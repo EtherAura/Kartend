@@ -338,7 +338,7 @@ auto NavigationManager::finalizeNavigation(int collectionIndex) -> void {
 // Validates basic context for selection restore operations
 auto NavigationManager::validateSelectionRestoreContext() const -> bool {
   if ((m_mainWindow == nullptr) || QApplication::closingDown() ||
-      m_mainWindow->m_isShuttingDown) {
+      m_mainWindow->isShuttingDown()) {
     return false;
   }
   if ((m_mainWindow->getScrollManager() == nullptr) ||
@@ -859,7 +859,7 @@ void NavigationManager::onCollectionSelected(int collectionIndex) {
 // Validates basic context for items loaded operations
 auto NavigationManager::validateItemsLoadedContext() const -> bool {
   return m_mainWindow != nullptr && !QApplication::closingDown() &&
-         !m_mainWindow->m_isShuttingDown;
+         !m_mainWindow->isShuttingDown();
 }
 
 // Cleans up existing no-items widgets from previous loads
@@ -909,7 +909,7 @@ auto NavigationManager::determineContentAvailability(
 
 // Handles the case when no content is available
 auto NavigationManager::handleEmptyContent() -> void {
-  if (!QApplication::closingDown() && !m_mainWindow->m_isShuttingDown) {
+  if (!QApplication::closingDown() && !m_mainWindow->isShuttingDown()) {
     m_mainWindow->ui->loadingLabel->setText("No items found");
     m_mainWindow->ui->loadingLabel->setVisible(true);
     resumeItemsPageRendering(m_mainWindow);
@@ -986,7 +986,7 @@ auto NavigationManager::schedulePostLoadOperations() -> void {
   QTimer::singleShot(UIConstants::START_SILENT_LOAD_AFTER_ITEMS_MS,
                      m_mainWindow, [this]() {
                        if (QApplication::closingDown() ||
-                           (m_mainWindow && m_mainWindow->m_isShuttingDown)) {
+                           (m_mainWindow && m_mainWindow->isShuttingDown())) {
                          return;
                        }
                        ArtworkManager::instance().startSilentLoading();

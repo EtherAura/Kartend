@@ -1,31 +1,31 @@
 [  0%] Built target kartend_autogen_timestamp_deps
 [  3%] Automatic MOC and UIC for target kartend
 [  3%] Built target kartend_autogen
-[ 11%] Generating ui_itemwidget.h
 [ 11%] Generating ui_mainwindow.h
+[ 11%] Generating ui_itemwidget.h
+[ 14%] Generating ui_metadatasidebar.h
 [ 18%] Automatic RCC for src/assets/resources.qrc
-[ 18%] Generating ui_settingsdialog.h
-[ 22%] Generating ui_metadatasidebar.h
-[ 29%] Building CXX object CMakeFiles/kartend.dir/kartend_autogen/mocs_compilation.cpp.o
+[ 22%] Generating ui_settingsdialog.h
+[ 25%] Building CXX object CMakeFiles/kartend.dir/src/managers/artworkmanager.cpp.o
 [ 29%] Building CXX object CMakeFiles/kartend.dir/src/core/main.cpp.o
-[ 37%] Building CXX object CMakeFiles/kartend.dir/src/managers/artworkmanager.cpp.o
+[ 33%] Building CXX object CMakeFiles/kartend.dir/kartend_autogen/mocs_compilation.cpp.o
 [ 37%] Building CXX object CMakeFiles/kartend.dir/src/managers/cachemanager.cpp.o
-[ 40%] Building CXX object CMakeFiles/kartend.dir/src/managers/databasemanager.cpp.o
-[ 44%] Building CXX object CMakeFiles/kartend.dir/src/managers/sessionmanager.cpp.o
-[ 48%] Building CXX object CMakeFiles/kartend.dir/src/managers/navigationmanager.cpp.o
-[ 55%] Building CXX object CMakeFiles/kartend.dir/src/managers/scrollmanager.cpp.o
-[ 55%] Building CXX object CMakeFiles/kartend.dir/src/managers/sidebarmanager.cpp.o
-[ 59%] Building CXX object CMakeFiles/kartend.dir/src/ui/widgets/metadatasidebar.cpp.o
-[ 70%] Building CXX object CMakeFiles/kartend.dir/src/core/mainwindow.cpp.o
-[ 70%] Building CXX object CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o
-[ 74%] Building CXX object CMakeFiles/kartend.dir/src/utils/pathutils.cpp.o
+[ 40%] Building CXX object CMakeFiles/kartend.dir/src/managers/settingsmanager.cpp.o
+[ 44%] Building CXX object CMakeFiles/kartend.dir/src/managers/navigationmanager.cpp.o
+[ 48%] Building CXX object CMakeFiles/kartend.dir/src/managers/sidebarmanager.cpp.o
+[ 51%] Building CXX object CMakeFiles/kartend.dir/src/managers/scrollmanager.cpp.o
+[ 55%] Building CXX object CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o
+[ 59%] Building CXX object CMakeFiles/kartend.dir/src/ui/dialogs/settingsdialog.cpp.o
+[ 62%] Building CXX object CMakeFiles/kartend.dir/src/core/mainwindow.cpp.o
+[ 66%] Building CXX object CMakeFiles/kartend.dir/src/ui/widgets/metadatasidebar.cpp.o
+[ 77%] Building CXX object CMakeFiles/kartend.dir/src/ui/widgets/itemwidget.cpp.o
 [ 77%] Building CXX object CMakeFiles/kartend.dir/src/managers/databaseworker.cpp.o
-[ 62%] Building CXX object CMakeFiles/kartend.dir/src/ui/dialogs/settingsdialog.cpp.o
-[ 81%] Building CXX object CMakeFiles/kartend.dir/src/managers/settingsmanager.cpp.o
-[ 96%] Building CXX object CMakeFiles/kartend.dir/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp.o
-[ 96%] Building CXX object CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o
-[ 96%] Building CXX object CMakeFiles/kartend.dir/src/ui/widgets/itemwidget.cpp.o
-[ 96%] Building CXX object CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o
+[ 77%] Building CXX object CMakeFiles/kartend.dir/src/managers/databasemanager.cpp.o
+[ 81%] Building CXX object CMakeFiles/kartend.dir/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp.o
+[ 85%] Building CXX object CMakeFiles/kartend.dir/src/managers/sessionmanager.cpp.o
+[ 88%] Building CXX object CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o
+[ 92%] Building CXX object CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o
+[ 96%] Building CXX object CMakeFiles/kartend.dir/src/utils/pathutils.cpp.o
 /home/carl/Documents/Programming/Kartend/src/core/mainwindow.cpp:36:37: warning: field 'm_interactionManager' will be initialized after field 'currentCollectionIndex' [-Wreorder-ctor]
    33 |       m_metadataSidebar(nullptr),
       |       ~~~~~~~~~~~~~~~~~~~~~~~~~~

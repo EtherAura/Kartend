@@ -39,8 +39,8 @@ events:
     checks:
       - "Detecting CXX compiler ABI info"
     directories:
-      source: "/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-IR3hm4"
-      binary: "/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-IR3hm4"
+      source: "/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-zHcWb3"
+      binary: "/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-zHcWb3"
     cmakeVariables:
       CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "/usr/bin/clang-scan-deps-20"
       CMAKE_CXX_FLAGS: ""
@@ -51,13 +51,13 @@ events:
       variable: "CMAKE_CXX_ABI_COMPILED"
       cached: true
       stdout: |
-        Change Dir: '/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-IR3hm4'
+        Change Dir: '/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-zHcWb3'
         
-        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_c9093/fast
-        /usr/bin/gmake  -f CMakeFiles/cmTC_c9093.dir/build.make CMakeFiles/cmTC_c9093.dir/build
-        gmake[1]: Entering directory '/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-IR3hm4'
-        Building CXX object CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o
-        /usr/bin/clang++   -v -MD -MT CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o -c /usr/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_93987/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_93987.dir/build.make CMakeFiles/cmTC_93987.dir/build
+        gmake[1]: Entering directory '/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-zHcWb3'
+        Building CXX object CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o
+        /usr/bin/clang++   -v -MD -MT CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o -c /usr/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp
         Ubuntu clang version 20.1.8 (0ubuntu4)
         Target: x86_64-pc-linux-gnu
         Thread model: posix
@@ -69,7 +69,7 @@ events:
         Candidate multilib: .;@m64
         Selected multilib: .;@m64
          (in-process)
-         "/usr/lib/llvm-20/bin/clang" -cc1 -triple x86_64-pc-linux-gnu -emit-obj -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=all -fmath-errno -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu x86-64 -tune-cpu generic -debugger-tuning=gdb -fdebug-compilation-dir=/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-IR3hm4 -v -fcoverage-compilation-dir=/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-IR3hm4 -resource-dir /usr/lib/llvm-20/lib/clang/20 -dependency-file CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o.d -MT CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15 -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/x86_64-linux-gnu/c++/15 -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/backward -internal-isystem /usr/lib/llvm-20/lib/clang/20/include -internal-isystem /usr/local/include -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../x86_64-linux-gnu/include -internal-externc-isystem /usr/include/x86_64-linux-gnu -internal-externc-isystem /include -internal-externc-isystem /usr/include -fdeprecated-macro -ferror-limit 19 -fgnuc-version=4.2.1 -fskip-odr-check-in-gmf -fcxx-exceptions -fexceptions -faddrsig -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o -x c++ /usr/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp
+         "/usr/lib/llvm-20/bin/clang" -cc1 -triple x86_64-pc-linux-gnu -emit-obj -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=all -fmath-errno -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu x86-64 -tune-cpu generic -debugger-tuning=gdb -fdebug-compilation-dir=/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-zHcWb3 -v -fcoverage-compilation-dir=/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-zHcWb3 -resource-dir /usr/lib/llvm-20/lib/clang/20 -dependency-file CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o.d -MT CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15 -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/x86_64-linux-gnu/c++/15 -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/backward -internal-isystem /usr/lib/llvm-20/lib/clang/20/include -internal-isystem /usr/local/include -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../x86_64-linux-gnu/include -internal-externc-isystem /usr/include/x86_64-linux-gnu -internal-externc-isystem /include -internal-externc-isystem /usr/include -fdeprecated-macro -ferror-limit 19 -fgnuc-version=4.2.1 -fskip-odr-check-in-gmf -fcxx-exceptions -fexceptions -faddrsig -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o -x c++ /usr/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp
         clang -cc1 version 20.1.8 based upon LLVM 20.1.8 default target x86_64-pc-linux-gnu
         ignoring nonexistent directory "/usr/lib/gcc/x86_64-linux-gnu/15/../../../../x86_64-linux-gnu/include"
         ignoring nonexistent directory "/include"
@@ -83,8 +83,8 @@ events:
          /usr/include/x86_64-linux-gnu
          /usr/include
         End of search list.
-        Linking CXX executable cmTC_c9093
-        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_c9093.dir/link.txt --verbose=1
+        Linking CXX executable cmTC_93987
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_93987.dir/link.txt --verbose=1
         Ubuntu clang version 20.1.8 (0ubuntu4)
         Target: x86_64-pc-linux-gnu
         Thread model: posix
@@ -95,10 +95,10 @@ events:
         Selected GCC installation: /usr/lib/gcc/x86_64-linux-gnu/15
         Candidate multilib: .;@m64
         Selected multilib: .;@m64
-         "/usr/bin/ld" -z relro --hash-style=gnu --build-id --eh-frame-hdr -m elf_x86_64 -pie -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_c9093 /lib/x86_64-linux-gnu/Scrt1.o /lib/x86_64-linux-gnu/crti.o /usr/lib/gcc/x86_64-linux-gnu/15/crtbeginS.o -L/usr/lib/gcc/x86_64-linux-gnu/15 -L/usr/lib/gcc/x86_64-linux-gnu/15/../../../../lib64 -L/lib/x86_64-linux-gnu -L/lib/../lib64 -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib64 -L/lib -L/usr/lib -v CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /usr/lib/gcc/x86_64-linux-gnu/15/crtendS.o /lib/x86_64-linux-gnu/crtn.o
+         "/usr/bin/ld" -z relro --hash-style=gnu --build-id --eh-frame-hdr -m elf_x86_64 -pie -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_93987 /lib/x86_64-linux-gnu/Scrt1.o /lib/x86_64-linux-gnu/crti.o /usr/lib/gcc/x86_64-linux-gnu/15/crtbeginS.o -L/usr/lib/gcc/x86_64-linux-gnu/15 -L/usr/lib/gcc/x86_64-linux-gnu/15/../../../../lib64 -L/lib/x86_64-linux-gnu -L/lib/../lib64 -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib64 -L/lib -L/usr/lib -v CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /usr/lib/gcc/x86_64-linux-gnu/15/crtendS.o /lib/x86_64-linux-gnu/crtn.o
         GNU ld (GNU Binutils for Ubuntu) 2.45
-        /usr/bin/clang++  -v -Wl,-v CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_c9093
-        gmake[1]: Leaving directory '/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-IR3hm4'
+        /usr/bin/clang++  -v -Wl,-v CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_93987
+        gmake[1]: Leaving directory '/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-zHcWb3'
         
       exitCode: 0
   -
@@ -139,13 +139,13 @@ events:
       Parsed CXX implicit link information:
         link line regex: [^( *|.*[/\\])(ld[0-9]*(\\.[a-z]+)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
         linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(\\.[a-z]+)?))("|,| |$)]
-        ignore line: [Change Dir: '/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-IR3hm4']
+        ignore line: [Change Dir: '/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-zHcWb3']
         ignore line: []
-        ignore line: [Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_c9093/fast]
-        ignore line: [/usr/bin/gmake  -f CMakeFiles/cmTC_c9093.dir/build.make CMakeFiles/cmTC_c9093.dir/build]
-        ignore line: [gmake[1]: Entering directory '/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-IR3hm4']
-        ignore line: [Building CXX object CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o]
-        ignore line: [/usr/bin/clang++   -v -MD -MT CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o -c /usr/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_93987/fast]
+        ignore line: [/usr/bin/gmake  -f CMakeFiles/cmTC_93987.dir/build.make CMakeFiles/cmTC_93987.dir/build]
+        ignore line: [gmake[1]: Entering directory '/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-zHcWb3']
+        ignore line: [Building CXX object CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o]
+        ignore line: [/usr/bin/clang++   -v -MD -MT CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o -c /usr/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp]
         ignore line: [Ubuntu clang version 20.1.8 (0ubuntu4)]
         ignore line: [Target: x86_64-pc-linux-gnu]
         ignore line: [Thread model: posix]
@@ -159,7 +159,7 @@ events:
         ignore line: [Selected multilib: .]
         ignore line: [@m64]
         ignore line: [ (in-process)]
-        ignore line: [ "/usr/lib/llvm-20/bin/clang" -cc1 -triple x86_64-pc-linux-gnu -emit-obj -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=all -fmath-errno -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu x86-64 -tune-cpu generic -debugger-tuning=gdb -fdebug-compilation-dir=/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-IR3hm4 -v -fcoverage-compilation-dir=/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-IR3hm4 -resource-dir /usr/lib/llvm-20/lib/clang/20 -dependency-file CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o.d -MT CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15 -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/x86_64-linux-gnu/c++/15 -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/backward -internal-isystem /usr/lib/llvm-20/lib/clang/20/include -internal-isystem /usr/local/include -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../x86_64-linux-gnu/include -internal-externc-isystem /usr/include/x86_64-linux-gnu -internal-externc-isystem /include -internal-externc-isystem /usr/include -fdeprecated-macro -ferror-limit 19 -fgnuc-version=4.2.1 -fskip-odr-check-in-gmf -fcxx-exceptions -fexceptions -faddrsig -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o -x c++ /usr/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [ "/usr/lib/llvm-20/bin/clang" -cc1 -triple x86_64-pc-linux-gnu -emit-obj -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=all -fmath-errno -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu x86-64 -tune-cpu generic -debugger-tuning=gdb -fdebug-compilation-dir=/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-zHcWb3 -v -fcoverage-compilation-dir=/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-zHcWb3 -resource-dir /usr/lib/llvm-20/lib/clang/20 -dependency-file CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o.d -MT CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15 -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/x86_64-linux-gnu/c++/15 -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/backward -internal-isystem /usr/lib/llvm-20/lib/clang/20/include -internal-isystem /usr/local/include -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/15/../../../../x86_64-linux-gnu/include -internal-externc-isystem /usr/include/x86_64-linux-gnu -internal-externc-isystem /include -internal-externc-isystem /usr/include -fdeprecated-macro -ferror-limit 19 -fgnuc-version=4.2.1 -fskip-odr-check-in-gmf -fcxx-exceptions -fexceptions -faddrsig -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o -x c++ /usr/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp]
         ignore line: [clang -cc1 version 20.1.8 based upon LLVM 20.1.8 default target x86_64-pc-linux-gnu]
         ignore line: [ignoring nonexistent directory "/usr/lib/gcc/x86_64-linux-gnu/15/../../../../x86_64-linux-gnu/include"]
         ignore line: [ignoring nonexistent directory "/include"]
@@ -173,8 +173,8 @@ events:
         ignore line: [ /usr/include/x86_64-linux-gnu]
         ignore line: [ /usr/include]
         ignore line: [End of search list.]
-        ignore line: [Linking CXX executable cmTC_c9093]
-        ignore line: [/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_c9093.dir/link.txt --verbose=1]
+        ignore line: [Linking CXX executable cmTC_93987]
+        ignore line: [/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_93987.dir/link.txt --verbose=1]
         ignore line: [Ubuntu clang version 20.1.8 (0ubuntu4)]
         ignore line: [Target: x86_64-pc-linux-gnu]
         ignore line: [Thread model: posix]
@@ -187,7 +187,7 @@ events:
         ignore line: [@m64]
         ignore line: [Selected multilib: .]
         ignore line: [@m64]
-        link line: [ "/usr/bin/ld" -z relro --hash-style=gnu --build-id --eh-frame-hdr -m elf_x86_64 -pie -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_c9093 /lib/x86_64-linux-gnu/Scrt1.o /lib/x86_64-linux-gnu/crti.o /usr/lib/gcc/x86_64-linux-gnu/15/crtbeginS.o -L/usr/lib/gcc/x86_64-linux-gnu/15 -L/usr/lib/gcc/x86_64-linux-gnu/15/../../../../lib64 -L/lib/x86_64-linux-gnu -L/lib/../lib64 -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib64 -L/lib -L/usr/lib -v CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /usr/lib/gcc/x86_64-linux-gnu/15/crtendS.o /lib/x86_64-linux-gnu/crtn.o]
+        link line: [ "/usr/bin/ld" -z relro --hash-style=gnu --build-id --eh-frame-hdr -m elf_x86_64 -pie -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_93987 /lib/x86_64-linux-gnu/Scrt1.o /lib/x86_64-linux-gnu/crti.o /usr/lib/gcc/x86_64-linux-gnu/15/crtbeginS.o -L/usr/lib/gcc/x86_64-linux-gnu/15 -L/usr/lib/gcc/x86_64-linux-gnu/15/../../../../lib64 -L/lib/x86_64-linux-gnu -L/lib/../lib64 -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib64 -L/lib -L/usr/lib -v CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /usr/lib/gcc/x86_64-linux-gnu/15/crtendS.o /lib/x86_64-linux-gnu/crtn.o]
           arg [/usr/bin/ld] ==> ignore
           arg [-zrelro] ==> ignore
           arg [--hash-style=gnu] ==> ignore
@@ -199,7 +199,7 @@ events:
           arg [-dynamic-linker] ==> ignore
           arg [/lib64/ld-linux-x86-64.so.2] ==> ignore
           arg [-o] ==> ignore
-          arg [cmTC_c9093] ==> ignore
+          arg [cmTC_93987] ==> ignore
           arg [/lib/x86_64-linux-gnu/Scrt1.o] ==> obj [/lib/x86_64-linux-gnu/Scrt1.o]
           arg [/lib/x86_64-linux-gnu/crti.o] ==> obj [/lib/x86_64-linux-gnu/crti.o]
           arg [/usr/lib/gcc/x86_64-linux-gnu/15/crtbeginS.o] ==> obj [/usr/lib/gcc/x86_64-linux-gnu/15/crtbeginS.o]
@@ -212,7 +212,7 @@ events:
           arg [-L/lib] ==> dir [/lib]
           arg [-L/usr/lib] ==> dir [/usr/lib]
           arg [-v] ==> ignore
-          arg [CMakeFiles/cmTC_c9093.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
+          arg [CMakeFiles/cmTC_93987.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
           arg [-lstdc++] ==> lib [stdc++]
           arg [-lm] ==> lib [m]
           arg [-lgcc_s] ==> lib [gcc_s]
@@ -260,8 +260,8 @@ events:
       - "/usr/lib/x86_64-linux-gnu/cmake/Qt6/Qt6Config.cmake:182 (include)"
       - "CMakeLists.txt:28 (find_package)"
     directories:
-      source: "/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-vLPOaQ"
-      binary: "/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-vLPOaQ"
+      source: "/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-STHY5L"
+      binary: "/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-STHY5L"
     cmakeVariables:
       CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "/usr/bin/clang-scan-deps-20"
       CMAKE_CXX_FLAGS: ""
@@ -272,17 +272,17 @@ events:
       variable: "CMAKE_HAVE_LIBC_PTHREAD"
       cached: true
       stdout: |
-        Change Dir: '/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-vLPOaQ'
+        Change Dir: '/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-STHY5L'
         
-        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_dc11a/fast
-        /usr/bin/gmake  -f CMakeFiles/cmTC_dc11a.dir/build.make CMakeFiles/cmTC_dc11a.dir/build
-        gmake[1]: Entering directory '/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-vLPOaQ'
-        Building CXX object CMakeFiles/cmTC_dc11a.dir/src.cxx.o
-        /usr/bin/clang++ -DCMAKE_HAVE_LIBC_PTHREAD   -MD -MT CMakeFiles/cmTC_dc11a.dir/src.cxx.o -MF CMakeFiles/cmTC_dc11a.dir/src.cxx.o.d -o CMakeFiles/cmTC_dc11a.dir/src.cxx.o -c /home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-vLPOaQ/src.cxx
-        Linking CXX executable cmTC_dc11a
-        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_dc11a.dir/link.txt --verbose=1
-        /usr/bin/clang++ CMakeFiles/cmTC_dc11a.dir/src.cxx.o -o cmTC_dc11a
-        gmake[1]: Leaving directory '/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-vLPOaQ'
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_61b63/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_61b63.dir/build.make CMakeFiles/cmTC_61b63.dir/build
+        gmake[1]: Entering directory '/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-STHY5L'
+        Building CXX object CMakeFiles/cmTC_61b63.dir/src.cxx.o
+        /usr/bin/clang++ -DCMAKE_HAVE_LIBC_PTHREAD   -MD -MT CMakeFiles/cmTC_61b63.dir/src.cxx.o -MF CMakeFiles/cmTC_61b63.dir/src.cxx.o.d -o CMakeFiles/cmTC_61b63.dir/src.cxx.o -c /home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-STHY5L/src.cxx
+        Linking CXX executable cmTC_61b63
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_61b63.dir/link.txt --verbose=1
+        /usr/bin/clang++ CMakeFiles/cmTC_61b63.dir/src.cxx.o -o cmTC_61b63
+        gmake[1]: Leaving directory '/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-STHY5L'
         
       exitCode: 0
   -
@@ -300,8 +300,8 @@ events:
     checks:
       - "Performing Test HAVE_STDATOMIC"
     directories:
-      source: "/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-8r8J42"
-      binary: "/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-8r8J42"
+      source: "/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-tBEKz3"
+      binary: "/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-tBEKz3"
     cmakeVariables:
       CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "/usr/bin/clang-scan-deps-20"
       CMAKE_CXX_FLAGS: ""
@@ -312,17 +312,17 @@ events:
       variable: "HAVE_STDATOMIC"
       cached: true
       stdout: |
-        Change Dir: '/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-8r8J42'
+        Change Dir: '/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-tBEKz3'
         
-        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_6d1a9/fast
-        /usr/bin/gmake  -f CMakeFiles/cmTC_6d1a9.dir/build.make CMakeFiles/cmTC_6d1a9.dir/build
-        gmake[1]: Entering directory '/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-8r8J42'
-        Building CXX object CMakeFiles/cmTC_6d1a9.dir/src.cxx.o
-        /usr/bin/clang++ -DHAVE_STDATOMIC   -MD -MT CMakeFiles/cmTC_6d1a9.dir/src.cxx.o -MF CMakeFiles/cmTC_6d1a9.dir/src.cxx.o.d -o CMakeFiles/cmTC_6d1a9.dir/src.cxx.o -c /home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-8r8J42/src.cxx
-        Linking CXX executable cmTC_6d1a9
-        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_6d1a9.dir/link.txt --verbose=1
-        /usr/bin/clang++ CMakeFiles/cmTC_6d1a9.dir/src.cxx.o -o cmTC_6d1a9
-        gmake[1]: Leaving directory '/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-8r8J42'
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_158ac/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_158ac.dir/build.make CMakeFiles/cmTC_158ac.dir/build
+        gmake[1]: Entering directory '/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-tBEKz3'
+        Building CXX object CMakeFiles/cmTC_158ac.dir/src.cxx.o
+        /usr/bin/clang++ -DHAVE_STDATOMIC   -MD -MT CMakeFiles/cmTC_158ac.dir/src.cxx.o -MF CMakeFiles/cmTC_158ac.dir/src.cxx.o.d -o CMakeFiles/cmTC_158ac.dir/src.cxx.o -c /home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-tBEKz3/src.cxx
+        Linking CXX executable cmTC_158ac
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_158ac.dir/link.txt --verbose=1
+        /usr/bin/clang++ CMakeFiles/cmTC_158ac.dir/src.cxx.o -o cmTC_158ac
+        gmake[1]: Leaving directory '/home/carl/.sync/Documents/Programming/Kartend/build/release/CMakeFiles/CMakeScratch/TryCompile-tBEKz3'
         
       exitCode: 0
 ...

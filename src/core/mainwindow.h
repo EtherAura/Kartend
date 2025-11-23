@@ -55,6 +55,7 @@ public:
   QList<CollectionConfig> m_collections;
   void refreshTitleCounts();
   void updateWindowTitleForCollection(int collectionIndex);
+  bool isShuttingDown() const { return m_isShuttingDown; }
 
   // Getters for Managers
   SidebarManager *getSidebarManager() const { return m_sidebarManager; }
@@ -70,17 +71,11 @@ protected:
   void keyPressEvent(QKeyEvent *event) override;
   auto eventFilter(QObject *watched, QEvent *event) -> bool override;
   void closeEvent(QCloseEvent *event) override;
-  bool m_isShuttingDown = false;
 
 private:
+  bool m_isShuttingDown = false;
   MainScreenConfig m_mainScreenConfig;
   QAction *m_fullscreenAction = nullptr;
-
-  friend class InteractionManager;
-  friend class NavigationManager;
-  friend class ScrollManager;
-  friend class SidebarManager;
-  friend class SettingsDialog;
 
   SidebarManager *m_sidebarManager = nullptr;
   metadataSidebar *m_metadataSidebar = nullptr;

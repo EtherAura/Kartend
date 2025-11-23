@@ -2584,7 +2584,7 @@ void InteractionManager::updateViewAndRowAfterVisibility(int index,
 
 auto InteractionManager::shouldExitEnsureItemVisible(int index) const -> bool {
   if (QApplication::closingDown() ||
-      ((m_mainWindow != nullptr) && m_mainWindow->m_isShuttingDown)) {
+      ((m_mainWindow != nullptr) && m_mainWindow->isShuttingDown())) {
     return true;
   }
   if (!m_itemScrollArea || (m_collections == nullptr) ||
@@ -4048,7 +4048,7 @@ void InteractionManager::handleSuccessfulSelection(int index) {
     m_restoringSelection = false;
     m_targetRestoreIndex = -1;
   }
-  if ((m_mainWindow != nullptr) && m_mainWindow->m_isShuttingDown) {
+  if ((m_mainWindow != nullptr) && m_mainWindow->isShuttingDown()) {
     return;
   }
 
