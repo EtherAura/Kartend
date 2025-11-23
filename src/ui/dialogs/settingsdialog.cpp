@@ -557,9 +557,9 @@ void SettingsDialog::setupGeneralSettingsConnections() {
           [this](bool checked) {
             auto *mainWindow = qobject_cast<MainWindow *>(parent());
             if ((mainWindow != nullptr) &&
-                (mainWindow->m_settingsManager != nullptr)) {
+                (mainWindow->getSettingsManager() != nullptr)) {
               mainWindow->m_generalSettings.rememberSelection = checked;
-              mainWindow->m_settingsManager->saveGeneralSettings(
+              mainWindow->getSettingsManager()->saveGeneralSettings(
                   mainWindow->m_generalSettings);
               m_generalSettings = mainWindow->m_generalSettings;
             }
@@ -569,9 +569,9 @@ void SettingsDialog::setupGeneralSettingsConnections() {
           [this](bool checked) {
             auto *mainWindow = qobject_cast<MainWindow *>(parent());
             if ((mainWindow != nullptr) &&
-                (mainWindow->m_settingsManager != nullptr)) {
+                (mainWindow->getSettingsManager() != nullptr)) {
               mainWindow->m_generalSettings.wrapNavigation = checked;
-              mainWindow->m_settingsManager->saveGeneralSettings(
+              mainWindow->getSettingsManager()->saveGeneralSettings(
                   mainWindow->m_generalSettings);
               m_generalSettings = mainWindow->m_generalSettings;
             }
@@ -1319,7 +1319,7 @@ void SettingsDialog::loadGeneralSettingsToUI() {
 
 void SettingsDialog::saveGeneralSettingsFromUI() {
   auto *mainWindow = qobject_cast<MainWindow *>(parent());
-  if ((mainWindow != nullptr) && (mainWindow->m_settingsManager != nullptr)) {
+  if ((mainWindow != nullptr) && (mainWindow->getSettingsManager() != nullptr)) {
     if (ui->rememberSelectionCheckBox != nullptr) {
       mainWindow->m_generalSettings.rememberSelection =
           ui->rememberSelectionCheckBox->isChecked();
@@ -1328,7 +1328,7 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
       mainWindow->m_generalSettings.wrapNavigation =
           ui->wrapNavigationCheckBox->isChecked();
     }
-    mainWindow->m_settingsManager->saveGeneralSettings(
+    mainWindow->getSettingsManager()->saveGeneralSettings(
         mainWindow->m_generalSettings);
     m_generalSettings = mainWindow->m_generalSettings;
   }

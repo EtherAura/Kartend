@@ -3,7 +3,7 @@ clang++: warning: argument unused during compilation: '-c' [-Wunused-command-lin
 #define APP_AUTHOR "EtherAura"
 #define APP_NAME "Kartend"
 #define APP_VERSION "0.0.1"
-#define BUILD_DATE "Nov-23-2025-152450"
+#define BUILD_DATE "Nov-23-2025-155046"
 #define NDEBUG 1
 #define QT_CONCURRENT_LIB 1
 #define QT_CORE_LIB 1

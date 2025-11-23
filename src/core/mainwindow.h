@@ -40,7 +40,6 @@ public:
 
   GeneralSettings m_generalSettings;
 
-  SidebarManager *m_sidebarManager;
   Ui_MainWindow *ui;
   QStackedWidget *stackedWidget;
   QWidget *itemsPage;
@@ -51,17 +50,20 @@ public:
   QLineEdit *searchBar;
   QPushButton *m_searchModeButton;
   QLabel *loadingLabel;
-  metadataSidebar *m_metadataSidebar;
-  SettingsManager *m_settingsManager;
-  DatabaseManager *m_databaseManager;
-  ScrollManager *m_scrollManager;
-  NavigationManager *m_navigationManager;
-  InteractionManager *m_interactionManager;
 
   int currentCollectionIndex;
   QList<CollectionConfig> m_collections;
   void refreshTitleCounts();
   void updateWindowTitleForCollection(int collectionIndex);
+
+  // Getters for Managers
+  SidebarManager *getSidebarManager() const { return m_sidebarManager; }
+  metadataSidebar *getMetadataSidebar() const { return m_metadataSidebar; }
+  SettingsManager *getSettingsManager() const { return m_settingsManager; }
+  DatabaseManager *getDatabaseManager() const { return m_databaseManager; }
+  ScrollManager *getScrollManager() const { return m_scrollManager; }
+  NavigationManager *getNavigationManager() const { return m_navigationManager; }
+  InteractionManager *getInteractionManager() const { return m_interactionManager; }
 
 protected:
   void resizeEvent(QResizeEvent *event) override;
@@ -79,6 +81,14 @@ private:
   friend class ScrollManager;
   friend class SidebarManager;
   friend class SettingsDialog;
+
+  SidebarManager *m_sidebarManager = nullptr;
+  metadataSidebar *m_metadataSidebar = nullptr;
+  SettingsManager *m_settingsManager = nullptr;
+  DatabaseManager *m_databaseManager = nullptr;
+  ScrollManager *m_scrollManager = nullptr;
+  NavigationManager *m_navigationManager = nullptr;
+  InteractionManager *m_interactionManager = nullptr;
 
   void setupManagerConnections();
   void updateWindowTitleWithFilter(int visible, int total);

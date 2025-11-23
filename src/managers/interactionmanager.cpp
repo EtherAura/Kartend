@@ -1571,8 +1571,8 @@ auto InteractionManager::handleEnterOnSubcollection(int currentSelection,
       m_navigationManager->m_navigationDepth++;
     }
     clearSelectionAndFocus();
-    if (m_mainWindow->m_metadataSidebar != nullptr) {
-      m_mainWindow->m_metadataSidebar->clearMetadata();
+    if (m_mainWindow->getMetadataSidebar() != nullptr) {
+      m_mainWindow->getMetadataSidebar()->clearMetadata();
     }
     const bool success = m_navigationManager->showCollectionItems(subIdx);
     if (!success) {
@@ -2243,7 +2243,7 @@ void InteractionManager::persistSuppressedSelectionAndMaybeCenter(
       ((m_currentCollectionIndex != nullptr) ? *m_currentCollectionIndex : -1);
   if ((m_mainWindow != nullptr) && curColl >= 0 &&
       curColl < m_mainWindow->m_collections.size()) {
-    m_mainWindow->m_settingsManager->setLastSelectedItem(curColl, index);
+    m_mainWindow->getSettingsManager()->setLastSelectedItem(curColl, index);
     QString collectionName = m_mainWindow->m_collections[curColl].name;
     QString title;
     if (index < subcollections.size()) {
@@ -4128,8 +4128,8 @@ auto InteractionManager::titleForIndexInColl(int coll, int idx) const
 }
 
 void InteractionManager::persistSelectionForIndex(int coll, int idx) {
-  if (m_mainWindow->m_settingsManager != nullptr) {
-    m_mainWindow->m_settingsManager->setLastSelectedItem(coll, idx);
+  if (m_mainWindow->getSettingsManager() != nullptr) {
+    m_mainWindow->getSettingsManager()->setLastSelectedItem(coll, idx);
   }
   QString collectionName;
   QString hierarchicalName;
