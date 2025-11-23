@@ -686,14 +686,46 @@ CMakeFiles/kartend.dir/src/managers/settingsmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qendian.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qjsondocument.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qjsonparseerror.h \
-  /home/carl/Documents/Programming/Kartend/src/core/mainwindow.h \
-  /home/carl/Documents/Programming/Kartend/src/managers/interactionmanager.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/QKeyEvent \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qevent.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qcoreevent.h \
+  /home/carl/Documents/Programming/Kartend/src/managers/navigationmanager.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QScrollArea \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qscrollarea.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtwidgetsglobal.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtwidgets-config.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtwidgetsexports.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qabstractscrollarea.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qframe.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qwidget.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qaction.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qkeysequence.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qicon.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qpalette.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qbrush.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qfont.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qfontmetrics.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qfontinfo.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qfontvariableaxis.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qsizepolicy.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qcursor.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qbitmap.h \
+  /home/carl/Documents/Programming/Kartend/src/utils/pathutils.h \
+  /home/carl/Documents/Programming/Kartend/src/managers/scrollmanager.h \
+  /home/carl/Documents/Programming/Kartend/src/utils/gridutils.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QDateTime \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QTimer \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qtimer.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qbasictimer.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qabstracteventdispatcher.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qeventloop.h \
+  /home/carl/Documents/Programming/Kartend/src/managers/sessionmanager.h \
+  /home/carl/Documents/Programming/Kartend/src/ui/dialogs/settingsdialog.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QDialog \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qdialog.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QMessageBox \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qmessagebox.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qdialogbuttonbox.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/QMouseEvent \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qevent.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qcoreevent.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qiodevice.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qeventpoint.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qvector2d.h \
@@ -712,63 +744,6 @@ CMakeFiles/kartend.dir/src/managers/settingsmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qcoreapplication_platform.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qinputmethod.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qguiapplication_platform.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qkeysequence.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QLineEdit \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qlineedit.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtwidgetsglobal.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtwidgets-config.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtwidgetsexports.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qframe.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qwidget.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qaction.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qicon.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qpalette.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qbrush.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qfont.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qfontmetrics.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qfontinfo.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qfontvariableaxis.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qsizepolicy.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qcursor.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qbitmap.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qtextcursor.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qtextdocument.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qtextformat.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qpen.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qtextoption.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/QMouseEvent \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QPropertyAnimation \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qpropertyanimation.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qvariantanimation.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qabstractanimation.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qeasingcurve.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QPushButton \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qpushbutton.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qabstractbutton.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QScrollArea \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qscrollarea.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qabstractscrollarea.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QStackedWidget \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qstackedwidget.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QTimer \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qtimer.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QVector \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qvector.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QMainWindow \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qmainwindow.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtabwidget.h \
-  /home/carl/Documents/Programming/Kartend/src/managers/navigationmanager.h \
-  /home/carl/Documents/Programming/Kartend/src/utils/pathutils.h \
-  /home/carl/Documents/Programming/Kartend/src/managers/scrollmanager.h \
-  /home/carl/Documents/Programming/Kartend/src/utils/gridutils.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QDateTime \
-  /home/carl/Documents/Programming/Kartend/src/managers/sessionmanager.h \
-  /home/carl/Documents/Programming/Kartend/src/ui/dialogs/settingsdialog.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QDialog \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qdialog.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QMessageBox \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qmessagebox.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qdialogbuttonbox.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTreeWidgetItem \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtreewidget.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtreeview.h \
@@ -783,6 +758,7 @@ CMakeFiles/kartend.dir/src/managers/settingsmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qabstractslider.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qstyle.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtabbar.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtabwidget.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qrubberband.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtreewidgetitemiterator.h \
   /home/carl/Documents/Programming/Kartend/src/managers/sidebarmanager.h \
@@ -805,4 +781,5 @@ CMakeFiles/kartend.dir/src/managers/settingsmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QLabel \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qlabel.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qpicture.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qtextdocument.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QTextStream

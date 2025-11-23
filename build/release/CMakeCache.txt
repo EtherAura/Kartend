@@ -15,7 +15,7 @@
 ########################
 
 //No help, variable specified on the command line.
-BUILD_DATE:UNINITIALIZED=Nov-23-2025-160158
+BUILD_DATE:UNINITIALIZED=Nov-23-2025-182853
 
 //Path to a program.
 CMAKE_ADDR2LINE:FILEPATH=/usr/bin/addr2line

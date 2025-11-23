@@ -1,12 +1,7 @@
 CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o: \
   /home/carl/Documents/Programming/Kartend/src/managers/interactionmanager.cpp \
   /home/carl/Documents/Programming/Kartend/src/managers/interactionmanager.h \
-  /home/carl/Documents/Programming/Kartend/src/utils/collectionconfig.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QHash \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qhash.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qalgorithms.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qglobal.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/type_traits \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/functional \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/x86_64-linux-gnu/c++/15/bits/c++config.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/x86_64-linux-gnu/c++/15/bits/os_defines.h \
   /usr/include/features.h /usr/include/features-time64.h \
@@ -18,7 +13,65 @@ CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/gnu/stubs-64.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/x86_64-linux-gnu/c++/15/bits/cpu_defines.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/pstl/pstl_config.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_function.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/move.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/type_traits \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/version.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/backward/binders.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/tuple \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_pair.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/utility.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/compare \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/concepts \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/uses_allocator.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/invoke.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/ranges_util.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/ranges_base.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/initializer_list \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_iterator.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/cpp_type_traits.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_iterator_base_types.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/iterator_concepts.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/ptr_traits.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/ranges_cmp.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/ext/type_traits.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/new \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/exception.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/exception_defines.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_construct.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_iterator_base_funcs.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/concept_check.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/debug/assertions.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/ext/numeric_traits.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/max_size_type.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/numbers \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/functional_hash.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/hash_bytes.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/refwrap.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/std_function.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/typeinfo \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/functexcept.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/unordered_map \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/requires_hosted.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/unordered_map.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/hashtable.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/hashtable_policy.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_algobase.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/debug/debug.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/predefined_ops.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bit \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/ext/aligned_buffer.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/ext/alloc_traits.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/alloc_traits.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/memoryfwd.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/allocator.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/x86_64-linux-gnu/c++/15/bits/c++allocator.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/new_allocator.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/enable_special_members.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/node_handle.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/range_access.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/erase_if.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/memory_resource.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/cstddef \
   /usr/lib/llvm-20/lib/clang/20/include/stddef.h \
   /usr/lib/llvm-20/lib/clang/20/include/__stddef_header_macro.h \
@@ -29,17 +82,24 @@ CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o: \
   /usr/lib/llvm-20/lib/clang/20/include/__stddef_nullptr_t.h \
   /usr/lib/llvm-20/lib/clang/20/include/__stddef_max_align_t.h \
   /usr/lib/llvm-20/lib/clang/20/include/__stddef_offsetof.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/uses_allocator_args.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/vector \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_uninitialized.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_vector.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/ranges_algobase.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_bvector.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/vector.tcc \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/formatfwd.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/array \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/move_only_function.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/mofunc_impl.h \
+  /home/carl/Documents/Programming/Kartend/src/utils/collectionconfig.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QHash \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qhash.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qalgorithms.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qglobal.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/utility \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_relops.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_pair.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/move.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/utility.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/compare \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/concepts \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/initializer_list \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/ext/numeric_traits.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/cpp_type_traits.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/ext/type_traits.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/cstdint \
   /usr/lib/llvm-20/lib/clang/20/include/stdint.h /usr/include/stdint.h \
   /usr/include/x86_64-linux-gnu/bits/libc-header-start.h \
@@ -80,23 +140,6 @@ CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qflags.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qcompare_impl.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/algorithm \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_algobase.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/functexcept.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/exception_defines.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_iterator_base_types.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/iterator_concepts.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/ptr_traits.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/ranges_cmp.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_iterator_base_funcs.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/concept_check.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/debug/assertions.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_iterator.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/new \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/exception.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_construct.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/debug/debug.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/predefined_ops.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bit \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_algo.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/algorithmfwd.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_heap.h \
@@ -142,17 +185,7 @@ CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o: \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/exception \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/exception_ptr.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/cxxabi_init_exception.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/typeinfo \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/hash_bytes.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/nested_exception.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/enable_special_members.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/functional_hash.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/invoke.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/ranges_algobase.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/ranges_base.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/max_size_type.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/numbers \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/ranges_util.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/pstl/glue_algorithm_defs.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/pstl/execution_defs.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qatomic.h \
@@ -217,8 +250,6 @@ CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qexceptionhandling.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qforeach.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qttypetraits.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/tuple \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/uses_allocator.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/variant \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/monostate.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/parse_numbers.h \
@@ -228,7 +259,6 @@ CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qminmax.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qnumeric.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/cmath \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/requires_hosted.h \
   /usr/include/math.h /usr/include/x86_64-linux-gnu/bits/math-vector.h \
   /usr/include/x86_64-linux-gnu/bits/libm-simd-decl-stubs.h \
   /usr/include/x86_64-linux-gnu/bits/flt-eval-method.h \
@@ -269,7 +299,6 @@ CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o: \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stream_iterator.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/iosfwd \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stringfwd.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/memoryfwd.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/postypes.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/cwchar \
   /usr/include/wchar.h /usr/lib/llvm-20/lib/clang/20/include/stdarg.h \
@@ -296,18 +325,9 @@ CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o: \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/locale_classes.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/string \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/char_traits.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/allocator.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/x86_64-linux-gnu/c++/15/bits/c++allocator.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/new_allocator.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/ostream_insert.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/cxxabi_forced.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_function.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/backward/binders.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/refwrap.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/range_access.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/basic_string.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/ext/alloc_traits.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/alloc_traits.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/string_view \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/string_view.tcc \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/ext/string_conversions.h \
@@ -323,15 +343,12 @@ CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/bits/stdio2.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/charconv.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/basic_string.tcc \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/memory_resource.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/uses_allocator_args.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/locale_classes.tcc \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/system_error \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/x86_64-linux-gnu/c++/15/bits/error_constants.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/stdexcept \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/streambuf.tcc \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/memory \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_uninitialized.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_raw_storage_iter.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/align.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/unique_ptr.h \
@@ -349,7 +366,6 @@ CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o: \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/shared_ptr.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/shared_ptr_base.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/allocated_ptr.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/ext/aligned_buffer.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/ext/concurrence.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/shared_ptr_atomic.h \
   /usr/lib/llvm-20/lib/clang/20/include/sanitizer/tsan_interface.h \
@@ -363,22 +379,6 @@ CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qcompare.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qstdlibdetection.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qcomparehelpers.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/functional \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/std_function.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/unordered_map \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/unordered_map.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/hashtable.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/hashtable_policy.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/node_handle.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/erase_if.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/vector \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_vector.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_bvector.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/vector.tcc \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/formatfwd.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/array \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/move_only_function.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/mofunc_impl.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qstringview.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qbytearray.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qrefcount.h \
@@ -794,10 +794,6 @@ CMakeFiles/kartend.dir/src/managers/interactionmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qlayoutitem.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qgridlayout.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QWidget \
-  /home/carl/Documents/Programming/Kartend/src/core/mainwindow.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QMainWindow \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qmainwindow.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtabwidget.h \
   /home/carl/Documents/Programming/Kartend/src/ui/widgets/metadatasidebar.h \
   /home/carl/Documents/Programming/Kartend/build/release/ui_metadatasidebar.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QSpacerItem \

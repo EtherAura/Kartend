@@ -98,7 +98,7 @@ template <> constexpr inline auto NavigationManager::qt_create_metaobjectdata<qt
             { QMetaType::QString, 13 },
         }}),
         // Slot 'scheduleSelectionRestore'
-        QtMocHelpers::SlotData<void(int, int, int, int) const>(14, 2, QMC::AccessPublic, QMetaType::Void, {{
+        QtMocHelpers::SlotData<void(int, int, int, int)>(14, 2, QMC::AccessPublic, QMetaType::Void, {{
             { QMetaType::Int, 15 }, { QMetaType::Int, 16 }, { QMetaType::Int, 17 }, { QMetaType::Int, 18 },
         }}),
         // Slot 'onItemsLoaded'
