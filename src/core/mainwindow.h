@@ -7,6 +7,7 @@
 #include <QList>
 #include <QMainWindow>
 #include <QTimer>
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 class QStackedWidget;
@@ -58,13 +59,13 @@ public:
   bool isShuttingDown() const { return m_isShuttingDown; }
 
   // Getters for Managers
-  SidebarManager *getSidebarManager() const { return m_sidebarManager; }
+  SidebarManager *getSidebarManager() const { return m_sidebarManager.get(); }
   metadataSidebar *getMetadataSidebar() const { return m_metadataSidebar; }
-  SettingsManager *getSettingsManager() const { return m_settingsManager; }
-  DatabaseManager *getDatabaseManager() const { return m_databaseManager; }
-  ScrollManager *getScrollManager() const { return m_scrollManager; }
-  NavigationManager *getNavigationManager() const { return m_navigationManager; }
-  InteractionManager *getInteractionManager() const { return m_interactionManager; }
+  SettingsManager *getSettingsManager() const { return m_settingsManager.get(); }
+  DatabaseManager *getDatabaseManager() const { return m_databaseManager.get(); }
+  ScrollManager *getScrollManager() const { return m_scrollManager.get(); }
+  NavigationManager *getNavigationManager() const { return m_navigationManager.get(); }
+  InteractionManager *getInteractionManager() const { return m_interactionManager.get(); }
 
 protected:
   void resizeEvent(QResizeEvent *event) override;
@@ -77,13 +78,13 @@ private:
   MainScreenConfig m_mainScreenConfig;
   QAction *m_fullscreenAction = nullptr;
 
-  SidebarManager *m_sidebarManager = nullptr;
+  std::unique_ptr<SidebarManager> m_sidebarManager;
   metadataSidebar *m_metadataSidebar = nullptr;
-  SettingsManager *m_settingsManager = nullptr;
-  DatabaseManager *m_databaseManager = nullptr;
-  ScrollManager *m_scrollManager = nullptr;
-  NavigationManager *m_navigationManager = nullptr;
-  InteractionManager *m_interactionManager = nullptr;
+  std::unique_ptr<SettingsManager> m_settingsManager;
+  std::unique_ptr<DatabaseManager> m_databaseManager;
+  std::unique_ptr<ScrollManager> m_scrollManager;
+  std::unique_ptr<NavigationManager> m_navigationManager;
+  std::unique_ptr<InteractionManager> m_interactionManager;
 
   void setupManagerConnections();
   void updateWindowTitleWithFilter(int visible, int total);
