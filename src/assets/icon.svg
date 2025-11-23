@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Kartend icon outline">
+  <defs>
+    <!-- mask to punch holes in the stroke area (keeps interior transparent) -->
+    <mask id="strokeMask" maskUnits="userSpaceOnUse">
+      <!-- show stroke region by drawing full rect and then black for holes -->
+      <!-- white region: entire rect (we'll stroke the rect; fill here is just for mask) -->
+      <rect x="44" y="28" width="168" height="200" rx="20" ry="20" fill="white"/>
+      <polygon points="128,64 176,128 128,192 80,128" fill="black"/>
+      <polygon points="96,64 112,80 96,96 80,80" fill="black"/>
+      <polygon points="160,160 176,176 160,192 144,176" fill="black"/>
+    </mask>
+  </defs>
+
+  <!-- outline rect: we draw a stroked rect; mask prevents diamonds from being visible through stroke area -->
+  <rect x="44" y="28" width="168" height="200" rx="20" ry="20" fill="none" stroke="white" stroke-width="12" mask="url(#strokeMask)"/>
+
+  <!-- center diamond cutout visually remains transparent; place white play triangle on top -->
+  <polygon points="116,114 116,142 146,128" fill="white"/>
+</svg>

@@ -1,0 +1,8 @@
+# Hashes of file build rules.
+913286a852bc6705cdbbadd2a8e07991 CMakeFiles/kartend_autogen
+5287c7f1de745c08e4a8febafd39114c kartend_autogen/7WA7TAYJOR/qrc_resources.cpp
+5326b498381a1ccb7395ade50f8df5b9 kartend_autogen/timestamp
+cf30ef64e5939fede3ef4a4081d3904a ui_itemwidget.h
+c4b65d73ee29ffc5eb5af895c77faa4e ui_mainwindow.h
+1d128a3bdf1d0cc12a85b6ef7b3c8451 ui_metadatasidebar.h
+11482511601ba87f2ee3e22f93312b58 ui_settingsdialog.h

@@ -1,0 +1,590 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SettingsDialog</class>
+ <widget class="QDialog" name="SettingsDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>900</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Settings</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="collectionsTab">
+      <attribute name="title">
+       <string>Collections</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="collectionsTabLayout">
+       <item>
+        <widget class="QGroupBox" name="collectionGroupBox">
+         <layout class="QVBoxLayout" name="collectionLayout">
+          <item>
+           <layout class="QHBoxLayout" name="collectionButtonLayout">
+            <item>
+             <widget class="QPushButton" name="addCollectionButton">
+              <property name="maximumSize">
+               <size>
+                <width>30</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+              <property name="icon">
+               <iconset theme="QIcon::ThemeIcon::DocumentNew"/>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="removeCollectionButton">
+              <property name="maximumSize">
+               <size>
+                <width>30</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+              <property name="icon">
+               <iconset theme="QIcon::ThemeIcon::EditDelete"/>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="collectionSpacer">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="saveCollectionButton">
+              <property name="maximumSize">
+               <size>
+                <width>30</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="toolTip">
+               <string>Save current collection settings</string>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+              <property name="icon">
+               <iconset theme="QIcon::ThemeIcon::DocumentSave"/>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QTreeWidget" name="collectionTreeWidget">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>200</height>
+             </size>
+            </property>
+            <property name="rootIsDecorated">
+             <bool>true</bool>
+            </property>
+            <property name="itemsExpandable">
+             <bool>true</bool>
+            </property>
+            <property name="animated">
+             <bool>true</bool>
+            </property>
+            <column>
+             <property name="text">
+              <string>Collections</string>
+             </property>
+            </column>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="configGroupBox">
+         <property name="title">
+          <string>Collection Configuration</string>
+         </property>
+         <layout class="QFormLayout" name="formLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_parentCollection">
+            <property name="text">
+             <string>Parent Collection:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="parentCollectionComboBox">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="toolTip">
+             <string>Select parent collection to make this a subcollection</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_launcher">
+            <property name="text">
+             <string>Launcher:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <layout class="QHBoxLayout" name="launcherLayout">
+            <item>
+             <widget class="QLineEdit" name="launcherLineEdit"/>
+            </item>
+            <item>
+             <widget class="QPushButton" name="browseLauncherButton">
+              <property name="text">
+               <string>Browse</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_core">
+            <property name="text">
+             <string>Core Path:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <layout class="QHBoxLayout" name="coreLayout">
+            <item>
+             <widget class="QLineEdit" name="coreLineEdit">
+              <property name="toolTip">
+               <string>Path to RetroArch core file</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="browseCoreButton">
+              <property name="text">
+               <string>Browse</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="label_launchParams">
+            <property name="text">
+             <string>Launch Parameters:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLineEdit" name="launchParamsLineEdit">
+            <property name="toolTip">
+             <string>Additional command-line parameters for the launcher</string>
+            </property>
+            <property name="placeholderText">
+             <string>Optional parameters (e.g., -fullscreen, -config file.cfg)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="label_romDir">
+            <property name="text">
+             <string>Content:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <layout class="QHBoxLayout" name="contentDirLayout">
+            <item>
+             <widget class="QLineEdit" name="mediaDirLineEdit"/>
+            </item>
+            <item>
+             <widget class="QPushButton" name="browseMediaDirButton">
+              <property name="text">
+               <string>Browse</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="label_artworkDir">
+            <property name="text">
+             <string>Primary Artwork:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <layout class="QHBoxLayout" name="artworkDirLayout">
+            <item>
+             <widget class="QLineEdit" name="artworkDirLineEdit"/>
+            </item>
+            <item>
+             <widget class="QPushButton" name="browseArtworkDirButton">
+              <property name="text">
+               <string>Browse</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="label_fileExtensions">
+            <property name="text">
+             <string>File Extensions:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QLineEdit" name="fileExtensionsLineEdit">
+            <property name="toolTip">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0">
+           <widget class="QLabel" name="label_gridLayout">
+            <property name="text">
+             <string>Grid Layout:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <layout class="QHBoxLayout" name="gridLayoutLayout">
+            <item>
+             <widget class="QLabel" name="label_gridWidth_mini">
+              <property name="text"><string>Width:</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="gridWidthSpinBox">
+              <property name="toolTip"><string>Number of artwork items per row (1-10)</string></property>
+              <property name="minimum"><number>1</number></property>
+              <property name="maximum"><number>10</number></property>
+              <property name="value"><number>4</number></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_hSpace_mini">
+              <property name="text"><string>H-Space:</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="horizontalSpacingSpinBox">
+              <property name="toolTip"><string>Horizontal spacing between items in pixels (-20-50)</string></property>
+              <property name="minimum"><number>-20</number></property>
+              <property name="maximum"><number>50</number></property>
+              <property name="value"><number>20</number></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_vSpace_mini">
+              <property name="text"><string>V-Space:</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="verticalSpacingSpinBox">
+              <property name="toolTip"><string>Vertical spacing between items in pixels (-20-50)</string></property>
+              <property name="minimum"><number>-20</number></property>
+              <property name="maximum"><number>50</number></property>
+              <property name="value"><number>20</number></property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+
+          <item row="8" column="0">
+           <widget class="QLabel" name="label_itemLayout">
+            <property name="text">
+             <string>Item Layout:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="1">
+           <layout class="QHBoxLayout" name="itemLayoutLayout">
+            <item>
+             <widget class="QLabel" name="label_itemWidth_mini">
+              <property name="text"><string>Width:</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="itemWidthSpinBox">
+              <property name="toolTip"><string>Width of collection items in pixels</string></property>
+              <property name="minimum"><number>100</number></property>
+              <property name="maximum"><number>400</number></property>
+              <property name="value"><number>220</number></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_itemHeight_mini">
+              <property name="text"><string>Height:</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="itemHeightSpinBox">
+              <property name="toolTip"><string>Height of collection items in pixels</string></property>
+              <property name="minimum"><number>100</number></property>
+              <property name="maximum"><number>400</number></property>
+              <property name="value"><number>245</number></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_fontSize_mini">
+              <property name="text"><string>Font:</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="fontSizeSpinBox">
+              <property name="toolTip"><string>Font size for item titles</string></property>
+              <property name="minimum"><number>8</number></property>
+              <property name="maximum"><number>72</number></property>
+              <property name="value"><number>12</number></property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+
+          <item row="9" column="0">
+           <widget class="QLabel" name="label_scrollbars">
+            <property name="text">
+             <string>Scrollbars:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="9" column="1">
+           <layout class="QHBoxLayout" name="scrollbarsLayout">
+            <item>
+             <widget class="QCheckBox" name="hideHorizontalScrollbarCheckBox">
+              <property name="toolTip"><string>Hide the horizontal scrollbar for this collection</string></property>
+              <property name="text"><string>Hide Horizontal</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="hideVerticalScrollbarCheckBox">
+              <property name="toolTip"><string>Hide the vertical scrollbar for this collection</string></property>
+              <property name="text"><string>Hide Vertical</string></property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+
+          <item row="10" column="0">
+           <widget class="QLabel" name="label_titles">
+            <property name="text">
+             <string>Titles:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="10" column="1">
+           <layout class="QHBoxLayout" name="titlesLayout">
+            <item>
+             <widget class="QCheckBox" name="hideTitlesCheckBox">
+              <property name="toolTip"><string>Hide titles for this collection</string></property>
+              <property name="text"><string>Hide Titles</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="showSubcollectionTitlesCheckBox">
+              <property name="toolTip"><string>Show titles for subcollections even if Hide Titles is enabled</string></property>
+              <property name="text"><string>Show Subcollection Titles</string></property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+
+          <item row="11" column="0">
+           <widget class="QLabel" name="label_sidebarMode">
+            <property name="text">
+             <string>Sidebar Mode:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="11" column="1">
+           <widget class="QComboBox" name="sidebarModeComboBox">
+            <property name="toolTip">
+             <string>Choose how the sidebar is displayed</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Overlay</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Fixed</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+
+          <item row="12" column="0">
+           <widget class="QLabel" name="label_showAllSubcollectionItems">
+            <property name="text">
+             <string>Show All Subcollection Items:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="12" column="1">
+           <widget class="QCheckBox" name="showAllSubcollectionItemsCheckBox">
+            <property name="toolTip">
+             <string>Mix items from subcollections with parent collection items, sorted alphabetically</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+            <property name="checked">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
+
+          <item row="13" column="0">
+           <widget class="QLabel" name="label_horizontalAlignment">
+            <property name="text">
+             <string>Horizontal Alignment:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="13" column="1">
+           <widget class="QComboBox" name="horizontalAlignmentComboBox">
+            <property name="toolTip">
+             <string>Horizontal alignment of collection grid (Left, Center, Right)</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Left</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Center</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Right</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="generalTab">
+      <attribute name="title">
+       <string>General</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="generalTabLayout">
+       <item>
+        <widget class="QGroupBox" name="generalGroupBox">
+         <property name="title">
+          <string>General Settings</string>
+         </property>
+         <layout class="QVBoxLayout" name="generalContentLayout">
+          <item>
+           <layout class="QFormLayout" name="generalFormLayout">
+            <item row="0" column="0">
+             <widget class="QLabel" name="rememberSelectionLabel">
+              <property name="text">
+               <string>Remember Selection:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QCheckBox" name="rememberSelectionCheckBox">
+              <property name="toolTip">
+               <string>Remember the last selected item when returning to a collection</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="wrapNavigationLabel">
+              <property name="text">
+               <string>Wrap Navigation:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QCheckBox" name="wrapNavigationCheckBox">
+              <property name="toolTip">
+               <string>When navigating with arrow keys, wrap at edges</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <spacer name="generalVerticalSpacer">
+            <property name="orientation">
+             <enum>Qt::Orientation::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Orientation::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="orientation">
+      <enum>Qt::Orientation::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

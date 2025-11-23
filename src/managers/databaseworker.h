@@ -1,0 +1,67 @@
+#ifndef DATABASEWORKER_H
+#define DATABASEWORKER_H
+
+#include <QObject>
+#include <QSqlDatabase>
+#include <QStringList>
+#include <QHash>
+#include <QDateTime>
+#include "collectionconfig.h"
+
+class DatabaseWorker : public QObject {
+  Q_OBJECT
+public:
+  explicit DatabaseWorker(QObject *parent = nullptr);
+  ~DatabaseWorker() override;
+
+public slots:
+  void initDatabase();
+  void loadAllCollections(const QList<CollectionConfig> &allCollections);
+  void loadItems(const CollectionContext &context);
+  void loadItemsWithSubcollections(const CollectionContext &context,
+                                   const QList<CollectionConfig> &allCollections);
+  void updateCachedCounts(const QList<CollectionConfig> &allCollections);
+
+signals:
+  void itemsLoaded(const QStringList &filePaths,
+                   const QHash<QString, QString> &fileNames,
+                   const QHash<QString, QString> &fileToArtworkDir,
+                   const QHash<QString, int> &fileToCollectionIndex);
+  void errorOccurred(const QString &message);
+  void countsUpdated();
+
+private:
+  QSqlDatabase m_db;
+  QString m_connectionName;
+
+  bool needsRescan(int collectionIndex, const CollectionConfig &collection);
+  static QStringList scanMediaDirectory(const CollectionConfig &collection,
+                                        QHash<QString, QDateTime> &timestamps);
+  QStringList loadItemsFromDatabaseByUuid(const QString &collectionUuid);
+  QStringList loadOrScanCollection(int collectionIndex,
+                                   const CollectionConfig &collection,
+                                   QHash<QString, QDateTime> &timestamps);
+  void saveItemsToDatabase(int collectionIndex, const QStringList &filePaths,
+                           const QHash<QString, QDateTime> &timestamps,
+                           const CollectionConfig &collection);
+  
+  qint64 countCollectionByUuid(const QString &collectionUuid);
+  qint64 countGlobal(const QList<CollectionConfig> &allCollections);
+  qint64 countCollectionRecursive(int collectionIndex,
+                                  const QList<CollectionConfig> &allCollections);
+  void clearCollectionFromDatabaseByUuid(const QString &collectionUuid);
+  static QString computeCollectionUuid(const QString &name);
+
+  static void appendFileMapsAndListCanonical(
+      int collectionIndex, const CollectionConfig &expandedCollection,
+      const QString &mappingArtworkDir, const QStringList &filePaths,
+      QStringList &allFilePaths, QHash<QString, QString> &allFileNames,
+      QHash<QString, QString> &fileToArtworkDir,
+      QHash<QString, QString> &fileToMediaDir,
+      QHash<QString, int> &fileToCollectionIndex, bool dedup);
+  
+  static void sortFiles(QStringList &allFilePaths);
+  static int getCharacterSortPriority(const QString &text);
+};
+
+#endif // DATABASEWORKER_H

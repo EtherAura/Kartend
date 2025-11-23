@@ -1,0 +1,9 @@
+/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/kartend.dir
+/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/edit_cache.dir
+/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/rebuild_cache.dir
+/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/list_install_components.dir
+/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/install.dir
+/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/install/local.dir
+/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/install/strip.dir
+/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/kartend_autogen_timestamp_deps.dir
+/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles/kartend_autogen.dir

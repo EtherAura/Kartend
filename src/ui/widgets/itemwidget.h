@@ -1,0 +1,105 @@
+#pragma once
+
+#include <QElapsedTimer>
+#include <QFrame>
+#include <QPixmap>
+#include <QPropertyAnimation>
+#include <QRect>
+
+#include "ui_itemwidget.h"
+#include <QString>
+
+class QLabel;
+class QMouseEvent;
+class QEnterEvent;
+class QPaintEvent;
+class QShowEvent;
+class QResizeEvent;
+class QTimer;
+
+class MediaItemWidget : public QWidget {
+  Q_OBJECT
+  Q_PROPERTY(qreal pulseOpacity READ pulseOpacity WRITE setPulseOpacity)
+  bool isSelectedState = false;
+  QPropertyAnimation *pulseAnimation = nullptr;
+  qreal m_pulseOpacity = 1.0;
+  QPixmap storedPixmap;
+
+public:
+  explicit MediaItemWidget(QWidget *parent = nullptr);
+  ~MediaItemWidget() override;
+
+  void setItemName(const QString &name);
+  void setFilePath(const QString &path);
+  void setArtworkPixmap(const QPixmap &pixmap);
+  virtual void setSelected(bool selected);
+
+  QString getItemName() const { return itemName; }
+  QString getFilePath() const { return filePath; }
+  bool isSelected() const { return isSelectedState; }
+
+  void setPulseOpacity(qreal opacity);
+  qreal pulseOpacity() const { return m_pulseOpacity; }
+
+  void setItemDimensions(int width, int height);
+  void setFontSize(int fontSize);
+  void setHideTitles(bool hide);
+  void setShowSubcollectionTitles(bool show);
+  int m_itemWidth;
+  int m_itemHeight;
+  int m_fontSize = 12; // Default font size
+  bool m_hideTitles = false;
+  bool m_showSubcollectionTitles = true;
+  QLabel *imageLabel = nullptr;
+  QLabel *nameLabel = nullptr;
+  QWidget *triangleIndicator;
+  void setAsSubcollection(int index, const QString &name);
+  void applyTitleTint() const;
+  static QColor titleTint();
+
+  void mousePressEvent(QMouseEvent *event) override;
+
+  void onArtworkChanged();
+
+signals:
+  void clicked();
+  void doubleClicked();
+  void subcollectionClicked(int index);
+  void subcollectionDoubleClicked(int index);
+
+protected:
+  void paintEvent(QPaintEvent *event) override;
+  void mouseDoubleClickEvent(QMouseEvent *event) override;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+  void enterEvent(QEnterEvent *event) override;
+#else
+  void enterEvent(QEvent *event) override;
+#endif
+  void leaveEvent(QEvent *event) override;
+  void showEvent(QShowEvent *event) override;
+  bool event(QEvent *event) override;
+  void resizeEvent(QResizeEvent *event) override;
+
+private:
+  QString itemName;
+  QString filePath;
+  bool m_isSubcollection = false;
+  int m_subcollectionIndex = -1;
+  void updateTriangleIndicator();
+  void paintTriangleIndicator();
+  QPixmap buildPlaceholderPattern(int width, int height) const;
+  void setupPulseAnimation();
+  void startPulseAnimation();
+  QTimer *m_pulseDelayTimer;
+  QElapsedTimer m_lastClickTimer;
+  QPoint m_lastClickPos;
+  static constexpr int DOUBLE_CLICK_TIMEOUT_MS = 300;
+  static constexpr int CLICK_POSITION_TOLERANCE = 5;
+
+  bool isGlideActive() const;
+  QRect computeSelectionBorderRect() const;
+  void applySelectedUiEffects();
+  void applyDeselectedUiEffects() const;
+  void scheduleSelectionBorderUpdate();
+  void applyDimensions();
+};
