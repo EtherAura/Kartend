@@ -21,98 +21,37 @@
 #include <QTimer>
 #include <algorithm>
 
-namespace {
-inline void persistCurrentSelection(MainWindow *mainWindow) {
-  if ((mainWindow == nullptr) ||
-      (mainWindow->getInteractionManager() == nullptr) ||
-      (mainWindow->getSettingsManager() == nullptr)) {
-    return;
-  }
-  int coll = mainWindow->currentCollectionIndex;
-  if (coll < 0 || coll >= mainWindow->m_collections.size()) {
-    return;
-  }
-  int sel = mainWindow->getInteractionManager()->currentSelectedIndex();
-  if (sel < 0) {
-    return;
-  }
-  mainWindow->getSettingsManager()->setLastSelectedItem(coll, sel);
+
+
+NavigationManager::NavigationManager(QObject *parent)
+    : QObject(parent) {}
+
+void NavigationManager::setupReferences(
+    const NavigationManagerDependencies &deps) {
+  m_interactionManager = deps.interactionManager;
+  m_settingsManager = deps.settingsManager;
+  m_sidebarManager = deps.sidebarManager;
+  m_scrollManager = deps.scrollManager;
+  m_databaseManager = deps.databaseManager;
+  m_metadataSidebar = deps.metadataSidebar;
+  m_currentCollectionIndex = deps.currentCollectionIndex;
+  m_collections = deps.collections;
+  m_generalSettings = deps.generalSettings;
+  m_searchBar = deps.searchBar;
+  m_itemsPage = deps.itemsPage;
+  m_stackedWidget = deps.stackedWidget;
+  m_loadingLabel = deps.loadingLabel;
+  m_itemScrollArea = deps.itemScrollArea;
+  m_gridContainer = deps.gridContainer;
+  m_isShuttingDown = deps.isShuttingDown;
+  m_refreshTitleCounts = deps.refreshTitleCounts;
 }
-
-
-inline void prepareForNonSharedNavigation(MainWindow *mainWindow) {
-  if (mainWindow == nullptr) {
-    return;
-  }
-  if (mainWindow->getInteractionManager() != nullptr) {
-    mainWindow->getInteractionManager()->clearSelectionAndFocus();
-  }
-  if (mainWindow->getMetadataSidebar() != nullptr) {
-    mainWindow->getMetadataSidebar()->clearMetadata();
-  }
-  ArtworkManager::instance().stopSilentLoading();
-  if (ArtworkManager::instance().getTimerCoordinator() != nullptr) {
-    ArtworkManager::instance().getTimerCoordinator()->stopAllTimers();
-  }
-  if (mainWindow->getScrollManager() != nullptr) {
-    mainWindow->getScrollManager()->cleanup();
-  }
-}
-
-inline void suspendItemsPageRendering(MainWindow *mainWindow) {
-  if (mainWindow == nullptr) {
-    return;
-  }
-  if (QScrollArea *scrollArea = mainWindow->ui->itemScrollArea) {
-    scrollArea->setUpdatesEnabled(false);
-    scrollArea->setProperty(PropertyKeys::SuppressArtwork, true);
-  }
-  if (QWidget *gridContainer = mainWindow->gridContainer) {
-    gridContainer->setUpdatesEnabled(false);
-    gridContainer->setVisible(false);
-  }
-}
-
-inline void resumeItemsPageRendering(MainWindow *mainWindow) {
-  if (mainWindow == nullptr) {
-    return;
-  }
-  if (QWidget *gridContainer = mainWindow->gridContainer) {
-    gridContainer->setVisible(true);
-    gridContainer->setUpdatesEnabled(true);
-  }
-  if (QScrollArea *scrollArea = mainWindow->ui->itemScrollArea) {
-    scrollArea->setUpdatesEnabled(true);
-    scrollArea->setProperty(PropertyKeys::SuppressArtwork, false);
-  }
-}
-
-inline void applyUiPoliciesForCollection(MainWindow *mainWindow,
-                                         int collectionIndex) {
-  if (mainWindow == nullptr) {
-    return;
-  }
-  if (mainWindow->getSidebarManager() != nullptr) {
-    mainWindow->getSidebarManager()->applySidebarStateForCollection(
-        collectionIndex);
-  }
-  if (mainWindow->getSettingsManager() != nullptr) {
-    SettingsManager::applyHorizontalScrollbarSetting(
-        mainWindow, collectionIndex, mainWindow->m_collections);
-    SettingsManager::applyVerticalScrollbarSetting(mainWindow, collectionIndex,
-                                                   mainWindow->m_collections);
-  }
-}
-} // namespace
-
-NavigationManager::NavigationManager(MainWindow *mainWindow)
-    : QObject(mainWindow), m_mainWindow(mainWindow) {}
 
 NavigationManager::~NavigationManager() = default;
 
 // Navigates to a subcollection using the shared parent view
 void NavigationManager::navigateWithSharedItems(int collectionIndex) {
-  if (m_mainWindow == nullptr) {
+  if (parent() == nullptr) {
     return;
   }
 
@@ -122,26 +61,26 @@ void NavigationManager::navigateWithSharedItems(int collectionIndex) {
     return;
   }
 
-  int previousIndex = m_mainWindow->currentCollectionIndex;
+  int previousIndex = (*m_currentCollectionIndex);
 
-  if (m_mainWindow->getInteractionManager() != nullptr) {
-    m_mainWindow->getInteractionManager()->clearSelectionAndFocus();
+  if (m_interactionManager != nullptr) {
+    m_interactionManager->clearSelectionAndFocus();
   }
-  if (m_mainWindow->getMetadataSidebar() != nullptr) {
-    m_mainWindow->getMetadataSidebar()->clearMetadata();
+  if (m_metadataSidebar != nullptr) {
+    m_metadataSidebar->clearMetadata();
   }
 
-  m_mainWindow->currentCollectionIndex = collectionIndex;
+  (*m_currentCollectionIndex) = collectionIndex;
 
-  if (m_mainWindow->getInteractionManager() != nullptr) {
-    m_mainWindow->getInteractionManager()
+  if (m_interactionManager != nullptr) {
+    m_interactionManager
         ->initializeSearchModeForCurrentCollection();
   }
 
   updateItemsPageTitle(collectionIndex);
 
   bool isNavigatingToSubcollection =
-      (m_mainWindow->m_collections[collectionIndex].parentCollectionIndex ==
+      ((*m_collections)[collectionIndex].parentCollectionIndex ==
        previousIndex);
 
   if (isNavigatingToSubcollection) {
@@ -154,11 +93,11 @@ void NavigationManager::navigateWithSharedItems(int collectionIndex) {
 }
 
 auto NavigationManager::initializeNavigationState() -> void {
-  if ((m_mainWindow != nullptr) &&
-      (m_mainWindow->getInteractionManager() != nullptr)) {
-    m_mainWindow->getInteractionManager()->stopRepeat();
-    m_mainWindow->getInteractionManager()->m_navigationInProgress = true;
-    auto *interactionManager = m_mainWindow->getInteractionManager();
+  if ((parent() != nullptr) &&
+      (m_interactionManager != nullptr)) {
+    m_interactionManager->stopRepeat();
+    m_interactionManager->m_navigationInProgress = true;
+    auto *interactionManager = m_interactionManager;
     interactionManager->setProperty(PropertyKeys::RowChangeFirstClickIndex, -1);
     interactionManager->setProperty(PropertyKeys::RowChangeFirstClickMs, 0);
     interactionManager->setProperty(PropertyKeys::DoubleClickPending, false);
@@ -170,28 +109,28 @@ auto NavigationManager::initializeNavigationState() -> void {
     interactionManager->setProperty(PropertyKeys::SelectionSuppressed, false);
     interactionManager->setProperty(PropertyKeys::PendingSelectionIndex, -1);
   }
-  if (m_mainWindow->getInteractionManager()) {
-    m_mainWindow->getInteractionManager()->cancelPendingSelectionRestore();
+  if (m_interactionManager) {
+    m_interactionManager->cancelPendingSelectionRestore();
   }
 }
 
 auto NavigationManager::validateAndPrepareNavigation(int collectionIndex)
     -> bool {
   if (collectionIndex < 0 ||
-      collectionIndex >= m_mainWindow->m_collections.size()) {
+      collectionIndex >= (*m_collections).size()) {
     return false;
   }
 
   bool hasSub = false;
   bool hasItems = false;
   if (!getHasSubAndItems(collectionIndex, hasSub, hasItems)) {
-    if ((m_mainWindow != nullptr) &&
-        (m_mainWindow->getInteractionManager() != nullptr)) {
+    if ((parent() != nullptr) &&
+        (m_interactionManager != nullptr)) {
       QTimer::singleShot(
-          UIConstants::NAVIGATION_PROGRESS_CLEAR_EARLY_MS, m_mainWindow,
+          UIConstants::NAVIGATION_PROGRESS_CLEAR_EARLY_MS, this,
           [this]() {
-            if (m_mainWindow && m_mainWindow->getInteractionManager()) {
-              m_mainWindow->getInteractionManager()->m_navigationInProgress =
+            if (parent() && m_interactionManager) {
+              m_interactionManager->m_navigationInProgress =
                   false;
             }
           });
@@ -202,34 +141,34 @@ auto NavigationManager::validateAndPrepareNavigation(int collectionIndex)
 }
 
 auto NavigationManager::shouldRestoreSelection() const -> bool {
-  const bool remember = m_mainWindow->m_generalSettings.rememberSelection;
+  const bool remember = (*m_generalSettings).rememberSelection;
   const bool searchActive =
-      ((m_mainWindow->searchBar != nullptr) &&
-       !m_mainWindow->searchBar->text().trimmed().isEmpty());
+      ((m_searchBar != nullptr) &&
+       !m_searchBar->text().trimmed().isEmpty());
   return remember && !searchActive &&
-         (m_mainWindow->getScrollManager() != nullptr) &&
-         (m_mainWindow->getInteractionManager() != nullptr);
+         (m_scrollManager != nullptr) &&
+         (m_interactionManager != nullptr);
 }
 
 auto NavigationManager::getSelectionRestoreIndex(int collectionIndex) const
     -> int {
-  if (m_mainWindow->getScrollManager() == nullptr) {
+  if (m_scrollManager == nullptr) {
     return -1;
   }
 
-  int total = m_mainWindow->getScrollManager()->getTotalItems();
+  int total = m_scrollManager->getTotalItems();
   if (total <= 0) {
     return -1;
   }
 
   QString hierarchicalName =
-      hierarchicalNameFor(m_mainWindow->m_collections[collectionIndex],
-                          m_mainWindow->m_collections);
+      hierarchicalNameFor((*m_collections)[collectionIndex],
+                          (*m_collections));
   int selIdx =
       SessionManager::instance().getLastSelectedIndex(hierarchicalName);
   if (selIdx < 0) {
     selIdx = SessionManager::instance().getLastSelectedIndex(
-        m_mainWindow->m_collections[collectionIndex].name);
+        (*m_collections)[collectionIndex].name);
   }
   if (selIdx >= total) {
     selIdx = total - 1;
@@ -239,24 +178,24 @@ auto NavigationManager::getSelectionRestoreIndex(int collectionIndex) const
 
 auto NavigationManager::createSelectionRestoreLambda(int collectionIndex,
                                                      int selIdx,
-                                                     int token) const
+                                                     int token)
     -> std::function<void()> {
-  QPointer<MainWindow> guard(m_mainWindow);
+  QPointer<NavigationManager> guard(this);
   return [guard, collectionIndex, selIdx, token]() {
     if (!guard) {
       return;
     }
-    if (guard->currentCollectionIndex != collectionIndex) {
+    if ((*guard->m_currentCollectionIndex) != collectionIndex) {
       return;
     }
-    if (guard->property(PropertyKeys::SelectionRestoreToken).toInt() != token) {
+    if (guard->parent()->property(PropertyKeys::SelectionRestoreToken).toInt() != token) {
       return;
     }
-    if (!guard->getInteractionManager() || !guard->getScrollManager()) {
+    if (!guard->m_interactionManager || !guard->m_scrollManager) {
       return;
     }
-    if (guard->getInteractionManager()->currentSelectedIndex() != selIdx) {
-      guard->getInteractionManager()->beginSelectionRestore(selIdx);
+    if (guard->m_interactionManager->currentSelectedIndex() != selIdx) {
+      guard->m_interactionManager->beginSelectionRestore(selIdx);
     }
   };
 }
@@ -267,16 +206,16 @@ auto NavigationManager::scheduleSelectionRestoreVerification(
       createSelectionRestoreLambda(collectionIndex, selIdx, token);
 
   QTimer::singleShot(UIConstants::SELECTION_RESTORE_EARLY_VERIFY_1_MS,
-                     m_mainWindow, restoreLambda);
+                     this, restoreLambda);
   QTimer::singleShot(UIConstants::SELECTION_RESTORE_EARLY_VERIFY_2_MS,
-                     m_mainWindow, restoreLambda);
+                     this, restoreLambda);
 }
 
 auto NavigationManager::handleSubcollectionNavigation(int collectionIndex,
                                                       int previousIndex)
     -> void {
   bool targetHasNestedItems =
-      m_mainWindow->m_collections[collectionIndex].showAllSubcollectionItems;
+      (*m_collections)[collectionIndex].showAllSubcollectionItems;
   bool targetHasChildren = false;
   if (targetHasNestedItems) {
     targetHasChildren = collectionHasDescendantWithMedia(collectionIndex);
@@ -286,10 +225,10 @@ auto NavigationManager::handleSubcollectionNavigation(int collectionIndex,
     return;
   }
 
-  if (m_mainWindow->getScrollManager() != nullptr) {
-    m_mainWindow->getScrollManager()->updateContextForSubcollection(
+  if (m_scrollManager != nullptr) {
+    m_scrollManager->updateContextForSubcollection(
         collectionIndex);
-    m_mainWindow->getScrollManager()->applySubcollectionFilter(collectionIndex);
+    m_scrollManager->applySubcollectionFilter(collectionIndex);
   }
 
   if (!shouldRestoreSelection()) {
@@ -302,47 +241,47 @@ auto NavigationManager::handleSubcollectionNavigation(int collectionIndex,
   }
 
   int token =
-      m_mainWindow->property(PropertyKeys::SelectionRestoreToken).toInt() + 1;
-  m_mainWindow->setProperty(PropertyKeys::SelectionRestoreToken, token);
+      parent()->property(PropertyKeys::SelectionRestoreToken).toInt() + 1;
+  parent()->setProperty(PropertyKeys::SelectionRestoreToken, token);
 
-  m_mainWindow->getInteractionManager()->beginSelectionRestore(selIdx);
+  m_interactionManager->beginSelectionRestore(selIdx);
   scheduleSelectionRestoreVerification(collectionIndex, selIdx, token);
 }
 
 auto NavigationManager::handleRegularNavigation(int collectionIndex) -> void {
-  if (m_mainWindow->getScrollManager() != nullptr) {
-    m_mainWindow->getScrollManager()->clearFilter();
+  if (m_scrollManager != nullptr) {
+    m_scrollManager->clearFilter();
   }
 }
 
 auto NavigationManager::finalizeNavigation(int collectionIndex) -> void {
   applyCollectionSettingsOnly(collectionIndex);
-  if ((m_mainWindow->searchBar != nullptr) &&
-      m_mainWindow->searchBar->text().trimmed().isEmpty()) {
-    m_mainWindow->searchBar->clear();
+  if ((m_searchBar != nullptr) &&
+      m_searchBar->text().trimmed().isEmpty()) {
+    m_searchBar->clear();
   }
-  QTimer::singleShot(UIConstants::MEDIUM_TIMER_DELAY, m_mainWindow, [this]() {
-    m_mainWindow->getScrollManager()->centerHorizontalScrollbar(
-        m_mainWindow->currentCollectionIndex, m_mainWindow->m_collections);
+  QTimer::singleShot(UIConstants::MEDIUM_TIMER_DELAY, this, [this]() {
+    m_scrollManager->centerHorizontalScrollbar(
+        (*m_currentCollectionIndex), (*m_collections));
   });
-  m_mainWindow->refreshTitleCounts();
+  if (m_refreshTitleCounts) m_refreshTitleCounts();
 
   QTimer::singleShot(
-      UIConstants::NAVIGATION_PROGRESS_CLEAR_MS, m_mainWindow, [this]() {
-        if (m_mainWindow && m_mainWindow->getInteractionManager()) {
-          m_mainWindow->getInteractionManager()->m_navigationInProgress = false;
+      UIConstants::NAVIGATION_PROGRESS_CLEAR_MS, this, [this]() {
+        if (parent() && m_interactionManager) {
+          m_interactionManager->m_navigationInProgress = false;
         }
       });
 }
 
 // Validates basic context for selection restore operations
 auto NavigationManager::validateSelectionRestoreContext() const -> bool {
-  if ((m_mainWindow == nullptr) || QApplication::closingDown() ||
-      m_mainWindow->isShuttingDown()) {
+  if ((parent() == nullptr) || QApplication::closingDown() ||
+      m_isShuttingDown()) {
     return false;
   }
-  if ((m_mainWindow->getScrollManager() == nullptr) ||
-      (m_mainWindow->getInteractionManager() == nullptr)) {
+  if ((m_scrollManager == nullptr) ||
+      (m_interactionManager == nullptr)) {
     return false;
   }
   return true;
@@ -351,9 +290,9 @@ auto NavigationManager::validateSelectionRestoreContext() const -> bool {
 // Initializes and returns the next selection restore token
 auto NavigationManager::initializeSelectionRestoreToken() const -> int {
   const int token =
-      m_mainWindow->property(PropertyKeys::SelectionRestoreToken).toInt() + 1;
-  m_mainWindow->setProperty(PropertyKeys::SelectionRestoreToken, token);
-  m_mainWindow->setProperty(PropertyKeys::SelectionRestorePending, true);
+      parent()->property(PropertyKeys::SelectionRestoreToken).toInt() + 1;
+  parent()->setProperty(PropertyKeys::SelectionRestoreToken, token);
+  parent()->setProperty(PropertyKeys::SelectionRestorePending, true);
   return token;
 }
 
@@ -364,13 +303,13 @@ auto NavigationManager::createRestoreValidationLambda(
     if (!validateSelectionRestoreContext()) {
       return false;
     }
-    if (m_mainWindow->currentCollectionIndex != scheduledCollectionIndex) {
-      m_mainWindow->setProperty(PropertyKeys::SelectionRestorePending, false);
+    if ((*m_currentCollectionIndex) != scheduledCollectionIndex) {
+      parent()->setProperty(PropertyKeys::SelectionRestorePending, false);
       return false;
     }
-    if (m_mainWindow->property(PropertyKeys::SelectionRestoreToken).toInt() !=
+    if (parent()->property(PropertyKeys::SelectionRestoreToken).toInt() !=
         token) {
-      m_mainWindow->setProperty(PropertyKeys::SelectionRestorePending, false);
+      parent()->setProperty(PropertyKeys::SelectionRestorePending, false);
       return false;
     }
     return true;
@@ -388,18 +327,18 @@ auto NavigationManager::executeSelectionRestore(int desiredIndex,
     return;
   }
 
-  int total = m_mainWindow->getScrollManager()->getTotalItems();
+  int total = m_scrollManager->getTotalItems();
   if (desiredIndex >= 0 && desiredIndex < total) {
     QTimer::singleShot(
-        UIConstants::MEDIUM_TIMER_DELAY, m_mainWindow,
+        UIConstants::MEDIUM_TIMER_DELAY, this,
         [this, desiredIndex, validator]() {
           if (validator()) {
-            m_mainWindow->getInteractionManager()->beginSelectionRestore(
+            m_interactionManager->beginSelectionRestore(
                 desiredIndex);
           }
         });
   }
-  m_mainWindow->setProperty(PropertyKeys::SelectionRestorePending, false);
+  parent()->setProperty(PropertyKeys::SelectionRestorePending, false);
 }
 
 // Schedules selection restoration for the current collection with a cancelable
@@ -407,7 +346,7 @@ auto NavigationManager::executeSelectionRestore(int desiredIndex,
 auto NavigationManager::scheduleSelectionRestore(int desiredIndex,
                                                  int maxAttempts,
                                                  int attemptDelayMs,
-                                                 int finalEnsureDelayMs) const
+                                                 int finalEnsureDelayMs)
     -> void {
   Q_UNUSED(maxAttempts)
   Q_UNUSED(attemptDelayMs)
@@ -417,27 +356,27 @@ auto NavigationManager::scheduleSelectionRestore(int desiredIndex,
   }
 
   if (desiredIndex < 0) {
-    if (m_mainWindow->getInteractionManager()) {
-      m_mainWindow->getInteractionManager()->cancelPendingSelectionRestore();
+    if (m_interactionManager) {
+      m_interactionManager->cancelPendingSelectionRestore();
     }
     return;
   }
 
-  const int scheduledCollectionIndex = m_mainWindow->currentCollectionIndex;
+  const int scheduledCollectionIndex = (*m_currentCollectionIndex);
   const int token = initializeSelectionRestoreToken();
 
   auto doRestore = [this, desiredIndex, scheduledCollectionIndex, token]() {
     executeSelectionRestore(desiredIndex, scheduledCollectionIndex, token);
   };
 
-  if (m_mainWindow->getScrollManager()->getTotalItems() > 0) {
-    QTimer::singleShot(UIConstants::SHORT_TIMER_DELAY, m_mainWindow, doRestore);
+  if (m_scrollManager->getTotalItems() > 0) {
+    QTimer::singleShot(UIConstants::SHORT_TIMER_DELAY, this, doRestore);
   } else {
     auto validator =
         createRestoreValidationLambda(scheduledCollectionIndex, token);
     auto *conn = new QMetaObject::Connection();
-    *conn = connect(m_mainWindow->getScrollManager(),
-                    &ScrollManager::virtualScrollSetupComplete, m_mainWindow,
+    *conn = connect(m_scrollManager,
+                    &ScrollManager::virtualScrollSetupComplete, this,
                     [conn, doRestore, validator]() {
                       disconnect(*conn);
                       delete conn;
@@ -450,7 +389,7 @@ auto NavigationManager::scheduleSelectionRestore(int desiredIndex,
   if (finalEnsureDelayMs > 0) {
     auto validator =
         createRestoreValidationLambda(scheduledCollectionIndex, token);
-    QTimer::singleShot(finalEnsureDelayMs, m_mainWindow,
+    QTimer::singleShot(finalEnsureDelayMs, this,
                        [doRestore, validator]() {
                          if (validator()) {
                            doRestore();
@@ -462,11 +401,11 @@ auto NavigationManager::scheduleSelectionRestore(int desiredIndex,
 // Validates collection index for showCollectionItems operation
 auto NavigationManager::validateCollectionIndex(int collectionIndex) const
     -> bool {
-  if (m_mainWindow == nullptr) {
+  if (parent() == nullptr) {
     return false;
   }
   if (collectionIndex < 0 ||
-      collectionIndex >= m_mainWindow->m_collections.size()) {
+      collectionIndex >= (*m_collections).size()) {
     return false;
   }
 
@@ -479,10 +418,10 @@ auto NavigationManager::validateCollectionIndex(int collectionIndex) const
 auto NavigationManager::handleSharedItemsNavigation(int collectionIndex)
     -> bool {
   bool itemsAreShared =
-      areItemsShared(m_mainWindow->currentCollectionIndex, collectionIndex);
+      areItemsShared((*m_currentCollectionIndex), collectionIndex);
   if (itemsAreShared) {
     navigateWithSharedItems(collectionIndex);
-    m_mainWindow->refreshTitleCounts();
+    if (m_refreshTitleCounts) m_refreshTitleCounts();
     return true;
   }
   return false;
@@ -491,52 +430,52 @@ auto NavigationManager::handleSharedItemsNavigation(int collectionIndex)
 // Prepares UI for non-shared navigation
 auto NavigationManager::prepareNonSharedNavigation(int collectionIndex)
     -> void {
-  prepareForNonSharedNavigation(m_mainWindow);
-  suspendItemsPageRendering(m_mainWindow);
+  prepareForNonSharedNavigationHelper();
+  suspendItemsPageRendering();
 
-  m_mainWindow->currentCollectionIndex = collectionIndex;
+  (*m_currentCollectionIndex) = collectionIndex;
 
-  applyUiPoliciesForCollection(m_mainWindow, collectionIndex);
+  applyUiPoliciesForCollection(collectionIndex);
   applyCollectionSettingsOnly(collectionIndex);
 
-  if (m_mainWindow->getScrollManager() != nullptr) {
-    m_mainWindow->getScrollManager()->primeLayoutFor(
-        m_mainWindow->m_collections[collectionIndex]);
+  if (m_scrollManager != nullptr) {
+    m_scrollManager->primeLayoutFor(
+        (*m_collections)[collectionIndex]);
   }
-  if (m_mainWindow->getInteractionManager() != nullptr) {
-    m_mainWindow->getInteractionManager()
+  if (m_interactionManager != nullptr) {
+    m_interactionManager
         ->initializeSearchModeForCurrentCollection();
   }
 
   updateItemsPageTitle(collectionIndex);
-  m_mainWindow->stackedWidget->setCurrentWidget(m_mainWindow->itemsPage);
-  m_mainWindow->setFocus();
-  m_mainWindow->activateWindow();
+  m_stackedWidget->setCurrentWidget(m_itemsPage);
+  if (auto *w = qobject_cast<QWidget*>(parent())) w->setFocus();
+  if (auto *w = qobject_cast<QWidget*>(parent())) w->activateWindow();
 
-  if (m_mainWindow->getSidebarManager() != nullptr) {
-    m_mainWindow->getSidebarManager()->applySidebarStateForCollection(
-        m_mainWindow->currentCollectionIndex);
+  if (m_sidebarManager != nullptr) {
+    m_sidebarManager->applySidebarStateForCollection(
+        (*m_currentCollectionIndex));
   }
 
-  if ((m_mainWindow->searchBar != nullptr) &&
-      m_mainWindow->searchBar->text().trimmed().isEmpty()) {
-    m_mainWindow->searchBar->clear();
+  if ((m_searchBar != nullptr) &&
+      m_searchBar->text().trimmed().isEmpty()) {
+    m_searchBar->clear();
   }
 
-  if (m_mainWindow->getScrollManager() != nullptr) {
-    m_mainWindow->getScrollManager()->clearFilter();
+  if (m_scrollManager != nullptr) {
+    m_scrollManager->clearFilter();
   }
 }
 
 // Loads data for the current collection
 auto NavigationManager::loadCollectionData(int collectionIndex) -> void {
-  if (m_mainWindow->currentCollectionIndex >= 0 &&
-      m_mainWindow->currentCollectionIndex <
-          m_mainWindow->m_collections.size()) {
+  if ((*m_currentCollectionIndex) >= 0 &&
+      (*m_currentCollectionIndex) <
+          (*m_collections).size()) {
     CollectionContext context;
-    context.currentIndex = m_mainWindow->currentCollectionIndex;
+    context.currentIndex = (*m_currentCollectionIndex);
     context.config =
-        m_mainWindow->m_collections[m_mainWindow->currentCollectionIndex];
+        (*m_collections)[(*m_currentCollectionIndex)];
     context.config.mediaDirectory = SettingsManager::expandConfigVariables(
         context.config.mediaDirectory, context.config.name);
     context.config.artworkDirectory = SettingsManager::expandConfigVariables(
@@ -549,15 +488,15 @@ auto NavigationManager::loadCollectionData(int collectionIndex) -> void {
         bool hasDescendantWithMedia =
             collectionHasDescendantWithMedia(collectionIndex);
         if (hasDescendantWithMedia) {
-          m_mainWindow->getDatabaseManager()->loadItemsWithSubcollections(
-              context, m_mainWindow->m_collections);
+          m_databaseManager->loadItemsWithSubcollections(
+              context, (*m_collections));
         } else {
           QStringList emptyFilePaths;
           QHash<QString, QString> emptyFileNames;
           onItemsLoaded(emptyFilePaths, emptyFileNames);
         }
       } else {
-        m_mainWindow->getDatabaseManager()->loadItems(context);
+        m_databaseManager->loadItems(context);
       }
     } else {
       QStringList emptyFilePaths;
@@ -573,13 +512,13 @@ auto NavigationManager::showCollectionItems(int collectionIndex) -> bool {
     return false;
   }
 
-  if ((m_mainWindow != nullptr) &&
-      (m_mainWindow->getInteractionManager() != nullptr)) {
-    m_mainWindow->getInteractionManager()->stopRepeat();
-    m_mainWindow->getInteractionManager()->cancelPendingSelectionRestore();
+  if ((parent() != nullptr) &&
+      (m_interactionManager != nullptr)) {
+    m_interactionManager->stopRepeat();
+    m_interactionManager->cancelPendingSelectionRestore();
   }
 
-  persistCurrentSelection(m_mainWindow);
+  persistCurrentSelection();
 
   if (handleSharedItemsNavigation(collectionIndex)) {
     return true;
@@ -587,7 +526,7 @@ auto NavigationManager::showCollectionItems(int collectionIndex) -> bool {
 
   prepareNonSharedNavigation(collectionIndex);
   loadCollectionData(collectionIndex);
-  m_mainWindow->refreshTitleCounts();
+  if (m_refreshTitleCounts) m_refreshTitleCounts();
   return true;
 }
 
@@ -603,7 +542,7 @@ auto NavigationManager::setSuppressArrowCenter(QScrollArea *scrollArea,
   scrollArea->setProperty(PropertyKeys::SuppressArrowCenterUntilMs, until);
   QPointer<QScrollArea> guard = scrollArea;
   QTimer::singleShot(
-      UIConstants::ARROW_CENTER_CLEAR_AFTER_SET_MS, m_mainWindow, [guard]() {
+      UIConstants::ARROW_CENTER_CLEAR_AFTER_SET_MS, this, [guard]() {
         if (guard) {
           guard->setProperty(PropertyKeys::SuppressArrowCenter, false);
         }
@@ -613,13 +552,13 @@ auto NavigationManager::setSuppressArrowCenter(QScrollArea *scrollArea,
 auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const
     -> bool {
   if (fromIndex < 0 || toIndex < 0 ||
-      fromIndex >= m_mainWindow->m_collections.size() ||
-      toIndex >= m_mainWindow->m_collections.size()) {
+      fromIndex >= (*m_collections).size() ||
+      toIndex >= (*m_collections).size()) {
     return false;
   }
 
-  const auto &fromCollection = m_mainWindow->m_collections[fromIndex];
-  const auto &toCollection = m_mainWindow->m_collections[toIndex];
+  const auto &fromCollection = (*m_collections)[fromIndex];
+  const auto &toCollection = (*m_collections)[toIndex];
 
   bool isDirectChild = (toCollection.parentCollectionIndex == fromIndex);
   if (!isDirectChild) {
@@ -639,12 +578,12 @@ auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const
   const bool anyDescendantWithMedia =
       std::ranges::any_of(childCollections, [this](int childIndex) {
         if (childIndex < 0 ||
-            childIndex >= m_mainWindow->m_collections.size()) {
+            childIndex >= (*m_collections).size()) {
           return false;
         }
         QString childMediaDir = SettingsManager::expandConfigVariables(
-            m_mainWindow->m_collections[childIndex].mediaDirectory,
-            m_mainWindow->m_collections[childIndex].name);
+            (*m_collections)[childIndex].mediaDirectory,
+            (*m_collections)[childIndex].name);
         return !childMediaDir.trimmed().isEmpty();
       });
   return !anyDescendantWithMedia;
@@ -653,55 +592,55 @@ auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const
 auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex)
     -> void {
   if (collectionIndex < 0 ||
-      collectionIndex >= m_mainWindow->m_collections.size()) {
+      collectionIndex >= (*m_collections).size()) {
     return;
   }
 
   const CollectionConfig &collection =
-      m_mainWindow->m_collections[collectionIndex];
+      (*m_collections)[collectionIndex];
 
   if (collection.gridWidth !=
-      m_mainWindow->getScrollManager()->getCurrentGridWidth()) {
-    m_mainWindow->getScrollManager()->updateGridWidth(collection.gridWidth);
+      m_scrollManager->getCurrentGridWidth()) {
+    m_scrollManager->updateGridWidth(collection.gridWidth);
   }
 
-  m_mainWindow->getSettingsManager()->applyHorizontalScrollbarSetting(
-      m_mainWindow, collectionIndex, m_mainWindow->m_collections);
-  m_mainWindow->getSettingsManager()->applyVerticalScrollbarSetting(
-      m_mainWindow, collectionIndex, m_mainWindow->m_collections);
+  m_settingsManager->applyHorizontalScrollbarSetting(
+      qobject_cast<QWidget*>(parent()), collectionIndex, (*m_collections));
+  m_settingsManager->applyVerticalScrollbarSetting(
+      qobject_cast<QWidget*>(parent()), collectionIndex, (*m_collections));
 
-  if (m_mainWindow->getSidebarManager() != nullptr) {
-    m_mainWindow->getSidebarManager()->applySidebarStateForCollection(
+  if (m_sidebarManager != nullptr) {
+    m_sidebarManager->applySidebarStateForCollection(
         collectionIndex);
   }
 }
 
 void NavigationManager::restoreSelectionForCurrentCollection() {
-  if ((m_mainWindow == nullptr) || QApplication::closingDown()) {
+  if ((parent() == nullptr) || QApplication::closingDown()) {
     return;
   }
-  if ((m_mainWindow->getScrollManager() == nullptr) ||
-      (m_mainWindow->getInteractionManager() == nullptr)) {
+  if ((m_scrollManager == nullptr) ||
+      (m_interactionManager == nullptr)) {
     return;
   }
-  int coll = m_mainWindow->currentCollectionIndex;
-  if (coll < 0 || coll >= m_mainWindow->m_collections.size()) {
+  int coll = (*m_currentCollectionIndex);
+  if (coll < 0 || coll >= (*m_collections).size()) {
     return;
   }
-  int total = m_mainWindow->getScrollManager()->getTotalItems();
+  int total = m_scrollManager->getTotalItems();
   if (total <= 0) {
     return;
   }
   int desired = -1;
-  if (m_mainWindow->getSettingsManager() != nullptr) {
-    desired = m_mainWindow->getSettingsManager()->getLastSelectedItem(coll);
+  if (m_settingsManager != nullptr) {
+    desired = m_settingsManager->getLastSelectedItem(coll);
   } else {
-    desired = m_mainWindow->getSettingsManager()->getLastSelectedItem(coll);
+    desired = m_settingsManager->getLastSelectedItem(coll);
   }
   if (desired < 0 || desired >= total) {
     desired = 0;
   }
-  if (m_mainWindow->getInteractionManager()->currentSelectedIndex() == desired) {
+  if (m_interactionManager->currentSelectedIndex() == desired) {
     return;
   }
 
@@ -712,11 +651,11 @@ void NavigationManager::restoreSelectionForCurrentCollection() {
 
 // Performs common navigation cleanup operations
 auto NavigationManager::performNavigationStackCleanup() -> void {
-  if (m_mainWindow->getInteractionManager() != nullptr) {
-    m_mainWindow->getInteractionManager()->clearSelectionAndFocus();
+  if (m_interactionManager != nullptr) {
+    m_interactionManager->clearSelectionAndFocus();
   }
-  if (m_mainWindow->getMetadataSidebar() != nullptr) {
-    m_mainWindow->getMetadataSidebar()->clearMetadata();
+  if (m_metadataSidebar != nullptr) {
+    m_metadataSidebar->clearMetadata();
   }
   ArtworkManager::instance().stopSilentLoading();
   if (ArtworkManager::instance().getTimerCoordinator() != nullptr) {
@@ -729,13 +668,13 @@ auto NavigationManager::findSubcollectionVisualIndex(int targetCollectionIndex,
                                                      int previousIndex) const
     -> int {
   if (targetCollectionIndex < 0 ||
-      targetCollectionIndex >= m_mainWindow->m_collections.size()) {
+      targetCollectionIndex >= (*m_collections).size()) {
     return -1;
   }
 
   QList<int> subcollections;
-  for (int i = 0; i < m_mainWindow->m_collections.size(); ++i) {
-    if (m_mainWindow->m_collections[i].parentCollectionIndex ==
+  for (int i = 0; i < (*m_collections).size(); ++i) {
+    if ((*m_collections)[i].parentCollectionIndex ==
         targetCollectionIndex) {
       subcollections.append(i);
     }
@@ -748,21 +687,21 @@ auto NavigationManager::scheduleNavigationReturn(int targetCollectionIndex,
                                                  int subcollectionVisualIndex)
     -> void {
   QTimer::singleShot(
-      UIConstants::SHORT_TIMER_DELAY, m_mainWindow,
+      UIConstants::SHORT_TIMER_DELAY, this,
       [this, targetCollectionIndex, subcollectionVisualIndex]() {
         showCollectionItems(targetCollectionIndex);
 
-        if (m_mainWindow->getInteractionManager()) {
-          m_mainWindow->getInteractionManager()->m_navigationInProgress = false;
+        if (m_interactionManager) {
+          m_interactionManager->m_navigationInProgress = false;
         }
 
         if (subcollectionVisualIndex >= 0 &&
-            m_mainWindow->getInteractionManager()) {
+            m_interactionManager) {
           QTimer::singleShot(
-              UIConstants::MEDIUM_TIMER_DELAY, m_mainWindow,
+              UIConstants::MEDIUM_TIMER_DELAY, this,
               [this, subcollectionVisualIndex]() {
-                if (m_mainWindow->getInteractionManager()) {
-                  m_mainWindow->getInteractionManager()->beginSelectionRestore(
+                if (m_interactionManager) {
+                  m_interactionManager->beginSelectionRestore(
                       subcollectionVisualIndex);
                 }
               });
@@ -773,18 +712,18 @@ auto NavigationManager::scheduleNavigationReturn(int targetCollectionIndex,
 // Handles navigation when the navigation stack is not empty
 auto NavigationManager::handleNavigationStackPop() -> void {
   int targetCollectionIndex = m_navigationStack.takeLast();
-  int previousIndex = m_mainWindow->currentCollectionIndex;
+  int previousIndex = (*m_currentCollectionIndex);
   m_navigationDepth =
       qMax(0, m_navigationDepth - 1);
 
   performNavigationStackCleanup();
 
   bool shared = areItemsShared(previousIndex, targetCollectionIndex);
-  if (m_mainWindow->getScrollManager() != nullptr) {
+  if (m_scrollManager != nullptr) {
     if (shared) {
-      m_mainWindow->getScrollManager()->cleanupActiveWidgets();
+      m_scrollManager->cleanupActiveWidgets();
     } else {
-      m_mainWindow->getScrollManager()->cleanup();
+      m_scrollManager->cleanup();
     }
   }
 
@@ -796,52 +735,52 @@ auto NavigationManager::handleNavigationStackPop() -> void {
 // Handles navigation fallback when the navigation stack is empty
 auto NavigationManager::handleNavigationFallback() -> void {
   m_navigationDepth = 0;
-  int previousIndex = m_mainWindow->currentCollectionIndex;
+  int previousIndex = (*m_currentCollectionIndex);
 
-  int fallbackIndex = m_mainWindow->currentCollectionIndex;
+  int fallbackIndex = (*m_currentCollectionIndex);
   if (fallbackIndex < 0 ||
-      fallbackIndex >= m_mainWindow->m_collections.size()) {
+      fallbackIndex >= (*m_collections).size()) {
     fallbackIndex = -1;
-    for (int i = 0; i < m_mainWindow->m_collections.size(); ++i) {
-      if (m_mainWindow->m_collections[i].parentCollectionIndex == -1) {
+    for (int i = 0; i < (*m_collections).size(); ++i) {
+      if ((*m_collections)[i].parentCollectionIndex == -1) {
         fallbackIndex = i;
         break;
       }
     }
-    if (fallbackIndex < 0 && !m_mainWindow->m_collections.isEmpty()) {
+    if (fallbackIndex < 0 && !(*m_collections).isEmpty()) {
       fallbackIndex = 0;
     }
   }
 
   if (fallbackIndex >= 0) {
     bool shared = areItemsShared(previousIndex, fallbackIndex);
-    if (m_mainWindow->getScrollManager() != nullptr) {
+    if (m_scrollManager != nullptr) {
       if (shared) {
-        m_mainWindow->getScrollManager()->cleanupActiveWidgets();
+        m_scrollManager->cleanupActiveWidgets();
       } else {
-        m_mainWindow->getScrollManager()->cleanup();
+        m_scrollManager->cleanup();
       }
     }
     showCollectionItems(fallbackIndex);
   }
 
-  if (m_mainWindow->getInteractionManager() != nullptr) {
-    m_mainWindow->getInteractionManager()->m_navigationInProgress = false;
+  if (m_interactionManager != nullptr) {
+    m_interactionManager->m_navigationInProgress = false;
   }
 }
 
 // Goes back to collections and cancels any active held-key repeats to avoid
 // stray timer callbacks
 void NavigationManager::goBackToCollections() {
-  if (m_mainWindow == nullptr) {
+  if (parent() == nullptr) {
     return;
   }
-  if ((m_mainWindow != nullptr) &&
-      (m_mainWindow->getInteractionManager() != nullptr)) {
-    m_mainWindow->getInteractionManager()->stopRepeat();
+  if ((parent() != nullptr) &&
+      (m_interactionManager != nullptr)) {
+    m_interactionManager->stopRepeat();
   }
 
-  persistCurrentSelection(m_mainWindow);
+  persistCurrentSelection();
 
   if (!m_navigationStack.isEmpty()) {
     handleNavigationStackPop();
@@ -858,18 +797,18 @@ void NavigationManager::onCollectionSelected(int collectionIndex) {
 
 // Validates basic context for items loaded operations
 auto NavigationManager::validateItemsLoadedContext() const -> bool {
-  return m_mainWindow != nullptr && !QApplication::closingDown() &&
-         !m_mainWindow->isShuttingDown();
+  return parent() != nullptr && !QApplication::closingDown() &&
+         !m_isShuttingDown();
 }
 
 // Cleans up existing no-items widgets from previous loads
 auto NavigationManager::cleanupExistingNoItemsWidgets() -> void {
-  if (m_mainWindow->ui->loadingLabel != nullptr) {
-    m_mainWindow->ui->loadingLabel->setVisible(false);
+  if (m_loadingLabel != nullptr) {
+    m_loadingLabel->setVisible(false);
   }
 
   QList<QWidget *> existingLabels =
-      m_mainWindow->gridContainer->findChildren<QWidget *>("noItemsWidget");
+      m_gridContainer->findChildren<QWidget *>("noItemsWidget");
   for (QWidget *widget : existingLabels) {
     widget->deleteLater();
   }
@@ -882,19 +821,19 @@ auto NavigationManager::determineContentAvailability(
     -> bool {
   bool hasContent = !filePaths.isEmpty() || !subcollections.isEmpty();
 
-  if (m_mainWindow->currentCollectionIndex >= 0 &&
-      m_mainWindow->currentCollectionIndex <
-          m_mainWindow->m_collections.size()) {
+  if ((*m_currentCollectionIndex) >= 0 &&
+      (*m_currentCollectionIndex) <
+          (*m_collections).size()) {
     const CollectionConfig &collection =
-        m_mainWindow->m_collections[m_mainWindow->currentCollectionIndex];
+        (*m_collections)[(*m_currentCollectionIndex)];
     if (collection.showAllSubcollectionItems && filePaths.isEmpty() &&
         !subcollections.isEmpty()) {
       QList<int> allDescendants =
-          getAllDescendantCollections(m_mainWindow->currentCollectionIndex);
+          getAllDescendantCollections((*m_currentCollectionIndex));
       for (int descendantIndex : allDescendants) {
         if (descendantIndex >= 0 &&
-            descendantIndex < m_mainWindow->m_collections.size()) {
-          if (!m_mainWindow->m_collections[descendantIndex]
+            descendantIndex < (*m_collections).size()) {
+          if (!(*m_collections)[descendantIndex]
                    .mediaDirectory.trimmed()
                    .isEmpty()) {
             hasContent = true;
@@ -909,15 +848,15 @@ auto NavigationManager::determineContentAvailability(
 
 // Handles the case when no content is available
 auto NavigationManager::handleEmptyContent() -> void {
-  if (!QApplication::closingDown() && !m_mainWindow->isShuttingDown()) {
-    m_mainWindow->ui->loadingLabel->setText("No items found");
-    m_mainWindow->ui->loadingLabel->setVisible(true);
-    resumeItemsPageRendering(m_mainWindow);
-    m_mainWindow->refreshTitleCounts();
+  if (!QApplication::closingDown() && !m_isShuttingDown()) {
+    m_loadingLabel->setText("No items found");
+    m_loadingLabel->setVisible(true);
+    resumeItemsPageRendering();
+    if (m_refreshTitleCounts) m_refreshTitleCounts();
   }
-  if ((m_mainWindow != nullptr) &&
-      (m_mainWindow->getInteractionManager() != nullptr)) {
-    m_mainWindow->getInteractionManager()->m_navigationInProgress = false;
+  if ((parent() != nullptr) &&
+      (m_interactionManager != nullptr)) {
+    m_interactionManager->m_navigationInProgress = false;
   }
 }
 
@@ -926,9 +865,9 @@ auto NavigationManager::setupCollectionContext(
     const QStringList &filePaths,
     const QHash<QString, QString> &fileNames) const -> CollectionContext {
   CollectionContext context;
-  context.currentIndex = m_mainWindow->currentCollectionIndex;
+  context.currentIndex = (*m_currentCollectionIndex);
   context.config =
-      m_mainWindow->m_collections[m_mainWindow->currentCollectionIndex];
+      (*m_collections)[(*m_currentCollectionIndex)];
   context.artworkDirectory = context.config.artworkDirectory;
   context.filePaths = filePaths;
   context.fileNames = fileNames;
@@ -940,22 +879,22 @@ auto NavigationManager::setupCollectionContext(
 
 // Calculates the appropriate selection index for restoration
 auto NavigationManager::calculateSelectionIndex(int totalItems) const -> int {
-  bool searchActive = ((m_mainWindow->searchBar != nullptr) &&
-                       !m_mainWindow->searchBar->text().trimmed().isEmpty());
+  bool searchActive = ((m_searchBar != nullptr) &&
+                       !m_searchBar->text().trimmed().isEmpty());
 
-  if (searchActive || !m_mainWindow->m_generalSettings.rememberSelection ||
+  if (searchActive || !(*m_generalSettings).rememberSelection ||
       totalItems <= 0) {
     return -1;
   }
 
   QString hierarchicalName = hierarchicalNameFor(
-      m_mainWindow->m_collections[m_mainWindow->currentCollectionIndex],
-      m_mainWindow->m_collections);
+      (*m_collections)[(*m_currentCollectionIndex)],
+      (*m_collections));
   int selIdx =
       SessionManager::instance().getLastSelectedIndex(hierarchicalName);
   if (selIdx < 0) {
     QString collectionName =
-        m_mainWindow->m_collections[m_mainWindow->currentCollectionIndex].name;
+        (*m_collections)[(*m_currentCollectionIndex)].name;
     selIdx = SessionManager::instance().getLastSelectedIndex(collectionName);
   }
   if (selIdx >= totalItems) {
@@ -969,9 +908,9 @@ auto NavigationManager::computeCollectionDepth(int collectionIndex) const
     -> int {
   int depth = 0;
   int idx = collectionIndex;
-  while (idx >= 0 && idx < m_mainWindow->m_collections.size()) {
+  while (idx >= 0 && idx < (*m_collections).size()) {
     ++depth;
-    int parent = m_mainWindow->m_collections[idx].parentCollectionIndex;
+    int parent = (*m_collections)[idx].parentCollectionIndex;
     if (parent < 0) {
       break;
     }
@@ -984,27 +923,27 @@ auto NavigationManager::computeCollectionDepth(int collectionIndex) const
 // cleanup
 auto NavigationManager::schedulePostLoadOperations() -> void {
   QTimer::singleShot(UIConstants::START_SILENT_LOAD_AFTER_ITEMS_MS,
-                     m_mainWindow, [this]() {
+                     this, [this]() {
                        if (QApplication::closingDown() ||
-                           (m_mainWindow && m_mainWindow->isShuttingDown())) {
+                           m_isShuttingDown()) {
                          return;
                        }
                        ArtworkManager::instance().startSilentLoading();
                      });
 
-  if (m_mainWindow->getDatabaseManager() != nullptr) {
-    m_mainWindow->getDatabaseManager()->updateCachedCounts(
-        m_mainWindow->m_collections);
+  if (m_databaseManager != nullptr) {
+    m_databaseManager->updateCachedCounts(
+        (*m_collections));
   }
-  m_mainWindow->refreshTitleCounts();
+  if (m_refreshTitleCounts) m_refreshTitleCounts();
 
   if (m_allCollectionsActive) {
     m_allCollectionsActive = false;
   }
 
-  QTimer::singleShot(UIConstants::VIEWPORT_DELAY, m_mainWindow, [this]() {
-    if (m_mainWindow && m_mainWindow->getInteractionManager()) {
-      m_mainWindow->getInteractionManager()->m_navigationInProgress = false;
+  QTimer::singleShot(UIConstants::VIEWPORT_DELAY, this, [this]() {
+    if (parent() && m_interactionManager) {
+      m_interactionManager->m_navigationInProgress = false;
     }
   });
 }
@@ -1020,7 +959,7 @@ void NavigationManager::onItemsLoaded(
   cleanupExistingNoItemsWidgets();
 
   QList<int> subcollections =
-      getSubcollections(m_mainWindow->currentCollectionIndex);
+      getSubcollections((*m_currentCollectionIndex));
   bool hasContent = determineContentAvailability(filePaths, subcollections);
 
   if (!hasContent) {
@@ -1032,12 +971,12 @@ void NavigationManager::onItemsLoaded(
   int totalItems = subcollections.size() + filePaths.size();
   int selIdx = calculateSelectionIndex(totalItems);
 
-  if (m_mainWindow->getScrollManager() != nullptr) {
-    m_mainWindow->getScrollManager()->setupVirtualScrolling(filePaths, fileNames,
+  if (m_scrollManager != nullptr) {
+    m_scrollManager->setupVirtualScrolling(filePaths, fileNames,
                                                          context);
   }
 
-  resumeItemsPageRendering(m_mainWindow);
+  resumeItemsPageRendering();
 
   if ((ArtworkManager::s_instance.load() != nullptr) &&
       !ArtworkManager::s_shuttingDown.load()) {
@@ -1048,12 +987,12 @@ void NavigationManager::onItemsLoaded(
   }
 
   bool pendingRestore =
-      m_mainWindow->property(PropertyKeys::SelectionRestorePending).toBool();
-  if (selIdx >= 0 && (m_mainWindow->getInteractionManager() != nullptr) &&
+      parent()->property(PropertyKeys::SelectionRestorePending).toBool();
+  if (selIdx >= 0 && (m_interactionManager != nullptr) &&
       !pendingRestore) {
-    int depth = computeCollectionDepth(m_mainWindow->currentCollectionIndex);
+    int depth = computeCollectionDepth((*m_currentCollectionIndex));
     if (depth >= 3) {
-      m_mainWindow->getInteractionManager()->beginSelectionRestore(selIdx);
+      m_interactionManager->beginSelectionRestore(selIdx);
     } else {
       scheduleSelectionRestore(selIdx, UIConstants::SELECTION_RESTORE_STEPS,
                                UIConstants::SELECTION_RESTORE_STEP_DELAY_MS,
@@ -1065,18 +1004,18 @@ void NavigationManager::onItemsLoaded(
 }
 
 void NavigationManager::onMediaLibraryError(const QString &error) {
-  if (m_mainWindow->loadingLabel != nullptr) {
-    m_mainWindow->loadingLabel->deleteLater();
-    m_mainWindow->loadingLabel = nullptr;
+  if (m_loadingLabel != nullptr) {
+    m_loadingLabel->deleteLater();
+    m_loadingLabel = nullptr;
   }
 
   QList<QWidget *> existingLabels =
-      m_mainWindow->gridContainer->findChildren<QWidget *>("noItemsWidget");
+      m_gridContainer->findChildren<QWidget *>("noItemsWidget");
   for (QWidget *widget : existingLabels) {
     widget->deleteLater();
   }
 
-  auto *errorWidget = new QWidget(m_mainWindow->gridContainer);
+  auto *errorWidget = new QWidget(m_gridContainer);
   errorWidget->setObjectName("noItemsWidget");
 
   auto *errorLabel = new QLabel(error, errorWidget);
@@ -1088,28 +1027,28 @@ void NavigationManager::onMediaLibraryError(const QString &error) {
   layout->addWidget(errorLabel);
   layout->setContentsMargins(0, 0, 0, 0);
 
-  if (m_mainWindow->ui->itemScrollArea != nullptr) {
-    QRect viewportRect = m_mainWindow->ui->itemScrollArea->viewport()->rect();
+  if (m_itemScrollArea != nullptr) {
+    QRect viewportRect = m_itemScrollArea->viewport()->rect();
     errorWidget->setGeometry(viewportRect);
   }
 
   errorWidget->show();
   errorWidget->raise();
 
-  if (m_mainWindow->getDatabaseManager() != nullptr) {
-    m_mainWindow->getDatabaseManager()->updateCachedCounts(
-        m_mainWindow->m_collections);
+  if (m_databaseManager != nullptr) {
+    m_databaseManager->updateCachedCounts(
+        (*m_collections));
   }
-  m_mainWindow->refreshTitleCounts();
+  if (m_refreshTitleCounts) m_refreshTitleCounts();
 }
 
 void NavigationManager::onViewportChanged() {
-  if ((m_mainWindow->getInteractionManager() != nullptr) &&
-      m_mainWindow->getInteractionManager()->isWheelScrolling() &&
-      m_mainWindow->stackedWidget->currentWidget() == m_mainWindow->itemsPage) {
-    QTimer::singleShot(UIConstants::SHORT_TIMER_DELAY, m_mainWindow, [this]() {
-      if (m_mainWindow->getScrollManager()) {
-        m_mainWindow->getScrollManager()->updateVirtualView();
+  if ((m_interactionManager != nullptr) &&
+      m_interactionManager->isWheelScrolling() &&
+      m_stackedWidget->currentWidget() == m_itemsPage) {
+    QTimer::singleShot(UIConstants::SHORT_TIMER_DELAY, this, [this]() {
+      if (m_scrollManager) {
+        m_scrollManager->updateVirtualView();
       }
       ArtworkManager::instance().updateViewportArtwork();
     });
@@ -1121,11 +1060,11 @@ void NavigationManager::onViewportChanged() {
 }
 
 void NavigationManager::filterItems(const QString &searchText) {
-  if (m_mainWindow->getScrollManager() != nullptr) {
+  if (m_scrollManager != nullptr) {
     if (searchText.trimmed().isEmpty()) {
-      m_mainWindow->getScrollManager()->clearFilter();
+      m_scrollManager->clearFilter();
     } else {
-      m_mainWindow->getScrollManager()->applyFilter(searchText);
+      m_scrollManager->applyFilter(searchText);
     }
   }
 }
@@ -1135,11 +1074,11 @@ auto NavigationManager::collectionHasDescendantWithMedia(int parentIndex) const
     -> bool {
   QList<int> childCollections = getAllDescendantCollections(parentIndex);
   return std::ranges::any_of(childCollections, [this](int childIndex) {
-    if (childIndex < 0 || childIndex >= m_mainWindow->m_collections.size()) {
+    if (childIndex < 0 || childIndex >= (*m_collections).size()) {
       return false;
     }
     const QString &mediaDir =
-        m_mainWindow->m_collections[childIndex].mediaDirectory;
+        (*m_collections)[childIndex].mediaDirectory;
     return !mediaDir.trimmed().isEmpty();
   });
 }
@@ -1147,9 +1086,9 @@ auto NavigationManager::collectionHasDescendantWithMedia(int parentIndex) const
 // Safely reloads the specified collection and recenters the horizontal
 // scrollbar
 void NavigationManager::safeReloadCollection(int collectionIndex) {
-  persistCurrentSelection(m_mainWindow);
+  persistCurrentSelection();
   if (collectionIndex < 0 ||
-      collectionIndex >= m_mainWindow->m_collections.size()) {
+      collectionIndex >= (*m_collections).size()) {
     return;
   }
 
@@ -1157,36 +1096,36 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
     coord->stopAllTimers();
   }
 
-  if (m_mainWindow->getScrollManager() != nullptr) {
-    m_mainWindow->getScrollManager()->cleanup();
+  if (m_scrollManager != nullptr) {
+    m_scrollManager->cleanup();
   }
 
   ArtworkManager::instance().cancelAllArtworkLoading();
 
   QTimer::singleShot(
-      UIConstants::MEDIUM_TIMER_DELAY, m_mainWindow, [this, collectionIndex]() {
+      UIConstants::MEDIUM_TIMER_DELAY, this, [this, collectionIndex]() {
         if (collectionIndex < 0 ||
-            collectionIndex >= m_mainWindow->m_collections.size()) {
+            collectionIndex >= (*m_collections).size()) {
           return;
         }
 
         CollectionContext context;
         context.currentIndex = collectionIndex;
-        context.config = m_mainWindow->m_collections[collectionIndex];
+        context.config = (*m_collections)[collectionIndex];
         context.artworkDirectory = context.config.artworkDirectory;
 
         if (context.config.showAllSubcollectionItems) {
-          m_mainWindow->getDatabaseManager()->loadItemsWithSubcollections(
-              context, m_mainWindow->m_collections);
+          m_databaseManager->loadItemsWithSubcollections(
+              context, (*m_collections));
         } else {
-          m_mainWindow->getDatabaseManager()->loadItems(context);
+          m_databaseManager->loadItems(context);
         }
 
-        QTimer::singleShot(UIConstants::VIEWPORT_DELAY, m_mainWindow, [this]() {
-          if (m_mainWindow->getScrollManager()) {
-            m_mainWindow->getScrollManager()->centerHorizontalScrollbar(
-                m_mainWindow->currentCollectionIndex,
-                m_mainWindow->m_collections);
+        QTimer::singleShot(UIConstants::VIEWPORT_DELAY, this, [this]() {
+          if (m_scrollManager) {
+            m_scrollManager->centerHorizontalScrollbar(
+                (*m_currentCollectionIndex),
+                (*m_collections));
           }
         });
       });
@@ -1195,27 +1134,27 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
 // Updates the items page title to show "Parent > Child" when viewing a
 // subcollection
 auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
-  if ((m_mainWindow == nullptr) || (m_mainWindow->itemsPage == nullptr)) {
+  if ((parent() == nullptr) || (m_itemsPage == nullptr)) {
     return;
   }
   auto *titleLabel =
-      m_mainWindow->itemsPage->findChild<QLabel *>("itemsTitleLabel");
+      m_itemsPage->findChild<QLabel *>("itemsTitleLabel");
   if (titleLabel == nullptr) {
     return;
   }
 
   if (collectionIndex < 0 ||
-      collectionIndex >= m_mainWindow->m_collections.size()) {
+      collectionIndex >= (*m_collections).size()) {
     titleLabel->clear();
     return;
   }
 
-  QString title = m_mainWindow->m_collections[collectionIndex].name;
-  if (m_mainWindow->m_collections[collectionIndex].isSubcollection) {
+  QString title = (*m_collections)[collectionIndex].name;
+  if ((*m_collections)[collectionIndex].isSubcollection) {
     int parentIdx =
-        m_mainWindow->m_collections[collectionIndex].parentCollectionIndex;
-    if (parentIdx >= 0 && parentIdx < m_mainWindow->m_collections.size()) {
-      title = m_mainWindow->m_collections[parentIdx].name + " > " + title;
+        (*m_collections)[collectionIndex].parentCollectionIndex;
+    if (parentIdx >= 0 && parentIdx < (*m_collections).size()) {
+      title = (*m_collections)[parentIdx].name + " > " + title;
     }
   }
   titleLabel->setText(title);
@@ -1227,22 +1166,22 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub,
                                           bool &hasItems) const -> bool {
   hasSub = false;
   hasItems = false;
-  if ((m_mainWindow == nullptr) || collectionIndex < 0 ||
-      collectionIndex >= m_mainWindow->m_collections.size()) {
+  if ((parent() == nullptr) || collectionIndex < 0 ||
+      collectionIndex >= (*m_collections).size()) {
     return false;
   }
 
   const CollectionConfig &collection =
-      m_mainWindow->m_collections[collectionIndex];
+      (*m_collections)[collectionIndex];
 
-  for (auto &m_collection : m_mainWindow->m_collections) {
+  for (auto &m_collection : (*m_collections)) {
     if (m_collection.parentCollectionIndex == collectionIndex) {
       hasSub = true;
       break;
     }
   }
 
-  QString mediaDir = (m_mainWindow->getSettingsManager() != nullptr)
+  QString mediaDir = (m_settingsManager != nullptr)
                          ? SettingsManager::expandConfigVariables(
                                collection.mediaDirectory, collection.name)
                          : collection.mediaDirectory;
@@ -1277,33 +1216,33 @@ void NavigationManager::setCollections(QList<CollectionConfig> *collections) {
 
 void NavigationManager::onSubcollectionEntered(int subcollectionIndex) {
   if (subcollectionIndex >= 0 &&
-      subcollectionIndex < m_mainWindow->m_collections.size()) {
-    if (m_mainWindow->getInteractionManager() != nullptr) {
+      subcollectionIndex < (*m_collections).size()) {
+    if (m_interactionManager != nullptr) {
       qint64 now = QDateTime::currentMSecsSinceEpoch();
-      m_mainWindow->getInteractionManager()->setProperty(
+      m_interactionManager->setProperty(
           PropertyKeys::SuppressDoubleClickUntilMs,
           now + UIConstants::DOUBLE_CLICK_SUPPRESS_AFTER_ENTER_MS);
     }
 
-    if (m_mainWindow->currentCollectionIndex >= 0 &&
-        (m_mainWindow->getInteractionManager() != nullptr)) {
+    if ((*m_currentCollectionIndex) >= 0 &&
+        (m_interactionManager != nullptr)) {
       int currentSelection =
-          m_mainWindow->getInteractionManager()->currentSelectedIndex();
+          m_interactionManager->currentSelectedIndex();
       if (currentSelection >= 0) {
-        m_mainWindow->getSettingsManager()->setLastSelectedItem(
-            m_mainWindow->currentCollectionIndex, currentSelection);
+        m_settingsManager->setLastSelectedItem(
+            (*m_currentCollectionIndex), currentSelection);
       }
     }
 
-    if (m_mainWindow->currentCollectionIndex >= 0 &&
-        m_mainWindow->currentCollectionIndex <
-            m_mainWindow->m_collections.size()) {
+    if ((*m_currentCollectionIndex) >= 0 &&
+        (*m_currentCollectionIndex) <
+            (*m_collections).size()) {
       m_navigationStack.append(
-          m_mainWindow->currentCollectionIndex);
+          (*m_currentCollectionIndex));
       m_navigationDepth++;
     }
 
-    m_mainWindow->getSettingsManager()->setLastSelectedItem(subcollectionIndex,
+    m_settingsManager->setLastSelectedItem(subcollectionIndex,
                                                          -1);
 
     bool success = showCollectionItems(subcollectionIndex);
@@ -1317,17 +1256,17 @@ void NavigationManager::onSubcollectionEntered(int subcollectionIndex) {
     }
 
     QTimer::singleShot(
-        UIConstants::SUBCOLLECTION_SCROLL_CENTER_DELAY_MS, m_mainWindow,
+        UIConstants::SUBCOLLECTION_SCROLL_CENTER_DELAY_MS, this,
         [this]() {
-          m_mainWindow->getScrollManager()->centerHorizontalScrollbar(
-              m_mainWindow->currentCollectionIndex,
-              m_mainWindow->m_collections);
+          m_scrollManager->centerHorizontalScrollbar(
+              (*m_currentCollectionIndex),
+              (*m_collections));
         });
 
     QTimer::singleShot(UIConstants::DOUBLE_CLICK_SUPPRESS_CLEAR_DELAY_MS,
-                       m_mainWindow, [this]() {
-                         if (m_mainWindow->getInteractionManager()) {
-                           m_mainWindow->getInteractionManager()->setProperty(
+                       this, [this]() {
+                         if (m_interactionManager) {
+                           m_interactionManager->setProperty(
                                PropertyKeys::SuppressDoubleClickUntilMs, 0);
                          }
                        });
@@ -1337,14 +1276,14 @@ void NavigationManager::onSubcollectionEntered(int subcollectionIndex) {
 // Loads items for the current collection with optional subcollection
 // aggregation and reapplies any active filter
 void NavigationManager::loadCurrentAndSubcollections() {
-  const int idx = m_mainWindow->currentCollectionIndex;
-  if (idx < 0 || idx >= m_mainWindow->m_collections.size()) {
+  const int idx = (*m_currentCollectionIndex);
+  if (idx < 0 || idx >= (*m_collections).size()) {
     return;
   }
 
   CollectionContext context;
   context.currentIndex = idx;
-  context.config = m_mainWindow->m_collections[idx];
+  context.config = (*m_collections)[idx];
   context.config.mediaDirectory = SettingsManager::expandConfigVariables(
       context.config.mediaDirectory, context.config.name);
   context.config.artworkDirectory = SettingsManager::expandConfigVariables(
@@ -1352,19 +1291,19 @@ void NavigationManager::loadCurrentAndSubcollections() {
   context.artworkDirectory = context.config.artworkDirectory;
 
   if (context.config.showAllSubcollectionItems) {
-    m_mainWindow->getDatabaseManager()->loadItemsWithSubcollections(
-        context, m_mainWindow->m_collections);
+    m_databaseManager->loadItemsWithSubcollections(
+        context, (*m_collections));
   } else {
-    m_mainWindow->getDatabaseManager()->loadItems(context);
+    m_databaseManager->loadItems(context);
   }
 
   QTimer::singleShot(UIConstants::FILTER_REAPPLY_DELAY_MS, [this]() {
-    if (m_mainWindow->searchBar &&
-        !m_mainWindow->searchBar->text().trimmed().isEmpty() &&
-        m_mainWindow->getScrollManager()) {
+    if (m_searchBar &&
+        !m_searchBar->text().trimmed().isEmpty() &&
+        m_scrollManager) {
       const QString currentSearchText =
-          m_mainWindow->searchBar->text().trimmed();
-      m_mainWindow->getScrollManager()->applyFilter(currentSearchText);
+          m_searchBar->text().trimmed();
+      m_scrollManager->applyFilter(currentSearchText);
     }
   });
 }
@@ -1373,16 +1312,16 @@ void NavigationManager::loadCurrentAndSubcollections() {
 // filter
 void NavigationManager::loadAllCollectionsView() {
   m_allCollectionsActive = true;
-  m_mainWindow->getDatabaseManager()->loadAllCollections(
-      m_mainWindow->m_collections);
+  m_databaseManager->loadAllCollections(
+      (*m_collections));
 
   QTimer::singleShot(UIConstants::FILTER_REAPPLY_DELAY_MS, [this]() {
-    if (m_mainWindow->searchBar &&
-        !m_mainWindow->searchBar->text().trimmed().isEmpty() &&
-        m_mainWindow->getScrollManager()) {
+    if (m_searchBar &&
+        !m_searchBar->text().trimmed().isEmpty() &&
+        m_scrollManager) {
       const QString currentSearchText =
-          m_mainWindow->searchBar->text().trimmed();
-      m_mainWindow->getScrollManager()->applyFilter(currentSearchText);
+          m_searchBar->text().trimmed();
+      m_scrollManager->applyFilter(currentSearchText);
     }
   });
 }
@@ -1416,4 +1355,74 @@ auto NavigationManager::getAllDescendantCollections(int parentIndex) const
     }
   }
   return result;
+}
+
+void NavigationManager::persistCurrentSelection() {
+  if ((m_interactionManager == nullptr) ||
+      (m_settingsManager == nullptr) ||
+      (m_currentCollectionIndex == nullptr) ||
+      (m_collections == nullptr)) {
+    return;
+  }
+  int coll = *m_currentCollectionIndex;
+  if (coll < 0 || coll >= m_collections->size()) {
+    return;
+  }
+  int sel = m_interactionManager->currentSelectedIndex();
+  if (sel < 0) {
+    return;
+  }
+  m_settingsManager->setLastSelectedItem(coll, sel);
+}
+
+void NavigationManager::prepareForNonSharedNavigationHelper() {
+  if (m_interactionManager != nullptr) {
+    m_interactionManager->clearSelectionAndFocus();
+  }
+  if (m_metadataSidebar != nullptr) {
+    m_metadataSidebar->clearMetadata();
+  }
+  ArtworkManager::instance().stopSilentLoading();
+  if (ArtworkManager::instance().getTimerCoordinator() != nullptr) {
+    ArtworkManager::instance().getTimerCoordinator()->stopAllTimers();
+  }
+  if (m_scrollManager != nullptr) {
+    m_scrollManager->cleanup();
+  }
+}
+
+void NavigationManager::suspendItemsPageRendering() {
+  if (m_itemScrollArea != nullptr) {
+    m_itemScrollArea->setUpdatesEnabled(false);
+    m_itemScrollArea->setProperty(PropertyKeys::SuppressArtwork, true);
+  }
+  if (m_gridContainer != nullptr) {
+    m_gridContainer->setUpdatesEnabled(false);
+    m_gridContainer->setVisible(false);
+  }
+}
+
+void NavigationManager::resumeItemsPageRendering() {
+  if (m_gridContainer != nullptr) {
+    m_gridContainer->setVisible(true);
+    m_gridContainer->setUpdatesEnabled(true);
+  }
+  if (m_itemScrollArea != nullptr) {
+    m_itemScrollArea->setUpdatesEnabled(true);
+    m_itemScrollArea->setProperty(PropertyKeys::SuppressArtwork, false);
+  }
+}
+
+void NavigationManager::applyUiPoliciesForCollection(int collectionIndex) {
+  if (m_sidebarManager != nullptr) {
+    m_sidebarManager->applySidebarStateForCollection(collectionIndex);
+  }
+  if (m_settingsManager != nullptr && parent() != nullptr && m_collections != nullptr) {
+    if (auto *w = qobject_cast<QWidget*>(parent())) {
+        SettingsManager::applyHorizontalScrollbarSetting(
+            w, collectionIndex, *m_collections);
+        SettingsManager::applyVerticalScrollbarSetting(w, collectionIndex,
+                                                       *m_collections);
+    }
+  }
 }

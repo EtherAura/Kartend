@@ -137,6 +137,27 @@ void MainWindow::setupManagerConnections() {
 
   loadingLabel = ui->loadingLabel;
 
+  NavigationManagerDependencies navDeps;
+  navDeps.interactionManager = m_interactionManager.get();
+  navDeps.settingsManager = m_settingsManager.get();
+  navDeps.sidebarManager = m_sidebarManager.get();
+  navDeps.scrollManager = m_scrollManager.get();
+  navDeps.databaseManager = m_databaseManager.get();
+  navDeps.metadataSidebar = m_metadataSidebar;
+  navDeps.currentCollectionIndex = &currentCollectionIndex;
+  navDeps.collections = &m_collections;
+  navDeps.generalSettings = &m_generalSettings;
+  navDeps.searchBar = searchBar;
+  navDeps.itemsPage = itemsPage;
+  navDeps.stackedWidget = stackedWidget;
+  navDeps.loadingLabel = loadingLabel;
+  navDeps.itemScrollArea = ui->itemScrollArea;
+  navDeps.gridContainer = gridContainer;
+  navDeps.isShuttingDown = [this]() { return isShuttingDown(); };
+  navDeps.refreshTitleCounts = [this]() { refreshTitleCounts(); };
+
+  m_navigationManager->setupReferences(navDeps);
+
   m_interactionManager->setupReferences(setup);
 
   connectDatabaseManager();
