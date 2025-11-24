@@ -48,6 +48,9 @@ void DatabaseWorker::initDatabase() {
   if (!query.exec("PRAGMA foreign_keys = ON")) {
     qWarning() << "Failed to enable foreign keys:" << query.lastError();
   }
+  if (!query.exec("PRAGMA journal_mode = WAL")) {
+    qWarning() << "Failed to enable WAL mode:" << query.lastError();
+  }
   // Tables are created by the main DatabaseManager or assumed to exist.
   // But for safety, we can ensure they exist here too, or rely on main thread init.
   // Since main thread runs initDatabase first, we should be fine.

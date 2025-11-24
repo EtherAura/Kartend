@@ -20,13 +20,7 @@
 #include <QTextStream>
 #include <QTimer>
 #include <algorithm>
-#include <QDir>
-#include <QFile>
-#include <QLabel>
-#include <QScrollArea>
-#include <QTextStream>
-#include <QTimer>
-#include <algorithm>
+#include <QStandardPaths>
 
 // Construct settings manager and initialize QSettings.
 SettingsManager::SettingsManager(SessionManager *sessionManager,
@@ -35,7 +29,8 @@ SettingsManager::SettingsManager(SessionManager *sessionManager,
                                  QObject *parent)
     : QObject(parent), m_sessionManager(sessionManager),
       m_artworkManager(artworkManager), m_cacheManager(cacheManager) {
-  QDir configDir(QDir::homePath() + "/.config/kartend");
+  QString configPath = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+  QDir configDir(configPath);
   if (!configDir.exists()) {
     configDir.mkpath(".");
   }
@@ -47,52 +42,11 @@ SettingsManager::~SettingsManager() = default;
 
 namespace {
 
-void setCollectionSpacing(const QString &value, int &spacing) {
-  bool conversionOk;
-  int spacingValue = value.toInt(&conversionOk);
-  if (conversionOk && spacingValue >= UIConstants::SPACING_MIN &&
-      spacingValue <= UIConstants::SPACING_MAX) {
-    spacing = spacingValue;
-  }
-}
-
-auto setCollectionGridWidth(const QString &value,
-                                             CollectionConfig &collection)
-    -> void {
-  int gridWidth = value.toInt();
-  if (gridWidth >= UIConstants::MIN_GRID_WIDTH &&
-      gridWidth <= UIConstants::MAX_GRID_WIDTH) {
-    collection.gridWidth = gridWidth;
-  }
-}
-
-auto setCollectionItemWidth(const QString &value,
-                                             CollectionConfig &collection)
-    -> void {
-  int width = value.toInt();
-  if (width >= UIConstants::MIN_ITEM_WIDTH &&
-      width <= UIConstants::MAX_ITEM_WIDTH) {
-    collection.itemWidth = width;
-  }
-}
-
-auto setCollectionItemHeight(const QString &value,
-                                              CollectionConfig &collection)
-    -> void {
-  int height = value.toInt();
-  if (height >= UIConstants::MIN_ITEM_HEIGHT &&
-      height <= UIConstants::MAX_ITEM_HEIGHT) {
-    collection.itemHeight = height;
-  }
-}
-
-auto setCollectionFontSize(const QString &value,
-                                            CollectionConfig &collection)
-    -> void {
-  int size = value.toInt();
-  if (size >= UIConstants::MIN_FONT_SIZE &&
-      size <= UIConstants::MAX_FONT_SIZE) {
-    collection.fontSize = size;
+void setConfigValue(const QString &value, int &target, int min, int max) {
+  bool ok;
+  int val = value.toInt(&ok);
+  if (ok && val >= min && val <= max) {
+    target = val;
   }
 }
 
@@ -144,7 +98,7 @@ auto processConfigLine(const QString &line,
   } else if (key == "extensions") {
     setCollectionExtensions(value, currentCollection, needsRewrite);
   } else if (key == "gridWidth") {
-    setCollectionGridWidth(value, currentCollection);
+    setConfigValue(value, currentCollection.gridWidth, UIConstants::MIN_GRID_WIDTH, UIConstants::MAX_GRID_WIDTH);
   } else if (key == "sidebarVisible") {
     currentCollection.sidebarVisible = (value == "true");
   } else if (key == "showAllSubcollectionItems") {
@@ -163,15 +117,15 @@ auto processConfigLine(const QString &line,
   } else if (key == "showSubcollectionTitles") {
     currentCollection.showSubcollectionTitles = (value == "true");
   } else if (key == "horizontalSpacing") {
-    setCollectionSpacing(value, currentCollection.horizontalSpacing);
+    setConfigValue(value, currentCollection.horizontalSpacing, UIConstants::SPACING_MIN, UIConstants::SPACING_MAX);
   } else if (key == "verticalSpacing") {
-    setCollectionSpacing(value, currentCollection.verticalSpacing);
+    setConfigValue(value, currentCollection.verticalSpacing, UIConstants::SPACING_MIN, UIConstants::SPACING_MAX);
   } else if (key == "itemWidth") {
-    setCollectionItemWidth(value, currentCollection);
+    setConfigValue(value, currentCollection.itemWidth, UIConstants::MIN_ITEM_WIDTH, UIConstants::MAX_ITEM_WIDTH);
   } else if (key == "itemHeight") {
-    setCollectionItemHeight(value, currentCollection);
+    setConfigValue(value, currentCollection.itemHeight, UIConstants::MIN_ITEM_HEIGHT, UIConstants::MAX_ITEM_HEIGHT);
   } else if (key == "fontSize") {
-    setCollectionFontSize(value, currentCollection);
+    setConfigValue(value, currentCollection.fontSize, UIConstants::MIN_FONT_SIZE, UIConstants::MAX_FONT_SIZE);
   }
 }
 
