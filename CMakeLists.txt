@@ -63,6 +63,7 @@ set(SOURCES
   ${SRC_DIR}/ui/widgets/metadatasidebar.cpp
   ${SRC_DIR}/ui/widgets/itemwidget.cpp
   ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
   ${SRC_DIR}/utils/extensionutils.cpp
   ${SRC_DIR}/utils/timerutils.cpp
 )
@@ -84,6 +85,7 @@ set(HEADERS
   ${SRC_DIR}/ui/widgets/metadatasidebar.h
   ${SRC_DIR}/ui/widgets/itemwidget.h
   ${SRC_DIR}/utils/collectionconfig.h
+  ${SRC_DIR}/utils/settingsutils.h
   ${SRC_DIR}/utils/pathutils.h
   ${SRC_DIR}/utils/gridutils.h
   ${SRC_DIR}/utils/extensionutils.h

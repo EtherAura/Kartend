@@ -24,6 +24,7 @@ class QStackedWidget;
 class QWidget;
 class MediaItemWidget;
 class QTimer;
+class CacheManager;
 
 namespace TimerUtils {
 class Coordinator;
@@ -60,7 +61,7 @@ class ArtworkManager : public QObject {
   Q_OBJECT
 
 public:
-  static ArtworkManager &instance();
+  explicit ArtworkManager(CacheManager *cacheManager, QObject *parent = nullptr);
 
   void setupReferences(const ArtworkManagerSetup &setup);
   void loadArtworkParallel(const QList<ArtworkInfo> &items, bool highPriority,
@@ -83,24 +84,18 @@ public:
   void
   addSubcollectionArtworkPathsWithDedup(int parentIndex,
                                         QSet<QString> &processedDirectories);
-  static void initializeCache();
+  void initializeCache();
   void clearLoadedArtworkState();
   TimerUtils::Coordinator *getTimerCoordinator() const;
 
   static QPixmap createProcessedArtwork(const QPixmap &originalPixmap);
-  static QPixmap getCachedPixmap(const QString &artworkPath);
-  static QPixmap loadArtworkFromFile(const QString &artworkPath);
+  QPixmap getCachedPixmap(const QString &artworkPath);
+  QPixmap loadArtworkFromFile(const QString &artworkPath);
 
-  static std::atomic<ArtworkManager *> s_instance;
-  static std::atomic<bool> s_shuttingDown;
-  static std::mutex s_mutex;
-
-  void shutdown();
   ~ArtworkManager() override;
-  static void cleanup();
 
 private:
-  explicit ArtworkManager(QObject *parent = nullptr);
+  CacheManager *m_cacheManager;
   void trackWidget(MediaItemWidget *widget);
   /// Applies processed artwork results to UI widgets on the GUI thread.
   void applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults,

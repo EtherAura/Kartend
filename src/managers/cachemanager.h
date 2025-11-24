@@ -12,7 +12,7 @@
 
 class CacheManager {
 public:
-  static CacheManager &instance();
+  CacheManager();
   void initialize();
   void saveToDisk();
   
@@ -21,10 +21,8 @@ public:
   void clearCollectionCache(int collectionIndex);
   static qint64 getCacheSize();
   void releaseGuiResources();
-  static void cleanup();
 
 private:
-  CacheManager();
   static QString getCacheDirectory();
   static QString getArtworkCachePath(const QString &artworkPath);
   

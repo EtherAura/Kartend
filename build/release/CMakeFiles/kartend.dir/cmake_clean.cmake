@@ -41,6 +41,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o.d"
   "CMakeFiles/kartend.dir/src/utils/pathutils.cpp.o"
   "CMakeFiles/kartend.dir/src/utils/pathutils.cpp.o.d"
+  "CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o"
+  "CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o.d"
   "CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o"
   "CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o.d"
   "kartend"

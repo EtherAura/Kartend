@@ -55,10 +55,6 @@
 #include <type_traits>
 #include <utility>
 
-std::atomic<ArtworkManager *> ArtworkManager::s_instance{nullptr};
-std::atomic<bool> ArtworkManager::s_shuttingDown{false};
-std::mutex ArtworkManager::s_mutex;
-
 namespace {
 // Computes immediate and extended viewports based on a scroll area's current
 // position
@@ -108,13 +104,13 @@ auto partitionByViewport(const QList<ArtworkInfo> &localPending, QWidget *grid,
 }
 
 // Periodically triggers a deferred persistent cache save when size grows enough
-auto maybeTriggerCacheSave(ArtworkManager *self) -> void {
+auto maybeTriggerCacheSave(ArtworkManager *self, CacheManager *cacheManager) -> void {
   static int updateCount = 0;
   if (++updateCount % UIConstants::PERSISTENT_CACHE_CHECK_INTERVAL != 0) {
     return;
   }
-  CacheManager &cache = CacheManager::instance();
-  const qint64 cacheSize = cache.getCacheSize();
+  if (!cacheManager) return;
+  const qint64 cacheSize = cacheManager->getCacheSize();
   if (cacheSize <= 0) {
     return;
   }
@@ -127,13 +123,12 @@ auto maybeTriggerCacheSave(ArtworkManager *self) -> void {
   lastSaveSize = cacheSize;
   QPointer<ArtworkManager> guard(self);
   QTimer::singleShot(UIConstants::PERSISTENT_CACHE_SAVE_DEFER_MS, self,
-                     [guard]() {
+                     [guard, cacheManager]() {
                        if (!guard) {
                          return;
                        }
-                       if (!QApplication::closingDown() &&
-                           !ArtworkManager::s_shuttingDown.load()) {
-                         CacheManager::instance().saveToDisk();
+                       if (!QApplication::closingDown()) {
+                         cacheManager->saveToDisk();
                        }
                      });
 }
@@ -173,7 +168,7 @@ static auto loadAndProcessImage(const QString &path) -> QImage {
 }
 
 // Constructs the artwork manager and sets up timers
-ArtworkManager::ArtworkManager(QObject *parent)
+ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
     : QObject(parent), collections(nullptr), currentCollectionIndex(nullptr),
       stackedWidget(nullptr), itemsPage(nullptr), gridContainer(nullptr),
       m_timerCoordinator(nullptr), m_silentLoadTimer(nullptr),
@@ -182,7 +177,7 @@ ArtworkManager::ArtworkManager(QObject *parent)
       m_silentLoadBatchSize(UIConstants::SILENT_LOAD_BATCH_SIZE_DEFAULT),
       m_lastUserActivity{QDateTime::currentMSecsSinceEpoch()},
       m_continuousSilentLoad(false), m_silentLoadIndex(0),
-      m_persistentSilentLoad(false) {
+      m_persistentSilentLoad(false), m_cacheManager(cacheManager) {
   m_timerCoordinator = new TimerUtils::Coordinator(this);
 
   m_silentLoadTimer = new QTimer(this);
@@ -195,9 +190,8 @@ ArtworkManager::ArtworkManager(QObject *parent)
   m_cacheTimer->setObjectName("artCacheTimer");
   m_cacheTimer->setInterval(UIConstants::PERSISTENT_CACHE_SAVE_INTERVAL_MS);
   connect(m_cacheTimer, &QTimer::timeout, this, [this]() {
-    if (!QApplication::closingDown() &&
-        !ArtworkManager::s_shuttingDown.load()) {
-      CacheManager::instance().saveToDisk();
+    if (!QApplication::closingDown() && m_cacheManager) {
+      m_cacheManager->saveToDisk();
     }
   });
   m_cacheTimer->start();
@@ -206,8 +200,6 @@ ArtworkManager::ArtworkManager(QObject *parent)
 // Destructor stops timers, cancels futures, clears widget state, and releases
 // GUI pixmap resources
 ArtworkManager::~ArtworkManager() {
-  s_shuttingDown.store(true, std::memory_order_release);
-
   TimerUtils::stopAndDisconnectTimers(
       {m_cacheTimer, m_silentLoadTimer, m_persistentLoadTimer});
   if (m_timerCoordinator != nullptr) {
@@ -234,16 +226,6 @@ ArtworkManager::~ArtworkManager() {
   }
 }
 
-// Cleanup: make singleton inert without deleting to avoid queued callback races
-void ArtworkManager::cleanup() {
-  ArtworkManager *inst = s_instance.load(std::memory_order_acquire);
-  if (inst == nullptr) {
-    return;
-  }
-  s_shuttingDown.store(true, std::memory_order_release);
-  inst->shutdown();
-}
-
 // Clears in-memory artwork widget/path/pending/silent cache state (blocks
 // widget signals)
 void ArtworkManager::clearArtworkWidgetState() {
@@ -259,69 +241,7 @@ void ArtworkManager::clearArtworkWidgetState() {
   m_allArtworkPaths.clear();
 }
 
-// Singleton accessor
-auto ArtworkManager::instance() -> ArtworkManager & {
-  ArtworkManager *inst = s_instance.load(std::memory_order_acquire);
-  if (inst != nullptr) {
-    return *inst;
-  }
 
-  if (s_shuttingDown.load(std::memory_order_acquire)) {
-    static ArtworkManager *inert = []() {
-      auto *inst = new ArtworkManager();
-      if (inst->m_silentLoadTimer != nullptr) {
-        inst->m_silentLoadTimer->stop();
-      }
-      if (inst->m_persistentLoadTimer != nullptr) {
-        inst->m_persistentLoadTimer->stop();
-      }
-      if (inst->m_cacheTimer != nullptr) {
-        inst->m_cacheTimer->stop();
-      }
-      if (inst->m_timerCoordinator != nullptr) {
-        inst->m_timerCoordinator->stopAllTimers();
-      }
-      return inst;
-    }();
-    return *inert;
-  }
-
-  std::lock_guard<std::mutex> lock(s_mutex);
-  inst = s_instance.load(std::memory_order_relaxed);
-  if ((inst == nullptr) && !s_shuttingDown.load(std::memory_order_acquire)) {
-    inst = new ArtworkManager();
-    s_instance.store(inst, std::memory_order_release);
-  }
-  return *inst;
-}
-
-void ArtworkManager::shutdown() {
-  if (s_shuttingDown.load()) {
-    return;
-  }
-  s_shuttingDown.store(true, std::memory_order_release);
-  TimerUtils::stopAndDisconnectTimers(
-      {m_silentLoadTimer, m_persistentLoadTimer, m_cacheTimer});
-  if (m_timerCoordinator != nullptr) {
-    m_timerCoordinator->stopAllTimers();
-    disconnect(m_timerCoordinator, nullptr, nullptr, nullptr);
-  }
-  {
-    QMutexLocker futureLock(&m_futureMutex);
-    for (auto &future : m_futures) {
-      if (future.isRunning()) {
-        future.cancel();
-        future.waitForFinished();
-      }
-    }
-    m_futures.clear();
-  }
-  clearArtworkWidgetState();
-  if (m_cacheTimer != nullptr) {
-    m_cacheTimer->deleteLater();
-    m_cacheTimer = nullptr;
-  }
-}
 
 // Clears in-memory artwork state for current context
 void ArtworkManager::clearLoadedArtworkState() {
@@ -381,7 +301,7 @@ void ArtworkManager::trackWidget(MediaItemWidget *widget) {
   if (!widget->property(PropertyKeys::TrackedByArtwork).toBool()) {
     widget->setProperty(PropertyKeys::TrackedByArtwork, true);
     connect(widget, &QObject::destroyed, this, [this](QObject *obj) {
-      if (s_shuttingDown.load()) {
+      if (QApplication::closingDown()) {
         return;
       }
       auto *widgetPtr = qobject_cast<MediaItemWidget *>(obj);
@@ -411,7 +331,7 @@ auto determineBatchSize(bool highPriority, int customBatchSize) -> int {
 
 // Checks if artwork loading should be skipped due to shutdown or invalid state
 auto ArtworkManager::shouldSkipArtworkLoading() -> bool {
-  return s_shuttingDown.load() || stackedWidget == nullptr ||
+  return QApplication::closingDown() || stackedWidget == nullptr ||
          stackedWidget->currentWidget() != itemsPage;
 }
 
@@ -422,7 +342,7 @@ auto processBatch(const QList<ArtworkInfo> &batch, bool highPriority)
   results.reserve(batch.size());
 
   for (const ArtworkInfo &info : batch) {
-    if (ArtworkManager::s_shuttingDown.load()) {
+    if (QApplication::closingDown()) {
       break;
     }
     if (info.mediaItem.isNull()) {
@@ -460,8 +380,10 @@ void ArtworkManager::applyResultsToUi(
       loadedArtwork.insert(widget);
     }
     trackWidget(widget);
-    CacheManager::instance().cacheArtwork(result.artworkPath, pixmap);
-    if (!ArtworkManager::s_shuttingDown.load()) {
+    if (m_cacheManager) {
+      m_cacheManager->cacheArtwork(result.artworkPath, pixmap);
+    }
+    if (!QApplication::closingDown()) {
       widget->setArtworkPixmap(pixmap);
       widget->update();
       if (highPriority) {
@@ -475,7 +397,7 @@ void ArtworkManager::applyResultsToUi(
 void ArtworkManager::loadArtworkParallel(const QList<ArtworkInfo> &items,
                                          bool highPriority,
                                          int customBatchSize) {
-  if (s_shuttingDown.load()) {
+  if (QApplication::closingDown()) {
     return;
   }
   if (items.isEmpty() || shouldSkipArtworkLoading()) {
@@ -486,12 +408,12 @@ void ArtworkManager::loadArtworkParallel(const QList<ArtworkInfo> &items,
   QList<ArtworkInfo> uncachedItems;
   uncachedItems.reserve(items.size());
   collectUncachedAndApplyCached(items, uncachedItems);
-  if (s_shuttingDown.load()) {
+  if (QApplication::closingDown()) {
     return;
   }
 
   for (int i = 0; i < uncachedItems.size(); i += batchSize) {
-    if (s_shuttingDown.load()) {
+    if (QApplication::closingDown()) {
       break;
     }
     int end = qMin(i + batchSize, uncachedItems.size());
@@ -582,10 +504,10 @@ auto ArtworkManager::createProcessedArtwork(const QPixmap &originalPixmap)
 }
 
 auto ArtworkManager::getCachedPixmap(const QString &artworkPath) -> QPixmap {
-  if (artworkPath.isEmpty()) {
+  if (artworkPath.isEmpty() || !m_cacheManager) {
     return {};
   }
-  return CacheManager::instance().getArtwork(artworkPath);
+  return m_cacheManager->getArtwork(artworkPath);
 }
 
 // Schedules a viewport artwork update via coordinator
@@ -694,7 +616,7 @@ void ArtworkManager::processPersistentSilentLoad() {
   if (stackedWidget == nullptr || stackedWidget->currentWidget() != itemsPage) {
     return;
   }
-  if (ArtworkManager::s_shuttingDown.load()) {
+  if (QApplication::closingDown()) {
     return;
   }
 
@@ -710,7 +632,7 @@ void ArtworkManager::processPersistentSilentLoad() {
   }
 
   for (const QString &artworkPath : batch) {
-    if (ArtworkManager::s_shuttingDown.load()) {
+    if (QApplication::closingDown()) {
       break;
     }
     QMutexLocker locker(&m_dataMutex);
@@ -757,7 +679,7 @@ void ArtworkManager::processContinuousSilentLoad() {
   if (stackedWidget == nullptr || stackedWidget->currentWidget() != itemsPage) {
     return;
   }
-  if (ArtworkManager::s_shuttingDown.load()) {
+  if (QApplication::closingDown()) {
     return;
   }
 
@@ -779,7 +701,7 @@ void ArtworkManager::processContinuousSilentLoad() {
   }
 
   for (const QString &artworkPath : batch) {
-    if (ArtworkManager::s_shuttingDown.load()) {
+    if (QApplication::closingDown()) {
       break;
     }
     {
@@ -875,7 +797,7 @@ void ArtworkManager::updateViewportArtwork() {
     }
   }
 
-  maybeTriggerCacheSave(this);
+  maybeTriggerCacheSave(this, m_cacheManager);
 }
 
 // Build artwork path list for current collection (and descendants if enabled)
@@ -928,7 +850,9 @@ void ArtworkManager::addSubcollectionArtworkPathsWithDedup(
 
 // Initializes persistent cache from disk
 void ArtworkManager::initializeCache() {
-  CacheManager::instance().initialize();
+  if (m_cacheManager) {
+    m_cacheManager->initialize();
+  }
 }
 
 // Loads artwork, processes it, and caches only in CacheManager to avoid
@@ -950,8 +874,8 @@ auto ArtworkManager::loadArtworkFromFile(const QString &artworkPath)
   }
 
   QPixmap processedPixmap = ArtworkManager::createProcessedArtwork(pixmap);
-  if (!processedPixmap.isNull()) {
-    CacheManager::instance().cacheArtwork(artworkPath, processedPixmap);
+  if (!processedPixmap.isNull() && m_cacheManager) {
+    m_cacheManager->cacheArtwork(artworkPath, processedPixmap);
   }
 
   return processedPixmap;
@@ -1078,18 +1002,18 @@ void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
   }
 
   QFuture<void> future = QtConcurrent::run([this, batch, highPriority]() {
-    if (s_shuttingDown.load()) {
+    if (QApplication::closingDown()) {
       return;
     }
     QList<ArtworkInfo::Result> results = processBatch(batch, highPriority);
-    if (s_shuttingDown.load()) {
+    if (QApplication::closingDown()) {
       return;
     }
     // Post results back to main thread
     QMetaObject::invokeMethod(
         this,
         [this, results, highPriority]() {
-          if (!s_shuttingDown.load()) {
+          if (!QApplication::closingDown()) {
             applyResultsToUi(results, highPriority);
           }
         },

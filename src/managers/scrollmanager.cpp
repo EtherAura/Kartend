@@ -64,6 +64,7 @@ ScrollManager::~ScrollManager() {
 void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   m_gridContainer = setup.gridContainer;
   m_mediaScrollArea = setup.mediaScrollArea;
+  m_artworkManager = setup.artworkManager;
   m_collections = setup.collections;
 
   if (m_mediaScrollArea != nullptr) {
@@ -298,7 +299,7 @@ void ScrollManager::removeUnneededWidgets(const QSet<int> &needed) {
 }
 
 void ScrollManager::updateArtworkIfAllowed() {
-  if (!QApplication::closingDown() && !ArtworkManager::s_shuttingDown.load()) {
+  if (!QApplication::closingDown() && m_artworkManager) {
     const bool suppressArtwork =
         (m_mediaScrollArea != nullptr) &&
         m_mediaScrollArea->property(PropertyKeys::SuppressArtwork).toBool();
@@ -307,7 +308,7 @@ void ScrollManager::updateArtworkIfAllowed() {
         m_mediaScrollArea->property(PropertyKeys::AllowArtworkDuringSelection)
             .toBool();
     if (!suppressArtwork || allowDuringSelection) {
-      ArtworkManager::instance().updateViewportArtwork();
+      m_artworkManager->updateViewportArtwork();
     }
   }
 }
@@ -933,9 +934,8 @@ void ScrollManager::handleLayoutChange() {
 }
 
 void ScrollManager::notifyUserActivity() {
-  if ((ArtworkManager::s_instance.load() != nullptr) &&
-      !ArtworkManager::s_shuttingDown.load()) {
-    ArtworkManager::instance().updateUserActivity();
+  if (m_artworkManager) {
+    m_artworkManager->updateUserActivity();
   }
 }
 
@@ -1628,8 +1628,8 @@ void ScrollManager::configureArtworkForWidget(MediaItemWidget *itemWidget,
   }
   QString artworkPath = ArtworkManager::findArtworkForFile(
       QFileInfo(fullPath).fileName(), artworkDir);
-  if (!artworkPath.isEmpty()) {
-    ArtworkManager::instance().addPendingArtwork(itemWidget, artworkPath);
+  if (!artworkPath.isEmpty() && m_artworkManager) {
+    m_artworkManager->addPendingArtwork(itemWidget, artworkPath);
   }
 }
 

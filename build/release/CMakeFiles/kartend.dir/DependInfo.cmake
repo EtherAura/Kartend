@@ -27,6 +27,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/carl/Documents/Programming/Kartend/src/ui/widgets/metadatasidebar.cpp" "CMakeFiles/kartend.dir/src/ui/widgets/metadatasidebar.cpp.o" "gcc" "CMakeFiles/kartend.dir/src/ui/widgets/metadatasidebar.cpp.o.d"
   "/home/carl/Documents/Programming/Kartend/src/utils/extensionutils.cpp" "CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o" "gcc" "CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o.d"
   "/home/carl/Documents/Programming/Kartend/src/utils/pathutils.cpp" "CMakeFiles/kartend.dir/src/utils/pathutils.cpp.o" "gcc" "CMakeFiles/kartend.dir/src/utils/pathutils.cpp.o.d"
+  "/home/carl/Documents/Programming/Kartend/src/utils/settingsutils.cpp" "CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o" "gcc" "CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o.d"
   "/home/carl/Documents/Programming/Kartend/src/utils/timerutils.cpp" "CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o" "gcc" "CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o.d"
   "" "kartend" "gcc" "CMakeFiles/kartend.dir/link.d"
   )

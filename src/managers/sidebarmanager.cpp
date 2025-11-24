@@ -21,6 +21,7 @@ void SidebarManager::setupReferences(const SidebarManagerSetup &setup) {
   m_mainHorizontalLayout = setup.mainLayout;
   m_itemScrollArea = setup.scrollArea;
   m_settingsManager = setup.settingsManager;
+  m_artworkManager = setup.artworkManager;
   m_collections = setup.collections;
 }
 
@@ -172,9 +173,11 @@ void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
     saveSidebarStateForCollection(currentCollectionIndex, m_sidebarVisible);
   }
 
-  if (auto *timerCoordinator =
-          ArtworkManager::instance().getTimerCoordinator()) {
-    timerCoordinator->scheduleLayoutUpdate();
+  if (m_artworkManager) {
+    if (auto *timerCoordinator =
+            m_artworkManager->getTimerCoordinator()) {
+      timerCoordinator->scheduleLayoutUpdate();
+    }
   }
 
   QTimer::singleShot(UIConstants::SIDEBAR_LAYOUT_NOTIFY_DELAY_MS, this,

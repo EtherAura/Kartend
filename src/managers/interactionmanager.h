@@ -23,6 +23,7 @@ class SettingsManager;
 class SidebarManager;
 class ScrollManager;
 class SessionManager;
+class ArtworkManager;
 class metadataSidebar;
 
 enum class SearchMode {
@@ -38,9 +39,10 @@ struct InteractionManagerSetup {
   DatabaseManager *databaseManager = nullptr;
   NavigationManager *navigationManager = nullptr;
   SessionManager *sessionManager = nullptr;
+  ArtworkManager *artworkManager = nullptr;
+  metadataSidebar *sidebar = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QWidget *gridContainer = nullptr;
-  metadataSidebar *sidebarWidget = nullptr;
   QStackedWidget *stackedWidget = nullptr;
   QWidget *itemsPage = nullptr;
   QWidget *collectionPage = nullptr;
@@ -171,6 +173,7 @@ private:
   DatabaseManager *m_databaseManager = nullptr;
   NavigationManager *m_navigationManager = nullptr;
   SessionManager *m_sessionManager = nullptr;
+  ArtworkManager *m_artworkManager = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
   QWidget *m_gridContainer = nullptr;
   metadataSidebar *m_metadataSidebar = nullptr;

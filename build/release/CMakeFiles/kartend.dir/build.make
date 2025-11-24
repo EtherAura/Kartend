@@ -338,10 +338,24 @@ CMakeFiles/kartend.dir/src/utils/pathutils.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/kartend.dir/src/utils/pathutils.cpp.s"
 	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/carl/Documents/Programming/Kartend/src/utils/pathutils.cpp -o CMakeFiles/kartend.dir/src/utils/pathutils.cpp.s
 
+CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o: CMakeFiles/kartend.dir/flags.make
+CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o: /home/carl/Documents/Programming/Kartend/src/utils/settingsutils.cpp
+CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o: CMakeFiles/kartend.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_23) "Building CXX object CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o"
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o -MF CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o.d -o CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o -c /home/carl/Documents/Programming/Kartend/src/utils/settingsutils.cpp
+
+CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.i"
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/carl/Documents/Programming/Kartend/src/utils/settingsutils.cpp > CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.i
+
+CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.s"
+	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/carl/Documents/Programming/Kartend/src/utils/settingsutils.cpp -o CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.s
+
 CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o: CMakeFiles/kartend.dir/flags.make
 CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o: /home/carl/Documents/Programming/Kartend/src/utils/extensionutils.cpp
 CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o: CMakeFiles/kartend.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_23) "Building CXX object CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_24) "Building CXX object CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o"
 	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o -MF CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o.d -o CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o -c /home/carl/Documents/Programming/Kartend/src/utils/extensionutils.cpp
 
 CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.i: cmake_force
@@ -355,7 +369,7 @@ CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.s: cmake_force
 CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o: CMakeFiles/kartend.dir/flags.make
 CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o: /home/carl/Documents/Programming/Kartend/src/utils/timerutils.cpp
 CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o: CMakeFiles/kartend.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_24) "Building CXX object CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_25) "Building CXX object CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o"
 	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o -MF CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o.d -o CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o -c /home/carl/Documents/Programming/Kartend/src/utils/timerutils.cpp
 
 CMakeFiles/kartend.dir/src/utils/timerutils.cpp.i: cmake_force
@@ -369,7 +383,7 @@ CMakeFiles/kartend.dir/src/utils/timerutils.cpp.s: cmake_force
 CMakeFiles/kartend.dir/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp.o: CMakeFiles/kartend.dir/flags.make
 CMakeFiles/kartend.dir/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp.o: kartend_autogen/7WA7TAYJOR/qrc_resources.cpp
 CMakeFiles/kartend.dir/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp.o: CMakeFiles/kartend.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_25) "Building CXX object CMakeFiles/kartend.dir/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_26) "Building CXX object CMakeFiles/kartend.dir/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp.o"
 	/usr/bin/clang++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/kartend.dir/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp.o -MF CMakeFiles/kartend.dir/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp.o.d -o CMakeFiles/kartend.dir/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp.o -c /home/carl/Documents/Programming/Kartend/build/release/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp
 
 CMakeFiles/kartend.dir/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp.i: cmake_force
@@ -399,6 +413,7 @@ kartend_OBJECTS = \
 "CMakeFiles/kartend.dir/src/ui/widgets/metadatasidebar.cpp.o" \
 "CMakeFiles/kartend.dir/src/ui/widgets/itemwidget.cpp.o" \
 "CMakeFiles/kartend.dir/src/utils/pathutils.cpp.o" \
+"CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o" \
 "CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o" \
 "CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o" \
 "CMakeFiles/kartend.dir/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp.o"
@@ -423,6 +438,7 @@ kartend: CMakeFiles/kartend.dir/src/ui/dialogs/settingsdialog.cpp.o
 kartend: CMakeFiles/kartend.dir/src/ui/widgets/metadatasidebar.cpp.o
 kartend: CMakeFiles/kartend.dir/src/ui/widgets/itemwidget.cpp.o
 kartend: CMakeFiles/kartend.dir/src/utils/pathutils.cpp.o
+kartend: CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o
 kartend: CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o
 kartend: CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o
 kartend: CMakeFiles/kartend.dir/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp.o
@@ -436,7 +452,7 @@ kartend: /usr/lib/x86_64-linux-gnu/libGLX.so
 kartend: /usr/lib/x86_64-linux-gnu/libOpenGL.so
 kartend: /usr/lib/x86_64-linux-gnu/libQt6Core.so.6.9.2
 kartend: CMakeFiles/kartend.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_26) "Linking CXX executable kartend"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/carl/Documents/Programming/Kartend/build/release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_27) "Linking CXX executable kartend"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/kartend.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

@@ -33,8 +33,6 @@ cd+++++++++ src/managers/
 >f+++++++++ src/managers/settingsmanager.h
 >f+++++++++ src/managers/sidebarmanager.cpp
 >f+++++++++ src/managers/sidebarmanager.h
->f+++++++++ src/managers/uimanager.cpp
->f+++++++++ src/managers/uimanager.h
 cd+++++++++ src/ui/
 >f+++++++++ src/ui/uiconstants.h
 cd+++++++++ src/ui/dialogs/
@@ -56,5 +54,7 @@ cd+++++++++ src/utils/
 >f+++++++++ src/utils/pathutils.cpp
 >f+++++++++ src/utils/pathutils.h
 >f+++++++++ src/utils/propertyutils.h
+>f+++++++++ src/utils/settingsutils.cpp
+>f+++++++++ src/utils/settingsutils.h
 >f+++++++++ src/utils/timerutils.cpp
 >f+++++++++ src/utils/timerutils.h

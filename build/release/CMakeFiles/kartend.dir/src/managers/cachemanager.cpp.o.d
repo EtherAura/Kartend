@@ -653,34 +653,6 @@ CMakeFiles/kartend.dir/src/managers/cachemanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qjsondocument.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qjsonparseerror.h \
   /home/carl/Documents/Programming/Kartend/src/ui/uiconstants.h \
-  /home/carl/Documents/Programming/Kartend/src/managers/artworkmanager.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QFuture \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfuture.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfutureinterface.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qresultstore.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfuture_impl.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qthreadpool.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qthread.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/future \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/mutex \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/unique_lock.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/condition_variable \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/stop_token \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/std_thread.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/semaphore \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/semaphore_base.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/atomic_timed_wait.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/this_thread_sleep.h \
-  /usr/include/x86_64-linux-gnu/sys/time.h /usr/include/semaphore.h \
-  /usr/include/x86_64-linux-gnu/bits/semaphore.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/atomic_futex.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qrunnable.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qexception.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qpromise.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/QImage \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QObject \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QPointer \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qpointer.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QApplication \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qapplication.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtwidgetsglobal.h \

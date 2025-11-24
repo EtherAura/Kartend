@@ -12,9 +12,7 @@ auto main(int argc, char *argv[]) -> int {
   QApplication::setWindowIcon(QIcon(":/assets/icons/tag-events.png"));
 
   QObject::connect(&app, &QCoreApplication::aboutToQuit, []() {
-    ArtworkManager::s_shuttingDown.store(true);
-    CacheManager::instance().releaseGuiResources();
-    CacheManager::cleanup();
+    // Cleanup handled by MainWindow destructor
   });
 
   MainWindow window;

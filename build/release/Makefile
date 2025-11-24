@@ -656,6 +656,30 @@ src/utils/pathutils.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kartend.dir/build.make CMakeFiles/kartend.dir/src/utils/pathutils.cpp.s
 .PHONY : src/utils/pathutils.cpp.s
 
+src/utils/settingsutils.o: src/utils/settingsutils.cpp.o
+.PHONY : src/utils/settingsutils.o
+
+# target to build an object file
+src/utils/settingsutils.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kartend.dir/build.make CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o
+.PHONY : src/utils/settingsutils.cpp.o
+
+src/utils/settingsutils.i: src/utils/settingsutils.cpp.i
+.PHONY : src/utils/settingsutils.i
+
+# target to preprocess a source file
+src/utils/settingsutils.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kartend.dir/build.make CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.i
+.PHONY : src/utils/settingsutils.cpp.i
+
+src/utils/settingsutils.s: src/utils/settingsutils.cpp.s
+.PHONY : src/utils/settingsutils.s
+
+# target to generate assembly for a file
+src/utils/settingsutils.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kartend.dir/build.make CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.s
+.PHONY : src/utils/settingsutils.cpp.s
+
 src/utils/timerutils.o: src/utils/timerutils.cpp.o
 .PHONY : src/utils/timerutils.o
 
@@ -752,6 +776,9 @@ help:
 	@echo "... src/utils/pathutils.o"
 	@echo "... src/utils/pathutils.i"
 	@echo "... src/utils/pathutils.s"
+	@echo "... src/utils/settingsutils.o"
+	@echo "... src/utils/settingsutils.i"
+	@echo "... src/utils/settingsutils.s"
 	@echo "... src/utils/timerutils.o"
 	@echo "... src/utils/timerutils.i"
 	@echo "... src/utils/timerutils.s"

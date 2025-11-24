@@ -11,6 +11,7 @@ class QScrollArea;
 class metadataSidebar;
 class MediaItemWidget;
 class SettingsManager;
+class ArtworkManager;
 
 struct SidebarManagerSetup {
   metadataSidebar *sidebar = nullptr;
@@ -18,6 +19,7 @@ struct SidebarManagerSetup {
   QHBoxLayout *mainLayout = nullptr;
   QScrollArea *scrollArea = nullptr;
   SettingsManager *settingsManager = nullptr;
+  ArtworkManager *artworkManager = nullptr;
   QList<CollectionConfig> *collections = nullptr;
 };
 
@@ -48,6 +50,7 @@ private:
   QHBoxLayout *m_mainHorizontalLayout;
   QScrollArea *m_itemScrollArea;
   SettingsManager *m_settingsManager = nullptr;
+  ArtworkManager *m_artworkManager = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   bool m_sidebarVisible = false;
   int m_currentCollectionIndex;

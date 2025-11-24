@@ -23,6 +23,7 @@ QT_END_NAMESPACE
 
 class Ui_MainWindow;
 class ArtworkManager;
+class CacheManager;
 class InteractionManager;
 class DatabaseManager;
 class NavigationManager;
@@ -67,6 +68,7 @@ public:
   NavigationManager *getNavigationManager() const { return m_navigationManager.get(); }
   InteractionManager *getInteractionManager() const { return m_interactionManager.get(); }
   SessionManager *getSessionManager() const { return m_sessionManager.get(); }
+  ArtworkManager *getArtworkManager() const { return m_artworkManager.get(); }
 
 protected:
   void resizeEvent(QResizeEvent *event) override;
@@ -87,6 +89,8 @@ private:
   std::unique_ptr<NavigationManager> m_navigationManager;
   std::unique_ptr<InteractionManager> m_interactionManager;
   std::unique_ptr<SessionManager> m_sessionManager;
+  std::unique_ptr<ArtworkManager> m_artworkManager;
+  std::unique_ptr<CacheManager> m_cacheManager;
 
   void setupManagerConnections();
   void updateWindowTitleWithFilter(int visible, int total);

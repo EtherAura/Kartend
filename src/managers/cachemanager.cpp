@@ -1,6 +1,6 @@
 #include "cachemanager.h"
 #include "uiconstants.h"
-#include "artworkmanager.h" // For s_shuttingDown
+
 
 #include <QApplication>
 #include <QCryptographicHash>
@@ -15,13 +15,6 @@
 
 CacheManager::CacheManager() = default;
 
-// Persistent cache singleton accessor (never destroyed to avoid QPixmap
-// teardown after QApplication)
-auto CacheManager::instance() -> CacheManager & {
-  static auto *inst = new CacheManager();
-  return *inst;
-}
-
 // Releases GUI resources and resets in-memory accounting totals
 void CacheManager::releaseGuiResources() {
   QMutexLocker locker(&m_mutex);
@@ -35,19 +28,6 @@ void CacheManager::releaseGuiResources() {
   artworkCache.clear();
   dirtyArtwork.clear();
   m_totalPixmapBytes = 0;
-}
-
-// Cleans cached pixmaps safely and resets in-memory accounting totals
-void CacheManager::cleanup() {
-  CacheManager &cache = instance();
-  QMutexLocker locker(&cache.m_mutex);
-  for (auto cacheIt = cache.artworkCache.begin();
-       cacheIt != cache.artworkCache.end(); ++cacheIt) {
-    cacheIt.value() = QPixmap();
-  }
-  cache.artworkCache.clear();
-  cache.dirtyArtwork.clear();
-  cache.m_totalPixmapBytes = 0;
 }
 
 // Returns cache directory path, creating subdirs if needed
@@ -171,7 +151,7 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
   if (artworkPath.isEmpty()) {
     return {};
   }
-  if (QApplication::closingDown() || ArtworkManager::s_shuttingDown.load()) {
+  if (QApplication::closingDown()) {
     return {};
   }
 
@@ -191,7 +171,7 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
   }
   locker.unlock();
 
-  if (QApplication::closingDown() || ArtworkManager::s_shuttingDown.load()) {
+  if (QApplication::closingDown()) {
     return {};
   }
 
@@ -218,7 +198,7 @@ void CacheManager::cacheArtwork(const QString &artworkPath,
   if (artworkPath.isEmpty() || pixmap.isNull()) {
     return;
   }
-  if (QApplication::closingDown() || ArtworkManager::s_shuttingDown.load()) {
+  if (QApplication::closingDown()) {
     return;
   }
   if (pixmap.width() < UIConstants::MIN_PIXMAP_SIZE ||
@@ -240,7 +220,7 @@ void CacheManager::cacheArtwork(const QString &artworkPath,
       static_cast<quint64>(UIConstants::PIXMAP_CACHE_KB) * 1024;
 
   QMutexLocker locker(&m_mutex);
-  if (QApplication::closingDown() || ArtworkManager::s_shuttingDown.load()) {
+  if (QApplication::closingDown()) {
     return;
   }
 

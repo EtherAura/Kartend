@@ -1,6 +1,6 @@
-CMakeFiles/kartend.dir/src/managers/navigationmanager.cpp.o: \
-  /home/carl/Documents/Programming/Kartend/src/managers/navigationmanager.cpp \
-  /home/carl/Documents/Programming/Kartend/src/managers/navigationmanager.h \
+CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o: \
+  /home/carl/Documents/Programming/Kartend/src/utils/settingsutils.cpp \
+  /home/carl/Documents/Programming/Kartend/src/utils/settingsutils.h \
   /home/carl/Documents/Programming/Kartend/src/utils/collectionconfig.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QHash \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qhash.h \
@@ -579,7 +579,12 @@ CMakeFiles/kartend.dir/src/managers/navigationmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QStringList \
   /home/carl/Documents/Programming/Kartend/src/ui/uiconstants.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/QList \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QObject \
+  /home/carl/Documents/Programming/Kartend/src/utils/pathutils.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QDir \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdir.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdirlisting.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfiledevice.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qiodevice.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qobject.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qobject_impl.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qbindingstorage.h \
@@ -595,6 +600,41 @@ CMakeFiles/kartend.dir/src/managers/navigationmanager.cpp.o: \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/chrono_io.h \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/iomanip \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/quoted_string.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qspan.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/cassert \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/q20iterator.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdatetime.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qcalendar.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qlocale.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qvariant.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdebug.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qtextstream.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qcontiguouscache.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qsharedpointer.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qshareddata.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qsharedpointer_impl.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/set \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_set.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_multiset.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/unordered_set \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/unordered_set.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qmap.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qshareddata_impl.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qset.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qvarlengtharray.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/q23utility.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/q20utility.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfile.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/filesystem \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/fs_fwd.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/fs_path.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/codecvt \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/fs_dir.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/fs_ops.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfileinfo.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/qtimezone.h \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QFile \
+  /usr/include/x86_64-linux-gnu/qt6/QtCore/QTextStream \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QScrollArea \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qscrollarea.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtwidgetsglobal.h \
@@ -608,8 +648,6 @@ CMakeFiles/kartend.dir/src/managers/navigationmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qwidget.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qwindowdefs.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qmargins.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/q23utility.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/q20utility.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qaction.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qkeysequence.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qicon.h \
@@ -621,31 +659,12 @@ CMakeFiles/kartend.dir/src/managers/navigationmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qcolor.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qrgb.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qrgba64.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qshareddata.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qimage.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qpixelformat.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qtransform.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qpolygon.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qregion.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qspan.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/cassert \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/q20iterator.h \
   /usr/include/x86_64-linux-gnu/qt6/QtCore/qline.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qvariant.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdebug.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qtextstream.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qcontiguouscache.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qsharedpointer.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qsharedpointer_impl.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/set \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_set.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/stl_multiset.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/unordered_set \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/unordered_set.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qmap.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qshareddata_impl.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qset.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qvarlengtharray.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qpalette.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qbrush.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qfont.h \
@@ -655,157 +674,4 @@ CMakeFiles/kartend.dir/src/managers/navigationmanager.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qfontvariableaxis.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qsizepolicy.h \
   /usr/include/x86_64-linux-gnu/qt6/QtGui/qcursor.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qbitmap.h \
-  /home/carl/Documents/Programming/Kartend/src/managers/artworkmanager.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QFuture \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfuture.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfutureinterface.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qmutex.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdeadlinetimer.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qelapsedtimer.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qtsan_impl.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qresultstore.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfuture_impl.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qthreadpool.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qthread.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/future \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/mutex \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/unique_lock.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/condition_variable \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/stop_token \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/std_thread.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/semaphore \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/semaphore_base.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/atomic_timed_wait.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/this_thread_sleep.h \
-  /usr/include/x86_64-linux-gnu/sys/time.h /usr/include/semaphore.h \
-  /usr/include/x86_64-linux-gnu/bits/semaphore.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/atomic_futex.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qrunnable.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qexception.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qpromise.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/QImage \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QMutex \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QPair \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/QPixmap \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QPointer \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qpointer.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QSet \
-  /home/carl/Documents/Programming/Kartend/src/managers/databasemanager.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QDateTime \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdatetime.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qcalendar.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qlocale.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtSql/QSqlDatabase \
-  /usr/include/x86_64-linux-gnu/qt6/QtSql/qsqldatabase.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtSql/qtsqlglobal.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtSql/qtsql-config.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtSql/qtsqlexports.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qmetaobject.h \
-  /home/carl/Documents/Programming/Kartend/src/managers/interactionmanager.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/QKeyEvent \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qevent.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qcoreevent.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qbasictimer.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qabstracteventdispatcher.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qeventloop.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qiodevice.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qurl.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qeventpoint.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qvector2d.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qvectornd.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qpointingdevice.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qinputdevice.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qscreen.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QRect \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QSize \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QSizeF \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/QTransform \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qnativeinterface.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qscreen_platform.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qguiapplication.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qcoreapplication.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qcoreapplication_platform.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qinputmethod.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qguiapplication_platform.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QLineEdit \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qlineedit.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qtextcursor.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qtextdocument.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qtextformat.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qpen.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qtextoption.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/QMouseEvent \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QPropertyAnimation \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qpropertyanimation.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qvariantanimation.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qabstractanimation.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qeasingcurve.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QPushButton \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qpushbutton.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qabstractbutton.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QStackedWidget \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qstackedwidget.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QTimer \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qtimer.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QVector \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qvector.h \
-  /home/carl/Documents/Programming/Kartend/src/core/mainwindow.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QMainWindow \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qmainwindow.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtabwidget.h \
-  /home/carl/Documents/Programming/Kartend/src/ui/widgets/metadatasidebar.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QFrame \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QLabel \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qlabel.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/qpicture.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QVBoxLayout \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qboxlayout.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qlayout.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qlayoutitem.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qgridlayout.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QWidget \
-  /home/carl/Documents/Programming/Kartend/build/release/ui_metadatasidebar.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QVariant \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QApplication \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qapplication.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QSpacerItem \
-  /home/carl/Documents/Programming/Kartend/src/utils/propertyutils.h \
-  /home/carl/Documents/Programming/Kartend/src/managers/scrollmanager.h \
-  /home/carl/Documents/Programming/Kartend/src/utils/gridutils.h \
-  /home/carl/Documents/Programming/Kartend/src/managers/sessionmanager.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QJsonObject \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qjsonobject.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qjsonvalue.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qcborvalue.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qcborcommon.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qregularexpression.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/quuid.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qjsondocument.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qjsonparseerror.h \
-  /home/carl/Documents/Programming/Kartend/src/managers/settingsmanager.h \
-  /home/carl/Documents/Programming/Kartend/src/utils/extensionutils.h \
-  /home/carl/Documents/Programming/Kartend/src/utils/settingsutils.h \
-  /home/carl/Documents/Programming/Kartend/src/managers/sidebarmanager.h \
-  /home/carl/Documents/Programming/Kartend/src/utils/timerutils.h \
-  /home/carl/Documents/Programming/Kartend/build/release/ui_mainwindow.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtGui/QAction \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QGridLayout \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QHBoxLayout \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QMenu \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qmenu.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QMenuBar \
-  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qmenubar.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/QDir \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdir.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdirlisting.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfiledevice.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfile.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/filesystem \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/fs_fwd.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/fs_path.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/codecvt \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/fs_dir.h \
-  /usr/lib/gcc/x86_64-linux-gnu/15/../../../../include/c++/15/bits/fs_ops.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qfileinfo.h \
-  /usr/include/x86_64-linux-gnu/qt6/QtCore/qtimezone.h
+  /usr/include/x86_64-linux-gnu/qt6/QtGui/qbitmap.h

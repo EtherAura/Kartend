@@ -31,6 +31,7 @@
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
+#include "settingsutils.h"
 #include "sidebarmanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
@@ -81,9 +82,10 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   m_databaseManager = setup.databaseManager;
   m_navigationManager = setup.navigationManager;
   m_sessionManager = setup.sessionManager;
+  m_artworkManager = setup.artworkManager;
   m_itemScrollArea = setup.itemScrollArea;
   m_gridContainer = setup.gridContainer;
-  m_metadataSidebar = setup.sidebarWidget;
+  m_metadataSidebar = setup.sidebar;
   m_stackedWidget = setup.stackedWidget;
   m_itemsPage = setup.itemsPage;
   m_collections = setup.collections;
@@ -147,9 +149,9 @@ void InteractionManager::performDebouncedSearch() {
   context.currentIndex = collIndex;
   context.config = (*m_collections)[collIndex];
   if (m_settingsManager != nullptr) {
-    context.config.mediaDirectory = SettingsManager::expandConfigVariables(
+    context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
         context.config.mediaDirectory, context.config.name);
-    context.config.artworkDirectory = SettingsManager::expandConfigVariables(
+    context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
         context.config.artworkDirectory, context.config.name);
   }
   context.artworkDirectory = context.config.artworkDirectory;
@@ -238,7 +240,7 @@ auto InteractionManager::hasDirectItemsForIndex(int idx) const -> bool {
   }
 
   QString mediaDir = (m_settingsManager != nullptr)
-                         ? SettingsManager::expandConfigVariables(
+                         ? SettingsUtils::expandConfigVariables(
                                collCfg.mediaDirectory, collCfg.name)
                          : collCfg.mediaDirectory;
   if (mediaDir.trimmed().isEmpty()) {
@@ -618,9 +620,8 @@ auto InteractionManager::handleActivityEvent(QEvent *event) -> bool {
   case QEvent::KeyRelease:
   case QEvent::Wheel:
     activityEvent = true;
-    if (ArtworkManager::s_instance.load() != nullptr &&
-        !ArtworkManager::s_shuttingDown.load()) {
-      ArtworkManager::instance().updateUserActivity();
+    if (m_artworkManager != nullptr) {
+      m_artworkManager->updateUserActivity();
     }
     break;
   default:
@@ -2034,9 +2035,8 @@ void InteractionManager::clearArtworkSuppressionViewportUpdateIfNeeded() {
     m_itemScrollArea->setProperty(PropertyKeys::AllowArtworkDuringSelection,
                                   true);
     QTimer::singleShot(UIConstants::SHORT_TIMER_DELAY, this, [this]() {
-      if (!QApplication::closingDown() &&
-          !ArtworkManager::s_shuttingDown.load()) {
-        ArtworkManager::instance().updateViewportArtwork();
+      if (!QApplication::closingDown() && m_artworkManager) {
+        m_artworkManager->updateViewportArtwork();
       }
     });
   }
@@ -2159,9 +2159,8 @@ void InteractionManager::onVScrollAnimationFinished() {
     m_itemScrollArea->setProperty(PropertyKeys::AllowArtworkDuringSelection,
                                   true);
     QTimer::singleShot(UIConstants::SHORT_TIMER_DELAY, this, [this]() {
-      if (!QApplication::closingDown() &&
-          !ArtworkManager::s_shuttingDown.load()) {
-        ArtworkManager::instance().updateViewportArtwork();
+      if (!QApplication::closingDown() && m_artworkManager) {
+        m_artworkManager->updateViewportArtwork();
       }
     });
   }
@@ -2273,9 +2272,8 @@ void InteractionManager::persistSuppressedSelectionAndMaybeCenter(
     }
   }
   QTimer::singleShot(UIConstants::SHORT_TIMER_DELAY, this, [this]() {
-    if (!QApplication::closingDown() &&
-        !ArtworkManager::s_shuttingDown.load()) {
-      ArtworkManager::instance().updateViewportArtwork();
+    if (!QApplication::closingDown() && m_artworkManager) {
+      m_artworkManager->updateViewportArtwork();
     }
   });
 }
@@ -4098,9 +4096,9 @@ auto InteractionManager::handleStartedTypingForCurrentMode() -> bool {
       if (cfg.showAllSubcollectionItems) {
         CollectionContext ctx;
         ctx.currentIndex = *m_currentCollectionIndex;
-        cfg.mediaDirectory = SettingsManager::expandConfigVariables(
+        cfg.mediaDirectory = SettingsUtils::expandConfigVariables(
             cfg.mediaDirectory, cfg.name);
-        cfg.artworkDirectory = SettingsManager::expandConfigVariables(
+        cfg.artworkDirectory = SettingsUtils::expandConfigVariables(
             cfg.artworkDirectory, cfg.name);
         ctx.config = cfg;
         ctx.artworkDirectory = cfg.artworkDirectory;
@@ -4136,36 +4134,35 @@ auto InteractionManager::titleForIndexInColl(int coll, int idx) const
 void InteractionManager::persistSelectionForIndex(int coll, int idx) {
   if (m_mainWindow->getSettingsManager() != nullptr) {
     m_mainWindow->getSettingsManager()->setLastSelectedItem(coll, idx);
-  }
-  QString collectionName;
-  QString hierarchicalName;
-  if (coll < m_mainWindow->m_collections.size()) {
-    collectionName = m_mainWindow->m_collections[coll].name;
-    hierarchicalName = hierarchicalNameFor(m_mainWindow->m_collections[coll],
-                                           m_mainWindow->m_collections);
-  }
-  const QString title = titleForIndexInColl(coll, idx);
-  if (m_sessionManager) {
-    if (!hierarchicalName.isEmpty()) {
-      m_sessionManager->setLastSelected(hierarchicalName, idx, title);
-    }
-    if (!collectionName.isEmpty() && hierarchicalName != collectionName) {
+    QString collectionName = m_mainWindow->m_collections[coll].name;
+    QString title;
+    // if (idx < subcollections.size()) {
+    //   int subIdx = subcollections[idx];
+    //   if (subIdx >= 0 && subIdx < m_mainWindow->m_collections.size()) {
+    //     title = m_mainWindow->m_collections[subIdx].name;
+    //   }
+    // } else {
+      QString path = m_selectedFilePath;
+      if (path.isEmpty() && (m_scrollManager != nullptr)) {
+        path = m_scrollManager->filePathForVisualIndex(idx);
+      }
+      if (!path.isEmpty()) {
+        title =
+            QFileInfo(path).completeBaseName().replace('_', ' ').simplified();
+      }
+    // }
+    if (m_sessionManager) {
       m_sessionManager->setLastSelected(collectionName, idx, title);
     }
+    if (m_settingsManager != nullptr) {
+      m_settingsManager->setLastSelectedItem(coll, idx);
+    }
   }
-  if (!QApplication::closingDown()) {
-    QTimer::singleShot(UIConstants::PERSISTENT_CACHE_QUICK_SAVE_DELAY_MS, this,
-                       [this]() {
-                         if (!QApplication::closingDown() &&
-                             !ArtworkManager::s_shuttingDown.load() &&
-                             m_sessionManager) {
-                           m_sessionManager->saveToDisk();
-                         }
-                       });
-  }
-  if (m_settingsManager != nullptr) {
-    m_settingsManager->setLastSelectedItem(coll, idx);
-  }
+  QTimer::singleShot(UIConstants::SHORT_TIMER_DELAY, this, [this]() {
+    if (!QApplication::closingDown() && m_artworkManager) {
+      m_artworkManager->updateViewportArtwork();
+    }
+  });
 }
 
 auto InteractionManager::findBestWidgetForClick(const QPoint &clickPos)

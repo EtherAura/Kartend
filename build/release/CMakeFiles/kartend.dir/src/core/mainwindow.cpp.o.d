@@ -813,6 +813,7 @@ CMakeFiles/kartend.dir/src/core/mainwindow.cpp.o: \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qrubberband.h \
   /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtreewidgetitemiterator.h \
   /home/carl/Documents/Programming/Kartend/src/managers/settingsmanager.h \
+  /home/carl/Documents/Programming/Kartend/src/utils/settingsutils.h \
   /home/carl/Documents/Programming/Kartend/src/managers/sidebarmanager.h \
   /home/carl/Documents/Programming/Kartend/src/utils/timerutils.h \
   /home/carl/Documents/Programming/Kartend/build/release/ui_mainwindow.h \

@@ -8,6 +8,7 @@
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
+#include "settingsutils.h"
 #include "sidebarmanager.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
@@ -34,7 +35,8 @@ void NavigationManager::setupReferences(
   m_scrollManager = deps.scrollManager;
   m_databaseManager = deps.databaseManager;
   m_sessionManager = deps.sessionManager;
-  m_metadataSidebar = deps.metadataSidebar;
+  m_artworkManager = deps.artworkManager;
+  m_metadataSidebar = deps.sidebar;
   m_currentCollectionIndex = deps.currentCollectionIndex;
   m_collections = deps.collections;
   m_generalSettings = deps.generalSettings;
@@ -479,9 +481,9 @@ auto NavigationManager::loadCollectionData(int collectionIndex) -> void {
     context.currentIndex = (*m_currentCollectionIndex);
     context.config =
         (*m_collections)[(*m_currentCollectionIndex)];
-    context.config.mediaDirectory = SettingsManager::expandConfigVariables(
+        context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
         context.config.mediaDirectory, context.config.name);
-    context.config.artworkDirectory = SettingsManager::expandConfigVariables(
+    context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
         context.config.artworkDirectory, context.config.name);
     context.artworkDirectory = context.config.artworkDirectory;
 
@@ -584,7 +586,7 @@ auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const
             childIndex >= (*m_collections).size()) {
           return false;
         }
-        QString childMediaDir = SettingsManager::expandConfigVariables(
+        QString childMediaDir = SettingsUtils::expandConfigVariables(
             (*m_collections)[childIndex].mediaDirectory,
             (*m_collections)[childIndex].name);
         return !childMediaDir.trimmed().isEmpty();
@@ -607,9 +609,9 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex)
     m_scrollManager->updateGridWidth(collection.gridWidth);
   }
 
-  m_settingsManager->applyHorizontalScrollbarSetting(
+  SettingsUtils::applyHorizontalScrollbarSetting(
       qobject_cast<QWidget*>(parent()), collectionIndex, (*m_collections));
-  m_settingsManager->applyVerticalScrollbarSetting(
+  SettingsUtils::applyVerticalScrollbarSetting(
       qobject_cast<QWidget*>(parent()), collectionIndex, (*m_collections));
 
   if (m_sidebarManager != nullptr) {
@@ -660,9 +662,9 @@ auto NavigationManager::performNavigationStackCleanup() -> void {
   if (m_metadataSidebar != nullptr) {
     m_metadataSidebar->clearMetadata();
   }
-  ArtworkManager::instance().stopSilentLoading();
-  if (ArtworkManager::instance().getTimerCoordinator() != nullptr) {
-    ArtworkManager::instance().getTimerCoordinator()->stopAllTimers();
+  m_artworkManager->stopSilentLoading();
+  if (m_artworkManager->getTimerCoordinator() != nullptr) {
+    m_artworkManager->getTimerCoordinator()->stopAllTimers();
   }
 }
 
@@ -933,7 +935,7 @@ auto NavigationManager::schedulePostLoadOperations() -> void {
                            m_isShuttingDown()) {
                          return;
                        }
-                       ArtworkManager::instance().startSilentLoading();
+                       m_artworkManager->startSilentLoading();
                      });
 
   if (m_databaseManager != nullptr) {
@@ -983,12 +985,12 @@ void NavigationManager::onItemsLoaded(
 
   resumeItemsPageRendering();
 
-  if ((ArtworkManager::s_instance.load() != nullptr) &&
-      !ArtworkManager::s_shuttingDown.load()) {
-    ArtworkManager::instance().updateViewportArtwork();
+  if (m_artworkManager != nullptr) {
+    m_artworkManager->updateViewportArtwork();
   }
-  if (ArtworkManager::instance().getTimerCoordinator() != nullptr) {
-    ArtworkManager::instance().getTimerCoordinator()->scheduleViewportUpdate();
+  if (m_artworkManager != nullptr &&
+      m_artworkManager->getTimerCoordinator() != nullptr) {
+    m_artworkManager->getTimerCoordinator()->scheduleViewportUpdate();
   }
 
   bool pendingRestore =
@@ -1055,10 +1057,10 @@ void NavigationManager::onViewportChanged() {
       if (m_scrollManager) {
         m_scrollManager->updateVirtualView();
       }
-      ArtworkManager::instance().updateViewportArtwork();
+      m_artworkManager->updateViewportArtwork();
     });
   } else {
-    if (auto *coord = ArtworkManager::instance().getTimerCoordinator()) {
+    if (auto *coord = m_artworkManager->getTimerCoordinator()) {
       coord->scheduleViewportUpdate();
     }
   }
@@ -1097,7 +1099,7 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
     return;
   }
 
-  if (auto *coord = ArtworkManager::instance().getTimerCoordinator()) {
+  if (auto *coord = m_artworkManager->getTimerCoordinator()) {
     coord->stopAllTimers();
   }
 
@@ -1105,7 +1107,7 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
     m_scrollManager->cleanup();
   }
 
-  ArtworkManager::instance().cancelAllArtworkLoading();
+  m_artworkManager->cancelAllArtworkLoading();
 
   QTimer::singleShot(
       UIConstants::MEDIUM_TIMER_DELAY, this, [this, collectionIndex]() {
@@ -1187,7 +1189,7 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub,
   }
 
   QString mediaDir = (m_settingsManager != nullptr)
-                         ? SettingsManager::expandConfigVariables(
+                         ? SettingsUtils::expandConfigVariables(
                                collection.mediaDirectory, collection.name)
                          : collection.mediaDirectory;
   if (!mediaDir.trimmed().isEmpty()) {
@@ -1285,9 +1287,9 @@ void NavigationManager::loadCurrentAndSubcollections() {
   CollectionContext context;
   context.currentIndex = idx;
   context.config = (*m_collections)[idx];
-  context.config.mediaDirectory = SettingsManager::expandConfigVariables(
+  context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
       context.config.mediaDirectory, context.config.name);
-  context.config.artworkDirectory = SettingsManager::expandConfigVariables(
+  context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
       context.config.artworkDirectory, context.config.name);
   context.artworkDirectory = context.config.artworkDirectory;
 
@@ -1383,9 +1385,9 @@ void NavigationManager::prepareForNonSharedNavigationHelper() {
   if (m_metadataSidebar != nullptr) {
     m_metadataSidebar->clearMetadata();
   }
-  ArtworkManager::instance().stopSilentLoading();
-  if (ArtworkManager::instance().getTimerCoordinator() != nullptr) {
-    ArtworkManager::instance().getTimerCoordinator()->stopAllTimers();
+  m_artworkManager->stopSilentLoading();
+  if (m_artworkManager->getTimerCoordinator() != nullptr) {
+    m_artworkManager->getTimerCoordinator()->stopAllTimers();
   }
   if (m_scrollManager != nullptr) {
     m_scrollManager->cleanup();
@@ -1420,9 +1422,9 @@ void NavigationManager::applyUiPoliciesForCollection(int collectionIndex) {
   }
   if (m_settingsManager != nullptr && parent() != nullptr && m_collections != nullptr) {
     if (auto *w = qobject_cast<QWidget*>(parent())) {
-        SettingsManager::applyHorizontalScrollbarSetting(
+        SettingsUtils::applyHorizontalScrollbarSetting(
             w, collectionIndex, *m_collections);
-        SettingsManager::applyVerticalScrollbarSetting(w, collectionIndex,
+        SettingsUtils::applyVerticalScrollbarSetting(w, collectionIndex,
                                                        *m_collections);
     }
   }

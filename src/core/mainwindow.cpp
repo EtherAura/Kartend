@@ -20,6 +20,7 @@
 #include "sessionmanager.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
+#include "settingsutils.h"
 #include "sidebarmanager.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
@@ -55,9 +56,10 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
   }
 
   QMainWindow::resizeEvent(event);
-  if (auto *timerCoordinator =
-          ArtworkManager::instance().getTimerCoordinator()) {
-    timerCoordinator->scheduleLayoutUpdate();
+  if (m_artworkManager) {
+    if (auto *timerCoordinator = m_artworkManager->getTimerCoordinator()) {
+      timerCoordinator->scheduleLayoutUpdate();
+    }
   }
 }
 
@@ -124,9 +126,11 @@ void MainWindow::setupManagerConnections() {
   setup.settingsManager = m_settingsManager.get();
   setup.databaseManager = m_databaseManager.get();
   setup.navigationManager = m_navigationManager.get();
+  setup.sessionManager = m_sessionManager.get();
+  setup.artworkManager = m_artworkManager.get();
   setup.itemScrollArea = ui->itemScrollArea;
   setup.gridContainer = gridContainer;
-  setup.sidebarWidget = m_metadataSidebar;
+  setup.sidebar = m_metadataSidebar;
   setup.stackedWidget = stackedWidget;
   setup.itemsPage = itemsPage;
   setup.collections = &m_collections;
@@ -143,7 +147,9 @@ void MainWindow::setupManagerConnections() {
   navDeps.sidebarManager = m_sidebarManager.get();
   navDeps.scrollManager = m_scrollManager.get();
   navDeps.databaseManager = m_databaseManager.get();
-  navDeps.metadataSidebar = m_metadataSidebar;
+  navDeps.sessionManager = m_sessionManager.get();
+  navDeps.artworkManager = m_artworkManager.get();
+  navDeps.sidebar = m_metadataSidebar;
   navDeps.currentCollectionIndex = &currentCollectionIndex;
   navDeps.collections = &m_collections;
   navDeps.generalSettings = &m_generalSettings;
@@ -193,21 +199,23 @@ void MainWindow::connectScrollManager() {
   QObject::connect(m_scrollManager.get(), &ScrollManager::subcollectionEntered,
                    m_navigationManager.get(),
                    &NavigationManager::onSubcollectionEntered);
-  QObject::connect(
-      ArtworkManager::instance().getTimerCoordinator(),
-      &TimerUtils::Coordinator::viewportUpdateRequested, this, []() {
-        if (!QApplication::closingDown() && ArtworkManager::s_instance.load() &&
-            !ArtworkManager::s_shuttingDown.load()) {
-          ArtworkManager::instance().updateViewportArtwork();
-        }
-      });
-  QObject::connect(
-      ArtworkManager::instance().getTimerCoordinator(),
-      &TimerUtils::Coordinator::layoutUpdateRequested, this, [this]() {
-        if (!QApplication::closingDown() && (m_scrollManager != nullptr)) {
-          m_scrollManager->handleLayoutChange();
-        }
-      });
+  if (m_artworkManager) {
+    QObject::connect(m_artworkManager->getTimerCoordinator(),
+                     &TimerUtils::Coordinator::viewportUpdateRequested, this,
+                     [this]() {
+                       if (!QApplication::closingDown() && m_artworkManager) {
+                         m_artworkManager->updateViewportArtwork();
+                       }
+                     });
+    QObject::connect(m_artworkManager->getTimerCoordinator(),
+                     &TimerUtils::Coordinator::layoutUpdateRequested, this,
+                     [this]() {
+                       if (!QApplication::closingDown() &&
+                           (m_scrollManager != nullptr)) {
+                         m_scrollManager->handleLayoutChange();
+                       }
+                     });
+  }
   QObject::connect(m_scrollManager.get(), &ScrollManager::filterChanged, this,
                    [this](int visible, int total) {
                      if (!QApplication::closingDown()) {
@@ -317,11 +325,6 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     m_interactionManager->blockSignals(true);
   }
 
-  ArtworkManager::s_shuttingDown.store(true, std::memory_order_release);
-  if (ArtworkManager::s_instance.load() != nullptr) {
-    ArtworkManager::instance().shutdown();
-  }
-
   if (m_scrollManager != nullptr) {
     m_scrollManager->blockSignals(true);
     m_scrollManager->cleanup();
@@ -331,13 +334,16 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 
   if (m_settingsManager != nullptr) {
     m_settingsManager->saveCollections(m_collections);
-    m_settingsManager->saveMainScreenSettings(m_mainScreenConfig);
+    SettingsUtils::saveMainScreenSettings(m_mainScreenConfig);
   }
 
-  CacheManager::instance()
-      .releaseGuiResources(); // NOLINT(readability-static-accessed-through-instance)
+  if (m_cacheManager) {
+    m_cacheManager->releaseGuiResources();
+    if (!QApplication::closingDown()) {
+      m_cacheManager->saveToDisk();
+    }
+  }
   if (!QApplication::closingDown()) {
-    CacheManager::instance().saveToDisk();
     if (m_sessionManager) {
       m_sessionManager->saveToDisk();
     }
@@ -360,9 +366,11 @@ void MainWindow::setupUI() {
 }
 
 void MainWindow::setupManagers() {
+  m_cacheManager = std::make_unique<CacheManager>();
   m_sessionManager = std::make_unique<SessionManager>(this);
-  m_settingsManager =
-      std::make_unique<SettingsManager>(m_sessionManager.get(), this);
+  m_artworkManager = std::make_unique<ArtworkManager>(m_cacheManager.get(), this);
+  m_settingsManager = std::make_unique<SettingsManager>(
+      m_sessionManager.get(), m_artworkManager.get(), m_cacheManager.get(), this);
   m_sidebarManager = std::make_unique<SidebarManager>(this);
   m_navigationManager = std::make_unique<NavigationManager>(this);
   m_interactionManager = std::make_unique<InteractionManager>(this);
@@ -372,7 +380,7 @@ void MainWindow::setupManagers() {
   m_scrollManager = std::make_unique<ScrollManager>(this);
 
   m_settingsManager->loadCollections(m_collections);
-  m_settingsManager->loadMainScreenSettings(m_mainScreenConfig);
+  SettingsUtils::loadMainScreenSettings(m_mainScreenConfig);
   m_settingsManager->loadGeneralSettings(m_generalSettings);
 }
 
@@ -493,6 +501,7 @@ void MainWindow::setupSidebar() {
     setup.mainLayout = m_mainHorizontalLayout;
     setup.scrollArea = (ui != nullptr) ? ui->itemScrollArea : nullptr;
     setup.settingsManager = m_settingsManager.get();
+    setup.artworkManager = m_artworkManager.get();
     setup.collections = &m_collections;
 
     m_sidebarManager->setupReferences(setup);
@@ -540,8 +549,10 @@ void MainWindow::showAbout() {
 }
 
 void MainWindow::setupArtworkManager() {
-  ArtworkManager::initializeCache();
-  ArtworkManager &artMgr = ArtworkManager::instance();
+  if (m_artworkManager) {
+    m_artworkManager->initializeCache();
+  }
+  ArtworkManager &artMgr = *m_artworkManager;
 
   ArtworkManagerSetup setup;
   setup.stackedWidget = stackedWidget;
@@ -582,6 +593,7 @@ void MainWindow::setupEventFilters() {
   ScrollManagerSetup setup;
   setup.gridContainer = gridContainer;
   setup.mediaScrollArea = ui->itemScrollArea;
+  setup.artworkManager = m_artworkManager.get();
   setup.collections = &m_collections;
 
   m_scrollManager->setupReferences(setup);

@@ -58,7 +58,7 @@ set(__QT_DEPLOY_QT_DEBUG_POSTFIX "")
 
 # Define the CMake commands to be made available during deployment.
 set(__qt_deploy_support_files
-    "/home/carl/.sync/Documents/Programming/Kartend/build/release/.qt/QtDeployTargets.cmake"
+    "/home/carl/Documents/Programming/Kartend/build/release/.qt/QtDeployTargets.cmake"
     "/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreDeploySupport.cmake"
 )
 foreach(__qt_deploy_support_file IN LISTS __qt_deploy_support_files)

@@ -12,6 +12,7 @@
 #include "sidebarmanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
+#include "settingsutils.h"
 #include <QDir>
 #include <QFile>
 #include <QLabel>
@@ -29,8 +30,11 @@
 
 // Construct settings manager and initialize QSettings.
 SettingsManager::SettingsManager(SessionManager *sessionManager,
+                                 ArtworkManager *artworkManager,
+                                 CacheManager *cacheManager,
                                  QObject *parent)
-    : QObject(parent), m_sessionManager(sessionManager) {
+    : QObject(parent), m_sessionManager(sessionManager),
+      m_artworkManager(artworkManager), m_cacheManager(cacheManager) {
   QDir configDir(QDir::homePath() + "/.config/kartend");
   if (!configDir.exists()) {
     configDir.mkpath(".");
@@ -39,72 +43,80 @@ SettingsManager::SettingsManager(SessionManager *sessionManager,
 
 SettingsManager::~SettingsManager() = default;
 
-// Return absolute path to config file.
-auto SettingsManager::getConfigPath() -> QString {
-  QDir configDir(QDir::homePath() + "/.config/kartend");
-  return configDir.absoluteFilePath("kartend.cfg");
+
+
+namespace {
+
+void setCollectionSpacing(const QString &value, int &spacing) {
+  bool conversionOk;
+  int spacingValue = value.toInt(&conversionOk);
+  if (conversionOk && spacingValue >= UIConstants::SPACING_MIN &&
+      spacingValue <= UIConstants::SPACING_MAX) {
+    spacing = spacingValue;
+  }
 }
 
-auto SettingsManager::parseConfigFile(
-    QFile &file, QHash<QString, CollectionConfig> &tempCollections,
-    bool &needsRewrite) -> bool {
-  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    return false;
+auto setCollectionGridWidth(const QString &value,
+                                             CollectionConfig &collection)
+    -> void {
+  int gridWidth = value.toInt();
+  if (gridWidth >= UIConstants::MIN_GRID_WIDTH &&
+      gridWidth <= UIConstants::MAX_GRID_WIDTH) {
+    collection.gridWidth = gridWidth;
   }
-
-  QTextStream inputStream(&file);
-  QString currentSection;
-  CollectionConfig currentCollection;
-  bool hasValidData = false;
-  bool inGeneral = false;
-
-  while (!inputStream.atEnd()) {
-    QString line = inputStream.readLine().trimmed();
-    if (line.isEmpty() || line.startsWith('#')) {
-      continue;
-    }
-
-    if (line.startsWith('[') && line.endsWith(']')) {
-      if (!currentSection.isEmpty() && !inGeneral &&
-          !currentCollection.name.isEmpty()) {
-        tempCollections[currentSection] = currentCollection;
-        hasValidData = true;
-      }
-      currentSection = line.mid(1, line.length() - 2);
-      currentCollection = CollectionConfig();
-      inGeneral = (currentSection == "General");
-      continue;
-    }
-
-    if (inGeneral) {
-      processGeneralConfigLine(line);
-      continue;
-    }
-
-    if (currentSection.isEmpty()) {
-      continue;
-    }
-
-    processConfigLine(line, currentCollection, needsRewrite);
-  }
-
-  if (!currentSection.isEmpty() && !inGeneral &&
-      !currentCollection.name.isEmpty()) {
-    tempCollections[currentSection] = currentCollection;
-    hasValidData = true;
-  }
-
-  file.close();
-  return hasValidData;
 }
 
-void SettingsManager::processGeneralConfigLine(const QString &line) {
+auto setCollectionItemWidth(const QString &value,
+                                             CollectionConfig &collection)
+    -> void {
+  int width = value.toInt();
+  if (width >= UIConstants::MIN_ITEM_WIDTH &&
+      width <= UIConstants::MAX_ITEM_WIDTH) {
+    collection.itemWidth = width;
+  }
+}
+
+auto setCollectionItemHeight(const QString &value,
+                                              CollectionConfig &collection)
+    -> void {
+  int height = value.toInt();
+  if (height >= UIConstants::MIN_ITEM_HEIGHT &&
+      height <= UIConstants::MAX_ITEM_HEIGHT) {
+    collection.itemHeight = height;
+  }
+}
+
+auto setCollectionFontSize(const QString &value,
+                                            CollectionConfig &collection)
+    -> void {
+  int size = value.toInt();
+  if (size >= UIConstants::MIN_FONT_SIZE &&
+      size <= UIConstants::MAX_FONT_SIZE) {
+    collection.fontSize = size;
+  }
+}
+
+auto setCollectionExtensions(const QString &value,
+                                              CollectionConfig &collection,
+                                              bool &needsRewrite) -> void {
+  QStringList rawList = value.split(',', Qt::SkipEmptyParts);
+  for (QString &extension : rawList) {
+    extension = extension.trimmed();
+  }
+  QStringList normalized = ExtensionUtils::normalizeStoredExtensions(rawList);
+  if (normalized != rawList) {
+    needsRewrite = true;
+  }
+  collection.extensions = normalized;
+}
+
+void processGeneralConfigLine(const QString &line) {
   // General settings are handled by loadGeneralSettings method
   // Just skip processing these lines in loadCollections
   Q_UNUSED(line);
 }
 
-auto SettingsManager::processConfigLine(const QString &line,
+auto processConfigLine(const QString &line,
                                         CollectionConfig &currentCollection,
                                         bool &needsRewrite) -> void {
   int equalPos = line.indexOf('=');
@@ -163,68 +175,113 @@ auto SettingsManager::processConfigLine(const QString &line,
   }
 }
 
-auto SettingsManager::setCollectionExtensions(const QString &value,
-                                              CollectionConfig &collection,
-                                              bool &needsRewrite) -> void {
-  QStringList rawList = value.split(',', Qt::SkipEmptyParts);
-  for (QString &extension : rawList) {
-    extension = extension.trimmed();
+auto parseConfigFile(
+    QFile &file, QHash<QString, CollectionConfig> &tempCollections,
+    bool &needsRewrite) -> bool {
+  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    return false;
   }
-  QStringList normalized = ExtensionUtils::normalizeStoredExtensions(rawList);
-  if (normalized != rawList) {
-    needsRewrite = true;
+
+  QTextStream inputStream(&file);
+  QString currentSection;
+  CollectionConfig currentCollection;
+  bool hasValidData = false;
+  bool inGeneral = false;
+
+  while (!inputStream.atEnd()) {
+    QString line = inputStream.readLine().trimmed();
+    if (line.isEmpty() || line.startsWith('#')) {
+      continue;
+    }
+
+    if (line.startsWith('[') && line.endsWith(']')) {
+      if (!currentSection.isEmpty() && !inGeneral &&
+          !currentCollection.name.isEmpty()) {
+        tempCollections[currentSection] = currentCollection;
+        hasValidData = true;
+      }
+      currentSection = line.mid(1, line.length() - 2);
+      currentCollection = CollectionConfig();
+      inGeneral = (currentSection == "General");
+      continue;
+    }
+
+    if (inGeneral) {
+      processGeneralConfigLine(line);
+      continue;
+    }
+
+    if (currentSection.isEmpty()) {
+      continue;
+    }
+
+    processConfigLine(line, currentCollection, needsRewrite);
   }
-  collection.extensions = normalized;
+
+  if (!currentSection.isEmpty() && !inGeneral &&
+      !currentCollection.name.isEmpty()) {
+    tempCollections[currentSection] = currentCollection;
+    hasValidData = true;
+  }
+
+  file.close();
+  return hasValidData;
 }
 
-auto SettingsManager::setCollectionGridWidth(const QString &value,
-                                             CollectionConfig &collection)
+
+
+auto findParentCollectionIndex(
+    const QStringList &parts, const QString &immediateParentName,
+    const QList<CollectionConfig> &collections) -> int {
+  for (int i = 0; i < collections.size(); ++i) {
+    if (collections[i].name == immediateParentName) {
+      if (parts.size() == 2 && !collections[i].isSubcollection) {
+        return i;
+      }
+      if (parts.size() > 2) {
+        QStringList parentPath = parts.mid(0, parts.size() - 1);
+        QString expectedParentPath = parentPath.join('/');
+        QString actualParentPath =
+            hierarchicalNameFor(collections[i], collections);
+        if (actualParentPath == expectedParentPath) {
+          return i;
+        }
+      }
+    }
+  }
+  return -1;
+}
+
+auto processSubcollection(const QString &sectionName,
+                                           CollectionConfig &collection,
+                                           QList<CollectionConfig> &collections)
     -> void {
-  int gridWidth = value.toInt();
-  if (gridWidth >= UIConstants::MIN_GRID_WIDTH &&
-      gridWidth <= UIConstants::MAX_GRID_WIDTH) {
-    collection.gridWidth = gridWidth;
+  QStringList parts = sectionName.split('/', Qt::KeepEmptyParts);
+  if (parts.size() < 2) {
+    return;
+  }
+
+  const QString &immediateParentName = parts[parts.size() - 2];
+  int parentIndex =
+      findParentCollectionIndex(parts, immediateParentName, collections);
+
+  if (parentIndex >= 0) {
+    collection.parentCollectionIndex = parentIndex;
+    collection.isSubcollection = true;
+    collections.append(collection);
   }
 }
 
-void SettingsManager::setCollectionSpacing(const QString &value, int &spacing) {
-  bool conversionOk;
-  int spacingValue = value.toInt(&conversionOk);
-  if (conversionOk && spacingValue >= UIConstants::SPACING_MIN &&
-      spacingValue <= UIConstants::SPACING_MAX) {
-    spacing = spacingValue;
-  }
-}
+auto detectChanges(
+    const QList<CollectionConfig> &newCollections,
+    const QList<CollectionConfig> &originalCollections,
+    int viewingCollectionIndex, bool &needsReload, bool &gridWidthChangedForView,
+    bool &alignmentChangedForView, bool &spacingChangedForView,
+    bool &scrollbarChangedForView, bool &sidebarModeChangedForView,
+    bool &titleChangedForView, bool &fontSizeChangedForView,
+    bool &hideTitlesChangedForView) -> bool;
 
-auto SettingsManager::setCollectionItemWidth(const QString &value,
-                                             CollectionConfig &collection)
-    -> void {
-  int width = value.toInt();
-  if (width >= UIConstants::MIN_ITEM_WIDTH &&
-      width <= UIConstants::MAX_ITEM_WIDTH) {
-    collection.itemWidth = width;
-  }
-}
-
-auto SettingsManager::setCollectionItemHeight(const QString &value,
-                                              CollectionConfig &collection)
-    -> void {
-  int height = value.toInt();
-  if (height >= UIConstants::MIN_ITEM_HEIGHT &&
-      height <= UIConstants::MAX_ITEM_HEIGHT) {
-    collection.itemHeight = height;
-  }
-}
-
-auto SettingsManager::setCollectionFontSize(const QString &value,
-                                            CollectionConfig &collection)
-    -> void {
-  int size = value.toInt();
-  if (size >= UIConstants::MIN_FONT_SIZE &&
-      size <= UIConstants::MAX_FONT_SIZE) {
-    collection.fontSize = size;
-  }
-}
+} // namespace
 
 void SettingsManager::finalizeCollections(
     const QHash<QString, CollectionConfig> &tempCollections,
@@ -255,55 +312,13 @@ void SettingsManager::finalizeCollections(
   }
 }
 
-auto SettingsManager::processSubcollection(const QString &sectionName,
-                                           CollectionConfig &collection,
-                                           QList<CollectionConfig> &collections)
-    -> void {
-  QStringList parts = sectionName.split('/', Qt::KeepEmptyParts);
-  if (parts.size() < 2) {
-    return;
-  }
-
-  const QString &immediateParentName = parts[parts.size() - 2];
-  int parentIndex =
-      findParentCollectionIndex(parts, immediateParentName, collections);
-
-  if (parentIndex >= 0) {
-    collection.parentCollectionIndex = parentIndex;
-    collection.isSubcollection = true;
-    collections.append(collection);
-  }
-}
-
-auto SettingsManager::findParentCollectionIndex(
-    const QStringList &parts, const QString &immediateParentName,
-    const QList<CollectionConfig> &collections) -> int {
-  for (int i = 0; i < collections.size(); ++i) {
-    if (collections[i].name == immediateParentName) {
-      if (parts.size() == 2 && !collections[i].isSubcollection) {
-        return i;
-      }
-      if (parts.size() > 2) {
-        QStringList parentPath = parts.mid(0, parts.size() - 1);
-        QString expectedParentPath = parentPath.join('/');
-        QString actualParentPath =
-            hierarchicalNameFor(collections[i], collections);
-        if (actualParentPath == expectedParentPath) {
-          return i;
-        }
-      }
-    }
-  }
-  return -1;
-}
-
 // Loads collections from config (no automatic default collections; leaves list
 // empty if none)
 void SettingsManager::loadCollections(
     QList<CollectionConfig> &collections) const {
   collections.clear();
 
-  QFile file(getConfigPath());
+  QFile file(SettingsUtils::getConfigPath());
   if (!file.exists()) {
     return;
   }
@@ -319,7 +334,7 @@ void SettingsManager::loadCollections(
 // Persist collection configurations to disk (no lastSelected_* entries)
 void SettingsManager::saveCollections(
     const QList<CollectionConfig> &collections) const {
-  QFile file(getConfigPath());
+  QFile file(SettingsUtils::getConfigPath());
   if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
     return;
   }
@@ -387,128 +402,9 @@ void SettingsManager::saveCollections(
   file.close();
 }
 
-// Load main screen (global layout) settings.
-void SettingsManager::loadMainScreenSettings(MainScreenConfig &config) {
-  QFile file(getConfigPath());
-  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    config.gridWidth = UIConstants::DEFAULT_GRID_WIDTH;
-    config.horizontalAlignment = HorizontalAlignment::Center;
-    config.showHiddenCollections = false;
-    return;
-  }
-  QTextStream inputStream(&file);
-  bool inGeneral = false;
-  while (!inputStream.atEnd()) {
-    QString line = inputStream.readLine().trimmed();
-    if (line.startsWith('[') && line.endsWith(']')) {
-      QString section = line.mid(1, line.length() - 2);
-      inGeneral = (section == "General");
-      continue;
-    }
-    if (!inGeneral) {
-      continue;
-    }
-    int equalPos = line.indexOf('=');
-    if (equalPos == -1) {
-      continue;
-    }
-    QString key = line.left(equalPos);
-    QString value = line.mid(equalPos + 1);
-    if (key == "MainScreen_gridWidth") {
-      config.gridWidth = value.toInt();
-    } else if (key == "MainScreen_horizontalAlignment") {
-      config.horizontalAlignment = stringToAlignment(value);
-    } else if (key == "MainScreen_showHiddenCollections") {
-      config.showHiddenCollections = (value == "true");
-    }
-  }
-  file.close();
-  config.gridWidth = std::max(config.gridWidth, UIConstants::MIN_GRID_WIDTH);
-  config.gridWidth = std::min(config.gridWidth, UIConstants::MAX_GRID_WIDTH);
-}
 
-// Save main screen settings while preserving other lines.
-namespace {
-// Reads all lines and removes existing MainScreen_* keys from [General]
-auto readAndFilterGeneralSection(QFile &file, QStringList &lines,
-                                 bool &foundGeneral) -> void {
-  bool inGeneral = false;
-  QTextStream inputStream(&file);
-  while (!inputStream.atEnd()) {
-    const QString line = inputStream.readLine();
-    const QString trimmed = line.trimmed();
-    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      const QString section = trimmed.mid(1, trimmed.length() - 2);
-      inGeneral = (section == "General");
-      if (inGeneral) {
-        foundGeneral = true;
-      }
-      lines.append(line);
-      continue;
-    }
-    if (inGeneral) {
-      if (trimmed.startsWith("MainScreen_gridWidth=") ||
-          trimmed.startsWith("MainScreen_horizontalAlignment=") ||
-          trimmed.startsWith("MainScreen_showHiddenCollections=")) {
-        continue;
-      }
-    }
-    lines.append(line);
-  }
-}
 
-// Inserts the three MainScreen_* entries immediately after [General]
-void insertMainScreenEntries(QStringList &lines,
-                             const MainScreenConfig &config) {
-  for (int i = 0; i < lines.size(); ++i) {
-    if (lines[i].trimmed() == "[General]") {
-      lines.insert(i + 1,
-                   QString("MainScreen_gridWidth=%1").arg(config.gridWidth));
-      lines.insert(i + 2,
-                   QString("MainScreen_horizontalAlignment=%1")
-                       .arg(alignmentToString(config.horizontalAlignment)));
-      lines.insert(i + 3,
-                   QString("MainScreen_showHiddenCollections=%1")
-                       .arg(config.showHiddenCollections ? "true" : "false"));
-      break;
-    }
-  }
-}
-} // namespace
 
-void SettingsManager::saveMainScreenSettings(const MainScreenConfig &config) {
-  QString configPath = getConfigPath();
-  QStringList lines;
-  bool foundGeneral = false;
-
-  QFile file(configPath);
-  if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    readAndFilterGeneralSection(file, lines, foundGeneral);
-    file.close();
-  }
-
-  if (!foundGeneral) {
-    lines.prepend("");
-    lines.prepend("[General]");
-  }
-
-  insertMainScreenEntries(lines, config);
-
-  if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-    QTextStream out(&file);
-    for (const QString &line : lines) {
-      out << line << "\n";
-    }
-    file.close();
-  }
-}
-
-// Expand variables/placeholders in a configured string.
-auto SettingsManager::expandConfigVariables(const QString &input,
-                                            const QString &collectionName)
-    -> QString {
-  return PathUtils::validateAndExpandPath(input, collectionName);
-}
 
 // Launch settings dialog and apply accepted modifications.
 void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
@@ -563,8 +459,8 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
     return;
   }
 
-  if (ArtworkManager::instance().getTimerCoordinator() != nullptr) {
-    ArtworkManager::instance().getTimerCoordinator()->stopAllTimers();
+  if (m_artworkManager->getTimerCoordinator() != nullptr) {
+    m_artworkManager->getTimerCoordinator()->stopAllTimers();
   }
 
   collections = newCollections;
@@ -597,15 +493,15 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   if (needsReload) {
     handleReloadRequired(collections, newCollections, originalCollections,
                          viewingCollectionIndex, sidebarManager,
-                         scrollManager, navigationManager,
-                         currentCollectionIndex);
+                         scrollManager, navigationManager, m_artworkManager,
+                         m_cacheManager, currentCollectionIndex);
   } else {
     handleLayoutChanges(parent, collections, viewingCollectionIndex,
                         titleChangedForView, scrollbarChangedForView,
                         sidebarModeChangedForView, gridWidthChangedForView,
                         spacingChangedForView, alignmentChangedForView,
                         fontSizeChangedForView, hideTitlesChangedForView,
-                        sidebarManager, scrollManager,
+                        sidebarManager, scrollManager, m_artworkManager,
                         currentCollectionIndex);
   }
 }
@@ -708,9 +604,9 @@ void updateWindowTitle(QWidget *parent, int viewingIndex,
 // Applies scrollbar settings for the viewing collection
 void applyScrollbarSettings(QWidget *parent, int viewingIndex,
                             const QList<CollectionConfig> &collections) {
-  SettingsManager::applyHorizontalScrollbarSetting(parent, viewingIndex,
+  SettingsUtils::applyHorizontalScrollbarSetting(parent, viewingIndex,
                                                    collections);
-  SettingsManager::applyVerticalScrollbarSetting(parent, viewingIndex,
+  SettingsUtils::applyVerticalScrollbarSetting(parent, viewingIndex,
                                                  collections);
 }
 
@@ -725,6 +621,7 @@ void refreshSidebar(SidebarManager *sidebarManager,
 
 // Handles scroll manager branching
 void handleScrollBranch(ScrollManager *scrollManager,
+                        ArtworkManager *artworkManager,
                         const QList<CollectionConfig> &collections,
                         int viewingIndex, bool spacingChanged,
                         bool sidebarModeChanged, bool gridWidthChanged,
@@ -742,17 +639,21 @@ void handleScrollBranch(ScrollManager *scrollManager,
   if (gridWidthChanged) {
     scrollManager->updateGridWidth(collections[viewingIndex].gridWidth);
     QTimer::singleShot(UIConstants::LONG_TIMER_DELAY, [scrollManager,
+                                                       artworkManager,
                                                        viewingIndex,
                                                        collections]() {
       if (scrollManager) {
         scrollManager->preCalculateLayout();
         scrollManager->forceVirtualViewUpdate();
         QTimer::singleShot(UIConstants::MEDIUM_TIMER_DELAY, [scrollManager,
+                                                             artworkManager,
                                                              viewingIndex,
                                                              collections]() {
           if (scrollManager) {
             scrollManager->updateVirtualView();
-            ArtworkManager::instance().updateViewportArtwork();
+            if (artworkManager) {
+              artworkManager->updateViewportArtwork();
+            }
             scrollManager->centerHorizontalScrollbar(viewingIndex, collections);
           }
         });
@@ -766,9 +667,7 @@ void handleScrollBranch(ScrollManager *scrollManager,
     scrollManager->handleLayoutChange();
   }
 }
-} // namespace
-
-auto SettingsManager::detectChanges(
+auto detectChanges(
     const QList<CollectionConfig> &newCollections,
     const QList<CollectionConfig> &originalCollections,
     int viewingCollectionIndex, bool &needsReload, bool &gridWidthChangedForView,
@@ -803,14 +702,19 @@ auto SettingsManager::detectChanges(
   return hasChanges;
 }
 
+} // namespace
+
 auto SettingsManager::handleReloadRequired(
     QList<CollectionConfig> &collections,
     const QList<CollectionConfig> &newCollections,
     const QList<CollectionConfig> &originalCollections,
     int viewingCollectionIndex, SidebarManager *sidebarManager,
-    ScrollManager *scrollManager,
-    NavigationManager *navigationManager, int currentCollectionIndex) -> void {
-  ArtworkManager::instance().cancelAllArtworkLoading();
+    ScrollManager *scrollManager, NavigationManager *navigationManager,
+    ArtworkManager *artworkManager, CacheManager *cacheManager,
+    int currentCollectionIndex) -> void {
+  if (artworkManager) {
+    artworkManager->cancelAllArtworkLoading();
+  }
   if (viewingCollectionIndex >= 0 &&
       viewingCollectionIndex < collections.size()) {
     const QString &mediaDirectory =
@@ -823,9 +727,13 @@ auto SettingsManager::handleReloadRequired(
          originalCollections[viewingCollectionIndex].extensions);
 
     if (mediaDirectoryChanged || extensionsChanged) {
-      CacheManager::instance().clearCollectionCache(viewingCollectionIndex);
-      ArtworkManager::instance().clearLoadedArtworkState();
-      ArtworkManager::instance().clearWidgetReferences();
+      if (cacheManager) {
+        cacheManager->clearCollectionCache(viewingCollectionIndex);
+      }
+      if (artworkManager) {
+        artworkManager->clearLoadedArtworkState();
+        artworkManager->clearWidgetReferences();
+      }
     }
 
     if (scrollManager != nullptr) {
@@ -848,8 +756,8 @@ auto SettingsManager::handleLayoutChanges(
     bool scrollbarChangedForView, bool sidebarModeChangedForView,
     bool gridWidthChangedForView, bool spacingChangedForView,
     bool alignmentChangedForView, bool fontSizeChangedForView,
-    bool hideTitlesChangedForView,
-    SidebarManager *sidebarManager, ScrollManager *scrollManager,
+    bool hideTitlesChangedForView, SidebarManager *sidebarManager,
+    ScrollManager *scrollManager, ArtworkManager *artworkManager,
     int currentCollectionIndex) -> void {
   if (viewingCollectionIndex < 0 ||
       viewingCollectionIndex >= collections.size()) {
@@ -864,45 +772,13 @@ auto SettingsManager::handleLayoutChanges(
   if (sidebarModeChangedForView) {
     refreshSidebar(sidebarManager, collections, currentCollectionIndex);
   }
-  handleScrollBranch(scrollManager, collections, viewingCollectionIndex,
+  handleScrollBranch(scrollManager, artworkManager, collections, viewingCollectionIndex,
                      spacingChangedForView, sidebarModeChangedForView,
                      gridWidthChangedForView, alignmentChangedForView,
                      fontSizeChangedForView, hideTitlesChangedForView);
 }
 
-// Apply horizontal scrollbar policy for collection.
-void SettingsManager::applyHorizontalScrollbarSetting(
-    QWidget *parent, int collectionIndex,
-    const QList<CollectionConfig> &collections) {
-  auto *itemScrollArea = parent->findChild<QScrollArea *>("itemScrollArea");
-  if ((itemScrollArea == nullptr) || collectionIndex < 0 ||
-      collectionIndex >= collections.size()) {
-    return;
-  }
-  const CollectionConfig &collection = collections[collectionIndex];
-  if (collection.hideHorizontalScrollbar) {
-    itemScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-  } else {
-    itemScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-  }
-}
 
-// Apply vertical scrollbar policy for collection.
-void SettingsManager::applyVerticalScrollbarSetting(
-    QWidget *parent, int collectionIndex,
-    const QList<CollectionConfig> &collections) {
-  auto *itemScrollArea = parent->findChild<QScrollArea *>("itemScrollArea");
-  if ((itemScrollArea == nullptr) || collectionIndex < 0 ||
-      collectionIndex >= collections.size()) {
-    return;
-  }
-  const CollectionConfig &collection = collections[collectionIndex];
-  if (collection.hideVerticalScrollbar) {
-    itemScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-  } else {
-    itemScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-  }
-}
 
 // Loads general settings (selection indices now resolved from persistent cache
 // separately)
@@ -912,7 +788,7 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   loaded.wrapNavigation = false;
   loaded.lastSelectedItems.clear();
 
-  QFile cfg(getConfigPath());
+  QFile cfg(SettingsUtils::getConfigPath());
   bool inGeneral = false;
   if (cfg.open(QIODevice::ReadOnly | QIODevice::Text)) {
     QTextStream inputStream(&cfg);
@@ -960,7 +836,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.rememberSelection = settings.rememberSelection;
   m_generalSettings.wrapNavigation = settings.wrapNavigation;
 
-  const QString cfgPath = getConfigPath();
+  const QString cfgPath = SettingsUtils::getConfigPath();
   QStringList lines;
   bool foundGeneral = false;
 

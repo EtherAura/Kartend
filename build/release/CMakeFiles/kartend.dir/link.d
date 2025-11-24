@@ -19,6 +19,7 @@ kartend: \
  CMakeFiles/kartend.dir/src/ui/widgets/metadatasidebar.cpp.o \
  CMakeFiles/kartend.dir/src/ui/widgets/itemwidget.cpp.o \
  CMakeFiles/kartend.dir/src/utils/pathutils.cpp.o \
+ CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o \
  CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o \
  CMakeFiles/kartend.dir/src/utils/timerutils.cpp.o \
  CMakeFiles/kartend.dir/kartend_autogen/7WA7TAYJOR/qrc_resources.cpp.o \
@@ -82,6 +83,8 @@ CMakeFiles/kartend.dir/src/ui/widgets/metadatasidebar.cpp.o:
 CMakeFiles/kartend.dir/src/ui/widgets/itemwidget.cpp.o:
 
 CMakeFiles/kartend.dir/src/utils/pathutils.cpp.o:
+
+CMakeFiles/kartend.dir/src/utils/settingsutils.cpp.o:
 
 CMakeFiles/kartend.dir/src/utils/extensionutils.cpp.o:
 

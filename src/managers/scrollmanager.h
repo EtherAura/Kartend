@@ -15,6 +15,7 @@ class QScrollBar;
 class MediaItemWidget;
 class DatabaseManager;
 class QPropertyAnimation;
+class ArtworkManager;
 
 struct VirtualMetrics {
   int itemWidth = 0;
@@ -34,6 +35,7 @@ struct VirtualMetrics {
 struct ScrollManagerSetup {
   QWidget *gridContainer = nullptr;
   QScrollArea *mediaScrollArea = nullptr;
+  ArtworkManager *artworkManager = nullptr;
   const QList<CollectionConfig> *collections = nullptr;
 };
 
@@ -69,7 +71,7 @@ public:
   void centerHorizontalScrollbar(int currentCollectionIndex,
                                  const QList<CollectionConfig> &collections);
   void handleLayoutChange();
-  static void notifyUserActivity();
+  void notifyUserActivity();
   int getCurrentGridWidth() const;
   void updateContextForSubcollection(int subcollectionIndex);
   void applySubcollectionFilter(int subcollectionIndex);
@@ -112,6 +114,7 @@ private:
 
   QWidget *m_gridContainer = nullptr;
   QScrollArea *m_mediaScrollArea = nullptr;
+  ArtworkManager *m_artworkManager = nullptr;
   QWidget *m_virtualContainer = nullptr;
   QStringList m_filePaths;
   QHash<QString, QString> m_fileNames;
