@@ -509,12 +509,19 @@ auto SettingsManager::expandConfigVariables(const QString &input,
 }
 
 // Launch settings dialog and apply accepted modifications.
-void SettingsManager::openSettingsDialog(QWidget *parent,
-                                         QList<CollectionConfig> &collections,
-                                         int &currentCollectionIndex,
-                                         SidebarManager *sidebarManager,
-                                         ScrollManager *scrollManager,
-                                         NavigationManager *navigationManager) {
+void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
+  if (context.collections == nullptr ||
+      context.currentCollectionIndex == nullptr) {
+    return;
+  }
+
+  QList<CollectionConfig> &collections = *context.collections;
+  int &currentCollectionIndex = *context.currentCollectionIndex;
+  QWidget *parent = context.parent;
+  SidebarManager *sidebarManager = context.sidebarManager;
+  ScrollManager *scrollManager = context.scrollManager;
+  NavigationManager *navigationManager = context.navigationManager;
+
   int viewingCollectionIndex = currentCollectionIndex;
   QList<CollectionConfig> originalCollections = collections;
 

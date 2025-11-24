@@ -422,10 +422,14 @@ void MainWindow::setupActionSettings() {
     QObject::connect(
         ui->actionSettings, &QAction::triggered, [this]() {
           if (m_settingsManager) {
-            m_settingsManager->openSettingsDialog(
-                this, m_collections, currentCollectionIndex,
-                m_sidebarManager.get(), m_scrollManager.get(),
-                m_navigationManager.get());
+            SettingsDialogContext context;
+            context.parent = this;
+            context.collections = &m_collections;
+            context.currentCollectionIndex = &currentCollectionIndex;
+            context.sidebarManager = m_sidebarManager.get();
+            context.scrollManager = m_scrollManager.get();
+            context.navigationManager = m_navigationManager.get();
+            m_settingsManager->openSettingsDialog(context);
           }
         });
     ui->actionSettings->setShortcutContext(Qt::ApplicationShortcut);
@@ -609,9 +613,15 @@ void MainWindow::setupInitialTimersEmptyCollections() {
   QTimer::singleShot(0, this, [this]() {
     if (m_settingsManager != nullptr) {
       int dummyIndex = currentCollectionIndex;
-      m_settingsManager->openSettingsDialog(
-          this, m_collections, dummyIndex, m_sidebarManager.get(),
-          m_scrollManager.get(), m_navigationManager.get());
+      SettingsDialogContext context;
+      context.parent = this;
+      context.collections = &m_collections;
+      context.currentCollectionIndex = &dummyIndex;
+      context.sidebarManager = m_sidebarManager.get();
+      context.scrollManager = m_scrollManager.get();
+      context.navigationManager = m_navigationManager.get();
+      m_settingsManager->openSettingsDialog(context);
+
       if (!m_collections.isEmpty()) {
         currentCollectionIndex = 0;
         if (m_navigationManager) {

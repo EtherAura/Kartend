@@ -11,6 +11,15 @@ class SidebarManager;
 class ScrollManager;
 class NavigationManager;
 
+struct SettingsDialogContext {
+  QWidget *parent = nullptr;
+  QList<CollectionConfig> *collections = nullptr;
+  int *currentCollectionIndex = nullptr;
+  SidebarManager *sidebarManager = nullptr;
+  ScrollManager *scrollManager = nullptr;
+  NavigationManager *navigationManager = nullptr;
+};
+
 class SettingsManager : public QObject {
   Q_OBJECT
 public:
@@ -25,11 +34,7 @@ public:
   static auto saveMainScreenSettings(const MainScreenConfig &config) -> void;
   static auto expandConfigVariables(const QString &input,
                                     const QString &collectionName) -> QString;
-  void openSettingsDialog(QWidget *parent, QList<CollectionConfig> &collections,
-                          int &currentCollectionIndex,
-                          SidebarManager *sidebarManager,
-                          ScrollManager *scrollManager,
-                          NavigationManager *navigationManager);
+  void openSettingsDialog(const SettingsDialogContext &context);
   static auto
   applyHorizontalScrollbarSetting(QWidget *parent, int collectionIndex,
                                   const QList<CollectionConfig> &collections)
