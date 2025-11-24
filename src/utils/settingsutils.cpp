@@ -9,12 +9,15 @@
 #include <algorithm>
 
 auto SettingsUtils::getConfigPath() -> QString {
-  QString configPath = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-  QDir configDir(configPath);
-  if (!configDir.exists()) {
-    configDir.mkpath(".");
+  QString configRoot = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+  QDir configDir(configRoot);
+  QString appConfigPath = configDir.filePath("kartend");
+
+  QDir appConfigDir(appConfigPath);
+  if (!appConfigDir.exists()) {
+    appConfigDir.mkpath(".");
   }
-  return configDir.absoluteFilePath("kartend.cfg");
+  return appConfigDir.absoluteFilePath("kartend.cfg");
 }
 
 void SettingsUtils::loadMainScreenSettings(MainScreenConfig &config) {
