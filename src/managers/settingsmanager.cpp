@@ -192,11 +192,30 @@ void SettingsManager::saveCollections(
     const QList<CollectionConfig> &collections) const {
   QSettings settings(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   
-  // Remove all existing collection groups to ensure clean state for collections
-  // but preserve [General] section which might contain other settings (e.g. MainScreen_*)
-  const QStringList groups = settings.childGroups();
-  for (const QString &group : groups) {
-    if (group != "General") {
+  QStringList sectionNames;
+  QHash<QString, int> sectionToIndex;
+  QSet<QString> newGroupNames;
+
+  for (int i = 0; i < collections.size(); ++i) {
+    QString sectionName = hierarchicalNameFor(collections[i], collections);
+    if (!sectionName.isEmpty()) {
+      sectionNames.append(sectionName);
+      sectionToIndex[sectionName] = i;
+      
+      // Convert "Games/Nintendo" to "Games > Nintendo" for comparison with existing groups
+      QString iniGroupName = sectionName;
+      iniGroupName.replace("/", " > ");
+      newGroupNames.insert(iniGroupName);
+    }
+  }
+  sectionNames.sort();
+
+  // Remove only groups that are NOT in the new collections list and NOT "General"
+  // This preserves "Games" if it contains extra keys (like showHiddenCollections)
+  // provided "Games" is also a valid collection name.
+  const QStringList existingGroups = settings.childGroups();
+  for (const QString &group : existingGroups) {
+    if (group != "General" && !newGroupNames.contains(group)) {
       settings.remove(group);
     }
   }
@@ -205,17 +224,6 @@ void SettingsManager::saveCollections(
   settings.setValue("rememberSelection", m_generalSettings.rememberSelection);
   settings.setValue("wrapNavigation", m_generalSettings.wrapNavigation);
   settings.endGroup();
-
-  QStringList sectionNames;
-  QHash<QString, int> sectionToIndex;
-  for (int i = 0; i < collections.size(); ++i) {
-    QString sectionName = hierarchicalNameFor(collections[i], collections);
-    if (!sectionName.isEmpty()) {
-      sectionNames.append(sectionName);
-      sectionToIndex[sectionName] = i;
-    }
-  }
-  sectionNames.sort();
 
   for (const QString &sectionName : sectionNames) {
     int index = sectionToIndex[sectionName];
