@@ -71,6 +71,9 @@ public slots:
                                 int finalEnsureDelayMs) -> void;
   void onItemsLoaded(const QStringList &filePaths,
                      const QHash<QString, QString> &fileNames);
+  void onItemCountLoaded(int count);
+  void onItemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
+  void fetchItemsRange(int offset, int limit);
   void onMediaLibraryError(const QString &error);
   void onViewportChanged();
 

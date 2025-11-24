@@ -78,9 +78,7 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
 
 // Initializes virtual scrolling and prepares virtual container; primes mappings
 // for aggregated views.
-void ScrollManager::setupVirtualScrolling(
-    const QStringList &filePaths, const QHash<QString, QString> &fileNames,
-    const CollectionContext &context) {
+void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContext &context) {
   if ((m_gridContainer == nullptr) || (m_mediaScrollArea == nullptr)) {
     return;
   }
@@ -92,20 +90,52 @@ void ScrollManager::setupVirtualScrolling(
   m_lastSelectedRow = -1;
 
   m_context = context;
-  m_filePaths = filePaths;
-  m_fileNames = fileNames;
-
+  // m_filePaths and m_fileNames will be populated on demand
+  m_filePaths.clear();
+  m_fileNames.clear();
+  
+  // Pre-fill m_filePaths with empty strings to reserve space
+  // But wait, m_filePaths is a QStringList (QList<QString>).
+  // If totalCount is huge, this is fine.
+  // However, we need to handle subcollections separately?
+  // The original code had m_subcollections + m_filePaths.
+  // Now totalCount includes items. Subcollections are separate?
+  // DatabaseWorker::fetchItemCount returns count of ITEMS.
+  // Subcollections are handled by ScrollManager::initializeSubcollections.
+  
   initializeSubcollections();
-  setupFilePathMappings();
-  processRelativeFilePaths();
+  
+  // The total items in the grid = subcollections + items.
+  // We need to know how many items are there.
+  int itemCount = totalCount;
+  
+  // Resize m_filePaths to itemCount with empty strings
+  m_filePaths.reserve(itemCount);
+  for(int i=0; i<itemCount; ++i) m_filePaths.append(QString());
 
-  m_totalItems = m_subcollections.size() + m_filePaths.size();
+  m_totalItems = m_subcollections.size() + itemCount;
+  
   if (m_totalItems == 0) {
     setupEmptyVirtualScrolling();
     return;
   }
 
   setupNormalVirtualScrolling();
+}
+
+void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames) {
+    if (offset < 0 || offset >= m_filePaths.size()) return;
+    
+    for (int i = 0; i < filePaths.size(); ++i) {
+        int index = offset + i;
+        if (index < m_filePaths.size()) {
+            m_filePaths[index] = filePaths[i];
+            m_fileNames[filePaths[i]] = fileNames.value(filePaths[i]);
+        }
+    }
+    
+    // Trigger update of visible widgets
+    updateVirtualView();
 }
 
 void ScrollManager::initializeSubcollections() {
@@ -1505,6 +1535,20 @@ auto ScrollManager::createMediaItemWidget(int visualIndex, int actualIndex)
   }
 
   const QString rawFileName = m_filePaths[mediaIndex];
+  if (rawFileName.isEmpty()) {
+      int chunkSize = 100;
+      int chunkStart = (mediaIndex / chunkSize) * chunkSize;
+      emit requestItemsRange(chunkStart, chunkSize);
+
+      auto *itemWidget = new MediaItemWidget(m_virtualContainer);
+      itemWidget->setFocusPolicy(Qt::NoFocus);
+      itemWidget->setItemDimensions(m_metrics.itemWidth, m_metrics.itemHeight);
+      if (itemWidget->nameLabel) {
+          itemWidget->nameLabel->setText("Loading...");
+      }
+      return itemWidget;
+  }
+
   QString fullPath;
   QString displayName;
   int collectionIndex = m_context.currentIndex;

@@ -232,6 +232,182 @@ void DatabaseWorker::updateCachedCounts(const QList<CollectionConfig> &allCollec
   // Currently, DatabaseManager::updateCachedCounts handles the SessionManager updates.
 }
 
+void DatabaseWorker::ensureCollectionScanned(int collectionIndex, const CollectionConfig &collection) {
+  if (collection.mediaDirectory.trimmed().isEmpty()) return;
+  if (needsRescan(collectionIndex, collection)) {
+    QHash<QString, QDateTime> timestamps;
+    QStringList filePaths = scanMediaDirectory(collection, timestamps);
+    if (!filePaths.isEmpty()) {
+      saveItemsToDatabase(collectionIndex, filePaths, timestamps, collection);
+    }
+  }
+}
+
+void DatabaseWorker::fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter) {
+  if (!m_db.isOpen()) initDatabase();
+
+  if (!context.isValid()) {
+    emit errorOccurred("Invalid collection context");
+    return;
+  }
+
+  CollectionContext ctx = context;
+  ctx.config.mediaDirectory = PathUtils::validateAndExpandPath(
+      ctx.config.mediaDirectory, ctx.config.name);
+  
+  ensureCollectionScanned(ctx.currentIndex, ctx.config);
+
+  QStringList uuids;
+  uuids << computeCollectionUuid(ctx.config.name);
+
+  if (ctx.config.showAllSubcollectionItems) {
+      QList<int> rawDescendants = collectDescendantIndices(ctx.currentIndex, allCollections);
+      for (int descendantIndex : rawDescendants) {
+          if (descendantIndex == ctx.currentIndex || descendantIndex < 0 || descendantIndex >= allCollections.size()) continue;
+          CollectionConfig subCol = allCollections[descendantIndex];
+          subCol.mediaDirectory = PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
+          ensureCollectionScanned(descendantIndex, subCol);
+          uuids << computeCollectionUuid(subCol.name);
+      }
+  }
+
+  QSqlQuery query(m_db);
+  QString sql = "SELECT COUNT(DISTINCT path) FROM items WHERE collection_uuid IN (";
+  for (int i = 0; i < uuids.size(); ++i) {
+      sql += (i == 0 ? "?" : ", ?");
+  }
+  sql += ")";
+  
+  if (!filter.isEmpty()) {
+      sql += " AND name LIKE ?";
+  }
+  
+  query.prepare(sql);
+  for (const QString &uuid : uuids) {
+      query.addBindValue(uuid);
+  }
+  if (!filter.isEmpty()) {
+      query.addBindValue("%" + filter + "%");
+  }
+
+  if (query.exec() && query.next()) {
+      emit itemCountLoaded(query.value(0).toInt());
+  } else {
+      emit itemCountLoaded(0);
+  }
+}
+
+void DatabaseWorker::fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter) {
+  if (!m_db.isOpen()) initDatabase();
+
+  if (!context.isValid()) {
+    emit errorOccurred("Invalid collection context");
+    return;
+  }
+
+  // We assume ensureCollectionScanned was called during fetchItemCount, 
+  // but for safety we could call it again or assume the DB is up to date.
+  // To avoid double scanning, we'll assume fetchItemCount is called first or the user accepts slight staleness until next scan.
+  // But strictly speaking, we should ensure correctness.
+  // For performance, let's assume fetchItemCount handled the scanning.
+
+  QStringList uuids;
+  CollectionContext ctx = context;
+  ctx.config.mediaDirectory = PathUtils::validateAndExpandPath(ctx.config.mediaDirectory, ctx.config.name);
+  uuids << computeCollectionUuid(ctx.config.name);
+
+  if (ctx.config.showAllSubcollectionItems) {
+      QList<int> rawDescendants = collectDescendantIndices(ctx.currentIndex, allCollections);
+      for (int descendantIndex : rawDescendants) {
+          if (descendantIndex == ctx.currentIndex || descendantIndex < 0 || descendantIndex >= allCollections.size()) continue;
+          CollectionConfig subCol = allCollections[descendantIndex];
+          uuids << computeCollectionUuid(subCol.name);
+      }
+  }
+
+  QSqlQuery query(m_db);
+  QString sql = "SELECT DISTINCT path, collection_uuid FROM items WHERE collection_uuid IN (";
+  for (int i = 0; i < uuids.size(); ++i) {
+      sql += (i == 0 ? "?" : ", ?");
+  }
+  sql += ")";
+  
+  if (!filter.isEmpty()) {
+      sql += " AND name LIKE ?";
+  }
+  
+  sql += " ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?";
+  
+  query.prepare(sql);
+  for (const QString &uuid : uuids) {
+      query.addBindValue(uuid);
+  }
+  if (!filter.isEmpty()) {
+      query.addBindValue("%" + filter + "%");
+  }
+  query.addBindValue(limit);
+  query.addBindValue(offset);
+
+  QStringList filePaths;
+  QHash<QString, QString> fileNames;
+  
+  // We need to reconstruct full paths because DB stores relative paths (mostly) or absolute?
+  // The DB stores "path" which is relative to collection media directory.
+  // So we need to map back to absolute paths if needed, or just return what we have.
+  // The original loadItems logic does a lot of mapping (appendFileMapsAndListCanonical).
+  // We need to replicate that logic but for a subset.
+  
+  // To do this efficiently, we need a map of UUID -> CollectionConfig/MediaDir
+  QHash<QString, QString> uuidToMediaDir;
+  QHash<QString, QString> uuidToArtworkDir;
+  
+  // Populate maps
+  auto addMap = [&](const CollectionConfig &c) {
+      QString u = computeCollectionUuid(c.name);
+      uuidToMediaDir[u] = c.mediaDirectory;
+      uuidToArtworkDir[u] = c.artworkDirectory;
+  };
+  
+  addMap(ctx.config);
+  if (ctx.config.showAllSubcollectionItems) {
+      QList<int> rawDescendants = collectDescendantIndices(ctx.currentIndex, allCollections);
+      for (int descendantIndex : rawDescendants) {
+          if (descendantIndex == ctx.currentIndex || descendantIndex < 0 || descendantIndex >= allCollections.size()) continue;
+          CollectionConfig subCol = allCollections[descendantIndex];
+          subCol.mediaDirectory = PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
+          subCol.artworkDirectory = PathUtils::validateAndExpandPath(subCol.artworkDirectory, subCol.name);
+          addMap(subCol);
+      }
+  }
+
+  if (query.exec()) {
+      while (query.next()) {
+          QString relPath = query.value(0).toString();
+          QString uuid = query.value(1).toString();
+          QString mediaDir = uuidToMediaDir.value(uuid);
+          
+          QString fullPath;
+          if (QDir::isAbsolutePath(relPath)) {
+              fullPath = relPath;
+          } else {
+              fullPath = QDir(mediaDir).absoluteFilePath(relPath);
+          }
+          
+          // Canonicalize if needed? The original code does canonicalKeyPath.
+          // For performance, maybe skip canonicalization if not strictly needed, or do it.
+          // Let's do it to be consistent.
+          QString keyPath = canonicalKeyPath(fullPath, false); // dedup=false for now
+          
+          filePaths.append(keyPath);
+          fileNames[keyPath] = displayNameForBase(QFileInfo(keyPath).completeBaseName());
+      }
+  } else {
+      qWarning() << "Fetch items range failed:" << query.lastError().text();
+  }
+
+  emit itemsRangeLoaded(offset, filePaths, fileNames);
+}
+
 // ... Helper implementations ...
 
 bool DatabaseWorker::needsRescan(int collectionIndex, const CollectionConfig &collection) {

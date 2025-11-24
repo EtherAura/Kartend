@@ -33,8 +33,12 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
   connect(this, &DatabaseManager::requestLoadAllCollections, m_worker, &DatabaseWorker::loadAllCollections);
   connect(this, &DatabaseManager::requestLoadItems, m_worker, &DatabaseWorker::loadItems);
   connect(this, &DatabaseManager::requestLoadItemsWithSubcollections, m_worker, &DatabaseWorker::loadItemsWithSubcollections);
+  connect(this, &DatabaseManager::requestFetchItemCount, m_worker, &DatabaseWorker::fetchItemCount);
+  connect(this, &DatabaseManager::requestFetchItemsRange, m_worker, &DatabaseWorker::fetchItemsRange);
   
   connect(m_worker, &DatabaseWorker::itemsLoaded, this, &DatabaseManager::onWorkerItemsLoaded);
+  connect(m_worker, &DatabaseWorker::itemCountLoaded, this, &DatabaseManager::onWorkerItemCountLoaded);
+  connect(m_worker, &DatabaseWorker::itemsRangeLoaded, this, &DatabaseManager::onWorkerItemsRangeLoaded);
   connect(m_worker, &DatabaseWorker::errorOccurred, this, &DatabaseManager::errorOccurred);
 
   m_workerThread->start();
@@ -144,6 +148,14 @@ void DatabaseManager::loadItems(const CollectionContext &context) {
   emit requestLoadItems(context);
 }
 
+void DatabaseManager::fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter) {
+  emit requestFetchItemCount(context, allCollections, filter);
+}
+
+void DatabaseManager::fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter) {
+  emit requestFetchItemsRange(context, allCollections, offset, limit, filter);
+}
+
 void DatabaseManager::onWorkerItemsLoaded(const QStringList &filePaths,
                                           const QHash<QString, QString> &fileNames,
                                           const QHash<QString, QString> &fileToArtworkDir,
@@ -151,6 +163,14 @@ void DatabaseManager::onWorkerItemsLoaded(const QStringList &filePaths,
   m_fileToArtworkDir = fileToArtworkDir;
   m_fileToCollectionIndex = fileToCollectionIndex;
   emit itemsLoaded(filePaths, fileNames);
+}
+
+void DatabaseManager::onWorkerItemCountLoaded(int count) {
+  emit itemCountLoaded(count);
+}
+
+void DatabaseManager::onWorkerItemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames) {
+  emit itemsRangeLoaded(offset, filePaths, fileNames);
 }
 
 // Count items in collection and descendants using uuid identity

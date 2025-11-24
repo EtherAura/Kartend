@@ -1067,13 +1067,21 @@ void NavigationManager::onViewportChanged() {
 }
 
 void NavigationManager::filterItems(const QString &searchText) {
-  if (m_scrollManager != nullptr) {
-    if (searchText.trimmed().isEmpty()) {
-      m_scrollManager->clearFilter();
-    } else {
-      m_scrollManager->applyFilter(searchText);
-    }
+  const int idx = (*m_currentCollectionIndex);
+  if (idx < 0 || idx >= (*m_collections).size()) {
+    return;
   }
+
+  CollectionContext context;
+  context.currentIndex = idx;
+  context.config = (*m_collections)[idx];
+  context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
+      context.config.mediaDirectory, context.config.name);
+  context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
+      context.config.artworkDirectory, context.config.name);
+  context.artworkDirectory = context.config.artworkDirectory;
+
+  m_databaseManager->fetchItemCount(context, (*m_collections), searchText.trimmed());
 }
 
 // Return true if any descendant of parentIndex has a non-empty mediaDirectory
@@ -1294,11 +1302,11 @@ void NavigationManager::loadCurrentAndSubcollections() {
   context.artworkDirectory = context.config.artworkDirectory;
 
   if (context.config.showAllSubcollectionItems) {
-    m_databaseManager->loadItemsWithSubcollections(
-        context, (*m_collections));
+    m_databaseManager->fetchItemCount(context, (*m_collections));
   } else {
-    m_databaseManager->loadItems(context);
+    m_databaseManager->fetchItemCount(context, (*m_collections));
   }
+}
 
   QTimer::singleShot(UIConstants::FILTER_REAPPLY_DELAY_MS, [this]() {
     if (m_searchBar &&
@@ -1428,4 +1436,67 @@ void NavigationManager::applyUiPoliciesForCollection(int collectionIndex) {
                                                        *m_collections);
     }
   }
+}
+
+void NavigationManager::onItemCountLoaded(int count) {
+  const int idx = (*m_currentCollectionIndex);
+  if (idx < 0 || idx >= (*m_collections).size()) {
+    return;
+  }
+
+  CollectionContext context;
+  context.currentIndex = idx;
+  context.config = (*m_collections)[idx];
+  context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
+      context.config.mediaDirectory, context.config.name);
+  context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
+      context.config.artworkDirectory, context.config.name);
+  context.artworkDirectory = context.config.artworkDirectory;
+
+  m_scrollManager->setupVirtualScrolling(count, context);
+  
+  if (m_loadingLabel != nullptr) {
+    m_loadingLabel->hide();
+  }
+  if (m_stackedWidget != nullptr && m_itemsPage != nullptr) {
+    m_stackedWidget->setCurrentWidget(m_itemsPage);
+  }
+  
+  // Restore selection if needed
+  if (shouldRestoreSelection()) {
+      int selIdx = getSelectionRestoreIndex(idx);
+      if (selIdx >= 0) {
+          int token = initializeSelectionRestoreToken();
+          scheduleSelectionRestoreVerification(idx, selIdx, token);
+      }
+  }
+}
+
+void NavigationManager::onItemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames) {
+    if (m_scrollManager) {
+        m_scrollManager->receiveItemsRange(offset, filePaths, fileNames);
+    }
+}
+
+void NavigationManager::fetchItemsRange(int offset, int limit) {
+  const int idx = (*m_currentCollectionIndex);
+  if (idx < 0 || idx >= (*m_collections).size()) {
+    return;
+  }
+
+  CollectionContext context;
+  context.currentIndex = idx;
+  context.config = (*m_collections)[idx];
+  context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
+      context.config.mediaDirectory, context.config.name);
+  context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
+      context.config.artworkDirectory, context.config.name);
+  context.artworkDirectory = context.config.artworkDirectory;
+
+  QString filter;
+  if (m_searchBar) {
+      filter = m_searchBar->text().trimmed();
+  }
+
+  m_databaseManager->fetchItemsRange(context, *m_collections, offset, limit, filter);
 }

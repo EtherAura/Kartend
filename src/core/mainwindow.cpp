@@ -176,6 +176,10 @@ void MainWindow::setupManagerConnections() {
 void MainWindow::connectDatabaseManager() {
   QObject::connect(m_databaseManager.get(), &DatabaseManager::itemsLoaded,
                    m_navigationManager.get(), &NavigationManager::onItemsLoaded);
+  QObject::connect(m_databaseManager.get(), &DatabaseManager::itemCountLoaded,
+                   m_navigationManager.get(), &NavigationManager::onItemCountLoaded);
+  QObject::connect(m_databaseManager.get(), &DatabaseManager::itemsRangeLoaded,
+                   m_navigationManager.get(), &NavigationManager::onItemsRangeLoaded);
   QObject::connect(m_databaseManager.get(), &DatabaseManager::errorOccurred,
                    m_navigationManager.get(),
                    &NavigationManager::onMediaLibraryError);
@@ -198,6 +202,9 @@ void MainWindow::connectScrollManager() {
       });
   QObject::connect(m_scrollManager.get(), &ScrollManager::subcollectionEntered,
                    m_navigationManager.get(),
+                   &NavigationManager::onSubcollectionEntered);
+  QObject::connect(m_scrollManager.get(), &ScrollManager::requestItemsRange,
+                   m_navigationManager.get(), &NavigationManager::fetchItemsRange);
                    &NavigationManager::onSubcollectionEntered);
   if (m_artworkManager) {
     QObject::connect(m_artworkManager->getTimerCoordinator(),

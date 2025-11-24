@@ -23,6 +23,9 @@ public:
   void loadItemsWithSubcollections(const CollectionContext &context,
                               const QList<CollectionConfig> &allCollections);
   void updateCachedCounts(const QList<CollectionConfig> &allCollections);
+  
+  void fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter = QString());
+  void fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter = QString());
 
   int getCollectionIndexForFile(const QString &filePath) const;
   QString findArtworkDirectoryForFile(const QString &filePath) const;
@@ -33,6 +36,8 @@ public:
 signals:
   void itemsLoaded(const QStringList &filePaths,
                    const QHash<QString, QString> &fileNames);
+  void itemCountLoaded(int count);
+  void itemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void errorOccurred(const QString &message);
 
   // Internal signals to trigger worker
@@ -41,12 +46,16 @@ signals:
   void requestLoadItemsWithSubcollections(const CollectionContext &context,
                                           const QList<CollectionConfig> &allCollections);
   void requestUpdateCachedCounts(const QList<CollectionConfig> &allCollections);
+  void requestFetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter);
+  void requestFetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter);
 
 private slots:
   void onWorkerItemsLoaded(const QStringList &filePaths,
                            const QHash<QString, QString> &fileNames,
                            const QHash<QString, QString> &fileToArtworkDir,
                            const QHash<QString, int> &fileToCollectionIndex);
+  void onWorkerItemCountLoaded(int count);
+  void onWorkerItemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
 
 private:
   class DatabaseWorker* m_worker;

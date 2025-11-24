@@ -23,12 +23,16 @@ public slots:
   void loadItemsWithSubcollections(const CollectionContext &context,
                                    const QList<CollectionConfig> &allCollections);
   void updateCachedCounts(const QList<CollectionConfig> &allCollections);
+  void fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter);
+  void fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter);
 
 signals:
   void itemsLoaded(const QStringList &filePaths,
                    const QHash<QString, QString> &fileNames,
                    const QHash<QString, QString> &fileToArtworkDir,
                    const QHash<QString, int> &fileToCollectionIndex);
+  void itemCountLoaded(int count);
+  void itemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void errorOccurred(const QString &message);
   void countsUpdated();
 
@@ -37,6 +41,7 @@ private:
   QSqlDatabase m_db;
   QString m_connectionName;
 
+  void ensureCollectionScanned(int collectionIndex, const CollectionConfig &collection);
   bool needsRescan(int collectionIndex, const CollectionConfig &collection);
   static QStringList scanMediaDirectory(const CollectionConfig &collection,
                                         QHash<QString, QDateTime> &timestamps);

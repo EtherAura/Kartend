@@ -45,9 +45,8 @@ public:
   ScrollManager(QObject *parent = nullptr);
   ~ScrollManager() override;
   void setupReferences(const ScrollManagerSetup &setup);
-  void setupVirtualScrolling(const QStringList &filePaths,
-                             const QHash<QString, QString> &fileNames,
-                             const CollectionContext &context);
+  void setupVirtualScrolling(int totalCount, const CollectionContext &context);
+  void receiveItemsRange(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void cleanup();
   void updateGridWidth(int newGridWidth);
   void updateVirtualView();
@@ -92,6 +91,7 @@ signals:
   void widgetDoubleClickedWithCollection(const QString &filePath,
                                          int collectionIndex);
   void subcollectionEntered(int subcollectionIndex);
+  void requestItemsRange(int offset, int limit);
   void virtualScrollSetupComplete();
   void filterChanged(int visibleItems, int totalOriginal);
 
