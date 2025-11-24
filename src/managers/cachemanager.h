@@ -9,6 +9,7 @@
 #include <QPair>
 #include <QList>
 #include <QJsonObject>
+#include <QCache>
 
 class CacheManager {
 public:
@@ -31,10 +32,9 @@ private:
   static void flushDirtyArtwork(const QList<QPair<QString, QPixmap>> &dirtyList);
 
   mutable QMutex m_mutex;
-  QHash<QString, QPixmap> artworkCache;
+  QCache<QString, QPixmap> artworkCache;
   QHash<QString, qint64> fileTimestamps;
   QSet<QString> dirtyArtwork;
-  quint64 m_totalPixmapBytes = 0;
 };
 
 #endif // CACHEMANAGER_H

@@ -13,21 +13,15 @@
 #include <QStandardPaths>
 #include <QDateTime>
 
-CacheManager::CacheManager() = default;
+CacheManager::CacheManager() {
+  artworkCache.setMaxCost(UIConstants::PIXMAP_CACHE_KB * 1024);
+}
 
 // Releases GUI resources and resets in-memory accounting totals
 void CacheManager::releaseGuiResources() {
   QMutexLocker locker(&m_mutex);
-
-  QHash<QString, QPixmap>::iterator cacheIt = artworkCache.begin();
-  while (cacheIt != artworkCache.end()) {
-    cacheIt.value() = QPixmap();
-    ++cacheIt;
-  }
-
   artworkCache.clear();
   dirtyArtwork.clear();
-  m_totalPixmapBytes = 0;
 }
 
 // Returns cache directory path, creating subdirs if needed
@@ -133,9 +127,8 @@ void CacheManager::saveToDisk() {
     QMutexLocker locker(&m_mutex);
     timestampsCopy = fileTimestamps;
     for (const QString &path : std::as_const(dirtyArtwork)) {
-      auto cacheIterator = artworkCache.constFind(path);
-      if (cacheIterator != artworkCache.constEnd()) {
-        dirtyList.append(qMakePair(path, cacheIterator.value()));
+      if (QPixmap *pix = artworkCache.object(path)) {
+        dirtyList.append(qMakePair(path, *pix));
       }
     }
     dirtyArtwork.clear();
@@ -157,7 +150,7 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
 
   QMutexLocker locker(&m_mutex);
   QFileInfo fileInfo(artworkPath);
-  if (artworkCache.contains(artworkPath)) {
+  if (QPixmap *pix = artworkCache.object(artworkPath)) {
     if (fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
         fileTimestamps[artworkPath] !=
             fileInfo.lastModified().toMSecsSinceEpoch()) {
@@ -166,7 +159,7 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
       artworkCache.remove(artworkPath);
       fileTimestamps.remove(artworkPath);
     } else {
-      return artworkCache[artworkPath];
+      return *pix;
     }
   }
   locker.unlock();
@@ -180,7 +173,15 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
     QPixmap cachedPixmap(cachePath);
     if (!cachedPixmap.isNull()) {
       QMutexLocker relocker(&m_mutex);
-      artworkCache[artworkPath] = cachedPixmap;
+      
+      constexpr int DEFAULT_BITS_PER_PIXEL = 32;
+      constexpr int BITS_PER_BYTE = 8;
+      int bitsPerPixel = cachedPixmap.depth() > 0 ? cachedPixmap.depth() : DEFAULT_BITS_PER_PIXEL;
+      int cost = static_cast<int>(static_cast<quint64>(cachedPixmap.width()) *
+             static_cast<quint64>(cachedPixmap.height()) *
+             static_cast<quint64>(bitsPerPixel) / BITS_PER_BYTE);
+
+      artworkCache.insert(artworkPath, new QPixmap(cachedPixmap), cost);
       if (fileInfo.exists()) {
         fileTimestamps[artworkPath] =
             fileInfo.lastModified().toMSecsSinceEpoch();
@@ -208,60 +209,23 @@ void CacheManager::cacheArtwork(const QString &artworkPath,
 
   constexpr int DEFAULT_BITS_PER_PIXEL = 32;
   constexpr int BITS_PER_BYTE = 8;
-  auto approximatePixmapBytes = [](const QPixmap &pixmap) -> quint64 {
-    int bitsPerPixel =
-        pixmap.depth() > 0 ? pixmap.depth() : DEFAULT_BITS_PER_PIXEL;
-    return static_cast<quint64>(pixmap.width()) *
-           static_cast<quint64>(pixmap.height()) *
-           static_cast<quint64>(bitsPerPixel) / BITS_PER_BYTE;
-  };
-
-  const quint64 byteLimit =
-      static_cast<quint64>(UIConstants::PIXMAP_CACHE_KB) * 1024;
+  int bitsPerPixel = pixmap.depth() > 0 ? pixmap.depth() : DEFAULT_BITS_PER_PIXEL;
+  int cost = static_cast<int>(static_cast<quint64>(pixmap.width()) *
+         static_cast<quint64>(pixmap.height()) *
+         static_cast<quint64>(bitsPerPixel) / BITS_PER_BYTE);
 
   QMutexLocker locker(&m_mutex);
   if (QApplication::closingDown()) {
     return;
   }
 
-  // If replacing an existing entry, subtract its previous size from the running
-  // total
-  if (artworkCache.contains(artworkPath)) {
-    auto previousIt = artworkCache.find(artworkPath);
-    m_totalPixmapBytes -= approximatePixmapBytes(previousIt.value());
-  }
-
   // Insert/update the pixmap and adjust running total
-  artworkCache[artworkPath] = pixmap;
+  artworkCache.insert(artworkPath, new QPixmap(pixmap), cost);
   QFileInfo fileInfo(artworkPath);
   if (fileInfo.exists()) {
     fileTimestamps[artworkPath] = fileInfo.lastModified().toMSecsSinceEpoch();
   }
   dirtyArtwork.insert(artworkPath);
-
-  m_totalPixmapBytes += approximatePixmapBytes(pixmap);
-
-  // Evict arbitrary entries until within limit (preserves existing non-LRU
-  // behavior)
-  if (byteLimit > 0 && m_totalPixmapBytes > byteLimit) {
-    QList<QString> keys = artworkCache.keys();
-    int keyIndex = 0;
-    while (m_totalPixmapBytes > byteLimit && keyIndex < keys.size()) {
-      const QString &key = keys[keyIndex++];
-      if (!artworkCache.contains(key)) {
-        continue;
-      }
-      auto iterator = artworkCache.find(key);
-      quint64 evictedBytes = approximatePixmapBytes(iterator.value());
-      fileTimestamps.remove(key);
-      dirtyArtwork.remove(key);
-      artworkCache.erase(iterator);
-      m_totalPixmapBytes = (m_totalPixmapBytes >= evictedBytes)
-                               ? (m_totalPixmapBytes - evictedBytes)
-                               : 0;
-    }
-    m_totalPixmapBytes = qMin(m_totalPixmapBytes, byteLimit);
-  }
 }
 
 // Clears all cached data for a particular collection (currently clears all) and
@@ -269,17 +233,8 @@ void CacheManager::cacheArtwork(const QString &artworkPath,
 void CacheManager::clearCollectionCache(int collectionIndex) {
   Q_UNUSED(collectionIndex)
   QMutexLocker locker(&m_mutex);
-
-  QStringList artworkKeysToRemove;
-  for (auto cacheIt = artworkCache.begin(); cacheIt != artworkCache.end();
-       ++cacheIt) {
-    artworkKeysToRemove.append(cacheIt.key());
-  }
-  for (const QString &key : artworkKeysToRemove) {
-    artworkCache.remove(key);
-    dirtyArtwork.remove(key);
-  }
-  m_totalPixmapBytes = 0;
+  artworkCache.clear();
+  dirtyArtwork.clear();
 }
 
 // Computes total size of cache directory on disk
