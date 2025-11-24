@@ -61,10 +61,11 @@ ScrollManager::~ScrollManager() {
   cleanupVirtualContainer();
 }
 
-void ScrollManager::setupReferences(QWidget *gridContainer,
-                                    QScrollArea *mediaScrollArea) {
-  m_gridContainer = gridContainer;
-  m_mediaScrollArea = mediaScrollArea;
+void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
+  m_gridContainer = setup.gridContainer;
+  m_mediaScrollArea = setup.mediaScrollArea;
+  m_collections = setup.collections;
+
   if (m_mediaScrollArea != nullptr) {
     m_mediaScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     if (auto *horizontalScrollbar = m_mediaScrollArea->horizontalScrollBar()) {
@@ -753,11 +754,6 @@ auto ScrollManager::resolveToFullPath(const QString &rawEntry) const
     return {};
   }
   return QDir(mediaDir).absoluteFilePath(rawEntry);
-}
-
-void ScrollManager::setCollectionsReference(
-    const QList<CollectionConfig> *collections) {
-  m_collections = collections;
 }
 
 auto ScrollManager::getSubcollectionName(int subcollectionIndex) const

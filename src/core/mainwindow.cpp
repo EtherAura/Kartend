@@ -168,10 +168,6 @@ void MainWindow::setupManagerConnections() {
 }
 
 void MainWindow::connectDatabaseManager() {
-  if (m_navigationManager != nullptr) {
-    m_navigationManager->setCollections(&m_collections);
-  }
-
   QObject::connect(m_databaseManager.get(), &DatabaseManager::itemsLoaded,
                    m_navigationManager.get(), &NavigationManager::onItemsLoaded);
   QObject::connect(m_databaseManager.get(), &DatabaseManager::errorOccurred,
@@ -364,8 +360,6 @@ void MainWindow::setupUI() {
 void MainWindow::setupManagers() {
   m_settingsManager = std::make_unique<SettingsManager>(this);
   m_sidebarManager = std::make_unique<SidebarManager>(this);
-  m_sidebarManager->setSettingsManager(m_settingsManager.get());
-  m_sidebarManager->setCollections(&m_collections);
   m_navigationManager = std::make_unique<NavigationManager>(this);
   m_interactionManager = std::make_unique<InteractionManager>(this);
 
@@ -483,10 +477,16 @@ void MainWindow::setupFullscreenAction() {
 void MainWindow::setupSidebar() {
   if (m_sidebarManager != nullptr) {
     m_sidebarManager->setupSidebar();
-    m_sidebarManager->setupReferences(
-        m_metadataSidebar, itemsPage,
-        m_mainHorizontalLayout,
-        (ui != nullptr) ? ui->itemScrollArea : nullptr);
+
+    SidebarManagerSetup setup;
+    setup.sidebar = m_metadataSidebar;
+    setup.itemsPage = itemsPage;
+    setup.mainLayout = m_mainHorizontalLayout;
+    setup.scrollArea = (ui != nullptr) ? ui->itemScrollArea : nullptr;
+    setup.settingsManager = m_settingsManager.get();
+    setup.collections = &m_collections;
+
+    m_sidebarManager->setupReferences(setup);
   }
 
   if (m_sidebarManager != nullptr) {
@@ -533,11 +533,16 @@ void MainWindow::showAbout() {
 void MainWindow::setupArtworkManager() {
   ArtworkManager::initializeCache();
   ArtworkManager &artMgr = ArtworkManager::instance();
-  artMgr.setupUIReferences(
-      stackedWidget, itemsPage, gridContainer,
-      (ui != nullptr) ? ui->itemScrollArea : nullptr);
-  artMgr.setupDataReferences(&m_collections,
-                             &currentCollectionIndex);
+
+  ArtworkManagerSetup setup;
+  setup.stackedWidget = stackedWidget;
+  setup.itemsPage = itemsPage;
+  setup.gridContainer = gridContainer;
+  setup.itemScrollArea = (ui != nullptr) ? ui->itemScrollArea : nullptr;
+  setup.collections = &m_collections;
+  setup.currentCollectionIndex = &currentCollectionIndex;
+
+  artMgr.setupReferences(setup);
 }
 
 void MainWindow::setupLastSelectedIndices() {
@@ -563,10 +568,13 @@ void MainWindow::setupLastSelectedIndices() {
 }
 
 void MainWindow::setupEventFilters() {
-  m_scrollManager->setupReferences(gridContainer,
-                                           ui->itemScrollArea);
+  ScrollManagerSetup setup;
+  setup.gridContainer = gridContainer;
+  setup.mediaScrollArea = ui->itemScrollArea;
+  setup.collections = &m_collections;
+
+  m_scrollManager->setupReferences(setup);
   m_scrollManager->setDatabaseManager(m_databaseManager.get());
-  m_scrollManager->setCollectionsReference(&m_collections);
 
   if ((ui != nullptr) && (ui->itemScrollArea != nullptr)) {
     ui->itemScrollArea->installEventFilter(

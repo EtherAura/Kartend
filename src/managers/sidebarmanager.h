@@ -12,15 +12,21 @@ class metadataSidebar;
 class MediaItemWidget;
 class SettingsManager;
 
+struct SidebarManagerSetup {
+  metadataSidebar *sidebar = nullptr;
+  QWidget *itemsPage = nullptr;
+  QHBoxLayout *mainLayout = nullptr;
+  QScrollArea *scrollArea = nullptr;
+  SettingsManager *settingsManager = nullptr;
+  QList<CollectionConfig> *collections = nullptr;
+};
+
 class SidebarManager : public QObject {
   Q_OBJECT
 
 public:
   explicit SidebarManager(QObject *parent = nullptr);
-  void setupReferences(metadataSidebar *sidebar, QWidget *itemsPage,
-                       QHBoxLayout *mainLayout, QScrollArea *scrollArea);
-  void setSettingsManager(SettingsManager *manager);
-  void setCollections(QList<CollectionConfig> *collections);
+  void setupReferences(const SidebarManagerSetup &setup);
   void setupSidebar();
   void toggleSidebar();
   void updateSidebarMetadata(MediaItemWidget *selectedItem);

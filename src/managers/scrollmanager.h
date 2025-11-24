@@ -31,12 +31,18 @@ struct VirtualMetrics {
   int overflowAmount = 0;
 };
 
+struct ScrollManagerSetup {
+  QWidget *gridContainer = nullptr;
+  QScrollArea *mediaScrollArea = nullptr;
+  const QList<CollectionConfig> *collections = nullptr;
+};
+
 class ScrollManager : public QObject {
   Q_OBJECT
 public:
   ScrollManager(QObject *parent = nullptr);
   ~ScrollManager() override;
-  void setupReferences(QWidget *gridContainer, QScrollArea *mediaScrollArea);
+  void setupReferences(const ScrollManagerSetup &setup);
   void setupVirtualScrolling(const QStringList &filePaths,
                              const QHash<QString, QString> &fileNames,
                              const CollectionContext &context);
@@ -47,7 +53,6 @@ public:
   int getFirstVisibleRow() const;
   int getLastVisibleRow() const;
   void updateSelectionForIndex(int selectedIndex);
-  void setCollectionsReference(const QList<CollectionConfig> *collections);
   QString getSubcollectionName(int subcollectionIndex) const;
   void setDatabaseManager(DatabaseManager *manager);
   void recenterVirtualContainer();

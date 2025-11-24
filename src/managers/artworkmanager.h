@@ -43,6 +43,15 @@ struct ArtworkInfo {
   };
 };
 
+struct ArtworkManagerSetup {
+  QStackedWidget *stackedWidget = nullptr;
+  QWidget *itemsPage = nullptr;
+  QWidget *gridContainer = nullptr;
+  QScrollArea *itemScrollArea = nullptr;
+  QList<CollectionConfig> *collections = nullptr;
+  int *currentCollectionIndex = nullptr;
+};
+
 struct UIReferences {
   QScrollArea *itemScrollArea;
 };
@@ -53,10 +62,7 @@ class ArtworkManager : public QObject {
 public:
   static ArtworkManager &instance();
 
-  void setupUIReferences(QStackedWidget *stack, QWidget *itemsPage_,
-                         QWidget *gridContainer_, QScrollArea *itemScrollArea);
-  void setupDataReferences(QList<CollectionConfig> *collections_,
-                           int *currentCollectionIndex_);
+  void setupReferences(const ArtworkManagerSetup &setup);
   void loadArtworkParallel(const QList<ArtworkInfo> &items, bool highPriority,
                            int customBatchSize = 0);
   void cancelAllArtworkLoading();

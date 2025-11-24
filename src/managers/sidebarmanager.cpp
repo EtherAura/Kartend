@@ -15,23 +15,13 @@ SidebarManager::SidebarManager(QObject *parent)
       m_mainHorizontalLayout(nullptr), m_itemScrollArea(nullptr),
       m_currentCollectionIndex(-1) {}
 
-void SidebarManager::setupReferences(metadataSidebar *sidebar,
-                                     QWidget *itemsPage,
-                                     QHBoxLayout *mainLayout,
-                                     QScrollArea *scrollArea) {
-  m_metadataSidebar = sidebar;
-  m_itemsPage = itemsPage;
-  m_mainHorizontalLayout = mainLayout;
-  m_itemScrollArea = scrollArea;
-}
-
-void SidebarManager::setSettingsManager(SettingsManager *manager) {
-  m_settingsManager = manager;
-}
-
-// Sets the collections pointer for sidebar state updates
-void SidebarManager::setCollections(QList<CollectionConfig> *collections) {
-  m_collections = collections;
+void SidebarManager::setupReferences(const SidebarManagerSetup &setup) {
+  m_metadataSidebar = setup.sidebar;
+  m_itemsPage = setup.itemsPage;
+  m_mainHorizontalLayout = setup.mainLayout;
+  m_itemScrollArea = setup.scrollArea;
+  m_settingsManager = setup.settingsManager;
+  m_collections = setup.collections;
 }
 
 void SidebarManager::toggleSidebar() {

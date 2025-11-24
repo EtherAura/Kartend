@@ -580,7 +580,6 @@ void SettingsManager::openSettingsDialog(QWidget *parent,
   viewingCollectionIndex = resolvedCollectionIndex;
 
   if (sidebarManager != nullptr) {
-    sidebarManager->setCollections(&collections);
     if (resolvedCollectionIndex >= 0) {
       sidebarManager->applySidebarStateForCollection(resolvedCollectionIndex);
     }
@@ -711,7 +710,6 @@ void refreshSidebar(SidebarManager *sidebarManager,
                     QList<CollectionConfig> &collections,
                     int currentCollectionIndex) {
   if (sidebarManager != nullptr) {
-    sidebarManager->setCollections(&collections);
     sidebarManager->updateSidebarLayout(currentCollectionIndex);
   }
 }

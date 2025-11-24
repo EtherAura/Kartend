@@ -1210,10 +1210,6 @@ auto NavigationManager::getSubcollections(int parentIndex) const -> QList<int> {
 }
 
 // Sets the collections pointer used for subcollection queries
-void NavigationManager::setCollections(QList<CollectionConfig> *collections) {
-  m_collections = collections;
-}
-
 void NavigationManager::onSubcollectionEntered(int subcollectionIndex) {
   if (subcollectionIndex >= 0 &&
       subcollectionIndex < (*m_collections).size()) {

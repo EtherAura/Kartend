@@ -50,7 +50,6 @@ public:
   int m_navigationDepth = 0;
 
   void restoreSelectionForCurrentCollection();
-  void setCollections(QList<CollectionConfig> *collections);
   void setupReferences(const NavigationManagerDependencies &deps);
 
 public slots:

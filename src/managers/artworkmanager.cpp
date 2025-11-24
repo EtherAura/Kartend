@@ -362,22 +362,14 @@ void ArtworkManager::appendArtworkFromDir(const QString &dirPath,
   processedDirectories.insert(normalized);
 }
 
-// Sets UI references used by viewport-based artwork updates
-void ArtworkManager::setupUIReferences(QStackedWidget *stack,
-                                       QWidget *itemsPage_,
-                                       QWidget *gridContainer_,
-                                       QScrollArea *itemScrollArea) {
-  stackedWidget = stack;
-  itemsPage = itemsPage_;
-  gridContainer = gridContainer_;
-  ui.itemScrollArea = itemScrollArea;
-}
-
-// Sets data references used by silent loading and deduplication
-void ArtworkManager::setupDataReferences(QList<CollectionConfig> *collections_,
-                                         int *currentCollectionIndex_) {
-  collections = collections_;
-  currentCollectionIndex = currentCollectionIndex_;
+// Sets references used by artwork updates and silent loading
+void ArtworkManager::setupReferences(const ArtworkManagerSetup &setup) {
+  stackedWidget = setup.stackedWidget;
+  itemsPage = setup.itemsPage;
+  gridContainer = setup.gridContainer;
+  ui.itemScrollArea = setup.itemScrollArea;
+  collections = setup.collections;
+  currentCollectionIndex = setup.currentCollectionIndex;
 }
 
 // Tracks a widget for lifecycle cleanup and de-duplicates tracking via a
