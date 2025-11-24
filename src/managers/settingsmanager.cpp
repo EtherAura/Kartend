@@ -139,6 +139,10 @@ void SettingsManager::loadCollections(
   for (const QString &group : groups) {
     if (group == "General") continue;
 
+    // Convert "Games > Nintendo" back to "Games/Nintendo" for internal processing
+    QString internalGroupName = group;
+    internalGroupName.replace(" > ", "/");
+
     settings.beginGroup(group);
     CollectionConfig config;
     config.name = settings.value("name").toString();
@@ -175,7 +179,8 @@ void SettingsManager::loadCollections(
     config.itemHeight = settings.value("itemHeight", UIConstants::DEFAULT_ITEM_HEIGHT).toInt();
     config.fontSize = settings.value("fontSize", UIConstants::DEFAULT_FONT_SIZE).toInt();
 
-    tempCollections[group] = config;
+    // Use the internal name (with slashes) for hierarchy processing
+    tempCollections[internalGroupName] = config;
     settings.endGroup();
   }
 
@@ -216,7 +221,11 @@ void SettingsManager::saveCollections(
     int index = sectionToIndex[sectionName];
     const CollectionConfig &c = collections[index];
 
-    settings.beginGroup(sectionName);
+    // Convert "Games/Nintendo" to "Games > Nintendo" to prevent QSettings nesting
+    QString iniGroupName = sectionName;
+    iniGroupName.replace("/", " > ");
+
+    settings.beginGroup(iniGroupName);
     settings.setValue("name", c.name);
     settings.setValue("launcherPath", c.launcherPath);
     settings.setValue("corePath", c.corePath);

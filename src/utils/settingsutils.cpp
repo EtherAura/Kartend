@@ -22,10 +22,12 @@ auto SettingsUtils::getConfigPath() -> QString {
 
 void SettingsUtils::loadMainScreenSettings(MainScreenConfig &config) {
   QSettings settings(getConfigPath(), QSettings::IniFormat);
-  settings.beginGroup("General");
-  config.gridWidth = settings.value("MainScreen_gridWidth", UIConstants::DEFAULT_GRID_WIDTH).toInt();
-  config.horizontalAlignment = stringToAlignment(settings.value("MainScreen_horizontalAlignment", "center").toString());
-  config.showHiddenCollections = settings.value("MainScreen_showHiddenCollections", false).toBool();
+  // Load from "Games" section instead of "General"
+  settings.beginGroup("Games");
+  config.gridWidth = settings.value("gridWidth", UIConstants::DEFAULT_GRID_WIDTH).toInt();
+  config.horizontalAlignment = stringToAlignment(settings.value("horizontalAlignment", "center").toString());
+  // showHiddenCollections might not be in CollectionConfig, so we keep it here or assume it's custom
+  config.showHiddenCollections = settings.value("showHiddenCollections", false).toBool();
   settings.endGroup();
 
   config.gridWidth = std::max(config.gridWidth, UIConstants::MIN_GRID_WIDTH);
@@ -34,10 +36,11 @@ void SettingsUtils::loadMainScreenSettings(MainScreenConfig &config) {
 
 void SettingsUtils::saveMainScreenSettings(const MainScreenConfig &config) {
   QSettings settings(getConfigPath(), QSettings::IniFormat);
-  settings.beginGroup("General");
-  settings.setValue("MainScreen_gridWidth", config.gridWidth);
-  settings.setValue("MainScreen_horizontalAlignment", alignmentToString(config.horizontalAlignment));
-  settings.setValue("MainScreen_showHiddenCollections", config.showHiddenCollections);
+  // Save to "Games" section instead of "General"
+  settings.beginGroup("Games");
+  settings.setValue("gridWidth", config.gridWidth);
+  settings.setValue("horizontalAlignment", alignmentToString(config.horizontalAlignment));
+  settings.setValue("showHiddenCollections", config.showHiddenCollections);
   settings.endGroup();
   settings.sync();
 }
