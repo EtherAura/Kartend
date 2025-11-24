@@ -15,7 +15,8 @@
 #include "sessionmanager.h"
 
 // Construct the database manager and initialize the database
-DatabaseManager::DatabaseManager(QObject *parent) : QObject(parent) {
+DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent)
+    : QObject(parent), m_sessionManager(sessionManager) {
   qRegisterMetaType<CollectionConfig>("CollectionConfig");
   qRegisterMetaType<CollectionContext>("CollectionContext");
   qRegisterMetaType<QList<CollectionConfig>>("QList<CollectionConfig>");
@@ -24,7 +25,7 @@ DatabaseManager::DatabaseManager(QObject *parent) : QObject(parent) {
   initDatabase();
 
   m_workerThread = new QThread(this);
-  m_worker = new DatabaseWorker();
+  m_worker = new DatabaseWorker(m_sessionManager);
   m_worker->moveToThread(m_workerThread);
 
   connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
@@ -188,13 +189,11 @@ auto DatabaseManager::countGlobal(const QList<CollectionConfig> &allCollections)
 // Recomputes and persists direct and recursive item counts for all collections
 void DatabaseManager::updateCachedCounts(
     const QList<CollectionConfig> &allCollections) {
-  if (!m_db.isOpen()) {
+  if (!m_db.isOpen() || !m_sessionManager) {
     return;
   }
 
-  SessionManager &sessionManager = SessionManager::instance();
-
-  sessionManager.clearStaleCollections(allCollections);
+  m_sessionManager->clearStaleCollections(allCollections);
 
   for (const auto &config : allCollections) {
     if (config.mediaDirectory.trimmed().isEmpty()) {
@@ -204,17 +203,17 @@ void DatabaseManager::updateCachedCounts(
   }
 
   qint64 global = countGlobal(allCollections);
-  sessionManager.setGlobalItemCount(global);
+  m_sessionManager->setGlobalItemCount(global);
 
   for (int i = 0; i < allCollections.size(); ++i) {
     const QString uuid = computeCollectionUuid(allCollections[i].name);
     qint64 direct = countCollectionByUuid(uuid);
     qint64 recursive = countCollectionRecursive(i, allCollections);
-    sessionManager.setCollectionCounts(allCollections[i], allCollections,
-                                        direct, recursive);
+    m_sessionManager->setCollectionCounts(allCollections[i], allCollections,
+                                          direct, recursive);
   }
 
-  sessionManager.saveToDisk();
+  m_sessionManager->saveToDisk();
 }
 
 // Get owning collection index for a file based on built maps

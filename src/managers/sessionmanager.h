@@ -18,7 +18,8 @@ public:
     QString title;
   };
 
-  static SessionManager &instance();
+  explicit SessionManager(QObject *parent = nullptr);
+  ~SessionManager() override;
   
   void initialize();
   void saveToDisk();
@@ -39,9 +40,6 @@ public:
   void clearStaleCollections(const QList<CollectionConfig> &currentCollections);
 
 private:
-  SessionManager();
-  ~SessionManager() override;
-  
   static QString getCacheDirectory();
   void readCollectionsData(const QJsonObject &root);
   void readGlobalData(const QJsonObject &root);

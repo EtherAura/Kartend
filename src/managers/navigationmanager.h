@@ -14,6 +14,7 @@ class SettingsManager;
 class SidebarManager;
 class ScrollManager;
 class DatabaseManager;
+class SessionManager;
 class metadataSidebar;
 class QLineEdit;
 class QStackedWidget;
@@ -25,6 +26,7 @@ struct NavigationManagerDependencies {
   SidebarManager *sidebarManager = nullptr;
   ScrollManager *scrollManager = nullptr;
   DatabaseManager *databaseManager = nullptr;
+  SessionManager *sessionManager = nullptr;
   metadataSidebar *metadataSidebar = nullptr;
   int *currentCollectionIndex = nullptr;
   QList<CollectionConfig> *collections = nullptr;
@@ -89,6 +91,7 @@ private:
   SidebarManager *m_sidebarManager = nullptr;
   ScrollManager *m_scrollManager = nullptr;
   DatabaseManager *m_databaseManager = nullptr;
+  SessionManager *m_sessionManager = nullptr;
   metadataSidebar *m_metadataSidebar = nullptr;
   int *m_currentCollectionIndex = nullptr;
   GeneralSettings *m_generalSettings = nullptr;

@@ -33,6 +33,7 @@ void NavigationManager::setupReferences(
   m_sidebarManager = deps.sidebarManager;
   m_scrollManager = deps.scrollManager;
   m_databaseManager = deps.databaseManager;
+  m_sessionManager = deps.sessionManager;
   m_metadataSidebar = deps.metadataSidebar;
   m_currentCollectionIndex = deps.currentCollectionIndex;
   m_collections = deps.collections;
@@ -164,11 +165,13 @@ auto NavigationManager::getSelectionRestoreIndex(int collectionIndex) const
   QString hierarchicalName =
       hierarchicalNameFor((*m_collections)[collectionIndex],
                           (*m_collections));
-  int selIdx =
-      SessionManager::instance().getLastSelectedIndex(hierarchicalName);
-  if (selIdx < 0) {
-    selIdx = SessionManager::instance().getLastSelectedIndex(
-        (*m_collections)[collectionIndex].name);
+  int selIdx = -1;
+  if (m_sessionManager) {
+    selIdx = m_sessionManager->getLastSelectedIndex(hierarchicalName);
+    if (selIdx < 0) {
+      selIdx = m_sessionManager->getLastSelectedIndex(
+          (*m_collections)[collectionIndex].name);
+    }
   }
   if (selIdx >= total) {
     selIdx = total - 1;
@@ -890,12 +893,14 @@ auto NavigationManager::calculateSelectionIndex(int totalItems) const -> int {
   QString hierarchicalName = hierarchicalNameFor(
       (*m_collections)[(*m_currentCollectionIndex)],
       (*m_collections));
-  int selIdx =
-      SessionManager::instance().getLastSelectedIndex(hierarchicalName);
-  if (selIdx < 0) {
-    QString collectionName =
-        (*m_collections)[(*m_currentCollectionIndex)].name;
-    selIdx = SessionManager::instance().getLastSelectedIndex(collectionName);
+  int selIdx = -1;
+  if (m_sessionManager) {
+    selIdx = m_sessionManager->getLastSelectedIndex(hierarchicalName);
+    if (selIdx < 0) {
+      QString collectionName =
+          (*m_collections)[(*m_currentCollectionIndex)].name;
+      selIdx = m_sessionManager->getLastSelectedIndex(collectionName);
+    }
   }
   if (selIdx >= totalItems) {
     selIdx = totalItems - 1;

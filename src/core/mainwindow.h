@@ -66,6 +66,7 @@ public:
   ScrollManager *getScrollManager() const { return m_scrollManager.get(); }
   NavigationManager *getNavigationManager() const { return m_navigationManager.get(); }
   InteractionManager *getInteractionManager() const { return m_interactionManager.get(); }
+  SessionManager *getSessionManager() const { return m_sessionManager.get(); }
 
 protected:
   void resizeEvent(QResizeEvent *event) override;
@@ -85,6 +86,7 @@ private:
   std::unique_ptr<ScrollManager> m_scrollManager;
   std::unique_ptr<NavigationManager> m_navigationManager;
   std::unique_ptr<InteractionManager> m_interactionManager;
+  std::unique_ptr<SessionManager> m_sessionManager;
 
   void setupManagerConnections();
   void updateWindowTitleWithFilter(int visible, int total);

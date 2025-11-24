@@ -28,7 +28,9 @@
 #include <algorithm>
 
 // Construct settings manager and initialize QSettings.
-SettingsManager::SettingsManager(QObject *parent) : QObject(parent) {
+SettingsManager::SettingsManager(SessionManager *sessionManager,
+                                 QObject *parent)
+    : QObject(parent), m_sessionManager(sessionManager) {
   QDir configDir(QDir::homePath() + "/.config/kartend");
   if (!configDir.exists()) {
     configDir.mkpath(".");
@@ -996,15 +998,20 @@ auto SettingsManager::getLastSelectedItem(int collectionIndex) const -> int {
       collectionIndex < mainWindow->m_collections.size()) {
     QString hierarchicalName = hierarchicalNameFor(
         mainWindow->m_collections[collectionIndex], mainWindow->m_collections);
-    int persistentIndex =
-        SessionManager::instance().getLastSelectedIndex(hierarchicalName);
+    int persistentIndex = -1;
+    if (m_sessionManager) {
+      persistentIndex =
+          m_sessionManager->getLastSelectedIndex(hierarchicalName);
+    }
     if (persistentIndex >= 0) {
       return persistentIndex;
     }
 
     QString collectionName = mainWindow->m_collections[collectionIndex].name;
-    persistentIndex =
-        SessionManager::instance().getLastSelectedIndex(collectionName);
+    if (m_sessionManager) {
+      persistentIndex =
+          m_sessionManager->getLastSelectedIndex(collectionName);
+    }
     if (persistentIndex >= 0) {
       return persistentIndex;
     }

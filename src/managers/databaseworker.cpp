@@ -13,7 +13,8 @@
 
 
 
-DatabaseWorker::DatabaseWorker(QObject *parent) : QObject(parent) {
+DatabaseWorker::DatabaseWorker(SessionManager *sessionManager, QObject *parent)
+    : QObject(parent), m_sessionManager(sessionManager) {
   m_connectionName = "kartend_worker";
 }
 
@@ -222,36 +223,10 @@ void DatabaseWorker::loadItemsWithSubcollections(const CollectionContext &contex
 void DatabaseWorker::updateCachedCounts(const QList<CollectionConfig> &allCollections) {
   if (!m_db.isOpen()) initDatabase();
 
-  // Note: SessionManager is a singleton, but it might not be thread-safe.
-  // However, SessionManager seems to use QSettings or similar which might be reentrant.
-  // But SessionManager::instance() returns a reference to a static local.
-  // If SessionManager methods are not thread-safe, we should not call them here.
-  // Let's assume for now we can calculate counts and emit them, or just do the DB part here.
-  
-  // The original code calls SessionManager directly.
-  // To be safe, we should probably move this logic to the main thread or ensure SessionManager is thread-safe.
-  // But for now, let's replicate the logic but be careful.
-  // Actually, SessionManager::setGlobalItemCount just sets a member.
-  // If we access it from multiple threads, we need a mutex.
-  
-  // Better approach: Calculate counts here, emit them, and let DatabaseManager update SessionManager.
-  // But updateCachedCounts does a lot of logic.
-  
-  // For now, let's just do the DB cleanup and return.
-  // The original code:
-  /*
-  SessionManager &sessionManager = SessionManager::instance();
-  sessionManager.clearStaleCollections(allCollections);
-  ...
-  */
-  
-  // Since SessionManager is likely not thread-safe, we should probably NOT do this in the worker.
-  // Or we should make SessionManager thread-safe.
-  // Given the scope, let's keep updateCachedCounts in the main thread for now, 
-  // OR just run the DB queries here.
-  
-  // Let's skip moving updateCachedCounts to worker for now to avoid threading issues with SessionManager.
-  // We will only move the heavy loading functions.
+  // Note: SessionManager usage here was removed because it's not thread-safe.
+  // The logic for updating cached counts should be handled in the main thread
+  // (e.g., in DatabaseManager) or SessionManager should be made thread-safe.
+  // Currently, DatabaseManager::updateCachedCounts handles the SessionManager updates.
 }
 
 // ... Helper implementations ...

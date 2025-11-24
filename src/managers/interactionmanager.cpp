@@ -80,6 +80,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   m_settingsManager = setup.settingsManager;
   m_databaseManager = setup.databaseManager;
   m_navigationManager = setup.navigationManager;
+  m_sessionManager = setup.sessionManager;
   m_itemScrollArea = setup.itemScrollArea;
   m_gridContainer = setup.gridContainer;
   m_metadataSidebar = setup.sidebarWidget;
@@ -227,8 +228,11 @@ auto InteractionManager::hasDirectItemsForIndex(int idx) const -> bool {
 
   qint64 direct = -1;
   qint64 recursive = -1;
-  const bool haveCounts = SessionManager::instance().getCollectionCounts(
-      collCfg, *m_collections, direct, recursive);
+  bool haveCounts = false;
+  if (m_sessionManager) {
+    haveCounts = m_sessionManager->getCollectionCounts(collCfg, *m_collections,
+                                                       direct, recursive);
+  }
   if (haveCounts) {
     return direct > 0;
   }
@@ -2261,7 +2265,9 @@ void InteractionManager::persistSuppressedSelectionAndMaybeCenter(
             QFileInfo(path).completeBaseName().replace('_', ' ').simplified();
       }
     }
-    SessionManager::instance().setLastSelected(collectionName, index, title);
+    if (m_sessionManager) {
+      m_sessionManager->setLastSelected(collectionName, index, title);
+    }
     if (m_settingsManager != nullptr) {
       m_settingsManager->setLastSelectedItem(curColl, index);
     }
@@ -4139,18 +4145,21 @@ void InteractionManager::persistSelectionForIndex(int coll, int idx) {
                                            m_mainWindow->m_collections);
   }
   const QString title = titleForIndexInColl(coll, idx);
-  if (!hierarchicalName.isEmpty()) {
-    SessionManager::instance().setLastSelected(hierarchicalName, idx, title);
-  }
-  if (!collectionName.isEmpty() && hierarchicalName != collectionName) {
-    SessionManager::instance().setLastSelected(collectionName, idx, title);
+  if (m_sessionManager) {
+    if (!hierarchicalName.isEmpty()) {
+      m_sessionManager->setLastSelected(hierarchicalName, idx, title);
+    }
+    if (!collectionName.isEmpty() && hierarchicalName != collectionName) {
+      m_sessionManager->setLastSelected(collectionName, idx, title);
+    }
   }
   if (!QApplication::closingDown()) {
     QTimer::singleShot(UIConstants::PERSISTENT_CACHE_QUICK_SAVE_DELAY_MS, this,
-                       []() {
+                       [this]() {
                          if (!QApplication::closingDown() &&
-                             !ArtworkManager::s_shuttingDown.load()) {
-                           SessionManager::instance().saveToDisk();
+                             !ArtworkManager::s_shuttingDown.load() &&
+                             m_sessionManager) {
+                           m_sessionManager->saveToDisk();
                          }
                        });
   }

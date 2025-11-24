@@ -10,6 +10,7 @@ class QFile;
 class SidebarManager;
 class ScrollManager;
 class NavigationManager;
+class SessionManager;
 
 struct SettingsDialogContext {
   QWidget *parent = nullptr;
@@ -23,7 +24,7 @@ struct SettingsDialogContext {
 class SettingsManager : public QObject {
   Q_OBJECT
 public:
-  explicit SettingsManager(QObject *parent = nullptr);
+  explicit SettingsManager(SessionManager *sessionManager, QObject *parent = nullptr);
   ~SettingsManager();
 
   static auto getConfigPath() -> QString;
@@ -49,6 +50,7 @@ public:
   auto getLastSelectedItem(int collectionIndex) const -> int;
 
 private:
+  SessionManager *m_sessionManager = nullptr;
   GeneralSettings m_generalSettings;
 
   // Helper methods to reduce cognitive complexity

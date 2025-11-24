@@ -10,14 +10,7 @@
 #include <QStandardPaths>
 #include <algorithm>
 
-
-
-SessionManager &SessionManager::instance() {
-  static SessionManager instance;
-  return instance;
-}
-
-SessionManager::SessionManager() : QObject(nullptr) {}
+SessionManager::SessionManager(QObject *parent) : QObject(parent) {}
 
 SessionManager::~SessionManager() = default;
 

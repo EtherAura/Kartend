@@ -9,10 +9,12 @@
 
 #include "collectionconfig.h"
 
+class SessionManager;
+
 class DatabaseManager : public QObject {
   Q_OBJECT
 public:
-  explicit DatabaseManager(QObject *parent = nullptr);
+  explicit DatabaseManager(SessionManager *sessionManager, QObject *parent = nullptr);
   ~DatabaseManager() override;
 
   void initDatabase();
@@ -48,6 +50,7 @@ private slots:
 
 private:
   class DatabaseWorker* m_worker;
+  SessionManager *m_sessionManager;
   class QThread* m_workerThread;
 
   bool needsRescan(int collectionIndex, const CollectionConfig &collection);

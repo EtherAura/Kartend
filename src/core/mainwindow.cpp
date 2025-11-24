@@ -338,7 +338,9 @@ void MainWindow::closeEvent(QCloseEvent *event) {
       .releaseGuiResources(); // NOLINT(readability-static-accessed-through-instance)
   if (!QApplication::closingDown()) {
     CacheManager::instance().saveToDisk();
-    SessionManager::instance().saveToDisk();
+    if (m_sessionManager) {
+      m_sessionManager->saveToDisk();
+    }
   }
 
   event->accept();
@@ -346,7 +348,7 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 
 void MainWindow::setupUI() {
   setupManagers();
-  SessionManager::instance().initialize();
+  m_sessionManager->initialize();
   setupUIReferences();
   createMenuBar();
   setupSidebar();
@@ -358,12 +360,15 @@ void MainWindow::setupUI() {
 }
 
 void MainWindow::setupManagers() {
-  m_settingsManager = std::make_unique<SettingsManager>(this);
+  m_sessionManager = std::make_unique<SessionManager>(this);
+  m_settingsManager =
+      std::make_unique<SettingsManager>(m_sessionManager.get(), this);
   m_sidebarManager = std::make_unique<SidebarManager>(this);
   m_navigationManager = std::make_unique<NavigationManager>(this);
   m_interactionManager = std::make_unique<InteractionManager>(this);
 
-  m_databaseManager = std::make_unique<DatabaseManager>(this);
+  m_databaseManager =
+      std::make_unique<DatabaseManager>(m_sessionManager.get(), this);
   m_scrollManager = std::make_unique<ScrollManager>(this);
 
   m_settingsManager->loadCollections(m_collections);
@@ -550,8 +555,10 @@ void MainWindow::setupArtworkManager() {
 }
 
 void MainWindow::setupLastSelectedIndices() {
+  if (!m_sessionManager) return;
+
   for (int i = 0; i < m_collections.size(); ++i) {
-    int sel = SessionManager::instance().getLastSelectedIndex(
+    int sel = m_sessionManager->getLastSelectedIndex(
         m_collections[i].name);
     if (sel < 0) {
       QString hierarchical =
@@ -559,7 +566,7 @@ void MainWindow::setupLastSelectedIndices() {
       if (!hierarchical.isEmpty() &&
           hierarchical != m_collections[i].name) {
         int hSel =
-            SessionManager::instance().getLastSelectedIndex(hierarchical);
+            m_sessionManager->getLastSelectedIndex(hierarchical);
         if (hSel >= 0) {
           sel = hSel;
         }

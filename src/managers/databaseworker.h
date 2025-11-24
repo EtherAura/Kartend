@@ -8,10 +8,12 @@
 #include <QDateTime>
 #include "collectionconfig.h"
 
+class SessionManager;
+
 class DatabaseWorker : public QObject {
   Q_OBJECT
 public:
-  explicit DatabaseWorker(QObject *parent = nullptr);
+  explicit DatabaseWorker(SessionManager *sessionManager, QObject *parent = nullptr);
   ~DatabaseWorker() override;
 
 public slots:
@@ -31,6 +33,7 @@ signals:
   void countsUpdated();
 
 private:
+  SessionManager *m_sessionManager;
   QSqlDatabase m_db;
   QString m_connectionName;
 
