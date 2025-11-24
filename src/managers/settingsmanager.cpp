@@ -131,7 +131,7 @@ void SettingsManager::loadCollections(
     QList<CollectionConfig> &collections) const {
   collections.clear();
 
-  QSettings settings(SettingsUtils::getConfigPath(), QSettings::IniFormat);
+  QSettings settings(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   QHash<QString, CollectionConfig> tempCollections;
   bool needsRewrite = false;
 
@@ -190,7 +190,7 @@ void SettingsManager::loadCollections(
 // Persist collection configurations to disk (no lastSelected_* entries)
 void SettingsManager::saveCollections(
     const QList<CollectionConfig> &collections) const {
-  QSettings settings(SettingsUtils::getConfigPath(), QSettings::IniFormat);
+  QSettings settings(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   
   // Remove all existing collection groups to ensure clean state for collections
   // but preserve [General] section which might contain other settings (e.g. MainScreen_*)
@@ -635,7 +635,7 @@ auto SettingsManager::handleLayoutChanges(
 // Loads general settings (selection indices now resolved from persistent cache
 // separately)
 void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
-  QSettings s(SettingsUtils::getConfigPath(), QSettings::IniFormat);
+  QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   s.beginGroup("General");
   settings.rememberSelection = s.value("rememberSelection", true).toBool();
   settings.wrapNavigation = s.value("wrapNavigation", false).toBool();
@@ -650,7 +650,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.rememberSelection = settings.rememberSelection;
   m_generalSettings.wrapNavigation = settings.wrapNavigation;
 
-  QSettings s(SettingsUtils::getConfigPath(), QSettings::IniFormat);
+  QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   s.beginGroup("General");
   s.setValue("rememberSelection", m_generalSettings.rememberSelection);
   s.setValue("wrapNavigation", m_generalSettings.wrapNavigation);
