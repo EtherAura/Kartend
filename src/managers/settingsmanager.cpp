@@ -17,7 +17,6 @@
 #include <QFile>
 #include <QLabel>
 #include <QScrollArea>
-#include <QTextStream>
 #include <QTimer>
 #include <algorithm>
 #include <QStandardPaths>
@@ -40,149 +39,9 @@ SettingsManager::~SettingsManager() = default;
 
 
 
+#include <QSettings>
+
 namespace {
-
-void setConfigValue(const QString &value, int &target, int min, int max) {
-  bool ok;
-  int val = value.toInt(&ok);
-  if (ok && val >= min && val <= max) {
-    target = val;
-  }
-}
-
-auto setCollectionExtensions(const QString &value,
-                                              CollectionConfig &collection,
-                                              bool &needsRewrite) -> void {
-  QStringList rawList = value.split(',', Qt::SkipEmptyParts);
-  for (QString &extension : rawList) {
-    extension = extension.trimmed();
-  }
-  QStringList normalized = ExtensionUtils::normalizeStoredExtensions(rawList);
-  if (normalized != rawList) {
-    needsRewrite = true;
-  }
-  collection.extensions = normalized;
-}
-
-void processGeneralConfigLine(const QString &line) {
-  // General settings are handled by loadGeneralSettings method
-  // Just skip processing these lines in loadCollections
-  Q_UNUSED(line);
-}
-
-auto processConfigLine(const QString &line,
-                                        CollectionConfig &currentCollection,
-                                        bool &needsRewrite) -> void {
-  int equalPos = line.indexOf('=');
-  if (equalPos == -1) {
-    return;
-  }
-
-  QString key = line.left(equalPos).trimmed();
-  QString value = line.mid(equalPos + 1).trimmed();
-
-  if (key == "name") {
-    currentCollection.name = value;
-  } else if (key == "launcherPath") {
-    currentCollection.launcherPath = value;
-  } else if (key == "corePath") {
-    currentCollection.corePath = value;
-  } else if (key == "launchParameters") {
-    currentCollection.launchParameters = value;
-  } else if (key == "mediaDirectory") {
-    currentCollection.mediaDirectory = value;
-  } else if (key == "artworkDirectory") {
-    currentCollection.artworkDirectory = value;
-  } else if (key == "collectionIcon") {
-    currentCollection.collectionIcon = value;
-  } else if (key == "extensions") {
-    setCollectionExtensions(value, currentCollection, needsRewrite);
-  } else if (key == "gridWidth") {
-    setConfigValue(value, currentCollection.gridWidth, UIConstants::MIN_GRID_WIDTH, UIConstants::MAX_GRID_WIDTH);
-  } else if (key == "sidebarVisible") {
-    currentCollection.sidebarVisible = (value == "true");
-  } else if (key == "showAllSubcollectionItems") {
-    currentCollection.showAllSubcollectionItems = (value == "true");
-  } else if (key == "horizontalAlignment") {
-    currentCollection.horizontalAlignment = stringToAlignment(value);
-  } else if (key == "sidebarMode") {
-    currentCollection.sidebarMode =
-        (value == "fixed") ? SidebarMode::Expand : SidebarMode::Overlay;
-  } else if (key == "hideHorizontalScrollbar") {
-    currentCollection.hideHorizontalScrollbar = (value == "true");
-  } else if (key == "hideVerticalScrollbar") {
-    currentCollection.hideVerticalScrollbar = (value == "true");
-  } else if (key == "hideTitles") {
-    currentCollection.hideTitles = (value == "true");
-  } else if (key == "showSubcollectionTitles") {
-    currentCollection.showSubcollectionTitles = (value == "true");
-  } else if (key == "horizontalSpacing") {
-    setConfigValue(value, currentCollection.horizontalSpacing, UIConstants::SPACING_MIN, UIConstants::SPACING_MAX);
-  } else if (key == "verticalSpacing") {
-    setConfigValue(value, currentCollection.verticalSpacing, UIConstants::SPACING_MIN, UIConstants::SPACING_MAX);
-  } else if (key == "itemWidth") {
-    setConfigValue(value, currentCollection.itemWidth, UIConstants::MIN_ITEM_WIDTH, UIConstants::MAX_ITEM_WIDTH);
-  } else if (key == "itemHeight") {
-    setConfigValue(value, currentCollection.itemHeight, UIConstants::MIN_ITEM_HEIGHT, UIConstants::MAX_ITEM_HEIGHT);
-  } else if (key == "fontSize") {
-    setConfigValue(value, currentCollection.fontSize, UIConstants::MIN_FONT_SIZE, UIConstants::MAX_FONT_SIZE);
-  }
-}
-
-auto parseConfigFile(
-    QFile &file, QHash<QString, CollectionConfig> &tempCollections,
-    bool &needsRewrite) -> bool {
-  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    return false;
-  }
-
-  QTextStream inputStream(&file);
-  QString currentSection;
-  CollectionConfig currentCollection;
-  bool hasValidData = false;
-  bool inGeneral = false;
-
-  while (!inputStream.atEnd()) {
-    QString line = inputStream.readLine().trimmed();
-    if (line.isEmpty() || line.startsWith('#')) {
-      continue;
-    }
-
-    if (line.startsWith('[') && line.endsWith(']')) {
-      if (!currentSection.isEmpty() && !inGeneral &&
-          !currentCollection.name.isEmpty()) {
-        tempCollections[currentSection] = currentCollection;
-        hasValidData = true;
-      }
-      currentSection = line.mid(1, line.length() - 2);
-      currentCollection = CollectionConfig();
-      inGeneral = (currentSection == "General");
-      continue;
-    }
-
-    if (inGeneral) {
-      processGeneralConfigLine(line);
-      continue;
-    }
-
-    if (currentSection.isEmpty()) {
-      continue;
-    }
-
-    processConfigLine(line, currentCollection, needsRewrite);
-  }
-
-  if (!currentSection.isEmpty() && !inGeneral &&
-      !currentCollection.name.isEmpty()) {
-    tempCollections[currentSection] = currentCollection;
-    hasValidData = true;
-  }
-
-  file.close();
-  return hasValidData;
-}
-
-
 
 auto findParentCollectionIndex(
     const QStringList &parts, const QString &immediateParentName,
@@ -272,33 +131,75 @@ void SettingsManager::loadCollections(
     QList<CollectionConfig> &collections) const {
   collections.clear();
 
-  QFile file(SettingsUtils::getConfigPath());
-  if (!file.exists()) {
-    return;
-  }
-
+  QSettings settings(SettingsUtils::getConfigPath(), QSettings::IniFormat);
   QHash<QString, CollectionConfig> tempCollections;
   bool needsRewrite = false;
 
-  if (parseConfigFile(file, tempCollections, needsRewrite)) {
-    finalizeCollections(tempCollections, collections, needsRewrite);
+  QStringList groups = settings.childGroups();
+  for (const QString &group : groups) {
+    if (group == "General") continue;
+
+    settings.beginGroup(group);
+    CollectionConfig config;
+    config.name = settings.value("name").toString();
+    config.launcherPath = settings.value("launcherPath").toString();
+    config.corePath = settings.value("corePath").toString();
+    config.launchParameters = settings.value("launchParameters").toString();
+    config.mediaDirectory = settings.value("mediaDirectory").toString();
+    config.artworkDirectory = settings.value("artworkDirectory").toString();
+    config.collectionIcon = settings.value("collectionIcon").toString();
+    
+    QString extStr = settings.value("extensions").toString();
+    QStringList rawList = extStr.split(',', Qt::SkipEmptyParts);
+    for (QString &extension : rawList) {
+      extension = extension.trimmed();
+    }
+    QStringList normalized = ExtensionUtils::normalizeStoredExtensions(rawList);
+    if (normalized != rawList) {
+      needsRewrite = true;
+    }
+    config.extensions = normalized;
+
+    config.gridWidth = settings.value("gridWidth", 4).toInt();
+    config.sidebarVisible = settings.value("sidebarVisible", false).toBool();
+    config.showAllSubcollectionItems = settings.value("showAllSubcollectionItems", false).toBool();
+    config.horizontalAlignment = stringToAlignment(settings.value("horizontalAlignment", "center").toString());
+    config.sidebarMode = (settings.value("sidebarMode", "overlay").toString() == "fixed") ? SidebarMode::Expand : SidebarMode::Overlay;
+    config.hideHorizontalScrollbar = settings.value("hideHorizontalScrollbar", false).toBool();
+    config.hideVerticalScrollbar = settings.value("hideVerticalScrollbar", false).toBool();
+    config.hideTitles = settings.value("hideTitles", false).toBool();
+    config.showSubcollectionTitles = settings.value("showSubcollectionTitles", true).toBool();
+    config.horizontalSpacing = settings.value("horizontalSpacing", UIConstants::GRID_SPACING).toInt();
+    config.verticalSpacing = settings.value("verticalSpacing", 20).toInt();
+    config.itemWidth = settings.value("itemWidth", UIConstants::DEFAULT_ITEM_WIDTH).toInt();
+    config.itemHeight = settings.value("itemHeight", UIConstants::DEFAULT_ITEM_HEIGHT).toInt();
+    config.fontSize = settings.value("fontSize", UIConstants::DEFAULT_FONT_SIZE).toInt();
+
+    tempCollections[group] = config;
+    settings.endGroup();
   }
+
+  finalizeCollections(tempCollections, collections, needsRewrite);
 }
 
 // Persist collection configurations to disk (no lastSelected_* entries)
 void SettingsManager::saveCollections(
     const QList<CollectionConfig> &collections) const {
-  QFile file(SettingsUtils::getConfigPath());
-  if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-    return;
+  QSettings settings(SettingsUtils::getConfigPath(), QSettings::IniFormat);
+  
+  // Remove all existing collection groups to ensure clean state for collections
+  // but preserve [General] section which might contain other settings (e.g. MainScreen_*)
+  const QStringList groups = settings.childGroups();
+  for (const QString &group : groups) {
+    if (group != "General") {
+      settings.remove(group);
+    }
   }
-  QTextStream out(&file);
 
-  out << "[General]\n";
-  out << "rememberSelection="
-      << (m_generalSettings.rememberSelection ? "true" : "false") << "\n";
-  out << "wrapNavigation="
-      << (m_generalSettings.wrapNavigation ? "true" : "false") << "\n\n";
+  settings.beginGroup("General");
+  settings.setValue("rememberSelection", m_generalSettings.rememberSelection);
+  settings.setValue("wrapNavigation", m_generalSettings.wrapNavigation);
+  settings.endGroup();
 
   QStringList sectionNames;
   QHash<QString, int> sectionToIndex;
@@ -313,48 +214,36 @@ void SettingsManager::saveCollections(
 
   for (const QString &sectionName : sectionNames) {
     int index = sectionToIndex[sectionName];
-    const CollectionConfig &collection = collections[index];
+    const CollectionConfig &c = collections[index];
 
-    out << "[" << sectionName << "]\n";
-    out << "name=" << collection.name << "\n";
-    out << "launcherPath=" << collection.launcherPath << "\n";
-    out << "corePath=" << collection.corePath << "\n";
-    out << "launchParameters=" << collection.launchParameters << "\n";
-    out << "mediaDirectory=" << collection.mediaDirectory << "\n";
-    out << "artworkDirectory=" << collection.artworkDirectory << "\n";
-    out << "collectionIcon=" << collection.collectionIcon << "\n";
-    out << "itemWidth=" << collection.itemWidth << "\n";
-    out << "itemHeight=" << collection.itemHeight << "\n";
-    out << "fontSize=" << collection.fontSize << "\n";
-
-    QStringList extensionsList;
-    for (const QString &ext : collection.extensions) {
-      extensionsList.append(ext);
-    }
-    out << "extensions=" << extensionsList.join(", ") << "\n";
-
-    out << "gridWidth=" << collection.gridWidth << "\n";
-    out << "sidebarVisible=" << (collection.sidebarVisible ? "true" : "false")
-        << "\n";
-    out << "showAllSubcollectionItems="
-        << (collection.showAllSubcollectionItems ? "true" : "false") << "\n";
-    out << "horizontalAlignment="
-        << alignmentToString(collection.horizontalAlignment) << "\n";
-    QString sidebarModeStr =
-        (collection.sidebarMode == SidebarMode::Expand) ? "fixed" : "overlay";
-    out << "sidebarMode=" << sidebarModeStr << "\n";
-    out << "hideHorizontalScrollbar="
-        << (collection.hideHorizontalScrollbar ? "true" : "false") << "\n";
-    out << "hideVerticalScrollbar="
-        << (collection.hideVerticalScrollbar ? "true" : "false") << "\n";
-    out << "hideTitles=" << (collection.hideTitles ? "true" : "false") << "\n";
-    out << "showSubcollectionTitles="
-        << (collection.showSubcollectionTitles ? "true" : "false") << "\n";
-    out << "horizontalSpacing=" << collection.horizontalSpacing << "\n";
-    out << "verticalSpacing=" << collection.verticalSpacing << "\n\n";
+    settings.beginGroup(sectionName);
+    settings.setValue("name", c.name);
+    settings.setValue("launcherPath", c.launcherPath);
+    settings.setValue("corePath", c.corePath);
+    settings.setValue("launchParameters", c.launchParameters);
+    settings.setValue("mediaDirectory", c.mediaDirectory);
+    settings.setValue("artworkDirectory", c.artworkDirectory);
+    settings.setValue("collectionIcon", c.collectionIcon);
+    settings.setValue("extensions", c.extensions.join(", "));
+    settings.setValue("gridWidth", c.gridWidth);
+    settings.setValue("sidebarVisible", c.sidebarVisible);
+    settings.setValue("showAllSubcollectionItems", c.showAllSubcollectionItems);
+    settings.setValue("horizontalAlignment", alignmentToString(c.horizontalAlignment));
+    settings.setValue("sidebarMode", (c.sidebarMode == SidebarMode::Expand) ? "fixed" : "overlay");
+    settings.setValue("hideHorizontalScrollbar", c.hideHorizontalScrollbar);
+    settings.setValue("hideVerticalScrollbar", c.hideVerticalScrollbar);
+    settings.setValue("hideTitles", c.hideTitles);
+    settings.setValue("showSubcollectionTitles", c.showSubcollectionTitles);
+    settings.setValue("horizontalSpacing", c.horizontalSpacing);
+    settings.setValue("verticalSpacing", c.verticalSpacing);
+    settings.setValue("itemWidth", c.itemWidth);
+    settings.setValue("itemHeight", c.itemHeight);
+    settings.setValue("fontSize", c.fontSize);
+    settings.endGroup();
   }
-  file.close();
+  settings.sync();
 }
+
 
 
 
@@ -737,80 +626,27 @@ auto SettingsManager::handleLayoutChanges(
 // Loads general settings (selection indices now resolved from persistent cache
 // separately)
 void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
-  GeneralSettings loaded;
-  loaded.rememberSelection = true;
-  loaded.wrapNavigation = false;
-  loaded.lastSelectedItems.clear();
+  QSettings s(SettingsUtils::getConfigPath(), QSettings::IniFormat);
+  s.beginGroup("General");
+  settings.rememberSelection = s.value("rememberSelection", true).toBool();
+  settings.wrapNavigation = s.value("wrapNavigation", false).toBool();
+  s.endGroup();
 
-  QFile cfg(SettingsUtils::getConfigPath());
-  bool inGeneral = false;
-  if (cfg.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    QTextStream inputStream(&cfg);
-    while (!inputStream.atEnd()) {
-      QString line = inputStream.readLine().trimmed();
-      if (line.startsWith('[') && line.endsWith(']')) {
-        QString section = line.mid(1, line.length() - 2);
-        inGeneral = (section.compare("General", Qt::CaseInsensitive) == 0);
-        continue;
-      }
-      if (!inGeneral) {
-        continue;
-      }
-      int equalPos = line.indexOf('=');
-      if (equalPos == -1) {
-        continue;
-      }
-      QString key = line.left(equalPos).trimmed();
-      QString value = line.mid(equalPos + 1).trimmed();
-      if (key.compare("rememberSelection", Qt::CaseInsensitive) == 0) {
-        loaded.rememberSelection =
-            (value.compare("true", Qt::CaseInsensitive) == 0);
-      } else if (key.compare("wrapNavigation", Qt::CaseInsensitive) == 0) {
-        loaded.wrapNavigation =
-            (value.compare("true", Qt::CaseInsensitive) == 0);
-      }
-    }
-    cfg.close();
-  }
-
-  m_generalSettings = loaded;
-  settings = loaded;
+  settings.lastSelectedItems.clear();
+  m_generalSettings = settings;
 }
 
 // Saves general settings (no legacy last_selected.dat persistence)
-namespace {
-auto readAndFilterGeneralForGeneralSettings(QFile &cfg, QStringList &lines,
-                                            bool &foundGeneral) -> void;
-auto ensureGeneralSectionPresence(QStringList &lines, bool foundGeneral)
-    -> void;
-auto insertGeneralEntries(QStringList &lines, bool rememberSelection,
-                          bool wrapNavigation) -> void;
-} // namespace
 void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.rememberSelection = settings.rememberSelection;
   m_generalSettings.wrapNavigation = settings.wrapNavigation;
 
-  const QString cfgPath = SettingsUtils::getConfigPath();
-  QStringList lines;
-  bool foundGeneral = false;
-
-  QFile cfg(cfgPath);
-  if (cfg.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    readAndFilterGeneralForGeneralSettings(cfg, lines, foundGeneral);
-    cfg.close();
-  }
-
-  ensureGeneralSectionPresence(lines, foundGeneral);
-  insertGeneralEntries(lines, m_generalSettings.rememberSelection,
-                       m_generalSettings.wrapNavigation);
-
-  if (cfg.open(QIODevice::WriteOnly | QIODevice::Text)) {
-    QTextStream out(&cfg);
-    for (const QString &line : lines) {
-      out << line << "\n";
-    }
-    cfg.close();
-  }
+  QSettings s(SettingsUtils::getConfigPath(), QSettings::IniFormat);
+  s.beginGroup("General");
+  s.setValue("rememberSelection", m_generalSettings.rememberSelection);
+  s.setValue("wrapNavigation", m_generalSettings.wrapNavigation);
+  s.endGroup();
+  s.sync();
 }
 
 // Updates a single collection's last selected item (in-memory only; persistent
@@ -853,109 +689,4 @@ auto SettingsManager::getLastSelectedItem(int collectionIndex) const -> int {
 
   return -1;
 }
-// Reads the file and filters [General] entries for general settings keys only.
-namespace {
 
-/// Reads settings file and filters
-/// rememberSelection/wrapNavigation/lastSelected_* from the [General] section
-/// while preserving all other lines.
-auto readAndFilterGeneralForGeneralSettings(QFile &cfg, QStringList &lines,
-                                            bool &foundGeneral) -> void {
-  lines.clear();
-  foundGeneral = false;
-
-  if (!cfg.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    return;
-  }
-  const QString content = QString::fromUtf8(cfg.readAll());
-  cfg.close();
-
-  const QStringList rawLines = content.split(QLatin1Char('\n'));
-  lines.reserve(rawLines.size());
-
-  bool inGeneral = false;
-  for (const QString &raw : rawLines) {
-    const QString &line = raw;
-    const QString trimmed = line.trimmed();
-
-    if (trimmed.startsWith(QLatin1Char('[')) &&
-        trimmed.endsWith(QLatin1Char(']'))) {
-      const QString section = trimmed.mid(1, trimmed.size() - 2);
-      inGeneral =
-          section.compare(QStringLiteral("General"), Qt::CaseInsensitive) == 0;
-      if (inGeneral) {
-        foundGeneral = true;
-      }
-      lines.push_back(line);
-      continue;
-    }
-
-    if (!inGeneral) {
-      lines.push_back(line);
-      continue;
-    }
-
-    const int equalsIndex = trimmed.indexOf(QLatin1Char('='));
-    if (equalsIndex <= 0) {
-      lines.push_back(line);
-      continue;
-    }
-
-    const QString key = trimmed.left(equalsIndex);
-    if (key.compare(QStringLiteral("rememberSelection"), Qt::CaseInsensitive) ==
-        0) {
-      continue;
-    }
-    if (key.compare(QStringLiteral("wrapNavigation"), Qt::CaseInsensitive) ==
-        0) {
-      continue;
-    }
-    if (key.startsWith(QStringLiteral("lastSelected_"), Qt::CaseInsensitive)) {
-      continue;
-    }
-
-    lines.push_back(line);
-  }
-}
-
-/// Ensures a [General] section header exists by inserting it at the top when
-/// absent.
-auto ensureGeneralSectionPresence(QStringList &lines, bool foundGeneral)
-    -> void {
-  if (foundGeneral) {
-    return;
-  }
-  lines.push_front(QStringLiteral("[General]"));
-}
-
-/// Inserts rememberSelection and wrapNavigation entries immediately after the
-/// [General] section header.
-auto insertGeneralEntries(QStringList &lines, bool rememberSelection,
-                          bool wrapNavigation) -> void {
-  int insertPos = -1;
-  for (int i = 0, lineCount = lines.size(); i < lineCount; ++i) {
-    const QString trimmed = lines[i].trimmed();
-    if (trimmed.startsWith(QLatin1Char('[')) &&
-        trimmed.endsWith(QLatin1Char(']'))) {
-      const QString section = trimmed.mid(1, trimmed.size() - 2);
-      if (section.compare(QStringLiteral("General"), Qt::CaseInsensitive) ==
-          0) {
-        insertPos = i + 1;
-        break;
-      }
-    }
-  }
-  if (insertPos < 0) {
-    return;
-  }
-
-  lines.insert(insertPos++,
-               QString::fromLatin1("rememberSelection=%1")
-                   .arg(rememberSelection ? QStringLiteral("true")
-                                          : QStringLiteral("false")));
-  lines.insert(insertPos++, QString::fromLatin1("wrapNavigation=%1")
-                                .arg(wrapNavigation ? QStringLiteral("true")
-                                                    : QStringLiteral("false")));
-}
-
-} // namespace

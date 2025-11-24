@@ -3,127 +3,40 @@
 #include "pathutils.h"
 #include <QDir>
 #include <QFile>
-#include <QTextStream>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QScrollArea>
 #include <algorithm>
 
 auto SettingsUtils::getConfigPath() -> QString {
-  QDir configDir(QDir::homePath() + "/.config/kartend");
+  QString configPath = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+  QDir configDir(configPath);
+  if (!configDir.exists()) {
+    configDir.mkpath(".");
+  }
   return configDir.absoluteFilePath("kartend.cfg");
 }
 
 void SettingsUtils::loadMainScreenSettings(MainScreenConfig &config) {
-  QFile file(getConfigPath());
-  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    config.gridWidth = UIConstants::DEFAULT_GRID_WIDTH;
-    config.horizontalAlignment = HorizontalAlignment::Center;
-    config.showHiddenCollections = false;
-    return;
-  }
-  QTextStream inputStream(&file);
-  bool inGeneral = false;
-  while (!inputStream.atEnd()) {
-    QString line = inputStream.readLine().trimmed();
-    if (line.startsWith('[') && line.endsWith(']')) {
-      QString section = line.mid(1, line.length() - 2);
-      inGeneral = (section == "General");
-      continue;
-    }
-    if (!inGeneral) {
-      continue;
-    }
-    int equalPos = line.indexOf('=');
-    if (equalPos == -1) {
-      continue;
-    }
-    QString key = line.left(equalPos);
-    QString value = line.mid(equalPos + 1);
-    if (key == "MainScreen_gridWidth") {
-      config.gridWidth = value.toInt();
-    } else if (key == "MainScreen_horizontalAlignment") {
-      config.horizontalAlignment = stringToAlignment(value);
-    } else if (key == "MainScreen_showHiddenCollections") {
-      config.showHiddenCollections = (value == "true");
-    }
-  }
-  file.close();
+  QSettings settings(getConfigPath(), QSettings::IniFormat);
+  settings.beginGroup("General");
+  config.gridWidth = settings.value("MainScreen_gridWidth", UIConstants::DEFAULT_GRID_WIDTH).toInt();
+  config.horizontalAlignment = stringToAlignment(settings.value("MainScreen_horizontalAlignment", "center").toString());
+  config.showHiddenCollections = settings.value("MainScreen_showHiddenCollections", false).toBool();
+  settings.endGroup();
+
   config.gridWidth = std::max(config.gridWidth, UIConstants::MIN_GRID_WIDTH);
   config.gridWidth = std::min(config.gridWidth, UIConstants::MAX_GRID_WIDTH);
 }
 
-namespace {
-// Reads all lines and removes existing MainScreen_* keys from [General]
-auto readAndFilterGeneralSection(QFile &file, QStringList &lines,
-                                 bool &foundGeneral) -> void {
-  bool inGeneral = false;
-  QTextStream inputStream(&file);
-  while (!inputStream.atEnd()) {
-    const QString line = inputStream.readLine();
-    const QString trimmed = line.trimmed();
-    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      const QString section = trimmed.mid(1, trimmed.length() - 2);
-      inGeneral = (section == "General");
-      if (inGeneral) {
-        foundGeneral = true;
-      }
-      lines.append(line);
-      continue;
-    }
-    if (inGeneral) {
-      if (trimmed.startsWith("MainScreen_gridWidth=") ||
-          trimmed.startsWith("MainScreen_horizontalAlignment=") ||
-          trimmed.startsWith("MainScreen_showHiddenCollections=")) {
-        continue;
-      }
-    }
-    lines.append(line);
-  }
-}
-
-// Inserts the three MainScreen_* entries immediately after [General]
-void insertMainScreenEntries(QStringList &lines,
-                             const MainScreenConfig &config) {
-  for (int i = 0; i < lines.size(); ++i) {
-    if (lines[i].trimmed() == "[General]") {
-      lines.insert(i + 1,
-                   QString("MainScreen_gridWidth=%1").arg(config.gridWidth));
-      lines.insert(i + 2,
-                   QString("MainScreen_horizontalAlignment=%1")
-                       .arg(alignmentToString(config.horizontalAlignment)));
-      lines.insert(i + 3,
-                   QString("MainScreen_showHiddenCollections=%1")
-                       .arg(config.showHiddenCollections ? "true" : "false"));
-      break;
-    }
-  }
-}
-} // namespace
-
 void SettingsUtils::saveMainScreenSettings(const MainScreenConfig &config) {
-  QString configPath = getConfigPath();
-  QStringList lines;
-  bool foundGeneral = false;
-
-  QFile file(configPath);
-  if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    readAndFilterGeneralSection(file, lines, foundGeneral);
-    file.close();
-  }
-
-  if (!foundGeneral) {
-    lines.prepend("");
-    lines.prepend("[General]");
-  }
-
-  insertMainScreenEntries(lines, config);
-
-  if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-    QTextStream out(&file);
-    for (const QString &line : lines) {
-      out << line << "\n";
-    }
-    file.close();
-  }
+  QSettings settings(getConfigPath(), QSettings::IniFormat);
+  settings.beginGroup("General");
+  settings.setValue("MainScreen_gridWidth", config.gridWidth);
+  settings.setValue("MainScreen_horizontalAlignment", alignmentToString(config.horizontalAlignment));
+  settings.setValue("MainScreen_showHiddenCollections", config.showHiddenCollections);
+  settings.endGroup();
+  settings.sync();
 }
 
 auto SettingsUtils::expandConfigVariables(const QString &input,
