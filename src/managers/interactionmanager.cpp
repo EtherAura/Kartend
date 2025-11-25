@@ -4237,10 +4237,10 @@ auto InteractionManager::findClosestWidget(
 void InteractionManager::cancelPendingSelectionRestore() {
   m_selectionRestoreToken++;
   m_selectionRestorePending = false;
-  if (m_mainWindow != nullptr) {
+  if (parent() != nullptr) {
     int token =
-        m_mainWindow->property(PropertyKeys::SelectionRestoreToken).toInt() + 1;
-    m_mainWindow->setProperty(PropertyKeys::SelectionRestoreToken, token);
-    m_mainWindow->setProperty(PropertyKeys::SelectionRestorePending, false);
+        parent()->property(PropertyKeys::SelectionRestoreToken).toInt() + 1;
+    parent()->setProperty(PropertyKeys::SelectionRestoreToken, token);
+    parent()->setProperty(PropertyKeys::SelectionRestorePending, false);
   }
 }

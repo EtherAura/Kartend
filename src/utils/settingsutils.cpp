@@ -124,9 +124,8 @@ auto SettingsUtils::expandConfigVariables(const QString &input,
 }
 
 void SettingsUtils::applyHorizontalScrollbarSetting(
-    QWidget *parent, int collectionIndex,
+    QScrollArea *itemScrollArea, int collectionIndex,
     const QList<CollectionConfig> &collections) {
-  auto *itemScrollArea = parent->findChild<QScrollArea *>("itemScrollArea");
   if ((itemScrollArea == nullptr) || collectionIndex < 0 ||
       collectionIndex >= collections.size()) {
     return;
@@ -140,9 +139,8 @@ void SettingsUtils::applyHorizontalScrollbarSetting(
 }
 
 void SettingsUtils::applyVerticalScrollbarSetting(
-    QWidget *parent, int collectionIndex,
+    QScrollArea *itemScrollArea, int collectionIndex,
     const QList<CollectionConfig> &collections) {
-  auto *itemScrollArea = parent->findChild<QScrollArea *>("itemScrollArea");
   if ((itemScrollArea == nullptr) || collectionIndex < 0 ||
       collectionIndex >= collections.size()) {
     return;

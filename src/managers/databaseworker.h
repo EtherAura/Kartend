@@ -58,7 +58,7 @@ private:
   qint64 countCollectionRecursive(int collectionIndex,
                                   const QList<CollectionConfig> &allCollections);
   void clearCollectionFromDatabaseByUuid(const QString &collectionUuid);
-  static QString computeCollectionUuid(const QString &name);
+  static QString computeCollectionUuid(const QString &name, const QString &mediaDir);
 
   static void appendFileMapsAndListCanonical(
       int collectionIndex, const CollectionConfig &expandedCollection,

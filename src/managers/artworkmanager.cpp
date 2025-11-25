@@ -169,7 +169,7 @@ static auto loadAndProcessImage(const QString &path) -> QImage {
 
 // Constructs the artwork manager and sets up timers
 ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
-    : QObject(parent), collections(nullptr), currentCollectionIndex(nullptr),
+    : QObject(parent), m_cacheManager(cacheManager), collections(nullptr), currentCollectionIndex(nullptr),
       stackedWidget(nullptr), itemsPage(nullptr), gridContainer(nullptr),
       m_timerCoordinator(nullptr), m_silentLoadTimer(nullptr),
       m_persistentLoadTimer(nullptr), m_cacheTimer(nullptr),
@@ -177,7 +177,7 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
       m_silentLoadBatchSize(UIConstants::SILENT_LOAD_BATCH_SIZE_DEFAULT),
       m_lastUserActivity{QDateTime::currentMSecsSinceEpoch()},
       m_continuousSilentLoad(false), m_silentLoadIndex(0),
-      m_persistentSilentLoad(false), m_cacheManager(cacheManager) {
+      m_persistentSilentLoad(false) {
   m_timerCoordinator = new TimerUtils::Coordinator(this);
 
   m_silentLoadTimer = new QTimer(this);

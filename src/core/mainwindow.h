@@ -22,6 +22,7 @@ class QAction;
 QT_END_NAMESPACE
 
 class Ui_MainWindow;
+class ApplicationManager;
 class ArtworkManager;
 class CacheManager;
 class InteractionManager;
@@ -60,15 +61,19 @@ public:
   bool isShuttingDown() const { return m_isShuttingDown; }
 
   // Getters for Managers
-  SidebarManager *getSidebarManager() const { return m_sidebarManager.get(); }
+  ApplicationManager *getApplicationManager() const { return m_appManager.get(); }
   metadataSidebar *getMetadataSidebar() const { return m_metadataSidebar; }
-  SettingsManager *getSettingsManager() const { return m_settingsManager.get(); }
-  DatabaseManager *getDatabaseManager() const { return m_databaseManager.get(); }
-  ScrollManager *getScrollManager() const { return m_scrollManager.get(); }
-  NavigationManager *getNavigationManager() const { return m_navigationManager.get(); }
-  InteractionManager *getInteractionManager() const { return m_interactionManager.get(); }
-  SessionManager *getSessionManager() const { return m_sessionManager.get(); }
-  ArtworkManager *getArtworkManager() const { return m_artworkManager.get(); }
+  
+  // Delegated Getters
+  SidebarManager *getSidebarManager() const;
+  SettingsManager *getSettingsManager() const;
+  DatabaseManager *getDatabaseManager() const;
+  ScrollManager *getScrollManager() const;
+  NavigationManager *getNavigationManager() const;
+  InteractionManager *getInteractionManager() const;
+  SessionManager *getSessionManager() const;
+  ArtworkManager *getArtworkManager() const;
+  CacheManager *getCacheManager() const;
 
 protected:
   void resizeEvent(QResizeEvent *event) override;
@@ -81,16 +86,8 @@ private:
   MainScreenConfig m_mainScreenConfig;
   QAction *m_fullscreenAction = nullptr;
 
-  std::unique_ptr<SidebarManager> m_sidebarManager;
+  std::unique_ptr<ApplicationManager> m_appManager;
   metadataSidebar *m_metadataSidebar = nullptr;
-  std::unique_ptr<SettingsManager> m_settingsManager;
-  std::unique_ptr<DatabaseManager> m_databaseManager;
-  std::unique_ptr<ScrollManager> m_scrollManager;
-  std::unique_ptr<NavigationManager> m_navigationManager;
-  std::unique_ptr<InteractionManager> m_interactionManager;
-  std::unique_ptr<SessionManager> m_sessionManager;
-  std::unique_ptr<ArtworkManager> m_artworkManager;
-  std::unique_ptr<CacheManager> m_cacheManager;
 
   void setupManagerConnections();
   void updateWindowTitleWithFilter(int visible, int total);
@@ -103,7 +100,6 @@ private:
 
   // UI Setup Methods
   void setupUI();
-  void setupManagers();
   void setupUIReferences();
   void createMenuBar();
   void setupActionExit();

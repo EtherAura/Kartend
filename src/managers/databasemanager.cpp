@@ -180,14 +180,16 @@ auto DatabaseManager::countCollectionRecursive(
   if (collectionIndex < 0 || collectionIndex >= allCollections.size()) {
     return 0;
   }
+  QString expandedMediaDir = PathUtils::validateAndExpandPath(allCollections[collectionIndex].mediaDirectory, allCollections[collectionIndex].name);
   const QString uuid =
-      computeCollectionUuid(allCollections[collectionIndex].name);
+      computeCollectionUuid(allCollections[collectionIndex].name, expandedMediaDir);
   qint64 total = countCollectionByUuid(uuid);
   QList<int> descendants =
       collectDescendantIndices(collectionIndex, allCollections);
   for (int descendantIndex : descendants) {
+    QString descExpandedMediaDir = PathUtils::validateAndExpandPath(allCollections[descendantIndex].mediaDirectory, allCollections[descendantIndex].name);
     const QString descendantUuid =
-        computeCollectionUuid(allCollections[descendantIndex].name);
+        computeCollectionUuid(allCollections[descendantIndex].name, descExpandedMediaDir);
     total += countCollectionByUuid(descendantUuid);
   }
   return total;
@@ -219,8 +221,9 @@ void DatabaseManager::updateCachedCounts(
   m_sessionManager->clearStaleCollections(allCollections);
 
   for (const auto &config : allCollections) {
-    if (config.mediaDirectory.trimmed().isEmpty()) {
-      const QString uuid = computeCollectionUuid(config.name);
+    QString expandedMediaDir = PathUtils::validateAndExpandPath(config.mediaDirectory, config.name);
+    if (expandedMediaDir.trimmed().isEmpty()) {
+      const QString uuid = computeCollectionUuid(config.name, expandedMediaDir);
       clearCollectionFromDatabaseByUuid(uuid);
     }
   }
@@ -229,7 +232,8 @@ void DatabaseManager::updateCachedCounts(
   m_sessionManager->setGlobalItemCount(global);
 
   for (int i = 0; i < allCollections.size(); ++i) {
-    const QString uuid = computeCollectionUuid(allCollections[i].name);
+    QString expandedMediaDir = PathUtils::validateAndExpandPath(allCollections[i].mediaDirectory, allCollections[i].name);
+    const QString uuid = computeCollectionUuid(allCollections[i].name, expandedMediaDir);
     qint64 direct = countCollectionByUuid(uuid);
     qint64 recursive = countCollectionRecursive(i, allCollections);
     m_sessionManager->setCollectionCounts(allCollections[i], allCollections,
@@ -264,8 +268,8 @@ auto DatabaseManager::findArtworkDirectoryForFile(const QString &filePath) const
 }
 
 // Compute a deterministic uuid from collection name
-auto DatabaseManager::computeCollectionUuid(const QString &name) -> QString {
-  QByteArray norm = name.trimmed().toLower().toUtf8();
+auto DatabaseManager::computeCollectionUuid(const QString &name, const QString &mediaDir) -> QString {
+  QByteArray norm = (name + "|" + mediaDir).trimmed().toLower().toUtf8();
   QByteArray digest =
       QCryptographicHash::hash(norm, QCryptographicHash::Sha1).toHex();
   return QString::fromLatin1(digest);

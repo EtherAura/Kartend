@@ -105,15 +105,23 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
   
   initializeSubcollections();
   
-  // The total items in the grid = subcollections + items.
-  // We need to know how many items are there.
-  int itemCount = totalCount;
-  
-  // Resize m_filePaths to itemCount with empty strings
-  m_filePaths.reserve(itemCount);
-  for(int i=0; i<itemCount; ++i) m_filePaths.append(QString());
+  if (!m_context.filePaths.isEmpty()) {
+    m_filePaths = m_context.filePaths;
+    m_fileNames = m_context.fileNames;
+  } else {
+    // The total items in the grid = subcollections + items.
+    // We need to know how many items are there.
+    int itemCount = totalCount - m_subcollections.size();
+    if (itemCount < 0) {
+      itemCount = 0;
+    }
+    
+    // Resize m_filePaths to itemCount with empty strings
+    m_filePaths.reserve(itemCount);
+    for(int i=0; i<itemCount; ++i) m_filePaths.append(QString());
+  }
 
-  m_totalItems = m_subcollections.size() + itemCount;
+  m_totalItems = m_subcollections.size() + m_filePaths.size();
   
   if (m_totalItems == 0) {
     setupEmptyVirtualScrolling();

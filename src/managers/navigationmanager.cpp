@@ -219,17 +219,6 @@ auto NavigationManager::scheduleSelectionRestoreVerification(
 auto NavigationManager::handleSubcollectionNavigation(int collectionIndex,
                                                       int previousIndex)
     -> void {
-  bool targetHasNestedItems =
-      (*m_collections)[collectionIndex].showAllSubcollectionItems;
-  bool targetHasChildren = false;
-  if (targetHasNestedItems) {
-    targetHasChildren = collectionHasDescendantWithMedia(collectionIndex);
-  }
-
-  if (targetHasChildren) {
-    return;
-  }
-
   if (m_scrollManager != nullptr) {
     m_scrollManager->updateContextForSubcollection(
         collectionIndex);
@@ -454,8 +443,10 @@ auto NavigationManager::prepareNonSharedNavigation(int collectionIndex)
 
   updateItemsPageTitle(collectionIndex);
   m_stackedWidget->setCurrentWidget(m_itemsPage);
-  if (auto *w = qobject_cast<QWidget*>(parent())) w->setFocus();
-  if (auto *w = qobject_cast<QWidget*>(parent())) w->activateWindow();
+  if (m_itemsPage && m_itemsPage->window()) {
+    m_itemsPage->window()->setFocus();
+    m_itemsPage->window()->activateWindow();
+  }
 
   if (m_sidebarManager != nullptr) {
     m_sidebarManager->applySidebarStateForCollection(
@@ -492,7 +483,7 @@ auto NavigationManager::loadCollectionData(int collectionIndex) -> void {
       if (context.config.showAllSubcollectionItems) {
         bool hasDescendantWithMedia =
             collectionHasDescendantWithMedia(collectionIndex);
-        if (hasDescendantWithMedia) {
+        if (hasDescendantWithMedia || hasMediaDirectory) {
           m_databaseManager->loadItemsWithSubcollections(
               context, (*m_collections));
         } else {
@@ -610,9 +601,9 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex)
   }
 
   SettingsUtils::applyHorizontalScrollbarSetting(
-      qobject_cast<QWidget*>(parent()), collectionIndex, (*m_collections));
+      m_itemScrollArea, collectionIndex, (*m_collections));
   SettingsUtils::applyVerticalScrollbarSetting(
-      qobject_cast<QWidget*>(parent()), collectionIndex, (*m_collections));
+      m_itemScrollArea, collectionIndex, (*m_collections));
 
   if (m_sidebarManager != nullptr) {
     m_sidebarManager->applySidebarStateForCollection(
@@ -979,8 +970,7 @@ void NavigationManager::onItemsLoaded(
   int selIdx = calculateSelectionIndex(totalItems);
 
   if (m_scrollManager != nullptr) {
-    m_scrollManager->setupVirtualScrolling(filePaths, fileNames,
-                                                         context);
+    m_scrollManager->setupVirtualScrolling(totalItems, context);
   }
 
   resumeItemsPageRendering();
@@ -1306,7 +1296,6 @@ void NavigationManager::loadCurrentAndSubcollections() {
   } else {
     m_databaseManager->fetchItemCount(context, (*m_collections));
   }
-}
 
   QTimer::singleShot(UIConstants::FILTER_REAPPLY_DELAY_MS, [this]() {
     if (m_searchBar &&
@@ -1428,13 +1417,11 @@ void NavigationManager::applyUiPoliciesForCollection(int collectionIndex) {
   if (m_sidebarManager != nullptr) {
     m_sidebarManager->applySidebarStateForCollection(collectionIndex);
   }
-  if (m_settingsManager != nullptr && parent() != nullptr && m_collections != nullptr) {
-    if (auto *w = qobject_cast<QWidget*>(parent())) {
-        SettingsUtils::applyHorizontalScrollbarSetting(
-            w, collectionIndex, *m_collections);
-        SettingsUtils::applyVerticalScrollbarSetting(w, collectionIndex,
-                                                       *m_collections);
-    }
+  if (m_settingsManager != nullptr && m_itemScrollArea != nullptr && m_collections != nullptr) {
+    SettingsUtils::applyHorizontalScrollbarSetting(
+        m_itemScrollArea, collectionIndex, *m_collections);
+    SettingsUtils::applyVerticalScrollbarSetting(m_itemScrollArea, collectionIndex,
+                                                   *m_collections);
   }
 }
 

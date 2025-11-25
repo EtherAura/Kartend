@@ -77,7 +77,7 @@ private:
   qint64 countCollectionByUuid(const QString &collectionUuid);
   qint64 countGlobal(const QList<CollectionConfig> &allCollections);
   void clearCollectionFromDatabaseByUuid(const QString &collectionUuid);
-  static QString computeCollectionUuid(const QString &name);
+  static QString computeCollectionUuid(const QString &name, const QString &mediaDir);
 
   QSqlDatabase m_db;
   QString m_connectionName;

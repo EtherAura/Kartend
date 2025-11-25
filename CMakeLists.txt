@@ -48,6 +48,7 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 set(SOURCES
   ${SRC_DIR}/core/main.cpp
+  ${SRC_DIR}/core/applicationmanager.cpp
   ${SRC_DIR}/core/mainwindow.cpp
   ${SRC_DIR}/managers/artworkmanager.cpp
   ${SRC_DIR}/managers/cachemanager.cpp
@@ -69,6 +70,7 @@ set(SOURCES
 )
 
 set(HEADERS
+  ${SRC_DIR}/core/applicationmanager.h
   ${SRC_DIR}/core/mainwindow.h
   ${SRC_DIR}/managers/artworkmanager.h
   ${SRC_DIR}/managers/cachemanager.h

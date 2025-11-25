@@ -464,10 +464,13 @@ void updateWindowTitle(QWidget *parent, int viewingIndex,
 // Applies scrollbar settings for the viewing collection
 void applyScrollbarSettings(QWidget *parent, int viewingIndex,
                             const QList<CollectionConfig> &collections) {
-  SettingsUtils::applyHorizontalScrollbarSetting(parent, viewingIndex,
+  auto *scrollArea = parent->findChild<QScrollArea *>("itemScrollArea");
+  if (scrollArea) {
+    SettingsUtils::applyHorizontalScrollbarSetting(scrollArea, viewingIndex,
                                                    collections);
-  SettingsUtils::applyVerticalScrollbarSetting(parent, viewingIndex,
+    SettingsUtils::applyVerticalScrollbarSetting(scrollArea, viewingIndex,
                                                  collections);
+  }
 }
 
 // Updates sidebar layout when mode changes

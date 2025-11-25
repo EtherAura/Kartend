@@ -13,6 +13,10 @@
 
 
 
+// Forward declarations of static helpers
+static auto canonicalKeyPath(const QString &absPath, bool dedup) -> QString;
+static auto displayNameForBase(const QString &baseName) -> QString;
+
 DatabaseWorker::DatabaseWorker(SessionManager *sessionManager, QObject *parent)
     : QObject(parent), m_sessionManager(sessionManager) {
   m_connectionName = "kartend_worker";
@@ -258,7 +262,7 @@ void DatabaseWorker::fetchItemCount(const CollectionContext &context, const QLis
   ensureCollectionScanned(ctx.currentIndex, ctx.config);
 
   QStringList uuids;
-  uuids << computeCollectionUuid(ctx.config.name);
+  uuids << computeCollectionUuid(ctx.config.name, ctx.config.mediaDirectory);
 
   if (ctx.config.showAllSubcollectionItems) {
       QList<int> rawDescendants = collectDescendantIndices(ctx.currentIndex, allCollections);
@@ -267,7 +271,7 @@ void DatabaseWorker::fetchItemCount(const CollectionContext &context, const QLis
           CollectionConfig subCol = allCollections[descendantIndex];
           subCol.mediaDirectory = PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
           ensureCollectionScanned(descendantIndex, subCol);
-          uuids << computeCollectionUuid(subCol.name);
+          uuids << computeCollectionUuid(subCol.name, subCol.mediaDirectory);
       }
   }
 
@@ -314,14 +318,15 @@ void DatabaseWorker::fetchItemsRange(const CollectionContext &context, const QLi
   QStringList uuids;
   CollectionContext ctx = context;
   ctx.config.mediaDirectory = PathUtils::validateAndExpandPath(ctx.config.mediaDirectory, ctx.config.name);
-  uuids << computeCollectionUuid(ctx.config.name);
+  uuids << computeCollectionUuid(ctx.config.name, ctx.config.mediaDirectory);
 
   if (ctx.config.showAllSubcollectionItems) {
       QList<int> rawDescendants = collectDescendantIndices(ctx.currentIndex, allCollections);
       for (int descendantIndex : rawDescendants) {
           if (descendantIndex == ctx.currentIndex || descendantIndex < 0 || descendantIndex >= allCollections.size()) continue;
           CollectionConfig subCol = allCollections[descendantIndex];
-          uuids << computeCollectionUuid(subCol.name);
+          subCol.mediaDirectory = PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
+          uuids << computeCollectionUuid(subCol.name, subCol.mediaDirectory);
       }
   }
 
@@ -363,7 +368,7 @@ void DatabaseWorker::fetchItemsRange(const CollectionContext &context, const QLi
   
   // Populate maps
   auto addMap = [&](const CollectionConfig &c) {
-      QString u = computeCollectionUuid(c.name);
+      QString u = computeCollectionUuid(c.name, c.mediaDirectory);
       uuidToMediaDir[u] = c.mediaDirectory;
       uuidToArtworkDir[u] = c.artworkDirectory;
   };
@@ -415,7 +420,7 @@ bool DatabaseWorker::needsRescan(int collectionIndex, const CollectionConfig &co
 
   if (collection.mediaDirectory.trimmed().isEmpty()) {
     if (m_db.isOpen()) {
-      const QString uuid = computeCollectionUuid(collection.name);
+      const QString uuid = computeCollectionUuid(collection.name, collection.mediaDirectory);
       clearCollectionFromDatabaseByUuid(uuid);
     }
     return false;
@@ -424,7 +429,7 @@ bool DatabaseWorker::needsRescan(int collectionIndex, const CollectionConfig &co
   QString currentSignature = collection.extensions.isEmpty()
                                  ? QString()
                                  : collection.extensions.join('|');
-  const QString uuid = computeCollectionUuid(collection.name);
+  const QString uuid = computeCollectionUuid(collection.name, collection.mediaDirectory);
 
   QSqlQuery query(m_db);
   query.prepare("SELECT last_scanned, name, ext_signature FROM collections "
@@ -490,8 +495,12 @@ QStringList DatabaseWorker::scanMediaDirectory(const CollectionConfig &collectio
     return filePaths;
   }
 
-  bool filtered = !collection.extensions.isEmpty();
-  QStringList nameFilters = filtered ? collection.extensions : QStringList();
+  QStringList nameFilters;
+  if (!collection.extensions.isEmpty()) {
+    for (const QString &ext : collection.extensions) {
+      nameFilters << "*." + ext;
+    }
+  }
 
   QDirIterator iterator(dir.absolutePath(), nameFilters, QDir::Files,
                         QDirIterator::NoIteratorFlags);
@@ -519,7 +528,7 @@ QStringList DatabaseWorker::loadOrScanCollection(
       saveItemsToDatabase(collectionIndex, filePaths, timestamps, collection);
     }
   } else {
-    const QString uuid = computeCollectionUuid(collection.name);
+    const QString uuid = computeCollectionUuid(collection.name, collection.mediaDirectory);
     filePaths = loadItemsFromDatabaseByUuid(uuid);
   }
 
@@ -540,7 +549,7 @@ void DatabaseWorker::saveItemsToDatabase(
   QString extSignature = collection.extensions.isEmpty()
                              ? QString()
                              : collection.extensions.join('|');
-  const QString uuid = computeCollectionUuid(collection.name);
+  const QString uuid = computeCollectionUuid(collection.name, collection.mediaDirectory);
 
   m_db.transaction();
 
@@ -666,8 +675,8 @@ void DatabaseWorker::clearCollectionFromDatabaseByUuid(const QString &collection
   }
 }
 
-QString DatabaseWorker::computeCollectionUuid(const QString &name) {
-  QByteArray norm = name.trimmed().toLower().toUtf8();
+QString DatabaseWorker::computeCollectionUuid(const QString &name, const QString &mediaDir) {
+  QByteArray norm = (name + "|" + mediaDir).trimmed().toLower().toUtf8();
   QByteArray digest =
       QCryptographicHash::hash(norm, QCryptographicHash::Sha1).toHex();
   return QString::fromLatin1(digest);

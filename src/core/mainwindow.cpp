@@ -8,6 +8,7 @@
 #include <QMessageBox>
 #include <QPixmapCache>
 
+#include "applicationmanager.h"
 #include "artworkmanager.h"
 #include "cachemanager.h"
 #include "collectionconfig.h"
@@ -32,19 +33,18 @@ MainWindow::MainWindow(QWidget *parent)
       itemGrid(nullptr), m_mainHorizontalLayout(nullptr), searchBar(nullptr),
       m_searchModeButton(nullptr), loadingLabel(nullptr),
       currentCollectionIndex(-1),
-      m_sidebarManager(nullptr),
-      m_metadataSidebar(nullptr),
-      m_settingsManager(nullptr),
-      m_databaseManager(nullptr), m_scrollManager(nullptr),
-      m_navigationManager(nullptr), m_interactionManager(nullptr) {
+      m_metadataSidebar(nullptr) {
+  m_appManager = std::make_unique<ApplicationManager>(this);
+  m_appManager->initialize();
+  
   ui->setupUi(this);
   setupUI();
 }
 
 MainWindow::~MainWindow() { delete ui; }
 void MainWindow::keyPressEvent(QKeyEvent *event) {
-  if ((m_interactionManager != nullptr) &&
-      m_interactionManager->handleGlobalKeyPress(event)) {
+  if ((getInteractionManager() != nullptr) &&
+      getInteractionManager()->handleGlobalKeyPress(event)) {
     return;
   }
   QMainWindow::keyPressEvent(event);
@@ -56,16 +56,16 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
   }
 
   QMainWindow::resizeEvent(event);
-  if (m_artworkManager) {
-    if (auto *timerCoordinator = m_artworkManager->getTimerCoordinator()) {
+  if (getArtworkManager()) {
+    if (auto *timerCoordinator = getArtworkManager()->getTimerCoordinator()) {
       timerCoordinator->scheduleLayoutUpdate();
     }
   }
 }
 
 auto MainWindow::eventFilter(QObject *watched, QEvent *event) -> bool {
-  return (m_interactionManager != nullptr)
-             ? m_interactionManager->eventFilter(watched, event)
+  return (getInteractionManager() != nullptr)
+             ? getInteractionManager()->eventFilter(watched, event)
              : QMainWindow::eventFilter(watched, event);
 }
 
@@ -80,7 +80,7 @@ static auto formatCountNumber(qint64 value) -> QString {
 }
 
 void MainWindow::refreshTitleCounts() {
-  if (m_databaseManager == nullptr) {
+  if (getDatabaseManager() == nullptr) {
     return;
   }
   int cur = currentCollectionIndex;
@@ -103,7 +103,7 @@ void MainWindow::refreshTitleCounts() {
   QStringList parts;
   for (int idx : chain) {
     qint64 countVal =
-        m_databaseManager->countCollectionRecursive(idx, m_collections);
+        getDatabaseManager()->countCollectionRecursive(idx, m_collections);
     parts << formatCountNumber(countVal);
   }
 
@@ -121,13 +121,13 @@ void MainWindow::refreshTitleCounts() {
 // sidebar becomes visible or its layout changes
 void MainWindow::setupManagerConnections() {
   InteractionManagerSetup setup;
-  setup.scrollManager = m_scrollManager.get();
-  setup.sidebarManager = m_sidebarManager.get();
-  setup.settingsManager = m_settingsManager.get();
-  setup.databaseManager = m_databaseManager.get();
-  setup.navigationManager = m_navigationManager.get();
-  setup.sessionManager = m_sessionManager.get();
-  setup.artworkManager = m_artworkManager.get();
+  setup.scrollManager = getScrollManager();
+  setup.sidebarManager = getSidebarManager();
+  setup.settingsManager = getSettingsManager();
+  setup.databaseManager = getDatabaseManager();
+  setup.navigationManager = getNavigationManager();
+  setup.sessionManager = getSessionManager();
+  setup.artworkManager = getArtworkManager();
   setup.itemScrollArea = ui->itemScrollArea;
   setup.gridContainer = gridContainer;
   setup.sidebar = m_metadataSidebar;
@@ -142,13 +142,13 @@ void MainWindow::setupManagerConnections() {
   loadingLabel = ui->loadingLabel;
 
   NavigationManagerDependencies navDeps;
-  navDeps.interactionManager = m_interactionManager.get();
-  navDeps.settingsManager = m_settingsManager.get();
-  navDeps.sidebarManager = m_sidebarManager.get();
-  navDeps.scrollManager = m_scrollManager.get();
-  navDeps.databaseManager = m_databaseManager.get();
-  navDeps.sessionManager = m_sessionManager.get();
-  navDeps.artworkManager = m_artworkManager.get();
+  navDeps.interactionManager = getInteractionManager();
+  navDeps.settingsManager = getSettingsManager();
+  navDeps.sidebarManager = getSidebarManager();
+  navDeps.scrollManager = getScrollManager();
+  navDeps.databaseManager = getDatabaseManager();
+  navDeps.sessionManager = getSessionManager();
+  navDeps.artworkManager = getArtworkManager();
   navDeps.sidebar = m_metadataSidebar;
   navDeps.currentCollectionIndex = &currentCollectionIndex;
   navDeps.collections = &m_collections;
@@ -162,9 +162,9 @@ void MainWindow::setupManagerConnections() {
   navDeps.isShuttingDown = [this]() { return isShuttingDown(); };
   navDeps.refreshTitleCounts = [this]() { refreshTitleCounts(); };
 
-  m_navigationManager->setupReferences(navDeps);
+  getNavigationManager()->setupReferences(navDeps);
 
-  m_interactionManager->setupReferences(setup);
+  getInteractionManager()->setupReferences(setup);
 
   connectDatabaseManager();
   connectScrollManager();
@@ -174,56 +174,55 @@ void MainWindow::setupManagerConnections() {
 }
 
 void MainWindow::connectDatabaseManager() {
-  QObject::connect(m_databaseManager.get(), &DatabaseManager::itemsLoaded,
-                   m_navigationManager.get(), &NavigationManager::onItemsLoaded);
-  QObject::connect(m_databaseManager.get(), &DatabaseManager::itemCountLoaded,
-                   m_navigationManager.get(), &NavigationManager::onItemCountLoaded);
-  QObject::connect(m_databaseManager.get(), &DatabaseManager::itemsRangeLoaded,
-                   m_navigationManager.get(), &NavigationManager::onItemsRangeLoaded);
-  QObject::connect(m_databaseManager.get(), &DatabaseManager::errorOccurred,
-                   m_navigationManager.get(),
+  QObject::connect(getDatabaseManager(), &DatabaseManager::itemsLoaded,
+                   getNavigationManager(), &NavigationManager::onItemsLoaded);
+  QObject::connect(getDatabaseManager(), &DatabaseManager::itemCountLoaded,
+                   getNavigationManager(), &NavigationManager::onItemCountLoaded);
+  QObject::connect(getDatabaseManager(), &DatabaseManager::itemsRangeLoaded,
+                   getNavigationManager(), &NavigationManager::onItemsRangeLoaded);
+  QObject::connect(getDatabaseManager(), &DatabaseManager::errorOccurred,
+                   getNavigationManager(),
                    &NavigationManager::onMediaLibraryError);
 }
 
 void MainWindow::connectScrollManager() {
-  QObject::connect(m_scrollManager.get(), &ScrollManager::widgetClicked, this,
+  QObject::connect(getScrollManager(), &ScrollManager::widgetClicked, this,
                    [this](MediaItemWidget *widget, const QString &path) {
                      if (!QApplication::closingDown()) {
-                       m_interactionManager->handleWidgetClicked(widget, path);
+                       getInteractionManager()->handleWidgetClicked(widget, path);
                      }
                    });
   QObject::connect(
-      m_scrollManager.get(), &ScrollManager::widgetDoubleClickedWithCollection, this,
+      getScrollManager(), &ScrollManager::widgetDoubleClickedWithCollection, this,
       [this](const QString &path, int idx) {
         if (!QApplication::closingDown()) {
-          m_interactionManager->handleWidgetDoubleClickedWithCollection(path,
+          getInteractionManager()->handleWidgetDoubleClickedWithCollection(path,
                                                                         idx);
         }
       });
-  QObject::connect(m_scrollManager.get(), &ScrollManager::subcollectionEntered,
-                   m_navigationManager.get(),
+  QObject::connect(getScrollManager(), &ScrollManager::subcollectionEntered,
+                   getNavigationManager(),
                    &NavigationManager::onSubcollectionEntered);
-  QObject::connect(m_scrollManager.get(), &ScrollManager::requestItemsRange,
-                   m_navigationManager.get(), &NavigationManager::fetchItemsRange);
-                   &NavigationManager::onSubcollectionEntered);
-  if (m_artworkManager) {
-    QObject::connect(m_artworkManager->getTimerCoordinator(),
+  QObject::connect(getScrollManager(), &ScrollManager::requestItemsRange,
+                   getNavigationManager(), &NavigationManager::fetchItemsRange);
+  if (getArtworkManager()) {
+    QObject::connect(getArtworkManager()->getTimerCoordinator(),
                      &TimerUtils::Coordinator::viewportUpdateRequested, this,
                      [this]() {
-                       if (!QApplication::closingDown() && m_artworkManager) {
-                         m_artworkManager->updateViewportArtwork();
+                       if (!QApplication::closingDown() && getArtworkManager()) {
+                         getArtworkManager()->updateViewportArtwork();
                        }
                      });
-    QObject::connect(m_artworkManager->getTimerCoordinator(),
+    QObject::connect(getArtworkManager()->getTimerCoordinator(),
                      &TimerUtils::Coordinator::layoutUpdateRequested, this,
                      [this]() {
                        if (!QApplication::closingDown() &&
-                           (m_scrollManager != nullptr)) {
-                         m_scrollManager->handleLayoutChange();
+                           (getScrollManager() != nullptr)) {
+                         getScrollManager()->handleLayoutChange();
                        }
                      });
   }
-  QObject::connect(m_scrollManager.get(), &ScrollManager::filterChanged, this,
+  QObject::connect(getScrollManager(), &ScrollManager::filterChanged, this,
                    [this](int visible, int total) {
                      if (!QApplication::closingDown()) {
                        updateWindowTitleWithFilter(visible, total);
@@ -233,47 +232,47 @@ void MainWindow::connectScrollManager() {
 
 void MainWindow::connectSidebarManager() {
   QObject::connect(
-      m_sidebarManager.get(), &SidebarManager::sidebarVisibilityChanged, this,
+      getSidebarManager(), &SidebarManager::sidebarVisibilityChanged, this,
       [this](bool visible) {
-        if (visible && (m_sidebarManager != nullptr) &&
-            (m_scrollManager != nullptr) && (m_interactionManager != nullptr)) {
-          int sel = m_interactionManager->currentSelectedIndex();
+        if (visible && (getSidebarManager() != nullptr) &&
+            (getScrollManager() != nullptr) && (getInteractionManager() != nullptr)) {
+          int sel = getInteractionManager()->currentSelectedIndex();
           if (sel >= 0) {
             MediaItemWidget *widgetPtr =
-                m_scrollManager->getActiveWidgets().value(sel, nullptr);
-            m_sidebarManager->updateSidebarMetadata(widgetPtr);
+                getScrollManager()->getActiveWidgets().value(sel, nullptr);
+            getSidebarManager()->updateSidebarMetadata(widgetPtr);
           }
         }
         QTimer::singleShot(UIConstants::SIDEBAR_METRICS_RECALC_DELAY_MS, this,
                            [this]() {
-                             if (m_scrollManager != nullptr) {
-                               m_scrollManager->recalculateContainerMetrics();
+                             if (getScrollManager() != nullptr) {
+                               getScrollManager()->recalculateContainerMetrics();
                              }
                            });
       });
 
   QObject::connect(
-      m_sidebarManager.get(), &SidebarManager::sidebarLayoutChanged, this, [this]() {
-        if (m_scrollManager != nullptr) {
-          m_scrollManager->recalculateContainerMetrics();
+      getSidebarManager(), &SidebarManager::sidebarLayoutChanged, this, [this]() {
+        if (getScrollManager() != nullptr) {
+          getScrollManager()->recalculateContainerMetrics();
         }
-        if ((m_sidebarManager != nullptr) && (m_scrollManager != nullptr) &&
-            (m_interactionManager != nullptr) &&
-            m_sidebarManager->isSidebarVisible()) {
-          int sel = m_interactionManager->currentSelectedIndex();
+        if ((getSidebarManager() != nullptr) && (getScrollManager() != nullptr) &&
+            (getInteractionManager() != nullptr) &&
+            getSidebarManager()->isSidebarVisible()) {
+          int sel = getInteractionManager()->currentSelectedIndex();
           if (sel >= 0) {
             MediaItemWidget *widgetPtr =
-                m_scrollManager->getActiveWidgets().value(sel, nullptr);
-            m_sidebarManager->updateSidebarMetadata(widgetPtr);
+                getScrollManager()->getActiveWidgets().value(sel, nullptr);
+            getSidebarManager()->updateSidebarMetadata(widgetPtr);
           }
         }
       });
 }
 
 void MainWindow::connectSearchComponents() {
-  if ((m_searchModeButton != nullptr) && (m_interactionManager != nullptr)) {
+  if ((m_searchModeButton != nullptr) && (getInteractionManager() != nullptr)) {
     QObject::connect(m_searchModeButton, &QPushButton::clicked,
-                     m_interactionManager.get(),
+                     getInteractionManager(),
                      &InteractionManager::toggleSearchMode);
   }
 }
@@ -283,14 +282,14 @@ void MainWindow::connectScrollBars() const {
     QScrollBar *vScrollBar = ui->itemScrollArea->verticalScrollBar();
     QScrollBar *hScrollBar = ui->itemScrollArea->horizontalScrollBar();
 
-    if ((vScrollBar != nullptr) && (m_navigationManager != nullptr)) {
+    if ((vScrollBar != nullptr) && (getNavigationManager() != nullptr)) {
       QObject::connect(vScrollBar, &QScrollBar::valueChanged,
-                       m_navigationManager.get(),
+                       getNavigationManager(),
                        &NavigationManager::onViewportChanged);
     }
-    if ((hScrollBar != nullptr) && (m_navigationManager != nullptr)) {
+    if ((hScrollBar != nullptr) && (getNavigationManager() != nullptr)) {
       QObject::connect(hScrollBar, &QScrollBar::valueChanged,
-                       m_navigationManager.get(),
+                       getNavigationManager(),
                        &NavigationManager::onViewportChanged);
     }
   }
@@ -318,41 +317,41 @@ void MainWindow::closeEvent(QCloseEvent *event) {
   m_isShuttingDown = true;
 
   if (ui->itemScrollArea != nullptr) {
-    ui->itemScrollArea->removeEventFilter(m_interactionManager.get());
+    ui->itemScrollArea->removeEventFilter(getInteractionManager());
     if (ui->itemScrollArea->viewport() != nullptr) {
-      ui->itemScrollArea->viewport()->removeEventFilter(m_interactionManager.get());
+      ui->itemScrollArea->viewport()->removeEventFilter(getInteractionManager());
     }
   }
   if (gridContainer != nullptr) {
-    gridContainer->removeEventFilter(m_interactionManager.get());
+    gridContainer->removeEventFilter(getInteractionManager());
   }
 
-  if (m_interactionManager != nullptr) {
-    m_interactionManager->clearSelection();
-    m_interactionManager->blockSignals(true);
+  if (getInteractionManager() != nullptr) {
+    getInteractionManager()->clearSelection();
+    getInteractionManager()->blockSignals(true);
   }
 
-  if (m_scrollManager != nullptr) {
-    m_scrollManager->blockSignals(true);
-    m_scrollManager->cleanup();
+  if (getScrollManager() != nullptr) {
+    getScrollManager()->blockSignals(true);
+    getScrollManager()->cleanup();
   }
 
   currentCollectionIndex = -1;
 
-  if (m_settingsManager != nullptr) {
-    m_settingsManager->saveCollections(m_collections);
+  if (getSettingsManager() != nullptr) {
+    getSettingsManager()->saveCollections(m_collections);
     SettingsUtils::saveMainScreenSettings(m_mainScreenConfig);
   }
 
-  if (m_cacheManager) {
-    m_cacheManager->releaseGuiResources();
+  if (getCacheManager()) {
+    getCacheManager()->releaseGuiResources();
     if (!QApplication::closingDown()) {
-      m_cacheManager->saveToDisk();
+      getCacheManager()->saveToDisk();
     }
   }
   if (!QApplication::closingDown()) {
-    if (m_sessionManager) {
-      m_sessionManager->saveToDisk();
+    if (getSessionManager()) {
+      getSessionManager()->saveToDisk();
     }
   }
 
@@ -360,8 +359,14 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 }
 
 void MainWindow::setupUI() {
-  setupManagers();
-  m_sessionManager->initialize();
+  // Managers are initialized by ApplicationManager in the constructor
+  getSessionManager()->initialize();
+  
+  // Load settings
+  getSettingsManager()->loadCollections(m_collections);
+  SettingsUtils::loadMainScreenSettings(m_mainScreenConfig);
+  getSettingsManager()->loadGeneralSettings(m_generalSettings);
+
   setupUIReferences();
   createMenuBar();
   setupSidebar();
@@ -372,24 +377,6 @@ void MainWindow::setupUI() {
   setupInitialTimers();
 }
 
-void MainWindow::setupManagers() {
-  m_cacheManager = std::make_unique<CacheManager>();
-  m_sessionManager = std::make_unique<SessionManager>(this);
-  m_artworkManager = std::make_unique<ArtworkManager>(m_cacheManager.get(), this);
-  m_settingsManager = std::make_unique<SettingsManager>(
-      m_sessionManager.get(), m_artworkManager.get(), m_cacheManager.get(), this);
-  m_sidebarManager = std::make_unique<SidebarManager>(this);
-  m_navigationManager = std::make_unique<NavigationManager>(this);
-  m_interactionManager = std::make_unique<InteractionManager>(this);
-
-  m_databaseManager =
-      std::make_unique<DatabaseManager>(m_sessionManager.get(), this);
-  m_scrollManager = std::make_unique<ScrollManager>(this);
-
-  m_settingsManager->loadCollections(m_collections);
-  SettingsUtils::loadMainScreenSettings(m_mainScreenConfig);
-  m_settingsManager->loadGeneralSettings(m_generalSettings);
-}
 
 void MainWindow::setupUIReferences() {
   setWindowTitle("Kartend");
@@ -428,8 +415,8 @@ void MainWindow::setupActionShowSidebar() {
   if (ui->actionShowSidebar != nullptr) {
     QObject::connect(ui->actionShowSidebar, &QAction::triggered,
                      [this]() {
-                       if (m_sidebarManager) {
-                         m_sidebarManager->toggleSidebar();
+                       if (getSidebarManager()) {
+                         getSidebarManager()->toggleSidebar();
                        }
                      });
     ui->actionShowSidebar->setShortcutContext(Qt::ApplicationShortcut);
@@ -441,15 +428,15 @@ void MainWindow::setupActionSettings() {
   if (ui->actionSettings != nullptr) {
     QObject::connect(
         ui->actionSettings, &QAction::triggered, [this]() {
-          if (m_settingsManager) {
+          if (getSettingsManager()) {
             SettingsDialogContext context;
             context.parent = this;
             context.collections = &m_collections;
             context.currentCollectionIndex = &currentCollectionIndex;
-            context.sidebarManager = m_sidebarManager.get();
-            context.scrollManager = m_scrollManager.get();
-            context.navigationManager = m_navigationManager.get();
-            m_settingsManager->openSettingsDialog(context);
+            context.sidebarManager = getSidebarManager();
+            context.scrollManager = getScrollManager();
+            context.navigationManager = getNavigationManager();
+            getSettingsManager()->openSettingsDialog(context);
           }
         });
     ui->actionSettings->setShortcutContext(Qt::ApplicationShortcut);
@@ -499,23 +486,23 @@ void MainWindow::setupFullscreenAction() {
 }
 
 void MainWindow::setupSidebar() {
-  if (m_sidebarManager != nullptr) {
-    m_sidebarManager->setupSidebar();
+  if (getSidebarManager() != nullptr) {
+    getSidebarManager()->setupSidebar();
 
     SidebarManagerSetup setup;
     setup.sidebar = m_metadataSidebar;
     setup.itemsPage = itemsPage;
     setup.mainLayout = m_mainHorizontalLayout;
     setup.scrollArea = (ui != nullptr) ? ui->itemScrollArea : nullptr;
-    setup.settingsManager = m_settingsManager.get();
-    setup.artworkManager = m_artworkManager.get();
+    setup.settingsManager = getSettingsManager();
+    setup.artworkManager = getArtworkManager();
     setup.collections = &m_collections;
 
-    m_sidebarManager->setupReferences(setup);
+    getSidebarManager()->setupReferences(setup);
   }
 
-  if (m_sidebarManager != nullptr) {
-    QObject::connect(m_sidebarManager.get(),
+  if (getSidebarManager() != nullptr) {
+    QObject::connect(getSidebarManager(),
                      &SidebarManager::sidebarVisibilityChanged, this,
                      [this](bool visible) {
                        if (ui->actionShowSidebar) {
@@ -556,10 +543,10 @@ void MainWindow::showAbout() {
 }
 
 void MainWindow::setupArtworkManager() {
-  if (m_artworkManager) {
-    m_artworkManager->initializeCache();
+  if (getArtworkManager()) {
+    getArtworkManager()->initializeCache();
   }
-  ArtworkManager &artMgr = *m_artworkManager;
+  ArtworkManager &artMgr = *getArtworkManager();
 
   ArtworkManagerSetup setup;
   setup.stackedWidget = stackedWidget;
@@ -573,10 +560,10 @@ void MainWindow::setupArtworkManager() {
 }
 
 void MainWindow::setupLastSelectedIndices() {
-  if (!m_sessionManager) return;
+  if (!getSessionManager()) return;
 
   for (int i = 0; i < m_collections.size(); ++i) {
-    int sel = m_sessionManager->getLastSelectedIndex(
+    int sel = getSessionManager()->getLastSelectedIndex(
         m_collections[i].name);
     if (sel < 0) {
       QString hierarchical =
@@ -584,14 +571,14 @@ void MainWindow::setupLastSelectedIndices() {
       if (!hierarchical.isEmpty() &&
           hierarchical != m_collections[i].name) {
         int hSel =
-            m_sessionManager->getLastSelectedIndex(hierarchical);
+            getSessionManager()->getLastSelectedIndex(hierarchical);
         if (hSel >= 0) {
           sel = hSel;
         }
       }
     }
     if (sel >= 0) {
-      m_settingsManager->setLastSelectedItem(i, sel);
+      getSettingsManager()->setLastSelectedItem(i, sel);
     }
   }
 }
@@ -600,30 +587,30 @@ void MainWindow::setupEventFilters() {
   ScrollManagerSetup setup;
   setup.gridContainer = gridContainer;
   setup.mediaScrollArea = ui->itemScrollArea;
-  setup.artworkManager = m_artworkManager.get();
+  setup.artworkManager = getArtworkManager();
   setup.collections = &m_collections;
 
-  m_scrollManager->setupReferences(setup);
-  m_scrollManager->setDatabaseManager(m_databaseManager.get());
+  getScrollManager()->setupReferences(setup);
+  getScrollManager()->setDatabaseManager(getDatabaseManager());
 
   if ((ui != nullptr) && (ui->itemScrollArea != nullptr)) {
     ui->itemScrollArea->installEventFilter(
-        m_interactionManager.get());
+        getInteractionManager());
     if (ui->itemScrollArea->viewport() != nullptr) {
       ui->itemScrollArea->viewport()->installEventFilter(
-          m_interactionManager.get());
+          getInteractionManager());
     }
   }
   if (gridContainer != nullptr) {
-    gridContainer->installEventFilter(m_interactionManager.get());
+    gridContainer->installEventFilter(getInteractionManager());
   }
 }
 
 void MainWindow::setupInitialTimers() {
   QTimer::singleShot(
       UIConstants::INITIAL_CENTER_SCROLL_DELAY_MS, this, [this]() {
-        if (m_scrollManager != nullptr) {
-          m_scrollManager->centerHorizontalScrollbar(
+        if (getScrollManager() != nullptr) {
+          getScrollManager()->centerHorizontalScrollbar(
               currentCollectionIndex, m_collections);
         }
       });
@@ -637,21 +624,21 @@ void MainWindow::setupInitialTimers() {
 
 void MainWindow::setupInitialTimersEmptyCollections() {
   QTimer::singleShot(0, this, [this]() {
-    if (m_settingsManager != nullptr) {
+    if (getSettingsManager() != nullptr) {
       int dummyIndex = currentCollectionIndex;
       SettingsDialogContext context;
       context.parent = this;
       context.collections = &m_collections;
       context.currentCollectionIndex = &dummyIndex;
-      context.sidebarManager = m_sidebarManager.get();
-      context.scrollManager = m_scrollManager.get();
-      context.navigationManager = m_navigationManager.get();
-      m_settingsManager->openSettingsDialog(context);
+      context.sidebarManager = getSidebarManager();
+      context.scrollManager = getScrollManager();
+      context.navigationManager = getNavigationManager();
+      getSettingsManager()->openSettingsDialog(context);
 
       if (!m_collections.isEmpty()) {
         currentCollectionIndex = 0;
-        if (m_navigationManager) {
-          m_navigationManager->showCollectionItems(0);
+        if (getNavigationManager()) {
+          getNavigationManager()->showCollectionItems(0);
         }
       }
     }
@@ -671,8 +658,8 @@ void MainWindow::setupInitialTimersWithCollections() {
       rootIndex = 0;
     }
     if (rootIndex >= 0) {
-      if (m_navigationManager) {
-        m_navigationManager->showCollectionItems(rootIndex);
+      if (getNavigationManager()) {
+        getNavigationManager()->showCollectionItems(rootIndex);
       }
     }
   });
@@ -701,3 +688,14 @@ void MainWindow::updateWindowTitleForCollection(int collectionIndex) {
     setWindowTitle(m_collections[collectionIndex].name);
   }
 }
+
+// Delegated Getters
+SidebarManager *MainWindow::getSidebarManager() const { return m_appManager->getSidebarManager(); }
+SettingsManager *MainWindow::getSettingsManager() const { return m_appManager->getSettingsManager(); }
+DatabaseManager *MainWindow::getDatabaseManager() const { return m_appManager->getDatabaseManager(); }
+ScrollManager *MainWindow::getScrollManager() const { return m_appManager->getScrollManager(); }
+NavigationManager *MainWindow::getNavigationManager() const { return m_appManager->getNavigationManager(); }
+InteractionManager *MainWindow::getInteractionManager() const { return m_appManager->getInteractionManager(); }
+SessionManager *MainWindow::getSessionManager() const { return m_appManager->getSessionManager(); }
+ArtworkManager *MainWindow::getArtworkManager() const { return m_appManager->getArtworkManager(); }
+CacheManager *MainWindow::getCacheManager() const { return m_appManager->getCacheManager(); }
