@@ -566,17 +566,26 @@ void ScrollManager::handleHorizontalMoveAnimation(int selectedIndex,
     if (!widget) {
       return {};
     }
-    QRect imageRect = widget->imageLabel ? widget->imageLabel->geometry()
-                                         : widget->geometry();
-    QRect nameRect =
-        widget->nameLabel ? widget->nameLabel->geometry() : QRect{};
-    int left = imageRect.left() - UIConstants::COLLECTION_ITEM_SPACING;
-    int top = imageRect.top() - UIConstants::COLLECTION_ITEM_SPACING;
-    int right = imageRect.right() + UIConstants::COLLECTION_ITEM_SPACING;
-    int bottom =
-        nameRect.isValid()
-            ? (nameRect.bottom() + UIConstants::COLLECTION_ITEM_SPACING)
-            : (imageRect.bottom() + UIConstants::COLLECTION_ITEM_SPACING);
+    // Use widget geometry directly to avoid layout latency issues
+    QRect widgetRect = widget->geometry();
+    
+    // Assuming standard layout where image is at top and name at bottom
+    // We can approximate the content rect based on widget size and margins
+    // But since the widget itself is sized to the item dimensions, we can use its rect
+    // adjusted for the selection border spacing.
+    
+    // However, the original code tried to be precise about image vs name.
+    // If we trust the widget geometry is set correctly in ensureWidgetForIndex:
+    // itemWidget->setGeometry(position.x(), position.y(), m_metrics.itemWidth, m_metrics.itemHeight);
+    
+    // The selection overlay should wrap the *content* of the widget.
+    // If the widget fills the cell, we can use the widget rect.
+    
+    int left = widgetRect.left() - UIConstants::COLLECTION_ITEM_SPACING;
+    int top = widgetRect.top() - UIConstants::COLLECTION_ITEM_SPACING;
+    int right = widgetRect.right() + UIConstants::COLLECTION_ITEM_SPACING;
+    int bottom = widgetRect.bottom() + UIConstants::COLLECTION_ITEM_SPACING;
+    
     return {QPoint(left, top), QPoint(right, bottom)};
   };
 
@@ -600,31 +609,58 @@ void ScrollManager::handleHorizontalMoveAnimation(int selectedIndex,
     }
     m_selectionOverlay->setGeometry(startRect);
     m_selectionOverlay->show();
-    m_selectionOverlay->raise();
   }
+  m_selectionOverlay->raise();
 
   if (m_gridContainer != nullptr) {
     m_gridContainer->setProperty(PropertyKeys::GlideAnimating, true);
   }
 
   if (m_selectionOverlayAnim->state() == QAbstractAnimation::Running) {
-    m_selectionOverlayAnim->setEndValue(targetRect);
-  } else {
-    QRect currentRect = m_selectionOverlay->geometry();
-    int deltaX = std::abs(currentRect.center().x() - targetRect.center().x());
-    static constexpr double SELECTION_ANIMATION_PIXELS_PER_SECOND = 900.0;
-    static constexpr double MILLISECONDS_PER_SECOND = 1000.0;
-    static constexpr int MIN_SELECTION_ANIMATION_DURATION = 30;
-    int computedDuration = static_cast<int>(
-        std::round((deltaX / SELECTION_ANIMATION_PIXELS_PER_SECOND) *
-                   MILLISECONDS_PER_SECOND));
-    computedDuration =
-        std::max(computedDuration, MIN_SELECTION_ANIMATION_DURATION);
-    m_selectionOverlayAnim->setDuration(computedDuration);
-    m_selectionOverlayAnim->setStartValue(currentRect);
-    m_selectionOverlayAnim->setEndValue(targetRect);
-    m_selectionOverlayAnim->start();
+    m_selectionOverlayAnim->blockSignals(true);
+    m_selectionOverlayAnim->stop();
+    m_selectionOverlayAnim->blockSignals(false);
   }
+
+  QRect currentRect = m_selectionOverlay->geometry();
+
+  // Check for lag: if the overlay is far from where it should be (prevIndex), snap it.
+  if (prevIndex >= 0) {
+      MediaItemWidget *prevWidget = getWidget(prevIndex);
+      if (prevWidget) {
+          QRect prevRect = computeBorderRect(prevWidget);
+          int lagX = std::abs(currentRect.center().x() - prevRect.center().x());
+          int lagY = std::abs(currentRect.center().y() - prevRect.center().y());
+          double lag = std::sqrt(lagX * lagX + lagY * lagY);
+          
+          // If lag is significant (e.g. > 1.5 item widths), snap to prevRect
+          if (lag > m_metrics.itemWidth * 1.5) {
+              currentRect = prevRect;
+              m_selectionOverlay->setGeometry(currentRect);
+          }
+      }
+  }
+
+  int deltaX = std::abs(currentRect.center().x() - targetRect.center().x());
+  int deltaY = std::abs(currentRect.center().y() - targetRect.center().y());
+  double distance = std::sqrt(deltaX * deltaX + deltaY * deltaY);
+
+  static constexpr double SELECTION_ANIMATION_PIXELS_PER_SECOND = 1500.0;
+  static constexpr double MILLISECONDS_PER_SECOND = 1000.0;
+  static constexpr int MIN_SELECTION_ANIMATION_DURATION = 50;
+  static constexpr int MAX_SELECTION_ANIMATION_DURATION = 300;
+
+  int computedDuration = static_cast<int>(
+      std::round((distance / SELECTION_ANIMATION_PIXELS_PER_SECOND) *
+                 MILLISECONDS_PER_SECOND));
+  computedDuration = std::clamp(computedDuration,
+                                MIN_SELECTION_ANIMATION_DURATION,
+                                MAX_SELECTION_ANIMATION_DURATION);
+
+  m_selectionOverlayAnim->setDuration(computedDuration);
+  m_selectionOverlayAnim->setStartValue(currentRect);
+  m_selectionOverlayAnim->setEndValue(targetRect);
+  m_selectionOverlayAnim->start();
 }
 
 void ScrollManager::handleDirectSelectionUpdate(int selectedIndex) {
@@ -747,9 +783,15 @@ void ScrollManager::updateSelectionForIndex(int selectedIndex) {
     return;
   }
 
-  // Horizontal move animation disabled
+  bool isHorizontalMove = false;
+  calculateMovementDirection(selectedIndex, prevIndex, m_metrics.itemsPerRow,
+                             isHorizontalMove);
 
-  handleDirectSelectionUpdate(selectedIndex);
+  if (isHorizontalMove) {
+    handleHorizontalMoveAnimation(selectedIndex, prevIndex);
+  } else {
+    handleDirectSelectionUpdate(selectedIndex);
+  }
   scheduleArrowKeyUpdate(selectedIndex);
 }
 
@@ -1505,6 +1547,12 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
     itemWidget->setGeometry(position.x(), position.y(), m_metrics.itemWidth,
                             m_metrics.itemHeight);
     itemWidget->show();
+
+    // Restore selection state if this widget corresponds to the currently selected index
+    if (visualIndex == m_committedSelectedIndex) {
+      itemWidget->setSelected(true);
+    }
+
     m_activeWidgets.insert(visualIndex, itemWidget);
   }
 }
@@ -1886,4 +1934,23 @@ auto ScrollManager::filePathForVisualIndex(int visualIndex) const -> QString {
   const QString rawEntry = m_filePaths[mediaIndex];
 
   return resolveToFullPath(rawEntry);
+}
+
+void ScrollManager::calculateMovementDirection(int selectedIndex, int prevIndex,
+                                               int itemsPerRow,
+                                               bool &isHorizontalMove) {
+  if (prevIndex < 0) {
+    isHorizontalMove = false;
+    return;
+  }
+
+  int diff = std::abs(selectedIndex - prevIndex);
+  if (diff != 1) {
+    isHorizontalMove = false;
+    return;
+  }
+
+  int prevRow = GridUtils::computeItemRow(prevIndex, itemsPerRow);
+  int currRow = GridUtils::computeItemRow(selectedIndex, itemsPerRow);
+  isHorizontalMove = (prevRow == currRow);
 }
