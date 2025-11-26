@@ -198,8 +198,6 @@ private:
   SearchMode m_currentSearchMode = SearchMode::CurrentCollection;
   QString m_currentSearchText;
   bool m_wheelScrolling = false;
-  QPropertyAnimation *m_vScrollAnim = nullptr;
-  QPropertyAnimation *m_hScrollAnim = nullptr;
   static constexpr int ARROW_KEY_THROTTLE_MS = 260;
   bool m_isShuttingDown = false;
   bool m_deferredCenterPending = false;
@@ -275,8 +273,6 @@ private:
   void configureAndStartVerticalAnimation(QScrollBar *vScrollBar, int curY,
                                           int targetY, int duration,
                                           bool clickScroll, bool clickHoldAdv);
-  void updateVirtualViewAndSelectionDuringVAnim(bool clickScroll,
-                                                bool clickHoldAdv);
   void onVScrollAnimationFinished();
 
   void setPendingSelectionIfNeeded(bool condition, int newSelection);

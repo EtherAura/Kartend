@@ -7,6 +7,8 @@
 #include <QScrollArea>
 #include <QScrollBar>
 
+#include <functional>
+
 QT_BEGIN_NAMESPACE
 class QTimer;
 QT_END_NAMESPACE
@@ -46,6 +48,14 @@ public:
   /// Returns true if vertical animation is currently running
   [[nodiscard]] bool isVerticalAnimRunning() const;
 
+  /// If running, updates or stops animation based on click mode.
+  /// Returns true if animation was handled (caller should return early).
+  /// If not click-scroll mode, updates curY and distance from scrollbar.
+  bool handleExistingVerticalAnimIfRunning(QScrollBar *verticalScrollBar,
+                                           int targetY, bool clickScroll,
+                                           bool clickHoldAdv, int &curY,
+                                           int &distance);
+
   /// Returns the current vertical animation (may be nullptr)
   [[nodiscard]] QPropertyAnimation *verticalAnimation() const {
     return m_vScrollAnim;
@@ -56,8 +66,7 @@ public:
 
   /// Updates virtual view and selection during vertical animation
   void updateVirtualViewAndSelectionDuringVAnim(bool clickScroll,
-                                                bool clickHoldAdv,
-                                                int selectedItemIndex);
+                                                bool clickHoldAdv);
 
   // --- Horizontal Animation ---
   /// Creates horizontal animation if not already created
@@ -111,6 +120,14 @@ public:
                                int itemHeight, int verticalSpacing,
                                bool isRepeating);
 
+  // --- Wheel Scroll Animation ---
+  /// Gets the current end value of vertical animation (for chaining wheel scrolls)
+  [[nodiscard]] int getVerticalAnimEndValue() const;
+
+  /// Starts a wheel scroll animation with custom finish callback
+  void startWheelScrollAnimation(QScrollBar *vScrollBar, int startVal,
+                                 int endVal, std::function<void()> onFinished);
+
 signals:
   /// Emitted when vertical scroll animation finishes
   void verticalAnimationFinished();
@@ -121,8 +138,8 @@ signals:
   /// Request to update virtual view during animation
   void requestVirtualViewUpdate();
 
-  /// Request to update selection overlay for an index
-  void requestSelectionUpdate(int index);
+  /// Request to update selection overlay for current selection
+  void requestSelectionUpdate();
 
   /// Request to refresh selection overlay state
   void requestSelectionOverlayRefresh();

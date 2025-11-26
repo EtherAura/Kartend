@@ -88,6 +88,22 @@ bool AnimationManager::isVerticalAnimRunning() const {
          m_vScrollAnim->state() == QAbstractAnimation::Running;
 }
 
+bool AnimationManager::handleExistingVerticalAnimIfRunning(
+    QScrollBar *verticalScrollBar, int targetY, bool clickScroll,
+    bool clickHoldAdv, int &curY, int &distance) {
+  if (!isVerticalAnimRunning()) {
+    return false;
+  }
+  if (clickScroll && !clickHoldAdv) {
+    m_vScrollAnim->setEndValue(targetY);
+    return true;
+  }
+  m_vScrollAnim->stop();
+  curY = verticalScrollBar->value();
+  distance = qAbs(targetY - curY);
+  return false;
+}
+
 void AnimationManager::setProgrammaticScrollGuarded(bool enable) {
   if (!m_itemScrollArea) {
     return;
@@ -107,9 +123,9 @@ void AnimationManager::setProgrammaticScrollGuarded(bool enable) {
 }
 
 void AnimationManager::updateVirtualViewAndSelectionDuringVAnim(
-    bool clickScroll, bool clickHoldAdv, int selectedItemIndex) {
+    bool clickScroll, bool clickHoldAdv) {
   emit requestVirtualViewUpdate();
-  emit requestSelectionUpdate(selectedItemIndex);
+  emit requestSelectionUpdate();
   
   if (clickScroll && !clickHoldAdv && (m_vScrollAnim != nullptr) &&
       qAbs(m_vScrollAnim->currentValue().toInt() -
@@ -329,5 +345,35 @@ void AnimationManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar,
   if (m_itemScrollArea) {
     m_itemScrollArea->setProperty("programmaticScroll", true);
   }
+  m_vScrollAnim->start();
+}
+
+// --- Wheel Scroll Animation ---
+
+int AnimationManager::getVerticalAnimEndValue() const {
+  if (m_vScrollAnim != nullptr) {
+    return m_vScrollAnim->endValue().toInt();
+  }
+  return 0;
+}
+
+void AnimationManager::startWheelScrollAnimation(
+    QScrollBar *vScrollBar, int startVal, int endVal,
+    std::function<void()> onFinished) {
+  ensureVAnimCreated(vScrollBar);
+
+  if (m_vScrollAnim->state() == QAbstractAnimation::Running) {
+    m_vScrollAnim->stop();
+  }
+
+  m_vScrollAnim->setStartValue(startVal);
+  m_vScrollAnim->setEndValue(endVal);
+  m_vScrollAnim->setDuration(UIConstants::SMOOTH_SCROLL_WHEEL_DURATION);
+
+  QObject::disconnect(m_vScrollAnim, nullptr, this, nullptr);
+  connect(m_vScrollAnim, &QPropertyAnimation::valueChanged, this,
+          [this]() { emit requestVirtualViewUpdate(); });
+  connect(m_vScrollAnim, &QPropertyAnimation::finished, this, onFinished);
+
   m_vScrollAnim->start();
 }

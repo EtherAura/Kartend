@@ -43,8 +43,6 @@ InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
   m_keyboardManager = std::make_unique<KeyboardManager>(this);
   m_animationManager = std::make_unique<AnimationManager>(this);
 
-  m_hScrollAnim = nullptr;
-
   m_continuousScrollActive = true;
 }
 
@@ -56,12 +54,6 @@ InteractionManager::~InteractionManager() {
   TimerUtils::stopAndDisconnectTimers({m_repeatStartTimer, m_repeatTimer});
   TimerUtils::deleteLaterTimer(m_repeatStartTimer);
   TimerUtils::deleteLaterTimer(m_repeatTimer);
-
-  if (m_hScrollAnim != nullptr) {
-    m_hScrollAnim->stop();
-    m_hScrollAnim->deleteLater();
-    m_hScrollAnim = nullptr;
-  }
 
   clearSelection();
 }
@@ -147,9 +139,8 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
             });
     connect(m_selectionManager.get(), &SelectionManager::requestStopScrollAnimations,
             this, [this]() {
-              if ((m_vScrollAnim != nullptr) &&
-                  m_vScrollAnim->state() == QAbstractAnimation::Running) {
-                m_vScrollAnim->stop();
+              if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
+                m_animationManager->verticalAnimation()->stop();
               }
             });
   }
@@ -203,9 +194,8 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
             });
     connect(m_keyboardManager.get(), &KeyboardManager::requestScrollAnimationStop,
             this, [this]() {
-              if ((m_vScrollAnim != nullptr) &&
-                  m_vScrollAnim->state() == QAbstractAnimation::Running) {
-                m_vScrollAnim->stop();
+              if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
+                m_animationManager->verticalAnimation()->stop();
               }
             });
     connect(m_keyboardManager.get(), &KeyboardManager::repeatStepRequested,
@@ -231,9 +221,14 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
             });
     connect(m_animationManager.get(),
             &AnimationManager::requestSelectionUpdate, this,
-            [this](int index) {
+            [this]() {
               if (m_scrollManager != nullptr) {
-                m_scrollManager->updateSelectionForIndex(index);
+                int idxDyn = property(PropertyKeys::SelectionSuppressed).toBool()
+                                 ? property(PropertyKeys::PendingSelectionIndex).toInt()
+                                 : m_selectedItemIndex;
+                if (idxDyn >= 0) {
+                  m_scrollManager->updateSelectionForIndex(idxDyn);
+                }
               }
             });
     connect(m_animationManager.get(),
@@ -256,6 +251,15 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     connect(m_animationManager.get(),
             &AnimationManager::verticalAnimationFinished, this,
             &InteractionManager::onVScrollAnimationFinished);
+    connect(m_animationManager.get(),
+            &AnimationManager::horizontalAnimationFinished, this, [this]() {
+              if (m_gridContainer) {
+                m_gridContainer->setProperty(PropertyKeys::GlideAnimating, false);
+                if (m_scrollManager != nullptr) {
+                  m_scrollManager->refreshSelectionOverlayState();
+                }
+              }
+            });
   }
 
   updateSearchModeButton();
@@ -455,9 +459,8 @@ void InteractionManager::onKeyboardRepeatStep() {
 // KeyboardManager callback: handles cleanup when key hold stops
 void InteractionManager::onKeyboardStopRepeat(bool suppressRecentering) {
   // KeyboardManager handles timers and properties; we handle selection cleanup
-  if (m_hScrollAnim != nullptr &&
-      m_hScrollAnim->state() == QAbstractAnimation::Running) {
-    m_hScrollAnim->stop();
+  if (m_animationManager && m_animationManager->isHorizontalAnimRunning()) {
+    m_animationManager->horizontalAnimation()->stop();
   }
 
   if (property(PropertyKeys::SelectionSuppressed).toBool()) {
@@ -471,8 +474,7 @@ void InteractionManager::onKeyboardStopRepeat(bool suppressRecentering) {
 
   if (m_keyboardManager && !m_keyboardManager->isPhysicalKeyDown()) {
     m_continuousScrollActive =
-        (m_vScrollAnim != nullptr &&
-         m_vScrollAnim->state() == QAbstractAnimation::Running);
+        (m_animationManager && m_animationManager->isVerticalAnimRunning());
   }
 
   if (!QApplication::closingDown() && m_selectedItemIndex >= 0 &&
@@ -979,9 +981,8 @@ auto InteractionManager::handleWheelEvent(QObject *obj, QEvent *event) -> bool {
   if (wrapTriggered) {
     m_wheelScrolling = false;
     m_continuousScrollActive = false;
-    if (m_vScrollAnim != nullptr &&
-        m_vScrollAnim->state() == QAbstractAnimation::Running) {
-      m_vScrollAnim->stop();
+    if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
+      m_animationManager->verticalAnimation()->stop();
     }
     if (m_scrollManager != nullptr) {
       m_scrollManager->updateVirtualView();
@@ -992,51 +993,14 @@ auto InteractionManager::handleWheelEvent(QObject *obj, QEvent *event) -> bool {
 
   int singleRowPixels = collection.itemHeight + collection.verticalSpacing;
   int basePos = currentPos;
-  if (m_vScrollAnim != nullptr &&
-      m_vScrollAnim->state() == QAbstractAnimation::Running) {
-    basePos = m_vScrollAnim->endValue().toInt();
+  if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
+    basePos = m_animationManager->getVerticalAnimEndValue();
   }
   int targetPos = basePos - (wheelSteps * singleRowPixels);
   targetPos = qBound(0, targetPos, vScrollBar->maximum());
 
   m_wheelScrolling = true;
   m_continuousScrollActive = true;
-
-  if (m_vScrollAnim == nullptr) {
-    m_vScrollAnim = new QPropertyAnimation(vScrollBar, "value", this);
-    m_vScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
-  }
-
-  if (m_vScrollAnim->state() == QAbstractAnimation::Running) {
-    m_vScrollAnim->stop();
-  }
-
-  m_vScrollAnim->setStartValue(currentPos);
-  m_vScrollAnim->setEndValue(targetPos);
-  m_vScrollAnim->setDuration(UIConstants::SMOOTH_SCROLL_WHEEL_DURATION);
-
-  QObject::disconnect(m_vScrollAnim, nullptr, this, nullptr);
-  connect(m_vScrollAnim, &QPropertyAnimation::valueChanged, this, [this]() {
-    if (m_scrollManager != nullptr) {
-      m_scrollManager->updateVirtualView();
-    }
-  });
-  connect(m_vScrollAnim, &QPropertyAnimation::finished, this, [this]() {
-    m_wheelScrolling = false;
-    m_continuousScrollActive = false;
-    if (m_itemScrollArea) {
-      m_itemScrollArea->setProperty(PropertyKeys::UserScrollActive, false);
-      m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, false);
-      m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenter, false);
-      m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenterUntilMs, 0);
-      if (m_scrollManager != nullptr) {
-        m_scrollManager->refreshSelectionOverlayState();
-      }
-    }
-    if (m_scrollManager != nullptr && m_selectedItemIndex >= 0) {
-      m_scrollManager->updateSelectionForIndex(m_selectedItemIndex);
-    }
-  });
 
   if (m_itemScrollArea) {
     m_itemScrollArea->setProperty(PropertyKeys::UserScrollActive, true);
@@ -1046,7 +1010,25 @@ auto InteractionManager::handleWheelEvent(QObject *obj, QEvent *event) -> bool {
     }
   }
 
-  m_vScrollAnim->start();
+  if (m_animationManager) {
+    m_animationManager->startWheelScrollAnimation(
+        vScrollBar, currentPos, targetPos, [this]() {
+          m_wheelScrolling = false;
+          m_continuousScrollActive = false;
+          if (m_itemScrollArea) {
+            m_itemScrollArea->setProperty(PropertyKeys::UserScrollActive, false);
+            m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, false);
+            m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenter, false);
+            m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenterUntilMs, 0);
+            if (m_scrollManager != nullptr) {
+              m_scrollManager->refreshSelectionOverlayState();
+            }
+          }
+          if (m_scrollManager != nullptr && m_selectedItemIndex >= 0) {
+            m_scrollManager->updateSelectionForIndex(m_selectedItemIndex);
+          }
+        });
+  }
 
   if (m_scrollManager != nullptr) {
     QTimer::singleShot(0, this, [this]() {
@@ -1983,14 +1965,9 @@ auto InteractionManager::maybeHandleImmediateCenter(
 auto InteractionManager::handleExistingVerticalAnimIfRunning(
     QScrollBar *verticalScrollBar, int targetY, bool clickScroll,
     bool clickHoldAdv, int &curY, int &distance) -> bool {
-  if (m_vScrollAnim->state() == QAbstractAnimation::Running) {
-    if (clickScroll && !clickHoldAdv) {
-      m_vScrollAnim->setEndValue(targetY);
-      return true;
-    }
-    m_vScrollAnim->stop();
-    curY = verticalScrollBar->value();
-    distance = qAbs(targetY - curY);
+  if (m_animationManager) {
+    return m_animationManager->handleExistingVerticalAnimIfRunning(
+        verticalScrollBar, targetY, clickScroll, clickHoldAdv, curY, distance);
   }
   return false;
 }
@@ -2010,15 +1987,8 @@ auto InteractionManager::handleImmediateCenterPath(
 
 void InteractionManager::stopActiveVerticalAnims(
     QScrollBar *verticalScrollBar) {
-  if ((m_vScrollAnim != nullptr) &&
-      m_vScrollAnim->state() == QAbstractAnimation::Running) {
-    m_vScrollAnim->stop();
-  }
-  if (auto *arrowKeyAnim = verticalScrollBar->findChild<QPropertyAnimation *>(
-          "arrowKeyScrollAnim")) {
-    if (arrowKeyAnim->state() == QAbstractAnimation::Running) {
-      arrowKeyAnim->stop();
-    }
+  if (m_animationManager) {
+    m_animationManager->stopActiveVerticalAnims(verticalScrollBar);
   }
 }
 
@@ -2123,49 +2093,17 @@ void InteractionManager::finalizeImmediateCenteringState(int index,
 }
 
 void InteractionManager::ensureVAnimCreated(QScrollBar *vScrollBar) {
-  if (m_vScrollAnim == nullptr) {
-    m_vScrollAnim = new QPropertyAnimation(vScrollBar, "value", this);
+  if (m_animationManager) {
+    m_animationManager->ensureVAnimCreated(vScrollBar);
   }
 }
 
 void InteractionManager::configureAndStartVerticalAnimation(
     QScrollBar *vScrollBar, int curY, int targetY, int duration,
     bool clickScroll, bool clickHoldAdv) {
-  m_vScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
-  m_vScrollAnim->setStartValue(curY);
-  m_vScrollAnim->setEndValue(targetY);
-  m_vScrollAnim->setDuration(duration);
-
-  QObject::disconnect(m_vScrollAnim, nullptr, this, nullptr);
-  connect(m_vScrollAnim, &QPropertyAnimation::valueChanged, this,
-          [this, clickScroll, clickHoldAdv]() {
-            updateVirtualViewAndSelectionDuringVAnim(clickScroll, clickHoldAdv);
-          });
-  connect(m_vScrollAnim, &QPropertyAnimation::finished, this,
-          [this]() { onVScrollAnimationFinished(); });
-
-  m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, true);
-  if (m_scrollManager != nullptr) {
-    m_scrollManager->refreshSelectionOverlayState();
-  }
-  m_vScrollAnim->start();
-}
-
-void InteractionManager::updateVirtualViewAndSelectionDuringVAnim(
-    bool clickScroll, bool clickHoldAdv) {
-  if (m_scrollManager != nullptr) {
-    m_scrollManager->updateVirtualView();
-    int idxDyn = property(PropertyKeys::SelectionSuppressed).toBool()
-                     ? property(PropertyKeys::PendingSelectionIndex).toInt()
-                     : m_selectedItemIndex;
-    if (idxDyn >= 0) {
-      m_scrollManager->updateSelectionForIndex(idxDyn);
-    }
-  }
-  if (clickScroll && !clickHoldAdv && !m_mouseHoldScrolling &&
-      qAbs(m_vScrollAnim->currentValue().toInt() -
-           m_vScrollAnim->endValue().toInt()) < 3) {
-    setProperty(PropertyKeys::ClickScroll, false);
+  if (m_animationManager) {
+    m_animationManager->configureAndStartVerticalAnimation(
+        vScrollBar, curY, targetY, duration, clickScroll, clickHoldAdv);
   }
 }
 
@@ -2419,9 +2357,6 @@ void InteractionManager::ensureHorizontallyVisible(int index) {
   initHorizontalAnimIfNeeded(hScrollBar);
 
   if (hold) {
-    if (m_hScrollAnim->state() == QAbstractAnimation::Running) {
-      m_hScrollAnim->stop();
-    }
     int startX = hScrollBar->value();
     animateHorizontalHold(hScrollBar, startX, targetX);
   } else {
@@ -2434,83 +2369,23 @@ void InteractionManager::ensureHorizontallyVisible(int index) {
 }
 
 void InteractionManager::initHorizontalAnimIfNeeded(QScrollBar *hScrollBar) {
-  if (m_hScrollAnim == nullptr) {
-    m_hScrollAnim = new QPropertyAnimation(hScrollBar, "value", this);
-    m_hScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
-    QObject::disconnect(m_hScrollAnim, nullptr, this, nullptr);
-    connect(m_hScrollAnim, &QPropertyAnimation::valueChanged, this, [this]() {
-      if (m_scrollManager != nullptr) {
-        m_scrollManager->updateVirtualView();
-      }
-    });
-    connect(m_hScrollAnim, &QPropertyAnimation::finished, this, [this]() {
-      if (m_gridContainer) {
-        m_gridContainer->setProperty(PropertyKeys::GlideAnimating, false);
-        if (m_scrollManager != nullptr) {
-          m_scrollManager->refreshSelectionOverlayState();
-        }
-      }
-      if (m_scrollManager != nullptr) {
-        m_scrollManager->updateVirtualView();
-      }
-    });
+  if (m_animationManager) {
+    m_animationManager->initHorizontalAnimIfNeeded(hScrollBar);
   }
 }
 
 void InteractionManager::animateHorizontalHold(QScrollBar *hScrollBar,
                                                int startX, int targetX) {
-  int distance = qAbs(targetX - startX);
-  constexpr double kPixelsPerSecond = 700.0;
-  constexpr double kMillisecondsPerSecond = 1000.0;
-  constexpr int kMinHoldDurationMs = 30;
-  int duration = static_cast<int>(
-      std::round((distance / kPixelsPerSecond) * kMillisecondsPerSecond));
-  duration = std::max(duration, kMinHoldDurationMs);
-
-  m_hScrollAnim->setEasingCurve(QEasingCurve::Linear);
-  m_hScrollAnim->setStartValue(startX);
-  m_hScrollAnim->setEndValue(targetX);
-  m_hScrollAnim->setDuration(duration);
-
-  if (m_gridContainer != nullptr) {
-    m_gridContainer->setProperty(PropertyKeys::GlideAnimating, true);
-    if (m_scrollManager != nullptr) {
-      m_scrollManager->refreshSelectionOverlayState();
-    }
+  if (m_animationManager) {
+    m_animationManager->animateHorizontalHold(hScrollBar, startX, targetX);
   }
-  if (m_itemScrollArea) {
-    m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, true);
-    if (m_scrollManager != nullptr) {
-      m_scrollManager->refreshSelectionOverlayState();
-    }
-  }
-  m_hScrollAnim->start();
-  QTimer::singleShot(0, this, [this]() {
-    if (m_itemScrollArea) {
-      m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, false);
-      if (m_scrollManager != nullptr) {
-        m_scrollManager->refreshSelectionOverlayState();
-      }
-    }
-  });
 }
 
-void InteractionManager::animateHorizontalSmooth(QScrollBar * /*hScrollBar*/,
+void InteractionManager::animateHorizontalSmooth(QScrollBar *hScrollBar,
                                                  int startX, int targetX) {
-  if (m_hScrollAnim->state() == QAbstractAnimation::Running) {
-    m_hScrollAnim->stop();
+  if (m_animationManager) {
+    m_animationManager->animateHorizontalSmooth(hScrollBar, startX, targetX);
   }
-  m_hScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
-  m_hScrollAnim->setStartValue(startX);
-  m_hScrollAnim->setEndValue(targetX);
-  m_hScrollAnim->setDuration(UIConstants::HSCROLL_ANIM_DURATION_MS);
-  if (m_gridContainer != nullptr) {
-    m_gridContainer->setProperty(PropertyKeys::GlideAnimating, true);
-    if (m_scrollManager != nullptr) {
-      m_scrollManager->refreshSelectionOverlayState();
-    }
-  }
-  m_hScrollAnim->start();
 }
 
 // Ensures the currently selected item stays visible without forcing vertical
@@ -2597,15 +2472,9 @@ void InteractionManager::ensureItemVisible(int index,
     return;
   }
 
-  // Duration is computed inside startEnsureVisibleVAnim; no local computation
-  // needed here.
-
-  if (m_vScrollAnim == nullptr) {
-    m_vScrollAnim = new QPropertyAnimation(vScrollBar, "value", this);
-    m_vScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
-  }
-  if (m_vScrollAnim->state() == QAbstractAnimation::Running) {
-    m_vScrollAnim->stop();
+  // Stop any running animation and update start position
+  if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
+    m_animationManager->verticalAnimation()->stop();
     startVal = vScrollBar->value();
   }
 
@@ -2677,37 +2546,21 @@ auto InteractionManager::shouldExitEnsureItemVisible(int index) const -> bool {
 void InteractionManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar,
                                                  int startVal, int endVal,
                                                  bool isRepeating) {
-  constexpr int kRepeatRecenterDurationMs = 140;
-  int duration =
-      isRepeating
-          ? kRepeatRecenterDurationMs
-          : computeVerticalCenterDuration(qAbs(endVal - startVal), false);
-
-  if (m_vScrollAnim == nullptr) {
-    m_vScrollAnim = new QPropertyAnimation(vScrollBar, "value", this);
-    m_vScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
-  }
-  if (m_vScrollAnim->state() == QAbstractAnimation::Running) {
-    m_vScrollAnim->stop();
+  if (!m_animationManager) {
+    return;
   }
 
-  m_vScrollAnim->setStartValue(startVal);
-  m_vScrollAnim->setEndValue(endVal);
-  m_vScrollAnim->setDuration(duration);
+  int itemHeight = 0;
+  int vSpacing = 0;
+  if ((m_collections != nullptr) && (m_currentCollectionIndex != nullptr) &&
+      *m_currentCollectionIndex >= 0 &&
+      *m_currentCollectionIndex < m_collections->size()) {
+    itemHeight = (*m_collections)[*m_currentCollectionIndex].itemHeight;
+    vSpacing = (*m_collections)[*m_currentCollectionIndex].verticalSpacing;
+  }
 
-  QObject::disconnect(m_vScrollAnim, nullptr, this, nullptr);
-  connect(m_vScrollAnim, &QPropertyAnimation::valueChanged, this, [this]() {
-    if (m_scrollManager) {
-      m_scrollManager->updateVirtualView();
-    }
-  });
-  connect(m_vScrollAnim, &QPropertyAnimation::finished, this, [this]() {
-    if (m_scrollManager) {
-      m_scrollManager->updateVirtualView();
-    }
-  });
-
-  m_vScrollAnim->start();
+  m_animationManager->startEnsureVisibleVAnim(
+      vScrollBar, startVal, endVal, itemHeight, vSpacing, isRepeating);
 }
 
 // Ensures vertical scrollbar policy matches collection settings after
@@ -3072,10 +2925,9 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
     }
   }
 
-  // Stop any running scroll animations (not delegated - uses local m_vScrollAnim)
-  if ((m_vScrollAnim != nullptr) &&
-      m_vScrollAnim->state() == QAbstractAnimation::Running) {
-    m_vScrollAnim->stop();
+  // Stop any running scroll animations
+  if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
+    m_animationManager->verticalAnimation()->stop();
   }
 
   applySelectionStateForIndex(targetIndex);
@@ -3563,9 +3415,8 @@ void InteractionManager::stopRepeat(bool suppressRecentering) {
     m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenterUntilMs, 0);
   }
 
-  if ((m_hScrollAnim != nullptr) &&
-      m_hScrollAnim->state() == QAbstractAnimation::Running) {
-    m_hScrollAnim->stop();
+  if (m_animationManager && m_animationManager->isHorizontalAnimRunning()) {
+    m_animationManager->horizontalAnimation()->stop();
   }
 
   if (property(PropertyKeys::SelectionSuppressed).toBool()) {
@@ -3579,8 +3430,7 @@ void InteractionManager::stopRepeat(bool suppressRecentering) {
 
   if (!m_physicalKeyDown) {
     m_continuousScrollActive =
-        ((m_vScrollAnim != nullptr) &&
-         m_vScrollAnim->state() == QAbstractAnimation::Running);
+        (m_animationManager && m_animationManager->isVerticalAnimRunning());
   }
 
   if (!QApplication::closingDown() && m_selectedItemIndex >= 0 &&
