@@ -216,11 +216,7 @@ private:
   void processSingleClickSelection(int visualIndex, const QString &filePath,
                                    bool applyScrollAreaSuppression);
 
-  // Extracted helpers to reduce complexity while preserving behavior
-  auto shouldTreatAsNewRowForClick(int targetIndex, int gridWidth) const
-      -> bool;
-  static bool shouldAnimateHorizontalHop(int fromIndex, int toIndex,
-                                         int gridWidth);
+  // Click selection helpers (computational methods moved to SelectionManager)
   void runHorizontalHopAnimation(int start, int target, qint64 nowMs);
   void handleNewRowClickSelection(int visualIndex, qint64 nowMs);
   void handleSameRowClickSelection(int visualIndex, bool skipCenter,

@@ -1909,6 +1909,9 @@ auto InteractionManager::handleSmallMovementEarlyReturn(
   }
   m_instantPositioning = false;
   m_lastSelectedRow = currentRow;
+  if (m_selectionManager) {
+    m_selectionManager->setLastSelectedRow(currentRow);
+  }
   return true;
 }
 
@@ -2021,6 +2024,9 @@ auto InteractionManager::handleImmediateCenterForEnsureVisible(int index)
     m_scrollManager->updateVirtualView();
   }
   m_lastSelectedRow = GridUtils::computeItemRow(index, gridWidth);
+  if (m_selectionManager) {
+    m_selectionManager->setLastSelectedRow(m_lastSelectedRow);
+  }
   m_forceImmediateCenter = false;
   m_deferredCenterPending = false;
   return true;
@@ -2167,6 +2173,9 @@ void InteractionManager::finalizeImmediateCenteringState(int index,
   }
   m_instantPositioning = false;
   m_lastSelectedRow = currentRow;
+  if (m_selectionManager) {
+    m_selectionManager->setLastSelectedRow(currentRow);
+  }
 }
 
 void InteractionManager::ensureVAnimCreated(QScrollBar *vScrollBar) {
@@ -2224,6 +2233,9 @@ void InteractionManager::onVScrollAnimationFinished() {
                    : m_selectedItemIndex;
   if (gridWidthLocal > 0 && idxDyn >= 0) {
     m_lastSelectedRow = idxDyn / gridWidthLocal;
+    if (m_selectionManager) {
+      m_selectionManager->setLastSelectedRow(m_lastSelectedRow);
+    }
   }
 }
 
@@ -2557,6 +2569,9 @@ void InteractionManager::ensureItemVisible(int index,
 
   startEnsureVisibleVAnim(vScrollBar, startVal, endVal, isRepeating);
   m_lastSelectedRow = GridUtils::computeItemRow(index, gridWidth);
+  if (m_selectionManager) {
+    m_selectionManager->setLastSelectedRow(m_lastSelectedRow);
+  }
 }
 
 auto InteractionManager::computeHorizontalTargetX(int itemX,
@@ -2582,6 +2597,9 @@ void InteractionManager::updateViewAndRowAfterVisibility(int index,
     m_scrollManager->updateVirtualView();
   }
   m_lastSelectedRow = GridUtils::computeItemRow(index, gridWidth);
+  if (m_selectionManager) {
+    m_selectionManager->setLastSelectedRow(m_lastSelectedRow);
+  }
 }
 
 auto InteractionManager::shouldExitEnsureItemVisible(int index) const -> bool {
@@ -2748,14 +2766,17 @@ void InteractionManager::processSingleClickSelection(
 
   const int fromIndex = m_selectedItemIndex;
   const bool canAnimateHoriz =
-      shouldAnimateHorizontalHop(fromIndex, visualIndex, gridWidth);
+      SelectionManager::shouldAnimateHorizontalHop(fromIndex, visualIndex, gridWidth);
 
   if (canAnimateHoriz) {
     runHorizontalHopAnimation(fromIndex, visualIndex, nowMs);
     return;
   }
 
-  if (shouldTreatAsNewRowForClick(visualIndex, gridWidth)) {
+  const bool treatAsNewRow = m_selectionManager
+      ? m_selectionManager->shouldTreatAsNewRow(visualIndex, gridWidth)
+      : false;
+  if (treatAsNewRow) {
     handleNewRowClickSelection(visualIndex, nowMs);
   } else {
     const bool skipCenter = (pendingValid && pendingIndex == visualIndex);
@@ -2766,30 +2787,6 @@ void InteractionManager::processSingleClickSelection(
   if (m_itemsPage != nullptr) {
     m_itemsPage->setFocus();
   }
-}
-
-auto InteractionManager::shouldTreatAsNewRowForClick(int targetIndex,
-                                                     int gridWidth) const
-    -> bool {
-  if (m_currentCollectionIndex == nullptr || m_collections == nullptr ||
-      gridWidth <= 0) {
-    return false;
-  }
-  if (*m_currentCollectionIndex < 0 ||
-      *m_currentCollectionIndex >= m_collections->size()) {
-    return false;
-  }
-  int targetRow = targetIndex / gridWidth;
-  return (m_lastSelectedRow < 0) || (targetRow != m_lastSelectedRow);
-}
-
-auto InteractionManager::shouldAnimateHorizontalHop(int fromIndex, int toIndex,
-                                                    int gridWidth) -> bool {
-  if (fromIndex < 0 || gridWidth <= 0) {
-    return false;
-  }
-  return (fromIndex / gridWidth) == (toIndex / gridWidth) &&
-         qAbs(toIndex - fromIndex) > 1;
 }
 
 void InteractionManager::runHorizontalHopAnimation(int start, int target,

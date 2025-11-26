@@ -108,6 +108,16 @@ public:
   // Check if selection matches restore target and finalize restore
   bool checkAndFinalizeRestore(int index);
 
+  // Click selection helpers
+  [[nodiscard]] bool shouldTreatAsNewRow(int targetIndex, int gridWidth) const;
+  [[nodiscard]] static bool shouldAnimateHorizontalHop(int fromIndex,
+                                                        int toIndex,
+                                                        int gridWidth);
+
+  // Row tracking for click detection
+  void setLastSelectedRow(int row) { m_lastSelectedRow = row; }
+  [[nodiscard]] int lastSelectedRow() const { return m_lastSelectedRow; }
+
 signals:
   void selectionChanged(int index);
   void selectionCleared();
@@ -125,6 +135,7 @@ private:
   MediaItemWidget *m_selectedMediaItem = nullptr;
   QString m_selectedFilePath;
   int m_selectedItemIndex = -1;
+  int m_lastSelectedRow = -1;
 
   // Selection restore state
   bool m_restoringSelection = false;

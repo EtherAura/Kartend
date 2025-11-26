@@ -237,3 +237,26 @@ void SelectionManager::cancelPendingSelectionRestore() {
     parent()->setProperty(PropertyKeys::SelectionRestorePending, false);
   }
 }
+
+bool SelectionManager::shouldTreatAsNewRow(int targetIndex,
+                                           int gridWidth) const {
+  if (m_currentCollectionIndex == nullptr || m_collections == nullptr ||
+      gridWidth <= 0) {
+    return false;
+  }
+  if (*m_currentCollectionIndex < 0 ||
+      *m_currentCollectionIndex >= m_collections->size()) {
+    return false;
+  }
+  int targetRow = targetIndex / gridWidth;
+  return (m_lastSelectedRow < 0) || (targetRow != m_lastSelectedRow);
+}
+
+bool SelectionManager::shouldAnimateHorizontalHop(int fromIndex, int toIndex,
+                                                  int gridWidth) {
+  if (fromIndex < 0 || gridWidth <= 0) {
+    return false;
+  }
+  return (fromIndex / gridWidth) == (toIndex / gridWidth) &&
+         qAbs(toIndex - fromIndex) > 1;
+}
