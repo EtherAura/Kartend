@@ -57,6 +57,7 @@ set(SOURCES
   ${SRC_DIR}/managers/keyboardmanager.cpp
   ${SRC_DIR}/managers/mousemanager.cpp
   ${SRC_DIR}/managers/launchmanager.cpp
+  ${SRC_DIR}/managers/viewportmanager.cpp
   ${SRC_DIR}/managers/interactionmanager.cpp
   ${SRC_DIR}/ui/dialogs/settingsdialog.cpp
   ${SRC_DIR}/ui/widgets/metadatasidebar.cpp
@@ -85,6 +86,7 @@ set(HEADERS
   ${SRC_DIR}/managers/keyboardmanager.h
   ${SRC_DIR}/managers/mousemanager.h
   ${SRC_DIR}/managers/launchmanager.h
+  ${SRC_DIR}/managers/viewportmanager.h
   ${SRC_DIR}/managers/interactionmanager.h
   ${SRC_DIR}/ui/uiconstants.h
   ${SRC_DIR}/ui/dialogs/settingsdialog.h

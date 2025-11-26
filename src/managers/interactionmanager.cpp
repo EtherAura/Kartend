@@ -33,6 +33,7 @@
 #include "sidebarmanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
+#include "viewportmanager.h"
 
 InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
   m_searchManager = std::make_unique<SearchManager>(this);
@@ -41,8 +42,9 @@ InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
   m_animationManager = std::make_unique<AnimationManager>(this);
   m_mouseManager = std::make_unique<MouseManager>(this);
   m_launchManager = std::make_unique<LaunchManager>(this);
+  m_viewportManager = std::make_unique<ViewportManager>(this);
 
-  m_continuousScrollActive = true;
+  m_viewportManager->setContinuousScrollActive(true);
 }
 
 // Destructor: stop timers/animations and clear selection
@@ -242,9 +244,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
                 }
               }
             });
-    connect(m_animationManager.get(),
-            &AnimationManager::verticalAnimationFinished, this,
-            &InteractionManager::onVScrollAnimationFinished);
+    // Note: verticalAnimationFinished is connected in ViewportManager
     connect(m_animationManager.get(),
             &AnimationManager::horizontalAnimationFinished, this, [this]() {
               if (m_gridContainer) {
@@ -274,9 +274,11 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     connect(m_mouseManager.get(), &MouseManager::holdScrollingStarted, this,
             [this](bool isHorizontal) {
               Q_UNUSED(isHorizontal);
-              m_continuousScrollActive = true;
-              m_repeating = true;
-              m_physicalKeyDown = true;
+              if (m_viewportManager) {
+                m_viewportManager->setContinuousScrollActive(true);
+                m_viewportManager->setRepeating(true);
+                m_viewportManager->setPhysicalKeyDown(true);
+              }
               m_allowArtworkDuringSelection = true;
             });
     connect(m_mouseManager.get(), &MouseManager::holdScrollingStopped, this,
@@ -292,16 +294,21 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
               }
 
               // Reset scroll state flags if not in keyboard repeat
-              if (!m_repeating) {
-                m_continuousScrollActive = false;
-                m_physicalKeyDown = false;
+              bool repeating = m_viewportManager ? m_viewportManager->isRepeating() : false;
+              if (!repeating) {
+                if (m_viewportManager) {
+                  m_viewportManager->setContinuousScrollActive(false);
+                  m_viewportManager->setPhysicalKeyDown(false);
+                }
                 m_allowArtworkDuringSelection = true;
                 if (m_itemScrollArea) {
                   m_itemScrollArea->setProperty(PropertyKeys::SuppressArtwork, false);
                   m_itemScrollArea->setProperty(PropertyKeys::AllowArtworkDuringSelection, true);
                 }
               }
-              m_wrapSequenceActive = false;
+              if (m_viewportManager) {
+                m_viewportManager->setWrapSequenceActive(false);
+              }
             });
     connect(m_mouseManager.get(), &MouseManager::requestSelectionUpdate, this,
             [this](int index) {
@@ -341,6 +348,31 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     LaunchManagerSetup launchSetup;
     launchSetup.collections = setup.collections;
     m_launchManager->setupReferences(launchSetup);
+  }
+
+  // Setup ViewportManager with its dependencies
+  if (m_viewportManager) {
+    ViewportManagerSetup viewportSetup;
+    viewportSetup.itemScrollArea = setup.itemScrollArea;
+    viewportSetup.scrollManager = setup.scrollManager;
+    viewportSetup.selectionManager = m_selectionManager.get();
+    viewportSetup.animationManager = m_animationManager.get();
+    viewportSetup.artworkManager = setup.artworkManager;
+    viewportSetup.mainWindow = setup.mainWindow;
+    viewportSetup.collections = setup.collections;
+    viewportSetup.currentCollectionIndex = setup.currentCollectionIndex;
+    m_viewportManager->setupReferences(viewportSetup);
+
+    // Connect ViewportManager signals
+    connect(m_viewportManager.get(), &ViewportManager::requestSelectionUpdate,
+            this, [this](int idxDyn) {
+              if (m_scrollManager != nullptr) {
+                int idx = (idxDyn >= 0) ? idxDyn : m_selectedItemIndex;
+                if (idx >= 0) {
+                  m_scrollManager->updateSelectionForIndex(idx);
+                }
+              }
+            });
   }
 
   updateSearchModeButton();
@@ -405,7 +437,9 @@ void InteractionManager::handleArrowKeyNavigation(int direction, bool vertical) 
   const bool wrapEnabled = (m_mainWindow != nullptr)
                                ? m_mainWindow->m_generalSettings.wrapNavigation
                                : false;
-  m_isWrappingNavigation = false;
+  if (m_viewportManager) {
+    m_viewportManager->setIsWrappingNavigation(false);
+  }
   if (m_keyboardManager) {
     m_keyboardManager->setWrapSequenceActive(false);
   }
@@ -415,7 +449,9 @@ void InteractionManager::handleArrowKeyNavigation(int direction, bool vertical) 
       KeyboardManager::calculateNewSelection(totalItems, currentSelection, direction,
                             wrapEnabled, vertical, gridWidth, didWrap);
   if (didWrap) {
-    m_isWrappingNavigation = true;
+    if (m_viewportManager) {
+      m_viewportManager->setIsWrappingNavigation(true);
+    }
     if (m_keyboardManager) {
       m_keyboardManager->setWrapSequenceActive(true);
     }
@@ -424,9 +460,10 @@ void InteractionManager::handleArrowKeyNavigation(int direction, bool vertical) 
   const bool isNewRow =
       SelectionManager::isNewRow(currentSelection, newSelection, gridWidth);
 
-  const bool forceImmediate = offscreenBefore || m_isWrappingNavigation;
-  if (forceImmediate) {
-    applyImmediateCenterSuppression();
+  const bool isWrapping = m_viewportManager ? m_viewportManager->isWrappingNavigation() : false;
+  const bool forceImmediate = offscreenBefore || isWrapping;
+  if (forceImmediate && m_viewportManager) {
+    m_viewportManager->applyImmediateCenterSuppression();
   }
 
   if (!vertical && !isNewRow && m_itemScrollArea != nullptr) {
@@ -503,7 +540,9 @@ void InteractionManager::onKeyboardRepeatStep() {
   }
 
   if (didWrap || m_keyboardManager->isWrapSequenceActive()) {
-    m_forceImmediateCenter = true;
+    if (m_viewportManager) {
+      m_viewportManager->setForceImmediateCenter(true);
+    }
     m_keyboardManager->setWrapSequenceActive(true);
     m_keyboardManager->setContinuousScrollActive(false);
   } else {
@@ -554,8 +593,10 @@ void InteractionManager::onKeyboardStopRepeat(bool suppressRecentering) {
   }
 
   if (m_keyboardManager && !m_keyboardManager->isPhysicalKeyDown()) {
-    m_continuousScrollActive =
-        (m_animationManager && m_animationManager->isVerticalAnimRunning());
+    bool animRunning = (m_animationManager && m_animationManager->isVerticalAnimRunning());
+    if (m_viewportManager) {
+      m_viewportManager->setContinuousScrollActive(animRunning);
+    }
   }
 
   if (!QApplication::closingDown() && m_selectedItemIndex >= 0 &&
@@ -564,7 +605,7 @@ void InteractionManager::onKeyboardStopRepeat(bool suppressRecentering) {
         UIConstants::STOP_REPEAT_RECENTER_DELAY_MS, this, [this]() {
           bool stillActive = m_keyboardManager
                                  ? m_keyboardManager->isContinuousScrollActive()
-                                 : m_continuousScrollActive;
+                                 : (m_viewportManager ? m_viewportManager->continuousScrollActive() : false);
           if (!QApplication::closingDown() && m_selectedItemIndex >= 0 &&
               !stillActive) {
             centerItemVertically(m_selectedItemIndex, false);
@@ -978,9 +1019,15 @@ auto InteractionManager::handleMouseButtonPress(QObject *obj, QEvent *event)
   if ((obj != nullptr && qobject_cast<QScrollBar *>(obj) != nullptr) ||
       qobject_cast<QScrollBar *>(obj != nullptr ? obj->parent() : nullptr) !=
           nullptr) {
-    m_continuousScrollActive = true;
+    if (m_viewportManager) {
+      m_viewportManager->setContinuousScrollActive(true);
+    }
     QTimer::singleShot(UIConstants::CONTINUOUS_SCROLL_IDLE_MS, this,
-                       [this]() { m_continuousScrollActive = false; });
+                       [this]() {
+                         if (m_viewportManager) {
+                           m_viewportManager->setContinuousScrollActive(false);
+                         }
+                       });
     stopRepeat(true);
     return QObject::eventFilter(obj, event);
   }
@@ -1058,7 +1105,9 @@ auto InteractionManager::handleWheelEvent(QObject *obj, QEvent *event) -> bool {
     if (m_mouseManager) {
       m_mouseManager->setWheelScrolling(false);
     }
-    m_continuousScrollActive = false;
+    if (m_viewportManager) {
+      m_viewportManager->setContinuousScrollActive(false);
+    }
     if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
       m_animationManager->verticalAnimation()->stop();
     }
@@ -1080,7 +1129,9 @@ auto InteractionManager::handleWheelEvent(QObject *obj, QEvent *event) -> bool {
   if (m_mouseManager) {
     m_mouseManager->setWheelScrolling(true);
   }
-  m_continuousScrollActive = true;
+  if (m_viewportManager) {
+    m_viewportManager->setContinuousScrollActive(true);
+  }
 
   if (m_itemScrollArea) {
     m_itemScrollArea->setProperty(PropertyKeys::UserScrollActive, true);
@@ -1096,7 +1147,9 @@ auto InteractionManager::handleWheelEvent(QObject *obj, QEvent *event) -> bool {
           if (m_mouseManager) {
             m_mouseManager->setWheelScrolling(false);
           }
-          m_continuousScrollActive = false;
+          if (m_viewportManager) {
+            m_viewportManager->setContinuousScrollActive(false);
+          }
           if (m_itemScrollArea) {
             m_itemScrollArea->setProperty(PropertyKeys::UserScrollActive, false);
             m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, false);
@@ -1165,9 +1218,11 @@ auto InteractionManager::applyWheelSelectionDelta(int wheelSteps) -> bool {
 
     wrapTriggered = wrapTriggered || didWrap;
     if (didWrap) {
-      m_wrapSequenceActive = true;
-      m_forceImmediateCenter = true;
-      m_continuousScrollActive = false;
+      if (m_viewportManager) {
+        m_viewportManager->setWrapSequenceActive(true);
+        m_viewportManager->setForceImmediateCenter(true);
+        m_viewportManager->setContinuousScrollActive(false);
+      }
     }
     const bool isNewRow =
         SelectionManager::isNewRow(currentSelection, newSelection, gridWidth);
@@ -1179,8 +1234,10 @@ auto InteractionManager::applyWheelSelectionDelta(int wheelSteps) -> bool {
   }
 
   if (wrapTriggered) {
-    m_wrapSequenceActive = true;
-    m_forceImmediateCenter = true;
+    if (m_viewportManager) {
+      m_viewportManager->setWrapSequenceActive(true);
+      m_viewportManager->setForceImmediateCenter(true);
+    }
   }
 
   return wrapTriggered;
@@ -1335,86 +1392,6 @@ auto InteractionManager::handleMousePress(QObject *obj, QEvent *event) -> bool {
   return true;
 }
 
-// Instantly positions scrollbars around the target index and marks programmatic
-// scroll using PropertyKeys
-// Instantly positions scrollbars around the target index and marks programmatic
-// scroll using PropertyKeys
-void InteractionManager::applyImmediateViewportPositioningForSelection(
-    int targetIndex) {
-  if (!m_itemScrollArea || (m_collections == nullptr) ||
-      (m_currentCollectionIndex == nullptr)) {
-    return;
-  }
-  if (*m_currentCollectionIndex < 0 ||
-      *m_currentCollectionIndex >= m_collections->size()) {
-    return;
-  }
-  if (targetIndex < 0) {
-    return;
-  }
-
-  QScrollBar *verticalScrollBar = m_itemScrollArea->verticalScrollBar();
-  QScrollBar *horizontalScrollBar = m_itemScrollArea->horizontalScrollBar();
-
-  if ((verticalScrollBar != nullptr) && *m_currentCollectionIndex >= 0 &&
-      *m_currentCollectionIndex < m_collections->size()) {
-    const CollectionConfig &collection =
-        (*m_collections)[*m_currentCollectionIndex];
-    if (collection.gridWidth > 0) {
-      int row = targetIndex / collection.gridWidth;
-      int col = targetIndex % collection.gridWidth;
-
-      int viewportH = m_itemScrollArea->viewport()->height();
-      int viewportW = m_itemScrollArea->viewport()->width();
-
-      if (viewportH > 0) {
-        int itemY =
-            UIConstants::GRID_MARGINS +
-            (row * (collection.itemHeight + collection.verticalSpacing));
-        int targetY = itemY + (collection.itemHeight / 2) - (viewportH / 2);
-        targetY = qBound(0, targetY, qMax(0, targetY));
-        AnimationManager::stopArrowKeyAnimationIfRunning(verticalScrollBar);
-        m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, true);
-        if (m_scrollManager != nullptr) {
-          m_scrollManager->refreshSelectionOverlayState();
-        }
-        verticalScrollBar->setValue(targetY);
-        QTimer::singleShot(0, this, [this]() {
-          if (m_itemScrollArea) {
-            m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll,
-                                          false);
-            if (m_scrollManager != nullptr) {
-              m_scrollManager->refreshSelectionOverlayState();
-            }
-          }
-        });
-      }
-
-      if (viewportW > 0 && (horizontalScrollBar != nullptr)) {
-        int itemX =
-            UIConstants::GRID_MARGINS +
-            (col * (collection.itemWidth + collection.horizontalSpacing));
-        int targetX = itemX + (collection.itemWidth / 2) - (viewportW / 2);
-        targetX = qBound(0, targetX, qMax(0, targetX));
-        horizontalScrollBar->setValue(targetX);
-      }
-    }
-  }
-}
-
-// Applies immediate centering suppression when offscreen or wrapping
-void InteractionManager::applyImmediateCenterSuppression() {
-  m_forceImmediateCenter = true;
-  if (m_itemScrollArea != nullptr) {
-    m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenter, true);
-    m_itemScrollArea->setProperty(PropertyKeys::UserScrollActive, false);
-    const qint64 until = QDateTime::currentMSecsSinceEpoch() +
-                         UIConstants::ARROW_KEY_ANIMATION_SETTLE_MS;
-    m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenterUntilMs,
-                                  until);
-  }
-}
-
 // Updates selection state and notifies dependent managers
 void InteractionManager::updateSelectionForKeyMove(int newSelection) {
   m_allowArtworkDuringSelection = true;
@@ -1560,7 +1537,10 @@ auto InteractionManager::forceImmediateCenter() const -> bool {
   if (m_selectionManager) {
     return m_selectionManager->forceImmediateCenter();
   }
-  return m_forceImmediateCenter;
+  if (m_viewportManager) {
+    return m_viewportManager->forceImmediateCenter();
+  }
+  return false;
 }
 
 // Returns the active grid width; prefers ScrollManager's current context to
@@ -1714,442 +1694,38 @@ void InteractionManager::updateSelectionStateAfterMove(int newSelection) {
 }
 
 void InteractionManager::centerItemVertically(int index, bool immediate) {
-  if (!m_itemScrollArea || (m_collections == nullptr) ||
-      (m_currentCollectionIndex == nullptr)) {
-    return;
-  }
-  if (*m_currentCollectionIndex < 0 ||
-      *m_currentCollectionIndex >= m_collections->size()) {
-    return;
-  }
-  if (index < 0) {
-    return;
-  }
-  if (shouldDeferCenterNow(immediate, index)) {
-    return;
-  }
-
-  const CollectionConfig &collection =
-      (*m_collections)[*m_currentCollectionIndex];
-  int gridWidth = collection.gridWidth;
-  if (gridWidth <= 0) {
-    return;
-  }
-
-  QScrollBar *verticalScrollBar = m_itemScrollArea->verticalScrollBar();
-  if (verticalScrollBar == nullptr) {
-    return;
-  }
-  int viewportHeight = m_itemScrollArea->viewport()->height();
-  if (viewportHeight <= 0) {
-    return;
-  }
-
-  bool clickScroll = property(PropertyKeys::ClickScroll).toBool();
-  bool clickHoldAdv = property(PropertyKeys::ClickHoldAdvancing).toBool();
-  bool forceClickAnim = property(PropertyKeys::ClickForceAnim).toBool();
-
-  int targetY = AnimationManager::computeTargetYForIndex(
-      index, gridWidth, collection.itemHeight, collection.verticalSpacing,
-      viewportHeight, verticalScrollBar->maximum());
-
-  bool forceImmediate = computeForceImmediate(immediate);
-  if (shouldEarlyReturnUserScroll(forceImmediate)) {
-    return;
-  }
-
-  int targetYUnboundedLocal =
-      GridUtils::computeItemY(index, gridWidth, collection.itemHeight,
-                              collection.verticalSpacing,
-                              UIConstants::GRID_MARGINS) +
-      (collection.itemHeight / 2) - (viewportHeight / 2);
-  if (handlePendingInitialCenterIfNeeded(verticalScrollBar, index,
-                                         targetYUnboundedLocal, immediate)) {
-    return;
-  }
-
-  int curY = verticalScrollBar->value();
-  int distance = qAbs(targetY - curY);
-
-  int currentRow = (gridWidth > 0 ? index / gridWidth : -1);
-  int smallThreshold = computeSmallThreshold(currentRow);
-
-  bool useSmooth = forceClickAnim ||
-                   (m_continuousScrollActive && !m_instantPositioning &&
-                    !m_wrapSequenceActive) ||
-                   property(PropertyKeys::ClickContinuous).toBool() ||
-                   property(PropertyKeys::KeyContinuous).toBool();
-
-  if (!forceImmediate && distance <= smallThreshold) {
-    if (handleSmallMovementEarlyReturn(distance, clickScroll, index,
-                                       currentRow)) {
-      return;
-    }
-  }
-
-  if (maybeHandleImmediateCenter(distance <= 1, useSmooth, forceImmediate,
-                                 forceClickAnim, verticalScrollBar, targetY,
-                                 index, currentRow)) {
-    return;
-  }
-
-  if (m_animationManager) {
-    m_animationManager->ensureVAnimCreated(verticalScrollBar);
-
-    if (m_animationManager->handleExistingVerticalAnimIfRunning(
-            verticalScrollBar, targetY, clickScroll, clickHoldAdv, curY,
-            distance)) {
-      return;
-    }
-  }
-
-  int duration = computeVerticalCenterDuration(distance, m_repeating);
-
-  if (forceClickAnim && distance <= 1) {
-    adjustForForceClickZeroDistance(verticalScrollBar, targetY, curY, distance,
-                                    duration, forceClickAnim);
-  }
-
-  if (m_animationManager) {
-    m_animationManager->configureAndStartVerticalAnimation(
-        verticalScrollBar, curY, targetY, duration, clickScroll, clickHoldAdv);
+  if (m_viewportManager) {
+    m_viewportManager->centerItemVertically(index, immediate);
   }
 }
 
-auto InteractionManager::computeForceImmediate(bool immediate) const -> bool {
-  return immediate || m_forceImmediateCenter || m_isWrappingNavigation ||
-         m_restoringSelection || m_instantPositioning || m_wrapSequenceActive;
+int InteractionManager::computeVerticalCenterDuration(int distance,
+                                                       bool repeatActive) const {
+  int itemHeight = 0;
+  int vSpacing = 0;
+  if ((m_collections != nullptr) && (m_currentCollectionIndex != nullptr) &&
+      *m_currentCollectionIndex >= 0 &&
+      *m_currentCollectionIndex < m_collections->size()) {
+    itemHeight = (*m_collections)[*m_currentCollectionIndex].itemHeight;
+    vSpacing = (*m_collections)[*m_currentCollectionIndex].verticalSpacing;
+  }
+  return AnimationManager::computeVerticalCenterDuration(distance, itemHeight,
+                                                         vSpacing, repeatActive);
 }
 
-auto InteractionManager::computeSmallThreshold(int currentRow) const -> int {
-  constexpr int kSmallThresholdSameRow = 8;
-  constexpr int kSmallThresholdOtherRow = 2;
-  return (m_lastSelectedRow >= 0 && m_lastSelectedRow == currentRow)
-             ? kSmallThresholdSameRow
-             : kSmallThresholdOtherRow;
-}
-
-auto InteractionManager::handleSmallMovementEarlyReturn(
-    int /*distance*/, bool clickScroll, int index, int currentRow) -> bool {
-  if (m_scrollManager != nullptr) {
-    m_scrollManager->updateVirtualView();
-    int idxDyn = property(PropertyKeys::SelectionSuppressed).toBool()
-                     ? property(PropertyKeys::PendingSelectionIndex).toInt()
-                     : index;
-    if (idxDyn >= 0) {
-      m_scrollManager->updateSelectionForIndex(idxDyn);
-    }
-  }
-  if (clickScroll) {
-    setProperty(PropertyKeys::ClickScroll, false);
-  }
-  if (m_itemScrollArea) {
-    m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenter, false);
-  }
-  m_instantPositioning = false;
-  m_lastSelectedRow = currentRow;
-  if (m_selectionManager) {
-    m_selectionManager->setLastSelectedRow(currentRow);
-  }
-  return true;
-}
-
-auto InteractionManager::shouldDeferCenterNow(bool immediate, int index) const
-    -> bool {
-  if (immediate) {
-    return false;
-  }
-  if (!property(PropertyKeys::DeferCenterOnClick).toBool()) {
-    return false;
-  }
-  int defIdx = property(PropertyKeys::DeferredCenterIndex).toInt();
-  return (defIdx < 0 || defIdx == index);
-}
-
-auto InteractionManager::shouldEarlyReturnUserScroll(bool forceImmediate) const
-    -> bool {
-  return m_itemScrollArea->property(PropertyKeys::UserScrollActive).toBool() &&
-         !forceImmediate;
-}
-
-auto InteractionManager::handlePendingInitialCenterIfNeeded(
-    QScrollBar *verticalScrollBar, int index, int targetYUnbounded,
-    bool immediate) -> bool {
-  Q_UNUSED(targetYUnbounded);
-  if (verticalScrollBar->maximum() == 0 && !immediate) {
-    if (!property(PropertyKeys::PendingInitialCenter).toBool()) {
-      setProperty(PropertyKeys::PendingInitialCenter, true);
-      QTimer::singleShot(
-          UIConstants::INITIAL_CENTER_SCROLL_DELAY_MS, this, [this, index]() {
-            setProperty(PropertyKeys::PendingInitialCenter, false);
-            if (!QApplication::closingDown()) {
-              centerItemVertically(index, false);
-            }
-          });
-    }
-    return true;
-  }
-  return false;
-}
-
-void InteractionManager::adjustForForceClickZeroDistance(
-    QScrollBar *verticalScrollBar, int targetY, int &curY, int &distance,
-    int &duration, bool /*forceClickAnim*/) {
-  if (targetY == curY) {
-    int adjust = (targetY > 0 ? -1 : 1);
-    m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, true);
-    if (m_scrollManager != nullptr) {
-      m_scrollManager->refreshSelectionOverlayState();
-    }
-    int startVal = qBound(0, targetY + adjust, verticalScrollBar->maximum());
-    verticalScrollBar->setValue(startVal);
-    QTimer::singleShot(0, this, [this]() {
-      if (m_itemScrollArea) {
-        m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, false);
-        if (m_scrollManager != nullptr) {
-          m_scrollManager->refreshSelectionOverlayState();
-        }
-      }
-    });
-    curY = startVal;
-    distance = qAbs(targetY - curY);
-    duration = computeVerticalCenterDuration(distance, m_repeating);
+void InteractionManager::ensureHorizontallyVisible(int index) {
+  if (m_viewportManager) {
+    m_viewportManager->ensureHorizontallyVisible(index);
   }
 }
 
-auto InteractionManager::handleImmediateCenterForEnsureVisible(int index)
-    -> bool {
-  if (!m_forceImmediateCenter) {
-    return false;
-  }
-  if (!m_itemScrollArea || (m_collections == nullptr) ||
-      (m_currentCollectionIndex == nullptr)) {
-    return false;
-  }
-  if (*m_currentCollectionIndex < 0 ||
-      *m_currentCollectionIndex >= m_collections->size()) {
-    return false;
-  }
-  const CollectionConfig &collection =
-      (*m_collections)[*m_currentCollectionIndex];
-  QScrollBar *vScrollBar = m_itemScrollArea->verticalScrollBar();
-  QScrollBar *hScrollBar = m_itemScrollArea->horizontalScrollBar();
-  if ((vScrollBar == nullptr) || (hScrollBar == nullptr)) {
-    return false;
-  }
-  QRect viewport = m_itemScrollArea->viewport()->rect();
-  int viewportWidth = viewport.width();
-  int viewportHeight = viewport.height();
-  int gridWidth = collection.gridWidth;
-  if (gridWidth <= 0 || viewportHeight <= 0) {
-    return false;
-  }
-  int hSpacing = (m_scrollManager != nullptr)
-                     ? m_scrollManager->getEffectiveHorizontalSpacing()
-                     : collection.horizontalSpacing;
-  int margins = UIConstants::GRID_MARGINS;
-  int itemX = GridUtils::computeItemX(index, gridWidth, collection.itemWidth,
-                                      hSpacing, margins);
-  int itemY = GridUtils::computeItemY(index, gridWidth, collection.itemHeight,
-                                      collection.verticalSpacing, margins);
-
-  int targetY = GridUtils::computeCenterTarget(
-      itemY, collection.itemHeight, viewportHeight, vScrollBar->maximum());
-  int targetX = GridUtils::computeCenterTarget(
-      itemX, collection.itemWidth, viewportWidth, hScrollBar->maximum());
-  vScrollBar->setValue(targetY);
-  hScrollBar->setValue(targetX);
-  if (m_scrollManager != nullptr) {
-    m_scrollManager->updateVirtualView();
-  }
-  m_lastSelectedRow = GridUtils::computeItemRow(index, gridWidth);
-  if (m_selectionManager) {
-    m_selectionManager->setLastSelectedRow(m_lastSelectedRow);
-  }
-  m_forceImmediateCenter = false;
-  m_deferredCenterPending = false;
-  return true;
-}
-
-auto InteractionManager::maybeHandleImmediateCenter(
-    bool distanceSmall, bool useSmooth, bool forceImmediate,
-    bool forceClickAnim, QScrollBar *verticalScrollBar, int targetY, int index,
-    int currentRow) -> bool {
-  if (((distanceSmall && !useSmooth) || forceImmediate) && !forceClickAnim) {
-    if (handleImmediateCenterPath(verticalScrollBar, targetY, index,
-                                  currentRow)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-auto InteractionManager::handleImmediateCenterPath(
-    QScrollBar *verticalScrollBar, int targetY, int index, int currentRow)
-    -> bool {
-  if (m_animationManager) {
-    m_animationManager->stopActiveVerticalAnims(verticalScrollBar);
-  }
-  setProgrammaticScrollGuarded(true);
-  setScrollValueAndUpdateSelection(verticalScrollBar, targetY, index);
-  setProgrammaticScrollGuarded(false);
-  finalizeImmediateCenteringState(index, currentRow);
-  clearArtworkSuppressionViewportUpdateIfNeeded();
-  clearArrowCenterSuppressionWhenDue();
-  return true;
-}
-
-void InteractionManager::setProgrammaticScrollGuarded(bool enable) {
-  if (!m_itemScrollArea) {
-    return;
-  }
-  if (enable) {
-    m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, true);
-    if (m_scrollManager != nullptr) {
-      m_scrollManager->refreshSelectionOverlayState();
-    }
-  } else {
-    QPointer<QScrollArea> scrollAreaPtr = m_itemScrollArea;
-    QTimer::singleShot(0, this, [this, scrollAreaPtr]() {
-      if (scrollAreaPtr) {
-        scrollAreaPtr->setProperty(PropertyKeys::ProgrammaticScroll, false);
-        if (m_scrollManager != nullptr) {
-          m_scrollManager->refreshSelectionOverlayState();
-        }
-      }
-    });
+void InteractionManager::ensureItemVisible(int index,
+                                           bool allowHorizontalScroll) {
+  if (m_viewportManager) {
+    m_viewportManager->ensureItemVisible(index, allowHorizontalScroll);
   }
 }
 
-void InteractionManager::setScrollValueAndUpdateSelection(
-    QScrollBar *verticalScrollBar, int targetY, int index) {
-  verticalScrollBar->setValue(targetY);
-  if (m_scrollManager != nullptr) {
-    m_scrollManager->updateVirtualView();
-    int idxDyn = property(PropertyKeys::SelectionSuppressed).toBool()
-                     ? property(PropertyKeys::PendingSelectionIndex).toInt()
-                     : index;
-    if (idxDyn >= 0) {
-      m_scrollManager->updateSelectionForIndex(idxDyn);
-    }
-  }
-}
-
-void InteractionManager::clearArtworkSuppressionViewportUpdateIfNeeded() {
-  if (m_itemScrollArea &&
-      m_itemScrollArea->property(PropertyKeys::SuppressArtwork).toBool() &&
-      !m_repeating) {
-    m_itemScrollArea->setProperty(PropertyKeys::SuppressArtwork, false);
-    m_itemScrollArea->setProperty(PropertyKeys::AllowArtworkDuringSelection,
-                                  true);
-    QTimer::singleShot(UIConstants::SHORT_TIMER_DELAY, this, [this]() {
-      if (!QApplication::closingDown() && m_artworkManager) {
-        m_artworkManager->updateViewportArtwork();
-      }
-    });
-  }
-}
-
-void InteractionManager::clearArrowCenterSuppressionWhenDue() {
-  if (!m_itemScrollArea) {
-    return;
-  }
-  qint64 until =
-      m_itemScrollArea->property(PropertyKeys::SuppressArrowCenterUntilMs)
-          .toLongLong();
-  qint64 now = QDateTime::currentMSecsSinceEpoch();
-  if (until > now) {
-    qint64 delay = until - now;
-    QPointer<QScrollArea> scrollAreaPtr = m_itemScrollArea;
-    constexpr qint64 kMaxArrowCenterSuppressClearMs = 1000;
-    QTimer::singleShot(
-        static_cast<int>(qMin<qint64>(delay, kMaxArrowCenterSuppressClearMs)),
-        this, [scrollAreaPtr]() {
-          if (scrollAreaPtr) {
-            scrollAreaPtr->setProperty(PropertyKeys::SuppressArrowCenter,
-                                       false);
-          }
-        });
-  } else {
-    m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenter, false);
-  }
-}
-
-void InteractionManager::finalizeImmediateCenteringState(int index,
-                                                         int currentRow) {
-  if (m_restoringSelection && index == m_targetRestoreIndex) {
-    m_restoringSelection = false;
-    m_targetRestoreIndex = -1;
-  }
-  m_isWrappingNavigation = false;
-  m_forceImmediateCenter = false;
-  if (m_wrapSequenceActive) {
-    m_wrapSequenceActive = false;
-    m_continuousScrollActive = true;
-  }
-  if (property(PropertyKeys::ClickScroll).toBool()) {
-    setProperty(PropertyKeys::ClickScroll, false);
-  }
-  if (!m_repeating && !m_physicalKeyDown &&
-      !property(PropertyKeys::ClickContinuous).toBool() &&
-      !property(PropertyKeys::KeyContinuous).toBool()) {
-    m_continuousScrollActive = false;
-  }
-  m_instantPositioning = false;
-  m_lastSelectedRow = currentRow;
-  if (m_selectionManager) {
-    m_selectionManager->setLastSelectedRow(currentRow);
-  }
-}
-
-void InteractionManager::onVScrollAnimationFinished() {
-  setProperty(PropertyKeys::ClickForceAnim, false);
-  if (m_scrollManager != nullptr) {
-    m_scrollManager->updateVirtualView();
-    int idxDyn = property(PropertyKeys::SelectionSuppressed).toBool()
-                     ? property(PropertyKeys::PendingSelectionIndex).toInt()
-                     : m_selectedItemIndex;
-    if (idxDyn >= 0) {
-      m_scrollManager->updateSelectionForIndex(idxDyn);
-    }
-  }
-  if (!m_repeating && !m_physicalKeyDown &&
-      !property(PropertyKeys::ClickContinuous).toBool() &&
-      !property(PropertyKeys::KeyContinuous).toBool()) {
-    m_continuousScrollActive = false;
-  }
-  if (m_itemScrollArea) {
-    m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, false);
-    if (m_scrollManager != nullptr) {
-      m_scrollManager->refreshSelectionOverlayState();
-    }
-  }
-  if (m_itemScrollArea && !m_repeating && !m_physicalKeyDown) {
-    m_itemScrollArea->setProperty(PropertyKeys::SuppressArtwork, false);
-    m_itemScrollArea->setProperty(PropertyKeys::AllowArtworkDuringSelection,
-                                  true);
-    QTimer::singleShot(UIConstants::SHORT_TIMER_DELAY, this, [this]() {
-      if (!QApplication::closingDown() && m_artworkManager) {
-        m_artworkManager->updateViewportArtwork();
-      }
-    });
-  }
-  setProperty(PropertyKeys::ClickScroll, false);
-  m_instantPositioning = false;
-  int gridWidthLocal = getCurrentGridWidth();
-  int idxDyn = property(PropertyKeys::SelectionSuppressed).toBool()
-                   ? property(PropertyKeys::PendingSelectionIndex).toInt()
-                   : m_selectedItemIndex;
-  if (gridWidthLocal > 0 && idxDyn >= 0) {
-    m_lastSelectedRow = idxDyn / gridWidthLocal;
-    if (m_selectionManager) {
-      m_selectionManager->setLastSelectedRow(m_lastSelectedRow);
-    }
-  }
-}
-
-// Selects an item by index, updates visuals, persists selection even when
-// suppressed, and optionally centers
 void InteractionManager::selectItemByIndex(int index,
                                            bool allowHorizontalScroll) {
   Q_UNUSED(allowHorizontalScroll);
@@ -2296,241 +1872,6 @@ void InteractionManager::handleWidgetClicked(MediaItemWidget *widget,
   processSingleClickSelection(visualIndex, filePath, true);
 }
 
-// Ensures the selected item is horizontally visible, adapting behavior for hold
-// scrolling
-void InteractionManager::ensureHorizontallyVisible(int index) {
-  if (!m_itemScrollArea || (m_collections == nullptr) ||
-      (m_currentCollectionIndex == nullptr)) {
-    return;
-  }
-  if (*m_currentCollectionIndex < 0 ||
-      *m_currentCollectionIndex >= m_collections->size()) {
-    return;
-  }
-  if (index < 0) {
-    return;
-  }
-
-  const CollectionConfig &collection =
-      (*m_collections)[*m_currentCollectionIndex];
-  int gridWidth = collection.gridWidth;
-  if (gridWidth <= 0) {
-    return;
-  }
-
-  QScrollBar *hScrollBar = m_itemScrollArea->horizontalScrollBar();
-  if (hScrollBar == nullptr) {
-    return;
-  }
-
-  int hSpacing = (m_scrollManager != nullptr)
-                     ? m_scrollManager->getEffectiveHorizontalSpacing()
-                     : collection.horizontalSpacing;
-  int margins = UIConstants::GRID_MARGINS;
-  int itemX = GridUtils::computeItemX(index, gridWidth, collection.itemWidth,
-                                      hSpacing, margins);
-
-  QRect viewport = m_itemScrollArea->viewport()->rect();
-  int curX = hScrollBar->value();
-  int viewportWidth = viewport.width();
-  int targetX = curX;
-
-  if (itemX < curX + margins) {
-    targetX = qMax(0, itemX - margins);
-  } else if (itemX + collection.itemWidth > curX + viewportWidth - margins) {
-    targetX =
-        qMax(0, qMin(itemX + collection.itemWidth - viewportWidth + margins,
-                     hScrollBar->maximum()));
-  }
-
-  if (targetX == curX) {
-    if (m_scrollManager != nullptr) {
-      m_scrollManager->updateVirtualView();
-    }
-    return;
-  }
-
-  bool hold = property(PropertyKeys::HorizHoldActive).toBool();
-
-  if (m_animationManager) {
-    m_animationManager->initHorizontalAnimIfNeeded(hScrollBar);
-
-    if (hold) {
-      int startX = hScrollBar->value();
-      m_animationManager->animateHorizontalHold(hScrollBar, startX, targetX);
-    } else {
-      m_animationManager->animateHorizontalSmooth(hScrollBar, curX, targetX);
-    }
-  }
-
-  if (m_scrollManager != nullptr) {
-    m_scrollManager->updateVirtualView();
-  }
-}
-
-// Ensures the currently selected item stays visible without forcing vertical
-// centering if unnecessary
-void InteractionManager::ensureItemVisible(int index,
-                                           bool allowHorizontalScroll) {
-  if (shouldExitEnsureItemVisible(index)) {
-    return;
-  }
-
-  if (property(PropertyKeys::DeferCenterOnClick).toBool() &&
-      !m_physicalKeyDown) {
-    return;
-  }
-  const CollectionConfig &collection =
-      (*m_collections)[*m_currentCollectionIndex];
-  int gridWidth = collection.gridWidth;
-  if (gridWidth <= 0) {
-    return;
-  }
-
-  QScrollBar *vScrollBar = m_itemScrollArea->verticalScrollBar();
-  QScrollBar *hScrollBar = m_itemScrollArea->horizontalScrollBar();
-  if ((vScrollBar == nullptr) || (hScrollBar == nullptr)) {
-    return;
-  }
-
-  int hSpacing = (m_scrollManager != nullptr)
-                     ? m_scrollManager->getEffectiveHorizontalSpacing()
-                     : collection.horizontalSpacing;
-  int margins = UIConstants::GRID_MARGINS;
-
-  int itemX = GridUtils::computeItemX(index, gridWidth, collection.itemWidth,
-                                      hSpacing, margins);
-  int itemY = GridUtils::computeItemY(index, gridWidth, collection.itemHeight,
-                                      collection.verticalSpacing, margins);
-
-  QRect viewport = m_itemScrollArea->viewport()->rect();
-  int curX = hScrollBar->value();
-  int curY = vScrollBar->value();
-  int viewportWidth = viewport.width();
-  int viewportHeight = viewport.height();
-  if (viewportHeight <= 0) {
-    return;
-  }
-
-  bool isRepeating = m_repeating && m_physicalKeyDown;
-  // Horizontal repeating flag was only used to select the same action; no-op
-  // retained
-
-  if (handleImmediateCenterForEnsureVisible(index)) {
-    return;
-  }
-
-  int targetX = allowHorizontalScroll
-                    ? AnimationManager::computeHorizontalTargetX(
-                          itemX, collection.itemWidth, curX, viewportWidth,
-                          margins, hScrollBar->maximum())
-                    : curX;
-  bool needH = (targetX != curX);
-
-  bool needV = false;
-  int desiredY = AnimationManager::computeDesiredYForVisibility(
-      itemY, collection.itemHeight, curY, viewportHeight, margins, needV);
-
-  if (!needV && !needH) {
-    updateViewAndRowAfterVisibility(index, gridWidth);
-    return;
-  }
-
-  if (needH) {
-    hScrollBar->setValue(targetX);
-  }
-
-  if (!needV) {
-    updateViewAndRowAfterVisibility(index, gridWidth);
-    return;
-  }
-
-  int startVal = curY;
-  int endVal = desiredY;
-  if (startVal == endVal) {
-    updateViewAndRowAfterVisibility(index, gridWidth);
-    return;
-  }
-
-  // Stop any running animation and update start position
-  if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
-    m_animationManager->verticalAnimation()->stop();
-    startVal = vScrollBar->value();
-  }
-
-  startEnsureVisibleVAnim(vScrollBar, startVal, endVal, isRepeating);
-  m_lastSelectedRow = GridUtils::computeItemRow(index, gridWidth);
-  if (m_selectionManager) {
-    m_selectionManager->setLastSelectedRow(m_lastSelectedRow);
-  }
-}
-
-void InteractionManager::updateViewAndRowAfterVisibility(int index,
-                                                         int gridWidth) {
-  if (m_scrollManager != nullptr) {
-    m_scrollManager->updateVirtualView();
-  }
-  m_lastSelectedRow = GridUtils::computeItemRow(index, gridWidth);
-  if (m_selectionManager) {
-    m_selectionManager->setLastSelectedRow(m_lastSelectedRow);
-  }
-}
-
-auto InteractionManager::shouldExitEnsureItemVisible(int index) const -> bool {
-  if (QApplication::closingDown() ||
-      ((m_mainWindow != nullptr) && m_mainWindow->isShuttingDown())) {
-    return true;
-  }
-  if (!m_itemScrollArea || (m_collections == nullptr) ||
-      (m_currentCollectionIndex == nullptr)) {
-    return true;
-  }
-  if (*m_currentCollectionIndex < 0 ||
-      *m_currentCollectionIndex >= m_collections->size()) {
-    return true;
-  }
-  if (index < 0) {
-    return true;
-  }
-  return false;
-}
-
-void InteractionManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar,
-                                                 int startVal, int endVal,
-                                                 bool isRepeating) {
-  if (!m_animationManager) {
-    return;
-  }
-
-  int itemHeight = 0;
-  int vSpacing = 0;
-  if ((m_collections != nullptr) && (m_currentCollectionIndex != nullptr) &&
-      *m_currentCollectionIndex >= 0 &&
-      *m_currentCollectionIndex < m_collections->size()) {
-    itemHeight = (*m_collections)[*m_currentCollectionIndex].itemHeight;
-    vSpacing = (*m_collections)[*m_currentCollectionIndex].verticalSpacing;
-  }
-
-  m_animationManager->startEnsureVisibleVAnim(
-      vScrollBar, startVal, endVal, itemHeight, vSpacing, isRepeating);
-}
-
-// Ensures vertical scrollbar policy matches collection settings after
-// content/metrics are established
-void InteractionManager::ensureVerticalScrollbarPolicy() {
-  if (!m_itemScrollArea || (m_collections == nullptr) ||
-      (m_currentCollectionIndex == nullptr)) {
-    return;
-  }
-  int idx = *m_currentCollectionIndex;
-  if (idx < 0 || idx >= m_collections->size()) {
-    return;
-  }
-  if (!(*m_collections)[idx].hideVerticalScrollbar) {
-    m_itemScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-  }
-}
-
 // Returns the direct child subcollection indices for a parent collection
 auto InteractionManager::getSubcollections(int parentIndex) const
     -> QList<int> {
@@ -2626,9 +1967,11 @@ void InteractionManager::processSingleClickSelection(
   } else {
     m_selectedFilePath = filePath;
   }
-  m_physicalKeyDown = false;
-  m_repeating = false;
-  m_wrapSequenceActive = false;
+  if (m_viewportManager) {
+    m_viewportManager->setPhysicalKeyDown(false);
+    m_viewportManager->setRepeating(false);
+    m_viewportManager->setWrapSequenceActive(false);
+  }
   stopRepeat();
 
   const int pendingIndex =
@@ -2772,23 +2115,6 @@ void InteractionManager::toggleSearchMode() {
   }
 }
 
-// Computes vertical centering duration using UIConstants without down‑scaling
-// so timing matches configured 1500ms values
-auto InteractionManager::computeVerticalCenterDuration(int distance,
-                                                       bool repeatActive) const
-    -> int {
-  int itemHeight = 0;
-  int vSpacing = 0;
-  if ((m_collections != nullptr) && (m_currentCollectionIndex != nullptr) &&
-      *m_currentCollectionIndex >= 0 &&
-      *m_currentCollectionIndex < m_collections->size()) {
-    itemHeight = (*m_collections)[*m_currentCollectionIndex].itemHeight;
-    vSpacing = (*m_collections)[*m_currentCollectionIndex].verticalSpacing;
-  }
-  return AnimationManager::computeVerticalCenterDuration(
-      distance, itemHeight, vSpacing, repeatActive);
-}
-
 void InteractionManager::saveCurrentSelection() {
   if (m_selectedItemIndex >= 0) {
     handleSuccessfulSelection(m_selectedItemIndex);
@@ -2825,12 +2151,16 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
     // Sync local state
     m_restoringSelection = m_selectionManager->isRestoringSelection();
     m_targetRestoreIndex = m_selectionManager->targetRestoreIndex();
-    m_forceImmediateCenter = m_selectionManager->forceImmediateCenter();
+    if (m_viewportManager) {
+      m_viewportManager->setForceImmediateCenter(m_selectionManager->forceImmediateCenter());
+    }
   } else {
     clearSelection();
     m_restoringSelection = true;
     m_targetRestoreIndex = targetIndex;
-    m_forceImmediateCenter = true;
+    if (m_viewportManager) {
+      m_viewportManager->setForceImmediateCenter(true);
+    }
 
     if (m_itemScrollArea) {
       m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenter, true);
@@ -2848,7 +2178,9 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
   }
 
   applySelectionStateForIndex(targetIndex);
-  applyImmediateViewportPositioningForSelection(targetIndex);
+  if (m_viewportManager) {
+    m_viewportManager->applyImmediateViewportPositioningForSelection(targetIndex);
+  }
   selectItemByIndex(targetIndex, false);
 
   if (m_selectedItemIndex == targetIndex) {
@@ -2861,11 +2193,15 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
     m_selectionManager->finalizeRestore();
     m_restoringSelection = m_selectionManager->isRestoringSelection();
     m_targetRestoreIndex = m_selectionManager->targetRestoreIndex();
-    m_forceImmediateCenter = m_selectionManager->forceImmediateCenter();
+    if (m_viewportManager) {
+      m_viewportManager->setForceImmediateCenter(m_selectionManager->forceImmediateCenter());
+    }
   } else {
     m_restoringSelection = false;
     m_targetRestoreIndex = -1;
-    m_forceImmediateCenter = false;
+    if (m_viewportManager) {
+      m_viewportManager->setForceImmediateCenter(false);
+    }
     setProperty(PropertyKeys::SelectionSuppressed, false);
     setProperty(PropertyKeys::PendingSelectionIndex, -1);
   }
@@ -2901,9 +2237,11 @@ void InteractionManager::applySelectionStateForIndex(int idx) {
 }
 
 void InteractionManager::finalizeRestoreFlagsAndFocus() {
-  m_physicalKeyDown = false;
-  m_repeating = false;
-  m_wrapSequenceActive = false;
+  if (m_viewportManager) {
+    m_viewportManager->setPhysicalKeyDown(false);
+    m_viewportManager->setRepeating(false);
+    m_viewportManager->setWrapSequenceActive(false);
+  }
   // Only set focus to items page if search bar doesn't currently have focus
   if ((m_itemsPage != nullptr) && !m_itemsPage->hasFocus()) {
     if (m_searchBar == nullptr || !m_searchBar->hasFocus()) {
@@ -3093,7 +2431,9 @@ void InteractionManager::scheduleScrollbarRecovery() {
       return;
     }
     guard->m_scrollManager->recalculateContainerMetrics();
-    guard->ensureVerticalScrollbarPolicy();
+    if (guard->m_viewportManager) {
+      guard->m_viewportManager->ensureVerticalScrollbarPolicy();
+    }
     QScrollBar *verticalScrollBar =
         guard->m_itemScrollArea->verticalScrollBar();
     if (verticalScrollBar != nullptr && verticalScrollBar->maximum() > 0) {
@@ -3117,7 +2457,9 @@ void InteractionManager::scheduleScrollbarRecovery() {
           if (!guard) {
             return;
           }
-          guard->ensureVerticalScrollbarPolicy();
+          if (guard->m_viewportManager) {
+            guard->m_viewportManager->ensureVerticalScrollbarPolicy();
+          }
           if (guard->m_scrollbarRecoveryConn) {
             QObject::disconnect(guard->m_scrollbarRecoveryConn);
             guard->m_scrollbarRecoveryConn = QMetaObject::Connection();
@@ -3197,8 +2539,10 @@ void InteractionManager::launchItemWithCollection(const QString &filePath,
 // Stops key/mouse repeat navigation and restores artwork / centering properties
 void InteractionManager::stopRepeat(bool suppressRecentering) {
   if (m_isShuttingDown || QApplication::closingDown()) {
-    m_repeating = false;
-    m_wrapSequenceActive = false;
+    if (m_viewportManager) {
+      m_viewportManager->setRepeating(false);
+      m_viewportManager->setWrapSequenceActive(false);
+    }
     setProperty(PropertyKeys::KeyContinuous, false);
     return;
   }
@@ -3213,8 +2557,10 @@ void InteractionManager::stopRepeat(bool suppressRecentering) {
     m_mouseManager->stopMouseHoldScrolling();
   }
 
-  m_repeating = false;
-  m_wrapSequenceActive = false;
+  if (m_viewportManager) {
+    m_viewportManager->setRepeating(false);
+    m_viewportManager->setWrapSequenceActive(false);
+  }
   setProperty(PropertyKeys::HorizHoldActive, false);
   setProperty(PropertyKeys::KeyContinuous, false);
   setProperty(PropertyKeys::ArmFirstClickDelay, false);
@@ -3252,9 +2598,9 @@ void InteractionManager::stopRepeat(bool suppressRecentering) {
     setProperty(PropertyKeys::PendingSelectionIndex, -1);
   }
 
-  if (!m_physicalKeyDown) {
-    m_continuousScrollActive =
-        (m_animationManager && m_animationManager->isVerticalAnimRunning());
+  if (m_viewportManager && !m_viewportManager->physicalKeyDown()) {
+    m_viewportManager->setContinuousScrollActive(
+        m_animationManager && m_animationManager->isVerticalAnimRunning());
   }
 
   if (!QApplication::closingDown() && m_selectedItemIndex >= 0 &&
@@ -3262,7 +2608,7 @@ void InteractionManager::stopRepeat(bool suppressRecentering) {
     QTimer::singleShot(
         UIConstants::STOP_REPEAT_RECENTER_DELAY_MS, this, [this]() {
           if (!QApplication::closingDown() && m_selectedItemIndex >= 0 &&
-              !m_continuousScrollActive) {
+              m_viewportManager && !m_viewportManager->continuousScrollActive()) {
             centerItemVertically(m_selectedItemIndex, false);
           }
         });
@@ -3312,12 +2658,14 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
       return;
     }
 
-    if (didWrap) {
-      m_forceImmediateCenter = true;
-      m_wrapSequenceActive = true;
-      m_continuousScrollActive = false;
-    } else {
-      m_continuousScrollActive = true;
+    if (m_viewportManager) {
+      if (didWrap) {
+        m_viewportManager->setForceImmediateCenter(true);
+        m_viewportManager->setWrapSequenceActive(true);
+        m_viewportManager->setContinuousScrollActive(false);
+      } else {
+        m_viewportManager->setContinuousScrollActive(true);
+      }
     }
 
     bool rowChanged = KeyboardManager::hasRowChanged(gridWidth, currentIndex, nextIndex);
@@ -3376,12 +2724,14 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
     return;
   }
 
-  if (didWrap) {
-    m_forceImmediateCenter = true;
-    m_wrapSequenceActive = true;
-    m_continuousScrollActive = false;
-  } else {
-    m_continuousScrollActive = true;
+  if (m_viewportManager) {
+    if (didWrap) {
+      m_viewportManager->setForceImmediateCenter(true);
+      m_viewportManager->setWrapSequenceActive(true);
+      m_viewportManager->setContinuousScrollActive(false);
+    } else {
+      m_viewportManager->setContinuousScrollActive(true);
+    }
   }
 
   if (*m_currentCollectionIndex >= 0 &&
@@ -3493,7 +2843,7 @@ void InteractionManager::handleSuccessfulSelection(int index) {
     return;
   }
 
-  bool immediate = m_forceImmediateCenter || restoringMatch;
+  bool immediate = (m_viewportManager && m_viewportManager->forceImmediateCenter()) || restoringMatch;
   centerItemVertically(index, immediate);
   if (m_scrollManager != nullptr) {
     m_scrollManager->updateVirtualView();

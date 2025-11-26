@@ -9,6 +9,7 @@
 #include "searchmanager.h"
 #include "searchutils.h"
 #include "selectionmanager.h"
+#include "viewportmanager.h"
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QMouseEvent>
@@ -94,7 +95,6 @@ private:
   // Selection state - kept for internal use during transition, synced with SelectionManager
   bool m_restoringSelection = false;
   int m_targetRestoreIndex = -1;
-  bool m_forceImmediateCenter = false;
   QString m_selectedFilePath;
   int m_selectedItemIndex = -1;
 
@@ -173,6 +173,9 @@ private:
   // Launch delegation (owned helper)
   std::unique_ptr<LaunchManager> m_launchManager;
 
+  // Viewport delegation (owned helper)
+  std::unique_ptr<ViewportManager> m_viewportManager;
+
   ScrollManager *m_scrollManager = nullptr;
   SidebarManager *m_sidebarManager = nullptr;
   SettingsManager *m_settingsManager = nullptr;
@@ -197,22 +200,11 @@ private:
   QString m_currentSearchText;
   static constexpr int ARROW_KEY_THROTTLE_MS = 260;
   bool m_isShuttingDown = false;
-  bool m_deferredCenterPending = false;
-  // Consolidated repeat flag: true when keyboard repeat or mouse hold is active
-  bool m_repeating = false;
-  bool m_physicalKeyDown = false;
-  int m_lastSelectedRow = -1;
-  bool m_isWrappingNavigation = false;
   bool m_allowArtworkDuringSelection = false;
   bool m_selectionAtViewportEdge = false;
 
   static constexpr double CONTINUOUS_SCROLL_ROW_DURATION_MS = 1500.0;
-  bool m_continuousScrollActive = false;
-  bool m_instantPositioning = false;
-  bool m_wrapSequenceActive = false;
-  void applyImmediateViewportPositioningForSelection(int index);
   void scheduleScrollbarRecovery();
-  void ensureVerticalScrollbarPolicy();
   QMetaObject::Connection m_scrollbarRecoveryConn;
   void processSingleClickSelection(int visualIndex, const QString &filePath,
                                    bool applyScrollAreaSuppression);
@@ -239,14 +231,6 @@ private:
   QString titleForIndexInColl(int coll, int idx) const;
   void persistSelectionForIndex(int coll, int idx);
 
-  bool computeForceImmediate(bool immediate) const;
-  int computeSmallThreshold(int currentRow) const;
-  bool handleSmallMovementEarlyReturn(int distance, bool clickScroll, int index,
-                                      int currentRow);
-  bool handleImmediateCenterPath(QScrollBar *verticalScrollBar, int targetY,
-                                 int index, int currentRow);
-  void onVScrollAnimationFinished();
-
   void setPendingSelectionIfNeeded(bool condition, int newSelection);
   void updateSelectionStateAfterMove(int newSelection);
   /// Applies wheel-scroll steps and returns true if wrapping occurred.
@@ -259,41 +243,11 @@ private:
   auto isItemOffscreen(int selection, int gridWidth) const -> bool;
   void applyMinorHorizontalSuppress();
 
-  // Immediate centering helpers
-  void setProgrammaticScrollGuarded(bool enable);
-  void setScrollValueAndUpdateSelection(QScrollBar *verticalScrollBar,
-                                        int targetY, int index);
-  void clearArtworkSuppressionViewportUpdateIfNeeded();
-  void clearArrowCenterSuppressionWhenDue();
-  void finalizeImmediateCenteringState(int index, int currentRow);
-
   // Selection helpers
   void persistSuppressedSelectionAndMaybeCenter(
       int index, const QList<int> &subcollections, bool skipCenter);
 
-  // Additional helpers to reduce complexity while preserving behavior
-  bool shouldDeferCenterNow(bool immediate, int index) const;
-  bool shouldEarlyReturnUserScroll(bool forceImmediate) const;
-  bool handlePendingInitialCenterIfNeeded(QScrollBar *verticalScrollBar,
-                                          int index, int targetYUnbounded,
-                                          bool immediate);
-  void adjustForForceClickZeroDistance(QScrollBar *verticalScrollBar,
-                                       int targetY, int &curY, int &distance,
-                                       int &duration, bool forceClickAnim);
-  bool handleImmediateCenterForEnsureVisible(int index);
-  bool maybeHandleImmediateCenter(bool distanceSmall, bool useSmooth,
-                                  bool forceImmediate, bool forceClickAnim,
-                                  QScrollBar *verticalScrollBar, int targetY,
-                                  int index, int currentRow);
-
-  // ensureItemVisible helpers
-  void updateViewAndRowAfterVisibility(int index, int gridWidth);
-  void startEnsureVisibleVAnim(QScrollBar *vScrollBar, int startVal, int endVal,
-                               bool isRepeating);
-  auto shouldExitEnsureItemVisible(int index) const -> bool;
-
   // Key navigation helpers still used by handleArrowKeyNavigation
-  void applyImmediateCenterSuppression();
   void updateSelectionForKeyMove(int newSelection);
   void performVisibilityForKeyMove(bool isNewRow, int newSelection);
 };
