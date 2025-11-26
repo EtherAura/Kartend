@@ -1,5 +1,5 @@
-#ifndef SCROLLANIMATIONMANAGER_H
-#define SCROLLANIMATIONMANAGER_H
+#ifndef ANIMATIONMANAGER_H
+#define ANIMATIONMANAGER_H
 
 #include <QObject>
 #include <QPointer>
@@ -14,8 +14,8 @@ QT_END_NAMESPACE
 class ScrollManager;
 class ArtworkManager;
 
-/// Setup struct for ScrollAnimationManager dependencies
-struct ScrollAnimationManagerSetup {
+/// Setup struct for AnimationManager dependencies
+struct AnimationManagerSetup {
   QScrollArea *itemScrollArea = nullptr;
   ScrollManager *scrollManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
@@ -23,13 +23,13 @@ struct ScrollAnimationManagerSetup {
 
 /// Handles scroll animation creation, configuration, and execution for
 /// vertical and horizontal centering/visibility operations.
-class ScrollAnimationManager : public QObject {
+class AnimationManager : public QObject {
   Q_OBJECT
 public:
-  explicit ScrollAnimationManager(QObject *parent = nullptr);
-  ~ScrollAnimationManager() override;
+  explicit AnimationManager(QObject *parent = nullptr);
+  ~AnimationManager() override;
 
-  void setupReferences(const ScrollAnimationManagerSetup &setup);
+  void setupReferences(const AnimationManagerSetup &setup);
 
   // --- Vertical Animation ---
   /// Creates vertical animation if not already created
@@ -143,4 +143,4 @@ private:
   QPropertyAnimation *m_hScrollAnim = nullptr;
 };
 
-#endif // SCROLLANIMATIONMANAGER_H
+#endif // ANIMATIONMANAGER_H

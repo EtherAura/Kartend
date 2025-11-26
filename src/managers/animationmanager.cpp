@@ -1,4 +1,4 @@
-#include "scrollanimationmanager.h"
+#include "animationmanager.h"
 #include "artworkmanager.h"
 #include "gridutils.h"
 #include "scrollmanager.h"
@@ -8,10 +8,10 @@
 #include <QTimer>
 #include <cmath>
 
-ScrollAnimationManager::ScrollAnimationManager(QObject *parent)
+AnimationManager::AnimationManager(QObject *parent)
     : QObject(parent) {}
 
-ScrollAnimationManager::~ScrollAnimationManager() {
+AnimationManager::~AnimationManager() {
   if (m_vScrollAnim != nullptr) {
     m_vScrollAnim->stop();
   }
@@ -20,8 +20,8 @@ ScrollAnimationManager::~ScrollAnimationManager() {
   }
 }
 
-void ScrollAnimationManager::setupReferences(
-    const ScrollAnimationManagerSetup &setup) {
+void AnimationManager::setupReferences(
+    const AnimationManagerSetup &setup) {
   m_itemScrollArea = setup.itemScrollArea;
   m_scrollManager = setup.scrollManager;
   m_artworkManager = setup.artworkManager;
@@ -29,13 +29,13 @@ void ScrollAnimationManager::setupReferences(
 
 // --- Vertical Animation ---
 
-void ScrollAnimationManager::ensureVAnimCreated(QScrollBar *vScrollBar) {
+void AnimationManager::ensureVAnimCreated(QScrollBar *vScrollBar) {
   if (m_vScrollAnim == nullptr) {
     m_vScrollAnim = new QPropertyAnimation(vScrollBar, "value", this);
   }
 }
 
-void ScrollAnimationManager::configureAndStartVerticalAnimation(
+void AnimationManager::configureAndStartVerticalAnimation(
     QScrollBar *vScrollBar, int curY, int targetY, int duration,
     bool clickScroll, bool clickHoldAdv) {
   ensureVAnimCreated(vScrollBar);
@@ -60,7 +60,7 @@ void ScrollAnimationManager::configureAndStartVerticalAnimation(
             }
           });
   connect(m_vScrollAnim, &QPropertyAnimation::finished, this,
-          &ScrollAnimationManager::onVScrollAnimationFinished);
+          &AnimationManager::onVScrollAnimationFinished);
 
   if (m_itemScrollArea) {
     m_itemScrollArea->setProperty("programmaticScroll", true);
@@ -69,7 +69,7 @@ void ScrollAnimationManager::configureAndStartVerticalAnimation(
   m_vScrollAnim->start();
 }
 
-void ScrollAnimationManager::stopActiveVerticalAnims(
+void AnimationManager::stopActiveVerticalAnims(
     QScrollBar *verticalScrollBar) {
   if ((m_vScrollAnim != nullptr) &&
       m_vScrollAnim->state() == QAbstractAnimation::Running) {
@@ -83,12 +83,12 @@ void ScrollAnimationManager::stopActiveVerticalAnims(
   }
 }
 
-bool ScrollAnimationManager::isVerticalAnimRunning() const {
+bool AnimationManager::isVerticalAnimRunning() const {
   return (m_vScrollAnim != nullptr) &&
          m_vScrollAnim->state() == QAbstractAnimation::Running;
 }
 
-void ScrollAnimationManager::setProgrammaticScrollGuarded(bool enable) {
+void AnimationManager::setProgrammaticScrollGuarded(bool enable) {
   if (!m_itemScrollArea) {
     return;
   }
@@ -106,7 +106,7 @@ void ScrollAnimationManager::setProgrammaticScrollGuarded(bool enable) {
   }
 }
 
-void ScrollAnimationManager::updateVirtualViewAndSelectionDuringVAnim(
+void AnimationManager::updateVirtualViewAndSelectionDuringVAnim(
     bool clickScroll, bool clickHoldAdv, int selectedItemIndex) {
   emit requestVirtualViewUpdate();
   emit requestSelectionUpdate(selectedItemIndex);
@@ -118,7 +118,7 @@ void ScrollAnimationManager::updateVirtualViewAndSelectionDuringVAnim(
   }
 }
 
-void ScrollAnimationManager::onVScrollAnimationFinished() {
+void AnimationManager::onVScrollAnimationFinished() {
   emit requestVirtualViewUpdate();
   if (m_itemScrollArea) {
     m_itemScrollArea->setProperty("programmaticScroll", false);
@@ -129,13 +129,13 @@ void ScrollAnimationManager::onVScrollAnimationFinished() {
 
 // --- Horizontal Animation ---
 
-void ScrollAnimationManager::initHorizontalAnimIfNeeded(QScrollBar *hScrollBar) {
+void AnimationManager::initHorizontalAnimIfNeeded(QScrollBar *hScrollBar) {
   if (m_hScrollAnim == nullptr) {
     m_hScrollAnim = new QPropertyAnimation(hScrollBar, "value", this);
   }
 }
 
-void ScrollAnimationManager::animateHorizontalHold(QScrollBar *hScrollBar,
+void AnimationManager::animateHorizontalHold(QScrollBar *hScrollBar,
                                                    int startX, int targetX) {
   initHorizontalAnimIfNeeded(hScrollBar);
 
@@ -156,7 +156,7 @@ void ScrollAnimationManager::animateHorizontalHold(QScrollBar *hScrollBar,
   connect(m_hScrollAnim, &QPropertyAnimation::valueChanged, this,
           [this]() { emit requestVirtualViewUpdate(); });
   connect(m_hScrollAnim, &QPropertyAnimation::finished, this,
-          &ScrollAnimationManager::onHScrollAnimationFinished);
+          &AnimationManager::onHScrollAnimationFinished);
 
   // Signal to set GlideAnimating property on grid container
   emit requestGlideAnimationStart();
@@ -174,7 +174,7 @@ void ScrollAnimationManager::animateHorizontalHold(QScrollBar *hScrollBar,
   });
 }
 
-void ScrollAnimationManager::animateHorizontalSmooth(QScrollBar *hScrollBar,
+void AnimationManager::animateHorizontalSmooth(QScrollBar *hScrollBar,
                                                      int startX, int targetX) {
   initHorizontalAnimIfNeeded(hScrollBar);
 
@@ -191,7 +191,7 @@ void ScrollAnimationManager::animateHorizontalSmooth(QScrollBar *hScrollBar,
   connect(m_hScrollAnim, &QPropertyAnimation::valueChanged, this,
           [this]() { emit requestVirtualViewUpdate(); });
   connect(m_hScrollAnim, &QPropertyAnimation::finished, this,
-          &ScrollAnimationManager::onHScrollAnimationFinished);
+          &AnimationManager::onHScrollAnimationFinished);
 
   // Signal to set GlideAnimating property on grid container
   emit requestGlideAnimationStart();
@@ -199,22 +199,22 @@ void ScrollAnimationManager::animateHorizontalSmooth(QScrollBar *hScrollBar,
   m_hScrollAnim->start();
 }
 
-bool ScrollAnimationManager::isHorizontalAnimRunning() const {
+bool AnimationManager::isHorizontalAnimRunning() const {
   return (m_hScrollAnim != nullptr) &&
          m_hScrollAnim->state() == QAbstractAnimation::Running;
 }
 
-void ScrollAnimationManager::onHScrollAnimationFinished() {
+void AnimationManager::onHScrollAnimationFinished() {
   emit requestVirtualViewUpdate();
   emit horizontalAnimationFinished();
 }
 
 // --- Duration Calculation ---
 
-int ScrollAnimationManager::computeVerticalCenterDuration(int distance,
-                                                          int itemHeight,
-                                                          int verticalSpacing,
-                                                          bool repeatActive) {
+int AnimationManager::computeVerticalCenterDuration(int distance,
+                                                    int itemHeight,
+                                                    int verticalSpacing,
+                                                    bool repeatActive) {
   int stepSpan = qMax(1, itemHeight + verticalSpacing);
   double rows = static_cast<double>(distance) / static_cast<double>(stepSpan);
   rows = std::max(rows, 1.0);
@@ -235,22 +235,22 @@ int ScrollAnimationManager::computeVerticalCenterDuration(int distance,
 
 // --- Target Calculation ---
 
-int ScrollAnimationManager::computeTargetYForIndex(int index, int gridWidth,
-                                                   int itemHeight,
-                                                   int verticalSpacing,
-                                                   int viewportHeight,
-                                                   int scrollbarMax) {
+int AnimationManager::computeTargetYForIndex(int index, int gridWidth,
+                                             int itemHeight,
+                                             int verticalSpacing,
+                                             int viewportHeight,
+                                             int scrollbarMax) {
   int itemY = GridUtils::computeItemY(index, gridWidth, itemHeight,
                                       verticalSpacing, UIConstants::GRID_MARGINS);
   int targetYUnbounded = itemY + (itemHeight / 2) - (viewportHeight / 2);
   return qBound(0, targetYUnbounded, scrollbarMax);
 }
 
-int ScrollAnimationManager::computeHorizontalTargetX(int itemX,
-                                                     int collectionItemWidth,
-                                                     int curX, int viewportWidth,
-                                                     int margins,
-                                                     int scrollMax) {
+int AnimationManager::computeHorizontalTargetX(int itemX,
+                                               int collectionItemWidth,
+                                               int curX, int viewportWidth,
+                                               int margins,
+                                               int scrollMax) {
   int itemLeft = itemX;
   int itemRight = itemX + collectionItemWidth;
   int visibleLeft = curX;
@@ -270,12 +270,12 @@ int ScrollAnimationManager::computeHorizontalTargetX(int itemX,
   return qBound(0, targetX, scrollMax);
 }
 
-int ScrollAnimationManager::computeDesiredYForVisibility(int itemY,
-                                                         int itemHeight,
-                                                         int curY,
-                                                         int viewportHeight,
-                                                         int margins,
-                                                         bool &needVertical) {
+int AnimationManager::computeDesiredYForVisibility(int itemY,
+                                                   int itemHeight,
+                                                   int curY,
+                                                   int viewportHeight,
+                                                   int margins,
+                                                   bool &needVertical) {
   int itemTop = itemY;
   int itemBottom = itemY + itemHeight;
   int visibleTop = curY;
@@ -300,11 +300,11 @@ int ScrollAnimationManager::computeDesiredYForVisibility(int itemY,
 
 // --- Ensure Visible Animation ---
 
-void ScrollAnimationManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar,
-                                                     int startVal, int endVal,
-                                                     int itemHeight,
-                                                     int verticalSpacing,
-                                                     bool isRepeating) {
+void AnimationManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar,
+                                               int startVal, int endVal,
+                                               int itemHeight,
+                                               int verticalSpacing,
+                                               bool isRepeating) {
   ensureVAnimCreated(vScrollBar);
 
   if (m_vScrollAnim->state() == QAbstractAnimation::Running) {
@@ -324,7 +324,7 @@ void ScrollAnimationManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar,
   connect(m_vScrollAnim, &QPropertyAnimation::valueChanged, this,
           [this]() { emit requestVirtualViewUpdate(); });
   connect(m_vScrollAnim, &QPropertyAnimation::finished, this,
-          &ScrollAnimationManager::onVScrollAnimationFinished);
+          &AnimationManager::onVScrollAnimationFinished);
 
   if (m_itemScrollArea) {
     m_itemScrollArea->setProperty("programmaticScroll", true);

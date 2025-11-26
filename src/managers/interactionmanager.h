@@ -3,7 +3,7 @@
 
 #include "collectionutils.h"
 #include "keyboardmanager.h"
-#include "scrollanimationmanager.h"
+#include "animationmanager.h"
 #include "searchmanager.h"
 #include "searchutils.h"
 #include "selectionmanager.h"
@@ -172,8 +172,8 @@ private:
   // Keyboard delegation (owned helper)
   std::unique_ptr<KeyboardManager> m_keyboardManager;
 
-  // Scroll animation delegation (owned helper)
-  std::unique_ptr<ScrollAnimationManager> m_scrollAnimManager;
+  // Animation delegation (owned helper)
+  std::unique_ptr<AnimationManager> m_animationManager;
 
   ScrollManager *m_scrollManager = nullptr;
   SidebarManager *m_sidebarManager = nullptr;

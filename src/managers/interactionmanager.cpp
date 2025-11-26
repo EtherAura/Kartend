@@ -41,7 +41,7 @@ InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
   m_searchManager = std::make_unique<SearchManager>(this);
   m_selectionManager = std::make_unique<SelectionManager>(this);
   m_keyboardManager = std::make_unique<KeyboardManager>(this);
-  m_scrollAnimManager = std::make_unique<ScrollAnimationManager>(this);
+  m_animationManager = std::make_unique<AnimationManager>(this);
 
   m_hScrollAnim = nullptr;
 
@@ -214,37 +214,37 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
             this, &InteractionManager::onKeyboardStopRepeat);
   }
 
-  // Setup ScrollAnimationManager with its dependencies
-  if (m_scrollAnimManager) {
-    ScrollAnimationManagerSetup scrollAnimSetup;
-    scrollAnimSetup.itemScrollArea = setup.itemScrollArea;
-    scrollAnimSetup.scrollManager = setup.scrollManager;
-    scrollAnimSetup.artworkManager = setup.artworkManager;
-    m_scrollAnimManager->setupReferences(scrollAnimSetup);
+  // Setup AnimationManager with its dependencies
+  if (m_animationManager) {
+    AnimationManagerSetup animSetup;
+    animSetup.itemScrollArea = setup.itemScrollArea;
+    animSetup.scrollManager = setup.scrollManager;
+    animSetup.artworkManager = setup.artworkManager;
+    m_animationManager->setupReferences(animSetup);
 
-    // Connect ScrollAnimationManager signals
-    connect(m_scrollAnimManager.get(),
-            &ScrollAnimationManager::requestVirtualViewUpdate, this, [this]() {
+    // Connect AnimationManager signals
+    connect(m_animationManager.get(),
+            &AnimationManager::requestVirtualViewUpdate, this, [this]() {
               if (m_scrollManager != nullptr) {
                 m_scrollManager->updateVirtualView();
               }
             });
-    connect(m_scrollAnimManager.get(),
-            &ScrollAnimationManager::requestSelectionUpdate, this,
+    connect(m_animationManager.get(),
+            &AnimationManager::requestSelectionUpdate, this,
             [this](int index) {
               if (m_scrollManager != nullptr) {
                 m_scrollManager->updateSelectionForIndex(index);
               }
             });
-    connect(m_scrollAnimManager.get(),
-            &ScrollAnimationManager::requestSelectionOverlayRefresh, this,
+    connect(m_animationManager.get(),
+            &AnimationManager::requestSelectionOverlayRefresh, this,
             [this]() {
               if (m_scrollManager != nullptr) {
                 m_scrollManager->refreshSelectionOverlayState();
               }
             });
-    connect(m_scrollAnimManager.get(),
-            &ScrollAnimationManager::requestGlideAnimationStart, this,
+    connect(m_animationManager.get(),
+            &AnimationManager::requestGlideAnimationStart, this,
             [this]() {
               if (m_gridContainer != nullptr) {
                 m_gridContainer->setProperty(PropertyKeys::GlideAnimating, true);
@@ -253,8 +253,8 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
                 }
               }
             });
-    connect(m_scrollAnimManager.get(),
-            &ScrollAnimationManager::verticalAnimationFinished, this,
+    connect(m_animationManager.get(),
+            &AnimationManager::verticalAnimationFinished, this,
             &InteractionManager::onVScrollAnimationFinished);
   }
 
