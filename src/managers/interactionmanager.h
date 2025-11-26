@@ -2,6 +2,7 @@
 #define INTERACTIONMANAGER_H
 
 #include "collectionutils.h"
+#include "searchmanager.h"
 #include "searchtypes.h"
 #include <QKeyEvent>
 #include <QLineEdit>
@@ -14,6 +15,7 @@
 #include <QStackedWidget>
 #include <QTimer>
 #include <QVector>
+#include <memory>
 
 class QTimer;
 class MainWindow;
@@ -154,6 +156,9 @@ private:
   QString derivePathFromIndex(int idx) const;
   int resolveOwnerForPath(const QString &path) const;
   int getFallbackCollectionIndex() const;
+
+  // Search delegation (owned helper)
+  std::unique_ptr<SearchManager> m_searchManager;
 
   ScrollManager *m_scrollManager = nullptr;
   SidebarManager *m_sidebarManager = nullptr;

@@ -37,6 +37,8 @@
 #include "uiconstants.h"
 
 InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
+  m_searchManager = std::make_unique<SearchManager>(this);
+
   m_searchDebounceTimer = new QTimer(this);
   m_searchDebounceTimer->setSingleShot(true);
   connect(m_searchDebounceTimer, &QTimer::timeout, this,
@@ -93,6 +95,20 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   m_searchBar = setup.searchBar;
   m_searchModeButton = setup.searchModeButton;
   m_mainWindow = setup.mainWindow;
+
+  // Setup SearchManager with its dependencies
+  if (m_searchManager) {
+    SearchManagerSetup searchSetup;
+    searchSetup.databaseManager = setup.databaseManager;
+    searchSetup.navigationManager = setup.navigationManager;
+    searchSetup.scrollManager = setup.scrollManager;
+    searchSetup.mainWindow = setup.mainWindow;
+    searchSetup.searchBar = setup.searchBar;
+    searchSetup.searchModeButton = setup.searchModeButton;
+    searchSetup.collections = setup.collections;
+    searchSetup.currentCollectionIndex = setup.currentCollectionIndex;
+    m_searchManager->setupReferences(searchSetup);
+  }
 
   updateSearchModeButton();
   updateSearchBarPlaceholder();
