@@ -194,21 +194,15 @@ private:
   MediaItemWidget *m_selectedMediaItem = nullptr;
   SearchMode m_currentSearchMode = SearchMode::CurrentCollection;
   QString m_currentSearchText;
-  bool m_wheelScrolling = false;
   static constexpr int ARROW_KEY_THROTTLE_MS = 260;
   bool m_isShuttingDown = false;
   bool m_deferredCenterPending = false;
-  QTimer *m_repeatTimer = nullptr;
-  QTimer *m_repeatStartTimer = nullptr;
+  // Consolidated repeat flag: true when keyboard repeat or mouse hold is active
   bool m_repeating = false;
-  Qt::Key m_repeatKey = Qt::Key_unknown;
-  int m_repeatDelta = 0;
-  bool m_repeatVertical = false;
   bool m_physicalKeyDown = false;
   int m_lastSelectedRow = -1;
   bool m_isWrappingNavigation = false;
   bool m_allowArtworkDuringSelection = false;
-  int m_repeatInterval;
   bool m_selectionAtViewportEdge = false;
 
   static constexpr double CONTINUOUS_SCROLL_ROW_DURATION_MS = 1500.0;

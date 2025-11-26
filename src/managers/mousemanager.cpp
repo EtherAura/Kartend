@@ -39,6 +39,12 @@ void MouseManager::setLeftMouseDown(bool down) {
   m_leftMouseDown = down;
 }
 
+// --- Wheel Scrolling State ---
+
+void MouseManager::setWheelScrolling(bool scrolling) {
+  m_wheelScrolling = scrolling;
+}
+
 // --- Click Hold Timer ---
 
 void MouseManager::startClickHoldTimer(const QPoint &clickPos,

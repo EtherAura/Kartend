@@ -46,6 +46,10 @@ public:
   [[nodiscard]] int holdDirection() const { return m_mouseHoldDirection; }
   [[nodiscard]] int horizontalDirection() const { return m_mouseHoldHorizontalDirection; }
   [[nodiscard]] bool isLeftMouseDown() const { return m_leftMouseDown; }
+  [[nodiscard]] bool isWheelScrolling() const { return m_wheelScrolling; }
+
+  // --- Wheel Scrolling State ---
+  void setWheelScrolling(bool scrolling);
 
   // --- Left Mouse Button Tracking ---
   void setLeftMouseDown(bool down);
@@ -137,6 +141,9 @@ private:
 
   // Left mouse button state
   bool m_leftMouseDown = false;
+
+  // Wheel scrolling state
+  bool m_wheelScrolling = false;
 
   // Click hold timer (initiates hold scrolling after delay)
   QTimer *m_clickHoldTimer = nullptr;

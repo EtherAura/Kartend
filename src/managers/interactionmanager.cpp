@@ -52,11 +52,6 @@ InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
 InteractionManager::~InteractionManager() {
   m_isShuttingDown = true;
   stopRepeat();
-
-  TimerUtils::stopAndDisconnectTimers({m_repeatStartTimer, m_repeatTimer});
-  TimerUtils::deleteLaterTimer(m_repeatStartTimer);
-  TimerUtils::deleteLaterTimer(m_repeatTimer);
-
   clearSelection();
 }
 
@@ -281,10 +276,10 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
             &InteractionManager::onMouseHoldScrollStep);
     connect(m_mouseManager.get(), &MouseManager::holdScrollingStarted, this,
             [this](bool isHorizontal) {
+              Q_UNUSED(isHorizontal);
               m_continuousScrollActive = true;
               m_repeating = true;
               m_physicalKeyDown = true;
-              m_repeatVertical = !isHorizontal;
               m_allowArtworkDuringSelection = true;
             });
     connect(m_mouseManager.get(), &MouseManager::holdScrollingStopped, this,
@@ -309,7 +304,6 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
                   m_itemScrollArea->setProperty(PropertyKeys::AllowArtworkDuringSelection, true);
                 }
               }
-              m_repeatVertical = false;
               m_wrapSequenceActive = false;
             });
     connect(m_mouseManager.get(), &MouseManager::requestSelectionUpdate, this,
@@ -1062,7 +1056,9 @@ auto InteractionManager::handleWheelEvent(QObject *obj, QEvent *event) -> bool {
 
   const bool wrapTriggered = applyWheelSelectionDelta(wheelSteps);
   if (wrapTriggered) {
-    m_wheelScrolling = false;
+    if (m_mouseManager) {
+      m_mouseManager->setWheelScrolling(false);
+    }
     m_continuousScrollActive = false;
     if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
       m_animationManager->verticalAnimation()->stop();
@@ -1082,7 +1078,9 @@ auto InteractionManager::handleWheelEvent(QObject *obj, QEvent *event) -> bool {
   int targetPos = basePos - (wheelSteps * singleRowPixels);
   targetPos = qBound(0, targetPos, vScrollBar->maximum());
 
-  m_wheelScrolling = true;
+  if (m_mouseManager) {
+    m_mouseManager->setWheelScrolling(true);
+  }
   m_continuousScrollActive = true;
 
   if (m_itemScrollArea) {
@@ -1096,7 +1094,9 @@ auto InteractionManager::handleWheelEvent(QObject *obj, QEvent *event) -> bool {
   if (m_animationManager) {
     m_animationManager->startWheelScrollAnimation(
         vScrollBar, currentPos, targetPos, [this]() {
-          m_wheelScrolling = false;
+          if (m_mouseManager) {
+            m_mouseManager->setWheelScrolling(false);
+          }
           m_continuousScrollActive = false;
           if (m_itemScrollArea) {
             m_itemScrollArea->setProperty(PropertyKeys::UserScrollActive, false);
@@ -3032,9 +3032,6 @@ void InteractionManager::applySelectionStateForIndex(int idx) {
 void InteractionManager::finalizeRestoreFlagsAndFocus() {
   m_physicalKeyDown = false;
   m_repeating = false;
-  m_repeatKey = Qt::Key_unknown;
-  m_repeatDelta = 0;
-  m_repeatVertical = false;
   m_wrapSequenceActive = false;
   // Only set focus to items page if search bar doesn't currently have focus
   if ((m_itemsPage != nullptr) && !m_itemsPage->hasFocus()) {
@@ -3391,25 +3388,22 @@ void InteractionManager::launchItemWithCollection(const QString &filePath,
 void InteractionManager::stopRepeat(bool suppressRecentering) {
   if (m_isShuttingDown || QApplication::closingDown()) {
     m_repeating = false;
-    m_repeatKey = Qt::Key_unknown;
-    m_repeatDelta = 0;
-    m_repeatVertical = false;
     m_wrapSequenceActive = false;
     setProperty(PropertyKeys::KeyContinuous, false);
     return;
   }
 
-  if (m_repeatTimer != nullptr) {
-    m_repeatTimer->stop();
+  // Delegate to KeyboardManager for timer/state cleanup
+  if (m_keyboardManager) {
+    m_keyboardManager->stopRepeat(suppressRecentering);
   }
-  if (m_repeatStartTimer != nullptr) {
-    m_repeatStartTimer->stop();
+
+  // Stop mouse hold scrolling if active
+  if (m_mouseManager && m_mouseManager->isMouseHoldScrolling()) {
+    m_mouseManager->stopMouseHoldScrolling();
   }
 
   m_repeating = false;
-  m_repeatKey = Qt::Key_unknown;
-  m_repeatDelta = 0;
-  m_repeatVertical = false;
   m_wrapSequenceActive = false;
   setProperty(PropertyKeys::HorizHoldActive, false);
   setProperty(PropertyKeys::KeyContinuous, false);
@@ -3418,8 +3412,6 @@ void InteractionManager::stopRepeat(bool suppressRecentering) {
 
   if (m_gridContainer != nullptr) {
     m_gridContainer->setProperty(PropertyKeys::ArrowKeyScrolling, false);
-  }
-  if (m_gridContainer != nullptr) {
     m_gridContainer->setProperty(PropertyKeys::GlideAnimating, false);
     if (m_scrollManager != nullptr) {
       m_scrollManager->refreshSelectionOverlayState();
@@ -3505,7 +3497,7 @@ auto InteractionManager::parseParameters(const QString &paramString)
 }
 
 auto InteractionManager::isWheelScrolling() const -> bool {
-  return m_wheelScrolling;
+  return m_mouseManager ? m_mouseManager->isWheelScrolling() : false;
 }
 
 // Advances selection during mouse-hold scrolling (called via MouseManager signal)
