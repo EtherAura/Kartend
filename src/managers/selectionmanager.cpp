@@ -260,3 +260,13 @@ bool SelectionManager::shouldAnimateHorizontalHop(int fromIndex, int toIndex,
   return (fromIndex / gridWidth) == (toIndex / gridWidth) &&
          qAbs(toIndex - fromIndex) > 1;
 }
+
+bool SelectionManager::isNewRow(int currentSelection, int newSelection,
+                                int gridWidth) {
+  if (gridWidth <= 0) {
+    return false;
+  }
+  const int currentRow = (currentSelection >= 0) ? currentSelection / gridWidth : -1;
+  const int targetRow = newSelection / gridWidth;
+  return currentRow != targetRow;
+}

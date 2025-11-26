@@ -113,6 +113,8 @@ public:
   [[nodiscard]] static bool shouldAnimateHorizontalHop(int fromIndex,
                                                         int toIndex,
                                                         int gridWidth);
+  [[nodiscard]] static bool isNewRow(int currentSelection, int newSelection,
+                                     int gridWidth);
 
   // Row tracking for click detection
   void setLastSelectedRow(int row) { m_lastSelectedRow = row; }

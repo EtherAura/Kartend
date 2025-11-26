@@ -418,7 +418,7 @@ void InteractionManager::handleArrowKeyNavigation(int direction, bool vertical) 
   }
 
   const bool isNewRow =
-      computeIsNewRow(currentSelection, newSelection, gridWidth);
+      SelectionManager::isNewRow(currentSelection, newSelection, gridWidth);
 
   const bool forceImmediate = offscreenBefore || m_isWrappingNavigation;
   if (forceImmediate) {
@@ -1199,7 +1199,7 @@ auto InteractionManager::applyWheelSelectionDelta(int wheelSteps) -> bool {
       m_continuousScrollActive = false;
     }
     const bool isNewRow =
-        computeIsNewRow(currentSelection, newSelection, gridWidth);
+        SelectionManager::isNewRow(currentSelection, newSelection, gridWidth);
     updateSelectionForKeyMove(newSelection);
     performVisibilityForKeyMove(isNewRow, newSelection);
 
@@ -1442,20 +1442,6 @@ void InteractionManager::applyImmediateViewportPositioningForSelection(
       }
     }
   }
-}
-
-// Computes whether the target selection lies on a different row
-auto InteractionManager::computeIsNewRow(int currentSelection, int newSelection,
-                                         int gridWidth) const -> bool {
-  if (m_currentCollectionIndex == nullptr || m_collections == nullptr ||
-      *m_currentCollectionIndex < 0 ||
-      *m_currentCollectionIndex >= m_collections->size() || gridWidth <= 0) {
-    return false;
-  }
-  const int currentRow =
-      (currentSelection >= 0) ? currentSelection / gridWidth : -1;
-  const int targetRow = newSelection / gridWidth;
-  return currentRow != targetRow;
 }
 
 // Applies immediate centering suppression when offscreen or wrapping

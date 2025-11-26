@@ -315,8 +315,6 @@ private:
   auto shouldExitEnsureItemVisible(int index) const -> bool;
 
   // Key navigation helpers still used by handleArrowKeyNavigation
-  auto computeIsNewRow(int currentSelection, int newSelection,
-                       int gridWidth) const -> bool;
   void applyImmediateCenterSuppression();
   void updateSelectionForKeyMove(int newSelection);
   void performVisibilityForKeyMove(bool isNewRow, int newSelection);
