@@ -86,6 +86,9 @@ public:
     return m_hScrollAnim;
   }
 
+  /// Stops any arrow key scroll animation on the given scrollbar
+  static void stopArrowKeyAnimationIfRunning(QScrollBar *scrollBar);
+
   // --- Duration Calculation ---
   /// Computes animation duration based on distance, item dimensions, and repeat state
   [[nodiscard]] static int computeVerticalCenterDuration(int distance,

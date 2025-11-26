@@ -20,6 +20,7 @@
 #include <QWheelEvent>
 #include <algorithm>
 
+#include "animationmanager.h"
 #include "artworkmanager.h"
 #include "databasemanager.h"
 #include "gridutils.h"
@@ -1029,7 +1030,7 @@ auto InteractionManager::handleWheelEvent(QObject *obj, QEvent *event) -> bool {
     return QObject::eventFilter(obj, event);
   }
 
-  stopArrowKeyAnimationIfRunning(vScrollBar);
+  AnimationManager::stopArrowKeyAnimationIfRunning(vScrollBar);
 
   const CollectionConfig &collection =
       (*m_collections)[*m_currentCollectionIndex];
@@ -1185,19 +1186,6 @@ auto InteractionManager::applyWheelSelectionDelta(int wheelSteps) -> bool {
   }
 
   return wrapTriggered;
-}
-
-// Stops any arrow key scroll animation associated with the given scrollbar
-void InteractionManager::stopArrowKeyAnimationIfRunning(QScrollBar *scrollBar) {
-  if (scrollBar == nullptr) {
-    return;
-  }
-  if (auto *anim =
-          scrollBar->findChild<QPropertyAnimation *>("arrowKeyScrollAnim")) {
-    if (anim->state() == QAbstractAnimation::Running) {
-      anim->stop();
-    }
-  }
 }
 
 auto InteractionManager::handleKeyPressEvent(QObject *obj, QEvent *event)
@@ -1387,7 +1375,7 @@ void InteractionManager::applyImmediateViewportPositioningForSelection(
             (row * (collection.itemHeight + collection.verticalSpacing));
         int targetY = itemY + (collection.itemHeight / 2) - (viewportH / 2);
         targetY = qBound(0, targetY, qMax(0, targetY));
-        stopArrowKeyAnimationIfRunning(verticalScrollBar);
+        AnimationManager::stopArrowKeyAnimationIfRunning(verticalScrollBar);
         m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, true);
         if (m_scrollManager != nullptr) {
           m_scrollManager->refreshSelectionOverlayState();
@@ -1763,7 +1751,7 @@ void InteractionManager::centerItemVertically(int index, bool immediate) {
   bool clickHoldAdv = property(PropertyKeys::ClickHoldAdvancing).toBool();
   bool forceClickAnim = property(PropertyKeys::ClickForceAnim).toBool();
 
-  int targetY = computeTargetYForIndex(
+  int targetY = AnimationManager::computeTargetYForIndex(
       index, gridWidth, collection.itemHeight, collection.verticalSpacing,
       viewportHeight, verticalScrollBar->maximum());
 
@@ -1824,15 +1812,6 @@ void InteractionManager::centerItemVertically(int index, bool immediate) {
 
   configureAndStartVerticalAnimation(verticalScrollBar, curY, targetY, duration,
                                      clickScroll, clickHoldAdv);
-}
-
-auto InteractionManager::computeTargetYForIndex(int index, int gridWidth,
-                                                int itemHeight,
-                                                int verticalSpacing,
-                                                int viewportHeight,
-                                                int scrollbarMax) -> int {
-  return AnimationManager::computeTargetYForIndex(
-      index, gridWidth, itemHeight, verticalSpacing, viewportHeight, scrollbarMax);
 }
 
 auto InteractionManager::computeForceImmediate(bool immediate) const -> bool {
@@ -2488,14 +2467,14 @@ void InteractionManager::ensureItemVisible(int index,
   }
 
   int targetX = allowHorizontalScroll
-                    ? computeHorizontalTargetX(itemX, collection.itemWidth,
-                                               curX, viewportWidth, margins,
-                                               hScrollBar->maximum())
+                    ? AnimationManager::computeHorizontalTargetX(
+                          itemX, collection.itemWidth, curX, viewportWidth,
+                          margins, hScrollBar->maximum())
                     : curX;
   bool needH = (targetX != curX);
 
   bool needV = false;
-  int desiredY = computeDesiredYForVisibility(
+  int desiredY = AnimationManager::computeDesiredYForVisibility(
       itemY, collection.itemHeight, curY, viewportHeight, margins, needV);
 
   if (!needV && !needH) {
@@ -2530,23 +2509,6 @@ void InteractionManager::ensureItemVisible(int index,
   if (m_selectionManager) {
     m_selectionManager->setLastSelectedRow(m_lastSelectedRow);
   }
-}
-
-auto InteractionManager::computeHorizontalTargetX(int itemX,
-                                                  int collectionItemWidth,
-                                                  int curX, int viewportWidth,
-                                                  int margins, int scrollMax)
-    -> int {
-  return AnimationManager::computeHorizontalTargetX(
-      itemX, collectionItemWidth, curX, viewportWidth, margins, scrollMax);
-}
-
-auto InteractionManager::computeDesiredYForVisibility(int itemY, int itemHeight,
-                                                      int curY, int viewportH,
-                                                      int margins, bool &needV)
-    -> int {
-  return AnimationManager::computeDesiredYForVisibility(
-      itemY, itemHeight, curY, viewportH, margins, needV);
 }
 
 void InteractionManager::updateViewAndRowAfterVisibility(int index,

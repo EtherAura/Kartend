@@ -149,7 +149,6 @@ private:
   bool allowAllFor(const CollectionConfig &cfg, int collIndex,
                    bool hasSubs) const;
   bool handleKeyReleaseEvent(QObject *obj, QEvent *event);
-  static void stopArrowKeyAnimationIfRunning(QScrollBar *scrollBar);
 
   int resolveDoubleClickIndexCandidate() const;
   QString derivePathFromIndex(int idx) const;
@@ -237,9 +236,6 @@ private:
   QString titleForIndexInColl(int coll, int idx) const;
   void persistSelectionForIndex(int coll, int idx);
 
-  static int computeTargetYForIndex(int index, int gridWidth, int itemHeight,
-                                    int verticalSpacing, int viewportHeight,
-                                    int scrollbarMax);
   bool computeForceImmediate(bool immediate) const;
   int computeSmallThreshold(int currentRow) const;
   bool handleSmallMovementEarlyReturn(int distance, bool clickScroll, int index,
@@ -302,12 +298,6 @@ private:
                                            int &distance);
 
   // ensureItemVisible helpers
-  static int computeHorizontalTargetX(int itemX, int collectionItemWidth,
-                                      int curX, int viewportWidth, int margins,
-                                      int scrollMax);
-  static int computeDesiredYForVisibility(int itemY, int itemHeight, int curY,
-                                          int viewportHeight, int margins,
-                                          bool &needV);
   void updateViewAndRowAfterVisibility(int index, int gridWidth);
   void startEnsureVisibleVAnim(QScrollBar *vScrollBar, int startVal, int endVal,
                                bool isRepeating);

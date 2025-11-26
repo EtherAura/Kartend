@@ -220,6 +220,18 @@ bool AnimationManager::isHorizontalAnimRunning() const {
          m_hScrollAnim->state() == QAbstractAnimation::Running;
 }
 
+void AnimationManager::stopArrowKeyAnimationIfRunning(QScrollBar *scrollBar) {
+  if (scrollBar == nullptr) {
+    return;
+  }
+  if (auto *anim =
+          scrollBar->findChild<QPropertyAnimation *>("arrowKeyScrollAnim")) {
+    if (anim->state() == QAbstractAnimation::Running) {
+      anim->stop();
+    }
+  }
+}
+
 void AnimationManager::onHScrollAnimationFinished() {
   emit requestVirtualViewUpdate();
   emit horizontalAnimationFinished();
