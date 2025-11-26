@@ -381,7 +381,9 @@ void MainWindow::setupUI() {
 void MainWindow::setupUIReferences() {
   setWindowTitle("Kartend");
 
-  QPixmapCache::setCacheLimit(UIConstants::PIXMAP_CACHE_KB);
+  // Apply user-configured pixmap cache size (in KB, settings stores MB)
+  int cacheSizeKB = m_generalSettings.pixmapCacheSizeMB * 1024;
+  QPixmapCache::setCacheLimit(cacheSizeKB);
 
   stackedWidget = ui->stackedWidget;
   itemsPage = ui->itemsPage;

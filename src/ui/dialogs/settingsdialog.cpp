@@ -4,6 +4,7 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QPixmapCache>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSignalBlocker>
@@ -451,8 +452,8 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->hideTitlesCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->showSubcollectionTitlesCheckBox != nullptr) {
-    connect(ui->showSubcollectionTitlesCheckBox, &QCheckBox::toggled, this,
+  if (ui->hideSubcollectionTitlesCheckBox != nullptr) {
+    connect(ui->hideSubcollectionTitlesCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
   }
   if (ui->itemWidthSpinBox != nullptr) {
@@ -622,7 +623,7 @@ void SettingsDialog::addCollection() {
   newCollection.horizontalAlignment = HorizontalAlignment::Center;
   newCollection.fontSize = UIConstants::DEFAULT_FONT_SIZE;
   newCollection.hideTitles = false;
-  newCollection.showSubcollectionTitles = true;
+  newCollection.hideSubcollectionTitles = false;
 
   int parentIdx = (currentCollectionIndex >= 0 &&
                    currentCollectionIndex < m_workingCollections.size())
@@ -644,7 +645,7 @@ void SettingsDialog::addCollection() {
     newCollection.showAllSubcollectionItems = parent.showAllSubcollectionItems;
     newCollection.horizontalAlignment = parent.horizontalAlignment;
     newCollection.hideTitles = parent.hideTitles;
-    newCollection.showSubcollectionTitles = parent.showSubcollectionTitles;
+    newCollection.hideSubcollectionTitles = parent.hideSubcollectionTitles;
   }
 
   collections.append(newCollection);
@@ -841,10 +842,10 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.hideTitles = (ui->hideTitlesCheckBox != nullptr)
                           ? ui->hideTitlesCheckBox->isChecked()
                           : config.hideTitles;
-  config.showSubcollectionTitles =
-      (ui->showSubcollectionTitlesCheckBox != nullptr)
-          ? ui->showSubcollectionTitlesCheckBox->isChecked()
-          : config.showSubcollectionTitles;
+  config.hideSubcollectionTitles =
+      (ui->hideSubcollectionTitlesCheckBox != nullptr)
+          ? ui->hideSubcollectionTitlesCheckBox->isChecked()
+          : config.hideSubcollectionTitles;
   return config;
 }
 
@@ -910,9 +911,9 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
            originalConfig.hideVerticalScrollbar) ||
       ((ui->hideTitlesCheckBox != nullptr) &&
        ui->hideTitlesCheckBox->isChecked() != originalConfig.hideTitles) ||
-      ((ui->showSubcollectionTitlesCheckBox != nullptr) &&
-       ui->showSubcollectionTitlesCheckBox->isChecked() !=
-           originalConfig.showSubcollectionTitles) ||
+      ((ui->hideSubcollectionTitlesCheckBox != nullptr) &&
+       ui->hideSubcollectionTitlesCheckBox->isChecked() !=
+           originalConfig.hideSubcollectionTitles) ||
       ((ui->fontSizeSpinBox != nullptr) &&
        ui->fontSizeSpinBox->value() != originalConfig.fontSize));
 }
@@ -1315,6 +1316,11 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->wrapNavigationCheckBox->setChecked(m_generalSettings.wrapNavigation);
     ui->wrapNavigationCheckBox->blockSignals(false);
   }
+  if (ui->pixmapCacheSpinBox != nullptr) {
+    ui->pixmapCacheSpinBox->blockSignals(true);
+    ui->pixmapCacheSpinBox->setValue(m_generalSettings.pixmapCacheSizeMB);
+    ui->pixmapCacheSpinBox->blockSignals(false);
+  }
 }
 
 void SettingsDialog::saveGeneralSettingsFromUI() {
@@ -1327,6 +1333,12 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     if (ui->wrapNavigationCheckBox != nullptr) {
       mainWindow->m_generalSettings.wrapNavigation =
           ui->wrapNavigationCheckBox->isChecked();
+    }
+    if (ui->pixmapCacheSpinBox != nullptr) {
+      int newCacheSize = ui->pixmapCacheSpinBox->value();
+      mainWindow->m_generalSettings.pixmapCacheSizeMB = newCacheSize;
+      // Apply immediately (in KB)
+      QPixmapCache::setCacheLimit(newCacheSize * 1024);
     }
     mainWindow->getSettingsManager()->saveGeneralSettings(
         mainWindow->m_generalSettings);
@@ -1431,9 +1443,9 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->hideTitlesCheckBox != nullptr) {
     ui->hideTitlesCheckBox->setChecked(config.hideTitles);
   }
-  if (ui->showSubcollectionTitlesCheckBox != nullptr) {
-    ui->showSubcollectionTitlesCheckBox->setChecked(
-        config.showSubcollectionTitles);
+  if (ui->hideSubcollectionTitlesCheckBox != nullptr) {
+    ui->hideSubcollectionTitlesCheckBox->setChecked(
+        config.hideSubcollectionTitles);
   }
   if (ui->itemWidthSpinBox != nullptr) {
     ui->itemWidthSpinBox->setValue(config.itemWidth);

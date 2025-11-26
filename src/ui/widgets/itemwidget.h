@@ -36,6 +36,7 @@ public:
 
   QString getItemName() const { return itemName; }
   QString getFilePath() const { return filePath; }
+  QRect selectionBorderRectInParent() const;
   bool isSelected() const { return isSelectedState; }
 
   void setPulseOpacity(qreal opacity);
@@ -44,12 +45,12 @@ public:
   void setItemDimensions(int width, int height);
   void setFontSize(int fontSize);
   void setHideTitles(bool hide);
-  void setShowSubcollectionTitles(bool show);
+  void setHideSubcollectionTitles(bool hide);
   int m_itemWidth;
   int m_itemHeight;
   int m_fontSize = 12; // Default font size
   bool m_hideTitles = false;
-  bool m_showSubcollectionTitles = true;
+  bool m_hideSubcollectionTitles = false;
   QLabel *imageLabel = nullptr;
   QLabel *nameLabel = nullptr;
   QWidget *triangleIndicator;

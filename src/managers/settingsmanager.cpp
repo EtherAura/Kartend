@@ -172,7 +172,7 @@ void SettingsManager::loadCollections(
     config.hideHorizontalScrollbar = settings.value("hideHorizontalScrollbar", false).toBool();
     config.hideVerticalScrollbar = settings.value("hideVerticalScrollbar", false).toBool();
     config.hideTitles = settings.value("hideTitles", false).toBool();
-    config.showSubcollectionTitles = settings.value("showSubcollectionTitles", true).toBool();
+    config.hideSubcollectionTitles = settings.value("hideSubcollectionTitles", false).toBool();
     config.horizontalSpacing = settings.value("horizontalSpacing", UIConstants::GRID_SPACING).toInt();
     config.verticalSpacing = settings.value("verticalSpacing", 20).toInt();
     config.itemWidth = settings.value("itemWidth", UIConstants::DEFAULT_ITEM_WIDTH).toInt();
@@ -250,7 +250,7 @@ void SettingsManager::saveCollections(
     settings.setValue("hideHorizontalScrollbar", c.hideHorizontalScrollbar);
     settings.setValue("hideVerticalScrollbar", c.hideVerticalScrollbar);
     settings.setValue("hideTitles", c.hideTitles);
-    settings.setValue("showSubcollectionTitles", c.showSubcollectionTitles);
+    settings.setValue("hideSubcollectionTitles", c.hideSubcollectionTitles);
     settings.setValue("horizontalSpacing", c.horizontalSpacing);
     settings.setValue("verticalSpacing", c.verticalSpacing);
     settings.setValue("itemWidth", c.itemWidth);
@@ -423,7 +423,8 @@ void updateViewingFlags(const CollectionConfig &configA,
     hasChanges = true;
     fontSizeChanged = true;
   }
-  if (configA.hideTitles != configB.hideTitles) {
+  if (configA.hideTitles != configB.hideTitles ||
+      configA.hideSubcollectionTitles != configB.hideSubcollectionTitles) {
     hasChanges = true;
     hideTitlesChanged = true;
   }
@@ -650,6 +651,9 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   s.beginGroup("General");
   settings.rememberSelection = s.value("rememberSelection", true).toBool();
   settings.wrapNavigation = s.value("wrapNavigation", false).toBool();
+  settings.pixmapCacheSizeMB = s.value("pixmapCacheSizeMB", 50).toInt();
+  // Clamp to reasonable range: 10MB - 500MB
+  settings.pixmapCacheSizeMB = qBound(10, settings.pixmapCacheSizeMB, 500);
   s.endGroup();
 
   settings.lastSelectedItems.clear();
@@ -660,11 +664,13 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
 void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.rememberSelection = settings.rememberSelection;
   m_generalSettings.wrapNavigation = settings.wrapNavigation;
+  m_generalSettings.pixmapCacheSizeMB = qBound(10, settings.pixmapCacheSizeMB, 500);
 
   QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   s.beginGroup("General");
   s.setValue("rememberSelection", m_generalSettings.rememberSelection);
   s.setValue("wrapNavigation", m_generalSettings.wrapNavigation);
+  s.setValue("pixmapCacheSizeMB", m_generalSettings.pixmapCacheSizeMB);
   s.endGroup();
   s.sync();
 }

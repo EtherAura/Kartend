@@ -34,6 +34,8 @@ MediaItemWidget::MediaItemWidget(QWidget *parent)
   nameLabel = itemUi.nameLabel;
   triangleIndicator = itemUi.triangleIndicator;
   setFocusPolicy(Qt::NoFocus);
+  // Allow children (nameLabel) to overflow widget bounds for long titles
+  setAttribute(Qt::WA_TransparentForMouseEvents, false);
   if (imageLabel != nullptr) {
     imageLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
   }
@@ -262,7 +264,8 @@ auto MediaItemWidget::computeSelectionBorderRect() const -> QRect {
   const int right = imageRect.right() + UIConstants::COLLECTION_ITEM_SPACING;
 
   int bottom;
-  bool shouldShowTitle = !m_hideTitles || (m_isSubcollection && m_showSubcollectionTitles);
+  // Show title if: regular item with titles visible, OR subcollection with subcollection titles visible
+  bool shouldShowTitle = (!m_isSubcollection && !m_hideTitles) || (m_isSubcollection && !m_hideSubcollectionTitles);
 
   if (!shouldShowTitle) {
     // If titles are hidden, only surround the artwork
@@ -278,7 +281,7 @@ auto MediaItemWidget::computeSelectionBorderRect() const -> QRect {
 
     int effectiveTextHeight = reservedTextHeight;
 
-    // Optimize selection rect to fit actual text content
+    // Compute actual text height to fit selection rect around visible text
     if (!itemName.isEmpty()) {
       QFont actualFont = this->font();
       actualFont.setPointSize(m_fontSize);
@@ -294,7 +297,9 @@ auto MediaItemWidget::computeSelectionBorderRect() const -> QRect {
           textHeight = actualFm.ascent() + actualFm.descent();
       }
       
-      effectiveTextHeight = std::min(textHeight, reservedTextHeight);
+      // Use actual text height - don't cap at reserved height so selection
+      // encompasses titles that wrap to 3+ lines
+      effectiveTextHeight = textHeight;
     } else {
       effectiveTextHeight = 0;
     }
@@ -310,6 +315,16 @@ auto MediaItemWidget::computeSelectionBorderRect() const -> QRect {
   }
 
   return {left, top, right - left, bottom - top};
+}
+
+auto MediaItemWidget::selectionBorderRectInParent() const -> QRect {
+  QRect localRect = computeSelectionBorderRect();
+  if (!localRect.isValid()) {
+    return {};
+  }
+  const QPoint topLeft = mapToParent(localRect.topLeft());
+  const QPoint bottomRight = mapToParent(localRect.bottomRight());
+  return QRect(topLeft, bottomRight);
 }
 
 // Applies visual effects for selection state, preserving animation behavior
@@ -416,7 +431,8 @@ void MediaItemWidget::applyDimensions() {
   QFont referenceFont = this->font();
   referenceFont.setPointSize(std::max(12, m_fontSize));
   QFontMetrics referenceFm(referenceFont);
-  int textLines = 2;
+  // Reserve space for 3 lines of text to accommodate longer titles
+  int textLines = 3;
   int singleLineHeight = referenceFm.ascent() + referenceFm.descent();
   int reservedTextHeight = singleLineHeight * textLines;
 
@@ -424,17 +440,18 @@ void MediaItemWidget::applyDimensions() {
                         UIConstants::WIDGET_SPACING - reservedTextHeight;
   int availableWidth = m_itemWidth - UIConstants::WIDGET_PADDING;
   int artworkSize = qMin(availableWidth, availableHeight);
+  
+  // Show title if: regular item with titles visible, OR subcollection with subcollection titles visible
+  bool shouldShowTitle = (!m_isSubcollection && !m_hideTitles) || (m_isSubcollection && !m_hideSubcollectionTitles);
+  
   if (imageLabel != nullptr) {
     imageLabel->setFixedSize(artworkSize, artworkSize);
   }
   if (nameLabel != nullptr) {
-    // Always keep visible to reserve space
     nameLabel->setVisible(true);
-    nameLabel->setFixedHeight(reservedTextHeight);
     nameLabel->setMaximumWidth(artworkSize);
+    nameLabel->setFixedHeight(reservedTextHeight);
     
-    bool shouldShowTitle = !m_hideTitles || (m_isSubcollection && m_showSubcollectionTitles);
-
     if (!shouldShowTitle) {
       nameLabel->setText("");
     } else {
@@ -517,7 +534,8 @@ void MediaItemWidget::setAsSubcollection(int index, const QString &name) {
 void MediaItemWidget::setItemName(const QString &name) {
   itemName = name;
   if (nameLabel != nullptr) {
-    bool shouldShowTitle = !m_hideTitles || (m_isSubcollection && m_showSubcollectionTitles);
+    // Show title if: regular item with titles visible, OR subcollection with subcollection titles visible
+    bool shouldShowTitle = (!m_isSubcollection && !m_hideTitles) || (m_isSubcollection && !m_hideSubcollectionTitles);
     if (!shouldShowTitle) {
       // Keep the label visible but empty to reserve layout space
       nameLabel->setText("");
@@ -581,11 +599,11 @@ void MediaItemWidget::setHideTitles(bool hide) {
   applyDimensions();
 }
 
-void MediaItemWidget::setShowSubcollectionTitles(bool show) {
-  if (m_showSubcollectionTitles == show) {
+void MediaItemWidget::setHideSubcollectionTitles(bool hide) {
+  if (m_hideSubcollectionTitles == hide) {
     return;
   }
-  m_showSubcollectionTitles = show;
+  m_hideSubcollectionTitles = hide;
   applyDimensions();
 }
 

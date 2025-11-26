@@ -6,6 +6,8 @@
 #include <QDateTime>
 #include <QHash>
 #include <QObject>
+#include <QPointer>
+#include <QRect>
 #include <QSet>
 #include <QTimer>
 
@@ -54,6 +56,8 @@ public:
   int getFirstVisibleRow() const;
   int getLastVisibleRow() const;
   void updateSelectionForIndex(int selectedIndex);
+  void refreshSelectionOverlayState();
+  void setForceSelectionOverlayVisible(bool force);
   QString getSubcollectionName(int subcollectionIndex) const;
   void setDatabaseManager(DatabaseManager *manager);
   void recenterVirtualContainer();
@@ -112,6 +116,13 @@ private:
   QPoint getItemPosition(int index) const;
   void rebuildFilteredIndices();
 
+  // Widget pool for recycling MediaItemWidgets
+  static constexpr int MAX_POOL_SIZE = 50;
+  QList<MediaItemWidget *> m_widgetPool;
+  MediaItemWidget *acquireWidget();
+  void releaseWidget(MediaItemWidget *widget);
+  void clearWidgetPool();
+
   QWidget *m_gridContainer = nullptr;
   QScrollArea *m_mediaScrollArea = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
@@ -141,11 +152,13 @@ private:
   int m_selectionDirection = 0;
   bool m_userScrollbarActive = false;
   QTimer *m_userScrollIdleTimer = nullptr;
-  QWidget *m_selectionOverlay = nullptr;
-  QPropertyAnimation *m_selectionOverlayAnim = nullptr;
   int m_committedSelectedIndex = -1;
+  bool m_forceSelectionOverlayVisible = false;
+  bool m_restartingSelectionAnim = false;  // Prevents finish callback interference
   QHash<QString, QString> m_rawToFullPath;
   QString resolveToFullPath(const QString &raw) const;
+  QPointer<QWidget> m_selectionOverlay;
+  QPointer<QPropertyAnimation> m_selectionOverlayAnim;
 
   // Helper methods to reduce cognitive complexity
   QSet<int> calculateNeededIndices() const;
@@ -177,6 +190,10 @@ private:
                                   int itemsPerRow, bool &isHorizontalMove);
   void setupSelectionOverlay();
   void setupSelectionAnimation();
+  QRect selectionOverlayRectForWidget(MediaItemWidget *widget) const;
+  QRect selectionOverlayRectForIndex(int visualIndex) const;
+  void applySelectionOverlayToWidget(MediaItemWidget *widget);
+  bool shouldKeepSelectionOverlayVisible() const;
   void handleHorizontalMoveAnimation(int selectedIndex, int prevIndex);
   void handleDirectSelectionUpdate(int selectedIndex);
   void prewarmSurroundingWidgets(int selectedIndex);

@@ -165,6 +165,8 @@ constexpr int SIDEBAR_LAYOUT_NOTIFY_DELAY_MS = 100;
 
 constexpr int ARROW_KEY_BASE_INTERVAL_MS =
     260; // Base delay between repeated arrow moves
+constexpr int CLICK_HOLD_HORIZONTAL_INTERVAL_MS =
+    320; // Delay for horizontal click-hold (slower to allow animation)
 constexpr int ARROW_KEY_VERTICAL_EXTRA_MS =
     120; // Extra delay for Up/Down (rows) vs Left/Right
 constexpr int ARROW_KEY_ANIMATION_SETTLE_MS =

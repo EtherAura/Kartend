@@ -9,15 +9,25 @@
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QPointer>
 #include <QPropertyAnimation>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSet>
+#include <QTextStream>
 #include <QTimer>
 #include <QWidget>
 #include <algorithm>
+
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcScrollManager, "kartend.scrollmanager")
+#define debugLog(msg) qCDebug(lcScrollManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
 
 // Initializes timers for throttle, arrow-key updates, and a short idle window
 // to treat any scrollbar interaction as user-driven scrolling
@@ -58,7 +68,48 @@ ScrollManager::~ScrollManager() {
     }
   }
   m_activeWidgets.clear();
+  clearWidgetPool();
   cleanupVirtualContainer();
+}
+
+// Widget pool management for recycling MediaItemWidgets
+MediaItemWidget *ScrollManager::acquireWidget() {
+  if (!m_widgetPool.isEmpty()) {
+    MediaItemWidget *widget = m_widgetPool.takeLast();
+    return widget;
+  }
+  return new MediaItemWidget(m_virtualContainer);
+}
+
+void ScrollManager::releaseWidget(MediaItemWidget *widget) {
+  if (widget == nullptr) return;
+  
+  widget->hide();
+  // Disconnect specific signals we connect, not the wildcard
+  QObject::disconnect(widget, &MediaItemWidget::clicked, nullptr, nullptr);
+  QObject::disconnect(widget, &MediaItemWidget::doubleClicked, nullptr, nullptr);
+  QObject::disconnect(widget, &MediaItemWidget::subcollectionClicked, nullptr, nullptr);
+  QObject::disconnect(widget, &MediaItemWidget::subcollectionDoubleClicked, nullptr, nullptr);
+  
+  widget->setSelected(false);
+  widget->setFilePath(QString());
+  widget->setItemName(QString());
+  widget->setArtworkPixmap(QPixmap());
+  
+  if (m_widgetPool.size() < MAX_POOL_SIZE) {
+    m_widgetPool.append(widget);
+  } else {
+    widget->deleteLater();
+  }
+}
+
+void ScrollManager::clearWidgetPool() {
+  for (MediaItemWidget *widget : m_widgetPool) {
+    if (widget) {
+      widget->deleteLater();
+    }
+  }
+  m_widgetPool.clear();
 }
 
 void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
@@ -236,13 +287,13 @@ void ScrollManager::cleanup() {
 
   for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
     if (MediaItemWidget *widget = it.value()) {
-      widget->hide();
-      widget->deleteLater();
+      releaseWidget(widget);
     }
   }
   m_activeWidgets.clear();
 
   cleanupVirtualContainer();
+  clearWidgetPool(); // Pool widgets are tied to the old virtual container
   m_filePaths.clear();
   m_fileNames.clear();
   m_subcollections.clear();
@@ -295,6 +346,13 @@ void ScrollManager::updateVirtualView() {
 
   removeUnneededWidgets(needed);
   updateArtworkIfAllowed();
+
+  if (m_selectionOverlay != nullptr) {
+    if (m_forceSelectionOverlayVisible && m_lastSelectedIndex >= 0) {
+      refreshSelectionOverlayState();
+    }
+    m_selectionOverlay->raise();
+  }
 }
 
 auto ScrollManager::calculateNeededIndices() const -> QSet<int> {
@@ -328,8 +386,7 @@ void ScrollManager::removeUnneededWidgets(const QSet<int> &needed) {
   for (int visualIndex : existing) {
     if (!needed.contains(visualIndex)) {
       if (MediaItemWidget *widget = m_activeWidgets.value(visualIndex)) {
-        widget->hide();
-        widget->deleteLater();
+        releaseWidget(widget);
       }
       m_activeWidgets.remove(visualIndex);
     }
@@ -509,7 +566,7 @@ void ScrollManager::setupAndStartCenterAnimation(QScrollBar *scrollBar,
 }
 
 void ScrollManager::setupSelectionOverlay() {
-  if (m_selectionOverlay == nullptr) {
+  if (m_selectionOverlay.isNull()) {
     m_selectionOverlay = new QWidget(m_virtualContainer);
     m_selectionOverlay->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     m_selectionOverlay->setAttribute(Qt::WA_NoSystemBackground, true);
@@ -518,20 +575,34 @@ void ScrollManager::setupSelectionOverlay() {
                 "palette(highlight); border-radius:%2px;")
             .arg(UIConstants::BORDER_WIDTH_SELECTION)
             .arg(UIConstants::BORDER_RADIUS));
+    // QPointer auto-nullifies when widget is destroyed, no manual tracking needed
   }
 }
 
 void ScrollManager::setupSelectionAnimation() {
-  if (m_selectionOverlayAnim == nullptr) {
+  if (m_selectionOverlayAnim.isNull()) {
     m_selectionOverlayAnim =
         new QPropertyAnimation(m_selectionOverlay, "geometry", this);
     m_selectionOverlayAnim->setEasingCurve(QEasingCurve::Linear);
     QObject::disconnect(m_selectionOverlayAnim, nullptr, this, nullptr);
     connect(
         m_selectionOverlayAnim, &QPropertyAnimation::finished, this, [this]() {
-          if (m_gridContainer) {
-            m_gridContainer->setProperty(PropertyKeys::GlideAnimating, false);
+          debugLog(QString("animation finished callback: restarting=%1 forceVisible=%2")
+                   .arg(m_restartingSelectionAnim).arg(m_forceSelectionOverlayVisible));
+          // If we're restarting the animation, don't run finish logic
+          if (m_restartingSelectionAnim) {
+            return;
           }
+          
+          // During click-hold, keep GlideAnimating true so widget doesn't draw its own border
+          // and keep overlay visible - next animation will start shortly
+          const bool keepVisible = shouldKeepSelectionOverlayVisible();
+          if (!keepVisible) {
+            if (m_gridContainer) {
+              m_gridContainer->setProperty(PropertyKeys::GlideAnimating, false);
+            }
+          }
+          
           if (m_committedSelectedIndex >= 0 &&
               m_committedSelectedIndex != m_lastSelectedIndex) {
             if (auto *prevSel =
@@ -544,134 +615,268 @@ void ScrollManager::setupSelectionAnimation() {
             newSel->setSelected(true);
           }
           m_committedSelectedIndex = m_lastSelectedIndex;
+          
+          debugLog(QString("  anim finish: keepVisible=%1").arg(keepVisible));
           if (m_selectionOverlay) {
-            m_selectionOverlay->hide();
+            if (keepVisible) {
+              m_selectionOverlay->raise();
+            } else {
+              debugLog("  HIDING overlay in anim finish callback");
+              m_selectionOverlay->hide();
+            }
           }
           updateVirtualView();
         });
   }
 }
 
+auto ScrollManager::selectionOverlayRectForWidget(MediaItemWidget *widget) const
+    -> QRect {
+  if (widget == nullptr) {
+    return {};
+  }
+  QRect borderRect = widget->selectionBorderRectInParent();
+  if (borderRect.isValid()) {
+    return borderRect;
+  }
+
+  QRect widgetRect = widget->geometry();
+  if (!widgetRect.isValid()) {
+    return {};
+  }
+
+  const int inset = UIConstants::COLLECTION_ITEM_SPACING;
+  return widgetRect.adjusted(-inset, -inset, inset, inset);
+}
+
+auto ScrollManager::selectionOverlayRectForIndex(int visualIndex) const
+    -> QRect {
+  if (visualIndex < 0 || visualIndex >= m_totalItems) {
+    return {};
+  }
+  QPoint pos = getItemPosition(visualIndex);
+  const int inset = UIConstants::COLLECTION_ITEM_SPACING;
+  return QRect(pos.x() - inset, pos.y() - inset,
+               m_metrics.itemWidth + 2 * inset,
+               m_metrics.itemHeight + 2 * inset);
+}
+
+void ScrollManager::applySelectionOverlayToWidget(MediaItemWidget *widget) {
+  if (widget == nullptr) {
+    return;
+  }
+  setupSelectionOverlay();
+  if (m_selectionOverlay == nullptr) {
+    return;
+  }
+
+  const QRect rect = selectionOverlayRectForWidget(widget);
+  if (!rect.isValid()) {
+    return;
+  }
+
+  m_selectionOverlay->setGeometry(rect);
+  m_selectionOverlay->show();
+  m_selectionOverlay->raise();
+}
+
+auto ScrollManager::shouldKeepSelectionOverlayVisible() const -> bool {
+  return m_forceSelectionOverlayVisible;
+}
+
+void ScrollManager::refreshSelectionOverlayState() {
+  debugLog(QString("refreshSelectionOverlayState: m_lastSelectedIndex=%1 forceVisible=%2")
+           .arg(m_lastSelectedIndex).arg(m_forceSelectionOverlayVisible));
+  
+  if (!shouldKeepSelectionOverlayVisible()) {
+    if (m_selectionOverlay != nullptr) {
+      debugLog("  HIDING overlay (not force visible)");
+      m_selectionOverlay->hide();
+    }
+
+    bool glideWasActive = false;
+    if (m_gridContainer != nullptr) {
+      glideWasActive =
+          m_gridContainer->property(PropertyKeys::GlideAnimating).toBool();
+      m_gridContainer->setProperty(PropertyKeys::GlideAnimating, false);
+    }
+
+    if (glideWasActive && m_lastSelectedIndex >= 0) {
+      ensureWidgetForIndex(m_lastSelectedIndex);
+      if (auto *selectedWidget =
+              m_activeWidgets.value(m_lastSelectedIndex, nullptr)) {
+        debugLog("  requesting widget repaint for selection border");
+        selectedWidget->update();
+      }
+    }
+    return;
+  }
+
+  // Don't interfere with an ongoing selection overlay animation
+  if ((m_selectionOverlayAnim != nullptr) &&
+      m_selectionOverlayAnim->state() == QAbstractAnimation::Running) {
+    debugLog("  animation running, just show/raise");
+    if (m_selectionOverlay != nullptr) {
+      m_selectionOverlay->show();
+      m_selectionOverlay->raise();
+    }
+    return;
+  }
+
+  // During click-hold, we respect the current visibility state (managed by move handlers)
+  // If visible, keep it on top. If hidden (e.g. wrapped row), keep it hidden.
+  if (m_forceSelectionOverlayVisible) {
+    if (m_selectionOverlay != nullptr && m_selectionOverlay->isVisible()) {
+      debugLog("  click-hold mode, raising visible overlay");
+      m_selectionOverlay->raise();
+    } else {
+      debugLog("  click-hold mode, overlay hidden (respecting state)");
+    }
+    return;
+  }
+
+  if (m_lastSelectedIndex < 0) {
+    return;
+  }
+
+  setupSelectionOverlay();
+  if (m_selectionOverlay == nullptr) {
+    return;
+  }
+
+  // Position overlay directly (non-click-hold case or initial positioning)
+  QRect rect = selectionOverlayRectForIndex(m_lastSelectedIndex);
+  debugLog(QString("  setting geometry to rect: x=%1 y=%2 w=%3 h=%4")
+           .arg(rect.x()).arg(rect.y()).arg(rect.width()).arg(rect.height()));
+  if (rect.isValid()) {
+    m_selectionOverlay->setGeometry(rect);
+    m_selectionOverlay->show();
+    m_selectionOverlay->raise();
+    m_selectionOverlay->update();
+  }
+}
+
+void ScrollManager::setForceSelectionOverlayVisible(bool force) {
+  debugLog(QString("setForceSelectionOverlayVisible: %1").arg(force));
+  if (m_forceSelectionOverlayVisible == force) {
+    return;
+  }
+  m_forceSelectionOverlayVisible = force;
+  refreshSelectionOverlayState();
+}
+
 void ScrollManager::handleHorizontalMoveAnimation(int selectedIndex,
                                                   int prevIndex) {
+  debugLog(QString("handleHorizontalMoveAnimation: prev=%1 sel=%2 forceVisible=%3")
+           .arg(prevIndex).arg(selectedIndex).arg(m_forceSelectionOverlayVisible));
+  
   setupSelectionOverlay();
   setupSelectionAnimation();
 
-  auto getWidget = [&](int visual) -> MediaItemWidget * {
-    ensureWidgetForIndex(visual);
-    return m_activeWidgets.value(visual, nullptr);
-  };
+  if (m_selectionOverlay == nullptr || m_selectionOverlayAnim == nullptr) {
+    debugLog("  overlay or anim is null, returning");
+    return;
+  }
 
-  auto computeBorderRect = [&](MediaItemWidget *widget) -> QRect {
-    if (!widget) {
-      return {};
+  // Calculate target rect for the new selection
+  QRect targetRect = selectionOverlayRectForIndex(selectedIndex);
+  if (!targetRect.isValid()) {
+    ensureWidgetForIndex(selectedIndex);
+    if (auto *w = m_activeWidgets.value(selectedIndex, nullptr)) {
+      targetRect = selectionOverlayRectForWidget(w);
     }
-    // Use widget geometry directly to avoid layout latency issues
-    QRect widgetRect = widget->geometry();
-    
-    // Assuming standard layout where image is at top and name at bottom
-    // We can approximate the content rect based on widget size and margins
-    // But since the widget itself is sized to the item dimensions, we can use its rect
-    // adjusted for the selection border spacing.
-    
-    // However, the original code tried to be precise about image vs name.
-    // If we trust the widget geometry is set correctly in ensureWidgetForIndex:
-    // itemWidget->setGeometry(position.x(), position.y(), m_metrics.itemWidth, m_metrics.itemHeight);
-    
-    // The selection overlay should wrap the *content* of the widget.
-    // If the widget fills the cell, we can use the widget rect.
-    
-    int left = widgetRect.left() - UIConstants::COLLECTION_ITEM_SPACING;
-    int top = widgetRect.top() - UIConstants::COLLECTION_ITEM_SPACING;
-    int right = widgetRect.right() + UIConstants::COLLECTION_ITEM_SPACING;
-    int bottom = widgetRect.bottom() + UIConstants::COLLECTION_ITEM_SPACING;
-    
-    return {QPoint(left, top), QPoint(right, bottom)};
-  };
+  }
+  if (!targetRect.isValid()) {
+    debugLog("  targetRect invalid, returning");
+    return;
+  }
 
-  MediaItemWidget *currentWidget = getWidget(selectedIndex);
-  QRect targetRect = computeBorderRect(currentWidget);
+  debugLog(QString("  targetRect: x=%1 y=%2").arg(targetRect.x()).arg(targetRect.y()));
 
-  if (!m_selectionOverlay->isVisible()) {
-    QRect startRect;
-    MediaItemWidget *committedWidget = (m_committedSelectedIndex >= 0)
-                                           ? getWidget(m_committedSelectedIndex)
-                                           : nullptr;
-    if (committedWidget != nullptr) {
-      startRect = computeBorderRect(committedWidget);
-    } else if (prevIndex >= 0) {
-      if (auto *previousWidget = getWidget(prevIndex)) {
-        startRect = computeBorderRect(previousWidget);
+  // Get current overlay position for animation
+  QRect currentRect = m_selectionOverlay->geometry();
+  
+  // If overlay isn't visible or valid, try to start from previous selection
+  if (!m_selectionOverlay->isVisible() || !currentRect.isValid()) {
+    QRect startRect = selectionOverlayRectForIndex(prevIndex);
+    if (!startRect.isValid()) {
+      ensureWidgetForIndex(prevIndex);
+      if (auto *w = m_activeWidgets.value(prevIndex, nullptr)) {
+        startRect = selectionOverlayRectForWidget(w);
       }
     }
-    if (!startRect.isValid()) {
-      startRect = targetRect;
+    if (startRect.isValid()) {
+      currentRect = startRect;
+    } else {
+      currentRect = targetRect;
     }
-    m_selectionOverlay->setGeometry(startRect);
-    m_selectionOverlay->show();
+    m_selectionOverlay->setGeometry(currentRect);
   }
+
+  // Update widget selection states
+  if (m_committedSelectedIndex >= 0 && m_committedSelectedIndex != selectedIndex) {
+    if (auto *prevWidget = m_activeWidgets.value(m_committedSelectedIndex, nullptr)) {
+      prevWidget->setSelected(false);
+    }
+  }
+  ensureWidgetForIndex(selectedIndex);
+  if (auto *currWidget = m_activeWidgets.value(selectedIndex, nullptr)) {
+    currWidget->setSelected(true);
+  }
+  m_committedSelectedIndex = selectedIndex;
+
+  // Show and raise overlay AFTER widget operations
+  m_selectionOverlay->show();
   m_selectionOverlay->raise();
 
   if (m_gridContainer != nullptr) {
     m_gridContainer->setProperty(PropertyKeys::GlideAnimating, true);
   }
 
+  // Handle animation - stop if running and get current position
   if (m_selectionOverlayAnim->state() == QAbstractAnimation::Running) {
-    m_selectionOverlayAnim->blockSignals(true);
+    currentRect = m_selectionOverlay->geometry();
+    m_restartingSelectionAnim = true;
     m_selectionOverlayAnim->stop();
-    m_selectionOverlayAnim->blockSignals(false);
+    m_restartingSelectionAnim = false;
   }
 
-  QRect currentRect = m_selectionOverlay->geometry();
-
-  // Check for lag: if the overlay is far from where it should be (prevIndex), snap it.
-  if (prevIndex >= 0) {
-      MediaItemWidget *prevWidget = getWidget(prevIndex);
-      if (prevWidget) {
-          QRect prevRect = computeBorderRect(prevWidget);
-          int lagX = std::abs(currentRect.center().x() - prevRect.center().x());
-          int lagY = std::abs(currentRect.center().y() - prevRect.center().y());
-          double lag = std::sqrt(lagX * lagX + lagY * lagY);
-          
-          // If lag is significant (e.g. > 1.5 item widths), snap to prevRect
-          if (lag > m_metrics.itemWidth * 1.5) {
-              currentRect = prevRect;
-              m_selectionOverlay->setGeometry(currentRect);
-          }
-      }
-  }
-
+  // Calculate animation duration based on distance
   int deltaX = std::abs(currentRect.center().x() - targetRect.center().x());
   int deltaY = std::abs(currentRect.center().y() - targetRect.center().y());
-  double distance = std::sqrt(deltaX * deltaX + deltaY * deltaY);
+  double distance = std::sqrt(static_cast<double>(deltaX * deltaX + deltaY * deltaY));
 
-  static constexpr double SELECTION_ANIMATION_PIXELS_PER_SECOND = 1500.0;
-  static constexpr double MILLISECONDS_PER_SECOND = 1000.0;
-  static constexpr int MIN_SELECTION_ANIMATION_DURATION = 50;
-  static constexpr int MAX_SELECTION_ANIMATION_DURATION = 300;
+  static constexpr double PIXELS_PER_SECOND = 1500.0;
+  static constexpr int MIN_DURATION = 50;
+  static constexpr int MAX_DURATION = 300;
 
-  int computedDuration = static_cast<int>(
-      std::round((distance / SELECTION_ANIMATION_PIXELS_PER_SECOND) *
-                 MILLISECONDS_PER_SECOND));
-  computedDuration = std::clamp(computedDuration,
-                                MIN_SELECTION_ANIMATION_DURATION,
-                                MAX_SELECTION_ANIMATION_DURATION);
+  int duration = static_cast<int>(std::round((distance / PIXELS_PER_SECOND) * 1000.0));
+  duration = std::clamp(duration, MIN_DURATION, MAX_DURATION);
 
-  m_selectionOverlayAnim->setDuration(computedDuration);
+  // Start the glide animation
+  m_selectionOverlayAnim->setDuration(duration);
   m_selectionOverlayAnim->setStartValue(currentRect);
   m_selectionOverlayAnim->setEndValue(targetRect);
   m_selectionOverlayAnim->start();
+  
+  debugLog(QString("  animation started: from (%1,%2) to (%3,%4) duration=%5")
+           .arg(currentRect.x()).arg(currentRect.y())
+           .arg(targetRect.x()).arg(targetRect.y())
+           .arg(duration));
 }
 
 void ScrollManager::handleDirectSelectionUpdate(int selectedIndex) {
+  const bool keepOverlay = shouldKeepSelectionOverlayVisible();
   if ((m_selectionOverlay != nullptr) && m_selectionOverlay->isVisible()) {
     if ((m_selectionOverlayAnim != nullptr) &&
         m_selectionOverlayAnim->state() == QAbstractAnimation::Running) {
       m_selectionOverlayAnim->stop();
     }
-    m_selectionOverlay->hide();
-    if (m_gridContainer != nullptr) {
-      m_gridContainer->setProperty(PropertyKeys::GlideAnimating, false);
+    if (!keepOverlay) {
+      m_selectionOverlay->hide();
+      if (m_gridContainer != nullptr) {
+        m_gridContainer->setProperty(PropertyKeys::GlideAnimating, false);
+      }
     }
   }
 
@@ -683,8 +888,24 @@ void ScrollManager::handleDirectSelectionUpdate(int selectedIndex) {
     }
   }
   ensureWidgetForIndex(selectedIndex);
-  if (auto *currSel = m_activeWidgets.value(selectedIndex, nullptr)) {
+  auto *currSel = m_activeWidgets.value(selectedIndex, nullptr);
+  if (currSel != nullptr) {
     currSel->setSelected(true);
+    // Force update to ensure border is drawn if we are in widget-border mode
+    currSel->update();
+  }
+  
+  if (keepOverlay) {
+    // For direct updates (non-gliding) during click-hold (e.g. row wrap),
+    // use widget border instead of overlay to avoid visual glitches.
+    // This ensures we always have a visible selection indicator.
+    if (m_gridContainer != nullptr) {
+      m_gridContainer->setProperty(PropertyKeys::GlideAnimating, false);
+    }
+    if (m_selectionOverlay != nullptr) {
+      m_selectionOverlay->hide();
+      debugLog("  handleDirectSelectionUpdate: hiding overlay, using widget border");
+    }
   }
   m_committedSelectedIndex = selectedIndex;
 }
@@ -746,27 +967,34 @@ void ScrollManager::scheduleArrowKeyUpdate(int selectedIndex) {
 // Updates selection visuals and manages prewarming, overlay animation, and
 // arrow-centering properties
 void ScrollManager::updateSelectionForIndex(int selectedIndex) {
+  debugLog(QString("updateSelectionForIndex: sel=%1 lastSel=%2 forceVisible=%3")
+           .arg(selectedIndex).arg(m_lastSelectedIndex).arg(m_forceSelectionOverlayVisible));
+  
   if (m_destroying || (m_mediaScrollArea == nullptr) || selectedIndex < 0 ||
       selectedIndex >= m_totalItems) {
+    debugLog("  early return due to invalid state");
     return;
   }
 
   int prevIndex = m_lastSelectedIndex;
-  m_lastSelectedIndex = selectedIndex;
+  const bool sameSelection = (prevIndex == selectedIndex);
 
-  if (prevIndex >= 0) {
-    int delta = selectedIndex - prevIndex;
-    if (delta == 0) {
-      m_selectionDirection = 0;
-    } else if (delta > 0) {
-      m_selectionDirection = 1;
+  if (!sameSelection) {
+    m_lastSelectedIndex = selectedIndex;
+    debugLog(QString("  updated m_lastSelectedIndex to %1").arg(selectedIndex));
+
+    if (prevIndex >= 0) {
+      int delta = selectedIndex - prevIndex;
+      if (delta == 0) {
+        m_selectionDirection = 0;
+      } else if (delta > 0) {
+        m_selectionDirection = 1;
+      } else {
+        m_selectionDirection = -1;
+      }
     } else {
-      m_selectionDirection = -1;
+      m_selectionDirection = 0;
     }
-    m_lastSelectedRow =
-        GridUtils::computeItemRow(selectedIndex, m_metrics.itemsPerRow);
-  } else {
-    m_selectionDirection = 0;
     m_lastSelectedRow =
         GridUtils::computeItemRow(selectedIndex, m_metrics.itemsPerRow);
   }
@@ -779,13 +1007,83 @@ void ScrollManager::updateSelectionForIndex(int selectedIndex) {
   };
 
   MediaItemWidget *currentWidget = getWidget(selectedIndex);
+  
+  // During click-holds, we must update overlay even if widget is null
+  const bool keepOverlay = shouldKeepSelectionOverlayVisible();
+  
   if (currentWidget == nullptr) {
+    debugLog(QString("  currentWidget is null for index %1").arg(selectedIndex));
+    // Widget not available, but during click-hold we still update overlay position
+    if (keepOverlay && !sameSelection) {
+      setupSelectionOverlay();
+      if (m_selectionOverlay != nullptr) {
+        QRect rect = selectionOverlayRectForIndex(selectedIndex);
+        if (rect.isValid()) {
+          m_selectionOverlay->setGeometry(rect);
+          m_selectionOverlay->show();
+          m_selectionOverlay->raise();
+          debugLog(QString("  positioned overlay directly at (%1,%2)").arg(rect.x()).arg(rect.y()));
+        }
+      }
+    }
+    return;
+  }
+
+  if (sameSelection) {
+    debugLog("  same selection, returning");
+    
+    // If an animation is running, we MUST let it finish to achieve the "glide" effect.
+    // Interrupting it here would cause the overlay to disappear and the widget border 
+    // to snap back immediately, defeating the purpose of the animation.
+    if ((m_selectionOverlayAnim != nullptr) &&
+        m_selectionOverlayAnim->state() == QAbstractAnimation::Running) {
+      debugLog("  animation running during same-selection update - letting it continue");
+      // Ensure overlay is visible
+      if (m_selectionOverlay != nullptr && !m_selectionOverlay->isVisible()) {
+        m_selectionOverlay->show();
+        m_selectionOverlay->raise();
+      }
+      // Do NOT disable GlideAnimating or stop animation.
+      // The animation finished handler will take care of cleanup.
+      return;
+    }
+
+    if (keepOverlay) {
+      applySelectionOverlayToWidget(currentWidget);
+      if (m_selectionOverlay != nullptr && !m_selectionOverlay->isVisible()) {
+        // Fallback to index-based positioning if widget-based failed
+        QRect rect = selectionOverlayRectForIndex(selectedIndex);
+        if (rect.isValid()) {
+          m_selectionOverlay->setGeometry(rect);
+          m_selectionOverlay->show();
+          m_selectionOverlay->raise();
+        }
+      }
+    } else if ((m_selectionOverlay != nullptr) &&
+               m_selectionOverlay->isVisible()) {
+      m_selectionOverlay->hide();
+    }
+    if (m_committedSelectedIndex >= 0 &&
+        m_committedSelectedIndex != selectedIndex) {
+      if (auto *prevSel =
+              m_activeWidgets.value(m_committedSelectedIndex, nullptr)) {
+        prevSel->setSelected(false);
+      }
+    }
+    currentWidget->setSelected(true);
+    m_committedSelectedIndex = selectedIndex;
+    if (m_gridContainer != nullptr && !keepOverlay) {
+      m_gridContainer->setProperty(PropertyKeys::GlideAnimating, false);
+    }
+    scheduleArrowKeyUpdate(selectedIndex);
     return;
   }
 
   bool isHorizontalMove = false;
   calculateMovementDirection(selectedIndex, prevIndex, m_metrics.itemsPerRow,
                              isHorizontalMove);
+  
+  debugLog(QString("  isHorizontalMove=%1").arg(isHorizontalMove));
 
   if (isHorizontalMove) {
     handleHorizontalMoveAnimation(selectedIndex, prevIndex);
@@ -896,7 +1194,14 @@ void ScrollManager::applyFilter(const QString &searchText) {
   updateVirtualView();
 }
 
-void ScrollManager::cleanupActiveWidgets() { m_activeWidgets.clear(); }
+void ScrollManager::cleanupActiveWidgets() {
+  for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
+    if (MediaItemWidget *widget = it.value()) {
+      releaseWidget(widget);
+    }
+  }
+  m_activeWidgets.clear();
+}
 
 void ScrollManager::clearFilter() {
   if (!m_isFiltered) {
@@ -977,8 +1282,8 @@ void ScrollManager::recreateLayout() {
       continue;
     }
     widget->setHideTitles(m_context.config.hideTitles);
-    widget->setShowSubcollectionTitles(
-        m_context.config.showSubcollectionTitles);
+    widget->setHideSubcollectionTitles(
+        m_context.config.hideSubcollectionTitles);
     widget->setFontSize(m_context.config.fontSize);
     widget->setItemDimensions(m_metrics.itemWidth, m_metrics.itemHeight);
     QPoint position = getItemPosition(it.key());
@@ -1287,6 +1592,7 @@ void ScrollManager::positionVirtualContainer() {
 
   configureHorizontalScrollbar(overflow);
   m_virtualContainer->move(containerX, 0);
+  m_virtualContainer->resize(m_metrics.totalWidth, m_metrics.totalHeight);
 }
 
 void ScrollManager::setupContainerSizes(int availableWidth, int contentWidth,
@@ -1325,6 +1631,7 @@ void ScrollManager::configureHorizontalScrollbar(bool overflow) {
 
 // Cleans up the virtual container and persistent selection overlay resources
 void ScrollManager::cleanupVirtualContainer() {
+  debugLog("cleanupVirtualContainer called!");
   if (m_selectionOverlayAnim != nullptr) {
     if (m_selectionOverlayAnim->state() == QAbstractAnimation::Running) {
       m_selectionOverlayAnim->stop();
@@ -1519,8 +1826,8 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
       existing->show();
     }
     existing->setHideTitles(m_context.config.hideTitles);
-    existing->setShowSubcollectionTitles(
-        m_context.config.showSubcollectionTitles);
+    existing->setHideSubcollectionTitles(
+        m_context.config.hideSubcollectionTitles);
     existing->setFontSize(m_context.config.fontSize);
     QPoint position = getItemPosition(visualIndex);
     existing->setGeometry(position.x(), position.y(), m_metrics.itemWidth,
@@ -1559,11 +1866,12 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
 
 auto ScrollManager::createSubcollectionWidget(int visualIndex, int actualIndex)
     -> MediaItemWidget * {
-  auto *itemWidget = new MediaItemWidget(m_virtualContainer);
+  auto *itemWidget = acquireWidget();
+  itemWidget->setParent(m_virtualContainer);
   itemWidget->setFocusPolicy(Qt::NoFocus);
   itemWidget->setHideTitles(m_context.config.hideTitles);
-  itemWidget->setShowSubcollectionTitles(
-      m_context.config.showSubcollectionTitles);
+  itemWidget->setHideSubcollectionTitles(
+      m_context.config.hideSubcollectionTitles);
   itemWidget->setFontSize(m_context.config.fontSize);
   itemWidget->setItemDimensions(m_metrics.itemWidth, m_metrics.itemHeight);
 
@@ -1596,7 +1904,8 @@ auto ScrollManager::createMediaItemWidget(int visualIndex, int actualIndex)
       int chunkStart = (mediaIndex / chunkSize) * chunkSize;
       emit requestItemsRange(chunkStart, chunkSize);
 
-      auto *itemWidget = new MediaItemWidget(m_virtualContainer);
+      auto *itemWidget = acquireWidget();
+      itemWidget->setParent(m_virtualContainer);
       itemWidget->setFocusPolicy(Qt::NoFocus);
       itemWidget->setItemDimensions(m_metrics.itemWidth, m_metrics.itemHeight);
       if (itemWidget->nameLabel) {
@@ -1614,11 +1923,12 @@ auto ScrollManager::createMediaItemWidget(int visualIndex, int actualIndex)
     return nullptr;
   }
 
-  auto *itemWidget = new MediaItemWidget(m_virtualContainer);
+  auto *itemWidget = acquireWidget();
+  itemWidget->setParent(m_virtualContainer);
   itemWidget->setFocusPolicy(Qt::NoFocus);
   itemWidget->setHideTitles(m_context.config.hideTitles);
-  itemWidget->setShowSubcollectionTitles(
-      m_context.config.showSubcollectionTitles);
+  itemWidget->setHideSubcollectionTitles(
+      m_context.config.hideSubcollectionTitles);
   itemWidget->setFontSize(m_context.config.fontSize);
   itemWidget->setItemDimensions(m_metrics.itemWidth, m_metrics.itemHeight);
   itemWidget->setFilePath(fullPath);
@@ -1944,13 +2254,36 @@ void ScrollManager::calculateMovementDirection(int selectedIndex, int prevIndex,
     return;
   }
 
+  // Allow jumps > 1 if on the same row (for rapid click-hold advancing)
+  int prevRow = GridUtils::computeItemRow(prevIndex, itemsPerRow);
+  int currRow = GridUtils::computeItemRow(selectedIndex, itemsPerRow);
+  
+  if (prevRow == currRow) {
+    isHorizontalMove = true;
+    return;
+  }
+
   int diff = std::abs(selectedIndex - prevIndex);
   if (diff != 1) {
     isHorizontalMove = false;
     return;
   }
 
-  int prevRow = GridUtils::computeItemRow(prevIndex, itemsPerRow);
-  int currRow = GridUtils::computeItemRow(selectedIndex, itemsPerRow);
-  isHorizontalMove = (prevRow == currRow);
+  if (itemsPerRow <= 1) {
+    isHorizontalMove = false;
+    return;
+  }
+
+  int prevCol = prevIndex % itemsPerRow;
+  if (prevCol < 0) {
+    prevCol += itemsPerRow;
+  }
+  int currCol = selectedIndex % itemsPerRow;
+  if (currCol < 0) {
+    currCol += itemsPerRow;
+  }
+
+  bool wrappedForward = (prevCol == itemsPerRow - 1) && (currCol == 0);
+  bool wrappedBackward = (prevCol == 0) && (currCol == itemsPerRow - 1);
+  isHorizontalMove = wrappedForward || wrappedBackward;
 }

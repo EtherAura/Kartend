@@ -3,6 +3,7 @@
 
 #include <QDateTime>
 #include <QHash>
+#include <QMutex>
 #include <QObject>
 #include <QSqlDatabase>
 #include <QStringList>
@@ -82,6 +83,7 @@ private:
   QSqlDatabase m_db;
   QString m_connectionName;
 
+  mutable QMutex m_dataMutex; // Protects m_fileToArtworkDir and m_fileToCollectionIndex
   QHash<QString, QString> m_fileToArtworkDir;
   QHash<QString, int> m_fileToCollectionIndex;
 

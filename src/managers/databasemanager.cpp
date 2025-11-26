@@ -2,6 +2,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QMutexLocker>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -160,8 +161,11 @@ void DatabaseManager::onWorkerItemsLoaded(const QStringList &filePaths,
                                           const QHash<QString, QString> &fileNames,
                                           const QHash<QString, QString> &fileToArtworkDir,
                                           const QHash<QString, int> &fileToCollectionIndex) {
-  m_fileToArtworkDir = fileToArtworkDir;
-  m_fileToCollectionIndex = fileToCollectionIndex;
+  {
+    QMutexLocker locker(&m_dataMutex);
+    m_fileToArtworkDir = fileToArtworkDir;
+    m_fileToCollectionIndex = fileToCollectionIndex;
+  }
   emit itemsLoaded(filePaths, fileNames);
 }
 
@@ -246,12 +250,14 @@ void DatabaseManager::updateCachedCounts(
 // Get owning collection index for a file based on built maps
 auto DatabaseManager::getCollectionIndexForFile(const QString &filePath) const
     -> int {
+  QMutexLocker locker(&m_dataMutex);
   return m_fileToCollectionIndex.value(filePath, -1);
 }
 
 // Resolve artwork directory for a file using best-available mapping
 auto DatabaseManager::findArtworkDirectoryForFile(const QString &filePath) const
     -> QString {
+  QMutexLocker locker(&m_dataMutex);
   if (m_fileToArtworkDir.contains(filePath)) {
     return m_fileToArtworkDir.value(filePath);
   }

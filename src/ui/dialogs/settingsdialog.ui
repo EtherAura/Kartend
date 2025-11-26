@@ -409,9 +409,9 @@
              </widget>
             </item>
             <item>
-             <widget class="QCheckBox" name="showSubcollectionTitlesCheckBox">
-              <property name="toolTip"><string>Show titles for subcollections even if Hide Titles is enabled</string></property>
-              <property name="text"><string>Show Subcollection Titles</string></property>
+             <widget class="QCheckBox" name="hideSubcollectionTitlesCheckBox">
+              <property name="toolTip"><string>Hide titles for subcollections</string></property>
+              <property name="text"><string>Hide Subcollection Titles</string></property>
              </widget>
             </item>
            </layout>
@@ -535,6 +535,35 @@
              <widget class="QCheckBox" name="wrapNavigationCheckBox">
               <property name="toolTip">
                <string>When navigating with arrow keys, wrap at edges</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="pixmapCacheLabel">
+              <property name="text">
+               <string>Pixmap Cache Size (MB):</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QSpinBox" name="pixmapCacheSpinBox">
+              <property name="toolTip">
+               <string>Memory allocated for caching artwork images (10-500 MB). Larger values improve scrolling performance.</string>
+              </property>
+              <property name="minimum">
+               <number>10</number>
+              </property>
+              <property name="maximum">
+               <number>500</number>
+              </property>
+              <property name="singleStep">
+               <number>10</number>
+              </property>
+              <property name="value">
+               <number>50</number>
+              </property>
+              <property name="suffix">
+               <string> MB</string>
               </property>
              </widget>
             </item>

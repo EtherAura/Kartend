@@ -49,7 +49,7 @@ struct CollectionConfig {
   bool hasParent() const { return parentCollectionIndex >= 0; }
   bool showAllSubcollectionItems = false;
   bool hideTitles = false;
-  bool showSubcollectionTitles = true;
+  bool hideSubcollectionTitles = false;
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Center;
   SidebarMode sidebarMode = SidebarMode::Overlay;
   int horizontalSpacing = UIConstants::GRID_SPACING;
@@ -106,10 +106,63 @@ struct MainScreenConfig {
 struct GeneralSettings {
   bool rememberSelection = false;
   bool wrapNavigation = false;
+  int pixmapCacheSizeMB = 50; // Default 50MB, user configurable
   QHash<int, int> lastSelectedItems;
   GeneralSettings() = default;
 };
 
+// Cache for collection hierarchy lookups - avoids repeated O(n) scans
+class CollectionHierarchyCache {
+public:
+  CollectionHierarchyCache() = default;
+  
+  void rebuild(const QList<CollectionConfig> &collections) {
+    m_directChildren.clear();
+    m_allDescendants.clear();
+    m_collections = &collections;
+    
+    // Build direct children map
+    for (int i = 0; i < collections.size(); ++i) {
+      int parent = collections[i].parentCollectionIndex;
+      if (parent >= 0) {
+        m_directChildren[parent].append(i);
+      }
+    }
+    
+    // Pre-compute all descendants for each collection
+    for (int i = 0; i < collections.size(); ++i) {
+      m_allDescendants[i] = computeDescendants(i);
+    }
+  }
+  
+  QList<int> directChildren(int parentIndex) const {
+    return m_directChildren.value(parentIndex);
+  }
+  
+  QList<int> allDescendants(int parentIndex) const {
+    return m_allDescendants.value(parentIndex);
+  }
+  
+  bool isValid() const { return m_collections != nullptr; }
+  
+private:
+  QList<int> computeDescendants(int parentIndex) const {
+    QList<int> result;
+    QList<int> stack = m_directChildren.value(parentIndex);
+    while (!stack.isEmpty()) {
+      int idx = stack.takeFirst();
+      result.append(idx);
+      stack.append(m_directChildren.value(idx));
+    }
+    return result;
+  }
+  
+  const QList<CollectionConfig> *m_collections = nullptr;
+  QHash<int, QList<int>> m_directChildren;
+  QHash<int, QList<int>> m_allDescendants;
+};
+
+// Legacy inline functions for backward compatibility
 inline QList<int>
 collectDescendantIndices(int parentIndex,
                          const QList<CollectionConfig> &collections) {
