@@ -1034,7 +1034,7 @@ auto InteractionManager::handleWheelEvent(QObject *obj, QEvent *event) -> bool {
   const CollectionConfig &collection =
       (*m_collections)[*m_currentCollectionIndex];
 
-  const int wheelSteps = computeWheelSteps(wheelEvent);
+  const int wheelSteps = MouseManager::computeWheelSteps(wheelEvent);
   if (wheelSteps == 0) {
     return QObject::eventFilter(obj, event);
   }
@@ -1123,34 +1123,6 @@ auto InteractionManager::handleWheelEvent(QObject *obj, QEvent *event) -> bool {
 
   event->accept();
   return true;
-}
-
-// Computes wheel scroll steps from angleDelta or pixelDelta
-auto InteractionManager::computeWheelSteps(const QWheelEvent *wheelEvent)
-    -> int {
-  if (wheelEvent == nullptr) {
-    return 0;
-  }
-  const int wheelAngle = wheelEvent->angleDelta().y();
-  if (wheelAngle != 0) {
-    constexpr int kWheelAngleStep = 120;
-    int steps = wheelAngle / kWheelAngleStep;
-    if (steps == 0) {
-      steps = (wheelAngle > 0 ? 1 : -1);
-    }
-    return steps;
-  }
-  const QPoint pixelDelta = wheelEvent->pixelDelta();
-  const int pixelDeltaY = pixelDelta.y();
-  if (pixelDeltaY == 0) {
-    return 0;
-  }
-  constexpr int kPixelDeltaStep = 120;
-  int steps = pixelDeltaY / kPixelDeltaStep;
-  if (steps == 0) {
-    steps = (pixelDeltaY > 0 ? 1 : -1);
-  }
-  return steps;
 }
 
 auto InteractionManager::applyWheelSelectionDelta(int wheelSteps) -> bool {

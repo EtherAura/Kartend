@@ -10,6 +10,7 @@
 
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QWheelEvent>
 #include <QWidget>
 
 MouseManager::MouseManager(QObject *parent) : QObject(parent) {}
@@ -43,6 +44,34 @@ void MouseManager::setLeftMouseDown(bool down) {
 
 void MouseManager::setWheelScrolling(bool scrolling) {
   m_wheelScrolling = scrolling;
+}
+
+// --- Wheel Computation ---
+
+int MouseManager::computeWheelSteps(const QWheelEvent *wheelEvent) {
+  if (wheelEvent == nullptr) {
+    return 0;
+  }
+  const int wheelAngle = wheelEvent->angleDelta().y();
+  if (wheelAngle != 0) {
+    constexpr int kWheelAngleStep = 120;
+    int steps = wheelAngle / kWheelAngleStep;
+    if (steps == 0) {
+      steps = (wheelAngle > 0 ? 1 : -1);
+    }
+    return steps;
+  }
+  const QPoint pixelDelta = wheelEvent->pixelDelta();
+  const int pixelDeltaY = pixelDelta.y();
+  if (pixelDeltaY == 0) {
+    return 0;
+  }
+  constexpr int kPixelDeltaStep = 120;
+  int steps = pixelDeltaY / kPixelDeltaStep;
+  if (steps == 0) {
+    steps = (pixelDeltaY > 0 ? 1 : -1);
+  }
+  return steps;
 }
 
 // --- Click Hold Timer ---

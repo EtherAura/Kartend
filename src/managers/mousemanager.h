@@ -9,6 +9,7 @@
 QT_BEGIN_NAMESPACE
 class QScrollArea;
 class QScrollBar;
+class QWheelEvent;
 class QWidget;
 QT_END_NAMESPACE
 
@@ -50,6 +51,10 @@ public:
 
   // --- Wheel Scrolling State ---
   void setWheelScrolling(bool scrolling);
+
+  // --- Wheel Computation (static) ---
+  /// Computes wheel scroll steps from angleDelta or pixelDelta
+  [[nodiscard]] static int computeWheelSteps(const QWheelEvent *wheelEvent);
 
   // --- Left Mouse Button Tracking ---
   void setLeftMouseDown(bool down);

@@ -149,7 +149,6 @@ private:
   bool allowAllFor(const CollectionConfig &cfg, int collIndex,
                    bool hasSubs) const;
   bool handleKeyReleaseEvent(QObject *obj, QEvent *event);
-  static int computeWheelSteps(const QWheelEvent *wheelEvent);
   static void stopArrowKeyAnimationIfRunning(QScrollBar *scrollBar);
 
   int resolveDoubleClickIndexCandidate() const;
