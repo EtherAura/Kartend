@@ -7,10 +7,8 @@
 #include <QHash>
 #include <QKeyEvent>
 #include <QLineEdit>
-#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPoint>
-#include <QProcess>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QTimer>
@@ -42,6 +40,7 @@ InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
   m_keyboardManager = std::make_unique<KeyboardManager>(this);
   m_animationManager = std::make_unique<AnimationManager>(this);
   m_mouseManager = std::make_unique<MouseManager>(this);
+  m_launchManager = std::make_unique<LaunchManager>(this);
 
   m_continuousScrollActive = true;
 }
@@ -335,6 +334,13 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
             [this](const char *name, const QVariant &value) {
               setProperty(name, value);
             });
+  }
+
+  // Setup LaunchManager with its dependencies
+  if (m_launchManager) {
+    LaunchManagerSetup launchSetup;
+    launchSetup.collections = setup.collections;
+    m_launchManager->setupReferences(launchSetup);
   }
 
   updateSearchModeButton();
@@ -851,15 +857,10 @@ auto InteractionManager::getFallbackCollectionIndex() const -> int {
 // Launches on double‑click without altering or interrupting any scroll state
 void InteractionManager::handleWidgetDoubleClickedWithCollection(
     const QString &filePath, int collectionIndex) {
-  static QHash<QString, qint64> lastLaunchTimes;
-  const qint64 now = QDateTime::currentMSecsSinceEpoch();
-  constexpr qint64 kDoubleLaunchGuardMs = 500;
-  if (lastLaunchTimes.contains(filePath)) {
-    if (now - lastLaunchTimes[filePath] < kDoubleLaunchGuardMs) {
-      return;
-    }
+  // Delegate debounce check to LaunchManager
+  if (m_launchManager && !filePath.isEmpty() && !m_launchManager->canLaunch(filePath)) {
+    return;
   }
-  lastLaunchTimes[filePath] = now;
 
   setProperty(PropertyKeys::RowChangeFirstClickIndex, -1);
   setProperty(PropertyKeys::RowChangeFirstClickMs, 0);
@@ -3184,73 +3185,12 @@ void InteractionManager::initializeSearchModeForCurrentCollection() {
 
 // Launches an item using the collection's configured launcher; expands
 // variables without path validation so launch works even if artworkDirectory is
-// empty
+// Delegates to LaunchManager for launching media items
 void InteractionManager::launchItemWithCollection(const QString &filePath,
                                                   int collectionIndex) {
-  if ((m_collections == nullptr) || collectionIndex < 0 ||
-      collectionIndex >= m_collections->size()) {
-    QMessageBox::warning(nullptr, "Invalid Collection",
-                         "Invalid collection specified.");
-    return;
-  }
-
-  const CollectionConfig &collection = (*m_collections)[collectionIndex];
-
-  auto expandOnly = [&](const QString &text) -> QString {
-    QString out = text;
-    out.replace("%collection%", collection.name, Qt::CaseInsensitive);
-    return out.trimmed();
-  };
-
-  QString expandedLauncherPath = expandOnly(collection.launcherPath);
-  QString expandedCorePath = expandOnly(collection.corePath);
-  QString expandedLaunchParameters = expandOnly(collection.launchParameters);
-
-  if (expandedLauncherPath.isEmpty()) {
-    QMessageBox::warning(nullptr, "No Launcher",
-                         "No launcher configured for " + collection.name);
-    return;
-  }
-
-  QString program;
-  QStringList arguments;
-
-  if (expandedLauncherPath.contains("retroarch", Qt::CaseInsensitive)) {
-    if (expandedCorePath.isEmpty()) {
-      QMessageBox::warning(nullptr, "No Core",
-                           "No RetroArch core configured for " +
-                               collection.name);
-      return;
-    }
-
-    program = expandedLauncherPath;
-    arguments << "-L" << expandedCorePath << filePath;
-  } else {
-    program = expandedLauncherPath;
-    arguments << filePath;
-
-    if (!expandedCorePath.isEmpty()) {
-      QString params = expandedCorePath.trimmed();
-      if (!params.isEmpty()) {
-        arguments.removeLast();
-        QStringList paramList = parseParameters(params);
-        arguments.append(paramList);
-        arguments << filePath;
-      }
-    }
-  }
-
-  bool success = QProcess::startDetached(program, arguments);
-
-  if (!success) {
-    QString errorMsg =
-        QString("Failed to launch: %1\n\nCommand attempted:\n%2 %3\n\nMake "
-                "sure the launcher path is correct and the file is executable.")
-            .arg(expandedLauncherPath)
-            .arg(program)
-            .arg(arguments.join(" "));
-
-    QMessageBox::critical(nullptr, "Launch Error", errorMsg);
+  if (m_launchManager) {
+    m_launchManager->recordLaunch(filePath);
+    m_launchManager->launchItem(filePath, collectionIndex);
   }
 }
 
@@ -3327,43 +3267,6 @@ void InteractionManager::stopRepeat(bool suppressRecentering) {
           }
         });
   }
-}
-
-auto InteractionManager::parseParameters(const QString &paramString)
-    -> QStringList {
-  QStringList result;
-  if (paramString.trimmed().isEmpty()) {
-    return result;
-  }
-
-  QString params = paramString.trimmed();
-  bool inQuotes = false;
-  QString currentParam;
-  QChar quoteChar;
-
-  for (int i = 0; i < params.length(); ++i) {
-    QChar currentChar = params[i];
-
-    if (!inQuotes && (currentChar == '"' || currentChar == '\'')) {
-      inQuotes = true;
-      quoteChar = currentChar;
-    } else if (inQuotes && currentChar == quoteChar) {
-      inQuotes = false;
-    } else if (currentChar == ' ' && !inQuotes) {
-      if (!currentParam.isEmpty()) {
-        result.append(currentParam);
-        currentParam.clear();
-      }
-    } else {
-      currentParam.append(currentChar);
-    }
-  }
-
-  if (!currentParam.isEmpty()) {
-    result.append(currentParam);
-  }
-
-  return result;
 }
 
 auto InteractionManager::isWheelScrolling() const -> bool {

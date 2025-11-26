@@ -3,6 +3,7 @@
 
 #include "collectionutils.h"
 #include "keyboardmanager.h"
+#include "launchmanager.h"
 #include "mousemanager.h"
 #include "animationmanager.h"
 #include "searchmanager.h"
@@ -129,7 +130,6 @@ private:
   auto handleMousePress(QObject *obj, QEvent *event) -> bool;
 
   QList<int> getSubcollections(int parentIndex) const;
-  static QStringList parseParameters(const QString &paramString);
   void updateFilePathForSelection(int index, const QList<int> &subcollections);
   void trySelectWidget(int index, const QList<int> &subcollections,
                        int attempt);
@@ -169,6 +169,9 @@ private:
 
   // Mouse hold scrolling delegation (owned helper)
   std::unique_ptr<MouseManager> m_mouseManager;
+
+  // Launch delegation (owned helper)
+  std::unique_ptr<LaunchManager> m_launchManager;
 
   ScrollManager *m_scrollManager = nullptr;
   SidebarManager *m_sidebarManager = nullptr;
