@@ -1794,10 +1794,8 @@ auto InteractionManager::computeTargetYForIndex(int index, int gridWidth,
                                                 int verticalSpacing,
                                                 int viewportHeight,
                                                 int scrollbarMax) -> int {
-  int itemY = GridUtils::computeItemY(
-      index, gridWidth, itemHeight, verticalSpacing, UIConstants::GRID_MARGINS);
-  int targetYUnbounded = itemY + (itemHeight / 2) - (viewportHeight / 2);
-  return qBound(0, targetYUnbounded, scrollbarMax);
+  return AnimationManager::computeTargetYForIndex(
+      index, gridWidth, itemHeight, verticalSpacing, viewportHeight, scrollbarMax);
 }
 
 auto InteractionManager::computeForceImmediate(bool immediate) const -> bool {
@@ -2487,33 +2485,16 @@ auto InteractionManager::computeHorizontalTargetX(int itemX,
                                                   int curX, int viewportWidth,
                                                   int margins, int scrollMax)
     -> int {
-  int targetX = curX;
-  if (itemX < curX + margins) {
-    targetX = qMax(0, itemX - margins);
-  } else if (itemX + collectionItemWidth > curX + viewportWidth - margins) {
-    targetX =
-        qMax(0, qMin(itemX + collectionItemWidth - viewportWidth + margins,
-                     scrollMax));
-  }
-  return targetX;
+  return AnimationManager::computeHorizontalTargetX(
+      itemX, collectionItemWidth, curX, viewportWidth, margins, scrollMax);
 }
 
 auto InteractionManager::computeDesiredYForVisibility(int itemY, int itemHeight,
                                                       int curY, int viewportH,
                                                       int margins, bool &needV)
     -> int {
-  int visibleTop = curY;
-  int visibleBottom = curY + viewportH;
-  int desiredY = curY;
-  needV = false;
-  if (itemY < visibleTop + margins) {
-    desiredY = qMax(0, itemY - margins);
-    needV = true;
-  } else if (itemY + itemHeight > visibleBottom - margins) {
-    desiredY = qMax(0, itemY + itemHeight + margins - viewportH);
-    needV = true;
-  }
-  return desiredY;
+  return AnimationManager::computeDesiredYForVisibility(
+      itemY, itemHeight, curY, viewportH, margins, needV);
 }
 
 void InteractionManager::updateViewAndRowAfterVisibility(int index,
@@ -2854,22 +2835,8 @@ auto InteractionManager::computeVerticalCenterDuration(int distance,
     itemHeight = (*m_collections)[*m_currentCollectionIndex].itemHeight;
     vSpacing = (*m_collections)[*m_currentCollectionIndex].verticalSpacing;
   }
-  int stepSpan = qMax(1, itemHeight + vSpacing);
-  double rows = static_cast<double>(distance) / static_cast<double>(stepSpan);
-  rows = std::max(rows, 1.0);
-
-  int perRow = repeatActive ? UIConstants::CENTER_SCROLL_PER_ROW_REPEAT
-                            : UIConstants::CENTER_SCROLL_PER_ROW;
-  double raw = rows * static_cast<double>(perRow);
-
-  int minDur = repeatActive ? UIConstants::CENTER_SCROLL_MIN_DURATION_REPEAT
-                            : UIConstants::CENTER_SCROLL_MIN_DURATION;
-  int maxDur = repeatActive ? UIConstants::CENTER_SCROLL_MAX_DURATION_REPEAT
-                            : UIConstants::CENTER_SCROLL_MAX_DURATION;
-
-  int duration = static_cast<int>(std::round(raw));
-  duration = qBound(minDur, duration, maxDur);
-  return duration;
+  return AnimationManager::computeVerticalCenterDuration(
+      distance, itemHeight, vSpacing, repeatActive);
 }
 
 void InteractionManager::saveCurrentSelection() {
