@@ -252,6 +252,9 @@ constexpr int SCROLLBAR_RECOVERY_ATTEMPT_3_MS = 460;
 // Delay before recentering after stopping repeat navigation
 constexpr int STOP_REPEAT_RECENTER_DELAY_MS = 10;
 
+// Key repeat start delay (time before hold-repeat begins)
+constexpr int KEY_REPEAT_START_DELAY_MS = 260;
+
 // Selection restore schedule used when reloading collections
 constexpr int SELECTION_RESTORE_STEPS = 6;
 constexpr int SELECTION_RESTORE_STEP_DELAY_MS = 120;

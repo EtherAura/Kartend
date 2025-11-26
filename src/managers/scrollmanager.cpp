@@ -185,11 +185,20 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
 void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames) {
     if (offset < 0 || offset >= m_filePaths.size()) return;
     
+    int subCount = m_subcollections.size();
+    
     for (int i = 0; i < filePaths.size(); ++i) {
         int index = offset + i;
         if (index < m_filePaths.size()) {
             m_filePaths[index] = filePaths[i];
             m_fileNames[filePaths[i]] = fileNames.value(filePaths[i]);
+            
+            // Release placeholder widgets so they get re-created with actual data
+            int visualIndex = subCount + index;
+            if (MediaItemWidget *widget = m_activeWidgets.value(visualIndex, nullptr)) {
+                releaseWidget(widget);
+                m_activeWidgets.remove(visualIndex);
+            }
         }
     }
     

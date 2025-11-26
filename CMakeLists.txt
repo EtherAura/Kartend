@@ -52,6 +52,8 @@ set(SOURCES
   ${SRC_DIR}/managers/sessionmanager.cpp
   ${SRC_DIR}/managers/scrollmanager.cpp
   ${SRC_DIR}/managers/searchmanager.cpp
+  ${SRC_DIR}/managers/selectionmanager.cpp
+  ${SRC_DIR}/managers/keyboardmanager.cpp
   ${SRC_DIR}/managers/interactionmanager.cpp
   ${SRC_DIR}/ui/dialogs/settingsdialog.cpp
   ${SRC_DIR}/ui/widgets/metadatasidebar.cpp
@@ -75,6 +77,8 @@ set(HEADERS
   ${SRC_DIR}/managers/sessionmanager.h
   ${SRC_DIR}/managers/scrollmanager.h
   ${SRC_DIR}/managers/searchmanager.h
+  ${SRC_DIR}/managers/selectionmanager.h
+  ${SRC_DIR}/managers/keyboardmanager.h
   ${SRC_DIR}/managers/interactionmanager.h
   ${SRC_DIR}/ui/uiconstants.h
   ${SRC_DIR}/ui/dialogs/settingsdialog.h
@@ -82,7 +86,7 @@ set(HEADERS
   ${SRC_DIR}/ui/widgets/itemwidget.h
   ${SRC_DIR}/utils/collectionutils.h
   ${SRC_DIR}/utils/configutils.h
-  ${SRC_DIR}/utils/searchtypes.h
+  ${SRC_DIR}/utils/searchutils.h
   ${SRC_DIR}/utils/stringutils.h
   ${SRC_DIR}/utils/settingsutils.h
   ${SRC_DIR}/utils/pathutils.h

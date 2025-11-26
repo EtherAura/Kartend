@@ -2,8 +2,10 @@
 #define INTERACTIONMANAGER_H
 
 #include "collectionutils.h"
+#include "keyboardmanager.h"
 #include "searchmanager.h"
-#include "searchtypes.h"
+#include "searchutils.h"
+#include "selectionmanager.h"
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QMouseEvent>
@@ -72,24 +74,28 @@ public:
   bool isWheelScrolling() const;
   auto eventFilter(QObject *obj, QEvent *event) -> bool override;
   auto handleGlobalKeyPress(QKeyEvent *event) -> bool;
-  MediaItemWidget *getSelectedMediaItem() const { return m_selectedMediaItem; }
-  void setSelectedMediaItem(MediaItemWidget *widget) {
-    m_selectedMediaItem = widget;
-  }
+  MediaItemWidget *getSelectedMediaItem() const;
+  void setSelectedMediaItem(MediaItemWidget *widget);
+  QString selectedFilePath() const;
   void ensureItemVisible(int index, bool allowHorizontalScroll);
   void initializeSearchModeForCurrentCollection();
   void beginSelectionRestore(int targetIndex);
   void cancelPendingSelectionRestore();
   void stopRepeat(bool suppressRecentering = false);
+  bool isRestoringSelection() const;
+  int targetRestoreIndex() const;
+  bool forceImmediateCenter() const;
 
+  bool m_navigationInProgress = false;
+
+private:
+  // Selection state - kept for internal use during transition, synced with SelectionManager
   bool m_restoringSelection = false;
   int m_targetRestoreIndex = -1;
   bool m_forceImmediateCenter = false;
   QString m_selectedFilePath;
   int m_selectedItemIndex = -1;
-  bool m_navigationInProgress = false;
 
-private:
   int m_selectionRestoreToken = 0;
   bool m_selectionRestorePending = false;
 
@@ -101,12 +107,12 @@ public slots:
   void onSearchDebounceTimeout();
   void saveCurrentSelection();
   void handleImmediateSearchTextChanged(const QString &text);
-  void onSearchTextChanged(const QString &text);
 
 private slots:
-  void beginHoldRepeat();
-  void onRepeatStep();
-  void performDebouncedSearch();
+  // KeyboardManager callbacks
+  void handleArrowKeyNavigation(int direction, bool vertical);
+  void onKeyboardRepeatStep();
+  void onKeyboardStopRepeat(bool suppressRecentering);
 
 private:
   // Event filter helper methods
@@ -160,6 +166,12 @@ private:
   // Search delegation (owned helper)
   std::unique_ptr<SearchManager> m_searchManager;
 
+  // Selection delegation (owned helper)
+  std::unique_ptr<SelectionManager> m_selectionManager;
+
+  // Keyboard delegation (owned helper)
+  std::unique_ptr<KeyboardManager> m_keyboardManager;
+
   ScrollManager *m_scrollManager = nullptr;
   SidebarManager *m_sidebarManager = nullptr;
   SettingsManager *m_settingsManager = nullptr;
@@ -198,12 +210,6 @@ private:
   int m_lastSelectedRow = -1;
   bool m_isWrappingNavigation = false;
   bool m_allowArtworkDuringSelection = false;
-  QTimer *m_searchDebounceTimer = nullptr;
-  QMetaObject::Connection m_searchItemsLoadedConn;
-  bool m_searchActive = false;
-  int m_preSearchCollectionIndex = -1;
-  SearchMode m_preSearchMode = SearchMode::CurrentCollection;
-  int m_preSearchSelectedIndex = -1;
   int m_repeatInterval;
   bool m_selectionAtViewportEdge = false;
 
