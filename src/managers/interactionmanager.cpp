@@ -2369,37 +2369,19 @@ void InteractionManager::ensureHorizontallyVisible(int index) {
 
   bool hold = property(PropertyKeys::HorizHoldActive).toBool();
 
-  initHorizontalAnimIfNeeded(hScrollBar);
+  if (m_animationManager) {
+    m_animationManager->initHorizontalAnimIfNeeded(hScrollBar);
 
-  if (hold) {
-    int startX = hScrollBar->value();
-    animateHorizontalHold(hScrollBar, startX, targetX);
-  } else {
-    animateHorizontalSmooth(hScrollBar, curX, targetX);
+    if (hold) {
+      int startX = hScrollBar->value();
+      m_animationManager->animateHorizontalHold(hScrollBar, startX, targetX);
+    } else {
+      m_animationManager->animateHorizontalSmooth(hScrollBar, curX, targetX);
+    }
   }
 
   if (m_scrollManager != nullptr) {
     m_scrollManager->updateVirtualView();
-  }
-}
-
-void InteractionManager::initHorizontalAnimIfNeeded(QScrollBar *hScrollBar) {
-  if (m_animationManager) {
-    m_animationManager->initHorizontalAnimIfNeeded(hScrollBar);
-  }
-}
-
-void InteractionManager::animateHorizontalHold(QScrollBar *hScrollBar,
-                                               int startX, int targetX) {
-  if (m_animationManager) {
-    m_animationManager->animateHorizontalHold(hScrollBar, startX, targetX);
-  }
-}
-
-void InteractionManager::animateHorizontalSmooth(QScrollBar *hScrollBar,
-                                                 int startX, int targetX) {
-  if (m_animationManager) {
-    m_animationManager->animateHorizontalSmooth(hScrollBar, startX, targetX);
   }
 }
 

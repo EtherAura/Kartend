@@ -265,11 +265,6 @@ private:
   void clearArrowCenterSuppressionWhenDue();
   void finalizeImmediateCenteringState(int index, int currentRow);
 
-  // Horizontal visibility helpers
-  void initHorizontalAnimIfNeeded(QScrollBar *hScrollBar);
-  void animateHorizontalHold(QScrollBar *hScrollBar, int startX, int targetX);
-  void animateHorizontalSmooth(QScrollBar *hScrollBar, int startX, int targetX);
-
   // Selection helpers
   void persistSuppressedSelectionAndMaybeCenter(
       int index, const QList<int> &subcollections, bool skipCenter);
