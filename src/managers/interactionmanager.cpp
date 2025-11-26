@@ -2963,27 +2963,22 @@ void InteractionManager::handleSameRowClickSelection(int visualIndex,
 // Cycles search mode regardless of search text; only updates results when there
 // is search text
 void InteractionManager::toggleSearchMode() {
-  const auto ctx = computeSearchContext();
-  QVector<SearchMode> cycle = buildSearchModeCycle(ctx);
-  if (cycle.isEmpty()) {
+  if (!m_searchManager) {
     return;
   }
 
-  if (!cycle.contains(m_currentSearchMode)) {
-    m_currentSearchMode = cycle.first();
-    emit searchModeChanged(m_currentSearchMode);
-  } else {
-    int pos = cycle.indexOf(m_currentSearchMode);
-    pos = std::max(pos, 0);
-    SearchMode next = cycle[(pos + 1) % cycle.size()];
-    if (next != m_currentSearchMode) {
-      m_currentSearchMode = next;
-      emit searchModeChanged(m_currentSearchMode);
-    }
-  }
+  // Sync current state to SearchManager before toggle
+  m_searchManager->setCurrentMode(m_currentSearchMode);
 
-  updateSearchModeButton();
-  updateSearchBarPlaceholder();
+  // Delegate to SearchManager
+  m_searchManager->toggleSearchMode();
+
+  // Sync result back from SearchManager
+  SearchMode newMode = m_searchManager->currentMode();
+  if (newMode != m_currentSearchMode) {
+    m_currentSearchMode = newMode;
+    emit searchModeChanged(m_currentSearchMode);
+  }
 
   // Do not reload or change the grid when search text is empty.
   // Only reapply results if the user has entered text.
@@ -3031,82 +3026,19 @@ void InteractionManager::saveCurrentSelection() {
 
 // Updates the search mode button icon/tooltip without coercing the current mode
 void InteractionManager::updateSearchModeButton() {
-  if (m_searchModeButton == nullptr) {
-    return;
+  if (m_searchManager) {
+    m_searchManager->setCurrentMode(m_currentSearchMode);
+    m_searchManager->updateSearchModeButton();
   }
-
-  constexpr int kSearchIconSizePx = 18;
-
-  auto themed = [](std::initializer_list<const char *> names) -> QIcon {
-    for (const auto *name : names) {
-      QIcon iconCandidate = QIcon::fromTheme(QString::fromUtf8(name));
-      if (!iconCandidate.isNull()) {
-        return iconCandidate;
-      }
-    }
-    return {};
-  };
-
-  QIcon icon;
-  QString tip;
-  switch (m_currentSearchMode) {
-  case SearchMode::CurrentCollection:
-    icon = themed({"search"});
-    tip = "Search: Current collection";
-    break;
-  case SearchMode::CurrentAndSubcollections:
-    icon = themed({"folder-stash-symbolic"});
-    tip = "Search: Current + subcollections";
-    break;
-  case SearchMode::AllCollections:
-    icon = themed({"emblem-shared-symbolic"});
-    tip = "Search: All collections";
-    break;
-  }
-
-  m_searchModeButton->setText(QString());
-  if (!icon.isNull()) {
-    m_searchModeButton->setIcon(icon);
-    m_searchModeButton->setIconSize(
-        QSize(kSearchIconSizePx, kSearchIconSizePx));
-  } else {
-    m_searchModeButton->setIcon(QIcon());
-  }
-  m_searchModeButton->setToolTip(tip);
-  m_searchModeButton->setStyleSheet(QString());
 }
 
 // Updates the search bar placeholder/text style without coercing the current
 // mode
 void InteractionManager::updateSearchBarPlaceholder() {
-  if (m_searchBar == nullptr) {
-    return;
+  if (m_searchManager) {
+    m_searchManager->setCurrentMode(m_currentSearchMode);
+    m_searchManager->updateSearchBarPlaceholder();
   }
-
-  switch (m_currentSearchMode) {
-  case SearchMode::CurrentCollection:
-    m_searchBar->setPlaceholderText("Search current collection...");
-    break;
-  case SearchMode::CurrentAndSubcollections:
-    m_searchBar->setPlaceholderText("Search current + subcollections...");
-    break;
-  case SearchMode::AllCollections:
-    m_searchBar->setPlaceholderText("Search all collections...");
-    break;
-  }
-
-  const bool emptyNow = m_searchBar->text().trimmed().isEmpty();
-  QFont searchFont = m_searchBar->font();
-  searchFont.setItalic(emptyNow);
-  m_searchBar->setFont(searchFont);
-
-  QPalette pal = m_searchBar->palette();
-  QColor placeholderColor =
-      QApplication::palette(m_searchBar).color(QPalette::PlaceholderText);
-  constexpr qreal kPlaceholderAlpha = 0.6;
-  placeholderColor.setAlphaF(kPlaceholderAlpha);
-  pal.setColor(QPalette::PlaceholderText, placeholderColor);
-  m_searchBar->setPalette(pal);
 }
 
 // Restores selection instantly, ensures viewport positioning, and updates
@@ -3538,27 +3470,17 @@ void InteractionManager::updateClickHoldHorizontalCandidate(
 // Initialize search mode for the current collection; reset away from
 // AllCollections and prefer collection defaults
 void InteractionManager::initializeSearchModeForCurrentCollection() {
-  const auto ctx = computeSearchContext();
-  const QVector<SearchMode> allowed = buildSearchModeCycle(ctx);
+  if (m_searchManager) {
+    m_searchManager->setCurrentMode(m_currentSearchMode);
+    m_searchManager->initializeSearchModeForCurrentCollection();
 
-  SearchMode defaultMode = m_currentSearchMode;
-  if (!allowed.isEmpty()) {
-    defaultMode = allowed.first();
+    // Sync result back
+    SearchMode newMode = m_searchManager->currentMode();
+    if (newMode != m_currentSearchMode) {
+      m_currentSearchMode = newMode;
+      emit searchModeChanged(m_currentSearchMode);
+    }
   }
-
-  bool mustReset = (m_currentSearchMode == SearchMode::AllCollections);
-  bool invalid = !allowed.contains(m_currentSearchMode);
-
-  SearchMode desired =
-      (mustReset || invalid) ? defaultMode : m_currentSearchMode;
-
-  if (desired != m_currentSearchMode) {
-    m_currentSearchMode = desired;
-    emit searchModeChanged(m_currentSearchMode);
-  }
-
-  updateSearchModeButton();
-  updateSearchBarPlaceholder();
 }
 
 // Launches an item using the collection's configured launcher; expands
