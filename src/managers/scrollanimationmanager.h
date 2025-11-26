@@ -1,0 +1,146 @@
+#ifndef SCROLLANIMATIONMANAGER_H
+#define SCROLLANIMATIONMANAGER_H
+
+#include <QObject>
+#include <QPointer>
+#include <QPropertyAnimation>
+#include <QScrollArea>
+#include <QScrollBar>
+
+QT_BEGIN_NAMESPACE
+class QTimer;
+QT_END_NAMESPACE
+
+class ScrollManager;
+class ArtworkManager;
+
+/// Setup struct for ScrollAnimationManager dependencies
+struct ScrollAnimationManagerSetup {
+  QScrollArea *itemScrollArea = nullptr;
+  ScrollManager *scrollManager = nullptr;
+  ArtworkManager *artworkManager = nullptr;
+};
+
+/// Handles scroll animation creation, configuration, and execution for
+/// vertical and horizontal centering/visibility operations.
+class ScrollAnimationManager : public QObject {
+  Q_OBJECT
+public:
+  explicit ScrollAnimationManager(QObject *parent = nullptr);
+  ~ScrollAnimationManager() override;
+
+  void setupReferences(const ScrollAnimationManagerSetup &setup);
+
+  // --- Vertical Animation ---
+  /// Creates vertical animation if not already created
+  void ensureVAnimCreated(QScrollBar *vScrollBar);
+
+  /// Starts vertical animation with the given parameters
+  void configureAndStartVerticalAnimation(QScrollBar *vScrollBar, int curY,
+                                          int targetY, int duration,
+                                          bool clickScroll, bool clickHoldAdv);
+
+  /// Stops active vertical animations on the scrollbar
+  void stopActiveVerticalAnims(QScrollBar *verticalScrollBar);
+
+  /// Returns true if vertical animation is currently running
+  [[nodiscard]] bool isVerticalAnimRunning() const;
+
+  /// Returns the current vertical animation (may be nullptr)
+  [[nodiscard]] QPropertyAnimation *verticalAnimation() const {
+    return m_vScrollAnim;
+  }
+
+  /// Sets programmatic scroll property with guarded deferred clearing
+  void setProgrammaticScrollGuarded(bool enable);
+
+  /// Updates virtual view and selection during vertical animation
+  void updateVirtualViewAndSelectionDuringVAnim(bool clickScroll,
+                                                bool clickHoldAdv,
+                                                int selectedItemIndex);
+
+  // --- Horizontal Animation ---
+  /// Creates horizontal animation if not already created
+  void initHorizontalAnimIfNeeded(QScrollBar *hScrollBar);
+
+  /// Animates horizontal scrolling for hold mode
+  void animateHorizontalHold(QScrollBar *hScrollBar, int startX, int targetX);
+
+  /// Animates horizontal scrolling with smooth easing
+  void animateHorizontalSmooth(QScrollBar *hScrollBar, int startX, int targetX);
+
+  /// Returns true if horizontal animation is currently running
+  [[nodiscard]] bool isHorizontalAnimRunning() const;
+
+  /// Returns the current horizontal animation (may be nullptr)
+  [[nodiscard]] QPropertyAnimation *horizontalAnimation() const {
+    return m_hScrollAnim;
+  }
+
+  // --- Duration Calculation ---
+  /// Computes animation duration based on distance, item dimensions, and repeat state
+  [[nodiscard]] static int computeVerticalCenterDuration(int distance,
+                                                         int itemHeight,
+                                                         int verticalSpacing,
+                                                         bool repeatActive);
+
+  // --- Target Calculation ---
+  /// Computes target Y position for centering an item
+  [[nodiscard]] static int computeTargetYForIndex(int index, int gridWidth,
+                                                  int itemHeight,
+                                                  int verticalSpacing,
+                                                  int viewportHeight,
+                                                  int scrollbarMax);
+
+  /// Computes horizontal target X for visibility
+  [[nodiscard]] static int computeHorizontalTargetX(int itemX,
+                                                    int collectionItemWidth,
+                                                    int curX, int viewportWidth,
+                                                    int margins, int scrollMax);
+
+  /// Computes desired Y for visibility (returns true if vertical scroll needed)
+  [[nodiscard]] static int computeDesiredYForVisibility(int itemY,
+                                                        int itemHeight, int curY,
+                                                        int viewportHeight,
+                                                        int margins,
+                                                        bool &needVertical);
+
+  // --- Ensure Visible Animation ---
+  /// Starts animation for ensuring an item is visible
+  void startEnsureVisibleVAnim(QScrollBar *vScrollBar, int startVal, int endVal,
+                               int itemHeight, int verticalSpacing,
+                               bool isRepeating);
+
+signals:
+  /// Emitted when vertical scroll animation finishes
+  void verticalAnimationFinished();
+
+  /// Emitted when horizontal scroll animation finishes
+  void horizontalAnimationFinished();
+
+  /// Request to update virtual view during animation
+  void requestVirtualViewUpdate();
+
+  /// Request to update selection overlay for an index
+  void requestSelectionUpdate(int index);
+
+  /// Request to refresh selection overlay state
+  void requestSelectionOverlayRefresh();
+
+  /// Request to start glide animation (set GlideAnimating property)
+  void requestGlideAnimationStart();
+
+private slots:
+  void onVScrollAnimationFinished();
+  void onHScrollAnimationFinished();
+
+private:
+  QPointer<QScrollArea> m_itemScrollArea = nullptr;
+  ScrollManager *m_scrollManager = nullptr;
+  ArtworkManager *m_artworkManager = nullptr;
+
+  QPropertyAnimation *m_vScrollAnim = nullptr;
+  QPropertyAnimation *m_hScrollAnim = nullptr;
+};
+
+#endif // SCROLLANIMATIONMANAGER_H

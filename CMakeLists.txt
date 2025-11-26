@@ -51,6 +51,7 @@ set(SOURCES
   ${SRC_DIR}/managers/sidebarmanager.cpp
   ${SRC_DIR}/managers/sessionmanager.cpp
   ${SRC_DIR}/managers/scrollmanager.cpp
+  ${SRC_DIR}/managers/scrollanimationmanager.cpp
   ${SRC_DIR}/managers/searchmanager.cpp
   ${SRC_DIR}/managers/selectionmanager.cpp
   ${SRC_DIR}/managers/keyboardmanager.cpp
@@ -76,6 +77,7 @@ set(HEADERS
   ${SRC_DIR}/managers/sidebarmanager.h
   ${SRC_DIR}/managers/sessionmanager.h
   ${SRC_DIR}/managers/scrollmanager.h
+  ${SRC_DIR}/managers/scrollanimationmanager.h
   ${SRC_DIR}/managers/searchmanager.h
   ${SRC_DIR}/managers/selectionmanager.h
   ${SRC_DIR}/managers/keyboardmanager.h

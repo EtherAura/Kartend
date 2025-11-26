@@ -41,6 +41,7 @@ InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
   m_searchManager = std::make_unique<SearchManager>(this);
   m_selectionManager = std::make_unique<SelectionManager>(this);
   m_keyboardManager = std::make_unique<KeyboardManager>(this);
+  m_scrollAnimManager = std::make_unique<ScrollAnimationManager>(this);
 
   m_hScrollAnim = nullptr;
 
@@ -211,6 +212,50 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
             this, &InteractionManager::onKeyboardRepeatStep);
     connect(m_keyboardManager.get(), &KeyboardManager::stopRepeatRequested,
             this, &InteractionManager::onKeyboardStopRepeat);
+  }
+
+  // Setup ScrollAnimationManager with its dependencies
+  if (m_scrollAnimManager) {
+    ScrollAnimationManagerSetup scrollAnimSetup;
+    scrollAnimSetup.itemScrollArea = setup.itemScrollArea;
+    scrollAnimSetup.scrollManager = setup.scrollManager;
+    scrollAnimSetup.artworkManager = setup.artworkManager;
+    m_scrollAnimManager->setupReferences(scrollAnimSetup);
+
+    // Connect ScrollAnimationManager signals
+    connect(m_scrollAnimManager.get(),
+            &ScrollAnimationManager::requestVirtualViewUpdate, this, [this]() {
+              if (m_scrollManager != nullptr) {
+                m_scrollManager->updateVirtualView();
+              }
+            });
+    connect(m_scrollAnimManager.get(),
+            &ScrollAnimationManager::requestSelectionUpdate, this,
+            [this](int index) {
+              if (m_scrollManager != nullptr) {
+                m_scrollManager->updateSelectionForIndex(index);
+              }
+            });
+    connect(m_scrollAnimManager.get(),
+            &ScrollAnimationManager::requestSelectionOverlayRefresh, this,
+            [this]() {
+              if (m_scrollManager != nullptr) {
+                m_scrollManager->refreshSelectionOverlayState();
+              }
+            });
+    connect(m_scrollAnimManager.get(),
+            &ScrollAnimationManager::requestGlideAnimationStart, this,
+            [this]() {
+              if (m_gridContainer != nullptr) {
+                m_gridContainer->setProperty(PropertyKeys::GlideAnimating, true);
+                if (m_scrollManager != nullptr) {
+                  m_scrollManager->refreshSelectionOverlayState();
+                }
+              }
+            });
+    connect(m_scrollAnimManager.get(),
+            &ScrollAnimationManager::verticalAnimationFinished, this,
+            &InteractionManager::onVScrollAnimationFinished);
   }
 
   updateSearchModeButton();
