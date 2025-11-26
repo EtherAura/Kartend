@@ -257,7 +257,6 @@ private:
   void applyMinorHorizontalSuppress();
 
   // Immediate centering helpers
-  void stopActiveVerticalAnims(QScrollBar *verticalScrollBar);
   void setProgrammaticScrollGuarded(bool enable);
   void setScrollValueAndUpdateSelection(QScrollBar *verticalScrollBar,
                                         int targetY, int index);

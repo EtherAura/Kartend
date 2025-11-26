@@ -1999,7 +1999,9 @@ auto InteractionManager::handleExistingVerticalAnimIfRunning(
 auto InteractionManager::handleImmediateCenterPath(
     QScrollBar *verticalScrollBar, int targetY, int index, int currentRow)
     -> bool {
-  stopActiveVerticalAnims(verticalScrollBar);
+  if (m_animationManager) {
+    m_animationManager->stopActiveVerticalAnims(verticalScrollBar);
+  }
   setProgrammaticScrollGuarded(true);
   setScrollValueAndUpdateSelection(verticalScrollBar, targetY, index);
   setProgrammaticScrollGuarded(false);
@@ -2007,13 +2009,6 @@ auto InteractionManager::handleImmediateCenterPath(
   clearArtworkSuppressionViewportUpdateIfNeeded();
   clearArrowCenterSuppressionWhenDue();
   return true;
-}
-
-void InteractionManager::stopActiveVerticalAnims(
-    QScrollBar *verticalScrollBar) {
-  if (m_animationManager) {
-    m_animationManager->stopActiveVerticalAnims(verticalScrollBar);
-  }
 }
 
 void InteractionManager::setProgrammaticScrollGuarded(bool enable) {
