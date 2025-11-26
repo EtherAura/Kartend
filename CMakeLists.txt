@@ -80,6 +80,7 @@ set(HEADERS
   ${SRC_DIR}/ui/widgets/itemwidget.h
   ${SRC_DIR}/utils/collectionutils.h
   ${SRC_DIR}/utils/configutils.h
+  ${SRC_DIR}/utils/searchtypes.h
   ${SRC_DIR}/utils/stringutils.h
   ${SRC_DIR}/utils/settingsutils.h
   ${SRC_DIR}/utils/pathutils.h

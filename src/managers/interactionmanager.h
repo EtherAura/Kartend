@@ -2,6 +2,7 @@
 #define INTERACTIONMANAGER_H
 
 #include "collectionutils.h"
+#include "searchtypes.h"
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QMouseEvent>
@@ -26,12 +27,6 @@ class SessionManager;
 class ArtworkManager;
 class metadataSidebar;
 
-enum class SearchMode {
-  CurrentCollection,
-  CurrentAndSubcollections,
-  AllCollections
-};
-
 struct InteractionManagerSetup {
   ScrollManager *scrollManager = nullptr;
   SidebarManager *sidebarManager = nullptr;
@@ -51,13 +46,6 @@ struct InteractionManagerSetup {
   MainWindow *mainWindow = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
-};
-
-struct SearchContext {
-  bool hasSubs = false;
-  bool realDirectItems = false;
-  bool allowAll = false;
-  bool isContainer = false;
 };
 
 class InteractionManager : public QObject {
