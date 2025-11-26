@@ -3,15 +3,12 @@
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
-#include <QEasingCurve>
 #include <QFileInfo>
-#include <QFont>
 #include <QHash>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMouseEvent>
-#include <QPalette>
 #include <QPoint>
 #include <QProcess>
 #include <QScrollArea>
