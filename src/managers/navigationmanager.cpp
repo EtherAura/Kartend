@@ -165,7 +165,7 @@ auto NavigationManager::getSelectionRestoreIndex(int collectionIndex) const
   }
 
   QString hierarchicalName =
-      hierarchicalNameFor((*m_collections)[collectionIndex],
+      CollectionUtils::hierarchicalNameFor((*m_collections)[collectionIndex],
                           (*m_collections));
   int selIdx = -1;
   if (m_sessionManager) {
@@ -883,7 +883,7 @@ auto NavigationManager::calculateSelectionIndex(int totalItems) const -> int {
     return -1;
   }
 
-  QString hierarchicalName = hierarchicalNameFor(
+  QString hierarchicalName = CollectionUtils::hierarchicalNameFor(
       (*m_collections)[(*m_currentCollectionIndex)],
       (*m_collections));
   int selIdx = -1;
@@ -1211,7 +1211,7 @@ auto NavigationManager::getSubcollections(int parentIndex) const -> QList<int> {
   if (m_collections == nullptr) {
     return {};
   }
-  return directChildrenOf(parentIndex, *m_collections);
+  return CollectionUtils::directChildrenOf(parentIndex, *m_collections);
 }
 
 // Sets the collections pointer used for subcollection queries
@@ -1334,7 +1334,7 @@ auto NavigationManager::getAllDescendantCollections(int parentIndex) const
     return result;
   }
 
-  QList<int> stack = directChildrenOf(parentIndex, *m_collections);
+  QList<int> stack = CollectionUtils::directChildrenOf(parentIndex, *m_collections);
   QSet<int> seen;
   while (!stack.isEmpty()) {
     int idx = stack.takeLast();
@@ -1347,7 +1347,7 @@ auto NavigationManager::getAllDescendantCollections(int parentIndex) const
     seen.insert(idx);
     result.append(idx);
 
-    const QList<int> children = directChildrenOf(idx, *m_collections);
+    const QList<int> children = CollectionUtils::directChildrenOf(idx, *m_collections);
     for (int childIdx : children) {
       if (!seen.contains(childIdx)) {
         stack.append(childIdx);

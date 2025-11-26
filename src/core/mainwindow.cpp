@@ -560,7 +560,7 @@ void MainWindow::setupLastSelectedIndices() {
         m_collections[i].name);
     if (sel < 0) {
       QString hierarchical =
-          hierarchicalNameFor(m_collections[i], m_collections);
+          CollectionUtils::hierarchicalNameFor(m_collections[i], m_collections);
       if (!hierarchical.isEmpty() &&
           hierarchical != m_collections[i].name) {
         int hSel =

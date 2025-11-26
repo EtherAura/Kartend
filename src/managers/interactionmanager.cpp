@@ -2739,7 +2739,7 @@ auto InteractionManager::getSubcollections(int parentIndex) const
   if (m_collections == nullptr) {
     return {};
   }
-  return directChildrenOf(parentIndex, *m_collections);
+  return CollectionUtils::directChildrenOf(parentIndex, *m_collections);
 }
 
 void InteractionManager::clearSelectionAndFocus() {

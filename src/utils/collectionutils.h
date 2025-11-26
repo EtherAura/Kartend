@@ -11,6 +11,8 @@ enum class HorizontalAlignment { Left = 0, Center = 1, Right = 2 };
 
 enum class SidebarMode { Overlay = 0, Expand = 1 };
 
+namespace CollectionUtils {
+
 inline QString alignmentToString(HorizontalAlignment alignment) {
   switch (alignment) {
   case HorizontalAlignment::Left:
@@ -32,6 +34,8 @@ inline HorizontalAlignment stringToAlignment(const QString &str) {
     return HorizontalAlignment::Right;
   return HorizontalAlignment::Center;
 }
+
+} // namespace CollectionUtils
 
 struct CollectionConfig {
   QString name;
@@ -163,6 +167,8 @@ private:
 };
 
 // Legacy inline functions for backward compatibility
+namespace CollectionUtils {
+
 inline QList<int>
 collectDescendantIndices(int parentIndex,
                          const QList<CollectionConfig> &collections) {
@@ -204,6 +210,8 @@ inline QList<int> directChildrenOf(int parentIndex,
   }
   return children;
 }
+
+} // namespace CollectionUtils
 
 Q_DECLARE_METATYPE(CollectionConfig)
 Q_DECLARE_METATYPE(CollectionContext)

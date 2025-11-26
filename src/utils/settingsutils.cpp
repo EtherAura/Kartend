@@ -97,7 +97,7 @@ void SettingsUtils::loadMainScreenSettings(MainScreenConfig &config) {
   // Load from "Games" section instead of "General"
   settings.beginGroup("Games");
   config.gridWidth = settings.value("gridWidth", UIConstants::DEFAULT_GRID_WIDTH).toInt();
-  config.horizontalAlignment = stringToAlignment(settings.value("horizontalAlignment", "center").toString());
+  config.horizontalAlignment = CollectionUtils::stringToAlignment(settings.value("horizontalAlignment", "center").toString());
   // showHiddenCollections might not be in CollectionConfig, so we keep it here or assume it's custom
   config.showHiddenCollections = settings.value("showHiddenCollections", false).toBool();
   settings.endGroup();
@@ -111,7 +111,7 @@ void SettingsUtils::saveMainScreenSettings(const MainScreenConfig &config) {
   // Save to "Games" section instead of "General"
   settings.beginGroup("Games");
   settings.setValue("gridWidth", config.gridWidth);
-  settings.setValue("horizontalAlignment", alignmentToString(config.horizontalAlignment));
+  settings.setValue("horizontalAlignment", CollectionUtils::alignmentToString(config.horizontalAlignment));
   settings.setValue("showHiddenCollections", config.showHiddenCollections);
   settings.endGroup();
   settings.sync();

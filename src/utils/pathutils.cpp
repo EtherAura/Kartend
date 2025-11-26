@@ -2,11 +2,12 @@
 #include <QDir>
 #include <QFileInfo>
 
+namespace PathUtils {
+
 // Expands placeholders and returns an absolute existing path; returns empty for
 // empty/non-absolute/non-existent paths
-auto PathUtils::validateAndExpandPath(const QString &path,
-                                      const QString &collectionName)
-    -> QString {
+QString validateAndExpandPath(const QString &path,
+                              const QString &collectionName) {
   QString result = path.trimmed();
   if (!collectionName.isEmpty()) {
     result.replace("%collection%", collectionName, Qt::CaseInsensitive);
@@ -25,8 +26,7 @@ auto PathUtils::validateAndExpandPath(const QString &path,
   return dir.absolutePath();
 }
 
-auto PathUtils::truncatePathForDisplay(const QString &path, int maxLength)
-    -> QString {
+QString truncatePathForDisplay(const QString &path, int maxLength) {
   if (path.length() <= maxLength) {
     return path;
   }
@@ -34,9 +34,11 @@ auto PathUtils::truncatePathForDisplay(const QString &path, int maxLength)
   return "..." + path.right(maxLength - 3);
 }
 
-auto PathUtils::normalizeDisplayName(const QString &input) -> QString {
+QString normalizeDisplayName(const QString &input) {
   QString out = input;
   out.replace('_', ' ').replace('-', ' ');
   out = out.simplified().toLower();
   return out;
 }
+
+} // namespace PathUtils

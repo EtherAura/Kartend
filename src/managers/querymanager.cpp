@@ -171,7 +171,7 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
   }
 
   QList<int> rawDescendants =
-      collectDescendantIndices(mainCtx.currentIndex, allCollections);
+      CollectionUtils::collectDescendantIndices(mainCtx.currentIndex, allCollections);
   QSet<int> seenDesc;
   QList<int> descendants;
   descendants.reserve(rawDescendants.size());
@@ -265,7 +265,7 @@ void QueryManager::fetchItemCount(const CollectionContext &context, const QList<
   uuids << computeCollectionUuid(ctx.config.name, ctx.config.mediaDirectory);
 
   if (ctx.config.showAllSubcollectionItems) {
-      QList<int> rawDescendants = collectDescendantIndices(ctx.currentIndex, allCollections);
+      QList<int> rawDescendants = CollectionUtils::collectDescendantIndices(ctx.currentIndex, allCollections);
       for (int descendantIndex : rawDescendants) {
           if (descendantIndex == ctx.currentIndex || descendantIndex < 0 || descendantIndex >= allCollections.size()) continue;
           CollectionConfig subCol = allCollections[descendantIndex];
@@ -321,7 +321,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
   uuids << computeCollectionUuid(ctx.config.name, ctx.config.mediaDirectory);
 
   if (ctx.config.showAllSubcollectionItems) {
-      QList<int> rawDescendants = collectDescendantIndices(ctx.currentIndex, allCollections);
+      QList<int> rawDescendants = CollectionUtils::collectDescendantIndices(ctx.currentIndex, allCollections);
       for (int descendantIndex : rawDescendants) {
           if (descendantIndex == ctx.currentIndex || descendantIndex < 0 || descendantIndex >= allCollections.size()) continue;
           CollectionConfig subCol = allCollections[descendantIndex];
@@ -375,7 +375,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
   
   addMap(ctx.config);
   if (ctx.config.showAllSubcollectionItems) {
-      QList<int> rawDescendants = collectDescendantIndices(ctx.currentIndex, allCollections);
+      QList<int> rawDescendants = CollectionUtils::collectDescendantIndices(ctx.currentIndex, allCollections);
       for (int descendantIndex : rawDescendants) {
           if (descendantIndex == ctx.currentIndex || descendantIndex < 0 || descendantIndex >= allCollections.size()) continue;
           CollectionConfig subCol = allCollections[descendantIndex];

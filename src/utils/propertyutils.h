@@ -44,8 +44,8 @@ inline constexpr const char* HoldVelocityPxPerMs             = "_hold_velocity_p
 inline constexpr const char* StreamLastMs                    = "_stream_last_ms";
 inline constexpr const char* DeferArtworkUpdate              = "_defer_artwork_update";
 inline constexpr const char* ForcePlaceholder                = "_force_placeholder";
-static constexpr const char* ClearedByEscape = "_cleared_by_escape";
-static constexpr const char* SelectionRestoreToken = "_sel_restore_token";
-static constexpr const char* SelectionRestorePending = "_sel_restore_pending";
+inline constexpr const char* ClearedByEscape                 = "_cleared_by_escape";
+inline constexpr const char* SelectionRestoreToken           = "_sel_restore_token";
+inline constexpr const char* SelectionRestorePending         = "_sel_restore_pending";
 }
 #endif

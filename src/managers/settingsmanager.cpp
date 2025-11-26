@@ -55,7 +55,7 @@ auto findParentCollectionIndex(
         QStringList parentPath = parts.mid(0, parts.size() - 1);
         QString expectedParentPath = parentPath.join('/');
         QString actualParentPath =
-            hierarchicalNameFor(collections[i], collections);
+            CollectionUtils::hierarchicalNameFor(collections[i], collections);
         if (actualParentPath == expectedParentPath) {
           return i;
         }
@@ -167,7 +167,7 @@ void SettingsManager::loadCollections(
     config.gridWidth = settings.value("gridWidth", 4).toInt();
     config.sidebarVisible = settings.value("sidebarVisible", false).toBool();
     config.showAllSubcollectionItems = settings.value("showAllSubcollectionItems", false).toBool();
-    config.horizontalAlignment = stringToAlignment(settings.value("horizontalAlignment", "center").toString());
+    config.horizontalAlignment = CollectionUtils::stringToAlignment(settings.value("horizontalAlignment", "center").toString());
     config.sidebarMode = (settings.value("sidebarMode", "overlay").toString() == "fixed") ? SidebarMode::Expand : SidebarMode::Overlay;
     config.hideHorizontalScrollbar = settings.value("hideHorizontalScrollbar", false).toBool();
     config.hideVerticalScrollbar = settings.value("hideVerticalScrollbar", false).toBool();
@@ -197,7 +197,7 @@ void SettingsManager::saveCollections(
   QSet<QString> newGroupNames;
 
   for (int i = 0; i < collections.size(); ++i) {
-    QString sectionName = hierarchicalNameFor(collections[i], collections);
+    QString sectionName = CollectionUtils::hierarchicalNameFor(collections[i], collections);
     if (!sectionName.isEmpty()) {
       sectionNames.append(sectionName);
       sectionToIndex[sectionName] = i;
@@ -245,7 +245,7 @@ void SettingsManager::saveCollections(
     settings.setValue("gridWidth", c.gridWidth);
     settings.setValue("sidebarVisible", c.sidebarVisible);
     settings.setValue("showAllSubcollectionItems", c.showAllSubcollectionItems);
-    settings.setValue("horizontalAlignment", alignmentToString(c.horizontalAlignment));
+    settings.setValue("horizontalAlignment", CollectionUtils::alignmentToString(c.horizontalAlignment));
     settings.setValue("sidebarMode", (c.sidebarMode == SidebarMode::Expand) ? "fixed" : "overlay");
     settings.setValue("hideHorizontalScrollbar", c.hideHorizontalScrollbar);
     settings.setValue("hideVerticalScrollbar", c.hideVerticalScrollbar);
@@ -688,7 +688,7 @@ auto SettingsManager::getLastSelectedItem(int collectionIndex) const -> int {
   auto *mainWindow = qobject_cast<MainWindow *>(parent());
   if ((mainWindow != nullptr) && collectionIndex >= 0 &&
       collectionIndex < mainWindow->m_collections.size()) {
-    QString hierarchicalName = hierarchicalNameFor(
+    QString hierarchicalName = CollectionUtils::hierarchicalNameFor(
         mainWindow->m_collections[collectionIndex], mainWindow->m_collections);
     int persistentIndex = -1;
     if (m_sessionManager) {

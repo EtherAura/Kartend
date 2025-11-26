@@ -200,7 +200,7 @@ void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths, 
 void ScrollManager::initializeSubcollections() {
   m_subcollections.clear();
   if ((m_collections != nullptr) && m_context.currentIndex >= 0) {
-    m_subcollections = directChildrenOf(m_context.currentIndex, *m_collections);
+    m_subcollections = CollectionUtils::directChildrenOf(m_context.currentIndex, *m_collections);
   }
 }
 
@@ -1335,7 +1335,7 @@ void ScrollManager::updateContextForSubcollection(int subcollectionIndex) {
   }
   m_context.currentIndex = subcollectionIndex;
   m_context.config = (*m_collections)[subcollectionIndex];
-  m_subcollections = directChildrenOf(subcollectionIndex, *m_collections);
+  m_subcollections = CollectionUtils::directChildrenOf(subcollectionIndex, *m_collections);
   m_totalItems = m_subcollections.size() + m_filePaths.size();
   calculateVirtualMetrics();
   positionVirtualContainer();
@@ -1384,7 +1384,7 @@ void ScrollManager::determineTargetCollections(int subcollectionIndex,
                                                QSet<int> &targetCollections) {
   targetCollections.insert(subcollectionIndex);
   QList<int> descendants =
-      collectDescendantIndices(subcollectionIndex, *m_collections);
+      CollectionUtils::collectDescendantIndices(subcollectionIndex, *m_collections);
   for (int descendant : descendants) {
     targetCollections.insert(descendant);
   }

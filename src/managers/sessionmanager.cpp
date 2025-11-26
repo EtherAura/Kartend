@@ -197,7 +197,7 @@ void SessionManager::setCollectionCounts(
     const CollectionConfig &collection,
     const QList<CollectionConfig> &allCollections, qint64 itemCount,
     qint64 recursiveCount) {
-  QString hierarchicalName = hierarchicalNameFor(collection, allCollections);
+  QString hierarchicalName = CollectionUtils::hierarchicalNameFor(collection, allCollections);
   QMutexLocker locker(&m_mutex);
   collectionNameRecursiveCountCache[hierarchicalName] = recursiveCount;
   collectionNameItemCountCache[hierarchicalName] = itemCount;
@@ -207,7 +207,7 @@ bool SessionManager::getCollectionCounts(
     const CollectionConfig &collection,
     const QList<CollectionConfig> &allCollections, qint64 &itemCount,
     qint64 &recursiveCount) const {
-  const QString key = hierarchicalNameFor(collection, allCollections);
+  const QString key = CollectionUtils::hierarchicalNameFor(collection, allCollections);
   QMutexLocker locker(&m_mutex);
   const bool hasDirect = collectionNameItemCountCache.contains(key);
   const bool hasRec = collectionNameRecursiveCountCache.contains(key);
@@ -233,7 +233,7 @@ void SessionManager::clearStaleCollections(
 
   QSet<QString> validHierNames;
   for (const CollectionConfig &config : currentCollections) {
-    QString hierarchicalName = hierarchicalNameFor(config, currentCollections);
+    QString hierarchicalName = CollectionUtils::hierarchicalNameFor(config, currentCollections);
     validHierNames.insert(hierarchicalName);
   }
 

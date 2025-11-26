@@ -189,7 +189,7 @@ auto DatabaseManager::countCollectionRecursive(
       computeCollectionUuid(allCollections[collectionIndex].name, expandedMediaDir);
   qint64 total = countCollectionByUuid(uuid);
   QList<int> descendants =
-      collectDescendantIndices(collectionIndex, allCollections);
+      CollectionUtils::collectDescendantIndices(collectionIndex, allCollections);
   for (int descendantIndex : descendants) {
     QString descExpandedMediaDir = PathUtils::validateAndExpandPath(allCollections[descendantIndex].mediaDirectory, allCollections[descendantIndex].name);
     const QString descendantUuid =
