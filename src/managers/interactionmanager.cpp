@@ -1797,12 +1797,12 @@ void InteractionManager::centerItemVertically(int index, bool immediate) {
 
   if (m_animationManager) {
     m_animationManager->ensureVAnimCreated(verticalScrollBar);
-  }
 
-  if (handleExistingVerticalAnimIfRunning(verticalScrollBar, targetY,
-                                          clickScroll, clickHoldAdv, curY,
-                                          distance)) {
-    return;
+    if (m_animationManager->handleExistingVerticalAnimIfRunning(
+            verticalScrollBar, targetY, clickScroll, clickHoldAdv, curY,
+            distance)) {
+      return;
+    }
   }
 
   int duration = computeVerticalCenterDuration(distance, m_repeating);
@@ -1982,16 +1982,6 @@ auto InteractionManager::maybeHandleImmediateCenter(
                                   currentRow)) {
       return true;
     }
-  }
-  return false;
-}
-
-auto InteractionManager::handleExistingVerticalAnimIfRunning(
-    QScrollBar *verticalScrollBar, int targetY, bool clickScroll,
-    bool clickHoldAdv, int &curY, int &distance) -> bool {
-  if (m_animationManager) {
-    return m_animationManager->handleExistingVerticalAnimIfRunning(
-        verticalScrollBar, targetY, clickScroll, clickHoldAdv, curY, distance);
   }
   return false;
 }

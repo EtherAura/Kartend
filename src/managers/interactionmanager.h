@@ -282,10 +282,6 @@ private:
                                   bool forceImmediate, bool forceClickAnim,
                                   QScrollBar *verticalScrollBar, int targetY,
                                   int index, int currentRow);
-  bool handleExistingVerticalAnimIfRunning(QScrollBar *verticalScrollBar,
-                                           int targetY, bool clickScroll,
-                                           bool clickHoldAdv, int &curY,
-                                           int &distance);
 
   // ensureItemVisible helpers
   void updateViewAndRowAfterVisibility(int index, int gridWidth);
