@@ -1,7 +1,7 @@
 #ifndef SETTINGSDIALOG_H
 #define SETTINGSDIALOG_H
 
-#include "collectionconfig.h"
+#include "collectionutils.h"
 #include "extensionutils.h"
 #include <QDialog>
 #include <QHash>

@@ -1,5 +1,5 @@
-#ifndef COLLECTIONCONFIG_H
-#define COLLECTIONCONFIG_H
+#ifndef COLLECTIONUTILS_H
+#define COLLECTIONUTILS_H
 
 #include <QHash>
 #include <QMetaType>

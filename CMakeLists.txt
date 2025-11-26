@@ -23,17 +23,9 @@ set(CMAKE_AUTOUIC_SEARCH_PATHS
   ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/widgets
 )
 
-# Prefer Qt6, fallback to Qt5
+# Qt6 required
 set(QT_REQUIRED_COMPONENTS Core Gui Widgets Sql Concurrent)
-find_package(Qt6 COMPONENTS ${QT_REQUIRED_COMPONENTS} QUIET)
-if (NOT Qt6_FOUND)
-  find_package(Qt5 COMPONENTS ${QT_REQUIRED_COMPONENTS} REQUIRED)
-endif()
-if (Qt6_FOUND)
-  set(QTNS Qt6)
-else()
-  set(QTNS Qt5)
-endif()
+find_package(Qt6 COMPONENTS ${QT_REQUIRED_COMPONENTS} REQUIRED)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -48,12 +40,12 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 set(SOURCES
   ${SRC_DIR}/core/main.cpp
-  ${SRC_DIR}/core/applicationmanager.cpp
+  ${SRC_DIR}/managers/applicationmanager.cpp
   ${SRC_DIR}/core/mainwindow.cpp
   ${SRC_DIR}/managers/artworkmanager.cpp
   ${SRC_DIR}/managers/cachemanager.cpp
   ${SRC_DIR}/managers/databasemanager.cpp
-  ${SRC_DIR}/managers/databaseworker.cpp
+  ${SRC_DIR}/managers/querymanager.cpp
   ${SRC_DIR}/managers/navigationmanager.cpp
   ${SRC_DIR}/managers/settingsmanager.cpp
   ${SRC_DIR}/managers/sidebarmanager.cpp
@@ -70,12 +62,12 @@ set(SOURCES
 )
 
 set(HEADERS
-  ${SRC_DIR}/core/applicationmanager.h
+  ${SRC_DIR}/managers/applicationmanager.h
   ${SRC_DIR}/core/mainwindow.h
   ${SRC_DIR}/managers/artworkmanager.h
   ${SRC_DIR}/managers/cachemanager.h
   ${SRC_DIR}/managers/databasemanager.h
-  ${SRC_DIR}/managers/databaseworker.h
+  ${SRC_DIR}/managers/querymanager.h
   ${SRC_DIR}/managers/navigationmanager.h
   ${SRC_DIR}/managers/settingsmanager.h
   ${SRC_DIR}/managers/sidebarmanager.h
@@ -86,7 +78,9 @@ set(HEADERS
   ${SRC_DIR}/ui/dialogs/settingsdialog.h
   ${SRC_DIR}/ui/widgets/metadatasidebar.h
   ${SRC_DIR}/ui/widgets/itemwidget.h
-  ${SRC_DIR}/utils/collectionconfig.h
+  ${SRC_DIR}/utils/collectionutils.h
+  ${SRC_DIR}/utils/configutils.h
+  ${SRC_DIR}/utils/stringutils.h
   ${SRC_DIR}/utils/settingsutils.h
   ${SRC_DIR}/utils/pathutils.h
   ${SRC_DIR}/utils/gridutils.h
@@ -119,16 +113,16 @@ target_sources(kartend PRIVATE
 
 target_link_libraries(kartend
   PRIVATE
-    ${QTNS}::Core
-    ${QTNS}::Gui
-    ${QTNS}::Widgets
-    ${QTNS}::Sql
-    ${QTNS}::Concurrent
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Sql
+    Qt6::Concurrent
 )
 
 target_compile_definitions(kartend
   PRIVATE
-    APP_NAME="Kartend"
+    APP_NAME="kartend"
     APP_VERSION="${PROJECT_VERSION}"
     APP_AUTHOR="EtherAura"
     BUILD_DATE="${BUILD_DATE}"

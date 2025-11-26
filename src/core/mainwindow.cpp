@@ -11,7 +11,7 @@
 #include "applicationmanager.h"
 #include "artworkmanager.h"
 #include "cachemanager.h"
-#include "collectionconfig.h"
+#include "collectionutils.h"
 #include "databasemanager.h"
 #include "interactionmanager.h"
 #include "mainwindow.h"
@@ -23,6 +23,7 @@
 #include "settingsmanager.h"
 #include "settingsutils.h"
 #include "sidebarmanager.h"
+#include "stringutils.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
@@ -69,16 +70,6 @@ auto MainWindow::eventFilter(QObject *watched, QEvent *event) -> bool {
              : QMainWindow::eventFilter(watched, event);
 }
 
-static auto formatCountNumber(qint64 value) -> QString {
-  QString digits = QString::number(value);
-  int pos = digits.size() - 3;
-  while (pos > 0) {
-    digits.insert(pos, ',');
-    pos -= 3;
-  }
-  return digits;
-}
-
 void MainWindow::refreshTitleCounts() {
   if (getDatabaseManager() == nullptr) {
     return;
@@ -104,7 +95,7 @@ void MainWindow::refreshTitleCounts() {
   for (int idx : chain) {
     qint64 countVal =
         getDatabaseManager()->countCollectionRecursive(idx, m_collections);
-    parts << formatCountNumber(countVal);
+    parts << StringUtils::formatCountNumber(countVal);
   }
 
   QString base = m_collections[cur].name;

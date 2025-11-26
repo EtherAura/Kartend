@@ -8,7 +8,7 @@
 #include <QSqlDatabase>
 #include <QStringList>
 
-#include "collectionconfig.h"
+#include "collectionutils.h"
 
 class SessionManager;
 
@@ -59,7 +59,7 @@ private slots:
   void onWorkerItemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
 
 private:
-  class DatabaseWorker* m_worker;
+  class QueryManager* m_worker;
   SessionManager *m_sessionManager;
   class QThread* m_workerThread;
 

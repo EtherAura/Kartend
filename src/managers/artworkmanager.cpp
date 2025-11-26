@@ -1,7 +1,7 @@
 // IWYU-adjusted includes
 #include "artworkmanager.h"
 #include "cachemanager.h"
-#include "collectionconfig.h"
+#include "collectionutils.h"
 #include "extensionutils.h"
 #include "propertyutils.h"
 #include "timerutils.h"

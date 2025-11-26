@@ -1,7 +1,7 @@
 #include "settingsmanager.h"
 #include "artworkmanager.h"
 #include "cachemanager.h"
-#include "collectionconfig.h"
+#include "collectionutils.h"
 #include "extensionutils.h"
 #include "mainwindow.h"
 #include "navigationmanager.h"

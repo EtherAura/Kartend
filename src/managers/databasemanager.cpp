@@ -11,7 +11,7 @@
 
 #include "artworkmanager.h"
 #include "databasemanager.h"
-#include "databaseworker.h"
+#include "querymanager.h"
 #include "pathutils.h"
 #include "sessionmanager.h"
 
@@ -26,21 +26,21 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
   initDatabase();
 
   m_workerThread = new QThread(this);
-  m_worker = new DatabaseWorker(m_sessionManager);
+  m_worker = new QueryManager(m_sessionManager);
   m_worker->moveToThread(m_workerThread);
 
   connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
   
-  connect(this, &DatabaseManager::requestLoadAllCollections, m_worker, &DatabaseWorker::loadAllCollections);
-  connect(this, &DatabaseManager::requestLoadItems, m_worker, &DatabaseWorker::loadItems);
-  connect(this, &DatabaseManager::requestLoadItemsWithSubcollections, m_worker, &DatabaseWorker::loadItemsWithSubcollections);
-  connect(this, &DatabaseManager::requestFetchItemCount, m_worker, &DatabaseWorker::fetchItemCount);
-  connect(this, &DatabaseManager::requestFetchItemsRange, m_worker, &DatabaseWorker::fetchItemsRange);
+  connect(this, &DatabaseManager::requestLoadAllCollections, m_worker, &QueryManager::loadAllCollections);
+  connect(this, &DatabaseManager::requestLoadItems, m_worker, &QueryManager::loadItems);
+  connect(this, &DatabaseManager::requestLoadItemsWithSubcollections, m_worker, &QueryManager::loadItemsWithSubcollections);
+  connect(this, &DatabaseManager::requestFetchItemCount, m_worker, &QueryManager::fetchItemCount);
+  connect(this, &DatabaseManager::requestFetchItemsRange, m_worker, &QueryManager::fetchItemsRange);
   
-  connect(m_worker, &DatabaseWorker::itemsLoaded, this, &DatabaseManager::onWorkerItemsLoaded);
-  connect(m_worker, &DatabaseWorker::itemCountLoaded, this, &DatabaseManager::onWorkerItemCountLoaded);
-  connect(m_worker, &DatabaseWorker::itemsRangeLoaded, this, &DatabaseManager::onWorkerItemsRangeLoaded);
-  connect(m_worker, &DatabaseWorker::errorOccurred, this, &DatabaseManager::errorOccurred);
+  connect(m_worker, &QueryManager::itemsLoaded, this, &DatabaseManager::onWorkerItemsLoaded);
+  connect(m_worker, &QueryManager::itemCountLoaded, this, &DatabaseManager::onWorkerItemCountLoaded);
+  connect(m_worker, &QueryManager::itemsRangeLoaded, this, &DatabaseManager::onWorkerItemsRangeLoaded);
+  connect(m_worker, &QueryManager::errorOccurred, this, &DatabaseManager::errorOccurred);
 
   m_workerThread->start();
 }

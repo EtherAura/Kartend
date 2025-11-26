@@ -1,7 +1,7 @@
 #ifndef SETTINGSMANAGER_H
 #define SETTINGSMANAGER_H
 
-#include "collectionconfig.h"
+#include "collectionutils.h"
 #include "extensionutils.h"
 #include <QObject>
 

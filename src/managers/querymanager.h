@@ -1,20 +1,20 @@
-#ifndef DATABASEWORKER_H
-#define DATABASEWORKER_H
+#ifndef QUERYMANAGER_H
+#define QUERYMANAGER_H
 
 #include <QObject>
 #include <QSqlDatabase>
 #include <QStringList>
 #include <QHash>
 #include <QDateTime>
-#include "collectionconfig.h"
+#include "collectionutils.h"
 
 class SessionManager;
 
-class DatabaseWorker : public QObject {
+class QueryManager : public QObject {
   Q_OBJECT
 public:
-  explicit DatabaseWorker(SessionManager *sessionManager, QObject *parent = nullptr);
-  ~DatabaseWorker() override;
+  explicit QueryManager(SessionManager *sessionManager, QObject *parent = nullptr);
+  ~QueryManager() override;
 
 public slots:
   void initDatabase();
@@ -72,4 +72,4 @@ private:
   static int getCharacterSortPriority(const QString &text);
 };
 
-#endif // DATABASEWORKER_H
+#endif // QUERYMANAGER_H

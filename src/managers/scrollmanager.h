@@ -1,7 +1,7 @@
 #ifndef SCROLLMANAGER_H
 #define SCROLLMANAGER_H
 
-#include "collectionconfig.h"
+#include "collectionutils.h"
 #include "gridutils.h"
 #include <QDateTime>
 #include <QHash>

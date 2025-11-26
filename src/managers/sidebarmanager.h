@@ -1,7 +1,7 @@
 #ifndef SIDEBARMANAGER_H
 #define SIDEBARMANAGER_H
 
-#include "collectionconfig.h"
+#include "collectionutils.h"
 #include <QObject>
 #include <QString>
 #include <QWidget>

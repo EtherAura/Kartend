@@ -1,7 +1,7 @@
 #ifndef SETTINGSUTILS_H
 #define SETTINGSUTILS_H
 
-#include "collectionconfig.h"
+#include "collectionutils.h"
 #include <QString>
 #include <QList>
 #include <QSettings>

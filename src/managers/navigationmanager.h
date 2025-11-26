@@ -1,7 +1,7 @@
 #ifndef NAVIGATIONMANAGER_H
 #define NAVIGATIONMANAGER_H
 
-#include "collectionconfig.h"
+#include "collectionutils.h"
 #include <QHash>
 #include <QList>
 #include <QObject>

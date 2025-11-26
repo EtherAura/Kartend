@@ -1,5 +1,5 @@
 #include "sessionmanager.h"
-#include "collectionconfig.h"
+#include "collectionutils.h"
 #include "uiconstants.h"
 
 #include <QApplication>

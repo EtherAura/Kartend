@@ -1,4 +1,4 @@
-#include "databaseworker.h"
+#include "querymanager.h"
 #include "pathutils.h"
 #include "sessionmanager.h"
 #include <QCryptographicHash>
@@ -17,12 +17,12 @@
 static auto canonicalKeyPath(const QString &absPath, bool dedup) -> QString;
 static auto displayNameForBase(const QString &baseName) -> QString;
 
-DatabaseWorker::DatabaseWorker(SessionManager *sessionManager, QObject *parent)
+QueryManager::QueryManager(SessionManager *sessionManager, QObject *parent)
     : QObject(parent), m_sessionManager(sessionManager) {
   m_connectionName = "kartend_worker";
 }
 
-DatabaseWorker::~DatabaseWorker() {
+QueryManager::~QueryManager() {
   if (m_db.isValid()) {
     QString connectionName = m_db.connectionName();
     m_db.close();
@@ -31,7 +31,7 @@ DatabaseWorker::~DatabaseWorker() {
   }
 }
 
-void DatabaseWorker::initDatabase() {
+void QueryManager::initDatabase() {
   if (QSqlDatabase::contains(m_connectionName)) {
     m_db = QSqlDatabase::database(m_connectionName);
   } else {
@@ -60,7 +60,7 @@ void DatabaseWorker::initDatabase() {
   // Since main thread runs initDatabase first, we should be fine.
 }
 
-void DatabaseWorker::loadAllCollections(const QList<CollectionConfig> &allCollections) {
+void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollections) {
   if (!m_db.isOpen()) initDatabase();
 
   QStringList allFilePaths;
@@ -97,7 +97,7 @@ void DatabaseWorker::loadAllCollections(const QList<CollectionConfig> &allCollec
   emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToCollectionIndex);
 }
 
-void DatabaseWorker::loadItems(const CollectionContext &context) {
+void QueryManager::loadItems(const CollectionContext &context) {
   if (!m_db.isOpen()) initDatabase();
 
   if (!context.isValid()) {
@@ -136,7 +136,7 @@ void DatabaseWorker::loadItems(const CollectionContext &context) {
   emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToCollectionIndex);
 }
 
-void DatabaseWorker::loadItemsWithSubcollections(const CollectionContext &context,
+void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
                                                  const QList<CollectionConfig> &allCollections) {
   if (!m_db.isOpen()) initDatabase();
 
@@ -227,7 +227,7 @@ void DatabaseWorker::loadItemsWithSubcollections(const CollectionContext &contex
   emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToCollectionIndex);
 }
 
-void DatabaseWorker::updateCachedCounts(const QList<CollectionConfig> &allCollections) {
+void QueryManager::updateCachedCounts(const QList<CollectionConfig> &allCollections) {
   if (!m_db.isOpen()) initDatabase();
 
   // Note: SessionManager usage here was removed because it's not thread-safe.
@@ -236,7 +236,7 @@ void DatabaseWorker::updateCachedCounts(const QList<CollectionConfig> &allCollec
   // Currently, DatabaseManager::updateCachedCounts handles the SessionManager updates.
 }
 
-void DatabaseWorker::ensureCollectionScanned(int collectionIndex, const CollectionConfig &collection) {
+void QueryManager::ensureCollectionScanned(int collectionIndex, const CollectionConfig &collection) {
   if (collection.mediaDirectory.trimmed().isEmpty()) return;
   if (needsRescan(collectionIndex, collection)) {
     QHash<QString, QDateTime> timestamps;
@@ -247,7 +247,7 @@ void DatabaseWorker::ensureCollectionScanned(int collectionIndex, const Collecti
   }
 }
 
-void DatabaseWorker::fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter) {
+void QueryManager::fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter) {
   if (!m_db.isOpen()) initDatabase();
 
   if (!context.isValid()) {
@@ -301,7 +301,7 @@ void DatabaseWorker::fetchItemCount(const CollectionContext &context, const QLis
   }
 }
 
-void DatabaseWorker::fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter) {
+void QueryManager::fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter) {
   if (!m_db.isOpen()) initDatabase();
 
   if (!context.isValid()) {
@@ -415,7 +415,7 @@ void DatabaseWorker::fetchItemsRange(const CollectionContext &context, const QLi
 
 // ... Helper implementations ...
 
-bool DatabaseWorker::needsRescan(int collectionIndex, const CollectionConfig &collection) {
+bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &collection) {
   Q_UNUSED(collectionIndex)
 
   if (collection.mediaDirectory.trimmed().isEmpty()) {
@@ -486,7 +486,7 @@ bool DatabaseWorker::needsRescan(int collectionIndex, const CollectionConfig &co
   return newer.next() && newer.value(0).toInt() > 0;
 }
 
-QStringList DatabaseWorker::scanMediaDirectory(const CollectionConfig &collection,
+QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
                                          QHash<QString, QDateTime> &timestamps) {
   QStringList filePaths;
   QDir dir(collection.mediaDirectory);
@@ -514,7 +514,7 @@ QStringList DatabaseWorker::scanMediaDirectory(const CollectionConfig &collectio
   return filePaths;
 }
 
-QStringList DatabaseWorker::loadOrScanCollection(
+QStringList QueryManager::loadOrScanCollection(
     int collectionIndex, const CollectionConfig &collection,
     QHash<QString, QDateTime> &timestamps) {
   QStringList filePaths;
@@ -535,7 +535,7 @@ QStringList DatabaseWorker::loadOrScanCollection(
   return filePaths;
 }
 
-void DatabaseWorker::saveItemsToDatabase(
+void QueryManager::saveItemsToDatabase(
     int collectionIndex, const QStringList &filePaths,
     const QHash<QString, QDateTime> &timestamps,
     const CollectionConfig &collection) {
@@ -622,7 +622,7 @@ void DatabaseWorker::saveItemsToDatabase(
   }
 }
 
-QStringList DatabaseWorker::loadItemsFromDatabaseByUuid(const QString &collectionUuid) {
+QStringList QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionUuid) {
   QStringList filePaths;
 
   if (!m_db.isOpen()) {
@@ -648,7 +648,7 @@ QStringList DatabaseWorker::loadItemsFromDatabaseByUuid(const QString &collectio
   return filePaths;
 }
 
-void DatabaseWorker::clearCollectionFromDatabaseByUuid(const QString &collectionUuid) {
+void QueryManager::clearCollectionFromDatabaseByUuid(const QString &collectionUuid) {
   if (!m_db.isOpen()) {
     return;
   }
@@ -675,7 +675,7 @@ void DatabaseWorker::clearCollectionFromDatabaseByUuid(const QString &collection
   }
 }
 
-QString DatabaseWorker::computeCollectionUuid(const QString &name, const QString &mediaDir) {
+QString QueryManager::computeCollectionUuid(const QString &name, const QString &mediaDir) {
   QByteArray norm = (name + "|" + mediaDir).trimmed().toLower().toUtf8();
   QByteArray digest =
       QCryptographicHash::hash(norm, QCryptographicHash::Sha1).toHex();
@@ -707,7 +707,7 @@ inline void insertIfAbsent(Map &map, const Key &key, const Value &value) {
   }
 }
 
-void DatabaseWorker::appendFileMapsAndListCanonical(
+void QueryManager::appendFileMapsAndListCanonical(
     int collectionIndex, const CollectionConfig &expandedCollection,
     const QString &mappingArtworkDir, const QStringList &filePaths,
     QStringList &allFilePaths, QHash<QString, QString> &allFileNames,
@@ -753,7 +753,7 @@ void DatabaseWorker::appendFileMapsAndListCanonical(
   }
 }
 
-void DatabaseWorker::sortFiles(QStringList &allFilePaths) {
+void QueryManager::sortFiles(QStringList &allFilePaths) {
   std::ranges::sort(allFilePaths, [&](const QString &lhs, const QString &rhs) {
     QString nameA = QFileInfo(lhs).completeBaseName();
     QString nameB = QFileInfo(rhs).completeBaseName();
@@ -778,7 +778,7 @@ void DatabaseWorker::sortFiles(QStringList &allFilePaths) {
   });
 }
 
-int DatabaseWorker::getCharacterSortPriority(const QString &text) {
+int QueryManager::getCharacterSortPriority(const QString &text) {
   if (text.isEmpty()) {
     return 3;
   }

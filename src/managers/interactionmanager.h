@@ -1,7 +1,7 @@
 #ifndef INTERACTIONMANAGER_H
 #define INTERACTIONMANAGER_H
 
-#include "collectionconfig.h"
+#include "collectionutils.h"
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QMouseEvent>
