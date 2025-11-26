@@ -1,5 +1,6 @@
 #include "scrollanimationmanager.h"
 #include "artworkmanager.h"
+#include "gridutils.h"
 #include "scrollmanager.h"
 #include "uiconstants.h"
 
@@ -239,8 +240,8 @@ int ScrollAnimationManager::computeTargetYForIndex(int index, int gridWidth,
                                                    int verticalSpacing,
                                                    int viewportHeight,
                                                    int scrollbarMax) {
-  int row = (gridWidth > 0) ? (index / gridWidth) : 0;
-  int itemY = UIConstants::GRID_MARGINS + row * (itemHeight + verticalSpacing);
+  int itemY = GridUtils::computeItemY(index, gridWidth, itemHeight,
+                                      verticalSpacing, UIConstants::GRID_MARGINS);
   int targetYUnbounded = itemY + (itemHeight / 2) - (viewportHeight / 2);
   return qBound(0, targetYUnbounded, scrollbarMax);
 }
