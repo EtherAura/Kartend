@@ -1074,7 +1074,7 @@ auto InteractionManager::applyWheelSelectionDelta(int wheelSteps) -> bool {
   while (remainingSteps != 0) {
     const int direction = (remainingSteps > 0) ? -gridWidth : gridWidth;
     bool didWrap = false;
-    const int newSelection = calculateNewSelection(
+    const int newSelection = KeyboardManager::calculateNewSelection(
         totalItems, currentSelection, direction, wrapEnabled, true, gridWidth,
         didWrap);
 
@@ -1338,119 +1338,11 @@ void InteractionManager::applyImmediateViewportPositioningForSelection(
   }
 }
 
-// Handles keyboard item navigation; ensures artwork updates are allowed during
-// navigation
-auto InteractionManager::handleItemKeyPress(QKeyEvent *event) -> bool {
-  if (guardForActiveNavigation(event)) {
-    return true;
-  }
-  if (event == nullptr || m_scrollManager == nullptr ||
-      m_collections == nullptr || m_currentCollectionIndex == nullptr) {
-    return false;
-  }
-  if (*m_currentCollectionIndex < 0 ||
-      *m_currentCollectionIndex >= m_collections->size()) {
-    return false;
-  }
-
-  prepareKeyNavigationState();
-  const int totalItems = m_scrollManager->getTotalItems();
-  if (totalItems == 0) {
-    return false;
-  }
-
-  const int gridWidth = getCurrentGridWidth();
-  int direction = 0;
-  bool vertical = false;
-  if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
-    return processEnterOrReturnKey(totalItems);
-  }
-  if (!deriveDirectionForKey(event->key(), gridWidth, direction, vertical) ||
-      direction == 0) {
-    return false;
-  }
-
-  if (m_itemScrollArea != nullptr) {
-    m_itemScrollArea->setProperty(PropertyKeys::SuppressArtwork, true);
-    m_itemScrollArea->setProperty(PropertyKeys::AllowArtworkDuringSelection,
-                                  true);
-  }
-
-  const int currentSelection =
-      (m_selectedItemIndex < 0) ? 0 : m_selectedItemIndex;
-  const bool offscreenBefore = isItemOffscreen(currentSelection, gridWidth);
-
-  const bool wrapEnabled = (m_mainWindow != nullptr)
-                               ? m_mainWindow->m_generalSettings.wrapNavigation
-                               : false;
-  m_isWrappingNavigation = false;
-  m_wrapSequenceActive = false;
-
-  bool didWrap = false;
-  const int newSelection =
-      calculateNewSelection(totalItems, currentSelection, direction,
-                            wrapEnabled, vertical, gridWidth, didWrap);
-  if (didWrap) {
-    m_isWrappingNavigation = true;
-    m_wrapSequenceActive = true;
-  }
-
-  const bool isNewRow =
-      computeIsNewRow(currentSelection, newSelection, gridWidth);
-
-  const bool forceImmediate = offscreenBefore || m_isWrappingNavigation;
-  if (forceImmediate) {
-    applyImmediateCenterSuppression();
-  }
-
-  if (!vertical && !isNewRow && m_itemScrollArea != nullptr) {
-    applyMinorHorizontalSuppress();
-  }
-
-  updateSelectionForKeyMove(newSelection);
-  performVisibilityForKeyMove(isNewRow, newSelection);
-
-  finalizeKeyRepeat(event, direction, vertical);
-  return true;
-}
-
-// Applies early navigation guards and consumes the event when relevant
-auto InteractionManager::guardForActiveNavigation(QKeyEvent *event) -> bool {
-  cancelPendingSelectionRestore();
-  if (m_restoringSelection) {
-    if (event != nullptr) {
-      event->accept();
-    }
-    return true;
-  }
-  if (m_navigationInProgress) {
-    if (event != nullptr) {
-      event->accept();
-    }
-    return true;
-  }
-  if (event != nullptr && event->isAutoRepeat()) {
-    event->accept();
-    return true;
-  }
-  return false;
-}
-
-// Prepares scroll/animation properties for a fresh key navigation step
-void InteractionManager::prepareKeyNavigationState() {
-  setProperty(PropertyKeys::UserFreeScroll, false);
-  setProperty(PropertyKeys::HorizAnimActive, false);
-  setProperty(PropertyKeys::HorizAnimGen,
-              property(PropertyKeys::HorizAnimGen).toInt() + 1);
-  setProperty(PropertyKeys::ClickForceAnim, false);
-  setProperty(PropertyKeys::SuppressInitialClickCenter, false);
-  m_physicalKeyDown = true;
-}
-
 // Computes whether the target selection lies on a different row
 auto InteractionManager::computeIsNewRow(int currentSelection, int newSelection,
                                          int gridWidth) const -> bool {
-  if (*m_currentCollectionIndex < 0 ||
+  if (m_currentCollectionIndex == nullptr || m_collections == nullptr ||
+      *m_currentCollectionIndex < 0 ||
       *m_currentCollectionIndex >= m_collections->size() || gridWidth <= 0) {
     return false;
   }
@@ -1498,21 +1390,6 @@ void InteractionManager::performVisibilityForKeyMove(bool isNewRow,
   } else {
     ensureHorizontallyVisible(newSelection);
   }
-}
-
-// Finalizes repeat state and focuses the items page
-void InteractionManager::finalizeKeyRepeat(QKeyEvent *event, int direction,
-                                           bool vertical) {
-  m_repeatKey = static_cast<Qt::Key>(event->key());
-  m_repeatDelta = direction;
-  m_repeatVertical = vertical;
-  if (m_repeatStartTimer != nullptr) {
-    m_repeatStartTimer->start(ARROW_KEY_THROTTLE_MS);
-  }
-  if (m_itemsPage != nullptr) {
-    m_itemsPage->setFocus();
-  }
-  event->accept();
 }
 
 // Restores a viewed collection after search is cleared (single reload path) and
@@ -1655,75 +1532,6 @@ auto InteractionManager::getCurrentGridWidth() const -> int {
   return UIConstants::DEFAULT_GRID_WIDTH;
 }
 
-auto InteractionManager::calculateNewSelection(int totalItems,
-                                               int currentSelection,
-                                               int direction, bool wrapEnabled,
-                                               bool vertical, int gridWidth,
-                                               bool &didWrap) -> int {
-  didWrap = false;
-  if (vertical) {
-    return calculateVerticalSelection(totalItems, currentSelection, direction,
-                                      wrapEnabled, gridWidth, didWrap);
-  }
-  return calculateHorizontalSelection(totalItems, currentSelection, direction,
-                                      wrapEnabled, didWrap);
-}
-
-auto InteractionManager::calculateHorizontalSelection(int totalItems,
-                                                      int currentSelection,
-                                                      int direction,
-                                                      bool wrapEnabled,
-                                                      bool &didWrap) -> int {
-  didWrap = false;
-  int newSelection = currentSelection + direction;
-  if (wrapEnabled) {
-    if (direction == -1 && currentSelection == 0) {
-      newSelection = totalItems - 1;
-      didWrap = true;
-    } else if (direction == 1 && currentSelection == totalItems - 1) {
-      newSelection = 0;
-      didWrap = true;
-    }
-  }
-  if (!didWrap) {
-    newSelection = std::max(newSelection, 0);
-    if (newSelection >= totalItems) {
-      newSelection = totalItems - 1;
-    }
-  }
-  return newSelection;
-}
-
-auto InteractionManager::calculateVerticalSelection(
-    int totalItems, int currentSelection, int direction, bool wrapEnabled,
-    int gridWidth, bool &didWrap) -> int {
-  didWrap = false;
-  int newSelection = currentSelection + direction;
-  if (wrapEnabled && gridWidth > 0) {
-    if (direction == -gridWidth && currentSelection < gridWidth) {
-      const int lastRowFirst = ((totalItems - 1) / gridWidth) * gridWidth;
-      const int targetColumn = currentSelection % gridWidth;
-      const int candidate = lastRowFirst + targetColumn;
-      newSelection = qMin(candidate, totalItems - 1);
-      didWrap = true;
-    } else if (direction == gridWidth &&
-               currentSelection + gridWidth >= totalItems) {
-      newSelection = currentSelection % gridWidth;
-      if (newSelection >= totalItems) {
-        newSelection = totalItems - 1;
-      }
-      didWrap = true;
-    }
-  }
-  if (!didWrap) {
-    newSelection = std::max(newSelection, 0);
-    if (newSelection >= totalItems) {
-      newSelection = totalItems - 1;
-    }
-  }
-  return newSelection;
-}
-
 auto InteractionManager::processEnterOrReturnKey(int totalItems) -> bool {
   const int currentSelection =
       (m_selectedItemIndex < 0) ? 0 : m_selectedItemIndex;
@@ -1836,13 +1644,6 @@ void InteractionManager::applyMinorHorizontalSuppress() {
       scrollAreaPtr->setProperty(PropertyKeys::SuppressArrowCenter, false);
     }
   });
-}
-
-auto InteractionManager::hasRowChanged(int gridWidth, int currentSelection,
-                                       int newSelection) -> bool {
-  int currentRow = (currentSelection >= 0) ? currentSelection / gridWidth : -1;
-  int targetRow = newSelection / gridWidth;
-  return currentRow != targetRow;
 }
 
 void InteractionManager::setPendingSelectionIfNeeded(bool condition,
@@ -2862,31 +2663,6 @@ void InteractionManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar,
   });
 
   m_vScrollAnim->start();
-}
-
-auto InteractionManager::deriveDirectionForKey(int key, int gridWidth,
-                                               int &direction, bool &vertical)
-    -> bool {
-  direction = 0;
-  vertical = false;
-  switch (key) {
-  case Qt::Key_Left:
-    direction = -1;
-    return true;
-  case Qt::Key_Right:
-    direction = 1;
-    return true;
-  case Qt::Key_Up:
-    direction = -gridWidth;
-    vertical = true;
-    return true;
-  case Qt::Key_Down:
-    direction = gridWidth;
-    vertical = true;
-    return true;
-  default:
-    return false;
-  }
 }
 
 // Ensures vertical scrollbar policy matches collection settings after
@@ -4042,7 +3818,7 @@ void InteractionManager::onMouseHoldScrollStep() {
                      ? m_mainWindow->m_generalSettings.wrapNavigation
                      : false);
     bool didWrap = false;
-    int nextIndex = calculateHorizontalSelection(
+    int nextIndex = KeyboardManager::calculateHorizontalSelection(
         totalItems, currentIndex, m_mouseHoldHorizontalDirection, wrap,
         didWrap);
 
@@ -4058,7 +3834,7 @@ void InteractionManager::onMouseHoldScrollStep() {
       m_continuousScrollActive = true;
     }
 
-    bool rowChanged = hasRowChanged(gridWidth, currentIndex, nextIndex);
+    bool rowChanged = KeyboardManager::hasRowChanged(gridWidth, currentIndex, nextIndex);
     if (rowChanged) {
       setProperty(PropertyKeys::SelectionSuppressed, true);
       setProperty(PropertyKeys::PendingSelectionIndex, nextIndex);

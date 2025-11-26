@@ -61,7 +61,6 @@ public:
   void handleWidgetClicked(MediaItemWidget *widget, const QString &filePath);
   void handleWidgetDoubleClickedWithCollection(const QString &filePath,
                                                int collectionIndex);
-  bool handleItemKeyPress(QKeyEvent *event);
   void selectItemByIndex(int index, bool allowHorizontalScroll);
   void clearSelection();
   void clearSelectionAndFocus();
@@ -276,18 +275,6 @@ private:
                                                 bool clickHoldAdv);
   void onVScrollAnimationFinished();
 
-  // Repeat-step refactor helpers (behavior-preserving)
-  static int calculateNewSelection(int totalItems, int currentSelection,
-                                   int direction, bool wrapEnabled,
-                                   bool vertical, int gridWidth, bool &didWrap);
-  static int calculateHorizontalSelection(int totalItems, int currentSelection,
-                                          int direction, bool wrapEnabled,
-                                          bool &didWrap);
-  static int calculateVerticalSelection(int totalItems, int currentSelection,
-                                        int direction, bool wrapEnabled,
-                                        int gridWidth, bool &didWrap);
-  static bool hasRowChanged(int gridWidth, int currentSelection,
-                            int newSelection);
   void setPendingSelectionIfNeeded(bool condition, int newSelection);
   void updateSelectionStateAfterMove(int newSelection);
   /// Applies wheel-scroll steps and returns true if wrapping occurred.
@@ -349,19 +336,12 @@ private:
                                bool isRepeating);
   auto shouldExitEnsureItemVisible(int index) const -> bool;
 
-  // key handling helpers
-  static auto deriveDirectionForKey(int key, int gridWidth, int &direction,
-                                    bool &vertical) -> bool;
-
-  // Reduced-complexity helpers for key navigation
-  auto guardForActiveNavigation(QKeyEvent *event) -> bool;
-  void prepareKeyNavigationState();
+  // Key navigation helpers still used by handleArrowKeyNavigation
   auto computeIsNewRow(int currentSelection, int newSelection,
                        int gridWidth) const -> bool;
   void applyImmediateCenterSuppression();
   void updateSelectionForKeyMove(int newSelection);
   void performVisibilityForKeyMove(bool isNewRow, int newSelection);
-  void finalizeKeyRepeat(QKeyEvent *event, int direction, bool vertical);
 };
 
 #endif
