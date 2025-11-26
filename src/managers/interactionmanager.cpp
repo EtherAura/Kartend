@@ -271,6 +271,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     mouseSetup.selectionManager = m_selectionManager.get();
     mouseSetup.mainWindow = setup.mainWindow;
     mouseSetup.itemScrollArea = setup.itemScrollArea;
+    mouseSetup.gridContainer = setup.gridContainer;
     mouseSetup.collections = setup.collections;
     mouseSetup.currentCollectionIndex = setup.currentCollectionIndex;
     m_mouseManager->setupReferences(mouseSetup);
@@ -999,12 +1000,12 @@ auto InteractionManager::handleMouseButtonRelease(QObject *obj, QEvent *event)
   auto *mouseReleaseEvent = static_cast<QMouseEvent *>(event);
   if (mouseReleaseEvent != nullptr &&
       mouseReleaseEvent->button() == Qt::LeftButton) {
-    m_leftMouseDown = false;
-    if (m_clickHoldTimer != nullptr && m_clickHoldTimer->isActive()) {
-      m_clickHoldTimer->stop();
-    }
-    if (m_mouseManager && m_mouseManager->isMouseHoldScrolling()) {
-      m_mouseManager->stopMouseHoldScrolling();
+    if (m_mouseManager) {
+      m_mouseManager->setLeftMouseDown(false);
+      m_mouseManager->stopClickHoldTimer();
+      if (m_mouseManager->isMouseHoldScrolling()) {
+        m_mouseManager->stopMouseHoldScrolling();
+      }
     }
     setProperty(PropertyKeys::ClickHoldRowChange, false);
     setProperty(PropertyKeys::DeferCenterOnClick, false);
@@ -1324,12 +1325,12 @@ auto InteractionManager::handleMousePress(QObject *obj, QEvent *event) -> bool {
     return QObject::eventFilter(obj, event);
   }
 
-  m_leftMouseDown = true;
-
-  const int previousSelection = m_selectedItemIndex;
   if (m_mouseManager) {
+    m_mouseManager->setLeftMouseDown(true);
     m_mouseManager->clearHorizontalCandidate();
   }
+
+  const int previousSelection = m_selectedItemIndex;
 
   bool target =
       (obj == m_itemScrollArea || obj == m_itemScrollArea->viewport() ||
@@ -1352,7 +1353,8 @@ auto InteractionManager::handleMousePress(QObject *obj, QEvent *event) -> bool {
     return true;
   }
 
-  MediaItemWidget *chosen = findBestWidgetForClick(clickPos);
+  MediaItemWidget *chosen = MouseManager::findBestWidgetForClick(
+      clickPos, m_scrollManager, m_gridContainer);
   if (chosen != nullptr) {
     const int clickedIndex =
         handleWidgetSelection(chosen, clickPos, mouseEvent);
@@ -1360,22 +1362,11 @@ auto InteractionManager::handleMousePress(QObject *obj, QEvent *event) -> bool {
     // Ensure we have a valid index before setting up hold candidate
     if (clickedIndex >= 0 && m_mouseManager) {
       const int gridWidth = getCurrentGridWidth();
+      const int totalItems = m_scrollManager->getTotalItems();
       m_mouseManager->updateClickHoldHorizontalCandidate(previousSelection,
                                                          clickedIndex, gridWidth);
-
-      if (m_clickHoldTimer == nullptr) {
-        m_clickHoldTimer = new QTimer(this);
-        m_clickHoldTimer->setSingleShot(true);
-        connect(m_clickHoldTimer, &QTimer::timeout, this, [this, clickPos]() {
-          if (m_leftMouseDown && m_mouseManager && m_scrollManager) {
-            const int gridWidth = getCurrentGridWidth();
-            const int totalItems = m_scrollManager->getTotalItems();
-            m_mouseManager->startMouseHoldScrolling(clickPos, m_selectedItemIndex,
-                                                    gridWidth, totalItems);
-          }
-        });
-      }
-      m_clickHoldTimer->start(UIConstants::CLICK_HOLD_START_MS);
+      m_mouseManager->startClickHoldTimer(clickPos, m_selectedItemIndex,
+                                          gridWidth, totalItems);
     }
 
     event->accept();
@@ -3835,75 +3826,6 @@ void InteractionManager::persistSelectionForIndex(int coll, int idx) {
       m_artworkManager->updateViewportArtwork();
     }
   });
-}
-
-auto InteractionManager::findBestWidgetForClick(const QPoint &clickPos)
-    -> MediaItemWidget * {
-  if ((m_scrollManager == nullptr) || (m_gridContainer == nullptr)) {
-    return nullptr;
-  }
-
-  QVector<MediaItemWidget *> candidates;
-  const auto &active = m_scrollManager->getActiveWidgets();
-  candidates.reserve(active.size());
-  for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
-    if ((it.value() != nullptr) && it.value()->isVisible()) {
-      candidates.append(it.value());
-    }
-  }
-  if (candidates.isEmpty()) {
-    return nullptr;
-  }
-
-  QPoint virtualContainerOffset(0, 0);
-  QWidget *virtualContainer = (candidates.first() != nullptr)
-                                  ? candidates.first()->parentWidget()
-                                  : nullptr;
-  if ((virtualContainer != nullptr) &&
-      virtualContainer->parentWidget() == m_gridContainer) {
-    virtualContainerOffset = virtualContainer->pos();
-  }
-  QPoint posInVC = clickPos - virtualContainerOffset;
-
-  QVector<MediaItemWidget *> under;
-  under.reserve(candidates.size());
-  for (MediaItemWidget *widget : candidates) {
-    if (widget == nullptr) {
-      continue;
-    }
-    if (widget->geometry().contains(posInVC)) {
-      under.append(widget);
-    }
-  }
-
-  if (!under.isEmpty()) {
-    return findClosestWidget(under, posInVC);
-  }
-  return findClosestWidget(candidates, posInVC);
-}
-
-auto InteractionManager::findClosestWidget(
-    const QVector<MediaItemWidget *> &candidates, const QPoint &clickPos)
-    -> MediaItemWidget * {
-  MediaItemWidget *best = nullptr;
-  qint64 bestDist2 = -1;
-  for (MediaItemWidget *widget : candidates) {
-    if (widget == nullptr) {
-      continue;
-    }
-    const QRect geometry = widget->geometry();
-    const QPoint centerPoint = geometry.center();
-    const qint64 deltaX = static_cast<qint64>(centerPoint.x()) -
-                          static_cast<qint64>(clickPos.x());
-    const qint64 deltaY = static_cast<qint64>(centerPoint.y()) -
-                          static_cast<qint64>(clickPos.y());
-    const qint64 dist2 = (deltaX * deltaX) + (deltaY * deltaY);
-    if (bestDist2 < 0 || dist2 < bestDist2) {
-      bestDist2 = dist2;
-      best = widget;
-    }
-  }
-  return best;
 }
 
 void InteractionManager::cancelPendingSelectionRestore() {

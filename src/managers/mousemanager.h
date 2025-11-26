@@ -4,15 +4,18 @@
 #include <QObject>
 #include <QPoint>
 #include <QTimer>
+#include <QVector>
 
 QT_BEGIN_NAMESPACE
 class QScrollArea;
 class QScrollBar;
+class QWidget;
 QT_END_NAMESPACE
 
 class ScrollManager;
 class SelectionManager;
 class MainWindow;
+class MediaItemWidget;
 struct CollectionConfig;
 
 /// Setup struct for MouseManager dependencies
@@ -21,12 +24,14 @@ struct MouseManagerSetup {
   SelectionManager *selectionManager = nullptr;
   MainWindow *mainWindow = nullptr;
   QScrollArea *itemScrollArea = nullptr;
+  QWidget *gridContainer = nullptr;
   const QVector<CollectionConfig> *collections = nullptr;
   const int *currentCollectionIndex = nullptr;
 };
 
 /// Manages mouse hold scrolling behavior for click-and-hold navigation.
 /// Handles both vertical (row-by-row) and horizontal (item-by-item) scrolling.
+/// Also manages click hold timer and left mouse button tracking.
 class MouseManager : public QObject {
   Q_OBJECT
 public:
@@ -40,6 +45,21 @@ public:
   [[nodiscard]] bool isHorizontalMode() const { return m_mouseHoldHorizontal; }
   [[nodiscard]] int holdDirection() const { return m_mouseHoldDirection; }
   [[nodiscard]] int horizontalDirection() const { return m_mouseHoldHorizontalDirection; }
+  [[nodiscard]] bool isLeftMouseDown() const { return m_leftMouseDown; }
+
+  // --- Left Mouse Button Tracking ---
+  void setLeftMouseDown(bool down);
+
+  // --- Click Hold Timer ---
+  /// Starts the click hold timer that triggers hold scrolling after delay
+  void startClickHoldTimer(const QPoint &clickPos, int selectedItemIndex,
+                           int gridWidth, int totalItems);
+
+  /// Stops the click hold timer if active
+  void stopClickHoldTimer();
+
+  /// Returns true if click hold timer is active
+  [[nodiscard]] bool isClickHoldTimerActive() const;
 
   // --- Click Hold Horizontal Candidate ---
   /// Updates horizontal hold candidate based on click selection change
@@ -61,6 +81,18 @@ public:
 
   /// Stops mouse hold scrolling
   void stopMouseHoldScrolling();
+
+  // --- Widget Finding Utilities (static) ---
+  /// Finds the best widget at the given click position
+  static MediaItemWidget *findBestWidgetForClick(
+      const QPoint &clickPos,
+      ScrollManager *scrollManager,
+      QWidget *gridContainer);
+
+  /// Finds the closest widget to the click position from candidates
+  static MediaItemWidget *findClosestWidget(
+      const QVector<MediaItemWidget *> &candidates,
+      const QPoint &clickPos);
 
 signals:
   /// Emitted when a scroll step should advance selection
@@ -88,6 +120,7 @@ signals:
 
 private slots:
   void onMouseHoldScrollStep();
+  void onClickHoldTimerTimeout();
 
 private:
   /// Computes vertical scroll direction based on selected item position
@@ -98,10 +131,21 @@ private:
   SelectionManager *m_selectionManager = nullptr;
   MainWindow *m_mainWindow = nullptr;
   QScrollArea *m_itemScrollArea = nullptr;
+  QWidget *m_gridContainer = nullptr;
   const QVector<CollectionConfig> *m_collections = nullptr;
   const int *m_currentCollectionIndex = nullptr;
 
-  // State
+  // Left mouse button state
+  bool m_leftMouseDown = false;
+
+  // Click hold timer (initiates hold scrolling after delay)
+  QTimer *m_clickHoldTimer = nullptr;
+  QPoint m_clickHoldPos;
+  int m_clickHoldSelectedIndex = -1;
+  int m_clickHoldGridWidth = 0;
+  int m_clickHoldTotalItems = 0;
+
+  // Hold scrolling state
   QTimer *m_mouseHoldTimer = nullptr;
   bool m_mouseHoldScrolling = false;
   int m_mouseHoldDirection = 0;

@@ -1,5 +1,6 @@
 #include "mousemanager.h"
 #include "collectionutils.h"
+#include "itemwidget.h"
 #include "keyboardmanager.h"
 #include "mainwindow.h"
 #include "propertyutils.h"
@@ -9,12 +10,16 @@
 
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QWidget>
 
 MouseManager::MouseManager(QObject *parent) : QObject(parent) {}
 
 MouseManager::~MouseManager() {
   if (m_mouseHoldTimer != nullptr) {
     m_mouseHoldTimer->stop();
+  }
+  if (m_clickHoldTimer != nullptr) {
+    m_clickHoldTimer->stop();
   }
 }
 
@@ -23,8 +28,51 @@ void MouseManager::setupReferences(const MouseManagerSetup &setup) {
   m_selectionManager = setup.selectionManager;
   m_mainWindow = setup.mainWindow;
   m_itemScrollArea = setup.itemScrollArea;
+  m_gridContainer = setup.gridContainer;
   m_collections = setup.collections;
   m_currentCollectionIndex = setup.currentCollectionIndex;
+}
+
+// --- Left Mouse Button Tracking ---
+
+void MouseManager::setLeftMouseDown(bool down) {
+  m_leftMouseDown = down;
+}
+
+// --- Click Hold Timer ---
+
+void MouseManager::startClickHoldTimer(const QPoint &clickPos,
+                                       int selectedItemIndex, int gridWidth,
+                                       int totalItems) {
+  m_clickHoldPos = clickPos;
+  m_clickHoldSelectedIndex = selectedItemIndex;
+  m_clickHoldGridWidth = gridWidth;
+  m_clickHoldTotalItems = totalItems;
+
+  if (m_clickHoldTimer == nullptr) {
+    m_clickHoldTimer = new QTimer(this);
+    m_clickHoldTimer->setSingleShot(true);
+    connect(m_clickHoldTimer, &QTimer::timeout, this,
+            &MouseManager::onClickHoldTimerTimeout);
+  }
+  m_clickHoldTimer->start(UIConstants::CLICK_HOLD_START_MS);
+}
+
+void MouseManager::stopClickHoldTimer() {
+  if (m_clickHoldTimer != nullptr && m_clickHoldTimer->isActive()) {
+    m_clickHoldTimer->stop();
+  }
+}
+
+bool MouseManager::isClickHoldTimerActive() const {
+  return m_clickHoldTimer != nullptr && m_clickHoldTimer->isActive();
+}
+
+void MouseManager::onClickHoldTimerTimeout() {
+  if (m_leftMouseDown) {
+    startMouseHoldScrolling(m_clickHoldPos, m_clickHoldSelectedIndex,
+                            m_clickHoldGridWidth, m_clickHoldTotalItems);
+  }
 }
 
 // --- Click Hold Horizontal Candidate ---
@@ -255,4 +303,75 @@ void MouseManager::onMouseHoldScrollStep() {
   } else {
     emit scrollStepRequested(m_mouseHoldDirection, false);
   }
+}
+
+// --- Widget Finding Utilities (static) ---
+
+MediaItemWidget *MouseManager::findBestWidgetForClick(
+    const QPoint &clickPos, ScrollManager *scrollManager,
+    QWidget *gridContainer) {
+  if (scrollManager == nullptr || gridContainer == nullptr) {
+    return nullptr;
+  }
+
+  QVector<MediaItemWidget *> candidates;
+  const auto &active = scrollManager->getActiveWidgets();
+  candidates.reserve(active.size());
+  for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
+    if (it.value() != nullptr && it.value()->isVisible()) {
+      candidates.append(it.value());
+    }
+  }
+  if (candidates.isEmpty()) {
+    return nullptr;
+  }
+
+  QPoint virtualContainerOffset(0, 0);
+  QWidget *virtualContainer =
+      candidates.first() != nullptr ? candidates.first()->parentWidget()
+                                    : nullptr;
+  if (virtualContainer != nullptr &&
+      virtualContainer->parentWidget() == gridContainer) {
+    virtualContainerOffset = virtualContainer->pos();
+  }
+  QPoint posInVC = clickPos - virtualContainerOffset;
+
+  QVector<MediaItemWidget *> under;
+  under.reserve(candidates.size());
+  for (MediaItemWidget *widget : candidates) {
+    if (widget == nullptr) {
+      continue;
+    }
+    if (widget->geometry().contains(posInVC)) {
+      under.append(widget);
+    }
+  }
+
+  if (!under.isEmpty()) {
+    return findClosestWidget(under, posInVC);
+  }
+  return findClosestWidget(candidates, posInVC);
+}
+
+MediaItemWidget *MouseManager::findClosestWidget(
+    const QVector<MediaItemWidget *> &candidates, const QPoint &clickPos) {
+  MediaItemWidget *best = nullptr;
+  qint64 bestDist2 = -1;
+  for (MediaItemWidget *widget : candidates) {
+    if (widget == nullptr) {
+      continue;
+    }
+    const QRect geometry = widget->geometry();
+    const QPoint centerPoint = geometry.center();
+    const qint64 deltaX =
+        static_cast<qint64>(centerPoint.x()) - static_cast<qint64>(clickPos.x());
+    const qint64 deltaY =
+        static_cast<qint64>(centerPoint.y()) - static_cast<qint64>(clickPos.y());
+    const qint64 dist2 = (deltaX * deltaX) + (deltaY * deltaY);
+    if (bestDist2 < 0 || dist2 < bestDist2) {
+      bestDist2 = dist2;
+      best = widget;
+    }
+  }
+  return best;
 }

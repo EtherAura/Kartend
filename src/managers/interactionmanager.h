@@ -133,10 +133,6 @@ private:
   void updateFilePathForSelection(int index, const QList<int> &subcollections);
   void trySelectWidget(int index, const QList<int> &subcollections,
                        int attempt);
-  MediaItemWidget *findBestWidgetForClick(const QPoint &clickPos);
-  static MediaItemWidget *
-  findClosestWidget(const QVector<MediaItemWidget *> &candidates,
-                    const QPoint &clickPos);
   int handleWidgetSelection(MediaItemWidget *widget, const QPoint &clickPos,
                             QMouseEvent *originalEvent);
   void handleSuccessfulSelection(int index);
@@ -217,8 +213,6 @@ private:
 
   static constexpr double CONTINUOUS_SCROLL_ROW_DURATION_MS = 1500.0;
   bool m_continuousScrollActive = false;
-  bool m_leftMouseDown = false;
-  QTimer *m_clickHoldTimer = nullptr;
   bool m_instantPositioning = false;
   bool m_wrapSequenceActive = false;
   void applyImmediateViewportPositioningForSelection(int index);
