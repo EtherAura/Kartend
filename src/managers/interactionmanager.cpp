@@ -1795,7 +1795,9 @@ void InteractionManager::centerItemVertically(int index, bool immediate) {
     return;
   }
 
-  ensureVAnimCreated(verticalScrollBar);
+  if (m_animationManager) {
+    m_animationManager->ensureVAnimCreated(verticalScrollBar);
+  }
 
   if (handleExistingVerticalAnimIfRunning(verticalScrollBar, targetY,
                                           clickScroll, clickHoldAdv, curY,
@@ -1810,8 +1812,10 @@ void InteractionManager::centerItemVertically(int index, bool immediate) {
                                     duration, forceClickAnim);
   }
 
-  configureAndStartVerticalAnimation(verticalScrollBar, curY, targetY, duration,
-                                     clickScroll, clickHoldAdv);
+  if (m_animationManager) {
+    m_animationManager->configureAndStartVerticalAnimation(
+        verticalScrollBar, curY, targetY, duration, clickScroll, clickHoldAdv);
+  }
 }
 
 auto InteractionManager::computeForceImmediate(bool immediate) const -> bool {
@@ -2112,21 +2116,6 @@ void InteractionManager::finalizeImmediateCenteringState(int index,
   m_lastSelectedRow = currentRow;
   if (m_selectionManager) {
     m_selectionManager->setLastSelectedRow(currentRow);
-  }
-}
-
-void InteractionManager::ensureVAnimCreated(QScrollBar *vScrollBar) {
-  if (m_animationManager) {
-    m_animationManager->ensureVAnimCreated(vScrollBar);
-  }
-}
-
-void InteractionManager::configureAndStartVerticalAnimation(
-    QScrollBar *vScrollBar, int curY, int targetY, int duration,
-    bool clickScroll, bool clickHoldAdv) {
-  if (m_animationManager) {
-    m_animationManager->configureAndStartVerticalAnimation(
-        vScrollBar, curY, targetY, duration, clickScroll, clickHoldAdv);
   }
 }
 

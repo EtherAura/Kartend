@@ -242,10 +242,6 @@ private:
                                       int currentRow);
   bool handleImmediateCenterPath(QScrollBar *verticalScrollBar, int targetY,
                                  int index, int currentRow);
-  void ensureVAnimCreated(QScrollBar *vScrollBar);
-  void configureAndStartVerticalAnimation(QScrollBar *vScrollBar, int curY,
-                                          int targetY, int duration,
-                                          bool clickScroll, bool clickHoldAdv);
   void onVScrollAnimationFinished();
 
   void setPendingSelectionIfNeeded(bool condition, int newSelection);
