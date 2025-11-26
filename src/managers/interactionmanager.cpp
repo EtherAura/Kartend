@@ -26,6 +26,7 @@
 #include "itemwidget.h"
 #include "mainwindow.h"
 #include "metadatasidebar.h"
+#include "mousemanager.h"
 #include "navigationmanager.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"
@@ -42,6 +43,7 @@ InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
   m_selectionManager = std::make_unique<SelectionManager>(this);
   m_keyboardManager = std::make_unique<KeyboardManager>(this);
   m_animationManager = std::make_unique<AnimationManager>(this);
+  m_mouseManager = std::make_unique<MouseManager>(this);
 
   m_continuousScrollActive = true;
 }
@@ -259,6 +261,86 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
                   m_scrollManager->refreshSelectionOverlayState();
                 }
               }
+            });
+  }
+
+  // Setup MouseManager with its dependencies
+  if (m_mouseManager) {
+    MouseManagerSetup mouseSetup;
+    mouseSetup.scrollManager = setup.scrollManager;
+    mouseSetup.selectionManager = m_selectionManager.get();
+    mouseSetup.mainWindow = setup.mainWindow;
+    mouseSetup.itemScrollArea = setup.itemScrollArea;
+    mouseSetup.collections = setup.collections;
+    mouseSetup.currentCollectionIndex = setup.currentCollectionIndex;
+    m_mouseManager->setupReferences(mouseSetup);
+
+    // Connect MouseManager signals
+    connect(m_mouseManager.get(), &MouseManager::scrollStepRequested, this,
+            &InteractionManager::onMouseHoldScrollStep);
+    connect(m_mouseManager.get(), &MouseManager::holdScrollingStarted, this,
+            [this](bool isHorizontal) {
+              m_continuousScrollActive = true;
+              m_repeating = true;
+              m_physicalKeyDown = true;
+              m_repeatVertical = !isHorizontal;
+              m_allowArtworkDuringSelection = true;
+            });
+    connect(m_mouseManager.get(), &MouseManager::holdScrollingStopped, this,
+            [this]() {
+              // Restore suppressed selection if any
+              if (property(PropertyKeys::SelectionSuppressed).toBool()) {
+                int pending = property(PropertyKeys::PendingSelectionIndex).toInt();
+                if (pending >= 0) {
+                  selectItemByIndex(pending, true);
+                }
+                setProperty(PropertyKeys::SelectionSuppressed, false);
+                setProperty(PropertyKeys::PendingSelectionIndex, -1);
+              }
+
+              // Reset scroll state flags if not in keyboard repeat
+              if (!m_repeating) {
+                m_continuousScrollActive = false;
+                m_physicalKeyDown = false;
+                m_allowArtworkDuringSelection = true;
+                if (m_itemScrollArea) {
+                  m_itemScrollArea->setProperty(PropertyKeys::SuppressArtwork, false);
+                  m_itemScrollArea->setProperty(PropertyKeys::AllowArtworkDuringSelection, true);
+                }
+              }
+              m_repeatVertical = false;
+              m_wrapSequenceActive = false;
+            });
+    connect(m_mouseManager.get(), &MouseManager::requestSelectionUpdate, this,
+            [this](int index) {
+              if (index >= 0) {
+                QList<int> subs = getSubcollections(*m_currentCollectionIndex);
+                m_selectedItemIndex = index;
+                if (m_selectionManager) {
+                  m_selectionManager->setSelectedIndex(index);
+                }
+                updateFilePathForSelection(index, subs);
+                if (m_scrollManager != nullptr) {
+                  m_scrollManager->updateSelectionForIndex(index);
+                }
+                selectItemByIndex(index, true);
+              }
+            });
+    connect(m_mouseManager.get(), &MouseManager::requestOverlayVisibility, this,
+            [this](bool visible) {
+              if (m_scrollManager != nullptr) {
+                m_scrollManager->setForceSelectionOverlayVisible(visible);
+              }
+            });
+    connect(m_mouseManager.get(), &MouseManager::requestScrollAreaProperty, this,
+            [this](const char *name, bool value) {
+              if (m_itemScrollArea != nullptr) {
+                m_itemScrollArea->setProperty(name, value);
+              }
+            });
+    connect(m_mouseManager.get(), &MouseManager::requestSetProperty, this,
+            [this](const char *name, const QVariant &value) {
+              setProperty(name, value);
             });
   }
 
@@ -921,8 +1003,8 @@ auto InteractionManager::handleMouseButtonRelease(QObject *obj, QEvent *event)
     if (m_clickHoldTimer != nullptr && m_clickHoldTimer->isActive()) {
       m_clickHoldTimer->stop();
     }
-    if (m_mouseHoldScrolling) {
-      stopMouseHoldScrolling();
+    if (m_mouseManager && m_mouseManager->isMouseHoldScrolling()) {
+      m_mouseManager->stopMouseHoldScrolling();
     }
     setProperty(PropertyKeys::ClickHoldRowChange, false);
     setProperty(PropertyKeys::DeferCenterOnClick, false);
@@ -1245,8 +1327,9 @@ auto InteractionManager::handleMousePress(QObject *obj, QEvent *event) -> bool {
   m_leftMouseDown = true;
 
   const int previousSelection = m_selectedItemIndex;
-  m_clickHoldHorizontalEligible = false;
-  m_mouseHoldHorizontalDirection = 0;
+  if (m_mouseManager) {
+    m_mouseManager->clearHorizontalCandidate();
+  }
 
   bool target =
       (obj == m_itemScrollArea || obj == m_itemScrollArea->viewport() ||
@@ -1275,15 +1358,20 @@ auto InteractionManager::handleMousePress(QObject *obj, QEvent *event) -> bool {
         handleWidgetSelection(chosen, clickPos, mouseEvent);
 
     // Ensure we have a valid index before setting up hold candidate
-    if (clickedIndex >= 0) {
-      updateClickHoldHorizontalCandidate(previousSelection, clickedIndex);
+    if (clickedIndex >= 0 && m_mouseManager) {
+      const int gridWidth = getCurrentGridWidth();
+      m_mouseManager->updateClickHoldHorizontalCandidate(previousSelection,
+                                                         clickedIndex, gridWidth);
 
       if (m_clickHoldTimer == nullptr) {
         m_clickHoldTimer = new QTimer(this);
         m_clickHoldTimer->setSingleShot(true);
         connect(m_clickHoldTimer, &QTimer::timeout, this, [this, clickPos]() {
-          if (m_leftMouseDown) {
-            startMouseHoldScrolling(clickPos);
+          if (m_leftMouseDown && m_mouseManager && m_scrollManager) {
+            const int gridWidth = getCurrentGridWidth();
+            const int totalItems = m_scrollManager->getTotalItems();
+            m_mouseManager->startMouseHoldScrolling(clickPos, m_selectedItemIndex,
+                                                    gridWidth, totalItems);
           }
         });
       }
@@ -3220,30 +3308,6 @@ auto InteractionManager::handleWidgetSelection(MediaItemWidget *widget,
   return visualIndex;
 }
 
-void InteractionManager::updateClickHoldHorizontalCandidate(
-    int previousSelection, int targetSelection) {
-  m_clickHoldHorizontalEligible = false;
-  m_mouseHoldHorizontalDirection = 0;
-  m_mouseHoldHorizontalStartIndex = -1;
-  if (previousSelection < 0 || targetSelection < 0 ||
-      previousSelection == targetSelection) {
-    return;
-  }
-  const int gridWidth = getCurrentGridWidth();
-  if (gridWidth <= 0) {
-    return;
-  }
-  const int previousRow = previousSelection / gridWidth;
-  const int currentRow = targetSelection / gridWidth;
-  if (previousRow != currentRow) {
-    return;
-  }
-  m_mouseHoldHorizontalDirection =
-      (targetSelection > previousSelection) ? 1 : -1;
-  m_mouseHoldHorizontalStartIndex = targetSelection;
-  m_clickHoldHorizontalEligible = true;
-}
-
 // Initialize search mode for the current collection; reset away from
 // AllCollections and prefer collection defaults
 void InteractionManager::initializeSearchModeForCurrentCollection() {
@@ -3453,236 +3517,40 @@ auto InteractionManager::isWheelScrolling() const -> bool {
   return m_wheelScrolling;
 }
 
-// Start mouse-hold based scrolling selection updates; allows artwork updates
-// during hold
-void InteractionManager::startMouseHoldScrolling(const QPoint &clickPos) {
-  Q_UNUSED(clickPos);
+// Advances selection during mouse-hold scrolling (called via MouseManager signal)
+void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal) {
   if (m_scrollManager == nullptr || m_collections == nullptr ||
       m_currentCollectionIndex == nullptr) {
-    return;
-  }
-  if (*m_currentCollectionIndex < 0 ||
-      *m_currentCollectionIndex >= m_collections->size()) {
+    if (m_mouseManager) {
+      m_mouseManager->stopMouseHoldScrolling();
+    }
     return;
   }
 
   int totalItems = m_scrollManager->getTotalItems();
   if (totalItems <= 0) {
+    if (m_mouseManager) {
+      m_mouseManager->stopMouseHoldScrolling();
+    }
     return;
   }
 
   int gridWidth = getCurrentGridWidth();
   if (gridWidth <= 0) {
-    return;
-  }
-
-  if (m_selectedItemIndex < 0) {
-    return;
-  }
-
-  if (m_mouseHoldTimer == nullptr) {
-    m_mouseHoldTimer = new QTimer(this);
-    connect(m_mouseHoldTimer, &QTimer::timeout, this,
-            &InteractionManager::onMouseHoldScrollStep);
-  }
-
-  if (tryStartHorizontalClickHold(totalItems)) {
-    return;
-  }
-
-  m_mouseHoldHorizontal = false;
-  m_clickHoldHorizontalEligible = false;
-  m_mouseHoldHorizontalDirection = 0;
-  m_mouseHoldHorizontalStartIndex = -1;
-  setProperty(PropertyKeys::HorizHoldActive, false);
-
-  const CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
-  QScrollBar *vBar = m_itemScrollArea->verticalScrollBar();
-  if (vBar == nullptr) {
-    return;
-  }
-
-  int selectedRow = m_selectedItemIndex / gridWidth;
-  int rowHeight = config.itemHeight + config.verticalSpacing;
-  int selectedItemY = UIConstants::GRID_MARGINS + (selectedRow * rowHeight) +
-                      (config.itemHeight / 2);
-
-  int scrollTop = vBar->value();
-  int viewportHeight = m_itemScrollArea->viewport()->height();
-  int viewportTop = scrollTop;
-  int viewportBottom = scrollTop + viewportHeight;
-  int viewportCenterY = scrollTop + (viewportHeight / 2);
-
-  if (selectedItemY < viewportTop + rowHeight) {
-    m_mouseHoldDirection = -1;
-  } else if (selectedItemY > viewportBottom - rowHeight) {
-    m_mouseHoldDirection = 1;
-  } else if (selectedItemY < viewportCenterY) {
-    m_mouseHoldDirection = -1;
-  } else if (selectedItemY > viewportCenterY) {
-    m_mouseHoldDirection = 1;
-  } else {
-    return;
-  }
-
-  m_mouseHoldScrolling = true;
-
-  m_mouseHoldTimer->start(UIConstants::ARROW_KEY_BASE_INTERVAL_MS);
-
-  if (m_itemScrollArea) {
-    m_itemScrollArea->setProperty(PropertyKeys::SuppressArtwork, true);
-    m_itemScrollArea->setProperty(PropertyKeys::AllowArtworkDuringSelection,
-                                  true);
-  }
-
-  m_continuousScrollActive = true;
-  m_repeating = true;
-  m_physicalKeyDown = true;
-  m_repeatVertical = true;
-  m_allowArtworkDuringSelection = true;
-
-  setProperty(PropertyKeys::ClickScroll, true);
-  setProperty(PropertyKeys::ClickHoldAdvancing, true);
-  if (m_scrollManager != nullptr) {
-    m_scrollManager->setForceSelectionOverlayVisible(true);
-  }
-}
-
-bool InteractionManager::tryStartHorizontalClickHold(int totalItems) {
-  if (!m_clickHoldHorizontalEligible || m_mouseHoldHorizontalDirection == 0 ||
-      m_mouseHoldTimer == nullptr) {
-    return false;
-  }
-  if (m_collections == nullptr || m_currentCollectionIndex == nullptr ||
-      *m_currentCollectionIndex < 0 ||
-      *m_currentCollectionIndex >= m_collections->size()) {
-    m_clickHoldHorizontalEligible = false;
-    return false;
-  }
-  if (m_selectedItemIndex < 0 || m_selectedItemIndex >= totalItems) {
-    m_clickHoldHorizontalEligible = false;
-    return false;
-  }
-
-  int startIndex = m_mouseHoldHorizontalStartIndex;
-  if (startIndex < 0 || startIndex >= totalItems) {
-    startIndex = m_selectedItemIndex;
-  }
-  if (startIndex != m_selectedItemIndex && startIndex >= 0 &&
-      startIndex < totalItems) {
-    QList<int> subs = getSubcollections(*m_currentCollectionIndex);
-    m_selectedItemIndex = startIndex;
-    if (m_selectionManager) {
-      m_selectionManager->setSelectedIndex(startIndex);
+    if (m_mouseManager) {
+      m_mouseManager->stopMouseHoldScrolling();
     }
-    updateFilePathForSelection(startIndex, subs);
-    if (m_scrollManager != nullptr) {
-      m_scrollManager->updateSelectionForIndex(startIndex);
-    }
-    selectItemByIndex(startIndex, true);
-  }
-  m_mouseHoldHorizontalStartIndex = -1;
-
-  m_mouseHoldHorizontal = true;
-  m_mouseHoldScrolling = true;
-  m_clickHoldHorizontalEligible = false;
-
-  m_mouseHoldTimer->start(UIConstants::CLICK_HOLD_HORIZONTAL_INTERVAL_MS);
-
-  if (m_itemScrollArea) {
-    m_itemScrollArea->setProperty(PropertyKeys::SuppressArtwork, true);
-    m_itemScrollArea->setProperty(PropertyKeys::AllowArtworkDuringSelection,
-                                  true);
-  }
-
-  m_continuousScrollActive = true;
-  m_repeating = true;
-  m_physicalKeyDown = true;
-  m_repeatVertical = false;
-  setProperty(PropertyKeys::HorizHoldActive, true);
-  m_allowArtworkDuringSelection = true;
-
-  setProperty(PropertyKeys::ClickScroll, true);
-  setProperty(PropertyKeys::ClickHoldAdvancing, true);
-  if (m_scrollManager != nullptr) {
-    m_scrollManager->setForceSelectionOverlayVisible(true);
-  }
-  return true;
-}
-
-// Stops mouse-hold scrolling and restores suppressed selection if needed
-void InteractionManager::stopMouseHoldScrolling() {
-  if (m_mouseHoldTimer != nullptr) {
-    m_mouseHoldTimer->stop();
-  }
-  m_mouseHoldScrolling = false;
-  m_mouseHoldDirection = 0;
-  m_mouseHoldHorizontal = false;
-  m_clickHoldHorizontalEligible = false;
-  m_mouseHoldHorizontalDirection = 0;
-  m_mouseHoldHorizontalStartIndex = -1;
-
-  m_repeatVertical = false;
-  m_wrapSequenceActive = false;
-
-  if (m_itemScrollArea && !m_repeating) {
-    m_itemScrollArea->setProperty(PropertyKeys::SuppressArtwork, false);
-    m_itemScrollArea->setProperty(PropertyKeys::AllowArtworkDuringSelection,
-                                  true);
-  }
-
-  if (property(PropertyKeys::SelectionSuppressed).toBool()) {
-    int pending = property(PropertyKeys::PendingSelectionIndex).toInt();
-    if (pending >= 0) {
-      selectItemByIndex(pending, true);
-    }
-    setProperty(PropertyKeys::SelectionSuppressed, false);
-    setProperty(PropertyKeys::PendingSelectionIndex, -1);
-  }
-
-  if (!m_repeating) {
-    m_continuousScrollActive = false;
-    m_physicalKeyDown = false;
-    m_allowArtworkDuringSelection = true;
-  }
-
-  setProperty(PropertyKeys::ClickScroll, false);
-  setProperty(PropertyKeys::ClickHoldAdvancing, false);
-  setProperty(PropertyKeys::HorizHoldActive, false);
-  if (m_scrollManager != nullptr) {
-    m_scrollManager->setForceSelectionOverlayVisible(false);
-  }
-}
-
-// Advances selection one row at a time during mouse-hold scrolling
-void InteractionManager::onMouseHoldScrollStep() {
-  if (!m_mouseHoldScrolling || m_scrollManager == nullptr ||
-      m_collections == nullptr || m_currentCollectionIndex == nullptr) {
-    stopMouseHoldScrolling();
     return;
   }
 
-  int totalItems = m_scrollManager->getTotalItems();
-  if (totalItems <= 0) {
-    stopMouseHoldScrolling();
-    return;
-  }
-
-  int gridWidth = getCurrentGridWidth();
-  if (gridWidth <= 0) {
-    stopMouseHoldScrolling();
-    return;
-  }
-
-  if (m_mouseHoldHorizontal) {
+  if (isHorizontal) {
     int currentIndex = m_selectedItemIndex >= 0 ? m_selectedItemIndex : 0;
     bool wrap = ((m_mainWindow != nullptr)
                      ? m_mainWindow->m_generalSettings.wrapNavigation
                      : false);
     bool didWrap = false;
     int nextIndex = KeyboardManager::calculateHorizontalSelection(
-        totalItems, currentIndex, m_mouseHoldHorizontalDirection, wrap,
-        didWrap);
+        totalItems, currentIndex, direction, wrap, didWrap);
 
     if (nextIndex == currentIndex) {
       return;
@@ -3724,8 +3592,9 @@ void InteractionManager::onMouseHoldScrollStep() {
     return;
   }
 
+  // Vertical scrolling
   int currentIndex = m_selectedItemIndex >= 0 ? m_selectedItemIndex : 0;
-  int nextIndex = currentIndex + (m_mouseHoldDirection * gridWidth);
+  int nextIndex = currentIndex + (direction * gridWidth);
 
   bool wrap = ((m_mainWindow != nullptr)
                    ? m_mainWindow->m_generalSettings.wrapNavigation

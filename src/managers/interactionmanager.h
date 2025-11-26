@@ -3,6 +3,7 @@
 
 #include "collectionutils.h"
 #include "keyboardmanager.h"
+#include "mousemanager.h"
 #include "animationmanager.h"
 #include "searchmanager.h"
 #include "searchutils.h"
@@ -114,6 +115,9 @@ private slots:
   void onKeyboardRepeatStep();
   void onKeyboardStopRepeat(bool suppressRecentering);
 
+  // MouseManager callbacks
+  void onMouseHoldScrollStep(int direction, bool isHorizontal);
+
 private:
   // Event filter helper methods
   auto handleActivityEvent(QEvent *event) -> bool;
@@ -135,8 +139,6 @@ private:
                     const QPoint &clickPos);
   int handleWidgetSelection(MediaItemWidget *widget, const QPoint &clickPos,
                             QMouseEvent *originalEvent);
-  void updateClickHoldHorizontalCandidate(int previousSelection,
-                                          int targetSelection);
   void handleSuccessfulSelection(int index);
   void centerItemVertically(int index, bool immediate);
   int computeVerticalCenterDuration(int distance, bool repeatActive) const;
@@ -145,10 +147,6 @@ private:
   auto computeSearchContext() const -> SearchContext;
   QVector<SearchMode> buildSearchModeCycle(const SearchContext &ctx) const;
   void ensureHorizontallyVisible(int index);
-  void startMouseHoldScrolling(const QPoint &clickPos);
-  void stopMouseHoldScrolling();
-  void onMouseHoldScrollStep();
-  bool tryStartHorizontalClickHold(int totalItems);
   bool handleSlashKey();
   bool handleEscapeKey();
   bool hasDirectItemsForIndex(int idx) const;
@@ -174,6 +172,9 @@ private:
 
   // Animation delegation (owned helper)
   std::unique_ptr<AnimationManager> m_animationManager;
+
+  // Mouse hold scrolling delegation (owned helper)
+  std::unique_ptr<MouseManager> m_mouseManager;
 
   ScrollManager *m_scrollManager = nullptr;
   SidebarManager *m_sidebarManager = nullptr;
@@ -220,13 +221,6 @@ private:
   QTimer *m_clickHoldTimer = nullptr;
   bool m_instantPositioning = false;
   bool m_wrapSequenceActive = false;
-  QTimer *m_mouseHoldTimer = nullptr;
-  bool m_mouseHoldScrolling = false;
-  int m_mouseHoldDirection = 0;
-  bool m_mouseHoldHorizontal = false;
-  bool m_clickHoldHorizontalEligible = false;
-  int m_mouseHoldHorizontalDirection = 0;
-  int m_mouseHoldHorizontalStartIndex = -1;
   void applyImmediateViewportPositioningForSelection(int index);
   void scheduleScrollbarRecovery();
   void ensureVerticalScrollbarPolicy();
