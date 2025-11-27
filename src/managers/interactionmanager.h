@@ -173,14 +173,6 @@ private:
   SearchMode m_currentSearchMode = SearchMode::CurrentCollection;
   bool m_isShuttingDown = false;
 
-  // Selection state - kept for backward compatibility during refactor
-  // TODO: These should eventually be removed in favor of SelectionManager
-  int m_selectedItemIndex = -1;
-  QString m_selectedFilePath;
-  MediaItemWidget *m_selectedMediaItem = nullptr;
-  bool m_restoringSelection = false;
-  int m_targetRestoreIndex = -1;
-
   void scheduleScrollbarRecovery();
   QMetaObject::Connection m_scrollbarRecoveryConn;
 

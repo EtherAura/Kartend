@@ -325,7 +325,6 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
             [this](int index) {
               if (index >= 0) {
                 QList<int> subs = getSubcollections(*m_currentCollectionIndex);
-                m_selectedItemIndex = index;
                 if (m_selectionManager) {
                   m_selectionManager->setSelectedIndex(index);
                 }
@@ -378,7 +377,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     connect(m_viewportManager.get(), &ViewportManager::requestSelectionUpdate,
             this, [this](int idxDyn) {
               if (m_scrollManager != nullptr) {
-                int idx = (idxDyn >= 0) ? idxDyn : m_selectedItemIndex;
+                int idx = (idxDyn >= 0) ? idxDyn : currentSelectedIndex();
                 if (idx >= 0) {
                   m_scrollManager->updateSelectionForIndex(idx);
                 }
@@ -416,7 +415,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
                 if (clickedIndex >= 0 && m_mouseManager) {
                   const int gridWidth = getCurrentGridWidth();
                   const int totalItems = m_scrollManager ? m_scrollManager->getTotalItems() : 0;
-                  const int previousSelection = m_selectedItemIndex;
+                  const int previousSelection = currentSelectedIndex();
                   m_mouseManager->updateClickHoldHorizontalCandidate(previousSelection, clickedIndex, gridWidth);
                   m_mouseManager->startClickHoldTimer(clickPos, clickedIndex, gridWidth, totalItems);
                 }
@@ -456,7 +455,8 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
 
 // KeyboardManager callback: handles arrow key navigation
 void InteractionManager::handleArrowKeyNavigation(int direction, bool vertical) {
-  if (m_restoringSelection || m_navigationInProgress) {
+  bool restoringSelection = m_selectionManager && m_selectionManager->isRestoringSelection();
+  if (restoringSelection || m_navigationInProgress) {
     return;
   }
   if (m_scrollManager == nullptr || m_collections == nullptr ||
@@ -486,8 +486,7 @@ void InteractionManager::handleArrowKeyNavigation(int direction, bool vertical) 
   setProperty(PropertyKeys::UserFreeScroll, false);
 
   const int gridWidth = getCurrentGridWidth();
-  const int currentSelection =
-      (m_selectedItemIndex < 0) ? 0 : m_selectedItemIndex;
+  const int currentSelection = std::max(0, currentSelectedIndex());
   const bool offscreenBefore = isItemOffscreen(currentSelection, gridWidth);
 
   const bool wrapEnabled = (m_mainWindow != nullptr)
@@ -587,8 +586,7 @@ void InteractionManager::onKeyboardRepeatStep() {
   const bool repeatVertical = m_keyboardManager->repeatVertical();
   const bool horizontal = !repeatVertical;
 
-  const int currentSelection =
-      (m_selectedItemIndex < 0) ? 0 : m_selectedItemIndex;
+  const int currentSelection = std::max(0, currentSelectedIndex());
   const bool wrapEnabled = (m_mainWindow != nullptr)
                                ? m_mainWindow->m_generalSettings.wrapNavigation
                                : false;
@@ -623,7 +621,6 @@ void InteractionManager::onKeyboardRepeatStep() {
     setPendingSelectionIfNeeded(true, newSelection);
   }
 
-  m_selectedItemIndex = newSelection;
   if (m_selectionManager) {
     m_selectionManager->setSelectedIndex(newSelection);
   }
@@ -661,16 +658,18 @@ void InteractionManager::onKeyboardStopRepeat(bool suppressRecentering) {
     }
   }
 
-  if (!QApplication::closingDown() && m_selectedItemIndex >= 0 &&
+  const int selected = currentSelectedIndex();
+  if (!QApplication::closingDown() && selected >= 0 &&
       !suppressRecentering) {
     QTimer::singleShot(
         UIConstants::STOP_REPEAT_RECENTER_DELAY_MS, this, [this]() {
           bool stillActive = m_keyboardManager
                                  ? m_keyboardManager->isContinuousScrollActive()
                                  : (m_viewportManager ? m_viewportManager->continuousScrollActive() : false);
-          if (!QApplication::closingDown() && m_selectedItemIndex >= 0 &&
+          const int sel = currentSelectedIndex();
+          if (!QApplication::closingDown() && sel >= 0 &&
               !stillActive) {
-            centerItemVertically(m_selectedItemIndex, false);
+            centerItemVertically(sel, false);
           }
         });
   }
@@ -774,7 +773,7 @@ void InteractionManager::handleImmediateSearchTextChanged(const QString &text) {
 
 // Helper: pick a currently selected visual index if any
 auto InteractionManager::resolveDoubleClickIndexCandidate() const -> int {
-  int idx = (m_selectedItemIndex >= 0) ? m_selectedItemIndex : -1;
+  int idx = currentSelectedIndex();
   if (idx < 0 && m_scrollManager != nullptr) {
     const auto &active = m_scrollManager->getActiveWidgets();
     for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
@@ -810,10 +809,11 @@ auto InteractionManager::resolveOwnerForPath(const QString &path) const -> int {
 
 // Helper: fallback collection index based on current selection or view
 auto InteractionManager::getFallbackCollectionIndex() const -> int {
-  if (!m_selectedFilePath.isEmpty()) {
+  QString selectedPath = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+  if (!selectedPath.isEmpty()) {
     if (m_databaseManager != nullptr) {
       int owner =
-          m_databaseManager->getCollectionIndexForFile(m_selectedFilePath);
+          m_databaseManager->getCollectionIndexForFile(selectedPath);
       if (owner >= 0) {
         return owner;
       }
@@ -858,8 +858,9 @@ void InteractionManager::handleWidgetDoubleClickedWithCollection(
     return;
   }
   const int fallbackIdx = getFallbackCollectionIndex();
-  if (fallbackIdx >= 0 && !m_selectedFilePath.isEmpty()) {
-    launchItemWithCollection(m_selectedFilePath, fallbackIdx);
+  QString selectedPath = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+  if (fallbackIdx >= 0 && !selectedPath.isEmpty()) {
+    launchItemWithCollection(selectedPath, fallbackIdx);
   }
 }
 
@@ -887,7 +888,6 @@ auto InteractionManager::eventFilter(QObject *obj, QEvent *event) -> bool {
 void InteractionManager::updateSelectionForKeyMove(int newSelection) {
   setProperty(PropertyKeys::SelectionSuppressed, true);
   setProperty(PropertyKeys::PendingSelectionIndex, newSelection);
-  m_selectedItemIndex = newSelection;
   if (m_selectionManager) {
     m_selectionManager->setSelectedIndex(newSelection);
   }
@@ -915,18 +915,12 @@ void InteractionManager::updateFilePathForSelection(
     int index, const QList<int> &subcollections) {
   if (m_selectionManager) {
     m_selectionManager->updateFilePathForSelection(index, subcollections);
-    // Keep local state in sync
-    m_selectedFilePath = m_selectionManager->selectedFilePath();
   }
 }
 
 void InteractionManager::clearSelection() {
   if (m_selectionManager) {
     m_selectionManager->clearSelection(m_isShuttingDown);
-    // Keep local state in sync for backward compatibility during refactor
-    m_selectedMediaItem = m_selectionManager->selectedWidget();
-    m_selectedFilePath = m_selectionManager->selectedFilePath();
-    m_selectedItemIndex = m_selectionManager->currentSelectedIndex();
   }
 }
 
@@ -986,8 +980,7 @@ auto InteractionManager::getCurrentGridWidth() const -> int {
 }
 
 auto InteractionManager::processEnterOrReturnKey(int totalItems) -> bool {
-  const int currentSelection =
-      (m_selectedItemIndex < 0) ? 0 : m_selectedItemIndex;
+  const int currentSelection = std::max(0, currentSelectedIndex());
   if (currentSelection < 0 || currentSelection >= totalItems) {
     return true;
   }
@@ -1039,7 +1032,7 @@ auto InteractionManager::handleEnterOnSubcollection(int currentSelection,
 
 auto InteractionManager::handleEnterOnItem(int currentSelection,
                                            int /*totalItems*/) -> bool {
-  QString path = m_selectedFilePath;
+  QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
   if (path.isEmpty() && (m_scrollManager != nullptr)) {
     path = m_scrollManager->filePathForVisualIndex(currentSelection);
   }
@@ -1167,8 +1160,7 @@ void InteractionManager::selectItemByIndex(int index,
     return;
   }
 
-  bool selectionChangedLocal = (index != m_selectedItemIndex);
-  m_selectedItemIndex = index;
+  bool selectionChangedLocal = (index != currentSelectedIndex());
   if (m_selectionManager) {
     m_selectionManager->setSelectedIndex(index);
   }
@@ -1189,7 +1181,6 @@ void InteractionManager::selectItemByIndex(int index,
   bool skipCenter = property(PropertyKeys::SuppressInitialClickCenter).toBool();
 
   if (widget != nullptr) {
-    m_selectedMediaItem = widget;
     if (m_selectionManager) {
       m_selectionManager->setSelectedWidget(widget);
     }
@@ -1201,13 +1192,14 @@ void InteractionManager::selectItemByIndex(int index,
     trySelectWidget(index, subcollections, 0);
   }
 
+  const int selected = currentSelectedIndex();
   if (m_scrollManager != nullptr) {
-    m_scrollManager->updateSelectionForIndex(m_selectedItemIndex);
+    m_scrollManager->updateSelectionForIndex(selected);
     if (property(PropertyKeys::ClickHoldAdvancing).toBool()) {
       m_scrollManager->refreshSelectionOverlayState();
     }
   }
-  emit selectionChanged(m_selectedItemIndex);
+  emit selectionChanged(selected);
 
   if (suppressed) {
     persistSuppressedSelectionAndMaybeCenter(index, subcollections, skipCenter);
@@ -1244,7 +1236,7 @@ void InteractionManager::persistSuppressedSelectionAndMaybeCenter(
           title = m_mainWindow->m_collections[subIdx].name;
         }
       } else {
-        QString path = m_selectedFilePath;
+        QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
         if (path.isEmpty() && (m_scrollManager != nullptr)) {
           path = m_scrollManager->filePathForVisualIndex(index);
         }
@@ -1301,7 +1293,7 @@ void InteractionManager::clearSelectionAndFocus() {
 void InteractionManager::trySelectWidget(int index,
                                          const QList<int> &subcollections,
                                          int attempt) {
-  if ((m_scrollManager == nullptr) || m_selectedItemIndex != index ||
+  if ((m_scrollManager == nullptr) || currentSelectedIndex() != index ||
       QApplication::closingDown()) {
     return;
   }
@@ -1311,8 +1303,6 @@ void InteractionManager::trySelectWidget(int index,
       m_selectionManager->setRestoringSelection(false);
       m_selectionManager->setTargetRestoreIndex(-1);
     }
-    m_restoringSelection = false;
-    m_targetRestoreIndex = -1;
     return;
   }
 
@@ -1325,7 +1315,6 @@ void InteractionManager::trySelectWidget(int index,
   }
 
   if (widget != nullptr) {
-    m_selectedMediaItem = widget;
     if (m_selectionManager) {
       m_selectionManager->setSelectedWidget(widget);
       m_selectionManager->applyWidgetSelection(widget);
@@ -1376,8 +1365,9 @@ void InteractionManager::toggleSearchMode() {
 }
 
 void InteractionManager::saveCurrentSelection() {
-  if (m_selectedItemIndex >= 0) {
-    handleSuccessfulSelection(m_selectedItemIndex);
+  const int selected = currentSelectedIndex();
+  if (selected >= 0) {
+    handleSuccessfulSelection(selected);
   }
 }
 
@@ -1408,16 +1398,11 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
   // Use SelectionManager for preparation if available
   if (m_selectionManager) {
     m_selectionManager->prepareForRestore(targetIndex);
-    // Sync local state
-    m_restoringSelection = m_selectionManager->isRestoringSelection();
-    m_targetRestoreIndex = m_selectionManager->targetRestoreIndex();
     if (m_viewportManager) {
       m_viewportManager->setForceImmediateCenter(m_selectionManager->forceImmediateCenter());
     }
   } else {
     clearSelection();
-    m_restoringSelection = true;
-    m_targetRestoreIndex = targetIndex;
     if (m_viewportManager) {
       m_viewportManager->setForceImmediateCenter(true);
     }
@@ -1443,7 +1428,7 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
   }
   selectItemByIndex(targetIndex, false);
 
-  if (m_selectedItemIndex == targetIndex) {
+  if (currentSelectedIndex() == targetIndex) {
     finalizeRestoreFlagsAndFocus();
     emit selectionChanged(targetIndex);
   }
@@ -1451,19 +1436,9 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
   // Finalize restore state
   if (m_selectionManager) {
     m_selectionManager->finalizeRestore();
-    m_restoringSelection = m_selectionManager->isRestoringSelection();
-    m_targetRestoreIndex = m_selectionManager->targetRestoreIndex();
     if (m_viewportManager) {
       m_viewportManager->setForceImmediateCenter(m_selectionManager->forceImmediateCenter());
     }
-  } else {
-    m_restoringSelection = false;
-    m_targetRestoreIndex = -1;
-    if (m_viewportManager) {
-      m_viewportManager->setForceImmediateCenter(false);
-    }
-    setProperty(PropertyKeys::SelectionSuppressed, false);
-    setProperty(PropertyKeys::PendingSelectionIndex, -1);
   }
 
   if ((m_sidebarManager != nullptr) && m_sidebarManager->isSidebarVisible()) {
@@ -1484,7 +1459,6 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
 }
 
 void InteractionManager::applySelectionStateForIndex(int idx) {
-  m_selectedItemIndex = idx;
   if (m_selectionManager) {
     m_selectionManager->setSelectedIndex(idx);
   }
@@ -1713,13 +1687,15 @@ void InteractionManager::stopRepeat(bool suppressRecentering) {
         m_animationManager && m_animationManager->isVerticalAnimRunning());
   }
 
-  if (!QApplication::closingDown() && m_selectedItemIndex >= 0 &&
+  const int selected = currentSelectedIndex();
+  if (!QApplication::closingDown() && selected >= 0 &&
       !suppressRecentering) {
     QTimer::singleShot(
         UIConstants::STOP_REPEAT_RECENTER_DELAY_MS, this, [this]() {
-          if (!QApplication::closingDown() && m_selectedItemIndex >= 0 &&
+          const int sel = currentSelectedIndex();
+          if (!QApplication::closingDown() && sel >= 0 &&
               m_viewportManager && !m_viewportManager->continuousScrollActive()) {
-            centerItemVertically(m_selectedItemIndex, false);
+            centerItemVertically(sel, false);
           }
         });
   }
@@ -1756,7 +1732,7 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
   }
 
   if (isHorizontal) {
-    int currentIndex = m_selectedItemIndex >= 0 ? m_selectedItemIndex : 0;
+    int currentIndex = std::max(0, currentSelectedIndex());
     bool wrap = ((m_mainWindow != nullptr)
                      ? m_mainWindow->m_generalSettings.wrapNavigation
                      : false);
@@ -1784,7 +1760,6 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
       setProperty(PropertyKeys::PendingSelectionIndex, nextIndex);
     }
 
-    m_selectedItemIndex = nextIndex;
     if (m_selectionManager) {
       m_selectionManager->setSelectedIndex(nextIndex);
     }
@@ -1807,7 +1782,7 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
   }
 
   // Vertical scrolling
-  int currentIndex = m_selectedItemIndex >= 0 ? m_selectedItemIndex : 0;
+  int currentIndex = std::max(0, currentSelectedIndex());
   int nextIndex = currentIndex + (direction * gridWidth);
 
   bool wrap = ((m_mainWindow != nullptr)
@@ -1854,7 +1829,6 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
     }
   }
 
-  m_selectedItemIndex = nextIndex;
   if (m_selectionManager) {
     m_selectionManager->setSelectedIndex(nextIndex);
   }
@@ -1879,15 +1853,6 @@ void InteractionManager::handleSuccessfulSelection(int index) {
   bool restoringMatch = false;
   if (m_selectionManager) {
     restoringMatch = m_selectionManager->checkAndFinalizeRestore(index);
-    // Sync local flags
-    m_restoringSelection = m_selectionManager->isRestoringSelection();
-    m_targetRestoreIndex = m_selectionManager->targetRestoreIndex();
-  } else {
-    restoringMatch = (m_restoringSelection && index == m_targetRestoreIndex);
-    if (restoringMatch) {
-      m_restoringSelection = false;
-      m_targetRestoreIndex = -1;
-    }
   }
   
   if ((m_mainWindow != nullptr) && m_mainWindow->isShuttingDown()) {
@@ -1920,7 +1885,7 @@ auto InteractionManager::titleForIndexInColl(int coll, int idx) const
     }
     return {};
   }
-  QString path = m_selectedFilePath;
+  QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
   if (path.isEmpty() && (m_scrollManager != nullptr)) {
     path = m_scrollManager->filePathForVisualIndex(idx);
   }
@@ -1941,7 +1906,7 @@ void InteractionManager::persistSelectionForIndex(int coll, int idx) {
     //     title = m_mainWindow->m_collections[subIdx].name;
     //   }
     // } else {
-      QString path = m_selectedFilePath;
+      QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
       if (path.isEmpty() && (m_scrollManager != nullptr)) {
         path = m_scrollManager->filePathForVisualIndex(idx);
       }
