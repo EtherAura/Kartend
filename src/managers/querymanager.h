@@ -60,6 +60,23 @@ private:
   void clearCollectionFromDatabaseByUuid(const QString &collectionUuid);
   static QString computeCollectionUuid(const QString &name, const QString &mediaDir);
 
+  // Helper struct for UUID-to-directory mappings
+  struct CollectionDirMaps {
+    QHash<QString, QString> uuidToMediaDir;
+    QHash<QString, QString> uuidToArtworkDir;
+  };
+
+  // Collects UUIDs for a collection and its descendants if showAllSubcollectionItems is set
+  QStringList collectCollectionUuids(const CollectionContext &ctx,
+                                     const QList<CollectionConfig> &allCollections);
+
+  // Builds UUID-to-directory mappings for path resolution
+  CollectionDirMaps buildDirectoryMaps(const CollectionContext &ctx,
+                                       const QList<CollectionConfig> &allCollections);
+
+  // Builds SQL IN clause with placeholders for the given UUID count
+  static QString buildUuidInClause(int uuidCount);
+
   static void appendFileMapsAndListCanonical(
       int collectionIndex, const CollectionConfig &expandedCollection,
       const QString &mappingArtworkDir, const QStringList &filePaths,

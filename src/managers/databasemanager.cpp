@@ -12,6 +12,7 @@
 
 #include "artworkmanager.h"
 #include "databasemanager.h"
+#include "errorutils.h"
 #include "querymanager.h"
 #include "pathutils.h"
 #include "sessionmanager.h"
@@ -23,6 +24,9 @@ Q_LOGGING_CATEGORY(lcDatabaseManager, "kartend.databasemanager")
 #else
 #define debugLog(msg) do {} while(0)
 #endif
+
+using ErrorUtils::ErrorCode;
+using ErrorUtils::ErrorContext;
 
 // Construct the database manager and initialize the database
 DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent)
@@ -86,16 +90,28 @@ void DatabaseManager::initDatabase() {
   m_db.setDatabaseName(dbPath + "/media.db");
 
   if (!m_db.open()) {
-    qCritical() << "Database error:" << m_db.lastError().text();
+    auto err = ErrorContext::critical(ErrorCode::DatabaseConnectionFailed,
+                                      "Failed to open database",
+                                      "DatabaseManager::initDatabase")
+                   .withDetails(m_db.lastError().text());
+    ErrorUtils::logError(err);
     return;
   }
 
   QSqlQuery query(m_db);
   if (!query.exec("PRAGMA foreign_keys = ON")) {
-    qWarning() << "Failed to enable foreign keys:" << query.lastError();
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to enable foreign keys",
+                                     "DatabaseManager::initDatabase")
+                   .withDetails(query.lastError().text());
+    ErrorUtils::logError(err);
   }
   if (!query.exec("PRAGMA journal_mode = WAL")) {
-    qWarning() << "Failed to enable WAL mode:" << query.lastError();
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to enable WAL mode",
+                                     "DatabaseManager::initDatabase")
+                   .withDetails(query.lastError().text());
+    ErrorUtils::logError(err);
   }
 
   QString collectionsTable = "CREATE TABLE IF NOT EXISTS collections ("
@@ -106,7 +122,11 @@ void DatabaseManager::initDatabase() {
                              "uuid TEXT DEFAULT ''"
                              ")";
   if (!query.exec(collectionsTable)) {
-    qCritical() << "Failed to create collections table:" << query.lastError();
+    auto err = ErrorContext::critical(ErrorCode::DatabaseQueryFailed,
+                                      "Failed to create collections table",
+                                      "DatabaseManager::initDatabase")
+                   .withDetails(query.lastError().text());
+    ErrorUtils::logError(err);
   }
 
   QString itemsTable =
@@ -125,7 +145,11 @@ void DatabaseManager::initDatabase() {
       "FOREIGN KEY(collection_id) REFERENCES collections(id) ON DELETE CASCADE"
       ")";
   if (!query.exec(itemsTable)) {
-    qCritical() << "Failed to create items table:" << query.lastError();
+    auto err = ErrorContext::critical(ErrorCode::DatabaseQueryFailed,
+                                      "Failed to create items table",
+                                      "DatabaseManager::initDatabase")
+                   .withDetails(query.lastError().text());
+    ErrorUtils::logError(err);
   }
 
   QSqlQuery idx(m_db);
