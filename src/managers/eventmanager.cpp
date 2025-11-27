@@ -445,12 +445,9 @@ int EventManager::getCurrentGridWidth() const {
 }
 
 QList<int> EventManager::getSubcollections(int parentIndex) const {
-  // Use cache for O(1) lookup if available via MainWindow
-  if (m_mainWindow != nullptr) {
-    const auto &cache = m_mainWindow->getHierarchyCache();
-    if (cache.isValid()) {
-      return cache.directChildren(parentIndex);
-    }
+  // Delegate to SelectionManager which owns the canonical implementation
+  if (m_selectionManager) {
+    return m_selectionManager->getSubcollections(parentIndex);
   }
   // Fallback to O(n) scan
   if (m_collections == nullptr) {

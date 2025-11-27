@@ -1168,13 +1168,9 @@ void InteractionManager::selectItemByIndex(int index,
     setProperty(PropertyKeys::UserFreeScroll, false);
   }
 
-  MediaItemWidget *widget = nullptr;
-  if (m_selectionManager) {
-    widget = m_selectionManager->widgetForIndex(index);
-  } else {
-    const auto &activeWidgets = m_scrollManager->getActiveWidgets();
-    widget = activeWidgets.value(index, nullptr);
-  }
+  MediaItemWidget *widget = m_selectionManager
+      ? m_selectionManager->widgetForIndex(index)
+      : nullptr;
   bool suppressed =
       property(PropertyKeys::SelectionSuppressed).toBool() &&
       property(PropertyKeys::PendingSelectionIndex).toInt() == index;
@@ -1221,34 +1217,9 @@ void InteractionManager::persistSuppressedSelectionAndMaybeCenter(
   int curColl =
       ((m_currentCollectionIndex != nullptr) ? *m_currentCollectionIndex : -1);
   if ((m_mainWindow != nullptr) && curColl >= 0 &&
-      curColl < m_mainWindow->m_collections.size()) {
-    QString title;
-    if (m_selectionManager) {
-      title = m_selectionManager->titleForIndex(index, subcollections);
-      m_selectionManager->persistSelection(curColl, index, title);
-    } else {
-      // Fallback if SelectionManager not available
-      m_mainWindow->getSettingsManager()->setLastSelectedItem(curColl, index);
-      QString collectionName = m_mainWindow->m_collections[curColl].name;
-      if (index < subcollections.size()) {
-        int subIdx = subcollections[index];
-        if (subIdx >= 0 && subIdx < m_mainWindow->m_collections.size()) {
-          title = m_mainWindow->m_collections[subIdx].name;
-        }
-      } else {
-        QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
-        if (path.isEmpty() && (m_scrollManager != nullptr)) {
-          path = m_scrollManager->filePathForVisualIndex(index);
-        }
-        if (!path.isEmpty()) {
-          title =
-              QFileInfo(path).completeBaseName().replace('_', ' ').simplified();
-        }
-      }
-      if (m_sessionManager) {
-        m_sessionManager->setLastSelected(collectionName, index, title);
-      }
-    }
+      curColl < m_mainWindow->m_collections.size() && m_selectionManager) {
+    QString title = m_selectionManager->titleForIndex(index, subcollections);
+    m_selectionManager->persistSelection(curColl, index, title);
   }
   QTimer::singleShot(UIConstants::SHORT_TIMER_DELAY, this, [this]() {
     if (!QApplication::closingDown() && m_artworkManager) {
@@ -1267,16 +1238,11 @@ void InteractionManager::handleWidgetClicked(MediaItemWidget *widget,
 // Returns the direct child subcollection indices for a parent collection
 auto InteractionManager::getSubcollections(int parentIndex) const
     -> QList<int> {
+  // Delegate to SelectionManager which owns the canonical implementation
   if (m_selectionManager) {
     return m_selectionManager->getSubcollections(parentIndex);
   }
-  // Fallback: use cache if available via MainWindow
-  if (m_mainWindow != nullptr) {
-    const auto &cache = m_mainWindow->getHierarchyCache();
-    if (cache.isValid()) {
-      return cache.directChildren(parentIndex);
-    }
-  }
+  // Fallback to O(n) scan
   if (m_collections == nullptr) {
     return {};
   }
@@ -1306,20 +1272,14 @@ void InteractionManager::trySelectWidget(int index,
     return;
   }
 
-  MediaItemWidget *widget = nullptr;
-  if (m_selectionManager) {
-    widget = m_selectionManager->widgetForIndex(index);
-  } else {
-    const auto &activeWidgets = m_scrollManager->getActiveWidgets();
-    widget = activeWidgets.value(index, nullptr);
-  }
+  MediaItemWidget *widget = m_selectionManager
+      ? m_selectionManager->widgetForIndex(index)
+      : nullptr;
 
   if (widget != nullptr) {
     if (m_selectionManager) {
       m_selectionManager->setSelectedWidget(widget);
       m_selectionManager->applyWidgetSelection(widget);
-    } else {
-      widget->setSelected(true);
     }
     updateFilePathForSelection(index, subcollections);
     handleSuccessfulSelection(index);
@@ -1395,25 +1355,11 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
     return;
   }
 
-  // Use SelectionManager for preparation if available
+  // Use SelectionManager for preparation
   if (m_selectionManager) {
     m_selectionManager->prepareForRestore(targetIndex);
     if (m_viewportManager) {
       m_viewportManager->setForceImmediateCenter(m_selectionManager->forceImmediateCenter());
-    }
-  } else {
-    clearSelection();
-    if (m_viewportManager) {
-      m_viewportManager->setForceImmediateCenter(true);
-    }
-
-    if (m_itemScrollArea) {
-      m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenter, true);
-      qint64 until = QDateTime::currentMSecsSinceEpoch() +
-                     UIConstants::ARROW_KEY_ANIMATION_SETTLE_MS +
-                     UIConstants::ARROW_CENTER_EXTRA_SUPPRESS_AFTER_RESTORE_MS;
-      m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenterUntilMs,
-                                    until);
     }
   }
 
@@ -1900,21 +1846,13 @@ void InteractionManager::persistSelectionForIndex(int coll, int idx) {
     m_mainWindow->getSettingsManager()->setLastSelectedItem(coll, idx);
     QString collectionName = m_mainWindow->m_collections[coll].name;
     QString title;
-    // if (idx < subcollections.size()) {
-    //   int subIdx = subcollections[idx];
-    //   if (subIdx >= 0 && subIdx < m_mainWindow->m_collections.size()) {
-    //     title = m_mainWindow->m_collections[subIdx].name;
-    //   }
-    // } else {
-      QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
-      if (path.isEmpty() && (m_scrollManager != nullptr)) {
-        path = m_scrollManager->filePathForVisualIndex(idx);
-      }
-      if (!path.isEmpty()) {
-        title =
-            QFileInfo(path).completeBaseName().replace('_', ' ').simplified();
-      }
-    // }
+    QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+    if (path.isEmpty() && (m_scrollManager != nullptr)) {
+      path = m_scrollManager->filePathForVisualIndex(idx);
+    }
+    if (!path.isEmpty()) {
+      title = QFileInfo(path).completeBaseName().replace('_', ' ').simplified();
+    }
     if (m_sessionManager) {
       m_sessionManager->setLastSelected(collectionName, idx, title);
     }
