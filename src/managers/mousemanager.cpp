@@ -62,8 +62,7 @@ int MouseManager::computeWheelSteps(const QWheelEvent *wheelEvent) {
   }
   const int wheelAngle = wheelEvent->angleDelta().y();
   if (wheelAngle != 0) {
-    constexpr int kWheelAngleStep = 120;
-    int steps = wheelAngle / kWheelAngleStep;
+    int steps = wheelAngle / UIConstants::Mouse::WHEEL_ANGLE_STEP;
     if (steps == 0) {
       steps = (wheelAngle > 0 ? 1 : -1);
     }
@@ -74,8 +73,7 @@ int MouseManager::computeWheelSteps(const QWheelEvent *wheelEvent) {
   if (pixelDeltaY == 0) {
     return 0;
   }
-  constexpr int kPixelDeltaStep = 120;
-  int steps = pixelDeltaY / kPixelDeltaStep;
+  int steps = pixelDeltaY / UIConstants::Mouse::WHEEL_PIXEL_STEP;
   if (steps == 0) {
     steps = (pixelDeltaY > 0 ? 1 : -1);
   }

@@ -52,6 +52,10 @@ auto TimerUtils::DebouncedTimer::isPending() const -> bool {
   return m_timer != nullptr && m_timer->isActive();
 }
 
+auto TimerUtils::DebouncedTimer::interval() const -> int {
+  return m_timer != nullptr ? m_timer->interval() : 0;
+}
+
 void TimerUtils::DebouncedTimer::setInterval(int intervalMs) {
   if (m_timer != nullptr) {
     m_timer->setInterval(intervalMs);

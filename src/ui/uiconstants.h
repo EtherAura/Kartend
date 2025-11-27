@@ -82,6 +82,7 @@ inline constexpr int LAYOUT_DELAY_MS = 100;
 inline constexpr int VIEWPORT_DELAY_MS = 300;
 inline constexpr int SETTINGS_RETRY_BASE_MS = 50;
 inline constexpr int USER_IDLE_THRESHOLD_MS = 2000;
+inline constexpr int RESIZE_RECENTER_DELAY_MS = 150;  // Delay before re-centering after resize
 } // namespace Timing
 
 // Legacy aliases
@@ -175,6 +176,8 @@ inline constexpr int CONTINUOUS_SCROLL_IDLE_MS = 300;
 inline constexpr int USER_SCROLL_IDLE_TIMER_MS = 240;
 inline constexpr int USER_SCROLL_ACTIVE_CLEAR_DELAY_MS = 220;
 inline constexpr int STOP_REPEAT_RECENTER_DELAY_MS = 10;
+inline constexpr int WHEEL_ANGLE_STEP = 120;   // Standard wheel angle per notch
+inline constexpr int WHEEL_PIXEL_STEP = 120;   // Pixel delta threshold for high-precision wheels
 } // namespace Mouse
 
 // Legacy aliases

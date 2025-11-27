@@ -55,13 +55,14 @@ Setup calls are wired in `MainWindow::setupManagers()` and related methods.
 |---------|---------|
 | `collectionutils.h` | `CollectionConfig`, `CollectionContext`, `CollectionHierarchyCache` structs and hierarchy helpers |
 | `configutils.h` | Config parsing helpers, default value handling |
+| `errorutils.h` | `ErrorCode` enum, `ErrorContext` struct, `Result<T>` template for structured error handling |
 | `searchutils.h` | `SearchMode` enum, search context utilities |
 | `stringutils.h` | String manipulation, title formatting |
 | `settingsutils.h/.cpp` | Settings file path resolution, INI helpers |
 | `pathutils.h/.cpp` | File path normalization, extension handling |
 | `gridutils.h` | Grid layout calculations, row/column math |
 | `extensionutils.h/.cpp` | File extension categorization, media type detection |
-| `timerutils.h/.cpp` | `TimerUtils::Coordinator` for debounced/throttled updates |
+| `timerutils.h/.cpp` | `TimerUtils::Coordinator` for debounced updates, `TimerUtils::DebouncedTimer` for generic debouncing |
 | `propertyutils.h` | `PropertyKeys` namespace with Qt dynamic property key constants |
 
 ### Key Data Structures (`src/utils/collectionutils.h`)
@@ -237,6 +238,44 @@ The cache is rebuilt via `rebuildHierarchyCache()` when `SettingsManager` emits 
 Use `TimerUtils::Coordinator` for debounced updates:
 ```cpp
 m_timerCoordinator->scheduleViewportUpdate();  // Debounced, won't spam
+```
+
+Use `TimerUtils::DebouncedTimer` for generic debounce patterns:
+```cpp
+// Create timer with interval
+m_debouncer = new TimerUtils::DebouncedTimer(100, this);
+connect(m_debouncer, &TimerUtils::DebouncedTimer::triggered, this, &MyClass::onDebounced);
+
+// Call trigger() repeatedly - only fires once after 100ms of inactivity
+m_debouncer->trigger();
+```
+
+### Error Handling
+
+Use `ErrorUtils` for structured error reporting:
+```cpp
+#include "errorutils.h"
+
+// Create error context
+auto ctx = ErrorUtils::ErrorContext::error(
+    ErrorUtils::ErrorCode::DatabaseQueryFailed,
+    "Failed to fetch items",
+    "QueryManager::fetchItems"
+).withDetails(query.lastError().text());
+
+// Log with appropriate severity
+ErrorUtils::logError(ctx);
+
+// Use Result<T> for functions that can fail
+ErrorUtils::Result<int> countItems() {
+    if (!m_db.isOpen()) {
+        return ErrorUtils::ErrorContext::error(
+            ErrorUtils::ErrorCode::DatabaseNotOpen,
+            "Database not open"
+        );
+    }
+    return itemCount;
+}
 ```
 
 ## Dependencies

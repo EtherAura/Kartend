@@ -67,15 +67,15 @@ private:
   };
 
   // Collects UUIDs for a collection and its descendants if showAllSubcollectionItems is set
-  QStringList collectCollectionUuids(const CollectionContext &ctx,
+  [[nodiscard]] QStringList collectCollectionUuids(const CollectionContext &ctx,
                                      const QList<CollectionConfig> &allCollections);
 
   // Builds UUID-to-directory mappings for path resolution
-  CollectionDirMaps buildDirectoryMaps(const CollectionContext &ctx,
+  [[nodiscard]] CollectionDirMaps buildDirectoryMaps(const CollectionContext &ctx,
                                        const QList<CollectionConfig> &allCollections);
 
   // Builds SQL IN clause with placeholders for the given UUID count
-  static QString buildUuidInClause(int uuidCount);
+  [[nodiscard]] static QString buildUuidInClause(int uuidCount);
 
   static void appendFileMapsAndListCanonical(
       int collectionIndex, const CollectionConfig &expandedCollection,

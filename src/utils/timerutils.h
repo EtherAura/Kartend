@@ -29,6 +29,7 @@ public:
   void triggerImmediate();  // Trigger immediately, resetting any pending
   void cancel();            // Cancel any pending trigger
   [[nodiscard]] bool isPending() const;
+  [[nodiscard]] int interval() const;
   void setInterval(int intervalMs);
 
 signals:

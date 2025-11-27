@@ -67,7 +67,7 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
   }
 
   // Re-center on current selection after resize completes
-  QTimer::singleShot(UIConstants::LAYOUT_UPDATE_DELAY + 50, this, [this]() {
+  QTimer::singleShot(UIConstants::Timing::RESIZE_RECENTER_DELAY_MS, this, [this]() {
     if (!QApplication::closingDown() && getInteractionManager() != nullptr) {
       getInteractionManager()->recenterCurrentSelection();
     }
