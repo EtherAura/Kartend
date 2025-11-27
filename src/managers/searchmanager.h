@@ -16,14 +16,12 @@ class DatabaseManager;
 class NavigationManager;
 class ScrollManager;
 class SettingsManager;
-class MainWindow;
 
 struct SearchManagerSetup {
   DatabaseManager *databaseManager = nullptr;
   NavigationManager *navigationManager = nullptr;
   ScrollManager *scrollManager = nullptr;
   SettingsManager *settingsManager = nullptr;
-  MainWindow *mainWindow = nullptr;
   QLineEdit *searchBar = nullptr;
   QPushButton *searchModeButton = nullptr;
   QScrollArea *itemScrollArea = nullptr;
@@ -92,7 +90,6 @@ private:
   NavigationManager *m_navigationManager = nullptr;
   ScrollManager *m_scrollManager = nullptr;
   SettingsManager *m_settingsManager = nullptr;
-  MainWindow *m_mainWindow = nullptr;
   QLineEdit *m_searchBar = nullptr;
   QPushButton *m_searchModeButton = nullptr;
   QScrollArea *m_itemScrollArea = nullptr;

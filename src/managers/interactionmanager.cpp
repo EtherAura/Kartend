@@ -73,6 +73,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   m_currentCollectionIndex = setup.currentCollectionIndex;
   m_searchBar = setup.searchBar;
   m_mainWindow = setup.mainWindow;
+  m_generalSettings = setup.generalSettings;
 
   // Setup SearchManager with its dependencies
   if (m_searchManager) {
@@ -81,7 +82,6 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     searchSetup.navigationManager = setup.navigationManager;
     searchSetup.scrollManager = setup.scrollManager;
     searchSetup.settingsManager = setup.settingsManager;
-    searchSetup.mainWindow = setup.mainWindow;
     searchSetup.searchBar = setup.searchBar;
     searchSetup.searchModeButton = setup.searchModeButton;
     searchSetup.itemScrollArea = setup.itemScrollArea;
@@ -158,7 +158,6 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   if (m_keyboardManager) {
     KeyboardManagerSetup keyboardSetup;
     keyboardSetup.scrollManager = setup.scrollManager;
-    keyboardSetup.mainWindow = setup.mainWindow;
     keyboardSetup.gridContainer = setup.gridContainer;
     keyboardSetup.itemsPage = setup.itemsPage;
     keyboardSetup.itemScrollArea = setup.itemScrollArea;
@@ -274,7 +273,6 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     MouseManagerSetup mouseSetup;
     mouseSetup.scrollManager = setup.scrollManager;
     mouseSetup.selectionManager = m_selectionManager.get();
-    mouseSetup.mainWindow = setup.mainWindow;
     mouseSetup.itemScrollArea = setup.itemScrollArea;
     mouseSetup.gridContainer = setup.gridContainer;
     mouseSetup.collections = setup.collections;
@@ -397,6 +395,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     m_eventManager->setDatabaseManager(setup.databaseManager);
     m_eventManager->setSidebarManager(setup.sidebarManager);
     m_eventManager->setMainWindow(setup.mainWindow);
+    m_eventManager->setGeneralSettings(setup.generalSettings);
     m_eventManager->setItemScrollArea(setup.itemScrollArea);
     m_eventManager->setGridContainer(setup.gridContainer);
     m_eventManager->setStackedWidget(setup.stackedWidget);
@@ -489,8 +488,8 @@ void InteractionManager::handleArrowKeyNavigation(int direction, bool vertical) 
   const int currentSelection = std::max(0, currentSelectedIndex());
   const bool offscreenBefore = isItemOffscreen(currentSelection, gridWidth);
 
-  const bool wrapEnabled = (m_mainWindow != nullptr)
-                               ? m_mainWindow->m_generalSettings.wrapNavigation
+  const bool wrapEnabled = m_generalSettings != nullptr
+                               ? m_generalSettings->wrapNavigation
                                : false;
   if (m_viewportManager) {
     m_viewportManager->setIsWrappingNavigation(false);
@@ -587,8 +586,8 @@ void InteractionManager::onKeyboardRepeatStep() {
   const bool horizontal = !repeatVertical;
 
   const int currentSelection = std::max(0, currentSelectedIndex());
-  const bool wrapEnabled = (m_mainWindow != nullptr)
-                               ? m_mainWindow->m_generalSettings.wrapNavigation
+  const bool wrapEnabled = m_generalSettings != nullptr
+                               ? m_generalSettings->wrapNavigation
                                : false;
   const int gridWidth = getCurrentGridWidth();
   bool didWrap = false;
@@ -1214,8 +1213,8 @@ void InteractionManager::persistSuppressedSelectionAndMaybeCenter(
   }
   int curColl =
       ((m_currentCollectionIndex != nullptr) ? *m_currentCollectionIndex : -1);
-  if ((m_mainWindow != nullptr) && curColl >= 0 &&
-      curColl < m_mainWindow->m_collections.size() && m_selectionManager) {
+  if (m_collections != nullptr && curColl >= 0 &&
+      curColl < m_collections->size() && m_selectionManager) {
     QString title = m_selectionManager->titleForIndex(index, subcollections);
     m_selectionManager->persistSelection(curColl, index, title);
   }
@@ -1657,9 +1656,9 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
 
   if (isHorizontal) {
     int currentIndex = std::max(0, currentSelectedIndex());
-    bool wrap = ((m_mainWindow != nullptr)
-                     ? m_mainWindow->m_generalSettings.wrapNavigation
-                     : false);
+    bool wrap = m_generalSettings != nullptr
+                    ? m_generalSettings->wrapNavigation
+                    : false;
     bool didWrap = false;
     int nextIndex = KeyboardManager::calculateHorizontalSelection(
         totalItems, currentIndex, direction, wrap, didWrap);
@@ -1709,9 +1708,9 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
   int currentIndex = std::max(0, currentSelectedIndex());
   int nextIndex = currentIndex + (direction * gridWidth);
 
-  bool wrap = ((m_mainWindow != nullptr)
-                   ? m_mainWindow->m_generalSettings.wrapNavigation
-                   : false);
+  bool wrap = m_generalSettings != nullptr
+                  ? m_generalSettings->wrapNavigation
+                  : false;
   bool didWrap = false;
 
   if (wrap) {
@@ -1804,8 +1803,8 @@ auto InteractionManager::titleForIndexInColl(int coll, int idx) const
   QList<int> subs = getSubcollections(coll);
   if (idx < subs.size()) {
     int subIdx = subs[idx];
-    if (subIdx >= 0 && subIdx < m_mainWindow->m_collections.size()) {
-      return m_mainWindow->m_collections[subIdx].name;
+    if (m_collections != nullptr && subIdx >= 0 && subIdx < m_collections->size()) {
+      return (*m_collections)[subIdx].name;
     }
     return {};
   }
@@ -1820,23 +1819,22 @@ auto InteractionManager::titleForIndexInColl(int coll, int idx) const
 }
 
 void InteractionManager::persistSelectionForIndex(int coll, int idx) {
-  if (m_mainWindow->getSettingsManager() != nullptr) {
-    m_mainWindow->getSettingsManager()->setLastSelectedItem(coll, idx);
-    QString collectionName = m_mainWindow->m_collections[coll].name;
-    QString title;
-    QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
-    if (path.isEmpty() && (m_scrollManager != nullptr)) {
-      path = m_scrollManager->filePathForVisualIndex(idx);
-    }
-    if (!path.isEmpty()) {
-      title = QFileInfo(path).completeBaseName().replace('_', ' ').simplified();
-    }
-    if (m_sessionManager) {
-      m_sessionManager->setLastSelected(collectionName, idx, title);
-    }
-    if (m_settingsManager != nullptr) {
-      m_settingsManager->setLastSelectedItem(coll, idx);
-    }
+  if (m_settingsManager == nullptr || m_collections == nullptr ||
+      coll < 0 || coll >= m_collections->size()) {
+    return;
+  }
+  m_settingsManager->setLastSelectedItem(coll, idx);
+  QString collectionName = (*m_collections)[coll].name;
+  QString title;
+  QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+  if (path.isEmpty() && (m_scrollManager != nullptr)) {
+    path = m_scrollManager->filePathForVisualIndex(idx);
+  }
+  if (!path.isEmpty()) {
+    title = QFileInfo(path).completeBaseName().replace('_', ' ').simplified();
+  }
+  if (m_sessionManager) {
+    m_sessionManager->setLastSelected(collectionName, idx, title);
   }
   QTimer::singleShot(UIConstants::SHORT_TIMER_DELAY, this, [this]() {
     if (!QApplication::closingDown() && m_artworkManager) {

@@ -493,8 +493,8 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
   int rowDelta = -wheelSteps;
   int newSelection = currentSelection + (rowDelta * gridWidth);
 
-  bool wrap = (m_mainWindow != nullptr)
-                  ? m_mainWindow->m_generalSettings.wrapNavigation
+  bool wrap = m_generalSettings != nullptr
+                  ? m_generalSettings->wrapNavigation
                   : false;
   bool wrapTriggered = false;
 

@@ -54,6 +54,7 @@ struct InteractionManagerSetup {
   MainWindow *mainWindow = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
+  GeneralSettings *generalSettings = nullptr;
 };
 
 class InteractionManager : public QObject {
@@ -168,6 +169,7 @@ private:
   int *m_currentCollectionIndex = nullptr;
   QLineEdit *m_searchBar = nullptr;
   MainWindow *m_mainWindow = nullptr;
+  GeneralSettings *m_generalSettings = nullptr;
 
   bool m_isShuttingDown = false;
 

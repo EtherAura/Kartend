@@ -146,8 +146,8 @@ void SelectionManager::updateFilePathForSelection(
 
 void SelectionManager::persistSelection(int collectionIndex, int itemIndex,
                                          const QString &title) {
-  if (m_mainWindow == nullptr || collectionIndex < 0 ||
-      collectionIndex >= m_mainWindow->m_collections.size()) {
+  if (m_collections == nullptr || collectionIndex < 0 ||
+      collectionIndex >= m_collections->size()) {
     return;
   }
 
@@ -155,7 +155,7 @@ void SelectionManager::persistSelection(int collectionIndex, int itemIndex,
     m_settingsManager->setLastSelectedItem(collectionIndex, itemIndex);
   }
 
-  QString collectionName = m_mainWindow->m_collections[collectionIndex].name;
+  QString collectionName = (*m_collections)[collectionIndex].name;
   if (m_sessionManager) {
     m_sessionManager->setLastSelected(collectionName, itemIndex, title);
   }
@@ -163,14 +163,10 @@ void SelectionManager::persistSelection(int collectionIndex, int itemIndex,
 
 QString SelectionManager::titleForIndex(int index,
                                          const QList<int> &subcollections) const {
-  if (m_mainWindow == nullptr) {
-    return {};
-  }
-
   if (index < subcollections.size()) {
     int subIdx = subcollections[index];
-    if (subIdx >= 0 && subIdx < m_mainWindow->m_collections.size()) {
-      return m_mainWindow->m_collections[subIdx].name;
+    if (m_collections != nullptr && subIdx >= 0 && subIdx < m_collections->size()) {
+      return (*m_collections)[subIdx].name;
     }
     return {};
   }
@@ -589,8 +585,8 @@ void SelectionManager::persistSuppressedSelectionAndMaybeCenter(
   }
   int curColl =
       ((m_currentCollectionIndex != nullptr) ? *m_currentCollectionIndex : -1);
-  if ((m_mainWindow != nullptr) && curColl >= 0 &&
-      curColl < m_mainWindow->m_collections.size()) {
+  if ((m_collections != nullptr) && curColl >= 0 &&
+      curColl < m_collections->size()) {
     QString title = titleForIndex(index, subcollections);
     persistSelection(curColl, index, title);
   }
@@ -611,7 +607,7 @@ void SelectionManager::handleSuccessfulSelection(int index) {
 
   int currentColl =
       ((m_currentCollectionIndex != nullptr) ? *m_currentCollectionIndex : -1);
-  if ((m_mainWindow != nullptr) && currentColl >= 0 && index >= 0) {
+  if ((m_collections != nullptr) && currentColl >= 0 && index >= 0) {
     persistSelectionForIndex(currentColl, index);
   }
   if (QApplication::closingDown()) {
@@ -626,8 +622,7 @@ void SelectionManager::handleSuccessfulSelection(int index) {
 }
 
 QString SelectionManager::titleForIndexInColl(int coll, int idx) const {
-  if (m_mainWindow == nullptr || m_collections == nullptr ||
-      coll < 0 || coll >= m_collections->size()) {
+  if (m_collections == nullptr || coll < 0 || coll >= m_collections->size()) {
     return {};
   }
 
@@ -650,8 +645,8 @@ QString SelectionManager::titleForIndexInColl(int coll, int idx) const {
 }
 
 void SelectionManager::persistSelectionForIndex(int coll, int idx) {
-  if (m_mainWindow == nullptr || coll < 0 ||
-      coll >= m_mainWindow->m_collections.size()) {
+  if (m_collections == nullptr || coll < 0 ||
+      coll >= m_collections->size()) {
     return;
   }
   QString title = titleForIndexInColl(coll, idx);

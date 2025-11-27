@@ -51,7 +51,6 @@ void KeyboardManager::cleanupTimers() {
 
 void KeyboardManager::setupReferences(const KeyboardManagerSetup &setup) {
   m_scrollManager = setup.scrollManager;
-  m_mainWindow = setup.mainWindow;
   m_gridContainer = setup.gridContainer;
   m_itemsPage = setup.itemsPage;
   m_itemScrollArea = setup.itemScrollArea;

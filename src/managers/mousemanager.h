@@ -15,7 +15,6 @@ QT_END_NAMESPACE
 
 class ScrollManager;
 class SelectionManager;
-class MainWindow;
 class MediaItemWidget;
 struct CollectionConfig;
 
@@ -23,7 +22,6 @@ struct CollectionConfig;
 struct MouseManagerSetup {
   ScrollManager *scrollManager = nullptr;
   SelectionManager *selectionManager = nullptr;
-  MainWindow *mainWindow = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QWidget *gridContainer = nullptr;
   const QVector<CollectionConfig> *collections = nullptr;
@@ -138,7 +136,6 @@ private:
   // References (not owned)
   ScrollManager *m_scrollManager = nullptr;
   SelectionManager *m_selectionManager = nullptr;
-  MainWindow *m_mainWindow = nullptr;
   QScrollArea *m_itemScrollArea = nullptr;
   QWidget *m_gridContainer = nullptr;
   const QVector<CollectionConfig> *m_collections = nullptr;

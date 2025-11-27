@@ -138,6 +138,7 @@ void MainWindow::setupManagerConnections() {
   setup.searchBar = searchBar;
   setup.searchModeButton = m_searchModeButton;
   setup.mainWindow = this;
+  setup.generalSettings = &m_generalSettings;
 
   loadingLabel = ui->loadingLabel;
 

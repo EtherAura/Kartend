@@ -11,12 +11,10 @@ class QWidget;
 class QScrollArea;
 class QLineEdit;
 class QStackedWidget;
-class MainWindow;
 class ScrollManager;
 
 struct KeyboardManagerSetup {
   ScrollManager *scrollManager = nullptr;
-  MainWindow *mainWindow = nullptr;
   QWidget *gridContainer = nullptr;
   QWidget *itemsPage = nullptr;
   QScrollArea *itemScrollArea = nullptr;
@@ -137,7 +135,6 @@ private:
 
   // Manager references
   ScrollManager *m_scrollManager = nullptr;
-  MainWindow *m_mainWindow = nullptr;
   QWidget *m_gridContainer = nullptr;
   QWidget *m_itemsPage = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;

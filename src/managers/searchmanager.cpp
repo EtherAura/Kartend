@@ -24,7 +24,6 @@ void SearchManager::setupReferences(const SearchManagerSetup &setup) {
   m_navigationManager = setup.navigationManager;
   m_scrollManager = setup.scrollManager;
   m_settingsManager = setup.settingsManager;
-  m_mainWindow = setup.mainWindow;
   m_searchBar = setup.searchBar;
   m_searchModeButton = setup.searchModeButton;
   m_itemScrollArea = setup.itemScrollArea;

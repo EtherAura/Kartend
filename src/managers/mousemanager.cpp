@@ -27,7 +27,6 @@ MouseManager::~MouseManager() {
 void MouseManager::setupReferences(const MouseManagerSetup &setup) {
   m_scrollManager = setup.scrollManager;
   m_selectionManager = setup.selectionManager;
-  m_mainWindow = setup.mainWindow;
   m_itemScrollArea = setup.itemScrollArea;
   m_gridContainer = setup.gridContainer;
   m_collections = setup.collections;
