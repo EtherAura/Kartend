@@ -33,6 +33,7 @@ Q_LOGGING_CATEGORY(lcScrollManager, "kartend.scrollmanager")
 // Initializes timers for throttle, arrow-key updates, and a short idle window
 // to treat any scrollbar interaction as user-driven scrolling
 ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
+  // Throttle timer - only fires once per interval, ignores subsequent triggers
   m_scrollTimer = new QTimer(this);
   m_scrollTimer->setSingleShot(true);
   m_scrollTimer->setInterval(UIConstants::SCROLL_THROTTLE_DELAY);
@@ -46,10 +47,9 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   connect(m_arrowKeyViewUpdateTimer, &QTimer::timeout, this,
           &ScrollManager::onArrowKeyViewUpdate);
 
-  m_userScrollIdleTimer = new QTimer(this);
-  m_userScrollIdleTimer->setSingleShot(true);
-  m_userScrollIdleTimer->setInterval(UIConstants::USER_SCROLL_IDLE_TIMER_MS);
-  connect(m_userScrollIdleTimer, &QTimer::timeout, this,
+  // Debounce timer - restarts on each trigger, fires after inactivity
+  m_userScrollIdleTimer = new TimerUtils::DebouncedTimer(UIConstants::USER_SCROLL_IDLE_TIMER_MS, this);
+  connect(m_userScrollIdleTimer, &TimerUtils::DebouncedTimer::triggered, this,
           [this]() { m_userScrollbarActive = false; });
 }
 
@@ -1759,7 +1759,7 @@ void ScrollManager::connectVerticalScrollEvents(QScrollBar *verticalScrollbar) {
           [this, verticalScrollbar]() {
             m_userScrollbarActive = true;
             if (m_userScrollIdleTimer) {
-              m_userScrollIdleTimer->start();
+              m_userScrollIdleTimer->trigger();
             }
             if (m_mediaScrollArea) {
               m_mediaScrollArea->setProperty(PropertyKeys::UserScrollActive,
@@ -1777,7 +1777,7 @@ void ScrollManager::connectVerticalScrollEvents(QScrollBar *verticalScrollbar) {
   connect(verticalScrollbar, &QScrollBar::sliderReleased, this, [this]() {
     m_userScrollbarActive = false;
     if (m_userScrollIdleTimer) {
-      m_userScrollIdleTimer->start();
+      m_userScrollIdleTimer->trigger();
     }
     QTimer::singleShot(UIConstants::USER_SCROLL_ACTIVE_CLEAR_DELAY_MS, this,
                        [this]() {
@@ -1793,7 +1793,7 @@ void ScrollManager::connectVerticalScrollEvents(QScrollBar *verticalScrollbar) {
           [this, verticalScrollbar](int) {
             m_userScrollbarActive = true;
             if (m_userScrollIdleTimer) {
-              m_userScrollIdleTimer->start();
+              m_userScrollIdleTimer->trigger();
             }
             if (m_mediaScrollArea) {
               m_mediaScrollArea->setProperty(PropertyKeys::UserScrollActive,
@@ -1817,7 +1817,7 @@ void ScrollManager::connectHorizontalScrollEvents(
   connect(horizontalScrollbar, &QScrollBar::sliderPressed, this, [this]() {
     m_userScrollbarActive = true;
     if (m_userScrollIdleTimer) {
-      m_userScrollIdleTimer->start();
+      m_userScrollIdleTimer->trigger();
     }
     if (m_mediaScrollArea) {
       m_mediaScrollArea->setProperty(PropertyKeys::UserScrollActive, true);
@@ -1827,7 +1827,7 @@ void ScrollManager::connectHorizontalScrollEvents(
   connect(horizontalScrollbar, &QScrollBar::sliderReleased, this, [this]() {
     m_userScrollbarActive = false;
     if (m_userScrollIdleTimer) {
-      m_userScrollIdleTimer->start();
+      m_userScrollIdleTimer->trigger();
     }
     QTimer::singleShot(UIConstants::USER_SCROLL_ACTIVE_CLEAR_DELAY_MS, this,
                        [this]() {
@@ -1843,7 +1843,7 @@ void ScrollManager::connectHorizontalScrollEvents(
           [this](int) {
             m_userScrollbarActive = true;
             if (m_userScrollIdleTimer) {
-              m_userScrollIdleTimer->start();
+              m_userScrollIdleTimer->trigger();
             }
             if (m_mediaScrollArea) {
               m_mediaScrollArea->setProperty(PropertyKeys::UserScrollActive,
@@ -2216,7 +2216,7 @@ void ScrollManager::handleProgrammaticScroll() {
 void ScrollManager::handleUserScroll() {
   m_userScrollbarActive = true;
   if (m_userScrollIdleTimer != nullptr) {
-    m_userScrollIdleTimer->start();
+    m_userScrollIdleTimer->trigger();
   }
 
   if (m_mediaScrollArea != nullptr) {

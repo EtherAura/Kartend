@@ -19,6 +19,10 @@ class DatabaseManager;
 class QPropertyAnimation;
 class ArtworkManager;
 
+namespace TimerUtils {
+class DebouncedTimer;
+}
+
 struct VirtualMetrics {
   int itemWidth = 0;
   int itemHeight = 0;
@@ -161,7 +165,7 @@ private:
   const QList<CollectionConfig> *m_collections = nullptr;
   CollectionContext m_context;
   VirtualMetrics m_metrics;
-  QTimer *m_scrollTimer = nullptr;
+  QTimer *m_scrollTimer = nullptr;  // Throttle timer (not debounce)
   QTimer *m_arrowKeyViewUpdateTimer = nullptr;
   int m_totalItems = 0;
   qint64 m_lastScrollTime = 0;
@@ -175,7 +179,7 @@ private:
   int m_lastSelectedRow = -1;
   int m_selectionDirection = 0;
   bool m_userScrollbarActive = false;
-  QTimer *m_userScrollIdleTimer = nullptr;
+  TimerUtils::DebouncedTimer *m_userScrollIdleTimer = nullptr;
   int m_committedSelectedIndex = -1;
   bool m_forceSelectionOverlayVisible = false;
   bool m_restartingSelectionAnim = false;  // Prevents finish callback interference
