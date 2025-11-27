@@ -124,6 +124,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     selectionSetup.mainWindow = setup.mainWindow;
     selectionSetup.metadataSidebar = setup.sidebar;
     selectionSetup.itemsPage = setup.itemsPage;
+    selectionSetup.gridContainer = setup.gridContainer;
     selectionSetup.itemScrollArea = setup.itemScrollArea;
     selectionSetup.collections = setup.collections;
     selectionSetup.currentCollectionIndex = setup.currentCollectionIndex;
@@ -131,7 +132,11 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
 
     // Connect SelectionManager signals
     connect(m_selectionManager.get(), &SelectionManager::selectionChanged,
-            this, &InteractionManager::selectionChanged);
+            this, [this](int index) {
+              // Sync local selection state with SelectionManager
+              m_selectedItemIndex = index;
+              emit selectionChanged(index);
+            });
     connect(m_selectionManager.get(), &SelectionManager::requestFocusItemsPage,
             this, [this]() {
               if (m_itemsPage != nullptr) {
@@ -1460,30 +1465,9 @@ void InteractionManager::persistSuppressedSelectionAndMaybeCenter(
 
 void InteractionManager::handleWidgetClicked(MediaItemWidget *widget,
                                              const QString &filePath) {
-  cancelPendingSelectionRestore();
-
-  if ((widget == nullptr) || (m_scrollManager == nullptr) ||
-      (m_collections == nullptr) || (m_currentCollectionIndex == nullptr)) {
-    return;
+  if (m_selectionManager) {
+    m_selectionManager->handleWidgetClicked(widget, filePath);
   }
-  int gridWidth = getCurrentGridWidth();
-  if (gridWidth <= 0) {
-    return;
-  }
-
-  int visualIndex = -1;
-  const auto &active = m_scrollManager->getActiveWidgets();
-  for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
-    if (it.value() == widget) {
-      visualIndex = it.key();
-      break;
-    }
-  }
-  if (visualIndex < 0) {
-    return;
-  }
-
-  processSingleClickSelection(visualIndex, filePath, true);
 }
 
 // Returns the direct child subcollection indices for a parent collection
@@ -1553,153 +1537,6 @@ void InteractionManager::trySelectWidget(int index,
       }
     });
   }
-}
-
-// Handles a single-click selection at visualIndex; scrolls immediately while
-// preserving double-click launch behavior
-void InteractionManager::processSingleClickSelection(
-    int visualIndex, const QString &filePath, bool applyScrollAreaSuppression) {
-  Q_UNUSED(applyScrollAreaSuppression);
-  if ((m_scrollManager == nullptr) || (m_collections == nullptr) ||
-      (m_currentCollectionIndex == nullptr)) {
-    return;
-  }
-  int gridWidth = getCurrentGridWidth();
-  if (gridWidth <= 0) {
-    return;
-  }
-
-  qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
-  int dcInterval = QApplication::doubleClickInterval();
-
-  setProperty(PropertyKeys::HorizAnimActive, false);
-  setProperty(PropertyKeys::HorizAnimGen,
-              property(PropertyKeys::HorizAnimGen).toInt() + 1);
-
-  if (filePath.isEmpty()) {
-    m_selectedFilePath.clear();
-  } else {
-    m_selectedFilePath = filePath;
-  }
-  if (m_viewportManager) {
-    m_viewportManager->setPhysicalKeyDown(false);
-    m_viewportManager->setRepeating(false);
-    m_viewportManager->setWrapSequenceActive(false);
-  }
-  stopRepeat();
-
-  const int pendingIndex =
-      property(PropertyKeys::RowChangeFirstClickIndex).toInt();
-  const qint64 pendingMs =
-      property(PropertyKeys::RowChangeFirstClickMs).toLongLong();
-  const bool pendingValid =
-      (pendingIndex >= 0 && (nowMs - pendingMs) <= dcInterval);
-
-  const int fromIndex = m_selectedItemIndex;
-  const bool canAnimateHoriz =
-      SelectionManager::shouldAnimateHorizontalHop(fromIndex, visualIndex, gridWidth);
-
-  if (canAnimateHoriz) {
-    runHorizontalHopAnimation(fromIndex, visualIndex, nowMs);
-    return;
-  }
-
-  const bool treatAsNewRow = m_selectionManager
-      ? m_selectionManager->shouldTreatAsNewRow(visualIndex, gridWidth)
-      : false;
-  if (treatAsNewRow) {
-    handleNewRowClickSelection(visualIndex, nowMs);
-  } else {
-    const bool skipCenter = (pendingValid && pendingIndex == visualIndex);
-    handleSameRowClickSelection(visualIndex, skipCenter, nowMs);
-  }
-
-  setProperty(PropertyKeys::ClickSeriesLastMs, nowMs);
-  if (m_itemsPage != nullptr) {
-    m_itemsPage->setFocus();
-  }
-}
-
-void InteractionManager::runHorizontalHopAnimation(int start, int target,
-                                                   qint64 nowMs) {
-  const int gen = property(PropertyKeys::HorizAnimGen).toInt() + 1;
-  setProperty(PropertyKeys::HorizAnimGen, gen);
-  setProperty(PropertyKeys::HorizAnimActive, true);
-  const int step = (target > start) ? 1 : -1;
-  const int steps = qAbs(target - start);
-  constexpr int kPerHopMs = 12;
-  if (m_scrollManager != nullptr) {
-    m_scrollManager->updateSelectionForIndex(start);
-  }
-  for (int i = 1; i <= steps; ++i) {
-    QTimer::singleShot(
-        i * kPerHopMs, this, [this, gen, i, step, start, target]() {
-          if (property(PropertyKeys::HorizAnimGen).toInt() != gen) {
-            return;
-          }
-          if (!m_scrollManager) {
-            return;
-          }
-          int nextIdx = start + (i * step);
-          if (nextIdx != target) {
-            m_selectedItemIndex = nextIdx;
-            if (m_selectionManager) {
-              m_selectionManager->setSelectedIndex(nextIdx);
-            }
-            m_scrollManager->updateSelectionForIndex(nextIdx);
-          } else {
-            setProperty(PropertyKeys::HorizAnimActive, false);
-            m_selectedItemIndex = target;
-            if (m_selectionManager) {
-              m_selectionManager->setSelectedIndex(target);
-            }
-            selectItemByIndex(target, true);
-            centerItemVertically(target, false);
-          }
-        });
-  }
-  setProperty(PropertyKeys::ClickSeriesLastMs, nowMs);
-  setProperty(PropertyKeys::RowChangeFirstClickIndex, -1);
-  setProperty(PropertyKeys::RowChangeFirstClickMs, 0);
-  if (m_itemsPage != nullptr) {
-    m_itemsPage->setFocus();
-  }
-}
-
-void InteractionManager::handleNewRowClickSelection(int visualIndex,
-                                                    qint64 nowMs) {
-  m_allowArtworkDuringSelection = false;
-  setProperty(PropertyKeys::SelectionSuppressed, true);
-  setProperty(PropertyKeys::PendingSelectionIndex, visualIndex);
-  setProperty(PropertyKeys::DeferCenterOnClick, false);
-  setProperty(PropertyKeys::DeferredCenterIndex, -1);
-  m_selectedItemIndex = visualIndex;
-  if (m_selectionManager) {
-    m_selectionManager->setSelectedIndex(visualIndex);
-  }
-  QList<int> subs = getSubcollections(*m_currentCollectionIndex);
-  updateFilePathForSelection(visualIndex, subs);
-  if (m_scrollManager != nullptr) {
-    m_scrollManager->updateSelectionForIndex(visualIndex);
-  }
-  selectItemByIndex(visualIndex, true);
-  centerItemVertically(visualIndex, false);
-  setProperty(PropertyKeys::RowChangeFirstClickIndex, visualIndex);
-  setProperty(PropertyKeys::RowChangeFirstClickMs, nowMs);
-}
-
-void InteractionManager::handleSameRowClickSelection(int visualIndex,
-                                                     bool skipCenter,
-                                                     qint64 /*nowMs*/) {
-  setProperty(PropertyKeys::DeferCenterOnClick, false);
-  setProperty(PropertyKeys::DeferredCenterIndex, -1);
-  m_allowArtworkDuringSelection = true;
-  selectItemByIndex(visualIndex, true);
-  if (!skipCenter) {
-    centerItemVertically(visualIndex, false);
-  }
-  setProperty(PropertyKeys::RowChangeFirstClickIndex, -1);
-  setProperty(PropertyKeys::RowChangeFirstClickMs, 0);
 }
 
 // Cycles search mode regardless of search text; only updates results when there
@@ -2080,47 +1917,6 @@ void InteractionManager::scheduleScrollbarRecovery() {
           }
         });
   }
-}
-
-auto InteractionManager::handleWidgetSelection(MediaItemWidget *widget,
-                                               const QPoint &clickPos,
-                                               QMouseEvent *originalEvent)
-    -> int {
-  if (widget == nullptr || m_gridContainer == nullptr ||
-      originalEvent == nullptr) {
-    return -1;
-  }
-
-  QPoint localPos = widget->mapFrom(m_gridContainer, clickPos);
-  QPoint globalPos = widget->mapToGlobal(localPos);
-  QMouseEvent synthetic(QEvent::MouseButtonPress, localPos, globalPos,
-                        Qt::LeftButton, Qt::LeftButton,
-                        originalEvent->modifiers());
-  widget->mousePressEvent(&synthetic);
-
-  if (widget == nullptr || m_scrollManager == nullptr ||
-      m_collections == nullptr || m_currentCollectionIndex == nullptr) {
-    return -1;
-  }
-  int gridWidth = getCurrentGridWidth();
-  if (gridWidth <= 0) {
-    return -1;
-  }
-
-  int visualIndex = -1;
-  const auto &active = m_scrollManager->getActiveWidgets();
-  for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
-    if (it.value() == widget) {
-      visualIndex = it.key();
-      break;
-    }
-  }
-  if (visualIndex < 0) {
-    return -1;
-  }
-
-  processSingleClickSelection(visualIndex, QString(), false);
-  return visualIndex;
 }
 
 // Initialize search mode for the current collection; reset away from

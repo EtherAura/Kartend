@@ -125,8 +125,6 @@ private:
   void updateFilePathForSelection(int index, const QList<int> &subcollections);
   void trySelectWidget(int index, const QList<int> &subcollections,
                        int attempt);
-  int handleWidgetSelection(MediaItemWidget *widget, const QPoint &clickPos,
-                            QMouseEvent *originalEvent);
   void handleSuccessfulSelection(int index);
   void centerItemVertically(int index, bool immediate);
   int computeVerticalCenterDuration(int distance, bool repeatActive) const;
@@ -200,14 +198,7 @@ private:
   static constexpr double CONTINUOUS_SCROLL_ROW_DURATION_MS = 1500.0;
   void scheduleScrollbarRecovery();
   QMetaObject::Connection m_scrollbarRecoveryConn;
-  void processSingleClickSelection(int visualIndex, const QString &filePath,
-                                   bool applyScrollAreaSuppression);
 
-  // Click selection helpers (computational methods moved to SelectionManager)
-  void runHorizontalHopAnimation(int start, int target, qint64 nowMs);
-  void handleNewRowClickSelection(int visualIndex, qint64 nowMs);
-  void handleSameRowClickSelection(int visualIndex, bool skipCenter,
-                                   qint64 nowMs);
   void applySelectionStateForIndex(int idx);
   void finalizeRestoreFlagsAndFocus();
   void scheduleSidebarMetadataUpdateIfVisible(int targetIndex,

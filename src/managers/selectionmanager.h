@@ -33,6 +33,7 @@ struct SelectionManagerSetup {
   MainWindow *mainWindow = nullptr;
   metadataSidebar *metadataSidebar = nullptr;
   QWidget *itemsPage = nullptr;
+  QWidget *gridContainer = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
@@ -202,6 +203,7 @@ private:
   MainWindow *m_mainWindow = nullptr;
   metadataSidebar *m_metadataSidebar = nullptr;
   QWidget *m_itemsPage = nullptr;
+  QWidget *m_gridContainer = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   int *m_currentCollectionIndex = nullptr;

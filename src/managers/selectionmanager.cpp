@@ -41,6 +41,7 @@ void SelectionManager::setupReferences(const SelectionManagerSetup &setup) {
   m_mainWindow = setup.mainWindow;
   m_metadataSidebar = setup.metadataSidebar;
   m_itemsPage = setup.itemsPage;
+  m_gridContainer = setup.gridContainer;
   m_itemScrollArea = setup.itemScrollArea;
   m_collections = setup.collections;
   m_currentCollectionIndex = setup.currentCollectionIndex;
@@ -441,10 +442,18 @@ void SelectionManager::handleSameRowClickSelection(int visualIndex,
 int SelectionManager::handleWidgetSelection(MediaItemWidget *widget,
                                             const QPoint &clickPos,
                                             QMouseEvent *originalEvent) {
-  Q_UNUSED(clickPos);
-  Q_UNUSED(originalEvent);
   if (widget == nullptr || m_scrollManager == nullptr) {
     return -1;
+  }
+
+  // Send synthetic mouse press event to widget for proper visual state
+  if (m_gridContainer != nullptr && originalEvent != nullptr) {
+    QPoint localPos = widget->mapFrom(m_gridContainer, clickPos);
+    QPoint globalPos = widget->mapToGlobal(localPos);
+    QMouseEvent synthetic(QEvent::MouseButtonPress, localPos, globalPos,
+                          Qt::LeftButton, Qt::LeftButton,
+                          originalEvent->modifiers());
+    widget->mousePressEvent(&synthetic);
   }
 
   int visualIndex = -1;
