@@ -56,8 +56,11 @@ public:
 
   int currentCollectionIndex;
   QList<CollectionConfig> m_collections;
+  CollectionHierarchyCache m_hierarchyCache;
   void refreshTitleCounts();
   void updateWindowTitleForCollection(int collectionIndex);
+  void rebuildHierarchyCache();
+  [[nodiscard]] const CollectionHierarchyCache &getHierarchyCache() const { return m_hierarchyCache; }
   bool isShuttingDown() const { return m_isShuttingDown; }
 
   // Getters for Managers

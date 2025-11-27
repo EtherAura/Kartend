@@ -325,6 +325,7 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
 
   collections = newCollections;
   saveCollections(collections);
+  emit collectionsModified();
   auto normalizeCollectionIndex = [](const QList<CollectionConfig> &list,
                                      int desiredIndex) -> int {
     if (list.isEmpty()) {

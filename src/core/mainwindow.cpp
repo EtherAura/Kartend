@@ -183,6 +183,10 @@ void MainWindow::connectDatabaseManager() {
   QObject::connect(getDatabaseManager(), &DatabaseManager::errorOccurred,
                    getNavigationManager(),
                    &NavigationManager::onMediaLibraryError);
+  
+  // Rebuild hierarchy cache when collections are modified via settings dialog
+  QObject::connect(getSettingsManager(), &SettingsManager::collectionsModified,
+                   this, &MainWindow::rebuildHierarchyCache);
 }
 
 void MainWindow::connectScrollManager() {
@@ -364,6 +368,7 @@ void MainWindow::setupUI() {
   
   // Load settings
   getSettingsManager()->loadCollections(m_collections);
+  rebuildHierarchyCache();
   SettingsUtils::loadMainScreenSettings(m_mainScreenConfig);
   getSettingsManager()->loadGeneralSettings(m_generalSettings);
 
@@ -689,6 +694,10 @@ void MainWindow::updateWindowTitleForCollection(int collectionIndex) {
   if (collectionIndex >= 0 && collectionIndex < m_collections.size()) {
     setWindowTitle(m_collections[collectionIndex].name);
   }
+}
+
+void MainWindow::rebuildHierarchyCache() {
+  m_hierarchyCache.rebuild(m_collections);
 }
 
 // Delegated Getters

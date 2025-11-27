@@ -41,6 +41,11 @@ public:
   auto setLastSelectedItem(int collectionIndex, int itemIndex) -> void;
   auto getLastSelectedItem(int collectionIndex) const -> int;
 
+signals:
+  void collectionsModified();
+
+public:
+
 
 
   auto handleReloadRequired(
