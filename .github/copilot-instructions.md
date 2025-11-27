@@ -13,6 +13,14 @@ Qt6 KDE frontend for organizing and launching multimedia collections. Uses **man
 | `NavigationManager` | Collection switching, navigation stack | `onCollectionSelected`, `onSubcollectionEntered` |
 | `ScrollManager` | Virtual scrolling, grid layout | `widgetClicked`, `requestItemsRange` |
 | `InteractionManager` | Input handling, selection state | `handleWidgetClicked`, `selectItemByIndex` |
+| `SelectionManager` | Selection logic, click processing | `selectionChanged`, `requestCenterVertically` |
+| `ViewportManager` | Centering, viewport positioning | `centerItemVertically`, `ensureItemVisible` |
+| `KeyboardManager` | Arrow key navigation, key repeat | `repeatStep`, `stopRepeat` |
+| `MouseManager` | Click hold scrolling, wheel events | `holdScrollingStarted`, `holdScrollingStopped` |
+| `SearchManager` | Search bar logic, search modes | `requestSelectionRestore`, `requestScrollbarRecovery` |
+| `EventManager` | Event filtering, gesture detection | `requestArrowKeyNavigation` |
+| `AnimationManager` | Scroll animations, easing curves | `animateVerticalScroll` |
+| `LaunchManager` | Item launching, process spawning | `launchItem` |
 | `ArtworkManager` | Async artwork loading with `QtConcurrent` | `loadArtworkParallel`, `addPendingArtwork` |
 | `DatabaseManager` | SQLite via worker thread (`QueryManager`) | `itemsLoaded`, `itemCountLoaded`, `itemsRangeLoaded` |
 | `CacheManager` | In-memory pixmap cache, disk persistence | |
@@ -39,6 +47,21 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
 ```
 
 Setup calls are wired in `MainWindow::setupManagers()` and related methods.
+
+### Utility Modules (`src/utils/`)
+
+| Utility | Purpose |
+|---------|---------|
+| `collectionutils.h` | `CollectionConfig`, `CollectionContext`, `CollectionHierarchyCache` structs and hierarchy helpers |
+| `configutils.h` | Config parsing helpers, default value handling |
+| `searchutils.h` | `SearchMode` enum, search context utilities |
+| `stringutils.h` | String manipulation, title formatting |
+| `settingsutils.h/.cpp` | Settings file path resolution, INI helpers |
+| `pathutils.h/.cpp` | File path normalization, extension handling |
+| `gridutils.h` | Grid layout calculations, row/column math |
+| `extensionutils.h/.cpp` | File extension categorization, media type detection |
+| `timerutils.h/.cpp` | `TimerUtils::Coordinator` for debounced/throttled updates |
+| `propertyutils.h` | `PropertyKeys` namespace with Qt dynamic property key constants |
 
 ### Key Data Structures (`src/utils/collectionutils.h`)
 
