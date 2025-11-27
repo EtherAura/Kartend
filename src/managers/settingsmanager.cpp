@@ -22,6 +22,14 @@
 #include <algorithm>
 #include <QStandardPaths>
 
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcSettingsManager, "kartend.settingsmanager")
+#define debugLog(msg) qCDebug(lcSettingsManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
+
 // Construct settings manager and initialize QSettings.
 SettingsManager::SettingsManager(SessionManager *sessionManager,
                                  ArtworkManager *artworkManager,

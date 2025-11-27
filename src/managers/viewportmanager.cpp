@@ -17,6 +17,14 @@
 
 #include "mainwindow.h"
 
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcViewportManager, "kartend.viewportmanager")
+#define debugLog(msg) qCDebug(lcViewportManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
+
 ViewportManager::ViewportManager(QObject *parent) : QObject(parent) {}
 
 ViewportManager::~ViewportManager() = default;

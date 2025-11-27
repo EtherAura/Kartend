@@ -30,6 +30,7 @@ struct SearchManagerSetup {
   QWidget *itemsPage = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
+  const CollectionHierarchyCache *hierarchyCache = nullptr;
 };
 
 class SearchManager : public QObject {
@@ -90,6 +91,7 @@ private:
   NavigationManager *m_navigationManager = nullptr;
   ScrollManager *m_scrollManager = nullptr;
   SettingsManager *m_settingsManager = nullptr;
+  const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   QLineEdit *m_searchBar = nullptr;
   QPushButton *m_searchModeButton = nullptr;
   QScrollArea *m_itemScrollArea = nullptr;

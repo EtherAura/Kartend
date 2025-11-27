@@ -600,6 +600,7 @@ void MainWindow::setupEventFilters() {
   setup.mediaScrollArea = ui->itemScrollArea;
   setup.artworkManager = getArtworkManager();
   setup.collections = &m_collections;
+  setup.hierarchyCache = &m_hierarchyCache;
 
   getScrollManager()->setupReferences(setup);
   getScrollManager()->setDatabaseManager(getDatabaseManager());

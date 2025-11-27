@@ -39,6 +39,7 @@ struct ScrollManagerSetup {
   QScrollArea *mediaScrollArea = nullptr;
   ArtworkManager *artworkManager = nullptr;
   const QList<CollectionConfig> *collections = nullptr;
+  const CollectionHierarchyCache *hierarchyCache = nullptr;
 };
 
 class ScrollManager : public QObject {
@@ -117,15 +118,16 @@ private:
   void rebuildFilteredIndices();
 
   // Widget pool for recycling MediaItemWidgets
-  static constexpr int MAX_POOL_SIZE = 50;
   QList<MediaItemWidget *> m_widgetPool;
   MediaItemWidget *acquireWidget();
   void releaseWidget(MediaItemWidget *widget);
   void clearWidgetPool();
+  [[nodiscard]] int calculateOptimalPoolSize() const;
 
   QWidget *m_gridContainer = nullptr;
   QScrollArea *m_mediaScrollArea = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
+  const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   QWidget *m_virtualContainer = nullptr;
   QStringList m_filePaths;
   QHash<QString, QString> m_fileNames;

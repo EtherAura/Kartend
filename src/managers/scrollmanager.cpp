@@ -97,11 +97,27 @@ void ScrollManager::releaseWidget(MediaItemWidget *widget) {
   widget->setItemName(QString());
   widget->setArtworkPixmap(QPixmap());
   
-  if (m_widgetPool.size() < MAX_POOL_SIZE) {
+  const int optimalSize = calculateOptimalPoolSize();
+  if (m_widgetPool.size() < optimalSize) {
     m_widgetPool.append(widget);
   } else {
     widget->deleteLater();
   }
+}
+
+// Calculates optimal pool size based on visible items with buffer
+auto ScrollManager::calculateOptimalPoolSize() const -> int {
+  if (m_metrics.itemsPerRow <= 0) {
+    return UIConstants::Widget::Pool::MIN_SIZE;
+  }
+  
+  int visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1 + UIConstants::BUFFER_ROWS;
+  int visibleWidgets = visibleRows * m_metrics.itemsPerRow;
+  int poolSize = visibleWidgets * UIConstants::Widget::Pool::BUFFER_MULTIPLIER;
+  
+  return std::clamp(poolSize, 
+                    UIConstants::Widget::Pool::MIN_SIZE, 
+                    UIConstants::Widget::Pool::MAX_SIZE);
 }
 
 void ScrollManager::clearWidgetPool() {
@@ -118,6 +134,7 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   m_mediaScrollArea = setup.mediaScrollArea;
   m_artworkManager = setup.artworkManager;
   m_collections = setup.collections;
+  m_hierarchyCache = setup.hierarchyCache;
 
   if (m_mediaScrollArea != nullptr) {
     m_mediaScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -210,7 +227,13 @@ void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths, 
 void ScrollManager::initializeSubcollections() {
   m_subcollections.clear();
   if ((m_collections != nullptr) && m_context.currentIndex >= 0) {
-    m_subcollections = CollectionUtils::directChildrenOf(m_context.currentIndex, *m_collections);
+    // Use cache for O(1) lookup if available
+    if (m_hierarchyCache != nullptr && m_hierarchyCache->isValid()) {
+      m_subcollections = m_hierarchyCache->directChildren(m_context.currentIndex);
+    } else {
+      // Fallback to O(n) scan
+      m_subcollections = CollectionUtils::directChildrenOf(m_context.currentIndex, *m_collections);
+    }
   }
 }
 
@@ -1351,7 +1374,13 @@ void ScrollManager::updateContextForSubcollection(int subcollectionIndex) {
   }
   m_context.currentIndex = subcollectionIndex;
   m_context.config = (*m_collections)[subcollectionIndex];
-  m_subcollections = CollectionUtils::directChildrenOf(subcollectionIndex, *m_collections);
+  // Use cache for O(1) lookup if available
+  if (m_hierarchyCache != nullptr && m_hierarchyCache->isValid()) {
+    m_subcollections = m_hierarchyCache->directChildren(subcollectionIndex);
+  } else {
+    // Fallback to O(n) scan
+    m_subcollections = CollectionUtils::directChildrenOf(subcollectionIndex, *m_collections);
+  }
   m_totalItems = m_subcollections.size() + m_filePaths.size();
   calculateVirtualMetrics();
   positionVirtualContainer();
@@ -1399,8 +1428,14 @@ void ScrollManager::applySubcollectionFilter(int subcollectionIndex) {
 void ScrollManager::determineTargetCollections(int subcollectionIndex,
                                                QSet<int> &targetCollections) {
   targetCollections.insert(subcollectionIndex);
-  QList<int> descendants =
-      CollectionUtils::collectDescendantIndices(subcollectionIndex, *m_collections);
+  QList<int> descendants;
+  // Use cache for O(1) lookup if available
+  if (m_hierarchyCache != nullptr && m_hierarchyCache->isValid()) {
+    descendants = m_hierarchyCache->allDescendants(subcollectionIndex);
+  } else {
+    // Fallback to O(n) recursive scan
+    descendants = CollectionUtils::collectDescendantIndices(subcollectionIndex, *m_collections);
+  }
   for (int descendant : descendants) {
     targetCollections.insert(descendant);
   }

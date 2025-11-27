@@ -37,6 +37,14 @@
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcInteractionManager, "kartend.interactionmanager")
+#define debugLog(msg) qCDebug(lcInteractionManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
+
 InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
   m_searchManager = std::make_unique<SearchManager>(this);
   m_selectionManager = std::make_unique<SelectionManager>(this);
@@ -82,6 +90,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     searchSetup.navigationManager = setup.navigationManager;
     searchSetup.scrollManager = setup.scrollManager;
     searchSetup.settingsManager = setup.settingsManager;
+    searchSetup.hierarchyCache = setup.hierarchyCache;
     searchSetup.searchBar = setup.searchBar;
     searchSetup.searchModeButton = setup.searchModeButton;
     searchSetup.itemScrollArea = setup.itemScrollArea;

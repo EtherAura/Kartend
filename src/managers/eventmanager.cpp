@@ -27,6 +27,14 @@
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcEventManager, "kartend.eventmanager")
+#define debugLog(msg) qCDebug(lcEventManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
+
 EventManager::EventManager(QObject *parent) : QObject(parent) {}
 
 EventManager::~EventManager() = default;

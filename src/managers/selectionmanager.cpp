@@ -26,6 +26,14 @@
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcSelectionManager, "kartend.selectionmanager")
+#define debugLog(msg) qCDebug(lcSelectionManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
+
 SelectionManager::SelectionManager(QObject *parent) : QObject(parent) {}
 
 SelectionManager::~SelectionManager() = default;

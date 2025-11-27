@@ -11,6 +11,14 @@
 #include <QScrollArea>
 #include <QTimer>
 
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcSidebarManager, "kartend.sidebarmanager")
+#define debugLog(msg) qCDebug(lcSidebarManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
+
 SidebarManager::SidebarManager(QObject *parent)
     : QObject(parent), m_metadataSidebar(nullptr), m_itemsPage(nullptr),
       m_mainHorizontalLayout(nullptr), m_itemScrollArea(nullptr),

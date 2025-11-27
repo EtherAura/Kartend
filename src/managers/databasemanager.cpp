@@ -16,6 +16,14 @@
 #include "pathutils.h"
 #include "sessionmanager.h"
 
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcDatabaseManager, "kartend.databasemanager")
+#define debugLog(msg) qCDebug(lcDatabaseManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
+
 // Construct the database manager and initialize the database
 DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent)
     : QObject(parent), m_sessionManager(sessionManager) {

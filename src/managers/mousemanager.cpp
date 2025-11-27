@@ -14,6 +14,14 @@
 #include <QWheelEvent>
 #include <QWidget>
 
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcMouseManager, "kartend.mousemanager")
+#define debugLog(msg) qCDebug(lcMouseManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
+
 MouseManager::MouseManager(QObject *parent) : QObject(parent) {}
 
 MouseManager::~MouseManager() {

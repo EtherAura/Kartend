@@ -11,6 +11,14 @@
 #include <QDir>
 #include <QScrollBar>
 
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcSearchManager, "kartend.searchmanager")
+#define debugLog(msg) qCDebug(lcSearchManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
+
 SearchManager::SearchManager(QObject *parent) : QObject(parent) {
   m_searchDebounceTimer = new QTimer(this);
   m_searchDebounceTimer->setSingleShot(true);
@@ -25,6 +33,7 @@ void SearchManager::setupReferences(const SearchManagerSetup &setup) {
   m_navigationManager = setup.navigationManager;
   m_scrollManager = setup.scrollManager;
   m_settingsManager = setup.settingsManager;
+  m_hierarchyCache = setup.hierarchyCache;
   m_searchBar = setup.searchBar;
   m_searchModeButton = setup.searchModeButton;
   m_itemScrollArea = setup.itemScrollArea;
@@ -170,8 +179,14 @@ SearchContext SearchManager::computeSearchContext() const {
   }
 
   const CollectionConfig &cfg = (*m_collections)[collIndex];
-  const QList<int> subs =
-      CollectionUtils::directChildrenOf(collIndex, *m_collections);
+  QList<int> subs;
+  // Use cache for O(1) lookup if available
+  if (m_hierarchyCache != nullptr && m_hierarchyCache->isValid()) {
+    subs = m_hierarchyCache->directChildren(collIndex);
+  } else {
+    // Fallback to O(n) scan
+    subs = CollectionUtils::directChildrenOf(collIndex, *m_collections);
+  }
   ctx.hasSubs = !subs.isEmpty();
 
   ctx.realDirectItems = hasDirectItemsForIndex(collIndex);

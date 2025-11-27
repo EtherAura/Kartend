@@ -12,7 +12,13 @@
 #include <stdexcept>
 #include <QDebug>
 
-
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcQueryManager, "kartend.querymanager")
+#define debugLog(msg) qCDebug(lcQueryManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
 
 // Forward declarations of static helpers
 static auto canonicalKeyPath(const QString &absPath, bool dedup) -> QString;

@@ -377,6 +377,13 @@ inline constexpr int TRIANGLE_OFFSET = 10;
 inline constexpr int BORDER_WIDTH_SELECTION = 4;
 inline constexpr int BORDER_RADIUS = 5;
 inline constexpr int HIGHLIGHT_DARKEN_FACTOR = 120;
+
+// Widget Pool - sizes for recycling MediaItemWidgets
+namespace Pool {
+inline constexpr int MIN_SIZE = 20;           // Minimum pool size
+inline constexpr int MAX_SIZE = 100;          // Maximum pool size cap
+inline constexpr int BUFFER_MULTIPLIER = 2;   // Pool = visible widgets * multiplier
+} // namespace Pool
 } // namespace Widget
 
 // Legacy aliases

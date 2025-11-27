@@ -29,6 +29,14 @@
 #include <algorithm>
 #include <mutex>
 
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcArtworkManager, "kartend.artworkmanager")
+#define debugLog(msg) qCDebug(lcArtworkManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
+
 namespace {
 // Computes immediate and extended viewports based on a scroll area's current
 // position
