@@ -12,10 +12,14 @@ class SidebarManager;
 class SessionManager;
 class SettingsManager;
 class NavigationManager;
+class AnimationManager;
+class ViewportManager;
+class ArtworkManager;
 class MainWindow;
 class metadataSidebar;
 class QWidget;
 class QScrollArea;
+class QMouseEvent;
 
 struct SelectionManagerSetup {
   ScrollManager *scrollManager = nullptr;
@@ -23,6 +27,9 @@ struct SelectionManagerSetup {
   SessionManager *sessionManager = nullptr;
   SettingsManager *settingsManager = nullptr;
   NavigationManager *navigationManager = nullptr;
+  AnimationManager *animationManager = nullptr;
+  ViewportManager *viewportManager = nullptr;
+  ArtworkManager *artworkManager = nullptr;
   MainWindow *mainWindow = nullptr;
   metadataSidebar *metadataSidebar = nullptr;
   QWidget *itemsPage = nullptr;
@@ -120,6 +127,39 @@ public:
   void setLastSelectedRow(int row) { m_lastSelectedRow = row; }
   [[nodiscard]] int lastSelectedRow() const { return m_lastSelectedRow; }
 
+  // Click selection processing (moved from InteractionManager)
+  void processSingleClickSelection(int visualIndex, const QString &filePath);
+  void runHorizontalHopAnimation(int start, int target, qint64 nowMs);
+  void handleNewRowClickSelection(int visualIndex, qint64 nowMs);
+  void handleSameRowClickSelection(int visualIndex, bool skipCenter, qint64 nowMs);
+
+  // Widget click handling
+  int handleWidgetSelection(MediaItemWidget *widget, const QPoint &clickPos,
+                            QMouseEvent *originalEvent);
+  void handleWidgetClicked(MediaItemWidget *widget, const QString &filePath);
+
+  // Selection restore (full implementation)
+  void beginFullSelectionRestore(int targetIndex);
+  void applySelectionStateForIndex(int idx);
+  void finalizeRestoreFlagsAndFocus();
+  void scheduleSidebarMetadataUpdateIfVisible(int targetIndex,
+                                              int initialDelayMs,
+                                              int secondaryDelayMs);
+
+  // Select item by index with full update
+  void selectItemByIndex(int index, bool allowHorizontalScroll);
+
+  // Persistence helpers
+  void persistSuppressedSelectionAndMaybeCenter(
+      int index, const QList<int> &subcollections, bool skipCenter);
+  void handleSuccessfulSelection(int index);
+  [[nodiscard]] QString titleForIndexInColl(int coll, int idx) const;
+  void persistSelectionForIndex(int coll, int idx);
+
+  // Try to select widget with retry
+  void trySelectWidget(int index, const QList<int> &subcollections,
+                       int attempt);
+
 signals:
   void selectionChanged(int index);
   void selectionCleared();
@@ -127,11 +167,15 @@ signals:
   void requestViewportPositioning(int targetIndex);
   void requestStopScrollAnimations();
   void requestSidebarUpdate(int targetIndex);
+  void requestCenterVertically(int index, bool immediate);
+  void requestEnsureHorizontallyVisible(int index);
+  void requestStopRepeat();
 
 private:
   void clearWidgetSelectionStates();
   void clearMetadataSidebar();
   void notifyScrollManagerOfSelection(int index);
+  [[nodiscard]] int getCurrentGridWidth() const;
 
   // Core selection state
   MediaItemWidget *m_selectedMediaItem = nullptr;
@@ -152,12 +196,18 @@ private:
   SessionManager *m_sessionManager = nullptr;
   SettingsManager *m_settingsManager = nullptr;
   NavigationManager *m_navigationManager = nullptr;
+  AnimationManager *m_animationManager = nullptr;
+  ViewportManager *m_viewportManager = nullptr;
+  ArtworkManager *m_artworkManager = nullptr;
   MainWindow *m_mainWindow = nullptr;
   metadataSidebar *m_metadataSidebar = nullptr;
   QWidget *m_itemsPage = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   int *m_currentCollectionIndex = nullptr;
+
+  // Flags for artwork handling during selection
+  bool m_allowArtworkDuringSelection = false;
 };
 
 #endif // SELECTIONMANAGER_H

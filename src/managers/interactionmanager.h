@@ -2,6 +2,7 @@
 #define INTERACTIONMANAGER_H
 
 #include "collectionutils.h"
+#include "eventmanager.h"
 #include "keyboardmanager.h"
 #include "launchmanager.h"
 #include "mousemanager.h"
@@ -120,15 +121,6 @@ private slots:
   void onMouseHoldScrollStep(int direction, bool isHorizontal);
 
 private:
-  // Event filter helper methods
-  auto handleActivityEvent(QEvent *event) -> bool;
-  auto handleMouseButtonPress(QObject *obj, QEvent *event) -> bool;
-  auto handleMouseButtonRelease(QObject *obj, QEvent *event) -> bool;
-  auto handleWheelEvent(QObject *obj, QEvent *event) -> bool;
-  auto handleKeyPressEvent(QObject *obj, QEvent *event) -> bool;
-  auto handleMouseDoubleClick(QObject *obj, QEvent *event) -> bool;
-  auto handleMousePress(QObject *obj, QEvent *event) -> bool;
-
   QList<int> getSubcollections(int parentIndex) const;
   void updateFilePathForSelection(int index, const QList<int> &subcollections);
   void trySelectWidget(int index, const QList<int> &subcollections,
@@ -148,7 +140,6 @@ private:
   bool hasDirectItemsForIndex(int idx) const;
   bool allowAllFor(const CollectionConfig &cfg, int collIndex,
                    bool hasSubs) const;
-  bool handleKeyReleaseEvent(QObject *obj, QEvent *event);
 
   int resolveDoubleClickIndexCandidate() const;
   QString derivePathFromIndex(int idx) const;
@@ -175,6 +166,9 @@ private:
 
   // Viewport delegation (owned helper)
   std::unique_ptr<ViewportManager> m_viewportManager;
+
+  // Event handling delegation (owned helper)
+  std::unique_ptr<EventManager> m_eventManager;
 
   ScrollManager *m_scrollManager = nullptr;
   SidebarManager *m_sidebarManager = nullptr;
@@ -233,9 +227,6 @@ private:
 
   void setPendingSelectionIfNeeded(bool condition, int newSelection);
   void updateSelectionStateAfterMove(int newSelection);
-  /// Applies wheel-scroll steps and returns true if wrapping occurred.
-  bool applyWheelSelectionDelta(int wheelSteps);
-
   auto processEnterOrReturnKey(int totalItems) -> bool;
   auto handleEnterOnSubcollection(int currentSelection, const QList<int> &subs)
       -> bool;

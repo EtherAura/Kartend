@@ -18,6 +18,7 @@
 #include "animationmanager.h"
 #include "artworkmanager.h"
 #include "databasemanager.h"
+#include "eventmanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
 #include "mainwindow.h"
@@ -43,6 +44,7 @@ InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
   m_mouseManager = std::make_unique<MouseManager>(this);
   m_launchManager = std::make_unique<LaunchManager>(this);
   m_viewportManager = std::make_unique<ViewportManager>(this);
+  m_eventManager = std::make_unique<EventManager>(this);
 
   m_viewportManager->setContinuousScrollActive(true);
 }
@@ -116,6 +118,9 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     selectionSetup.sessionManager = setup.sessionManager;
     selectionSetup.settingsManager = setup.settingsManager;
     selectionSetup.navigationManager = setup.navigationManager;
+    selectionSetup.animationManager = m_animationManager.get();
+    selectionSetup.viewportManager = m_viewportManager.get();
+    selectionSetup.artworkManager = setup.artworkManager;
     selectionSetup.mainWindow = setup.mainWindow;
     selectionSetup.metadataSidebar = setup.sidebar;
     selectionSetup.itemsPage = setup.itemsPage;
@@ -139,6 +144,12 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
                 m_animationManager->verticalAnimation()->stop();
               }
             });
+    connect(m_selectionManager.get(), &SelectionManager::requestCenterVertically,
+            this, &InteractionManager::centerItemVertically);
+    connect(m_selectionManager.get(), &SelectionManager::requestEnsureHorizontallyVisible,
+            this, &InteractionManager::ensureHorizontallyVisible);
+    connect(m_selectionManager.get(), &SelectionManager::requestStopRepeat,
+            this, [this]() { stopRepeat(); });
   }
 
   // Setup KeyboardManager with its dependencies
@@ -373,6 +384,48 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
                 }
               }
             });
+  }
+
+  // Setup EventManager with its dependencies
+  if (m_eventManager) {
+    m_eventManager->setScrollManager(setup.scrollManager);
+    m_eventManager->setKeyboardManager(m_keyboardManager.get());
+    m_eventManager->setMouseManager(m_mouseManager.get());
+    m_eventManager->setAnimationManager(m_animationManager.get());
+    m_eventManager->setViewportManager(m_viewportManager.get());
+    m_eventManager->setSelectionManager(m_selectionManager.get());
+    m_eventManager->setArtworkManager(setup.artworkManager);
+    m_eventManager->setDatabaseManager(setup.databaseManager);
+    m_eventManager->setSidebarManager(setup.sidebarManager);
+    m_eventManager->setMainWindow(setup.mainWindow);
+    m_eventManager->setItemScrollArea(setup.itemScrollArea);
+    m_eventManager->setGridContainer(setup.gridContainer);
+    m_eventManager->setStackedWidget(setup.stackedWidget);
+    m_eventManager->setItemsPage(setup.itemsPage);
+    m_eventManager->setSearchBar(setup.searchBar);
+    m_eventManager->setCollections(setup.collections);
+    m_eventManager->setCurrentCollectionIndex(setup.currentCollectionIndex);
+
+    // Connect EventManager signals
+    connect(m_eventManager.get(), &EventManager::widgetDoubleClicked,
+            this, &InteractionManager::handleWidgetDoubleClickedWithCollection);
+    connect(m_eventManager.get(), &EventManager::widgetClicked,
+            this, [this](MediaItemWidget *widget, const QPoint &clickPos, QMouseEvent *event) {
+              if (m_selectionManager) {
+                const int clickedIndex = m_selectionManager->handleWidgetSelection(widget, clickPos, event);
+                if (clickedIndex >= 0 && m_mouseManager) {
+                  const int gridWidth = getCurrentGridWidth();
+                  const int totalItems = m_scrollManager ? m_scrollManager->getTotalItems() : 0;
+                  const int previousSelection = m_selectedItemIndex;
+                  m_mouseManager->updateClickHoldHorizontalCandidate(previousSelection, clickedIndex, gridWidth);
+                  m_mouseManager->startClickHoldTimer(clickPos, clickedIndex, gridWidth, totalItems);
+                }
+              }
+            });
+    connect(m_eventManager.get(), &EventManager::clearSelectionRequested,
+            this, &InteractionManager::clearSelectionAndFocus);
+    connect(m_eventManager.get(), &EventManager::requestStopRepeat,
+            this, &InteractionManager::stopRepeat);
   }
 
   updateSearchModeButton();
@@ -942,454 +995,15 @@ auto InteractionManager::eventFilter(QObject *obj, QEvent *event) -> bool {
     return QObject::eventFilter(obj, event);
   }
 
-  if (handleActivityEvent(event)) {
-    // Activity tracking was handled
-  }
-
-  switch (event->type()) {
-  case QEvent::MouseButtonPress:
-    return handleMouseButtonPress(obj, event);
-  case QEvent::MouseButtonRelease:
-    return handleMouseButtonRelease(obj, event);
-  case QEvent::Wheel:
-    return handleWheelEvent(obj, event);
-  case QEvent::KeyPress:
-    return handleKeyPressEvent(obj, event);
-  case QEvent::KeyRelease: {
-    return handleKeyReleaseEvent(obj, event);
-  }
-  case QEvent::MouseButtonDblClick:
-    return handleMouseDoubleClick(obj, event);
-  default:
-    break;
-  }
-  return QObject::eventFilter(obj, event);
-}
-
-auto InteractionManager::handleKeyReleaseEvent(QObject *obj, QEvent *event)
-    -> bool {
-  auto *keyEvent = static_cast<QKeyEvent *>(event);
-  if (keyEvent == nullptr) {
-    return QObject::eventFilter(obj, event);
-  }
-
-  // Delegate to KeyboardManager for key release handling
-  if (m_keyboardManager) {
-    const bool handled = m_keyboardManager->handleKeyRelease(keyEvent);
+  // Delegate event filtering to EventManager
+  if (m_eventManager) {
+    bool handled = m_eventManager->filterEvent(obj, event);
     if (handled) {
-      event->accept();
       return true;
     }
   }
 
   return QObject::eventFilter(obj, event);
-}
-auto InteractionManager::handleActivityEvent(QEvent *event) -> bool {
-  bool activityEvent = false;
-  switch (event->type()) {
-  case QEvent::MouseMove:
-  case QEvent::MouseButtonPress:
-  case QEvent::MouseButtonRelease:
-  case QEvent::KeyPress:
-  case QEvent::KeyRelease:
-  case QEvent::Wheel:
-    activityEvent = true;
-    if (m_artworkManager != nullptr) {
-      m_artworkManager->updateUserActivity();
-    }
-    break;
-  default:
-    break;
-  }
-
-  if (activityEvent) {
-    qint64 now = QDateTime::currentMSecsSinceEpoch();
-    qint64 last = property(PropertyKeys::LastUiActivityMs).toLongLong();
-    if (last > 0 && (now - last) >= UIConstants::USER_IDLE_THRESHOLD_MS) {
-      setProperty(PropertyKeys::ArmFirstClickDelay, true);
-    }
-    setProperty(PropertyKeys::LastUiActivityMs, now);
-  }
-
-  return activityEvent;
-}
-
-auto InteractionManager::handleMouseButtonPress(QObject *obj, QEvent *event)
-    -> bool {
-  if ((obj != nullptr && qobject_cast<QScrollBar *>(obj) != nullptr) ||
-      qobject_cast<QScrollBar *>(obj != nullptr ? obj->parent() : nullptr) !=
-          nullptr) {
-    if (m_viewportManager) {
-      m_viewportManager->setContinuousScrollActive(true);
-    }
-    QTimer::singleShot(UIConstants::CONTINUOUS_SCROLL_IDLE_MS, this,
-                       [this]() {
-                         if (m_viewportManager) {
-                           m_viewportManager->setContinuousScrollActive(false);
-                         }
-                       });
-    stopRepeat(true);
-    return QObject::eventFilter(obj, event);
-  }
-
-  return handleMousePress(obj, event);
-}
-
-auto InteractionManager::handleMouseButtonRelease(QObject *obj, QEvent *event)
-    -> bool {
-  auto *mouseReleaseEvent = static_cast<QMouseEvent *>(event);
-  if (mouseReleaseEvent != nullptr &&
-      mouseReleaseEvent->button() == Qt::LeftButton) {
-    if (m_mouseManager) {
-      m_mouseManager->setLeftMouseDown(false);
-      m_mouseManager->stopClickHoldTimer();
-      if (m_mouseManager->isMouseHoldScrolling()) {
-        m_mouseManager->stopMouseHoldScrolling();
-      }
-    }
-    setProperty(PropertyKeys::ClickHoldRowChange, false);
-    setProperty(PropertyKeys::DeferCenterOnClick, false);
-    setProperty(PropertyKeys::DeferredCenterIndex, -1);
-    setProperty(PropertyKeys::ClickScroll, false);
-  }
-  return QObject::eventFilter(obj, event);
-}
-
-auto InteractionManager::handleWheelEvent(QObject *obj, QEvent *event) -> bool {
-  QWidget *activeModal = QApplication::activeModalWidget();
-  if (activeModal != nullptr) {
-    return QObject::eventFilter(obj, event);
-  }
-
-  if (m_itemScrollArea == nullptr || m_collections == nullptr ||
-      m_currentCollectionIndex == nullptr || *m_currentCollectionIndex < 0 ||
-      *m_currentCollectionIndex >= m_collections->size() ||
-      m_stackedWidget == nullptr ||
-      m_stackedWidget->currentWidget() != m_itemsPage) {
-    return QObject::eventFilter(obj, event);
-  }
-
-  auto *wheelEvent = static_cast<QWheelEvent *>(event);
-  QScrollBar *vScrollBar = m_itemScrollArea->verticalScrollBar();
-  if (vScrollBar == nullptr) {
-    return QObject::eventFilter(obj, event);
-  }
-
-  AnimationManager::stopArrowKeyAnimationIfRunning(vScrollBar);
-
-  const CollectionConfig &collection =
-      (*m_collections)[*m_currentCollectionIndex];
-
-  const int wheelSteps = MouseManager::computeWheelSteps(wheelEvent);
-  if (wheelSteps == 0) {
-    return QObject::eventFilter(obj, event);
-  }
-
-  int currentPos = vScrollBar->value();
-
-  if (m_itemScrollArea) {
-    m_itemScrollArea->setProperty(PropertyKeys::UserScrollActive, true);
-    m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, true);
-    m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenter, true);
-    qint64 until = QDateTime::currentMSecsSinceEpoch() +
-                   UIConstants::WHEEL_SUPPRESS_ARROW_CENTER_MS;
-    m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenterUntilMs,
-                                  until);
-    if (m_scrollManager != nullptr) {
-      m_scrollManager->refreshSelectionOverlayState();
-    }
-  }
-
-  const bool wrapTriggered = applyWheelSelectionDelta(wheelSteps);
-  if (wrapTriggered) {
-    if (m_mouseManager) {
-      m_mouseManager->setWheelScrolling(false);
-    }
-    if (m_viewportManager) {
-      m_viewportManager->setContinuousScrollActive(false);
-    }
-    if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
-      m_animationManager->verticalAnimation()->stop();
-    }
-    if (m_scrollManager != nullptr) {
-      m_scrollManager->updateVirtualView();
-    }
-    event->accept();
-    return true;
-  }
-
-  int singleRowPixels = collection.itemHeight + collection.verticalSpacing;
-  int basePos = currentPos;
-  if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
-    basePos = m_animationManager->getVerticalAnimEndValue();
-  }
-  int targetPos = basePos - (wheelSteps * singleRowPixels);
-  targetPos = qBound(0, targetPos, vScrollBar->maximum());
-
-  if (m_mouseManager) {
-    m_mouseManager->setWheelScrolling(true);
-  }
-  if (m_viewportManager) {
-    m_viewportManager->setContinuousScrollActive(true);
-  }
-
-  if (m_itemScrollArea) {
-    m_itemScrollArea->setProperty(PropertyKeys::UserScrollActive, true);
-    m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, true);
-    if (m_scrollManager != nullptr) {
-      m_scrollManager->refreshSelectionOverlayState();
-    }
-  }
-
-  if (m_animationManager) {
-    m_animationManager->startWheelScrollAnimation(
-        vScrollBar, currentPos, targetPos, [this]() {
-          if (m_mouseManager) {
-            m_mouseManager->setWheelScrolling(false);
-          }
-          if (m_viewportManager) {
-            m_viewportManager->setContinuousScrollActive(false);
-          }
-          if (m_itemScrollArea) {
-            m_itemScrollArea->setProperty(PropertyKeys::UserScrollActive, false);
-            m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, false);
-            m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenter, false);
-            m_itemScrollArea->setProperty(PropertyKeys::SuppressArrowCenterUntilMs, 0);
-            if (m_scrollManager != nullptr) {
-              m_scrollManager->refreshSelectionOverlayState();
-            }
-          }
-          if (m_scrollManager != nullptr && m_selectedItemIndex >= 0) {
-            m_scrollManager->updateSelectionForIndex(m_selectedItemIndex);
-          }
-        });
-  }
-
-  if (m_scrollManager != nullptr) {
-    QTimer::singleShot(0, this, [this]() {
-      if (m_scrollManager) {
-        m_scrollManager->updateVirtualView();
-      }
-    });
-  }
-
-  event->accept();
-  return true;
-}
-
-auto InteractionManager::applyWheelSelectionDelta(int wheelSteps) -> bool {
-  if (wheelSteps == 0 || m_scrollManager == nullptr ||
-      m_collections == nullptr || m_currentCollectionIndex == nullptr) {
-    return false;
-  }
-  if (*m_currentCollectionIndex < 0 ||
-      *m_currentCollectionIndex >= m_collections->size()) {
-    return false;
-  }
-  const int totalItems = m_scrollManager->getTotalItems();
-  if (totalItems <= 0) {
-    return false;
-  }
-
-  const int gridWidth = getCurrentGridWidth();
-  if (gridWidth <= 0) {
-    return false;
-  }
-
-  const bool wrapEnabled =
-      (m_mainWindow != nullptr)
-          ? m_mainWindow->m_generalSettings.wrapNavigation
-          : false;
-
-  int currentSelection = (m_selectedItemIndex < 0) ? 0 : m_selectedItemIndex;
-  int remainingSteps = wheelSteps;
-  bool wrapTriggered = false;
-
-  while (remainingSteps != 0) {
-    const int direction = (remainingSteps > 0) ? -gridWidth : gridWidth;
-    bool didWrap = false;
-    const int newSelection = KeyboardManager::calculateNewSelection(
-        totalItems, currentSelection, direction, wrapEnabled, true, gridWidth,
-        didWrap);
-
-    if (newSelection == currentSelection) {
-      break;
-    }
-
-    wrapTriggered = wrapTriggered || didWrap;
-    if (didWrap) {
-      if (m_viewportManager) {
-        m_viewportManager->setWrapSequenceActive(true);
-        m_viewportManager->setForceImmediateCenter(true);
-        m_viewportManager->setContinuousScrollActive(false);
-      }
-    }
-    const bool isNewRow =
-        SelectionManager::isNewRow(currentSelection, newSelection, gridWidth);
-    updateSelectionForKeyMove(newSelection);
-    performVisibilityForKeyMove(isNewRow, newSelection);
-
-    currentSelection = newSelection;
-    remainingSteps += (remainingSteps > 0) ? -1 : 1;
-  }
-
-  if (wrapTriggered) {
-    if (m_viewportManager) {
-      m_viewportManager->setWrapSequenceActive(true);
-      m_viewportManager->setForceImmediateCenter(true);
-    }
-  }
-
-  return wrapTriggered;
-}
-
-auto InteractionManager::handleKeyPressEvent(QObject *obj, QEvent *event)
-    -> bool {
-  auto *keyEvent = static_cast<QKeyEvent *>(event);
-
-  if (QApplication::activeModalWidget() != nullptr) {
-    return QObject::eventFilter(obj, event);
-  }
-
-  // Delegate to KeyboardManager for key handling
-  if (m_keyboardManager) {
-    const bool searchBarFocused =
-        (m_searchBar != nullptr) && m_searchBar->hasFocus();
-    const bool handled =
-        m_keyboardManager->handleKeyPress(keyEvent, searchBarFocused);
-    if (handled) {
-      event->accept();
-      return true;
-    }
-  }
-
-  // If search bar is focused and KeyboardManager didn't handle, let it through
-  if ((m_searchBar != nullptr) && m_searchBar->hasFocus()) {
-    return QObject::eventFilter(obj, event);
-  }
-
-  return QObject::eventFilter(obj, event);
-}
-
-auto InteractionManager::handleMouseDoubleClick(QObject *obj, QEvent *event)
-    -> bool {
-  auto *mouseEvent = static_cast<QMouseEvent *>(event);
-  if (mouseEvent == nullptr || mouseEvent->button() != Qt::LeftButton) {
-    return QObject::eventFilter(obj, event);
-  }
-
-  auto *widget = qobject_cast<MediaItemWidget *>(obj);
-  if (widget == nullptr) {
-    return QObject::eventFilter(obj, event);
-  }
-
-  // If the double-clicked widget represents a subcollection, allow the widget
-  // to handle the event so its subcollectionDoubleClicked signal is emitted.
-  if (m_scrollManager != nullptr && m_currentCollectionIndex != nullptr &&
-      *m_currentCollectionIndex >= 0) {
-    int visualIndex = -1;
-    const auto &active = m_scrollManager->getActiveWidgets();
-    for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
-      if (it.value() == widget) {
-        visualIndex = it.key();
-        break;
-      }
-    }
-    if (visualIndex >= 0) {
-      const QList<int> subs = getSubcollections(*m_currentCollectionIndex);
-      if (visualIndex < subs.size()) {
-        return QObject::eventFilter(obj, event);
-      }
-    }
-  }
-
-  QString path = widget->getFilePath();
-  if (path.isEmpty()) {
-    event->accept();
-    return true;
-  }
-
-  int collIdx = -1;
-  if (m_databaseManager != nullptr) {
-    collIdx = m_databaseManager->getCollectionIndexForFile(path);
-  } else if (m_currentCollectionIndex != nullptr) {
-    collIdx = *m_currentCollectionIndex;
-  } else {
-    collIdx = -1;
-  }
-  handleWidgetDoubleClickedWithCollection(path, collIdx);
-  event->accept();
-  return true;
-}
-
-auto InteractionManager::handleMousePress(QObject *obj, QEvent *event) -> bool {
-  if (m_restoringSelection) {
-    event->accept();
-    return true;
-  }
-  auto *mouseEvent = static_cast<QMouseEvent *>(event);
-  if ((mouseEvent == nullptr) || mouseEvent->button() != Qt::LeftButton) {
-    return QObject::eventFilter(obj, event);
-  }
-
-  if (!m_itemScrollArea || (m_gridContainer == nullptr) ||
-      (m_stackedWidget == nullptr) || (m_itemsPage == nullptr)) {
-    return QObject::eventFilter(obj, event);
-  }
-  if (m_stackedWidget->currentWidget() != m_itemsPage) {
-    return QObject::eventFilter(obj, event);
-  }
-
-  if (m_mouseManager) {
-    m_mouseManager->setLeftMouseDown(true);
-    m_mouseManager->clearHorizontalCandidate();
-  }
-
-  const int previousSelection = m_selectedItemIndex;
-
-  bool target =
-      (obj == m_itemScrollArea || obj == m_itemScrollArea->viewport() ||
-       obj == m_gridContainer || obj == m_itemsPage ||
-       qobject_cast<MediaItemWidget *>(obj) != nullptr);
-  if (!target) {
-    return QObject::eventFilter(obj, event);
-  }
-
-  QPoint clickPos = mouseEvent->pos();
-  if (obj != m_gridContainer) {
-    if (auto *w = qobject_cast<QWidget *>(obj)) {
-      clickPos = m_gridContainer->mapFromGlobal(w->mapToGlobal(clickPos));
-    }
-  }
-
-  if (m_scrollManager == nullptr) {
-    clearSelectionAndFocus();
-    event->accept();
-    return true;
-  }
-
-  MediaItemWidget *chosen = MouseManager::findBestWidgetForClick(
-      clickPos, m_scrollManager, m_gridContainer);
-  if (chosen != nullptr) {
-    const int clickedIndex =
-        handleWidgetSelection(chosen, clickPos, mouseEvent);
-
-    // Ensure we have a valid index before setting up hold candidate
-    if (clickedIndex >= 0 && m_mouseManager) {
-      const int gridWidth = getCurrentGridWidth();
-      const int totalItems = m_scrollManager->getTotalItems();
-      m_mouseManager->updateClickHoldHorizontalCandidate(previousSelection,
-                                                         clickedIndex, gridWidth);
-      m_mouseManager->startClickHoldTimer(clickPos, m_selectedItemIndex,
-                                          gridWidth, totalItems);
-    }
-
-    event->accept();
-    return true;
-  }
-  clearSelectionAndFocus();
-  event->accept();
-  return true;
 }
 
 // Updates selection state and notifies dependent managers
