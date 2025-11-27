@@ -22,7 +22,8 @@ Qt6 KDE frontend for organizing and launching multimedia collections. Uses **man
 | `AnimationManager` | Scroll animations, easing curves | `animateVerticalScroll` |
 | `LaunchManager` | Item launching, process spawning | `launchItem` |
 | `ArtworkManager` | Async artwork loading with `QtConcurrent` | `loadArtworkParallel`, `addPendingArtwork` |
-| `DatabaseManager` | SQLite via worker thread (`QueryManager`) | `itemsLoaded`, `itemCountLoaded`, `itemsRangeLoaded` |
+| `DatabaseManager` | SQLite coordination via worker thread | `itemsLoaded`, `itemCountLoaded`, `itemsRangeLoaded` |
+| `QueryManager` | Worker thread SQL queries for DatabaseManager | `itemsLoaded`, `itemsRangeLoaded` |
 | `CacheManager` | In-memory pixmap cache, disk persistence | |
 | `SessionManager` | Selection state persistence, counts caching | |
 | `SettingsManager` | Config file I/O, settings dialog | |

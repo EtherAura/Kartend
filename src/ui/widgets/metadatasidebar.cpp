@@ -1,7 +1,4 @@
-/*
- * Display item metadata in the sidebar
- */
-
+// Displays file metadata, artwork preview, and item details in the sidebar panel.
 #include <QApplication>
 #include <QDir>
 #include <QFile>

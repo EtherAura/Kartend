@@ -1,3 +1,4 @@
+// Collection configuration dialog with tree-based hierarchy editing and live preview.
 #include <QAbstractItemView>
 #include <QDir>
 #include <QFileDialog>

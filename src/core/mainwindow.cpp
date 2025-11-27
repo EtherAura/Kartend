@@ -1,3 +1,4 @@
+// Main application window that owns ApplicationManager and orchestrates UI setup.
 #include <QApplication>
 #include <QCoreApplication>
 #include <QKeyEvent>

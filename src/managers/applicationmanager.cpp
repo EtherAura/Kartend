@@ -50,10 +50,6 @@ void ApplicationManager::initialize() {
   m_interactionManager = std::make_unique<InteractionManager>(this);
 }
 
-void ApplicationManager::setupMainWindow(MainWindow *window) {
-  // This method will be populated as we move logic from MainWindow
-}
-
 ArtworkManager *ApplicationManager::getArtworkManager() const {
   return m_artworkManager.get();
 }
