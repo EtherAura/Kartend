@@ -126,9 +126,6 @@ private:
                        int attempt);
   void handleSuccessfulSelection(int index);
   void centerItemVertically(int index, bool immediate);
-  int computeVerticalCenterDuration(int distance, bool repeatActive) const;
-  void restoreViewedCollectionAfterSearchClear();
-  void forceReloadViewedCollection();
   void ensureHorizontallyVisible(int index);
   bool handleSlashKey();
   bool handleEscapeKey();
@@ -171,20 +168,16 @@ private:
   ArtworkManager *m_artworkManager = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
   QWidget *m_gridContainer = nullptr;
-  metadataSidebar *m_metadataSidebar = nullptr;
   QStackedWidget *m_stackedWidget = nullptr;
   QWidget *m_itemsPage = nullptr;
-  QWidget *m_collectionPage = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   int *m_currentCollectionIndex = nullptr;
   QLineEdit *m_searchBar = nullptr;
-  QPushButton *m_searchModeButton = nullptr;
   MainWindow *m_mainWindow = nullptr;
 
   MediaItemWidget *m_selectedMediaItem = nullptr;
   SearchMode m_currentSearchMode = SearchMode::CurrentCollection;
   bool m_isShuttingDown = false;
-  bool m_allowArtworkDuringSelection = false;
 
   void scheduleScrollbarRecovery();
   QMetaObject::Connection m_scrollbarRecoveryConn;

@@ -207,9 +207,6 @@ private:
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   int *m_currentCollectionIndex = nullptr;
-
-  // Flags for artwork handling during selection
-  bool m_allowArtworkDuringSelection = false;
 };
 
 #endif // SELECTIONMANAGER_H

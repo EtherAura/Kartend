@@ -405,7 +405,6 @@ void SelectionManager::runHorizontalHopAnimation(int start, int target,
 
 void SelectionManager::handleNewRowClickSelection(int visualIndex,
                                                   qint64 nowMs) {
-  m_allowArtworkDuringSelection = false;
   if (parent()) {
     parent()->setProperty(PropertyKeys::SelectionSuppressed, true);
     parent()->setProperty(PropertyKeys::PendingSelectionIndex, visualIndex);
@@ -433,7 +432,6 @@ void SelectionManager::handleSameRowClickSelection(int visualIndex,
     parent()->setProperty(PropertyKeys::DeferCenterOnClick, false);
     parent()->setProperty(PropertyKeys::DeferredCenterIndex, -1);
   }
-  m_allowArtworkDuringSelection = true;
   selectItemByIndex(visualIndex, true);
   if (!skipCenter) {
     emit requestCenterVertically(visualIndex, false);
@@ -568,7 +566,6 @@ void SelectionManager::selectItemByIndex(int index,
 
 void SelectionManager::persistSuppressedSelectionAndMaybeCenter(
     int index, const QList<int> &subcollections, bool skipCenter) {
-  m_allowArtworkDuringSelection = true;
   bool deferCenter = parent() &&
       parent()->property(PropertyKeys::DeferCenterOnClick).toBool() &&
       parent()->property(PropertyKeys::DeferredCenterIndex).toInt() == index;

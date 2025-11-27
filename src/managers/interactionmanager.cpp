@@ -67,13 +67,11 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   m_artworkManager = setup.artworkManager;
   m_itemScrollArea = setup.itemScrollArea;
   m_gridContainer = setup.gridContainer;
-  m_metadataSidebar = setup.sidebar;
   m_stackedWidget = setup.stackedWidget;
   m_itemsPage = setup.itemsPage;
   m_collections = setup.collections;
   m_currentCollectionIndex = setup.currentCollectionIndex;
   m_searchBar = setup.searchBar;
-  m_searchModeButton = setup.searchModeButton;
   m_mainWindow = setup.mainWindow;
 
   // Setup SearchManager with its dependencies
@@ -295,7 +293,6 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
                 m_viewportManager->setRepeating(true);
                 m_viewportManager->setPhysicalKeyDown(true);
               }
-              m_allowArtworkDuringSelection = true;
             });
     connect(m_mouseManager.get(), &MouseManager::holdScrollingStopped, this,
             [this]() {
@@ -316,7 +313,6 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
                   m_viewportManager->setContinuousScrollActive(false);
                   m_viewportManager->setPhysicalKeyDown(false);
                 }
-                m_allowArtworkDuringSelection = true;
                 if (m_itemScrollArea) {
                   m_itemScrollArea->setProperty(PropertyKeys::SuppressArtwork, false);
                   m_itemScrollArea->setProperty(PropertyKeys::AllowArtworkDuringSelection, true);
@@ -481,11 +477,14 @@ void InteractionManager::handleArrowKeyNavigation(int direction, bool vertical) 
     return;
   }
 
+  // Clear user scroll state to ensure centering isn't blocked
   if (m_itemScrollArea != nullptr) {
+    m_itemScrollArea->setProperty(PropertyKeys::UserScrollActive, false);
     m_itemScrollArea->setProperty(PropertyKeys::SuppressArtwork, true);
     m_itemScrollArea->setProperty(PropertyKeys::AllowArtworkDuringSelection,
                                   true);
   }
+  setProperty(PropertyKeys::UserFreeScroll, false);
 
   const int gridWidth = getCurrentGridWidth();
   const int currentSelection =
@@ -578,6 +577,12 @@ void InteractionManager::onKeyboardRepeatStep() {
     }
     return;
   }
+
+  // Clear user scroll state to ensure centering isn't blocked
+  if (m_itemScrollArea != nullptr) {
+    m_itemScrollArea->setProperty(PropertyKeys::UserScrollActive, false);
+  }
+  setProperty(PropertyKeys::UserFreeScroll, false);
 
   const int direction = m_keyboardManager->repeatDelta();
   const bool repeatVertical = m_keyboardManager->repeatVertical();
@@ -881,7 +886,6 @@ auto InteractionManager::eventFilter(QObject *obj, QEvent *event) -> bool {
 
 // Updates selection state and notifies dependent managers
 void InteractionManager::updateSelectionForKeyMove(int newSelection) {
-  m_allowArtworkDuringSelection = true;
   setProperty(PropertyKeys::SelectionSuppressed, true);
   setProperty(PropertyKeys::PendingSelectionIndex, newSelection);
   m_selectedItemIndex = newSelection;
@@ -903,57 +907,6 @@ void InteractionManager::performVisibilityForKeyMove(bool isNewRow,
     centerItemVertically(newSelection, false);
   } else {
     ensureHorizontallyVisible(newSelection);
-  }
-}
-
-// Restores a viewed collection after search is cleared (single reload path) and
-// schedules scrollbar recovery
-void InteractionManager::restoreViewedCollectionAfterSearchClear() {
-  if (m_navigationManager == nullptr) {
-    return;
-  }
-
-  if (m_searchManager && m_searchManager->debounceTimer() != nullptr) {
-    m_searchManager->debounceTimer()->stop();
-  }
-  if (m_searchManager) {
-    auto &conn = m_searchManager->itemsLoadedConnection();
-    if (conn != QMetaObject::Connection()) {
-      QObject::disconnect(conn);
-      conn = QMetaObject::Connection();
-    }
-  }
-
-  const int fallback =
-      ((m_currentCollectionIndex != nullptr) ? *m_currentCollectionIndex : -1);
-  const int targetIndex =
-      (m_searchManager ? m_searchManager->preSearchCollectionIndex() : -1);
-  const int finalTarget = (targetIndex >= 0 ? targetIndex : fallback);
-  if (finalTarget < 0) {
-    if (m_searchManager) {
-      m_searchManager->setSearchActive(false);
-    }
-    return;
-  }
-
-  m_navigationManager->filterItems(QString());
-  m_navigationManager->safeReloadCollection(finalTarget);
-  initializeSearchModeForCurrentCollection();
-
-  int sel = m_searchManager ? m_searchManager->preSearchSelectedIndex() : -1;
-  if (sel < 0 && (m_settingsManager != nullptr)) {
-    sel = m_settingsManager->getLastSelectedItem(finalTarget);
-  }
-  if (sel >= 0) {
-    m_navigationManager->scheduleSelectionRestore(
-        sel, UIConstants::SELECTION_RESTORE_STEPS,
-        UIConstants::SELECTION_RESTORE_STEP_DELAY_MS,
-        UIConstants::SELECTION_RESTORE_MAX_DELAY_MS);
-  }
-
-  scheduleScrollbarRecovery();
-  if (m_searchManager) {
-    m_searchManager->setSearchActive(false);
   }
 }
 
@@ -1199,20 +1152,6 @@ void InteractionManager::recenterCurrentSelection() {
   }
 }
 
-int InteractionManager::computeVerticalCenterDuration(int distance,
-                                                       bool repeatActive) const {
-  int itemHeight = 0;
-  int vSpacing = 0;
-  if ((m_collections != nullptr) && (m_currentCollectionIndex != nullptr) &&
-      *m_currentCollectionIndex >= 0 &&
-      *m_currentCollectionIndex < m_collections->size()) {
-    itemHeight = (*m_collections)[*m_currentCollectionIndex].itemHeight;
-    vSpacing = (*m_collections)[*m_currentCollectionIndex].verticalSpacing;
-  }
-  return AnimationManager::computeVerticalCenterDuration(distance, itemHeight,
-                                                         vSpacing, repeatActive);
-}
-
 void InteractionManager::ensureHorizontallyVisible(int index) {
   if (m_viewportManager) {
     m_viewportManager->ensureHorizontallyVisible(index);
@@ -1298,7 +1237,6 @@ void InteractionManager::selectItemByIndex(int index,
 
 void InteractionManager::persistSuppressedSelectionAndMaybeCenter(
     int index, const QList<int> &subcollections, bool skipCenter) {
-  m_allowArtworkDuringSelection = true;
   bool deferCenter =
       property(PropertyKeys::DeferCenterOnClick).toBool() &&
       property(PropertyKeys::DeferredCenterIndex).toInt() == index;
@@ -1941,56 +1879,6 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
   selectItemByIndex(nextIndex, true);
 
   centerItemVertically(nextIndex, false);
-}
-
-// Forces a full reload of the viewed collection and clears any global view
-// remnants
-void InteractionManager::forceReloadViewedCollection() {
-  if (m_navigationManager == nullptr) {
-    return;
-  }
-
-  if (m_searchManager && m_searchManager->debounceTimer() != nullptr) {
-    m_searchManager->debounceTimer()->stop();
-  }
-  if (m_searchManager) {
-    auto &conn = m_searchManager->itemsLoadedConnection();
-    if (conn != QMetaObject::Connection()) {
-      QObject::disconnect(conn);
-      conn = QMetaObject::Connection();
-    }
-  }
-
-  int collIndex = -1;
-  if (m_searchManager && m_searchManager->preSearchCollectionIndex() >= 0) {
-    collIndex = m_searchManager->preSearchCollectionIndex();
-  } else if (m_currentCollectionIndex != nullptr) {
-    collIndex = *m_currentCollectionIndex;
-  } else {
-    collIndex = -1;
-  }
-  if (collIndex < 0) {
-    return;
-  }
-
-  m_navigationManager->filterItems(QString());
-  m_navigationManager->safeReloadCollection(collIndex);
-  m_navigationManager->showCollectionItems(collIndex);
-
-  int sel = m_searchManager ? m_searchManager->preSearchSelectedIndex() : -1;
-  if (sel < 0 && (m_settingsManager != nullptr)) {
-    sel = m_settingsManager->getLastSelectedItem(collIndex);
-  }
-  if (sel >= 0) {
-    m_navigationManager->scheduleSelectionRestore(
-        sel, UIConstants::SELECTION_RESTORE_STEPS,
-        UIConstants::SELECTION_RESTORE_STEP_DELAY_MS,
-        UIConstants::SELECTION_RESTORE_MAX_DELAY_MS);
-  }
-
-  if (m_searchManager) {
-    m_searchManager->setSearchActive(false);
-  }
 }
 
 // Finalizes selection bookkeeping and persists selection; standardizes property
