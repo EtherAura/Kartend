@@ -1,6 +1,7 @@
 #include "animationmanager.h"
 #include "artworkmanager.h"
 #include "gridutils.h"
+#include "propertyutils.h"
 #include "scrollmanager.h"
 #include "uiconstants.h"
 
@@ -63,7 +64,7 @@ void AnimationManager::configureAndStartVerticalAnimation(
           &AnimationManager::onVScrollAnimationFinished);
 
   if (m_itemScrollArea) {
-    m_itemScrollArea->setProperty("programmaticScroll", true);
+    m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, true);
   }
   emit requestSelectionOverlayRefresh();
   m_vScrollAnim->start();
@@ -109,13 +110,13 @@ void AnimationManager::setProgrammaticScrollGuarded(bool enable) {
     return;
   }
   if (enable) {
-    m_itemScrollArea->setProperty("programmaticScroll", true);
+    m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, true);
     emit requestSelectionOverlayRefresh();
   } else {
     QPointer<QScrollArea> scrollAreaPtr = m_itemScrollArea;
     QTimer::singleShot(0, this, [this, scrollAreaPtr]() {
       if (scrollAreaPtr) {
-        scrollAreaPtr->setProperty("programmaticScroll", false);
+        scrollAreaPtr->setProperty(PropertyKeys::ProgrammaticScroll, false);
         emit requestSelectionOverlayRefresh();
       }
     });
@@ -137,7 +138,7 @@ void AnimationManager::updateVirtualViewAndSelectionDuringVAnim(
 void AnimationManager::onVScrollAnimationFinished() {
   emit requestVirtualViewUpdate();
   if (m_itemScrollArea) {
-    m_itemScrollArea->setProperty("programmaticScroll", false);
+    m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, false);
     emit requestSelectionOverlayRefresh();
   }
   emit verticalAnimationFinished();
@@ -178,13 +179,13 @@ void AnimationManager::animateHorizontalHold(QScrollBar *hScrollBar,
   emit requestGlideAnimationStart();
 
   if (m_itemScrollArea) {
-    m_itemScrollArea->setProperty("programmaticScroll", true);
+    m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, true);
     emit requestSelectionOverlayRefresh();
   }
   m_hScrollAnim->start();
   QTimer::singleShot(0, this, [this]() {
     if (m_itemScrollArea) {
-      m_itemScrollArea->setProperty("programmaticScroll", false);
+      m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, false);
       emit requestSelectionOverlayRefresh();
     }
   });
@@ -355,7 +356,7 @@ void AnimationManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar,
           &AnimationManager::onVScrollAnimationFinished);
 
   if (m_itemScrollArea) {
-    m_itemScrollArea->setProperty("programmaticScroll", true);
+    m_itemScrollArea->setProperty(PropertyKeys::ProgrammaticScroll, true);
   }
   m_vScrollAnim->start();
 }

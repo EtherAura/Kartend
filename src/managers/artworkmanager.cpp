@@ -19,41 +19,15 @@
 #include <QJsonObject>
 #include <QPainter>
 #include <QPointer>
-#include <QRect>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
 #include <QStandardPaths>
 #include <QTimer>
-
-#include <QtCore/qobjectdefs.h>
-#include <qbytearray.h>
-#include <qchar.h>
-#include <qdatetime.h>
-#include <qiodevice.h>
-#include <qjsonvalue.h>
-#include <qmetatype.h>
-#include <qminmax.h>
-#include <qnamespace.h>
-#include <qpair.h>
-#include <qpoint.h>
-#include <qstringalgorithms.h>
-#include <qtconcurrentrun.h>
-#include <qtpreprocessorsupport.h>
-#include <qtypeinfo.h>
-#include <qvariant.h>
-#include <qwidget.h>
+#include <QtConcurrent>
 
 #include <algorithm>
-#include <atomic>
-#include <cassert>
-#include <cstring>
-#include <functional>
-#include <iterator>
 #include <mutex>
-#include <tuple>
-#include <type_traits>
-#include <utility>
 
 namespace {
 // Computes immediate and extended viewports based on a scroll area's current

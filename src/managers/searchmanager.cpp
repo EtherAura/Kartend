@@ -1,6 +1,7 @@
 #include "searchmanager.h"
 #include "databasemanager.h"
 #include "navigationmanager.h"
+#include "propertyutils.h"
 #include "scrollmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
@@ -416,7 +417,7 @@ void SearchManager::scheduleSearchBarRefocusIfNeeded() {
     return;
   }
   const bool clearedByEscape =
-      m_searchBar->property("clearedByEscape").toBool();
+      m_searchBar->property(PropertyKeys::ClearedByEscape).toBool();
   if (clearedByEscape) {
     return;
   }
