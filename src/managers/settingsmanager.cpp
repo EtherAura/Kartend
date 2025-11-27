@@ -188,6 +188,9 @@ void SettingsManager::loadCollections(
     config.itemHeight = settings.value("itemHeight", UIConstants::DEFAULT_ITEM_HEIGHT).toInt();
     config.fontSize = settings.value("fontSize", UIConstants::DEFAULT_FONT_SIZE).toInt();
 
+    // Validate and clamp numeric values to acceptable ranges
+    config.clampValues();
+
     // Use the internal name (with slashes) for hierarchy processing
     tempCollections[internalGroupName] = config;
     settings.endGroup();

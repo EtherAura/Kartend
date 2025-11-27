@@ -7,6 +7,11 @@
 #include <QStringList>
 #include <uiconstants.h>
 
+// Forward declaration for validation
+namespace ErrorUtils {
+struct ErrorContext;
+}
+
 enum class HorizontalAlignment { Left = 0, Center = 1, Right = 2 };
 
 enum class SidebarMode { Overlay = 0, Expand = 1 };
@@ -75,6 +80,24 @@ struct CollectionConfig {
            mediaDirectory == other.mediaDirectory &&
            artworkDirectory == other.artworkDirectory &&
            horizontalAlignment == other.horizontalAlignment;
+  }
+
+  // Validation methods
+  [[nodiscard]] bool isValid() const { return !name.isEmpty(); }
+  
+  [[nodiscard]] bool hasMediaDirectory() const { return !mediaDirectory.isEmpty(); }
+  
+  [[nodiscard]] bool hasArtworkDirectory() const { return !artworkDirectory.isEmpty(); }
+  
+  // Validates numeric fields are within acceptable ranges
+  void clampValues() {
+    gridWidth = std::clamp(gridWidth, UIConstants::MIN_GRID_WIDTH, UIConstants::MAX_GRID_WIDTH);
+    itemWidth = std::clamp(itemWidth, UIConstants::MIN_ITEM_WIDTH, UIConstants::MAX_ITEM_WIDTH);
+    itemHeight = std::clamp(itemHeight, UIConstants::MIN_ITEM_HEIGHT, UIConstants::MAX_ITEM_HEIGHT);
+    fontSize = std::clamp(fontSize, UIConstants::MIN_FONT_SIZE, UIConstants::MAX_FONT_SIZE);
+    // Spacing can be negative for overlap effects
+    horizontalSpacing = std::clamp(horizontalSpacing, -100, 200);
+    verticalSpacing = std::clamp(verticalSpacing, -100, 200);
   }
 };
 

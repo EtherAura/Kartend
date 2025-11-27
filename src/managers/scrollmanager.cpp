@@ -77,8 +77,10 @@ ScrollManager::~ScrollManager() {
 MediaItemWidget *ScrollManager::acquireWidget() {
   if (!m_widgetPool.isEmpty()) {
     MediaItemWidget *widget = m_widgetPool.takeLast();
+    ++m_poolMetrics.hits;
     return widget;
   }
+  ++m_poolMetrics.misses;
   return new MediaItemWidget(m_virtualContainer);
 }
 
@@ -100,8 +102,10 @@ void ScrollManager::releaseWidget(MediaItemWidget *widget) {
   const int optimalSize = calculateOptimalPoolSize();
   if (m_widgetPool.size() < optimalSize) {
     m_widgetPool.append(widget);
+    ++m_poolMetrics.releases;
   } else {
     widget->deleteLater();
+    ++m_poolMetrics.discards;
   }
 }
 

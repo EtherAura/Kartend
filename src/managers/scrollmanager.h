@@ -124,6 +124,28 @@ private:
   void clearWidgetPool();
   [[nodiscard]] int calculateOptimalPoolSize() const;
 
+  // Widget pool metrics for monitoring
+  struct PoolMetrics {
+    int hits = 0;      // Reused from pool
+    int misses = 0;    // Created new
+    int releases = 0;  // Returned to pool
+    int discards = 0;  // Pool full, deleted
+    
+    [[nodiscard]] double hitRate() const {
+      int total = hits + misses;
+      return total > 0 ? static_cast<double>(hits) / total : 0.0;
+    }
+    
+    void reset() { hits = misses = releases = discards = 0; }
+  };
+  PoolMetrics m_poolMetrics;
+
+public:
+  [[nodiscard]] const PoolMetrics &getPoolMetrics() const { return m_poolMetrics; }
+  void resetPoolMetrics() { m_poolMetrics.reset(); }
+
+private:
+
   QWidget *m_gridContainer = nullptr;
   QScrollArea *m_mediaScrollArea = nullptr;
   ArtworkManager *m_artworkManager = nullptr;

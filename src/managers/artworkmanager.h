@@ -127,6 +127,7 @@ private:
   bool m_silentLoadingActive;
   int m_silentLoadBatchSize;
   std::atomic<qint64> m_lastUserActivity;
+  std::atomic<bool> m_cancellationRequested{false};  // For cooperative cancellation
   bool m_continuousSilentLoad;
   int m_silentLoadIndex;
   bool m_persistentSilentLoad;

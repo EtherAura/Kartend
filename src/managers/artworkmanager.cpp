@@ -323,14 +323,15 @@ auto ArtworkManager::shouldSkipArtworkLoading() -> bool {
          stackedWidget->currentWidget() != itemsPage;
 }
 
-// Processes a batch of artwork items in parallel
-auto processBatch(const QList<ArtworkInfo> &batch, bool highPriority)
+// Processes a batch of artwork items in parallel (with cancellation support)
+auto processBatch(const QList<ArtworkInfo> &batch, bool highPriority,
+                  const std::atomic<bool> &cancelled)
     -> QList<ArtworkInfo::Result> {
   QList<ArtworkInfo::Result> results;
   results.reserve(batch.size());
 
   for (const ArtworkInfo &info : batch) {
-    if (QApplication::closingDown()) {
+    if (QApplication::closingDown() || cancelled.load(std::memory_order_relaxed)) {
       break;
     }
     if (info.mediaItem.isNull()) {
@@ -412,9 +413,20 @@ void ArtworkManager::loadArtworkParallel(const QList<ArtworkInfo> &items,
 
 // Cancels all pending/loaded artwork state (for reload)
 void ArtworkManager::cancelAllArtworkLoading() {
-  QMutexLocker locker(&m_dataMutex);
-  loadedArtwork.clear();
-  pendingArtwork.clear();
+  // Set cancellation flag to stop in-flight operations
+  m_cancellationRequested.store(true, std::memory_order_relaxed);
+  
+  {
+    QMutexLocker locker(&m_dataMutex);
+    loadedArtwork.clear();
+    pendingArtwork.clear();
+  }
+  
+  // Wait briefly for in-flight operations to notice cancellation
+  // then reset flag for future operations
+  QTimer::singleShot(50, this, [this]() {
+    m_cancellationRequested.store(false, std::memory_order_relaxed);
+  });
 }
 
 // Adds pending artwork request, applying deferral logic based on container
@@ -989,19 +1001,22 @@ void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
     return;
   }
 
-  QFuture<void> future = QtConcurrent::run([this, batch, highPriority]() {
-    if (QApplication::closingDown()) {
+  // Capture reference to cancellation flag for cooperative cancellation
+  const std::atomic<bool> &cancelFlag = m_cancellationRequested;
+  
+  QFuture<void> future = QtConcurrent::run([this, batch, highPriority, &cancelFlag]() {
+    if (QApplication::closingDown() || cancelFlag.load(std::memory_order_relaxed)) {
       return;
     }
-    QList<ArtworkInfo::Result> results = processBatch(batch, highPriority);
-    if (QApplication::closingDown()) {
+    QList<ArtworkInfo::Result> results = processBatch(batch, highPriority, cancelFlag);
+    if (QApplication::closingDown() || cancelFlag.load(std::memory_order_relaxed)) {
       return;
     }
     // Post results back to main thread
     QMetaObject::invokeMethod(
         this,
         [this, results, highPriority]() {
-          if (!QApplication::closingDown()) {
+          if (!QApplication::closingDown() && !m_cancellationRequested.load(std::memory_order_relaxed)) {
             applyResultsToUi(results, highPriority);
           }
         },
