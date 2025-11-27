@@ -866,8 +866,6 @@ void InteractionManager::handleWidgetDoubleClickedWithCollection(
 
 // Global event filter handling input, mouse/scroll, selection, and viewport
 // scrolling
-// Global event filter handling input, mouse/scroll, selection, and viewport
-// scrolling
 auto InteractionManager::eventFilter(QObject *obj, QEvent *event) -> bool {
   if (QApplication::closingDown() || event == nullptr) {
     return QObject::eventFilter(obj, event);
@@ -1304,18 +1302,8 @@ void InteractionManager::toggleSearchMode() {
     return;
   }
 
-  // Sync current state to SearchManager before toggle
-  m_searchManager->setCurrentMode(m_currentSearchMode);
-
   // Delegate to SearchManager
   m_searchManager->toggleSearchMode();
-
-  // Sync result back from SearchManager
-  SearchMode newMode = m_searchManager->currentMode();
-  if (newMode != m_currentSearchMode) {
-    m_currentSearchMode = newMode;
-    emit searchModeChanged(m_currentSearchMode);
-  }
 
   // Do not reload or change the grid when search text is empty.
   // Only reapply results if the user has entered text.
@@ -1334,7 +1322,6 @@ void InteractionManager::saveCurrentSelection() {
 // Updates the search mode button icon/tooltip without coercing the current mode
 void InteractionManager::updateSearchModeButton() {
   if (m_searchManager) {
-    m_searchManager->setCurrentMode(m_currentSearchMode);
     m_searchManager->updateSearchModeButton();
   }
 }
@@ -1343,7 +1330,6 @@ void InteractionManager::updateSearchModeButton() {
 // mode
 void InteractionManager::updateSearchBarPlaceholder() {
   if (m_searchManager) {
-    m_searchManager->setCurrentMode(m_currentSearchMode);
     m_searchManager->updateSearchBarPlaceholder();
   }
 }
@@ -1543,15 +1529,7 @@ void InteractionManager::scheduleScrollbarRecovery() {
 // AllCollections and prefer collection defaults
 void InteractionManager::initializeSearchModeForCurrentCollection() {
   if (m_searchManager) {
-    m_searchManager->setCurrentMode(m_currentSearchMode);
     m_searchManager->initializeSearchModeForCurrentCollection();
-
-    // Sync result back
-    SearchMode newMode = m_searchManager->currentMode();
-    if (newMode != m_currentSearchMode) {
-      m_currentSearchMode = newMode;
-      emit searchModeChanged(m_currentSearchMode);
-    }
   }
 }
 

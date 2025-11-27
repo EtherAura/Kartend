@@ -99,7 +99,6 @@ private:
 
 signals:
   void selectionChanged(int index);
-  void searchModeChanged(SearchMode mode);
 
 public slots:
   void saveCurrentSelection();
@@ -170,7 +169,6 @@ private:
   QLineEdit *m_searchBar = nullptr;
   MainWindow *m_mainWindow = nullptr;
 
-  SearchMode m_currentSearchMode = SearchMode::CurrentCollection;
   bool m_isShuttingDown = false;
 
   void scheduleScrollbarRecovery();

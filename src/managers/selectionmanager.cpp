@@ -290,12 +290,19 @@ bool SelectionManager::isNewRow(int currentSelection, int newSelection,
 }
 
 int SelectionManager::getCurrentGridWidth() const {
+  // Prefer ScrollManager's value for filtered/nested views
+  if (m_scrollManager != nullptr) {
+    int width = m_scrollManager->getCurrentGridWidth();
+    if (width > 0) {
+      return width;
+    }
+  }
   if (m_collections == nullptr || m_currentCollectionIndex == nullptr) {
-    return 0;
+    return UIConstants::DEFAULT_GRID_WIDTH;
   }
   if (*m_currentCollectionIndex < 0 ||
       *m_currentCollectionIndex >= m_collections->size()) {
-    return 0;
+    return UIConstants::DEFAULT_GRID_WIDTH;
   }
   return (*m_collections)[*m_currentCollectionIndex].gridWidth;
 }
