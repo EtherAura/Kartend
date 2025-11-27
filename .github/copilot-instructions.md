@@ -94,15 +94,54 @@ Tests are planned but not yet implemented.
 
 ### UI Constants
 
-All magic numbers live in `UIConstants` namespace (`src/ui/uiconstants.h`). **Never hardcode** timing, spacing, or dimensions:
+All magic numbers live in `UIConstants` namespace (`src/ui/uiconstants.h`). **Never hardcode** timing, spacing, or dimensions.
+
+UIConstants is organized into logical sub-namespaces:
+
+| Namespace | Purpose |
+|-----------|---------|
+| `UIConstants::Grid` | Grid layout (row height, spacing, margins) |
+| `UIConstants::Item` | Item widget dimensions and padding |
+| `UIConstants::Timing` | General timing constants (delays, debounce) |
+| `UIConstants::Animation` | Animation durations and easing |
+| `UIConstants::Keyboard` | Key repeat rates, arrow navigation timing |
+| `UIConstants::Mouse` | Click hold, scroll step timing |
+| `UIConstants::Search` | Search debounce, minimum query length |
+| `UIConstants::Selection` | Selection overlay, highlight timing |
+| `UIConstants::Navigation` | Collection navigation timing |
+| `UIConstants::Artwork` | Artwork loading batch sizes, delays |
+| `UIConstants::Cache` | Cache size limits, persistence timing |
+| `UIConstants::Sidebar` | Sidebar dimensions and animation |
+| `UIConstants::Viewport` | Viewport calculations, scroll margins |
+| `UIConstants::Widget` | Widget pool sizes, creation limits |
+| `UIConstants::Metadata` | Metadata sidebar update timing |
+| `UIConstants::Color` | Transparency, overlay colors |
+| `UIConstants::Placeholder` | Placeholder image dimensions |
+| `UIConstants::Dialog` | Settings dialog dimensions |
+| `UIConstants::Emoji` | Unicode emoji constants for UI |
+
+Example usage:
 ```cpp
-constexpr int SEARCH_DEBOUNCE_DELAY_MS = 120;
-constexpr int ARTWORK_BATCH_HIGH = 10;
+// Use namespaced constants
+constexpr int delay = UIConstants::Timing::SEARCH_DEBOUNCE_DELAY_MS;
+constexpr int batch = UIConstants::Artwork::BATCH_HIGH;
+
+// Legacy aliases still work for backward compatibility
+constexpr int delay = UIConstants::SEARCH_DEBOUNCE_DELAY_MS;
 ```
 
 ### Header Guards
 
 Use `#ifndef CLASSNAME_H` pattern. Qt forward declarations with `QT_BEGIN_NAMESPACE`/`QT_END_NAMESPACE` blocks.
+
+### Return Value Annotations
+
+Use `[[nodiscard]]` on const getter methods and factory functions to ensure return values are used:
+```cpp
+[[nodiscard]] int getCurrentGridWidth() const;
+[[nodiscard]] QString filePathForVisualIndex(int visualIndex) const;
+[[nodiscard]] auto areItemsShared(int fromIndex, int toIndex) const -> bool;
+```
 
 ### Threading Model
 
@@ -148,6 +187,26 @@ Collections support parent-child relationships via `parentCollectionIndex`. Use:
 - `directChildrenOf()` - Get immediate children
 - `collectDescendantIndices()` - Recursive descendants
 - `CollectionHierarchyCache` - Pre-computed lookups for performance
+
+#### Using CollectionHierarchyCache
+
+The hierarchy cache provides O(1) lookups for parent/child relationships. It's owned by `MainWindow` and rebuilt automatically when collections are modified:
+
+```cpp
+// Access the cache via MainWindow
+const auto &cache = mainWindow->getHierarchyCache();
+
+// O(1) lookup for direct children
+const auto &children = cache.directChildren.value(parentIndex);
+
+// O(1) lookup for all descendants
+const auto &descendants = cache.allDescendants.value(parentIndex);
+
+// O(1) lookup for parent collection
+int parent = cache.parentIndex.value(childIndex, -1);
+```
+
+The cache is rebuilt via `rebuildHierarchyCache()` when `SettingsManager` emits `collectionsModified()`.
 
 ### Artwork Loading Pipeline
 

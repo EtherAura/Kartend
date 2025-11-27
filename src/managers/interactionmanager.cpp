@@ -131,8 +131,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     // Connect SelectionManager signals
     connect(m_selectionManager.get(), &SelectionManager::selectionChanged,
             this, [this](int index) {
-              // Sync local selection state with SelectionManager
-              m_selectedItemIndex = index;
+              // Forward selection change signal
               emit selectionChanged(index);
             });
     connect(m_selectionManager.get(), &SelectionManager::requestFocusItemsPage,
@@ -235,7 +234,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
               if (m_scrollManager != nullptr) {
                 int idxDyn = property(PropertyKeys::SelectionSuppressed).toBool()
                                  ? property(PropertyKeys::PendingSelectionIndex).toInt()
-                                 : m_selectedItemIndex;
+                                 : currentSelectedIndex();
                 if (idxDyn >= 0) {
                   m_scrollManager->updateSelectionForIndex(idxDyn);
                 }
@@ -932,45 +931,29 @@ void InteractionManager::clearSelection() {
 }
 
 auto InteractionManager::currentSelectedIndex() const -> int {
-  if (m_selectionManager) {
-    return m_selectionManager->currentSelectedIndex();
-  }
-  return m_selectedItemIndex;
+  return m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
 }
 
 auto InteractionManager::getSelectedMediaItem() const -> MediaItemWidget * {
-  if (m_selectionManager) {
-    return m_selectionManager->selectedWidget();
-  }
-  return m_selectedMediaItem;
+  return m_selectionManager ? m_selectionManager->selectedWidget() : nullptr;
 }
 
 void InteractionManager::setSelectedMediaItem(MediaItemWidget *widget) {
-  m_selectedMediaItem = widget;
   if (m_selectionManager) {
     m_selectionManager->setSelectedWidget(widget);
   }
 }
 
 auto InteractionManager::selectedFilePath() const -> QString {
-  if (m_selectionManager) {
-    return m_selectionManager->selectedFilePath();
-  }
-  return m_selectedFilePath;
+  return m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
 }
 
 auto InteractionManager::isRestoringSelection() const -> bool {
-  if (m_selectionManager) {
-    return m_selectionManager->isRestoringSelection();
-  }
-  return m_restoringSelection;
+  return m_selectionManager ? m_selectionManager->isRestoringSelection() : false;
 }
 
 auto InteractionManager::targetRestoreIndex() const -> int {
-  if (m_selectionManager) {
-    return m_selectionManager->targetRestoreIndex();
-  }
-  return m_targetRestoreIndex;
+  return m_selectionManager ? m_selectionManager->targetRestoreIndex() : -1;
 }
 
 auto InteractionManager::forceImmediateCenter() const -> bool {

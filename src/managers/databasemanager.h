@@ -28,9 +28,9 @@ public:
   void fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter = QString());
   void fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter = QString());
 
-  int getCollectionIndexForFile(const QString &filePath) const;
-  QString findArtworkDirectoryForFile(const QString &filePath) const;
-  qint64
+  [[nodiscard]] int getCollectionIndexForFile(const QString &filePath) const;
+  [[nodiscard]] QString findArtworkDirectoryForFile(const QString &filePath) const;
+  [[nodiscard]] qint64
   countCollectionRecursive(int collectionIndex,
                            const QList<CollectionConfig> &allCollections);
 

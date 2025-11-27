@@ -80,16 +80,16 @@ public slots:
 private:
   // Helper methods for navigateWithSharedItems
   auto initializeNavigationState() -> void;
-  auto validateAndPrepareNavigation(int collectionIndex) -> bool;
+  [[nodiscard]] auto validateAndPrepareNavigation(int collectionIndex) -> bool;
   auto handleSubcollectionNavigation(int collectionIndex, int previousIndex)
       -> void;
   auto handleRegularNavigation(int collectionIndex) -> void;
   auto finalizeNavigation(int collectionIndex) -> void;
 
-  auto areItemsShared(int fromIndex, int toIndex) const -> bool;
+  [[nodiscard]] auto areItemsShared(int fromIndex, int toIndex) const -> bool;
   auto applyCollectionSettingsOnly(int collectionIndex) -> void;
-  auto getSubcollections(int parentIndex) const -> QList<int>;
-  auto getAllDescendantCollections(int parentIndex) const -> QList<int>;
+  [[nodiscard]] auto getSubcollections(int parentIndex) const -> QList<int>;
+  [[nodiscard]] auto getAllDescendantCollections(int parentIndex) const -> QList<int>;
 
   InteractionManager *m_interactionManager = nullptr;
   SettingsManager *m_settingsManager = nullptr;
@@ -111,23 +111,23 @@ private:
   std::function<void()> m_refreshTitleCounts;
 
   bool m_virtualScrollConnected = false;
-  auto collectionHasDescendantWithMedia(int parentIndex) const -> bool;
+  [[nodiscard]] auto collectionHasDescendantWithMedia(int parentIndex) const -> bool;
   bool m_allCollectionsActive = false;
   auto setSuppressArrowCenter(QScrollArea *scrollArea, int settleMs) -> void;
-  auto getHasSubAndItems(int collectionIndex, bool &hasSub,
+  [[nodiscard]] auto getHasSubAndItems(int collectionIndex, bool &hasSub,
                          bool &hasItems) const -> bool;
   auto updateItemsPageTitle(int collectionIndex) -> void;
   // Helper methods for handleSubcollectionNavigation refactoring
-  auto shouldRestoreSelection() const -> bool;
-  auto getSelectionRestoreIndex(int collectionIndex) const -> int;
+  [[nodiscard]] auto shouldRestoreSelection() const -> bool;
+  [[nodiscard]] auto getSelectionRestoreIndex(int collectionIndex) const -> int;
   auto createSelectionRestoreLambda(int collectionIndex, int selIdx,
                                     int token) -> std::function<void()>;
   auto scheduleSelectionRestoreVerification(int collectionIndex, int selIdx,
                                             int token) -> void;
   // Helper methods for scheduleSelectionRestore refactoring
-  auto validateSelectionRestoreContext() const -> bool;
-  auto initializeSelectionRestoreToken() const -> int;
-  auto createRestoreValidationLambda(int scheduledCollectionIndex,
+  [[nodiscard]] auto validateSelectionRestoreContext() const -> bool;
+  [[nodiscard]] auto initializeSelectionRestoreToken() const -> int;
+  [[nodiscard]] auto createRestoreValidationLambda(int scheduledCollectionIndex,
                                      int token) const -> std::function<bool()>;
   auto executeSelectionRestore(int desiredIndex, int scheduledCollectionIndex,
                                int token) const -> void;
@@ -135,26 +135,26 @@ private:
   auto performNavigationStackCleanup() -> void;
   auto handleNavigationStackPop() -> void;
   auto handleNavigationFallback() -> void;
-  auto findSubcollectionVisualIndex(int targetCollectionIndex,
+  [[nodiscard]] auto findSubcollectionVisualIndex(int targetCollectionIndex,
                                     int previousIndex) const -> int;
   auto scheduleNavigationReturn(int targetCollectionIndex,
                                 int subcollectionVisualIndex) -> void;
   // Helper methods for onItemsLoaded refactoring
-  auto validateItemsLoadedContext() const -> bool;
+  [[nodiscard]] auto validateItemsLoadedContext() const -> bool;
   auto cleanupExistingNoItemsWidgets() -> void;
-  auto determineContentAvailability(const QStringList &filePaths,
+  [[nodiscard]] auto determineContentAvailability(const QStringList &filePaths,
                                     const QList<int> &subcollections) const
       -> bool;
   auto handleEmptyContent() -> void;
-  auto setupCollectionContext(const QStringList &filePaths,
+  [[nodiscard]] auto setupCollectionContext(const QStringList &filePaths,
                               const QHash<QString, QString> &fileNames) const
       -> CollectionContext;
-  auto calculateSelectionIndex(int totalItems) const -> int;
-  auto computeCollectionDepth(int collectionIndex) const -> int;
+  [[nodiscard]] auto calculateSelectionIndex(int totalItems) const -> int;
+  [[nodiscard]] auto computeCollectionDepth(int collectionIndex) const -> int;
   auto schedulePostLoadOperations() -> void;
   // Helper methods for showCollectionItems refactoring
-  auto validateCollectionIndex(int collectionIndex) const -> bool;
-  auto handleSharedItemsNavigation(int collectionIndex) -> bool;
+  [[nodiscard]] auto validateCollectionIndex(int collectionIndex) const -> bool;
+  [[nodiscard]] auto handleSharedItemsNavigation(int collectionIndex) -> bool;
   auto prepareNonSharedNavigation(int collectionIndex) -> void;
   auto loadCollectionData(int collectionIndex) -> void;
 

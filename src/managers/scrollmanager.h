@@ -52,42 +52,42 @@ public:
   void cleanup();
   void updateGridWidth(int newGridWidth);
   void updateVirtualView();
-  int getEffectiveHorizontalSpacing() const;
-  int getFirstVisibleRow() const;
-  int getLastVisibleRow() const;
+  [[nodiscard]] int getEffectiveHorizontalSpacing() const;
+  [[nodiscard]] int getFirstVisibleRow() const;
+  [[nodiscard]] int getLastVisibleRow() const;
   void updateSelectionForIndex(int selectedIndex);
   void refreshSelectionOverlayState();
   void setForceSelectionOverlayVisible(bool force);
-  QString getSubcollectionName(int subcollectionIndex) const;
+  [[nodiscard]] QString getSubcollectionName(int subcollectionIndex) const;
   void setDatabaseManager(DatabaseManager *manager);
   void recenterVirtualContainer();
-  HorizontalAlignment getCurrentAlignment() const;
+  [[nodiscard]] HorizontalAlignment getCurrentAlignment() const;
   void applyFilter(const QString &searchText);
   void cleanupActiveWidgets();
   void clearFilter();
-  int getFilteredIndex(int visualIndex) const;
-  int getScrollbarWidth() const;
-  bool willNeedVerticalScrollbar() const;
-  int getTotalItems() const;
+  [[nodiscard]] int getFilteredIndex(int visualIndex) const;
+  [[nodiscard]] int getScrollbarWidth() const;
+  [[nodiscard]] bool willNeedVerticalScrollbar() const;
+  [[nodiscard]] int getTotalItems() const;
   void enforceScrollContentConstraints();
   void recreateLayout();
   void centerHorizontalScrollbar(int currentCollectionIndex,
                                  const QList<CollectionConfig> &collections);
   void handleLayoutChange();
   void notifyUserActivity();
-  int getCurrentGridWidth() const;
+  [[nodiscard]] int getCurrentGridWidth() const;
   void updateContextForSubcollection(int subcollectionIndex);
   void applySubcollectionFilter(int subcollectionIndex);
-  int getEffectiveViewportWidth() const;
+  [[nodiscard]] int getEffectiveViewportWidth() const;
   void recalculateContainerMetrics();
   void forceVirtualViewUpdate();
   void preCalculateLayout();
-  const QHash<int, MediaItemWidget *> &getActiveWidgets() const {
+  [[nodiscard]] const QHash<int, MediaItemWidget *> &getActiveWidgets() const {
     return m_activeWidgets;
   }
-  const QStringList &getFilePaths() const { return m_filePaths; }
-  const QHash<QString, QString> &getFileNames() const { return m_fileNames; }
-  QString filePathForVisualIndex(int visualIndex) const;
+  [[nodiscard]] const QStringList &getFilePaths() const { return m_filePaths; }
+  [[nodiscard]] const QHash<QString, QString> &getFileNames() const { return m_fileNames; }
+  [[nodiscard]] QString filePathForVisualIndex(int visualIndex) const;
   void primeLayoutFor(const CollectionConfig &config);
 
 signals:

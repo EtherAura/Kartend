@@ -93,12 +93,7 @@ public:
   bool m_navigationInProgress = false;
 
 private:
-  // Selection state - kept for internal use during transition, synced with SelectionManager
-  bool m_restoringSelection = false;
-  int m_targetRestoreIndex = -1;
-  QString m_selectedFilePath;
-  int m_selectedItemIndex = -1;
-
+  // Selection restore token for cancellation - kept here as it coordinates with NavigationManager
   int m_selectionRestoreToken = 0;
   bool m_selectionRestorePending = false;
 
@@ -175,9 +170,16 @@ private:
   QLineEdit *m_searchBar = nullptr;
   MainWindow *m_mainWindow = nullptr;
 
-  MediaItemWidget *m_selectedMediaItem = nullptr;
   SearchMode m_currentSearchMode = SearchMode::CurrentCollection;
   bool m_isShuttingDown = false;
+
+  // Selection state - kept for backward compatibility during refactor
+  // TODO: These should eventually be removed in favor of SelectionManager
+  int m_selectedItemIndex = -1;
+  QString m_selectedFilePath;
+  MediaItemWidget *m_selectedMediaItem = nullptr;
+  bool m_restoringSelection = false;
+  int m_targetRestoreIndex = -1;
 
   void scheduleScrollbarRecovery();
   QMetaObject::Connection m_scrollbarRecoveryConn;
