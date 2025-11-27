@@ -22,7 +22,6 @@
 #include "eventmanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
-#include "mainwindow.h"
 #include "metadatasidebar.h"
 #include "mousemanager.h"
 #include "navigationmanager.h"

@@ -3,7 +3,6 @@
 #include "artworkmanager.h"
 #include "databasemanager.h"
 #include "interactionmanager.h"
-#include "mainwindow.h"
 #include "metadatasidebar.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"

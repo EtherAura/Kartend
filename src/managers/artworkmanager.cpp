@@ -26,9 +26,6 @@
 #include <QTimer>
 #include <QtConcurrent>
 
-#include <algorithm>
-#include <mutex>
-
 #ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcArtworkManager, "kartend.artworkmanager")

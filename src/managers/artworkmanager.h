@@ -17,7 +17,6 @@
 #include <QPointer>
 #include <QSet>
 #include <atomic>
-#include <mutex>
 
 class QScrollArea;
 class QStackedWidget;

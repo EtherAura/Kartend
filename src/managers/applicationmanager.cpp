@@ -5,7 +5,6 @@
 #include "cachemanager.h"
 #include "databasemanager.h"
 #include "interactionmanager.h"
-#include "mainwindow.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"

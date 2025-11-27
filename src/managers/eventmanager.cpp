@@ -19,7 +19,6 @@
 #include "databasemanager.h"
 #include "itemwidget.h"
 #include "keyboardmanager.h"
-#include "mainwindow.h"
 #include "mousemanager.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"

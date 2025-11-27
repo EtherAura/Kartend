@@ -4,6 +4,7 @@
 #include <QApplication>
 #include <QDateTime>
 #include <QFileInfo>
+#include <QLineEdit>
 #include <QMouseEvent>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -14,7 +15,6 @@
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "itemwidget.h"
-#include "mainwindow.h"
 #include "metadatasidebar.h"
 #include "mousemanager.h"
 #include "navigationmanager.h"

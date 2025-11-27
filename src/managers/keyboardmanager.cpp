@@ -10,7 +10,6 @@
 #include <algorithm>
 
 #include "collectionutils.h"
-#include "mainwindow.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"
 #include "uiconstants.h"

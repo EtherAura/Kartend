@@ -3,7 +3,6 @@
 #include "collectionutils.h"
 #include "itemwidget.h"
 #include "keyboardmanager.h"
-#include "mainwindow.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
