@@ -5,6 +5,63 @@
 #include <QApplication>
 #include <QTimer>
 
+// ============================================================================
+// DebouncedTimer Implementation
+// ============================================================================
+
+TimerUtils::DebouncedTimer::DebouncedTimer(int intervalMs, QObject *parent)
+    : QObject(parent), m_timer(new QTimer(this)) {
+  m_timer->setSingleShot(true);
+  m_timer->setInterval(intervalMs);
+  connect(m_timer, &QTimer::timeout, this, [this]() {
+    if (!QApplication::closingDown()) {
+      emit triggered();
+    }
+  });
+}
+
+TimerUtils::DebouncedTimer::~DebouncedTimer() {
+  if (m_timer != nullptr) {
+    m_timer->stop();
+    m_timer->disconnect();
+  }
+}
+
+void TimerUtils::DebouncedTimer::trigger() {
+  if (m_timer != nullptr) {
+    m_timer->start();  // Restarts timer, extending the debounce window
+  }
+}
+
+void TimerUtils::DebouncedTimer::triggerImmediate() {
+  if (m_timer != nullptr) {
+    m_timer->stop();
+  }
+  if (!QApplication::closingDown()) {
+    emit triggered();
+  }
+}
+
+void TimerUtils::DebouncedTimer::cancel() {
+  if (m_timer != nullptr) {
+    m_timer->stop();
+  }
+}
+
+auto TimerUtils::DebouncedTimer::isPending() const -> bool {
+  return m_timer != nullptr && m_timer->isActive();
+}
+
+void TimerUtils::DebouncedTimer::setInterval(int intervalMs) {
+  if (m_timer != nullptr) {
+    m_timer->setInterval(intervalMs);
+  }
+}
+
+// ============================================================================
+// Coordinator Implementation
+// ============================================================================
+
 // Creates a coordinator for coalesced layout and viewport updates
 TimerUtils::Coordinator::Coordinator(QObject *parent)
     : QObject(parent), m_layoutTimer(new QTimer(this)),

@@ -20,9 +20,9 @@ Q_LOGGING_CATEGORY(lcSearchManager, "kartend.searchmanager")
 #endif
 
 SearchManager::SearchManager(QObject *parent) : QObject(parent) {
-  m_searchDebounceTimer = new QTimer(this);
-  m_searchDebounceTimer->setSingleShot(true);
-  connect(m_searchDebounceTimer, &QTimer::timeout, this,
+  m_searchDebounceTimer = new TimerUtils::DebouncedTimer(
+      UIConstants::Search::DEBOUNCE_DELAY_MS, this);
+  connect(m_searchDebounceTimer, &TimerUtils::DebouncedTimer::triggered, this,
           &SearchManager::performDebouncedSearch);
 }
 
@@ -311,7 +311,7 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
 
   if (!hasSearch) {
     if (m_searchDebounceTimer != nullptr) {
-      m_searchDebounceTimer->stop();
+      m_searchDebounceTimer->cancel();
     }
     if (m_searchItemsLoadedConn != QMetaObject::Connection()) {
       QObject::disconnect(m_searchItemsLoadedConn);
@@ -351,7 +351,8 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
   }
 
   if (m_searchDebounceTimer != nullptr) {
-    m_searchDebounceTimer->start(UIConstants::SEARCH_TYPING_DEBOUNCE_MS);
+    m_searchDebounceTimer->setInterval(UIConstants::SEARCH_TYPING_DEBOUNCE_MS);
+    m_searchDebounceTimer->trigger();
   }
 }
 
