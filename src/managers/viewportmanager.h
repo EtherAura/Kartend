@@ -14,7 +14,6 @@ class AnimationManager;
 class ScrollManager;
 class SelectionManager;
 class ArtworkManager;
-class MainWindow;
 
 struct ViewportManagerSetup {
   QScrollArea *itemScrollArea = nullptr;
@@ -22,9 +21,9 @@ struct ViewportManagerSetup {
   SelectionManager *selectionManager = nullptr;
   AnimationManager *animationManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
-  MainWindow *mainWindow = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
+  const bool *isShuttingDown = nullptr;
 };
 
 /**
@@ -163,9 +162,9 @@ private:
   SelectionManager *m_selectionManager = nullptr;
   AnimationManager *m_animationManager = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
-  MainWindow *m_mainWindow = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   int *m_currentCollectionIndex = nullptr;
+  const bool *m_isShuttingDown = nullptr;
 };
 
 #endif // VIEWPORTMANAGER_H

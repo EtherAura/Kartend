@@ -51,7 +51,6 @@ InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
 
 // Destructor: stop timers/animations and clear selection
 InteractionManager::~InteractionManager() {
-  m_isShuttingDown = true;
   stopRepeat();
   clearSelection();
 }
@@ -72,8 +71,8 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   m_collections = setup.collections;
   m_currentCollectionIndex = setup.currentCollectionIndex;
   m_searchBar = setup.searchBar;
-  m_mainWindow = setup.mainWindow;
   m_generalSettings = setup.generalSettings;
+  m_isShuttingDown = setup.isShuttingDown;
 
   // Setup SearchManager with its dependencies
   if (m_searchManager) {
@@ -119,13 +118,14 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     selectionSetup.animationManager = m_animationManager.get();
     selectionSetup.viewportManager = m_viewportManager.get();
     selectionSetup.artworkManager = setup.artworkManager;
-    selectionSetup.mainWindow = setup.mainWindow;
     selectionSetup.sidebar = setup.sidebar;
     selectionSetup.itemsPage = setup.itemsPage;
     selectionSetup.gridContainer = setup.gridContainer;
     selectionSetup.itemScrollArea = setup.itemScrollArea;
     selectionSetup.collections = setup.collections;
     selectionSetup.currentCollectionIndex = setup.currentCollectionIndex;
+    selectionSetup.hierarchyCache = setup.hierarchyCache;
+    selectionSetup.searchBar = setup.searchBar;
     m_selectionManager->setupReferences(selectionSetup);
 
     // Connect SelectionManager signals
@@ -366,9 +366,9 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     viewportSetup.selectionManager = m_selectionManager.get();
     viewportSetup.animationManager = m_animationManager.get();
     viewportSetup.artworkManager = setup.artworkManager;
-    viewportSetup.mainWindow = setup.mainWindow;
     viewportSetup.collections = setup.collections;
     viewportSetup.currentCollectionIndex = setup.currentCollectionIndex;
+    viewportSetup.isShuttingDown = setup.isShuttingDown;
     m_viewportManager->setupReferences(viewportSetup);
 
     // Connect ViewportManager signals
@@ -394,7 +394,6 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     m_eventManager->setArtworkManager(setup.artworkManager);
     m_eventManager->setDatabaseManager(setup.databaseManager);
     m_eventManager->setSidebarManager(setup.sidebarManager);
-    m_eventManager->setMainWindow(setup.mainWindow);
     m_eventManager->setGeneralSettings(setup.generalSettings);
     m_eventManager->setItemScrollArea(setup.itemScrollArea);
     m_eventManager->setGridContainer(setup.gridContainer);
@@ -1000,8 +999,8 @@ auto InteractionManager::handleEnterOnSubcollection(int currentSelection,
       m_navigationManager->m_navigationDepth++;
     }
     clearSelectionAndFocus();
-    if (m_mainWindow->getMetadataSidebar() != nullptr) {
-      m_mainWindow->getMetadataSidebar()->clearMetadata();
+    if (m_sidebarManager != nullptr) {
+      m_sidebarManager->updateSidebarMetadata(nullptr);
     }
     const bool success = m_navigationManager->showCollectionItems(subIdx);
     if (!success) {
@@ -1016,7 +1015,7 @@ auto InteractionManager::handleEnterOnSubcollection(int currentSelection,
       }
     } else {
       constexpr int kHorizontalCenterDelayMs = 600;
-      QTimer::singleShot(kHorizontalCenterDelayMs, m_mainWindow, [this]() {
+      QTimer::singleShot(kHorizontalCenterDelayMs, this, [this]() {
         if (!QApplication::closingDown() && m_scrollManager) {
           m_scrollManager->centerHorizontalScrollbar(*m_currentCollectionIndex,
                                                      *m_collections);
@@ -1778,13 +1777,13 @@ void InteractionManager::handleSuccessfulSelection(int index) {
     restoringMatch = m_selectionManager->checkAndFinalizeRestore(index);
   }
   
-  if ((m_mainWindow != nullptr) && m_mainWindow->isShuttingDown()) {
+  if ((m_isShuttingDown != nullptr) && *m_isShuttingDown) {
     return;
   }
 
   int currentColl =
       ((m_currentCollectionIndex != nullptr) ? *m_currentCollectionIndex : -1);
-  if ((m_mainWindow != nullptr) && currentColl >= 0 && index >= 0) {
+  if ((m_collections != nullptr) && currentColl >= 0 && index >= 0) {
     persistSelectionForIndex(currentColl, index);
   }
   if (QApplication::closingDown()) {

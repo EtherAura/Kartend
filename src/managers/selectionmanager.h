@@ -15,10 +15,10 @@ class NavigationManager;
 class AnimationManager;
 class ViewportManager;
 class ArtworkManager;
-class MainWindow;
 class metadataSidebar;
 class QWidget;
 class QScrollArea;
+class QLineEdit;
 class QMouseEvent;
 
 struct SelectionManagerSetup {
@@ -30,13 +30,14 @@ struct SelectionManagerSetup {
   AnimationManager *animationManager = nullptr;
   ViewportManager *viewportManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
-  MainWindow *mainWindow = nullptr;
   metadataSidebar *sidebar = nullptr;
   QWidget *itemsPage = nullptr;
   QWidget *gridContainer = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
+  const CollectionHierarchyCache *hierarchyCache = nullptr;
+  QLineEdit *searchBar = nullptr;
 };
 
 /**
@@ -200,8 +201,9 @@ private:
   AnimationManager *m_animationManager = nullptr;
   ViewportManager *m_viewportManager = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
-  MainWindow *m_mainWindow = nullptr;
   metadataSidebar *m_metadataSidebar = nullptr;
+  const CollectionHierarchyCache *m_hierarchyCache = nullptr;
+  QLineEdit *m_searchBar = nullptr;
   QWidget *m_itemsPage = nullptr;
   QWidget *m_gridContainer = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;

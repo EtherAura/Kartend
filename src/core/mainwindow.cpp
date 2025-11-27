@@ -137,8 +137,9 @@ void MainWindow::setupManagerConnections() {
   setup.currentCollectionIndex = &currentCollectionIndex;
   setup.searchBar = searchBar;
   setup.searchModeButton = m_searchModeButton;
-  setup.mainWindow = this;
   setup.generalSettings = &m_generalSettings;
+  setup.isShuttingDown = &m_isShuttingDown;
+  setup.hierarchyCache = &m_hierarchyCache;
 
   loadingLabel = ui->loadingLabel;
 

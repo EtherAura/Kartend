@@ -23,7 +23,6 @@ class SelectionManager;
 class ArtworkManager;
 class DatabaseManager;
 class SidebarManager;
-class MainWindow;
 struct CollectionConfig;
 struct GeneralSettings;
 
@@ -57,7 +56,6 @@ public:
   void setArtworkManager(ArtworkManager *manager) { m_artworkManager = manager; }
   void setDatabaseManager(DatabaseManager *manager) { m_databaseManager = manager; }
   void setSidebarManager(SidebarManager *manager) { m_sidebarManager = manager; }
-  void setMainWindow(MainWindow *mainWindow) { m_mainWindow = mainWindow; }
   void setGeneralSettings(GeneralSettings *settings) { m_generalSettings = settings; }
   void setItemScrollArea(QScrollArea *scrollArea) { m_itemScrollArea = scrollArea; }
   void setGridContainer(QWidget *container) { m_gridContainer = container; }
@@ -110,7 +108,6 @@ private:
   ArtworkManager *m_artworkManager = nullptr;
   DatabaseManager *m_databaseManager = nullptr;
   SidebarManager *m_sidebarManager = nullptr;
-  MainWindow *m_mainWindow = nullptr;
   GeneralSettings *m_generalSettings = nullptr;
 
   // UI references

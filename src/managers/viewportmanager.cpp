@@ -26,9 +26,9 @@ void ViewportManager::setupReferences(const ViewportManagerSetup &setup) {
   m_selectionManager = setup.selectionManager;
   m_animationManager = setup.animationManager;
   m_artworkManager = setup.artworkManager;
-  m_mainWindow = setup.mainWindow;
   m_collections = setup.collections;
   m_currentCollectionIndex = setup.currentCollectionIndex;
+  m_isShuttingDown = setup.isShuttingDown;
 
   // Connect to AnimationManager's finished signal
   if (m_animationManager) {
@@ -668,7 +668,7 @@ void ViewportManager::updateViewAndRowAfterVisibility(int index,
 
 bool ViewportManager::shouldExitEnsureItemVisible(int index) const {
   if (QApplication::closingDown() ||
-      ((m_mainWindow != nullptr) && m_mainWindow->isShuttingDown())) {
+      ((m_isShuttingDown != nullptr) && *m_isShuttingDown)) {
     return true;
   }
   if (!m_itemScrollArea || (m_collections == nullptr) ||

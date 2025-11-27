@@ -38,13 +38,14 @@ void SelectionManager::setupReferences(const SelectionManagerSetup &setup) {
   m_animationManager = setup.animationManager;
   m_viewportManager = setup.viewportManager;
   m_artworkManager = setup.artworkManager;
-  m_mainWindow = setup.mainWindow;
   m_metadataSidebar = setup.sidebar;
   m_itemsPage = setup.itemsPage;
   m_gridContainer = setup.gridContainer;
   m_itemScrollArea = setup.itemScrollArea;
   m_collections = setup.collections;
   m_currentCollectionIndex = setup.currentCollectionIndex;
+  m_hierarchyCache = setup.hierarchyCache;
+  m_searchBar = setup.searchBar;
 }
 
 void SelectionManager::setSelectedIndex(int index) {
@@ -109,12 +110,9 @@ void SelectionManager::clearSelectionAndFocus() {
 }
 
 QList<int> SelectionManager::getSubcollections(int parentIndex) const {
-  // Use cache for O(1) lookup if available via MainWindow
-  if (m_mainWindow != nullptr) {
-    const auto &cache = m_mainWindow->getHierarchyCache();
-    if (cache.isValid()) {
-      return cache.directChildren(parentIndex);
-    }
+  // Use cache for O(1) lookup if available
+  if (m_hierarchyCache != nullptr && m_hierarchyCache->isValid()) {
+    return m_hierarchyCache->directChildren(parentIndex);
   }
   // Fallback to O(n) scan
   if (m_collections == nullptr) {
@@ -733,11 +731,7 @@ void SelectionManager::finalizeRestoreFlagsAndFocus() {
     m_viewportManager->setWrapSequenceActive(false);
   }
   // Only set focus to items page if search bar doesn't currently have focus
-  bool searchBarHasFocus = false;
-  if (m_mainWindow) {
-    QLineEdit *searchBar = m_mainWindow->findChild<QLineEdit *>();
-    searchBarHasFocus = searchBar && searchBar->hasFocus();
-  }
+  bool searchBarHasFocus = (m_searchBar != nullptr) && m_searchBar->hasFocus();
   if ((m_itemsPage != nullptr) && !m_itemsPage->hasFocus() && !searchBarHasFocus) {
     emit requestFocusItemsPage();
   }

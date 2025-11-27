@@ -24,7 +24,6 @@
 #include <memory>
 
 class QTimer;
-class MainWindow;
 class MediaItemWidget;
 class DatabaseManager;
 class NavigationManager;
@@ -51,10 +50,11 @@ struct InteractionManagerSetup {
   QWidget *collectionPage = nullptr;
   QLineEdit *searchBar = nullptr;
   QPushButton *searchModeButton = nullptr;
-  MainWindow *mainWindow = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
   GeneralSettings *generalSettings = nullptr;
+  const bool *isShuttingDown = nullptr;
+  const CollectionHierarchyCache *hierarchyCache = nullptr;
 };
 
 class InteractionManager : public QObject {
@@ -168,10 +168,8 @@ private:
   QList<CollectionConfig> *m_collections = nullptr;
   int *m_currentCollectionIndex = nullptr;
   QLineEdit *m_searchBar = nullptr;
-  MainWindow *m_mainWindow = nullptr;
   GeneralSettings *m_generalSettings = nullptr;
-
-  bool m_isShuttingDown = false;
+  const bool *m_isShuttingDown = nullptr;
 
   void scheduleScrollbarRecovery();
   QMetaObject::Connection m_scrollbarRecoveryConn;
