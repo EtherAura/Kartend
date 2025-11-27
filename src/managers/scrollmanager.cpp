@@ -1325,6 +1325,12 @@ void ScrollManager::handleLayoutChange() {
                         m_metrics.itemHeight);
   }
   updateVirtualView();
+
+  // Clear user scroll state after layout change - scroll position changes
+  // during resize should not block subsequent programmatic centering
+  if (m_mediaScrollArea != nullptr) {
+    m_mediaScrollArea->setProperty(PropertyKeys::UserScrollActive, false);
+  }
 }
 
 void ScrollManager::notifyUserActivity() {

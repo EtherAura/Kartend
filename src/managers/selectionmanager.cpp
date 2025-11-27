@@ -39,7 +39,7 @@ void SelectionManager::setupReferences(const SelectionManagerSetup &setup) {
   m_viewportManager = setup.viewportManager;
   m_artworkManager = setup.artworkManager;
   m_mainWindow = setup.mainWindow;
-  m_metadataSidebar = setup.metadataSidebar;
+  m_metadataSidebar = setup.sidebar;
   m_itemsPage = setup.itemsPage;
   m_gridContainer = setup.gridContainer;
   m_itemScrollArea = setup.itemScrollArea;
@@ -301,6 +301,11 @@ void SelectionManager::processSingleClickSelection(
   int gridWidth = getCurrentGridWidth();
   if (gridWidth <= 0) {
     return;
+  }
+
+  // Clear user scroll state so centering isn't blocked
+  if (m_itemScrollArea) {
+    m_itemScrollArea->setProperty(PropertyKeys::UserScrollActive, false);
   }
 
   qint64 nowMs = QDateTime::currentMSecsSinceEpoch();

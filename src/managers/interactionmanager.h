@@ -8,7 +8,6 @@
 #include "mousemanager.h"
 #include "animationmanager.h"
 #include "searchmanager.h"
-#include "searchutils.h"
 #include "selectionmanager.h"
 #include "viewportmanager.h"
 #include <QKeyEvent>
@@ -89,6 +88,7 @@ public:
   bool isRestoringSelection() const;
   int targetRestoreIndex() const;
   bool forceImmediateCenter() const;
+  void recenterCurrentSelection();
 
   bool m_navigationInProgress = false;
 
@@ -107,7 +107,6 @@ signals:
   void searchModeChanged(SearchMode mode);
 
 public slots:
-  void onSearchDebounceTimeout();
   void saveCurrentSelection();
   void handleImmediateSearchTextChanged(const QString &text);
 
@@ -130,14 +129,9 @@ private:
   int computeVerticalCenterDuration(int distance, bool repeatActive) const;
   void restoreViewedCollectionAfterSearchClear();
   void forceReloadViewedCollection();
-  auto computeSearchContext() const -> SearchContext;
-  QVector<SearchMode> buildSearchModeCycle(const SearchContext &ctx) const;
   void ensureHorizontallyVisible(int index);
   bool handleSlashKey();
   bool handleEscapeKey();
-  bool hasDirectItemsForIndex(int idx) const;
-  bool allowAllFor(const CollectionConfig &cfg, int collIndex,
-                   bool hasSubs) const;
 
   int resolveDoubleClickIndexCandidate() const;
   QString derivePathFromIndex(int idx) const;
@@ -189,13 +183,9 @@ private:
 
   MediaItemWidget *m_selectedMediaItem = nullptr;
   SearchMode m_currentSearchMode = SearchMode::CurrentCollection;
-  QString m_currentSearchText;
-  static constexpr int ARROW_KEY_THROTTLE_MS = 260;
   bool m_isShuttingDown = false;
   bool m_allowArtworkDuringSelection = false;
-  bool m_selectionAtViewportEdge = false;
 
-  static constexpr double CONTINUOUS_SCROLL_ROW_DURATION_MS = 1500.0;
   void scheduleScrollbarRecovery();
   QMetaObject::Connection m_scrollbarRecoveryConn;
 
@@ -204,15 +194,6 @@ private:
   void scheduleSidebarMetadataUpdateIfVisible(int targetIndex,
                                               int initialDelayMs,
                                               int secondaryDelayMs);
-  void scheduleSearchBarRefocusIfNeeded();
-  void handleCollectionsSearchDebounce(bool stoppedTyping,
-                                       const QString &newSearchText);
-  void handleItemsSearchDebounce(bool startedTyping, bool stoppedTyping,
-                                 const QString &newSearchText);
-  void buildSearchDebounceState(bool &onCollections, bool &onItems,
-                                bool &startedTyping, bool &stoppedTyping,
-                                QString &newSearchText);
-  auto handleStartedTypingForCurrentMode() -> bool;
   QString titleForIndexInColl(int coll, int idx) const;
   void persistSelectionForIndex(int coll, int idx);
 

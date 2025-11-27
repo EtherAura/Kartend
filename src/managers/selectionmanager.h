@@ -31,7 +31,7 @@ struct SelectionManagerSetup {
   ViewportManager *viewportManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
   MainWindow *mainWindow = nullptr;
-  metadataSidebar *metadataSidebar = nullptr;
+  metadataSidebar *sidebar = nullptr;
   QWidget *itemsPage = nullptr;
   QWidget *gridContainer = nullptr;
   QScrollArea *itemScrollArea = nullptr;

@@ -17,6 +17,7 @@
 #include "mainwindow.h"
 #include "metadatasidebar.h"
 #include "navigationmanager.h"
+#include "propertyutils.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsdialog.h"
@@ -57,11 +58,19 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
   }
 
   QMainWindow::resizeEvent(event);
+
   if (getArtworkManager()) {
     if (auto *timerCoordinator = getArtworkManager()->getTimerCoordinator()) {
       timerCoordinator->scheduleLayoutUpdate();
     }
   }
+
+  // Re-center on current selection after resize completes
+  QTimer::singleShot(UIConstants::LAYOUT_UPDATE_DELAY + 50, this, [this]() {
+    if (!QApplication::closingDown() && getInteractionManager() != nullptr) {
+      getInteractionManager()->recenterCurrentSelection();
+    }
+  });
 }
 
 auto MainWindow::eventFilter(QObject *watched, QEvent *event) -> bool {

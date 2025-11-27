@@ -107,16 +107,6 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
     return;
   }
 
-  int targetYUnboundedLocal =
-      GridUtils::computeItemY(index, gridWidth, collection.itemHeight,
-                              collection.verticalSpacing,
-                              UIConstants::GRID_MARGINS) +
-      (collection.itemHeight / 2) - (viewportHeight / 2);
-  if (handlePendingInitialCenterIfNeeded(verticalScrollBar, index,
-                                         targetYUnboundedLocal, immediate)) {
-    return;
-  }
-
   int curY = verticalScrollBar->value();
   int distance = qAbs(targetY - curY);
 

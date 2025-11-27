@@ -122,7 +122,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     selectionSetup.viewportManager = m_viewportManager.get();
     selectionSetup.artworkManager = setup.artworkManager;
     selectionSetup.mainWindow = setup.mainWindow;
-    selectionSetup.metadataSidebar = setup.sidebar;
+    selectionSetup.sidebar = setup.sidebar;
     selectionSetup.itemsPage = setup.itemsPage;
     selectionSetup.gridContainer = setup.gridContainer;
     selectionSetup.itemScrollArea = setup.itemScrollArea;
@@ -672,95 +672,6 @@ void InteractionManager::onKeyboardStopRepeat(bool suppressRecentering) {
   }
 }
 
-// Computes search context flags including availability of "All collections"
-// under the specified constraints
-auto InteractionManager::computeSearchContext() const -> SearchContext {
-  SearchContext ctx{};
-
-  const int collIndex =
-      (m_currentCollectionIndex != nullptr) ? *m_currentCollectionIndex : -1;
-  if (m_collections == nullptr || collIndex < 0 ||
-      collIndex >= m_collections->size()) {
-    return ctx;
-  }
-
-  const CollectionConfig &cfg = (*m_collections)[collIndex];
-  const QList<int> subs = getSubcollections(collIndex);
-  ctx.hasSubs = !subs.isEmpty();
-
-  ctx.realDirectItems = hasDirectItemsForIndex(collIndex);
-
-  ctx.allowAll = allowAllFor(cfg, collIndex, ctx.hasSubs);
-
-  ctx.isContainer = ctx.hasSubs && !ctx.realDirectItems;
-  return ctx;
-}
-
-// Returns whether index has any direct items according to cache or filesystem
-auto InteractionManager::hasDirectItemsForIndex(int idx) const -> bool {
-  if (m_collections == nullptr || idx < 0 || idx >= m_collections->size()) {
-    return false;
-  }
-
-  const CollectionConfig &collCfg = (*m_collections)[idx];
-
-  qint64 direct = -1;
-  qint64 recursive = -1;
-  bool haveCounts = false;
-  if (m_sessionManager) {
-    haveCounts = m_sessionManager->getCollectionCounts(collCfg, *m_collections,
-                                                       direct, recursive);
-  }
-  if (haveCounts) {
-    return direct > 0;
-  }
-
-  QString mediaDir = (m_settingsManager != nullptr)
-                         ? SettingsUtils::expandConfigVariables(
-                               collCfg.mediaDirectory, collCfg.name)
-                         : collCfg.mediaDirectory;
-  if (mediaDir.trimmed().isEmpty()) {
-    return false;
-  }
-  QDir dir(mediaDir);
-  if (!dir.exists()) {
-    return false;
-  }
-  const QStringList filters =
-      collCfg.extensions.isEmpty() ? QStringList() : collCfg.extensions;
-  const QStringList files = filters.isEmpty()
-                                ? dir.entryList(QDir::Files)
-                                : dir.entryList(filters, QDir::Files);
-  return !files.isEmpty();
-}
-
-// Returns whether the "All collections" option should be allowed
-auto InteractionManager::allowAllFor(const CollectionConfig &cfg, int collIndex,
-                                     bool hasSubs) const -> bool {
-  const bool isRoot = (cfg.parentCollectionIndex == -1);
-  const bool isLeaf = !hasSubs;
-
-  if (isRoot) {
-    const int total = (m_collections != nullptr) ? m_collections->size() : 0;
-    for (int i = 0; i < total; ++i) {
-      if (i == collIndex) {
-        continue;
-      }
-      const CollectionConfig &rootCandidate = (*m_collections)[i];
-      if (rootCandidate.parentCollectionIndex == -1 &&
-          hasDirectItemsForIndex(i)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  if (hasSubs || isLeaf) {
-    return true;
-  }
-  return false;
-}
-
 // Handles global key presses; ESC clears search, navigates to parent only if
 // subcollection, otherwise does nothing
 auto InteractionManager::handleGlobalKeyPress(QKeyEvent *event) -> bool {
@@ -848,49 +759,6 @@ auto InteractionManager::handleEscapeKey() -> bool {
     return true;
   }
   return true;
-}
-
-// Builds the allowed search mode cycle respecting the constraints and desired
-// defaults
-auto InteractionManager::buildSearchModeCycle(const SearchContext &ctx) const
-    -> QVector<SearchMode> {
-  QVector<SearchMode> cycle;
-  cycle.reserve(3);
-
-  const int collIndex =
-      ((m_currentCollectionIndex != nullptr) ? *m_currentCollectionIndex : -1);
-  const bool valid = ((m_collections != nullptr) && collIndex >= 0 &&
-                      collIndex < m_collections->size());
-  bool isRoot = false;
-  if (valid) {
-    isRoot = ((*m_collections)[collIndex].parentCollectionIndex == -1);
-  }
-
-  if (isRoot) {
-    cycle << (ctx.hasSubs ? SearchMode::CurrentAndSubcollections
-                          : SearchMode::CurrentCollection);
-    if (ctx.allowAll) {
-      cycle << SearchMode::AllCollections;
-    }
-    return cycle;
-  }
-
-  if (ctx.hasSubs) {
-    cycle << SearchMode::CurrentAndSubcollections;
-    if (ctx.realDirectItems) {
-      cycle << SearchMode::CurrentCollection;
-    }
-    if (ctx.allowAll) {
-      cycle << SearchMode::AllCollections;
-    }
-    return cycle;
-  }
-
-  cycle << SearchMode::CurrentCollection;
-  if (ctx.allowAll) {
-    cycle << SearchMode::AllCollections;
-  }
-  return cycle;
 }
 
 void InteractionManager::handleImmediateSearchTextChanged(const QString &text) {
@@ -1315,6 +1183,19 @@ void InteractionManager::updateSelectionStateAfterMove(int newSelection) {
 void InteractionManager::centerItemVertically(int index, bool immediate) {
   if (m_viewportManager) {
     m_viewportManager->centerItemVertically(index, immediate);
+  }
+}
+
+void InteractionManager::recenterCurrentSelection() {
+  // Clear user scroll state to ensure centering isn't blocked
+  if (m_itemScrollArea != nullptr) {
+    m_itemScrollArea->setProperty(PropertyKeys::UserScrollActive, false);
+  }
+  setProperty(PropertyKeys::UserFreeScroll, false);
+
+  int selectedIndex = currentSelectedIndex();
+  if (selectedIndex >= 0) {
+    centerItemVertically(selectedIndex, true);
   }
 }
 
@@ -1747,115 +1628,6 @@ struct ResetClearedFlag {
 };
 } // namespace
 
-void InteractionManager::onSearchDebounceTimeout() {
-  if (m_searchBar == nullptr || m_navigationManager == nullptr) {
-    return;
-  }
-
-  bool onCollections = false;
-  bool onItems = false;
-  bool startedTyping = false;
-  bool stoppedTyping = false;
-  QString newSearchText;
-  buildSearchDebounceState(onCollections, onItems, startedTyping, stoppedTyping,
-                           newSearchText);
-
-  auto scheduleRefocusIfNeeded = [this]() {
-    scheduleSearchBarRefocusIfNeeded();
-  };
-
-  ResetClearedFlag reset{m_searchBar};
-
-  if (onCollections) {
-    handleCollectionsSearchDebounce(stoppedTyping, newSearchText);
-    return;
-  }
-
-  if (!onItems) {
-    return;
-  }
-  if (m_currentCollectionIndex == nullptr) {
-    return;
-  }
-
-  if (stoppedTyping) {
-    restoreViewedCollectionAfterSearchClear();
-    scheduleRefocusIfNeeded();
-    return;
-  }
-
-  handleItemsSearchDebounce(startedTyping, stoppedTyping, newSearchText);
-}
-
-void InteractionManager::buildSearchDebounceState(bool &onCollections,
-                                                  bool &onItems,
-                                                  bool &startedTyping,
-                                                  bool &stoppedTyping,
-                                                  QString &newSearchText) {
-  onCollections = (m_stackedWidget != nullptr && m_collectionPage != nullptr &&
-                   m_stackedWidget->currentWidget() == m_collectionPage);
-  onItems = (m_stackedWidget != nullptr && m_itemsPage != nullptr &&
-             m_stackedWidget->currentWidget() == m_itemsPage);
-
-  newSearchText = (m_searchBar != nullptr) ? m_searchBar->text() : QString();
-  const QString previousSearchText = m_currentSearchText;
-  m_currentSearchText = newSearchText;
-
-  const bool wasEmpty = previousSearchText.trimmed().isEmpty();
-  const bool isNowEmpty = newSearchText.trimmed().isEmpty();
-  startedTyping = wasEmpty && !isNowEmpty;
-  stoppedTyping = !wasEmpty && isNowEmpty;
-
-  updateSearchBarPlaceholder();
-}
-
-void InteractionManager::scheduleSearchBarRefocusIfNeeded() {
-  if (m_searchBar == nullptr) {
-    return;
-  }
-  const bool clearedByEscape =
-      m_searchBar->property(PropertyKeys::ClearedByEscape).toBool();
-  if (clearedByEscape) {
-    return;
-  }
-  QTimer::singleShot(0, this, [this]() {
-    if (m_searchBar != nullptr && m_searchBar->isVisible()) {
-      m_searchBar->setFocus(Qt::OtherFocusReason);
-    }
-  });
-  QTimer::singleShot(UIConstants::SEARCH_REFOCUS_DELAY_SHORT_MS, this,
-                     [this]() {
-                       if (m_searchBar != nullptr && m_searchBar->isVisible()) {
-                         m_searchBar->setFocus(Qt::OtherFocusReason);
-                       }
-                     });
-  QTimer::singleShot(UIConstants::SEARCH_REFOCUS_DELAY_LONG_MS, this, [this]() {
-    if (m_searchBar != nullptr && m_searchBar->isVisible()) {
-      m_searchBar->setFocus(Qt::OtherFocusReason);
-    }
-  });
-}
-
-void InteractionManager::handleCollectionsSearchDebounce(
-    bool stoppedTyping, const QString &newSearchText) {
-  if (stoppedTyping) {
-    m_navigationManager->filterItems({});
-    scheduleSearchBarRefocusIfNeeded();
-    return;
-  }
-  m_navigationManager->filterItems(newSearchText);
-}
-
-void InteractionManager::handleItemsSearchDebounce(
-    bool startedTyping, bool /*stoppedTyping*/, const QString &newSearchText) {
-  if (startedTyping) {
-    if (handleStartedTypingForCurrentMode()) {
-      return;
-    }
-  }
-  m_navigationManager->filterItems(newSearchText);
-}
-
 // Schedules repeated attempts plus a layout-complete hook to restore vertical
 // scrollbar visibility after clearing search
 void InteractionManager::scheduleScrollbarRecovery() {
@@ -2257,45 +2029,6 @@ void InteractionManager::handleSuccessfulSelection(int index) {
   centerItemVertically(index, immediate);
   if (m_scrollManager != nullptr) {
     m_scrollManager->updateVirtualView();
-  }
-}
-
-auto InteractionManager::handleStartedTypingForCurrentMode() -> bool {
-  switch (m_currentSearchMode) {
-  case SearchMode::CurrentAndSubcollections:
-    if (m_navigationManager != nullptr) {
-      m_navigationManager->loadCurrentAndSubcollections();
-      return true;
-    }
-    return false;
-  case SearchMode::AllCollections:
-    if (m_navigationManager != nullptr) {
-      m_navigationManager->loadAllCollectionsView();
-      return true;
-    }
-    return false;
-  case SearchMode::CurrentCollection:
-  default: {
-    if ((m_collections != nullptr) && m_currentCollectionIndex != nullptr &&
-        *m_currentCollectionIndex >= 0 &&
-        *m_currentCollectionIndex < m_collections->size() &&
-        (m_databaseManager != nullptr) && (m_settingsManager != nullptr)) {
-      CollectionConfig cfg = (*m_collections)[*m_currentCollectionIndex];
-      if (cfg.showAllSubcollectionItems) {
-        CollectionContext ctx;
-        ctx.currentIndex = *m_currentCollectionIndex;
-        cfg.mediaDirectory = SettingsUtils::expandConfigVariables(
-            cfg.mediaDirectory, cfg.name);
-        cfg.artworkDirectory = SettingsUtils::expandConfigVariables(
-            cfg.artworkDirectory, cfg.name);
-        ctx.config = cfg;
-        ctx.artworkDirectory = cfg.artworkDirectory;
-        m_databaseManager->loadItemsWithSubcollections(ctx, *m_collections);
-        return true;
-      }
-    }
-    return false;
-  }
   }
 }
 
