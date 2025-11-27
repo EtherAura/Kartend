@@ -1,3 +1,4 @@
+// Handles config file I/O, collection settings, and the settings dialog interface.
 #include "settingsmanager.h"
 #include "artworkmanager.h"
 #include "cachemanager.h"

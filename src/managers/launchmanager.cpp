@@ -1,3 +1,4 @@
+// Launches media items with configured emulators, handling RetroArch cores and parameters.
 #include "launchmanager.h"
 
 #include <QDateTime>

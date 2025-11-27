@@ -1,3 +1,4 @@
+// Manages smooth scroll animations with easing curves for vertical and horizontal scrolling.
 #include "animationmanager.h"
 #include "artworkmanager.h"
 #include "gridutils.h"

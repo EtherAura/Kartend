@@ -5,10 +5,7 @@
 #include <QPointer>
 
 class QEvent;
-class QKeyEvent;
 class QMouseEvent;
-class QWheelEvent;
-class QScrollBar;
 class QScrollArea;
 class QStackedWidget;
 class QWidget;

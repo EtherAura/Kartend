@@ -1,3 +1,4 @@
+// Handles search bar logic, search modes, and query debouncing for item filtering.
 #include "searchmanager.h"
 #include "databasemanager.h"
 #include "navigationmanager.h"

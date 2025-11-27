@@ -8,7 +8,6 @@
 
 QT_BEGIN_NAMESPACE
 class QScrollArea;
-class QScrollBar;
 class QWheelEvent;
 class QWidget;
 QT_END_NAMESPACE

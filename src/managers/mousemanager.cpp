@@ -1,3 +1,4 @@
+// Handles mouse input including click-hold scrolling, wheel events, and widget finding.
 #include "mousemanager.h"
 #include "collectionutils.h"
 #include "itemwidget.h"

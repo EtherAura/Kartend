@@ -1,3 +1,4 @@
+// Filters and dispatches input events to specialized handlers for mouse, keyboard, and wheel.
 #include "eventmanager.h"
 
 #include <QApplication>

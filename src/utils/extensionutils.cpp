@@ -1,3 +1,4 @@
+// Categorizes file extensions by media type (ROM, disc image, archive, etc.).
 #include "extensionutils.h"
 #include <QSet>
 #include <QString>

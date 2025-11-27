@@ -143,29 +143,29 @@ void MainWindow::setupManagerConnections() {
 
   loadingLabel = ui->loadingLabel;
 
-  NavigationManagerDependencies navDeps;
-  navDeps.interactionManager = getInteractionManager();
-  navDeps.settingsManager = getSettingsManager();
-  navDeps.sidebarManager = getSidebarManager();
-  navDeps.scrollManager = getScrollManager();
-  navDeps.databaseManager = getDatabaseManager();
-  navDeps.sessionManager = getSessionManager();
-  navDeps.artworkManager = getArtworkManager();
-  navDeps.sidebar = m_metadataSidebar;
-  navDeps.currentCollectionIndex = &currentCollectionIndex;
-  navDeps.collections = &m_collections;
-  navDeps.hierarchyCache = &m_hierarchyCache;
-  navDeps.generalSettings = &m_generalSettings;
-  navDeps.searchBar = searchBar;
-  navDeps.itemsPage = itemsPage;
-  navDeps.stackedWidget = stackedWidget;
-  navDeps.loadingLabel = loadingLabel;
-  navDeps.itemScrollArea = ui->itemScrollArea;
-  navDeps.gridContainer = gridContainer;
-  navDeps.isShuttingDown = [this]() { return isShuttingDown(); };
-  navDeps.refreshTitleCounts = [this]() { refreshTitleCounts(); };
+  NavigationManagerSetup navSetup;
+  navSetup.interactionManager = getInteractionManager();
+  navSetup.settingsManager = getSettingsManager();
+  navSetup.sidebarManager = getSidebarManager();
+  navSetup.scrollManager = getScrollManager();
+  navSetup.databaseManager = getDatabaseManager();
+  navSetup.sessionManager = getSessionManager();
+  navSetup.artworkManager = getArtworkManager();
+  navSetup.sidebar = m_metadataSidebar;
+  navSetup.currentCollectionIndex = &currentCollectionIndex;
+  navSetup.collections = &m_collections;
+  navSetup.hierarchyCache = &m_hierarchyCache;
+  navSetup.generalSettings = &m_generalSettings;
+  navSetup.searchBar = searchBar;
+  navSetup.itemsPage = itemsPage;
+  navSetup.stackedWidget = stackedWidget;
+  navSetup.loadingLabel = loadingLabel;
+  navSetup.itemScrollArea = ui->itemScrollArea;
+  navSetup.gridContainer = gridContainer;
+  navSetup.isShuttingDown = [this]() { return isShuttingDown(); };
+  navSetup.refreshTitleCounts = [this]() { refreshTitleCounts(); };
 
-  getNavigationManager()->setupReferences(navDeps);
+  getNavigationManager()->setupReferences(navSetup);
 
   getInteractionManager()->setupReferences(setup);
 

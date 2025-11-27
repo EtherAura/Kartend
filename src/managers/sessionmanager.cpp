@@ -1,3 +1,4 @@
+// Persists and restores selection state and item counts across application sessions.
 #include "sessionmanager.h"
 #include "collectionutils.h"
 #include "uiconstants.h"

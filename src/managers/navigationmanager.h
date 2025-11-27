@@ -21,7 +21,7 @@ class QLineEdit;
 class QStackedWidget;
 class QLabel;
 
-struct NavigationManagerDependencies {
+struct NavigationManagerSetup {
   InteractionManager *interactionManager = nullptr;
   SettingsManager *settingsManager = nullptr;
   SidebarManager *sidebarManager = nullptr;
@@ -55,7 +55,7 @@ public:
   int m_navigationDepth = 0;
 
   void restoreSelectionForCurrentCollection();
-  void setupReferences(const NavigationManagerDependencies &deps);
+  void setupReferences(const NavigationManagerSetup &setup);
 
 public slots:
   auto showCollectionItems(int collectionIndex) -> bool;

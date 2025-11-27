@@ -9,10 +9,6 @@
 
 #include <functional>
 
-QT_BEGIN_NAMESPACE
-class QTimer;
-QT_END_NAMESPACE
-
 class ScrollManager;
 class ArtworkManager;
 

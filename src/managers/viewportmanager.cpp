@@ -1,3 +1,4 @@
+// Manages viewport positioning, item centering, and scroll-to-visible operations.
 #include "viewportmanager.h"
 #include "animationmanager.h"
 #include "artworkmanager.h"

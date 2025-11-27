@@ -7,7 +7,6 @@
 
 #include "collectionutils.h"
 
-class InteractionManager;
 struct LaunchManagerSetup {
   QList<CollectionConfig> *collections = nullptr;
 };

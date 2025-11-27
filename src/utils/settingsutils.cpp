@@ -1,3 +1,4 @@
+// Resolves settings file paths and provides INI file handling utilities.
 #include "settingsutils.h"
 #include "uiconstants.h"
 #include "pathutils.h"

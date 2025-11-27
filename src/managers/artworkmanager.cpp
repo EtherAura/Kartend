@@ -1,4 +1,4 @@
-// IWYU-adjusted includes
+// Handles async artwork loading with QtConcurrent, caching, and viewport-aware prioritization.
 #include "artworkmanager.h"
 #include "cachemanager.h"
 #include "collectionutils.h"

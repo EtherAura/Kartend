@@ -1,3 +1,4 @@
+// Orchestrates user interactions, delegating to specialized managers for input handling.
 #include "interactionmanager.h"
 
 #include <QApplication>

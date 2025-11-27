@@ -1,3 +1,4 @@
+// Provides file path normalization, extension handling, and path manipulation.
 #include "pathutils.h"
 #include <QDir>
 #include <QFileInfo>

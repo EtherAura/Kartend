@@ -1,3 +1,4 @@
+// Controls metadata sidebar visibility, positioning, and content updates.
 #include "sidebarmanager.h"
 #include "artworkmanager.h"
 #include "itemwidget.h"

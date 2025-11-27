@@ -1,3 +1,4 @@
+// Owns and coordinates all manager lifecycles with controlled destruction order.
 #include "applicationmanager.h"
 
 #include "artworkmanager.h"

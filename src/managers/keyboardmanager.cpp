@@ -1,3 +1,4 @@
+// Handles keyboard input processing, arrow key navigation, and key repeat behavior.
 #include "keyboardmanager.h"
 
 #include <QApplication>

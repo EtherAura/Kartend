@@ -1,3 +1,4 @@
+// Manages collection switching, navigation stack, and subcollection hierarchy traversal.
 #include "navigationmanager.h"
 #include "artworkmanager.h"
 #include "databasemanager.h"
@@ -28,27 +29,27 @@ NavigationManager::NavigationManager(QObject *parent)
     : QObject(parent) {}
 
 void NavigationManager::setupReferences(
-    const NavigationManagerDependencies &deps) {
-  m_interactionManager = deps.interactionManager;
-  m_settingsManager = deps.settingsManager;
-  m_sidebarManager = deps.sidebarManager;
-  m_scrollManager = deps.scrollManager;
-  m_databaseManager = deps.databaseManager;
-  m_sessionManager = deps.sessionManager;
-  m_artworkManager = deps.artworkManager;
-  m_metadataSidebar = deps.sidebar;
-  m_currentCollectionIndex = deps.currentCollectionIndex;
-  m_collections = deps.collections;
-  m_hierarchyCache = deps.hierarchyCache;
-  m_generalSettings = deps.generalSettings;
-  m_searchBar = deps.searchBar;
-  m_itemsPage = deps.itemsPage;
-  m_stackedWidget = deps.stackedWidget;
-  m_loadingLabel = deps.loadingLabel;
-  m_itemScrollArea = deps.itemScrollArea;
-  m_gridContainer = deps.gridContainer;
-  m_isShuttingDown = deps.isShuttingDown;
-  m_refreshTitleCounts = deps.refreshTitleCounts;
+    const NavigationManagerSetup &setup) {
+  m_interactionManager = setup.interactionManager;
+  m_settingsManager = setup.settingsManager;
+  m_sidebarManager = setup.sidebarManager;
+  m_scrollManager = setup.scrollManager;
+  m_databaseManager = setup.databaseManager;
+  m_sessionManager = setup.sessionManager;
+  m_artworkManager = setup.artworkManager;
+  m_metadataSidebar = setup.sidebar;
+  m_currentCollectionIndex = setup.currentCollectionIndex;
+  m_collections = setup.collections;
+  m_hierarchyCache = setup.hierarchyCache;
+  m_generalSettings = setup.generalSettings;
+  m_searchBar = setup.searchBar;
+  m_itemsPage = setup.itemsPage;
+  m_stackedWidget = setup.stackedWidget;
+  m_loadingLabel = setup.loadingLabel;
+  m_itemScrollArea = setup.itemScrollArea;
+  m_gridContainer = setup.gridContainer;
+  m_isShuttingDown = setup.isShuttingDown;
+  m_refreshTitleCounts = setup.refreshTitleCounts;
 }
 
 NavigationManager::~NavigationManager() = default;

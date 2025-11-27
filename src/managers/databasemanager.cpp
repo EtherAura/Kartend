@@ -1,3 +1,4 @@
+// Coordinates SQLite database access via worker thread for collection metadata queries.
 #include <QCryptographicHash>
 #include <QDir>
 #include <QDirIterator>

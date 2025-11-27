@@ -1,3 +1,4 @@
+// Owns selection state and coordinates selection operations with visual feedback.
 #include "selectionmanager.h"
 
 #include <QApplication>

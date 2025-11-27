@@ -1,3 +1,4 @@
+// Provides debounced timer coordination for viewport and layout updates.
 #include "timerutils.h"
 
 #include "uiconstants.h"

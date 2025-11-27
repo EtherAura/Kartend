@@ -1,3 +1,4 @@
+// Manages virtual scrolling, widget pooling, and grid layout for large item collections.
 #include "scrollmanager.h"
 #include "artworkmanager.h"
 #include "databasemanager.h"

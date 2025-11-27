@@ -1,3 +1,4 @@
+// Executes SQLite queries on worker thread for paginated item loading and filtering.
 #include "querymanager.h"
 #include "pathutils.h"
 #include "sessionmanager.h"
