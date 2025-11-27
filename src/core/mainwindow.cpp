@@ -152,6 +152,7 @@ void MainWindow::setupManagerConnections() {
   navDeps.sidebar = m_metadataSidebar;
   navDeps.currentCollectionIndex = &currentCollectionIndex;
   navDeps.collections = &m_collections;
+  navDeps.hierarchyCache = &m_hierarchyCache;
   navDeps.generalSettings = &m_generalSettings;
   navDeps.searchBar = searchBar;
   navDeps.itemsPage = itemsPage;

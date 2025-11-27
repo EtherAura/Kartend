@@ -32,6 +32,7 @@ struct NavigationManagerDependencies {
   metadataSidebar *sidebar = nullptr;
   int *currentCollectionIndex = nullptr;
   QList<CollectionConfig> *collections = nullptr;
+  const CollectionHierarchyCache *hierarchyCache = nullptr;
   GeneralSettings *generalSettings = nullptr;
   QLineEdit *searchBar = nullptr;
   QWidget *itemsPage = nullptr;
@@ -100,6 +101,7 @@ private:
   ArtworkManager *m_artworkManager = nullptr;
   metadataSidebar *m_metadataSidebar = nullptr;
   int *m_currentCollectionIndex = nullptr;
+  const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   GeneralSettings *m_generalSettings = nullptr;
   QLineEdit *m_searchBar = nullptr;
   QWidget *m_itemsPage = nullptr;

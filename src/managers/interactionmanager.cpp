@@ -1278,6 +1278,13 @@ auto InteractionManager::getSubcollections(int parentIndex) const
   if (m_selectionManager) {
     return m_selectionManager->getSubcollections(parentIndex);
   }
+  // Fallback: use cache if available via MainWindow
+  if (m_mainWindow != nullptr) {
+    const auto &cache = m_mainWindow->getHierarchyCache();
+    if (cache.isValid()) {
+      return cache.directChildren(parentIndex);
+    }
+  }
   if (m_collections == nullptr) {
     return {};
   }

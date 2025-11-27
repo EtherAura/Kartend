@@ -39,6 +39,7 @@ void NavigationManager::setupReferences(
   m_metadataSidebar = deps.sidebar;
   m_currentCollectionIndex = deps.currentCollectionIndex;
   m_collections = deps.collections;
+  m_hierarchyCache = deps.hierarchyCache;
   m_generalSettings = deps.generalSettings;
   m_searchBar = deps.searchBar;
   m_itemsPage = deps.itemsPage;
@@ -1208,6 +1209,11 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub,
 
 // Returns the direct child subcollection indices for a parent collection
 auto NavigationManager::getSubcollections(int parentIndex) const -> QList<int> {
+  // Use cache for O(1) lookup if available
+  if (m_hierarchyCache != nullptr && m_hierarchyCache->isValid()) {
+    return m_hierarchyCache->directChildren(parentIndex);
+  }
+  // Fallback to O(n) scan
   if (m_collections == nullptr) {
     return {};
   }
@@ -1328,6 +1334,11 @@ void NavigationManager::loadAllCollectionsView() {
 
 auto NavigationManager::getAllDescendantCollections(int parentIndex) const
     -> QList<int> {
+  // Use cache for O(1) lookup if available
+  if (m_hierarchyCache != nullptr && m_hierarchyCache->isValid()) {
+    return m_hierarchyCache->allDescendants(parentIndex);
+  }
+  // Fallback to O(n) recursive scan
   QList<int> result;
   if ((m_collections == nullptr) || parentIndex < 0 ||
       parentIndex >= m_collections->size()) {

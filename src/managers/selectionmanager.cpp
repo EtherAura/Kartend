@@ -109,6 +109,14 @@ void SelectionManager::clearSelectionAndFocus() {
 }
 
 QList<int> SelectionManager::getSubcollections(int parentIndex) const {
+  // Use cache for O(1) lookup if available via MainWindow
+  if (m_mainWindow != nullptr) {
+    const auto &cache = m_mainWindow->getHierarchyCache();
+    if (cache.isValid()) {
+      return cache.directChildren(parentIndex);
+    }
+  }
+  // Fallback to O(n) scan
   if (m_collections == nullptr) {
     return {};
   }
