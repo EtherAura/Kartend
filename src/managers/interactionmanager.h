@@ -174,6 +174,15 @@ private:
   void scheduleScrollbarRecovery();
   QMetaObject::Connection m_scrollbarRecoveryConn;
 
+  // Signal connection helpers for setupReferences
+  void connectSearchManagerSignals();
+  void connectSelectionManagerSignals();
+  void connectKeyboardManagerSignals();
+  void connectAnimationManagerSignals();
+  void connectMouseManagerSignals();
+  void connectViewportManagerSignals();
+  void connectEventManagerSignals();
+
   void applySelectionStateForIndex(int idx);
   void finalizeRestoreFlagsAndFocus();
   void scheduleSidebarMetadataUpdateIfVisible(int targetIndex,

@@ -19,6 +19,10 @@ class DatabaseManager;
 class QPropertyAnimation;
 class ArtworkManager;
 
+namespace TimerUtils {
+class DebouncedTimer;
+}
+
 struct VirtualMetrics {
   int itemWidth = 0;
   int itemHeight = 0;
@@ -39,6 +43,7 @@ struct ScrollManagerSetup {
   QScrollArea *mediaScrollArea = nullptr;
   ArtworkManager *artworkManager = nullptr;
   const QList<CollectionConfig> *collections = nullptr;
+  const CollectionHierarchyCache *hierarchyCache = nullptr;
 };
 
 class ScrollManager : public QObject {
@@ -117,15 +122,38 @@ private:
   void rebuildFilteredIndices();
 
   // Widget pool for recycling MediaItemWidgets
-  static constexpr int MAX_POOL_SIZE = 50;
   QList<MediaItemWidget *> m_widgetPool;
   MediaItemWidget *acquireWidget();
   void releaseWidget(MediaItemWidget *widget);
   void clearWidgetPool();
+  [[nodiscard]] int calculateOptimalPoolSize() const;
+
+  // Widget pool metrics for monitoring
+  struct PoolMetrics {
+    int hits = 0;      // Reused from pool
+    int misses = 0;    // Created new
+    int releases = 0;  // Returned to pool
+    int discards = 0;  // Pool full, deleted
+    
+    [[nodiscard]] double hitRate() const {
+      int total = hits + misses;
+      return total > 0 ? static_cast<double>(hits) / total : 0.0;
+    }
+    
+    void reset() { hits = misses = releases = discards = 0; }
+  };
+  PoolMetrics m_poolMetrics;
+
+public:
+  [[nodiscard]] const PoolMetrics &getPoolMetrics() const { return m_poolMetrics; }
+  void resetPoolMetrics() { m_poolMetrics.reset(); }
+
+private:
 
   QWidget *m_gridContainer = nullptr;
   QScrollArea *m_mediaScrollArea = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
+  const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   QWidget *m_virtualContainer = nullptr;
   QStringList m_filePaths;
   QHash<QString, QString> m_fileNames;
@@ -137,7 +165,7 @@ private:
   const QList<CollectionConfig> *m_collections = nullptr;
   CollectionContext m_context;
   VirtualMetrics m_metrics;
-  QTimer *m_scrollTimer = nullptr;
+  QTimer *m_scrollTimer = nullptr;  // Throttle timer (not debounce)
   QTimer *m_arrowKeyViewUpdateTimer = nullptr;
   int m_totalItems = 0;
   qint64 m_lastScrollTime = 0;
@@ -151,7 +179,7 @@ private:
   int m_lastSelectedRow = -1;
   int m_selectionDirection = 0;
   bool m_userScrollbarActive = false;
-  QTimer *m_userScrollIdleTimer = nullptr;
+  TimerUtils::DebouncedTimer *m_userScrollIdleTimer = nullptr;
   int m_committedSelectedIndex = -1;
   bool m_forceSelectionOverlayVisible = false;
   bool m_restartingSelectionAnim = false;  // Prevents finish callback interference

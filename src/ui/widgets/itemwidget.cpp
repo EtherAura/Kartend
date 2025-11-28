@@ -1,3 +1,4 @@
+// Media item widget displaying artwork, title, and selection state with pulse animation.
 #include "itemwidget.h"
 #include "propertyutils.h"
 #include "uiconstants.h"

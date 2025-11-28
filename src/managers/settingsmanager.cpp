@@ -22,6 +22,14 @@
 #include <algorithm>
 #include <QStandardPaths>
 
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcSettingsManager, "kartend.settingsmanager")
+#define debugLog(msg) qCDebug(lcSettingsManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
+
 // Construct settings manager and initialize QSettings.
 SettingsManager::SettingsManager(SessionManager *sessionManager,
                                  ArtworkManager *artworkManager,
@@ -179,6 +187,9 @@ void SettingsManager::loadCollections(
     config.itemWidth = settings.value("itemWidth", UIConstants::DEFAULT_ITEM_WIDTH).toInt();
     config.itemHeight = settings.value("itemHeight", UIConstants::DEFAULT_ITEM_HEIGHT).toInt();
     config.fontSize = settings.value("fontSize", UIConstants::DEFAULT_FONT_SIZE).toInt();
+
+    // Validate and clamp numeric values to acceptable ranges
+    config.clampValues();
 
     // Use the internal name (with slashes) for hierarchy processing
     tempCollections[internalGroupName] = config;

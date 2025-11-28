@@ -1,4 +1,5 @@
-#pragma once
+#ifndef ITEMWIDGET_H
+#define ITEMWIDGET_H
 
 #include <QElapsedTimer>
 #include <QFrame>
@@ -104,3 +105,5 @@ private:
   void scheduleSelectionBorderUpdate();
   void applyDimensions();
 };
+
+#endif // ITEMWIDGET_H

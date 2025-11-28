@@ -5,12 +5,19 @@
 #include "cachemanager.h"
 #include "databasemanager.h"
 #include "interactionmanager.h"
-#include "mainwindow.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "sidebarmanager.h"
+
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcApplicationManager, "kartend.applicationmanager")
+#define debugLog(msg) qCDebug(lcApplicationManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
 
 ApplicationManager::ApplicationManager(QObject *parent) : QObject(parent) {}
 
@@ -48,10 +55,6 @@ void ApplicationManager::initialize() {
 
   // 9. InteractionManager
   m_interactionManager = std::make_unique<InteractionManager>(this);
-}
-
-void ApplicationManager::setupMainWindow(MainWindow *window) {
-  // This method will be populated as we move logic from MainWindow
 }
 
 ArtworkManager *ApplicationManager::getArtworkManager() const {

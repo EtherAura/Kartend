@@ -23,7 +23,6 @@ public:
   ~ApplicationManager() override;
 
   void initialize();
-  void setupMainWindow(MainWindow *window);
 
   // Getters
   ArtworkManager *getArtworkManager() const;

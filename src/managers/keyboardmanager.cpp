@@ -10,10 +10,17 @@
 #include <algorithm>
 
 #include "collectionutils.h"
-#include "mainwindow.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"
 #include "uiconstants.h"
+
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcKeyboardManager, "kartend.keyboardmanager")
+#define debugLog(msg) qCDebug(lcKeyboardManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
 
 KeyboardManager::KeyboardManager(QObject *parent) : QObject(parent) {
   initTimers();

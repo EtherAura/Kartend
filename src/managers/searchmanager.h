@@ -3,6 +3,7 @@
 
 #include "collectionutils.h"
 #include "searchutils.h"
+#include "timerutils.h"
 #include <QLineEdit>
 #include <QMetaObject>
 #include <QObject>
@@ -10,7 +11,6 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QStackedWidget>
-#include <QTimer>
 
 class DatabaseManager;
 class NavigationManager;
@@ -30,6 +30,7 @@ struct SearchManagerSetup {
   QWidget *itemsPage = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
+  const CollectionHierarchyCache *hierarchyCache = nullptr;
 };
 
 class SearchManager : public QObject {
@@ -67,7 +68,7 @@ public:
   void setPreSearchSelectedIndex(int idx) { m_preSearchSelectedIndex = idx; }
 
   // Timer access for InteractionManager
-  QTimer *debounceTimer() const { return m_searchDebounceTimer; }
+  TimerUtils::DebouncedTimer *debounceTimer() const { return m_searchDebounceTimer; }
   QMetaObject::Connection &itemsLoadedConnection() { return m_searchItemsLoadedConn; }
 
   // Helpers
@@ -90,6 +91,7 @@ private:
   NavigationManager *m_navigationManager = nullptr;
   ScrollManager *m_scrollManager = nullptr;
   SettingsManager *m_settingsManager = nullptr;
+  const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   QLineEdit *m_searchBar = nullptr;
   QPushButton *m_searchModeButton = nullptr;
   QScrollArea *m_itemScrollArea = nullptr;
@@ -99,7 +101,7 @@ private:
   QList<CollectionConfig> *m_collections = nullptr;
   int *m_currentCollectionIndex = nullptr;
 
-  QTimer *m_searchDebounceTimer = nullptr;
+  TimerUtils::DebouncedTimer *m_searchDebounceTimer = nullptr;
   QMetaObject::Connection m_searchItemsLoadedConn;
 
   SearchMode m_currentSearchMode = SearchMode::CurrentCollection;

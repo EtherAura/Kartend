@@ -7,6 +7,14 @@
 #include <QMessageBox>
 #include <QProcess>
 
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcLaunchManager, "kartend.launchmanager")
+#define debugLog(msg) qCDebug(lcLaunchManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
+
 LaunchManager::LaunchManager(QObject *parent) : QObject(parent) {}
 
 void LaunchManager::setupReferences(const LaunchManagerSetup &setup) {

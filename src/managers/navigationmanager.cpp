@@ -3,7 +3,6 @@
 #include "artworkmanager.h"
 #include "databasemanager.h"
 #include "interactionmanager.h"
-#include "mainwindow.h"
 #include "metadatasidebar.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"
@@ -23,7 +22,13 @@
 #include <QTimer>
 #include <algorithm>
 
-
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcNavigationManager, "kartend.navigationmanager")
+#define debugLog(msg) qCDebug(lcNavigationManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
 
 NavigationManager::NavigationManager(QObject *parent)
     : QObject(parent) {}

@@ -2,7 +2,6 @@
 #include "cachemanager.h"
 #include "uiconstants.h"
 
-
 #include <QApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -13,6 +12,14 @@
 #include <QJsonObject>
 #include <QStandardPaths>
 #include <QDateTime>
+
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcCacheManager, "kartend.cachemanager")
+#define debugLog(msg) qCDebug(lcCacheManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
 
 CacheManager::CacheManager() {
   artworkCache.setMaxCost(UIConstants::PIXMAP_CACHE_KB * 1024);

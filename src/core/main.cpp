@@ -1,3 +1,4 @@
+// Application entry point that initializes Qt and displays the main window.
 #include <QApplication>
 
 #include "artworkmanager.h"

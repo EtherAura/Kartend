@@ -4,6 +4,7 @@
 #include <QApplication>
 #include <QDateTime>
 #include <QFileInfo>
+#include <QLineEdit>
 #include <QMouseEvent>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -14,7 +15,6 @@
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "itemwidget.h"
-#include "mainwindow.h"
 #include "metadatasidebar.h"
 #include "mousemanager.h"
 #include "navigationmanager.h"
@@ -25,6 +25,14 @@
 #include "sidebarmanager.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
+
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcSelectionManager, "kartend.selectionmanager")
+#define debugLog(msg) qCDebug(lcSelectionManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
 
 SelectionManager::SelectionManager(QObject *parent) : QObject(parent) {}
 

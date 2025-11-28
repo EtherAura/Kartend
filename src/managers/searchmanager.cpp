@@ -11,10 +11,18 @@
 #include <QDir>
 #include <QScrollBar>
 
+#ifdef KARTEND_DEBUG_LOGGING
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcSearchManager, "kartend.searchmanager")
+#define debugLog(msg) qCDebug(lcSearchManager) << msg
+#else
+#define debugLog(msg) do {} while(0)
+#endif
+
 SearchManager::SearchManager(QObject *parent) : QObject(parent) {
-  m_searchDebounceTimer = new QTimer(this);
-  m_searchDebounceTimer->setSingleShot(true);
-  connect(m_searchDebounceTimer, &QTimer::timeout, this,
+  m_searchDebounceTimer = new TimerUtils::DebouncedTimer(
+      UIConstants::Search::DEBOUNCE_DELAY_MS, this);
+  connect(m_searchDebounceTimer, &TimerUtils::DebouncedTimer::triggered, this,
           &SearchManager::performDebouncedSearch);
 }
 
@@ -25,6 +33,7 @@ void SearchManager::setupReferences(const SearchManagerSetup &setup) {
   m_navigationManager = setup.navigationManager;
   m_scrollManager = setup.scrollManager;
   m_settingsManager = setup.settingsManager;
+  m_hierarchyCache = setup.hierarchyCache;
   m_searchBar = setup.searchBar;
   m_searchModeButton = setup.searchModeButton;
   m_itemScrollArea = setup.itemScrollArea;
@@ -170,8 +179,14 @@ SearchContext SearchManager::computeSearchContext() const {
   }
 
   const CollectionConfig &cfg = (*m_collections)[collIndex];
-  const QList<int> subs =
-      CollectionUtils::directChildrenOf(collIndex, *m_collections);
+  QList<int> subs;
+  // Use cache for O(1) lookup if available
+  if (m_hierarchyCache != nullptr && m_hierarchyCache->isValid()) {
+    subs = m_hierarchyCache->directChildren(collIndex);
+  } else {
+    // Fallback to O(n) scan
+    subs = CollectionUtils::directChildrenOf(collIndex, *m_collections);
+  }
   ctx.hasSubs = !subs.isEmpty();
 
   ctx.realDirectItems = hasDirectItemsForIndex(collIndex);
@@ -296,7 +311,7 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
 
   if (!hasSearch) {
     if (m_searchDebounceTimer != nullptr) {
-      m_searchDebounceTimer->stop();
+      m_searchDebounceTimer->cancel();
     }
     if (m_searchItemsLoadedConn != QMetaObject::Connection()) {
       QObject::disconnect(m_searchItemsLoadedConn);
@@ -336,7 +351,8 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
   }
 
   if (m_searchDebounceTimer != nullptr) {
-    m_searchDebounceTimer->start(UIConstants::SEARCH_TYPING_DEBOUNCE_MS);
+    m_searchDebounceTimer->setInterval(UIConstants::SEARCH_TYPING_DEBOUNCE_MS);
+    m_searchDebounceTimer->trigger();
   }
 }
 

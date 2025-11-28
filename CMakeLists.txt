@@ -104,6 +104,7 @@ set(HEADERS
   ${SRC_DIR}/utils/extensionutils.h
   ${SRC_DIR}/utils/timerutils.h
   ${SRC_DIR}/utils/propertyutils.h
+  ${SRC_DIR}/utils/errorutils.h
 )
 
 set(UI_FILES
