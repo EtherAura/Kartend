@@ -935,6 +935,12 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ((ui->hideSubcollectionTitlesCheckBox) &&
        ui->hideSubcollectionTitlesCheckBox->isChecked() !=
            originalConfig.hideSubcollectionTitles) ||
+      ((ui->includeContentSubfoldersCheckBox) &&
+       ui->includeContentSubfoldersCheckBox->isChecked() !=
+           originalConfig.includeContentSubfolders) ||
+      ((ui->includeArtworkSubfoldersCheckBox) &&
+       ui->includeArtworkSubfoldersCheckBox->isChecked() !=
+           originalConfig.includeArtworkSubfolders) ||
       ((ui->fontSizeSpinBox) &&
        ui->fontSizeSpinBox->value() != originalConfig.fontSize));
 }

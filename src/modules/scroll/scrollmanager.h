@@ -103,6 +103,8 @@ public:
   }
   [[nodiscard]] const QStringList &getFilePaths() const { return m_filePaths; }
   [[nodiscard]] const QHash<QString, QString> &getFileNames() const { return m_fileNames; }
+  [[nodiscard]] int getSubcollectionCount() const { return m_subcollections.size(); }
+  [[nodiscard]] int getVirtualFolderCount() const { return m_virtualFolders.size(); }
   [[nodiscard]] QString filePathForVisualIndex(int visualIndex) const;
   void primeLayoutFor(const CollectionConfig &config);
 
