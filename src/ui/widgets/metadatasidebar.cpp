@@ -12,8 +12,8 @@
 
 // Creates metadata sidebar with scrollable layout for displaying item
 // information and artwork
-metadataSidebar::metadataSidebar(QWidget *parent)
-    : QWidget(parent), ui(new Ui::metadataSidebar) {
+MetadataSidebar::MetadataSidebar(QWidget *parent)
+    : QWidget(parent), ui(new Ui::MetadataSidebar) {
   ui->setupUi(this);
   setAutoFillBackground(true);
 
@@ -31,15 +31,15 @@ metadataSidebar::metadataSidebar(QWidget *parent)
   contentPalette.setColor(QPalette::Window, palette().color(QPalette::Window));
   ui->contentWidget->setPalette(contentPalette);
 
-  setFixedWidth(UIConstants::FIXED_SIDEBAR_WIDTH);
+  setFixedWidth(UIConstants::Sidebar::FIXED_WIDTH);
   clearMetadata();
 }
 
-metadataSidebar::~metadataSidebar() { delete ui; }
+MetadataSidebar::~MetadataSidebar() { delete ui; }
 
 // Sets metadata fields and loads centered artwork from a sibling "artwork"
 // directory if present
-void metadataSidebar::setmetadata(const QString &filePath,
+void MetadataSidebar::setMetadata(const QString &filePath,
                                   const QString &itemName) {
   if (filePath.isEmpty()) {
     clearMetadata();
@@ -51,8 +51,8 @@ void metadataSidebar::setmetadata(const QString &filePath,
 
   QFileInfo fileInfo(filePath);
 
-  QPixmap defaultPixmap(UIConstants::METADATA_ARTWORK_SIZE,
-                        UIConstants::METADATA_ARTWORK_SIZE);
+  QPixmap defaultPixmap(UIConstants::Metadata::ARTWORK_SIZE,
+                        UIConstants::Metadata::ARTWORK_SIZE);
   defaultPixmap.fill(palette().color(QPalette::Mid));
   ui->artworkDisplay->setPixmap(defaultPixmap);
 
@@ -74,18 +74,18 @@ void metadataSidebar::setmetadata(const QString &filePath,
         QPixmap artwork(artworkPath);
         if (!artwork.isNull()) {
           QPixmap scaledArtwork =
-              artwork.scaled(UIConstants::METADATA_ARTWORK_SIZE,
-                             UIConstants::METADATA_ARTWORK_SIZE,
+              artwork.scaled(UIConstants::Metadata::ARTWORK_SIZE,
+                             UIConstants::Metadata::ARTWORK_SIZE,
                              Qt::KeepAspectRatio, Qt::SmoothTransformation);
-          QPixmap centeredArtwork(UIConstants::METADATA_ARTWORK_SIZE,
-                                  UIConstants::METADATA_ARTWORK_SIZE);
+          QPixmap centeredArtwork(UIConstants::Metadata::ARTWORK_SIZE,
+                                  UIConstants::Metadata::ARTWORK_SIZE);
           centeredArtwork.fill(palette().color(QPalette::Base));
 
           QPainter painter(&centeredArtwork);
           const int centerX =
-              (UIConstants::METADATA_ARTWORK_SIZE - scaledArtwork.width()) / 2;
+              (UIConstants::Metadata::ARTWORK_SIZE - scaledArtwork.width()) / 2;
           const int centerY =
-              (UIConstants::METADATA_ARTWORK_SIZE - scaledArtwork.height()) / 2;
+              (UIConstants::Metadata::ARTWORK_SIZE - scaledArtwork.height()) / 2;
           painter.drawPixmap(centerX, centerY, scaledArtwork);
           painter.end();
 
@@ -112,21 +112,21 @@ void metadataSidebar::setmetadata(const QString &filePath,
 }
 
 // Clears all metadata fields and displays default "No item selected" state
-void metadataSidebar::clearMetadata() {
+void MetadataSidebar::clearMetadata() {
   ui->itemNameValue->setText("No item selected");
   ui->filePathValue->setText("-");
   ui->fileSizeValue->setText("-");
   ui->lastModifiedValue->setText("-");
   ui->fileExtensionValue->setText("-");
-  QPixmap emptyPixmap(UIConstants::METADATA_ARTWORK_SIZE,
-                      UIConstants::METADATA_ARTWORK_SIZE);
+  QPixmap emptyPixmap(UIConstants::Metadata::ARTWORK_SIZE,
+                      UIConstants::Metadata::ARTWORK_SIZE);
   emptyPixmap.fill(palette().color(QPalette::Mid));
   ui->artworkDisplay->setPixmap(emptyPixmap);
 }
 
 // Updates file information fields including size, modification date, and file
 // type
-void metadataSidebar::updateFileInfo(const QString &filePath) {
+void MetadataSidebar::updateFileInfo(const QString &filePath) {
   QFileInfo fileInfo(filePath);
 
   if (!fileInfo.exists()) {
@@ -138,7 +138,7 @@ void metadataSidebar::updateFileInfo(const QString &filePath) {
   }
 
   QString displayPath = PathUtils::truncatePathForDisplay(
-      filePath, UIConstants::PATH_TRUNCATE_LENGTH);
+      filePath, UIConstants::Metadata::PATH_TRUNCATE_LENGTH);
   ui->filePathValue->setText(displayPath);
   ui->filePathValue->setToolTip(filePath);
 
@@ -155,10 +155,10 @@ void metadataSidebar::updateFileInfo(const QString &filePath) {
 
 // Formats file size into human-readable string with appropriate units (KB, MB,
 // GB)
-auto metadataSidebar::formatFileSize(qint64 bytes) -> QString {
-  const qint64 kiloBytes = UIConstants::FILE_SIZE_KB;
-  const qint64 megaBytes = kiloBytes * UIConstants::FILE_SIZE_KB;
-  const qint64 gigaBytes = megaBytes * UIConstants::FILE_SIZE_KB;
+auto MetadataSidebar::formatFileSize(qint64 bytes) -> QString {
+  const qint64 kiloBytes = UIConstants::Metadata::FILE_SIZE_KB;
+  const qint64 megaBytes = kiloBytes * UIConstants::Metadata::FILE_SIZE_KB;
+  const qint64 gigaBytes = megaBytes * UIConstants::Metadata::FILE_SIZE_KB;
 
   if (bytes >= gigaBytes) {
     return QString::number(bytes / static_cast<double>(gigaBytes), 'f', 2) +
@@ -176,8 +176,8 @@ auto metadataSidebar::formatFileSize(qint64 bytes) -> QString {
 }
 
 // Apply horzontal scrolling policy
-void metadataSidebar::setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy) {
-  if (ui->scrollArea != nullptr) {
+void MetadataSidebar::setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy) {
+  if (ui->scrollArea) {
     ui->scrollArea->setHorizontalScrollBarPolicy(policy);
     ui->scrollArea->updateGeometry();
     QApplication::processEvents();

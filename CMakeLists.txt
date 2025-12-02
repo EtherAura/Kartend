@@ -40,26 +40,38 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 set(SOURCES
   ${SRC_DIR}/core/main.cpp
-  ${SRC_DIR}/managers/applicationmanager.cpp
   ${SRC_DIR}/core/mainwindow.cpp
-  ${SRC_DIR}/managers/artworkmanager.cpp
-  ${SRC_DIR}/managers/cachemanager.cpp
-  ${SRC_DIR}/managers/databasemanager.cpp
-  ${SRC_DIR}/managers/querymanager.cpp
-  ${SRC_DIR}/managers/navigationmanager.cpp
-  ${SRC_DIR}/managers/settingsmanager.cpp
-  ${SRC_DIR}/managers/sidebarmanager.cpp
-  ${SRC_DIR}/managers/sessionmanager.cpp
-  ${SRC_DIR}/managers/scrollmanager.cpp
-  ${SRC_DIR}/managers/animationmanager.cpp
-  ${SRC_DIR}/managers/searchmanager.cpp
-  ${SRC_DIR}/managers/selectionmanager.cpp
-  ${SRC_DIR}/managers/keyboardmanager.cpp
-  ${SRC_DIR}/managers/mousemanager.cpp
-  ${SRC_DIR}/managers/launchmanager.cpp
-  ${SRC_DIR}/managers/viewportmanager.cpp
-  ${SRC_DIR}/managers/eventmanager.cpp
-  ${SRC_DIR}/managers/interactionmanager.cpp
+  ${SRC_DIR}/modules/animation/animationmanager.cpp
+  ${SRC_DIR}/modules/application/applicationmanager.cpp
+  ${SRC_DIR}/modules/artwork/artworkmanager.cpp
+  ${SRC_DIR}/modules/cache/cachemanager.cpp
+  ${SRC_DIR}/modules/database/databasemanager.cpp
+  ${SRC_DIR}/modules/event/eventmanager.cpp
+  ${SRC_DIR}/modules/interaction/interactionmanager.cpp
+  ${SRC_DIR}/modules/interaction/arrownavigationhandler.cpp
+  ${SRC_DIR}/modules/interaction/interactionstateholder.cpp
+  ${SRC_DIR}/modules/keyboard/keyboardmanager.cpp
+  ${SRC_DIR}/modules/launch/launchmanager.cpp
+  ${SRC_DIR}/modules/mouse/mousemanager.cpp
+  ${SRC_DIR}/modules/navigation/navigationmanager.cpp
+  ${SRC_DIR}/modules/overlay/selectionoverlaymanager.cpp
+  ${SRC_DIR}/modules/query/querymanager.cpp
+  ${SRC_DIR}/modules/restore/selectionrestoremanager.cpp
+  ${SRC_DIR}/modules/scroll/scrollmanager.cpp
+  ${SRC_DIR}/modules/scroll/arrowkeyscrollhelper.cpp
+  ${SRC_DIR}/modules/scroll/virtualcontainermanager.cpp
+  ${SRC_DIR}/modules/scroll/selectioncoordinator.cpp
+  ${SRC_DIR}/modules/scroll/scrolleventhandler.cpp
+  ${SRC_DIR}/modules/scroll/gridlayoutcalculator.cpp
+  ${SRC_DIR}/modules/scroll/itemwidgetfactory.cpp
+  ${SRC_DIR}/modules/filter/filtermanager.cpp
+  ${SRC_DIR}/modules/widgetpool/widgetpoolmanager.cpp
+  ${SRC_DIR}/modules/search/searchmanager.cpp
+  ${SRC_DIR}/modules/selection/selectionmanager.cpp
+  ${SRC_DIR}/modules/session/sessionmanager.cpp
+  ${SRC_DIR}/modules/settings/settingsmanager.cpp
+  ${SRC_DIR}/modules/sidebar/sidebarmanager.cpp
+  ${SRC_DIR}/modules/viewport/viewportmanager.cpp
   ${SRC_DIR}/ui/dialogs/settingsdialog.cpp
   ${SRC_DIR}/ui/widgets/metadatasidebar.cpp
   ${SRC_DIR}/ui/widgets/itemwidget.cpp
@@ -67,29 +79,43 @@ set(SOURCES
   ${SRC_DIR}/utils/settingsutils.cpp
   ${SRC_DIR}/utils/extensionutils.cpp
   ${SRC_DIR}/utils/timerutils.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/artworkutils.cpp
 )
 
 set(HEADERS
-  ${SRC_DIR}/managers/applicationmanager.h
   ${SRC_DIR}/core/mainwindow.h
-  ${SRC_DIR}/managers/artworkmanager.h
-  ${SRC_DIR}/managers/cachemanager.h
-  ${SRC_DIR}/managers/databasemanager.h
-  ${SRC_DIR}/managers/querymanager.h
-  ${SRC_DIR}/managers/navigationmanager.h
-  ${SRC_DIR}/managers/settingsmanager.h
-  ${SRC_DIR}/managers/sidebarmanager.h
-  ${SRC_DIR}/managers/sessionmanager.h
-  ${SRC_DIR}/managers/scrollmanager.h
-  ${SRC_DIR}/managers/animationmanager.h
-  ${SRC_DIR}/managers/searchmanager.h
-  ${SRC_DIR}/managers/selectionmanager.h
-  ${SRC_DIR}/managers/keyboardmanager.h
-  ${SRC_DIR}/managers/mousemanager.h
-  ${SRC_DIR}/managers/launchmanager.h
-  ${SRC_DIR}/managers/viewportmanager.h
-  ${SRC_DIR}/managers/eventmanager.h
-  ${SRC_DIR}/managers/interactionmanager.h
+  ${SRC_DIR}/modules/animation/animationmanager.h
+  ${SRC_DIR}/modules/application/applicationmanager.h
+  ${SRC_DIR}/modules/artwork/artworkmanager.h
+  ${SRC_DIR}/modules/cache/cachemanager.h
+  ${SRC_DIR}/modules/database/databasemanager.h
+  ${SRC_DIR}/modules/event/eventmanager.h
+  ${SRC_DIR}/modules/interaction/interactionmanager.h
+  ${SRC_DIR}/modules/interaction/arrownavigationhandler.h
+  ${SRC_DIR}/modules/interaction/interactionstateholder.h
+  ${SRC_DIR}/modules/keyboard/keyboardmanager.h
+  ${SRC_DIR}/modules/launch/launchmanager.h
+  ${SRC_DIR}/modules/mouse/mousemanager.h
+  ${SRC_DIR}/modules/navigation/navigationmanager.h
+  ${SRC_DIR}/modules/overlay/selectionoverlaymanager.h
+  ${SRC_DIR}/modules/query/querymanager.h
+  ${SRC_DIR}/modules/restore/selectionrestoremanager.h
+  ${SRC_DIR}/modules/scroll/scrollmanager.h
+  ${SRC_DIR}/modules/scroll/arrowkeyscrollhelper.h
+  ${SRC_DIR}/modules/scroll/virtualcontainermanager.h
+  ${SRC_DIR}/modules/scroll/selectioncoordinator.h
+  ${SRC_DIR}/modules/scroll/scrolleventhandler.h
+  ${SRC_DIR}/modules/scroll/gridlayoutcalculator.h
+  ${SRC_DIR}/modules/scroll/itemwidgetfactory.h
+  ${SRC_DIR}/modules/filter/filtermanager.h
+  ${SRC_DIR}/modules/widgetpool/widgetpoolmanager.h
+  ${SRC_DIR}/modules/search/searchmanager.h
+  ${SRC_DIR}/modules/selection/selectionmanager.h
+  ${SRC_DIR}/modules/session/sessionmanager.h
+  ${SRC_DIR}/modules/settings/settingsmanager.h
+  ${SRC_DIR}/modules/sidebar/sidebarmanager.h
+  ${SRC_DIR}/modules/viewport/viewportmanager.h
   ${SRC_DIR}/ui/uiconstants.h
   ${SRC_DIR}/ui/dialogs/settingsdialog.h
   ${SRC_DIR}/ui/widgets/metadatasidebar.h
@@ -105,6 +131,11 @@ set(HEADERS
   ${SRC_DIR}/utils/timerutils.h
   ${SRC_DIR}/utils/propertyutils.h
   ${SRC_DIR}/utils/errorutils.h
+  ${SRC_DIR}/utils/applicationcontext.h
+  ${SRC_DIR}/utils/stateutils.h
+  ${SRC_DIR}/utils/setuputils.h
+  ${SRC_DIR}/utils/artworkutils.h
+  ${SRC_DIR}/utils/forwarddecl.h
 )
 
 set(UI_FILES
@@ -150,7 +181,29 @@ target_include_directories(kartend PRIVATE
   ${CMAKE_CURRENT_BINARY_DIR}
   ${SRC_DIR}
   ${SRC_DIR}/core
-  ${SRC_DIR}/managers
+  ${SRC_DIR}/modules/animation
+  ${SRC_DIR}/modules/application
+  ${SRC_DIR}/modules/artwork
+  ${SRC_DIR}/modules/cache
+  ${SRC_DIR}/modules/database
+  ${SRC_DIR}/modules/event
+  ${SRC_DIR}/modules/interaction
+  ${SRC_DIR}/modules/keyboard
+  ${SRC_DIR}/modules/launch
+  ${SRC_DIR}/modules/mouse
+  ${SRC_DIR}/modules/navigation
+  ${SRC_DIR}/modules/overlay
+  ${SRC_DIR}/modules/query
+  ${SRC_DIR}/modules/restore
+  ${SRC_DIR}/modules/filter
+  ${SRC_DIR}/modules/widgetpool
+  ${SRC_DIR}/modules/scroll
+  ${SRC_DIR}/modules/search
+  ${SRC_DIR}/modules/selection
+  ${SRC_DIR}/modules/session
+  ${SRC_DIR}/modules/settings
+  ${SRC_DIR}/modules/sidebar
+  ${SRC_DIR}/modules/viewport
   ${SRC_DIR}/ui
   ${SRC_DIR}/ui/widgets
   ${SRC_DIR}/ui/dialogs
@@ -216,4 +269,10 @@ endif()
 # MAINTENANCE adds -Werror
 if (MAINTENANCE)
   target_compile_options(kartend PRIVATE -Werror)
+endif()
+
+# Tests (optional)
+option(BUILD_TESTS "Build unit tests" OFF)
+if (BUILD_TESTS)
+  add_subdirectory(tests)
 endif()

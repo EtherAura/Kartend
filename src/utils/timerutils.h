@@ -4,10 +4,10 @@
 #include <QObject>
 #include <QList>
 #include <QHash>
+#include <QPointer>
 #include <QString>
+#include <QTimer>
 #include <functional>
-
-class QTimer;
 
 namespace TimerUtils {
 
@@ -67,11 +67,44 @@ private:
     QTimer* m_viewportTimer;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
 // Helper functions for timer management
+// ─────────────────────────────────────────────────────────────────────────────
+
 void stopTimers(const QList<QTimer*>& timers);
 void disconnectTimers(const QList<QTimer*>& timers);
 void stopAndDisconnectTimers(const QList<QTimer*>& timers);
 void deleteLaterTimer(QTimer*& timer);
+
+/**
+ * @brief Execute a callback after a delay, with object lifetime guard.
+ * 
+ * Uses QPointer to ensure the target object is still valid when the
+ * callback executes. Safer than raw QTimer::singleShot for member lambdas.
+ * 
+ * @param delayMs Delay in milliseconds (0 = next event loop iteration)
+ * @param target The QObject to guard (typically 'this')
+ * @param callback The function to execute if target is still valid
+ */
+template<typename T, typename Func>
+void singleShotGuarded(int delayMs, T *target, Func &&callback) {
+  QPointer<T> guard(target);
+  QTimer::singleShot(delayMs, target, [guard, cb = std::forward<Func>(callback)]() {
+    if (guard) {
+      cb();
+    }
+  });
+}
+
+/**
+ * @brief Execute a callback on next event loop iteration, with object lifetime guard.
+ * 
+ * Convenience overload for the common case of deferring to next event loop.
+ */
+template<typename T, typename Func>
+void deferGuarded(T *target, Func &&callback) {
+  singleShotGuarded(0, target, std::forward<Func>(callback));
+}
 
 } // namespace TimerUtils
 

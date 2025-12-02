@@ -42,7 +42,7 @@ SettingsDialog::SettingsDialog(
   collectionTreeWidget = ui->collectionTreeWidget;
 
   installEventFilter(this);
-  if (collectionTreeWidget != nullptr) {
+  if (collectionTreeWidget) {
     collectionTreeWidget->installEventFilter(this);
     collectionTreeWidget->setFocusPolicy(Qt::WheelFocus);
   }
@@ -83,7 +83,7 @@ auto SettingsDialog::eventFilter(QObject *obj, QEvent *event) -> bool {
       return QDialog::eventFilter(obj, event);
     }
 
-    if ((collectionTreeWidget != nullptr) &&
+    if ((collectionTreeWidget) &&
         collectionTreeWidget->underMouse()) {
       QWheelEvent forwardedEvent(
           collectionTreeWidget->mapFromGlobal(
@@ -100,7 +100,7 @@ auto SettingsDialog::eventFilter(QObject *obj, QEvent *event) -> bool {
     return true;
   }
 
-  if ((collectionTreeWidget != nullptr) &&
+  if ((collectionTreeWidget) &&
       (obj == collectionTreeWidget ||
        obj == collectionTreeWidget->viewport()) &&
       event->type() == QEvent::MouseButtonPress) {
@@ -109,7 +109,7 @@ auto SettingsDialog::eventFilter(QObject *obj, QEvent *event) -> bool {
     QPoint vpPos =
         collectionTreeWidget->viewport()->mapFrom(src, mouseEvent->pos());
     QTreeWidgetItem *hit = collectionTreeWidget->itemAt(vpPos);
-    if (hit == nullptr) {
+    if (!hit) {
       collectionTreeWidget->clearSelection();
       collectionTreeWidget->setCurrentItem(nullptr);
       currentTreeItem = nullptr;
@@ -140,20 +140,20 @@ void SettingsDialog::reject() {
 }
 
 void SettingsDialog::updateCollectionTreeWidget() {
-  if (collectionTreeWidget == nullptr) {
+  if (!collectionTreeWidget) {
     return;
   }
   collectionTreeWidget->clear();
   itemToCollectionIndex.clear();
   collectionIndexToItem.clear();
   populateTreeWidget();
-  if (ui->removeCollectionButton != nullptr) {
+  if (ui->removeCollectionButton) {
     ui->removeCollectionButton->setEnabled(collections.size() > 1);
   }
 }
 
 void SettingsDialog::expandPathToCollection(int collectionIndex) {
-  if (collectionIndex < 0 || collectionIndex >= collections.size()) {
+  if (!CollectionUtils::isValidIndex(collectionIndex, &collections)) {
     return;
   }
   if (!collectionIndexToItem.contains(collectionIndex)) {
@@ -162,7 +162,7 @@ void SettingsDialog::expandPathToCollection(int collectionIndex) {
 
   QList<int> pathIndices;
   int currentIndex = collectionIndex;
-  while (currentIndex >= 0 && currentIndex < collections.size()) {
+  while (CollectionUtils::isValidIndex(currentIndex, &collections)) {
     pathIndices.prepend(currentIndex);
     const CollectionConfig &config = collections[currentIndex];
     currentIndex = config.parentCollectionIndex;
@@ -171,7 +171,7 @@ void SettingsDialog::expandPathToCollection(int collectionIndex) {
     int index = pathIndices[i];
     if (collectionIndexToItem.contains(index)) {
       QTreeWidgetItem *item = collectionIndexToItem[index];
-      if (item != nullptr) {
+      if (item) {
         item->setExpanded(true);
       }
     }
@@ -220,7 +220,7 @@ void SettingsDialog::populateTreeWidget() {
 auto SettingsDialog::createTreeItem(int collectionIndex,
                                     QTreeWidgetItem *parent)
     -> QTreeWidgetItem * {
-  QTreeWidgetItem *item = (parent != nullptr)
+  QTreeWidgetItem *item = (parent)
                               ? new QTreeWidgetItem(parent)
                               : new QTreeWidgetItem(collectionTreeWidget);
   item->setText(0, collections[collectionIndex].name);
@@ -268,7 +268,7 @@ void SettingsDialog::onTreeItemSelectionChanged() {
     item = collectionIndexToItem[newIndex];
   }
 
-  if (collectionTreeWidget != nullptr && item != nullptr) {
+  if (collectionTreeWidget && item) {
     QSignalBlocker blocker(collectionTreeWidget);
     collectionTreeWidget->setCurrentItem(item);
     item->setSelected(true);
@@ -291,8 +291,8 @@ void SettingsDialog::onTreeItemChanged(QTreeWidgetItem *item, int column) {
     return;
   }
   int collectionIndex = itemToCollectionIndex[item];
-  if (collectionIndex < 0 || collectionIndex >= collections.size() ||
-      collectionIndex >= m_workingCollections.size()) {
+  if (!CollectionUtils::isValidIndex(collectionIndex, &collections) ||
+      !CollectionUtils::isValidIndex(collectionIndex, &m_workingCollections)) {
     return;
   }
 
@@ -333,6 +333,10 @@ void SettingsDialog::setupButtonConnections() {
           &SettingsDialog::browseMediaDir);
   connect(ui->browseArtworkDirButton, &QPushButton::clicked, this,
           &SettingsDialog::browseArtworkDir);
+  if (ui->recursiveImportContentButton) {
+    connect(ui->recursiveImportContentButton, &QPushButton::clicked, this,
+            &SettingsDialog::onRecursiveImportContent);
+  }
 }
 
 void SettingsDialog::setupBasicUIConnections() {
@@ -381,7 +385,7 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
   expandPathToCollection(editedIndex);
   if (collectionIndexToItem.contains(editedIndex)) {
     QTreeWidgetItem *item = collectionIndexToItem[editedIndex];
-    if (item != nullptr) {
+    if (item) {
       collectionTreeWidget->setCurrentItem(item);
       item->setSelected(true);
     }
@@ -390,89 +394,105 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
 }
 
 void SettingsDialog::setupFormFieldConnections() {
-  if (ui->launcherLineEdit != nullptr) {
+  if (ui->launcherLineEdit) {
     connect(ui->launcherLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
     connect(ui->launcherLineEdit, &QLineEdit::textChanged, this,
             [this](const QString &text) { updateUIForLauncherType(text); });
   }
-  if (ui->coreLineEdit != nullptr) {
+  if (ui->coreLineEdit) {
     connect(ui->coreLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->launchParamsLineEdit != nullptr) {
+  if (ui->launchParamsLineEdit) {
     connect(ui->launchParamsLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->mediaDirLineEdit != nullptr) {
+  if (ui->mediaDirLineEdit) {
     connect(ui->mediaDirLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
     connect(ui->mediaDirLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::onContentDirectoryChanged);
   }
-  if (ui->artworkDirLineEdit != nullptr) {
+  if (ui->artworkDirLineEdit) {
     connect(ui->artworkDirLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->fileExtensionsLineEdit != nullptr) {
+  if (ui->includeContentSubfoldersCheckBox) {
+    connect(ui->includeContentSubfoldersCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->showAllSubfolderItemsCheckBox) {
+    connect(ui->showAllSubfolderItemsCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->hideSubfolderTitlesCheckBox) {
+    connect(ui->hideSubfolderTitlesCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->includeArtworkSubfoldersCheckBox) {
+    connect(ui->includeArtworkSubfoldersCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->fileExtensionsLineEdit) {
     connect(ui->fileExtensionsLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->gridWidthSpinBox != nullptr) {
+  if (ui->gridWidthSpinBox) {
     connect(ui->gridWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &SettingsDialog::onGridWidthChanged);
   }
-  if (ui->showAllSubcollectionItemsCheckBox != nullptr) {
+  if (ui->showAllSubcollectionItemsCheckBox) {
     connect(ui->showAllSubcollectionItemsCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->horizontalAlignmentComboBox != nullptr) {
+  if (ui->horizontalAlignmentComboBox) {
     connect(ui->horizontalAlignmentComboBox,
             QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->parentCollectionComboBox != nullptr) {
+  if (ui->parentCollectionComboBox) {
     connect(ui->parentCollectionComboBox,
             QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->sidebarModeComboBox != nullptr) {
+  if (ui->sidebarModeComboBox) {
     connect(ui->sidebarModeComboBox,
             QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->hideHorizontalScrollbarCheckBox != nullptr) {
+  if (ui->hideHorizontalScrollbarCheckBox) {
     connect(ui->hideHorizontalScrollbarCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->hideVerticalScrollbarCheckBox != nullptr) {
+  if (ui->hideVerticalScrollbarCheckBox) {
     connect(ui->hideVerticalScrollbarCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->hideTitlesCheckBox != nullptr) {
+  if (ui->hideTitlesCheckBox) {
     connect(ui->hideTitlesCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->hideSubcollectionTitlesCheckBox != nullptr) {
+  if (ui->hideSubcollectionTitlesCheckBox) {
     connect(ui->hideSubcollectionTitlesCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->itemWidthSpinBox != nullptr) {
+  if (ui->itemWidthSpinBox) {
     connect(ui->itemWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &SettingsDialog::checkForChanges);
   }
-  if (ui->itemHeightSpinBox != nullptr) {
+  if (ui->itemHeightSpinBox) {
     connect(ui->itemHeightSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &SettingsDialog::checkForChanges);
   }
-  if (ui->fontSizeSpinBox != nullptr) {
+  if (ui->fontSizeSpinBox) {
     connect(ui->fontSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &SettingsDialog::checkForChanges);
   }
 }
 
 void SettingsDialog::setupSpacingConnections() {
-  if (ui->horizontalSpacingSpinBox != nullptr) {
+  if (ui->horizontalSpacingSpinBox) {
     connect(ui->horizontalSpacingSpinBox,
             QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
@@ -480,7 +500,7 @@ void SettingsDialog::setupSpacingConnections() {
             QOverload<int>::of(&QSpinBox::valueChanged), this,
             [this]() { handleSpacingChanged(); });
   }
-  if (ui->verticalSpacingSpinBox != nullptr) {
+  if (ui->verticalSpacingSpinBox) {
     connect(ui->verticalSpacingSpinBox,
             QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
@@ -491,8 +511,8 @@ void SettingsDialog::setupSpacingConnections() {
 }
 
 void SettingsDialog::handleSpacingChanged() {
-  if ((ui->horizontalSpacingSpinBox == nullptr) ||
-      (ui->verticalSpacingSpinBox == nullptr)) {
+  if (!ui->horizontalSpacingSpinBox ||
+      !ui->verticalSpacingSpinBox) {
     return;
   }
   if (currentCollectionIndex < 0 ||
@@ -514,7 +534,7 @@ void SettingsDialog::handleSpacingChanged() {
 }
 
 void SettingsDialog::setupTreeWidgetConnections() {
-  if (collectionTreeWidget != nullptr) {
+  if (collectionTreeWidget) {
     connect(collectionTreeWidget, &QTreeWidget::itemSelectionChanged, this,
             &SettingsDialog::onTreeItemSelectionChanged);
     connect(collectionTreeWidget, &QTreeWidget::itemChanged, this,
@@ -525,7 +545,7 @@ void SettingsDialog::setupTreeWidgetConnections() {
 }
 
 void SettingsDialog::setupUIConstraints() {
-  if (ui->horizontalSpacingSpinBox != nullptr) {
+  if (ui->horizontalSpacingSpinBox) {
     // Rebase horizontal spacing: UI range 0 to 150 maps to internal -100 to 50
     // Internal = UI - 70.
     // Min UI = -100 + 70 = -30? No.
@@ -537,19 +557,19 @@ void SettingsDialog::setupUIConstraints() {
     ui->horizontalSpacingSpinBox->setMaximum(120);
     ui->horizontalSpacingSpinBox->setSingleStep(1);
   }
-  if (ui->verticalSpacingSpinBox != nullptr) {
-    ui->verticalSpacingSpinBox->setMinimum(UIConstants::SPACING_MIN);
-    ui->verticalSpacingSpinBox->setMaximum(UIConstants::SPACING_MAX);
+  if (ui->verticalSpacingSpinBox) {
+    ui->verticalSpacingSpinBox->setMinimum(UIConstants::Viewport::SPACING_MIN);
+    ui->verticalSpacingSpinBox->setMaximum(UIConstants::Viewport::SPACING_MAX);
     ui->verticalSpacingSpinBox->setSingleStep(1);
   }
-  if (ui->gridWidthSpinBox != nullptr) {
-    ui->gridWidthSpinBox->setMinimum(UIConstants::MIN_GRID_WIDTH);
-    ui->gridWidthSpinBox->setMaximum(UIConstants::MAX_GRID_WIDTH);
+  if (ui->gridWidthSpinBox) {
+    ui->gridWidthSpinBox->setMinimum(UIConstants::Grid::MIN_WIDTH);
+    ui->gridWidthSpinBox->setMaximum(UIConstants::Grid::MAX_WIDTH);
     ui->gridWidthSpinBox->setSingleStep(1);
   }
-  if (ui->fontSizeSpinBox != nullptr) {
-    ui->fontSizeSpinBox->setMinimum(UIConstants::MIN_FONT_SIZE);
-    ui->fontSizeSpinBox->setMaximum(UIConstants::MAX_FONT_SIZE);
+  if (ui->fontSizeSpinBox) {
+    ui->fontSizeSpinBox->setMinimum(UIConstants::Item::MIN_FONT_SIZE);
+    ui->fontSizeSpinBox->setMaximum(UIConstants::Item::MAX_FONT_SIZE);
     ui->fontSizeSpinBox->setSingleStep(1);
   }
 }
@@ -558,8 +578,8 @@ void SettingsDialog::setupGeneralSettingsConnections() {
   connect(ui->rememberSelectionCheckBox, &QCheckBox::toggled, this,
           [this](bool checked) {
             auto *mainWindow = qobject_cast<MainWindow *>(parent());
-            if ((mainWindow != nullptr) &&
-                (mainWindow->getSettingsManager() != nullptr)) {
+            if ((mainWindow) &&
+                (mainWindow->getSettingsManager())) {
               mainWindow->m_generalSettings.rememberSelection = checked;
               mainWindow->getSettingsManager()->saveGeneralSettings(
                   mainWindow->m_generalSettings);
@@ -570,8 +590,8 @@ void SettingsDialog::setupGeneralSettingsConnections() {
   connect(ui->wrapNavigationCheckBox, &QCheckBox::toggled, this,
           [this](bool checked) {
             auto *mainWindow = qobject_cast<MainWindow *>(parent());
-            if ((mainWindow != nullptr) &&
-                (mainWindow->getSettingsManager() != nullptr)) {
+            if ((mainWindow) &&
+                (mainWindow->getSettingsManager())) {
               mainWindow->m_generalSettings.wrapNavigation = checked;
               mainWindow->getSettingsManager()->saveGeneralSettings(
                   mainWindow->m_generalSettings);
@@ -616,13 +636,13 @@ void SettingsDialog::addCollection() {
   newCollection.mediaDirectory = "";
   newCollection.artworkDirectory = "";
   newCollection.extensions = QStringList();
-  newCollection.gridWidth = UIConstants::DEFAULT_GRID_WIDTH;
+  newCollection.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
   newCollection.sidebarVisible = false;
   newCollection.parentCollectionIndex = -1;
   newCollection.isSubcollection = false;
   newCollection.showAllSubcollectionItems = false;
   newCollection.horizontalAlignment = HorizontalAlignment::Center;
-  newCollection.fontSize = UIConstants::DEFAULT_FONT_SIZE;
+  newCollection.fontSize = UIConstants::Item::DEFAULT_FONT_SIZE;
   newCollection.hideTitles = false;
   newCollection.hideSubcollectionTitles = false;
 
@@ -659,7 +679,7 @@ void SettingsDialog::addCollection() {
 
   if (collectionIndexToItem.contains(newIndex)) {
     QTreeWidgetItem *item = collectionIndexToItem[newIndex];
-    if (item != nullptr) {
+    if (item) {
       collectionTreeWidget->setCurrentItem(item);
       item->setSelected(true);
     }
@@ -673,12 +693,12 @@ void SettingsDialog::addCollection() {
 
 // Validates preconditions for collection removal
 auto SettingsDialog::validateRemovalPreconditions() -> bool {
-  if ((currentTreeItem == nullptr) ||
+  if ((!currentTreeItem) ||
       !itemToCollectionIndex.contains(currentTreeItem)) {
     return false;
   }
   int index = itemToCollectionIndex[currentTreeItem];
-  if (index < 0 || index >= collections.size()) {
+  if (!CollectionUtils::isValidIndex(index, collections)) {
     return false;
   }
   if (collections.size() <= 1) {
@@ -695,7 +715,7 @@ auto SettingsDialog::captureExpandedStates() -> QList<int> {
   QList<int> expandedBefore;
   for (auto it = collectionIndexToItem.begin();
        it != collectionIndexToItem.end(); ++it) {
-    if ((it.value() != nullptr) && it.value()->isExpanded()) {
+    if ((it.value()) && it.value()->isExpanded()) {
       expandedBefore.append(it.key());
     }
   }
@@ -735,7 +755,7 @@ auto SettingsDialog::restoreExpandedStates(const QList<int> &expandedBefore,
     }
     int adjustedIdx = (expIdx > removedIndex) ? expIdx - 1 : expIdx;
     if (collectionIndexToItem.contains(adjustedIdx) &&
-        (collectionIndexToItem[adjustedIdx] != nullptr)) {
+        (collectionIndexToItem[adjustedIdx])) {
       collectionIndexToItem[adjustedIdx]->setExpanded(true);
     }
   }
@@ -775,76 +795,92 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   }
 
   if (collectionIndexToItem.contains(currentCollectionIndex) &&
-      (collectionIndexToItem[currentCollectionIndex] != nullptr)) {
+      (collectionIndexToItem[currentCollectionIndex])) {
     QString treeName = collectionIndexToItem[currentCollectionIndex]->text(0);
     if (!treeName.isEmpty()) {
       config.name = treeName;
     }
   }
 
-  config.launcherPath = (ui->launcherLineEdit != nullptr)
+  config.launcherPath = (ui->launcherLineEdit)
                             ? ui->launcherLineEdit->text()
                             : config.launcherPath;
-  config.corePath = (ui->coreLineEdit != nullptr) ? ui->coreLineEdit->text()
+  config.corePath = (ui->coreLineEdit) ? ui->coreLineEdit->text()
                                                   : config.corePath;
-  config.launchParameters = (ui->launchParamsLineEdit != nullptr)
+  config.launchParameters = (ui->launchParamsLineEdit)
                                 ? ui->launchParamsLineEdit->text()
                                 : config.launchParameters;
-  config.mediaDirectory = (ui->mediaDirLineEdit != nullptr)
+  config.mediaDirectory = (ui->mediaDirLineEdit)
                               ? ui->mediaDirLineEdit->text()
                               : config.mediaDirectory;
-  config.artworkDirectory = (ui->artworkDirLineEdit != nullptr)
+  config.artworkDirectory = (ui->artworkDirLineEdit)
                                 ? ui->artworkDirLineEdit->text()
                                 : config.artworkDirectory;
-  config.itemWidth = (ui->itemWidthSpinBox != nullptr)
+  config.includeContentSubfolders =
+      (ui->includeContentSubfoldersCheckBox)
+          ? ui->includeContentSubfoldersCheckBox->isChecked()
+          : config.includeContentSubfolders;
+  config.showAllSubfolderItems =
+      (ui->showAllSubfolderItemsCheckBox)
+          ? ui->showAllSubfolderItemsCheckBox->isChecked()
+          : config.showAllSubfolderItems;
+  config.hideSubfolderTitles =
+      (ui->hideSubfolderTitlesCheckBox)
+          ? ui->hideSubfolderTitlesCheckBox->isChecked()
+          : config.hideSubfolderTitles;
+  config.includeArtworkSubfolders =
+      (ui->includeArtworkSubfoldersCheckBox)
+          ? ui->includeArtworkSubfoldersCheckBox->isChecked()
+          : config.includeArtworkSubfolders;
+  config.itemWidth = (ui->itemWidthSpinBox)
                          ? ui->itemWidthSpinBox->value()
                          : config.itemWidth;
-  config.itemHeight = (ui->itemHeightSpinBox != nullptr)
+  config.itemHeight = (ui->itemHeightSpinBox)
                           ? ui->itemHeightSpinBox->value()
                           : config.itemHeight;
-  config.fontSize = (ui->fontSizeSpinBox != nullptr)
+  config.fontSize = (ui->fontSizeSpinBox)
                         ? ui->fontSizeSpinBox->value()
                         : config.fontSize;
-  config.extensions = (ui->fileExtensionsLineEdit != nullptr)
+  config.extensions = (ui->fileExtensionsLineEdit)
                           ? ExtensionUtils::parseUserExtensionList(
                                 ui->fileExtensionsLineEdit->text())
                           : config.extensions;
-  config.gridWidth = (ui->gridWidthSpinBox != nullptr)
+  config.gridWidth = (ui->gridWidthSpinBox)
                          ? ui->gridWidthSpinBox->value()
                          : config.gridWidth;
   config.showAllSubcollectionItems =
-      (ui->showAllSubcollectionItemsCheckBox != nullptr)
+      (ui->showAllSubcollectionItemsCheckBox)
           ? ui->showAllSubcollectionItemsCheckBox->isChecked()
           : config.showAllSubcollectionItems;
   config.horizontalAlignment =
-      (ui->horizontalAlignmentComboBox != nullptr)
+      (ui->horizontalAlignmentComboBox)
           ? static_cast<HorizontalAlignment>(
                 ui->horizontalAlignmentComboBox->currentIndex())
           : config.horizontalAlignment;
   config.sidebarMode =
-      (ui->sidebarModeComboBox != nullptr)
+      (ui->sidebarModeComboBox)
           ? static_cast<SidebarMode>(ui->sidebarModeComboBox->currentIndex())
           : config.sidebarMode;
   // Rebase horizontal spacing: Internal = UI - 70
-  config.horizontalSpacing = (ui->horizontalSpacingSpinBox != nullptr)
+  config.horizontalSpacing = (ui->horizontalSpacingSpinBox)
                                  ? ui->horizontalSpacingSpinBox->value() - 70
                                  : config.horizontalSpacing;
-  config.verticalSpacing = (ui->verticalSpacingSpinBox != nullptr)
+  config.verticalSpacing = (ui->verticalSpacingSpinBox)
                                ? ui->verticalSpacingSpinBox->value()
                                : config.verticalSpacing;
   config.hideHorizontalScrollbar =
-      (ui->hideHorizontalScrollbarCheckBox != nullptr)
+      (ui->hideHorizontalScrollbarCheckBox)
           ? ui->hideHorizontalScrollbarCheckBox->isChecked()
           : config.hideHorizontalScrollbar;
   config.hideVerticalScrollbar =
-      (ui->hideVerticalScrollbarCheckBox != nullptr)
+      (ui->hideVerticalScrollbarCheckBox)
           ? ui->hideVerticalScrollbarCheckBox->isChecked()
           : config.hideVerticalScrollbar;
-  config.hideTitles = (ui->hideTitlesCheckBox != nullptr)
+  config.hideTitles = (ui->hideTitlesCheckBox)
                           ? ui->hideTitlesCheckBox->isChecked()
                           : config.hideTitles;
   config.hideSubcollectionTitles =
-      (ui->hideSubcollectionTitlesCheckBox != nullptr)
+      (ui->hideSubcollectionTitlesCheckBox)
           ? ui->hideSubcollectionTitlesCheckBox->isChecked()
           : config.hideSubcollectionTitles;
   return config;
@@ -853,7 +889,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
 // Updates parent collection settings from UI
 auto SettingsDialog::updateParentCollectionFromUI(CollectionConfig &collection,
                                                   int index) -> void {
-  if (ui->parentCollectionComboBox != nullptr) {
+  if (ui->parentCollectionComboBox) {
     int dropdownIndex = ui->parentCollectionComboBox->currentIndex();
     if (dropdownIndex >= 0 &&
         dropdownIndex < m_parentCollectionMapping.size()) {
@@ -878,50 +914,62 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
   const CollectionConfig &originalConfig = originalCollection;
 
   return (
-      ((ui->launcherLineEdit != nullptr) &&
+      ((ui->launcherLineEdit) &&
        ui->launcherLineEdit->text() != originalConfig.launcherPath) ||
-      ((ui->coreLineEdit != nullptr) &&
+      ((ui->coreLineEdit) &&
        ui->coreLineEdit->text() != originalConfig.corePath) ||
-      ((ui->launchParamsLineEdit != nullptr) &&
+      ((ui->launchParamsLineEdit) &&
        ui->launchParamsLineEdit->text() != originalConfig.launchParameters) ||
-      ((ui->mediaDirLineEdit != nullptr) &&
+      ((ui->mediaDirLineEdit) &&
        ui->mediaDirLineEdit->text() != originalConfig.mediaDirectory) ||
-      ((ui->artworkDirLineEdit != nullptr) &&
+      ((ui->artworkDirLineEdit) &&
        ui->artworkDirLineEdit->text() != originalConfig.artworkDirectory) ||
-      ((ui->gridWidthSpinBox != nullptr) &&
+      ((ui->gridWidthSpinBox) &&
        ui->gridWidthSpinBox->value() != originalConfig.gridWidth) ||
-      ((ui->showAllSubcollectionItemsCheckBox != nullptr) &&
+      ((ui->showAllSubcollectionItemsCheckBox) &&
        ui->showAllSubcollectionItemsCheckBox->isChecked() !=
            originalConfig.showAllSubcollectionItems) ||
-      ((ui->horizontalAlignmentComboBox != nullptr) &&
+      ((ui->horizontalAlignmentComboBox) &&
        ui->horizontalAlignmentComboBox->currentIndex() !=
            static_cast<int>(originalConfig.horizontalAlignment)) ||
-      ((ui->sidebarModeComboBox != nullptr) &&
+      ((ui->sidebarModeComboBox) &&
        ui->sidebarModeComboBox->currentIndex() !=
            static_cast<int>(originalConfig.sidebarMode)) ||
-      ((ui->horizontalSpacingSpinBox != nullptr) &&
+      ((ui->horizontalSpacingSpinBox) &&
        (ui->horizontalSpacingSpinBox->value() - 70) !=
            originalConfig.horizontalSpacing) ||
-      ((ui->verticalSpacingSpinBox != nullptr) &&
+      ((ui->verticalSpacingSpinBox) &&
        ui->verticalSpacingSpinBox->value() != originalConfig.verticalSpacing) ||
-      ((ui->hideHorizontalScrollbarCheckBox != nullptr) &&
+      ((ui->hideHorizontalScrollbarCheckBox) &&
        ui->hideHorizontalScrollbarCheckBox->isChecked() !=
            originalConfig.hideHorizontalScrollbar) ||
-      ((ui->hideVerticalScrollbarCheckBox != nullptr) &&
+      ((ui->hideVerticalScrollbarCheckBox) &&
        ui->hideVerticalScrollbarCheckBox->isChecked() !=
            originalConfig.hideVerticalScrollbar) ||
-      ((ui->hideTitlesCheckBox != nullptr) &&
+      ((ui->hideTitlesCheckBox) &&
        ui->hideTitlesCheckBox->isChecked() != originalConfig.hideTitles) ||
-      ((ui->hideSubcollectionTitlesCheckBox != nullptr) &&
+      ((ui->hideSubcollectionTitlesCheckBox) &&
        ui->hideSubcollectionTitlesCheckBox->isChecked() !=
            originalConfig.hideSubcollectionTitles) ||
-      ((ui->fontSizeSpinBox != nullptr) &&
+      ((ui->includeContentSubfoldersCheckBox) &&
+       ui->includeContentSubfoldersCheckBox->isChecked() !=
+           originalConfig.includeContentSubfolders) ||
+      ((ui->showAllSubfolderItemsCheckBox) &&
+       ui->showAllSubfolderItemsCheckBox->isChecked() !=
+           originalConfig.showAllSubfolderItems) ||
+      ((ui->hideSubfolderTitlesCheckBox) &&
+       ui->hideSubfolderTitlesCheckBox->isChecked() !=
+           originalConfig.hideSubfolderTitles) ||
+      ((ui->includeArtworkSubfoldersCheckBox) &&
+       ui->includeArtworkSubfoldersCheckBox->isChecked() !=
+           originalConfig.includeArtworkSubfolders) ||
+      ((ui->fontSizeSpinBox) &&
        ui->fontSizeSpinBox->value() != originalConfig.fontSize));
 }
 
 // Checks extension list changes
 auto SettingsDialog::checkExtensionChanges() const -> bool {
-  QStringList currentExtensions = (ui->fileExtensionsLineEdit != nullptr)
+  QStringList currentExtensions = (ui->fileExtensionsLineEdit)
                                       ? ExtensionUtils::parseUserExtensionList(
                                             ui->fileExtensionsLineEdit->text())
                                       : originalCollection.extensions;
@@ -933,7 +981,7 @@ auto SettingsDialog::checkTreeNameChanges() const -> bool {
   QString currentTreeName = originalCollection.name;
   if (collectionIndexToItem.contains(currentCollectionIndex)) {
     QTreeWidgetItem *item = collectionIndexToItem[currentCollectionIndex];
-    if (item != nullptr) {
+    if (item) {
       currentTreeName = item->text(0);
     }
   }
@@ -942,7 +990,7 @@ auto SettingsDialog::checkTreeNameChanges() const -> bool {
 
 // Checks parent collection changes
 auto SettingsDialog::checkParentCollectionChanges() const -> bool {
-  int dropdownIndex = (ui->parentCollectionComboBox != nullptr)
+  int dropdownIndex = (ui->parentCollectionComboBox)
                           ? ui->parentCollectionComboBox->currentIndex()
                           : -1;
   int currentParentIndex = -1;
@@ -1047,7 +1095,7 @@ void SettingsDialog::removeCollection() {
 // Saves current collection UI edits (including name) into working and live
 // collections
 void SettingsDialog::saveCollectionFromUI(int index) {
-  if (index < 0 || index >= m_workingCollections.size()) {
+  if (!CollectionUtils::isValidIndex(index, m_workingCollections)) {
     return;
   }
 
@@ -1101,7 +1149,7 @@ void SettingsDialog::updateUIForLauncherType(const QString &launcherPath) {
 }
 
 void SettingsDialog::updateParentCollectionComboBox(int currentIndex) {
-  if (ui->parentCollectionComboBox == nullptr) {
+  if (!ui->parentCollectionComboBox) {
     return;
   }
 
@@ -1206,78 +1254,79 @@ void SettingsDialog::updateSidebarModeVisibility() {
 }
 
 auto SettingsDialog::calculateMaxGridWidth() const -> int {
-  int viewportWidth = UIConstants::DEFAULT_VIEWPORT_WIDTH;
+  int viewportWidth = UIConstants::Viewport::DEFAULT_WIDTH;
   if (QWidget *parentWindow = this->parentWidget()) {
     auto *itemScrollArea =
         parentWindow->findChild<QScrollArea *>("itemScrollArea");
-    if ((itemScrollArea != nullptr) &&
-        (itemScrollArea->viewport() != nullptr)) {
+    if ((itemScrollArea) &&
+        (itemScrollArea->viewport())) {
       viewportWidth = itemScrollArea->viewport()->width();
       QScrollBar *vScrollBar = itemScrollArea->verticalScrollBar();
-      if ((vScrollBar != nullptr) && vScrollBar->isVisible()) {
+      if ((vScrollBar) && vScrollBar->isVisible()) {
         viewportWidth -= vScrollBar->width();
       }
     }
   }
-  if (viewportWidth < UIConstants::MIN_VIEWPORT_WIDTH) {
-    viewportWidth = UIConstants::DEFAULT_VIEWPORT_WIDTH;
+  if (viewportWidth < UIConstants::Viewport::MIN_WIDTH) {
+    viewportWidth = UIConstants::Viewport::DEFAULT_WIDTH;
   }
 
-  int itemWidth = (ui->itemWidthSpinBox != nullptr)
+  int itemWidth = (ui->itemWidthSpinBox)
                       ? ui->itemWidthSpinBox->value()
                       : originalCollection.itemWidth;
   if (itemWidth <= 0) {
-    itemWidth = UIConstants::DEFAULT_ITEM_WIDTH;
+    itemWidth = UIConstants::Item::DEFAULT_WIDTH;
   }
 
   int horizontalSpacing = originalCollection.horizontalSpacing;
-  int margins = UIConstants::GRID_MARGINS;
+  int margins = UIConstants::Grid::MARGINS;
   const int totalMargins = margins * 2;
   const int stride = itemWidth + horizontalSpacing;
   int itemsFit =
       stride > 0 ? (viewportWidth - totalMargins + horizontalSpacing) / stride
-                 : UIConstants::MIN_GRID_WIDTH;
-  itemsFit = std::max(UIConstants::MIN_GRID_WIDTH, itemsFit);
+                 : UIConstants::Grid::MIN_WIDTH;
+  itemsFit = std::max(UIConstants::Grid::MIN_WIDTH, itemsFit);
   itemsFit += 1;
-  return std::min(itemsFit, UIConstants::MAX_GRID_WIDTH);
+  return std::min(itemsFit, UIConstants::Grid::MAX_WIDTH);
 }
 
 void SettingsDialog::updateGridWidthLimits() {
-  if (ui->gridWidthSpinBox == nullptr) {
+  if (!ui->gridWidthSpinBox) {
     return;
   }
   int preservedValue = ui->gridWidthSpinBox->value();
   int calculatedMax = calculateMaxGridWidth();
-  ui->gridWidthSpinBox->setMaximum(UIConstants::MAX_GRID_WIDTH);
+  ui->gridWidthSpinBox->setMaximum(UIConstants::Grid::MAX_WIDTH);
   ui->gridWidthSpinBox->setValue(preservedValue);
   if (preservedValue > calculatedMax) {
     ui->gridWidthSpinBox->setToolTip(
         QString("Current: %1, Recommended max: %2, Absolute max: %3")
             .arg(preservedValue)
             .arg(calculatedMax)
-            .arg(UIConstants::MAX_GRID_WIDTH));
+            .arg(UIConstants::Grid::MAX_WIDTH));
   } else {
     ui->gridWidthSpinBox->setToolTip(
         QString("Items per row (Recommended max: %1, Absolute max: %2)")
             .arg(calculatedMax)
-            .arg(UIConstants::MAX_GRID_WIDTH));
+            .arg(UIConstants::Grid::MAX_WIDTH));
   }
 }
 
 void SettingsDialog::onGridWidthChanged(int value) {
-  if (ui->gridWidthSpinBox == nullptr) {
+  if (!ui->gridWidthSpinBox) {
     return;
   }
   int maxWidth = calculateMaxGridWidth();
   if (value > maxWidth) {
+    // Delay tooltip to avoid showing during rapid spin box changes
     QTimer::singleShot(
-        UIConstants::MEDIUM_TIMER_DELAY, this, [this, maxWidth, value]() {
+        UIConstants::Timing::MEDIUM_DELAY_MS, this, [this, maxWidth, value]() {
           QToolTip::showText(
               ui->gridWidthSpinBox->mapToGlobal(QPoint(0, 0)),
               QString("Width %1 may overflow. Recommended max: %2.")
                   .arg(value)
                   .arg(maxWidth),
-              ui->gridWidthSpinBox, QRect(), UIConstants::TOOLTIP_DISPLAY_TIME);
+              ui->gridWidthSpinBox, QRect(), UIConstants::Timing::TOOLTIP_DISPLAY_MS);
         });
   }
   checkForChanges();
@@ -1291,33 +1340,35 @@ void SettingsDialog::onGridWidthChanged(int value) {
 
 void SettingsDialog::showEvent(QShowEvent *event) {
   QDialog::showEvent(event);
-  QTimer::singleShot(UIConstants::LONG_TIMER_DELAY, this,
+  // Delay grid width calculation until dialog geometry is finalized
+  QTimer::singleShot(UIConstants::Timing::LONG_DELAY_MS, this,
                      &SettingsDialog::updateGridWidthLimits);
 }
 
 void SettingsDialog::resizeEvent(QResizeEvent *event) {
   QDialog::resizeEvent(event);
-  QTimer::singleShot(UIConstants::MEDIUM_TIMER_DELAY, this,
+  // Delay recalculation until resize animation/settling completes
+  QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this,
                      &SettingsDialog::updateGridWidthLimits);
 }
 
 void SettingsDialog::loadGeneralSettingsToUI() {
   auto *mainWindow = qobject_cast<MainWindow *>(parent());
-  if (mainWindow != nullptr) {
+  if (mainWindow) {
     m_generalSettings = mainWindow->m_generalSettings;
   }
-  if (ui->rememberSelectionCheckBox != nullptr) {
+  if (ui->rememberSelectionCheckBox) {
     ui->rememberSelectionCheckBox->blockSignals(true);
     ui->rememberSelectionCheckBox->setChecked(
         m_generalSettings.rememberSelection);
     ui->rememberSelectionCheckBox->blockSignals(false);
   }
-  if (ui->wrapNavigationCheckBox != nullptr) {
+  if (ui->wrapNavigationCheckBox) {
     ui->wrapNavigationCheckBox->blockSignals(true);
     ui->wrapNavigationCheckBox->setChecked(m_generalSettings.wrapNavigation);
     ui->wrapNavigationCheckBox->blockSignals(false);
   }
-  if (ui->pixmapCacheSpinBox != nullptr) {
+  if (ui->pixmapCacheSpinBox) {
     ui->pixmapCacheSpinBox->blockSignals(true);
     ui->pixmapCacheSpinBox->setValue(m_generalSettings.pixmapCacheSizeMB);
     ui->pixmapCacheSpinBox->blockSignals(false);
@@ -1326,16 +1377,16 @@ void SettingsDialog::loadGeneralSettingsToUI() {
 
 void SettingsDialog::saveGeneralSettingsFromUI() {
   auto *mainWindow = qobject_cast<MainWindow *>(parent());
-  if ((mainWindow != nullptr) && (mainWindow->getSettingsManager() != nullptr)) {
-    if (ui->rememberSelectionCheckBox != nullptr) {
+  if ((mainWindow) && (mainWindow->getSettingsManager())) {
+    if (ui->rememberSelectionCheckBox) {
       mainWindow->m_generalSettings.rememberSelection =
           ui->rememberSelectionCheckBox->isChecked();
     }
-    if (ui->wrapNavigationCheckBox != nullptr) {
+    if (ui->wrapNavigationCheckBox) {
       mainWindow->m_generalSettings.wrapNavigation =
           ui->wrapNavigationCheckBox->isChecked();
     }
-    if (ui->pixmapCacheSpinBox != nullptr) {
+    if (ui->pixmapCacheSpinBox) {
       int newCacheSize = ui->pixmapCacheSpinBox->value();
       mainWindow->m_generalSettings.pixmapCacheSizeMB = newCacheSize;
       // Apply immediately (in KB)
@@ -1356,7 +1407,7 @@ void SettingsDialog::browseLauncher() {
   QString fileName = QFileDialog::getOpenFileName(
       this, tr("Select Launcher"), "",
       tr("All Files (*)"));
-  if (!fileName.isEmpty() && ui->launcherLineEdit != nullptr) {
+  if (!fileName.isEmpty() && ui->launcherLineEdit) {
     ui->launcherLineEdit->setText(fileName);
   }
 }
@@ -1365,7 +1416,7 @@ void SettingsDialog::browseCore() {
   QString fileName = QFileDialog::getOpenFileName(
       this, tr("Select Core"), "",
       tr("Core Files (*.so *.dll *.dylib);;All Files (*)"));
-  if (!fileName.isEmpty() && ui->coreLineEdit != nullptr) {
+  if (!fileName.isEmpty() && ui->coreLineEdit) {
     ui->coreLineEdit->setText(fileName);
   }
 }
@@ -1373,7 +1424,7 @@ void SettingsDialog::browseCore() {
 void SettingsDialog::browseMediaDir() {
   QString dirName = QFileDialog::getExistingDirectory(
       this, tr("Select Media Directory"), "");
-  if (!dirName.isEmpty() && ui->mediaDirLineEdit != nullptr) {
+  if (!dirName.isEmpty() && ui->mediaDirLineEdit) {
     ui->mediaDirLineEdit->setText(dirName);
   }
 }
@@ -1381,80 +1432,225 @@ void SettingsDialog::browseMediaDir() {
 void SettingsDialog::browseArtworkDir() {
   QString dirName = QFileDialog::getExistingDirectory(
       this, tr("Select Artwork Directory"), "");
-  if (!dirName.isEmpty() && ui->artworkDirLineEdit != nullptr) {
+  if (!dirName.isEmpty() && ui->artworkDirLineEdit) {
     ui->artworkDirLineEdit->setText(dirName);
   }
 }
 
+void SettingsDialog::onRecursiveImportContent() {
+  if (!ui->mediaDirLineEdit) {
+    return;
+  }
+  QString baseDir = ui->mediaDirLineEdit->text().trimmed();
+  if (baseDir.isEmpty()) {
+    QMessageBox::warning(this, tr("Recursive Import"),
+                         tr("Please specify a content directory first."));
+    return;
+  }
+  performRecursiveImport(baseDir, true);
+}
+
+void SettingsDialog::onRecursiveImportArtwork() {
+  if (!ui->artworkDirLineEdit) {
+    return;
+  }
+  QString baseDir = ui->artworkDirLineEdit->text().trimmed();
+  if (baseDir.isEmpty()) {
+    QMessageBox::warning(this, tr("Recursive Import"),
+                         tr("Please specify an artwork directory first."));
+    return;
+  }
+  performRecursiveImport(baseDir, false);
+}
+
+void SettingsDialog::performRecursiveImport(const QString &baseDir, bool isContentDir) {
+  QDir dir(baseDir);
+  if (!dir.exists()) {
+    QMessageBox::warning(this, tr("Recursive Import"),
+                         tr("The specified directory does not exist."));
+    return;
+  }
+
+  // Get list of subdirectories
+  QStringList subdirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+  if (subdirs.isEmpty()) {
+    QMessageBox::information(this, tr("Recursive Import"),
+                             tr("No subdirectories found in the specified directory."));
+    return;
+  }
+
+  // Show confirmation dialog
+  QString message = tr("This will create %1 subcollection(s) based on the directory structure:\n\n").arg(subdirs.size());
+  for (int i = 0; i < qMin(subdirs.size(), 10); ++i) {
+    message += QString("  • %1\n").arg(subdirs[i]);
+  }
+  if (subdirs.size() > 10) {
+    message += tr("  ... and %1 more\n").arg(subdirs.size() - 10);
+  }
+  message += tr("\nEach subcollection will inherit the current collection's settings.\n");
+  if (isContentDir) {
+    message += tr("Content directories will be set automatically.");
+  } else {
+    message += tr("Artwork directories will be set automatically.");
+  }
+
+  QMessageBox::StandardButton reply = QMessageBox::question(
+      this, tr("Confirm Recursive Import"), message,
+      QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+
+  if (reply != QMessageBox::Yes) {
+    return;
+  }
+
+  // Get current collection as template
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_workingCollections.size()) {
+    return;
+  }
+  
+  // Save current collection first
+  handleSaveCollection(currentCollectionIndex, false);
+  
+  const CollectionConfig &templateConfig = m_workingCollections[currentCollectionIndex];
+  int parentIndex = currentCollectionIndex;
+
+  // Create subcollections for each subdirectory
+  for (const QString &subdir : subdirs) {
+    CollectionConfig newCollection = templateConfig;
+    newCollection.name = subdir;
+    newCollection.parentCollectionIndex = parentIndex;
+    newCollection.isSubcollection = true;
+    
+    // Set the directory paths
+    if (isContentDir) {
+      newCollection.mediaDirectory = dir.absoluteFilePath(subdir);
+      // Try to match artwork directory structure if it exists
+      if (!templateConfig.artworkDirectory.isEmpty()) {
+        QDir artworkBase(templateConfig.artworkDirectory);
+        QString potentialArtworkDir = artworkBase.absoluteFilePath(subdir);
+        if (QDir(potentialArtworkDir).exists()) {
+          newCollection.artworkDirectory = potentialArtworkDir;
+        }
+      }
+    } else {
+      newCollection.artworkDirectory = dir.absoluteFilePath(subdir);
+      // Try to match content directory structure if it exists
+      if (!templateConfig.mediaDirectory.isEmpty()) {
+        QDir mediaBase(templateConfig.mediaDirectory);
+        QString potentialMediaDir = mediaBase.absoluteFilePath(subdir);
+        if (QDir(potentialMediaDir).exists()) {
+          newCollection.mediaDirectory = potentialMediaDir;
+        }
+      }
+    }
+    
+    // Clear the virtual subfolder state
+    newCollection.currentSubfolder.clear();
+    
+    m_workingCollections.append(newCollection);
+    collections.append(newCollection);
+  }
+
+  // Refresh the tree widget
+  updateCollectionTreeWidget();
+  expandPathToCollection(currentCollectionIndex);
+  
+  // Reselect current collection
+  if (collectionIndexToItem.contains(currentCollectionIndex)) {
+    QTreeWidgetItem *item = collectionIndexToItem[currentCollectionIndex];
+    if (item) {
+      collectionTreeWidget->setCurrentItem(item);
+      item->setSelected(true);
+      item->setExpanded(true);
+    }
+  }
+  
+  emit collectionSaved(collections);
+  
+  QMessageBox::information(this, tr("Recursive Import"),
+                           tr("Successfully created %1 subcollection(s).").arg(subdirs.size()));
+}
+
 void SettingsDialog::loadCollectionToUI(int index) {
-  if (index < 0 || index >= m_workingCollections.size()) {
+  if (!CollectionUtils::isValidIndex(index, m_workingCollections)) {
     return;
   }
   m_isLoading = true;
   const CollectionConfig &config = m_workingCollections[index];
 
-  if (ui->launcherLineEdit != nullptr) {
+  if (ui->launcherLineEdit) {
     ui->launcherLineEdit->setText(config.launcherPath);
   }
-  if (ui->coreLineEdit != nullptr) {
+  if (ui->coreLineEdit) {
     ui->coreLineEdit->setText(config.corePath);
   }
-  if (ui->launchParamsLineEdit != nullptr) {
+  if (ui->launchParamsLineEdit) {
     ui->launchParamsLineEdit->setText(config.launchParameters);
   }
-  if (ui->mediaDirLineEdit != nullptr) {
+  if (ui->mediaDirLineEdit) {
     ui->mediaDirLineEdit->setText(config.mediaDirectory);
   }
-  if (ui->artworkDirLineEdit != nullptr) {
+  if (ui->artworkDirLineEdit) {
     ui->artworkDirLineEdit->setText(config.artworkDirectory);
   }
-  if (ui->fileExtensionsLineEdit != nullptr) {
+  if (ui->includeContentSubfoldersCheckBox) {
+    ui->includeContentSubfoldersCheckBox->setChecked(config.includeContentSubfolders);
+  }
+  if (ui->showAllSubfolderItemsCheckBox) {
+    ui->showAllSubfolderItemsCheckBox->setChecked(config.showAllSubfolderItems);
+  }
+  if (ui->hideSubfolderTitlesCheckBox) {
+    ui->hideSubfolderTitlesCheckBox->setChecked(config.hideSubfolderTitles);
+  }
+  if (ui->includeArtworkSubfoldersCheckBox) {
+    ui->includeArtworkSubfoldersCheckBox->setChecked(config.includeArtworkSubfolders);
+  }
+  if (ui->fileExtensionsLineEdit) {
     ui->fileExtensionsLineEdit->setText(config.extensions.join(", "));
   }
-  if (ui->gridWidthSpinBox != nullptr) {
+  if (ui->gridWidthSpinBox) {
     ui->gridWidthSpinBox->setValue(config.gridWidth);
   }
-  if (ui->showAllSubcollectionItemsCheckBox != nullptr) {
+  if (ui->showAllSubcollectionItemsCheckBox) {
     ui->showAllSubcollectionItemsCheckBox->setChecked(
         config.showAllSubcollectionItems);
   }
-  if (ui->horizontalAlignmentComboBox != nullptr) {
+  if (ui->horizontalAlignmentComboBox) {
     ui->horizontalAlignmentComboBox->setCurrentIndex(
         static_cast<int>(config.horizontalAlignment));
   }
-  if (ui->sidebarModeComboBox != nullptr) {
+  if (ui->sidebarModeComboBox) {
     ui->sidebarModeComboBox->setCurrentIndex(
         static_cast<int>(config.sidebarMode));
   }
-  if (ui->horizontalSpacingSpinBox != nullptr) {
+  if (ui->horizontalSpacingSpinBox) {
     // Rebase horizontal spacing: UI = Internal + 70
     ui->horizontalSpacingSpinBox->setValue(config.horizontalSpacing + 70);
   }
-  if (ui->verticalSpacingSpinBox != nullptr) {
+  if (ui->verticalSpacingSpinBox) {
     ui->verticalSpacingSpinBox->setValue(config.verticalSpacing);
   }
-  if (ui->hideHorizontalScrollbarCheckBox != nullptr) {
+  if (ui->hideHorizontalScrollbarCheckBox) {
     ui->hideHorizontalScrollbarCheckBox->setChecked(
         config.hideHorizontalScrollbar);
   }
-  if (ui->hideVerticalScrollbarCheckBox != nullptr) {
+  if (ui->hideVerticalScrollbarCheckBox) {
     ui->hideVerticalScrollbarCheckBox->setChecked(
         config.hideVerticalScrollbar);
   }
-  if (ui->hideTitlesCheckBox != nullptr) {
+  if (ui->hideTitlesCheckBox) {
     ui->hideTitlesCheckBox->setChecked(config.hideTitles);
   }
-  if (ui->hideSubcollectionTitlesCheckBox != nullptr) {
+  if (ui->hideSubcollectionTitlesCheckBox) {
     ui->hideSubcollectionTitlesCheckBox->setChecked(
         config.hideSubcollectionTitles);
   }
-  if (ui->itemWidthSpinBox != nullptr) {
+  if (ui->itemWidthSpinBox) {
     ui->itemWidthSpinBox->setValue(config.itemWidth);
   }
-  if (ui->itemHeightSpinBox != nullptr) {
+  if (ui->itemHeightSpinBox) {
     ui->itemHeightSpinBox->setValue(config.itemHeight);
   }
-  if (ui->fontSizeSpinBox != nullptr) {
+  if (ui->fontSizeSpinBox) {
     ui->fontSizeSpinBox->setValue(config.fontSize);
   }
 

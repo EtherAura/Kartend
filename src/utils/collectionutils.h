@@ -18,7 +18,7 @@ enum class SidebarMode { Overlay = 0, Expand = 1 };
 
 namespace CollectionUtils {
 
-inline QString alignmentToString(HorizontalAlignment alignment) {
+[[nodiscard]] inline QString alignmentToString(HorizontalAlignment alignment) {
   switch (alignment) {
   case HorizontalAlignment::Left:
     return "left";
@@ -31,7 +31,7 @@ inline QString alignmentToString(HorizontalAlignment alignment) {
   }
 }
 
-inline HorizontalAlignment stringToAlignment(const QString &str) {
+[[nodiscard]] inline HorizontalAlignment stringToAlignment(const QString &str) {
   QString lower = str.toLower();
   if (lower == "left")
     return HorizontalAlignment::Left;
@@ -61,13 +61,22 @@ struct CollectionConfig {
   bool hideSubcollectionTitles = false;
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Center;
   SidebarMode sidebarMode = SidebarMode::Overlay;
-  int horizontalSpacing = UIConstants::GRID_SPACING;
+  int horizontalSpacing = UIConstants::Grid::SPACING;
   int verticalSpacing = 20;
   bool hideHorizontalScrollbar = false;
   bool hideVerticalScrollbar = false;
-  int itemWidth = UIConstants::DEFAULT_ITEM_WIDTH;
-  int itemHeight = UIConstants::DEFAULT_ITEM_HEIGHT;
-  int fontSize = UIConstants::DEFAULT_FONT_SIZE;
+  int itemWidth = UIConstants::Item::DEFAULT_WIDTH;
+  int itemHeight = UIConstants::Item::DEFAULT_HEIGHT;
+  int fontSize = UIConstants::Item::DEFAULT_FONT_SIZE;
+  
+  // Folder browsing options
+  bool includeContentSubfolders = false;   // Show subfolders as virtual navigable folders
+  bool includeArtworkSubfolders = false;   // Match artwork from subfolders
+  bool showAllSubfolderItems = false;      // Mix subfolder items with parent (like showAllSubcollectionItems)
+  bool hideSubfolderTitles = false;        // Hide titles on virtual folder widgets
+  
+  // Virtual subfolder tracking (runtime only, not persisted)
+  QString currentSubfolder;                // Current virtual subfolder path (relative to mediaDirectory)
 
   CollectionConfig()
       : gridWidth(4), sidebarVisible(false),
@@ -91,15 +100,56 @@ struct CollectionConfig {
   
   // Validates numeric fields are within acceptable ranges
   void clampValues() {
-    gridWidth = std::clamp(gridWidth, UIConstants::MIN_GRID_WIDTH, UIConstants::MAX_GRID_WIDTH);
-    itemWidth = std::clamp(itemWidth, UIConstants::MIN_ITEM_WIDTH, UIConstants::MAX_ITEM_WIDTH);
-    itemHeight = std::clamp(itemHeight, UIConstants::MIN_ITEM_HEIGHT, UIConstants::MAX_ITEM_HEIGHT);
-    fontSize = std::clamp(fontSize, UIConstants::MIN_FONT_SIZE, UIConstants::MAX_FONT_SIZE);
+    gridWidth = std::clamp(gridWidth, UIConstants::Grid::MIN_WIDTH, UIConstants::Grid::MAX_WIDTH);
+    itemWidth = std::clamp(itemWidth, UIConstants::Item::MIN_WIDTH, UIConstants::Item::MAX_WIDTH);
+    itemHeight = std::clamp(itemHeight, UIConstants::Item::MIN_HEIGHT, UIConstants::Item::MAX_HEIGHT);
+    fontSize = std::clamp(fontSize, UIConstants::Item::MIN_FONT_SIZE, UIConstants::Item::MAX_FONT_SIZE);
     // Spacing can be negative for overlap effects
     horizontalSpacing = std::clamp(horizontalSpacing, -100, 200);
     verticalSpacing = std::clamp(verticalSpacing, -100, 200);
   }
 };
+
+// Collection index validation helpers - reduces repeated null checks
+// Placed after CollectionConfig definition to avoid forward declaration issues
+namespace CollectionUtils {
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Index validation helpers - reduces repeated null/bounds checks
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Validates index against collection pointer (null-safe)
+[[nodiscard]] inline bool isValidIndex(int index,
+                                       const QList<CollectionConfig> *collections) {
+  return collections && index >= 0 && index < collections->size();
+}
+
+/// Validates index pointer against collection pointer (null-safe for both)
+[[nodiscard]] inline bool isValidIndex(const int *indexPtr,
+                                       const QList<CollectionConfig> *collections) {
+  return indexPtr && isValidIndex(*indexPtr, collections);
+}
+
+/// Validates index against collection reference (no null check needed)
+[[nodiscard]] inline bool isValidIndex(int index,
+                                       const QList<CollectionConfig> &collections) {
+  return index >= 0 && index < collections.size();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Collection property accessors with validation
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Get grid width with fallback to default - reduces duplication across managers
+[[nodiscard]] inline int getGridWidth(const int *indexPtr,
+                                      const QList<CollectionConfig> *collections) {
+  if (!isValidIndex(indexPtr, collections)) {
+    return UIConstants::Grid::DEFAULT_WIDTH;
+  }
+  return (*collections)[*indexPtr].gridWidth;
+}
+
+} // namespace CollectionUtils
 
 struct CollectionContext {
   int currentIndex = -1;
@@ -107,27 +157,7 @@ struct CollectionContext {
   QString artworkDirectory;
   QStringList filePaths;
   QHash<QString, QString> fileNames;
-  bool isValid() const { return currentIndex >= 0; }
-};
-
-struct MainScreenConfig {
-  int gridWidth;
-  HorizontalAlignment horizontalAlignment;
-  bool showHiddenCollections;
-
-  MainScreenConfig()
-      : gridWidth(4), horizontalAlignment(HorizontalAlignment::Center),
-        showHiddenCollections(false) {}
-
-  bool operator==(const MainScreenConfig &other) const {
-    return gridWidth == other.gridWidth &&
-           horizontalAlignment == other.horizontalAlignment &&
-           showHiddenCollections == other.showHiddenCollections;
-  }
-
-  bool operator!=(const MainScreenConfig &other) const {
-    return !(*this == other);
-  }
+  [[nodiscard]] bool isValid() const { return currentIndex >= 0; }
 };
 
 struct GeneralSettings {
@@ -162,15 +192,15 @@ public:
     }
   }
   
-  QList<int> directChildren(int parentIndex) const {
+  [[nodiscard]] QList<int> directChildren(int parentIndex) const {
     return m_directChildren.value(parentIndex);
   }
   
-  QList<int> allDescendants(int parentIndex) const {
+  [[nodiscard]] QList<int> allDescendants(int parentIndex) const {
     return m_allDescendants.value(parentIndex);
   }
   
-  bool isValid() const { return m_collections != nullptr; }
+  [[nodiscard]] bool isValid() const { return m_collections; }
   
 private:
   QList<int> computeDescendants(int parentIndex) const {
@@ -192,7 +222,7 @@ private:
 // Legacy inline functions for backward compatibility
 namespace CollectionUtils {
 
-inline QList<int>
+[[nodiscard]] inline QList<int>
 collectDescendantIndices(int parentIndex,
                          const QList<CollectionConfig> &collections) {
   QList<int> descendants;
@@ -205,7 +235,7 @@ collectDescendantIndices(int parentIndex,
   return descendants;
 }
 
-inline QString hierarchicalNameFor(const CollectionConfig &collection,
+[[nodiscard]] inline QString hierarchicalNameFor(const CollectionConfig &collection,
                                    const QList<CollectionConfig> &collections) {
   if (!collection.isSubcollection || collection.parentCollectionIndex < 0) {
     return collection.name;
@@ -223,7 +253,7 @@ inline QString hierarchicalNameFor(const CollectionConfig &collection,
   return parts.join('/');
 }
 
-inline QList<int> directChildrenOf(int parentIndex,
+[[nodiscard]] inline QList<int> directChildrenOf(int parentIndex,
                                    const QList<CollectionConfig> &collections) {
   QList<int> children;
   for (int i = 0; i < collections.size(); ++i) {
@@ -233,6 +263,14 @@ inline QList<int> directChildrenOf(int parentIndex,
   }
   return children;
 }
+
+/**
+ * @brief Computes a deterministic UUID from collection name and media directory.
+ * @param name Collection name.
+ * @param mediaDir Media directory path.
+ * @return SHA1 hash as hex string.
+ */
+[[nodiscard]] QString computeCollectionUuid(const QString &name, const QString &mediaDir);
 
 } // namespace CollectionUtils
 

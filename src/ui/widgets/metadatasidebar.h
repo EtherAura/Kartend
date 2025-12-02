@@ -9,20 +9,20 @@
 
 #include "ui_metadatasidebar.h"
 
-class metadataSidebar : public QWidget {
+class MetadataSidebar : public QWidget {
   Q_OBJECT
 public:
-  explicit metadataSidebar(QWidget *parent = nullptr);
-  ~metadataSidebar();
-  void setmetadata(const QString &filePath, const QString &itemName);
+  explicit MetadataSidebar(QWidget *parent = nullptr);
+  ~MetadataSidebar();
+  void setMetadata(const QString &filePath, const QString &itemName);
   void clearMetadata();
   void setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy);
 
 private:
   void setupUI();
   void updateFileInfo(const QString &filePath);
-  static QString formatFileSize(qint64 bytes);
-  Ui::metadataSidebar *ui;
+  [[nodiscard]] static QString formatFileSize(qint64 bytes);
+  Ui::MetadataSidebar *ui;
 };
 
 #endif

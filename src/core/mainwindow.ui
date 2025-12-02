@@ -239,7 +239,7 @@
             </widget>
            </item>
            <item>
-            <widget class="metadataSidebar" name="metadataSidebarWidget">
+            <widget class="MetadataSidebar" name="metadataSidebarWidget">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Fixed" vsizetype="Expanding">
                <horstretch>0</horstretch>
@@ -338,7 +338,7 @@
 
  <customwidgets>
   <customwidget>
-   <class>metadataSidebar</class>
+   <class>MetadataSidebar</class>
    <extends>QWidget</extends>
    <header>metadatasidebar.h</header>
   </customwidget>
