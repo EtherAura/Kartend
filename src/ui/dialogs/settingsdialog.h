@@ -2,7 +2,6 @@
 #define SETTINGSDIALOG_H
 
 #include "collectionutils.h"
-#include "extensionutils.h"
 #include <QDialog>
 #include <QHash>
 #include <QList>
@@ -62,6 +61,8 @@ private slots:
   void checkForChanges();
   void onContentDirectoryChanged();
   void onGridWidthChanged(int value);
+  void onRecursiveImportContent();
+  void onRecursiveImportArtwork();
 
 private:
   void updateCollectionTreeWidget();
@@ -82,20 +83,21 @@ private:
   void setupGeneralSettingsConnections();
   void loadCollectionToUI(int index);
   void saveCollectionFromUI(int index);
-  bool hasUnsavedChanges() const;
+  [[nodiscard]] bool hasUnsavedChanges() const;
   void updateSaveButtonStyle();
   void updateUIForLauncherType(const QString &launcherPath);
   /// Populates and selects the parent collection combo box for the active collection.
   void updateParentCollectionComboBox(int currentIndex);
-  bool wouldCreateCircularReference(int childIndex,
+  [[nodiscard]] bool wouldCreateCircularReference(int childIndex,
                                     int potentialParentIndex) const;
   void emitGridWidthChanged();
   void updateFieldVisibility();
   void updateSidebarModeVisibility();
-  int calculateMaxGridWidth() const;
+  [[nodiscard]] int calculateMaxGridWidth() const;
   void updateGridWidthLimits();
   void loadGeneralSettingsToUI();
   void saveGeneralSettingsFromUI();
+  void performRecursiveImport(const QString &baseDir, bool isContentDir);
   // Helper methods for removeCollection refactoring
   auto validateRemovalPreconditions() -> bool;
   auto captureExpandedStates() -> QList<int>;

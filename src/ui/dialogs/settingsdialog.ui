@@ -219,16 +219,60 @@
            </widget>
           </item>
           <item row="4" column="1">
-           <layout class="QHBoxLayout" name="contentDirLayout">
+           <layout class="QVBoxLayout" name="contentDirOuterLayout">
+            <property name="spacing">
+             <number>4</number>
+            </property>
             <item>
-             <widget class="QLineEdit" name="mediaDirLineEdit"/>
+             <layout class="QHBoxLayout" name="contentDirLayout">
+              <item>
+               <widget class="QLineEdit" name="mediaDirLineEdit"/>
+              </item>
+              <item>
+               <widget class="QPushButton" name="browseMediaDirButton">
+                <property name="text">
+                 <string>Browse</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
             </item>
             <item>
-             <widget class="QPushButton" name="browseMediaDirButton">
-              <property name="text">
-               <string>Browse</string>
-              </property>
-             </widget>
+             <layout class="QHBoxLayout" name="contentOptionsLayout">
+              <item>
+               <widget class="QCheckBox" name="includeContentSubfoldersCheckBox">
+                <property name="toolTip">
+                 <string>Show subfolders as navigable virtual folders (does not create subcollections)</string>
+                </property>
+                <property name="text">
+                 <string>Include Subfolders</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="recursiveImportContentButton">
+                <property name="toolTip">
+                 <string>Create subcollections matching the directory structure</string>
+                </property>
+                <property name="text">
+                 <string>Recursive Import...</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="contentOptionsSpacer">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
             </item>
            </layout>
           </item>
@@ -240,16 +284,50 @@
            </widget>
           </item>
           <item row="5" column="1">
-           <layout class="QHBoxLayout" name="artworkDirLayout">
+           <layout class="QVBoxLayout" name="artworkDirOuterLayout">
+            <property name="spacing">
+             <number>4</number>
+            </property>
             <item>
-             <widget class="QLineEdit" name="artworkDirLineEdit"/>
+             <layout class="QHBoxLayout" name="artworkDirLayout">
+              <item>
+               <widget class="QLineEdit" name="artworkDirLineEdit"/>
+              </item>
+              <item>
+               <widget class="QPushButton" name="browseArtworkDirButton">
+                <property name="text">
+                 <string>Browse</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
             </item>
             <item>
-             <widget class="QPushButton" name="browseArtworkDirButton">
-              <property name="text">
-               <string>Browse</string>
-              </property>
-             </widget>
+             <layout class="QHBoxLayout" name="artworkOptionsLayout">
+              <item>
+               <widget class="QCheckBox" name="includeArtworkSubfoldersCheckBox">
+                <property name="toolTip">
+                 <string>Look for artwork in subfolders matching the content structure</string>
+                </property>
+                <property name="text">
+                 <string>Include Subfolders</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="artworkOptionsSpacer">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
             </item>
            </layout>
           </item>
