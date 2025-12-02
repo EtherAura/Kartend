@@ -93,31 +93,6 @@ auto SettingsUtils::getConfigPath() -> QString {
   return appConfigDir.absoluteFilePath("kartend.cfg");
 }
 
-void SettingsUtils::loadMainScreenSettings(MainScreenConfig &config) {
-  QSettings settings(getConfigPath(), getFormat());
-  // Load from "Games" section instead of "General"
-  settings.beginGroup("Games");
-  config.gridWidth = settings.value("gridWidth", UIConstants::DEFAULT_GRID_WIDTH).toInt();
-  config.horizontalAlignment = CollectionUtils::stringToAlignment(settings.value("horizontalAlignment", "center").toString());
-  // showHiddenCollections might not be in CollectionConfig, so we keep it here or assume it's custom
-  config.showHiddenCollections = settings.value("showHiddenCollections", false).toBool();
-  settings.endGroup();
-
-  config.gridWidth = std::max(config.gridWidth, UIConstants::MIN_GRID_WIDTH);
-  config.gridWidth = std::min(config.gridWidth, UIConstants::MAX_GRID_WIDTH);
-}
-
-void SettingsUtils::saveMainScreenSettings(const MainScreenConfig &config) {
-  QSettings settings(getConfigPath(), getFormat());
-  // Save to "Games" section instead of "General"
-  settings.beginGroup("Games");
-  settings.setValue("gridWidth", config.gridWidth);
-  settings.setValue("horizontalAlignment", CollectionUtils::alignmentToString(config.horizontalAlignment));
-  settings.setValue("showHiddenCollections", config.showHiddenCollections);
-  settings.endGroup();
-  settings.sync();
-}
-
 auto SettingsUtils::expandConfigVariables(const QString &input,
                                             const QString &collectionName)
     -> QString {
@@ -127,7 +102,7 @@ auto SettingsUtils::expandConfigVariables(const QString &input,
 void SettingsUtils::applyHorizontalScrollbarSetting(
     QScrollArea *itemScrollArea, int collectionIndex,
     const QList<CollectionConfig> &collections) {
-  if ((itemScrollArea == nullptr) || collectionIndex < 0 ||
+  if ((!itemScrollArea) || collectionIndex < 0 ||
       collectionIndex >= collections.size()) {
     return;
   }
@@ -142,7 +117,7 @@ void SettingsUtils::applyHorizontalScrollbarSetting(
 void SettingsUtils::applyVerticalScrollbarSetting(
     QScrollArea *itemScrollArea, int collectionIndex,
     const QList<CollectionConfig> &collections) {
-  if ((itemScrollArea == nullptr) || collectionIndex < 0 ||
+  if ((!itemScrollArea) || collectionIndex < 0 ||
       collectionIndex >= collections.size()) {
     return;
   }

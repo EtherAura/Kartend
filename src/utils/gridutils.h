@@ -3,25 +3,25 @@
 
 namespace GridUtils {
 
-inline int computeItemRow(int index, int gridWidth) {
+[[nodiscard]] inline int computeItemRow(int index, int gridWidth) {
     return (gridWidth > 0) ? (index / gridWidth) : 0;
 }
 
-inline int computeItemCol(int index, int gridWidth) {
+[[nodiscard]] inline int computeItemCol(int index, int gridWidth) {
     return (gridWidth > 0) ? (index % gridWidth) : 0;
 }
 
-inline int computeItemY(int index, int gridWidth, int itemHeight, int verticalSpacing, int margins) {
+[[nodiscard]] inline int computeItemY(int index, int gridWidth, int itemHeight, int verticalSpacing, int margins) {
     int row = computeItemRow(index, gridWidth);
     return margins + row * (itemHeight + verticalSpacing);
 }
 
-inline int computeItemX(int index, int gridWidth, int itemWidth, int horizontalSpacing, int margins) {
+[[nodiscard]] inline int computeItemX(int index, int gridWidth, int itemWidth, int horizontalSpacing, int margins) {
     int col = computeItemCol(index, gridWidth);
     return margins + col * (itemWidth + horizontalSpacing);
 }
 
-inline int computeCenterTarget(int itemCoord, int itemSize, int viewportSize, int maxScroll) {
+[[nodiscard]] inline int computeCenterTarget(int itemCoord, int itemSize, int viewportSize, int maxScroll) {
     int t = itemCoord + itemSize / 2 - viewportSize / 2;
     if (t < 0) t = 0;
     else if (t > maxScroll) t = maxScroll;

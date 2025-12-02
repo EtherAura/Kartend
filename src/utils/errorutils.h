@@ -67,6 +67,12 @@ struct ErrorContext {
   static ErrorContext success() {
     return ErrorContext{};
   }
+
+  // Create informational context (not an error, just a condition)
+  static ErrorContext info(ErrorCode code, const QString &message,
+                          const QString &source = QString()) {
+    return ErrorContext{code, Severity::Info, message, QString(), source};
+  }
   
   // Create error context
   static ErrorContext error(ErrorCode code, const QString &message,

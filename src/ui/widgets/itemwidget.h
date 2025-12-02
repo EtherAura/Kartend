@@ -53,11 +53,12 @@ public:
   int m_fontSize = 12; // Default font size
   bool m_hideTitles = false;
   bool m_hideSubcollectionTitles = false;
+  bool m_hideSubfolderTitle = false;
   QLabel *imageLabel = nullptr;
   QLabel *nameLabel = nullptr;
   QWidget *triangleIndicator;
   void setAsSubcollection(int index, const QString &name);
-  void setAsVirtualFolder(const QString &folderPath, const QString &displayName);
+  void setAsVirtualFolder(const QString &folderPath, const QString &displayName, bool hideTitle = false);
   [[nodiscard]] bool isVirtualFolder() const { return m_isVirtualFolder; }
   [[nodiscard]] QString virtualFolderPath() const { return m_virtualFolderPath; }
   void applyTitleTint();

@@ -421,8 +421,14 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
 
   // Paint title text with tint color - bypasses broken QLabel stylesheet in Qt 6.9
   if (nameLabel && !itemName.isEmpty() && nameLabel->isVisible()) {
-    bool shouldShowTitle = (!m_isSubcollection && !m_hideTitles) || 
-                           (m_isSubcollection && !m_hideSubcollectionTitles);
+    bool shouldShowTitle = false;
+    if (m_isVirtualFolder) {
+      shouldShowTitle = !m_hideSubfolderTitle;
+    } else if (m_isSubcollection) {
+      shouldShowTitle = !m_hideSubcollectionTitles;
+    } else {
+      shouldShowTitle = !m_hideTitles;
+    }
     if (shouldShowTitle) {
       painter.setRenderHint(QPainter::TextAntialiasing);
       painter.setPen(m_titleTintColor);
@@ -466,8 +472,16 @@ void ItemWidget::applyDimensions() {
   int availableWidth = m_itemWidth - UIConstants::Widget::PADDING;
   int artworkSize = qMin(availableWidth, availableHeight);
   
-  // Show title if: regular item with titles visible, OR subcollection with subcollection titles visible
-  bool shouldShowTitle = (!m_isSubcollection && !m_hideTitles) || (m_isSubcollection && !m_hideSubcollectionTitles);
+  // Show title if: regular item with titles visible, OR subcollection with subcollection titles visible,
+  // OR virtual folder with subfolder titles visible
+  bool shouldShowTitle = false;
+  if (m_isVirtualFolder) {
+    shouldShowTitle = !m_hideSubfolderTitle;
+  } else if (m_isSubcollection) {
+    shouldShowTitle = !m_hideSubcollectionTitles;
+  } else {
+    shouldShowTitle = !m_hideTitles;
+  }
   
   if (imageLabel) {
     imageLabel->setFixedSize(artworkSize, artworkSize);
@@ -587,6 +601,7 @@ void ItemWidget::resetForReuse() {
   m_subcollectionIndex = -1;
   m_isVirtualFolder = false;
   m_virtualFolderPath.clear();
+  m_hideSubfolderTitle = false;
   filePath.clear();
   itemName.clear();
   storedPixmap = QPixmap();  // Clear stored artwork
@@ -611,10 +626,12 @@ void ItemWidget::setAsSubcollection(int index, const QString &name) {
 }
 
 // Set as virtual folder (subfolder navigation without subcollection)
-void ItemWidget::setAsVirtualFolder(const QString &folderPath, const QString &displayName) {
+void ItemWidget::setAsVirtualFolder(const QString &folderPath, const QString &displayName, bool hideTitle) {
   m_isVirtualFolder = true;
   m_virtualFolderPath = folderPath;
-  setItemName(QStringLiteral("📂 ") + displayName);
+  m_hideSubfolderTitle = hideTitle;
+  // Use folder icon (🗂️) to distinguish from subcollection icon (📂)
+  setItemName(QStringLiteral("🗂️ ") + displayName);
   applyDimensions();
 }
 
@@ -622,8 +639,16 @@ void ItemWidget::setAsVirtualFolder(const QString &folderPath, const QString &di
 void ItemWidget::setItemName(const QString &name) {
   itemName = name;
   if (nameLabel) {
-    // Show title if: regular item with titles visible, OR subcollection with subcollection titles visible
-    bool shouldShowTitle = (!m_isSubcollection && !m_hideTitles) || (m_isSubcollection && !m_hideSubcollectionTitles);
+    // Show title if: regular item with titles visible, OR subcollection with subcollection titles visible,
+    // OR virtual folder with subfolder titles visible
+    bool shouldShowTitle = false;
+    if (m_isVirtualFolder) {
+      shouldShowTitle = !m_hideSubfolderTitle;
+    } else if (m_isSubcollection) {
+      shouldShowTitle = !m_hideSubcollectionTitles;
+    } else {
+      shouldShowTitle = !m_hideTitles;
+    }
     
     if (!shouldShowTitle) {
       // Keep the label visible but empty to reserve layout space

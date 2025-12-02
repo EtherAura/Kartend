@@ -71,9 +71,9 @@ struct CollectionConfig {
   
   // Folder browsing options
   bool includeContentSubfolders = false;   // Show subfolders as virtual navigable folders
-  bool recursiveContentImport = false;     // Auto-create subcollections from directory structure
   bool includeArtworkSubfolders = false;   // Match artwork from subfolders
-  bool recursiveArtworkImport = false;     // Auto-create artwork mappings from directory structure
+  bool showAllSubfolderItems = false;      // Mix subfolder items with parent (like showAllSubcollectionItems)
+  bool hideSubfolderTitles = false;        // Hide titles on virtual folder widgets
   
   // Virtual subfolder tracking (runtime only, not persisted)
   QString currentSubfolder;                // Current virtual subfolder path (relative to mediaDirectory)

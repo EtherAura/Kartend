@@ -161,9 +161,9 @@ void SettingsManager::loadCollections(
     config.mediaDirectory = settings.value("mediaDirectory").toString();
     config.artworkDirectory = settings.value("artworkDirectory").toString();
     config.includeContentSubfolders = settings.value("includeContentSubfolders", false).toBool();
-    config.recursiveContentImport = settings.value("recursiveContentImport", false).toBool();
     config.includeArtworkSubfolders = settings.value("includeArtworkSubfolders", false).toBool();
-    config.recursiveArtworkImport = settings.value("recursiveArtworkImport", false).toBool();
+    config.showAllSubfolderItems = settings.value("showAllSubfolderItems", false).toBool();
+    config.hideSubfolderTitles = settings.value("hideSubfolderTitles", false).toBool();
     config.collectionIcon = settings.value("collectionIcon").toString();
     
     QString extStr = settings.value("extensions").toString();
@@ -255,9 +255,9 @@ void SettingsManager::saveCollections(
     settings.setValue("mediaDirectory", c.mediaDirectory);
     settings.setValue("artworkDirectory", c.artworkDirectory);
     settings.setValue("includeContentSubfolders", c.includeContentSubfolders);
-    settings.setValue("recursiveContentImport", c.recursiveContentImport);
     settings.setValue("includeArtworkSubfolders", c.includeArtworkSubfolders);
-    settings.setValue("recursiveArtworkImport", c.recursiveArtworkImport);
+    settings.setValue("showAllSubfolderItems", c.showAllSubfolderItems);
+    settings.setValue("hideSubfolderTitles", c.hideSubfolderTitles);
     settings.setValue("collectionIcon", c.collectionIcon);
     settings.setValue("extensions", c.extensions.join(", "));
     settings.setValue("gridWidth", c.gridWidth);
@@ -409,6 +409,8 @@ void compareReloadFields(const CollectionConfig &configA,
       configA.includeContentSubfolders != configB.includeContentSubfolders ||
       configA.includeArtworkSubfolders != configB.includeArtworkSubfolders ||
       configA.showAllSubcollectionItems != configB.showAllSubcollectionItems ||
+      configA.showAllSubfolderItems != configB.showAllSubfolderItems ||
+      configA.hideSubfolderTitles != configB.hideSubfolderTitles ||
       configA.extensions != configB.extensions) {
     hasChanges = true;
     needsReload = true;

@@ -250,6 +250,26 @@
                </widget>
               </item>
               <item>
+               <widget class="QCheckBox" name="showAllSubfolderItemsCheckBox">
+                <property name="toolTip">
+                 <string>Mix items from subfolders with parent collection items, sorted alphabetically</string>
+                </property>
+                <property name="text">
+                 <string>Show All Subfolder Items</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="hideSubfolderTitlesCheckBox">
+                <property name="toolTip">
+                 <string>Hide titles on virtual subfolder widgets</string>
+                </property>
+                <property name="text">
+                 <string>Hide Subfolder Titles</string>
+                </property>
+               </widget>
+              </item>
+              <item>
                <widget class="QPushButton" name="recursiveImportContentButton">
                 <property name="toolTip">
                  <string>Create subcollections matching the directory structure</string>

@@ -422,6 +422,14 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->includeContentSubfoldersCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
   }
+  if (ui->showAllSubfolderItemsCheckBox) {
+    connect(ui->showAllSubfolderItemsCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->hideSubfolderTitlesCheckBox) {
+    connect(ui->hideSubfolderTitlesCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
   if (ui->includeArtworkSubfoldersCheckBox) {
     connect(ui->includeArtworkSubfoldersCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
@@ -812,6 +820,14 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
       (ui->includeContentSubfoldersCheckBox)
           ? ui->includeContentSubfoldersCheckBox->isChecked()
           : config.includeContentSubfolders;
+  config.showAllSubfolderItems =
+      (ui->showAllSubfolderItemsCheckBox)
+          ? ui->showAllSubfolderItemsCheckBox->isChecked()
+          : config.showAllSubfolderItems;
+  config.hideSubfolderTitles =
+      (ui->hideSubfolderTitlesCheckBox)
+          ? ui->hideSubfolderTitlesCheckBox->isChecked()
+          : config.hideSubfolderTitles;
   config.includeArtworkSubfolders =
       (ui->includeArtworkSubfoldersCheckBox)
           ? ui->includeArtworkSubfoldersCheckBox->isChecked()
@@ -938,6 +954,12 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ((ui->includeContentSubfoldersCheckBox) &&
        ui->includeContentSubfoldersCheckBox->isChecked() !=
            originalConfig.includeContentSubfolders) ||
+      ((ui->showAllSubfolderItemsCheckBox) &&
+       ui->showAllSubfolderItemsCheckBox->isChecked() !=
+           originalConfig.showAllSubfolderItems) ||
+      ((ui->hideSubfolderTitlesCheckBox) &&
+       ui->hideSubfolderTitlesCheckBox->isChecked() !=
+           originalConfig.hideSubfolderTitles) ||
       ((ui->includeArtworkSubfoldersCheckBox) &&
        ui->includeArtworkSubfoldersCheckBox->isChecked() !=
            originalConfig.includeArtworkSubfolders) ||
@@ -1572,6 +1594,12 @@ void SettingsDialog::loadCollectionToUI(int index) {
   }
   if (ui->includeContentSubfoldersCheckBox) {
     ui->includeContentSubfoldersCheckBox->setChecked(config.includeContentSubfolders);
+  }
+  if (ui->showAllSubfolderItemsCheckBox) {
+    ui->showAllSubfolderItemsCheckBox->setChecked(config.showAllSubfolderItems);
+  }
+  if (ui->hideSubfolderTitlesCheckBox) {
+    ui->hideSubfolderTitlesCheckBox->setChecked(config.hideSubfolderTitles);
   }
   if (ui->includeArtworkSubfoldersCheckBox) {
     ui->includeArtworkSubfoldersCheckBox->setChecked(config.includeArtworkSubfolders);

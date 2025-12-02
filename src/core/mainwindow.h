@@ -1,6 +1,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include "applicationcontext.h"
 #include "collectionutils.h"
 #include "interactionmanager.h"
 #include <QHash>
@@ -31,8 +32,8 @@ class NavigationManager;
 class SettingsManager;
 class SidebarManager;
 class ScrollManager;
-class MediaItemWidget;
-class metadataSidebar;
+class ItemWidget;
+class MetadataSidebar;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -57,15 +58,18 @@ public:
   int currentCollectionIndex;
   QList<CollectionConfig> m_collections;
   CollectionHierarchyCache m_hierarchyCache;
+  ApplicationContext m_appContext;  // Shared context for manager setup
+  
   void refreshTitleCounts();
   void updateWindowTitleForCollection(int collectionIndex);
   void rebuildHierarchyCache();
   [[nodiscard]] const CollectionHierarchyCache &getHierarchyCache() const { return m_hierarchyCache; }
-  bool isShuttingDown() const { return m_isShuttingDown; }
+  [[nodiscard]] const ApplicationContext &getAppContext() const { return m_appContext; }
+  [[nodiscard]] bool isShuttingDown() const { return m_isShuttingDown; }
 
   // Getters for Managers
   ApplicationManager *getApplicationManager() const { return m_appManager.get(); }
-  metadataSidebar *getMetadataSidebar() const { return m_metadataSidebar; }
+  MetadataSidebar *getMetadataSidebar() const { return m_MetadataSidebar; }
   
   // Delegated Getters
   SidebarManager *getSidebarManager() const;
@@ -86,11 +90,10 @@ protected:
 
 private:
   bool m_isShuttingDown = false;
-  MainScreenConfig m_mainScreenConfig;
   QAction *m_fullscreenAction = nullptr;
 
   std::unique_ptr<ApplicationManager> m_appManager;
-  metadataSidebar *m_metadataSidebar = nullptr;
+  MetadataSidebar *m_MetadataSidebar = nullptr;
 
   void setupManagerConnections();
   void updateWindowTitleWithFilter(int visible, int total);
@@ -118,6 +121,7 @@ private:
   void setupInitialTimers();
   void setupInitialTimersEmptyCollections();
   void setupInitialTimersWithCollections();
+  void initializeAppContext();
   void showAbout();
 };
 

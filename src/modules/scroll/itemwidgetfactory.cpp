@@ -81,7 +81,7 @@ ItemWidget *ItemWidgetFactory::createVirtualFolderWidget(const QString &folderPa
     displayName = folderPath.mid(lastSlash + 1);
   }
 
-  widget->setAsVirtualFolder(folderPath, displayName);
+  widget->setAsVirtualFolder(folderPath, displayName, m_context.config.hideSubfolderTitles);
 
   // Connect double-click signal
   connect(widget, &ItemWidget::virtualFolderDoubleClicked, this,

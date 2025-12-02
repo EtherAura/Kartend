@@ -346,7 +346,8 @@ void ScrollManager::initializeVirtualFolders() {
   m_virtualFolders.clear();
   
   // Only show virtual folders if includeContentSubfolders is enabled
-  if (!m_context.config.includeContentSubfolders) {
+  // AND showAllSubfolderItems is false (otherwise items are flattened)
+  if (!m_context.config.includeContentSubfolders || m_context.config.showAllSubfolderItems) {
     return;
   }
   

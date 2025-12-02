@@ -6,10 +6,10 @@
 class ExtensionUtils
 {
 public:
-    static QStringList parseUserExtensionList(const QString& text);
-    static QStringList normalizeStoredExtensions(const QStringList& raw);
-    static const QStringList& imageBaseExtensions();
-    static QStringList imageFilters();
+    [[nodiscard]] static QStringList parseUserExtensionList(const QString& text);
+    [[nodiscard]] static QStringList normalizeStoredExtensions(const QStringList& raw);
+    [[nodiscard]] static const QStringList& imageBaseExtensions();
+    [[nodiscard]] static QStringList imageFilters();
 
 };
 
