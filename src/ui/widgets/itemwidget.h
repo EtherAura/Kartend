@@ -18,7 +18,7 @@ class QShowEvent;
 class QResizeEvent;
 class QTimer;
 
-class MediaItemWidget : public QWidget {
+class ItemWidget : public QWidget {
   Q_OBJECT
   Q_PROPERTY(qreal pulseOpacity READ pulseOpacity WRITE setPulseOpacity)
   bool isSelectedState = false;
@@ -27,21 +27,22 @@ class MediaItemWidget : public QWidget {
   QPixmap storedPixmap;
 
 public:
-  explicit MediaItemWidget(QWidget *parent = nullptr);
-  ~MediaItemWidget() override;
+  explicit ItemWidget(QWidget *parent = nullptr);
+  ~ItemWidget() override;
 
   void setItemName(const QString &name);
   void setFilePath(const QString &path);
   void setArtworkPixmap(const QPixmap &pixmap);
   virtual void setSelected(bool selected);
+  void resetForReuse();
 
-  QString getItemName() const { return itemName; }
-  QString getFilePath() const { return filePath; }
-  QRect selectionBorderRectInParent() const;
-  bool isSelected() const { return isSelectedState; }
+  [[nodiscard]] QString getItemName() const { return itemName; }
+  [[nodiscard]] QString getFilePath() const { return filePath; }
+  [[nodiscard]] QRect selectionBorderRectInParent() const;
+  [[nodiscard]] bool isSelected() const { return isSelectedState; }
 
   void setPulseOpacity(qreal opacity);
-  qreal pulseOpacity() const { return m_pulseOpacity; }
+  [[nodiscard]] qreal pulseOpacity() const { return m_pulseOpacity; }
 
   void setItemDimensions(int width, int height);
   void setFontSize(int fontSize);
@@ -56,18 +57,21 @@ public:
   QLabel *nameLabel = nullptr;
   QWidget *triangleIndicator;
   void setAsSubcollection(int index, const QString &name);
-  void applyTitleTint() const;
+  void setAsVirtualFolder(const QString &folderPath, const QString &displayName);
+  [[nodiscard]] bool isVirtualFolder() const { return m_isVirtualFolder; }
+  [[nodiscard]] QString virtualFolderPath() const { return m_virtualFolderPath; }
+  void applyTitleTint();
   static QColor titleTint();
+  QColor m_titleTintColor;  // Cached tint color for custom painting
 
   void mousePressEvent(QMouseEvent *event) override;
 
   void onArtworkChanged();
 
 signals:
-  void clicked();
-  void doubleClicked();
-  void subcollectionClicked(int index);
+  // Only subcollectionDoubleClicked is used - EventManager intercepts all other clicks
   void subcollectionDoubleClicked(int index);
+  void virtualFolderDoubleClicked(const QString &folderPath);
 
 protected:
   void paintEvent(QPaintEvent *event) override;
@@ -87,9 +91,11 @@ private:
   QString filePath;
   bool m_isSubcollection = false;
   int m_subcollectionIndex = -1;
+  bool m_isVirtualFolder = false;
+  QString m_virtualFolderPath;
   void updateTriangleIndicator();
   void paintTriangleIndicator();
-  QPixmap buildPlaceholderPattern(int width, int height) const;
+  [[nodiscard]] QPixmap buildPlaceholderPattern(int width, int height) const;
   void setupPulseAnimation();
   void startPulseAnimation();
   QTimer *m_pulseDelayTimer;
@@ -98,10 +104,10 @@ private:
   static constexpr int DOUBLE_CLICK_TIMEOUT_MS = 300;
   static constexpr int CLICK_POSITION_TOLERANCE = 5;
 
-  bool isGlideActive() const;
-  QRect computeSelectionBorderRect() const;
+  [[nodiscard]] bool isGlideActive() const;
+  [[nodiscard]] QRect computeSelectionBorderRect() const;
   void applySelectedUiEffects();
-  void applyDeselectedUiEffects() const;
+  void applyDeselectedUiEffects();
   void scheduleSelectionBorderUpdate();
   void applyDimensions();
 };

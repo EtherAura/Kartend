@@ -19,15 +19,17 @@
 #include <QPolygon>
 #include <QPropertyAnimation>
 #include <QRandomGenerator>
+#include <QScreen>
+#include <QStyle>
 #include <QTimer>
 #include <algorithm>
 
-MediaItemWidget::MediaItemWidget(QWidget *parent)
+ItemWidget::ItemWidget(QWidget *parent)
     : QWidget(parent)
 
       ,
-      m_itemWidth(UIConstants::DEFAULT_ITEM_WIDTH),
-      m_itemHeight(UIConstants::DEFAULT_ITEM_HEIGHT),
+      m_itemWidth(UIConstants::Item::DEFAULT_WIDTH),
+      m_itemHeight(UIConstants::Item::DEFAULT_HEIGHT),
       triangleIndicator(nullptr), m_pulseDelayTimer(nullptr) {
   Ui::ItemWidget itemUi;
   itemUi.setupUi(this);
@@ -37,33 +39,33 @@ MediaItemWidget::MediaItemWidget(QWidget *parent)
   setFocusPolicy(Qt::NoFocus);
   // Allow children (nameLabel) to overflow widget bounds for long titles
   setAttribute(Qt::WA_TransparentForMouseEvents, false);
-  if (imageLabel != nullptr) {
+  if (imageLabel) {
     imageLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
   }
-  if (nameLabel != nullptr) {
+  if (nameLabel) {
     nameLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     nameLabel->setTextFormat(Qt::PlainText);
     nameLabel->setAutoFillBackground(false);
   }
-  if (triangleIndicator != nullptr) {
+  if (triangleIndicator) {
     triangleIndicator->setAttribute(Qt::WA_TransparentForMouseEvents, true);
   }
   applyTitleTint();
 
   m_pulseDelayTimer = new QTimer(this);
   m_pulseDelayTimer->setSingleShot(true);
-  m_pulseDelayTimer->setInterval(UIConstants::PULSE_INACTIVITY_DELAY_MS);
+  m_pulseDelayTimer->setInterval(UIConstants::Animation::PULSE_INACTIVITY_DELAY_MS);
   connect(m_pulseDelayTimer, &QTimer::timeout, this,
-          &MediaItemWidget::startPulseAnimation);
+          &ItemWidget::startPulseAnimation);
 }
 
-MediaItemWidget::~MediaItemWidget() {
-  if (pulseAnimation != nullptr) {
+ItemWidget::~ItemWidget() {
+  if (pulseAnimation) {
     pulseAnimation->stop();
     delete pulseAnimation;
     pulseAnimation = nullptr;
   }
-  if (m_pulseDelayTimer != nullptr) {
+  if (m_pulseDelayTimer) {
     m_pulseDelayTimer->stop();
     delete m_pulseDelayTimer;
     m_pulseDelayTimer = nullptr;
@@ -71,77 +73,71 @@ MediaItemWidget::~MediaItemWidget() {
   storedPixmap = QPixmap();
 }
 
-// Compute title tint
-auto MediaItemWidget::titleTint() -> QColor {
+// Compute title tint from highlight color with configurable saturation/lightness
+auto ItemWidget::titleTint() -> QColor {
   QColor highlight = QApplication::palette().color(QPalette::Highlight);
   int hue = 0;
   int saturation = 0;
   int lightness = 0;
   int alpha = 0;
   highlight.getHsl(&hue, &saturation, &lightness, &alpha);
-  saturation = qBound(0, UIConstants::TITLE_TINT_SATURATION,
-                      UIConstants::COLOR_CHANNEL_MAX);
-  lightness = qBound(0, lightness + UIConstants::TITLE_TINT_LIGHTNESS_OFFSET,
-                     UIConstants::COLOR_CHANNEL_MAX);
+  
+  int targetLightness = qBound(0, UIConstants::Color::TITLE_TINT_LIGHTNESS, 
+                               UIConstants::Color::CHANNEL_MAX);
+  int targetSaturation = qBound(0, UIConstants::Color::TITLE_TINT_SATURATION,
+                                UIConstants::Color::CHANNEL_MAX);
+  
   QColor color;
-  color.setHsl(hue, saturation, lightness, UIConstants::COLOR_CHANNEL_MAX);
+  color.setHsl(hue, targetSaturation, targetLightness, UIConstants::Color::CHANNEL_MAX);
   return color;
 }
 
-void MediaItemWidget::setupPulseAnimation() {
-  if (pulseAnimation != nullptr) {
+void ItemWidget::setupPulseAnimation() {
+  if (pulseAnimation) {
     pulseAnimation->stop();
     delete pulseAnimation;
   }
   pulseAnimation = new QPropertyAnimation(this, "pulseOpacity");
-  pulseAnimation->setDuration(UIConstants::PULSE_ANIMATION_DURATION);
-  pulseAnimation->setKeyValueAt(0.0, UIConstants::PULSE_OPACITY_LOW);
-  pulseAnimation->setKeyValueAt(UIConstants::PULSE_KEYFRAME_MID_POS,
-                                UIConstants::PULSE_OPACITY_HIGH);
-  pulseAnimation->setKeyValueAt(1.0, UIConstants::PULSE_OPACITY_LOW);
+  pulseAnimation->setDuration(UIConstants::Animation::PULSE_DURATION_MS);
+  pulseAnimation->setKeyValueAt(0.0, UIConstants::Animation::PULSE_OPACITY_LOW);
+  pulseAnimation->setKeyValueAt(UIConstants::Animation::PULSE_KEYFRAME_MID_POS,
+                                UIConstants::Animation::PULSE_OPACITY_HIGH);
+  pulseAnimation->setKeyValueAt(1.0, UIConstants::Animation::PULSE_OPACITY_LOW);
   pulseAnimation->setLoopCount(-1);
   pulseAnimation->setEasingCurve(QEasingCurve::InOutSine);
 }
 
-void MediaItemWidget::startPulseAnimation() {
+void ItemWidget::startPulseAnimation() {
   if (!isSelectedState) {
     return;
   }
 
-  if (pulseAnimation == nullptr) {
+  if (!pulseAnimation) {
     setupPulseAnimation();
   }
 
-  if ((pulseAnimation != nullptr) &&
+  if ((pulseAnimation) &&
       pulseAnimation->state() != QAbstractAnimation::Running) {
     pulseAnimation->start();
   }
 }
 
-// Apply title tint
-void MediaItemWidget::applyTitleTint() const {
-  if (nameLabel == nullptr) {
-    return;
+// Apply title tint - caches the color for custom painting in paintEvent
+// Qt 6.9.2 ignores QLabel stylesheets, so we paint the text manually
+void ItemWidget::applyTitleTint() {
+  m_titleTintColor = titleTint();
+  if (nameLabel) {
+    // Make label text transparent - we'll paint it ourselves in paintEvent
+    nameLabel->setStyleSheet(
+        QStringLiteral("QLabel { color: transparent; background: transparent; }"));
   }
-  QColor color = titleTint();
-  nameLabel->setStyleSheet(
-      QString("QLabel { color:#%1%2%3; background:transparent; padding:0; "
-              "margin:0; }")
-          .arg(color.red(), 2, UIConstants::HEX_BASE, QChar('0'))
-          .arg(color.green(), 2, UIConstants::HEX_BASE, QChar('0'))
-          .arg(color.blue(), 2, UIConstants::HEX_BASE, QChar('0')));
-  nameLabel->update();
+  update();  // Trigger repaint to draw tinted text
 }
 
-// Handle mouse press
-void MediaItemWidget::mousePressEvent(QMouseEvent *event) {
+// Handle mouse press - only tracks click position for double-click detection.
+// EventManager intercepts all clicks before they reach the widget.
+void ItemWidget::mousePressEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
-    if (m_isSubcollection) {
-      setSelected(true);
-      emit subcollectionClicked(m_subcollectionIndex);
-    }
-    emit clicked();
-
     m_lastClickPos = event->pos();
     m_lastClickTimer.start();
   }
@@ -149,27 +145,28 @@ void MediaItemWidget::mousePressEvent(QMouseEvent *event) {
 }
 
 // Handle mouse double click
-void MediaItemWidget::mouseDoubleClickEvent(QMouseEvent *event) {
+void ItemWidget::mouseDoubleClickEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
-    bool validDoubleClick = false;
-
+    // Trust Qt's double-click detection - it already validated timing.
+    // Only check position tolerance to ensure clicks are on the same spot.
+    bool validDoubleClick = true;
+    
     if (m_lastClickTimer.isValid()) {
-      qint64 elapsed = m_lastClickTimer.elapsed();
       QPoint currentPos = event->pos();
       int distance = (currentPos - m_lastClickPos).manhattanLength();
-
-      if (elapsed <= DOUBLE_CLICK_TIMEOUT_MS &&
-          distance <= CLICK_POSITION_TOLERANCE) {
-        validDoubleClick = true;
+      if (distance > CLICK_POSITION_TOLERANCE) {
+        validDoubleClick = false;
       }
     }
 
     if (validDoubleClick) {
+      // Only subcollection double-clicks reach here - EventManager passes them through
       if (m_isSubcollection) {
         emit subcollectionDoubleClicked(m_subcollectionIndex);
-      } else {
-        emit doubleClicked();
+      } else if (m_isVirtualFolder) {
+        emit virtualFolderDoubleClicked(m_virtualFolderPath);
       }
+      // Media item double-clicks are handled by EventManager::widgetDoubleClicked
     }
 
     m_lastClickTimer.invalidate();
@@ -179,42 +176,44 @@ void MediaItemWidget::mouseDoubleClickEvent(QMouseEvent *event) {
 
 // Enter event
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-void MediaItemWidget::enterEvent(QEnterEvent *event)
+void ItemWidget::enterEvent(QEnterEvent *event)
 #else
-void MediaItemWidget::enterEvent(QEvent *event)
+void ItemWidget::enterEvent(QEvent *event)
 #endif
 {
   QWidget::enterEvent(event);
 }
 
 // Leave event
-void MediaItemWidget::leaveEvent(QEvent *event) { QWidget::leaveEvent(event); }
+void ItemWidget::leaveEvent(QEvent *event) { QWidget::leaveEvent(event); }
 
 // Show event
-void MediaItemWidget::showEvent(QShowEvent *event) {
+void ItemWidget::showEvent(QShowEvent *event) {
   QWidget::showEvent(event);
 }
 
 // Handles palette change to trigger artwork change respecting
 // DeferArtworkUpdate
-auto MediaItemWidget::event(QEvent *event) -> bool {
+auto ItemWidget::event(QEvent *event) -> bool {
   bool handled = QWidget::event(event);
   if (event->type() == QEvent::PaletteChange) {
     applyTitleTint();
-    if ((imageLabel != nullptr) &&
-        !property(PropertyKeys::DeferArtworkUpdate).toBool()) {
-      QPointer<MediaItemWidget> ptr = this;
-  QTimer::singleShot(0, this, [ptr]() {
-    if (ptr) { ptr->onArtworkChanged();
-}
-  });
+    if (imageLabel && !property(PropertyKeys::DeferArtworkUpdate).toBool()) {
+      QPointer<ItemWidget> ptr = this;
+      // Defer artwork update until after the palette change fully propagates -
+      // ensures consistent appearance when switching light/dark themes
+      QTimer::singleShot(0, this, [ptr]() {
+        if (ptr) {
+          ptr->onArtworkChanged();
+        }
+      });
     }
   }
   return handled;
 }
 
 // Resize event
-void MediaItemWidget::resizeEvent(QResizeEvent *event) {
+void ItemWidget::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);
   if (m_isSubcollection) {
     updateTriangleIndicator();
@@ -222,7 +221,7 @@ void MediaItemWidget::resizeEvent(QResizeEvent *event) {
 }
 
 // Sets selected state and respects glide-animating property via PropertyKeys
-void MediaItemWidget::setSelected(bool selected) {
+void ItemWidget::setSelected(bool selected) {
   const bool glideActive = isGlideActive();
   if (isSelectedState == selected) {
     return;
@@ -241,28 +240,28 @@ void MediaItemWidget::setSelected(bool selected) {
 }
 
 // Returns true when a glide animation is active up the parent chain
-auto MediaItemWidget::isGlideActive() const -> bool {
+auto ItemWidget::isGlideActive() const -> bool {
   const QWidget *parentPtr = parentWidget();
-  if ((parentPtr != nullptr) &&
+  if ((parentPtr) &&
       parentPtr->property(PropertyKeys::GlideAnimating).toBool()) {
     return true;
   }
   const QWidget *grandparentPtr =
-      (parentPtr != nullptr) ? parentPtr->parentWidget() : nullptr;
-  return (grandparentPtr != nullptr) &&
+      (parentPtr) ? parentPtr->parentWidget() : nullptr;
+  return (grandparentPtr) &&
          grandparentPtr->property(PropertyKeys::GlideAnimating).toBool();
 }
 
 // Computes the selection border rectangle around the artwork and title area
-auto MediaItemWidget::computeSelectionBorderRect() const -> QRect {
-  if (imageLabel == nullptr) {
+auto ItemWidget::computeSelectionBorderRect() const -> QRect {
+  if (!imageLabel) {
     return {};
   }
   const QRect imageRect = imageLabel->geometry();
 
-  const int left = imageRect.left() - UIConstants::COLLECTION_ITEM_SPACING;
-  const int top = imageRect.top() - UIConstants::COLLECTION_ITEM_SPACING;
-  const int right = imageRect.right() + UIConstants::COLLECTION_ITEM_SPACING;
+  const int left = imageRect.left() - UIConstants::CollectionIcon::ITEM_SPACING;
+  const int top = imageRect.top() - UIConstants::CollectionIcon::ITEM_SPACING;
+  const int right = imageRect.right() + UIConstants::CollectionIcon::ITEM_SPACING;
 
   int bottom;
   // Show title if: regular item with titles visible, OR subcollection with subcollection titles visible
@@ -270,7 +269,7 @@ auto MediaItemWidget::computeSelectionBorderRect() const -> QRect {
 
   if (!shouldShowTitle) {
     // If titles are hidden, only surround the artwork
-    bottom = imageRect.bottom() + UIConstants::COLLECTION_ITEM_SPACING;
+    bottom = imageRect.bottom() + UIConstants::CollectionIcon::ITEM_SPACING;
   } else {
     // Calculate reserved text height using the same logic as applyDimensions
     QFont referenceFont = this->font();
@@ -306,19 +305,19 @@ auto MediaItemWidget::computeSelectionBorderRect() const -> QRect {
     }
 
     // Include the text area in the selection border
-    int spacing = (effectiveTextHeight > 0) ? UIConstants::WIDGET_SPACING : 0;
+    int spacing = (effectiveTextHeight > 0) ? UIConstants::Widget::SPACING : 0;
     const int contentBottom =
         imageRect.bottom() + spacing + effectiveTextHeight;
     
     // Use tighter bottom padding for text
-    int bottomPadding = (effectiveTextHeight > 0) ? UIConstants::METADATA_VALUE_PADDING : UIConstants::COLLECTION_ITEM_SPACING;
+    int bottomPadding = (effectiveTextHeight > 0) ? UIConstants::Metadata::VALUE_PADDING : UIConstants::CollectionIcon::ITEM_SPACING;
     bottom = contentBottom + bottomPadding;
   }
 
   return {left, top, right - left, bottom - top};
 }
 
-auto MediaItemWidget::selectionBorderRectInParent() const -> QRect {
+auto ItemWidget::selectionBorderRectInParent() const -> QRect {
   QRect localRect = computeSelectionBorderRect();
   if (!localRect.isValid()) {
     return {};
@@ -329,35 +328,44 @@ auto MediaItemWidget::selectionBorderRectInParent() const -> QRect {
 }
 
 // Applies visual effects for selection state, preserving animation behavior
-void MediaItemWidget::applySelectedUiEffects() {
+void ItemWidget::applySelectedUiEffects() {
   raise();
-  if (m_isSubcollection && (triangleIndicator != nullptr)) {
+  if (m_isSubcollection && (triangleIndicator)) {
     updateTriangleIndicator();
   }
-  if (pulseAnimation == nullptr) {
+  if (!pulseAnimation) {
     setupPulseAnimation();
   }
-  if ((pulseAnimation != nullptr) &&
+  if ((pulseAnimation) &&
       pulseAnimation->state() != QAbstractAnimation::Running) {
     pulseAnimation->start();
   }
 }
 
 // Applies visual changes when deselected
-void MediaItemWidget::applyDeselectedUiEffects() const {
-  if (triangleIndicator != nullptr) {
+void ItemWidget::applyDeselectedUiEffects() {
+  // Stop pulse animation when deselected to prevent visual artifacts
+  if (pulseAnimation && pulseAnimation->state() == QAbstractAnimation::Running) {
+    pulseAnimation->stop();
+  }
+  if (m_pulseDelayTimer && m_pulseDelayTimer->isActive()) {
+    m_pulseDelayTimer->stop();
+  }
+  m_pulseOpacity = UIConstants::Animation::PULSE_OPACITY_LOW;
+
+  if (triangleIndicator) {
     triangleIndicator->hide();
   }
 }
 
 // Schedules repaint of selection border region
-void MediaItemWidget::scheduleSelectionBorderUpdate() {
-  if (imageLabel != nullptr) {
+void ItemWidget::scheduleSelectionBorderUpdate() {
+  if (imageLabel) {
     const QRect borderRect = computeSelectionBorderRect();
-    update(borderRect.adjusted(-UIConstants::BORDER_WIDTH_SELECTION,
-                               -UIConstants::BORDER_WIDTH_SELECTION,
-                               UIConstants::BORDER_WIDTH_SELECTION,
-                               UIConstants::BORDER_WIDTH_SELECTION));
+    update(borderRect.adjusted(-UIConstants::Widget::BORDER_WIDTH_SELECTION,
+                               -UIConstants::Widget::BORDER_WIDTH_SELECTION,
+                               UIConstants::Widget::BORDER_WIDTH_SELECTION,
+                               UIConstants::Widget::BORDER_WIDTH_SELECTION));
   } else {
     update();
   }
@@ -365,8 +373,8 @@ void MediaItemWidget::scheduleSelectionBorderUpdate() {
 
 // Renders the selection border with pulsing opacity when selected; suppressed
 // during glide animations
-void MediaItemWidget::paintEvent(QPaintEvent *event) {
-  if ((event == nullptr) || !isVisible()) {
+void ItemWidget::paintEvent(QPaintEvent *event) {
+  if ((!event) || !isVisible()) {
     return;
   }
 
@@ -374,45 +382,61 @@ void MediaItemWidget::paintEvent(QPaintEvent *event) {
 
   bool glideActive = false;
   QWidget *parentWidgetPtr = parentWidget();
-  if ((parentWidgetPtr != nullptr) &&
+  if ((parentWidgetPtr) &&
       parentWidgetPtr->property(PropertyKeys::GlideAnimating).toBool()) {
     glideActive = true;
   }
   QWidget *grandparentWidgetPtr =
-      (parentWidgetPtr != nullptr) ? parentWidgetPtr->parentWidget() : nullptr;
-  if ((grandparentWidgetPtr != nullptr) &&
+      (parentWidgetPtr) ? parentWidgetPtr->parentWidget() : nullptr;
+  if ((grandparentWidgetPtr) &&
       grandparentWidgetPtr->property(PropertyKeys::GlideAnimating).toBool()) {
     glideActive = true;
   }
 
-  if (isSelectedState && (imageLabel != nullptr) && !glideActive) {
-    QPainter painter(this);
-    if (!painter.isActive()) {
-      return;
-    }
+  QPainter painter(this);
+  if (!painter.isActive()) {
+    return;
+  }
 
+  // Paint selection border when selected
+  if (isSelectedState && (imageLabel) && !glideActive) {
     painter.setRenderHint(QPainter::Antialiasing);
 
-    double alpha = qBound(UIConstants::PULSE_OPACITY_LOW,
+    double alpha = qBound(UIConstants::Animation::PULSE_OPACITY_LOW,
                           static_cast<double>(m_pulseOpacity),
-                          UIConstants::PULSE_OPACITY_HIGH);
+                          UIConstants::Animation::PULSE_OPACITY_HIGH);
 
     QColor borderColor = palette().color(QPalette::Highlight);
     borderColor.setAlphaF(alpha);
 
     QPen pen(borderColor);
-    pen.setWidth(UIConstants::BORDER_WIDTH_SELECTION);
+    pen.setWidth(UIConstants::Widget::BORDER_WIDTH_SELECTION);
     painter.setPen(pen);
 
     // Use the centralized computation for the border rectangle
     QRect borderRect = computeSelectionBorderRect();
-    painter.drawRoundedRect(borderRect, UIConstants::BORDER_RADIUS,
-                            UIConstants::BORDER_RADIUS);
+    painter.drawRoundedRect(borderRect, UIConstants::Widget::BORDER_RADIUS,
+                            UIConstants::Widget::BORDER_RADIUS);
+  }
+
+  // Paint title text with tint color - bypasses broken QLabel stylesheet in Qt 6.9
+  if (nameLabel && !itemName.isEmpty() && nameLabel->isVisible()) {
+    bool shouldShowTitle = (!m_isSubcollection && !m_hideTitles) || 
+                           (m_isSubcollection && !m_hideSubcollectionTitles);
+    if (shouldShowTitle) {
+      painter.setRenderHint(QPainter::TextAntialiasing);
+      painter.setPen(m_titleTintColor);
+      painter.setFont(nameLabel->font());
+      
+      // Draw text in the same rect as the nameLabel
+      QRect textRect = nameLabel->geometry();
+      painter.drawText(textRect, nameLabel->alignment() | Qt::TextWordWrap, itemName);
+    }
   }
 }
 
 // Set item dimensions
-void MediaItemWidget::setItemDimensions(int width, int height) {
+void ItemWidget::setItemDimensions(int width, int height) {
   if (m_itemWidth == width && m_itemHeight == height) {
     return;
   }
@@ -421,7 +445,7 @@ void MediaItemWidget::setItemDimensions(int width, int height) {
   applyDimensions();
 }
 
-void MediaItemWidget::applyDimensions() {
+void ItemWidget::applyDimensions() {
   QString currentName = itemName;
   QString currentPath = filePath;
   QPixmap currentPixmap = storedPixmap;
@@ -437,18 +461,18 @@ void MediaItemWidget::applyDimensions() {
   int singleLineHeight = referenceFm.ascent() + referenceFm.descent();
   int reservedTextHeight = singleLineHeight * textLines;
 
-  int availableHeight = m_itemHeight - UIConstants::WIDGET_PADDING -
-                        UIConstants::WIDGET_SPACING - reservedTextHeight;
-  int availableWidth = m_itemWidth - UIConstants::WIDGET_PADDING;
+  int availableHeight = m_itemHeight - UIConstants::Widget::PADDING -
+                        UIConstants::Widget::SPACING - reservedTextHeight;
+  int availableWidth = m_itemWidth - UIConstants::Widget::PADDING;
   int artworkSize = qMin(availableWidth, availableHeight);
   
   // Show title if: regular item with titles visible, OR subcollection with subcollection titles visible
   bool shouldShowTitle = (!m_isSubcollection && !m_hideTitles) || (m_isSubcollection && !m_hideSubcollectionTitles);
   
-  if (imageLabel != nullptr) {
+  if (imageLabel) {
     imageLabel->setFixedSize(artworkSize, artworkSize);
   }
-  if (nameLabel != nullptr) {
+  if (nameLabel) {
     nameLabel->setVisible(true);
     nameLabel->setMaximumWidth(artworkSize);
     nameLabel->setFixedHeight(reservedTextHeight);
@@ -471,7 +495,9 @@ void MediaItemWidget::applyDimensions() {
   if (!currentPixmap.isNull()) {
     setArtworkPixmap(currentPixmap);
   }
-  QPointer<MediaItemWidget> ptr = this;
+  QPointer<ItemWidget> ptr = this;
+  // Defer artwork update until after all recycle property changes settle -
+  // ensures the widget displays correctly after being reused from the pool
   QTimer::singleShot(0, this, [ptr]() {
     if (ptr) {
       ptr->onArtworkChanged();
@@ -480,9 +506,9 @@ void MediaItemWidget::applyDimensions() {
 }
 
 // Updates the artwork image label respecting DeferArtworkUpdate and
-// ForcePlaceholder
-void MediaItemWidget::onArtworkChanged() {
-  if (imageLabel == nullptr) {
+// ForcePlaceholder. Preserves device pixel ratio for crisp high-DPI rendering.
+void ItemWidget::onArtworkChanged() {
+  if (!imageLabel) {
     return;
   }
 
@@ -501,42 +527,104 @@ void MediaItemWidget::onArtworkChanged() {
     imageLabel->setPixmap(buildPlaceholderPattern(width, height));
     imageLabel->setStyleSheet(QString());
   } else {
-    QPixmap backgroundPixmap(width, height);
+    // Get device pixel ratio for HiDPI rendering
+    qreal dpr = 1.0;
+    if (QGuiApplication::primaryScreen()) {
+      dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
+    }
+    const int actualWidth = qRound(width * dpr);
+    const int actualHeight = qRound(height * dpr);
+
+    // Create background at actual pixel size
+    QPixmap backgroundPixmap(actualWidth, actualHeight);
+    backgroundPixmap.setDevicePixelRatio(dpr);
     backgroundPixmap.fill(palette().color(QPalette::Mid));
+
+    // Scale the stored pixmap to fit the label's actual pixel dimensions
+    // Use the raw pixel dimensions for scaling since we're drawing to actual pixels
+    QPixmap scaledArtwork = storedPixmap.scaled(
+        actualWidth, actualHeight,
+        Qt::KeepAspectRatio,
+        Qt::SmoothTransformation);
+
+    // Center the scaled artwork on the background
     QPainter painter(&backgroundPixmap);
     painter.setRenderHints(QPainter::Antialiasing |
                            QPainter::SmoothPixmapTransform);
-    QPixmap scaled = storedPixmap.scaled(width, height, Qt::KeepAspectRatio,
-                                         Qt::SmoothTransformation);
-    int offsetX = (width - scaled.width()) / 2;
-    int offsetY = (height - scaled.height()) / 2;
-    painter.drawPixmap(offsetX, offsetY, scaled);
+    int offsetX = (actualWidth - scaledArtwork.width()) / 2;
+    int offsetY = (actualHeight - scaledArtwork.height()) / 2;
+    painter.drawPixmap(offsetX, offsetY, scaledArtwork);
     painter.end();
+
     imageLabel->setPixmap(backgroundPixmap);
     imageLabel->setStyleSheet(QString());
   }
-  if (nameLabel != nullptr) {
+  if (nameLabel) {
     nameLabel->raise();
   }
 }
 
 // Set file path
-void MediaItemWidget::setFilePath(const QString &path) { filePath = path; }
+void ItemWidget::setFilePath(const QString &path) { filePath = path; }
+
+// Reset widget state for reuse from pool
+void ItemWidget::resetForReuse() {
+  // Clear selection state and stop any running pulse animation
+  // This prevents stale selection rectangles when widgets are recycled
+  if (isSelectedState) {
+    isSelectedState = false;
+    if (pulseAnimation &&
+        pulseAnimation->state() == QAbstractAnimation::Running) {
+      pulseAnimation->stop();
+    }
+    m_pulseOpacity = UIConstants::Animation::PULSE_OPACITY_LOW;
+  }
+  if (m_pulseDelayTimer && m_pulseDelayTimer->isActive()) {
+    m_pulseDelayTimer->stop();
+  }
+
+  m_isSubcollection = false;
+  m_subcollectionIndex = -1;
+  m_isVirtualFolder = false;
+  m_virtualFolderPath.clear();
+  filePath.clear();
+  itemName.clear();
+  storedPixmap = QPixmap();  // Clear stored artwork
+  if (imageLabel) {
+    // Set placeholder pattern instead of clearing - widget dimensions may not
+    // be set yet, so use current label size or fallback to reasonable defaults
+    int width = imageLabel->width() > 0 ? imageLabel->width() : 100;
+    int height = imageLabel->height() > 0 ? imageLabel->height() : 100;
+    imageLabel->setPixmap(buildPlaceholderPattern(width, height));
+  }
+  if (triangleIndicator) {
+    triangleIndicator->hide();
+  }
+}
 
 // Set as subcollection
-void MediaItemWidget::setAsSubcollection(int index, const QString &name) {
+void ItemWidget::setAsSubcollection(int index, const QString &name) {
   m_isSubcollection = true;
   m_subcollectionIndex = index;
   setItemName(QStringLiteral("📁 ") + name);
   applyDimensions();
 }
 
+// Set as virtual folder (subfolder navigation without subcollection)
+void ItemWidget::setAsVirtualFolder(const QString &folderPath, const QString &displayName) {
+  m_isVirtualFolder = true;
+  m_virtualFolderPath = folderPath;
+  setItemName(QStringLiteral("📂 ") + displayName);
+  applyDimensions();
+}
+
 // Set item name
-void MediaItemWidget::setItemName(const QString &name) {
+void ItemWidget::setItemName(const QString &name) {
   itemName = name;
-  if (nameLabel != nullptr) {
+  if (nameLabel) {
     // Show title if: regular item with titles visible, OR subcollection with subcollection titles visible
     bool shouldShowTitle = (!m_isSubcollection && !m_hideTitles) || (m_isSubcollection && !m_hideSubcollectionTitles);
+    
     if (!shouldShowTitle) {
       // Keep the label visible but empty to reserve layout space
       nameLabel->setText("");
@@ -554,8 +642,8 @@ void MediaItemWidget::setItemName(const QString &name) {
 }
 
 // Sets the current pixmap while respecting DeferArtworkUpdate
-void MediaItemWidget::setArtworkPixmap(const QPixmap &pixmap) {
-  if (imageLabel == nullptr) {
+void ItemWidget::setArtworkPixmap(const QPixmap &pixmap) {
+  if (!imageLabel) {
     return;
   }
 
@@ -566,24 +654,27 @@ void MediaItemWidget::setArtworkPixmap(const QPixmap &pixmap) {
   }
 
   storedPixmap = pixmap;
-  QPointer<MediaItemWidget> ptr = this;
+  QPointer<ItemWidget> ptr = this;
+  // Defer artwork display until next event loop iteration - allows
+  // the pixmap to be stored before triggering the visual update
   QTimer::singleShot(0, this, [ptr]() {
-    if (ptr) { ptr->onArtworkChanged();
-}
+    if (ptr) {
+      ptr->onArtworkChanged();
+    }
   });
-  if (nameLabel != nullptr) {
+  if (nameLabel) {
     nameLabel->raise();
   }
 }
 
 // Set pulse opacity
-void MediaItemWidget::setPulseOpacity(qreal opacity) {
+void ItemWidget::setPulseOpacity(qreal opacity) {
   m_pulseOpacity = opacity;
   scheduleSelectionBorderUpdate();
 }
 
 // Set font size
-void MediaItemWidget::setFontSize(int fontSize) {
+void ItemWidget::setFontSize(int fontSize) {
   if (m_fontSize == fontSize) {
     return;
   }
@@ -592,7 +683,7 @@ void MediaItemWidget::setFontSize(int fontSize) {
 }
 
 // Set hide titles
-void MediaItemWidget::setHideTitles(bool hide) {
+void ItemWidget::setHideTitles(bool hide) {
   if (m_hideTitles == hide) {
     return;
   }
@@ -600,7 +691,7 @@ void MediaItemWidget::setHideTitles(bool hide) {
   applyDimensions();
 }
 
-void MediaItemWidget::setHideSubcollectionTitles(bool hide) {
+void ItemWidget::setHideSubcollectionTitles(bool hide) {
   if (m_hideSubcollectionTitles == hide) {
     return;
   }
@@ -609,22 +700,22 @@ void MediaItemWidget::setHideSubcollectionTitles(bool hide) {
 }
 
 // Update triangle indicator
-void MediaItemWidget::updateTriangleIndicator() {
-  if ((triangleIndicator == nullptr) || (imageLabel == nullptr) ||
+void ItemWidget::updateTriangleIndicator() {
+  if ((!triangleIndicator) || (!imageLabel) ||
       !m_isSubcollection) {
     return;
   }
   if (isSelectedState) {
     QRect imageRect = imageLabel->geometry();
-    int borderSpacing = UIConstants::COLLECTION_ITEM_SPACING;
+    int borderSpacing = UIConstants::CollectionIcon::ITEM_SPACING;
     int indicatorX =
         imageRect.right() + borderSpacing -
-        (UIConstants::TRIANGLE_SIZE + UIConstants::METADATA_VALUE_PADDING);
+        (UIConstants::Widget::TRIANGLE_SIZE + UIConstants::Metadata::VALUE_PADDING);
     int indicatorY =
-        imageRect.top() - borderSpacing + UIConstants::METADATA_VALUE_PADDING;
+        imageRect.top() - borderSpacing + UIConstants::Metadata::VALUE_PADDING;
     triangleIndicator->setGeometry(indicatorX, indicatorY,
-                                   UIConstants::TRIANGLE_SIZE,
-                                   UIConstants::TRIANGLE_SIZE);
+                                   UIConstants::Widget::TRIANGLE_SIZE,
+                                   UIConstants::Widget::TRIANGLE_SIZE);
     triangleIndicator->show();
     triangleIndicator->raise();
     paintTriangleIndicator();
@@ -634,34 +725,34 @@ void MediaItemWidget::updateTriangleIndicator() {
 }
 
 // Paint triangle indicator
-void MediaItemWidget::paintTriangleIndicator() {
-  if ((triangleIndicator == nullptr) || !triangleIndicator->isVisible()) {
+void ItemWidget::paintTriangleIndicator() {
+  if ((!triangleIndicator) || !triangleIndicator->isVisible()) {
     return;
   }
-  QPixmap pixmap(UIConstants::TRIANGLE_SIZE, UIConstants::TRIANGLE_SIZE);
+  QPixmap pixmap(UIConstants::Widget::TRIANGLE_SIZE, UIConstants::Widget::TRIANGLE_SIZE);
   pixmap.fill(Qt::transparent);
   QPainter painter(&pixmap);
   painter.setRenderHint(QPainter::Antialiasing);
   QColor highlight = palette().color(QPalette::Highlight);
   painter.setBrush(highlight);
   painter.setPen(
-      QPen(highlight.darker(UIConstants::HIGHLIGHT_DARKEN_FACTOR), 1));
+      QPen(highlight.darker(UIConstants::Widget::HIGHLIGHT_DARKEN_FACTOR), 1));
   QPolygon triangle;
-  triangle << QPoint(UIConstants::METADATA_VALUE_PADDING,
-                     UIConstants::METADATA_VALUE_PADDING)
-           << QPoint(UIConstants::TRIANGLE_SIZE -
-                         UIConstants::METADATA_VALUE_PADDING,
-                     UIConstants::METADATA_VALUE_PADDING)
-           << QPoint(UIConstants::TRIANGLE_SIZE -
-                         UIConstants::METADATA_VALUE_PADDING,
-                     UIConstants::TRIANGLE_SIZE -
-                         UIConstants::METADATA_VALUE_PADDING);
+  triangle << QPoint(UIConstants::Metadata::VALUE_PADDING,
+                     UIConstants::Metadata::VALUE_PADDING)
+           << QPoint(UIConstants::Widget::TRIANGLE_SIZE -
+                         UIConstants::Metadata::VALUE_PADDING,
+                     UIConstants::Metadata::VALUE_PADDING)
+           << QPoint(UIConstants::Widget::TRIANGLE_SIZE -
+                         UIConstants::Metadata::VALUE_PADDING,
+                     UIConstants::Widget::TRIANGLE_SIZE -
+                         UIConstants::Metadata::VALUE_PADDING);
   painter.drawPolygon(triangle);
   auto *indicatorLabel = qobject_cast<QLabel *>(triangleIndicator);
-  if (indicatorLabel == nullptr) {
+  if (!indicatorLabel) {
     indicatorLabel = new QLabel(triangleIndicator);
-    indicatorLabel->setGeometry(0, 0, UIConstants::TRIANGLE_SIZE,
-                                UIConstants::TRIANGLE_SIZE);
+    indicatorLabel->setGeometry(0, 0, UIConstants::Widget::TRIANGLE_SIZE,
+                                UIConstants::Widget::TRIANGLE_SIZE);
     indicatorLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     indicatorLabel->show();
   }
@@ -669,7 +760,7 @@ void MediaItemWidget::paintTriangleIndicator() {
 }
 
 // Build placeholder pattern
-auto MediaItemWidget::buildPlaceholderPattern(int width, int height) const
+auto ItemWidget::buildPlaceholderPattern(int width, int height) const
     -> QPixmap {
   if (width <= 0 || height <= 0) {
     return {};
@@ -694,10 +785,10 @@ auto MediaItemWidget::buildPlaceholderPattern(int width, int height) const
   constexpr int kLightnessDarkThreshold = 128;
   bool dark = (baseLightness < kLightnessDarkThreshold);
 
-  int primaryDelta = dark ? UIConstants::PLACEHOLDER_PRIMARY_DELTA_DARK
-                          : UIConstants::PLACEHOLDER_PRIMARY_DELTA_LIGHT;
-  int secondaryDelta = dark ? UIConstants::PLACEHOLDER_SECONDARY_DELTA_DARK
-                            : UIConstants::PLACEHOLDER_SECONDARY_DELTA_LIGHT;
+  int primaryDelta = dark ? UIConstants::Placeholder::PRIMARY_DELTA_DARK
+                          : UIConstants::Placeholder::PRIMARY_DELTA_LIGHT;
+  int secondaryDelta = dark ? UIConstants::Placeholder::SECONDARY_DELTA_DARK
+                            : UIConstants::Placeholder::SECONDARY_DELTA_LIGHT;
 
   int hHue = 0;
   int hSat = 0;
@@ -707,51 +798,51 @@ auto MediaItemWidget::buildPlaceholderPattern(int width, int height) const
   primary.getHsl(&hHue, &hSat, &hLight, &hAlpha);
   primary.setHsl(
       hHue, hSat / 2,
-      qBound(0, hLight + primaryDelta, UIConstants::COLOR_CHANNEL_MAX),
-      UIConstants::COLOR_CHANNEL_MAX);
+      qBound(0, hLight + primaryDelta, UIConstants::Color::CHANNEL_MAX),
+      UIConstants::Color::CHANNEL_MAX);
   QColor titleTintColor = titleTint();
   primary.setRed(
-      (primary.red() * UIConstants::PLACEHOLDER_PRIMARY_TINT_NUM +
-       titleTintColor.red() * (UIConstants::PLACEHOLDER_PRIMARY_TINT_DEN -
-                               UIConstants::PLACEHOLDER_PRIMARY_TINT_NUM)) /
-      UIConstants::PLACEHOLDER_PRIMARY_TINT_DEN);
+      (primary.red() * UIConstants::Placeholder::PRIMARY_TINT_NUM +
+       titleTintColor.red() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
+                               UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
+      UIConstants::Placeholder::PRIMARY_TINT_DEN);
   primary.setGreen(
-      (primary.green() * UIConstants::PLACEHOLDER_PRIMARY_TINT_NUM +
-       titleTintColor.green() * (UIConstants::PLACEHOLDER_PRIMARY_TINT_DEN -
-                                 UIConstants::PLACEHOLDER_PRIMARY_TINT_NUM)) /
-      UIConstants::PLACEHOLDER_PRIMARY_TINT_DEN);
+      (primary.green() * UIConstants::Placeholder::PRIMARY_TINT_NUM +
+       titleTintColor.green() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
+                                 UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
+      UIConstants::Placeholder::PRIMARY_TINT_DEN);
   primary.setBlue(
-      (primary.blue() * UIConstants::PLACEHOLDER_PRIMARY_TINT_NUM +
-       titleTintColor.blue() * (UIConstants::PLACEHOLDER_PRIMARY_TINT_DEN -
-                                UIConstants::PLACEHOLDER_PRIMARY_TINT_NUM)) /
-      UIConstants::PLACEHOLDER_PRIMARY_TINT_DEN);
-  primary.setAlpha(UIConstants::PLACEHOLDER_PRIMARY_ALPHA);
+      (primary.blue() * UIConstants::Placeholder::PRIMARY_TINT_NUM +
+       titleTintColor.blue() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
+                                UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
+      UIConstants::Placeholder::PRIMARY_TINT_DEN);
+  primary.setAlpha(UIConstants::Placeholder::PRIMARY_ALPHA);
 
   QColor secondary = base;
   secondary.setHsl(
       hHue, hSat / 3,
-      qBound(0, hLight + secondaryDelta, UIConstants::COLOR_CHANNEL_MAX),
-      UIConstants::COLOR_CHANNEL_MAX);
+      qBound(0, hLight + secondaryDelta, UIConstants::Color::CHANNEL_MAX),
+      UIConstants::Color::CHANNEL_MAX);
   secondary.setRed(
-      (secondary.red() * UIConstants::PLACEHOLDER_SECONDARY_TINT_NUM +
-       titleTintColor.red() * (UIConstants::PLACEHOLDER_SECONDARY_TINT_DEN -
-                               UIConstants::PLACEHOLDER_SECONDARY_TINT_NUM)) /
-      UIConstants::PLACEHOLDER_SECONDARY_TINT_DEN);
+      (secondary.red() * UIConstants::Placeholder::SECONDARY_TINT_NUM +
+       titleTintColor.red() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
+                               UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
+      UIConstants::Placeholder::SECONDARY_TINT_DEN);
   secondary.setGreen(
-      (secondary.green() * UIConstants::PLACEHOLDER_SECONDARY_TINT_NUM +
-       titleTintColor.green() * (UIConstants::PLACEHOLDER_SECONDARY_TINT_DEN -
-                                 UIConstants::PLACEHOLDER_SECONDARY_TINT_NUM)) /
-      UIConstants::PLACEHOLDER_SECONDARY_TINT_DEN);
+      (secondary.green() * UIConstants::Placeholder::SECONDARY_TINT_NUM +
+       titleTintColor.green() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
+                                 UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
+      UIConstants::Placeholder::SECONDARY_TINT_DEN);
   secondary.setBlue(
-      (secondary.blue() * UIConstants::PLACEHOLDER_SECONDARY_TINT_NUM +
-       titleTintColor.blue() * (UIConstants::PLACEHOLDER_SECONDARY_TINT_DEN -
-                                UIConstants::PLACEHOLDER_SECONDARY_TINT_NUM)) /
-      UIConstants::PLACEHOLDER_SECONDARY_TINT_DEN);
-  secondary.setAlpha(UIConstants::PLACEHOLDER_SECONDARY_ALPHA);
+      (secondary.blue() * UIConstants::Placeholder::SECONDARY_TINT_NUM +
+       titleTintColor.blue() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
+                                UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
+      UIConstants::Placeholder::SECONDARY_TINT_DEN);
+  secondary.setAlpha(UIConstants::Placeholder::SECONDARY_ALPHA);
 
-  int step = qBound(UIConstants::PLACEHOLDER_STEP_MIN,
-                    qMin(width, height) / UIConstants::PLACEHOLDER_STEP_DIVISOR,
-                    UIConstants::PLACEHOLDER_STEP_MAX);
+  int step = qBound(UIConstants::Placeholder::STEP_MIN,
+                    qMin(width, height) / UIConstants::Placeholder::STEP_DIVISOR,
+                    UIConstants::Placeholder::STEP_MAX);
 
   {
     QPainter painter(&pixmap);
@@ -768,9 +859,9 @@ auto MediaItemWidget::buildPlaceholderPattern(int width, int height) const
 
   QImage img = pixmap.toImage();
   QRandomGenerator generator(
-      static_cast<quint32>(key ^ UIConstants::PLACEHOLDER_NOISE_SEED));
-  const int noiseAmp = UIConstants::PLACEHOLDER_NOISE_AMPLITUDE;
-  const int stride = UIConstants::PLACEHOLDER_NOISE_STRIDE;
+      static_cast<quint32>(key ^ UIConstants::Placeholder::NOISE_SEED));
+  const int noiseAmp = UIConstants::Placeholder::NOISE_AMPLITUDE;
+  const int stride = UIConstants::Placeholder::NOISE_STRIDE;
   if (noiseAmp > 0 && stride > 0) {
     for (int yPos = 0; yPos < height; yPos += stride) {
       QRgb *row = reinterpret_cast<QRgb *>(img.scanLine(yPos));
@@ -780,13 +871,13 @@ auto MediaItemWidget::buildPlaceholderPattern(int width, int height) const
         int green = qGreen(pixel);
         int blue = qBlue(pixel);
         int noiseDelta = static_cast<int>(generator.generate() &
-                                          UIConstants::PLACEHOLDER_NOISE_MASK) -
-                         UIConstants::PLACEHOLDER_NOISE_BIAS;
+                                          UIConstants::Placeholder::NOISE_MASK) -
+                         UIConstants::Placeholder::NOISE_BIAS;
         noiseDelta = std::min(noiseDelta, noiseAmp);
         noiseDelta = std::max(noiseDelta, -noiseAmp);
-        red = qBound(0, red + noiseDelta, UIConstants::COLOR_CHANNEL_MAX);
-        green = qBound(0, green + noiseDelta, UIConstants::COLOR_CHANNEL_MAX);
-        blue = qBound(0, blue + noiseDelta, UIConstants::COLOR_CHANNEL_MAX);
+        red = qBound(0, red + noiseDelta, UIConstants::Color::CHANNEL_MAX);
+        green = qBound(0, green + noiseDelta, UIConstants::Color::CHANNEL_MAX);
+        blue = qBound(0, blue + noiseDelta, UIConstants::Color::CHANNEL_MAX);
         row[xPos] = qRgb(red, green, blue);
       }
     }
@@ -797,9 +888,9 @@ auto MediaItemWidget::buildPlaceholderPattern(int width, int height) const
     QPainter painter(&pixmap);
     QLinearGradient gradient(0, 0, 0, height);
     QColor top(base.red(), base.green(), base.blue(),
-               UIConstants::PLACEHOLDER_GRADIENT_TOP_ALPHA);
+               UIConstants::Placeholder::GRADIENT_TOP_ALPHA);
     QColor bottom(base.red(), base.green(), base.blue(),
-                  UIConstants::PLACEHOLDER_GRADIENT_BOTTOM_ALPHA);
+                  UIConstants::Placeholder::GRADIENT_BOTTOM_ALPHA);
     gradient.setColorAt(0.0, top);
     gradient.setColorAt(1.0, bottom);
     painter.fillRect(0, 0, width, height, gradient);
