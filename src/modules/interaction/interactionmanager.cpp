@@ -49,6 +49,7 @@ InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
   m_selectionManager = std::make_unique<SelectionManager>(this);
   m_keyboardManager = std::make_unique<KeyboardManager>(this);
   m_arrowHandler = std::make_unique<ArrowNavigationHandler>(this);
+  m_alphabeticHandler = std::make_unique<AlphabeticNavigationHandler>(this);
   m_animationManager = std::make_unique<AnimationManager>(this);
   m_mouseManager = std::make_unique<MouseManager>(this);
   m_launchManager = std::make_unique<LaunchManager>(this);
@@ -155,6 +156,17 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
                 m_itemsPage->setFocus();
               }
             });
+  }
+
+  // Setup AlphabeticNavigationHandler with its dependencies
+  if (m_alphabeticHandler) {
+    m_alphabeticHandler->setScrollManager(m_scrollManager);
+    m_alphabeticHandler->setSelectionManager(m_selectionManager.get());
+
+    // Connect handler signals
+    connect(m_alphabeticHandler.get(),
+            &AlphabeticNavigationHandler::requestSelection, this,
+            [this](int index) { selectItemByIndex(index, true); });
   }
 
   // Setup AnimationManager with its dependencies
@@ -272,6 +284,8 @@ void InteractionManager::connectSelectionManagerSignals() {
 void InteractionManager::connectKeyboardManagerSignals() {
   connect(m_keyboardManager.get(), &KeyboardManager::requestSelectionMove,
           this, &InteractionManager::handleArrowKeyNavigation);
+  connect(m_keyboardManager.get(), &KeyboardManager::requestAlphabeticNavigation,
+          this, &InteractionManager::handleAlphabeticNavigation);
   connect(m_keyboardManager.get(), &KeyboardManager::requestEnterAction,
           this, [this]() {
             if (m_scrollManager) {
@@ -461,6 +475,17 @@ void InteractionManager::handleArrowKeyNavigation(int direction, bool vertical) 
   }
   if (m_arrowHandler) {
     m_arrowHandler->handleArrowKeyNavigation(direction, vertical);
+  }
+}
+
+// KeyboardManager callback: handles alphabetic navigation via PageUp/PageDown
+void InteractionManager::handleAlphabeticNavigation(bool forward) {
+  bool restoringSelection = m_selectionManager && m_selectionManager->isRestoringSelection();
+  if (restoringSelection || m_navigationInProgress) {
+    return;
+  }
+  if (m_alphabeticHandler) {
+    m_alphabeticHandler->navigateToNextLetter(forward);
   }
 }
 
@@ -1118,6 +1143,7 @@ void InteractionManager::updateSearchBarPlaceholder() {
 // Restores selection instantly, ensures viewport positioning, and updates
 // sidebar metadata
 void InteractionManager::beginSelectionRestore(int targetIndex) {
+  qDebug() << "[SelectionRestore] beginSelectionRestore: targetIndex=" << targetIndex;
   if (targetIndex < 0) {
     return;
   }
@@ -1606,7 +1632,9 @@ void InteractionManager::persistSelectionForIndex(int coll, int idx) {
     return;
   }
   m_settingsManager->setLastSelectedItem(coll, idx);
-  QString collectionName = (*m_collections)[coll].name;
+  // Use hierarchical name to match how calculateSelectionIndex looks it up
+  QString collectionName = CollectionUtils::hierarchicalNameFor(
+      (*m_collections)[coll], *m_collections);
   QString title;
   QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
   if (path.isEmpty() && (m_scrollManager)) {

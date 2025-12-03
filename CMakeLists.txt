@@ -51,6 +51,7 @@ set(SOURCES
   ${SRC_DIR}/modules/interaction/arrownavigationhandler.cpp
   ${SRC_DIR}/modules/interaction/interactionstateholder.cpp
   ${SRC_DIR}/modules/keyboard/keyboardmanager.cpp
+  ${SRC_DIR}/modules/keyboard/alphabeticnavigationhandler.cpp
   ${SRC_DIR}/modules/launch/launchmanager.cpp
   ${SRC_DIR}/modules/mouse/mousemanager.cpp
   ${SRC_DIR}/modules/navigation/navigationmanager.cpp
@@ -95,6 +96,7 @@ set(HEADERS
   ${SRC_DIR}/modules/interaction/arrownavigationhandler.h
   ${SRC_DIR}/modules/interaction/interactionstateholder.h
   ${SRC_DIR}/modules/keyboard/keyboardmanager.h
+  ${SRC_DIR}/modules/keyboard/alphabeticnavigationhandler.h
   ${SRC_DIR}/modules/launch/launchmanager.h
   ${SRC_DIR}/modules/mouse/mousemanager.h
   ${SRC_DIR}/modules/navigation/navigationmanager.h

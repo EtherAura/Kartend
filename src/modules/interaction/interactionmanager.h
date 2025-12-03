@@ -14,6 +14,7 @@
 #include "setuputils.h"
 #include "viewportmanager.h"
 #include "arrownavigationhandler.h"
+#include "alphabeticnavigationhandler.h"
 #include <QObject>
 #include <QPointer>
 #include <memory>
@@ -175,6 +176,7 @@ public slots:
 private slots:
   // KeyboardManager callbacks
   void handleArrowKeyNavigation(int direction, bool vertical);
+  void handleAlphabeticNavigation(bool forward);
   void onKeyboardRepeatStep();
   void onKeyboardStopRepeat(bool suppressRecentering);
 
@@ -208,6 +210,9 @@ private:
 
   // Arrow key navigation delegation (owned helper)
   std::unique_ptr<ArrowNavigationHandler> m_arrowHandler;
+
+  // Alphabetic navigation delegation (owned helper)
+  std::unique_ptr<AlphabeticNavigationHandler> m_alphabeticHandler;
 
   // Animation delegation (owned helper)
   std::unique_ptr<AnimationManager> m_animationManager;

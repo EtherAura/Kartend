@@ -146,6 +146,16 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
     }
   }
 
+  // PageUp/PageDown for alphabetic navigation
+  if (key == Qt::Key_PageUp) {
+    emit requestAlphabeticNavigation(false); // backward
+    return true;
+  }
+  if (key == Qt::Key_PageDown) {
+    emit requestAlphabeticNavigation(true); // forward
+    return true;
+  }
+
   return false;
 }
 

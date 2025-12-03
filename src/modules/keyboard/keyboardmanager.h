@@ -111,6 +111,7 @@ public:
 signals:
   // Action requests for InteractionManager
   void requestSelectionMove(int direction, bool vertical);
+  void requestAlphabeticNavigation(bool forward);
   void requestEnterAction();
   void requestSearchModeToggle();
   void requestSearchBarFocus();
