@@ -573,8 +573,7 @@ void ItemWidget::onArtworkChanged() {
     }
 
     // Apply corner radius masking at the end (consistent with placeholder approach)
-    const int scaledRadius = qRound(m_cornerRadius * dpr);
-    if (scaledRadius > 0) {
+    if (m_cornerRadius > 0) {
       QPixmap maskedPixmap(actualWidth, actualHeight);
       maskedPixmap.setDevicePixelRatio(dpr);
       maskedPixmap.fill(Qt::transparent);
@@ -582,9 +581,10 @@ void ItemWidget::onArtworkChanged() {
       QPainter maskPainter(&maskedPixmap);
       maskPainter.setRenderHint(QPainter::Antialiasing, true);
       
+      // Use logical coordinates (width x height) since devicePixelRatio is set
       QPainterPath clipPath;
-      clipPath.addRoundedRect(QRectF(0, 0, actualWidth, actualHeight),
-                              scaledRadius, scaledRadius);
+      clipPath.addRoundedRect(QRectF(0, 0, width, height),
+                              m_cornerRadius, m_cornerRadius);
       maskPainter.setClipPath(clipPath);
       maskPainter.drawPixmap(0, 0, backgroundPixmap);
       maskPainter.end();
