@@ -553,7 +553,7 @@ void ItemWidget::onArtworkChanged() {
     // Create background at actual pixel size
     QPixmap backgroundPixmap(actualWidth, actualHeight);
     backgroundPixmap.setDevicePixelRatio(dpr);
-    backgroundPixmap.fill(Qt::transparent);
+    backgroundPixmap.fill(palette().color(QPalette::Mid));
 
     // Scale the stored pixmap to fit the label's actual pixel dimensions
     // Use the raw pixel dimensions for scaling since we're drawing to actual pixels
@@ -562,27 +562,35 @@ void ItemWidget::onArtworkChanged() {
         Qt::KeepAspectRatio,
         Qt::SmoothTransformation);
 
-    QPainter painter(&backgroundPixmap);
-    painter.setRenderHints(QPainter::Antialiasing |
-                           QPainter::SmoothPixmapTransform);
+    // Center the scaled artwork on the background
+    {
+      QPainter painter(&backgroundPixmap);
+      painter.setRenderHints(QPainter::Antialiasing |
+                             QPainter::SmoothPixmapTransform);
+      int offsetX = (actualWidth - scaledArtwork.width()) / 2;
+      int offsetY = (actualHeight - scaledArtwork.height()) / 2;
+      painter.drawPixmap(offsetX, offsetY, scaledArtwork);
+    }
 
-    // Apply corner radius clipping if set
+    // Apply corner radius masking at the end (consistent with placeholder approach)
     const int scaledRadius = qRound(m_cornerRadius * dpr);
     if (scaledRadius > 0) {
+      QPixmap maskedPixmap(actualWidth, actualHeight);
+      maskedPixmap.setDevicePixelRatio(dpr);
+      maskedPixmap.fill(Qt::transparent);
+      
+      QPainter maskPainter(&maskedPixmap);
+      maskPainter.setRenderHint(QPainter::Antialiasing, true);
+      
       QPainterPath clipPath;
       clipPath.addRoundedRect(QRectF(0, 0, actualWidth, actualHeight),
                               scaledRadius, scaledRadius);
-      painter.setClipPath(clipPath);
+      maskPainter.setClipPath(clipPath);
+      maskPainter.drawPixmap(0, 0, backgroundPixmap);
+      maskPainter.end();
+      
+      backgroundPixmap = maskedPixmap;
     }
-
-    // Fill background color (visible in non-artwork areas and letterboxing)
-    painter.fillRect(0, 0, actualWidth, actualHeight, palette().color(QPalette::Mid));
-
-    // Center the scaled artwork on the background
-    int offsetX = (actualWidth - scaledArtwork.width()) / 2;
-    int offsetY = (actualHeight - scaledArtwork.height()) / 2;
-    painter.drawPixmap(offsetX, offsetY, scaledArtwork);
-    painter.end();
 
     imageLabel->setPixmap(backgroundPixmap);
     imageLabel->setStyleSheet(QString());
