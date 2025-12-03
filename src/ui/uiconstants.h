@@ -9,7 +9,7 @@ namespace UIConstants {
 // Grid Layout
 // =============================================================================
 namespace Grid {
-inline constexpr int DEFAULT_WIDTH = 6;
+inline constexpr int DEFAULT_WIDTH = 7;
 inline constexpr int MIN_WIDTH = 1;
 inline constexpr int MAX_WIDTH = 40;
 inline constexpr int SPACING = 20;
@@ -150,7 +150,7 @@ inline constexpr int SCROLLBAR_RECOVERY_ATTEMPT_3_MS = 460;
 // Artwork Loading
 // =============================================================================
 namespace Artwork {
-inline constexpr int BOX_SIZE = 200;
+inline constexpr int BOX_SIZE = 400;
 inline constexpr int BATCH_HIGH = 10;
 inline constexpr int BATCH_LOW = 5;
 inline constexpr int IMMEDIATE_BATCH = 15;
