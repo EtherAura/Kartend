@@ -164,6 +164,7 @@ void SettingsManager::loadCollections(
     config.includeArtworkSubfolders = settings.value("includeArtworkSubfolders", false).toBool();
     config.showAllSubfolderItems = settings.value("showAllSubfolderItems", false).toBool();
     config.hideSubfolderTitles = settings.value("hideSubfolderTitles", false).toBool();
+    config.showHiddenFolders = settings.value("showHiddenFolders", false).toBool();
     config.collectionIcon = settings.value("collectionIcon").toString();
     
     QString extStr = settings.value("extensions").toString();
@@ -191,6 +192,7 @@ void SettingsManager::loadCollections(
     config.itemWidth = settings.value("itemWidth", UIConstants::Item::DEFAULT_WIDTH).toInt();
     config.itemHeight = settings.value("itemHeight", UIConstants::Item::DEFAULT_HEIGHT).toInt();
     config.fontSize = settings.value("fontSize", UIConstants::Item::DEFAULT_FONT_SIZE).toInt();
+    config.cornerRadius = settings.value("cornerRadius", UIConstants::Item::DEFAULT_CORNER_RADIUS).toInt();
 
     // Validate and clamp numeric values to acceptable ranges
     config.clampValues();
@@ -258,6 +260,7 @@ void SettingsManager::saveCollections(
     settings.setValue("includeArtworkSubfolders", c.includeArtworkSubfolders);
     settings.setValue("showAllSubfolderItems", c.showAllSubfolderItems);
     settings.setValue("hideSubfolderTitles", c.hideSubfolderTitles);
+    settings.setValue("showHiddenFolders", c.showHiddenFolders);
     settings.setValue("collectionIcon", c.collectionIcon);
     settings.setValue("extensions", c.extensions.join(", "));
     settings.setValue("gridWidth", c.gridWidth);
@@ -274,6 +277,7 @@ void SettingsManager::saveCollections(
     settings.setValue("itemWidth", c.itemWidth);
     settings.setValue("itemHeight", c.itemHeight);
     settings.setValue("fontSize", c.fontSize);
+    settings.setValue("cornerRadius", c.cornerRadius);
     settings.endGroup();
   }
   settings.sync();
@@ -411,6 +415,7 @@ void compareReloadFields(const CollectionConfig &configA,
       configA.showAllSubcollectionItems != configB.showAllSubcollectionItems ||
       configA.showAllSubfolderItems != configB.showAllSubfolderItems ||
       configA.hideSubfolderTitles != configB.hideSubfolderTitles ||
+      configA.showHiddenFolders != configB.showHiddenFolders ||
       configA.extensions != configB.extensions) {
     hasChanges = true;
     needsReload = true;
@@ -442,7 +447,8 @@ void updateViewingFlags(const CollectionConfig &configA,
     hasChanges = true;
     spacingChanged = true;
   }
-  if (configA.fontSize != configB.fontSize) {
+  if (configA.fontSize != configB.fontSize ||
+      configA.cornerRadius != configB.cornerRadius) {
     hasChanges = true;
     fontSizeChanged = true;
   }

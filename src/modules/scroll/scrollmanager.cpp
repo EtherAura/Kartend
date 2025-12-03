@@ -362,8 +362,12 @@ void ScrollManager::initializeVirtualFolders() {
     return;
   }
   
-  // Get list of subdirectories
-  QStringList subdirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+  // Get list of subdirectories, optionally including hidden folders
+  QDir::Filters filters = QDir::Dirs | QDir::NoDotAndDotDot;
+  if (m_context.config.showHiddenFolders) {
+    filters |= QDir::Hidden;
+  }
+  QStringList subdirs = dir.entryList(filters, QDir::Name);
   for (const QString &subdir : subdirs) {
     // Store path relative to mediaDirectory for navigation
     if (m_context.config.currentSubfolder.isEmpty()) {
@@ -1500,6 +1504,21 @@ void ScrollManager::onSubcollectionDoubleClicked(int subcollectionIndex) {
 
 void ScrollManager::onVirtualFolderDoubleClicked(const QString &folderPath) {
   emit virtualFolderEntered(folderPath);
+}
+
+// Returns the virtual folder path for a visual index, or empty string if not a virtual folder
+auto ScrollManager::virtualFolderPathForVisualIndex(int visualIndex) const -> QString {
+  int actualIndex = getFilteredIndex(visualIndex);
+  int subCount = m_subcollections.size();
+  int folderCount = m_virtualFolders.size();
+  
+  // Check if the index is in the virtual folder range
+  if (actualIndex < subCount || actualIndex >= subCount + folderCount) {
+    return {};
+  }
+  
+  int folderIndex = actualIndex - subCount;
+  return m_virtualFolders[folderIndex];
 }
 
 // Returns the underlying path for a visual index; delegates to DatabaseManager

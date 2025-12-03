@@ -266,6 +266,7 @@ private:
   auto processEnterOrReturnKey(int totalItems) -> bool;
   auto handleEnterOnSubcollection(int currentSelection, const QList<int> &subs)
       -> bool;
+  auto handleEnterOnVirtualFolder(const QString &folderPath) -> bool;
   [[nodiscard]] auto handleEnterOnItem(int currentSelection, int totalItems) -> bool;
   [[nodiscard]] auto isItemOffscreen(int selection, int gridWidth) const -> bool;
   void applyMinorHorizontalSuppress();

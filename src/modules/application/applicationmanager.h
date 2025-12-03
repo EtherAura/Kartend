@@ -15,6 +15,9 @@ class SettingsManager;
 class SidebarManager;
 class MainWindow;
 
+struct CollectionConfig;
+template <typename T> class QList;
+
 class ApplicationManager : public QObject {
   Q_OBJECT
 
@@ -23,6 +26,7 @@ public:
   ~ApplicationManager() override;
 
   void initialize();
+  void shutdown(const QList<CollectionConfig> &collections);
 
   // Getters
   [[nodiscard]] ArtworkManager *getArtworkManager() const;

@@ -106,6 +106,7 @@ public:
   [[nodiscard]] int getSubcollectionCount() const { return m_subcollections.size(); }
   [[nodiscard]] int getVirtualFolderCount() const { return m_virtualFolders.size(); }
   [[nodiscard]] QString filePathForVisualIndex(int visualIndex) const;
+  [[nodiscard]] QString virtualFolderPathForVisualIndex(int visualIndex) const;
   void primeLayoutFor(const CollectionConfig &config);
 
 signals:

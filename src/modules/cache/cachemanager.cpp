@@ -147,6 +147,21 @@ void CacheManager::saveToDisk() {
   flushDirtyArtwork(dirtyList);
 }
 
+// Saves cache metadata to disk during shutdown - skips QApplication::closingDown
+// check since we're intentionally saving during app close
+void CacheManager::saveToDiskForShutdown() {
+  QHash<QString, qint64> timestampsCopy;
+  {
+    QMutexLocker locker(&m_mutex);
+    timestampsCopy = fileTimestamps;
+    // Skip dirty artwork flush during shutdown - pixmaps may be invalidated
+    // and the flush is expensive. Timestamps are the critical metadata.
+    dirtyArtwork.clear();
+  }
+
+  writeTimestamps(timestampsCopy);
+}
+
 // Returns artwork pixmap if valid and up-to-date; otherwise attempts load from
 // disk cache
 auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {

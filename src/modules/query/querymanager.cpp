@@ -617,6 +617,20 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
   if (!dirInfo.exists() || dirInfo.lastModified() > lastScanned) {
     return true;
   }
+  
+  // When includeContentSubfolders is enabled, also check if any subdirectory
+  // has been modified since the last scan (files added/removed in subfolders)
+  if (collection.includeContentSubfolders) {
+    QDirIterator dirIt(collection.mediaDirectory, QDir::Dirs | QDir::NoDotAndDotDot,
+                       QDirIterator::Subdirectories);
+    while (dirIt.hasNext()) {
+      dirIt.next();
+      QFileInfo subDirInfo(dirIt.filePath());
+      if (subDirInfo.lastModified() > lastScanned) {
+        return true;
+      }
+    }
+  }
 
   QSqlQuery newer(m_db);
   newer.prepare("SELECT COUNT(*) FROM items WHERE collection_uuid = ? AND "

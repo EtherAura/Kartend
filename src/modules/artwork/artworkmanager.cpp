@@ -119,29 +119,19 @@ auto maybeTriggerCacheSave(ArtworkManager *self, CacheManager *cacheManager) -> 
 }
 } // namespace
 
-// Scales an image to fit within a square box and centers it on transparent
-// background. Accounts for device pixel ratio for crisp HiDPI rendering.
+// Scales an image to fit within a square box.
+// Accounts for device pixel ratio for crisp HiDPI rendering.
+// Does NOT center on a square canvas - the caller handles centering.
 static auto scaleCenterToBox(const QImage &img, int targetSize, qreal dpr = 1.0) -> QImage {
   if (img.isNull()) {
     return {};
   }
-  // Scale to actual pixel size (targetSize * dpr) for HiDPI crispness
+  // Scale to fit within actual pixel size (targetSize * dpr) for HiDPI crispness
   const int actualSize = qRound(targetSize * dpr);
   QImage scaled = img.scaled(actualSize, actualSize, Qt::KeepAspectRatio,
                              Qt::SmoothTransformation);
-  if (scaled.width() == actualSize && scaled.height() == actualSize) {
-    scaled.setDevicePixelRatio(dpr);
-    return scaled;
-  }
-  QImage centered(actualSize, actualSize, QImage::Format_ARGB32_Premultiplied);
-  centered.fill(Qt::transparent);
-  centered.setDevicePixelRatio(dpr);
-  QPainter painter(&centered);
-  painter.setRenderHint(QPainter::SmoothPixmapTransform);
-  const int offsetX = (actualSize - scaled.width()) / 2;
-  const int offsetY = (actualSize - scaled.height()) / 2;
-  painter.drawImage(offsetX, offsetY, scaled);
-  return centered;
+  scaled.setDevicePixelRatio(dpr);
+  return scaled;
 }
 
 // Loads an image from disk and returns a centered, scaled image
@@ -195,6 +185,9 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
 // Destructor stops timers, cancels futures, clears widget state, and releases
 // GUI pixmap resources
 ArtworkManager::~ArtworkManager() {
+  // Set cancellation flag first to signal all in-flight operations to stop
+  m_cancellationRequested.store(true, std::memory_order_release);
+
   TimerUtils::stopAndDisconnectTimers(
       {m_cacheTimer, m_silentLoadTimer, m_persistentLoadTimer});
   if (m_timerCoordinator) {
@@ -207,7 +200,9 @@ ArtworkManager::~ArtworkManager() {
     for (auto &future : m_futures) {
       if (future.isRunning()) {
         future.cancel();
-        future.waitForFinished();
+        // Don't wait for futures - they will complete asynchronously.
+        // The cancellation flag ensures they exit quickly without
+        // performing expensive operations.
       }
     }
     m_futures.clear();

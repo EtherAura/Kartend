@@ -421,6 +421,8 @@ void SettingsDialog::setupFormFieldConnections() {
   if (ui->includeContentSubfoldersCheckBox) {
     connect(ui->includeContentSubfoldersCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
+    connect(ui->includeContentSubfoldersCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::onIncludeSubfoldersToggled);
   }
   if (ui->showAllSubfolderItemsCheckBox) {
     connect(ui->showAllSubfolderItemsCheckBox, &QCheckBox::toggled, this,
@@ -428,6 +430,10 @@ void SettingsDialog::setupFormFieldConnections() {
   }
   if (ui->hideSubfolderTitlesCheckBox) {
     connect(ui->hideSubfolderTitlesCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->showHiddenFoldersCheckBox) {
+    connect(ui->showHiddenFoldersCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
   }
   if (ui->includeArtworkSubfoldersCheckBox) {
@@ -487,6 +493,10 @@ void SettingsDialog::setupFormFieldConnections() {
   }
   if (ui->fontSizeSpinBox) {
     connect(ui->fontSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &SettingsDialog::checkForChanges);
+  }
+  if (ui->cornerRadiusSpinBox) {
+    connect(ui->cornerRadiusSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &SettingsDialog::checkForChanges);
   }
 }
@@ -571,6 +581,11 @@ void SettingsDialog::setupUIConstraints() {
     ui->fontSizeSpinBox->setMinimum(UIConstants::Item::MIN_FONT_SIZE);
     ui->fontSizeSpinBox->setMaximum(UIConstants::Item::MAX_FONT_SIZE);
     ui->fontSizeSpinBox->setSingleStep(1);
+  }
+  if (ui->cornerRadiusSpinBox) {
+    ui->cornerRadiusSpinBox->setMinimum(UIConstants::Item::MIN_CORNER_RADIUS);
+    ui->cornerRadiusSpinBox->setMaximum(UIConstants::Item::MAX_CORNER_RADIUS);
+    ui->cornerRadiusSpinBox->setSingleStep(1);
   }
 }
 
@@ -828,6 +843,10 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
       (ui->hideSubfolderTitlesCheckBox)
           ? ui->hideSubfolderTitlesCheckBox->isChecked()
           : config.hideSubfolderTitles;
+  config.showHiddenFolders =
+      (ui->showHiddenFoldersCheckBox)
+          ? ui->showHiddenFoldersCheckBox->isChecked()
+          : config.showHiddenFolders;
   config.includeArtworkSubfolders =
       (ui->includeArtworkSubfoldersCheckBox)
           ? ui->includeArtworkSubfoldersCheckBox->isChecked()
@@ -841,6 +860,9 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.fontSize = (ui->fontSizeSpinBox)
                         ? ui->fontSizeSpinBox->value()
                         : config.fontSize;
+  config.cornerRadius = (ui->cornerRadiusSpinBox)
+                            ? ui->cornerRadiusSpinBox->value()
+                            : config.cornerRadius;
   config.extensions = (ui->fileExtensionsLineEdit)
                           ? ExtensionUtils::parseUserExtensionList(
                                 ui->fileExtensionsLineEdit->text())
@@ -960,11 +982,16 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ((ui->hideSubfolderTitlesCheckBox) &&
        ui->hideSubfolderTitlesCheckBox->isChecked() !=
            originalConfig.hideSubfolderTitles) ||
+      ((ui->showHiddenFoldersCheckBox) &&
+       ui->showHiddenFoldersCheckBox->isChecked() !=
+           originalConfig.showHiddenFolders) ||
       ((ui->includeArtworkSubfoldersCheckBox) &&
        ui->includeArtworkSubfoldersCheckBox->isChecked() !=
            originalConfig.includeArtworkSubfolders) ||
       ((ui->fontSizeSpinBox) &&
-       ui->fontSizeSpinBox->value() != originalConfig.fontSize));
+       ui->fontSizeSpinBox->value() != originalConfig.fontSize) ||
+      ((ui->cornerRadiusSpinBox) &&
+       ui->cornerRadiusSpinBox->value() != originalConfig.cornerRadius));
 }
 
 // Checks extension list changes
@@ -1003,7 +1030,9 @@ auto SettingsDialog::checkParentCollectionChanges() const -> bool {
 // Checks dimension changes
 auto SettingsDialog::checkDimensionChanges() const -> bool {
   return (ui->itemWidthSpinBox->value() != originalCollection.itemWidth ||
-          ui->itemHeightSpinBox->value() != originalCollection.itemHeight);
+          ui->itemHeightSpinBox->value() != originalCollection.itemHeight ||
+          (ui->cornerRadiusSpinBox &&
+           ui->cornerRadiusSpinBox->value() != originalCollection.cornerRadius));
 }
 
 auto SettingsDialog::promptUnsavedChanges(const QString &actionDescription)
@@ -1463,6 +1492,12 @@ void SettingsDialog::onRecursiveImportArtwork() {
   performRecursiveImport(baseDir, false);
 }
 
+void SettingsDialog::onIncludeSubfoldersToggled(bool checked) {
+  if (ui->subfolderOptionsWidget) {
+    ui->subfolderOptionsWidget->setVisible(checked);
+  }
+}
+
 void SettingsDialog::performRecursiveImport(const QString &baseDir, bool isContentDir) {
   QDir dir(baseDir);
   if (!dir.exists()) {
@@ -1601,6 +1636,12 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->hideSubfolderTitlesCheckBox) {
     ui->hideSubfolderTitlesCheckBox->setChecked(config.hideSubfolderTitles);
   }
+  if (ui->showHiddenFoldersCheckBox) {
+    ui->showHiddenFoldersCheckBox->setChecked(config.showHiddenFolders);
+  }
+  if (ui->subfolderOptionsWidget) {
+    ui->subfolderOptionsWidget->setVisible(config.includeContentSubfolders);
+  }
   if (ui->includeArtworkSubfoldersCheckBox) {
     ui->includeArtworkSubfoldersCheckBox->setChecked(config.includeArtworkSubfolders);
   }
@@ -1652,6 +1693,9 @@ void SettingsDialog::loadCollectionToUI(int index) {
   }
   if (ui->fontSizeSpinBox) {
     ui->fontSizeSpinBox->setValue(config.fontSize);
+  }
+  if (ui->cornerRadiusSpinBox) {
+    ui->cornerRadiusSpinBox->setValue(config.cornerRadius);
   }
 
   updateParentCollectionComboBox(index);

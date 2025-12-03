@@ -12,6 +12,7 @@
 #include <QLinearGradient>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPalette>
 #include <QPen>
 #include <QPixmap>
@@ -541,36 +542,63 @@ void ItemWidget::onArtworkChanged() {
     imageLabel->setPixmap(buildPlaceholderPattern(width, height));
     imageLabel->setStyleSheet(QString());
   } else {
-    // Get device pixel ratio for HiDPI rendering
+    // Get the screen DPR for the final output
     qreal dpr = 1.0;
     if (QGuiApplication::primaryScreen()) {
       dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
     }
-    const int actualWidth = qRound(width * dpr);
-    const int actualHeight = qRound(height * dpr);
-
-    // Create background at actual pixel size
-    QPixmap backgroundPixmap(actualWidth, actualHeight);
-    backgroundPixmap.setDevicePixelRatio(dpr);
-    backgroundPixmap.fill(palette().color(QPalette::Mid));
-
-    // Scale the stored pixmap to fit the label's actual pixel dimensions
-    // Use the raw pixel dimensions for scaling since we're drawing to actual pixels
-    QPixmap scaledArtwork = storedPixmap.scaled(
-        actualWidth, actualHeight,
+    
+    // Physical dimensions for the output
+    int physicalW = qRound(width * dpr);
+    int physicalH = qRound(height * dpr);
+    
+    // Create a copy of source with DPR=1 so we work in raw physical pixels
+    QPixmap sourceNoDpr = storedPixmap;
+    sourceNoDpr.setDevicePixelRatio(1.0);
+    
+    // Scale to fit within physical target size
+    QPixmap scaledArtwork = sourceNoDpr.scaled(
+        physicalW, physicalH,
         Qt::KeepAspectRatio,
         Qt::SmoothTransformation);
 
-    // Center the scaled artwork on the background
-    QPainter painter(&backgroundPixmap);
-    painter.setRenderHints(QPainter::Antialiasing |
-                           QPainter::SmoothPixmapTransform);
-    int offsetX = (actualWidth - scaledArtwork.width()) / 2;
-    int offsetY = (actualHeight - scaledArtwork.height()) / 2;
-    painter.drawPixmap(offsetX, offsetY, scaledArtwork);
-    painter.end();
+    // Create result at physical size
+    QPixmap resultPixmap(physicalW, physicalH);
+    resultPixmap.fill(palette().color(QPalette::Mid));
 
-    imageLabel->setPixmap(backgroundPixmap);
+    // Center using physical pixel coordinates
+    {
+      QPainter painter(&resultPixmap);
+      painter.setRenderHints(QPainter::Antialiasing |
+                             QPainter::SmoothPixmapTransform);
+      int offsetX = (physicalW - scaledArtwork.width()) / 2;
+      int offsetY = (physicalH - scaledArtwork.height()) / 2;
+      painter.drawPixmap(offsetX, offsetY, scaledArtwork);
+    }
+
+    // Apply corner radius masking (in physical pixels)
+    if (m_cornerRadius > 0) {
+      int physicalRadius = qRound(m_cornerRadius * dpr);
+      QPixmap maskedPixmap(physicalW, physicalH);
+      maskedPixmap.fill(Qt::transparent);
+      
+      QPainter maskPainter(&maskedPixmap);
+      maskPainter.setRenderHint(QPainter::Antialiasing, true);
+      
+      QPainterPath clipPath;
+      clipPath.addRoundedRect(QRectF(0, 0, physicalW, physicalH),
+                              physicalRadius, physicalRadius);
+      maskPainter.setClipPath(clipPath);
+      maskPainter.drawPixmap(0, 0, resultPixmap);
+      maskPainter.end();
+      
+      resultPixmap = maskedPixmap;
+    }
+
+    // Set DPR on final result for proper display
+    resultPixmap.setDevicePixelRatio(dpr);
+
+    imageLabel->setPixmap(resultPixmap);
     imageLabel->setStyleSheet(QString());
   }
   if (nameLabel) {
@@ -724,6 +752,15 @@ void ItemWidget::setHideSubcollectionTitles(bool hide) {
   applyDimensions();
 }
 
+// Set corner radius for artwork clipping
+void ItemWidget::setCornerRadius(int radius) {
+  if (m_cornerRadius == radius) {
+    return;
+  }
+  m_cornerRadius = radius;
+  onArtworkChanged();
+}
+
 // Update triangle indicator
 void ItemWidget::updateTriangleIndicator() {
   if ((!triangleIndicator) || (!imageLabel) ||
@@ -792,6 +829,7 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   }
   static QPixmap cache;
   static quint64 cacheKey = 0;
+  static int cachedCornerRadius = 0;
   QColor base = palette().color(QPalette::Mid);
   constexpr int kKeyWidthShiftBits = 48;
   constexpr int kKeyHeightShiftBits = 32;
@@ -799,12 +837,12 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   quint64 key = (static_cast<quint64>(width) << kKeyWidthShiftBits) |
                 (static_cast<quint64>(height) << kKeyHeightShiftBits) |
                 (static_cast<quint64>(base.rgba()) & kRgbaMask32);
-  if (!cache.isNull() && cacheKey == key) {
+  if (!cache.isNull() && cacheKey == key && cachedCornerRadius == m_cornerRadius) {
     return cache;
   }
 
   QPixmap pixmap(width, height);
-  pixmap.fill(base);
+  pixmap.fill(Qt::transparent);
 
   int baseLightness = base.lightness();
   constexpr int kLightnessDarkThreshold = 128;
@@ -872,6 +910,10 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   {
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing, false);
+    
+    // Fill background
+    painter.fillRect(0, 0, width, height, base);
+    
     painter.setPen(QPen(primary, 1));
     for (int diag = -height; diag < width; diag += step) {
       painter.drawLine(diag, 0, diag + height, height);
@@ -921,7 +963,26 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
     painter.fillRect(0, 0, width, height, gradient);
   }
 
+  // Apply corner radius masking at the end (after all drawing/processing)
+  if (m_cornerRadius > 0) {
+    QPixmap maskedPixmap(width, height);
+    maskedPixmap.fill(Qt::transparent);
+    
+    QPainter maskPainter(&maskedPixmap);
+    maskPainter.setRenderHint(QPainter::Antialiasing, true);
+    
+    QPainterPath clipPath;
+    clipPath.addRoundedRect(QRectF(0, 0, width, height),
+                            m_cornerRadius, m_cornerRadius);
+    maskPainter.setClipPath(clipPath);
+    maskPainter.drawPixmap(0, 0, pixmap);
+    maskPainter.end();
+    
+    pixmap = maskedPixmap;
+  }
+
   cache = pixmap;
   cacheKey = key;
+  cachedCornerRadius = m_cornerRadius;
   return pixmap;
 }

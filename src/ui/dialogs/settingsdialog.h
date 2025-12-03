@@ -63,6 +63,7 @@ private slots:
   void onGridWidthChanged(int value);
   void onRecursiveImportContent();
   void onRecursiveImportArtwork();
+  void onIncludeSubfoldersToggled(bool checked);
 
 private:
   void updateCollectionTreeWidget();

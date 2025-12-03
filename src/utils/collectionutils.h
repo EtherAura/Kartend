@@ -68,12 +68,14 @@ struct CollectionConfig {
   int itemWidth = UIConstants::Item::DEFAULT_WIDTH;
   int itemHeight = UIConstants::Item::DEFAULT_HEIGHT;
   int fontSize = UIConstants::Item::DEFAULT_FONT_SIZE;
+  int cornerRadius = UIConstants::Item::DEFAULT_CORNER_RADIUS;
   
   // Folder browsing options
   bool includeContentSubfolders = false;   // Show subfolders as virtual navigable folders
   bool includeArtworkSubfolders = false;   // Match artwork from subfolders
   bool showAllSubfolderItems = false;      // Mix subfolder items with parent (like showAllSubcollectionItems)
   bool hideSubfolderTitles = false;        // Hide titles on virtual folder widgets
+  bool showHiddenFolders = false;          // Show hidden folders (starting with dot)
   
   // Virtual subfolder tracking (runtime only, not persisted)
   QString currentSubfolder;                // Current virtual subfolder path (relative to mediaDirectory)
@@ -104,6 +106,7 @@ struct CollectionConfig {
     itemWidth = std::clamp(itemWidth, UIConstants::Item::MIN_WIDTH, UIConstants::Item::MAX_WIDTH);
     itemHeight = std::clamp(itemHeight, UIConstants::Item::MIN_HEIGHT, UIConstants::Item::MAX_HEIGHT);
     fontSize = std::clamp(fontSize, UIConstants::Item::MIN_FONT_SIZE, UIConstants::Item::MAX_FONT_SIZE);
+    cornerRadius = std::clamp(cornerRadius, UIConstants::Item::MIN_CORNER_RADIUS, UIConstants::Item::MAX_CORNER_RADIUS);
     // Spacing can be negative for overlap effects
     horizontalSpacing = std::clamp(horizontalSpacing, -100, 200);
     verticalSpacing = std::clamp(verticalSpacing, -100, 200);

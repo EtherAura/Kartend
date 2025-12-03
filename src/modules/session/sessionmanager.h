@@ -23,6 +23,7 @@ public:
   
   void initialize();
   void saveToDisk();
+  void saveToDiskForShutdown();
   
   // Session State
   void setLastSelected(const QString &collectionName, int index, const QString &title);
