@@ -895,15 +895,7 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
 
   {
     QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, m_cornerRadius > 0);
-    
-    // Apply corner radius clipping if set
-    if (m_cornerRadius > 0) {
-      QPainterPath clipPath;
-      clipPath.addRoundedRect(QRectF(0, 0, width, height),
-                              m_cornerRadius, m_cornerRadius);
-      painter.setClipPath(clipPath);
-    }
+    painter.setRenderHint(QPainter::Antialiasing, false);
     
     // Fill background
     painter.fillRect(0, 0, width, height, base);
@@ -947,16 +939,6 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
 
   {
     QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, m_cornerRadius > 0);
-    
-    // Apply corner radius clipping for gradient overlay
-    if (m_cornerRadius > 0) {
-      QPainterPath clipPath;
-      clipPath.addRoundedRect(QRectF(0, 0, width, height),
-                              m_cornerRadius, m_cornerRadius);
-      painter.setClipPath(clipPath);
-    }
-    
     QLinearGradient gradient(0, 0, 0, height);
     QColor top(base.red(), base.green(), base.blue(),
                UIConstants::Placeholder::GRADIENT_TOP_ALPHA);
@@ -965,6 +947,24 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
     gradient.setColorAt(0.0, top);
     gradient.setColorAt(1.0, bottom);
     painter.fillRect(0, 0, width, height, gradient);
+  }
+
+  // Apply corner radius masking at the end (after all drawing/processing)
+  if (m_cornerRadius > 0) {
+    QPixmap maskedPixmap(width, height);
+    maskedPixmap.fill(Qt::transparent);
+    
+    QPainter maskPainter(&maskedPixmap);
+    maskPainter.setRenderHint(QPainter::Antialiasing, true);
+    
+    QPainterPath clipPath;
+    clipPath.addRoundedRect(QRectF(0, 0, width, height),
+                            m_cornerRadius, m_cornerRadius);
+    maskPainter.setClipPath(clipPath);
+    maskPainter.drawPixmap(0, 0, pixmap);
+    maskPainter.end();
+    
+    pixmap = maskedPixmap;
   }
 
   cache = pixmap;
