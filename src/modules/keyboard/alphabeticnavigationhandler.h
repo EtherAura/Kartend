@@ -40,11 +40,11 @@ public:
   [[nodiscard]] int navigateToNextLetter(bool forward);
 
   /**
-   * @brief Get the starting letter of an item at the given visual index.
+   * @brief Get the starting character of an item at the given visual index.
    * @param visualIndex The visual index in the current view.
-   * @return The uppercase first letter, or QChar() if invalid.
+   * @return The uppercase first character, or QChar() if invalid.
    */
-  [[nodiscard]] QChar getLetterForIndex(int visualIndex) const;
+  [[nodiscard]] QChar getFirstCharForIndex(int visualIndex) const;
 
 signals:
   /**

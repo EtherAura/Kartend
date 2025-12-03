@@ -36,21 +36,14 @@ auto AlphabeticNavigationHandler::navigateToNextLetter(bool forward) -> int {
   return -1;
 }
 
-auto AlphabeticNavigationHandler::getLetterForIndex(int visualIndex) const
+auto AlphabeticNavigationHandler::getFirstCharForIndex(int visualIndex) const
     -> QChar {
   const QString displayName = getDisplayNameForIndex(visualIndex);
   if (displayName.isEmpty()) {
     return QChar();
   }
 
-  // Find the first letter character, skipping leading non-letters
-  for (const QChar &ch : displayName) {
-    if (ch.isLetter()) {
-      return ch.toUpper();
-    }
-  }
-
-  // No letter found - return first character for non-alphabetic items
+  // Return the first character (uppercased for consistent comparison)
   return displayName.at(0).toUpper();
 }
 
@@ -101,61 +94,61 @@ auto AlphabeticNavigationHandler::findNextLetterIndex(int currentIndex,
                                                       bool forward,
                                                       int totalItems) const
     -> int {
-  const QChar currentLetter = getLetterForIndex(currentIndex);
-  if (currentLetter.isNull()) {
+  const QChar currentChar = getFirstCharForIndex(currentIndex);
+  if (currentChar.isNull()) {
     return -1;
   }
 
-  // Target letter is the next/previous letter in the alphabet
-  QChar targetLetter = getAdjacentLetter(currentLetter, forward);
-  const QChar startLetter = targetLetter;
-
-  // Search for an item starting with the target letter
-  // If not found, try subsequent letters until we wrap around
-  int attempts = 0;
-  constexpr int MAX_LETTER_ATTEMPTS = 27; // 26 letters + 1 for non-alpha
-
-  while (attempts < MAX_LETTER_ATTEMPTS) {
-    // Search through all items for one starting with targetLetter
-    if (forward) {
-      // Search forward from current position first, then wrap
-      for (int i = currentIndex + 1; i < totalItems; ++i) {
-        const QChar letter = getLetterForIndex(i);
-        if (letter == targetLetter) {
-          return i;
-        }
+  // Simple approach: find the next item that starts with a different character
+  // This handles numbers, special chars, and letters uniformly
+  if (forward) {
+    // Search forward from current position, then wrap to beginning
+    for (int i = currentIndex + 1; i < totalItems; ++i) {
+      const QChar itemChar = getFirstCharForIndex(i);
+      if (!itemChar.isNull() && itemChar != currentChar) {
+        return i;
       }
-      // Wrap to beginning
-      for (int i = 0; i < currentIndex; ++i) {
-        const QChar letter = getLetterForIndex(i);
-        if (letter == targetLetter) {
-          return i;
-        }
+    }
+    // Wrap to beginning
+    for (int i = 0; i < currentIndex; ++i) {
+      const QChar itemChar = getFirstCharForIndex(i);
+      if (!itemChar.isNull() && itemChar != currentChar) {
+        return i;
       }
-    } else {
-      // Search backward from current position first, then wrap
-      for (int i = currentIndex - 1; i >= 0; --i) {
-        const QChar letter = getLetterForIndex(i);
-        if (letter == targetLetter) {
-          return i;
-        }
+    }
+  } else {
+    // Search backward: find the FIRST item of the previous group
+    // First, find what character the previous group starts with
+    QChar prevGroupChar;
+    for (int i = currentIndex - 1; i >= 0; --i) {
+      const QChar itemChar = getFirstCharForIndex(i);
+      if (!itemChar.isNull() && itemChar != currentChar) {
+        prevGroupChar = itemChar;
+        break;
       }
-      // Wrap to end
+    }
+    
+    // If not found before current, wrap and search from end
+    if (prevGroupChar.isNull()) {
       for (int i = totalItems - 1; i > currentIndex; --i) {
-        const QChar letter = getLetterForIndex(i);
-        if (letter == targetLetter) {
-          return i;
+        const QChar itemChar = getFirstCharForIndex(i);
+        if (!itemChar.isNull() && itemChar != currentChar) {
+          prevGroupChar = itemChar;
+          break;
         }
       }
     }
-
-    // Target letter not found, try the next adjacent letter
-    targetLetter = getAdjacentLetter(targetLetter, forward);
-    ++attempts;
-
-    // If we've wrapped back to start, no different letter exists
-    if (targetLetter == startLetter) {
-      break;
+    
+    if (prevGroupChar.isNull()) {
+      return -1; // All items have the same first character
+    }
+    
+    // Now find the FIRST item with prevGroupChar (start of that group)
+    for (int i = 0; i < totalItems; ++i) {
+      const QChar itemChar = getFirstCharForIndex(i);
+      if (itemChar == prevGroupChar) {
+        return i;
+      }
     }
   }
 
@@ -164,8 +157,8 @@ auto AlphabeticNavigationHandler::findNextLetterIndex(int currentIndex,
 
 auto AlphabeticNavigationHandler::getAdjacentLetter(QChar current,
                                                     bool forward) -> QChar {
+  // This function is no longer used but kept for potential future use
   if (!current.isLetter()) {
-    // For non-letters, treat as before 'A' when going forward
     return forward ? QChar('A') : QChar('Z');
   }
 
