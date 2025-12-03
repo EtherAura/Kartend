@@ -48,9 +48,11 @@ public:
   void setFontSize(int fontSize);
   void setHideTitles(bool hide);
   void setHideSubcollectionTitles(bool hide);
+  void setCornerRadius(int radius);
   int m_itemWidth;
   int m_itemHeight;
   int m_fontSize = 12; // Default font size
+  int m_cornerRadius = 0; // Corner radius for artwork clipping
   bool m_hideTitles = false;
   bool m_hideSubcollectionTitles = false;
   bool m_hideSubfolderTitle = false;

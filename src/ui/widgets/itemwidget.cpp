@@ -12,6 +12,7 @@
 #include <QLinearGradient>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPalette>
 #include <QPen>
 #include <QPixmap>
@@ -552,7 +553,7 @@ void ItemWidget::onArtworkChanged() {
     // Create background at actual pixel size
     QPixmap backgroundPixmap(actualWidth, actualHeight);
     backgroundPixmap.setDevicePixelRatio(dpr);
-    backgroundPixmap.fill(palette().color(QPalette::Mid));
+    backgroundPixmap.fill(Qt::transparent);
 
     // Scale the stored pixmap to fit the label's actual pixel dimensions
     // Use the raw pixel dimensions for scaling since we're drawing to actual pixels
@@ -561,10 +562,23 @@ void ItemWidget::onArtworkChanged() {
         Qt::KeepAspectRatio,
         Qt::SmoothTransformation);
 
-    // Center the scaled artwork on the background
     QPainter painter(&backgroundPixmap);
     painter.setRenderHints(QPainter::Antialiasing |
                            QPainter::SmoothPixmapTransform);
+
+    // Apply corner radius clipping if set
+    const int scaledRadius = qRound(m_cornerRadius * dpr);
+    if (scaledRadius > 0) {
+      QPainterPath clipPath;
+      clipPath.addRoundedRect(QRectF(0, 0, actualWidth, actualHeight),
+                              scaledRadius, scaledRadius);
+      painter.setClipPath(clipPath);
+    }
+
+    // Fill background color (visible in non-artwork areas and letterboxing)
+    painter.fillRect(0, 0, actualWidth, actualHeight, palette().color(QPalette::Mid));
+
+    // Center the scaled artwork on the background
     int offsetX = (actualWidth - scaledArtwork.width()) / 2;
     int offsetY = (actualHeight - scaledArtwork.height()) / 2;
     painter.drawPixmap(offsetX, offsetY, scaledArtwork);
@@ -724,6 +738,15 @@ void ItemWidget::setHideSubcollectionTitles(bool hide) {
   applyDimensions();
 }
 
+// Set corner radius for artwork clipping
+void ItemWidget::setCornerRadius(int radius) {
+  if (m_cornerRadius == radius) {
+    return;
+  }
+  m_cornerRadius = radius;
+  onArtworkChanged();
+}
+
 // Update triangle indicator
 void ItemWidget::updateTriangleIndicator() {
   if ((!triangleIndicator) || (!imageLabel) ||
@@ -792,6 +815,7 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   }
   static QPixmap cache;
   static quint64 cacheKey = 0;
+  static int cachedCornerRadius = 0;
   QColor base = palette().color(QPalette::Mid);
   constexpr int kKeyWidthShiftBits = 48;
   constexpr int kKeyHeightShiftBits = 32;
@@ -799,12 +823,12 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   quint64 key = (static_cast<quint64>(width) << kKeyWidthShiftBits) |
                 (static_cast<quint64>(height) << kKeyHeightShiftBits) |
                 (static_cast<quint64>(base.rgba()) & kRgbaMask32);
-  if (!cache.isNull() && cacheKey == key) {
+  if (!cache.isNull() && cacheKey == key && cachedCornerRadius == m_cornerRadius) {
     return cache;
   }
 
   QPixmap pixmap(width, height);
-  pixmap.fill(base);
+  pixmap.fill(Qt::transparent);
 
   int baseLightness = base.lightness();
   constexpr int kLightnessDarkThreshold = 128;
@@ -871,7 +895,19 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
 
   {
     QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, false);
+    painter.setRenderHint(QPainter::Antialiasing, m_cornerRadius > 0);
+    
+    // Apply corner radius clipping if set
+    if (m_cornerRadius > 0) {
+      QPainterPath clipPath;
+      clipPath.addRoundedRect(QRectF(0, 0, width, height),
+                              m_cornerRadius, m_cornerRadius);
+      painter.setClipPath(clipPath);
+    }
+    
+    // Fill background
+    painter.fillRect(0, 0, width, height, base);
+    
     painter.setPen(QPen(primary, 1));
     for (int diag = -height; diag < width; diag += step) {
       painter.drawLine(diag, 0, diag + height, height);
@@ -911,6 +947,16 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
 
   {
     QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, m_cornerRadius > 0);
+    
+    // Apply corner radius clipping for gradient overlay
+    if (m_cornerRadius > 0) {
+      QPainterPath clipPath;
+      clipPath.addRoundedRect(QRectF(0, 0, width, height),
+                              m_cornerRadius, m_cornerRadius);
+      painter.setClipPath(clipPath);
+    }
+    
     QLinearGradient gradient(0, 0, 0, height);
     QColor top(base.red(), base.green(), base.blue(),
                UIConstants::Placeholder::GRADIENT_TOP_ALPHA);
@@ -923,5 +969,6 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
 
   cache = pixmap;
   cacheKey = key;
+  cachedCornerRadius = m_cornerRadius;
   return pixmap;
 }

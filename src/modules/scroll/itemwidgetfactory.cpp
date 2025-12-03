@@ -7,6 +7,7 @@
 #include "itemwidget.h"
 #include "widgetpoolmanager.h"
 
+#include <QDir>
 #include <QFileInfo>
 
 ItemWidgetFactory::ItemWidgetFactory(QObject *parent) : QObject(parent) {}
@@ -37,6 +38,7 @@ void ItemWidgetFactory::configureBaseWidget(ItemWidget *widget) {
   widget->setHideTitles(m_context.config.hideTitles);
   widget->setHideSubcollectionTitles(m_context.config.hideSubcollectionTitles);
   widget->setFontSize(m_context.config.fontSize);
+  widget->setCornerRadius(m_context.config.cornerRadius);
   widget->setItemDimensions(m_itemWidth, m_itemHeight);
 }
 
@@ -189,6 +191,25 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget,
       artworkDir = foundArtworkDir;
     }
   }
+
+  // Mirror the subfolder structure from media directory to artwork directory when:
+  // 1. includeArtworkSubfolders is explicitly enabled, OR
+  // 2. artworkDirectory equals mediaDirectory (artwork is co-located with media)
+  const QString &mediaDir = m_context.config.mediaDirectory;
+  bool shouldMirrorSubfolders =
+      m_context.config.includeArtworkSubfolders ||
+      (QDir(artworkDir).absolutePath() == QDir(mediaDir).absolutePath());
+
+  if (shouldMirrorSubfolders && !mediaDir.isEmpty()) {
+    QDir mediaDirObj(mediaDir);
+    QString relativePath = mediaDirObj.relativeFilePath(fullPath);
+    // Extract the directory component (subfolder path without the filename)
+    QString relativeDir = QFileInfo(relativePath).path();
+    if (!relativeDir.isEmpty() && relativeDir != ".") {
+      artworkDir = QDir(artworkDir).absoluteFilePath(relativeDir);
+    }
+  }
+
   QString artworkPath = ArtworkUtils::findArtworkForFile(
       QFileInfo(fullPath).fileName(), artworkDir);
   if (!artworkPath.isEmpty() && m_artworkManager) {

@@ -250,26 +250,6 @@
                </widget>
               </item>
               <item>
-               <widget class="QCheckBox" name="showAllSubfolderItemsCheckBox">
-                <property name="toolTip">
-                 <string>Mix items from subfolders with parent collection items, sorted alphabetically</string>
-                </property>
-                <property name="text">
-                 <string>Show All Subfolder Items</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QCheckBox" name="hideSubfolderTitlesCheckBox">
-                <property name="toolTip">
-                 <string>Hide titles on virtual subfolder widgets</string>
-                </property>
-                <property name="text">
-                 <string>Hide Subfolder Titles</string>
-                </property>
-               </widget>
-              </item>
-              <item>
                <widget class="QPushButton" name="recursiveImportContentButton">
                 <property name="toolTip">
                  <string>Create subcollections matching the directory structure</string>
@@ -293,6 +273,64 @@
                </spacer>
               </item>
              </layout>
+            </item>
+            <item>
+             <widget class="QWidget" name="subfolderOptionsWidget">
+              <layout class="QHBoxLayout" name="subfolderOptionsLayout">
+               <property name="leftMargin">
+                <number>20</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="QCheckBox" name="showAllSubfolderItemsCheckBox">
+                 <property name="toolTip">
+                  <string>Mix items from subfolders with parent collection items, sorted alphabetically</string>
+                 </property>
+                 <property name="text">
+                  <string>Show All Items</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QCheckBox" name="hideSubfolderTitlesCheckBox">
+                 <property name="toolTip">
+                  <string>Hide titles on virtual subfolder widgets</string>
+                 </property>
+                 <property name="text">
+                  <string>Hide Titles</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QCheckBox" name="showHiddenFoldersCheckBox">
+                 <property name="toolTip">
+                  <string>Show hidden folders (folders starting with a dot)</string>
+                 </property>
+                 <property name="text">
+                  <string>Show Hidden</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="subfolderOptionsSpacer">
+                 <property name="orientation">
+                  <enum>Qt::Orientation::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </widget>
             </item>
            </layout>
           </item>
@@ -462,6 +500,19 @@
               <property name="minimum"><number>8</number></property>
               <property name="maximum"><number>72</number></property>
               <property name="value"><number>12</number></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_cornerRadius_mini">
+              <property name="text"><string>Radius:</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="cornerRadiusSpinBox">
+              <property name="toolTip"><string>Corner radius for item artwork in pixels (0 = square)</string></property>
+              <property name="minimum"><number>0</number></property>
+              <property name="maximum"><number>100</number></property>
+              <property name="value"><number>0</number></property>
              </widget>
             </item>
            </layout>

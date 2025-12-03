@@ -38,6 +38,10 @@ inline constexpr int MAX_HEIGHT = 2160;
 inline constexpr int MIN_FONT_SIZE = 4;
 inline constexpr int DEFAULT_FONT_SIZE = 8;
 inline constexpr int MAX_FONT_SIZE = 72;
+// Corner radius bounds and default
+inline constexpr int MIN_CORNER_RADIUS = 0;
+inline constexpr int DEFAULT_CORNER_RADIUS = 0;
+inline constexpr int MAX_CORNER_RADIUS = 100;
 } // namespace Item
 
 // =============================================================================
