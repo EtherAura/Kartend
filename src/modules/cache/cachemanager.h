@@ -16,6 +16,7 @@ public:
   CacheManager();
   void initialize();
   void saveToDisk();
+  void saveToDiskForShutdown();
   
   [[nodiscard]] QPixmap getArtwork(const QString &artworkPath);
   void cacheArtwork(const QString &artworkPath, const QPixmap &pixmap);

@@ -542,57 +542,63 @@ void ItemWidget::onArtworkChanged() {
     imageLabel->setPixmap(buildPlaceholderPattern(width, height));
     imageLabel->setStyleSheet(QString());
   } else {
-    // Get device pixel ratio for HiDPI rendering
+    // Get the screen DPR for the final output
     qreal dpr = 1.0;
     if (QGuiApplication::primaryScreen()) {
       dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
     }
-    const int actualWidth = qRound(width * dpr);
-    const int actualHeight = qRound(height * dpr);
-
-    // Create background at actual pixel size
-    QPixmap backgroundPixmap(actualWidth, actualHeight);
-    backgroundPixmap.setDevicePixelRatio(dpr);
-    backgroundPixmap.fill(palette().color(QPalette::Mid));
-
-    // Scale the stored pixmap to fit the label's actual pixel dimensions
-    // Use the raw pixel dimensions for scaling since we're drawing to actual pixels
-    QPixmap scaledArtwork = storedPixmap.scaled(
-        actualWidth, actualHeight,
+    
+    // Physical dimensions for the output
+    int physicalW = qRound(width * dpr);
+    int physicalH = qRound(height * dpr);
+    
+    // Create a copy of source with DPR=1 so we work in raw physical pixels
+    QPixmap sourceNoDpr = storedPixmap;
+    sourceNoDpr.setDevicePixelRatio(1.0);
+    
+    // Scale to fit within physical target size
+    QPixmap scaledArtwork = sourceNoDpr.scaled(
+        physicalW, physicalH,
         Qt::KeepAspectRatio,
         Qt::SmoothTransformation);
 
-    // Center the scaled artwork on the background
+    // Create result at physical size
+    QPixmap resultPixmap(physicalW, physicalH);
+    resultPixmap.fill(palette().color(QPalette::Mid));
+
+    // Center using physical pixel coordinates
     {
-      QPainter painter(&backgroundPixmap);
+      QPainter painter(&resultPixmap);
       painter.setRenderHints(QPainter::Antialiasing |
                              QPainter::SmoothPixmapTransform);
-      int offsetX = (actualWidth - scaledArtwork.width()) / 2;
-      int offsetY = (actualHeight - scaledArtwork.height()) / 2;
+      int offsetX = (physicalW - scaledArtwork.width()) / 2;
+      int offsetY = (physicalH - scaledArtwork.height()) / 2;
       painter.drawPixmap(offsetX, offsetY, scaledArtwork);
     }
 
-    // Apply corner radius masking at the end (consistent with placeholder approach)
+    // Apply corner radius masking (in physical pixels)
     if (m_cornerRadius > 0) {
-      QPixmap maskedPixmap(actualWidth, actualHeight);
-      maskedPixmap.setDevicePixelRatio(dpr);
+      int physicalRadius = qRound(m_cornerRadius * dpr);
+      QPixmap maskedPixmap(physicalW, physicalH);
       maskedPixmap.fill(Qt::transparent);
       
       QPainter maskPainter(&maskedPixmap);
       maskPainter.setRenderHint(QPainter::Antialiasing, true);
       
-      // Use logical coordinates (width x height) since devicePixelRatio is set
       QPainterPath clipPath;
-      clipPath.addRoundedRect(QRectF(0, 0, width, height),
-                              m_cornerRadius, m_cornerRadius);
+      clipPath.addRoundedRect(QRectF(0, 0, physicalW, physicalH),
+                              physicalRadius, physicalRadius);
       maskPainter.setClipPath(clipPath);
-      maskPainter.drawPixmap(0, 0, backgroundPixmap);
+      maskPainter.drawPixmap(0, 0, resultPixmap);
       maskPainter.end();
       
-      backgroundPixmap = maskedPixmap;
+      resultPixmap = maskedPixmap;
     }
 
-    imageLabel->setPixmap(backgroundPixmap);
+    // Set DPR on final result for proper display
+    resultPixmap.setDevicePixelRatio(dpr);
+
+    imageLabel->setPixmap(resultPixmap);
     imageLabel->setStyleSheet(QString());
   }
   if (nameLabel) {

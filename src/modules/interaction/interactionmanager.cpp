@@ -768,6 +768,15 @@ auto InteractionManager::processEnterOrReturnKey(int totalItems) -> bool {
   if (currentSelection < subs.size()) {
     return handleEnterOnSubcollection(currentSelection, subs);
   }
+  
+  // Check if this is a virtual folder
+  if (m_scrollManager) {
+    QString folderPath = m_scrollManager->virtualFolderPathForVisualIndex(currentSelection);
+    if (!folderPath.isEmpty()) {
+      return handleEnterOnVirtualFolder(folderPath);
+    }
+  }
+  
   return handleEnterOnItem(currentSelection, totalItems);
 }
 
@@ -808,6 +817,13 @@ auto InteractionManager::handleEnterOnSubcollection(int currentSelection,
         }
       });
     }
+  }
+  return true;
+}
+
+auto InteractionManager::handleEnterOnVirtualFolder(const QString &folderPath) -> bool {
+  if (m_navigationManager) {
+    m_navigationManager->onVirtualFolderEntered(folderPath);
   }
   return true;
 }

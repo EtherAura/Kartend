@@ -299,6 +299,10 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 
   m_isShuttingDown = true;
 
+  // Hide window immediately so user sees instant visual response
+  hide();
+
+  // Remove event filters first to prevent further processing
   if (ui->itemScrollArea) {
     ui->itemScrollArea->removeEventFilter(getInteractionManager());
     if (ui->itemScrollArea->viewport()) {
@@ -309,32 +313,20 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     gridContainer->removeEventFilter(getInteractionManager());
   }
 
+  // Block signals early to prevent cascading updates during shutdown
   if (getInteractionManager()) {
-    getInteractionManager()->clearSelection();
     getInteractionManager()->blockSignals(true);
+    getInteractionManager()->clearSelection();
   }
-
   if (getScrollManager()) {
     getScrollManager()->blockSignals(true);
-    getScrollManager()->cleanup();
   }
 
   currentCollectionIndex = -1;
 
-  if (getSettingsManager()) {
-    getSettingsManager()->saveCollections(m_collections);
-  }
-
-  if (getCacheManager()) {
-    getCacheManager()->releaseGuiResources();
-    if (!QApplication::closingDown()) {
-      getCacheManager()->saveToDisk();
-    }
-  }
-  if (!QApplication::closingDown()) {
-    if (getSessionManager()) {
-      getSessionManager()->saveToDisk();
-    }
+  // Delegate shutdown to ApplicationManager for coordinated cleanup
+  if (m_appManager) {
+    m_appManager->shutdown(m_collections);
   }
 
   event->accept();

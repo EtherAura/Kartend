@@ -134,6 +134,51 @@ void SessionManager::saveToDisk() {
   }
 }
 
+// Saves session data to disk during shutdown - skips QApplication::closingDown
+// check since we're intentionally saving during app close
+void SessionManager::saveToDiskForShutdown() {
+  QJsonObject root;
+  QJsonObject collections;
+
+  QMutexLocker locker(&m_mutex);
+  
+  // Merge all keys from counts and lastSelected
+  QSet<QString> allKeys;
+  allKeys.unite(QSet<QString>(collectionNameItemCountCache.keyBegin(), collectionNameItemCountCache.keyEnd()));
+  allKeys.unite(QSet<QString>(collectionNameRecursiveCountCache.keyBegin(), collectionNameRecursiveCountCache.keyEnd()));
+  allKeys.unite(QSet<QString>(lastSelectedByName.keyBegin(), lastSelectedByName.keyEnd()));
+
+  for (const QString &name : allKeys) {
+    QJsonObject coll;
+    if (collectionNameItemCountCache.contains(name)) {
+        coll["itemCount"] = static_cast<double>(collectionNameItemCountCache[name]);
+    }
+    if (collectionNameRecursiveCountCache.contains(name)) {
+        coll["itemRecursiveCount"] = static_cast<double>(collectionNameRecursiveCountCache[name]);
+    }
+    if (lastSelectedByName.contains(name)) {
+        const LastSelectedInfo &info = lastSelectedByName[name];
+        QJsonObject sel;
+        sel["index"] = info.index;
+        sel["title"] = info.title;
+        coll["lastSelected"] = sel;
+    }
+    collections[name] = coll;
+  }
+
+  root["collections"] = collections;
+  root["global"] = static_cast<double>(globalItemCount);
+  locker.unlock();
+
+  QString metadataPath = getCacheDirectory() + "/metadata/session.json";
+  QDir().mkpath(QFileInfo(metadataPath).absolutePath());
+  QFile metadataFile(metadataPath);
+  if (metadataFile.open(QIODevice::WriteOnly)) {
+    metadataFile.write(QJsonDocument(root).toJson());
+    metadataFile.close();
+  }
+}
+
 void SessionManager::setLastSelected(const QString &collectionName, int index,
                                      const QString &title) {
   QMutexLocker locker(&m_mutex);

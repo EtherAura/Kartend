@@ -3,6 +3,7 @@
 
 #include "artworkmanager.h"
 #include "cachemanager.h"
+#include "collectionutils.h"
 #include "databasemanager.h"
 #include "interactionmanager.h"
 #include "navigationmanager.h"
@@ -10,6 +11,8 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "sidebarmanager.h"
+
+#include <QThreadPool>
 
 #ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
@@ -55,6 +58,42 @@ void ApplicationManager::initialize() {
 
   // 9. InteractionManager
   m_interactionManager = std::make_unique<InteractionManager>(this);
+}
+
+void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
+  // 1. Cancel artwork loading first (non-blocking) to stop in-flight operations
+  if (m_artworkManager) {
+    m_artworkManager->cancelAllArtworkLoading();
+  }
+
+  // 2. Cleanup ScrollManager (release widgets back to pool)
+  if (m_scrollManager) {
+    m_scrollManager->cleanup();
+  }
+
+  // 3. Save settings synchronously (fast INI write)
+  if (m_settingsManager) {
+    m_settingsManager->saveCollections(collections);
+  }
+
+  // 4. Release GUI resources from cache (clears pixmaps from memory)
+  if (m_cacheManager) {
+    m_cacheManager->releaseGuiResources();
+  }
+
+  // 5. Persist cache and session data to disk in background threads
+  //    These operations can take time but don't block the UI
+  if (m_cacheManager) {
+    QThreadPool::globalInstance()->start([cache = m_cacheManager.get()]() {
+      cache->saveToDiskForShutdown();
+    });
+  }
+
+  if (m_sessionManager) {
+    QThreadPool::globalInstance()->start([session = m_sessionManager.get()]() {
+      session->saveToDiskForShutdown();
+    });
+  }
 }
 
 ArtworkManager *ApplicationManager::getArtworkManager() const {
