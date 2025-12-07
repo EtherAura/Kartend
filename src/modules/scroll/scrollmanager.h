@@ -6,6 +6,7 @@
 #include "setuputils.h"
 #include <QDateTime>
 #include <QHash>
+#include <memory>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
@@ -59,6 +60,16 @@ struct ScrollManagerSetup {
   SETUP_GETTER_DECL(const GeneralSettings*, GeneralSettings)
 };
 
+/**
+ * @brief Manages virtual scrolling, widget pooling, and grid layout for large item collections.
+ * 
+ * Memory Ownership Model:
+ * - Owns helper managers via std::unique_ptr (explicit lifetime management)
+ * - Owns QTimer instances via Qt parent ownership (new QTimer(this))
+ * - Does NOT own: m_gridContainer, m_mediaScrollArea, m_artworkManager, m_databaseManager,
+ *   m_collections, m_hierarchyCache, m_generalSettings, m_state (borrowed references)
+ * - Widget ownership: ItemWidgets in m_activeWidgets are managed by WidgetPoolManager
+ */
 class ScrollManager : public QObject {
   Q_OBJECT
 public:
@@ -139,39 +150,43 @@ private:
   void ensureWidgetForIndex(int visualIndex);
   [[nodiscard]] QPoint getItemPosition(int index) const;
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Owned helper managers (unique_ptr for explicit ownership)
+  // ─────────────────────────────────────────────────────────────────────────
+  
   // Widget pool manager for recycling ItemWidgets
-  WidgetPoolManager *m_widgetPool = nullptr;
+  std::unique_ptr<WidgetPoolManager> m_widgetPool;
   ItemWidget *acquireWidget();
   void releaseWidget(ItemWidget *widget);
 
   // Filter manager for search and subcollection filtering
-  FilterManager *m_filterManager = nullptr;
+  std::unique_ptr<FilterManager> m_filterManager;
 
   // Selection overlay manager for glide animation
-  SelectionOverlayManager *m_overlayManager = nullptr;
+  std::unique_ptr<SelectionOverlayManager> m_overlayManager;
 
   // Virtual container manager for container lifecycle
-  VirtualContainerManager *m_containerManager = nullptr;
+  std::unique_ptr<VirtualContainerManager> m_containerManager;
 
   // Selection coordinator for selection state and movement analysis
-  SelectionCoordinator *m_selectionCoordinator = nullptr;
+  std::unique_ptr<SelectionCoordinator> m_selectionCoordinator;
 
   // Scroll event handler for scroll event wiring
-  ScrollEventHandler *m_scrollEventHandler = nullptr;
+  std::unique_ptr<ScrollEventHandler> m_scrollEventHandler;
 
   // Item widget factory for creating and configuring widgets
-  ItemWidgetFactory *m_widgetFactory = nullptr;
+  std::unique_ptr<ItemWidgetFactory> m_widgetFactory;
 
   // Arrow key scroll helper for centering animation
-  ArrowKeyScrollHelper *m_arrowKeyScrollHelper = nullptr;
+  std::unique_ptr<ArrowKeyScrollHelper> m_arrowKeyScrollHelper;
 
 public:
-  [[nodiscard]] const WidgetPoolManager *getWidgetPool() const { return m_widgetPool; }
-  [[nodiscard]] const FilterManager *getFilterManager() const { return m_filterManager; }
-  [[nodiscard]] const SelectionOverlayManager *getOverlayManager() const { return m_overlayManager; }
-  [[nodiscard]] const VirtualContainerManager *getContainerManager() const { return m_containerManager; }
-  [[nodiscard]] const SelectionCoordinator *getSelectionCoordinator() const { return m_selectionCoordinator; }
-  [[nodiscard]] const ScrollEventHandler *getScrollEventHandler() const { return m_scrollEventHandler; }
+  [[nodiscard]] const WidgetPoolManager *getWidgetPool() const { return m_widgetPool.get(); }
+  [[nodiscard]] const FilterManager *getFilterManager() const { return m_filterManager.get(); }
+  [[nodiscard]] const SelectionOverlayManager *getOverlayManager() const { return m_overlayManager.get(); }
+  [[nodiscard]] const VirtualContainerManager *getContainerManager() const { return m_containerManager.get(); }
+  [[nodiscard]] const SelectionCoordinator *getSelectionCoordinator() const { return m_selectionCoordinator.get(); }
+  [[nodiscard]] const ScrollEventHandler *getScrollEventHandler() const { return m_scrollEventHandler.get(); }
 
 private:
 

@@ -65,6 +65,8 @@ set(SOURCES
   ${SRC_DIR}/modules/scroll/scrolleventhandler.cpp
   ${SRC_DIR}/modules/scroll/gridlayoutcalculator.cpp
   ${SRC_DIR}/modules/scroll/itemwidgetfactory.cpp
+  ${SRC_DIR}/modules/scroll/scrolldatamanager.cpp
+  ${SRC_DIR}/modules/scroll/presearchstatemanager.cpp
   ${SRC_DIR}/modules/filter/filtermanager.cpp
   ${SRC_DIR}/modules/widgetpool/widgetpoolmanager.cpp
   ${SRC_DIR}/modules/search/searchmanager.cpp
@@ -113,6 +115,8 @@ set(HEADERS
   ${SRC_DIR}/modules/scroll/scrolleventhandler.h
   ${SRC_DIR}/modules/scroll/gridlayoutcalculator.h
   ${SRC_DIR}/modules/scroll/itemwidgetfactory.h
+  ${SRC_DIR}/modules/scroll/scrolldatamanager.h
+  ${SRC_DIR}/modules/scroll/presearchstatemanager.h
   ${SRC_DIR}/modules/filter/filtermanager.h
   ${SRC_DIR}/modules/widgetpool/widgetpoolmanager.h
   ${SRC_DIR}/modules/search/searchmanager.h

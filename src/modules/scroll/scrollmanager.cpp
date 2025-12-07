@@ -44,16 +44,16 @@ Q_LOGGING_CATEGORY(lcScrollManager, "kartend.scrollmanager")
 // to treat any scrollbar interaction as user-driven scrolling
 ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   // Widget pool for recycling ItemWidgets
-  m_widgetPool = new WidgetPoolManager(this);
+  m_widgetPool = std::make_unique<WidgetPoolManager>(this);
 
   // Filter manager for search and subcollection filtering
-  m_filterManager = new FilterManager(this);
-  connect(m_filterManager, &FilterManager::filterChanged, this,
+  m_filterManager = std::make_unique<FilterManager>(this);
+  connect(m_filterManager.get(), &FilterManager::filterChanged, this,
           &ScrollManager::filterChanged);
 
   // Selection overlay manager for glide animation
-  m_overlayManager = new SelectionOverlayManager(this);
-  connect(m_overlayManager, &SelectionOverlayManager::animationFinished, this,
+  m_overlayManager = std::make_unique<SelectionOverlayManager>(this);
+  connect(m_overlayManager.get(), &SelectionOverlayManager::animationFinished, this,
           [this]() {
             // Update widget selection states when animation finishes
             if (m_committedSelectedIndex >= 0 &&
@@ -79,33 +79,33 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
           });
 
   // Virtual container manager for container lifecycle
-  m_containerManager = new VirtualContainerManager(this);
-  m_containerManager->setOverlayManager(m_overlayManager);
+  m_containerManager = std::make_unique<VirtualContainerManager>(this);
+  m_containerManager->setOverlayManager(m_overlayManager.get());
 
   // Selection coordinator for selection state and movement analysis
-  m_selectionCoordinator = new SelectionCoordinator(this);
-  m_selectionCoordinator->setOverlayManager(m_overlayManager);
+  m_selectionCoordinator = std::make_unique<SelectionCoordinator>(this);
+  m_selectionCoordinator->setOverlayManager(m_overlayManager.get());
 
   // Scroll event handler for scroll event wiring
-  m_scrollEventHandler = new ScrollEventHandler(this);
-  connect(m_scrollEventHandler, &ScrollEventHandler::scrollChanged,
+  m_scrollEventHandler = std::make_unique<ScrollEventHandler>(this);
+  connect(m_scrollEventHandler.get(), &ScrollEventHandler::scrollChanged,
           this, &ScrollManager::onScrollChanged);
-  connect(m_scrollEventHandler, &ScrollEventHandler::userScrollEnded,
+  connect(m_scrollEventHandler.get(), &ScrollEventHandler::userScrollEnded,
           this, &ScrollManager::updateVirtualView);
 
   // Item widget factory for creating and configuring widgets
-  m_widgetFactory = new ItemWidgetFactory(this);
-  m_widgetFactory->setWidgetPool(m_widgetPool);
-  connect(m_widgetFactory, &ItemWidgetFactory::subcollectionDoubleClicked,
+  m_widgetFactory = std::make_unique<ItemWidgetFactory>(this);
+  m_widgetFactory->setWidgetPool(m_widgetPool.get());
+  connect(m_widgetFactory.get(), &ItemWidgetFactory::subcollectionDoubleClicked,
           this, &ScrollManager::onSubcollectionDoubleClicked);
-  connect(m_widgetFactory, &ItemWidgetFactory::virtualFolderDoubleClicked,
+  connect(m_widgetFactory.get(), &ItemWidgetFactory::virtualFolderDoubleClicked,
           this, &ScrollManager::onVirtualFolderDoubleClicked);
-  connect(m_widgetFactory, &ItemWidgetFactory::requestItemsRange,
+  connect(m_widgetFactory.get(), &ItemWidgetFactory::requestItemsRange,
           this, &ScrollManager::requestItemsRange);
 
   // Arrow key scroll helper for centering animation
-  m_arrowKeyScrollHelper = new ArrowKeyScrollHelper(this);
-  connect(m_arrowKeyScrollHelper, &ArrowKeyScrollHelper::requestViewUpdate,
+  m_arrowKeyScrollHelper = std::make_unique<ArrowKeyScrollHelper>(this);
+  connect(m_arrowKeyScrollHelper.get(), &ArrowKeyScrollHelper::requestViewUpdate,
           this, &ScrollManager::updateVirtualView);
 
   // Throttle timer - only fires once per interval, ignores subsequent triggers
@@ -258,7 +258,7 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   if (m_arrowKeyScrollHelper) {
     m_arrowKeyScrollHelper->setScrollArea(m_mediaScrollArea);
     m_arrowKeyScrollHelper->setInteractionState(m_state);
-    m_arrowKeyScrollHelper->setScrollEventHandler(m_scrollEventHandler);
+    m_arrowKeyScrollHelper->setScrollEventHandler(m_scrollEventHandler.get());
     m_arrowKeyScrollHelper->setGeneralSettings(m_generalSettings);
   }
 

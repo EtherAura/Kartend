@@ -100,6 +100,20 @@ struct InteractionManagerSetup {
   SETUP_GETTER_INLINE_SAME(const bool*, IsShuttingDown, isShuttingDown)
 };
 
+/**
+ * @brief Central coordinator for user input handling across keyboard, mouse, and touch.
+ * 
+ * Memory Ownership Model:
+ * - Owns sub-managers via std::unique_ptr (explicit lifetime management):
+ *   SearchManager, SelectionManager, KeyboardManager, ArrowNavigationHandler,
+ *   AlphabeticNavigationHandler, AnimationManager, MouseManager, LaunchManager,
+ *   ViewportManager, EventManager
+ * - Owns InteractionStateHolder as value member (m_state)
+ * - Does NOT own: m_scrollManager, m_sidebarManager, m_settingsManager, m_databaseManager,
+ *   m_navigationManager, m_sessionManager, m_artworkManager, UI widgets (borrowed references)
+ * 
+ * Sub-managers are registered in ApplicationContext after setup for sibling access.
+ */
 class InteractionManager : public QObject {
   Q_OBJECT
 public:
