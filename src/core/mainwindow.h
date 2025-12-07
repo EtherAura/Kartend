@@ -34,6 +34,7 @@ class SidebarManager;
 class ScrollManager;
 class ItemWidget;
 class MetadataSidebar;
+class LoadingOverlay;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -54,6 +55,7 @@ public:
   QLineEdit *searchBar;
   QPushButton *m_searchModeButton;
   QLabel *loadingLabel;
+  LoadingOverlay *m_loadingOverlay = nullptr;
 
   int currentCollectionIndex;
   QList<CollectionConfig> m_collections;

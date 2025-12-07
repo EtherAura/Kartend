@@ -17,6 +17,7 @@ QT_END_NAMESPACE
 
 class MetadataSidebar;
 class InteractionStateHolder;
+class LoadingOverlay;
 
 // Forward declarations for managers
 class ScrollManager;
@@ -74,6 +75,7 @@ struct ApplicationContext {
   QPushButton *searchModeButton = nullptr;
   MetadataSidebar *sidebar = nullptr;
   QLabel *loadingLabel = nullptr;
+  LoadingOverlay *loadingOverlay = nullptr;
 
   // Manager references (commonly shared across setup structs)
   // These are populated after managers are created in ApplicationManager

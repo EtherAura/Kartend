@@ -5,6 +5,7 @@
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
+#include "loadingoverlay.h"
 #include "metadatasidebar.h"
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
@@ -60,6 +61,7 @@ void NavigationManager::setupReferences(
   m_stackedWidget = setup.getStackedWidget();
   m_menubar = setup.getMenubar();
   m_loadingLabel = setup.getLoadingLabel();
+  m_loadingOverlay = setup.getLoadingOverlay();
   m_itemScrollArea = setup.getItemScrollArea();
   m_gridContainer = setup.getGridContainer();
   
@@ -126,6 +128,11 @@ void NavigationManager::navigateWithSharedItems(int collectionIndex) {
 }
 
 auto NavigationManager::initializeNavigationState() -> void {
+  // Show loading overlay during navigation
+  if (m_loadingOverlay) {
+    m_loadingOverlay->show("Loading collection...");
+  }
+  
   if ((parent()) &&
       (m_interactionManager)) {
     m_interactionManager->stopRepeat();
@@ -211,6 +218,11 @@ auto NavigationManager::finalizeNavigation(int collectionIndex) -> void {
     }
   });
   if (m_refreshTitleCounts) m_refreshTitleCounts();
+
+  // Hide loading overlay after navigation completes
+  if (m_loadingOverlay) {
+    m_loadingOverlay->hide();
+  }
 
   // Clear navigation progress flag after all animations complete -
   // allows user input to be processed again

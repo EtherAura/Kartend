@@ -29,6 +29,7 @@ class SessionManager;
 class ArtworkManager;
 class MetadataSidebar;
 class SelectionRestoreManager;
+class LoadingOverlay;
 
 /**
  * @brief Setup struct for NavigationManager dependencies.
@@ -61,6 +62,7 @@ struct NavigationManagerSetup {
   QStackedWidget *stackedWidget = nullptr;
   QMenuBar *menubar = nullptr;
   QLabel *loadingLabel = nullptr;
+  LoadingOverlay *loadingOverlay = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QWidget *gridContainer = nullptr;
   
@@ -86,6 +88,7 @@ struct NavigationManagerSetup {
   SETUP_GETTER_INLINE_SAME(QMenuBar*, Menubar, menubar)
   SETUP_GETTER_INLINE_SAME(QLineEdit*, SearchBar, searchBar)
   SETUP_GETTER_INLINE_SAME(QLabel*, LoadingLabel, loadingLabel)
+  SETUP_GETTER_INLINE_SAME(LoadingOverlay*, LoadingOverlay, loadingOverlay)
   SETUP_GETTER_INLINE_SAME(MetadataSidebar*, Sidebar, sidebar)
   SETUP_GETTER_INLINE_SAME(QList<CollectionConfig>*, Collections, collections)
   SETUP_GETTER_INLINE_SAME(int*, CurrentCollectionIndex, currentCollectionIndex)
@@ -171,6 +174,7 @@ private:
   QStackedWidget *m_stackedWidget = nullptr;
   QMenuBar *m_menubar = nullptr;
   QLabel *m_loadingLabel = nullptr;
+  LoadingOverlay *m_loadingOverlay = nullptr;
   QScrollArea *m_itemScrollArea = nullptr;
   QWidget *m_gridContainer = nullptr;
   std::function<bool()> m_isShuttingDown;
