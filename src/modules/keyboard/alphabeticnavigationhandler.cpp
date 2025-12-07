@@ -117,13 +117,15 @@ auto AlphabeticNavigationHandler::findNextLetterIndex(int currentIndex,
       }
     }
   } else {
-    // Search backward: find the FIRST item of the previous group
+    // Search backward: find the FIRST item of the previous contiguous group
     // First, find what character the previous group starts with
     QChar prevGroupChar;
+    int prevGroupFoundAt = -1;
     for (int i = currentIndex - 1; i >= 0; --i) {
       const QChar itemChar = getFirstCharForIndex(i);
       if (!itemChar.isNull() && itemChar != currentChar) {
         prevGroupChar = itemChar;
+        prevGroupFoundAt = i;
         break;
       }
     }
@@ -134,6 +136,7 @@ auto AlphabeticNavigationHandler::findNextLetterIndex(int currentIndex,
         const QChar itemChar = getFirstCharForIndex(i);
         if (!itemChar.isNull() && itemChar != currentChar) {
           prevGroupChar = itemChar;
+          prevGroupFoundAt = i;
           break;
         }
       }
@@ -143,13 +146,20 @@ auto AlphabeticNavigationHandler::findNextLetterIndex(int currentIndex,
       return -1; // All items have the same first character
     }
     
-    // Now find the FIRST item with prevGroupChar (start of that group)
-    for (int i = 0; i < totalItems; ++i) {
+    // Find the start of the contiguous group containing prevGroupFoundAt
+    // Walk backward from prevGroupFoundAt until we find a different character
+    int groupStart = prevGroupFoundAt;
+    for (int i = prevGroupFoundAt - 1; i >= 0; --i) {
       const QChar itemChar = getFirstCharForIndex(i);
       if (itemChar == prevGroupChar) {
-        return i;
+        groupStart = i;
+      } else {
+        // Found a different character - the group starts at groupStart
+        break;
       }
     }
+    
+    return groupStart;
   }
 
   return -1;

@@ -177,6 +177,7 @@ private slots:
   // KeyboardManager callbacks
   void handleArrowKeyNavigation(int direction, bool vertical);
   void handleAlphabeticNavigation(bool forward);
+  void handleJumpToEdge(bool toEnd);
   void onKeyboardRepeatStep();
   void onKeyboardStopRepeat(bool suppressRecentering);
 

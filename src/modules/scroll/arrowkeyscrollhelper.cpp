@@ -1,4 +1,5 @@
 #include "arrowkeyscrollhelper.h"
+#include "collectionutils.h"
 #include "interactionstateholder.h"
 #include "scrolleventhandler.h"
 #include "uiconstants.h"
@@ -130,12 +131,14 @@ auto ArrowKeyScrollHelper::calculateCenterTarget(int itemY,
 
 void ArrowKeyScrollHelper::setupAndStartAnimation(QScrollBar *scrollBar,
                                                   int current, int target) {
+  // Get base duration from settings
+  int baseDuration = m_generalSettings 
+      ? m_generalSettings->scrollAnimationDurationMs 
+      : 1500;
+  
   int rowStride = m_itemHeight + m_verticalSpacing;
-  int singleRowDuration = UIConstants::Animation::CENTER_SCROLL_DURATION_MS +
-                          UIConstants::Animation::CENTER_SCROLL_DURATION_MS;
-  singleRowDuration = std::max(
-      UIConstants::Animation::CENTER_SCROLL_DURATION_MS,
-      std::min(singleRowDuration, UIConstants::Animation::CENTER_SCROLL_DURATION_MS));
+  int singleRowDuration = baseDuration + baseDuration;
+  singleRowDuration = std::max(baseDuration, std::min(singleRowDuration, baseDuration));
 
   static constexpr double DEFAULT_PIXELS_PER_MILLISECOND = 0.5;
   double pixelsPerMillisecond = (rowStride > 0 && singleRowDuration > 0)
@@ -161,9 +164,7 @@ void ArrowKeyScrollHelper::setupAndStartAnimation(QScrollBar *scrollBar,
           ? static_cast<int>(std::round(static_cast<double>(distance) /
                                         pixelsPerMillisecond))
           : singleRowDuration;
-  duration =
-      std::max(UIConstants::Animation::CENTER_SCROLL_DURATION_MS,
-               std::min(duration, UIConstants::Animation::CENTER_SCROLL_DURATION_MS));
+  duration = std::max(baseDuration, std::min(duration, baseDuration));
 
   animation->setDuration(duration);
   animation->setStartValue(current);

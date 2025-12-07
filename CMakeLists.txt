@@ -174,6 +174,7 @@ target_link_libraries(kartend
 target_compile_definitions(kartend
   PRIVATE
     APP_NAME="kartend"
+    APP_DISPLAY_NAME="Kartend"
     APP_VERSION="${PROJECT_VERSION}"
     APP_AUTHOR="EtherAura"
     BUILD_DATE="${BUILD_DATE}"

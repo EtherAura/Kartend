@@ -43,6 +43,7 @@ struct ApplicationContext;
  */
 struct ScrollManagerSetup {
   const ApplicationContext *ctx = nullptr;
+  const GeneralSettings *generalSettings = nullptr;
   QWidget *gridContainer = nullptr;
   QScrollArea *mediaScrollArea = nullptr;
   ArtworkManager *artworkManager = nullptr;
@@ -55,6 +56,7 @@ struct ScrollManagerSetup {
   SETUP_GETTER_DECL(const QList<CollectionConfig>*, Collections)
   SETUP_GETTER_DECL(const CollectionHierarchyCache*, HierarchyCache)
   SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder*, InteractionState)
+  SETUP_GETTER_DECL(const GeneralSettings*, GeneralSettings)
 };
 
 class ScrollManager : public QObject {
@@ -81,6 +83,9 @@ public:
   void applyFilter(const QString &searchText);
   void cleanupActiveWidgets();
   void clearFilter();
+  void savePreSearchState();
+  void restorePreSearchState();
+  [[nodiscard]] bool hasPreSearchState() const { return !m_preSearchWidgets.isEmpty(); }
   [[nodiscard]] int getFilteredIndex(int visualIndex) const;
   [[nodiscard]] int getScrollbarWidth() const;
   [[nodiscard]] bool willNeedVerticalScrollbar() const;
@@ -108,6 +113,7 @@ public:
   [[nodiscard]] QString filePathForVisualIndex(int visualIndex) const;
   [[nodiscard]] QString virtualFolderPathForVisualIndex(int visualIndex) const;
   void primeLayoutFor(const CollectionConfig &config);
+  void setInitialScrollIndex(int index);
 
 signals:
   void subcollectionEntered(int subcollectionIndex);
@@ -169,6 +175,7 @@ public:
 
 private:
 
+  const GeneralSettings *m_generalSettings = nullptr;
   InteractionStateHolder *m_state = nullptr;
   QWidget *m_gridContainer = nullptr;
   QScrollArea *m_mediaScrollArea = nullptr;
@@ -196,6 +203,13 @@ private:
   int m_selectionDirection = 0;
   TimerUtils::DebouncedTimer *m_userScrollIdleTimer = nullptr;
   int m_committedSelectedIndex = -1;
+
+  // Saved pre-search state for fast restoration
+  QHash<int, ItemWidget *> m_preSearchWidgets;
+  int m_preSearchScrollPosition = 0;
+  
+  // Initial scroll index for pre-positioning before widget creation
+  int m_initialScrollIndex = -1;
 
   // Helper methods to reduce cognitive complexity
   [[nodiscard]] QSet<int> calculateNeededIndices() const;

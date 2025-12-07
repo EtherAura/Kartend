@@ -68,19 +68,19 @@ public:
   [[nodiscard]] bool isShuttingDown() const { return m_isShuttingDown; }
 
   // Getters for Managers
-  ApplicationManager *getApplicationManager() const { return m_appManager.get(); }
-  MetadataSidebar *getMetadataSidebar() const { return m_MetadataSidebar; }
+  [[nodiscard]] ApplicationManager *getApplicationManager() const { return m_appManager.get(); }
+  [[nodiscard]] MetadataSidebar *getMetadataSidebar() const { return m_MetadataSidebar; }
   
   // Delegated Getters
-  SidebarManager *getSidebarManager() const;
-  SettingsManager *getSettingsManager() const;
-  DatabaseManager *getDatabaseManager() const;
-  ScrollManager *getScrollManager() const;
-  NavigationManager *getNavigationManager() const;
-  InteractionManager *getInteractionManager() const;
-  SessionManager *getSessionManager() const;
-  ArtworkManager *getArtworkManager() const;
-  CacheManager *getCacheManager() const;
+  [[nodiscard]] SidebarManager *getSidebarManager() const;
+  [[nodiscard]] SettingsManager *getSettingsManager() const;
+  [[nodiscard]] DatabaseManager *getDatabaseManager() const;
+  [[nodiscard]] ScrollManager *getScrollManager() const;
+  [[nodiscard]] NavigationManager *getNavigationManager() const;
+  [[nodiscard]] InteractionManager *getInteractionManager() const;
+  [[nodiscard]] SessionManager *getSessionManager() const;
+  [[nodiscard]] ArtworkManager *getArtworkManager() const;
+  [[nodiscard]] CacheManager *getCacheManager() const;
 
 protected:
   void resizeEvent(QResizeEvent *event) override;
@@ -112,6 +112,8 @@ private:
   void setupActionShowSidebar();
   void setupActionSettings();
   void setupActionAbout();
+  void setupActionAboutQt();
+  void setupActionRefresh();
   void setupFullscreenAction();
   void setupFullscreenMenuAction(QAction *fullscreenAction);
   void setupSidebar();

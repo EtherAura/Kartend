@@ -25,6 +25,43 @@
 #include <QTimer>
 #include <algorithm>
 
+// Static configuration members - initialized to UIConstants defaults
+int ItemWidget::s_titleTintSaturation = UIConstants::Color::TITLE_TINT_SATURATION;
+int ItemWidget::s_titleTintLightness = UIConstants::Color::TITLE_TINT_LIGHTNESS;
+QString ItemWidget::s_titleBaseColor;
+QString ItemWidget::s_customFontFamily;
+QString ItemWidget::s_primaryColor;
+QString ItemWidget::s_tileColor;
+QString ItemWidget::s_selectionColor;
+
+void ItemWidget::setTitleTintSaturation(int saturation) {
+  s_titleTintSaturation = qBound(0, saturation, 255);
+}
+
+void ItemWidget::setTitleTintLightness(int lightness) {
+  s_titleTintLightness = qBound(0, lightness, 255);
+}
+
+void ItemWidget::setTitleBaseColor(const QString &hexColor) {
+  s_titleBaseColor = hexColor;
+}
+
+void ItemWidget::setCustomFontFamily(const QString &fontFamily) {
+  s_customFontFamily = fontFamily;
+}
+
+void ItemWidget::setPrimaryColor(const QString &hexColor) {
+  s_primaryColor = hexColor;
+}
+
+void ItemWidget::setTileColor(const QString &hexColor) {
+  s_tileColor = hexColor;
+}
+
+void ItemWidget::setSelectionColor(const QString &hexColor) {
+  s_selectionColor = hexColor;
+}
+
 ItemWidget::ItemWidget(QWidget *parent)
     : QWidget(parent)
 
@@ -76,16 +113,24 @@ ItemWidget::~ItemWidget() {
 
 // Compute title tint from highlight color with configurable saturation/lightness
 auto ItemWidget::titleTint() -> QColor {
-  QColor highlight = QApplication::palette().color(QPalette::Highlight);
+  // Title tint is NOT affected by per-collection primary color
+  // Primary color only affects selection borders and placeholder patterns
+  QColor baseColor;
+  if (!s_titleBaseColor.isEmpty() && QColor::isValidColorName(s_titleBaseColor)) {
+    baseColor = QColor(s_titleBaseColor);
+  } else {
+    baseColor = QApplication::palette().color(QPalette::Highlight);
+  }
+  
   int hue = 0;
   int saturation = 0;
   int lightness = 0;
   int alpha = 0;
-  highlight.getHsl(&hue, &saturation, &lightness, &alpha);
+  baseColor.getHsl(&hue, &saturation, &lightness, &alpha);
   
-  int targetLightness = qBound(0, UIConstants::Color::TITLE_TINT_LIGHTNESS, 
+  int targetLightness = qBound(0, s_titleTintLightness, 
                                UIConstants::Color::CHANNEL_MAX);
-  int targetSaturation = qBound(0, UIConstants::Color::TITLE_TINT_SATURATION,
+  int targetSaturation = qBound(0, s_titleTintSaturation,
                                 UIConstants::Color::CHANNEL_MAX);
   
   QColor color;
@@ -161,6 +206,10 @@ void ItemWidget::mouseDoubleClickEvent(QMouseEvent *event) {
     }
 
     if (validDoubleClick) {
+      // Guard against widget deletion during signal handling -
+      // subcollection navigation may destroy this widget
+      QPointer<ItemWidget> guard = this;
+      
       // Only subcollection double-clicks reach here - EventManager passes them through
       if (m_isSubcollection) {
         emit subcollectionDoubleClicked(m_subcollectionIndex);
@@ -168,6 +217,11 @@ void ItemWidget::mouseDoubleClickEvent(QMouseEvent *event) {
         emit virtualFolderDoubleClicked(m_virtualFolderPath);
       }
       // Media item double-clicks are handled by EventManager::widgetDoubleClicked
+      
+      // Widget may have been deleted during navigation - don't access members
+      if (!guard) {
+        return;
+      }
     }
 
     m_lastClickTimer.invalidate();
@@ -407,7 +461,13 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
                           static_cast<double>(m_pulseOpacity),
                           UIConstants::Animation::PULSE_OPACITY_HIGH);
 
-    QColor borderColor = palette().color(QPalette::Highlight);
+    // Use per-collection selection color if set, otherwise system highlight
+    QColor borderColor;
+    if (!s_selectionColor.isEmpty() && QColor::isValidColorName(s_selectionColor)) {
+      borderColor = QColor(s_selectionColor);
+    } else {
+      borderColor = palette().color(QPalette::Highlight);
+    }
     borderColor.setAlphaF(alpha);
 
     QPen pen(borderColor);
@@ -433,7 +493,13 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
     if (shouldShowTitle) {
       painter.setRenderHint(QPainter::TextAntialiasing);
       painter.setPen(m_titleTintColor);
-      painter.setFont(nameLabel->font());
+      
+      // Apply custom font if configured
+      QFont titleFont = nameLabel->font();
+      if (!s_customFontFamily.isEmpty()) {
+        titleFont.setFamily(s_customFontFamily);
+      }
+      painter.setFont(titleFont);
       
       // Draw text in the same rect as the nameLabel
       QRect textRect = nameLabel->geometry();
@@ -472,6 +538,7 @@ void ItemWidget::applyDimensions() {
                         UIConstants::Widget::SPACING - reservedTextHeight;
   int availableWidth = m_itemWidth - UIConstants::Widget::PADDING;
   int artworkSize = qMin(availableWidth, availableHeight);
+  m_artworkSize = artworkSize;
   
   // Show title if: regular item with titles visible, OR subcollection with subcollection titles visible,
   // OR virtual folder with subfolder titles visible
@@ -533,6 +600,7 @@ void ItemWidget::onArtworkChanged() {
     int width = imageLabel->width();
     int height = imageLabel->height();
     imageLabel->setPixmap(buildPlaceholderPattern(width, height));
+    imageLabel->setStyleSheet(QString());
     return;
   }
 
@@ -633,13 +701,8 @@ void ItemWidget::resetForReuse() {
   filePath.clear();
   itemName.clear();
   storedPixmap = QPixmap();  // Clear stored artwork
-  if (imageLabel) {
-    // Set placeholder pattern instead of clearing - widget dimensions may not
-    // be set yet, so use current label size or fallback to reasonable defaults
-    int width = imageLabel->width() > 0 ? imageLabel->width() : 100;
-    int height = imageLabel->height() > 0 ? imageLabel->height() : 100;
-    imageLabel->setPixmap(buildPlaceholderPattern(width, height));
-  }
+  // Don't generate placeholder here - onArtworkChanged() will be called after
+  // configuration and will generate the placeholder with correct dimensions
   if (triangleIndicator) {
     triangleIndicator->hide();
   }
@@ -763,12 +826,25 @@ void ItemWidget::setCornerRadius(int radius) {
 
 // Update triangle indicator
 void ItemWidget::updateTriangleIndicator() {
-  if ((!triangleIndicator) || (!imageLabel) ||
-      !m_isSubcollection) {
+  if ((!triangleIndicator) || !m_isSubcollection || m_artworkSize <= 0) {
     return;
   }
   if (isSelectedState) {
-    QRect imageRect = imageLabel->geometry();
+    // Force layout update to get accurate geometry
+    if (layout()) {
+      layout()->activate();
+    }
+    
+    // Use imageLabel geometry if valid, otherwise calculate from known dimensions
+    QRect imageRect = imageLabel ? imageLabel->geometry() : QRect();
+    if (imageRect.width() != m_artworkSize || imageRect.height() != m_artworkSize) {
+      // Geometry not yet updated - calculate expected position
+      // Layout has 10px margins, imageLabel is centered horizontally
+      int leftMargin = (m_itemWidth - m_artworkSize) / 2;
+      int topMargin = UIConstants::Widget::MARGIN;  // 10px from .ui file
+      imageRect = QRect(leftMargin, topMargin, m_artworkSize, m_artworkSize);
+    }
+    
     int borderSpacing = UIConstants::CollectionIcon::ITEM_SPACING;
     int indicatorX =
         imageRect.right() + borderSpacing -
@@ -795,10 +871,17 @@ void ItemWidget::paintTriangleIndicator() {
   pixmap.fill(Qt::transparent);
   QPainter painter(&pixmap);
   painter.setRenderHint(QPainter::Antialiasing);
-  QColor highlight = palette().color(QPalette::Highlight);
-  painter.setBrush(highlight);
+  
+  // Use per-collection tile color if set, otherwise system highlight
+  QColor badgeColor;
+  if (!s_tileColor.isEmpty() && QColor::isValidColorName(s_tileColor)) {
+    badgeColor = QColor(s_tileColor);
+  } else {
+    badgeColor = palette().color(QPalette::Highlight);
+  }
+  painter.setBrush(badgeColor);
   painter.setPen(
-      QPen(highlight.darker(UIConstants::Widget::HIGHLIGHT_DARKEN_FACTOR), 1));
+      QPen(badgeColor.darker(UIConstants::Widget::HIGHLIGHT_DARKEN_FACTOR), 1));
   QPolygon triangle;
   triangle << QPoint(UIConstants::Metadata::VALUE_PADDING,
                      UIConstants::Metadata::VALUE_PADDING)
@@ -830,6 +913,7 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   static QPixmap cache;
   static quint64 cacheKey = 0;
   static int cachedCornerRadius = 0;
+  static QString cachedTileColor;
   QColor base = palette().color(QPalette::Mid);
   constexpr int kKeyWidthShiftBits = 48;
   constexpr int kKeyHeightShiftBits = 32;
@@ -837,7 +921,8 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   quint64 key = (static_cast<quint64>(width) << kKeyWidthShiftBits) |
                 (static_cast<quint64>(height) << kKeyHeightShiftBits) |
                 (static_cast<quint64>(base.rgba()) & kRgbaMask32);
-  if (!cache.isNull() && cacheKey == key && cachedCornerRadius == m_cornerRadius) {
+  if (!cache.isNull() && cacheKey == key && cachedCornerRadius == m_cornerRadius 
+      && cachedTileColor == s_tileColor) {
     return cache;
   }
 
@@ -863,21 +948,27 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
       hHue, hSat / 2,
       qBound(0, hLight + primaryDelta, UIConstants::Color::CHANNEL_MAX),
       UIConstants::Color::CHANNEL_MAX);
-  QColor titleTintColor = titleTint();
+  // Use per-collection tile color if set, otherwise use title tint
+  QColor accentColor;
+  if (!s_tileColor.isEmpty() && QColor::isValidColorName(s_tileColor)) {
+    accentColor = QColor(s_tileColor);
+  } else {
+    accentColor = titleTint();
+  }
   primary.setRed(
       (primary.red() * UIConstants::Placeholder::PRIMARY_TINT_NUM +
-       titleTintColor.red() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
-                               UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
+       accentColor.red() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
+                            UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
       UIConstants::Placeholder::PRIMARY_TINT_DEN);
   primary.setGreen(
       (primary.green() * UIConstants::Placeholder::PRIMARY_TINT_NUM +
-       titleTintColor.green() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
-                                 UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
+       accentColor.green() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
+                              UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
       UIConstants::Placeholder::PRIMARY_TINT_DEN);
   primary.setBlue(
       (primary.blue() * UIConstants::Placeholder::PRIMARY_TINT_NUM +
-       titleTintColor.blue() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
-                                UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
+       accentColor.blue() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
+                             UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
       UIConstants::Placeholder::PRIMARY_TINT_DEN);
   primary.setAlpha(UIConstants::Placeholder::PRIMARY_ALPHA);
 
@@ -888,18 +979,18 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
       UIConstants::Color::CHANNEL_MAX);
   secondary.setRed(
       (secondary.red() * UIConstants::Placeholder::SECONDARY_TINT_NUM +
-       titleTintColor.red() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
-                               UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
+       accentColor.red() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
+                            UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
       UIConstants::Placeholder::SECONDARY_TINT_DEN);
   secondary.setGreen(
       (secondary.green() * UIConstants::Placeholder::SECONDARY_TINT_NUM +
-       titleTintColor.green() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
-                                 UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
+       accentColor.green() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
+                              UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
       UIConstants::Placeholder::SECONDARY_TINT_DEN);
   secondary.setBlue(
       (secondary.blue() * UIConstants::Placeholder::SECONDARY_TINT_NUM +
-       titleTintColor.blue() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
-                                UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
+       accentColor.blue() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
+                             UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
       UIConstants::Placeholder::SECONDARY_TINT_DEN);
   secondary.setAlpha(UIConstants::Placeholder::SECONDARY_ALPHA);
 
@@ -907,12 +998,21 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
                     qMin(width, height) / UIConstants::Placeholder::STEP_DIVISOR,
                     UIConstants::Placeholder::STEP_MAX);
 
+  // Determine background color - use tileColor if set, otherwise use palette
+  QColor bgColor = base;
+  if (!s_tileColor.isEmpty() && QColor::isValidColorName(s_tileColor)) {
+    bgColor = QColor(s_tileColor);
+    // Adjust based on tileColor lightness for better hatch visibility
+    int bgLightness = bgColor.lightness();
+    dark = (bgLightness < kLightnessDarkThreshold);
+  }
+
   {
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing, false);
     
-    // Fill background
-    painter.fillRect(0, 0, width, height, base);
+    // Fill background with tileColor or palette base
+    painter.fillRect(0, 0, width, height, bgColor);
     
     painter.setPen(QPen(primary, 1));
     for (int diag = -height; diag < width; diag += step) {
@@ -954,9 +1054,9 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   {
     QPainter painter(&pixmap);
     QLinearGradient gradient(0, 0, 0, height);
-    QColor top(base.red(), base.green(), base.blue(),
+    QColor top(bgColor.red(), bgColor.green(), bgColor.blue(),
                UIConstants::Placeholder::GRADIENT_TOP_ALPHA);
-    QColor bottom(base.red(), base.green(), base.blue(),
+    QColor bottom(bgColor.red(), bgColor.green(), bgColor.blue(),
                   UIConstants::Placeholder::GRADIENT_BOTTOM_ALPHA);
     gradient.setColorAt(0.0, top);
     gradient.setColorAt(1.0, bottom);
@@ -984,5 +1084,6 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   cache = pixmap;
   cacheKey = key;
   cachedCornerRadius = m_cornerRadius;
+  cachedTileColor = s_tileColor;
   return pixmap;
 }

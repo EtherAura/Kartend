@@ -94,7 +94,6 @@ private:
   void emitGridWidthChanged();
   void updateFieldVisibility();
   void updateSidebarModeVisibility();
-  [[nodiscard]] int calculateMaxGridWidth() const;
   void updateGridWidthLimits();
   void loadGeneralSettingsToUI();
   void saveGeneralSettingsFromUI();

@@ -19,6 +19,7 @@
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "gridlayoutcalculator.h"
+#include "gridutils.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "keyboardmanager.h"
@@ -232,7 +233,12 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
     return false;
   }
 
+  // Stop any running scroll animations when wheel scrolling starts
+  // This prevents wheel scroll from chaining off centering animations
   AnimationManager::stopArrowKeyAnimationIfRunning(vScrollBar);
+  if (m_animationManager) {
+    m_animationManager->stopActiveVerticalAnims(vScrollBar);
+  }
 
   const CollectionConfig &collection =
       (*m_collections)[*m_currentCollectionIndex];
@@ -271,12 +277,25 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
     return true;
   }
 
-  int singleRowPixels = GridLayoutCalculator::getRowHeight(collection);
-  int basePos = currentPos;
-  if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
-    basePos = m_animationManager->getVerticalAnimEndValue();
+  // Calculate target scroll position based on new selection position
+  // This ensures the selection always stays visible during wheel scrolling
+  int selectedIndex = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
+  if (selectedIndex < 0) {
+    event->accept();
+    return true;
   }
-  int targetPos = basePos - (wheelSteps * singleRowPixels);
+
+  int gridWidth = collection.gridWidth;
+  int margins = UIConstants::Grid::MARGINS;
+  int itemY = GridUtils::computeItemY(selectedIndex, gridWidth, collection.itemHeight,
+                                       collection.verticalSpacing, margins);
+  
+  QRect viewport = m_itemScrollArea->viewport()->rect();
+  int viewportHeight = viewport.height();
+  
+  // Calculate target scroll position to keep selection visible
+  // Center the selection row vertically in the viewport
+  int targetPos = itemY - (viewportHeight - collection.itemHeight) / 2;
   targetPos = qBound(0, targetPos, vScrollBar->maximum());
 
   if (m_mouseManager) {
@@ -314,6 +333,11 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
           int selectedIndex = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
           if (m_scrollManager && selectedIndex >= 0) {
             m_scrollManager->updateSelectionForIndex(selectedIndex);
+          }
+          // Ensure selected item is visible after wheel scroll completes -
+          // prevents selection from being scrolled outside the viewport
+          if (m_viewportManager && selectedIndex >= 0) {
+            m_viewportManager->ensureItemVisible(selectedIndex, false);
           }
           emit wheelScrollEnded();
         });
@@ -536,7 +560,11 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
     currentSelection = 0;
   }
 
-  int rowDelta = -wheelSteps;
+  // Get row multiplier from settings
+  int rowMultiplier = m_generalSettings 
+      ? m_generalSettings->mouseWheelRows 
+      : 1;
+  int rowDelta = -wheelSteps * rowMultiplier;
   int newSelection = currentSelection + (rowDelta * gridWidth);
 
   bool wrap = m_generalSettings

@@ -188,7 +188,11 @@ void SelectionManager::persistSelection(int collectionIndex, int itemIndex,
     m_settingsManager->setLastSelectedItem(collectionIndex, itemIndex);
   }
 
-  QString collectionName = (*m_collections)[collectionIndex].name;
+  // Use hierarchical name to match how calculateSelectionIndex looks it up
+  QString collectionName = CollectionUtils::hierarchicalNameFor(
+      (*m_collections)[collectionIndex], *m_collections);
+  debugLog("[SelectionRestore] persistSelection: collectionName=" << collectionName
+           << "itemIndex=" << itemIndex << "title=" << title);
   if (m_sessionManager) {
     m_sessionManager->setLastSelected(collectionName, itemIndex, title);
   }

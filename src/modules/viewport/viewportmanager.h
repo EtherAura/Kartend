@@ -20,6 +20,7 @@ struct ApplicationContext;
 
 struct ViewportManagerSetup {
   const ApplicationContext *ctx = nullptr;
+  const GeneralSettings *generalSettings = nullptr;
 
   QScrollArea *itemScrollArea = nullptr;
   ScrollManager *scrollManager = nullptr;
@@ -40,6 +41,7 @@ struct ViewportManagerSetup {
   SETUP_GETTER_DECL(QList<CollectionConfig>*, Collections)
   SETUP_GETTER_DECL(int*, CurrentCollectionIndex)
   SETUP_GETTER_DECL(const bool*, IsShuttingDown)
+  SETUP_GETTER_DECL(const GeneralSettings*, GeneralSettings)
 };
 
 /**
@@ -167,6 +169,7 @@ private:
   bool m_deferredCenterPending = false;
 
   // Manager references
+  const GeneralSettings *m_generalSettings = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
   ScrollManager *m_scrollManager = nullptr;
   SelectionManager *m_selectionManager = nullptr;

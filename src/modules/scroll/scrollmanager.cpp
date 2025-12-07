@@ -149,6 +149,16 @@ ScrollManager::~ScrollManager() {
     }
   }
   m_activeWidgets.clear();
+  
+  // Also clean up any saved pre-search widgets
+  for (auto it = m_preSearchWidgets.begin(); it != m_preSearchWidgets.end(); ++it) {
+    if (ItemWidget *widget = it.value()) {
+      widget->hide();
+      widget->deleteLater();
+    }
+  }
+  m_preSearchWidgets.clear();
+  
   if (m_widgetPool) {
     m_widgetPool->clear();
   }
@@ -192,8 +202,10 @@ SETUP_GETTER_DEF_SAME(ScrollManagerSetup, ArtworkManager*, ArtworkManager, artwo
 SETUP_GETTER_DEF_SAME(ScrollManagerSetup, const QList<CollectionConfig>*, Collections, collections)
 SETUP_GETTER_DEF_SAME(ScrollManagerSetup, const CollectionHierarchyCache*, HierarchyCache, hierarchyCache)
 SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, InteractionStateHolder*, InteractionState, interactionState)
+SETUP_GETTER_DEF_SAME(ScrollManagerSetup, const GeneralSettings*, GeneralSettings, generalSettings)
 
 void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
+  m_generalSettings = setup.getGeneralSettings();
   m_state = setup.getInteractionState();
   m_gridContainer = setup.getGridContainer();
   m_mediaScrollArea = setup.getMediaScrollArea();
@@ -232,6 +244,7 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
     m_arrowKeyScrollHelper->setScrollArea(m_mediaScrollArea);
     m_arrowKeyScrollHelper->setInteractionState(m_state);
     m_arrowKeyScrollHelper->setScrollEventHandler(m_scrollEventHandler);
+    m_arrowKeyScrollHelper->setGeneralSettings(m_generalSettings);
   }
 
   // Pass dependencies to FilterManager
@@ -247,6 +260,10 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
       horizontalScrollbar->hide();
     }
   }
+}
+
+void ScrollManager::setInitialScrollIndex(int index) {
+  m_initialScrollIndex = index;
 }
 
 // Initializes virtual scrolling and prepares virtual container; primes mappings
@@ -415,11 +432,39 @@ void ScrollManager::setupNormalVirtualScrolling() {
         [this](int idx) { return getSubcollectionName(idx); });
   }
 
+  // Pre-position scrollbar BEFORE creating widgets to prevent visual jump
+  // where list briefly shows at position 0 then jumps to remembered position
+  if (m_initialScrollIndex >= 0 && m_mediaScrollArea) {
+    if (QScrollBar *scrollbar = m_mediaScrollArea->verticalScrollBar()) {
+      int viewportHeight = m_mediaScrollArea->viewport()->height();
+      // Calculate scroll max from metrics rather than scrollbar->maximum()
+      // because Qt may not have processed the container resize yet
+      int scrollMax = qMax(0, m_metrics.totalHeight - viewportHeight);
+      int itemY = GridUtils::computeItemY(m_initialScrollIndex, m_metrics.itemsPerRow,
+                                          m_metrics.itemHeight, m_metrics.verticalSpacing,
+                                          UIConstants::Grid::MARGINS);
+      int targetY = itemY + (m_metrics.itemHeight / 2) - (viewportHeight / 2);
+      targetY = qBound(0, targetY, scrollMax);
+      // Set scrollbar range explicitly before setting value to ensure it takes effect
+      scrollbar->setRange(0, scrollMax);
+      scrollbar->setValue(targetY);
+    }
+    m_initialScrollIndex = -1;  // Reset after use
+  }
+
   updateVirtualView();
   positionVirtualContainer();
   if (m_virtualContainer) {
     m_virtualContainer->setVisible(true);
   }
+  
+  // Pre-warm widget pool during initial setup for smoother scrolling
+  if (m_widgetPool) {
+    int visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1;
+    m_widgetPool->setVisibleMetrics(visibleRows, m_metrics.itemsPerRow);
+    m_widgetPool->prewarm();
+  }
+  
   emit virtualScrollSetupComplete();
 }
 
@@ -428,23 +473,44 @@ void ScrollManager::cleanup() {
     return;
   }
   if (m_activeWidgets.isEmpty() && (!m_virtualContainer) &&
-      m_filePaths.isEmpty() && m_subcollections.isEmpty()) {
+      m_filePaths.isEmpty() && m_subcollections.isEmpty() &&
+      m_preSearchWidgets.isEmpty()) {
     return;
   }
 
   disconnectScrollEvents();
 
+  // Clear artwork widget references FIRST - prevents stale widget pointers
+  // from causing incorrect artwork or crashes when widgets are destroyed
+  if (m_artworkManager) {
+    m_artworkManager->clearWidgetReferences();
+  }
+
+  // Explicitly delete active widgets before clearing the pool
+  // This ensures proper cleanup order and prevents use-after-free
   for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
     if (ItemWidget *widget = it.value()) {
-      releaseWidget(widget);
+      delete widget;
     }
   }
   m_activeWidgets.clear();
 
-  cleanupVirtualContainer();
+  // DO NOT delete pre-search widgets here - they are reparented to m_gridContainer
+  // and will be restored when search is cleared. Only delete them on full cleanup
+  // (when m_destroying is true, which returns early above)
+
+  // Clear the widget pool - if we have pre-search widgets, just clear
+  // the reference list without deleting (widgets are reparented elsewhere)
+  // to avoid double-deletion with saved widgets
   if (m_widgetPool) {
-    m_widgetPool->clear(); // Pool widgets are tied to the old virtual container
+    if (!m_preSearchWidgets.isEmpty()) {
+      m_widgetPool->clear();
+    } else {
+      m_widgetPool->clearAndDelete();
+    }
   }
+
+  cleanupVirtualContainer();
   if (m_filterManager) {
     m_filterManager->clearFilter();
   }
@@ -993,10 +1059,10 @@ void ScrollManager::applyFilter(const QString &searchText) {
   calculateVirtualMetrics();
   positionVirtualContainer();
 
-  // Hide all widgets and clear active set
+  // Release widgets back to pool for reuse instead of just hiding
   for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
-    if (it.value()) {
-      it.value()->hide();
+    if (ItemWidget *widget = it.value()) {
+      releaseWidget(widget);
     }
   }
   m_activeWidgets.clear();
@@ -1017,6 +1083,98 @@ void ScrollManager::cleanupActiveWidgets() {
   m_activeWidgets.clear();
 }
 
+void ScrollManager::savePreSearchState() {
+  // Only save if not already saved and we have widgets to save
+  if (!m_preSearchWidgets.isEmpty() || m_activeWidgets.isEmpty()) {
+    return;
+  }
+  
+  // Save current scroll position
+  if (m_mediaScrollArea && m_mediaScrollArea->verticalScrollBar()) {
+    m_preSearchScrollPosition = m_mediaScrollArea->verticalScrollBar()->value();
+  }
+  
+  // Move active widgets to saved state
+  // Reparent to m_gridContainer so they survive cleanup() destroying virtual container
+  m_preSearchWidgets = m_activeWidgets;
+  for (auto it = m_preSearchWidgets.begin(); it != m_preSearchWidgets.end(); ++it) {
+    if (it.value()) {
+      it.value()->setParent(m_gridContainer);
+      it.value()->hide();
+    }
+  }
+  m_activeWidgets.clear();
+}
+
+void ScrollManager::restorePreSearchState() {
+  if (m_preSearchWidgets.isEmpty()) {
+    return;
+  }
+  
+  // Clear artwork references from search result widgets before releasing them
+  // This prevents stale widget pointers from causing incorrect artwork
+  if (m_artworkManager) {
+    m_artworkManager->clearWidgetReferences();
+  }
+  
+  // Clear the widget pool first - we're going to delete all widgets in
+  // the virtual container, which may include pool widgets. This prevents
+  // double-delete crashes during shutdown.
+  if (m_widgetPool) {
+    m_widgetPool->clear();
+  }
+  
+  // Delete search result widgets immediately - don't return to pool
+  // Pool widgets might still be visible if they haven't been hidden yet
+  for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
+    if (ItemWidget *widget = it.value()) {
+      widget->hide();
+      widget->setParent(nullptr);  // Orphan before delete to ensure immediate removal
+      delete widget;
+    }
+  }
+  m_activeWidgets.clear();
+  
+  // Also delete any ItemWidget children of the virtual container that might
+  // not be tracked in m_activeWidgets (e.g., orphaned widgets from pool)
+  if (m_virtualContainer) {
+    QList<ItemWidget *> orphanedWidgets = m_virtualContainer->findChildren<ItemWidget *>();
+    for (ItemWidget *widget : orphanedWidgets) {
+      widget->hide();
+      widget->setParent(nullptr);
+      delete widget;
+    }
+  }
+  
+  // Restore scroll position BEFORE showing widgets to avoid visual jump
+  // from beginning of list to remembered position
+  if (m_mediaScrollArea && m_mediaScrollArea->verticalScrollBar()) {
+    m_mediaScrollArea->verticalScrollBar()->setValue(m_preSearchScrollPosition);
+  }
+  
+  // Restore saved widgets - reparent back to virtual container
+  m_activeWidgets = m_preSearchWidgets;
+  m_preSearchWidgets.clear();
+  
+  // Show, reparent and reposition widgets - their artwork is already loaded
+  for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
+    if (ItemWidget *widget = it.value()) {
+      // Reparent back to virtual container
+      if (m_virtualContainer) {
+        widget->setParent(m_virtualContainer);
+      }
+      QPoint position = getItemPosition(it.key());
+      widget->setGeometry(position.x(), position.y(), m_metrics.itemWidth,
+                          m_metrics.itemHeight);
+      widget->show();
+    }
+  }
+  
+  // Don't call updateViewportArtwork() - restored widgets already have their
+  // artwork loaded and displayed. Calling it could cause incorrect artwork
+  // due to stale mappings.
+}
+
 void ScrollManager::clearFilter() {
   if (!m_filterManager) {
     emit filterChanged(m_filePaths.size(), m_filePaths.size());
@@ -1024,6 +1182,10 @@ void ScrollManager::clearFilter() {
   }
 
   if (!m_filterManager->isFiltered()) {
+    // Filter not active, but we may still have pre-search widgets to restore
+    if (!m_preSearchWidgets.isEmpty()) {
+      restorePreSearchState();
+    }
     emit filterChanged(m_filePaths.size(), m_filePaths.size());
     return;
   }
@@ -1032,15 +1194,33 @@ void ScrollManager::clearFilter() {
   m_totalItems = m_subcollections.size() + m_virtualFolders.size() + m_filePaths.size();
 
   calculateVirtualMetrics();
-  positionVirtualContainer();
-
-  for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
-    if (it.value()) {
-      it.value()->hide();
+  
+  // Pre-set scroll position BEFORE positionVirtualContainer to prevent visual jump
+  // where list briefly shows at position 0 then jumps to remembered position
+  if (!m_preSearchWidgets.isEmpty() && m_mediaScrollArea) {
+    if (QScrollBar *scrollbar = m_mediaScrollArea->verticalScrollBar()) {
+      int viewportHeight = m_mediaScrollArea->viewport()->height();
+      int scrollMax = qMax(0, m_metrics.totalHeight - viewportHeight);
+      scrollbar->setRange(0, scrollMax);
+      scrollbar->setValue(m_preSearchScrollPosition);
     }
   }
-  m_activeWidgets.clear();
-  updateVirtualView();
+  
+  positionVirtualContainer();
+
+  // Try to restore saved pre-search state for instant recovery
+  if (!m_preSearchWidgets.isEmpty()) {
+    restorePreSearchState();
+  } else {
+    // Fallback: release widgets and rebuild view
+    for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
+      if (ItemWidget *widget = it.value()) {
+        releaseWidget(widget);
+      }
+    }
+    m_activeWidgets.clear();
+    updateVirtualView();
+  }
 }
 
 auto ScrollManager::getFilteredIndex(int visualIndex) const -> int {
@@ -1101,6 +1281,7 @@ void ScrollManager::recreateLayout() {
     widget->setHideSubcollectionTitles(
         m_context.config.hideSubcollectionTitles);
     widget->setFontSize(m_context.config.fontSize);
+    widget->setCornerRadius(m_context.config.cornerRadius);
     widget->setItemDimensions(m_metrics.itemWidth, m_metrics.itemHeight);
     QPoint position = getItemPosition(it.key());
     widget->setGeometry(position.x(), position.y(), m_metrics.itemWidth,
@@ -1126,6 +1307,7 @@ void ScrollManager::handleLayoutChange() {
     if (!widget) {
       continue;
     }
+    widget->setCornerRadius(m_context.config.cornerRadius);
     widget->setItemDimensions(m_metrics.itemWidth, m_metrics.itemHeight);
     QPoint position = getItemPosition(it.key());
     widget->setGeometry(position.x(), position.y(), m_metrics.itemWidth,
@@ -1271,6 +1453,10 @@ void ScrollManager::primeLayoutFor(const CollectionConfig &config) {
     return;
   }
   m_context.config = config;
+  // Update factory context so new widgets get correct settings (corner radius, etc.)
+  if (m_widgetFactory) {
+    m_widgetFactory->setCollectionContext(m_context);
+  }
   int savedTotal = m_totalItems;
   m_totalItems = 0;
   calculateVirtualMetrics();
@@ -1354,6 +1540,8 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
     existing->setHideSubcollectionTitles(
         m_context.config.hideSubcollectionTitles);
     existing->setFontSize(m_context.config.fontSize);
+    existing->setCornerRadius(m_context.config.cornerRadius);
+    existing->setItemDimensions(m_metrics.itemWidth, m_metrics.itemHeight);
     QPoint position = getItemPosition(visualIndex);
     existing->setGeometry(position.x(), position.y(), m_metrics.itemWidth,
                           m_metrics.itemHeight);

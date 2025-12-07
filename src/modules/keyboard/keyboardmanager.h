@@ -18,6 +18,7 @@ struct ApplicationContext;
 
 struct KeyboardManagerSetup {
   const ApplicationContext *ctx = nullptr;
+  const GeneralSettings *generalSettings = nullptr;
 
   ScrollManager *scrollManager = nullptr;
   QWidget *gridContainer = nullptr;
@@ -112,6 +113,7 @@ signals:
   // Action requests for InteractionManager
   void requestSelectionMove(int direction, bool vertical);
   void requestAlphabeticNavigation(bool forward);
+  void requestJumpToEdge(bool toEnd);  // Home/End key navigation
   void requestEnterAction();
   void requestSearchModeToggle();
   void requestSearchBarFocus();
@@ -150,6 +152,7 @@ private:
   bool m_isShuttingDown = false;
 
   // Manager references
+  const GeneralSettings *m_generalSettings = nullptr;
   InteractionStateHolder *m_state = nullptr;
   ScrollManager *m_scrollManager = nullptr;
   QWidget *m_gridContainer = nullptr;

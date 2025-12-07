@@ -39,6 +39,7 @@ AnimationManager::~AnimationManager() {
 
 void AnimationManager::setupReferences(
     const AnimationManagerSetup &setup) {
+  m_generalSettings = setup.generalSettings;
   m_itemScrollArea = setup.getItemScrollArea();
   m_scrollManager = setup.getScrollManager();
   m_artworkManager = setup.getArtworkManager();
@@ -263,19 +264,19 @@ void AnimationManager::onHScrollAnimationFinished() {
 int AnimationManager::computeVerticalCenterDuration(int distance,
                                                     int itemHeight,
                                                     int verticalSpacing,
-                                                    bool repeatActive) {
+                                                    bool repeatActive,
+                                                    int durationMs) {
   int stepSpan = qMax(1, itemHeight + verticalSpacing);
   double rows = static_cast<double>(distance) / static_cast<double>(stepSpan);
   rows = std::max(rows, 1.0);
 
-  int perRow = repeatActive ? UIConstants::Animation::CENTER_SCROLL_DURATION_MS
-                            : UIConstants::Animation::CENTER_SCROLL_DURATION_MS;
+  // Use provided duration directly
+  int baseDuration = durationMs;
+  int perRow = repeatActive ? baseDuration : baseDuration;
   double raw = rows * static_cast<double>(perRow);
 
-  int minDur = repeatActive ? UIConstants::Animation::CENTER_SCROLL_DURATION_MS
-                            : UIConstants::Animation::CENTER_SCROLL_DURATION_MS;
-  int maxDur = repeatActive ? UIConstants::Animation::CENTER_SCROLL_DURATION_MS
-                            : UIConstants::Animation::CENTER_SCROLL_DURATION_MS;
+  int minDur = repeatActive ? baseDuration : baseDuration;
+  int maxDur = repeatActive ? baseDuration : baseDuration;
 
   int duration = static_cast<int>(std::round(raw));
   duration = qBound(minDur, duration, maxDur);
@@ -361,8 +362,11 @@ void AnimationManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar,
   }
 
   int distance = qAbs(endVal - startVal);
+  int durationMs = m_generalSettings 
+      ? m_generalSettings->scrollAnimationDurationMs 
+      : 1500;
   int duration =
-      computeVerticalCenterDuration(distance, itemHeight, verticalSpacing, isRepeating);
+      computeVerticalCenterDuration(distance, itemHeight, verticalSpacing, isRepeating, durationMs);
 
   m_vScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
   m_vScrollAnim->setStartValue(startVal);
@@ -401,7 +405,12 @@ void AnimationManager::startWheelScrollAnimation(
 
   m_vScrollAnim->setStartValue(startVal);
   m_vScrollAnim->setEndValue(endVal);
-  m_vScrollAnim->setDuration(UIConstants::Animation::SMOOTH_SCROLL_WHEEL_DURATION_MS);
+  
+  // Use scroll animation duration from settings, fallback to constant
+  int duration = m_generalSettings 
+      ? m_generalSettings->scrollAnimationDurationMs 
+      : UIConstants::Animation::SMOOTH_SCROLL_WHEEL_DURATION_MS;
+  m_vScrollAnim->setDuration(duration);
 
   QObject::disconnect(m_vScrollAnim, nullptr, this, nullptr);
   connect(m_vScrollAnim, &QPropertyAnimation::valueChanged, this,

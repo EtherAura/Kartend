@@ -340,17 +340,26 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
     }
 
     if (collIndex >= 0) {
-      m_navigationManager->filterItems(QString());
-      m_navigationManager->safeReloadCollection(collIndex);
+      // If we have saved pre-search state, just restore it instead of reloading
+      if (m_scrollManager && m_scrollManager->hasPreSearchState()) {
+        m_scrollManager->clearFilter();
+        // For CurrentCollection mode with pre-search state, we need to restore
+        // selection manually since onItemsLoaded won't be called
+        int sel = m_preSearchSelectedIndex;
+        if (sel < 0 && m_settingsManager && collIndex >= 0) {
+          sel = m_settingsManager->getLastSelectedItem(collIndex);
+        }
+        if (sel >= 0) {
+          emit requestSelectionRestore(sel);
+        }
+      } else {
+        // For other modes, safeReloadCollection triggers onItemsLoaded which
+        // handles selection restore via calculateSelectionIndex - don't emit
+        // requestSelectionRestore here to avoid duplicate/racing restores
+        m_navigationManager->filterItems(QString());
+        m_navigationManager->safeReloadCollection(collIndex);
+      }
       initializeSearchModeForCurrentCollection();
-
-      int sel = m_preSearchSelectedIndex;
-      if (sel < 0 && m_settingsManager && collIndex >= 0) {
-        sel = m_settingsManager->getLastSelectedItem(collIndex);
-      }
-      if (sel >= 0) {
-        emit requestSelectionRestore(sel);
-      }
     }
 
     emit requestScrollbarRecovery();
@@ -367,6 +376,17 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
         collIndex >= 0) {
       m_preSearchSelectedIndex =
           m_settingsManager->getLastSelectedItem(collIndex);
+    }
+    // Save scroll view state for fast restoration when search is cleared
+    // For CurrentCollection mode, items are already loaded
+    // For CurrentAndSubcollections with showAllSubcollectionItems, items are also already loaded
+    bool canUsePreSearchState = (m_currentSearchMode == SearchMode::CurrentCollection);
+    if (m_currentSearchMode == SearchMode::CurrentAndSubcollections &&
+        m_collections && collIndex >= 0 && collIndex < m_collections->size()) {
+      canUsePreSearchState = (*m_collections)[collIndex].showAllSubcollectionItems;
+    }
+    if (m_scrollManager && canUsePreSearchState) {
+      m_scrollManager->savePreSearchState();
     }
     emit requestClearSelection();
   }
@@ -411,30 +431,39 @@ void SearchManager::performDebouncedSearch() {
 
   switch (m_currentSearchMode) {
   case SearchMode::CurrentCollection: {
-    if (context.config.showAllSubcollectionItems) {
-      if (m_databaseManager) {
-        m_databaseManager->loadItemsWithSubcollections(context, *m_collections);
-      }
-    } else if (m_databaseManager) {
-      m_databaseManager->loadItems(context);
+    // For current collection, apply filter directly without reloading
+    // The items are already loaded, just filter the existing view
+    if (m_scrollManager) {
+      m_scrollManager->applyFilter(trimmed);
     }
     break;
   }
   case SearchMode::CurrentAndSubcollections: {
-    if (m_databaseManager) {
-      m_databaseManager->loadItemsWithSubcollections(context, *m_collections);
+    // If showAllSubcollectionItems is enabled, items are already loaded
+    // so we can filter directly like CurrentCollection mode
+    if (context.config.showAllSubcollectionItems && m_scrollManager) {
+      m_scrollManager->applyFilter(trimmed);
+    } else {
+      // Otherwise, need to load items from all subcollections
+      if (m_databaseManager) {
+        m_databaseManager->loadItemsWithSubcollections(context, *m_collections);
+      }
+      m_navigationManager->filterItems(trimmed);
     }
     break;
   }
   case SearchMode::AllCollections: {
     m_navigationManager->loadAllCollectionsView();
+    m_navigationManager->filterItems(trimmed);
     break;
   }
   }
 
-  m_navigationManager->filterItems(trimmed);
-
-  if (m_databaseManager) {
+  // Only connect for async loading cases (not when using applyFilter)
+  bool needsAsyncLoad = (m_currentSearchMode == SearchMode::AllCollections) ||
+                        (m_currentSearchMode == SearchMode::CurrentAndSubcollections &&
+                         !context.config.showAllSubcollectionItems);
+  if (needsAsyncLoad && m_databaseManager) {
     m_searchItemsLoadedConn = connect(
         m_databaseManager, &DatabaseManager::itemsLoaded, this,
         [this, trimmed]() {

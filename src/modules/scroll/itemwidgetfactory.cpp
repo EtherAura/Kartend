@@ -32,14 +32,19 @@ ItemWidget *ItemWidgetFactory::acquireWidget() {
 }
 
 void ItemWidgetFactory::configureBaseWidget(ItemWidget *widget) {
-  widget->resetForReuse();
+  // Set parent BEFORE resetForReuse() to ensure child widgets (imageLabel, etc.)
+  // are in a valid state - reparenting first prevents stale child pointers
   widget->setParent(m_parentWidget);
+  widget->resetForReuse();
   widget->setFocusPolicy(Qt::NoFocus);
   widget->setHideTitles(m_context.config.hideTitles);
   widget->setHideSubcollectionTitles(m_context.config.hideSubcollectionTitles);
   widget->setFontSize(m_context.config.fontSize);
   widget->setCornerRadius(m_context.config.cornerRadius);
   widget->setItemDimensions(m_itemWidth, m_itemHeight);
+  // Force artwork refresh after all configuration is set to ensure
+  // corner radius and other settings are applied to the placeholder
+  widget->onArtworkChanged();
 }
 
 void ItemWidgetFactory::releaseWidget(ItemWidget *widget, int visibleRows,
@@ -128,9 +133,7 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex,
 
 ItemWidget *ItemWidgetFactory::createPlaceholderWidget() {
   auto *widget = acquireWidget();
-  widget->setParent(m_parentWidget);
-  widget->setFocusPolicy(Qt::NoFocus);
-  widget->setItemDimensions(m_itemWidth, m_itemHeight);
+  configureBaseWidget(widget);
   if (widget->nameLabel) {
     widget->nameLabel->setText("Loading...");
   }

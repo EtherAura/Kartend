@@ -38,11 +38,18 @@ public:
   // Return a widget to the pool for reuse
   void release(ItemWidget *widget);
 
-  // Clear all widgets from the pool
+  // Clear all widgets from the pool (does not delete them)
   void clear();
+
+  // Clear all widgets and delete them immediately
+  void clearAndDelete();
 
   // Set parameters for pool size calculation
   void setVisibleMetrics(int visibleRows, int itemsPerRow);
+
+  // Pre-allocate widgets during idle time for smoother initial scroll.
+  // Call after setWidgetParent and setVisibleMetrics are configured.
+  void prewarm();
 
   // Get pool performance metrics
   [[nodiscard]] const WidgetPoolMetrics &metrics() const { return m_metrics; }

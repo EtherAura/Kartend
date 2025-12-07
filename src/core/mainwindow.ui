@@ -288,6 +288,8 @@
     <property name="title">
      <string>&amp;View</string>
     </property>
+    <addaction name="actionRefresh"/>
+    <addaction name="separator"/>
     <addaction name="actionShowSidebar"/>
     <addaction name="separator"/>
     <addaction name="actionSettings"/>
@@ -297,6 +299,7 @@
      <string>&amp;Help</string>
     </property>
     <addaction name="actionAbout"/>
+    <addaction name="actionAboutQt"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuView"/>
@@ -332,6 +335,19 @@
   <action name="actionAbout">
    <property name="text">
     <string>About</string>
+   </property>
+  </action>
+  <action name="actionAboutQt">
+   <property name="text">
+    <string>About Qt</string>
+   </property>
+  </action>
+  <action name="actionRefresh">
+   <property name="text">
+    <string>Refresh Collection</string>
+   </property>
+   <property name="shortcut">
+    <string>F5</string>
    </property>
   </action>
  </widget>

@@ -36,12 +36,14 @@ SETUP_GETTER_DEF_SAME(ViewportManagerSetup, InteractionStateHolder*, Interaction
 SETUP_GETTER_DEF_SAME(ViewportManagerSetup, QList<CollectionConfig>*, Collections, collections)
 SETUP_GETTER_DEF_SAME(ViewportManagerSetup, int*, CurrentCollectionIndex, currentCollectionIndex)
 SETUP_GETTER_DEF_SAME(ViewportManagerSetup, const bool*, IsShuttingDown, isShuttingDown)
+SETUP_GETTER_DEF_SAME(ViewportManagerSetup, const GeneralSettings*, GeneralSettings, generalSettings)
 
 ViewportManager::ViewportManager(QObject *parent) : QObject(parent) {}
 
 ViewportManager::~ViewportManager() = default;
 
 void ViewportManager::setupReferences(const ViewportManagerSetup &setup) {
+  m_generalSettings = setup.getGeneralSettings();
   m_itemScrollArea = setup.getItemScrollArea();
   m_scrollManager = setup.getScrollManager();
   m_selectionManager = setup.getSelectionManager();
@@ -99,8 +101,12 @@ int ViewportManager::computeVerticalCenterDuration(int distance,
     itemHeight = (*m_collections)[*m_currentCollectionIndex].itemHeight;
     vSpacing = (*m_collections)[*m_currentCollectionIndex].verticalSpacing;
   }
+  int speedLevel = m_generalSettings 
+      ? m_generalSettings->scrollAnimationDurationMs 
+      : 1500;
   return AnimationManager::computeVerticalCenterDuration(distance, itemHeight,
-                                                         vSpacing, repeatActive);
+                                                         vSpacing, repeatActive,
+                                                         speedLevel);
 }
 
 void ViewportManager::centerItemVertically(int index, bool immediate) {

@@ -3,6 +3,7 @@
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "uiconstants.h"
+#include <QColor>
 #include <QPropertyAnimation>
 #include <QWidget>
 #include <cmath>
@@ -48,12 +49,28 @@ void SelectionOverlayManager::ensureOverlay() {
     m_overlay = new QWidget(m_parentWidget);
     m_overlay->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     m_overlay->setAttribute(Qt::WA_NoSystemBackground, true);
-    m_overlay->setStyleSheet(
-        QString("background: transparent; border:%1px solid "
-                "palette(highlight); border-radius:%2px;")
-            .arg(UIConstants::Widget::BORDER_WIDTH_SELECTION)
-            .arg(UIConstants::Widget::BORDER_RADIUS));
+    updateOverlayStyle();
   }
+}
+
+void SelectionOverlayManager::updateOverlayStyle() {
+  if (!m_overlay) {
+    return;
+  }
+  
+  QString borderColor;
+  if (!ItemWidget::s_selectionColor.isEmpty() && 
+      QColor::isValidColorName(ItemWidget::s_selectionColor)) {
+    borderColor = ItemWidget::s_selectionColor;
+  } else {
+    borderColor = "palette(highlight)";
+  }
+  
+  m_overlay->setStyleSheet(
+      QString("background: transparent; border:%1px solid %2; border-radius:%3px;")
+          .arg(UIConstants::Widget::BORDER_WIDTH_SELECTION)
+          .arg(borderColor)
+          .arg(UIConstants::Widget::BORDER_RADIUS));
 }
 
 void SelectionOverlayManager::ensureAnimation() {
@@ -88,6 +105,9 @@ void SelectionOverlayManager::showAtWidget(ItemWidget *widget) {
     return;
   }
 
+  // Update style in case primary color changed (e.g., collection switch)
+  updateOverlayStyle();
+
   QRect rect = overlayRectForWidget(widget);
   if (!rect.isValid()) {
     return;
@@ -106,6 +126,9 @@ void SelectionOverlayManager::showAtRect(const QRect &rect) {
   if (!m_overlay) {
     return;
   }
+
+  // Update style in case primary color changed (e.g., collection switch)
+  updateOverlayStyle();
 
   m_overlay->setGeometry(rect);
   m_overlay->show();

@@ -4,6 +4,7 @@
 #include "databasemanager.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
+#include "itemwidget.h"
 #include "metadatasidebar.h"
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
@@ -55,7 +56,9 @@ void NavigationManager::setupReferences(
   m_generalSettings = setup.getGeneralSettings();
   m_searchBar = setup.getSearchBar();
   m_itemsPage = setup.getItemsPage();
+  m_itemsTopBar = setup.getItemsTopBar();
   m_stackedWidget = setup.getStackedWidget();
+  m_menubar = setup.getMenubar();
   m_loadingLabel = setup.getLoadingLabel();
   m_itemScrollArea = setup.getItemScrollArea();
   m_gridContainer = setup.getGridContainer();
@@ -402,6 +405,14 @@ auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const
     return false;
   }
 
+  // Check if target is a container collection (no media directory)
+  // Container collections cannot share items - they only show subcollection folders
+  QString toMediaDir = SettingsUtils::expandConfigVariables(
+      toCollection.mediaDirectory, toCollection.name);
+  if (toMediaDir.trimmed().isEmpty()) {
+    return false;
+  }
+
   if (!toCollection.showAllSubcollectionItems) {
     return true;
   }
@@ -441,9 +452,106 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex)
   SettingsUtils::applyVerticalScrollbarSetting(
       m_itemScrollArea, collectionIndex, (*m_collections));
 
+  applyBackgroundForCollection(collectionIndex);
+  applyPrimaryColorForCollection(collectionIndex);
+
   if (m_sidebarManager) {
     m_sidebarManager->applySidebarStateForCollection(
         collectionIndex);
+  }
+}
+
+void NavigationManager::applyBackgroundForCollection(int collectionIndex) {
+  if (!m_itemScrollArea || collectionIndex < 0 ||
+      collectionIndex >= (*m_collections).size()) {
+    return;
+  }
+
+  const CollectionConfig &collection = (*m_collections)[collectionIndex];
+  QWidget *viewport = m_itemScrollArea->viewport();
+  if (!viewport) {
+    return;
+  }
+
+  QString styleSheet;
+  if (collection.backgroundType == BackgroundType::Image &&
+      !collection.backgroundImage.isEmpty()) {
+    // Background image mode
+    QString imagePath = collection.backgroundImage;
+    // Escape backslashes for CSS
+    imagePath.replace("\\", "/");
+    styleSheet = QString(
+        "QWidget { "
+        "background-image: url(\"%1\"); "
+        "background-repeat: no-repeat; "
+        "background-position: center; "
+        "background-attachment: fixed; "
+        "}")
+        .arg(imagePath);
+  } else if (!collection.backgroundColor.isEmpty()) {
+    // Background color mode
+    styleSheet = QString("QWidget { background-color: %1; }")
+                     .arg(collection.backgroundColor);
+  } else {
+    // Clear any custom background (use system default)
+    styleSheet.clear();
+  }
+
+  viewport->setStyleSheet(styleSheet);
+}
+
+void NavigationManager::applyPrimaryColorForCollection(int collectionIndex) {
+  if (collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
+    return;
+  }
+
+  const CollectionConfig &collection = (*m_collections)[collectionIndex];
+  ItemWidget::setPrimaryColor(collection.primaryColor);
+  ItemWidget::setTileColor(collection.tileColor);
+  ItemWidget::setSelectionColor(collection.selectionColor);
+
+  bool hasPrimaryColor = !collection.primaryColor.isEmpty() && 
+                         QColor::isValidColorName(collection.primaryColor);
+
+  // Apply primary color to toolbar/top bar (exact color, not tinted)
+  if (m_itemsTopBar) {
+    QString toolbarStyle;
+    if (hasPrimaryColor) {
+      toolbarStyle = QString(
+          "QWidget#itemsTopBar { background-color: %1; }")
+          .arg(collection.primaryColor);
+    }
+    m_itemsTopBar->setStyleSheet(toolbarStyle);
+  }
+
+  // Apply primary color to menubar
+  if (m_menubar) {
+    QString menubarStyle;
+    if (hasPrimaryColor) {
+      menubarStyle = QString(
+          "QMenuBar { background-color: %1; }"
+          "QMenuBar::item { background-color: transparent; }"
+          "QMenuBar::item:selected { background-color: rgba(255,255,255,0.2); }")
+          .arg(collection.primaryColor);
+    }
+    m_menubar->setStyleSheet(menubarStyle);
+  }
+
+  // Apply primary color to search bar background
+  if (m_searchBar) {
+    QString searchBarStyle;
+    if (hasPrimaryColor) {
+      // Tint the primary color slightly for the search bar background
+      QColor baseColor(collection.primaryColor);
+      QColor bgColor = baseColor.lighter(130);
+      searchBarStyle = QString(
+          "QLineEdit { background-color: %1; border: 1px solid %2; border-radius: 4px; padding: 4px; }"
+          "QLineEdit:focus { border-color: %3; }")
+          .arg(bgColor.name())
+          .arg(baseColor.darker(110).name())
+          .arg(baseColor.name());
+    }
+    m_searchBar->setStyleSheet(searchBarStyle);
   }
 }
 
@@ -813,6 +921,11 @@ void NavigationManager::onItemsLoaded(
   int selIdx = calculateSelectionIndex(totalItems);
 
   if (m_scrollManager) {
+    // Pre-set scroll position to avoid visual jump where list briefly
+    // shows at position 0 then jumps to remembered position
+    if (selIdx >= 0) {
+      m_scrollManager->setInitialScrollIndex(selIdx);
+    }
     m_scrollManager->setupVirtualScrolling(totalItems, context);
   }
 
@@ -828,16 +941,21 @@ void NavigationManager::onItemsLoaded(
 
   bool pendingRestore =
       m_state ? m_state->selectionRestore().restorePending : false;
+  debugLog("[SelectionRestore] onItemsLoaded: selIdx=" << selIdx 
+           << "totalItems=" << totalItems << "pendingRestore=" << pendingRestore
+           << "collectionIndex=" << (*m_currentCollectionIndex));
   if (selIdx >= 0 && (m_interactionManager) &&
       !pendingRestore) {
+#ifdef KARTEND_DEBUG_LOGGING
     int depth = computeCollectionDepth((*m_currentCollectionIndex));
-    if (depth >= 3) {
-      m_interactionManager->beginSelectionRestore(selIdx);
-    } else {
-      scheduleSelectionRestore(selIdx, UIConstants::Selection::RESTORE_STEPS,
-                               UIConstants::Selection::RESTORE_STEP_DELAY_MS,
-                               UIConstants::Selection::RESTORE_MAX_DELAY_MS);
-    }
+    debugLog("[SelectionRestore] depth=" << depth << "for collection" 
+             << (*m_collections)[(*m_currentCollectionIndex)].name);
+#endif
+    // Use scheduleSelectionRestore for all depths to ensure widgets are
+    // materialized before selection restore attempts sidebar update
+    scheduleSelectionRestore(selIdx, UIConstants::Selection::RESTORE_STEPS,
+                             UIConstants::Selection::RESTORE_STEP_DELAY_MS,
+                             UIConstants::Selection::RESTORE_MAX_DELAY_MS);
   }
 
   schedulePostLoadOperations();

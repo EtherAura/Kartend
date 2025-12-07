@@ -3,6 +3,8 @@
 
 #include <QObject>
 
+struct GeneralSettings;
+
 class QScrollArea;
 class QScrollBar;
 class QPropertyAnimation;
@@ -27,6 +29,7 @@ public:
   void setScrollArea(QScrollArea *scrollArea) { m_scrollArea = scrollArea; }
   void setInteractionState(InteractionStateHolder *state) { m_state = state; }
   void setScrollEventHandler(ScrollEventHandler *handler) { m_scrollEventHandler = handler; }
+  void setGeneralSettings(const GeneralSettings *settings) { m_generalSettings = settings; }
 
   // Metrics needed for centering calculation
   void setItemMetrics(int itemHeight, int verticalSpacing, int margins);
@@ -72,6 +75,7 @@ private:
   QScrollArea *m_scrollArea = nullptr;
   InteractionStateHolder *m_state = nullptr;
   ScrollEventHandler *m_scrollEventHandler = nullptr;
+  const GeneralSettings *m_generalSettings = nullptr;
   QTimer *m_updateTimer = nullptr;
 
   // Cached metrics

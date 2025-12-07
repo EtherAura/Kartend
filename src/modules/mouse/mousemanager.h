@@ -18,6 +18,7 @@ class SelectionManager;
 class ItemWidget;
 class InteractionStateHolder;
 struct CollectionConfig;
+struct GeneralSettings;
 struct ApplicationContext;
 
 /// Setup struct for MouseManager dependencies
@@ -30,6 +31,7 @@ struct MouseManagerSetup {
   QWidget *gridContainer = nullptr;
   const QVector<CollectionConfig> *collections = nullptr;
   const int *currentCollectionIndex = nullptr;
+  GeneralSettings *generalSettings = nullptr;
 
   SETUP_GETTER_DECL(ScrollManager*, ScrollManager)
   SETUP_GETTER_DECL(SelectionManager*, SelectionManager)
@@ -37,6 +39,7 @@ struct MouseManagerSetup {
   SETUP_GETTER_DECL(QWidget*, GridContainer)
   SETUP_GETTER_DECL(const QVector<CollectionConfig>*, Collections)
   SETUP_GETTER_DECL(const int*, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(GeneralSettings*, GeneralSettings)
   SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder*, InteractionState)
 };
 
@@ -153,6 +156,7 @@ private:
   QWidget *m_gridContainer = nullptr;
   const QVector<CollectionConfig> *m_collections = nullptr;
   const int *m_currentCollectionIndex = nullptr;
+  GeneralSettings *m_generalSettings = nullptr;
 
   // Left mouse button state
   bool m_leftMouseDown = false;

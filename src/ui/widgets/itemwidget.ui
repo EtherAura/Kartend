@@ -49,9 +49,6 @@
        <height>200</height>
       </size>
      </property>
-     <property name="styleSheet">
-      <string>border: 1px solid palette(mid); background-color: palette(mid);</string>
-     </property>
      <property name="alignment">
       <set>Qt::AlignCenter</set>
      </property>

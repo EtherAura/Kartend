@@ -79,6 +79,7 @@ signals:
 private:
   void ensureOverlay();
   void ensureAnimation();
+  void updateOverlayStyle();
 
   QWidget *m_parentWidget = nullptr;
   QWidget *m_gridContainer = nullptr;

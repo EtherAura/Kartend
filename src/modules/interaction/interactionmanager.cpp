@@ -112,6 +112,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   if (m_keyboardManager) {
     KeyboardManagerSetup keyboardSetup;
     keyboardSetup.ctx = setup.ctx;
+    keyboardSetup.generalSettings = m_generalSettings;
     m_keyboardManager->setupReferences(keyboardSetup);
     connectKeyboardManagerSignals();
   }
@@ -163,16 +164,22 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     m_alphabeticHandler->setScrollManager(m_scrollManager);
     m_alphabeticHandler->setSelectionManager(m_selectionManager.get());
 
-    // Connect handler signals
+    // Connect handler signals - use immediate centering for large jumps
     connect(m_alphabeticHandler.get(),
             &AlphabeticNavigationHandler::requestSelection, this,
-            [this](int index) { selectItemByIndex(index, true); });
+            [this](int index) {
+              selectItemByIndex(index, true);
+              if (m_viewportManager) {
+                m_viewportManager->centerItemVertically(index, true);
+              }
+            });
   }
 
   // Setup AnimationManager with its dependencies
   if (m_animationManager) {
     AnimationManagerSetup animSetup;
     animSetup.ctx = setup.ctx;
+    animSetup.generalSettings = m_generalSettings;
     m_animationManager->setupReferences(animSetup);
     connectAnimationManagerSignals();
   }
@@ -182,6 +189,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     MouseManagerSetup mouseSetup;
     mouseSetup.ctx = setup.ctx;
     mouseSetup.selectionManager = m_selectionManager.get();
+    mouseSetup.generalSettings = m_generalSettings;
     m_mouseManager->setupReferences(mouseSetup);
     connectMouseManagerSignals();
   }
@@ -197,6 +205,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   if (m_viewportManager) {
     ViewportManagerSetup viewportSetup;
     viewportSetup.ctx = setup.ctx;
+    viewportSetup.generalSettings = m_generalSettings;
     viewportSetup.selectionManager = m_selectionManager.get();
     viewportSetup.animationManager = m_animationManager.get();
     m_viewportManager->setupReferences(viewportSetup);
@@ -286,6 +295,8 @@ void InteractionManager::connectKeyboardManagerSignals() {
           this, &InteractionManager::handleArrowKeyNavigation);
   connect(m_keyboardManager.get(), &KeyboardManager::requestAlphabeticNavigation,
           this, &InteractionManager::handleAlphabeticNavigation);
+  connect(m_keyboardManager.get(), &KeyboardManager::requestJumpToEdge,
+          this, &InteractionManager::handleJumpToEdge);
   connect(m_keyboardManager.get(), &KeyboardManager::requestEnterAction,
           this, [this]() {
             if (m_scrollManager) {
@@ -485,7 +496,42 @@ void InteractionManager::handleAlphabeticNavigation(bool forward) {
     return;
   }
   if (m_alphabeticHandler) {
-    m_alphabeticHandler->navigateToNextLetter(forward);
+    (void)m_alphabeticHandler->navigateToNextLetter(forward);
+  }
+}
+
+// KeyboardManager callback: handles Home/End key to jump to first/last item
+void InteractionManager::handleJumpToEdge(bool toEnd) {
+  bool restoringSelection = m_selectionManager && m_selectionManager->isRestoringSelection();
+  if (restoringSelection || m_navigationInProgress) {
+    return;
+  }
+  if (!m_scrollManager) {
+    return;
+  }
+  
+  const int totalItems = m_scrollManager->getTotalItems();
+  if (totalItems <= 0) {
+    return;
+  }
+  
+  // Stop any ongoing scroll animation
+  if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
+    m_animationManager->verticalAnimation()->stop();
+  }
+  
+  // Calculate target index: 0 for Home, last item for End
+  const int targetIndex = toEnd ? (totalItems - 1) : 0;
+  const int currentIndex = currentSelectedIndex();
+  
+  if (targetIndex == currentIndex) {
+    return; // Already at edge
+  }
+  
+  // Select and center on the target item with immediate viewport jump
+  selectItemByIndex(targetIndex, true);
+  if (m_viewportManager) {
+    m_viewportManager->centerItemVertically(targetIndex, true);
   }
 }
 
@@ -1143,7 +1189,7 @@ void InteractionManager::updateSearchBarPlaceholder() {
 // Restores selection instantly, ensures viewport positioning, and updates
 // sidebar metadata
 void InteractionManager::beginSelectionRestore(int targetIndex) {
-  qDebug() << "[SelectionRestore] beginSelectionRestore: targetIndex=" << targetIndex;
+  debugLog("[SelectionRestore] beginSelectionRestore: targetIndex=" << targetIndex);
   if (targetIndex < 0) {
     return;
   }

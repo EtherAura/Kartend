@@ -70,6 +70,7 @@ void KeyboardManager::cleanupTimers() {
 }
 
 void KeyboardManager::setupReferences(const KeyboardManagerSetup &setup) {
+  m_generalSettings = setup.generalSettings;
   m_state = setup.getInteractionState();
   m_scrollManager = setup.getScrollManager();
   m_gridContainer = setup.getGridContainer();
@@ -156,6 +157,16 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
     return true;
   }
 
+  // Home/End for jumping to first/last item
+  if (key == Qt::Key_Home) {
+    emit requestJumpToEdge(false); // jump to first item
+    return true;
+  }
+  if (key == Qt::Key_End) {
+    emit requestJumpToEdge(true); // jump to last item
+    return true;
+  }
+
   return false;
 }
 
@@ -200,8 +211,12 @@ void KeyboardManager::beginHoldRepeat() {
     return;
   }
 
-  constexpr int kVerticalRepeatIntervalMs = 250;
-  constexpr int kHorizontalRepeatIntervalMs = 130;
+  // Get repeat interval from settings, adjust for vertical vs horizontal
+  int baseInterval = m_generalSettings 
+      ? m_generalSettings->keyboardRepeatIntervalMs 
+      : 260;
+  int verticalInterval = baseInterval;
+  int horizontalInterval = baseInterval / 2;
   constexpr qint64 kSuppressArrowCenterHoldMs = 60000; // 60s safeguard window
 
   if (!m_repeatTimer) {
@@ -216,7 +231,7 @@ void KeyboardManager::beginHoldRepeat() {
 
   m_repeating = true;
   m_repeatInterval =
-      m_repeatVertical ? kVerticalRepeatIntervalMs : kHorizontalRepeatIntervalMs;
+      m_repeatVertical ? verticalInterval : horizontalInterval;
 
   if (m_state) {
     m_state->scroll().horizHoldActive = !m_repeatVertical;
@@ -350,7 +365,11 @@ void KeyboardManager::finalizeKeyRepeat(QKeyEvent *event, int direction,
   m_repeatVertical = vertical;
 
   if (m_repeatStartTimer && !m_repeating) {
-    m_repeatStartTimer->start(UIConstants::Keyboard::REPEAT_START_DELAY_MS);
+    // Use keyboardRepeatDelayMs for initial delay before repeating starts
+    int repeatDelay = m_generalSettings 
+        ? m_generalSettings->keyboardRepeatDelayMs 
+        : 260;
+    m_repeatStartTimer->start(repeatDelay);
   }
 
   if (m_itemsPage) {

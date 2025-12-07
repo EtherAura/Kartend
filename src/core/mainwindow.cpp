@@ -15,6 +15,7 @@
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "interactionmanager.h"
+#include "itemwidget.h"
 #include "mainwindow.h"
 #include "metadatasidebar.h"
 #include "navigationmanager.h"
@@ -128,15 +129,7 @@ void MainWindow::setupManagerConnections() {
 
   loadingLabel = ui->loadingLabel;
 
-  NavigationManagerSetup navSetup;
-  navSetup.ctx = &m_appContext;  // Managers and UI elements from shared context
-  
-  // Callbacks (not in context)
-  navSetup.isShuttingDown = [this]() { return isShuttingDown(); };
-  navSetup.refreshTitleCounts = [this]() { refreshTitleCounts(); };
-
-  getNavigationManager()->setupReferences(navSetup);
-
+  // Set up InteractionManager first to get interactionState
   getInteractionManager()->setupReferences(setup);
   
   // Populate interactionState in context now that InteractionManager is set up
@@ -152,6 +145,16 @@ void MainWindow::setupManagerConnections() {
   m_appContext.eventManager = getInteractionManager()->eventManager();
   m_appContext.searchManager = getInteractionManager()->searchManager();
   m_appContext.launchManager = getInteractionManager()->launchManager();
+
+  // Now set up NavigationManager with fully populated context
+  NavigationManagerSetup navSetup;
+  navSetup.ctx = &m_appContext;  // Managers and UI elements from shared context
+  
+  // Callbacks (not in context)
+  navSetup.isShuttingDown = [this]() { return isShuttingDown(); };
+  navSetup.refreshTitleCounts = [this]() { refreshTitleCounts(); };
+
+  getNavigationManager()->setupReferences(navSetup);
 
   connectDatabaseManager();
   connectScrollManager();
@@ -340,6 +343,12 @@ void MainWindow::setupUI() {
   getSettingsManager()->loadCollections(m_collections);
   rebuildHierarchyCache();
   getSettingsManager()->loadGeneralSettings(m_generalSettings);
+  
+  // Apply text appearance settings to ItemWidget statics
+  ItemWidget::setTitleTintSaturation(m_generalSettings.titleTintSaturation);
+  ItemWidget::setTitleTintLightness(m_generalSettings.titleTintLightness);
+  ItemWidget::setTitleBaseColor(m_generalSettings.titleBaseColor);
+  ItemWidget::setCustomFontFamily(m_generalSettings.customFontFamily);
 
   setupUIReferences();
   initializeAppContext();
@@ -383,7 +392,9 @@ void MainWindow::initializeAppContext() {
   m_appContext.itemScrollArea = ui->itemScrollArea;
   m_appContext.stackedWidget = stackedWidget;
   m_appContext.itemsPage = itemsPage;
+  m_appContext.itemsTopBar = ui->itemsTopBar;
   m_appContext.gridContainer = gridContainer;
+  m_appContext.menubar = ui->menubar;
   m_appContext.searchBar = searchBar;
   m_appContext.searchModeButton = m_searchModeButton;
   m_appContext.sidebar = m_MetadataSidebar;
@@ -404,7 +415,9 @@ void MainWindow::createMenuBar() {
   setupActionExit();
   setupActionShowSidebar();
   setupActionSettings();
+  setupActionRefresh();
   setupActionAbout();
+  setupActionAboutQt();
   setupFullscreenAction();
 }
 
@@ -454,6 +467,25 @@ void MainWindow::setupActionAbout() {
   if (ui->actionAbout) {
     QObject::connect(ui->actionAbout, &QAction::triggered,
                      [this]() { showAbout(); });
+  }
+}
+
+void MainWindow::setupActionAboutQt() {
+  if (ui->actionAboutQt) {
+    QObject::connect(ui->actionAboutQt, &QAction::triggered,
+                     qApp, &QApplication::aboutQt);
+  }
+}
+
+void MainWindow::setupActionRefresh() {
+  if (ui->actionRefresh) {
+    QObject::connect(ui->actionRefresh, &QAction::triggered, [this]() {
+      if (getNavigationManager() && currentCollectionIndex >= 0) {
+        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+      }
+    });
+    ui->actionRefresh->setShortcutContext(Qt::ApplicationShortcut);
+    addAction(ui->actionRefresh);
   }
 }
 
@@ -518,7 +550,7 @@ void MainWindow::setupSidebar() {
 }
 
 void MainWindow::showAbout() {
-  QString appName = APP_NAME;
+  QString appName = APP_DISPLAY_NAME;
   QString appVersion = APP_VERSION;
   QString appAuthor = APP_AUTHOR;
 
@@ -584,6 +616,7 @@ void MainWindow::setupLastSelectedIndices() {
 void MainWindow::setupEventFilters() {
   ScrollManagerSetup setup;
   setup.ctx = &m_appContext;
+  setup.generalSettings = &m_generalSettings;
   setup.artworkManager = getArtworkManager();
 
   getScrollManager()->setupReferences(setup);

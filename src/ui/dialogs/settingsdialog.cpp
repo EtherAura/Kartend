@@ -1,7 +1,9 @@
 // Collection configuration dialog with tree-based hierarchy editing and live preview.
 #include <QAbstractItemView>
+#include <QColorDialog>
 #include <QDir>
 #include <QFileDialog>
+#include <QFontDialog>
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -17,7 +19,9 @@
 #include <set>
 
 #include "extensionutils.h"
+#include "itemwidget.h"
 #include "mainwindow.h"
+#include "scrollmanager.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
 #include "ui_settingsdialog.h"
@@ -613,6 +617,113 @@ void SettingsDialog::setupGeneralSettingsConnections() {
               m_generalSettings = mainWindow->m_generalSettings;
             }
           });
+
+  connect(ui->browseFontButton, &QPushButton::clicked, this, [this]() {
+    bool ok;
+    QFont currentFont = QApplication::font();
+    if (!m_generalSettings.customFontFamily.isEmpty()) {
+      currentFont.setFamily(m_generalSettings.customFontFamily);
+    }
+    QFont font = QFontDialog::getFont(&ok, currentFont, this, tr("Select Font"));
+    if (ok) {
+      ui->customFontEdit->setText(font.family());
+    }
+  });
+
+  connect(ui->browseColorButton, &QPushButton::clicked, this, [this]() {
+    QColor currentColor = Qt::white;
+    if (!m_generalSettings.titleBaseColor.isEmpty()) {
+      currentColor = QColor(m_generalSettings.titleBaseColor);
+    }
+    QColor color = QColorDialog::getColor(currentColor, this, tr("Select Base Color"));
+    if (color.isValid()) {
+      ui->baseColorEdit->setText(color.name());
+    }
+  });
+
+  // Background type radio buttons - update button text based on selection
+  connect(ui->backgroundColorRadio, &QRadioButton::toggled, this, [this](bool checked) {
+    if (checked) {
+      ui->browseBackgroundButton->setText(tr("Pick..."));
+      ui->browseBackgroundButton->setToolTip(tr("Select background color"));
+      ui->backgroundValueEdit->setPlaceholderText(tr("Default"));
+      ui->backgroundValueEdit->setToolTip(tr("Background color (hex format like #FF5500)"));
+    }
+  });
+
+  connect(ui->backgroundImageRadio, &QRadioButton::toggled, this, [this](bool checked) {
+    if (checked) {
+      ui->browseBackgroundButton->setText(tr("Browse..."));
+      ui->browseBackgroundButton->setToolTip(tr("Select background image"));
+      ui->backgroundValueEdit->setPlaceholderText(tr("None"));
+      ui->backgroundValueEdit->setToolTip(tr("Path to background image file"));
+    }
+  });
+
+  // Background picker button - opens color dialog or file dialog based on radio selection
+  connect(ui->browseBackgroundButton, &QPushButton::clicked, this, [this]() {
+    if (ui->backgroundColorRadio->isChecked()) {
+      // Color picker
+      QColor currentColor = Qt::white;
+      QString currentValue = ui->backgroundValueEdit->text().trimmed();
+      if (!currentValue.isEmpty()) {
+        currentColor = QColor(currentValue);
+      }
+      QColor color = QColorDialog::getColor(currentColor, this, tr("Select Background Color"));
+      if (color.isValid()) {
+        ui->backgroundValueEdit->setText(color.name());
+      }
+    } else {
+      // Image file picker
+      QString currentPath = ui->backgroundValueEdit->text().trimmed();
+      QString startDir = currentPath.isEmpty() ? QDir::homePath() : QFileInfo(currentPath).absolutePath();
+      QString filePath = QFileDialog::getOpenFileName(
+          this, tr("Select Background Image"), startDir,
+          tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;All Files (*)"));
+      if (!filePath.isEmpty()) {
+        ui->backgroundValueEdit->setText(filePath);
+      }
+    }
+  });
+
+  // Primary color picker button
+  connect(ui->browsePrimaryColorButton, &QPushButton::clicked, this, [this]() {
+    QColor currentColor = Qt::gray;
+    QString currentValue = ui->primaryColorEdit->text().trimmed();
+    if (!currentValue.isEmpty() && QColor::isValidColorName(currentValue)) {
+      currentColor = QColor(currentValue);
+    }
+    QColor color = QColorDialog::getColor(currentColor, this, tr("Select Primary Color"));
+    if (color.isValid()) {
+      ui->primaryColorEdit->setText(color.name());
+    }
+  });
+
+  // Tile color picker button
+  connect(ui->browseTileColorButton, &QPushButton::clicked, this, [this]() {
+    QColor currentColor = Qt::gray;
+    QString currentValue = ui->tileColorEdit->text().trimmed();
+    if (!currentValue.isEmpty() && QColor::isValidColorName(currentValue)) {
+      currentColor = QColor(currentValue);
+    }
+    QColor color = QColorDialog::getColor(currentColor, this, tr("Select Tile Color"));
+    if (color.isValid()) {
+      ui->tileColorEdit->setText(color.name());
+    }
+  });
+
+  // Selection color picker button
+  connect(ui->browseSelectionColorButton, &QPushButton::clicked, this, [this]() {
+    QColor currentColor = Qt::gray;
+    QString currentValue = ui->selectionColorEdit->text().trimmed();
+    if (!currentValue.isEmpty() && QColor::isValidColorName(currentValue)) {
+      currentColor = QColor(currentValue);
+    }
+    QColor color = QColorDialog::getColor(currentColor, this, tr("Select Selection Color"));
+    if (color.isValid()) {
+      ui->selectionColorEdit->setText(color.name());
+    }
+  });
 }
 
 // Sets up signal/slot connections and ensures tree updates immediately after
@@ -905,6 +1016,41 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
       (ui->hideSubcollectionTitlesCheckBox)
           ? ui->hideSubcollectionTitlesCheckBox->isChecked()
           : config.hideSubcollectionTitles;
+
+  // Background settings
+  if (ui->backgroundImageRadio && ui->backgroundColorRadio) {
+    config.backgroundType = ui->backgroundImageRadio->isChecked()
+                                ? BackgroundType::Image
+                                : BackgroundType::Color;
+  }
+  if (ui->backgroundValueEdit) {
+    QString value = ui->backgroundValueEdit->text().trimmed();
+    if (config.backgroundType == BackgroundType::Image) {
+      config.backgroundImage = value;
+      // Clear color when switching to image mode
+      config.backgroundColor.clear();
+    } else {
+      config.backgroundColor = value;
+      // Clear image when switching to color mode
+      config.backgroundImage.clear();
+    }
+  }
+
+  // Primary color setting
+  config.primaryColor = (ui->primaryColorEdit)
+                            ? ui->primaryColorEdit->text().trimmed()
+                            : config.primaryColor;
+
+  // Tile color setting
+  config.tileColor = (ui->tileColorEdit)
+                         ? ui->tileColorEdit->text().trimmed()
+                         : config.tileColor;
+
+  // Selection color setting
+  config.selectionColor = (ui->selectionColorEdit)
+                              ? ui->selectionColorEdit->text().trimmed()
+                              : config.selectionColor;
+
   return config;
 }
 
@@ -1282,82 +1428,17 @@ void SettingsDialog::updateSidebarModeVisibility() {
   ui->sidebarModeComboBox->setVisible(true);
 }
 
-auto SettingsDialog::calculateMaxGridWidth() const -> int {
-  int viewportWidth = UIConstants::Viewport::DEFAULT_WIDTH;
-  if (QWidget *parentWindow = this->parentWidget()) {
-    auto *itemScrollArea =
-        parentWindow->findChild<QScrollArea *>("itemScrollArea");
-    if ((itemScrollArea) &&
-        (itemScrollArea->viewport())) {
-      viewportWidth = itemScrollArea->viewport()->width();
-      QScrollBar *vScrollBar = itemScrollArea->verticalScrollBar();
-      if ((vScrollBar) && vScrollBar->isVisible()) {
-        viewportWidth -= vScrollBar->width();
-      }
-    }
-  }
-  if (viewportWidth < UIConstants::Viewport::MIN_WIDTH) {
-    viewportWidth = UIConstants::Viewport::DEFAULT_WIDTH;
-  }
-
-  int itemWidth = (ui->itemWidthSpinBox)
-                      ? ui->itemWidthSpinBox->value()
-                      : originalCollection.itemWidth;
-  if (itemWidth <= 0) {
-    itemWidth = UIConstants::Item::DEFAULT_WIDTH;
-  }
-
-  int horizontalSpacing = originalCollection.horizontalSpacing;
-  int margins = UIConstants::Grid::MARGINS;
-  const int totalMargins = margins * 2;
-  const int stride = itemWidth + horizontalSpacing;
-  int itemsFit =
-      stride > 0 ? (viewportWidth - totalMargins + horizontalSpacing) / stride
-                 : UIConstants::Grid::MIN_WIDTH;
-  itemsFit = std::max(UIConstants::Grid::MIN_WIDTH, itemsFit);
-  itemsFit += 1;
-  return std::min(itemsFit, UIConstants::Grid::MAX_WIDTH);
-}
-
 void SettingsDialog::updateGridWidthLimits() {
   if (!ui->gridWidthSpinBox) {
     return;
   }
   int preservedValue = ui->gridWidthSpinBox->value();
-  int calculatedMax = calculateMaxGridWidth();
   ui->gridWidthSpinBox->setMaximum(UIConstants::Grid::MAX_WIDTH);
   ui->gridWidthSpinBox->setValue(preservedValue);
-  if (preservedValue > calculatedMax) {
-    ui->gridWidthSpinBox->setToolTip(
-        QString("Current: %1, Recommended max: %2, Absolute max: %3")
-            .arg(preservedValue)
-            .arg(calculatedMax)
-            .arg(UIConstants::Grid::MAX_WIDTH));
-  } else {
-    ui->gridWidthSpinBox->setToolTip(
-        QString("Items per row (Recommended max: %1, Absolute max: %2)")
-            .arg(calculatedMax)
-            .arg(UIConstants::Grid::MAX_WIDTH));
-  }
 }
 
 void SettingsDialog::onGridWidthChanged(int value) {
-  if (!ui->gridWidthSpinBox) {
-    return;
-  }
-  int maxWidth = calculateMaxGridWidth();
-  if (value > maxWidth) {
-    // Delay tooltip to avoid showing during rapid spin box changes
-    QTimer::singleShot(
-        UIConstants::Timing::MEDIUM_DELAY_MS, this, [this, maxWidth, value]() {
-          QToolTip::showText(
-              ui->gridWidthSpinBox->mapToGlobal(QPoint(0, 0)),
-              QString("Width %1 may overflow. Recommended max: %2.")
-                  .arg(value)
-                  .arg(maxWidth),
-              ui->gridWidthSpinBox, QRect(), UIConstants::Timing::TOOLTIP_DISPLAY_MS);
-        });
-  }
+  Q_UNUSED(value)
   checkForChanges();
   if (!m_isLoading &&
       currentCollectionIndex == originalCurrentCollectionIndex &&
@@ -1402,6 +1483,56 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->pixmapCacheSpinBox->setValue(m_generalSettings.pixmapCacheSizeMB);
     ui->pixmapCacheSpinBox->blockSignals(false);
   }
+  if (ui->keyboardSpeedSpinBox) {
+    ui->keyboardSpeedSpinBox->blockSignals(true);
+    ui->keyboardSpeedSpinBox->setValue(m_generalSettings.keyboardRepeatIntervalMs);
+    ui->keyboardSpeedSpinBox->blockSignals(false);
+  }
+  if (ui->keyboardRepeatDelaySpinBox) {
+    ui->keyboardRepeatDelaySpinBox->blockSignals(true);
+    ui->keyboardRepeatDelaySpinBox->setValue(m_generalSettings.keyboardRepeatDelayMs);
+    ui->keyboardRepeatDelaySpinBox->blockSignals(false);
+  }
+  if (ui->clickHoldDelaySpinBox) {
+    ui->clickHoldDelaySpinBox->blockSignals(true);
+    ui->clickHoldDelaySpinBox->setValue(m_generalSettings.clickHoldDelayMs);
+    ui->clickHoldDelaySpinBox->blockSignals(false);
+  }
+  if (ui->clickHoldRepeatIntervalSpinBox) {
+    ui->clickHoldRepeatIntervalSpinBox->blockSignals(true);
+    ui->clickHoldRepeatIntervalSpinBox->setValue(m_generalSettings.clickHoldRepeatIntervalMs);
+    ui->clickHoldRepeatIntervalSpinBox->blockSignals(false);
+  }
+  if (ui->mouseWheelSpeedSpinBox) {
+    ui->mouseWheelSpeedSpinBox->blockSignals(true);
+    ui->mouseWheelSpeedSpinBox->setValue(m_generalSettings.mouseWheelRows);
+    ui->mouseWheelSpeedSpinBox->blockSignals(false);
+  }
+  if (ui->scrollAnimationSpeedSpinBox) {
+    ui->scrollAnimationSpeedSpinBox->blockSignals(true);
+    ui->scrollAnimationSpeedSpinBox->setValue(m_generalSettings.scrollAnimationDurationMs);
+    ui->scrollAnimationSpeedSpinBox->blockSignals(false);
+  }
+  if (ui->titleSaturationSpinBox) {
+    ui->titleSaturationSpinBox->blockSignals(true);
+    ui->titleSaturationSpinBox->setValue(m_generalSettings.titleTintSaturation);
+    ui->titleSaturationSpinBox->blockSignals(false);
+  }
+  if (ui->titleLightnessSpinBox) {
+    ui->titleLightnessSpinBox->blockSignals(true);
+    ui->titleLightnessSpinBox->setValue(m_generalSettings.titleTintLightness);
+    ui->titleLightnessSpinBox->blockSignals(false);
+  }
+  if (ui->baseColorEdit) {
+    ui->baseColorEdit->blockSignals(true);
+    ui->baseColorEdit->setText(m_generalSettings.titleBaseColor);
+    ui->baseColorEdit->blockSignals(false);
+  }
+  if (ui->customFontEdit) {
+    ui->customFontEdit->blockSignals(true);
+    ui->customFontEdit->setText(m_generalSettings.customFontFamily);
+    ui->customFontEdit->blockSignals(false);
+  }
 }
 
 void SettingsDialog::saveGeneralSettingsFromUI() {
@@ -1421,9 +1552,69 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
       // Apply immediately (in KB)
       QPixmapCache::setCacheLimit(newCacheSize * 1024);
     }
+    if (ui->keyboardSpeedSpinBox) {
+      mainWindow->m_generalSettings.keyboardRepeatIntervalMs =
+          ui->keyboardSpeedSpinBox->value();
+    }
+    if (ui->keyboardRepeatDelaySpinBox) {
+      mainWindow->m_generalSettings.keyboardRepeatDelayMs =
+          ui->keyboardRepeatDelaySpinBox->value();
+    }
+    if (ui->clickHoldDelaySpinBox) {
+      mainWindow->m_generalSettings.clickHoldDelayMs =
+          ui->clickHoldDelaySpinBox->value();
+    }
+    if (ui->clickHoldRepeatIntervalSpinBox) {
+      mainWindow->m_generalSettings.clickHoldRepeatIntervalMs =
+          ui->clickHoldRepeatIntervalSpinBox->value();
+    }
+    if (ui->mouseWheelSpeedSpinBox) {
+      mainWindow->m_generalSettings.mouseWheelRows =
+          ui->mouseWheelSpeedSpinBox->value();
+    }
+    if (ui->scrollAnimationSpeedSpinBox) {
+      mainWindow->m_generalSettings.scrollAnimationDurationMs =
+          ui->scrollAnimationSpeedSpinBox->value();
+    }
+    if (ui->titleSaturationSpinBox) {
+      mainWindow->m_generalSettings.titleTintSaturation =
+          ui->titleSaturationSpinBox->value();
+      // Apply to ItemWidget static settings
+      ItemWidget::setTitleTintSaturation(ui->titleSaturationSpinBox->value());
+    }
+    if (ui->titleLightnessSpinBox) {
+      mainWindow->m_generalSettings.titleTintLightness =
+          ui->titleLightnessSpinBox->value();
+      // Apply to ItemWidget static settings
+      ItemWidget::setTitleTintLightness(ui->titleLightnessSpinBox->value());
+    }
+    if (ui->baseColorEdit) {
+      mainWindow->m_generalSettings.titleBaseColor =
+          ui->baseColorEdit->text().trimmed();
+      // Apply to ItemWidget static settings
+      ItemWidget::setTitleBaseColor(ui->baseColorEdit->text().trimmed());
+    }
+    if (ui->customFontEdit) {
+      mainWindow->m_generalSettings.customFontFamily =
+          ui->customFontEdit->text().trimmed();
+      // Apply to ItemWidget static settings
+      ItemWidget::setCustomFontFamily(ui->customFontEdit->text().trimmed());
+    }
     mainWindow->getSettingsManager()->saveGeneralSettings(
         mainWindow->m_generalSettings);
     m_generalSettings = mainWindow->m_generalSettings;
+    
+    // Refresh all visible widgets to apply text appearance changes immediately
+    ScrollManager *scrollManager = mainWindow->getScrollManager();
+    if (scrollManager) {
+      const auto &activeWidgets = scrollManager->getActiveWidgets();
+      for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd(); ++it) {
+        ItemWidget *widget = it.value();
+        if (widget) {
+          widget->applyTitleTint();
+        }
+      }
+    }
   }
 }
 
@@ -1696,6 +1887,37 @@ void SettingsDialog::loadCollectionToUI(int index) {
   }
   if (ui->cornerRadiusSpinBox) {
     ui->cornerRadiusSpinBox->setValue(config.cornerRadius);
+  }
+
+  // Background settings
+  if (ui->backgroundColorRadio && ui->backgroundImageRadio) {
+    if (config.backgroundType == BackgroundType::Image) {
+      ui->backgroundImageRadio->setChecked(true);
+    } else {
+      ui->backgroundColorRadio->setChecked(true);
+    }
+  }
+  if (ui->backgroundValueEdit) {
+    if (config.backgroundType == BackgroundType::Image) {
+      ui->backgroundValueEdit->setText(config.backgroundImage);
+    } else {
+      ui->backgroundValueEdit->setText(config.backgroundColor);
+    }
+  }
+
+  // Primary color setting
+  if (ui->primaryColorEdit) {
+    ui->primaryColorEdit->setText(config.primaryColor);
+  }
+
+  // Tile color setting
+  if (ui->tileColorEdit) {
+    ui->tileColorEdit->setText(config.tileColor);
+  }
+
+  // Selection color setting
+  if (ui->selectionColorEdit) {
+    ui->selectionColorEdit->setText(config.selectionColor);
   }
 
   updateParentCollectionComboBox(index);

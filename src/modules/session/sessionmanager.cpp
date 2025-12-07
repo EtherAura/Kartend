@@ -64,11 +64,11 @@ void SessionManager::readCollectionsData(const QJsonObject &root) {
 
     if (collObj.contains("itemCount")) {
       collectionNameItemCountCache[name] =
-          static_cast<qint64>(collObj["itemCount"].toDouble());
+          collObj["itemCount"].toVariant().toLongLong();
     }
     if (collObj.contains("itemRecursiveCount")) {
       collectionNameRecursiveCountCache[name] =
-          static_cast<qint64>(collObj["itemRecursiveCount"].toDouble());
+          collObj["itemRecursiveCount"].toVariant().toLongLong();
     }
     if (collObj.contains("lastSelected")) {
       QJsonObject lastSelObj = collObj["lastSelected"].toObject();
@@ -83,7 +83,7 @@ void SessionManager::readCollectionsData(const QJsonObject &root) {
 void SessionManager::readGlobalData(const QJsonObject &root) {
   if (root.contains("global")) {
     QMutexLocker locker(&m_mutex);
-    globalItemCount = static_cast<qint64>(root["global"].toDouble());
+    globalItemCount = root["global"].toVariant().toLongLong();
   }
 }
 

@@ -16,6 +16,8 @@ enum class HorizontalAlignment { Left = 0, Center = 1, Right = 2 };
 
 enum class SidebarMode { Overlay = 0, Expand = 1 };
 
+enum class BackgroundType { Color = 0, Image = 1 };
+
 namespace CollectionUtils {
 
 [[nodiscard]] inline QString alignmentToString(HorizontalAlignment alignment) {
@@ -70,6 +72,14 @@ struct CollectionConfig {
   int fontSize = UIConstants::Item::DEFAULT_FONT_SIZE;
   int cornerRadius = UIConstants::Item::DEFAULT_CORNER_RADIUS;
   
+  // Background settings
+  BackgroundType backgroundType = BackgroundType::Color;
+  QString backgroundColor;   // Background color (hex like #1a1a2e)
+  QString backgroundImage;    // Background image path
+  QString primaryColor;       // Primary UI color for toolbar, menubar, search bar
+  QString tileColor;          // Color for item tiles/placeholders (if blank, uses default)
+  QString selectionColor;     // Color for selection rectangle and glide overlay border
+  
   // Folder browsing options
   bool includeContentSubfolders = false;   // Show subfolders as virtual navigable folders
   bool includeArtworkSubfolders = false;   // Match artwork from subfolders
@@ -85,12 +95,42 @@ struct CollectionConfig {
         horizontalAlignment(HorizontalAlignment::Center) {}
 
   bool operator==(const CollectionConfig &other) const {
-    return name == other.name && launcherPath == other.launcherPath &&
+    return name == other.name && 
+           launcherPath == other.launcherPath &&
            corePath == other.corePath &&
            launchParameters == other.launchParameters &&
            mediaDirectory == other.mediaDirectory &&
            artworkDirectory == other.artworkDirectory &&
-           horizontalAlignment == other.horizontalAlignment;
+           collectionIcon == other.collectionIcon &&
+           extensions == other.extensions &&
+           gridWidth == other.gridWidth &&
+           sidebarVisible == other.sidebarVisible &&
+           parentCollectionIndex == other.parentCollectionIndex &&
+           isSubcollection == other.isSubcollection &&
+           showAllSubcollectionItems == other.showAllSubcollectionItems &&
+           hideTitles == other.hideTitles &&
+           hideSubcollectionTitles == other.hideSubcollectionTitles &&
+           horizontalAlignment == other.horizontalAlignment &&
+           sidebarMode == other.sidebarMode &&
+           horizontalSpacing == other.horizontalSpacing &&
+           verticalSpacing == other.verticalSpacing &&
+           hideHorizontalScrollbar == other.hideHorizontalScrollbar &&
+           hideVerticalScrollbar == other.hideVerticalScrollbar &&
+           itemWidth == other.itemWidth &&
+           itemHeight == other.itemHeight &&
+           fontSize == other.fontSize &&
+           cornerRadius == other.cornerRadius &&
+           backgroundType == other.backgroundType &&
+           backgroundColor == other.backgroundColor &&
+           backgroundImage == other.backgroundImage &&
+           primaryColor == other.primaryColor &&
+           tileColor == other.tileColor &&
+           selectionColor == other.selectionColor &&
+           includeContentSubfolders == other.includeContentSubfolders &&
+           includeArtworkSubfolders == other.includeArtworkSubfolders &&
+           showAllSubfolderItems == other.showAllSubfolderItems &&
+           hideSubfolderTitles == other.hideSubfolderTitles &&
+           showHiddenFolders == other.showHiddenFolders;
   }
 
   // Validation methods
@@ -167,6 +207,17 @@ struct GeneralSettings {
   bool rememberSelection = false;
   bool wrapNavigation = false;
   int pixmapCacheSizeMB = 50; // Default 50MB, user configurable
+  int keyboardRepeatIntervalMs = 260;      // Keyboard repeat interval in ms
+  int keyboardRepeatDelayMs = 260;         // Initial delay before keyboard repeat starts
+  int clickHoldDelayMs = 500;              // Click-hold activation delay in ms
+  int clickHoldRepeatIntervalMs = 320;     // Interval between click-hold repeat steps
+  int mouseWheelRows = 1;                  // Rows to scroll per wheel step
+  int scrollAnimationDurationMs = 1500;    // Scroll animation duration in ms
+  // Text appearance settings
+  int titleTintSaturation = 180;           // Title text saturation (0-255)
+  int titleTintLightness = 60;             // Title text lightness (0-255)
+  QString titleBaseColor;                  // Base color for title text (empty = use highlight)
+  QString customFontFamily;                // Custom font family (empty = system default)
   QHash<int, int> lastSelectedItems;
   GeneralSettings() = default;
 };

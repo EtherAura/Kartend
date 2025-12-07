@@ -30,6 +30,7 @@ SETUP_GETTER_DEF_SAME(MouseManagerSetup, QScrollArea*, ItemScrollArea, itemScrol
 SETUP_GETTER_DEF_SAME(MouseManagerSetup, QWidget*, GridContainer, gridContainer)
 SETUP_GETTER_DEF_SAME(MouseManagerSetup, const QVector<CollectionConfig>*, Collections, collections)
 SETUP_GETTER_DEF_SAME(MouseManagerSetup, const int*, CurrentCollectionIndex, currentCollectionIndex)
+SETUP_GETTER_DEF_SAME(MouseManagerSetup, GeneralSettings*, GeneralSettings, generalSettings)
 SETUP_GETTER_DEF_CTX_ONLY(MouseManagerSetup, InteractionStateHolder*, InteractionState, interactionState)
 
 MouseManager::MouseManager(QObject *parent) : QObject(parent) {}
@@ -51,6 +52,7 @@ void MouseManager::setupReferences(const MouseManagerSetup &setup) {
   m_gridContainer = setup.getGridContainer();
   m_collections = setup.getCollections();
   m_currentCollectionIndex = setup.getCurrentCollectionIndex();
+  m_generalSettings = setup.getGeneralSettings();
 }
 
 // --- Left Mouse Button Tracking ---
@@ -107,7 +109,8 @@ void MouseManager::startClickHoldTimer(const QPoint &clickPos,
     connect(m_clickHoldTimer, &QTimer::timeout, this,
             &MouseManager::onClickHoldTimerTimeout);
   }
-  m_clickHoldTimer->start(UIConstants::Mouse::CLICK_HOLD_START_MS);
+  int delay = m_generalSettings ? m_generalSettings->clickHoldDelayMs : 500;
+  m_clickHoldTimer->start(delay);
 }
 
 void MouseManager::stopClickHoldTimer() {
@@ -210,7 +213,8 @@ void MouseManager::startMouseHoldScrolling(const QPoint &clickPos,
   m_mouseHoldDirection = direction;
   m_mouseHoldScrolling = true;
 
-  m_mouseHoldTimer->start(UIConstants::Keyboard::BASE_INTERVAL_MS);
+  int interval = m_generalSettings ? m_generalSettings->clickHoldRepeatIntervalMs : 320;
+  m_mouseHoldTimer->start(interval);
 
   // Signal that hold scrolling started
   if (m_state) {
@@ -255,7 +259,8 @@ bool MouseManager::tryStartHorizontalClickHold(int totalItems,
   m_mouseHoldScrolling = true;
   m_clickHoldHorizontalEligible = false;
 
-  m_mouseHoldTimer->start(UIConstants::Mouse::CLICK_HOLD_HORIZONTAL_INTERVAL_MS);
+  int interval = m_generalSettings ? m_generalSettings->clickHoldRepeatIntervalMs : 320;
+  m_mouseHoldTimer->start(interval);
 
   // Signal properties
   if (m_state) {

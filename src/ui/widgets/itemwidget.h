@@ -51,6 +51,7 @@ public:
   void setCornerRadius(int radius);
   int m_itemWidth;
   int m_itemHeight;
+  int m_artworkSize = 0; // Computed artwork size for triangle indicator positioning
   int m_fontSize = 12; // Default font size
   int m_cornerRadius = 0; // Corner radius for artwork clipping
   bool m_hideTitles = false;
@@ -66,6 +67,22 @@ public:
   void applyTitleTint();
   static QColor titleTint();
   QColor m_titleTintColor;  // Cached tint color for custom painting
+
+  // Static configuration for title appearance (set from GeneralSettings)
+  static void setTitleTintSaturation(int saturation);
+  static void setTitleTintLightness(int lightness);
+  static void setTitleBaseColor(const QString &hexColor);
+  static void setCustomFontFamily(const QString &fontFamily);
+  static void setPrimaryColor(const QString &hexColor);
+  static void setTileColor(const QString &hexColor);
+  static void setSelectionColor(const QString &hexColor);
+  static int s_titleTintSaturation;
+  static int s_titleTintLightness;
+  static QString s_titleBaseColor;
+  static QString s_customFontFamily;
+  static QString s_primaryColor;
+  static QString s_tileColor;
+  static QString s_selectionColor;
 
   void mousePressEvent(QMouseEvent *event) override;
 

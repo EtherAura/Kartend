@@ -101,7 +101,7 @@ auto detectChanges(
     bool &alignmentChangedForView, bool &spacingChangedForView,
     bool &scrollbarChangedForView, bool &sidebarModeChangedForView,
     bool &titleChangedForView, bool &fontSizeChangedForView,
-    bool &hideTitlesChangedForView) -> bool;
+    bool &hideTitlesChangedForView, bool &appearanceChangedForView) -> bool;
 
 } // namespace
 
@@ -193,6 +193,15 @@ void SettingsManager::loadCollections(
     config.itemHeight = settings.value("itemHeight", UIConstants::Item::DEFAULT_HEIGHT).toInt();
     config.fontSize = settings.value("fontSize", UIConstants::Item::DEFAULT_FONT_SIZE).toInt();
     config.cornerRadius = settings.value("cornerRadius", UIConstants::Item::DEFAULT_CORNER_RADIUS).toInt();
+    
+    // Background settings
+    QString bgType = settings.value("backgroundType", "color").toString().toLower();
+    config.backgroundType = (bgType == "image") ? BackgroundType::Image : BackgroundType::Color;
+    config.backgroundColor = settings.value("backgroundColor").toString();
+    config.backgroundImage = settings.value("backgroundImage").toString();
+    config.primaryColor = settings.value("primaryColor").toString();
+    config.tileColor = settings.value("tileColor").toString();
+    config.selectionColor = settings.value("selectionColor").toString();
 
     // Validate and clamp numeric values to acceptable ranges
     config.clampValues();
@@ -278,6 +287,12 @@ void SettingsManager::saveCollections(
     settings.setValue("itemHeight", c.itemHeight);
     settings.setValue("fontSize", c.fontSize);
     settings.setValue("cornerRadius", c.cornerRadius);
+    settings.setValue("backgroundType", (c.backgroundType == BackgroundType::Image) ? "image" : "color");
+    settings.setValue("backgroundColor", c.backgroundColor);
+    settings.setValue("backgroundImage", c.backgroundImage);
+    settings.setValue("primaryColor", c.primaryColor);
+    settings.setValue("tileColor", c.tileColor);
+    settings.setValue("selectionColor", c.selectionColor);
     settings.endGroup();
   }
   settings.sync();
@@ -330,12 +345,13 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   bool titleChangedForView = false;
   bool fontSizeChangedForView = false;
   bool hideTitlesChangedForView = false;
+  bool appearanceChangedForView = false;
 
   hasChanges = detectChanges(
       newCollections, originalCollections, viewingCollectionIndex, needsReload,
       gridWidthChangedForView, alignmentChangedForView, spacingChangedForView,
       scrollbarChangedForView, sidebarModeChangedForView, titleChangedForView,
-      fontSizeChangedForView, hideTitlesChangedForView);
+      fontSizeChangedForView, hideTitlesChangedForView, appearanceChangedForView);
 
   if (!hasChanges) {
     return;
@@ -373,6 +389,12 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
     }
   }
 
+  // Always apply appearance settings (colors) after any changes
+  if (navigationManager && resolvedCollectionIndex >= 0) {
+    navigationManager->applyBackgroundForCollection(resolvedCollectionIndex);
+    navigationManager->applyPrimaryColorForCollection(resolvedCollectionIndex);
+  }
+
   if (needsReload) {
     handleReloadRequired(collections, newCollections, originalCollections,
                          viewingCollectionIndex, sidebarManager,
@@ -386,6 +408,11 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
                         fontSizeChangedForView, hideTitlesChangedForView,
                         sidebarManager, scrollManager, m_artworkManager,
                         currentCollectionIndex);
+    
+    // If only appearance changed, still refresh widgets to show new colors
+    if (appearanceChangedForView && scrollManager) {
+      scrollManager->recreateLayout();
+    }
   }
 }
 
@@ -428,7 +455,8 @@ void updateViewingFlags(const CollectionConfig &configA,
                         bool &gridWidthChanged, bool &alignmentChanged,
                         bool &spacingChanged, bool &scrollbarChanged,
                         bool &sidebarModeChanged, bool &titleChanged,
-                        bool &fontSizeChanged, bool &hideTitlesChanged) {
+                        bool &fontSizeChanged, bool &hideTitlesChanged,
+                        bool &appearanceChanged) {
   if (configA.gridWidth != configB.gridWidth) {
     hasChanges = true;
     gridWidthChanged = true;
@@ -468,6 +496,16 @@ void updateViewingFlags(const CollectionConfig &configA,
   }
   if (configA.name != configB.name) {
     titleChanged = true;
+  }
+  // Appearance changes (colors)
+  if (configA.primaryColor != configB.primaryColor ||
+      configA.tileColor != configB.tileColor ||
+      configA.selectionColor != configB.selectionColor ||
+      configA.backgroundColor != configB.backgroundColor ||
+      configA.backgroundImage != configB.backgroundImage ||
+      configA.backgroundType != configB.backgroundType) {
+    hasChanges = true;
+    appearanceChanged = true;
   }
 }
 
@@ -569,7 +607,7 @@ auto detectChanges(
     bool &alignmentChangedForView, bool &spacingChangedForView,
     bool &scrollbarChangedForView, bool &sidebarModeChangedForView,
     bool &titleChangedForView, bool &fontSizeChangedForView,
-    bool &hideTitlesChangedForView) -> bool {
+    bool &hideTitlesChangedForView, bool &appearanceChangedForView) -> bool {
   bool hasChanges = false;
   if (newCollections.size() != originalCollections.size()) {
     hasChanges = true;
@@ -591,7 +629,8 @@ auto detectChanges(
                          gridWidthChangedForView, alignmentChangedForView,
                          spacingChangedForView, scrollbarChangedForView,
                          sidebarModeChangedForView, titleChangedForView,
-                         fontSizeChangedForView, hideTitlesChangedForView);
+                         fontSizeChangedForView, hideTitlesChangedForView,
+                         appearanceChangedForView);
     }
   }
   return hasChanges;
@@ -687,6 +726,18 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.pixmapCacheSizeMB = s.value("pixmapCacheSizeMB", 50).toInt();
   // Clamp to reasonable range: 10MB - 500MB
   settings.pixmapCacheSizeMB = qBound(10, settings.pixmapCacheSizeMB, 500);
+  // Load timing settings (direct ms/count values)
+  settings.keyboardRepeatIntervalMs = s.value("keyboardRepeatIntervalMs", 260).toInt();
+  settings.keyboardRepeatDelayMs = s.value("keyboardRepeatDelayMs", 260).toInt();
+  settings.clickHoldDelayMs = s.value("clickHoldDelayMs", 500).toInt();
+  settings.clickHoldRepeatIntervalMs = s.value("clickHoldRepeatIntervalMs", 320).toInt();
+  settings.mouseWheelRows = s.value("mouseWheelRows", 1).toInt();
+  settings.scrollAnimationDurationMs = s.value("scrollAnimationDurationMs", 1500).toInt();
+  // Load text appearance settings
+  settings.titleTintSaturation = s.value("titleTintSaturation", 180).toInt();
+  settings.titleTintLightness = s.value("titleTintLightness", 60).toInt();
+  settings.titleBaseColor = s.value("titleBaseColor", QString()).toString();
+  settings.customFontFamily = s.value("customFontFamily", QString()).toString();
   s.endGroup();
 
   settings.lastSelectedItems.clear();
@@ -698,12 +749,32 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.rememberSelection = settings.rememberSelection;
   m_generalSettings.wrapNavigation = settings.wrapNavigation;
   m_generalSettings.pixmapCacheSizeMB = qBound(10, settings.pixmapCacheSizeMB, 500);
+  m_generalSettings.keyboardRepeatIntervalMs = settings.keyboardRepeatIntervalMs;
+  m_generalSettings.keyboardRepeatDelayMs = settings.keyboardRepeatDelayMs;
+  m_generalSettings.clickHoldDelayMs = settings.clickHoldDelayMs;
+  m_generalSettings.clickHoldRepeatIntervalMs = settings.clickHoldRepeatIntervalMs;
+  m_generalSettings.mouseWheelRows = settings.mouseWheelRows;
+  m_generalSettings.scrollAnimationDurationMs = settings.scrollAnimationDurationMs;
+  m_generalSettings.titleTintSaturation = settings.titleTintSaturation;
+  m_generalSettings.titleTintLightness = settings.titleTintLightness;
+  m_generalSettings.titleBaseColor = settings.titleBaseColor;
+  m_generalSettings.customFontFamily = settings.customFontFamily;
 
   QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   s.beginGroup("General");
   s.setValue("rememberSelection", m_generalSettings.rememberSelection);
   s.setValue("wrapNavigation", m_generalSettings.wrapNavigation);
   s.setValue("pixmapCacheSizeMB", m_generalSettings.pixmapCacheSizeMB);
+  s.setValue("keyboardRepeatIntervalMs", m_generalSettings.keyboardRepeatIntervalMs);
+  s.setValue("keyboardRepeatDelayMs", m_generalSettings.keyboardRepeatDelayMs);
+  s.setValue("clickHoldDelayMs", m_generalSettings.clickHoldDelayMs);
+  s.setValue("clickHoldRepeatIntervalMs", m_generalSettings.clickHoldRepeatIntervalMs);
+  s.setValue("mouseWheelRows", m_generalSettings.mouseWheelRows);
+  s.setValue("scrollAnimationDurationMs", m_generalSettings.scrollAnimationDurationMs);
+  s.setValue("titleTintSaturation", m_generalSettings.titleTintSaturation);
+  s.setValue("titleTintLightness", m_generalSettings.titleTintLightness);
+  s.setValue("titleBaseColor", m_generalSettings.titleBaseColor);
+  s.setValue("customFontFamily", m_generalSettings.customFontFamily);
   s.endGroup();
   s.sync();
 }

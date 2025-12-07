@@ -82,6 +82,16 @@ void QueryManager::initDatabase() {
         .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
   }
+  // Use NORMAL synchronous mode for better write performance while maintaining
+  // data safety - WAL mode already provides crash recovery guarantees
+  if (!query.exec("PRAGMA synchronous = NORMAL")) {
+    auto err = ErrorContext::warning(
+        ErrorCode::DatabaseQueryFailed,
+        "Failed to set synchronous mode",
+        "QueryManager::initDatabase")
+        .withDetails(query.lastError().text());
+    ErrorUtils::logError(err);
+  }
   // Tables are created by the main DatabaseManager or assumed to exist.
   // But for safety, we can ensure they exist here too, or rely on main thread init.
   // Since main thread runs initDatabase first, we should be fine.

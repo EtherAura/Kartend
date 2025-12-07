@@ -18,6 +18,7 @@ struct ApplicationContext;
 /// Setup struct for AnimationManager dependencies
 struct AnimationManagerSetup {
   const ApplicationContext *ctx = nullptr;
+  const GeneralSettings *generalSettings = nullptr;
 
   QScrollArea *itemScrollArea = nullptr;
   ScrollManager *scrollManager = nullptr;
@@ -96,11 +97,12 @@ public:
   static void stopArrowKeyAnimationIfRunning(QScrollBar *scrollBar);
 
   // --- Duration Calculation ---
-  /// Computes animation duration based on distance, item dimensions, and repeat state
+  /// Computes animation duration based on distance, item dimensions, repeat state, and base duration
   [[nodiscard]] static int computeVerticalCenterDuration(int distance,
                                                          int itemHeight,
                                                          int verticalSpacing,
-                                                         bool repeatActive);
+                                                         bool repeatActive,
+                                                         int durationMs = 1500);
 
   // --- Target Calculation ---
   /// Computes target Y position for centering an item
@@ -161,6 +163,7 @@ private slots:
   void onHScrollAnimationFinished();
 
 private:
+  const GeneralSettings *m_generalSettings = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
   ScrollManager *m_scrollManager = nullptr;
   ArtworkManager *m_artworkManager = nullptr;

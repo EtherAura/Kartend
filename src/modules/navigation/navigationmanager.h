@@ -14,6 +14,7 @@
 QT_BEGIN_NAMESPACE
 class QLabel;
 class QLineEdit;
+class QMenuBar;
 class QScrollArea;
 class QStackedWidget;
 QT_END_NAMESPACE
@@ -56,7 +57,9 @@ struct NavigationManagerSetup {
   GeneralSettings *generalSettings = nullptr;
   QLineEdit *searchBar = nullptr;
   QWidget *itemsPage = nullptr;
+  QWidget *itemsTopBar = nullptr;
   QStackedWidget *stackedWidget = nullptr;
+  QMenuBar *menubar = nullptr;
   QLabel *loadingLabel = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QWidget *gridContainer = nullptr;
@@ -78,7 +81,9 @@ struct NavigationManagerSetup {
   SETUP_GETTER_INLINE_SAME(QScrollArea*, ItemScrollArea, itemScrollArea)
   SETUP_GETTER_INLINE_SAME(QWidget*, GridContainer, gridContainer)
   SETUP_GETTER_INLINE_SAME(QWidget*, ItemsPage, itemsPage)
+  SETUP_GETTER_INLINE_SAME(QWidget*, ItemsTopBar, itemsTopBar)
   SETUP_GETTER_INLINE_SAME(QStackedWidget*, StackedWidget, stackedWidget)
+  SETUP_GETTER_INLINE_SAME(QMenuBar*, Menubar, menubar)
   SETUP_GETTER_INLINE_SAME(QLineEdit*, SearchBar, searchBar)
   SETUP_GETTER_INLINE_SAME(QLabel*, LoadingLabel, loadingLabel)
   SETUP_GETTER_INLINE_SAME(MetadataSidebar*, Sidebar, sidebar)
@@ -129,6 +134,10 @@ public slots:
   void fetchItemsRange(int offset, int limit);
   void onMediaLibraryError(const QString &error);
   void onViewportChanged();
+  
+  // Appearance methods - can be called from SettingsManager after dialog closes
+  void applyBackgroundForCollection(int collectionIndex);
+  void applyPrimaryColorForCollection(int collectionIndex);
 
 private:
   // Helper methods for navigateWithSharedItems
@@ -158,7 +167,9 @@ private:
   GeneralSettings *m_generalSettings = nullptr;
   QLineEdit *m_searchBar = nullptr;
   QWidget *m_itemsPage = nullptr;
+  QWidget *m_itemsTopBar = nullptr;
   QStackedWidget *m_stackedWidget = nullptr;
+  QMenuBar *m_menubar = nullptr;
   QLabel *m_loadingLabel = nullptr;
   QScrollArea *m_itemScrollArea = nullptr;
   QWidget *m_gridContainer = nullptr;

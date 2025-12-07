@@ -12,6 +12,7 @@ class QWidget;
 class QLineEdit;
 class QPushButton;
 class QLabel;
+class QMenuBar;
 QT_END_NAMESPACE
 
 class MetadataSidebar;
@@ -66,7 +67,9 @@ struct ApplicationContext {
   QScrollArea *itemScrollArea = nullptr;
   QStackedWidget *stackedWidget = nullptr;
   QWidget *itemsPage = nullptr;
+  QWidget *itemsTopBar = nullptr;
   QWidget *gridContainer = nullptr;
+  QMenuBar *menubar = nullptr;
   QLineEdit *searchBar = nullptr;
   QPushButton *searchModeButton = nullptr;
   MetadataSidebar *sidebar = nullptr;

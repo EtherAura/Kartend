@@ -7,7 +7,7 @@
 
 WidgetPoolManager::WidgetPoolManager(QObject *parent) : QObject(parent) {}
 
-WidgetPoolManager::~WidgetPoolManager() { clear(); }
+WidgetPoolManager::~WidgetPoolManager() { clearAndDelete(); }
 
 void WidgetPoolManager::setWidgetParent(QWidget *parent) {
   m_widgetParent = parent;
@@ -52,9 +52,22 @@ void WidgetPoolManager::release(ItemWidget *widget) {
 
 void WidgetPoolManager::clear() {
   logMetrics();  // Log final metrics before clearing
+  // Don't delete widgets - just clear the pool list.
+  // Caller is responsible for widget lifetime.
+  m_pool.clear();
+}
+
+void WidgetPoolManager::clearAndDelete() {
+  logMetrics();  // Log final metrics before clearing
+  // Explicitly delete all pooled widgets - use this during cleanup
+  // when widgets need to be destroyed before their parent container
   for (ItemWidget *widget : m_pool) {
     if (widget) {
-      widget->deleteLater();
+      // Safety check: only delete if widget still has a valid parent
+      // This prevents double-delete if widget was already destroyed elsewhere
+      if (widget->parent()) {
+        delete widget;
+      }
     }
   }
   m_pool.clear();
@@ -63,6 +76,22 @@ void WidgetPoolManager::clear() {
 void WidgetPoolManager::setVisibleMetrics(int visibleRows, int itemsPerRow) {
   m_visibleRows = visibleRows;
   m_itemsPerRow = itemsPerRow;
+}
+
+void WidgetPoolManager::prewarm() {
+  if (!m_widgetParent) {
+    return;
+  }
+  
+  int targetSize = calculateOptimalSize();
+  int toCreate = targetSize - m_pool.size();
+  
+  // Pre-allocate widgets up to optimal pool size
+  for (int i = 0; i < toCreate; ++i) {
+    auto *widget = new ItemWidget(m_widgetParent);
+    widget->hide();
+    m_pool.append(widget);
+  }
 }
 
 auto WidgetPoolManager::calculateOptimalSize() const -> int {
