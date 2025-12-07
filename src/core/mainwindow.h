@@ -3,7 +3,6 @@
 
 #include "applicationcontext.h"
 #include "collectionutils.h"
-#include "interactionmanager.h"
 #include <QHash>
 #include <QList>
 #include <QMainWindow>
@@ -29,6 +28,7 @@ class CacheManager;
 class InteractionManager;
 class DatabaseManager;
 class NavigationManager;
+class SessionManager;
 class SettingsManager;
 class SidebarManager;
 class ScrollManager;
