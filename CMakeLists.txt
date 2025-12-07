@@ -105,6 +105,7 @@ set(HEADERS
   ${SRC_DIR}/modules/launch/launchmanager.h
   ${SRC_DIR}/modules/mouse/mousemanager.h
   ${SRC_DIR}/modules/navigation/navigationmanager.h
+  ${SRC_DIR}/modules/navigation/navigationstackmanager.h
   ${SRC_DIR}/modules/overlay/selectionoverlaymanager.h
   ${SRC_DIR}/modules/query/querymanager.h
   ${SRC_DIR}/modules/restore/selectionrestoremanager.h

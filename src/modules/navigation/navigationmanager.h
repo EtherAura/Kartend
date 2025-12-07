@@ -30,6 +30,7 @@ class ArtworkManager;
 class MetadataSidebar;
 class SelectionRestoreManager;
 class LoadingOverlay;
+class NavigationStackManager;
 
 /**
  * @brief Setup struct for NavigationManager dependencies.
@@ -102,15 +103,15 @@ class NavigationManager : public QObject {
 public:
   explicit NavigationManager(QObject *parent = nullptr);
   ~NavigationManager() override;
-  [[nodiscard]] bool isNavigationInProgress() const { return m_navigationInProgress; }
+  [[nodiscard]] bool isNavigationInProgress() const;
+
+  // Navigation stack manager for hierarchy traversal
+  [[nodiscard]] NavigationStackManager *stackManager() const { return m_stackManager.get(); }
 
 private:
-  bool m_navigationInProgress = false;
+  std::unique_ptr<NavigationStackManager> m_stackManager;
 
 public:
-
-  QList<int> m_navigationStack;
-  int m_navigationDepth = 0;
 
   void restoreSelectionForCurrentCollection();
   void setupReferences(const NavigationManagerSetup &setup);

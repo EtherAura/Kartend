@@ -8,6 +8,7 @@
 #include "itemwidget.h"
 #include "loadingoverlay.h"
 #include "metadatasidebar.h"
+#include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
 #include "sessionmanager.h"
@@ -36,6 +37,7 @@ Q_LOGGING_CATEGORY(lcNavigationManager, "kartend.navigationmanager")
 
 NavigationManager::NavigationManager(QObject *parent)
     : QObject(parent),
+      m_stackManager(std::make_unique<NavigationStackManager>(this)),
       m_selectionRestoreManager(std::make_unique<SelectionRestoreManager>(this)) {}
 
 void NavigationManager::setupReferences(
@@ -84,6 +86,10 @@ void NavigationManager::setupReferences(
 }
 
 NavigationManager::~NavigationManager() = default;
+
+bool NavigationManager::isNavigationInProgress() const {
+  return m_stackManager && m_stackManager->isInProgress();
+}
 
 // Navigates to a subcollection using the shared parent view
 void NavigationManager::navigateWithSharedItems(int collectionIndex) {
@@ -675,10 +681,8 @@ auto NavigationManager::scheduleNavigationReturn(int targetCollectionIndex,
 
 // Handles navigation when the navigation stack is not empty
 auto NavigationManager::handleNavigationStackPop() -> void {
-  int targetCollectionIndex = m_navigationStack.takeLast();
+  int targetCollectionIndex = m_stackManager->pop();
   int previousIndex = (*m_currentCollectionIndex);
-  m_navigationDepth =
-      qMax(0, m_navigationDepth - 1);
 
   performNavigationStackCleanup();
 
@@ -698,7 +702,7 @@ auto NavigationManager::handleNavigationStackPop() -> void {
 
 // Handles navigation fallback when the navigation stack is empty
 auto NavigationManager::handleNavigationFallback() -> void {
-  m_navigationDepth = 0;
+  m_stackManager->clear();  // Ensure depth is reset
   int previousIndex = (*m_currentCollectionIndex);
 
   int fallbackIndex = (*m_currentCollectionIndex);
@@ -746,7 +750,7 @@ void NavigationManager::goBackToCollections() {
 
   persistCurrentSelection();
 
-  if (!m_navigationStack.isEmpty()) {
+  if (!m_stackManager->isEmpty()) {
     handleNavigationStackPop();
   } else {
     handleNavigationFallback();
@@ -754,8 +758,7 @@ void NavigationManager::goBackToCollections() {
 }
 
 void NavigationManager::onCollectionSelected(int collectionIndex) {
-  m_navigationStack.clear();
-  m_navigationDepth = 0;
+  m_stackManager->clear();
   showCollectionItems(collectionIndex);
 }
 
@@ -1254,9 +1257,7 @@ void NavigationManager::onSubcollectionEntered(int subcollectionIndex) {
     if ((*m_currentCollectionIndex) >= 0 &&
         (*m_currentCollectionIndex) <
             (*m_collections).size()) {
-      m_navigationStack.append(
-          (*m_currentCollectionIndex));
-      m_navigationDepth++;
+      m_stackManager->push(*m_currentCollectionIndex);
     }
 
     m_settingsManager->setLastSelectedItem(subcollectionIndex,
@@ -1264,11 +1265,8 @@ void NavigationManager::onSubcollectionEntered(int subcollectionIndex) {
 
     bool success = showCollectionItems(subcollectionIndex);
     if (!success) {
-      if (!m_navigationStack.isEmpty()) {
-        m_navigationStack.removeLast();
-      }
-      m_navigationDepth =
-          qMax(0, m_navigationDepth - 1);
+      // Undo the push if navigation failed
+      (void)m_stackManager->pop();
       return;
     }
 

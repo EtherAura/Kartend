@@ -35,6 +35,7 @@
 #include "itemwidget.h"
 #include "metadatasidebar.h"
 #include "navigationmanager.h"
+#include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
@@ -882,8 +883,7 @@ auto InteractionManager::handleEnterOnSubcollection(int currentSelection,
   if (m_navigationManager) {
     if (*m_currentCollectionIndex >= 0 &&
         *m_currentCollectionIndex < m_collections->size()) {
-      m_navigationManager->m_navigationStack.append(*m_currentCollectionIndex);
-      m_navigationManager->m_navigationDepth++;
+      m_navigationManager->stackManager()->push(*m_currentCollectionIndex);
     }
     clearSelectionAndFocus();
     if (m_sidebarManager) {
@@ -891,11 +891,8 @@ auto InteractionManager::handleEnterOnSubcollection(int currentSelection,
     }
     const bool success = m_navigationManager->showCollectionItems(subIdx);
     if (!success) {
-      if (!m_navigationManager->m_navigationStack.isEmpty()) {
-        m_navigationManager->m_navigationStack.removeLast();
-      }
-      m_navigationManager->m_navigationDepth =
-          qMax(0, m_navigationManager->m_navigationDepth - 1);
+      // Undo the push if navigation failed
+      (void)m_navigationManager->stackManager()->pop();
       selectItemByIndex(currentSelection, true);
       if (m_itemsPage) {
         m_itemsPage->setFocus();
