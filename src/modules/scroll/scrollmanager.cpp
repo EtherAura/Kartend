@@ -13,6 +13,7 @@
 #include "presearchstatemanager.h"
 #include "scrolldatamanager.h"
 #include "scrolleventhandler.h"
+#include "selectionstatetracker.h"
 #include "selectioncoordinator.h"
 #include "selectionoverlaymanager.h"
 #include "timerutils.h"
@@ -58,18 +59,17 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   connect(m_overlayManager.get(), &SelectionOverlayManager::animationFinished, this,
           [this]() {
             // Update widget selection states when animation finishes
-            if (m_committedSelectedIndex >= 0 &&
-                m_committedSelectedIndex != m_lastSelectedIndex) {
+            if (m_selectionState->needsCommitUpdate(m_selectionState->lastSelectedIndex())) {
               if (auto *prevSel =
-                      m_activeWidgets.value(m_committedSelectedIndex, nullptr)) {
+                      m_activeWidgets.value(m_selectionState->committedSelectedIndex(), nullptr)) {
                 prevSel->setSelected(false);
               }
             }
             if (auto *newSel =
-                    m_activeWidgets.value(m_lastSelectedIndex, nullptr)) {
+                    m_activeWidgets.value(m_selectionState->lastSelectedIndex(), nullptr)) {
               newSel->setSelected(true);
             }
-            m_committedSelectedIndex = m_lastSelectedIndex;
+            m_selectionState->commitSelection(m_selectionState->lastSelectedIndex());
 
             // Hide overlay if not in force-visible mode
             if (!m_overlayManager->shouldKeepVisible()) {
@@ -115,6 +115,9 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
 
   // Pre-search state manager for fast search result restoration
   m_preSearchStateManager = std::make_unique<PreSearchStateManager>(this);
+
+  // Selection state tracker for selection indices, direction, and row
+  m_selectionState = std::make_unique<SelectionStateTracker>();
 
   // Throttle timer - only fires once per interval, ignores subsequent triggers
   m_scrollTimer = new QTimer(this);
@@ -319,9 +322,7 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
 
   cleanup();
 
-  m_lastSelectedIndex = -1;
-  m_committedSelectedIndex = -1;
-  m_lastSelectedRow = -1;
+  m_selectionState->reset();
 
   m_context = context;
   
@@ -543,7 +544,7 @@ void ScrollManager::updateVirtualView() {
   updateArtworkIfAllowed();
 
   if (m_overlayManager) {
-    if (m_overlayManager->isForceVisible() && m_lastSelectedIndex >= 0) {
+    if (m_overlayManager->isForceVisible() && m_selectionState->hasSelection()) {
       refreshSelectionOverlayState();
     }
     m_overlayManager->raise();
@@ -630,7 +631,8 @@ auto ScrollManager::getLastVisibleRow() const -> int {
 // Handles arrow key scroll animation to center selected item
 void ScrollManager::onArrowKeyViewUpdate() {
   if (!m_arrowKeyScrollHelper || !m_virtualContainer ||
-      m_lastSelectedIndex < 0 || m_lastSelectedIndex >= m_totalItems) {
+      !m_selectionState->hasSelection() || 
+      m_selectionState->lastSelectedIndex() >= m_totalItems) {
     return;
   }
 
@@ -640,7 +642,7 @@ void ScrollManager::onArrowKeyViewUpdate() {
 
   // Delegate to helper with position callback
   m_arrowKeyScrollHelper->performUpdate(
-      m_lastSelectedIndex, m_totalItems, m_metrics.itemsPerRow,
+      m_selectionState->lastSelectedIndex(), m_totalItems, m_metrics.itemsPerRow,
       [this](int idx) { return getItemPosition(idx).y(); });
 }
 
@@ -665,8 +667,8 @@ void ScrollManager::refreshSelectionOverlayState() {
     return;
   }
   
-  debugLog(QString("refreshSelectionOverlayState: m_lastSelectedIndex=%1 forceVisible=%2")
-           .arg(m_lastSelectedIndex).arg(m_overlayManager->isForceVisible()));
+  debugLog(QString("refreshSelectionOverlayState: lastSelectedIndex=%1 forceVisible=%2")
+           .arg(m_selectionState->lastSelectedIndex()).arg(m_overlayManager->isForceVisible()));
   
   if (!m_overlayManager->shouldKeepVisible()) {
     debugLog("  HIDING overlay (not force visible)");
@@ -677,10 +679,10 @@ void ScrollManager::refreshSelectionOverlayState() {
       m_state->setGlideAnimating(false);
     }
 
-    if (glideWasActive && m_lastSelectedIndex >= 0) {
-      ensureWidgetForIndex(m_lastSelectedIndex);
+    if (glideWasActive && m_selectionState->hasSelection()) {
+      ensureWidgetForIndex(m_selectionState->lastSelectedIndex());
       if (auto *selectedWidget =
-              m_activeWidgets.value(m_lastSelectedIndex, nullptr)) {
+              m_activeWidgets.value(m_selectionState->lastSelectedIndex(), nullptr)) {
         debugLog("  requesting widget repaint for selection border");
         selectedWidget->update();
       }
@@ -707,12 +709,12 @@ void ScrollManager::refreshSelectionOverlayState() {
     return;
   }
 
-  if (m_lastSelectedIndex < 0) {
+  if (!m_selectionState->hasSelection()) {
     return;
   }
 
   // Position overlay directly (non-click-hold case or initial positioning)
-  QRect rect = selectionOverlayRectForIndex(m_lastSelectedIndex);
+  QRect rect = selectionOverlayRectForIndex(m_selectionState->lastSelectedIndex());
   debugLog(QString("  setting geometry to rect: x=%1 y=%2 w=%3 h=%4")
            .arg(rect.x()).arg(rect.y()).arg(rect.width()).arg(rect.height()));
   if (rect.isValid()) {
@@ -769,8 +771,8 @@ void ScrollManager::handleHorizontalMoveAnimation(int selectedIndex,
   }
 
   // Update widget selection states
-  if (m_committedSelectedIndex >= 0 && m_committedSelectedIndex != selectedIndex) {
-    if (auto *prevWidget = m_activeWidgets.value(m_committedSelectedIndex, nullptr)) {
+  if (m_selectionState->needsCommitUpdate(selectedIndex)) {
+    if (auto *prevWidget = m_activeWidgets.value(m_selectionState->committedSelectedIndex(), nullptr)) {
       prevWidget->setSelected(false);
     }
   }
@@ -778,7 +780,7 @@ void ScrollManager::handleHorizontalMoveAnimation(int selectedIndex,
   if (auto *currWidget = m_activeWidgets.value(selectedIndex, nullptr)) {
     currWidget->setSelected(true);
   }
-  m_committedSelectedIndex = selectedIndex;
+  m_selectionState->commitSelection(selectedIndex);
 
   // Animate to target
   m_overlayManager->animateTo(targetRect, startRect);
@@ -800,10 +802,9 @@ void ScrollManager::handleDirectSelectionUpdate(int selectedIndex) {
     }
   }
 
-  if (m_committedSelectedIndex >= 0 &&
-      m_committedSelectedIndex != selectedIndex) {
+  if (m_selectionState->needsCommitUpdate(selectedIndex)) {
     if (auto *prevSel =
-            m_activeWidgets.value(m_committedSelectedIndex, nullptr)) {
+            m_activeWidgets.value(m_selectionState->committedSelectedIndex(), nullptr)) {
       prevSel->setSelected(false);
     }
   }
@@ -827,7 +828,7 @@ void ScrollManager::handleDirectSelectionUpdate(int selectedIndex) {
       debugLog("  handleDirectSelectionUpdate: hiding overlay, using widget border");
     }
   }
-  m_committedSelectedIndex = selectedIndex;
+  m_selectionState->commitSelection(selectedIndex);
 }
 
 void ScrollManager::prewarmSurroundingWidgets(int selectedIndex) {
@@ -869,7 +870,7 @@ void ScrollManager::updateSelectionForIndex(int selectedIndex) {
 #ifdef KARTEND_DEBUG_LOGGING
   bool forceVisible = m_overlayManager && m_overlayManager->isForceVisible();
   debugLog(QString("updateSelectionForIndex: sel=%1 lastSel=%2 forceVisible=%3")
-           .arg(selectedIndex).arg(m_lastSelectedIndex).arg(forceVisible));
+           .arg(selectedIndex).arg(m_selectionState->lastSelectedIndex()).arg(forceVisible));
 #endif
   
   if (m_destroying || (!m_mediaScrollArea) || selectedIndex < 0 ||
@@ -878,7 +879,7 @@ void ScrollManager::updateSelectionForIndex(int selectedIndex) {
     return;
   }
 
-  int prevIndex = m_lastSelectedIndex;
+  int prevIndex = m_selectionState->lastSelectedIndex();
   const bool sameSelection = (prevIndex == selectedIndex);
 
   if (!sameSelection) {
@@ -908,22 +909,8 @@ void ScrollManager::updateSelectionForIndex(int selectedIndex) {
 }
 
 void ScrollManager::updateSelectionDirection(int selectedIndex, int prevIndex) {
-  m_lastSelectedIndex = selectedIndex;
-  debugLog(QString("  updated m_lastSelectedIndex to %1").arg(selectedIndex));
-
-  if (prevIndex >= 0) {
-    int delta = selectedIndex - prevIndex;
-    if (delta == 0) {
-      m_selectionDirection = 0;
-    } else if (delta > 0) {
-      m_selectionDirection = 1;
-    } else {
-      m_selectionDirection = -1;
-    }
-  } else {
-    m_selectionDirection = 0;
-  }
-  m_lastSelectedRow = GridUtils::computeItemRow(selectedIndex, m_metrics.itemsPerRow);
+  m_selectionState->updateForNewSelection(selectedIndex, prevIndex, m_metrics.itemsPerRow);
+  debugLog(QString("  updated lastSelectedIndex to %1").arg(selectedIndex));
 }
 
 void ScrollManager::handleMissingWidgetSelection(int selectedIndex, bool keepOverlay) {
@@ -965,13 +952,13 @@ void ScrollManager::handleSameSelectionUpdate(int selectedIndex, ItemWidget *cur
     m_overlayManager->hide();
   }
   
-  if (m_committedSelectedIndex >= 0 && m_committedSelectedIndex != selectedIndex) {
-    if (auto *prevSel = m_activeWidgets.value(m_committedSelectedIndex, nullptr)) {
+  if (m_selectionState->needsCommitUpdate(selectedIndex)) {
+    if (auto *prevSel = m_activeWidgets.value(m_selectionState->committedSelectedIndex(), nullptr)) {
       prevSel->setSelected(false);
     }
   }
   currentWidget->setSelected(true);
-  m_committedSelectedIndex = selectedIndex;
+  m_selectionState->commitSelection(selectedIndex);
   
   if (m_state && !keepOverlay) {
     m_state->setGlideAnimating(false);
@@ -1504,7 +1491,7 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
     itemWidget->show();
 
     // Restore selection state if this widget corresponds to the currently selected index
-    if (visualIndex == m_committedSelectedIndex) {
+    if (visualIndex == m_selectionState->committedSelectedIndex()) {
       itemWidget->setSelected(true);
     }
 

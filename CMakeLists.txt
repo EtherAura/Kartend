@@ -117,6 +117,7 @@ set(HEADERS
   ${SRC_DIR}/modules/scroll/itemwidgetfactory.h
   ${SRC_DIR}/modules/scroll/scrolldatamanager.h
   ${SRC_DIR}/modules/scroll/presearchstatemanager.h
+  ${SRC_DIR}/modules/scroll/selectionstatetracker.h
   ${SRC_DIR}/modules/filter/filtermanager.h
   ${SRC_DIR}/modules/widgetpool/widgetpoolmanager.h
   ${SRC_DIR}/modules/search/searchmanager.h

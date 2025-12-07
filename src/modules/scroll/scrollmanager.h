@@ -31,6 +31,7 @@ class InteractionStateHolder;
 class ArrowKeyScrollHelper;
 class ScrollDataManager;
 class PreSearchStateManager;
+class SelectionStateTracker;
 
 namespace TimerUtils {
 class DebouncedTimer;
@@ -189,6 +190,9 @@ private:
   // Pre-search state manager for fast search result restoration
   std::unique_ptr<PreSearchStateManager> m_preSearchStateManager;
 
+  // Selection state tracker for selection indices, direction, and row
+  std::unique_ptr<SelectionStateTracker> m_selectionState;
+
 public:
   [[nodiscard]] const WidgetPoolManager *getWidgetPool() const { return m_widgetPool.get(); }
   [[nodiscard]] const FilterManager *getFilterManager() const { return m_filterManager.get(); }
@@ -198,6 +202,7 @@ public:
   [[nodiscard]] const ScrollEventHandler *getScrollEventHandler() const { return m_scrollEventHandler.get(); }
   [[nodiscard]] const ScrollDataManager *getDataManager() const { return m_dataManager.get(); }
   [[nodiscard]] const PreSearchStateManager *getPreSearchStateManager() const { return m_preSearchStateManager.get(); }
+  [[nodiscard]] const SelectionStateTracker *getSelectionState() const { return m_selectionState.get(); }
 
 private:
 
@@ -219,11 +224,7 @@ private:
   bool m_isMutating = false;
   DatabaseManager *m_databaseManager = nullptr;
   bool m_destroying = false;
-  int m_lastSelectedIndex = -1;
-  int m_lastSelectedRow = -1;
-  int m_selectionDirection = 0;
   TimerUtils::DebouncedTimer *m_userScrollIdleTimer = nullptr;
-  int m_committedSelectedIndex = -1;
   TimerUtils::DebouncedTimer *m_prewarmIdleTimer = nullptr;
   
   // Initial scroll index for pre-positioning before widget creation
