@@ -14,11 +14,22 @@ void WidgetPoolManager::setWidgetParent(QWidget *parent) {
 }
 
 auto WidgetPoolManager::acquire() -> ItemWidget * {
+  // First try the main pool (fresh widgets)
   if (!m_pool.isEmpty()) {
     ItemWidget *widget = m_pool.takeLast();
     ++m_metrics.hits;
     return widget;
   }
+  
+  // Fall back to stale pool if main pool is empty
+  // This prevents unnecessary widget creation after collection switches
+  if (!m_stalePool.isEmpty()) {
+    ItemWidget *widget = m_stalePool.takeLast();
+    ++m_metrics.staleReused;
+    ++m_metrics.hits;
+    return widget;
+  }
+  
   ++m_metrics.misses;
   return new ItemWidget(m_widgetParent);
 }
@@ -55,6 +66,26 @@ void WidgetPoolManager::clear() {
   // Don't delete widgets - just clear the pool list.
   // Caller is responsible for widget lifetime.
   m_pool.clear();
+  m_stalePool.clear();
+}
+
+void WidgetPoolManager::softClear() {
+  // Move main pool widgets to stale pool instead of deleting them
+  // This allows reuse if the new collection needs widgets quickly
+  m_stalePool.append(m_pool);
+  m_pool.clear();
+}
+
+void WidgetPoolManager::pruneStaleWidgets() {
+  // Delete stale widgets that weren't reused
+  // Call this during idle time to reclaim memory
+  for (ItemWidget *widget : m_stalePool) {
+    if (widget) {
+      widget->deleteLater();
+      ++m_metrics.discards;
+    }
+  }
+  m_stalePool.clear();
 }
 
 void WidgetPoolManager::clearAndDelete() {
@@ -71,6 +102,16 @@ void WidgetPoolManager::clearAndDelete() {
     }
   }
   m_pool.clear();
+  
+  // Also delete stale widgets
+  for (ItemWidget *widget : m_stalePool) {
+    if (widget) {
+      if (widget->parent()) {
+        delete widget;
+      }
+    }
+  }
+  m_stalePool.clear();
 }
 
 void WidgetPoolManager::setVisibleMetrics(int visibleRows, int itemsPerRow) {
@@ -114,7 +155,9 @@ void WidgetPoolManager::logMetrics() const {
            << "misses=" << m_metrics.misses
            << "releases=" << m_metrics.releases
            << "discards=" << m_metrics.discards
+           << "staleReused=" << m_metrics.staleReused
            << "hitRate=" << QString::number(m_metrics.hitRate() * 100, 'f', 1) << "%"
-           << "poolSize=" << m_pool.size();
+           << "poolSize=" << m_pool.size()
+           << "stalePoolSize=" << m_stalePool.size();
 #endif
 }

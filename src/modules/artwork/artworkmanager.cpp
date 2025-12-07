@@ -224,10 +224,9 @@ ArtworkManager::~ArtworkManager() {
   m_silentlyCachedPaths.clear();
   m_allArtworkPaths.clear();
 
-  if (m_cacheTimer) {
-    m_cacheTimer->deleteLater();
-    m_cacheTimer = nullptr;
-  }
+  // Note: m_cacheTimer, m_silentLoadTimer, and m_timerCoordinator are
+  // parented to 'this', so Qt will automatically delete them when the
+  // ArtworkManager is destroyed. No explicit deletion needed.
 }
 
 // Clears in-memory artwork widget/path/pending/silent cache state (blocks

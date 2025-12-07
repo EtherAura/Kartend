@@ -9,17 +9,18 @@ class QWidget;
 
 // Metrics for monitoring widget pool performance
 struct WidgetPoolMetrics {
-  int hits = 0;      // Reused from pool
-  int misses = 0;    // Created new
-  int releases = 0;  // Returned to pool
-  int discards = 0;  // Pool full, deleted
+  int hits = 0;       // Reused from pool
+  int misses = 0;     // Created new
+  int releases = 0;   // Returned to pool
+  int discards = 0;   // Pool full, deleted
+  int staleReused = 0; // Reused stale widget
 
   [[nodiscard]] double hitRate() const {
     int total = hits + misses;
     return total > 0 ? static_cast<double>(hits) / total : 0.0;
   }
 
-  void reset() { hits = misses = releases = discards = 0; }
+  void reset() { hits = misses = releases = discards = staleReused = 0; }
 };
 
 // Manages a pool of recycled ItemWidget instances for virtual scrolling
@@ -40,6 +41,13 @@ public:
 
   // Clear all widgets from the pool (does not delete them)
   void clear();
+  
+  // Soft clear: marks widgets as stale but keeps them available
+  // Stale widgets can still be reused if pool runs low
+  void softClear();
+  
+  // Remove stale widgets that haven't been reused (call during idle)
+  void pruneStaleWidgets();
 
   // Clear all widgets and delete them immediately
   void clearAndDelete();
@@ -68,6 +76,7 @@ private:
   [[nodiscard]] int calculateOptimalSize() const;
 
   QList<ItemWidget *> m_pool;
+  QList<ItemWidget *> m_stalePool;  // Widgets marked stale but still available
   QWidget *m_widgetParent = nullptr;
   WidgetPoolMetrics m_metrics;
 

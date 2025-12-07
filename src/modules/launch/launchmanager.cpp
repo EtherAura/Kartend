@@ -51,10 +51,22 @@ auto LaunchManager::validatePathSecurity(const QString &path) -> Result<void> {
                                "LaunchManager::validatePathSecurity");
   }
 
+  // Normalize Unicode to NFC form to prevent homoglyph/normalization attacks
+  // This ensures consistent representation of characters
+  QString normalized = path.normalized(QString::NormalizationForm_C);
+  
+  // Reject if normalization changed the path (indicates potential obfuscation)
+  if (normalized != path) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Path contains non-canonical Unicode",
+                               "LaunchManager::validatePathSecurity")
+        .withDetails("Path was modified by Unicode normalization");
+  }
+
   // Reject shell metacharacters that could enable command injection
   // These characters have special meaning in shells and could be exploited
   static const QRegularExpression shellMeta(R"([;|&`$(){}\[\]<>!])");
-  if (shellMeta.match(path).hasMatch()) {
+  if (shellMeta.match(normalized).hasMatch()) {
     return ErrorContext::error(ErrorCode::InvalidFilePath,
                                "Path contains shell metacharacters",
                                "LaunchManager::validatePathSecurity")
@@ -62,16 +74,23 @@ auto LaunchManager::validatePathSecurity(const QString &path) -> Result<void> {
   }
 
   // Reject null bytes which could truncate strings in C APIs
-  if (path.contains(QChar('\0'))) {
+  if (normalized.contains(QChar('\0'))) {
     return ErrorContext::error(ErrorCode::InvalidFilePath,
                                "Path contains null bytes",
                                "LaunchManager::validatePathSecurity");
   }
 
   // Reject newlines which could inject additional commands
-  if (path.contains('\n') || path.contains('\r')) {
+  if (normalized.contains('\n') || normalized.contains('\r')) {
     return ErrorContext::error(ErrorCode::InvalidFilePath,
                                "Path contains newline characters",
+                               "LaunchManager::validatePathSecurity");
+  }
+  
+  // Reject backslash characters (Windows-style paths that could confuse Unix systems)
+  if (normalized.contains('\\')) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Path contains backslash characters",
                                "LaunchManager::validatePathSecurity");
   }
 
@@ -79,7 +98,7 @@ auto LaunchManager::validatePathSecurity(const QString &path) -> Result<void> {
 }
 
 auto LaunchManager::validateLauncherPath(const QString &path) -> Result<void> {
-  // First check for shell metacharacters
+  // First check for shell metacharacters and Unicode issues
   auto securityResult = validatePathSecurity(path);
   if (securityResult.isError()) {
     return securityResult;
@@ -110,9 +129,53 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<void> {
                                "LaunchManager::validateLauncherPath")
         .withDetails(path);
   }
-
-  // Reject symlinks pointing outside expected directories (optional strict mode)
-  // For now, we allow symlinks but resolve them for the existence check above
+  
+  // Check original path against sensitive directories BEFORE canonicalization
+  // This catches paths like /proc/self/exe which would otherwise resolve to a valid location
+  static const QStringList sensitiveDirectories = {
+    "/proc", "/sys", "/dev"
+  };
+  for (const QString &sensitive : sensitiveDirectories) {
+    if (path.startsWith(sensitive + "/") || path == sensitive) {
+      return ErrorContext::error(ErrorCode::InvalidFilePath,
+                                 "Launcher path is in restricted directory",
+                                 "LaunchManager::validateLauncherPath")
+          .withDetails(QString("Path: %1").arg(path));
+    }
+  }
+  
+  // Resolve symlinks and verify the canonical path
+  // This prevents symlink-based attacks where a symlink points to an unexpected location
+  QString canonicalPath = info.canonicalFilePath();
+  if (canonicalPath.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Could not resolve canonical path",
+                               "LaunchManager::validateLauncherPath")
+        .withDetails(path);
+  }
+  
+  // Ensure canonical path is still in a reasonable location
+  // Reject if it resolves to a sensitive system directory (double-check after symlink resolution)
+  for (const QString &sensitive : sensitiveDirectories) {
+    if (canonicalPath.startsWith(sensitive + "/") || canonicalPath == sensitive) {
+      return ErrorContext::error(ErrorCode::InvalidFilePath,
+                                 "Launcher path resolves to restricted directory",
+                                 "LaunchManager::validateLauncherPath")
+          .withDetails(QString("Canonical path: %1").arg(canonicalPath));
+    }
+  }
+  
+  // Verify the canonical path also passes security checks
+  // (in case symlink resolution introduced new issues)
+  if (canonicalPath != path) {
+    auto canonicalSecurityResult = validatePathSecurity(canonicalPath);
+    if (canonicalSecurityResult.isError()) {
+      return ErrorContext::error(ErrorCode::InvalidFilePath,
+                                 "Resolved symlink path failed security validation",
+                                 "LaunchManager::validateLauncherPath")
+          .withDetails(QString("Original: %1, Canonical: %2").arg(path, canonicalPath));
+    }
+  }
 
   return Result<void>::success();
 }

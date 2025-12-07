@@ -170,6 +170,13 @@ void DatabaseManager::initDatabase() {
   // This covers filtering by collection UUID and sorting by name in a single index scan
   idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_uuid_name ON items(collection_uuid, name COLLATE NOCASE)");
   idx.exec();
+  
+  // Covering index for paginated queries: includes path to avoid table lookup
+  // Query pattern: SELECT path, collection_uuid FROM items WHERE collection_uuid IN (...)
+  //                ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?
+  // This index covers: filtering (uuid), sorting (name), and result columns (path)
+  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_covering ON items(collection_uuid, name COLLATE NOCASE, path)");
+  idx.exec();
 }
 
 

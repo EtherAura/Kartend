@@ -129,9 +129,9 @@ void NavigationManager::navigateWithSharedItems(int collectionIndex) {
 }
 
 auto NavigationManager::initializeNavigationState() -> void {
-  // Show loading overlay during navigation
+  // Show loading overlay during navigation (will be updated with collection name later)
   if (m_loadingOverlay) {
-    m_loadingOverlay->show("Loading collection...");
+    m_loadingOverlay->show("Preparing...");
   }
   
   if ((parent()) &&
@@ -161,6 +161,12 @@ auto NavigationManager::validateAndPrepareNavigation(int collectionIndex)
   if (collectionIndex < 0 ||
       collectionIndex >= (*m_collections).size()) {
     return false;
+  }
+
+  // Update loading overlay with collection name for better UX
+  if (m_loadingOverlay && m_collections) {
+    const QString &collectionName = (*m_collections)[collectionIndex].name;
+    m_loadingOverlay->setMessage(QString("Loading %1...").arg(collectionName));
   }
 
   bool hasSub = false;
@@ -1493,6 +1499,13 @@ void NavigationManager::onItemCountLoaded(int count) {
   const int idx = (*m_currentCollectionIndex);
   if (idx < 0 || idx >= (*m_collections).size()) {
     return;
+  }
+
+  // Update loading overlay to show item count found
+  if (m_loadingOverlay && m_loadingOverlay->isActive()) {
+    const QString &collectionName = (*m_collections)[idx].name;
+    m_loadingOverlay->setMessage(
+        QString("Loading %1 (%2 items)...").arg(collectionName).arg(count));
   }
 
   CollectionContext context;

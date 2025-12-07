@@ -24,12 +24,16 @@ private slots:
   void testValidatePathSecurity_shellMetacharacters();
   void testValidatePathSecurity_nullBytes();
   void testValidatePathSecurity_newlines();
+  void testValidatePathSecurity_backslash();
+  void testValidatePathSecurity_unicodeNormalization();
 
   // validateLauncherPath tests
   void testValidateLauncherPath_validExecutable();
   void testValidateLauncherPath_relativePath();
   void testValidateLauncherPath_nonExistent();
   void testValidateLauncherPath_notExecutable();
+  void testValidateLauncherPath_sensitiveDirectories_data();
+  void testValidateLauncherPath_sensitiveDirectories();
 
   // parseParameters tests
   void testParseParameters_empty();
@@ -134,6 +138,26 @@ void TestLaunchManager::testValidatePathSecurity_newlines() {
   QVERIFY2(resultCarriageReturn.isError(), "Path with carriage return should fail");
 }
 
+void TestLaunchManager::testValidatePathSecurity_backslash() {
+  auto result = LaunchManager::validatePathSecurity("/path\\to\\file");
+  QVERIFY2(result.isError(), "Path with backslash should fail validation");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidFilePath);
+}
+
+void TestLaunchManager::testValidatePathSecurity_unicodeNormalization() {
+  // Test that paths with decomposed Unicode characters are rejected
+  // The character 'é' can be represented as U+00E9 (composed) or U+0065 U+0301 (decomposed)
+  // NFC normalization converts decomposed to composed form
+  QString composedPath = "/path/to/caf\u00E9";  // é as single codepoint
+  QString decomposedPath = "/path/to/cafe\u0301";  // e + combining acute
+  
+  auto composedResult = LaunchManager::validatePathSecurity(composedPath);
+  QVERIFY2(composedResult.isOk(), "Composed Unicode path should pass");
+  
+  auto decomposedResult = LaunchManager::validatePathSecurity(decomposedPath);
+  QVERIFY2(decomposedResult.isError(), "Decomposed Unicode path should fail (non-canonical)");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // validateLauncherPath tests
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,6 +189,27 @@ void TestLaunchManager::testValidateLauncherPath_notExecutable() {
   auto result = LaunchManager::validateLauncherPath(m_tempNonExecutable);
   QVERIFY2(result.isError(), "Non-executable file should fail validation");
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidFilePath);
+}
+
+void TestLaunchManager::testValidateLauncherPath_sensitiveDirectories_data() {
+  QTest::addColumn<QString>("path");
+  QTest::addColumn<QString>("description");
+
+  QTest::newRow("proc") << "/proc/self/exe" << "proc filesystem";
+  QTest::newRow("sys") << "/sys/firmware/acpi" << "sys filesystem";
+  QTest::newRow("dev") << "/dev/null" << "device node";
+}
+
+void TestLaunchManager::testValidateLauncherPath_sensitiveDirectories() {
+  QFETCH(QString, path);
+  QFETCH(QString, description);
+  
+  // These paths either don't exist as executables or should be rejected
+  // The test verifies that paths resolving to sensitive directories fail
+  auto result = LaunchManager::validateLauncherPath(path);
+  // We expect failure either due to non-existence or sensitive directory restriction
+  QVERIFY2(result.isError(),
+           qPrintable(QString("Path in %1 should fail validation").arg(description)));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -137,6 +137,10 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   connect(m_prewarmIdleTimer, &TimerUtils::DebouncedTimer::triggered, this,
           [this]() {
             if (m_widgetPool) {
+              // Prune stale widgets that weren't reused during collection switch
+              // This reclaims memory from the soft-cleared pool
+              m_widgetPool->pruneStaleWidgets();
+              
               int visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1;
               m_widgetPool->setVisibleMetrics(visibleRows, m_metrics.itemsPerRow);
               m_widgetPool->prewarm();
@@ -510,14 +514,17 @@ void ScrollManager::cleanup() {
   // and will be restored when search is cleared. Only delete them on full cleanup
   // (when m_destroying is true, which returns early above)
 
-  // Clear the widget pool - if we have pre-search widgets, just clear
-  // the reference list without deleting (widgets are reparented elsewhere)
-  // to avoid double-deletion with saved widgets
+  // Clear the widget pool - if we have pre-search widgets, use soft clear
+  // to allow potential reuse when search is cleared
+  // Otherwise use clearAndDelete for explicit cleanup
   if (m_widgetPool) {
     if (!m_preSearchWidgets.isEmpty()) {
-      m_widgetPool->clear();
+      // Pre-search widgets exist - soft clear allows widget reuse
+      m_widgetPool->softClear();
     } else {
-      m_widgetPool->clearAndDelete();
+      // Full cleanup - use soft clear to allow reuse during next collection load
+      // The prewarm timer will prune unused stale widgets during idle
+      m_widgetPool->softClear();
     }
   }
 
