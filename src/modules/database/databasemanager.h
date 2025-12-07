@@ -12,6 +12,22 @@
 
 class SessionManager;
 
+/**
+ * @brief Coordinates database operations via a dedicated worker thread.
+ * 
+ * Threading Model:
+ * - Main thread only: All public methods (loadItems, fetchItemCount, etc.)
+ * - Worker thread: QueryManager executes actual SQL queries
+ * - Communication: Signals/slots with Qt::QueuedConnection for thread safety
+ * 
+ * Thread-safe operations:
+ * - resolveFilePath(), resolveRelativeFilePath() - read-only, no shared mutable state
+ * - Signal emissions are queued to main thread automatically
+ * 
+ * NOT thread-safe (main thread only):
+ * - initDatabase(), loadAllCollections(), loadItems()
+ * - All setup and configuration methods
+ */
 class DatabaseManager : public QObject {
   Q_OBJECT
 public:

@@ -11,6 +11,21 @@
 
 class SessionManager;
 
+/**
+ * @brief Worker thread database query executor.
+ * 
+ * Threading Model:
+ * - Lives on worker thread: moveToThread() in DatabaseManager constructor
+ * - All slots are invoked via Qt::QueuedConnection from main thread
+ * - All signals are automatically queued back to main thread
+ * 
+ * Thread-safe by design:
+ * - Owns its own QSqlDatabase connection (m_db)
+ * - Uses thread-local prepared statement cache
+ * - No direct access from main thread - only via signals/slots
+ * 
+ * NEVER call methods directly from main thread - use DatabaseManager's API.
+ */
 class QueryManager : public QObject {
   Q_OBJECT
 public:

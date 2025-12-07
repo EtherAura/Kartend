@@ -52,6 +52,10 @@ struct ApplicationContext;
 /**
  * @brief Setup struct for ArtworkManager dependencies.
  */
+
+/**
+ * @brief Setup struct for ArtworkManager dependencies.
+ */
 struct ArtworkManagerSetup {
   const ApplicationContext *ctx = nullptr;
   QStackedWidget *stackedWidget = nullptr;
@@ -74,6 +78,25 @@ struct UIReferences {
   QScrollArea *itemScrollArea;
 };
 
+/**
+ * @brief Manages async artwork loading with viewport prioritization and caching.
+ * 
+ * Threading Model:
+ * - Main thread: All public API calls, signal emissions, widget updates
+ * - Worker threads: QtConcurrent tasks for image loading/scaling
+ * 
+ * Thread-safe operations:
+ * - findArtworkForFile() - static, no shared state
+ * - loadArtworkParallel() - dispatches work to thread pool safely
+ * - m_cancelFlag (std::atomic) - signals cancellation to worker threads
+ * 
+ * NOT thread-safe (main thread only):
+ * - addPendingArtwork(), clearPendingArtwork(), clearWidgetReferences()
+ * - All widget-related operations
+ * - setupReferences() and configuration methods
+ * 
+ * Results are delivered back to main thread via queued signal connections.
+ */
 class ArtworkManager : public QObject {
   Q_OBJECT
 

@@ -45,6 +45,26 @@ class CacheManager;
  * that are passed to multiple managers. Individual manager setup structs
  * can include a pointer to this context instead of duplicating all fields.
  * 
+ * Field Categories:
+ * 
+ * REQUIRED (must be set before any manager setup):
+ * - collections, currentCollectionIndex - Core collection state
+ * - isShuttingDown - Shutdown coordination flag
+ * 
+ * REQUIRED FOR UI (must be set for any UI-related manager):
+ * - itemScrollArea, gridContainer - Primary UI containers
+ * - stackedWidget, itemsPage - Page switching
+ * 
+ * OPTIONAL (set based on feature needs):
+ * - searchBar, searchModeButton - Search functionality
+ * - sidebar - Metadata display
+ * - menubar - Menu integration
+ * - loadingLabel, loadingOverlay - Loading feedback
+ * 
+ * POPULATED AFTER SETUP:
+ * - All manager pointers (scrollManager, artworkManager, etc.)
+ * - interactionState - Set after InteractionManager created
+ * 
  * Usage pattern:
  *   // In MainWindow, create once:
  *   m_appContext.collections = &m_collections;
@@ -57,19 +77,27 @@ class CacheManager;
  *   setup.managerSpecificField = someValue;
  */
 struct ApplicationContext {
-  // Collection state
+  // ─────────────────────────────────────────────────────────────────────────
+  // Required: Core collection state (must be set before any manager setup)
+  // ─────────────────────────────────────────────────────────────────────────
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
   const CollectionHierarchyCache *hierarchyCache = nullptr;
   GeneralSettings *generalSettings = nullptr;
   const bool *isShuttingDown = nullptr;
 
-  // Common UI elements
+  // ─────────────────────────────────────────────────────────────────────────
+  // Required for UI: Common UI elements (must be set for UI managers)
+  // ─────────────────────────────────────────────────────────────────────────
   QScrollArea *itemScrollArea = nullptr;
   QStackedWidget *stackedWidget = nullptr;
   QWidget *itemsPage = nullptr;
   QWidget *itemsTopBar = nullptr;
   QWidget *gridContainer = nullptr;
+  
+  // ─────────────────────────────────────────────────────────────────────────
+  // Optional: Feature-specific UI elements
+  // ─────────────────────────────────────────────────────────────────────────
   QMenuBar *menubar = nullptr;
   QLineEdit *searchBar = nullptr;
   QPushButton *searchModeButton = nullptr;
@@ -77,8 +105,10 @@ struct ApplicationContext {
   QLabel *loadingLabel = nullptr;
   LoadingOverlay *loadingOverlay = nullptr;
 
-  // Manager references (commonly shared across setup structs)
-  // These are populated after managers are created in ApplicationManager
+  // ─────────────────────────────────────────────────────────────────────────
+  // Populated after setup: Manager references
+  // These are set in ApplicationManager after managers are created
+  // ─────────────────────────────────────────────────────────────────────────
   ScrollManager *scrollManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
   SettingsManager *settingsManager = nullptr;

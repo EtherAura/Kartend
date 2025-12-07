@@ -62,3 +62,20 @@ target_link_libraries(test_pathutils
   Qt6::Test
 )
 add_test(NAME PathUtils COMMAND test_pathutils)
+
+# WidgetPoolManager tests
+add_executable(test_widgetpoolmanager
+  test_widgetpoolmanager.cpp
+  ${SRC_DIR}/modules/widgetpool/widgetpoolmanager.cpp
+  ${SRC_DIR}/ui/widgets/itemwidget.cpp
+)
+target_include_directories(test_widgetpoolmanager PRIVATE
+  ${SRC_DIR}/modules/widgetpool
+  ${SRC_DIR}/ui/widgets
+)
+target_link_libraries(test_widgetpoolmanager
+  Qt6::Core
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME WidgetPoolManager COMMAND test_widgetpoolmanager)
