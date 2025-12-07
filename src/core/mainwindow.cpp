@@ -26,6 +26,7 @@
 #include "settingsdialog.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
+#include "shortcutsdialog.h"
 #include "sidebarmanager.h"
 #include "stringutils.h"
 #include "timerutils.h"
@@ -424,6 +425,7 @@ void MainWindow::createMenuBar() {
   setupActionAbout();
   setupActionAboutQt();
   setupFullscreenAction();
+  setupShortcutsAction();
 }
 
 void MainWindow::setupActionExit() {
@@ -525,6 +527,25 @@ void MainWindow::setupFullscreenAction() {
                          }
                        }
                      });
+  }
+}
+
+void MainWindow::setupShortcutsAction() {
+  if (!m_shortcutsAction) {
+    m_shortcutsAction = new QAction(QObject::tr("Keyboard Shortcuts"), this);
+    m_shortcutsAction->setShortcut(QKeySequence(Qt::Key_F1));
+    m_shortcutsAction->setShortcutContext(Qt::ApplicationShortcut);
+    addAction(m_shortcutsAction);
+
+    // Add to Help menu if it exists
+    if (ui->menuHelp) {
+      ui->menuHelp->addAction(m_shortcutsAction);
+    }
+
+    QObject::connect(m_shortcutsAction, &QAction::triggered, [this]() {
+      ShortcutsDialog dialog(this);
+      dialog.exec();
+    });
   }
 }
 

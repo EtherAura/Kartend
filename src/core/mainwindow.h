@@ -93,6 +93,7 @@ protected:
 private:
   bool m_isShuttingDown = false;
   QAction *m_fullscreenAction = nullptr;
+  QAction *m_shortcutsAction = nullptr;
 
   std::unique_ptr<ApplicationManager> m_appManager;
   MetadataSidebar *m_MetadataSidebar = nullptr;
@@ -117,6 +118,7 @@ private:
   void setupActionAboutQt();
   void setupActionRefresh();
   void setupFullscreenAction();
+  void setupShortcutsAction();
   void setupFullscreenMenuAction(QAction *fullscreenAction);
   void setupSidebar();
   void setupArtworkManager();

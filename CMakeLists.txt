@@ -75,6 +75,7 @@ set(SOURCES
   ${SRC_DIR}/modules/viewport/viewportmanager.cpp
   ${SRC_DIR}/ui/dialogs/errordialog.cpp
   ${SRC_DIR}/ui/dialogs/settingsdialog.cpp
+  ${SRC_DIR}/ui/dialogs/shortcutsdialog.cpp
   ${SRC_DIR}/ui/widgets/metadatasidebar.cpp
   ${SRC_DIR}/ui/widgets/itemwidget.cpp
   ${SRC_DIR}/ui/widgets/loadingoverlay.cpp
@@ -123,6 +124,7 @@ set(HEADERS
   ${SRC_DIR}/ui/uiconstants.h
   ${SRC_DIR}/ui/dialogs/errordialog.h
   ${SRC_DIR}/ui/dialogs/settingsdialog.h
+  ${SRC_DIR}/ui/dialogs/shortcutsdialog.h
   ${SRC_DIR}/ui/widgets/metadatasidebar.h
   ${SRC_DIR}/ui/widgets/itemwidget.h
   ${SRC_DIR}/ui/widgets/loadingoverlay.h
