@@ -882,95 +882,104 @@ void ScrollManager::updateSelectionForIndex(int selectedIndex) {
   const bool sameSelection = (prevIndex == selectedIndex);
 
   if (!sameSelection) {
-    m_lastSelectedIndex = selectedIndex;
-    debugLog(QString("  updated m_lastSelectedIndex to %1").arg(selectedIndex));
-
-    if (prevIndex >= 0) {
-      int delta = selectedIndex - prevIndex;
-      if (delta == 0) {
-        m_selectionDirection = 0;
-      } else if (delta > 0) {
-        m_selectionDirection = 1;
-      } else {
-        m_selectionDirection = -1;
-      }
-    } else {
-      m_selectionDirection = 0;
-    }
-    m_lastSelectedRow =
-        GridUtils::computeItemRow(selectedIndex, m_metrics.itemsPerRow);
+    updateSelectionDirection(selectedIndex, prevIndex);
   }
 
   prewarmSurroundingWidgets(selectedIndex);
 
-  auto getWidget = [&](int visual) -> ItemWidget * {
-    ensureWidgetForIndex(visual);
-    return m_activeWidgets.value(visual, nullptr);
-  };
-
-  ItemWidget *currentWidget = getWidget(selectedIndex);
+  // Ensure widget exists and get reference
+  ensureWidgetForIndex(selectedIndex);
+  ItemWidget *currentWidget = m_activeWidgets.value(selectedIndex, nullptr);
   
-  // During click-holds, we must update overlay even if widget is null
   const bool keepOverlay = m_overlayManager && m_overlayManager->shouldKeepVisible();
   
   if (!currentWidget) {
-    debugLog(QString("  currentWidget is null for index %1").arg(selectedIndex));
-    // Widget not available, but during click-hold we still update overlay position
-    if (keepOverlay && !sameSelection && m_overlayManager) {
-      QRect rect = selectionOverlayRectForIndex(selectedIndex);
-      if (rect.isValid()) {
-        m_overlayManager->showAtRect(rect);
-        debugLog(QString("  positioned overlay directly at (%1,%2)").arg(rect.x()).arg(rect.y()));
-      }
-    }
+    handleMissingWidgetSelection(selectedIndex, keepOverlay);
     return;
   }
 
   if (sameSelection) {
-    debugLog("  same selection, returning");
-    
-    // If an animation is running, we MUST let it finish to achieve the "glide" effect.
-    // Interrupting it here would cause the overlay to disappear and the widget border 
-    // to snap back immediately, defeating the purpose of the animation.
-    if (m_overlayManager && m_overlayManager->isAnimating()) {
-      debugLog("  animation running during same-selection update - letting it continue");
-      // Ensure overlay is visible
-      if (!m_overlayManager->isVisible()) {
-        m_overlayManager->raise();
-      }
-      // Do NOT disable GlideAnimating or stop animation.
-      // The animation finished handler will take care of cleanup.
-      return;
-    }
-
-    if (keepOverlay && m_overlayManager) {
-      m_overlayManager->showAtWidget(currentWidget);
-      if (!m_overlayManager->isVisible()) {
-        // Fallback to index-based positioning if widget-based failed
-        QRect rect = selectionOverlayRectForIndex(selectedIndex);
-        if (rect.isValid()) {
-          m_overlayManager->showAtRect(rect);
-        }
-      }
-    } else if (m_overlayManager && m_overlayManager->isVisible()) {
-      m_overlayManager->hide();
-    }
-    if (m_committedSelectedIndex >= 0 &&
-        m_committedSelectedIndex != selectedIndex) {
-      if (auto *prevSel =
-              m_activeWidgets.value(m_committedSelectedIndex, nullptr)) {
-        prevSel->setSelected(false);
-      }
-    }
-    currentWidget->setSelected(true);
-    m_committedSelectedIndex = selectedIndex;
-    if (m_state && !keepOverlay) {
-      m_state->setGlideAnimating(false);
-    }
-    scheduleArrowKeyUpdate(selectedIndex);
+    handleSameSelectionUpdate(selectedIndex, currentWidget, keepOverlay);
     return;
   }
 
+  handleNewSelectionUpdate(selectedIndex, prevIndex, currentWidget);
+  scheduleArrowKeyUpdate(selectedIndex);
+}
+
+void ScrollManager::updateSelectionDirection(int selectedIndex, int prevIndex) {
+  m_lastSelectedIndex = selectedIndex;
+  debugLog(QString("  updated m_lastSelectedIndex to %1").arg(selectedIndex));
+
+  if (prevIndex >= 0) {
+    int delta = selectedIndex - prevIndex;
+    if (delta == 0) {
+      m_selectionDirection = 0;
+    } else if (delta > 0) {
+      m_selectionDirection = 1;
+    } else {
+      m_selectionDirection = -1;
+    }
+  } else {
+    m_selectionDirection = 0;
+  }
+  m_lastSelectedRow = GridUtils::computeItemRow(selectedIndex, m_metrics.itemsPerRow);
+}
+
+void ScrollManager::handleMissingWidgetSelection(int selectedIndex, bool keepOverlay) {
+  debugLog(QString("  currentWidget is null for index %1").arg(selectedIndex));
+  // Widget not available, but during click-hold we still update overlay position
+  if (keepOverlay && m_overlayManager) {
+    QRect rect = selectionOverlayRectForIndex(selectedIndex);
+    if (rect.isValid()) {
+      m_overlayManager->showAtRect(rect);
+      debugLog(QString("  positioned overlay directly at (%1,%2)").arg(rect.x()).arg(rect.y()));
+    }
+  }
+}
+
+void ScrollManager::handleSameSelectionUpdate(int selectedIndex, ItemWidget *currentWidget, bool keepOverlay) {
+  debugLog("  same selection, returning");
+  
+  // If an animation is running, we MUST let it finish to achieve the "glide" effect.
+  // Interrupting it here would cause the overlay to disappear and the widget border 
+  // to snap back immediately, defeating the purpose of the animation.
+  if (m_overlayManager && m_overlayManager->isAnimating()) {
+    debugLog("  animation running during same-selection update - letting it continue");
+    if (!m_overlayManager->isVisible()) {
+      m_overlayManager->raise();
+    }
+    return;
+  }
+
+  if (keepOverlay && m_overlayManager) {
+    m_overlayManager->showAtWidget(currentWidget);
+    if (!m_overlayManager->isVisible()) {
+      // Fallback to index-based positioning if widget-based failed
+      QRect rect = selectionOverlayRectForIndex(selectedIndex);
+      if (rect.isValid()) {
+        m_overlayManager->showAtRect(rect);
+      }
+    }
+  } else if (m_overlayManager && m_overlayManager->isVisible()) {
+    m_overlayManager->hide();
+  }
+  
+  if (m_committedSelectedIndex >= 0 && m_committedSelectedIndex != selectedIndex) {
+    if (auto *prevSel = m_activeWidgets.value(m_committedSelectedIndex, nullptr)) {
+      prevSel->setSelected(false);
+    }
+  }
+  currentWidget->setSelected(true);
+  m_committedSelectedIndex = selectedIndex;
+  
+  if (m_state && !keepOverlay) {
+    m_state->setGlideAnimating(false);
+  }
+  scheduleArrowKeyUpdate(selectedIndex);
+}
+
+void ScrollManager::handleNewSelectionUpdate(int selectedIndex, int prevIndex, ItemWidget *currentWidget) {
   // Use coordinator for movement analysis
   bool isHorizontalMove = false;
   if (m_selectionCoordinator) {
@@ -989,7 +998,8 @@ void ScrollManager::updateSelectionForIndex(int selectedIndex) {
   } else {
     handleDirectSelectionUpdate(selectedIndex);
   }
-  scheduleArrowKeyUpdate(selectedIndex);
+  
+  Q_UNUSED(currentWidget)
 }
 
 auto ScrollManager::getSubcollectionName(int subcollectionIndex) const

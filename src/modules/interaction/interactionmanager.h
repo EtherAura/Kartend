@@ -275,6 +275,11 @@ private:
   void connectViewportManagerSignals();
   void connectEventManagerSignals();
 
+  // Setup helpers (split from setupReferences)
+  void setupArrowNavigationHandler(const InteractionManagerSetup &setup);
+  void setupAlphabeticNavigationHandler();
+  void installEventFilters();
+
   void applySelectionStateForIndex(int idx);
   void finalizeRestoreFlagsAndFocus();
   void scheduleSidebarMetadataUpdateIfVisible(int targetIndex,

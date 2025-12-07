@@ -253,6 +253,12 @@ private:
   void prewarmSurroundingWidgets(int selectedIndex);
   void scheduleArrowKeyUpdate(int selectedIndex);
 
+  // Selection update helpers (split from updateSelectionForIndex)
+  void updateSelectionDirection(int selectedIndex, int prevIndex);
+  void handleSameSelectionUpdate(int selectedIndex, ItemWidget *currentWidget, bool keepOverlay);
+  void handleNewSelectionUpdate(int selectedIndex, int prevIndex, ItemWidget *currentWidget);
+  void handleMissingWidgetSelection(int selectedIndex, bool keepOverlay);
+
   void rebuildFilteredView();
 };
 

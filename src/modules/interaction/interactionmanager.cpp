@@ -125,63 +125,9 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     connectKeyboardManagerSignals();
   }
 
-  // Setup ArrowNavigationHandler with its dependencies
-  if (m_arrowHandler) {
-    ArrowNavigationHandlerSetup arrowSetup;
-    arrowSetup.ctx = setup.ctx;
-    // Override with owned managers
-    arrowSetup.keyboardManager = m_keyboardManager.get();
-    arrowSetup.animationManager = m_animationManager.get();
-    arrowSetup.viewportManager = m_viewportManager.get();
-    arrowSetup.selectionManager = m_selectionManager.get();
-    m_arrowHandler->setupReferences(arrowSetup);
-
-    // Set callbacks for accessing InteractionManager state
-    m_arrowHandler->setGetCurrentSelection(
-        [this]() { return currentSelectedIndex(); });
-    m_arrowHandler->setGetCurrentGridWidth(
-        [this]() { return getCurrentGridWidth(); });
-    m_arrowHandler->setIsItemOffscreen(
-        [this](int selection, int gridWidth) {
-          return isItemOffscreen(selection, gridWidth);
-        });
-
-    // Connect handler signals
-    connect(m_arrowHandler.get(),
-            &ArrowNavigationHandler::requestFullSelectionUpdate, this,
-            [this](int index) {
-              const QList<int> subs = getSubcollections(*m_currentCollectionIndex);
-              updateFilePathForSelection(index, subs);
-              selectItemByIndex(index, true);
-            });
-    connect(m_arrowHandler.get(), &ArrowNavigationHandler::requestRecenter,
-            this, &InteractionManager::recenterCurrentSelection);
-    connect(m_arrowHandler.get(),
-            &ArrowNavigationHandler::requestMinorHorizontalSuppress, this,
-            &InteractionManager::applyMinorHorizontalSuppress);
-    connect(m_arrowHandler.get(),
-            &ArrowNavigationHandler::requestFocusItemsPage, this, [this]() {
-              if (m_itemsPage) {
-                m_itemsPage->setFocus();
-              }
-            });
-  }
-
-  // Setup AlphabeticNavigationHandler with its dependencies
-  if (m_alphabeticHandler) {
-    m_alphabeticHandler->setScrollManager(m_scrollManager);
-    m_alphabeticHandler->setSelectionManager(m_selectionManager.get());
-
-    // Connect handler signals - use immediate centering for large jumps
-    connect(m_alphabeticHandler.get(),
-            &AlphabeticNavigationHandler::requestSelection, this,
-            [this](int index) {
-              selectItemByIndex(index, true);
-              if (m_viewportManager) {
-                m_viewportManager->centerItemVertically(index, true);
-              }
-            });
-  }
+  // Setup navigation handlers with state callbacks and signal connections
+  setupArrowNavigationHandler(setup);
+  setupAlphabeticNavigationHandler();
 
   // Setup AnimationManager with its dependencies
   if (m_animationManager) {
@@ -241,6 +187,75 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
             &InteractionManager::handleImmediateSearchTextChanged);
   }
 
+  installEventFilters();
+}
+
+void InteractionManager::setupArrowNavigationHandler(
+    const InteractionManagerSetup &setup) {
+  if (!m_arrowHandler) {
+    return;
+  }
+
+  ArrowNavigationHandlerSetup arrowSetup;
+  arrowSetup.ctx = setup.ctx;
+  // Override with owned managers
+  arrowSetup.keyboardManager = m_keyboardManager.get();
+  arrowSetup.animationManager = m_animationManager.get();
+  arrowSetup.viewportManager = m_viewportManager.get();
+  arrowSetup.selectionManager = m_selectionManager.get();
+  m_arrowHandler->setupReferences(arrowSetup);
+
+  // Set callbacks for accessing InteractionManager state
+  m_arrowHandler->setGetCurrentSelection(
+      [this]() { return currentSelectedIndex(); });
+  m_arrowHandler->setGetCurrentGridWidth(
+      [this]() { return getCurrentGridWidth(); });
+  m_arrowHandler->setIsItemOffscreen(
+      [this](int selection, int gridWidth) {
+        return isItemOffscreen(selection, gridWidth);
+      });
+
+  // Connect handler signals
+  connect(m_arrowHandler.get(),
+          &ArrowNavigationHandler::requestFullSelectionUpdate, this,
+          [this](int index) {
+            const QList<int> subs = getSubcollections(*m_currentCollectionIndex);
+            updateFilePathForSelection(index, subs);
+            selectItemByIndex(index, true);
+          });
+  connect(m_arrowHandler.get(), &ArrowNavigationHandler::requestRecenter,
+          this, &InteractionManager::recenterCurrentSelection);
+  connect(m_arrowHandler.get(),
+          &ArrowNavigationHandler::requestMinorHorizontalSuppress, this,
+          &InteractionManager::applyMinorHorizontalSuppress);
+  connect(m_arrowHandler.get(),
+          &ArrowNavigationHandler::requestFocusItemsPage, this, [this]() {
+            if (m_itemsPage) {
+              m_itemsPage->setFocus();
+            }
+          });
+}
+
+void InteractionManager::setupAlphabeticNavigationHandler() {
+  if (!m_alphabeticHandler) {
+    return;
+  }
+
+  m_alphabeticHandler->setScrollManager(m_scrollManager);
+  m_alphabeticHandler->setSelectionManager(m_selectionManager.get());
+
+  // Connect handler signals - use immediate centering for large jumps
+  connect(m_alphabeticHandler.get(),
+          &AlphabeticNavigationHandler::requestSelection, this,
+          [this](int index) {
+            selectItemByIndex(index, true);
+            if (m_viewportManager) {
+              m_viewportManager->centerItemVertically(index, true);
+            }
+          });
+}
+
+void InteractionManager::installEventFilters() {
   if (qApp) {
     qApp->installEventFilter(this);
   }
