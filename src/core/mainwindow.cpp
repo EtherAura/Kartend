@@ -16,6 +16,7 @@
 #include "databasemanager.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
+#include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "metadatasidebar.h"
 #include "navigationmanager.h"
@@ -25,6 +26,7 @@
 #include "settingsdialog.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
+#include "shortcutsdialog.h"
 #include "sidebarmanager.h"
 #include "stringutils.h"
 #include "timerutils.h"
@@ -378,6 +380,9 @@ void MainWindow::setupUIReferences() {
   searchBar = ui->searchBar;
   m_searchModeButton = ui->searchModeButton;
   m_MetadataSidebar = ui->metadataSidebarWidget;
+  
+  // Create loading overlay (parented to scroll area for correct positioning)
+  m_loadingOverlay = new LoadingOverlay(ui->itemScrollArea);
 }
 
 void MainWindow::initializeAppContext() {
@@ -399,6 +404,7 @@ void MainWindow::initializeAppContext() {
   m_appContext.searchModeButton = m_searchModeButton;
   m_appContext.sidebar = m_MetadataSidebar;
   m_appContext.loadingLabel = ui->loadingLabel;
+  m_appContext.loadingOverlay = m_loadingOverlay;
 
   // Manager references (for setup structs to use via ctx)
   m_appContext.scrollManager = getScrollManager();
@@ -419,6 +425,7 @@ void MainWindow::createMenuBar() {
   setupActionAbout();
   setupActionAboutQt();
   setupFullscreenAction();
+  setupShortcutsAction();
 }
 
 void MainWindow::setupActionExit() {
@@ -520,6 +527,25 @@ void MainWindow::setupFullscreenAction() {
                          }
                        }
                      });
+  }
+}
+
+void MainWindow::setupShortcutsAction() {
+  if (!m_shortcutsAction) {
+    m_shortcutsAction = new QAction(QObject::tr("Keyboard Shortcuts"), this);
+    m_shortcutsAction->setShortcut(QKeySequence(Qt::Key_F1));
+    m_shortcutsAction->setShortcutContext(Qt::ApplicationShortcut);
+    addAction(m_shortcutsAction);
+
+    // Add to Help menu if it exists
+    if (ui->menuHelp) {
+      ui->menuHelp->addAction(m_shortcutsAction);
+    }
+
+    QObject::connect(m_shortcutsAction, &QAction::triggered, [this]() {
+      ShortcutsDialog dialog(this);
+      dialog.exec();
+    });
   }
 }
 

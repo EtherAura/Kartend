@@ -161,6 +161,15 @@ void DatabaseManager::initDatabase() {
 
   idx.prepare("CREATE UNIQUE INDEX IF NOT EXISTS uniq_items_uuid_path ON items(collection_uuid, path)");
   idx.exec();
+
+  // Index on name for search filtering and ORDER BY name COLLATE NOCASE
+  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_name ON items(name COLLATE NOCASE)");
+  idx.exec();
+
+  // Composite index for common query pattern: WHERE collection_uuid IN (...) ORDER BY name
+  // This covers filtering by collection UUID and sorting by name in a single index scan
+  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_uuid_name ON items(collection_uuid, name COLLATE NOCASE)");
+  idx.exec();
 }
 
 

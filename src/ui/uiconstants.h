@@ -386,6 +386,8 @@ inline constexpr int MIN_SIZE = 20;
 inline constexpr int MAX_SIZE = 100;
 /// Multiplier for buffer calculation
 inline constexpr int BUFFER_MULTIPLIER = 2;
+/// Idle time before triggering pool prewarm (ms)
+inline constexpr int PREWARM_IDLE_MS = 500;
 } // namespace Pool
 } // namespace Widget
 

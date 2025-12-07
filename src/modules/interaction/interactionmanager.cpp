@@ -16,18 +16,26 @@
 #include <QWheelEvent>
 #include <algorithm>
 
+// Include full headers for forward-declared owned managers
 #include "animationmanager.h"
+#include "arrownavigationhandler.h"
+#include "alphabeticnavigationhandler.h"
+#include "eventmanager.h"
+#include "keyboardmanager.h"
+#include "launchmanager.h"
+#include "mousemanager.h"
+#include "searchmanager.h"
+#include "selectionmanager.h"
+#include "viewportmanager.h"
+
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
-#include "eventmanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
 #include "metadatasidebar.h"
-#include "mousemanager.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
-#include "selectionmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"

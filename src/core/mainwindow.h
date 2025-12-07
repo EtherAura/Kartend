@@ -3,7 +3,6 @@
 
 #include "applicationcontext.h"
 #include "collectionutils.h"
-#include "interactionmanager.h"
 #include <QHash>
 #include <QList>
 #include <QMainWindow>
@@ -29,11 +28,13 @@ class CacheManager;
 class InteractionManager;
 class DatabaseManager;
 class NavigationManager;
+class SessionManager;
 class SettingsManager;
 class SidebarManager;
 class ScrollManager;
 class ItemWidget;
 class MetadataSidebar;
+class LoadingOverlay;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -54,6 +55,7 @@ public:
   QLineEdit *searchBar;
   QPushButton *m_searchModeButton;
   QLabel *loadingLabel;
+  LoadingOverlay *m_loadingOverlay = nullptr;
 
   int currentCollectionIndex;
   QList<CollectionConfig> m_collections;
@@ -91,6 +93,7 @@ protected:
 private:
   bool m_isShuttingDown = false;
   QAction *m_fullscreenAction = nullptr;
+  QAction *m_shortcutsAction = nullptr;
 
   std::unique_ptr<ApplicationManager> m_appManager;
   MetadataSidebar *m_MetadataSidebar = nullptr;
@@ -115,6 +118,7 @@ private:
   void setupActionAboutQt();
   void setupActionRefresh();
   void setupFullscreenAction();
+  void setupShortcutsAction();
   void setupFullscreenMenuAction(QAction *fullscreenAction);
   void setupSidebar();
   void setupArtworkManager();

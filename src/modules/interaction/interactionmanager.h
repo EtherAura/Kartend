@@ -3,18 +3,8 @@
 
 #include "applicationcontext.h"
 #include "collectionutils.h"
-#include "eventmanager.h"
-#include "interactionstateholder.h"
-#include "keyboardmanager.h"
-#include "launchmanager.h"
-#include "mousemanager.h"
-#include "animationmanager.h"
-#include "searchmanager.h"
-#include "selectionmanager.h"
+#include "interactionstateholder.h"  // Required: m_state is a value member
 #include "setuputils.h"
-#include "viewportmanager.h"
-#include "arrownavigationhandler.h"
-#include "alphabeticnavigationhandler.h"
 #include <QObject>
 #include <QPointer>
 #include <memory>
@@ -27,6 +17,18 @@ class QScrollArea;
 class QStackedWidget;
 class QTimer;
 QT_END_NAMESPACE
+
+// Forward declarations for owned sub-managers (only pointers used in header)
+class AnimationManager;
+class EventManager;
+class KeyboardManager;
+class LaunchManager;
+class MouseManager;
+class SearchManager;
+class SelectionManager;
+class ViewportManager;
+class ArrowNavigationHandler;
+class AlphabeticNavigationHandler;
 
 class ItemWidget;
 class DatabaseManager;

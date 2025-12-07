@@ -18,6 +18,7 @@
 #include <QSet>
 #include <atomic>
 
+#include "adaptivebatcher.h"
 #include "setuputils.h"
 
 class QScrollArea;
@@ -151,6 +152,9 @@ private:
   bool m_continuousSilentLoad;
   int m_silentLoadIndex;
   bool m_persistentSilentLoad;
+
+  // Adaptive batching for performance-based batch sizing
+  AdaptiveBatcher m_adaptiveBatcher;
 
   QMutex m_dataMutex;
   QMutex m_futureMutex;

@@ -73,9 +73,12 @@ set(SOURCES
   ${SRC_DIR}/modules/settings/settingsmanager.cpp
   ${SRC_DIR}/modules/sidebar/sidebarmanager.cpp
   ${SRC_DIR}/modules/viewport/viewportmanager.cpp
+  ${SRC_DIR}/ui/dialogs/errordialog.cpp
   ${SRC_DIR}/ui/dialogs/settingsdialog.cpp
+  ${SRC_DIR}/ui/dialogs/shortcutsdialog.cpp
   ${SRC_DIR}/ui/widgets/metadatasidebar.cpp
   ${SRC_DIR}/ui/widgets/itemwidget.cpp
+  ${SRC_DIR}/ui/widgets/loadingoverlay.cpp
   ${SRC_DIR}/utils/pathutils.cpp
   ${SRC_DIR}/utils/settingsutils.cpp
   ${SRC_DIR}/utils/extensionutils.cpp
@@ -119,11 +122,15 @@ set(HEADERS
   ${SRC_DIR}/modules/sidebar/sidebarmanager.h
   ${SRC_DIR}/modules/viewport/viewportmanager.h
   ${SRC_DIR}/ui/uiconstants.h
+  ${SRC_DIR}/ui/dialogs/errordialog.h
   ${SRC_DIR}/ui/dialogs/settingsdialog.h
+  ${SRC_DIR}/ui/dialogs/shortcutsdialog.h
   ${SRC_DIR}/ui/widgets/metadatasidebar.h
   ${SRC_DIR}/ui/widgets/itemwidget.h
+  ${SRC_DIR}/ui/widgets/loadingoverlay.h
   ${SRC_DIR}/utils/collectionutils.h
   ${SRC_DIR}/utils/configutils.h
+  ${SRC_DIR}/utils/configvalidation.h
   ${SRC_DIR}/utils/searchutils.h
   ${SRC_DIR}/utils/stringutils.h
   ${SRC_DIR}/utils/settingsutils.h
@@ -137,6 +144,7 @@ set(HEADERS
   ${SRC_DIR}/utils/stateutils.h
   ${SRC_DIR}/utils/setuputils.h
   ${SRC_DIR}/utils/artworkutils.h
+  ${SRC_DIR}/utils/adaptivebatcher.h
   ${SRC_DIR}/utils/forwarddecl.h
 )
 

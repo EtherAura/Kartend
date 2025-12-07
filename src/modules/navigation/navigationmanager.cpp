@@ -2,9 +2,11 @@
 #include "navigationmanager.h"
 #include "artworkmanager.h"
 #include "databasemanager.h"
+#include "errordialog.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
+#include "loadingoverlay.h"
 #include "metadatasidebar.h"
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
@@ -60,6 +62,7 @@ void NavigationManager::setupReferences(
   m_stackedWidget = setup.getStackedWidget();
   m_menubar = setup.getMenubar();
   m_loadingLabel = setup.getLoadingLabel();
+  m_loadingOverlay = setup.getLoadingOverlay();
   m_itemScrollArea = setup.getItemScrollArea();
   m_gridContainer = setup.getGridContainer();
   
@@ -126,6 +129,11 @@ void NavigationManager::navigateWithSharedItems(int collectionIndex) {
 }
 
 auto NavigationManager::initializeNavigationState() -> void {
+  // Show loading overlay during navigation
+  if (m_loadingOverlay) {
+    m_loadingOverlay->show("Loading collection...");
+  }
+  
   if ((parent()) &&
       (m_interactionManager)) {
     m_interactionManager->stopRepeat();
@@ -205,10 +213,17 @@ auto NavigationManager::finalizeNavigation(int collectionIndex) -> void {
   }
   // Delay horizontal centering until layout has settled after navigation
   QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this, [this]() {
-    m_scrollManager->centerHorizontalScrollbar(
-        (*m_currentCollectionIndex), (*m_collections));
+    if (m_scrollManager && m_currentCollectionIndex && m_collections) {
+      m_scrollManager->centerHorizontalScrollbar(
+          (*m_currentCollectionIndex), (*m_collections));
+    }
   });
   if (m_refreshTitleCounts) m_refreshTitleCounts();
+
+  // Hide loading overlay after navigation completes
+  if (m_loadingOverlay) {
+    m_loadingOverlay->hide();
+  }
 
   // Clear navigation progress flag after all animations complete -
   // allows user input to be processed again
@@ -875,7 +890,9 @@ auto NavigationManager::schedulePostLoadOperations() -> void {
                            m_isShuttingDown()) {
                          return;
                        }
-                       m_artworkManager->startSilentLoading();
+                       if (m_artworkManager) {
+                         m_artworkManager->startSilentLoading();
+                       }
                      });
 
   if (m_databaseManager) {
@@ -967,11 +984,25 @@ void NavigationManager::onMediaLibraryError(const QString &error) {
     m_loadingLabel = nullptr;
   }
 
+  // Hide loading overlay if visible
+  if (m_loadingOverlay) {
+    m_loadingOverlay->hide();
+  }
+
   QList<QWidget *> existingLabels =
       m_gridContainer->findChildren<QWidget *>("noItemsWidget");
   for (QWidget *widget : existingLabels) {
     widget->deleteLater();
   }
+
+  // Show error dialog for database errors
+  auto errorContext = ErrorUtils::ErrorContext::error(
+      ErrorUtils::ErrorCode::DatabaseQueryFailed,
+      error,
+      "NavigationManager::onMediaLibraryError");
+  
+  QWidget *parentWidget = m_gridContainer ? m_gridContainer->window() : nullptr;
+  ErrorDialog::showError(parentWidget, errorContext);
 
   auto *errorWidget = new QWidget(m_gridContainer);
   errorWidget->setObjectName("noItemsWidget");
@@ -1003,18 +1034,22 @@ void NavigationManager::onMediaLibraryError(const QString &error) {
 void NavigationManager::onViewportChanged() {
   if ((m_interactionManager) &&
       m_interactionManager->isWheelScrolling() &&
-      m_stackedWidget->currentWidget() == m_itemsPage) {
+      m_stackedWidget && m_stackedWidget->currentWidget() == m_itemsPage) {
     // Delay viewport update during wheel scrolling to batch rapid events -
     // reduces CPU load from frequent artwork updates during fast scrolling
     QTimer::singleShot(UIConstants::Timing::SHORT_DELAY_MS, this, [this]() {
       if (m_scrollManager) {
         m_scrollManager->updateVirtualView();
       }
-      m_artworkManager->updateViewportArtwork();
+      if (m_artworkManager) {
+        m_artworkManager->updateViewportArtwork();
+      }
     });
   } else {
-    if (auto *coord = m_artworkManager->getTimerCoordinator()) {
-      coord->scheduleViewportUpdate();
+    if (m_artworkManager) {
+      if (auto *coord = m_artworkManager->getTimerCoordinator()) {
+        coord->scheduleViewportUpdate();
+      }
     }
   }
 }
@@ -1055,26 +1090,31 @@ auto NavigationManager::collectionHasDescendantWithMedia(int parentIndex) const
 // scrollbar
 void NavigationManager::safeReloadCollection(int collectionIndex) {
   persistCurrentSelection();
-  if (collectionIndex < 0 ||
+  if (!m_collections || collectionIndex < 0 ||
       collectionIndex >= (*m_collections).size()) {
     return;
   }
 
-  if (auto *coord = m_artworkManager->getTimerCoordinator()) {
-    coord->stopAllTimers();
+  if (m_artworkManager) {
+    if (auto *coord = m_artworkManager->getTimerCoordinator()) {
+      coord->stopAllTimers();
+    }
   }
 
   if (m_scrollManager) {
     m_scrollManager->cleanup();
   }
 
-  m_artworkManager->cancelAllArtworkLoading();
+  if (m_artworkManager) {
+    m_artworkManager->cancelAllArtworkLoading();
+  }
 
   // Delay collection reload to allow cleanup operations to complete -
   // nested timer ensures horizontal centering happens after items load
   QTimer::singleShot(
       UIConstants::Timing::MEDIUM_DELAY_MS, this, [this, collectionIndex]() {
-        if (collectionIndex < 0 ||
+        if (!m_collections || !m_databaseManager ||
+            collectionIndex < 0 ||
             collectionIndex >= (*m_collections).size()) {
           return;
         }
@@ -1093,7 +1133,7 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
 
         // Delay centering until items are loaded and layout is calculated
         QTimer::singleShot(UIConstants::Timing::VIEWPORT_DELAY_MS, this, [this]() {
-          if (m_scrollManager) {
+          if (m_scrollManager && m_currentCollectionIndex && m_collections) {
             m_scrollManager->centerHorizontalScrollbar(
                 (*m_currentCollectionIndex),
                 (*m_collections));

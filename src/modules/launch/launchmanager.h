@@ -6,6 +6,7 @@
 #include <QStringList>
 
 #include "collectionutils.h"
+#include "errorutils.h"
 #include "setuputils.h"
 
 struct ApplicationContext;
@@ -33,6 +34,12 @@ public:
 
   /// Parses command-line parameters handling quoted strings
   [[nodiscard]] static QStringList parseParameters(const QString &paramString);
+
+  /// Validates a launcher path for security (must be absolute, exist, executable)
+  [[nodiscard]] static ErrorUtils::Result<void> validateLauncherPath(const QString &path);
+
+  /// Validates that a path doesn't contain shell metacharacters or traversal
+  [[nodiscard]] static ErrorUtils::Result<void> validatePathSecurity(const QString &path);
 
   /// Checks if launch is allowed (debounce guard)
   [[nodiscard]] bool canLaunch(const QString &filePath) const;

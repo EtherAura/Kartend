@@ -11,6 +11,30 @@
 #include <QJsonObject>
 #include <QCache>
 
+// Statistics for monitoring cache performance
+struct CacheMetrics {
+  qint64 memoryHits = 0;     // Found in QCache (fastest)
+  qint64 diskHits = 0;       // Loaded from disk cache
+  qint64 misses = 0;         // Not cached anywhere
+  qint64 inserts = 0;        // New items cached
+  qint64 evictions = 0;      // Items evicted by LRU
+  qint64 invalidations = 0;  // Stale items removed
+
+  [[nodiscard]] double memoryHitRate() const {
+    qint64 total = memoryHits + diskHits + misses;
+    return total > 0 ? static_cast<double>(memoryHits) / total : 0.0;
+  }
+
+  [[nodiscard]] double totalHitRate() const {
+    qint64 total = memoryHits + diskHits + misses;
+    return total > 0 ? static_cast<double>(memoryHits + diskHits) / total : 0.0;
+  }
+
+  void reset() {
+    memoryHits = diskHits = misses = inserts = evictions = invalidations = 0;
+  }
+};
+
 class CacheManager {
 public:
   CacheManager();
@@ -24,6 +48,11 @@ public:
   [[nodiscard]] static qint64 getCacheSize();
   void releaseGuiResources();
 
+  // Cache metrics access
+  [[nodiscard]] CacheMetrics metrics() const;
+  void resetMetrics();
+  void logMetrics() const;
+
 private:
   static QString getCacheDirectory();
   static QString getArtworkCachePath(const QString &artworkPath);
@@ -36,6 +65,7 @@ private:
   QCache<QString, QPixmap> artworkCache;
   QHash<QString, qint64> fileTimestamps;
   QSet<QString> dirtyArtwork;
+  CacheMetrics m_metrics;
 };
 
 #endif // CACHEMANAGER_H
