@@ -30,6 +30,7 @@ class ItemWidgetFactory;
 class InteractionStateHolder;
 class ArrowKeyScrollHelper;
 class ScrollDataManager;
+class PreSearchStateManager;
 
 namespace TimerUtils {
 class DebouncedTimer;
@@ -97,7 +98,7 @@ public:
   void clearFilter();
   void savePreSearchState();
   void restorePreSearchState();
-  [[nodiscard]] bool hasPreSearchState() const { return !m_preSearchWidgets.isEmpty(); }
+  [[nodiscard]] bool hasPreSearchState() const;
   [[nodiscard]] int getFilteredIndex(int visualIndex) const;
   [[nodiscard]] int getScrollbarWidth() const;
   [[nodiscard]] bool willNeedVerticalScrollbar() const;
@@ -185,6 +186,9 @@ private:
   // Data manager for file paths, file names, subcollections, and virtual folders
   std::unique_ptr<ScrollDataManager> m_dataManager;
 
+  // Pre-search state manager for fast search result restoration
+  std::unique_ptr<PreSearchStateManager> m_preSearchStateManager;
+
 public:
   [[nodiscard]] const WidgetPoolManager *getWidgetPool() const { return m_widgetPool.get(); }
   [[nodiscard]] const FilterManager *getFilterManager() const { return m_filterManager.get(); }
@@ -193,6 +197,7 @@ public:
   [[nodiscard]] const SelectionCoordinator *getSelectionCoordinator() const { return m_selectionCoordinator.get(); }
   [[nodiscard]] const ScrollEventHandler *getScrollEventHandler() const { return m_scrollEventHandler.get(); }
   [[nodiscard]] const ScrollDataManager *getDataManager() const { return m_dataManager.get(); }
+  [[nodiscard]] const PreSearchStateManager *getPreSearchStateManager() const { return m_preSearchStateManager.get(); }
 
 private:
 
@@ -220,10 +225,6 @@ private:
   TimerUtils::DebouncedTimer *m_userScrollIdleTimer = nullptr;
   int m_committedSelectedIndex = -1;
   TimerUtils::DebouncedTimer *m_prewarmIdleTimer = nullptr;
-
-  // Saved pre-search state for fast restoration
-  QHash<int, ItemWidget *> m_preSearchWidgets;
-  int m_preSearchScrollPosition = 0;
   
   // Initial scroll index for pre-positioning before widget creation
   int m_initialScrollIndex = -1;

@@ -10,6 +10,7 @@
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "itemwidgetfactory.h"
+#include "presearchstatemanager.h"
 #include "scrolldatamanager.h"
 #include "scrolleventhandler.h"
 #include "selectioncoordinator.h"
@@ -112,6 +113,9 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   // Data manager for file paths, file names, subcollections, and virtual folders
   m_dataManager = std::make_unique<ScrollDataManager>(this);
 
+  // Pre-search state manager for fast search result restoration
+  m_preSearchStateManager = std::make_unique<PreSearchStateManager>(this);
+
   // Throttle timer - only fires once per interval, ignores subsequent triggers
   m_scrollTimer = new QTimer(this);
   m_scrollTimer->setSingleShot(true);
@@ -169,14 +173,10 @@ ScrollManager::~ScrollManager() {
   }
   m_activeWidgets.clear();
   
-  // Also clean up any saved pre-search widgets
-  for (auto it = m_preSearchWidgets.begin(); it != m_preSearchWidgets.end(); ++it) {
-    if (ItemWidget *widget = it.value()) {
-      widget->hide();
-      widget->deleteLater();
-    }
+  // Discard any saved pre-search state (widgets will be cleaned up by manager)
+  if (m_preSearchStateManager) {
+    m_preSearchStateManager->discardSavedState();
   }
-  m_preSearchWidgets.clear();
   
   if (m_widgetPool) {
     m_widgetPool->clear();
@@ -270,6 +270,11 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   if (m_filterManager) {
     m_filterManager->setCollections(m_collections);
     m_filterManager->setHierarchyCache(m_hierarchyCache);
+  }
+
+  // Configure pre-search state manager with scroll area and grid container
+  if (m_preSearchStateManager) {
+    m_preSearchStateManager->setReferences(m_mediaScrollArea, m_gridContainer);
   }
 
   if (m_mediaScrollArea) {
@@ -443,9 +448,10 @@ void ScrollManager::cleanup() {
   if (m_destroying) {
     return;
   }
+  bool hasPreSearch = m_preSearchStateManager && m_preSearchStateManager->hasSavedState();
   if (m_activeWidgets.isEmpty() && (!m_virtualContainer) &&
       m_dataManager->filePaths().isEmpty() && m_dataManager->subcollections().isEmpty() &&
-      m_preSearchWidgets.isEmpty()) {
+      !hasPreSearch) {
     return;
   }
 
@@ -474,7 +480,7 @@ void ScrollManager::cleanup() {
   // to allow potential reuse when search is cleared
   // Otherwise use clearAndDelete for explicit cleanup
   if (m_widgetPool) {
-    if (!m_preSearchWidgets.isEmpty()) {
+    if (hasPreSearch) {
       // Pre-search widgets exist - soft clear allows widget reuse
       m_widgetPool->softClear();
     } else {
@@ -1056,95 +1062,33 @@ void ScrollManager::cleanupActiveWidgets() {
 }
 
 void ScrollManager::savePreSearchState() {
-  // Only save if not already saved and we have widgets to save
-  if (!m_preSearchWidgets.isEmpty() || m_activeWidgets.isEmpty()) {
-    return;
+  if (m_preSearchStateManager) {
+    m_preSearchStateManager->saveState(m_activeWidgets);
   }
-  
-  // Save current scroll position
-  if (m_mediaScrollArea && m_mediaScrollArea->verticalScrollBar()) {
-    m_preSearchScrollPosition = m_mediaScrollArea->verticalScrollBar()->value();
-  }
-  
-  // Move active widgets to saved state
-  // Reparent to m_gridContainer so they survive cleanup() destroying virtual container
-  m_preSearchWidgets = m_activeWidgets;
-  for (auto it = m_preSearchWidgets.begin(); it != m_preSearchWidgets.end(); ++it) {
-    if (it.value()) {
-      it.value()->setParent(m_gridContainer);
-      it.value()->hide();
-    }
-  }
-  m_activeWidgets.clear();
 }
 
 void ScrollManager::restorePreSearchState() {
-  if (m_preSearchWidgets.isEmpty()) {
+  if (!m_preSearchStateManager || !m_preSearchStateManager->hasSavedState()) {
     return;
   }
   
-  // Clear artwork references from search result widgets before releasing them
-  // This prevents stale widget pointers from causing incorrect artwork
-  if (m_artworkManager) {
-    m_artworkManager->clearWidgetReferences();
-  }
+  // Create position callback for widget repositioning
+  auto getPositionFunc = [this](int index) -> QPoint {
+    return getItemPosition(index);
+  };
   
-  // Clear the widget pool first - we're going to delete all widgets in
-  // the virtual container, which may include pool widgets. This prevents
-  // double-delete crashes during shutdown.
-  if (m_widgetPool) {
-    m_widgetPool->clear();
-  }
-  
-  // Delete search result widgets immediately - don't return to pool
-  // Pool widgets might still be visible if they haven't been hidden yet
-  for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
-    if (ItemWidget *widget = it.value()) {
-      widget->hide();
-      widget->setParent(nullptr);  // Orphan before delete to ensure immediate removal
-      delete widget;
-    }
-  }
-  m_activeWidgets.clear();
-  
-  // Also delete any ItemWidget children of the virtual container that might
-  // not be tracked in m_activeWidgets (e.g., orphaned widgets from pool)
-  if (m_virtualContainer) {
-    QList<ItemWidget *> orphanedWidgets = m_virtualContainer->findChildren<ItemWidget *>();
-    for (ItemWidget *widget : orphanedWidgets) {
-      widget->hide();
-      widget->setParent(nullptr);
-      delete widget;
-    }
-  }
-  
-  // Restore scroll position BEFORE showing widgets to avoid visual jump
-  // from beginning of list to remembered position
-  if (m_mediaScrollArea && m_mediaScrollArea->verticalScrollBar()) {
-    m_mediaScrollArea->verticalScrollBar()->setValue(m_preSearchScrollPosition);
-  }
-  
-  // Restore saved widgets - reparent back to virtual container
-  m_activeWidgets = m_preSearchWidgets;
-  m_preSearchWidgets.clear();
-  
-  // Show, reparent and reposition widgets - their artwork is already loaded
-  for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
-    if (ItemWidget *widget = it.value()) {
-      // Reparent back to virtual container
-      if (m_virtualContainer) {
-        widget->setParent(m_virtualContainer);
-      }
-      QPoint position = getItemPosition(it.key());
-      widget->setGeometry(position.x(), position.y(), m_metrics.itemWidth,
-                          m_metrics.itemHeight);
-      widget->show();
-    }
-  }
-  
-  // Don't call updateViewportArtwork() - restored widgets already have their
-  // artwork loaded and displayed. Calling it could cause incorrect artwork
-  // due to stale mappings.
+  m_preSearchStateManager->restoreState(
+      m_activeWidgets,
+      m_virtualContainer,
+      m_widgetPool.get(),
+      m_artworkManager,
+      getPositionFunc,
+      m_metrics.itemWidth,
+      m_metrics.itemHeight);
+}
+
+auto ScrollManager::hasPreSearchState() const -> bool {
+  return m_preSearchStateManager && m_preSearchStateManager->hasSavedState();
 }
 
 void ScrollManager::clearFilter() {
@@ -1153,9 +1097,11 @@ void ScrollManager::clearFilter() {
     return;
   }
 
+  bool hasPreSearch = hasPreSearchState();
+  
   if (!m_filterManager->isFiltered()) {
     // Filter not active, but we may still have pre-search widgets to restore
-    if (!m_preSearchWidgets.isEmpty()) {
+    if (hasPreSearch) {
       restorePreSearchState();
     }
     emit filterChanged(m_dataManager->fileCount(), m_dataManager->fileCount());
@@ -1169,19 +1115,19 @@ void ScrollManager::clearFilter() {
   
   // Pre-set scroll position BEFORE positionVirtualContainer to prevent visual jump
   // where list briefly shows at position 0 then jumps to remembered position
-  if (!m_preSearchWidgets.isEmpty() && m_mediaScrollArea) {
+  if (hasPreSearch && m_mediaScrollArea && m_preSearchStateManager) {
     if (QScrollBar *scrollbar = m_mediaScrollArea->verticalScrollBar()) {
       int viewportHeight = m_mediaScrollArea->viewport()->height();
       int scrollMax = qMax(0, m_metrics.totalHeight - viewportHeight);
       scrollbar->setRange(0, scrollMax);
-      scrollbar->setValue(m_preSearchScrollPosition);
+      scrollbar->setValue(m_preSearchStateManager->savedScrollPosition());
     }
   }
   
   positionVirtualContainer();
 
   // Try to restore saved pre-search state for instant recovery
-  if (!m_preSearchWidgets.isEmpty()) {
+  if (hasPreSearch) {
     restorePreSearchState();
   } else {
     // Fallback: release widgets and rebuild view
