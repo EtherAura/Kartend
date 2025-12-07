@@ -2,6 +2,7 @@
 #include "navigationmanager.h"
 #include "artworkmanager.h"
 #include "databasemanager.h"
+#include "errordialog.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
@@ -983,11 +984,25 @@ void NavigationManager::onMediaLibraryError(const QString &error) {
     m_loadingLabel = nullptr;
   }
 
+  // Hide loading overlay if visible
+  if (m_loadingOverlay) {
+    m_loadingOverlay->hide();
+  }
+
   QList<QWidget *> existingLabels =
       m_gridContainer->findChildren<QWidget *>("noItemsWidget");
   for (QWidget *widget : existingLabels) {
     widget->deleteLater();
   }
+
+  // Show error dialog for database errors
+  auto errorContext = ErrorUtils::ErrorContext::error(
+      ErrorUtils::ErrorCode::DatabaseQueryFailed,
+      error,
+      "NavigationManager::onMediaLibraryError");
+  
+  QWidget *parentWidget = m_gridContainer ? m_gridContainer->window() : nullptr;
+  ErrorDialog::showError(parentWidget, errorContext);
 
   auto *errorWidget = new QWidget(m_gridContainer);
   errorWidget->setObjectName("noItemsWidget");
