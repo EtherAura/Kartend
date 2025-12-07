@@ -1,13 +1,16 @@
 // Launches media items with configured emulators, handling RetroArch cores and parameters.
 #include "launchmanager.h"
 #include "applicationcontext.h"
+#include "errorutils.h"
 #include "setuputils.h"
 
 #include <QDateTime>
+#include <QFileInfo>
 #include <QHash>
 #include <QList>
 #include <QMessageBox>
 #include <QProcess>
+#include <QRegularExpression>
 
 #ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
@@ -37,6 +40,83 @@ void LaunchManager::recordLaunch(const QString &filePath) {
   m_lastLaunchTimes[filePath] = QDateTime::currentMSecsSinceEpoch();
 }
 
+using ErrorUtils::ErrorCode;
+using ErrorUtils::ErrorContext;
+using ErrorUtils::Result;
+
+auto LaunchManager::validatePathSecurity(const QString &path) -> Result<void> {
+  if (path.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Path is empty",
+                               "LaunchManager::validatePathSecurity");
+  }
+
+  // Reject shell metacharacters that could enable command injection
+  // These characters have special meaning in shells and could be exploited
+  static const QRegularExpression shellMeta(R"([;|&`$(){}\[\]<>!])");
+  if (shellMeta.match(path).hasMatch()) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Path contains shell metacharacters",
+                               "LaunchManager::validatePathSecurity")
+        .withDetails(path);
+  }
+
+  // Reject null bytes which could truncate strings in C APIs
+  if (path.contains(QChar('\0'))) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Path contains null bytes",
+                               "LaunchManager::validatePathSecurity");
+  }
+
+  // Reject newlines which could inject additional commands
+  if (path.contains('\n') || path.contains('\r')) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Path contains newline characters",
+                               "LaunchManager::validatePathSecurity");
+  }
+
+  return Result<void>::success();
+}
+
+auto LaunchManager::validateLauncherPath(const QString &path) -> Result<void> {
+  // First check for shell metacharacters
+  auto securityResult = validatePathSecurity(path);
+  if (securityResult.isError()) {
+    return securityResult;
+  }
+
+  QFileInfo info(path);
+
+  // Launcher must be an absolute path to prevent PATH hijacking
+  if (!info.isAbsolute()) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Launcher path must be absolute",
+                               "LaunchManager::validateLauncherPath")
+        .withDetails(path);
+  }
+
+  // Verify the file exists
+  if (!info.exists()) {
+    return ErrorContext::error(ErrorCode::FileNotFound,
+                               "Launcher executable not found",
+                               "LaunchManager::validateLauncherPath")
+        .withDetails(path);
+  }
+
+  // Verify the file is executable
+  if (!info.isExecutable()) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Launcher file is not executable",
+                               "LaunchManager::validateLauncherPath")
+        .withDetails(path);
+  }
+
+  // Reject symlinks pointing outside expected directories (optional strict mode)
+  // For now, we allow symlinks but resolve them for the existence check above
+
+  return Result<void>::success();
+}
+
 void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
   if ((!m_collections) || collectionIndex < 0 ||
       collectionIndex >= m_collections->size()) {
@@ -59,6 +139,41 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
   if (expandedLauncherPath.isEmpty()) {
     QMessageBox::warning(nullptr, "No Launcher",
                          "No launcher configured for " + collection.name);
+    return;
+  }
+
+  // Validate launcher path for security before execution
+  auto launcherValidation = validateLauncherPath(expandedLauncherPath);
+  if (launcherValidation.isError()) {
+    ErrorUtils::logError(launcherValidation.error());
+    QMessageBox::warning(nullptr, "Invalid Launcher",
+                         QString("Launcher validation failed: %1\n\nPath: %2")
+                             .arg(launcherValidation.error().message)
+                             .arg(expandedLauncherPath));
+    return;
+  }
+
+  // Validate core path if specified
+  if (!expandedCorePath.isEmpty()) {
+    auto coreValidation = validatePathSecurity(expandedCorePath);
+    if (coreValidation.isError()) {
+      ErrorUtils::logError(coreValidation.error());
+      QMessageBox::warning(nullptr, "Invalid Core Path",
+                           QString("Core path validation failed: %1\n\nPath: %2")
+                               .arg(coreValidation.error().message)
+                               .arg(expandedCorePath));
+      return;
+    }
+  }
+
+  // Validate media file path for security
+  auto fileValidation = validatePathSecurity(filePath);
+  if (fileValidation.isError()) {
+    ErrorUtils::logError(fileValidation.error());
+    QMessageBox::warning(nullptr, "Invalid File Path",
+                         QString("File path validation failed: %1\n\nPath: %2")
+                             .arg(fileValidation.error().message)
+                             .arg(filePath));
     return;
   }
 
