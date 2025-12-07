@@ -162,7 +162,15 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
       m_silentLoadBatchSize(UIConstants::Artwork::SILENT_LOAD_BATCH_SIZE_DEFAULT),
       m_lastUserActivity{QDateTime::currentMSecsSinceEpoch()},
       m_continuousSilentLoad(false), m_silentLoadIndex(0),
-      m_persistentSilentLoad(false) {
+      m_persistentSilentLoad(false),
+      m_adaptiveBatcher(AdaptiveBatcher::Config{
+          UIConstants::Artwork::BATCH_HIGH,  // initialBatchSize
+          2,    // minBatchSize
+          30,   // maxBatchSize
+          50,   // targetTimeMs - Target 50ms per batch for responsive UI
+          0.3,  // smoothingFactor
+          10    // historySize
+      }) {
   m_timerCoordinator = new TimerUtils::Coordinator(this);
 
   m_silentLoadTimer = new QTimer(this);
@@ -328,13 +336,17 @@ void ArtworkManager::trackWidget(ItemWidget *widget) {
   }
 }
 
-// Determines the appropriate batch size for artwork loading
-auto determineBatchSize(bool highPriority, int customBatchSize) -> int {
+// Determines the appropriate batch size for artwork loading.
+// Uses adaptive batching when no custom size specified, with high-priority
+// using current adaptive size and low-priority using a reduced adaptive size.
+auto determineBatchSize(bool highPriority, int customBatchSize, 
+                        const AdaptiveBatcher &batcher) -> int {
   if (customBatchSize > 0) {
     return customBatchSize;
   }
-  return highPriority ? UIConstants::Artwork::BATCH_HIGH
-                      : UIConstants::Artwork::BATCH_LOW;
+  // Use adaptive batch size, with low priority getting half the size
+  int adaptiveSize = batcher.currentBatchSize();
+  return highPriority ? adaptiveSize : qMax(2, adaptiveSize / 2);
 }
 
 // Checks if artwork loading should be skipped due to shutdown or invalid state
@@ -416,7 +428,7 @@ void ArtworkManager::loadArtworkParallel(const QList<ArtworkInfo> &items,
     return;
   }
 
-  const int batchSize = determineBatchSize(highPriority, customBatchSize);
+  const int batchSize = determineBatchSize(highPriority, customBatchSize, m_adaptiveBatcher);
   QList<ArtworkInfo> uncachedItems;
   uncachedItems.reserve(items.size());
   collectUncachedAndApplyCached(items, uncachedItems);
@@ -1043,7 +1055,13 @@ void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
   // Capture reference to cancellation flag for cooperative cancellation
   const std::atomic<bool> &cancelFlag = m_cancellationRequested;
   
-  QFuture<void> future = QtConcurrent::run([this, batch, highPriority, &cancelFlag]() {
+  // Start timing for adaptive batching (high-priority only for responsiveness)
+  if (highPriority) {
+    m_adaptiveBatcher.startBatch();
+  }
+  int batchItemCount = batch.size();
+  
+  QFuture<void> future = QtConcurrent::run([this, batch, highPriority, &cancelFlag, batchItemCount]() {
     if (QApplication::closingDown() || cancelFlag.load(std::memory_order_relaxed)) {
       return;
     }
@@ -1051,12 +1069,16 @@ void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
     if (QApplication::closingDown() || cancelFlag.load(std::memory_order_relaxed)) {
       return;
     }
-    // Post results back to main thread
+    // Post results back to main thread with timing update
     QMetaObject::invokeMethod(
         this,
-        [this, results, highPriority]() {
+        [this, results, highPriority, batchItemCount]() {
           if (!QApplication::closingDown() && !m_cancellationRequested.load(std::memory_order_relaxed)) {
             applyResultsToUi(results, highPriority);
+            // Update adaptive batcher with completed batch timing (high-priority only)
+            if (highPriority && !results.isEmpty()) {
+              m_adaptiveBatcher.endBatch(batchItemCount);
+            }
           }
         },
         Qt::QueuedConnection);

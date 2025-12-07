@@ -139,6 +139,7 @@ set(HEADERS
   ${SRC_DIR}/utils/stateutils.h
   ${SRC_DIR}/utils/setuputils.h
   ${SRC_DIR}/utils/artworkutils.h
+  ${SRC_DIR}/utils/adaptivebatcher.h
   ${SRC_DIR}/utils/forwarddecl.h
 )
 
