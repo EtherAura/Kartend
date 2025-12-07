@@ -10,6 +10,7 @@
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "itemwidgetfactory.h"
+#include "scrolldatamanager.h"
 #include "scrolleventhandler.h"
 #include "selectioncoordinator.h"
 #include "selectionoverlaymanager.h"
@@ -107,6 +108,9 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   m_arrowKeyScrollHelper = std::make_unique<ArrowKeyScrollHelper>(this);
   connect(m_arrowKeyScrollHelper.get(), &ArrowKeyScrollHelper::requestViewUpdate,
           this, &ScrollManager::updateVirtualView);
+
+  // Data manager for file paths, file names, subcollections, and virtual folders
+  m_dataManager = std::make_unique<ScrollDataManager>(this);
 
   // Throttle timer - only fires once per interval, ignores subsequent triggers
   m_scrollTimer = new QTimer(this);
@@ -277,6 +281,26 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Data Accessors - delegate to ScrollDataManager
+// ─────────────────────────────────────────────────────────────────────────
+
+auto ScrollManager::getFilePaths() const -> const QStringList & {
+  return m_dataManager->filePaths();
+}
+
+auto ScrollManager::getFileNames() const -> const QHash<QString, QString> & {
+  return m_dataManager->fileNames();
+}
+
+auto ScrollManager::getSubcollectionCount() const -> int {
+  return m_dataManager->subcollectionCount();
+}
+
+auto ScrollManager::getVirtualFolderCount() const -> int {
+  return m_dataManager->virtualFolderCount();
+}
+
 void ScrollManager::setInitialScrollIndex(int index) {
   m_initialScrollIndex = index;
 }
@@ -295,39 +319,24 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
   m_lastSelectedRow = -1;
 
   m_context = context;
-  // m_filePaths and m_fileNames will be populated on demand
-  m_filePaths.clear();
-  m_fileNames.clear();
-  
-  // Pre-fill m_filePaths with empty strings to reserve space
-  // But wait, m_filePaths is a QStringList (QList<QString>).
-  // If totalCount is huge, this is fine.
-  // However, we need to handle subcollections separately?
-  // The original code had m_subcollections + m_filePaths.
-  // Now totalCount includes items. Subcollections are separate?
-  // DatabaseWorker::fetchItemCount returns count of ITEMS.
-  // Subcollections are handled by ScrollManager::initializeSubcollections.
   
   initializeSubcollections();
   initializeVirtualFolders();
   
   if (!m_context.filePaths.isEmpty()) {
-    m_filePaths = m_context.filePaths;
-    m_fileNames = m_context.fileNames;
+    // Preloaded data from context - copy to data manager
+    m_dataManager->filePaths() = m_context.filePaths;
+    m_dataManager->fileNames() = m_context.fileNames;
   } else {
-    // The total items in the grid = subcollections + items.
-    // We need to know how many items are there.
-    int itemCount = totalCount - m_subcollections.size();
+    // On-demand loading - initialize storage with placeholder count
+    int itemCount = totalCount - m_dataManager->subcollectionCount();
     if (itemCount < 0) {
       itemCount = 0;
     }
-    
-    // Resize m_filePaths to itemCount with empty strings
-    m_filePaths.reserve(itemCount);
-    for(int i=0; i<itemCount; ++i) m_filePaths.append(QString());
+    m_dataManager->initializeStorage(itemCount);
   }
 
-  m_totalItems = m_subcollections.size() + m_virtualFolders.size() + m_filePaths.size();
+  m_totalItems = m_dataManager->totalItemCount();
   
   if (m_totalItems == 0) {
     setupEmptyVirtualScrolling();
@@ -338,22 +347,16 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
 }
 
 void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames) {
-    if (offset < 0 || offset >= m_filePaths.size()) return;
+    if (offset < 0 || offset >= m_dataManager->fileCount()) return;
     
-    int subCount = m_subcollections.size();
+    // Store data and get visual indices that were updated
+    QList<int> updatedIndices = m_dataManager->receiveItemsRange(offset, filePaths, fileNames);
     
-    for (int i = 0; i < filePaths.size(); ++i) {
-        int index = offset + i;
-        if (index < m_filePaths.size()) {
-            m_filePaths[index] = filePaths[i];
-            m_fileNames[filePaths[i]] = fileNames.value(filePaths[i]);
-            
-            // Release placeholder widgets so they get re-created with actual data
-            int visualIndex = subCount + index;
-            if (ItemWidget *widget = m_activeWidgets.value(visualIndex, nullptr)) {
-                releaseWidget(widget);
-                m_activeWidgets.remove(visualIndex);
-            }
+    // Release placeholder widgets so they get re-created with actual data
+    for (int visualIndex : updatedIndices) {
+        if (ItemWidget *widget = m_activeWidgets.value(visualIndex, nullptr)) {
+            releaseWidget(widget);
+            m_activeWidgets.remove(visualIndex);
         }
     }
     
@@ -362,62 +365,15 @@ void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths, 
 }
 
 void ScrollManager::initializeSubcollections() {
-  m_subcollections.clear();
-  if ((m_collections) && m_context.currentIndex >= 0) {
-    // Use cache for O(1) lookup if available
-    if (m_hierarchyCache && m_hierarchyCache->isValid()) {
-      m_subcollections = m_hierarchyCache->directChildren(m_context.currentIndex);
-    } else {
-      // Fallback to O(n) scan
-      m_subcollections = CollectionUtils::directChildrenOf(m_context.currentIndex, *m_collections);
-    }
-  }
+  m_dataManager->initializeSubcollections(m_context, m_collections, m_hierarchyCache);
 }
 
 void ScrollManager::initializeVirtualFolders() {
-  m_virtualFolders.clear();
-  
-  // Only show virtual folders if includeContentSubfolders is enabled
-  // AND showAllSubfolderItems is false (otherwise items are flattened)
-  if (!m_context.config.includeContentSubfolders || m_context.config.showAllSubfolderItems) {
-    return;
-  }
-  
-  // Determine the effective directory to scan
-  QString scanDir = m_context.config.mediaDirectory;
-  if (!m_context.config.currentSubfolder.isEmpty()) {
-    scanDir = QDir(scanDir).absoluteFilePath(m_context.config.currentSubfolder);
-  }
-  
-  QDir dir(scanDir);
-  if (!dir.exists()) {
-    return;
-  }
-  
-  // Get list of subdirectories, optionally including hidden folders
-  QDir::Filters filters = QDir::Dirs | QDir::NoDotAndDotDot;
-  if (m_context.config.showHiddenFolders) {
-    filters |= QDir::Hidden;
-  }
-  QStringList subdirs = dir.entryList(filters, QDir::Name);
-  for (const QString &subdir : subdirs) {
-    // Store path relative to mediaDirectory for navigation
-    if (m_context.config.currentSubfolder.isEmpty()) {
-      m_virtualFolders.append(subdir);
-    } else {
-      m_virtualFolders.append(m_context.config.currentSubfolder + "/" + subdir);
-    }
-  }
+  m_dataManager->initializeVirtualFolders(m_context);
 }
 
 void ScrollManager::setupFilePathMappings() {
-  m_filePathToDisplayName.clear();
-  if (m_context.config.showAllSubcollectionItems) {
-    for (auto it = m_fileNames.constBegin(); it != m_fileNames.constEnd();
-         ++it) {
-      m_filePathToDisplayName[it.key()] = it.value();
-    }
-  }
+  m_dataManager->setupFilePathMappings(m_context);
 }
 
 // processRelativeFilePaths is no longer needed - DatabaseManager now handles
@@ -442,7 +398,7 @@ void ScrollManager::setupNormalVirtualScrolling() {
     m_widgetFactory->setParentWidget(m_virtualContainer);
     m_widgetFactory->setCollectionContext(m_context);
     m_widgetFactory->setMetrics(m_metrics.itemWidth, m_metrics.itemHeight);
-    m_widgetFactory->setFileData(&m_filePaths, &m_fileNames);
+    m_widgetFactory->setFileData(&m_dataManager->filePaths(), &m_dataManager->fileNames());
     m_widgetFactory->setSubcollectionNameResolver(
         [this](int idx) { return getSubcollectionName(idx); });
   }
@@ -488,7 +444,7 @@ void ScrollManager::cleanup() {
     return;
   }
   if (m_activeWidgets.isEmpty() && (!m_virtualContainer) &&
-      m_filePaths.isEmpty() && m_subcollections.isEmpty() &&
+      m_dataManager->filePaths().isEmpty() && m_dataManager->subcollections().isEmpty() &&
       m_preSearchWidgets.isEmpty()) {
     return;
   }
@@ -532,9 +488,7 @@ void ScrollManager::cleanup() {
   if (m_filterManager) {
     m_filterManager->clearFilter();
   }
-  m_filePaths.clear();
-  m_fileNames.clear();
-  m_subcollections.clear();
+  m_dataManager->clear();
   m_totalItems = 0;
 }
 
@@ -1064,15 +1018,15 @@ void ScrollManager::applyFilter(const QString &searchText) {
   }
 
   // Update FilterManager's source data before applying filter
-  m_filterManager->setSourceData(m_filePaths, m_fileNames,
-                                  m_filePathToDisplayName, m_subcollections);
+  m_filterManager->setSourceData(m_dataManager->filePaths(), m_dataManager->fileNames(),
+                                  m_dataManager->filePathToDisplayName(), m_dataManager->subcollections());
   m_filterManager->setContext(m_context);
   m_filterManager->applyFilter(searchText);
 
   // Update local state from FilterManager
   m_totalItems = m_filterManager->isFiltered()
                      ? m_filterManager->filteredCount()
-                     : m_subcollections.size() + m_filePaths.size();
+                     : m_dataManager->subcollectionCount() + m_dataManager->fileCount();
 
   calculateVirtualMetrics();
   positionVirtualContainer();
@@ -1195,7 +1149,7 @@ void ScrollManager::restorePreSearchState() {
 
 void ScrollManager::clearFilter() {
   if (!m_filterManager) {
-    emit filterChanged(m_filePaths.size(), m_filePaths.size());
+    emit filterChanged(m_dataManager->fileCount(), m_dataManager->fileCount());
     return;
   }
 
@@ -1204,12 +1158,12 @@ void ScrollManager::clearFilter() {
     if (!m_preSearchWidgets.isEmpty()) {
       restorePreSearchState();
     }
-    emit filterChanged(m_filePaths.size(), m_filePaths.size());
+    emit filterChanged(m_dataManager->fileCount(), m_dataManager->fileCount());
     return;
   }
 
   m_filterManager->clearFilter();
-  m_totalItems = m_subcollections.size() + m_virtualFolders.size() + m_filePaths.size();
+  m_totalItems = m_dataManager->totalItemCount();
 
   calculateVirtualMetrics();
   
@@ -1285,7 +1239,7 @@ void ScrollManager::enforceScrollContentConstraints() {
 }
 
 void ScrollManager::recreateLayout() {
-  if (m_filePaths.isEmpty() && m_subcollections.isEmpty()) {
+  if (m_dataManager->filePaths().isEmpty() && m_dataManager->subcollections().isEmpty()) {
     return;
   }
   calculateVirtualMetrics();
@@ -1357,14 +1311,9 @@ void ScrollManager::updateContextForSubcollection(int subcollectionIndex) {
   }
   m_context.currentIndex = subcollectionIndex;
   m_context.config = (*m_collections)[subcollectionIndex];
-  // Use cache for O(1) lookup if available
-  if (m_hierarchyCache && m_hierarchyCache->isValid()) {
-    m_subcollections = m_hierarchyCache->directChildren(subcollectionIndex);
-  } else {
-    // Fallback to O(n) scan
-    m_subcollections = CollectionUtils::directChildrenOf(subcollectionIndex, *m_collections);
-  }
-  m_totalItems = m_subcollections.size() + m_virtualFolders.size() + m_filePaths.size();
+  // Reinitialize subcollections for the new context
+  m_dataManager->initializeSubcollections(m_context, m_collections, m_hierarchyCache);
+  m_totalItems = m_dataManager->totalItemCount();
   calculateVirtualMetrics();
   positionVirtualContainer();
   updateVirtualView();
@@ -1378,7 +1327,7 @@ void ScrollManager::applySubcollectionFilter(int subcollectionIndex) {
       subcollectionIndex >= m_collections->size()) {
     return;
   }
-  if (m_filePaths.isEmpty() && m_subcollections.isEmpty()) {
+  if (m_dataManager->filePaths().isEmpty() && m_dataManager->subcollections().isEmpty()) {
     return;
   }
 
@@ -1391,8 +1340,8 @@ void ScrollManager::applySubcollectionFilter(int subcollectionIndex) {
   }
 
   // Update FilterManager's source data and apply subcollection filter
-  m_filterManager->setSourceData(m_filePaths, m_fileNames,
-                                  m_filePathToDisplayName, m_subcollections);
+  m_filterManager->setSourceData(m_dataManager->filePaths(), m_dataManager->fileNames(),
+                                  m_dataManager->filePathToDisplayName(), m_dataManager->subcollections());
   m_filterManager->setContext(m_context);
   m_filterManager->applySubcollectionFilter(subcollectionIndex);
 
@@ -1401,7 +1350,7 @@ void ScrollManager::applySubcollectionFilter(int subcollectionIndex) {
 
 void ScrollManager::rebuildFilteredView() {
   m_totalItems = m_filterManager ? m_filterManager->filteredCount()
-                                 : m_subcollections.size() + m_filePaths.size();
+                                 : m_dataManager->subcollectionCount() + m_dataManager->fileCount();
   calculateVirtualMetrics();
   positionVirtualContainer();
 
@@ -1571,23 +1520,22 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
     return;
   }
 
-  int subCount = m_subcollections.size();
-  int folderCount = m_virtualFolders.size();
+  int subCount = m_dataManager->subcollectionCount();
+  int folderCount = m_dataManager->virtualFolderCount();
   ItemWidget *itemWidget = nullptr;
 
   if (m_widgetFactory) {
     if (actualIndex < subCount) {
       // Subcollection item
-      int subcollectionIndex = m_subcollections[actualIndex];
+      int subcollectionIndex = m_dataManager->subcollectionIndexFromActual(actualIndex);
       itemWidget = m_widgetFactory->createSubcollectionWidget(subcollectionIndex);
     } else if (actualIndex < subCount + folderCount) {
       // Virtual folder item
-      int folderIndex = actualIndex - subCount;
-      const QString &folderPath = m_virtualFolders[folderIndex];
+      QString folderPath = m_dataManager->virtualFolderFromActual(actualIndex);
       itemWidget = m_widgetFactory->createVirtualFolderWidget(folderPath);
     } else {
       // Media item
-      int mediaIndex = actualIndex - subCount - folderCount;
+      int mediaIndex = m_dataManager->mediaIndexFromActual(actualIndex);
       int collectionIndex = m_context.currentIndex;
       itemWidget = m_widgetFactory->createMediaWidget(mediaIndex, collectionIndex);
     }
@@ -1720,33 +1668,22 @@ void ScrollManager::onVirtualFolderDoubleClicked(const QString &folderPath) {
 // Returns the virtual folder path for a visual index, or empty string if not a virtual folder
 auto ScrollManager::virtualFolderPathForVisualIndex(int visualIndex) const -> QString {
   int actualIndex = getFilteredIndex(visualIndex);
-  int subCount = m_subcollections.size();
-  int folderCount = m_virtualFolders.size();
-  
-  // Check if the index is in the virtual folder range
-  if (actualIndex < subCount || actualIndex >= subCount + folderCount) {
-    return {};
-  }
-  
-  int folderIndex = actualIndex - subCount;
-  return m_virtualFolders[folderIndex];
+  return m_dataManager->virtualFolderFromActual(actualIndex);
 }
 
 // Returns the underlying path for a visual index; delegates to DatabaseManager
 // for path resolution
 auto ScrollManager::filePathForVisualIndex(int visualIndex) const -> QString {
   int actualIndex = getFilteredIndex(visualIndex);
-  int subCount = m_subcollections.size();
-  int folderCount = m_virtualFolders.size();
-  if (actualIndex < subCount + folderCount) {
-    return {};
-  }
-  int mediaIndex = actualIndex - subCount - folderCount;
-  if (mediaIndex < 0 || mediaIndex >= m_filePaths.size()) {
+  int mediaIndex = m_dataManager->mediaIndexFromActual(actualIndex);
+  if (mediaIndex < 0) {
     return {};
   }
 
-  const QString rawEntry = m_filePaths[mediaIndex];
+  const QString rawEntry = m_dataManager->rawFilePath(mediaIndex);
+  if (rawEntry.isEmpty()) {
+    return {};
+  }
 
   if (!m_databaseManager) {
     return {};

@@ -29,6 +29,7 @@ class ScrollEventHandler;
 class ItemWidgetFactory;
 class InteractionStateHolder;
 class ArrowKeyScrollHelper;
+class ScrollDataManager;
 
 namespace TimerUtils {
 class DebouncedTimer;
@@ -117,10 +118,11 @@ public:
   [[nodiscard]] const QHash<int, ItemWidget *> &getActiveWidgets() const {
     return m_activeWidgets;
   }
-  [[nodiscard]] const QStringList &getFilePaths() const { return m_filePaths; }
-  [[nodiscard]] const QHash<QString, QString> &getFileNames() const { return m_fileNames; }
-  [[nodiscard]] int getSubcollectionCount() const { return m_subcollections.size(); }
-  [[nodiscard]] int getVirtualFolderCount() const { return m_virtualFolders.size(); }
+  // Data accessors - delegate to ScrollDataManager
+  [[nodiscard]] const QStringList &getFilePaths() const;
+  [[nodiscard]] const QHash<QString, QString> &getFileNames() const;
+  [[nodiscard]] int getSubcollectionCount() const;
+  [[nodiscard]] int getVirtualFolderCount() const;
   [[nodiscard]] QString filePathForVisualIndex(int visualIndex) const;
   [[nodiscard]] QString virtualFolderPathForVisualIndex(int visualIndex) const;
   void primeLayoutFor(const CollectionConfig &config);
@@ -180,6 +182,9 @@ private:
   // Arrow key scroll helper for centering animation
   std::unique_ptr<ArrowKeyScrollHelper> m_arrowKeyScrollHelper;
 
+  // Data manager for file paths, file names, subcollections, and virtual folders
+  std::unique_ptr<ScrollDataManager> m_dataManager;
+
 public:
   [[nodiscard]] const WidgetPoolManager *getWidgetPool() const { return m_widgetPool.get(); }
   [[nodiscard]] const FilterManager *getFilterManager() const { return m_filterManager.get(); }
@@ -187,6 +192,7 @@ public:
   [[nodiscard]] const VirtualContainerManager *getContainerManager() const { return m_containerManager.get(); }
   [[nodiscard]] const SelectionCoordinator *getSelectionCoordinator() const { return m_selectionCoordinator.get(); }
   [[nodiscard]] const ScrollEventHandler *getScrollEventHandler() const { return m_scrollEventHandler.get(); }
+  [[nodiscard]] const ScrollDataManager *getDataManager() const { return m_dataManager.get(); }
 
 private:
 
@@ -197,11 +203,7 @@ private:
   ArtworkManager *m_artworkManager = nullptr;
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   QWidget *m_virtualContainer = nullptr;
-  QStringList m_filePaths;
-  QHash<QString, QString> m_fileNames;
   QHash<int, ItemWidget *> m_activeWidgets;
-  QList<int> m_subcollections;
-  QStringList m_virtualFolders;  // Subfolder paths for virtual folder navigation
   const QList<CollectionConfig> *m_collections = nullptr;
   CollectionContext m_context;
   VirtualMetrics m_metrics;
@@ -210,7 +212,6 @@ private:
   int m_totalItems = 0;
   qint64 m_lastScrollTime = 0;
   bool m_isMutating = false;
-  QHash<QString, QString> m_filePathToDisplayName;
   DatabaseManager *m_databaseManager = nullptr;
   bool m_destroying = false;
   int m_lastSelectedIndex = -1;
