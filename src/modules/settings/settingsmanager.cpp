@@ -3,6 +3,7 @@
 #include "artworkmanager.h"
 #include "cachemanager.h"
 #include "collectionutils.h"
+#include "configvalidation.h"
 #include "extensionutils.h"
 #include "mainwindow.h"
 #include "navigationmanager.h"
@@ -212,6 +213,10 @@ void SettingsManager::loadCollections(
   }
 
   finalizeCollections(tempCollections, collections, needsRewrite);
+
+  // Validate loaded collections and log any issues
+  auto validation = ConfigValidation::validateAllCollections(collections);
+  ConfigValidation::logValidationResult(validation, "loadCollections");
 }
 
 // Persist collection configurations to disk (no lastSelected_* entries)
