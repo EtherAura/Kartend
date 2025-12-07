@@ -205,8 +205,10 @@ auto NavigationManager::finalizeNavigation(int collectionIndex) -> void {
   }
   // Delay horizontal centering until layout has settled after navigation
   QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this, [this]() {
-    m_scrollManager->centerHorizontalScrollbar(
-        (*m_currentCollectionIndex), (*m_collections));
+    if (m_scrollManager && m_currentCollectionIndex && m_collections) {
+      m_scrollManager->centerHorizontalScrollbar(
+          (*m_currentCollectionIndex), (*m_collections));
+    }
   });
   if (m_refreshTitleCounts) m_refreshTitleCounts();
 
@@ -875,7 +877,9 @@ auto NavigationManager::schedulePostLoadOperations() -> void {
                            m_isShuttingDown()) {
                          return;
                        }
-                       m_artworkManager->startSilentLoading();
+                       if (m_artworkManager) {
+                         m_artworkManager->startSilentLoading();
+                       }
                      });
 
   if (m_databaseManager) {
@@ -1003,18 +1007,22 @@ void NavigationManager::onMediaLibraryError(const QString &error) {
 void NavigationManager::onViewportChanged() {
   if ((m_interactionManager) &&
       m_interactionManager->isWheelScrolling() &&
-      m_stackedWidget->currentWidget() == m_itemsPage) {
+      m_stackedWidget && m_stackedWidget->currentWidget() == m_itemsPage) {
     // Delay viewport update during wheel scrolling to batch rapid events -
     // reduces CPU load from frequent artwork updates during fast scrolling
     QTimer::singleShot(UIConstants::Timing::SHORT_DELAY_MS, this, [this]() {
       if (m_scrollManager) {
         m_scrollManager->updateVirtualView();
       }
-      m_artworkManager->updateViewportArtwork();
+      if (m_artworkManager) {
+        m_artworkManager->updateViewportArtwork();
+      }
     });
   } else {
-    if (auto *coord = m_artworkManager->getTimerCoordinator()) {
-      coord->scheduleViewportUpdate();
+    if (m_artworkManager) {
+      if (auto *coord = m_artworkManager->getTimerCoordinator()) {
+        coord->scheduleViewportUpdate();
+      }
     }
   }
 }
@@ -1055,26 +1063,31 @@ auto NavigationManager::collectionHasDescendantWithMedia(int parentIndex) const
 // scrollbar
 void NavigationManager::safeReloadCollection(int collectionIndex) {
   persistCurrentSelection();
-  if (collectionIndex < 0 ||
+  if (!m_collections || collectionIndex < 0 ||
       collectionIndex >= (*m_collections).size()) {
     return;
   }
 
-  if (auto *coord = m_artworkManager->getTimerCoordinator()) {
-    coord->stopAllTimers();
+  if (m_artworkManager) {
+    if (auto *coord = m_artworkManager->getTimerCoordinator()) {
+      coord->stopAllTimers();
+    }
   }
 
   if (m_scrollManager) {
     m_scrollManager->cleanup();
   }
 
-  m_artworkManager->cancelAllArtworkLoading();
+  if (m_artworkManager) {
+    m_artworkManager->cancelAllArtworkLoading();
+  }
 
   // Delay collection reload to allow cleanup operations to complete -
   // nested timer ensures horizontal centering happens after items load
   QTimer::singleShot(
       UIConstants::Timing::MEDIUM_DELAY_MS, this, [this, collectionIndex]() {
-        if (collectionIndex < 0 ||
+        if (!m_collections || !m_databaseManager ||
+            collectionIndex < 0 ||
             collectionIndex >= (*m_collections).size()) {
           return;
         }
@@ -1093,7 +1106,7 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
 
         // Delay centering until items are loaded and layout is calculated
         QTimer::singleShot(UIConstants::Timing::VIEWPORT_DELAY_MS, this, [this]() {
-          if (m_scrollManager) {
+          if (m_scrollManager && m_currentCollectionIndex && m_collections) {
             m_scrollManager->centerHorizontalScrollbar(
                 (*m_currentCollectionIndex),
                 (*m_collections));
