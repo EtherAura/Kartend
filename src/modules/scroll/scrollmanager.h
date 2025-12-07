@@ -203,6 +203,7 @@ private:
   int m_selectionDirection = 0;
   TimerUtils::DebouncedTimer *m_userScrollIdleTimer = nullptr;
   int m_committedSelectedIndex = -1;
+  TimerUtils::DebouncedTimer *m_prewarmIdleTimer = nullptr;
 
   // Saved pre-search state for fast restoration
   QHash<int, ItemWidget *> m_preSearchWidgets;

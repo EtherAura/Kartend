@@ -131,6 +131,17 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
               m_scrollEventHandler->setUserScrollActive(false);
             }
           });
+
+  // Prewarm timer - replenishes widget pool after scroll activity settles
+  m_prewarmIdleTimer = new TimerUtils::DebouncedTimer(UIConstants::Widget::Pool::PREWARM_IDLE_MS, this);
+  connect(m_prewarmIdleTimer, &TimerUtils::DebouncedTimer::triggered, this,
+          [this]() {
+            if (m_widgetPool) {
+              int visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1;
+              m_widgetPool->setVisibleMetrics(visibleRows, m_metrics.itemsPerRow);
+              m_widgetPool->prewarm();
+            }
+          });
 }
 
 // Destructor disconnects scroll events, clears timers, deletes widgets and
@@ -1629,6 +1640,11 @@ void ScrollManager::handleUserScroll() {
   }
   if (m_userScrollIdleTimer) {
     m_userScrollIdleTimer->trigger();
+  }
+
+  // Schedule pool prewarm for when scroll activity settles
+  if (m_prewarmIdleTimer) {
+    m_prewarmIdleTimer->trigger();
   }
 
   if (m_state) {
