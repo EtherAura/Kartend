@@ -34,12 +34,38 @@ QueryManager::QueryManager(SessionManager *sessionManager, QObject *parent)
 }
 
 QueryManager::~QueryManager() {
+  clearStatementCache();
   if (m_db.isValid()) {
     QString connectionName = m_db.connectionName();
     m_db.close();
     m_db = QSqlDatabase();
     QSqlDatabase::removeDatabase(connectionName);
   }
+}
+
+// Gets or creates a prepared statement for the given SQL
+// Caches compiled statements to avoid repeated prepare() overhead
+auto QueryManager::getPreparedStatement(const QString &sql) -> QSqlQuery & {
+  auto it = m_statementCache.find(sql);
+  if (it != m_statementCache.end()) {
+    // Clear previous bindings before reuse
+    it->finish();
+    return *it;
+  }
+  
+  // Create new prepared statement and cache it
+  QSqlQuery query(m_db);
+  query.prepare(sql);
+  m_statementCache.insert(sql, query);
+  return m_statementCache[sql];
+}
+
+// Clears statement cache - call when database connection changes
+void QueryManager::clearStatementCache() {
+  for (auto &query : m_statementCache) {
+    query.finish();
+  }
+  m_statementCache.clear();
 }
 
 void QueryManager::initDatabase() {
@@ -455,8 +481,8 @@ void QueryManager::fetchItemCount(const CollectionContext &context, const QList<
     sql += " AND name LIKE ?";
   }
   
-  QSqlQuery query(m_db);
-  query.prepare(sql);
+  // Use cached prepared statement - dynamic SQL is cached by query string
+  QSqlQuery &query = getPreparedStatement(sql);
   for (const QString &uuid : uuids) {
     query.addBindValue(uuid);
   }
@@ -515,8 +541,8 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
   }
   sql += " ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?";
   
-  QSqlQuery query(m_db);
-  query.prepare(sql);
+  // Use cached prepared statement - dynamic SQL is cached by query string
+  QSqlQuery &query = getPreparedStatement(sql);
   for (const QString &uuid : uuids) {
     query.addBindValue(uuid);
   }
@@ -564,6 +590,22 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
 
 // ... Helper implementations ...
 
+// SQL constants for prepared statement caching
+namespace QuerySQL {
+  constexpr const char* COLLECTION_INFO = 
+      "SELECT last_scanned, name, ext_signature FROM collections WHERE uuid = ?";
+  constexpr const char* ITEM_PATH_CHECK = 
+      "SELECT path FROM items WHERE collection_uuid = ? LIMIT 1";
+  constexpr const char* ITEMS_MODIFIED_COUNT = 
+      "SELECT COUNT(*) FROM items WHERE collection_uuid = ? AND last_modified > ?";
+  constexpr const char* DELETE_ITEMS_BY_UUID = 
+      "DELETE FROM items WHERE collection_uuid = ?";
+  constexpr const char* DELETE_COLLECTION_BY_UUID = 
+      "DELETE FROM collections WHERE uuid = ?";
+  constexpr const char* LOAD_ITEMS_BY_UUID = 
+      "SELECT DISTINCT path FROM items WHERE collection_uuid = ? ORDER BY name COLLATE NOCASE";
+}
+
 bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &collection) {
   Q_UNUSED(collectionIndex)
 
@@ -583,9 +625,8 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
   
   const QString uuid = CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
 
-  QSqlQuery query(m_db);
-  query.prepare("SELECT last_scanned, name, ext_signature FROM collections "
-                "WHERE uuid = ?");
+  // Use cached prepared statement for collection info lookup
+  QSqlQuery &query = getPreparedStatement(QuerySQL::COLLECTION_INFO);
   query.addBindValue(uuid);
 
   bool rowPresent = query.exec() && query.next();
@@ -595,6 +636,10 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
 
   QString storedName = query.value(1).toString();
   QString storedSignature = query.value(2).toString();
+
+  // Capture lastScanned before any early returns that might invalidate query state
+  QDateTime lastScanned =
+      QDateTime::fromString(query.value(0).toString(), Qt::ISODate);
 
   if (storedName != collection.name) {
     clearCollectionFromDatabaseByUuid(uuid);
@@ -606,8 +651,8 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
     return true;
   }
 
-  QSqlQuery pathQuery(m_db);
-  pathQuery.prepare("SELECT path FROM items WHERE collection_uuid = ? LIMIT 1");
+  // Use cached prepared statement for item path check
+  QSqlQuery &pathQuery = getPreparedStatement(QuerySQL::ITEM_PATH_CHECK);
   pathQuery.addBindValue(uuid);
 
   if (pathQuery.exec() && pathQuery.next()) {
@@ -620,8 +665,6 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
     }
   }
 
-  QDateTime lastScanned =
-      QDateTime::fromString(query.value(0).toString(), Qt::ISODate);
   QFileInfo dirInfo(collection.mediaDirectory);
 
   if (!dirInfo.exists() || dirInfo.lastModified() > lastScanned) {
@@ -642,9 +685,8 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
     }
   }
 
-  QSqlQuery newer(m_db);
-  newer.prepare("SELECT COUNT(*) FROM items WHERE collection_uuid = ? AND "
-                "last_modified > ?");
+  // Use cached prepared statement for modified items count
+  QSqlQuery &newer = getPreparedStatement(QuerySQL::ITEMS_MODIFIED_COUNT);
   newer.addBindValue(uuid);
   newer.addBindValue(lastScanned.toString(Qt::ISODate));
   newer.exec();
@@ -821,9 +863,8 @@ QStringList QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionU
     return filePaths;
   }
 
-  QSqlQuery query(m_db);
-  query.prepare("SELECT DISTINCT path FROM items WHERE collection_uuid = ? "
-                "ORDER BY name COLLATE NOCASE");
+  // Use cached prepared statement for loading items
+  QSqlQuery &query = getPreparedStatement(QuerySQL::LOAD_ITEMS_BY_UUID);
   query.addBindValue(collectionUuid);
 
   if (!query.exec()) {
@@ -851,15 +892,15 @@ void QueryManager::clearCollectionFromDatabaseByUuid(const QString &collectionUu
   m_db.transaction();
 
   try {
-    QSqlQuery query(m_db);
-    query.prepare("DELETE FROM items WHERE collection_uuid = ?");
+    // Use cached prepared statement for deleting items
+    QSqlQuery &query = getPreparedStatement(QuerySQL::DELETE_ITEMS_BY_UUID);
     query.addBindValue(collectionUuid);
     if (!query.exec()) {
       throw std::runtime_error(query.lastError().text().toStdString());
     }
 
-    QSqlQuery delc(m_db);
-    delc.prepare("DELETE FROM collections WHERE uuid = ?");
+    // Use cached prepared statement for deleting collection
+    QSqlQuery &delc = getPreparedStatement(QuerySQL::DELETE_COLLECTION_BY_UUID);
     delc.addBindValue(collectionUuid);
     delc.exec();
 

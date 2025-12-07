@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QStringList>
 #include <QHash>
 #include <QDateTime>
@@ -41,6 +42,16 @@ private:
   SessionManager *m_sessionManager;
   QSqlDatabase m_db;
   QString m_connectionName;
+
+  // Prepared statement cache - maps SQL strings to prepared queries
+  // Reduces overhead by reusing compiled statements
+  QHash<QString, QSqlQuery> m_statementCache;
+  
+  // Gets or creates a prepared statement for the given SQL
+  [[nodiscard]] QSqlQuery &getPreparedStatement(const QString &sql);
+  
+  // Clears the statement cache (called when database is reopened)
+  void clearStatementCache();
 
   void ensureCollectionScanned(int collectionIndex, const CollectionConfig &collection);
   bool needsRescan(int collectionIndex, const CollectionConfig &collection);
