@@ -178,11 +178,15 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
     if (fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
         fileTimestamps[artworkPath] !=
             fileInfo.lastModified().toMSecsSinceEpoch()) {
+      // Cache invalidation - file changed on disk
       QString cachePath = CacheManager::getArtworkCachePath(artworkPath);
       QFile::remove(cachePath);
       artworkCache.remove(artworkPath);
       fileTimestamps.remove(artworkPath);
+      ++m_metrics.invalidations;
     } else {
+      // Memory cache hit
+      ++m_metrics.memoryHits;
       return *pix;
     }
   }
@@ -196,6 +200,7 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
   if (QFile::exists(cachePath)) {
     QPixmap cachedPixmap(cachePath);
     if (!cachedPixmap.isNull()) {
+      // Disk cache hit
       // Set device pixel ratio for HiDPI displays
       qreal dpr = 1.0;
       if (QGuiApplication::primaryScreen()) {
@@ -204,6 +209,7 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
       cachedPixmap.setDevicePixelRatio(dpr);
 
       QMutexLocker relocker(&m_mutex);
+      ++m_metrics.diskHits;
       
       constexpr int DEFAULT_BITS_PER_PIXEL = 32;
       constexpr int BITS_PER_BYTE = 8;
@@ -219,6 +225,12 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
       }
       return cachedPixmap;
     }
+  }
+  
+  // Cache miss
+  {
+    QMutexLocker relocker(&m_mutex);
+    ++m_metrics.misses;
   }
   return {};
 }
@@ -257,6 +269,7 @@ void CacheManager::cacheArtwork(const QString &artworkPath,
     fileTimestamps[artworkPath] = fileInfo.lastModified().toMSecsSinceEpoch();
   }
   dirtyArtwork.insert(artworkPath);
+  ++m_metrics.inserts;
 }
 
 // Clears all cached data for a particular collection (currently clears all) and
@@ -279,4 +292,29 @@ auto CacheManager::getCacheSize() -> qint64 {
     totalSize += dirIt.fileInfo().size();
   }
   return totalSize;
+}
+
+auto CacheManager::metrics() const -> CacheMetrics {
+  QMutexLocker locker(&m_mutex);
+  return m_metrics;
+}
+
+void CacheManager::resetMetrics() {
+  QMutexLocker locker(&m_mutex);
+  m_metrics.reset();
+}
+
+void CacheManager::logMetrics() const {
+#ifdef KARTEND_DEBUG_LOGGING
+  CacheMetrics m = metrics();
+  qDebug() << "CacheManager metrics:"
+           << "memHits=" << m.memoryHits
+           << "diskHits=" << m.diskHits
+           << "misses=" << m.misses
+           << "inserts=" << m.inserts
+           << "evictions=" << m.evictions
+           << "invalidations=" << m.invalidations
+           << "memHitRate=" << QString::number(m.memoryHitRate() * 100, 'f', 1) << "%"
+           << "totalHitRate=" << QString::number(m.totalHitRate() * 100, 'f', 1) << "%";
+#endif
 }
