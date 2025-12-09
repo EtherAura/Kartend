@@ -45,18 +45,33 @@ QueryManager::~QueryManager() {
 
 // Gets or creates a prepared statement for the given SQL
 // Caches compiled statements to avoid repeated prepare() overhead
+// Uses LRU eviction when cache exceeds MAX_STATEMENT_CACHE_SIZE
 auto QueryManager::getPreparedStatement(const QString &sql) -> QSqlQuery & {
   auto it = m_statementCache.find(sql);
   if (it != m_statementCache.end()) {
     // Clear previous bindings before reuse
     it->finish();
+    // Update LRU order: move to back (most recently used)
+    m_statementAccessOrder.removeOne(sql);
+    m_statementAccessOrder.append(sql);
     return *it;
+  }
+  
+  // Evict oldest entry if cache is at capacity
+  if (m_statementCache.size() >= MAX_STATEMENT_CACHE_SIZE && !m_statementAccessOrder.isEmpty()) {
+    QString oldest = m_statementAccessOrder.takeFirst();
+    auto oldIt = m_statementCache.find(oldest);
+    if (oldIt != m_statementCache.end()) {
+      oldIt->finish();
+      m_statementCache.erase(oldIt);
+    }
   }
   
   // Create new prepared statement and cache it
   QSqlQuery query(m_db);
   query.prepare(sql);
   m_statementCache.insert(sql, query);
+  m_statementAccessOrder.append(sql);
   return m_statementCache[sql];
 }
 
@@ -66,6 +81,7 @@ void QueryManager::clearStatementCache() {
     query.finish();
   }
   m_statementCache.clear();
+  m_statementAccessOrder.clear();
 }
 
 void QueryManager::initDatabase() {
@@ -132,9 +148,15 @@ void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollecti
   QHash<QString, QString> fileToMediaDir;
   QHash<QString, int> fileToCollectionIndex;
 
+  const int totalCollections = allCollections.size();
+  
   for (int collectionIndex = 0; collectionIndex < allCollections.size();
        ++collectionIndex) {
     CollectionConfig collection = allCollections[collectionIndex];
+    
+    // Emit progress signal so UI can update loading overlay
+    emit scanProgress(collectionIndex + 1, totalCollections, collection.name);
+    
     collection.mediaDirectory = PathUtils::validateAndExpandPath(
         collection.mediaDirectory, collection.name);
     collection.artworkDirectory = PathUtils::validateAndExpandPath(

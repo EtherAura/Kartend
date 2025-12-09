@@ -54,6 +54,7 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
   connect(m_worker, &QueryManager::itemCountLoaded, this, &DatabaseManager::onWorkerItemCountLoaded);
   connect(m_worker, &QueryManager::itemsRangeLoaded, this, &DatabaseManager::onWorkerItemsRangeLoaded);
   connect(m_worker, &QueryManager::errorOccurred, this, &DatabaseManager::errorOccurred);
+  connect(m_worker, &QueryManager::scanProgress, this, &DatabaseManager::scanProgress);
 
   m_workerThread->start();
 }
@@ -108,10 +109,19 @@ void DatabaseManager::initDatabase() {
   }
   if (!query.exec("PRAGMA journal_mode = WAL")) {
     auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to enable WAL mode",
+                                     "Failed to enable WAL mode, falling back to DELETE mode",
                                      "DatabaseManager::initDatabase")
                    .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
+    // Fall back to DELETE journal mode for safer operation on systems
+    // that don't support WAL (e.g., network filesystems, older SQLite)
+    if (!query.exec("PRAGMA journal_mode = DELETE")) {
+      auto fallbackErr = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to set DELETE journal mode",
+                                               "DatabaseManager::initDatabase")
+                             .withDetails(query.lastError().text());
+      ErrorUtils::logError(fallbackErr);
+    }
   }
 
   QString collectionsTable = "CREATE TABLE IF NOT EXISTS collections ("

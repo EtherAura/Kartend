@@ -218,11 +218,16 @@ ArtworkManager::~ArtworkManager() {
 
   // During destruction, just clear the containers without touching widgets
   // The widgets are owned by Qt's parent hierarchy and may already be destroyed
-  loadedArtwork.clear();
-  widgetToArtworkPath.clear();
-  pendingArtwork.clear();
-  m_silentlyCachedPaths.clear();
-  m_allArtworkPaths.clear();
+  // Use mutex to ensure any in-flight operations that didn't see cancellation flag
+  // complete safely before we clear the containers
+  {
+    QMutexLocker locker(&m_dataMutex);
+    loadedArtwork.clear();
+    widgetToArtworkPath.clear();
+    pendingArtwork.clear();
+    m_silentlyCachedPaths.clear();
+    m_allArtworkPaths.clear();
+  }
 
   // Note: m_cacheTimer, m_silentLoadTimer, and m_timerCoordinator are
   // parented to 'this', so Qt will automatically delete them when the
@@ -232,6 +237,7 @@ ArtworkManager::~ArtworkManager() {
 // Clears in-memory artwork widget/path/pending/silent cache state (blocks
 // widget signals)
 void ArtworkManager::clearArtworkWidgetState() {
+  QMutexLocker locker(&m_dataMutex);
   // Skip widget signal blocking during app shutdown - widgets may already be destroyed
   if (!QApplication::closingDown()) {
     for (auto *widget : loadedArtwork) {

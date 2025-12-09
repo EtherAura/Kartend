@@ -159,6 +159,7 @@ public:
   void initializeSearchModeForCurrentCollection();
   void beginSelectionRestore(int targetIndex);
   void cancelPendingSelectionRestore();
+  void resetSelectionRestoreState();  // Reset for new navigation (allows auto-restore)
   void stopRepeat(bool suppressRecentering = false);
   [[nodiscard]] bool isRestoringSelection() const;
   [[nodiscard]] int targetRestoreIndex() const;

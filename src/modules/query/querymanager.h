@@ -52,6 +52,12 @@ signals:
   void itemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void errorOccurred(const QString &message);
   void countsUpdated();
+  
+  /// Emitted during loadAllCollections to report scan progress.
+  /// @param current The 1-based index of the collection being scanned
+  /// @param total The total number of collections to scan
+  /// @param collectionName The name of the collection being scanned
+  void scanProgress(int current, int total, const QString &collectionName);
 
 private:
   SessionManager *m_sessionManager;
@@ -60,7 +66,10 @@ private:
 
   // Prepared statement cache - maps SQL strings to prepared queries
   // Reduces overhead by reusing compiled statements
+  // Limited to MAX_STATEMENT_CACHE_SIZE entries with LRU eviction
+  static constexpr int MAX_STATEMENT_CACHE_SIZE = 32;
   QHash<QString, QSqlQuery> m_statementCache;
+  QList<QString> m_statementAccessOrder;  // LRU tracking: most recent at back
   
   // Gets or creates a prepared statement for the given SQL
   [[nodiscard]] QSqlQuery &getPreparedStatement(const QString &sql);

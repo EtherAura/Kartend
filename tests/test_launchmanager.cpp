@@ -41,6 +41,7 @@ private slots:
   void testParseParameters_multipleArgs();
   void testParseParameters_quotedArgs();
   void testParseParameters_mixedQuotes();
+  void testParseParameters_unclosedQuotes();
 
 private:
   QString m_tempExecutable;
@@ -217,45 +218,68 @@ void TestLaunchManager::testValidateLauncherPath_sensitiveDirectories() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void TestLaunchManager::testParseParameters_empty() {
-  QStringList result = LaunchManager::parseParameters("");
-  QVERIFY(result.isEmpty());
+  auto result = LaunchManager::parseParameters("");
+  QVERIFY(result.isOk());
+  QVERIFY(result.value().isEmpty());
 
   result = LaunchManager::parseParameters("   ");
-  QVERIFY(result.isEmpty());
+  QVERIFY(result.isOk());
+  QVERIFY(result.value().isEmpty());
 }
 
 void TestLaunchManager::testParseParameters_singleArg() {
-  QStringList result = LaunchManager::parseParameters("arg1");
-  QCOMPARE(result.size(), 1);
-  QCOMPARE(result[0], "arg1");
+  auto result = LaunchManager::parseParameters("arg1");
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 1);
+  QCOMPARE(result.value()[0], "arg1");
 }
 
 void TestLaunchManager::testParseParameters_multipleArgs() {
-  QStringList result = LaunchManager::parseParameters("arg1 arg2 arg3");
-  QCOMPARE(result.size(), 3);
-  QCOMPARE(result[0], "arg1");
-  QCOMPARE(result[1], "arg2");
-  QCOMPARE(result[2], "arg3");
+  auto result = LaunchManager::parseParameters("arg1 arg2 arg3");
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 3);
+  QCOMPARE(result.value()[0], "arg1");
+  QCOMPARE(result.value()[1], "arg2");
+  QCOMPARE(result.value()[2], "arg3");
 }
 
 void TestLaunchManager::testParseParameters_quotedArgs() {
-  QStringList result = LaunchManager::parseParameters("\"arg with spaces\" arg2");
-  QCOMPARE(result.size(), 2);
-  QCOMPARE(result[0], "arg with spaces");
-  QCOMPARE(result[1], "arg2");
+  auto result = LaunchManager::parseParameters("\"arg with spaces\" arg2");
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 2);
+  QCOMPARE(result.value()[0], "arg with spaces");
+  QCOMPARE(result.value()[1], "arg2");
 
   result = LaunchManager::parseParameters("'single quoted' arg2");
-  QCOMPARE(result.size(), 2);
-  QCOMPARE(result[0], "single quoted");
-  QCOMPARE(result[1], "arg2");
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 2);
+  QCOMPARE(result.value()[0], "single quoted");
+  QCOMPARE(result.value()[1], "arg2");
 }
 
 void TestLaunchManager::testParseParameters_mixedQuotes() {
-  QStringList result = LaunchManager::parseParameters("\"double\" 'single' plain");
-  QCOMPARE(result.size(), 3);
-  QCOMPARE(result[0], "double");
-  QCOMPARE(result[1], "single");
-  QCOMPARE(result[2], "plain");
+  auto result = LaunchManager::parseParameters("\"double\" 'single' plain");
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().size(), 3);
+  QCOMPARE(result.value()[0], "double");
+  QCOMPARE(result.value()[1], "single");
+  QCOMPARE(result.value()[2], "plain");
+}
+
+void TestLaunchManager::testParseParameters_unclosedQuotes() {
+  // Unclosed double quote should return error
+  auto result = LaunchManager::parseParameters("\"unclosed arg");
+  QVERIFY2(result.isError(), "Unclosed double quote should fail");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
+
+  // Unclosed single quote should return error
+  result = LaunchManager::parseParameters("'unclosed arg");
+  QVERIFY2(result.isError(), "Unclosed single quote should fail");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
+
+  // Mixed unclosed should return error
+  result = LaunchManager::parseParameters("valid \"unclosed");
+  QVERIFY2(result.isError(), "Unclosed quote at end should fail");
 }
 
 QTEST_MAIN(TestLaunchManager)

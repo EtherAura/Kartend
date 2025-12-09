@@ -261,11 +261,30 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
       QString params = expandedCorePath.trimmed();
       if (!params.isEmpty()) {
         arguments.removeLast();
-        QStringList paramList = parseParameters(params);
-        arguments.append(paramList);
+        auto parseResult = parseParameters(params);
+        if (parseResult.isError()) {
+          ErrorUtils::logError(parseResult.error());
+          QMessageBox::warning(nullptr, "Invalid Parameters",
+                               QString("Parameter parsing failed: %1\n\nParameters: %2")
+                                   .arg(parseResult.error().message)
+                                   .arg(params));
+          return;
+        }
+        arguments.append(parseResult.value());
         arguments << filePath;
       }
     }
+  }
+
+  // TOCTOU mitigation: Re-validate launcher right before execution.
+  // This reduces the window between validation and execution, though
+  // cannot fully eliminate the race on systems without atomic exec.
+  QFileInfo launcherCheck(program);
+  if (!launcherCheck.exists() || !launcherCheck.isExecutable()) {
+    QMessageBox::critical(nullptr, "Launch Error",
+                          QString("Launcher is no longer accessible or executable:\n%1")
+                              .arg(program));
+    return;
   }
 
   bool success = QProcess::startDetached(program, arguments);
@@ -282,7 +301,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
   }
 }
 
-auto LaunchManager::parseParameters(const QString &paramString) -> QStringList {
+auto LaunchManager::parseParameters(const QString &paramString) -> ErrorUtils::Result<QStringList> {
   QStringList result;
   if (paramString.trimmed().isEmpty()) {
     return result;
@@ -309,6 +328,14 @@ auto LaunchManager::parseParameters(const QString &paramString) -> QStringList {
     } else {
       currentParam.append(currentChar);
     }
+  }
+
+  // Check for unclosed quotes - potential injection vulnerability
+  if (inQuotes) {
+    return ErrorContext::error(ErrorCode::InvalidArgument,
+                               "Unclosed quote in launch parameters",
+                               "LaunchManager::parseParameters")
+        .withDetails(QString("Quote character '%1' was not closed").arg(quoteChar));
   }
 
   if (!currentParam.isEmpty()) {

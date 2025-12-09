@@ -33,7 +33,8 @@ public:
   void launchItem(const QString &filePath, int collectionIndex);
 
   /// Parses command-line parameters handling quoted strings
-  [[nodiscard]] static QStringList parseParameters(const QString &paramString);
+  /// Returns error if quotes are unclosed (potential injection vector)
+  [[nodiscard]] static ErrorUtils::Result<QStringList> parseParameters(const QString &paramString);
 
   /// Validates a launcher path for security (must be absolute, exist, executable)
   [[nodiscard]] static ErrorUtils::Result<void> validateLauncherPath(const QString &path);

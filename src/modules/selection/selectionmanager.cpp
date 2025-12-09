@@ -283,6 +283,19 @@ void SelectionManager::cancelPendingSelectionRestore() {
   if (m_state) {
     m_state->selectionRestore().restoreToken++;
     m_state->selectionRestore().restorePending = false;
+    m_state->selectionRestore().userSelectionMade = true;
+  }
+}
+
+void SelectionManager::resetSelectionRestoreState() {
+  // Reset state for new navigation - clears pending restores and userSelectionMade
+  // so that automatic restore can proceed for the new collection
+  m_selectionRestoreToken++;
+  m_selectionRestorePending = false;
+  if (m_state) {
+    m_state->selectionRestore().restoreToken++;
+    m_state->selectionRestore().restorePending = false;
+    m_state->selectionRestore().userSelectionMade = false;
   }
 }
 
@@ -485,6 +498,10 @@ int SelectionManager::handleWidgetSelection(ItemWidget *widget,
   if (!widget || !m_scrollManager) {
     return -1;
   }
+
+  // User initiated selection - cancel any pending automatic restore
+  // to prevent it from overriding this explicit user choice
+  cancelPendingSelectionRestore();
 
   // Visual state is handled by ScrollManager::updateSelectionForIndex
   // which is called from selectItemByIndex during processSingleClickSelection

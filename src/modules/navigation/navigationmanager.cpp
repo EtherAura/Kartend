@@ -157,8 +157,10 @@ auto NavigationManager::initializeNavigationState() -> void {
       m_state->click().pendingSelectionIndex = -1;
     }
   }
+  // Reset restore state for new navigation - clears any pending restores
+  // and allows automatic restore to proceed (userSelectionMade = false)
   if (m_interactionManager) {
-    m_interactionManager->cancelPendingSelectionRestore();
+    m_interactionManager->resetSelectionRestoreState();
   }
 }
 

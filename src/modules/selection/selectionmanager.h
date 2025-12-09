@@ -99,6 +99,7 @@ public:
   // Selection restore operations
   void beginSelectionRestore(int targetIndex);
   void cancelPendingSelectionRestore();
+  void resetSelectionRestoreState();  // Reset state for new navigation (doesn't set userSelectionMade)
   void prepareForRestore(int targetIndex);
   void finalizeRestore();
   [[nodiscard]] bool isRestoringSelection() const {

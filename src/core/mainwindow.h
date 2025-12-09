@@ -94,6 +94,8 @@ private:
   bool m_isShuttingDown = false;
   QAction *m_fullscreenAction = nullptr;
   QAction *m_shortcutsAction = nullptr;
+  QAction *m_gridWidthIncreaseAction = nullptr;
+  QAction *m_gridWidthDecreaseAction = nullptr;
 
   std::unique_ptr<ApplicationManager> m_appManager;
   MetadataSidebar *m_MetadataSidebar = nullptr;
@@ -119,6 +121,8 @@ private:
   void setupActionRefresh();
   void setupFullscreenAction();
   void setupShortcutsAction();
+  void setupGridWidthActions();
+  void adjustGridWidth(int delta);
   void setupFullscreenMenuAction(QAction *fullscreenAction);
   void setupSidebar();
   void setupArtworkManager();

@@ -4,6 +4,7 @@
 #include "uiconstants.h"
 #include <algorithm>
 #include <QDebug>
+#include <QTimer>
 
 WidgetPoolManager::WidgetPoolManager(QObject *parent) : QObject(parent) {}
 
@@ -23,6 +24,8 @@ auto WidgetPoolManager::acquire() -> ItemWidget * {
   
   // Fall back to stale pool if main pool is empty
   // This prevents unnecessary widget creation after collection switches
+  // Note: Stale widgets have been reparented to a safe parent during softClear()
+  // so they can be safely reparented to the new virtual container
   if (!m_stalePool.isEmpty()) {
     ItemWidget *widget = m_stalePool.takeLast();
     ++m_metrics.staleReused;
@@ -69,9 +72,19 @@ void WidgetPoolManager::clear() {
   m_stalePool.clear();
 }
 
-void WidgetPoolManager::softClear() {
+void WidgetPoolManager::softClear(QWidget *safeParent) {
   // Move main pool widgets to stale pool instead of deleting them
   // This allows reuse if the new collection needs widgets quickly
+  // CRITICAL: Reparent widgets to safeParent before the old virtual container
+  // is deleted, otherwise setParent() will crash accessing deleted memory
+  if (safeParent) {
+    for (ItemWidget *widget : m_pool) {
+      if (widget) {
+        widget->setParent(safeParent);
+        widget->hide();
+      }
+    }
+  }
   m_stalePool.append(m_pool);
   m_pool.clear();
 }
@@ -132,6 +145,56 @@ void WidgetPoolManager::prewarm() {
     auto *widget = new ItemWidget(m_widgetParent);
     widget->hide();
     m_pool.append(widget);
+  }
+}
+
+void WidgetPoolManager::prewarmAsync() {
+  if (!m_widgetParent) {
+    return;
+  }
+  
+  m_prewarmTargetSize = calculateOptimalSize();
+  
+  // Already at target size
+  if (m_pool.size() >= m_prewarmTargetSize) {
+    return;
+  }
+  
+  // Create timer if needed
+  if (!m_prewarmTimer) {
+    m_prewarmTimer = new QTimer(this);
+    m_prewarmTimer->setInterval(0);  // Next event loop iteration
+    connect(m_prewarmTimer, &QTimer::timeout, this, [this]() {
+      if (!m_widgetParent || m_pool.size() >= m_prewarmTargetSize) {
+        m_prewarmTimer->stop();
+        return;
+      }
+      
+      // Create a small batch per tick to avoid blocking
+      int remaining = m_prewarmTargetSize - m_pool.size();
+      int toCreate = qMin(PREWARM_BATCH_SIZE, remaining);
+      
+      for (int i = 0; i < toCreate; ++i) {
+        auto *widget = new ItemWidget(m_widgetParent);
+        widget->hide();
+        m_pool.append(widget);
+      }
+      
+      // Stop when done
+      if (m_pool.size() >= m_prewarmTargetSize) {
+        m_prewarmTimer->stop();
+      }
+    });
+  }
+  
+  if (!m_prewarmTimer->isActive()) {
+    m_prewarmTimer->start();
+  }
+}
+
+void WidgetPoolManager::stopPrewarm() {
+  if (m_prewarmTimer && m_prewarmTimer->isActive()) {
+    m_prewarmTimer->stop();
   }
 }
 

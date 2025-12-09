@@ -17,6 +17,7 @@ void VirtualContainerManager::createContainer() {
   cleanupContainer();
 
   if (!m_gridContainer) {
+    qWarning() << "VirtualContainerManager::createContainer: m_gridContainer is null, cannot create container";
     return;
   }
 

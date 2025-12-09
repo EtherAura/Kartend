@@ -6,6 +6,7 @@
 
 class ItemWidget;
 class QWidget;
+class QTimer;
 
 // Metrics for monitoring widget pool performance
 struct WidgetPoolMetrics {
@@ -44,7 +45,9 @@ public:
   
   // Soft clear: marks widgets as stale but keeps them available
   // Stale widgets can still be reused if pool runs low
-  void softClear();
+  // safeParent: Widgets are reparented to this widget before the old container
+  // is deleted - prevents crash when old parent is destroyed
+  void softClear(QWidget *safeParent = nullptr);
   
   // Remove stale widgets that haven't been reused (call during idle)
   void pruneStaleWidgets();
@@ -58,6 +61,13 @@ public:
   // Pre-allocate widgets during idle time for smoother initial scroll.
   // Call after setWidgetParent and setVisibleMetrics are configured.
   void prewarm();
+  
+  // Async prewarm: creates widgets incrementally to avoid blocking UI.
+  // Preferred over prewarm() during runtime to maintain responsiveness.
+  void prewarmAsync();
+  
+  // Stop any in-progress async prewarm operation
+  void stopPrewarm();
 
   // Get pool performance metrics
   [[nodiscard]] const WidgetPoolMetrics &metrics() const { return m_metrics; }
@@ -83,6 +93,11 @@ private:
   // Metrics for calculating optimal pool size
   int m_visibleRows = 0;
   int m_itemsPerRow = 0;
+  
+  // Async prewarm state
+  QTimer *m_prewarmTimer = nullptr;
+  int m_prewarmTargetSize = 0;
+  static constexpr int PREWARM_BATCH_SIZE = 3;  // Widgets per timer tick
 };
 
 #endif

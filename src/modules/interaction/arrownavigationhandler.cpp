@@ -58,6 +58,12 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction,
     return;
   }
 
+  // User initiated navigation - cancel any pending automatic restore
+  // to prevent it from overriding this explicit user choice
+  if (m_selectionManager) {
+    m_selectionManager->cancelPendingSelectionRestore();
+  }
+
   if (m_keyboardManager) {
     m_keyboardManager->prepareKeyNavigationState();
   }

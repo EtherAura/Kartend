@@ -19,12 +19,14 @@ struct SelectionRestoreState {
   bool forceImmediateCenter = false;
   int restoreToken = 0;
   bool restorePending = false;
+  bool userSelectionMade = false;  // Set when user makes explicit selection, blocks auto-restore
 
   void reset() {
     restoring = false;
     targetIndex = -1;
     forceImmediateCenter = false;
     restorePending = false;
+    userSelectionMade = false;
     // Note: restoreToken is not reset - it increments to invalidate old operations
   }
 

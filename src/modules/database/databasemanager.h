@@ -62,6 +62,12 @@ signals:
   void itemCountLoaded(int count);
   void itemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void errorOccurred(const QString &message);
+  
+  /// Emitted during collection scanning to report progress.
+  /// @param current The 1-based index of the collection being scanned
+  /// @param total The total number of collections to scan
+  /// @param collectionName The name of the collection being scanned
+  void scanProgress(int current, int total, const QString &collectionName);
 
   // Internal signals to trigger worker
   void requestLoadAllCollections(const QList<CollectionConfig> &allCollections);

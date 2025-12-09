@@ -154,7 +154,8 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
               
               int visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1;
               m_widgetPool->setVisibleMetrics(visibleRows, m_metrics.itemsPerRow);
-              m_widgetPool->prewarm();
+              // Use async prewarm to avoid blocking UI during idle replenishment
+              m_widgetPool->prewarmAsync();
             }
           });
 }
@@ -398,6 +399,12 @@ void ScrollManager::setupNormalVirtualScrolling() {
   calculateVirtualMetrics();
   createVirtualContainer();
 
+  // Bail early if container creation failed (null gridContainer)
+  if (!m_virtualContainer) {
+    qWarning() << "ScrollManager::setupNormalVirtualScrolling: Failed to create virtual container";
+    return;
+  }
+
   // Configure widget factory with current context and metrics
   if (m_widgetFactory) {
     m_widgetFactory->setDatabaseManager(m_databaseManager);
@@ -480,14 +487,16 @@ void ScrollManager::cleanup() {
   // Clear the widget pool - if we have pre-search widgets, use soft clear
   // to allow potential reuse when search is cleared
   // Otherwise use clearAndDelete for explicit cleanup
+  // IMPORTANT: Pass m_gridContainer as safe parent so widgets are reparented
+  // BEFORE the virtual container is deleted - prevents crash on reuse
   if (m_widgetPool) {
     if (hasPreSearch) {
       // Pre-search widgets exist - soft clear allows widget reuse
-      m_widgetPool->softClear();
+      m_widgetPool->softClear(m_gridContainer);
     } else {
       // Full cleanup - use soft clear to allow reuse during next collection load
       // The prewarm timer will prune unused stale widgets during idle
-      m_widgetPool->softClear();
+      m_widgetPool->softClear(m_gridContainer);
     }
   }
 

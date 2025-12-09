@@ -131,11 +131,12 @@ void MainWindow::setupManagerConnections() {
 
   loadingLabel = ui->loadingLabel;
 
-  // Set up InteractionManager first to get interactionState
-  getInteractionManager()->setupReferences(setup);
-  
-  // Populate interactionState in context now that InteractionManager is set up
+  // CRITICAL: Set interactionState BEFORE setupReferences so sub-managers
+  // can access it via ctx during their own setupReferences calls
   m_appContext.interactionState = &getInteractionManager()->state();
+
+  // Set up InteractionManager (its sub-managers will now get valid interactionState)
+  getInteractionManager()->setupReferences(setup);
 
   // Register InteractionManager's owned sub-managers in ApplicationContext
   // This enables sub-managers to access siblings directly via ctx
@@ -175,6 +176,22 @@ void MainWindow::connectDatabaseManager() {
   QObject::connect(getDatabaseManager(), &DatabaseManager::errorOccurred,
                    getNavigationManager(),
                    &NavigationManager::onMediaLibraryError);
+  
+  // Update loading overlay with scan progress during initial collection loading
+  QObject::connect(getDatabaseManager(), &DatabaseManager::scanProgress,
+                   this, [this](int current, int total, const QString &name) {
+                     if (m_loadingOverlay) {
+                       if (m_loadingOverlay->isActive()) {
+                         // Update existing overlay with progress
+                         m_loadingOverlay->setMessage(QString("Scanning %1...").arg(name));
+                         m_loadingOverlay->setProgress(current, total);
+                       } else {
+                         // Show overlay with initial progress
+                         m_loadingOverlay->showWithProgress(
+                             QString("Scanning %1...").arg(name), current, total);
+                       }
+                     }
+                   });
   
   // Rebuild hierarchy cache when collections are modified via settings dialog
   QObject::connect(getSettingsManager(), &SettingsManager::collectionsModified,
@@ -426,6 +443,7 @@ void MainWindow::createMenuBar() {
   setupActionAboutQt();
   setupFullscreenAction();
   setupShortcutsAction();
+  setupGridWidthActions();
 }
 
 void MainWindow::setupActionExit() {
@@ -549,6 +567,76 @@ void MainWindow::setupShortcutsAction() {
   }
 }
 
+void MainWindow::setupGridWidthActions() {
+  // Ctrl++ to increase grid width (more columns, smaller items)
+  m_gridWidthIncreaseAction = new QAction(QObject::tr("Increase Grid Width"), this);
+  m_gridWidthIncreaseAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Plus));
+  m_gridWidthIncreaseAction->setShortcutContext(Qt::ApplicationShortcut);
+  addAction(m_gridWidthIncreaseAction);
+  QObject::connect(m_gridWidthIncreaseAction, &QAction::triggered, this, [this]() {
+    adjustGridWidth(1);
+  });
+
+  // Ctrl+- to decrease grid width (fewer columns, larger items)
+  m_gridWidthDecreaseAction = new QAction(QObject::tr("Decrease Grid Width"), this);
+  m_gridWidthDecreaseAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus));
+  m_gridWidthDecreaseAction->setShortcutContext(Qt::ApplicationShortcut);
+  addAction(m_gridWidthDecreaseAction);
+  QObject::connect(m_gridWidthDecreaseAction, &QAction::triggered, this, [this]() {
+    adjustGridWidth(-1);
+  });
+}
+
+void MainWindow::adjustGridWidth(int delta) {
+  if (currentCollectionIndex < 0 || 
+      currentCollectionIndex >= m_collections.size()) {
+    return;
+  }
+
+  CollectionConfig &config = m_collections[currentCollectionIndex];
+  int newWidth = config.gridWidth + delta;
+
+  // Clamp to valid range
+  newWidth = qBound(UIConstants::Grid::MIN_WIDTH, newWidth, 
+                    UIConstants::Grid::MAX_WIDTH);
+
+  if (newWidth == config.gridWidth) {
+    return;  // No change needed
+  }
+
+  // Update the collection config
+  config.gridWidth = newWidth;
+
+  // Persist the change
+  if (getSettingsManager()) {
+    getSettingsManager()->saveCollections(m_collections);
+  }
+
+  // Apply the change to the UI using the same flow as settings dialog
+  if (getScrollManager()) {
+    getScrollManager()->updateGridWidth(newWidth);
+
+    // Delay layout recalculation to allow grid width change to propagate -
+    // nested timer ensures artwork updates happen after layout is stable
+    QTimer::singleShot(UIConstants::Timing::LONG_DELAY_MS, this, [this]() {
+      if (getScrollManager()) {
+        getScrollManager()->preCalculateLayout();
+        getScrollManager()->forceVirtualViewUpdate();
+        QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this, [this]() {
+          if (getScrollManager()) {
+            getScrollManager()->updateVirtualView();
+            if (getArtworkManager()) {
+              getArtworkManager()->updateViewportArtwork();
+            }
+            getScrollManager()->centerHorizontalScrollbar(
+                currentCollectionIndex, m_collections);
+          }
+        });
+      }
+    });
+  }
+}
+
 void MainWindow::setupSidebar() {
   if (getSidebarManager()) {
     getSidebarManager()->setupSidebar();
@@ -644,6 +732,10 @@ void MainWindow::setupEventFilters() {
   setup.ctx = &m_appContext;
   setup.generalSettings = &m_generalSettings;
   setup.artworkManager = getArtworkManager();
+  setup.gridContainer = gridContainer;
+  setup.mediaScrollArea = ui->itemScrollArea;
+  setup.collections = &m_collections;
+  setup.hierarchyCache = &m_hierarchyCache;
 
   getScrollManager()->setupReferences(setup);
   getScrollManager()->setDatabaseManager(getDatabaseManager());

@@ -24,6 +24,11 @@ void ItemWidgetFactory::setFileData(const QStringList *filePaths,
 }
 
 ItemWidget *ItemWidgetFactory::acquireWidget() {
+  // Cannot create widgets without a valid parent
+  if (!m_parentWidget) {
+    qWarning() << "ItemWidgetFactory::acquireWidget: m_parentWidget is null, cannot acquire widget";
+    return nullptr;
+  }
   if (!m_widgetPool) {
     return new ItemWidget(m_parentWidget);
   }
@@ -34,7 +39,9 @@ ItemWidget *ItemWidgetFactory::acquireWidget() {
 void ItemWidgetFactory::configureBaseWidget(ItemWidget *widget) {
   // Set parent BEFORE resetForReuse() to ensure child widgets (imageLabel, etc.)
   // are in a valid state - reparenting first prevents stale child pointers
-  widget->setParent(m_parentWidget);
+  if (m_parentWidget) {
+    widget->setParent(m_parentWidget);
+  }
   widget->resetForReuse();
   widget->setFocusPolicy(Qt::NoFocus);
   widget->setHideTitles(m_context.config.hideTitles);
@@ -62,6 +69,9 @@ void ItemWidgetFactory::releaseWidget(ItemWidget *widget, int visibleRows,
 
 ItemWidget *ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex) {
   auto *widget = acquireWidget();
+  if (!widget) {
+    return nullptr;
+  }
   configureBaseWidget(widget);
 
   QString subcollectionName;
@@ -79,6 +89,9 @@ ItemWidget *ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex)
 
 ItemWidget *ItemWidgetFactory::createVirtualFolderWidget(const QString &folderPath) {
   auto *widget = acquireWidget();
+  if (!widget) {
+    return nullptr;
+  }
   configureBaseWidget(widget);
 
   // Extract display name from folder path (last component)
@@ -122,6 +135,9 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex,
   }
 
   auto *widget = acquireWidget();
+  if (!widget) {
+    return nullptr;
+  }
   configureBaseWidget(widget);
   widget->setFilePath(fullPath);
   widget->setItemName(displayName);
@@ -133,6 +149,9 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex,
 
 ItemWidget *ItemWidgetFactory::createPlaceholderWidget() {
   auto *widget = acquireWidget();
+  if (!widget) {
+    return nullptr;
+  }
   configureBaseWidget(widget);
   if (widget->nameLabel) {
     widget->nameLabel->setText("Loading...");

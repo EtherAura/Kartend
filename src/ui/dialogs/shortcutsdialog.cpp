@@ -58,6 +58,11 @@ void ShortcutsDialog::setupUI() {
   addShortcut(contentLayout, tr("F11"), tr("Toggle fullscreen"));
   addShortcut(contentLayout, tr("F1"), tr("Show this help dialog"));
 
+  // View
+  addSection(contentLayout, tr("View"));
+  addShortcut(contentLayout, tr("Ctrl++"), tr("Increase grid columns (smaller items)"));
+  addShortcut(contentLayout, tr("Ctrl+-"), tr("Decrease grid columns (larger items)"));
+
   // Add stretch to push content to top
   contentLayout->addStretch();
 

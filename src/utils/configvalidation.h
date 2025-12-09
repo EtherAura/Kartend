@@ -5,6 +5,8 @@
 #include "errorutils.h"
 #include <QDir>
 #include <QFileInfo>
+#include <QProcess>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -15,6 +17,15 @@
  * error reporting for collection configurations.
  */
 namespace ConfigValidation {
+
+// Check if a command is available in PATH (for non-path launchers like "retroarch")
+[[nodiscard]] inline bool isCommandInPath(const QString &command) {
+  // Use 'which' on Unix-like systems to check if command exists in PATH
+  QProcess process;
+  process.start("which", QStringList() << command);
+  process.waitForFinished(1000);  // 1 second timeout
+  return process.exitCode() == 0;
+}
 
 // Validation result with multiple issues
 struct ValidationResult {
@@ -54,8 +65,9 @@ struct ValidationResult {
 };
 
 // Validate a single collection configuration
+// isContainer: true if this collection has children (shell/container collection)
 [[nodiscard]] inline ValidationResult validateCollection(
-    const CollectionConfig &config, int index) {
+    const CollectionConfig &config, int index, bool isContainer = false) {
   ValidationResult result;
   QString prefix = QString("Collection '%1' (index %2): ")
                        .arg(config.name.isEmpty() ? "<unnamed>" : config.name)
@@ -67,8 +79,11 @@ struct ValidationResult {
   }
 
   // Media directory validation
+  // Container/shell collections don't need media directories - they only hold subcollections
   if (config.mediaDirectory.isEmpty()) {
-    result.addWarning(prefix + "no media directory specified");
+    if (!isContainer) {
+      result.addWarning(prefix + "no media directory specified");
+    }
   } else {
     QString expandedPath = config.mediaDirectory;
     if (expandedPath.startsWith("~")) {
@@ -105,17 +120,34 @@ struct ValidationResult {
 
   // Launcher validation (optional but validate if present)
   if (!config.launcherPath.isEmpty()) {
-    QString expandedPath = config.launcherPath;
-    if (expandedPath.startsWith("~")) {
-      expandedPath = QDir::homePath() + expandedPath.mid(1);
+    QString launcherPath = config.launcherPath;
+    bool launcherValid = false;
+    
+    // Check if it's an absolute or relative path
+    if (launcherPath.contains('/') || launcherPath.startsWith("~")) {
+      QString expandedPath = launcherPath;
+      if (expandedPath.startsWith("~")) {
+        expandedPath = QDir::homePath() + expandedPath.mid(1);
+      }
+      QFileInfo launcherInfo(expandedPath);
+      if (launcherInfo.exists()) {
+        if (launcherInfo.isExecutable()) {
+          launcherValid = true;
+        } else {
+          result.addWarning(prefix + "launcher is not executable: " +
+                            launcherPath);
+        }
+      }
+    } else {
+      // It's a command name - check if it's in PATH
+      launcherValid = isCommandInPath(launcherPath);
     }
-    QFileInfo launcherInfo(expandedPath);
-    if (!launcherInfo.exists()) {
-      result.addWarning(prefix + "launcher does not exist: " +
-                        config.launcherPath);
-    } else if (!launcherInfo.isExecutable()) {
-      result.addWarning(prefix + "launcher is not executable: " +
-                        config.launcherPath);
+    
+    if (!launcherValid && !launcherPath.contains('/')) {
+      // Only warn if we haven't already added a warning above
+      result.addWarning(prefix + "launcher not found in PATH: " + launcherPath);
+    } else if (!launcherValid) {
+      result.addWarning(prefix + "launcher does not exist: " + launcherPath);
     }
   }
 
@@ -146,9 +178,19 @@ struct ValidationResult {
     return result;
   }
 
+  // Build set of collections that have children (container/shell collections)
+  QSet<int> containerIndices;
+  for (int i = 0; i < collections.size(); ++i) {
+    int parentIndex = collections[i].parentCollectionIndex;
+    if (parentIndex >= 0 && parentIndex < collections.size()) {
+      containerIndices.insert(parentIndex);
+    }
+  }
+
   // Validate each collection
   for (int i = 0; i < collections.size(); ++i) {
-    ValidationResult collResult = validateCollection(collections[i], i);
+    bool isContainer = containerIndices.contains(i);
+    ValidationResult collResult = validateCollection(collections[i], i, isContainer);
     result.warnings << collResult.warnings;
     result.errors << collResult.errors;
     if (!collResult.valid) {

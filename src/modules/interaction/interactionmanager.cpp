@@ -1214,6 +1214,13 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
     return;
   }
 
+  // Check if user has made an explicit selection since navigation started -
+  // if so, don't override their choice with automatic restore
+  if (m_state.selectionRestore().userSelectionMade) {
+    debugLog("[SelectionRestore] Skipping restore - user made explicit selection");
+    return;
+  }
+
   // Use SelectionManager for preparation
   if (m_selectionManager) {
     m_selectionManager->prepareForRestore(targetIndex);
@@ -1723,6 +1730,14 @@ void InteractionManager::persistSelectionForIndex(int coll, int idx) {
 void InteractionManager::cancelPendingSelectionRestore() {
   if (m_selectionManager) {
     m_selectionManager->cancelPendingSelectionRestore();
+  }
+  m_selectionRestoreToken++;
+  m_selectionRestorePending = false;
+}
+
+void InteractionManager::resetSelectionRestoreState() {
+  if (m_selectionManager) {
+    m_selectionManager->resetSelectionRestoreState();
   }
   m_selectionRestoreToken++;
   m_selectionRestorePending = false;

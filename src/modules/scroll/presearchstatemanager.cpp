@@ -28,7 +28,7 @@ bool PreSearchStateManager::saveState(QHash<int, ItemWidget *> &activeWidgets) {
   // Reparent to gridContainer so they survive cleanup() destroying virtual container
   m_savedWidgets = activeWidgets;
   for (auto it = m_savedWidgets.begin(); it != m_savedWidgets.end(); ++it) {
-    if (it.value()) {
+    if (it.value() && m_gridContainer) {
       it.value()->setParent(m_gridContainer);
       it.value()->hide();
     }
