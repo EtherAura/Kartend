@@ -200,4 +200,7 @@ inline void logError(const ErrorContext &ctx) {
 
 } // namespace ErrorUtils
 
+// Allow ErrorContext to be used in queued signal/slot connections (cross-thread)
+Q_DECLARE_METATYPE(ErrorUtils::ErrorContext)
+
 #endif // ERRORUTILS_H

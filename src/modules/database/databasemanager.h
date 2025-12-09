@@ -9,6 +9,7 @@
 #include <QStringList>
 
 #include "collectionutils.h"
+#include "errorutils.h"
 
 class SessionManager;
 
@@ -61,7 +62,7 @@ signals:
                    const QHash<QString, QString> &fileNames);
   void itemCountLoaded(int count);
   void itemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
-  void errorOccurred(const QString &message);
+  void errorOccurred(const ErrorUtils::ErrorContext &error);
   
   /// Emitted during collection scanning to report progress.
   /// @param current The 1-based index of the collection being scanned

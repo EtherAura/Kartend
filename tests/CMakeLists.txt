@@ -79,3 +79,8 @@ target_link_libraries(test_widgetpoolmanager
   Qt6::Test
 )
 add_test(NAME WidgetPoolManager COMMAND test_widgetpoolmanager)
+
+# GridUtils tests
+add_executable(test_gridutils test_gridutils.cpp)
+target_link_libraries(test_gridutils Qt6::Core Qt6::Test)
+add_test(NAME GridUtils COMMAND test_gridutils)

@@ -87,6 +87,15 @@ void WidgetPoolManager::softClear(QWidget *safeParent) {
   }
   m_stalePool.append(m_pool);
   m_pool.clear();
+  
+  // Limit stale pool size to prevent memory bloat during rapid collection switching
+  // Excess widgets are deleted immediately rather than waiting for pruneStaleWidgets()
+  while (m_stalePool.size() > MAX_STALE_POOL_SIZE) {
+    if (ItemWidget *excess = m_stalePool.takeFirst()) {
+      excess->deleteLater();
+      ++m_metrics.discards;
+    }
+  }
 }
 
 void WidgetPoolManager::pruneStaleWidgets() {

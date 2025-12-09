@@ -3,6 +3,7 @@
 
 #include "applicationcontext.h"
 #include "collectionutils.h"
+#include "errorutils.h"
 #include "setuputils.h"
 #include <QHash>
 #include <QList>
@@ -136,7 +137,7 @@ public slots:
   void onItemCountLoaded(int count);
   void onItemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void fetchItemsRange(int offset, int limit);
-  void onMediaLibraryError(const QString &error);
+  void onMediaLibraryError(const ErrorUtils::ErrorContext &error);
   void onViewportChanged();
   
   // Appearance methods - can be called from SettingsManager after dialog closes

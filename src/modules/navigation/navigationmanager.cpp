@@ -989,7 +989,7 @@ void NavigationManager::onItemsLoaded(
   schedulePostLoadOperations();
 }
 
-void NavigationManager::onMediaLibraryError(const QString &error) {
+void NavigationManager::onMediaLibraryError(const ErrorUtils::ErrorContext &error) {
   if (m_loadingLabel) {
     m_loadingLabel->deleteLater();
     m_loadingLabel = nullptr;
@@ -1006,19 +1006,14 @@ void NavigationManager::onMediaLibraryError(const QString &error) {
     widget->deleteLater();
   }
 
-  // Show error dialog for database errors
-  auto errorContext = ErrorUtils::ErrorContext::error(
-      ErrorUtils::ErrorCode::DatabaseQueryFailed,
-      error,
-      "NavigationManager::onMediaLibraryError");
-  
+  // Show error dialog for database errors - use the full ErrorContext
   QWidget *parentWidget = m_gridContainer ? m_gridContainer->window() : nullptr;
-  ErrorDialog::showError(parentWidget, errorContext);
+  ErrorDialog::showError(parentWidget, error);
 
   auto *errorWidget = new QWidget(m_gridContainer);
   errorWidget->setObjectName("noItemsWidget");
 
-  auto *errorLabel = new QLabel(error, errorWidget);
+  auto *errorLabel = new QLabel(error.message, errorWidget);
   errorLabel->setAlignment(Qt::AlignCenter);
   errorLabel->setStyleSheet(
       "QLabel { color: palette(text); font-size: 14px; }");

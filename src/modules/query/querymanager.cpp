@@ -31,6 +31,9 @@ static auto displayNameForBase(const QString &baseName) -> QString;
 QueryManager::QueryManager(SessionManager *sessionManager, QObject *parent)
     : QObject(parent), m_sessionManager(sessionManager) {
   m_connectionName = "kartend_worker";
+  
+  // Register ErrorContext for queued signal/slot connections
+  qRegisterMetaType<ErrorUtils::ErrorContext>("ErrorUtils::ErrorContext");
 }
 
 QueryManager::~QueryManager() {
@@ -103,7 +106,7 @@ void QueryManager::initDatabase() {
         "QueryManager::initDatabase")
         .withDetails(m_db.lastError().text());
     ErrorUtils::logError(err);
-    emit errorOccurred(err.message);
+    emit errorOccurred(err);
     return;
   }
 
@@ -190,7 +193,7 @@ void QueryManager::loadItems(const CollectionContext &context) {
                                    "Invalid collection context",
                                    "QueryManager::loadItems");
     ErrorUtils::logError(err);
-    emit errorOccurred(err.message);
+    emit errorOccurred(err);
     return;
   }
 
@@ -258,7 +261,7 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
                                    "Invalid collection context",
                                    "QueryManager::loadItemsWithSubcollections");
     ErrorUtils::logError(err);
-    emit errorOccurred(err.message);
+    emit errorOccurred(err);
     return;
   }
 
@@ -460,7 +463,7 @@ void QueryManager::fetchItemCount(const CollectionContext &context, const QList<
                                    "Invalid collection context",
                                    "QueryManager::fetchItemCount");
     ErrorUtils::logError(err);
-    emit errorOccurred(err.message);
+    emit errorOccurred(err);
     return;
   }
 
@@ -530,7 +533,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
                                    "Invalid collection context",
                                    "QueryManager::fetchItemsRange");
     ErrorUtils::logError(err);
-    emit errorOccurred(err.message);
+    emit errorOccurred(err);
     return;
   }
 
@@ -604,7 +607,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
         "QueryManager::fetchItemsRange")
         .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
-    emit errorOccurred(err.message);
+    emit errorOccurred(err);
   }
 
   emit itemsRangeLoaded(offset, filePaths, fileNames);
@@ -869,7 +872,7 @@ void QueryManager::saveItemsToDatabase(
         "QueryManager::saveItemsToDatabase")
         .withDetails(QString::fromStdString(e.what()));
     ErrorUtils::logError(err);
-    emit errorOccurred(err.message);
+    emit errorOccurred(err);
   }
 }
 

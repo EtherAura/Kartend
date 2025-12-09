@@ -31,6 +31,7 @@ private slots:
 
   // Soft clear and stale widgets
   void testSoftClear_marksWidgetsStale();
+  void testSoftClear_limitsStalePoolSize();
   void testAcquire_reusesStaleWidget();
   void testPruneStaleWidgets_removesStaleWidgets();
   void testPruneStaleWidgets_keepsNormalPool();
@@ -161,6 +162,50 @@ void TestWidgetPoolManager::testSoftClear_marksWidgetsStale() {
   
   // Pool size should be 0 (stale widgets aren't counted in poolSize())
   QCOMPARE(m_pool->poolSize(), 0);
+}
+
+void TestWidgetPoolManager::testSoftClear_limitsStalePoolSize() {
+  // Create more widgets than MAX_STALE_POOL_SIZE (50)
+  // We need to set visible metrics large enough to allow the pool to grow
+  // and then soft clear to trigger the stale pool limiting
+  
+  constexpr int MAX_STALE_SIZE = 50;  // Must match MAX_STALE_POOL_SIZE in header
+  constexpr int WIDGET_COUNT = 70;    // More than MAX_STALE_SIZE
+  
+  // Set large visible metrics to allow pool to hold many widgets
+  // 10 rows * 10 items * 2 (buffer multiplier) = 200, clamped to MAX_SIZE (100)
+  m_pool->setVisibleMetrics(10, 10);
+  
+  QList<ItemWidget *> widgets;
+  for (int i = 0; i < WIDGET_COUNT; ++i) {
+    widgets.append(m_pool->acquire());
+  }
+  
+  // Release all widgets back to pool
+  // Note: pool may discard some if it's at capacity (MAX_SIZE = 100)
+  for (ItemWidget *w : widgets) {
+    m_pool->release(w);
+  }
+  
+  int poolSizeBeforeSoftClear = m_pool->poolSize();
+  QVERIFY2(poolSizeBeforeSoftClear >= MAX_STALE_SIZE, 
+           "Pool should have at least MAX_STALE_SIZE widgets before soft clear");
+  
+  // Reset metrics to track discards during softClear
+  m_pool->resetMetrics();
+  
+  // Soft clear should limit stale pool size
+  m_pool->softClear();
+  
+  // Check that excess widgets were discarded
+  int expectedDiscards = poolSizeBeforeSoftClear - MAX_STALE_SIZE;
+  QCOMPARE(m_pool->metrics().discards, expectedDiscards);
+  
+  // Pool should be empty (all moved to stale)
+  QCOMPARE(m_pool->poolSize(), 0);
+  
+  // Clean up remaining stale widgets
+  m_pool->pruneStaleWidgets();
 }
 
 void TestWidgetPoolManager::testAcquire_reusesStaleWidget() {

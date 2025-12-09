@@ -98,6 +98,9 @@ private:
   QTimer *m_prewarmTimer = nullptr;
   int m_prewarmTargetSize = 0;
   static constexpr int PREWARM_BATCH_SIZE = 3;  // Widgets per timer tick
+  
+  // Stale pool size limit to prevent memory bloat during rapid collection switching
+  static constexpr int MAX_STALE_POOL_SIZE = 50;
 };
 
 #endif
