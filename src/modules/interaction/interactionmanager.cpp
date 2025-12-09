@@ -486,11 +486,12 @@ void InteractionManager::connectEventManagerSignals() {
   connect(m_eventManager.get(), &EventManager::widgetClicked,
           this, [this](ItemWidget *widget, const QPoint &clickPos, QMouseEvent *event) {
             if (m_selectionManager) {
+              // Get previous selection BEFORE handleWidgetSelection changes it
+              const int previousSelection = currentSelectedIndex();
               const int clickedIndex = m_selectionManager->handleWidgetSelection(widget, clickPos, event);
               if (clickedIndex >= 0 && m_mouseManager) {
                 const int gridWidth = getCurrentGridWidth();
                 const int totalItems = m_scrollManager ? m_scrollManager->getTotalItems() : 0;
-                const int previousSelection = currentSelectedIndex();
                 m_mouseManager->updateClickHoldHorizontalCandidate(previousSelection, clickedIndex, gridWidth);
                 m_mouseManager->startClickHoldTimer(clickPos, clickedIndex, gridWidth, totalItems);
               }
@@ -1553,14 +1554,23 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
         m_viewportManager->setForceImmediateCenter(true);
         m_viewportManager->setWrapSequenceActive(true);
         m_viewportManager->setContinuousScrollActive(false);
+        // Clear any pending selection on wrap - the wrap jump is the final position
+        m_state.click().selectionSuppressed = false;
+        m_state.click().pendingSelectionIndex = -1;
       } else {
         m_viewportManager->setContinuousScrollActive(true);
       }
     }
 
     bool rowChanged = KeyboardManager::hasRowChanged(gridWidth, currentIndex, nextIndex);
-    if (rowChanged) {
+    // Only suppress selection for row changes if NOT wrapping
+    // Wraps should immediately finalize at the target position
+    if (rowChanged && !didWrap) {
       m_state.click().selectionSuppressed = true;
+    }
+    // Always update pending index to current position during horizontal hold
+    // so releasing the mouse lands on the current item, not the first item after row change
+    if (m_state.click().selectionSuppressed) {
       m_state.click().pendingSelectionIndex = nextIndex;
     }
 

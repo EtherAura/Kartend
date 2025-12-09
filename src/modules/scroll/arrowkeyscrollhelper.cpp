@@ -154,7 +154,31 @@ void ArrowKeyScrollHelper::setupAndStartAnimation(QScrollBar *scrollBar,
     animation->setEasingCurve(QEasingCurve::OutCubic);
   }
 
+  // Check if animation is running and can be extended smoothly
   if (animation->state() == QAbstractAnimation::Running) {
+    int animEnd = animation->endValue().toInt();
+    int animStart = animation->startValue().toInt();
+    bool movingDown = animEnd > animStart;
+    bool newTargetDown = target > current;
+    
+    // If continuing in the same direction, just update the target
+    // This creates smooth continuous scrolling instead of stuttering restarts
+    if (movingDown == newTargetDown) {
+      int newDistance = std::abs(target - current);
+      int newDuration =
+          (pixelsPerMillisecond > 0.0)
+              ? static_cast<int>(std::round(static_cast<double>(newDistance) /
+                                            pixelsPerMillisecond))
+              : singleRowDuration;
+      newDuration = std::max(baseDuration, std::min(newDuration, baseDuration));
+      
+      // Update end value and duration without stopping - smooth extension
+      animation->setEndValue(target);
+      animation->setDuration(newDuration);
+      return;
+    }
+    
+    // Direction changed - need to stop and restart
     animation->stop();
   }
 

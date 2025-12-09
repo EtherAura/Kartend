@@ -91,12 +91,20 @@ void QueryManager::clearStatementCache() {
 // Attempts to reconnect to the database if connection was lost
 // Used to handle transient SQLite errors (disk full, I/O errors, etc.)
 // Returns true if database is now open, false otherwise
+// NOTE: Only attempts reconnection if database was previously initialized
+//       (has valid driver). Returns false for uninitialized databases.
 auto QueryManager::ensureDatabaseConnection() -> bool {
   static constexpr int MAX_RECONNECT_ATTEMPTS = 3;
   static constexpr int RECONNECT_DELAY_MS = 100;
   
   if (m_db.isOpen()) {
     return true;
+  }
+  
+  // Don't attempt reconnection if database was never initialized
+  // (no driver means initDatabase() hasn't been called yet)
+  if (!m_db.isValid() || m_db.driverName().isEmpty()) {
+    return false;
   }
   
   auto logReconnectAttempt = [this](int attempt) {
@@ -113,10 +121,8 @@ auto QueryManager::ensureDatabaseConnection() -> bool {
     logReconnectAttempt(attempt);
     
     // Close and clear the old connection state
-    if (m_db.isValid()) {
-      clearStatementCache();
-      m_db.close();
-    }
+    clearStatementCache();
+    m_db.close();
     
     // Try to reopen
     if (m_db.open()) {

@@ -380,7 +380,11 @@ auto NavigationManager::showCollectionItems(int collectionIndex) -> bool {
   if ((parent()) &&
       (m_interactionManager)) {
     m_interactionManager->stopRepeat();
-    m_interactionManager->cancelPendingSelectionRestore();
+    // Only cancel pending restore when navigating FROM an existing collection
+    // On initial startup (*m_currentCollectionIndex < 0), allow restore to proceed
+    if (*m_currentCollectionIndex >= 0) {
+      m_interactionManager->cancelPendingSelectionRestore();
+    }
   }
 
   persistCurrentSelection();
