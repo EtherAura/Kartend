@@ -77,6 +77,10 @@ private:
   
   // Clears the statement cache (called when database is reopened)
   void clearStatementCache();
+  
+  // Attempts to reconnect to the database if connection was lost
+  // Returns true if database is open (either already was or reconnection succeeded)
+  [[nodiscard]] bool ensureDatabaseConnection();
 
   void ensureCollectionScanned(int collectionIndex, const CollectionConfig &collection);
   bool needsRescan(int collectionIndex, const CollectionConfig &collection);

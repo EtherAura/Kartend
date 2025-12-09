@@ -10,6 +10,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
+#include <QThread>
 #include <stdexcept>
 #include <QDebug>
 
@@ -87,6 +88,72 @@ void QueryManager::clearStatementCache() {
   m_statementAccessOrder.clear();
 }
 
+// Attempts to reconnect to the database if connection was lost
+// Used to handle transient SQLite errors (disk full, I/O errors, etc.)
+// Returns true if database is now open, false otherwise
+auto QueryManager::ensureDatabaseConnection() -> bool {
+  static constexpr int MAX_RECONNECT_ATTEMPTS = 3;
+  static constexpr int RECONNECT_DELAY_MS = 100;
+  
+  if (m_db.isOpen()) {
+    return true;
+  }
+  
+  auto logReconnectAttempt = [this](int attempt) {
+    auto info = ErrorContext::info(
+        ErrorCode::DatabaseConnectionLost,
+        QString("Database connection lost, attempting reconnection (%1/%2)")
+            .arg(attempt)
+            .arg(MAX_RECONNECT_ATTEMPTS),
+        "QueryManager::ensureDatabaseConnection");
+    ErrorUtils::logError(info);
+  };
+  
+  for (int attempt = 1; attempt <= MAX_RECONNECT_ATTEMPTS; ++attempt) {
+    logReconnectAttempt(attempt);
+    
+    // Close and clear the old connection state
+    if (m_db.isValid()) {
+      clearStatementCache();
+      m_db.close();
+    }
+    
+    // Try to reopen
+    if (m_db.open()) {
+      auto success = ErrorContext::info(
+          ErrorCode::DatabaseConnectionRestored,
+          QString("Database reconnection successful on attempt %1").arg(attempt),
+          "QueryManager::ensureDatabaseConnection");
+      ErrorUtils::logError(success);
+      
+      // Re-initialize PRAGMAs after reconnection
+      QSqlQuery query(m_db);
+      query.exec("PRAGMA foreign_keys = ON");
+      query.exec("PRAGMA journal_mode = WAL");
+      query.exec("PRAGMA synchronous = NORMAL");
+      
+      return true;
+    }
+    
+    // Wait before next attempt (unless it's the last one)
+    if (attempt < MAX_RECONNECT_ATTEMPTS) {
+      QThread::msleep(RECONNECT_DELAY_MS);
+    }
+  }
+  
+  // All attempts failed
+  auto err = ErrorContext::critical(
+      ErrorCode::DatabaseConnectionFailed,
+      QString("Failed to reconnect to database after %1 attempts")
+          .arg(MAX_RECONNECT_ATTEMPTS),
+      "QueryManager::ensureDatabaseConnection")
+      .withDetails(m_db.lastError().text());
+  ErrorUtils::logError(err);
+  emit errorOccurred(err);
+  
+  return false;
+}
+
 void QueryManager::initDatabase() {
   if (QSqlDatabase::contains(m_connectionName)) {
     m_db = QSqlDatabase::database(m_connectionName);
@@ -143,7 +210,12 @@ void QueryManager::initDatabase() {
 }
 
 void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollections) {
-  if (!m_db.isOpen()) initDatabase();
+  if (!ensureDatabaseConnection()) {
+    initDatabase();
+    if (!m_db.isOpen()) {
+      return;
+    }
+  }
 
   QStringList allFilePaths;
   QHash<QString, QString> allFileNames;
@@ -186,7 +258,12 @@ void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollecti
 }
 
 void QueryManager::loadItems(const CollectionContext &context) {
-  if (!m_db.isOpen()) initDatabase();
+  if (!ensureDatabaseConnection()) {
+    initDatabase();
+    if (!m_db.isOpen()) {
+      return;
+    }
+  }
 
   if (!context.isValid()) {
     auto err = ErrorContext::error(ErrorCode::InvalidCollectionContext,
@@ -254,7 +331,12 @@ void QueryManager::loadItems(const CollectionContext &context) {
 
 void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
                                                  const QList<CollectionConfig> &allCollections) {
-  if (!m_db.isOpen()) initDatabase();
+  if (!ensureDatabaseConnection()) {
+    initDatabase();
+    if (!m_db.isOpen()) {
+      return;
+    }
+  }
 
   if (!context.isValid()) {
     auto err = ErrorContext::error(ErrorCode::InvalidCollectionContext,
@@ -371,7 +453,9 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
 }
 
 void QueryManager::updateCachedCounts(const QList<CollectionConfig> &allCollections) {
-  if (!m_db.isOpen()) initDatabase();
+  if (!ensureDatabaseConnection()) {
+    initDatabase();
+  }
 
   // Note: SessionManager usage here was removed because it's not thread-safe.
   // The logic for updating cached counts should be handled in the main thread
@@ -456,7 +540,13 @@ void QueryManager::ensureCollectionScanned(int collectionIndex, const Collection
 }
 
 void QueryManager::fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter) {
-  if (!m_db.isOpen()) initDatabase();
+  if (!ensureDatabaseConnection()) {
+    initDatabase();
+    if (!m_db.isOpen()) {
+      emit itemCountLoaded(0);
+      return;
+    }
+  }
 
   if (!context.isValid()) {
     auto err = ErrorContext::error(ErrorCode::InvalidCollectionContext,
@@ -526,7 +616,13 @@ void QueryManager::fetchItemCount(const CollectionContext &context, const QList<
 }
 
 void QueryManager::fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter) {
-  if (!m_db.isOpen()) initDatabase();
+  if (!ensureDatabaseConnection()) {
+    initDatabase();
+    if (!m_db.isOpen()) {
+      emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>());
+      return;
+    }
+  }
 
   if (!context.isValid()) {
     auto err = ErrorContext::error(ErrorCode::InvalidCollectionContext,

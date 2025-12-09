@@ -24,6 +24,8 @@ enum class ErrorCode {
   DatabaseQueryFailed = 101,
   DatabaseTransactionFailed = 102,
   DatabaseNotOpen = 103,
+  DatabaseConnectionLost = 104,
+  DatabaseConnectionRestored = 105,
   
   // Collection errors (200-299)
   InvalidCollectionContext = 200,
@@ -178,6 +180,8 @@ inline void logError(const ErrorContext &ctx) {
     case ErrorCode::DatabaseQueryFailed: return "DatabaseQueryFailed";
     case ErrorCode::DatabaseTransactionFailed: return "DatabaseTransactionFailed";
     case ErrorCode::DatabaseNotOpen: return "DatabaseNotOpen";
+    case ErrorCode::DatabaseConnectionLost: return "DatabaseConnectionLost";
+    case ErrorCode::DatabaseConnectionRestored: return "DatabaseConnectionRestored";
     case ErrorCode::InvalidCollectionContext: return "InvalidCollectionContext";
     case ErrorCode::CollectionNotFound: return "CollectionNotFound";
     case ErrorCode::MediaDirectoryNotFound: return "MediaDirectoryNotFound";
