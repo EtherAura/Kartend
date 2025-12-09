@@ -133,6 +133,13 @@ private:
   int m_preSearchCollectionIndex = -1;
   SearchMode m_preSearchMode = SearchMode::CurrentCollection;
   int m_preSearchSelectedIndex = -1;
+  
+  // Adaptive debounce: tracks keystroke timing to adjust debounce delay
+  qint64 m_lastKeystrokeTime = 0;
+  int m_adaptiveDebounceMs = 0;  // 0 = use default from UIConstants
+  static constexpr int MIN_ADAPTIVE_DEBOUNCE_MS = 80;
+  static constexpr int MAX_ADAPTIVE_DEBOUNCE_MS = 250;
+  void updateAdaptiveDebounce();
 };
 
 #endif

@@ -73,6 +73,38 @@ m_appContext.selectionManager = getInteractionManager()->selectionManager();
 | `SettingsManager` | ApplicationManager | |
 | `SidebarManager` | ApplicationManager | |
 
+### Atomic File Writes Pattern
+
+For data integrity when writing to disk, use the atomic write pattern (temp file + rename):
+
+```cpp
+// In SessionManager::atomicWriteFile()
+bool atomicWriteFile(const QString &filePath, const QByteArray &data) {
+  QString tempPath = filePath + ".tmp";
+  
+  // Write to temporary file first
+  QFile tempFile(tempPath);
+  if (!tempFile.open(QIODevice::WriteOnly)) {
+    return false;
+  }
+  qint64 written = tempFile.write(data);
+  tempFile.close();
+  
+  if (written != data.size()) {
+    QFile::remove(tempPath);  // Clean up partial write
+    return false;
+  }
+  
+  // Remove existing file, then atomic rename
+  if (QFile::exists(filePath)) {
+    QFile::remove(filePath);
+  }
+  return QFile::rename(tempPath, filePath);
+}
+```
+
+This pattern prevents data corruption if the application crashes during write.
+
 ### State Ownership
 
 **Single source of truth pattern:** Avoid duplicating state across managers.
@@ -169,6 +201,58 @@ Database operations use a worker thread pattern:
 | `QueryManager` | Worker thread, executes SQL queries, emits results |
 
 All database errors use structured `ErrorContext` reporting via `errorutils.h`.
+
+#### Database Reconnection Pattern
+
+`QueryManager` implements automatic reconnection for transient database failures:
+
+```cpp
+// ensureDatabaseConnection() attempts reconnection with retry logic
+// Called at the start of each query operation
+if (!ensureDatabaseConnection()) {
+  initDatabase();
+  if (!m_db.isOpen()) {
+    emit itemCountLoaded(0);  // Return safe default
+    return;
+  }
+}
+```
+
+The reconnection logic:
+- Attempts up to 3 reconnections with 100ms delay between attempts
+- Clears the prepared statement cache on reconnection
+- Re-initializes PRAGMAs (foreign_keys, journal_mode, synchronous)
+- Logs reconnection attempts with `ErrorContext` for debugging
+
+Error codes for connection state:
+- `DatabaseConnectionLost` - Connection was lost, attempting reconnection
+- `DatabaseConnectionRestored` - Reconnection succeeded
+- `DatabaseConnectionFailed` - All reconnection attempts failed
+
+#### ErrorContext Signal Propagation
+
+Database errors propagate through the signal chain as full `ErrorContext` objects:
+
+```cpp
+// In QueryManager (worker thread)
+void errorOccurred(const ErrorUtils::ErrorContext &error);  // Signal
+
+// In DatabaseManager (main thread) - forwards to NavigationManager
+connect(m_worker, &QueryManager::errorOccurred, 
+        this, &DatabaseManager::errorOccurred);
+
+// In NavigationManager - displays to user
+void NavigationManager::onMediaLibraryError(const ErrorUtils::ErrorContext &error) {
+  // Show error dialog with full context
+  showErrorDialog(error.message, error.details);
+}
+```
+
+Register `ErrorContext` for cross-thread signals:
+```cpp
+// In QueryManager constructor
+qRegisterMetaType<ErrorUtils::ErrorContext>("ErrorUtils::ErrorContext");
+```
 
 ### Utility Modules (`src/utils/`)
 
@@ -299,6 +383,12 @@ add_test(NAME test_classname COMMAND test_classname)
 |------------|-------|----------|
 | `test_gridlayoutcalculator` | 19 | Grid metrics, item positioning, row ranges |
 | `test_interactionstateholder` | 15 | State flags, suppression timers, struct access, search state |
+| `test_launchmanager` | 12 | Security validation, path checking, parameter parsing |
+| `test_pathutils` | 10 | Path validation, expansion, Result<T> error handling |
+| `test_widgetpoolmanager` | 20 | Widget acquisition, release, soft/hard clear, stale limits |
+| `test_gridutils` | 24 | Row/column math, centering, grid metrics calculation |
+
+**Total: 100+ unit tests across 6 test suites**
 
 ## Code Conventions
 

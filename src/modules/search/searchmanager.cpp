@@ -9,6 +9,7 @@
 #include "settingsutils.h"
 #include "uiconstants.h"
 #include <QApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QLineEdit>
 #include <QPushButton>
@@ -334,6 +335,10 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
     if (m_searchDebounceTimer) {
       m_searchDebounceTimer->cancel();
     }
+    // Reset adaptive debounce state when search is cleared
+    m_lastKeystrokeTime = 0;
+    m_adaptiveDebounceMs = 0;
+    
     if (m_searchItemsLoadedConn != QMetaObject::Connection()) {
       QObject::disconnect(m_searchItemsLoadedConn);
       m_searchItemsLoadedConn = QMetaObject::Connection();
@@ -392,7 +397,10 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
   }
 
   if (m_searchDebounceTimer) {
-    m_searchDebounceTimer->setInterval(UIConstants::Search::TYPING_DEBOUNCE_MS);
+    updateAdaptiveDebounce();
+    int debounceMs = (m_adaptiveDebounceMs > 0) ? m_adaptiveDebounceMs 
+                                                 : UIConstants::Search::TYPING_DEBOUNCE_MS;
+    m_searchDebounceTimer->setInterval(debounceMs);
     m_searchDebounceTimer->trigger();
   }
 }
@@ -507,4 +515,36 @@ void SearchManager::scheduleSearchBarRefocusIfNeeded() {
       m_searchBar->setFocus(Qt::OtherFocusReason);
     }
   });
+}
+
+// Updates debounce interval based on typing speed
+// Fast typing (< 100ms between keystrokes) = shorter debounce for responsiveness
+// Slow typing (> 300ms between keystrokes) = longer debounce to avoid premature searches
+void SearchManager::updateAdaptiveDebounce() {
+  qint64 now = QDateTime::currentMSecsSinceEpoch();
+  
+  if (m_lastKeystrokeTime > 0) {
+    qint64 timeSinceLastKeystroke = now - m_lastKeystrokeTime;
+    
+    // Clamp to reasonable range for calculation
+    int keystrokeInterval = static_cast<int>(std::clamp(timeSinceLastKeystroke, 
+                                                         static_cast<qint64>(50), 
+                                                         static_cast<qint64>(500)));
+    
+    // Map keystroke interval to debounce delay:
+    // Fast typing (50-100ms between keys) -> short debounce (80-120ms)
+    // Slow typing (300-500ms between keys) -> long debounce (180-250ms)
+    // Formula: debounce = MIN + (interval - 50) * (MAX - MIN) / (500 - 50)
+    int range = MAX_ADAPTIVE_DEBOUNCE_MS - MIN_ADAPTIVE_DEBOUNCE_MS;
+    int debounce = MIN_ADAPTIVE_DEBOUNCE_MS + 
+                   ((keystrokeInterval - 50) * range) / 450;
+    
+    m_adaptiveDebounceMs = std::clamp(debounce, MIN_ADAPTIVE_DEBOUNCE_MS, 
+                                       MAX_ADAPTIVE_DEBOUNCE_MS);
+  } else {
+    // First keystroke - use default
+    m_adaptiveDebounceMs = UIConstants::Search::TYPING_DEBOUNCE_MS;
+  }
+  
+  m_lastKeystrokeTime = now;
 }
