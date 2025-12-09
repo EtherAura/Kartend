@@ -361,13 +361,15 @@ auto ArtworkManager::shouldSkipArtworkLoading() -> bool {
 }
 
 // Processes a batch of artwork items in parallel (with cancellation support)
-auto processBatch(const QList<ArtworkInfo> &batch, bool highPriority,
+auto processBatch(const QList<ArtworkInfo> &batch,
+                  [[maybe_unused]] bool highPriority,
                   const std::atomic<bool> &cancelled)
     -> QList<ArtworkInfo::Result> {
   QList<ArtworkInfo::Result> results;
   results.reserve(batch.size());
 
   for (const ArtworkInfo &info : batch) {
+    // Check cancellation at start of each iteration
     if (QApplication::closingDown() || cancelled.load(std::memory_order_relaxed)) {
       break;
     }
@@ -375,6 +377,12 @@ auto processBatch(const QList<ArtworkInfo> &batch, bool highPriority,
       continue;
     }
     QImage img = loadAndProcessImage(info.artworkPath);
+    
+    // Check cancellation again after expensive I/O operation
+    // This ensures we exit quickly even if file loading was slow
+    if (QApplication::closingDown() || cancelled.load(std::memory_order_relaxed)) {
+      break;
+    }
     if (img.isNull()) {
       continue;
     }

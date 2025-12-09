@@ -46,6 +46,12 @@ private:
   void readCollectionsData(const QJsonObject &root);
   void readGlobalData(const QJsonObject &root);
   
+  // Builds JSON object from current session state (caller must hold m_mutex)
+  [[nodiscard]] QJsonObject buildSessionJson() const;
+  
+  // Atomically writes data to file using temp file + rename pattern
+  static bool atomicWriteFile(const QString &filePath, const QByteArray &data);
+  
   mutable QMutex m_mutex;
   qint64 globalItemCount = 0;
   QHash<QString, qint64> collectionNameRecursiveCountCache;

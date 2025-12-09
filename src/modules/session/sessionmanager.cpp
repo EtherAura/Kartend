@@ -87,96 +87,100 @@ void SessionManager::readGlobalData(const QJsonObject &root) {
   }
 }
 
+// Builds JSON object from current session state
+// Caller must hold m_mutex
+auto SessionManager::buildSessionJson() const -> QJsonObject {
+  QJsonObject root;
+  QJsonObject collections;
+
+  // Merge all keys from counts and lastSelected
+  QSet<QString> allKeys;
+  allKeys.unite(QSet<QString>(collectionNameItemCountCache.keyBegin(),
+                              collectionNameItemCountCache.keyEnd()));
+  allKeys.unite(QSet<QString>(collectionNameRecursiveCountCache.keyBegin(),
+                              collectionNameRecursiveCountCache.keyEnd()));
+  allKeys.unite(
+      QSet<QString>(lastSelectedByName.keyBegin(), lastSelectedByName.keyEnd()));
+
+  for (const QString &name : allKeys) {
+    QJsonObject coll;
+    if (collectionNameItemCountCache.contains(name)) {
+      coll["itemCount"] =
+          static_cast<double>(collectionNameItemCountCache[name]);
+    }
+    if (collectionNameRecursiveCountCache.contains(name)) {
+      coll["itemRecursiveCount"] =
+          static_cast<double>(collectionNameRecursiveCountCache[name]);
+    }
+    if (lastSelectedByName.contains(name)) {
+      const LastSelectedInfo &info = lastSelectedByName[name];
+      QJsonObject sel;
+      sel["index"] = info.index;
+      sel["title"] = info.title;
+      coll["lastSelected"] = sel;
+    }
+    collections[name] = coll;
+  }
+
+  root["collections"] = collections;
+  root["global"] = static_cast<double>(globalItemCount);
+  return root;
+}
+
+// Atomically writes data to file using temp file + rename pattern
+// This prevents data loss if the application crashes during write
+auto SessionManager::atomicWriteFile(const QString &filePath,
+                                     const QByteArray &data) -> bool {
+  QString tempPath = filePath + ".tmp";
+
+  // Write to temporary file first
+  QFile tempFile(tempPath);
+  if (!tempFile.open(QIODevice::WriteOnly)) {
+    return false;
+  }
+
+  qint64 written = tempFile.write(data);
+  tempFile.close();
+
+  if (written != data.size()) {
+    // Write failed, remove partial temp file
+    QFile::remove(tempPath);
+    return false;
+  }
+
+  // Remove existing file if present (required for rename on some platforms)
+  if (QFile::exists(filePath)) {
+    QFile::remove(filePath);
+  }
+
+  // Atomic rename
+  return QFile::rename(tempPath, filePath);
+}
+
 void SessionManager::saveToDisk() {
   if (QApplication::closingDown()) {
     return;
   }
 
-  QJsonObject root;
-  QJsonObject collections;
-
   QMutexLocker locker(&m_mutex);
-  
-  // Merge all keys from counts and lastSelected
-  QSet<QString> allKeys;
-  allKeys.unite(QSet<QString>(collectionNameItemCountCache.keyBegin(), collectionNameItemCountCache.keyEnd()));
-  allKeys.unite(QSet<QString>(collectionNameRecursiveCountCache.keyBegin(), collectionNameRecursiveCountCache.keyEnd()));
-  allKeys.unite(QSet<QString>(lastSelectedByName.keyBegin(), lastSelectedByName.keyEnd()));
-
-  for (const QString &name : allKeys) {
-    QJsonObject coll;
-    if (collectionNameItemCountCache.contains(name)) {
-        coll["itemCount"] = static_cast<double>(collectionNameItemCountCache[name]);
-    }
-    if (collectionNameRecursiveCountCache.contains(name)) {
-        coll["itemRecursiveCount"] = static_cast<double>(collectionNameRecursiveCountCache[name]);
-    }
-    if (lastSelectedByName.contains(name)) {
-        const LastSelectedInfo &info = lastSelectedByName[name];
-        QJsonObject sel;
-        sel["index"] = info.index;
-        sel["title"] = info.title;
-        coll["lastSelected"] = sel;
-    }
-    collections[name] = coll;
-  }
-
-  root["collections"] = collections;
-  root["global"] = static_cast<double>(globalItemCount);
+  QJsonObject root = buildSessionJson();
   locker.unlock();
 
   QString metadataPath = getCacheDirectory() + "/metadata/session.json";
   QDir().mkpath(QFileInfo(metadataPath).absolutePath());
-  QFile metadataFile(metadataPath);
-  if (metadataFile.open(QIODevice::WriteOnly)) {
-    metadataFile.write(QJsonDocument(root).toJson());
-    metadataFile.close();
-  }
+  atomicWriteFile(metadataPath, QJsonDocument(root).toJson());
 }
 
 // Saves session data to disk during shutdown - skips QApplication::closingDown
 // check since we're intentionally saving during app close
 void SessionManager::saveToDiskForShutdown() {
-  QJsonObject root;
-  QJsonObject collections;
-
   QMutexLocker locker(&m_mutex);
-  
-  // Merge all keys from counts and lastSelected
-  QSet<QString> allKeys;
-  allKeys.unite(QSet<QString>(collectionNameItemCountCache.keyBegin(), collectionNameItemCountCache.keyEnd()));
-  allKeys.unite(QSet<QString>(collectionNameRecursiveCountCache.keyBegin(), collectionNameRecursiveCountCache.keyEnd()));
-  allKeys.unite(QSet<QString>(lastSelectedByName.keyBegin(), lastSelectedByName.keyEnd()));
-
-  for (const QString &name : allKeys) {
-    QJsonObject coll;
-    if (collectionNameItemCountCache.contains(name)) {
-        coll["itemCount"] = static_cast<double>(collectionNameItemCountCache[name]);
-    }
-    if (collectionNameRecursiveCountCache.contains(name)) {
-        coll["itemRecursiveCount"] = static_cast<double>(collectionNameRecursiveCountCache[name]);
-    }
-    if (lastSelectedByName.contains(name)) {
-        const LastSelectedInfo &info = lastSelectedByName[name];
-        QJsonObject sel;
-        sel["index"] = info.index;
-        sel["title"] = info.title;
-        coll["lastSelected"] = sel;
-    }
-    collections[name] = coll;
-  }
-
-  root["collections"] = collections;
-  root["global"] = static_cast<double>(globalItemCount);
+  QJsonObject root = buildSessionJson();
   locker.unlock();
 
   QString metadataPath = getCacheDirectory() + "/metadata/session.json";
   QDir().mkpath(QFileInfo(metadataPath).absolutePath());
-  QFile metadataFile(metadataPath);
-  if (metadataFile.open(QIODevice::WriteOnly)) {
-    metadataFile.write(QJsonDocument(root).toJson());
-    metadataFile.close();
-  }
+  atomicWriteFile(metadataPath, QJsonDocument(root).toJson());
 }
 
 void SessionManager::setLastSelected(const QString &collectionName, int index,
