@@ -233,6 +233,34 @@ struct ValidationResult {
     }
   }
 
+  // Check for UUID collisions (same name + mediaDirectory = same UUID)
+  // This can cause data corruption as items would be stored under the same key
+  QHash<QString, QList<int>> uuidToIndices;
+  for (int i = 0; i < collections.size(); ++i) {
+    const CollectionConfig &c = collections[i];
+    // Skip collections without media directories (shell collections)
+    if (c.mediaDirectory.isEmpty()) {
+      continue;
+    }
+    QString uuid = CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
+    uuidToIndices[uuid].append(i);
+  }
+  for (auto it = uuidToIndices.begin(); it != uuidToIndices.end(); ++it) {
+    if (it.value().size() > 1) {
+      QStringList collisionNames;
+      for (int idx : it.value()) {
+        collisionNames << QString("'%1' (index %2)")
+                              .arg(collections[idx].name)
+                              .arg(idx);
+      }
+      result.addError(
+          QString("UUID collision detected: collections %1 have identical "
+                  "name+mediaDirectory combination. This will cause data "
+                  "corruption. Please rename one of the collections.")
+              .arg(collisionNames.join(", ")));
+    }
+  }
+
   return result;
 }
 
