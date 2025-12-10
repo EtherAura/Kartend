@@ -233,12 +233,9 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
     return false;
   }
 
-  // Stop any running scroll animations when wheel scrolling starts
-  // This prevents wheel scroll from chaining off centering animations
+  // Stop arrow key animations but NOT wheel scroll animations - wheel
+  // animations will be chained smoothly in startWheelScrollAnimation
   AnimationManager::stopArrowKeyAnimationIfRunning(vScrollBar);
-  if (m_animationManager) {
-    m_animationManager->stopActiveVerticalAnims(vScrollBar);
-  }
 
   const CollectionConfig &collection =
       (*m_collections)[*m_currentCollectionIndex];
@@ -248,15 +245,16 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
     return false;
   }
 
+  // Get scrollbar position for target calculation - actual animation start
+  // position is determined by startWheelScrollAnimation based on running anim
   int currentPos = vScrollBar->value();
 
   if (m_state) {
     m_state->scroll().userScrollActive = true;
     m_state->scroll().programmaticScroll = true;
     m_state->suppressArrowCenterFor(UIConstants::Mouse::WHEEL_SUPPRESS_ARROW_CENTER_MS);
-    if (m_scrollManager) {
-      m_scrollManager->refreshSelectionOverlayState();
-    }
+    // Skip refreshSelectionOverlayState here - too frequent during rapid
+    // wheel events; animation completion will refresh the state
   }
 
   const bool wrapTriggered = applyWheelSelectionDelta(wheelSteps);
@@ -308,9 +306,8 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   if (m_state) {
     m_state->scroll().userScrollActive = true;
     m_state->scroll().programmaticScroll = true;
-    if (m_scrollManager) {
-      m_scrollManager->refreshSelectionOverlayState();
-    }
+    // Skip refreshSelectionOverlayState here - called too frequently during
+    // rapid wheel events and causes overhead; let animation completion handle it
   }
 
   if (m_animationManager) {

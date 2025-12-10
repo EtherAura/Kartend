@@ -399,18 +399,35 @@ void AnimationManager::startWheelScrollAnimation(
     std::function<void()> onFinished) {
   ensureVAnimCreated(vScrollBar);
 
+  // Chain from current animation position for smooth blending when wheel
+  // events arrive in quick succession during slow scrolling
+  int effectiveStart = startVal;
   if (m_vScrollAnim->state() == QAbstractAnimation::Running) {
+    effectiveStart = m_vScrollAnim->currentValue().toInt();
     m_vScrollAnim->stop();
   }
 
-  m_vScrollAnim->setStartValue(startVal);
+  m_vScrollAnim->setStartValue(effectiveStart);
   m_vScrollAnim->setEndValue(endVal);
   
-  // Use scroll animation duration from settings, fallback to constant
-  int duration = m_generalSettings 
+  // Scale duration based on scroll distance for responsive slow scrolling.
+  // Short distances get quick animations; long distances use full duration.
+  int baseDuration = m_generalSettings 
       ? m_generalSettings->scrollAnimationDurationMs 
       : UIConstants::Animation::SMOOTH_SCROLL_WHEEL_DURATION_MS;
+  int distance = qAbs(endVal - effectiveStart);
+  
+  // Use distance-proportional duration: ~150ms per 100px, clamped to reasonable bounds
+  constexpr int kMinWheelDuration = 80;
+  constexpr int kMaxWheelDuration = 400;
+  constexpr double kMsPerPixel = 1.5;
+  int duration = static_cast<int>(distance * kMsPerPixel);
+  duration = qBound(kMinWheelDuration, duration, qMin(kMaxWheelDuration, baseDuration));
+  
   m_vScrollAnim->setDuration(duration);
+  
+  // OutCubic provides smooth deceleration for natural momentum feel
+  m_vScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
 
   QObject::disconnect(m_vScrollAnim, nullptr, this, nullptr);
   connect(m_vScrollAnim, &QPropertyAnimation::valueChanged, this,
