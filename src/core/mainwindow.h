@@ -19,6 +19,7 @@ class QLineEdit;
 class QPushButton;
 class QLabel;
 class QAction;
+class QActionGroup;
 QT_END_NAMESPACE
 
 class Ui_MainWindow;
@@ -96,6 +97,7 @@ private:
   QAction *m_shortcutsAction = nullptr;
   QAction *m_gridWidthIncreaseAction = nullptr;
   QAction *m_gridWidthDecreaseAction = nullptr;
+  QActionGroup *m_sortActionGroup = nullptr;
 
   std::unique_ptr<ApplicationManager> m_appManager;
   MetadataSidebar *m_MetadataSidebar = nullptr;
@@ -114,11 +116,14 @@ private:
   void setupUIReferences();
   void createMenuBar();
   void setupActionExit();
+  void setupActionShowMenuBar();
+  void setupActionShowToolbar();
   void setupActionShowSidebar();
   void setupActionSettings();
   void setupActionAbout();
   void setupActionAboutQt();
   void setupActionRefresh();
+  void setupSortActions();
   void setupFullscreenAction();
   void setupShortcutsAction();
   void setupGridWidthActions();

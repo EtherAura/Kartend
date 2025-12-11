@@ -121,6 +121,7 @@ public slots:
   auto showCollectionItems(int collectionIndex) -> bool;
   void navigateWithSharedItems(int collectionIndex);
   void safeReloadCollection(int collectionIndex);
+  void forceRescanCollection(int collectionIndex);
   void onCollectionSelected(int collectionIndex);
   void onSubcollectionEntered(int subcollectionIndex);
   void onVirtualFolderEntered(const QString &folderPath);
@@ -139,6 +140,8 @@ public slots:
   void fetchItemsRange(int offset, int limit);
   void onMediaLibraryError(const ErrorUtils::ErrorContext &error);
   void onViewportChanged();
+  /// Handles clicks on breadcrumb links in the toolbar title
+  void onBreadcrumbLinkClicked(const QString &link);
   
   // Appearance methods - can be called from SettingsManager after dialog closes
   void applyBackgroundForCollection(int collectionIndex);
@@ -226,6 +229,9 @@ private:
   void applyUiPoliciesForCollection(int collectionIndex);
 
   QList<CollectionConfig> *m_collections = nullptr;
+  bool m_isRescanInProgress = false;  // Track when force rescan is active
+  int m_pendingRescanCollectionIndex = -1;  // Collection to reload after cache invalidation
+  QMetaObject::Connection m_cacheInvalidatedConnection;  // One-shot connection for cache invalidation
 };
 
 #endif

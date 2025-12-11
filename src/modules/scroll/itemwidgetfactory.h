@@ -3,6 +3,7 @@
 
 #include "collectionutils.h"
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <functional>
 
@@ -80,6 +81,11 @@ public:
    */
   void releaseWidget(ItemWidget *widget, int visibleRows, int itemsPerRow);
 
+  /**
+   * @brief Clears pending range requests, allowing new requests after data arrives.
+   */
+  void clearPendingRangeRequests() { m_pendingRangeRequests.clear(); }
+
 signals:
   /**
    * @brief Emitted when a subcollection widget is double-clicked.
@@ -121,6 +127,7 @@ private:
   SubcollectionNameResolver m_subcollectionNameResolver;
   const QStringList *m_filePaths = nullptr;
   const QHash<QString, QString> *m_fileNames = nullptr;
+  QSet<int> m_pendingRangeRequests;  // Tracks chunk start indices with pending requests
 };
 
 #endif // ITEMWIDGETFACTORY_H

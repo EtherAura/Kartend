@@ -8,8 +8,20 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <random>
+#include <variant>
 
 class DatabaseManager;
+
+/**
+ * @brief Represents an item in the sorted unified view (when sortSubfolders is enabled).
+ */
+struct UnifiedItem {
+  enum class Type { Subcollection, VirtualFolder, MediaFile };
+  Type type;
+  int originalIndex;  // Index into the original list for this type
+  QString displayName;  // Sort key
+};
 
 /**
  * @brief Manages scroll view data: file paths, file names, subcollections, and virtual folders.
@@ -48,6 +60,14 @@ public:
    * @param context Current collection context
    */
   void initializeVirtualFolders(const CollectionContext &context);
+
+  /**
+   * @brief Apply unified sorting to all items (subcollections, virtual folders, files).
+   * @param context Current collection context with sortMode and sortSubfolders
+   * @param collections Pointer to collections list for subcollection name lookup
+   */
+  void applyUnifiedSort(const CollectionContext &context,
+                        const QList<CollectionConfig> *collections);
   
   /**
    * @brief Set up file path to display name mappings.
@@ -97,6 +117,10 @@ public:
    * @param actualIndex Index after filter transformation
    */
   [[nodiscard]] bool isSubcollectionIndex(int actualIndex) const {
+    if (m_unifiedSortActive) {
+      if (actualIndex < 0 || actualIndex >= m_unifiedItems.size()) return false;
+      return m_unifiedItems[actualIndex].type == UnifiedItem::Type::Subcollection;
+    }
     return actualIndex >= 0 && actualIndex < m_subcollections.size();
   }
   
@@ -105,6 +129,10 @@ public:
    * @param actualIndex Index after filter transformation
    */
   [[nodiscard]] bool isVirtualFolderIndex(int actualIndex) const {
+    if (m_unifiedSortActive) {
+      if (actualIndex < 0 || actualIndex >= m_unifiedItems.size()) return false;
+      return m_unifiedItems[actualIndex].type == UnifiedItem::Type::VirtualFolder;
+    }
     int subCount = m_subcollections.size();
     return actualIndex >= subCount && 
            actualIndex < subCount + m_virtualFolders.size();
@@ -115,6 +143,10 @@ public:
    * @param actualIndex Index after filter transformation
    */
   [[nodiscard]] bool isMediaIndex(int actualIndex) const {
+    if (m_unifiedSortActive) {
+      if (actualIndex < 0 || actualIndex >= m_unifiedItems.size()) return false;
+      return m_unifiedItems[actualIndex].type == UnifiedItem::Type::MediaFile;
+    }
     int prefixCount = m_subcollections.size() + m_virtualFolders.size();
     return actualIndex >= prefixCount && 
            actualIndex < prefixCount + m_filePaths.size();
@@ -126,6 +158,10 @@ public:
    * @return Subcollection index or -1 if not a subcollection
    */
   [[nodiscard]] int subcollectionIndexFromActual(int actualIndex) const {
+    if (m_unifiedSortActive) {
+      if (!isSubcollectionIndex(actualIndex)) return -1;
+      return m_subcollections[m_unifiedItems[actualIndex].originalIndex];
+    }
     if (!isSubcollectionIndex(actualIndex)) return -1;
     return m_subcollections[actualIndex];
   }
@@ -136,6 +172,10 @@ public:
    * @return Folder path or empty string if not a virtual folder
    */
   [[nodiscard]] QString virtualFolderFromActual(int actualIndex) const {
+    if (m_unifiedSortActive) {
+      if (!isVirtualFolderIndex(actualIndex)) return {};
+      return m_virtualFolders[m_unifiedItems[actualIndex].originalIndex];
+    }
     if (!isVirtualFolderIndex(actualIndex)) return {};
     int folderIndex = actualIndex - m_subcollections.size();
     return m_virtualFolders[folderIndex];
@@ -147,6 +187,10 @@ public:
    * @return Media index or -1 if not a media item
    */
   [[nodiscard]] int mediaIndexFromActual(int actualIndex) const {
+    if (m_unifiedSortActive) {
+      if (!isMediaIndex(actualIndex)) return -1;
+      return m_unifiedItems[actualIndex].originalIndex;
+    }
     int prefixCount = m_subcollections.size() + m_virtualFolders.size();
     if (actualIndex < prefixCount) return -1;
     int mediaIndex = actualIndex - prefixCount;
@@ -162,6 +206,11 @@ public:
     if (mediaIndex < 0 || mediaIndex >= m_filePaths.size()) return {};
     return m_filePaths[mediaIndex];
   }
+  
+  /**
+   * @brief Check if unified sorting is currently active.
+   */
+  [[nodiscard]] bool isUnifiedSortActive() const { return m_unifiedSortActive; }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Data Updates
@@ -183,6 +232,10 @@ private:
   QList<int> m_subcollections;
   QStringList m_virtualFolders;
   QHash<QString, QString> m_filePathToDisplayName;
+  
+  // Unified sorting state
+  bool m_unifiedSortActive = false;
+  QList<UnifiedItem> m_unifiedItems;
 };
 
 #endif // SCROLLDATAMANAGER_H

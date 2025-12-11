@@ -410,19 +410,12 @@ void AnimationManager::startWheelScrollAnimation(
   m_vScrollAnim->setStartValue(effectiveStart);
   m_vScrollAnim->setEndValue(endVal);
   
-  // Scale duration based on scroll distance for responsive slow scrolling.
-  // Short distances get quick animations; long distances use full duration.
-  int baseDuration = m_generalSettings 
+  // Use configured scroll animation duration for consistent glide feel.
+  // The chaining from current position prevents stuttering while preserving
+  // the smooth deceleration over the full duration.
+  int duration = m_generalSettings 
       ? m_generalSettings->scrollAnimationDurationMs 
       : UIConstants::Animation::SMOOTH_SCROLL_WHEEL_DURATION_MS;
-  int distance = qAbs(endVal - effectiveStart);
-  
-  // Use distance-proportional duration: ~150ms per 100px, clamped to reasonable bounds
-  constexpr int kMinWheelDuration = 80;
-  constexpr int kMaxWheelDuration = 400;
-  constexpr double kMsPerPixel = 1.5;
-  int duration = static_cast<int>(distance * kMsPerPixel);
-  duration = qBound(kMinWheelDuration, duration, qMin(kMaxWheelDuration, baseDuration));
   
   m_vScrollAnim->setDuration(duration);
   

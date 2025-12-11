@@ -9,9 +9,17 @@ using ErrorUtils::Result;
 
 namespace PathUtils {
 
-// Helper to expand placeholders in path
+// Helper to expand placeholders and ~ in path
 static QString expandPath(const QString &path, const QString &collectionName) {
   QString result = path.trimmed();
+  
+  // Expand ~ to home directory (must be at start of path)
+  if (result.startsWith("~/")) {
+    result = QDir::homePath() + result.mid(1);  // Replace ~ with home path
+  } else if (result == "~") {
+    result = QDir::homePath();
+  }
+  
   if (!collectionName.isEmpty()) {
     result.replace("%collection%", collectionName, Qt::CaseInsensitive);
   }

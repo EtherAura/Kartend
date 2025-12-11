@@ -44,6 +44,9 @@ public:
   
   void fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter = QString());
   void fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter = QString());
+  
+  // Clears cached items for a collection to force a fresh rescan
+  void invalidateCollectionCache(const QString &collectionUuid);
 
   [[nodiscard]] int getCollectionIndexForFile(const QString &filePath) const;
   [[nodiscard]] QString findArtworkDirectoryForFile(const QString &filePath) const;
@@ -69,6 +72,15 @@ signals:
   /// @param total The total number of collections to scan
   /// @param collectionName The name of the collection being scanned
   void scanProgress(int current, int total, const QString &collectionName);
+  
+  /// Emitted when a long-running scan is starting
+  void scanStarting(const QString &collectionName, int estimatedItems);
+  
+  /// Emitted periodically during scan with items processed so far
+  void scanItemsProgress(int itemsProcessed, int totalItems);
+  
+  /// Emitted when collection cache has been invalidated (async operation complete)
+  void cacheInvalidated(const QString &collectionUuid);
 
   // Internal signals to trigger worker
   void requestLoadAllCollections(const QList<CollectionConfig> &allCollections);
@@ -78,6 +90,11 @@ signals:
   void requestUpdateCachedCounts(const QList<CollectionConfig> &allCollections);
   void requestFetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter);
   void requestFetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter);
+  void requestInvalidateCache(const QString &collectionUuid);
+
+public slots:
+  /// Request cancellation of any in-progress scan
+  void cancelScan();
 
 private slots:
   void onWorkerItemsLoaded(const QStringList &filePaths,

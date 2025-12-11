@@ -114,6 +114,7 @@ private:
   NavigationManager *m_navigationManager = nullptr;
   ScrollManager *m_scrollManager = nullptr;
   SettingsManager *m_settingsManager = nullptr;
+  GeneralSettings *m_generalSettings = nullptr;
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   QLineEdit *m_searchBar = nullptr;
   QPushButton *m_searchModeButton = nullptr;

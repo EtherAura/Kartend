@@ -307,7 +307,7 @@ auto ItemWidget::isGlideActive() const -> bool {
          grandparentPtr->property(PropertyKeys::GlideAnimating).toBool();
 }
 
-// Computes the selection border rectangle around the artwork and title area
+// Computes the selection border rectangle around the artwork only
 auto ItemWidget::computeSelectionBorderRect() const -> QRect {
   if (!imageLabel) {
     return {};
@@ -317,57 +317,7 @@ auto ItemWidget::computeSelectionBorderRect() const -> QRect {
   const int left = imageRect.left() - UIConstants::CollectionIcon::ITEM_SPACING;
   const int top = imageRect.top() - UIConstants::CollectionIcon::ITEM_SPACING;
   const int right = imageRect.right() + UIConstants::CollectionIcon::ITEM_SPACING;
-
-  int bottom;
-  // Show title if: regular item with titles visible, OR subcollection with subcollection titles visible
-  bool shouldShowTitle = (!m_isSubcollection && !m_hideTitles) || (m_isSubcollection && !m_hideSubcollectionTitles);
-
-  if (!shouldShowTitle) {
-    // If titles are hidden, only surround the artwork
-    bottom = imageRect.bottom() + UIConstants::CollectionIcon::ITEM_SPACING;
-  } else {
-    // Calculate reserved text height using the same logic as applyDimensions
-    QFont referenceFont = this->font();
-    referenceFont.setPointSize(std::max(8, m_fontSize));
-    QFontMetrics referenceFm(referenceFont);
-    int textLines = 2;
-    int singleLineHeight = referenceFm.ascent() + referenceFm.descent();
-    int reservedTextHeight = singleLineHeight * textLines;
-
-    int effectiveTextHeight = reservedTextHeight;
-
-    // Compute actual text height to fit selection rect around visible text
-    if (!itemName.isEmpty()) {
-      QFont actualFont = this->font();
-      actualFont.setPointSize(m_fontSize);
-      QFontMetrics actualFm(actualFont);
-      int maxWidth = imageRect.width();
-      int flags = Qt::AlignTop | Qt::AlignHCenter | Qt::TextWordWrap;
-      QRect textRect =
-          actualFm.boundingRect(QRect(0, 0, maxWidth, 0), flags, itemName);
-      
-      int textHeight = textRect.height();
-      // For single lines, use tighter height (exclude leading)
-      if (textHeight <= actualFm.lineSpacing()) {
-          textHeight = actualFm.ascent() + actualFm.descent();
-      }
-      
-      // Use actual text height - don't cap at reserved height so selection
-      // encompasses titles that wrap to 3+ lines
-      effectiveTextHeight = textHeight;
-    } else {
-      effectiveTextHeight = 0;
-    }
-
-    // Include the text area in the selection border
-    int spacing = (effectiveTextHeight > 0) ? UIConstants::Widget::SPACING : 0;
-    const int contentBottom =
-        imageRect.bottom() + spacing + effectiveTextHeight;
-    
-    // Use tighter bottom padding for text
-    int bottomPadding = (effectiveTextHeight > 0) ? UIConstants::Metadata::VALUE_PADDING : UIConstants::CollectionIcon::ITEM_SPACING;
-    bottom = contentBottom + bottomPadding;
-  }
+  const int bottom = imageRect.bottom() + UIConstants::CollectionIcon::ITEM_SPACING;
 
   return {left, top, right - left, bottom - top};
 }

@@ -22,7 +22,7 @@ Combination Capacity:
 Usage:
     # Setup venv first:
     cd scripts
-    python -m venv venv
+    python -m venv .venv
     source venv/bin/activate.fish  # or activate.sh for bash
     pip install -r requirements.txt
     
@@ -332,26 +332,19 @@ CONNECTORS = [
     "against", "plus", "featuring", "ft.", "x", "×",
 ]
 
-# Subfolder names for organizing files when --subfolders is used
-SUBFOLDERS = [
-    # Colors
-    "Crimson", "Azure", "Emerald", "Amber", "Violet", "Coral", "Indigo", "Sage",
-    "Burgundy", "Teal", "Ochre", "Magenta", "Cerulean", "Scarlet", "Olive",
-    # Animals
-    "Penguin", "Octopus", "Flamingo", "Badger", "Otter", "Raven", "Gecko",
-    "Narwhal", "Capybara", "Axolotl", "Pangolin", "Quokka", "Platypus",
-    # Weather & Nature
-    "Thunder", "Aurora", "Monsoon", "Eclipse", "Cascade", "Tundra", "Canyon",
-    "Glacier", "Volcano", "Nebula", "Comet", "Tempest", "Mirage", "Oasis",
-    # Objects
-    "Lantern", "Compass", "Anchor", "Prism", "Mosaic", "Pendulum", "Kaleidoscope",
-    "Telescope", "Hourglass", "Chandelier", "Origami", "Carousel", "Lighthouse",
-    # Abstract
-    "Paradox", "Zenith", "Liminal", "Ephemeral", "Serendipity", "Catalyst",
-    "Entropy", "Nexus", "Cipher", "Axiom", "Enigma", "Cosmos", "Vertex",
-    # Materials
-    "Copper", "Obsidian", "Marble", "Velvet", "Porcelain", "Bamboo", "Granite",
-    "Crystal", "Leather", "Canvas", "Silk", "Bronze", "Ivory", "Slate",
+# Subfolder name components for generating folder names when --subfolders is used
+FOLDER_ADJECTIVES = [
+    "Haunted", "Forbidden", "Ancient", "Hidden", "Lost", "Secret", "Mystic",
+    "Cursed", "Sacred", "Forgotten", "Abandoned", "Enchanted", "Corrupted",
+    "Pristine", "Chaotic", "Serene", "Twisted", "Golden", "Silver", "Crystal",
+    "Shadow", "Luminous", "Frozen", "Burning", "Floating", "Sunken", "Eternal",
+]
+
+FOLDER_NOUNS = [
+    "Archives", "Vault", "Chamber", "Sanctum", "Library", "Repository",
+    "Warehouse", "Bunker", "Cavern", "Temple", "Tower", "Crypt", "Realm",
+    "Dimension", "Sector", "Zone", "Quadrant", "Domain", "Fortress", "Citadel",
+    "Nexus", "Portal", "Gateway", "Threshold", "Corridor", "Labyrinth", "Maze",
 ]
 
 
@@ -463,6 +456,34 @@ def generate_contrasting_color(bg_color: tuple) -> tuple:
         return (30, 30, 30)  # Dark text on light background
     else:
         return (245, 245, 245)  # Light text on dark background
+
+
+def generate_folder_name(used_names: set) -> str:
+    """Generate a unique subfolder name.
+    
+    Combines adjectives and nouns to create names like "Haunted Archives".
+    Falls back to numbered names if all combinations are exhausted.
+    """
+    max_attempts = 100
+    
+    for attempt in range(max_attempts):
+        adj = random.choice(FOLDER_ADJECTIVES)
+        noun = random.choice(FOLDER_NOUNS)
+        
+        if attempt < 50:
+            # Basic: "Haunted Archives"
+            name = f"{adj} {noun}"
+        else:
+            # With number suffix for more combinations
+            num = random.randint(1, 999)
+            name = f"{adj} {noun} {num}"
+        
+        if name not in used_names:
+            return name
+    
+    # Fallback: guaranteed unique with index
+    fallback_idx = len(used_names)
+    return f"Sector {fallback_idx:04d}"
 
 
 def create_artwork_image(
@@ -603,9 +624,15 @@ def generate_seed_data(
     # Determine subfolders to use
     subfolders = []
     if use_subfolders:
-        # Use specified count or default to random selection
-        num_folders = subfolder_count if subfolder_count > 0 else random.randint(5, min(15, len(SUBFOLDERS)))
-        subfolders = random.sample(SUBFOLDERS, min(num_folders, len(SUBFOLDERS)))
+        # Use specified count or default to random 5-15
+        num_folders = subfolder_count if subfolder_count > 0 else random.randint(5, 15)
+        
+        # Generate unique subfolder names dynamically
+        used_folder_names = set()
+        for _ in range(num_folders):
+            folder_name = generate_folder_name(used_folder_names)
+            used_folder_names.add(folder_name)
+            subfolders.append(folder_name)
         
         # Create subfolder directories
         for folder in subfolders:

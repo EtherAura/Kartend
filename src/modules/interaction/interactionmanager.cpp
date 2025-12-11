@@ -245,14 +245,24 @@ void InteractionManager::setupAlphabeticNavigationHandler() {
   m_alphabeticHandler->setScrollManager(m_scrollManager);
   m_alphabeticHandler->setSelectionManager(m_selectionManager.get());
 
-  // Connect handler signals - use immediate centering for large jumps
+  // Connect handler signals - scroll first, then select, since the target
+  // widget may not exist until the viewport is scrolled to show it
   connect(m_alphabeticHandler.get(),
           &AlphabeticNavigationHandler::requestSelection, this,
           [this](int index) {
-            selectItemByIndex(index, true);
+            // User initiated navigation - cancel any pending automatic restore
+            // to prevent it from overriding this explicit user choice
+            cancelPendingSelectionRestore();
+            // Scroll to target position first so the widget gets materialized
             if (m_viewportManager) {
               m_viewportManager->centerItemVertically(index, true);
             }
+            // Update virtual view to materialize widgets at new scroll position
+            if (m_scrollManager) {
+              m_scrollManager->updateVirtualView();
+            }
+            // Now select the item (widget should exist after scroll + update)
+            selectItemByIndex(index, true);
           });
 }
 
@@ -484,11 +494,12 @@ void InteractionManager::connectEventManagerSignals() {
   connect(m_eventManager.get(), &EventManager::widgetDoubleClicked,
           this, &InteractionManager::handleWidgetDoubleClickedWithCollection);
   connect(m_eventManager.get(), &EventManager::widgetClicked,
-          this, [this](ItemWidget *widget, const QPoint &clickPos, QMouseEvent *event) {
-            if (m_selectionManager) {
-              // Get previous selection BEFORE handleWidgetSelection changes it
+          this, [this](ItemWidget *widget, int visualIndex, const QPoint &clickPos, QMouseEvent *event) {
+            Q_UNUSED(widget);
+            if (m_selectionManager && visualIndex >= 0) {
+              // Get previous selection BEFORE handleWidgetSelectionByIndex changes it
               const int previousSelection = currentSelectedIndex();
-              const int clickedIndex = m_selectionManager->handleWidgetSelection(widget, clickPos, event);
+              const int clickedIndex = m_selectionManager->handleWidgetSelectionByIndex(visualIndex, clickPos, event);
               if (clickedIndex >= 0 && m_mouseManager) {
                 const int gridWidth = getCurrentGridWidth();
                 const int totalItems = m_scrollManager ? m_scrollManager->getTotalItems() : 0;
@@ -545,19 +556,49 @@ void InteractionManager::handleJumpToEdge(bool toEnd) {
     m_animationManager->verticalAnimation()->stop();
   }
   
+  // Clear stale state that could interfere with immediate jump
+  m_state.click().deferCenterOnClick = false;
+  m_state.click().deferredCenterIndex = -1;
+  m_state.click().selectionSuppressed = false;
+  m_state.click().pendingSelectionIndex = -1;
+  m_state.scroll().userScrollActive = false;
+  if (m_viewportManager) {
+    m_viewportManager->setWrapSequenceActive(false);
+    m_viewportManager->setContinuousScrollActive(false);
+    m_viewportManager->setForceImmediateCenter(true);
+  }
+  
   // Calculate target index: 0 for Home, last item for End
   const int targetIndex = toEnd ? (totalItems - 1) : 0;
   const int currentIndex = currentSelectedIndex();
   
   if (targetIndex == currentIndex) {
-    return; // Already at edge
+    // Already at edge - just ensure it's centered
+    if (m_viewportManager) {
+      m_viewportManager->centerItemVertically(targetIndex, true);
+      m_viewportManager->setForceImmediateCenter(false);
+    }
+    return;
   }
   
-  // Select and center on the target item with immediate viewport jump
-  selectItemByIndex(targetIndex, true);
+  // Set selection directly without triggering additional centering logic
+  if (m_selectionManager) {
+    m_selectionManager->setSelectedIndex(targetIndex);
+  }
+  
+  // Center immediately on the target
   if (m_viewportManager) {
     m_viewportManager->centerItemVertically(targetIndex, true);
+    m_viewportManager->setForceImmediateCenter(false);
   }
+  
+  // Update virtual view and selection overlay
+  if (m_scrollManager) {
+    m_scrollManager->updateVirtualView();
+    m_scrollManager->updateSelectionForIndex(targetIndex);
+  }
+  
+  emit selectionChanged(targetIndex);
 }
 
 // KeyboardManager callback: handles repeat step during key hold

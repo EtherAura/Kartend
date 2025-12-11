@@ -56,6 +56,9 @@ void SearchManager::setupReferences(const SearchManagerSetup &setup) {
   m_scrollManager = setup.getScrollManager();
   m_settingsManager = setup.getSettingsManager();
   m_hierarchyCache = setup.getHierarchyCache();
+  if (setup.ctx) {
+    m_generalSettings = setup.ctx->generalSettings;
+  }
   m_searchBar = setup.getSearchBar();
   m_searchModeButton = setup.getSearchModeButton();
   m_itemScrollArea = setup.getItemScrollArea();
@@ -436,6 +439,10 @@ void SearchManager::performDebouncedSearch() {
   context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
       context.config.artworkDirectory, context.config.name);
   context.artworkDirectory = context.config.artworkDirectory;
+  if (m_generalSettings) {
+    context.sortMode = m_generalSettings->sortMode;
+    context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+  }
 
   switch (m_currentSearchMode) {
   case SearchMode::CurrentCollection: {

@@ -160,6 +160,10 @@ public:
   void handleSameRowClickSelection(int visualIndex, bool skipCenter, qint64 nowMs);
 
   // Widget click handling via EventManager
+  // handleWidgetSelectionByIndex is preferred - uses pre-computed index from click detection
+  int handleWidgetSelectionByIndex(int visualIndex, const QPoint &clickPos,
+                                   QMouseEvent *originalEvent);
+  // Legacy method - searches for widget in activeWidgets (may fail during rapid scrolling)
   int handleWidgetSelection(ItemWidget *widget, const QPoint &clickPos,
                             QMouseEvent *originalEvent);
 

@@ -24,7 +24,8 @@ SessionManager::SessionManager(QObject *parent) : QObject(parent) {}
 SessionManager::~SessionManager() = default;
 
 QString SessionManager::getCacheDirectory() {
-  return QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+  // Use GenericCacheLocation + app name for consistent ~/.cache/kartend path
+  return QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + "/kartend";
 }
 
 void SessionManager::initialize() {

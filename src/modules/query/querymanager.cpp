@@ -11,6 +11,7 @@
 #include <QSqlQuery>
 #include <QStandardPaths>
 #include <QThread>
+#include <random>
 #include <stdexcept>
 #include <QDebug>
 
@@ -45,6 +46,18 @@ QueryManager::~QueryManager() {
     m_db = QSqlDatabase();
     QSqlDatabase::removeDatabase(connectionName);
   }
+}
+
+void QueryManager::requestCancelScan() {
+  m_scanCancelled.store(true, std::memory_order_release);
+}
+
+bool QueryManager::isScanCancelled() const {
+  return m_scanCancelled.load(std::memory_order_acquire);
+}
+
+void QueryManager::resetScanCancellation() {
+  m_scanCancelled.store(false, std::memory_order_release);
 }
 
 // Gets or creates a prepared statement for the given SQL
@@ -235,9 +248,6 @@ void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollecti
        ++collectionIndex) {
     CollectionConfig collection = allCollections[collectionIndex];
     
-    // Emit progress signal so UI can update loading overlay
-    emit scanProgress(collectionIndex + 1, totalCollections, collection.name);
-    
     collection.mediaDirectory = PathUtils::validateAndExpandPath(
         collection.mediaDirectory, collection.name);
     collection.artworkDirectory = PathUtils::validateAndExpandPath(
@@ -245,6 +255,11 @@ void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollecti
 
     if (collection.mediaDirectory.trimmed().isEmpty()) {
       continue;
+    }
+
+    // Only emit progress signal when a scan is actually needed (not for cached loads)
+    if (needsRescan(collectionIndex, collection)) {
+      emit scanProgress(collectionIndex + 1, totalCollections, collection.name);
     }
 
     QHash<QString, QDateTime> timestamps;
@@ -330,7 +345,7 @@ void QueryManager::loadItems(const CollectionContext &context) {
                                  allFilePaths, allFileNames, fileToArtworkDir,
                                  fileToMediaDir, fileToCollectionIndex, false);
 
-  sortFiles(allFilePaths);
+  sortFiles(allFilePaths, ctx.sortMode);
 
   emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex);
 }
@@ -454,7 +469,7 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
     allFilePaths.swap(unique);
   }
 
-  sortFiles(allFilePaths);
+  sortFiles(allFilePaths, context.sortMode);
   emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex);
 }
 
@@ -537,9 +552,17 @@ auto QueryManager::buildUuidInClause(int uuidCount) -> QString {
 void QueryManager::ensureCollectionScanned(int collectionIndex, const CollectionConfig &collection) {
   if (collection.mediaDirectory.trimmed().isEmpty()) return;
   if (needsRescan(collectionIndex, collection)) {
+    // Reset cancellation flag before starting new scan
+    resetScanCancellation();
+    
+    // Notify UI that a scan is starting (estimated items unknown, use -1)
+    emit scanStarting(collection.name, -1);
+    
     QHash<QString, QDateTime> timestamps;
     QStringList filePaths = scanMediaDirectory(collection, timestamps);
-    if (!filePaths.isEmpty()) {
+    
+    // Only save if we got files and weren't cancelled
+    if (!filePaths.isEmpty() && !isScanCancelled()) {
       saveItemsToDatabase(collectionIndex, filePaths, timestamps, collection);
     }
   }
@@ -725,6 +748,8 @@ namespace QuerySQL {
       "SELECT path FROM items WHERE collection_uuid = ? LIMIT 1";
   constexpr const char* ITEMS_MODIFIED_COUNT = 
       "SELECT COUNT(*) FROM items WHERE collection_uuid = ? AND last_modified > ?";
+  constexpr const char* ITEMS_COUNT_BY_UUID = 
+      "SELECT COUNT(*) FROM items WHERE collection_uuid = ?";
   constexpr const char* DELETE_ITEMS_BY_UUID = 
       "DELETE FROM items WHERE collection_uuid = ?";
   constexpr const char* DELETE_COLLECTION_BY_UUID = 
@@ -798,17 +823,32 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
     return true;
   }
   
-  // When includeContentSubfolders is enabled, also check if any subdirectory
-  // has been modified since the last scan (files added/removed in subfolders)
+  // When includeContentSubfolders is enabled, check for subdirectory modifications.
+  // For large collections, this check is expensive (iterates all subdirs). 
+  // Skip deep check if collection has items in DB - trust cached data on startup.
+  // Full validation happens when user navigates into subfolders or forces refresh.
   if (collection.includeContentSubfolders) {
+    // Quick check: if we have items in the database, trust the cache
+    QSqlQuery &countQuery = getPreparedStatement(QuerySQL::ITEMS_COUNT_BY_UUID);
+    countQuery.addBindValue(uuid);
+    if (countQuery.exec() && countQuery.next() && countQuery.value(0).toInt() > 0) {
+      // Collection has cached items - skip expensive subdirectory scan
+      return false;
+    }
+    
+    // No cached items - need to scan (first run or after cache clear)
+    // Still limit subdirectory check to avoid startup hang
+    constexpr int MAX_SUBDIR_CHECK = 100;
+    int checked = 0;
     QDirIterator dirIt(collection.mediaDirectory, QDir::Dirs | QDir::NoDotAndDotDot,
                        QDirIterator::Subdirectories);
-    while (dirIt.hasNext()) {
+    while (dirIt.hasNext() && checked < MAX_SUBDIR_CHECK) {
       dirIt.next();
       QFileInfo subDirInfo(dirIt.filePath());
       if (subDirInfo.lastModified() > lastScanned) {
         return true;
       }
+      ++checked;
     }
   }
 
@@ -842,12 +882,34 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
       ? QDirIterator::Subdirectories
       : QDirIterator::NoIteratorFlags;
 
+  // For progress reporting - report frequently so user sees scanning activity
+  constexpr int PROGRESS_REPORT_INTERVAL = 500;  // Report every 500 items
+  int itemsScanned = 0;
+
   QDirIterator iterator(dir.absolutePath(), nameFilters, QDir::Files, flags);
   while (iterator.hasNext()) {
+    // Check for cancellation
+    if (isScanCancelled()) {
+      filePaths.clear();
+      timestamps.clear();
+      return filePaths;
+    }
+    
     iterator.next();
     QString relativePath = dir.relativeFilePath(iterator.filePath());
     filePaths.append(relativePath);
     timestamps[relativePath] = QFileInfo(iterator.filePath()).lastModified();
+    
+    ++itemsScanned;
+    if (itemsScanned % PROGRESS_REPORT_INTERVAL == 0) {
+      // Emit progress - use -1 for total since we don't know it yet
+      emit scanItemsProgress(itemsScanned, -1);
+    }
+  }
+  
+  // Emit final scan count before moving to indexing phase
+  if (itemsScanned > 0) {
+    emit scanItemsProgress(itemsScanned, -1);
   }
 
   return filePaths;
@@ -897,85 +959,196 @@ void QueryManager::saveItemsToDatabase(
   
   const QString uuid = CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
 
-  m_db.transaction();
+  // Temporarily disable synchronous writes for bulk insert performance
+  QSqlQuery pragmaOff(m_db);
+  pragmaOff.exec("PRAGMA synchronous = OFF");
 
-  try {
-    QSqlQuery update(m_db);
-    update.prepare("UPDATE collections SET name=?, last_scanned=?, "
-                   "ext_signature=? WHERE uuid=?");
-    update.addBindValue(collection.name);
-    update.addBindValue(QDateTime::currentDateTime().toString(Qt::ISODate));
-    update.addBindValue(extSignature);
-    update.addBindValue(uuid);
-    update.exec();
+  // Batch insert for performance - SQLite handles up to 999 variables per statement
+  // With 5 columns per row, we can insert 199 rows per batch (995 variables)
+  constexpr int BATCH_SIZE = 199;
+  // Commit every N batches to save incremental progress (~100K items per commit)
+  constexpr int COMMIT_INTERVAL_BATCHES = 500;
+  constexpr int PROGRESS_REPORT_INTERVAL = 50000;  // Report every 50K items
+  
+  // Retry constants for lock handling
+  constexpr int MAX_RETRIES = 5;
+  constexpr int BASE_DELAY_MS = 100;
+  
+  const int totalItems = filePaths.size();
+  int legacyId = -1;
+  bool collectionRowCreated = false;
 
-    QSqlQuery check(m_db);
-    check.prepare("SELECT COUNT(*) FROM collections WHERE uuid=?");
-    check.addBindValue(uuid);
-    bool exists = (check.exec() && check.next() && check.value(0).toInt() > 0);
+  // First transaction: create/update collection row and clear old items
+  // With retry logic for database lock scenarios
+  bool prepareSuccess = false;
+  for (int attempt = 0; attempt < MAX_RETRIES && !prepareSuccess; ++attempt) {
+    if (attempt > 0) {
+      // Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
+      QThread::msleep(BASE_DELAY_MS * (1 << (attempt - 1)));
+    }
+    
+    if (!m_db.transaction()) {
+      continue;  // Retry if can't start transaction
+    }
+    
+    try {
+      QSqlQuery update(m_db);
+      update.prepare("UPDATE collections SET name=?, last_scanned=?, "
+                     "ext_signature=? WHERE uuid=?");
+      update.addBindValue(collection.name);
+      update.addBindValue(QDateTime::currentDateTime().toString(Qt::ISODate));
+      update.addBindValue(extSignature);
+      update.addBindValue(uuid);
+      update.exec();
 
-    if (!exists) {
-      QSqlQuery insert(m_db);
-      insert.prepare("INSERT INTO collections (name, last_scanned, "
-                     "ext_signature, uuid) VALUES (?, ?, ?, ?)");
-      insert.addBindValue(collection.name);
-      insert.addBindValue(QDateTime::currentDateTime().toString(Qt::ISODate));
-      insert.addBindValue(extSignature);
-      insert.addBindValue(uuid);
-      if (!insert.exec()) {
-        throw std::runtime_error(insert.lastError().text().toStdString());
+      QSqlQuery check(m_db);
+      check.prepare("SELECT COUNT(*) FROM collections WHERE uuid=?");
+      check.addBindValue(uuid);
+      bool exists = (check.exec() && check.next() && check.value(0).toInt() > 0);
+
+      if (!exists) {
+        QSqlQuery insert(m_db);
+        insert.prepare("INSERT INTO collections (name, last_scanned, "
+                       "ext_signature, uuid) VALUES (?, ?, ?, ?)");
+        insert.addBindValue(collection.name);
+        insert.addBindValue(QDateTime::currentDateTime().toString(Qt::ISODate));
+        insert.addBindValue(extSignature);
+        insert.addBindValue(uuid);
+        if (!insert.exec()) {
+          throw std::runtime_error(insert.lastError().text().toStdString());
+        }
       }
-    }
+      collectionRowCreated = true;
 
-    QSqlQuery del(m_db);
-    del.prepare("DELETE FROM items WHERE collection_uuid = ?");
-    del.addBindValue(uuid);
-    if (!del.exec()) {
-      throw std::runtime_error(del.lastError().text().toStdString());
-    }
+      QSqlQuery del(m_db);
+      del.prepare("DELETE FROM items WHERE collection_uuid = ?");
+      del.addBindValue(uuid);
+      if (!del.exec()) {
+        throw std::runtime_error(del.lastError().text().toStdString());
+      }
 
+      {
+        QSqlQuery idq(m_db);
+        idq.prepare("SELECT id FROM collections WHERE uuid = ?");
+        idq.addBindValue(uuid);
+        if (idq.exec() && idq.next()) {
+          legacyId = idq.value(0).toInt();
+        }
+      }
+
+      m_db.commit();
+      prepareSuccess = true;  // Exit retry loop
+    } catch (const std::exception &e) {
+      m_db.rollback();
+      
+      QString errorText = QString::fromStdString(e.what());
+      bool isLockError = errorText.contains("locked", Qt::CaseInsensitive);
+      
+      if (!isLockError || attempt == MAX_RETRIES - 1) {
+        // Non-lock error or final attempt - log and give up
+        auto err = ErrorContext::critical(
+            ErrorCode::DatabaseTransactionFailed,
+            "Failed to prepare collection for items",
+            "QueryManager::saveItemsToDatabase")
+            .withDetails(errorText);
+        ErrorUtils::logError(err);
+        emit errorOccurred(err);
+        return;
+      }
+      // Lock error - will retry
+    }
+  }
+  
+  if (!prepareSuccess) {
+    return;  // All retries failed
+  }
+
+  // Second phase: insert items in batches with periodic commits
+  int batchesSinceCommit = 0;
+  bool inTransaction = false;
+  int itemsInserted = 0;
+  
+  for (int batchStart = 0; batchStart < totalItems; batchStart += BATCH_SIZE) {
+    // Check for cancellation between batches
+    if (isScanCancelled()) {
+      if (inTransaction) {
+        m_db.commit();  // Save partial progress
+      }
+      break;
+    }
+    
+    // Start new transaction if needed
+    if (!inTransaction) {
+      m_db.transaction();
+      inTransaction = true;
+      batchesSinceCommit = 0;
+    }
+    
+    const int batchEnd = qMin(batchStart + BATCH_SIZE, totalItems);
+    const int batchCount = batchEnd - batchStart;
+    
+    // Build multi-row INSERT statement
+    QString sql = "INSERT OR IGNORE INTO items (collection_id, collection_uuid, "
+                  "path, name, last_modified) VALUES ";
+    QStringList valueSets;
+    valueSets.reserve(batchCount);
+    for (int i = 0; i < batchCount; ++i) {
+      valueSets.append("(?, ?, ?, ?, ?)");
+    }
+    sql += valueSets.join(", ");
+    
     QSqlQuery ins(m_db);
-    ins.prepare("INSERT OR IGNORE INTO items (collection_id, collection_uuid, "
-                "path, name, last_modified) VALUES (?, ?, ?, ?, ?)");
-
-    int legacyId = -1;
-    {
-      QSqlQuery idq(m_db);
-      idq.prepare("SELECT id FROM collections WHERE uuid = ?");
-      idq.addBindValue(uuid);
-      if (idq.exec() && idq.next()) {
-        legacyId = idq.value(0).toInt();
-      }
-    }
-
-    for (const QString &filePath : filePaths) {
+    ins.prepare(sql);
+    
+    for (int i = batchStart; i < batchEnd; ++i) {
+      const QString &filePath = filePaths[i];
       ins.addBindValue(legacyId);
       ins.addBindValue(uuid);
       ins.addBindValue(filePath);
       ins.addBindValue(QFileInfo(filePath).completeBaseName());
       ins.addBindValue(timestamps.value(filePath).toString(Qt::ISODate));
-
-      if (!ins.exec()) {
-        auto err = ErrorContext::warning(
-            ErrorCode::DatabaseQueryFailed,
-            QString("Failed to insert item: %1").arg(filePath),
-            "QueryManager::saveItemsToDatabase")
-            .withDetails(ins.lastError().text());
-        ErrorUtils::logError(err);
-      }
     }
-
-    m_db.commit();
-  } catch (const std::exception &e) {
-    m_db.rollback();
-    auto err = ErrorContext::critical(
-        ErrorCode::DatabaseTransactionFailed,
-        "Database transaction failed",
-        "QueryManager::saveItemsToDatabase")
-        .withDetails(QString::fromStdString(e.what()));
-    ErrorUtils::logError(err);
-    emit errorOccurred(err);
+    
+    if (!ins.exec()) {
+      auto err = ErrorContext::warning(
+          ErrorCode::DatabaseQueryFailed,
+          QString("Failed to insert batch at %1").arg(batchStart),
+          "QueryManager::saveItemsToDatabase")
+          .withDetails(ins.lastError().text());
+      ErrorUtils::logError(err);
+    }
+    
+    itemsInserted = batchEnd;
+    ++batchesSinceCommit;
+    
+    // Commit periodically to save incremental progress
+    if (batchesSinceCommit >= COMMIT_INTERVAL_BATCHES) {
+      m_db.commit();
+      inTransaction = false;
+      
+      // Report progress
+      emit scanItemsProgress(itemsInserted, totalItems);
+    }
+    
+    // Report progress at intervals even within transaction
+    if (itemsInserted % PROGRESS_REPORT_INTERVAL == 0) {
+      emit scanItemsProgress(itemsInserted, totalItems);
+    }
   }
+  
+  // Final commit for any remaining items
+  if (inTransaction) {
+    m_db.commit();
+  }
+  
+  // Final progress report
+  if (!isScanCancelled()) {
+    emit scanItemsProgress(totalItems, totalItems);
+  }
+  
+  // Restore synchronous mode for data safety
+  QSqlQuery pragmaOn(m_db);
+  pragmaOn.exec("PRAGMA synchronous = NORMAL");
 }
 
 QStringList QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionUuid) {
@@ -1011,35 +1184,69 @@ QStringList QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionU
   return filePaths;
 }
 
+void QueryManager::invalidateCollectionCache(const QString &collectionUuid) {
+  // Cancel any ongoing scan before clearing cache to prevent lock conflicts
+  requestCancelScan();
+  
+  // Small delay to allow in-progress transaction to complete
+  QThread::msleep(50);
+  
+  clearCollectionFromDatabaseByUuid(collectionUuid);
+  emit cacheInvalidated(collectionUuid);
+}
+
 void QueryManager::clearCollectionFromDatabaseByUuid(const QString &collectionUuid) {
   if (!m_db.isOpen()) {
     return;
   }
 
-  m_db.transaction();
-
-  try {
-    // Use cached prepared statement for deleting items
-    QSqlQuery &query = getPreparedStatement(QuerySQL::DELETE_ITEMS_BY_UUID);
-    query.addBindValue(collectionUuid);
-    if (!query.exec()) {
-      throw std::runtime_error(query.lastError().text().toStdString());
+  // Retry logic for database lock scenarios
+  constexpr int MAX_RETRIES = 5;
+  constexpr int BASE_DELAY_MS = 100;
+  
+  for (int attempt = 0; attempt < MAX_RETRIES; ++attempt) {
+    if (attempt > 0) {
+      // Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
+      QThread::msleep(BASE_DELAY_MS * (1 << (attempt - 1)));
+    }
+    
+    if (!m_db.transaction()) {
+      continue;  // Retry if can't start transaction
     }
 
-    // Use cached prepared statement for deleting collection
-    QSqlQuery &delc = getPreparedStatement(QuerySQL::DELETE_COLLECTION_BY_UUID);
-    delc.addBindValue(collectionUuid);
-    delc.exec();
+    try {
+      // Use cached prepared statement for deleting items
+      QSqlQuery &query = getPreparedStatement(QuerySQL::DELETE_ITEMS_BY_UUID);
+      query.addBindValue(collectionUuid);
+      if (!query.exec()) {
+        throw std::runtime_error(query.lastError().text().toStdString());
+      }
 
-    m_db.commit();
-  } catch (const std::exception &e) {
-    m_db.rollback();
-    auto err = ErrorContext::critical(
-        ErrorCode::DatabaseTransactionFailed,
-        "Failed to clear collection from database",
-        "QueryManager::clearCollectionFromDatabaseByUuid")
-        .withDetails(QString::fromStdString(e.what()));
-    ErrorUtils::logError(err);
+      // Use cached prepared statement for deleting collection
+      QSqlQuery &delc = getPreparedStatement(QuerySQL::DELETE_COLLECTION_BY_UUID);
+      delc.addBindValue(collectionUuid);
+      delc.exec();
+
+      m_db.commit();
+      return;  // Success - exit retry loop
+    } catch (const std::exception &e) {
+      m_db.rollback();
+      
+      QString errorText = QString::fromStdString(e.what());
+      bool isLockError = errorText.contains("locked", Qt::CaseInsensitive);
+      
+      if (!isLockError || attempt == MAX_RETRIES - 1) {
+        // Non-lock error or final attempt - log and give up
+        auto err = ErrorContext::critical(
+            ErrorCode::DatabaseTransactionFailed,
+            "Failed to clear collection from database",
+            "QueryManager::clearCollectionFromDatabaseByUuid")
+            .withDetails(errorText);
+        ErrorUtils::logError(err);
+        return;
+      }
+      // Lock error - will retry
+    }
   }
 }
 
@@ -1114,7 +1321,21 @@ void QueryManager::appendFileMapsAndListCanonical(
   }
 }
 
-void QueryManager::sortFiles(QStringList &allFilePaths) {
+void QueryManager::sortFiles(QStringList &allFilePaths, SortMode mode) {
+  if (mode == SortMode::Random) {
+    // Fisher-Yates shuffle
+    auto seed = static_cast<unsigned>(QDateTime::currentMSecsSinceEpoch());
+    std::mt19937 rng(seed);
+    for (int i = allFilePaths.size() - 1; i > 0; --i) {
+      std::uniform_int_distribution<int> dist(0, i);
+      int j = dist(rng);
+      allFilePaths.swapItemsAt(i, j);
+    }
+    return;
+  }
+
+  bool descending = (mode == SortMode::NameDescending);
+  
   std::ranges::sort(allFilePaths, [&](const QString &lhs, const QString &rhs) {
     QString nameA = QFileInfo(lhs).completeBaseName();
     QString nameB = QFileInfo(rhs).completeBaseName();
@@ -1133,9 +1354,10 @@ void QueryManager::sortFiles(QStringList &allFilePaths) {
     int priorityA = getCharacterSortPriority(sortKeyA);
     int priorityB = getCharacterSortPriority(sortKeyB);
     if (priorityA != priorityB) {
-      return priorityA < priorityB;
+      return descending ? priorityA > priorityB : priorityA < priorityB;
     }
-    return sortKeyA.compare(sortKeyB, Qt::CaseInsensitive) < 0;
+    int cmp = sortKeyA.compare(sortKeyB, Qt::CaseInsensitive);
+    return descending ? cmp > 0 : cmp < 0;
   });
 }
 

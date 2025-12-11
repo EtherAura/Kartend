@@ -50,6 +50,7 @@ SETUP_GETTER_DEF_SAME(EventManagerSetup, QScrollArea*, ItemScrollArea, itemScrol
 SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget*, GridContainer, gridContainer)
 SETUP_GETTER_DEF_SAME(EventManagerSetup, QStackedWidget*, StackedWidget, stackedWidget)
 SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget*, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget*, ItemsTopBar, itemsTopBar)
 SETUP_GETTER_DEF_SAME(EventManagerSetup, QLineEdit*, SearchBar, searchBar)
 SETUP_GETTER_DEF_SAME(EventManagerSetup, QList<CollectionConfig>*, Collections, collections)
 SETUP_GETTER_DEF_SAME(EventManagerSetup, int*, CurrentCollectionIndex, currentCollectionIndex)
@@ -76,6 +77,7 @@ void EventManager::setupReferences(const EventManagerSetup &setup) {
   m_gridContainer = setup.getGridContainer();
   m_stackedWidget = setup.getStackedWidget();
   m_itemsPage = setup.getItemsPage();
+  m_itemsTopBar = setup.getItemsTopBar();
   m_searchBar = setup.getSearchBar();
   m_collections = setup.getCollections();
   m_currentCollectionIndex = setup.getCurrentCollectionIndex();
@@ -216,20 +218,31 @@ bool EventManager::handleMouseButtonRelease(QObject *obj, QEvent *event) {
 
 bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   Q_UNUSED(obj);
+  
+  // Prevent reentrant wheel handling which can occur when animations
+  // or signal processing trigger additional wheel events
+  if (m_processingWheelEvent) {
+    return true;  // Accept event to prevent default handling
+  }
+  m_processingWheelEvent = true;
+  
   QWidget *activeModal = QApplication::activeModalWidget();
   if (activeModal) {
+    m_processingWheelEvent = false;
     return false;
   }
 
   if (!m_itemScrollArea || !m_stackedWidget ||
       !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections) ||
       m_stackedWidget->currentWidget() != m_itemsPage) {
+    m_processingWheelEvent = false;
     return false;
   }
 
   auto *wheelEvent = static_cast<QWheelEvent *>(event);
   QScrollBar *vScrollBar = m_itemScrollArea->verticalScrollBar();
   if (!vScrollBar) {
+    m_processingWheelEvent = false;
     return false;
   }
 
@@ -352,6 +365,7 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
 
   emit wheelScrollStarted();
   event->accept();
+  m_processingWheelEvent = false;
   return true;
 }
 
@@ -473,6 +487,28 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
     return false;
   }
 
+  // Block clicks that originate from or are inside the items top bar -
+  // this prevents toolbar clicks from affecting grid navigation/selection
+  if (m_itemsTopBar && m_itemsTopBar->isVisible()) {
+    auto *widget = qobject_cast<QWidget *>(obj);
+    if (widget) {
+      // Check if the clicked widget is the toolbar or a child of it
+      for (QWidget *w = widget; w; w = w->parentWidget()) {
+        if (w == m_itemsTopBar) {
+          return false;  // Let Qt handle toolbar interactions normally
+        }
+      }
+      // Check if click position falls within the toolbar geometry
+      QPoint globalPos = mouseEvent->globalPosition().toPoint();
+      QRect toolbarRect = m_itemsTopBar->geometry();
+      QPoint toolbarTopLeft = m_itemsTopBar->parentWidget()->mapToGlobal(toolbarRect.topLeft());
+      QRect globalToolbarRect(toolbarTopLeft, toolbarRect.size());
+      if (globalToolbarRect.contains(globalPos)) {
+        return false;  // Click is over the toolbar, ignore
+      }
+    }
+  }
+
   if (m_mouseManager) {
     m_mouseManager->setLeftMouseDown(true);
     m_mouseManager->clearHorizontalCandidate();
@@ -499,10 +535,10 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
     return true;
   }
 
-  ItemWidget *chosen = MouseManager::findBestWidgetForClick(
+  auto [chosen, visualIndex] = MouseManager::findBestWidgetForClick(
       clickPos, m_scrollManager, m_gridContainer);
-  if (chosen) {
-    emit widgetClicked(chosen, clickPos, mouseEvent);
+  if (chosen && visualIndex >= 0) {
+    emit widgetClicked(chosen, visualIndex, clickPos, mouseEvent);
     event->accept();
     return true;
   }

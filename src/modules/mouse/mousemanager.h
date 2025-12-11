@@ -105,8 +105,9 @@ public:
   void stopMouseHoldScrolling();
 
   // --- Widget Finding Utilities (static) ---
-  /// Finds the best widget at the given click position
-  static ItemWidget *findBestWidgetForClick(
+  /// Finds the best widget at the given click position and returns its visual index
+  /// Returns {widget, visualIndex} pair; visualIndex is -1 if not found
+  static std::pair<ItemWidget *, int> findBestWidgetForClick(
       const QPoint &clickPos,
       ScrollManager *scrollManager,
       QWidget *gridContainer);

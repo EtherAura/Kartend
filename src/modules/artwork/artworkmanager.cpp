@@ -410,6 +410,27 @@ void ArtworkManager::applyResultsToUi(
     if (!widget) {
       continue;
     }
+    
+    // Virtual folders use folder path for identity, not file path
+    // Skip stale-check for virtual folders since their artwork is based on folder name
+    if (!widget->isVirtualFolder()) {
+      // Verify the widget is still displaying the same file - widget may have been
+      // recycled to display a different file while artwork was loading async
+      const QString widgetFilePath = widget->getFilePath();
+      if (widgetFilePath.isEmpty()) {
+        // Widget has no file path (placeholder or reset) - skip stale artwork
+        continue;
+      }
+      
+      // Extract base name from both paths for comparison
+      const QString widgetBaseName = QFileInfo(widgetFilePath).completeBaseName();
+      const QString artworkBaseName = QFileInfo(result.artworkPath).completeBaseName();
+      if (widgetBaseName != artworkBaseName) {
+        // Widget is now displaying a different file, skip this stale artwork
+        continue;
+      }
+    }
+    
     {
       QMutexLocker locker(&m_dataMutex);
       widgetToArtworkPath[widget] = result.artworkPath;
@@ -526,8 +547,9 @@ void ArtworkManager::addPendingArtwork(ItemWidget *widget,
     const bool deferAll = m_state->artwork().deferAllArtwork;
     const bool gliding = m_state->glideAnimating();
     const bool arrowScrolling = m_state->arrow().arrowKeyScrolling;
+    const bool userScrolling = m_state->scroll().userScrollActive;
     const bool allowDuringSelection = m_state->artwork().allowDuringSelection;
-    shouldDefer = (deferAll || gliding || arrowScrolling) && !allowDuringSelection;
+    shouldDefer = (deferAll || gliding || arrowScrolling || userScrolling) && !allowDuringSelection;
   }
 
   if (shouldDefer) {
@@ -1043,6 +1065,27 @@ void ArtworkManager::collectUncachedAndApplyCached(
     if (info.mediaItem.isNull()) {
       continue;
     }
+    
+    // Virtual folders use folder path for identity, not file path
+    // Skip stale-check for virtual folders since their artwork is based on folder name
+    if (!info.mediaItem->isVirtualFolder()) {
+      // Verify the widget is still displaying the same file - widget may have been
+      // recycled to display a different file while waiting in queue
+      const QString widgetFilePath = info.mediaItem->getFilePath();
+      if (widgetFilePath.isEmpty()) {
+        // Widget has no file path (placeholder or reset) - skip
+        continue;
+      }
+      
+      // Extract base name from both paths for comparison
+      const QString widgetBaseName = QFileInfo(widgetFilePath).completeBaseName();
+      const QString artworkBaseName = QFileInfo(info.artworkPath).completeBaseName();
+      if (widgetBaseName != artworkBaseName) {
+        // Widget is now displaying a different file, skip this stale artwork
+        continue;
+      }
+    }
+    
     QPixmap cached = ArtworkManager::getCachedPixmap(info.artworkPath);
     if (!cached.isNull()) {
       info.mediaItem->setArtworkPixmap(cached);

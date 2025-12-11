@@ -1,6 +1,7 @@
 // Launches media items with configured emulators, handling RetroArch cores and parameters.
 #include "launchmanager.h"
 #include "applicationcontext.h"
+#include "configvalidation.h"
 #include "errorutils.h"
 #include "setuputils.h"
 
@@ -63,9 +64,10 @@ auto LaunchManager::validatePathSecurity(const QString &path) -> Result<void> {
         .withDetails("Path was modified by Unicode normalization");
   }
 
-  // Reject shell metacharacters that could enable command injection
-  // These characters have special meaning in shells and could be exploited
-  static const QRegularExpression shellMeta(R"([;|&`$(){}\[\]<>!])");
+  // Reject shell metacharacters that could enable command injection.
+  // Note: ()[] are allowed as they're common in filenames and safe with QProcess
+  // which passes arguments directly without shell interpretation.
+  static const QRegularExpression shellMeta(R"([;|&`$<>])");
   if (shellMeta.match(normalized).hasMatch()) {
     return ErrorContext::error(ErrorCode::InvalidFilePath,
                                "Path contains shell metacharacters",
@@ -105,13 +107,30 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<void> {
   }
 
   QFileInfo info(path);
+  QString resolvedPath = path;
 
-  // Launcher must be an absolute path to prevent PATH hijacking
+  // If not an absolute path, try to resolve via PATH
   if (!info.isAbsolute()) {
-    return ErrorContext::error(ErrorCode::InvalidFilePath,
-                               "Launcher path must be absolute",
-                               "LaunchManager::validateLauncherPath")
-        .withDetails(path);
+    // Check if command exists in PATH
+    if (!ConfigValidation::isCommandInPath(path)) {
+      return ErrorContext::error(ErrorCode::FileNotFound,
+                                 "Launcher command not found in PATH",
+                                 "LaunchManager::validateLauncherPath")
+          .withDetails(QString("Command '%1' is not in PATH. Specify absolute path or install the program.").arg(path));
+    }
+    
+    // Resolve to absolute path using 'which' for further security validation
+    QProcess whichProcess;
+    whichProcess.start("which", QStringList() << path);
+    whichProcess.waitForFinished(1000);
+    if (whichProcess.exitCode() == 0) {
+      resolvedPath = QString::fromUtf8(whichProcess.readAllStandardOutput()).trimmed();
+      info.setFile(resolvedPath);
+    } else {
+      // Fallback: command is in PATH but 'which' failed - allow it
+      // QProcess::startDetached will handle the PATH lookup
+      return Result<void>::success();
+    }
   }
 
   // Verify the file exists
@@ -119,7 +138,7 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<void> {
     return ErrorContext::error(ErrorCode::FileNotFound,
                                "Launcher executable not found",
                                "LaunchManager::validateLauncherPath")
-        .withDetails(path);
+        .withDetails(resolvedPath);
   }
 
   // Verify the file is executable
@@ -127,7 +146,7 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<void> {
     return ErrorContext::error(ErrorCode::InvalidFilePath,
                                "Launcher file is not executable",
                                "LaunchManager::validateLauncherPath")
-        .withDetails(path);
+        .withDetails(resolvedPath);
   }
   
   // Check original path against sensitive directories BEFORE canonicalization
@@ -136,11 +155,11 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<void> {
     "/proc", "/sys", "/dev"
   };
   for (const QString &sensitive : sensitiveDirectories) {
-    if (path.startsWith(sensitive + "/") || path == sensitive) {
+    if (resolvedPath.startsWith(sensitive + "/") || resolvedPath == sensitive) {
       return ErrorContext::error(ErrorCode::InvalidFilePath,
                                  "Launcher path is in restricted directory",
                                  "LaunchManager::validateLauncherPath")
-          .withDetails(QString("Path: %1").arg(path));
+          .withDetails(QString("Path: %1").arg(resolvedPath));
     }
   }
   
@@ -279,12 +298,16 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
   // TOCTOU mitigation: Re-validate launcher right before execution.
   // This reduces the window between validation and execution, though
   // cannot fully eliminate the race on systems without atomic exec.
+  // Skip this check for PATH-based commands (non-absolute paths) since
+  // QFileInfo can't check them - they were already validated via 'which'.
   QFileInfo launcherCheck(program);
-  if (!launcherCheck.exists() || !launcherCheck.isExecutable()) {
-    QMessageBox::critical(nullptr, "Launch Error",
-                          QString("Launcher is no longer accessible or executable:\n%1")
-                              .arg(program));
-    return;
+  if (launcherCheck.isAbsolute()) {
+    if (!launcherCheck.exists() || !launcherCheck.isExecutable()) {
+      QMessageBox::critical(nullptr, "Launch Error",
+                            QString("Launcher is no longer accessible or executable:\n%1")
+                                .arg(program));
+      return;
+    }
   }
 
   bool success = QProcess::startDetached(program, arguments);

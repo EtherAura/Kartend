@@ -80,6 +80,19 @@ ItemWidget *ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex)
   }
   widget->setAsSubcollection(subcollectionIndex, subcollectionName);
 
+  // Try to find artwork for the subcollection using the folder name
+  // Artwork is searched in the current collection's artwork directory
+  if (!subcollectionName.isEmpty() && m_artworkManager) {
+    QString artworkDir = m_context.config.artworkDirectory;
+    if (!artworkDir.isEmpty()) {
+      QString artworkPath = ArtworkUtils::findArtworkForFile(
+          subcollectionName, artworkDir);
+      if (!artworkPath.isEmpty()) {
+        m_artworkManager->addPendingArtwork(widget, artworkPath);
+      }
+    }
+  }
+
   // Connect double-click signal
   connect(widget, &ItemWidget::subcollectionDoubleClicked, this,
           &ItemWidgetFactory::subcollectionDoubleClicked);
@@ -103,6 +116,19 @@ ItemWidget *ItemWidgetFactory::createVirtualFolderWidget(const QString &folderPa
 
   widget->setAsVirtualFolder(folderPath, displayName, m_context.config.hideSubfolderTitles);
 
+  // Try to find artwork for the virtual folder using the folder name
+  // Artwork is searched in the current collection's artwork directory
+  if (!displayName.isEmpty() && m_artworkManager) {
+    QString artworkDir = m_context.config.artworkDirectory;
+    if (!artworkDir.isEmpty()) {
+      QString artworkPath = ArtworkUtils::findArtworkForFile(
+          displayName, artworkDir);
+      if (!artworkPath.isEmpty()) {
+        m_artworkManager->addPendingArtwork(widget, artworkPath);
+      }
+    }
+  }
+
   // Connect double-click signal
   connect(widget, &ItemWidget::virtualFolderDoubleClicked, this,
           &ItemWidgetFactory::virtualFolderDoubleClicked);
@@ -121,7 +147,11 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex,
     // Request items from database and return placeholder
     constexpr int chunkSize = 100;
     int chunkStart = (mediaIndex / chunkSize) * chunkSize;
-    emit requestItemsRange(chunkStart, chunkSize);
+    // Only emit request if this chunk isn't already pending
+    if (!m_pendingRangeRequests.contains(chunkStart)) {
+      m_pendingRangeRequests.insert(chunkStart);
+      emit requestItemsRange(chunkStart, chunkSize);
+    }
     return createPlaceholderWidget();
   }
 

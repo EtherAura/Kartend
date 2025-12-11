@@ -44,6 +44,8 @@ signals:
   void gridWidthChanged(int collectionIndex, int newGridWidth);
   void spacingChanged(int collectionIndex, int horizontalSpacing,
                       int verticalSpacing);
+  /// Emitted when changes requiring a database rescan have been saved
+  void rescanRequired(int collectionIndex);
 
 protected:
   void showEvent(QShowEvent *event) override;
@@ -83,9 +85,11 @@ private:
   void setupUIConstraints();
   void setupGeneralSettingsConnections();
   void loadCollectionToUI(int index);
+  void clearCollectionUI();
   void saveCollectionFromUI(int index);
   [[nodiscard]] bool hasUnsavedChanges() const;
   void updateSaveButtonStyle();
+  void updateDeleteButtonState();
   void updateUIForLauncherType(const QString &launcherPath);
   /// Populates and selects the parent collection combo box for the active collection.
   void updateParentCollectionComboBox(int currentIndex);
@@ -98,11 +102,13 @@ private:
   void loadGeneralSettingsToUI();
   void saveGeneralSettingsFromUI();
   void performRecursiveImport(const QString &baseDir, bool isContentDir);
+  void ensureRootCollectionExists();
   // Helper methods for removeCollection refactoring
   auto validateRemovalPreconditions() -> bool;
   auto captureExpandedStates() -> QList<int>;
   auto performCollectionRemoval(int index) -> void;
   auto updateParentReferences(int removedIndex) -> void;
+  auto rebuildParentIndices() -> void;
   auto restoreExpandedStates(const QList<int> &expandedBefore, int removedIndex) -> void;
   auto selectTargetAfterRemoval(int parentIdx, int removedIndex) -> void;
   // Helper methods for saveCollectionFromUI refactoring  
@@ -139,6 +145,8 @@ private:
   QList<int> m_parentCollectionMapping;
   bool m_isLoading;
   GeneralSettings m_generalSettings;
+  /// Tracks collection indices that need a rescan due to database-affecting changes
+  QSet<int> m_rescanRequired;
   bool eventFilter(QObject *obj, QEvent *event) override;
 };
 

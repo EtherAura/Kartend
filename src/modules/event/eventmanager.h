@@ -52,6 +52,7 @@ struct EventManagerSetup {
   QWidget *gridContainer = nullptr;
   QStackedWidget *stackedWidget = nullptr;
   QWidget *itemsPage = nullptr;
+  QWidget *itemsTopBar = nullptr;
   QLineEdit *searchBar = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
@@ -71,6 +72,7 @@ struct EventManagerSetup {
   SETUP_GETTER_DECL(QWidget*, GridContainer)
   SETUP_GETTER_DECL(QStackedWidget*, StackedWidget)
   SETUP_GETTER_DECL(QWidget*, ItemsPage)
+  SETUP_GETTER_DECL(QWidget*, ItemsTopBar)
   SETUP_GETTER_DECL(QLineEdit*, SearchBar)
   SETUP_GETTER_DECL(QList<CollectionConfig>*, Collections)
   SETUP_GETTER_DECL(int*, CurrentCollectionIndex)
@@ -107,7 +109,7 @@ public:
 signals:
   // Event signals for InteractionManager to handle
   void widgetDoubleClicked(const QString &filePath, int collectionIndex);
-  void widgetClicked(ItemWidget *widget, const QPoint &clickPos, QMouseEvent *event);
+  void widgetClicked(ItemWidget *widget, int visualIndex, const QPoint &clickPos, QMouseEvent *event);
   void clearSelectionRequested();
   void slashKeyPressed();
   void escapeKeyPressed();
@@ -151,9 +153,13 @@ private:
   QWidget *m_gridContainer = nullptr;
   QStackedWidget *m_stackedWidget = nullptr;
   QWidget *m_itemsPage = nullptr;
+  QWidget *m_itemsTopBar = nullptr;
   QLineEdit *m_searchBar = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   int *m_currentCollectionIndex = nullptr;
+  
+  // Reentrancy guard for wheel event handling
+  bool m_processingWheelEvent = false;
 };
 
 #endif // EVENTMANAGER_H

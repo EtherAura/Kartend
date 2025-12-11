@@ -334,9 +334,13 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
     // Preloaded data from context - copy to data manager
     m_dataManager->filePaths() = m_context.filePaths;
     m_dataManager->fileNames() = m_context.fileNames;
+    // Apply unified sorting if enabled (sorts subcollections, folders, and files together)
+    m_dataManager->applyUnifiedSort(m_context, m_collections);
   } else {
     // On-demand loading - initialize storage with placeholder count
-    int itemCount = totalCount - m_dataManager->subcollectionCount();
+    // totalCount includes subcollections + virtualFolders + mediaItems
+    // Storage should only hold mediaItems
+    int itemCount = totalCount - m_dataManager->subcollectionCount() - m_dataManager->virtualFolderCount();
     if (itemCount < 0) {
       itemCount = 0;
     }
@@ -355,6 +359,11 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
 
 void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames) {
     if (offset < 0 || offset >= m_dataManager->fileCount()) return;
+    
+    // Clear this chunk from pending requests so future scrolls can re-request if needed
+    if (m_widgetFactory) {
+      m_widgetFactory->clearPendingRangeRequests();
+    }
     
     // Store data and get visual indices that were updated
     QList<int> updatedIndices = m_dataManager->receiveItemsRange(offset, filePaths, fileNames);
@@ -780,14 +789,17 @@ void ScrollManager::handleHorizontalMoveAnimation(int selectedIndex,
   }
 
   // Update widget selection states
-  if (m_selectionState->needsCommitUpdate(selectedIndex)) {
-    if (auto *prevWidget = m_activeWidgets.value(m_selectionState->committedSelectedIndex(), nullptr)) {
+  int committedIdx = m_selectionState->committedSelectedIndex();
+  bool needsUpdate = m_selectionState->needsCommitUpdate(selectedIndex);
+  if (needsUpdate) {
+    if (auto *prevWidget = m_activeWidgets.value(committedIdx, nullptr)) {
       prevWidget->setSelected(false);
     }
   }
   ensureWidgetForIndex(selectedIndex);
   if (auto *currWidget = m_activeWidgets.value(selectedIndex, nullptr)) {
     currWidget->setSelected(true);
+  } else {
   }
   m_selectionState->commitSelection(selectedIndex);
 
@@ -1523,15 +1535,24 @@ void ScrollManager::onScrollChanged() {
   if (!m_scrollTimer) {
     return;
   }
+  
+  // Prevent reentrant scroll handling which can occur when scroll animations
+  // trigger valueChanged signals during processing
+  if (m_processingScrollChange) {
+    return;
+  }
+  m_processingScrollChange = true;
 
   if (m_state && m_state->scroll().programmaticScroll) {
     handleProgrammaticScroll();
+    m_processingScrollChange = false;
     return;
   }
 
   handleUserScroll();
   setupScrollSuppression();
   finalizeScrollChanges();
+  m_processingScrollChange = false;
 }
 
 void ScrollManager::handleProgrammaticScroll() {
@@ -1593,11 +1614,17 @@ void ScrollManager::setupScrollSuppression() {
 
 void ScrollManager::finalizeScrollChanges() {
   // Delay clearing UserScrollActive to allow any pending scroll events
-  // to be processed with the flag still set
+  // to be processed with the flag still set. After clearing, trigger
+  // artwork update since it was deferred during scrolling.
   QTimer::singleShot(
       UIConstants::Mouse::USER_SCROLL_ACTIVE_CLEAR_DELAY_MS, this, [this]() {
         if (m_state) {
           m_state->scroll().userScrollActive = false;
+        }
+        // Trigger artwork update now that user scroll is complete -
+        // artwork loading was deferred while userScrollActive was true
+        if (m_artworkManager) {
+          m_artworkManager->updateViewportArtwork();
         }
       });
 

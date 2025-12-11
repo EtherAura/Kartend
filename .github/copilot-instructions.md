@@ -305,9 +305,15 @@ int gridWidth = CollectionUtils::getGridWidth(m_currentCollectionIndex, m_collec
 ```
 
 Build script flags:
-- `--debug` - Debug build with map file
+- `--debug` - Debug build with map file, **required to see `qWarning()`/`qDebug()` output**
 - `--maintenance` - Warnings as errors, enables `--apply-fixes` and `--format-apply`
 - `--pgo` - Profile-guided optimization (two-pass build)
+
+**Debug builds:** Use `--debug` flag when you need to see debug/warning output:
+```bash
+.scripts/build.sh --debug
+```
+The debug binary is at `build/debug/kartend`.
 
 **Manual builds:**
 ```bash
@@ -500,7 +506,7 @@ void ScrollManager::releaseWidget(ItemWidget *widget);  // Return to pool
 
 ### Config File
 
-INI format at `~/.config/EtherAura/Kartend/kartend.cfg`:
+INI format at `~/.config/kartend/kartend.cfg`:
 ```ini
 [%General]
 MainScreen_gridWidth=6

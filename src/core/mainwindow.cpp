@@ -1,6 +1,8 @@
 // Main application window that owns ApplicationManager and orchestrates UI setup.
+#include <QActionGroup>
 #include <QApplication>
 #include <QCoreApplication>
+#include <QInputDialog>
 #include <QKeyEvent>
 #include <QPushButton>
 #include <QResizeEvent>
@@ -89,12 +91,55 @@ void MainWindow::refreshTitleCounts() {
   if (!getDatabaseManager()) {
     return;
   }
+  
+  // Don't update title bar with counts while a scan is in progress
+  // (the scan progress handler sets the title instead)
+  if (m_loadingOverlay && m_loadingOverlay->isActive()) {
+    return;
+  }
+  
   int cur = currentCollectionIndex;
   if (cur < 0 || cur >= m_collections.size()) {
     setWindowTitle(qApp->applicationName());
     return;
   }
 
+  // Check if we're in a subfolder
+  const QString &subfolder = m_collections[cur].currentSubfolder;
+  if (!subfolder.isEmpty() && getScrollManager()) {
+    // In a subfolder: show "SubfolderName (subfolderCount/collectionCount Items)"
+    QString subfolderName = subfolder;
+    int lastSlash = subfolder.lastIndexOf('/');
+    if (lastSlash >= 0) {
+      subfolderName = subfolder.mid(lastSlash + 1);
+    }
+    
+    int subfolderItemCount = getScrollManager()->getTotalItems();
+    qint64 collectionCount = getDatabaseManager()->countCollectionRecursive(cur, m_collections);
+
+    QString counts = QString("(%1/%2 Items)")
+      .arg(StringUtils::formatCountNumber(subfolderItemCount))
+      .arg(StringUtils::formatCountNumber(collectionCount));
+
+    int directSubfolderCount = CollectionUtils::countVirtualFolders(m_collections[cur]);
+    int directSubcollectionCount = CollectionUtils::directChildrenOf(cur, m_collections).size();
+
+    QString title = QString("%1 %2").arg(subfolderName, counts);
+    QStringList childParts;
+    if (directSubfolderCount > 0) {
+      childParts << QString("%1 subfolders").arg(directSubfolderCount);
+    }
+    if (directSubcollectionCount > 0) {
+      childParts << QString("%1 subcollections").arg(directSubcollectionCount);
+    }
+    if (!childParts.isEmpty()) {
+      title += QString(" — %1").arg(childParts.join(", "));
+    }
+    setWindowTitle(title);
+    return;
+  }
+
+  // Not in subfolder: show collection hierarchy counts
   QVector<int> chain;
   int walk = cur;
   while (walk >= 0 && walk < m_collections.size()) {
@@ -120,7 +165,22 @@ void MainWindow::refreshTitleCounts() {
   } else {
     counts = QString("(%1 Items)").arg(parts.join('/'));
   }
-  setWindowTitle(QString("%1 %2").arg(base, counts));
+
+  int directSubfolderCount = CollectionUtils::countVirtualFolders(m_collections[cur]);
+  int directSubcollectionCount = CollectionUtils::directChildrenOf(cur, m_collections).size();
+
+  QString title = QString("%1 %2").arg(base, counts);
+  QStringList childParts;
+  if (directSubfolderCount > 0) {
+    childParts << QString("%1 subfolders").arg(directSubfolderCount);
+  }
+  if (directSubcollectionCount > 0) {
+    childParts << QString("%1 subcollections").arg(directSubcollectionCount);
+  }
+  if (!childParts.isEmpty()) {
+    title += QString(" — %1").arg(childParts.join(", "));
+  }
+  setWindowTitle(title);
 }
 
 // Wires managers and signals; ensures sidebar metadata is refreshed when the
@@ -189,6 +249,38 @@ void MainWindow::connectDatabaseManager() {
                          // Show overlay with initial progress
                          m_loadingOverlay->showWithProgress(
                              QString("Scanning %1...").arg(name), current, total);
+                       }
+                     }
+                   });
+  
+  // Show overlay when a long scan starts (e.g., from fetchItemCount triggering rescan)
+  QObject::connect(getDatabaseManager(), &DatabaseManager::scanStarting,
+                   this, [this](const QString &name, int estimatedItems) {
+                     Q_UNUSED(estimatedItems)
+                     if (m_loadingOverlay && !m_loadingOverlay->isActive()) {
+                       m_loadingOverlay->show(QString("Scanning %1...").arg(name));
+                     }
+                     // Show "Scanning..." in title bar instead of "0 items"
+                     setWindowTitle(QString("%1 (Scanning...)").arg(name));
+                   });
+  
+  // Update progress during item scan/save
+  QObject::connect(getDatabaseManager(), &DatabaseManager::scanItemsProgress,
+                   this, [this](int itemsProcessed, int totalItems) {
+                     if (m_loadingOverlay && m_loadingOverlay->isActive()) {
+                       if (totalItems > 0) {
+                         // Indexing phase - we know the total
+                         m_loadingOverlay->setMessage(
+                             QString("Indexing %1 of %2 items...")
+                                 .arg(itemsProcessed)
+                                 .arg(totalItems));
+                         m_loadingOverlay->setProgress(itemsProcessed, totalItems);
+                       } else {
+                         // Scanning phase - total unknown, show count found so far
+                         m_loadingOverlay->setMessage(
+                             QString("Scanning... found %1 items").arg(itemsProcessed));
+                         // Show indeterminate progress (spinner continues)
+                         m_loadingOverlay->setProgress(0, 0);
                        }
                      }
                    });
@@ -398,8 +490,18 @@ void MainWindow::setupUIReferences() {
   m_searchModeButton = ui->searchModeButton;
   m_MetadataSidebar = ui->metadataSidebarWidget;
   
-  // Create loading overlay (parented to scroll area for correct positioning)
-  m_loadingOverlay = new LoadingOverlay(ui->itemScrollArea);
+  // Prevent scroll area from stealing keyboard focus - we handle PageUp/PageDown
+  // and arrow keys ourselves via the event filter, and QScrollArea's built-in
+  // keyboard handling would consume those events before our filter sees them
+  if (ui->itemScrollArea) {
+    ui->itemScrollArea->setFocusPolicy(Qt::NoFocus);
+    if (ui->itemScrollArea->viewport()) {
+      ui->itemScrollArea->viewport()->setFocusPolicy(Qt::NoFocus);
+    }
+  }
+  
+  // Create loading overlay (parented to central widget so it's above all content)
+  m_loadingOverlay = new LoadingOverlay(ui->centralwidget);
 }
 
 void MainWindow::initializeAppContext() {
@@ -436,9 +538,12 @@ void MainWindow::initializeAppContext() {
 
 void MainWindow::createMenuBar() {
   setupActionExit();
+  setupActionShowMenuBar();
+  setupActionShowToolbar();
   setupActionShowSidebar();
   setupActionSettings();
   setupActionRefresh();
+  setupSortActions();
   setupActionAbout();
   setupActionAboutQt();
   setupFullscreenAction();
@@ -452,6 +557,32 @@ void MainWindow::setupActionExit() {
                      &QWidget::close);
     ui->actionExit->setShortcutContext(Qt::ApplicationShortcut);
     addAction(ui->actionExit);
+  }
+}
+
+void MainWindow::setupActionShowMenuBar() {
+  if (ui->actionShowMenuBar) {
+    QObject::connect(ui->actionShowMenuBar, &QAction::triggered,
+                     [this](bool checked) {
+                       if (ui->menubar) {
+                         ui->menubar->setVisible(checked);
+                       }
+                     });
+    ui->actionShowMenuBar->setShortcutContext(Qt::ApplicationShortcut);
+    addAction(ui->actionShowMenuBar);
+  }
+}
+
+void MainWindow::setupActionShowToolbar() {
+  if (ui->actionShowToolbar) {
+    QObject::connect(ui->actionShowToolbar, &QAction::triggered,
+                     [this](bool checked) {
+                       if (ui->itemsTopBar) {
+                         ui->itemsTopBar->setVisible(checked);
+                       }
+                     });
+    ui->actionShowToolbar->setShortcutContext(Qt::ApplicationShortcut);
+    addAction(ui->actionShowToolbar);
   }
 }
 
@@ -503,14 +634,88 @@ void MainWindow::setupActionAboutQt() {
 }
 
 void MainWindow::setupActionRefresh() {
+  // Hard refresh (Ctrl+F5) - rescan the database
   if (ui->actionRefresh) {
     QObject::connect(ui->actionRefresh, &QAction::triggered, [this]() {
       if (getNavigationManager() && currentCollectionIndex >= 0) {
-        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+        getNavigationManager()->forceRescanCollection(currentCollectionIndex);
       }
     });
     ui->actionRefresh->setShortcutContext(Qt::ApplicationShortcut);
     addAction(ui->actionRefresh);
+  }
+
+  // Soft refresh (F5) - just reload the view without database rescan
+  if (ui->actionSoftRefresh) {
+    QObject::connect(ui->actionSoftRefresh, &QAction::triggered, [this]() {
+      if (getNavigationManager() && currentCollectionIndex >= 0) {
+        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+      }
+    });
+    ui->actionSoftRefresh->setShortcutContext(Qt::ApplicationShortcut);
+    addAction(ui->actionSoftRefresh);
+  }
+}
+
+void MainWindow::setupSortActions() {
+  // Create action group for mutually exclusive sort options
+  m_sortActionGroup = new QActionGroup(this);
+  m_sortActionGroup->setExclusive(true);
+
+  if (ui->actionSortNameAsc) {
+    m_sortActionGroup->addAction(ui->actionSortNameAsc);
+    QObject::connect(ui->actionSortNameAsc, &QAction::triggered, [this]() {
+      m_generalSettings.sortMode = SortMode::NameAscending;
+      if (getNavigationManager() && currentCollectionIndex >= 0) {
+        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+      }
+    });
+  }
+
+  if (ui->actionSortNameDesc) {
+    m_sortActionGroup->addAction(ui->actionSortNameDesc);
+    QObject::connect(ui->actionSortNameDesc, &QAction::triggered, [this]() {
+      m_generalSettings.sortMode = SortMode::NameDescending;
+      if (getNavigationManager() && currentCollectionIndex >= 0) {
+        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+      }
+    });
+  }
+
+  if (ui->actionSortRandom) {
+    m_sortActionGroup->addAction(ui->actionSortRandom);
+    QObject::connect(ui->actionSortRandom, &QAction::triggered, [this]() {
+      m_generalSettings.sortMode = SortMode::Random;
+      if (getNavigationManager() && currentCollectionIndex >= 0) {
+        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+      }
+    });
+  }
+
+  // Exclude subfolders option (not part of action group - it's a toggle)
+  if (ui->actionSortSubfolders) {
+    QObject::connect(ui->actionSortSubfolders, &QAction::triggered, [this](bool checked) {
+      m_generalSettings.excludeSubfoldersFromSort = checked;
+      if (getNavigationManager() && currentCollectionIndex >= 0) {
+        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+      }
+    });
+  }
+
+  // Sync initial checked states with current settings
+  switch (m_generalSettings.sortMode) {
+    case SortMode::NameAscending:
+      if (ui->actionSortNameAsc) ui->actionSortNameAsc->setChecked(true);
+      break;
+    case SortMode::NameDescending:
+      if (ui->actionSortNameDesc) ui->actionSortNameDesc->setChecked(true);
+      break;
+    case SortMode::Random:
+      if (ui->actionSortRandom) ui->actionSortRandom->setChecked(true);
+      break;
+  }
+  if (ui->actionSortSubfolders) {
+    ui->actionSortSubfolders->setChecked(m_generalSettings.excludeSubfoldersFromSort);
   }
 }
 
@@ -770,15 +975,47 @@ void MainWindow::setupInitialTimers() {
 }
 
 void MainWindow::setupInitialTimersEmptyCollections() {
-  // Defer settings dialog until after the main window is fully shown -
+  // Defer collection creation until after the main window is fully shown -
   // ensures proper parent-child relationship and window stacking order
   QTimer::singleShot(0, this, [this]() {
+    // Prompt user to create their first collection
+    bool ok = false;
+    QString name = QInputDialog::getText(
+        this, tr("Create First Collection"),
+        tr("Enter a name for your first collection:"),
+        QLineEdit::Normal, "", &ok);
+    
+    if (!ok || name.trimmed().isEmpty()) {
+      // User cancelled - show message and close
+      QMessageBox::information(this, tr("No Collection Created"),
+          tr("Kartend requires at least one collection to function. "
+             "Please restart the application to try again."));
+      return;
+    }
+    
+    // Create the first collection with the given name
+    CollectionConfig newCollection;
+    newCollection.name = name.trimmed();
+    newCollection.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
+    newCollection.parentCollectionIndex = -1;
+    newCollection.isSubcollection = false;
+    m_collections.append(newCollection);
+    
+    // Save the new collection
     if (getSettingsManager()) {
-      int dummyIndex = currentCollectionIndex;
+      getSettingsManager()->saveCollections(m_collections);
+    }
+    
+    // Rebuild hierarchy cache with the new collection
+    rebuildHierarchyCache();
+    
+    // Now open settings dialog for the user to configure the collection
+    if (getSettingsManager()) {
+      currentCollectionIndex = 0;
       SettingsDialogContext context;
       context.parent = this;
       context.collections = &m_collections;
-      context.currentCollectionIndex = &dummyIndex;
+      context.currentCollectionIndex = &currentCollectionIndex;
       context.sidebarManager = getSidebarManager();
       context.scrollManager = getScrollManager();
       context.navigationManager = getNavigationManager();

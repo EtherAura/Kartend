@@ -16,6 +16,8 @@
 #include <QToolTip>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
+#include <algorithm>
+#include <functional>
 #include <set>
 
 #include "extensionutils.h"
@@ -50,6 +52,9 @@ SettingsDialog::SettingsDialog(
     collectionTreeWidget->installEventFilter(this);
     collectionTreeWidget->setFocusPolicy(Qt::WheelFocus);
   }
+  
+  // Check if there's no root collection and prompt to create one
+  ensureRootCollectionExists();
 
   loadGeneralSettingsToUI();
   setupConnections();
@@ -71,11 +76,17 @@ SettingsDialog::SettingsDialog(
     if (collectionIndexToItem.contains(currentCollectionIndex)) {
       collectionTreeWidget->setCurrentItem(
           collectionIndexToItem[currentCollectionIndex]);
+      currentTreeItem = collectionIndexToItem[currentCollectionIndex];
     }
   }
 
   originalCurrentCollectionIndex = currentCollectionIndex;
   loadGeneralSettingsToUI();
+  
+  // Initialize button states after setup is complete
+  m_collectionSaved = true;
+  updateSaveButtonStyle();
+  updateDeleteButtonState();
 }
 
 // Handles wheel routing and whitespace click to allow deselection
@@ -133,6 +144,30 @@ void SettingsDialog::accept() {
     return;
   }
   saveGeneralSettingsFromUI();
+  
+  // Prompt user to rescan if database-affecting changes were saved
+  if (!m_rescanRequired.isEmpty()) {
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this,
+        tr("Rescan Required"),
+        tr("Some changes affect the database and require a rescan to take effect.\n\n"
+           "Would you like to rescan now?"),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::Yes);
+    
+    if (reply == QMessageBox::Yes) {
+      // Only rescan the currently viewed collection to avoid concurrent database operations
+      // If the user modified multiple collections, they can manually rescan others
+      if (m_rescanRequired.contains(originalCurrentCollectionIndex)) {
+        emit rescanRequired(originalCurrentCollectionIndex);
+      } else if (!m_rescanRequired.isEmpty()) {
+        // Fall back to first affected collection if current wasn't modified
+        emit rescanRequired(*m_rescanRequired.begin());
+      }
+    }
+    m_rescanRequired.clear();
+  }
+  
   QDialog::accept();
 }
 
@@ -151,9 +186,8 @@ void SettingsDialog::updateCollectionTreeWidget() {
   itemToCollectionIndex.clear();
   collectionIndexToItem.clear();
   populateTreeWidget();
-  if (ui->removeCollectionButton) {
-    ui->removeCollectionButton->setEnabled(collections.size() > 1);
-  }
+  // Enable delete button when a collection is selected
+  updateDeleteButtonState();
 }
 
 void SettingsDialog::expandPathToCollection(int collectionIndex) {
@@ -241,6 +275,7 @@ void SettingsDialog::onTreeItemSelectionChanged() {
   if (selectedItems.isEmpty()) {
     currentTreeItem = nullptr;
     currentCollectionIndex = -1;
+    updateDeleteButtonState();
     return;
   }
 
@@ -288,6 +323,7 @@ void SettingsDialog::onTreeItemSelectionChanged() {
   loadCollectionToUI(newIndex);
   m_collectionSaved = true;
   updateSaveButtonStyle();
+  updateDeleteButtonState();
 }
 
 void SettingsDialog::onTreeItemChanged(QTreeWidgetItem *item, int column) {
@@ -367,6 +403,27 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
   if (isActive && gridWidthChangedFlag) {
     m_gridWidthChangedForActiveCollection = true;
     m_newGridWidthForActiveCollection = newGridWidth;
+  }
+
+  // Check if database-affecting fields changed before saving
+  // These fields affect the UUID or database content and require a rescan
+  QString newName = originalCollection.name;
+  if (collectionIndexToItem.contains(editedIndex) &&
+      collectionIndexToItem[editedIndex]) {
+    newName = collectionIndexToItem[editedIndex]->text(0);
+  }
+  QString newMediaDir = ui->mediaDirLineEdit ? ui->mediaDirLineEdit->text().trimmed() : originalCollection.mediaDirectory;
+  QString newExtensions = ui->fileExtensionsLineEdit ? ui->fileExtensionsLineEdit->text().trimmed() : originalCollection.extensions.join(", ");
+  bool newIncludeSubfolders = ui->includeContentSubfoldersCheckBox ? ui->includeContentSubfoldersCheckBox->isChecked() : originalCollection.includeContentSubfolders;
+  
+  bool databaseFieldsChanged = 
+      (newName != originalCollection.name) ||
+      (newMediaDir != originalCollection.mediaDirectory) ||
+      (newExtensions != originalCollection.extensions.join(", ")) ||
+      (newIncludeSubfolders != originalCollection.includeContentSubfolders);
+  
+  if (databaseFieldsChanged) {
+    m_rescanRequired.insert(editedIndex);
   }
 
   saveCollectionFromUI(editedIndex);
@@ -817,6 +874,59 @@ void SettingsDialog::addCollection() {
   updateSaveButtonStyle();
 }
 
+// Ensures at least one root collection exists, prompting user to create one if needed
+void SettingsDialog::ensureRootCollectionExists() {
+  // Check if any root collection exists
+  bool hasRootCollection = false;
+  for (const auto &collection : collections) {
+    if (collection.parentCollectionIndex == -1) {
+      hasRootCollection = true;
+      break;
+    }
+  }
+  
+  if (hasRootCollection) {
+    return;
+  }
+  
+  // No root collection exists - prompt user to create one
+  while (true) {
+    bool ok = false;
+    QString name = QInputDialog::getText(
+        this, tr("Create Collection"),
+        tr("No collections found. Enter a name for your first collection:"),
+        QLineEdit::Normal, "", &ok);
+    
+    if (!ok) {
+      // User cancelled - they must create a collection to use settings
+      QMessageBox::warning(this, tr("Collection Required"),
+          tr("A collection is required to configure settings. "
+             "Please enter a collection name."));
+      continue;
+    }
+    
+    if (name.trimmed().isEmpty()) {
+      QMessageBox::warning(this, tr("Invalid Name"),
+          tr("Collection name cannot be empty. Please enter a valid name."));
+      continue;
+    }
+    
+    // Create the new root collection
+    CollectionConfig newCollection;
+    newCollection.name = name.trimmed();
+    newCollection.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
+    newCollection.parentCollectionIndex = -1;
+    newCollection.isSubcollection = false;
+    
+    collections.append(newCollection);
+    m_workingCollections.append(newCollection);
+    currentCollectionIndex = collections.size() - 1;
+    
+    m_collectionSaved = false;
+    break;
+  }
+}
+
 // Validates preconditions for collection removal
 auto SettingsDialog::validateRemovalPreconditions() -> bool {
   if ((!currentTreeItem) ||
@@ -827,12 +937,7 @@ auto SettingsDialog::validateRemovalPreconditions() -> bool {
   if (!CollectionUtils::isValidIndex(index, collections)) {
     return false;
   }
-  if (collections.size() <= 1) {
-    QMessageBox::warning(this, "Cannot Remove Collection",
-                         "You cannot remove the last collection.",
-                         QMessageBox::Ok);
-    return false;
-  }
+  // Allow removing any collection, including the last one
   return true;
 }
 
@@ -869,6 +974,16 @@ auto SettingsDialog::updateParentReferences(int removedIndex) -> void {
       collections[i].isSubcollection = false;
       m_workingCollections[i].isSubcollection = false;
     }
+  }
+}
+
+// Rebuilds parent indices after multiple removals to ensure consistency
+auto SettingsDialog::rebuildParentIndices() -> void {
+  // Parent indices should already be set correctly after removals
+  // Just sync working collections with main collections
+  for (int i = 0; i < collections.size() && i < m_workingCollections.size(); ++i) {
+    m_workingCollections[i].parentCollectionIndex = collections[i].parentCollectionIndex;
+    m_workingCollections[i].isSubcollection = collections[i].isSubcollection;
   }
 }
 
@@ -1248,23 +1363,102 @@ void SettingsDialog::removeCollection() {
 
   int index = itemToCollectionIndex[currentTreeItem];
   int parentIdx = collections[index].parentCollectionIndex;
+  
+  // Check if this is a root collection with descendants
+  QList<int> descendants = CollectionUtils::collectDescendantIndices(index, collections);
+  bool isRootCollection = (parentIdx == -1);
+  bool hasDescendants = !descendants.isEmpty();
+  
+  QString message;
+  if (isRootCollection && hasDescendants) {
+    message = QString("Remove \"%1\" and all %2 nested collection(s)?\n\n"
+                      "This action cannot be undone.")
+                  .arg(collections[index].name)
+                  .arg(descendants.size());
+  } else if (hasDescendants) {
+    message = QString("Remove \"%1\" and all %2 nested collection(s)?")
+                  .arg(collections[index].name)
+                  .arg(descendants.size());
+  } else {
+    message = QString("Remove \"%1\"?").arg(collections[index].name);
+  }
 
   QMessageBox::StandardButton reply = QMessageBox::question(
-      this, "Remove Collection", "Remove " + collections[index].name + "?",
+      this, "Remove Collection", message,
       QMessageBox::Yes | QMessageBox::No);
   if (reply != QMessageBox::Yes) {
     return;
   }
 
   QList<int> expandedBefore = captureExpandedStates();
-  performCollectionRemoval(index);
-  updateParentReferences(index);
+  
+  // Remove descendants first (in reverse order to maintain indices)
+  // Sort descendants in descending order so removal doesn't affect other indices
+  std::sort(descendants.begin(), descendants.end(), std::greater<int>());
+  for (int descIndex : descendants) {
+    performCollectionRemoval(descIndex);
+  }
+  
+  // Recalculate index after descendant removals
+  // Count how many descendants were before the target index
+  int adjustedIndex = index;
+  for (int descIndex : descendants) {
+    if (descIndex < index) {
+      adjustedIndex--;
+    }
+  }
+  
+  performCollectionRemoval(adjustedIndex);
+  
+  // Update parent references - need to rebuild since multiple removals happened
+  for (int i = 0; i < collections.size(); ++i) {
+    // Find the original parent and update if needed
+    int origParent = collections[i].parentCollectionIndex;
+    if (origParent >= 0) {
+      // Check if parent was removed or shifted
+      if (origParent == index || descendants.contains(origParent)) {
+        // Parent was removed - orphan this collection to root
+        collections[i].parentCollectionIndex = -1;
+        m_workingCollections[i].parentCollectionIndex = -1;
+        collections[i].isSubcollection = false;
+        m_workingCollections[i].isSubcollection = false;
+      }
+    }
+  }
+  // Rebuild parent indices to be consistent
+  rebuildParentIndices();
+  
+  // Persist the removal immediately
+  emit collectionSaved(collections);
+  
   updateCollectionTreeWidget();
-  restoreExpandedStates(expandedBefore, index);
-  selectTargetAfterRemoval(parentIdx, index);
+  
+  // If all collections were removed, prompt for a new one
+  if (collections.isEmpty()) {
+    clearCollectionUI();
+    currentTreeItem = nullptr;
+    currentCollectionIndex = -1;
+    ensureRootCollectionExists();
+    updateCollectionTreeWidget();
+    if (!collections.isEmpty()) {
+      currentCollectionIndex = 0;
+      if (collectionIndexToItem.contains(0)) {
+        currentTreeItem = collectionIndexToItem[0];
+        collectionTreeWidget->setCurrentItem(currentTreeItem);
+        currentTreeItem->setSelected(true);
+      }
+      loadCollectionToUI(0);
+      originalCollection = m_workingCollections[0];
+      emit collectionSaved(collections);
+    }
+  } else {
+    restoreExpandedStates(expandedBefore, index);
+    selectTargetAfterRemoval(parentIdx, adjustedIndex);
+  }
 
   m_collectionSaved = true;
   updateSaveButtonStyle();
+  updateDeleteButtonState();
 }
 
 // Saves current collection UI edits (including name) into working and live
@@ -1296,13 +1490,15 @@ auto SettingsDialog::hasUnsavedChanges() const -> bool {
 }
 
 void SettingsDialog::updateSaveButtonStyle() {
-  if (hasUnsavedChanges()) {
-    ui->saveCollectionButton->setStyleSheet("QPushButton {"
-                                            "  border: 1px solid red;"
-                                            "  padding: 5px;"
-                                            "}");
-  } else {
-    ui->saveCollectionButton->setStyleSheet("");
+  ui->saveCollectionButton->setEnabled(hasUnsavedChanges());
+}
+
+void SettingsDialog::updateDeleteButtonState() {
+  if (ui->removeCollectionButton) {
+    // Enable delete when there's a valid collection selected
+    bool hasSelection = currentTreeItem != nullptr && 
+                        itemToCollectionIndex.contains(currentTreeItem);
+    ui->removeCollectionButton->setEnabled(hasSelection && !collections.isEmpty());
   }
 }
 
@@ -1619,6 +1815,11 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
 }
 
 void SettingsDialog::checkForChanges() {
+  // Skip change detection during programmatic loading to avoid
+  // false positives before originalCollection is set
+  if (m_isLoading) {
+    return;
+  }
   m_collectionSaved = !hasUnsavedChanges();
   updateSaveButtonStyle();
 }
@@ -1923,5 +2124,48 @@ void SettingsDialog::loadCollectionToUI(int index) {
   updateParentCollectionComboBox(index);
   updateFieldVisibility();
   updateGridWidthLimits();
+  m_isLoading = false;
+}
+
+void SettingsDialog::clearCollectionUI() {
+  m_isLoading = true;
+  
+  if (ui->launcherLineEdit) ui->launcherLineEdit->clear();
+  if (ui->coreLineEdit) ui->coreLineEdit->clear();
+  if (ui->launchParamsLineEdit) ui->launchParamsLineEdit->clear();
+  if (ui->mediaDirLineEdit) ui->mediaDirLineEdit->clear();
+  if (ui->artworkDirLineEdit) ui->artworkDirLineEdit->clear();
+  if (ui->fileExtensionsLineEdit) ui->fileExtensionsLineEdit->clear();
+  if (ui->backgroundValueEdit) ui->backgroundValueEdit->clear();
+  if (ui->primaryColorEdit) ui->primaryColorEdit->clear();
+  if (ui->tileColorEdit) ui->tileColorEdit->clear();
+  if (ui->selectionColorEdit) ui->selectionColorEdit->clear();
+  
+  if (ui->includeContentSubfoldersCheckBox) ui->includeContentSubfoldersCheckBox->setChecked(false);
+  if (ui->showAllSubfolderItemsCheckBox) ui->showAllSubfolderItemsCheckBox->setChecked(false);
+  if (ui->hideSubfolderTitlesCheckBox) ui->hideSubfolderTitlesCheckBox->setChecked(false);
+  if (ui->showHiddenFoldersCheckBox) ui->showHiddenFoldersCheckBox->setChecked(false);
+  if (ui->includeArtworkSubfoldersCheckBox) ui->includeArtworkSubfoldersCheckBox->setChecked(false);
+  if (ui->showAllSubcollectionItemsCheckBox) ui->showAllSubcollectionItemsCheckBox->setChecked(false);
+  if (ui->hideHorizontalScrollbarCheckBox) ui->hideHorizontalScrollbarCheckBox->setChecked(false);
+  if (ui->hideVerticalScrollbarCheckBox) ui->hideVerticalScrollbarCheckBox->setChecked(false);
+  if (ui->hideTitlesCheckBox) ui->hideTitlesCheckBox->setChecked(false);
+  if (ui->hideSubcollectionTitlesCheckBox) ui->hideSubcollectionTitlesCheckBox->setChecked(false);
+  
+  if (ui->gridWidthSpinBox) ui->gridWidthSpinBox->setValue(UIConstants::Grid::DEFAULT_WIDTH);
+  if (ui->horizontalSpacingSpinBox) ui->horizontalSpacingSpinBox->setValue(70);
+  if (ui->verticalSpacingSpinBox) ui->verticalSpacingSpinBox->setValue(0);
+  if (ui->itemWidthSpinBox) ui->itemWidthSpinBox->setValue(200);
+  if (ui->itemHeightSpinBox) ui->itemHeightSpinBox->setValue(300);
+  if (ui->fontSizeSpinBox) ui->fontSizeSpinBox->setValue(12);
+  if (ui->cornerRadiusSpinBox) ui->cornerRadiusSpinBox->setValue(0);
+  
+  if (ui->horizontalAlignmentComboBox) ui->horizontalAlignmentComboBox->setCurrentIndex(0);
+  if (ui->sidebarModeComboBox) ui->sidebarModeComboBox->setCurrentIndex(0);
+  if (ui->parentCollectionComboBox) ui->parentCollectionComboBox->clear();
+  
+  if (ui->backgroundColorRadio) ui->backgroundColorRadio->setChecked(true);
+  if (ui->subfolderOptionsWidget) ui->subfolderOptionsWidget->setVisible(false);
+  
   m_isLoading = false;
 }

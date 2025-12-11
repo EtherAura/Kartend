@@ -54,10 +54,13 @@ private:
   void startSpinnerAnimation();
   void stopSpinnerAnimation();
   void updatePosition();
+  void updateAccentColor();
+  void updateSpinnerPosition();
 
   QLabel *m_messageLabel = nullptr;
   QProgressBar *m_progressBar = nullptr;
   QWidget *m_contentWidget = nullptr;
+  QWidget *m_spinnerWidget = nullptr;
   
   QPropertyAnimation *m_spinnerAnimation = nullptr;
   QPropertyAnimation *m_fadeAnimation = nullptr;
@@ -65,6 +68,7 @@ private:
   int m_spinnerAngle = 0;
   bool m_active = false;
   bool m_showProgress = false;
+  QColor m_accentColor;
 };
 
 #endif // LOADINGOVERLAY_H

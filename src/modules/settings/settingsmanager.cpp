@@ -334,6 +334,18 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
         saveCollections(collections);
       });
 
+  // Connect rescan signal to trigger database rescan after dialog closes
+  connect(&dlg, &SettingsDialog::rescanRequired, this,
+          [navigationManager](int collectionIndex) {
+            if (navigationManager) {
+              // Defer rescan to allow dialog to fully close first
+              QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS,
+                                 [navigationManager, collectionIndex]() {
+                                   navigationManager->forceRescanCollection(collectionIndex);
+                                 });
+            }
+          });
+
   if (dlg.exec() != QDialog::Accepted) {
     return;
   }

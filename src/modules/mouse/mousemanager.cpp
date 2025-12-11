@@ -362,50 +362,73 @@ void MouseManager::onMouseHoldScrollStep() {
 
 // --- Widget Finding Utilities (static) ---
 
-ItemWidget *MouseManager::findBestWidgetForClick(
+std::pair<ItemWidget *, int> MouseManager::findBestWidgetForClick(
     const QPoint &clickPos, ScrollManager *scrollManager,
     QWidget *gridContainer) {
   if (!scrollManager || !gridContainer) {
-    return nullptr;
+    return {nullptr, -1};
   }
 
-  QVector<ItemWidget *> candidates;
+  // Build candidate list preserving widget->index mapping
+  QVector<std::pair<ItemWidget *, int>> candidates;
   const auto &active = scrollManager->getActiveWidgets();
   candidates.reserve(active.size());
   for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
     if (it.value() && it.value()->isVisible()) {
-      candidates.append(it.value());
+      candidates.append({it.value(), it.key()});
     }
   }
   if (candidates.isEmpty()) {
-    return nullptr;
+    return {nullptr, -1};
   }
 
   QPoint virtualContainerOffset(0, 0);
   QWidget *virtualContainer =
-      candidates.first() ? candidates.first()->parentWidget()
-                                    : nullptr;
+      candidates.first().first ? candidates.first().first->parentWidget()
+                               : nullptr;
   if (virtualContainer &&
       virtualContainer->parentWidget() == gridContainer) {
     virtualContainerOffset = virtualContainer->pos();
   }
   QPoint posInVC = clickPos - virtualContainerOffset;
 
-  QVector<ItemWidget *> under;
+  // Find widgets directly under click position
+  QVector<std::pair<ItemWidget *, int>> under;
   under.reserve(candidates.size());
-  for (ItemWidget *widget : candidates) {
+  for (const auto &[widget, idx] : candidates) {
     if (!widget) {
       continue;
     }
     if (widget->geometry().contains(posInVC)) {
-      under.append(widget);
+      under.append({widget, idx});
     }
   }
 
-  if (!under.isEmpty()) {
-    return findClosestWidget(under, posInVC);
+  // Find closest widget from either under-click or all candidates
+  const auto &searchList = under.isEmpty() ? candidates : under;
+  ItemWidget *best = nullptr;
+  int bestIdx = -1;
+  qint64 bestDist2 = -1;
+  
+  for (const auto &[widget, idx] : searchList) {
+    if (!widget) {
+      continue;
+    }
+    const QRect geometry = widget->geometry();
+    const QPoint centerPoint = geometry.center();
+    const qint64 deltaX =
+        static_cast<qint64>(centerPoint.x()) - static_cast<qint64>(posInVC.x());
+    const qint64 deltaY =
+        static_cast<qint64>(centerPoint.y()) - static_cast<qint64>(posInVC.y());
+    const qint64 dist2 = (deltaX * deltaX) + (deltaY * deltaY);
+    if (bestDist2 < 0 || dist2 < bestDist2) {
+      bestDist2 = dist2;
+      best = widget;
+      bestIdx = idx;
+    }
   }
-  return findClosestWidget(candidates, posInVC);
+  
+  return {best, bestIdx};
 }
 
 ItemWidget *MouseManager::findClosestWidget(

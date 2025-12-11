@@ -5,6 +5,7 @@
 #include <QGraphicsOpacityEffect>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPalette>
 #include <QResizeEvent>
 
 namespace {
@@ -14,9 +15,50 @@ constexpr int CONTENT_PADDING = 24;
 constexpr int FADE_DURATION_MS = 150;
 constexpr int SPINNER_DURATION_MS = 1000;
 constexpr QColor OVERLAY_COLOR = QColor(0, 0, 0, 160);
-constexpr QColor SPINNER_COLOR = QColor(100, 180, 255);
-constexpr QColor SPINNER_BG_COLOR = QColor(60, 60, 60);
+constexpr QColor SPINNER_BG_COLOR = QColor(45, 45, 45);  // Match overlay background
 } // namespace
+
+// Custom spinner widget that draws the animated arc
+class SpinnerWidget : public QWidget {
+public:
+  explicit SpinnerWidget(QWidget *parent = nullptr) : QWidget(parent) {
+    setAttribute(Qt::WA_TranslucentBackground);
+    setFixedSize(SPINNER_SIZE + SPINNER_THICKNESS * 2, SPINNER_SIZE + SPINNER_THICKNESS * 2);
+  }
+  
+  void setAngle(int angle) { m_angle = angle; update(); }
+  void setColor(const QColor &color) { m_color = color; update(); }
+  
+protected:
+  void paintEvent(QPaintEvent *) override {
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    
+    int offset = SPINNER_THICKNESS;
+    QRect spinnerRect(offset, offset, SPINNER_SIZE, SPINNER_SIZE);
+    
+    painter.save();
+    painter.translate(width() / 2, height() / 2);
+    painter.rotate(m_angle);
+    painter.translate(-width() / 2, -height() / 2);
+    
+    // Draw background arc
+    QPen bgPen(SPINNER_BG_COLOR, SPINNER_THICKNESS, Qt::SolidLine, Qt::RoundCap);
+    painter.setPen(bgPen);
+    painter.drawArc(spinnerRect, 0, 360 * 16);
+    
+    // Draw foreground arc
+    QPen fgPen(m_color, SPINNER_THICKNESS, Qt::SolidLine, Qt::RoundCap);
+    painter.setPen(fgPen);
+    painter.drawArc(spinnerRect, 90 * 16, 270 * 16);
+    
+    painter.restore();
+  }
+  
+private:
+  int m_angle = 0;
+  QColor m_color = QColor(100, 180, 255);
+};
 
 LoadingOverlay::LoadingOverlay(QWidget *parent)
     : QWidget(parent) {
@@ -41,7 +83,7 @@ void LoadingOverlay::setupUI() {
   m_contentWidget->setObjectName("loadingContent");
   m_contentWidget->setStyleSheet(
       "#loadingContent {"
-      "  background-color: rgba(40, 40, 40, 230);"
+      "  background-color: rgba(45, 45, 45, 255);"
       "  border-radius: 12px;"
       "  padding: 20px;"
       "}");
@@ -55,6 +97,9 @@ void LoadingOverlay::setupUI() {
   // Message label
   m_messageLabel = new QLabel("Loading...", m_contentWidget);
   m_messageLabel->setAlignment(Qt::AlignCenter);
+  m_messageLabel->setWordWrap(true);
+  m_messageLabel->setMinimumWidth(300);
+  m_messageLabel->setMaximumWidth(500);
   m_messageLabel->setStyleSheet(
       "QLabel {"
       "  color: white;"
@@ -68,21 +113,13 @@ void LoadingOverlay::setupUI() {
   m_progressBar->setRange(0, 100);
   m_progressBar->setValue(0);
   m_progressBar->setTextVisible(true);
-  m_progressBar->setFixedWidth(200);
-  m_progressBar->setFixedHeight(8);
-  m_progressBar->setStyleSheet(
-      "QProgressBar {"
-      "  background-color: rgba(60, 60, 60, 200);"
-      "  border-radius: 4px;"
-      "  text-align: center;"
-      "}"
-      "QProgressBar::chunk {"
-      "  background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
-      "    stop:0 #4a9eff, stop:1 #64b4ff);"
-      "  border-radius: 4px;"
-      "}");
+  m_progressBar->setFixedWidth(300);
+  m_progressBar->setFixedHeight(20);
   m_progressBar->hide();
   layout->addWidget(m_progressBar, 0, Qt::AlignCenter);
+  
+  // Spinner widget (sits on top of content widget)
+  m_spinnerWidget = new SpinnerWidget(this);
   
   // Spinner animation
   m_spinnerAnimation = new QPropertyAnimation(this, "spinnerAngle", this);
@@ -107,6 +144,7 @@ void LoadingOverlay::show(const QString &message) {
   m_messageLabel->setText(message);
   m_progressBar->hide();
   
+  updateAccentColor();
   updatePosition();
   startSpinnerAnimation();
   
@@ -120,6 +158,7 @@ void LoadingOverlay::show(const QString &message) {
   
   QWidget::show();
   raise();
+  if (m_spinnerWidget) m_spinnerWidget->raise();
 }
 
 void LoadingOverlay::showWithProgress(const QString &message, int current, int total) {
@@ -131,6 +170,7 @@ void LoadingOverlay::showWithProgress(const QString &message, int current, int t
   m_progressBar->setValue(current);
   m_progressBar->show();
   
+  updateAccentColor();
   updatePosition();
   startSpinnerAnimation();
   
@@ -144,6 +184,7 @@ void LoadingOverlay::showWithProgress(const QString &message, int current, int t
   
   QWidget::show();
   raise();
+  if (m_spinnerWidget) m_spinnerWidget->raise();
 }
 
 void LoadingOverlay::setProgress(int current, int total) {
@@ -184,7 +225,9 @@ void LoadingOverlay::hide(bool animated) {
 
 void LoadingOverlay::setSpinnerAngle(int angle) {
   m_spinnerAngle = angle;
-  update(); // Trigger repaint
+  if (m_spinnerWidget) {
+    static_cast<SpinnerWidget*>(m_spinnerWidget)->setAngle(angle);
+  }
 }
 
 void LoadingOverlay::paintEvent(QPaintEvent *event) {
@@ -193,32 +236,8 @@ void LoadingOverlay::paintEvent(QPaintEvent *event) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing);
   
-  // Draw semi-transparent overlay background
+  // Draw semi-transparent overlay background only
   painter.fillRect(rect(), OVERLAY_COLOR);
-  
-  // Draw spinner at top-center of content widget
-  if (m_contentWidget && m_active) {
-    QRect contentRect = m_contentWidget->geometry();
-    int spinnerX = contentRect.center().x();
-    int spinnerY = contentRect.top() + CONTENT_PADDING + SPINNER_SIZE / 2;
-    
-    painter.save();
-    painter.translate(spinnerX, spinnerY);
-    painter.rotate(m_spinnerAngle);
-    
-    // Draw spinner background arc
-    QPen bgPen(SPINNER_BG_COLOR, SPINNER_THICKNESS, Qt::SolidLine, Qt::RoundCap);
-    painter.setPen(bgPen);
-    QRect spinnerRect(-SPINNER_SIZE / 2, -SPINNER_SIZE / 2, SPINNER_SIZE, SPINNER_SIZE);
-    painter.drawArc(spinnerRect, 0, 360 * 16);
-    
-    // Draw spinner foreground arc (partial)
-    QPen fgPen(SPINNER_COLOR, SPINNER_THICKNESS, Qt::SolidLine, Qt::RoundCap);
-    painter.setPen(fgPen);
-    painter.drawArc(spinnerRect, 90 * 16, 270 * 16); // 270 degree arc
-    
-    painter.restore();
-  }
 }
 
 void LoadingOverlay::resizeEvent(QResizeEvent *event) {
@@ -249,14 +268,53 @@ void LoadingOverlay::updatePosition() {
   // Fill parent widget
   setGeometry(parentWidget()->rect());
   
-  // Center content widget
+  // Center content widget with generous sizing for text
   if (m_contentWidget) {
     m_contentWidget->adjustSize();
     QSize contentSize = m_contentWidget->sizeHint();
-    // Add extra height for spinner
-    contentSize.setHeight(contentSize.height() + SPINNER_SIZE + 8);
+    // Ensure minimum width for longer messages
+    contentSize.setWidth(qMax(contentSize.width(), 350));
+    // Add extra height for spinner and ensure text fits
+    contentSize.setHeight(contentSize.height() + SPINNER_SIZE + 16);
     int x = (width() - contentSize.width()) / 2;
     int y = (height() - contentSize.height()) / 2;
     m_contentWidget->setGeometry(x, y, contentSize.width(), contentSize.height());
+    
+    // Position spinner widget at top center of content box
+    // The spinner draws on top of the content widget with proper z-order
+    if (m_spinnerWidget) {
+      int spinnerX = x + (contentSize.width() - SPINNER_SIZE) / 2;
+      int spinnerY = y + 12;  // 12px from top of content box
+      m_spinnerWidget->setGeometry(spinnerX, spinnerY, SPINNER_SIZE, SPINNER_SIZE);
+      m_spinnerWidget->raise();  // Ensure spinner is on top
+    }
   }
+}
+
+void LoadingOverlay::updateAccentColor() {
+  // Cache the accent color for consistent use in spinner and progress bar
+  m_accentColor = QApplication::palette().color(QPalette::Highlight);
+  
+  // Update spinner widget color
+  if (m_spinnerWidget) {
+    static_cast<SpinnerWidget*>(m_spinnerWidget)->setColor(m_accentColor);
+  }
+  
+  if (!m_progressBar) return;
+  
+  // Apply accent color to progress bar (flat color, no gradient, to match spinner)
+  QString styleSheet = QString(
+      "QProgressBar {"
+      "  background-color: rgba(60, 60, 60, 200);"
+      "  border-radius: 4px;"
+      "  text-align: center;"
+      "  color: white;"
+      "  font-size: 11px;"
+      "}"
+      "QProgressBar::chunk {"
+      "  background-color: %1;"
+      "  border-radius: 4px;"
+      "}").arg(m_accentColor.name());
+  
+  m_progressBar->setStyleSheet(styleSheet);
 }

@@ -224,6 +224,7 @@ private:
   bool m_isMutating = false;
   DatabaseManager *m_databaseManager = nullptr;
   bool m_destroying = false;
+  bool m_processingScrollChange = false;  // Reentrancy guard for onScrollChanged
   TimerUtils::DebouncedTimer *m_userScrollIdleTimer = nullptr;
   TimerUtils::DebouncedTimer *m_prewarmIdleTimer = nullptr;
   

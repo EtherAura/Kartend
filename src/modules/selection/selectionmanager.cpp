@@ -478,6 +478,10 @@ void SelectionManager::handleSameRowClickSelection(int visualIndex,
   if (m_state) {
     m_state->click().deferCenterOnClick = false;
     m_state->click().deferredCenterIndex = -1;
+    // Clear any stale row-change suppression state to prevent ViewportManager
+    // from using the old pendingSelectionIndex when centering
+    m_state->click().selectionSuppressed = false;
+    m_state->click().pendingSelectionIndex = -1;
   }
   selectItemByIndex(visualIndex, true);
   if (!skipCenter) {
@@ -487,6 +491,27 @@ void SelectionManager::handleSameRowClickSelection(int visualIndex,
     m_state->click().rowChangeFirstClickIndex = -1;
     m_state->click().rowChangeFirstClickMs = 0;
   }
+}
+
+int SelectionManager::handleWidgetSelectionByIndex(int visualIndex,
+                                                   const QPoint &clickPos,
+                                                   QMouseEvent *originalEvent) {
+  Q_UNUSED(clickPos);
+  Q_UNUSED(originalEvent);
+
+  if (visualIndex < 0 || !m_scrollManager) {
+    return -1;
+  }
+
+  // User initiated selection - cancel any pending automatic restore
+  // to prevent it from overriding this explicit user choice
+  cancelPendingSelectionRestore();
+
+  // Get the file path for this index
+  QString filePath = m_scrollManager->filePathForVisualIndex(visualIndex);
+  
+  processSingleClickSelection(visualIndex, filePath);
+  return visualIndex;
 }
 
 int SelectionManager::handleWidgetSelection(ItemWidget *widget,
@@ -534,13 +559,23 @@ void SelectionManager::selectItemByIndex(int index,
 
   const QStringList &filePaths = m_scrollManager->getFilePaths();
   QList<int> subcollections = getSubcollections(*m_currentCollectionIndex);
-  int totalItems = subcollections.size() + filePaths.size();
+  int virtualFolderCount = m_scrollManager->getVirtualFolderCount();
+  int totalItems = subcollections.size() + virtualFolderCount + filePaths.size();
   if (index < 0 || index >= totalItems) {
     return;
   }
 
   bool selectionChangedLocal = (index != m_selectedItemIndex);
   m_selectedItemIndex = index;
+  
+  // Always update m_lastSelectedRow when selection changes to keep state in sync
+  // This was previously only updated in handleSuccessfulSelection, causing stale
+  // row tracking when selection was suppressed for new-row click sequences
+  int gridWidth = getCurrentGridWidth();
+  if (gridWidth > 0) {
+    m_lastSelectedRow = index / gridWidth;
+  }
+  
   if (selectionChangedLocal && m_state) {
     m_state->scroll().userFreeScroll = false;
   }

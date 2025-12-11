@@ -23,6 +23,8 @@ private slots:
   void testValidateAndExpandPath_relativePath();
   void testValidateAndExpandPath_nonExistentPath();
   void testValidateAndExpandPath_withPlaceholder();
+  void testValidateAndExpandPath_tildeExpansion();
+  void testValidateAndExpandPath_tildeOnly();
 
   // tryValidateAndExpandPath tests (Result version)
   void testTryValidateAndExpandPath_validPath();
@@ -91,6 +93,24 @@ void TestPathUtils::testValidateAndExpandPath_withPlaceholder() {
 
   QVERIFY2(!result.isEmpty(), "Path with placeholder should expand correctly");
   QVERIFY2(result.endsWith(subdir), "Expanded path should contain collection name");
+}
+
+void TestPathUtils::testValidateAndExpandPath_tildeExpansion() {
+  // Test that ~/path expands to home directory + /path
+  // We use home directory itself since it's guaranteed to exist
+  QString pathWithTilde = "~";
+  QString result = PathUtils::validateAndExpandPath(pathWithTilde);
+  
+  QVERIFY2(!result.isEmpty(), "~ should expand to home directory");
+  QCOMPARE(result, QDir::homePath());
+}
+
+void TestPathUtils::testValidateAndExpandPath_tildeOnly() {
+  // Test that ~ alone expands correctly
+  auto result = PathUtils::tryValidateAndExpandPath("~");
+  
+  QVERIFY2(result.isOk(), "~ alone should expand to home directory");
+  QCOMPARE(result.value(), QDir::homePath());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

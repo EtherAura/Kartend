@@ -279,8 +279,8 @@ target_link_options(kartend PRIVATE
 if (UNIX AND NOT APPLE)
   include(GNUInstallDirs)
   install(TARGETS kartend RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-  install(FILES assets/desktop/kartend.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
-  install(FILES assets/icons/kartend.png DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/pixmaps)
+  install(FILES src/assets/kartend.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
+  install(FILES src/assets/icon.svg DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps RENAME kartend.svg)
 endif()
 
 # MAINTENANCE adds -Werror

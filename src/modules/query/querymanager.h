@@ -7,6 +7,7 @@
 #include <QStringList>
 #include <QHash>
 #include <QDateTime>
+#include <atomic>
 #include "collectionutils.h"
 #include "errorutils.h"
 
@@ -42,6 +43,9 @@ public slots:
   void updateCachedCounts(const QList<CollectionConfig> &allCollections);
   void fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter);
   void fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter);
+  
+  /// Invalidates collection cache on worker thread (async)
+  void invalidateCollectionCache(const QString &collectionUuid);
 
 signals:
   void itemsLoaded(const QStringList &filePaths,
@@ -59,8 +63,28 @@ signals:
   /// @param total The total number of collections to scan
   /// @param collectionName The name of the collection being scanned
   void scanProgress(int current, int total, const QString &collectionName);
+  
+  /// Emitted when a long-running scan is starting (allows UI to show overlay)
+  void scanStarting(const QString &collectionName, int estimatedItems);
+  
+  /// Emitted periodically during scan with items processed so far
+  void scanItemsProgress(int itemsProcessed, int totalItems);
+  
+  /// Emitted when collection cache has been invalidated
+  void cacheInvalidated(const QString &collectionUuid);
+
+public:
+  /// Request cancellation of any in-progress scan (thread-safe)
+  void requestCancelScan();
+  
+  /// Check if scan cancellation was requested (thread-safe)
+  [[nodiscard]] bool isScanCancelled() const;
+  
+  /// Reset cancellation flag (call before starting new scan)
+  void resetScanCancellation();
 
 private:
+  std::atomic<bool> m_scanCancelled{false};
   SessionManager *m_sessionManager;
   QSqlDatabase m_db;
   QString m_connectionName;
@@ -84,8 +108,8 @@ private:
 
   void ensureCollectionScanned(int collectionIndex, const CollectionConfig &collection);
   bool needsRescan(int collectionIndex, const CollectionConfig &collection);
-  static QStringList scanMediaDirectory(const CollectionConfig &collection,
-                                        QHash<QString, QDateTime> &timestamps);
+  QStringList scanMediaDirectory(const CollectionConfig &collection,
+                                 QHash<QString, QDateTime> &timestamps);
   QStringList loadItemsFromDatabaseByUuid(const QString &collectionUuid);
   QStringList loadOrScanCollection(int collectionIndex,
                                    const CollectionConfig &collection,
@@ -125,7 +149,7 @@ private:
       QHash<QString, QString> &fileToMediaDir,
       QHash<QString, int> &fileToCollectionIndex, bool dedup);
   
-  static void sortFiles(QStringList &allFilePaths);
+  static void sortFiles(QStringList &allFilePaths, SortMode mode = SortMode::NameAscending);
   static int getCharacterSortPriority(const QString &text);
 };
 

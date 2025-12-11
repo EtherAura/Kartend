@@ -1,6 +1,7 @@
 #ifndef COLLECTIONUTILS_H
 #define COLLECTIONUTILS_H
 
+#include <QDir>
 #include <QHash>
 #include <QMetaType>
 #include <QString>
@@ -192,7 +193,46 @@ namespace CollectionUtils {
   return (*collections)[*indexPtr].gridWidth;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Virtual folder counting
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Count virtual folders (subdirectories) for a collection config.
+/// Returns 0 if includeContentSubfolders is disabled or showAllSubfolderItems is enabled.
+[[nodiscard]] inline int countVirtualFolders(const CollectionConfig &config) {
+  // Only count virtual folders if includeContentSubfolders is enabled
+  // AND showAllSubfolderItems is false (otherwise items are flattened)
+  if (!config.includeContentSubfolders || config.showAllSubfolderItems) {
+    return 0;
+  }
+  
+  // Determine the effective directory to scan
+  QString scanDir = config.mediaDirectory;
+  if (!config.currentSubfolder.isEmpty()) {
+    scanDir = QDir(scanDir).absoluteFilePath(config.currentSubfolder);
+  }
+  
+  QDir dir(scanDir);
+  if (!dir.exists()) {
+    return 0;
+  }
+  
+  // Count subdirectories, optionally including hidden folders
+  QDir::Filters filters = QDir::Dirs | QDir::NoDotAndDotDot;
+  if (config.showHiddenFolders) {
+    filters |= QDir::Hidden;
+  }
+  return dir.entryList(filters).size();
+}
+
 } // namespace CollectionUtils
+
+/// Sort mode for collection items
+enum class SortMode {
+  NameAscending,   // A → Z (default)
+  NameDescending,  // Z → A
+  Random           // Shuffle
+};
 
 struct CollectionContext {
   int currentIndex = -1;
@@ -200,6 +240,8 @@ struct CollectionContext {
   QString artworkDirectory;
   QStringList filePaths;
   QHash<QString, QString> fileNames;
+  SortMode sortMode = SortMode::NameAscending;  // Sort mode for this view
+  bool excludeSubfoldersFromSort = false;       // Exclude subfolders/subcollections from sorting
   [[nodiscard]] bool isValid() const { return currentIndex >= 0; }
 };
 
@@ -218,6 +260,8 @@ struct GeneralSettings {
   int titleTintLightness = 60;             // Title text lightness (0-255)
   QString titleBaseColor;                  // Base color for title text (empty = use highlight)
   QString customFontFamily;                // Custom font family (empty = system default)
+  SortMode sortMode = SortMode::NameAscending;  // Current sort mode
+  bool excludeSubfoldersFromSort = false;  // Exclude subfolders/subcollections from sorting
   QHash<int, int> lastSelectedItems;
   GeneralSettings() = default;
 };

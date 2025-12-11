@@ -62,7 +62,7 @@
           </property>
           <layout class="QHBoxLayout" name="itemsTopBarLayout">
            <property name="spacing">
-            <number>10</number>
+            <number>6</number>
            </property>
            <property name="leftMargin">
             <number>15</number>
@@ -86,6 +86,29 @@
              </property>
              <property name="text">
               <string>Collection</string>
+             </property>
+             <property name="textFormat">
+              <enum>Qt::RichText</enum>
+             </property>
+             <property name="openExternalLinks">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="subfolderPathLabel">
+             <property name="font">
+              <font>
+               <pointsize>12</pointsize>
+               <weight>25</weight>
+               <italic>true</italic>
+              </font>
+             </property>
+             <property name="text">
+              <string></string>
+             </property>
+             <property name="visible">
+              <bool>false</bool>
              </property>
             </widget>
            </item>
@@ -282,17 +305,31 @@
     <property name="title">
      <string>&amp;File</string>
     </property>
+    <addaction name="actionSoftRefresh"/>
+    <addaction name="actionRefresh"/>
+    <addaction name="separator"/>
     <addaction name="actionExit"/>
    </widget>
    <widget class="QMenu" name="menuView">
     <property name="title">
      <string>&amp;View</string>
     </property>
-    <addaction name="actionRefresh"/>
-    <addaction name="separator"/>
+    <addaction name="actionShowMenuBar"/>
+    <addaction name="actionShowToolbar"/>
     <addaction name="actionShowSidebar"/>
     <addaction name="separator"/>
     <addaction name="actionSettings"/>
+   </widget>
+   <widget class="QMenu" name="menuSort">
+    <property name="title">
+     <string>&amp;Sort</string>
+    </property>
+    <addaction name="actionSortNameAsc"/>
+    <addaction name="actionSortNameDesc"/>
+    <addaction name="separator"/>
+    <addaction name="actionSortRandom"/>
+    <addaction name="separator"/>
+    <addaction name="actionSortSubfolders"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
     <property name="title">
@@ -303,6 +340,7 @@
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuView"/>
+   <addaction name="menuSort"/>
    <addaction name="menuHelp"/>
   </widget>
   <action name="actionExit">
@@ -322,6 +360,34 @@
    </property>
    <property name="shortcut">
     <string>F9</string>
+   </property>
+  </action>
+  <action name="actionShowToolbar">
+   <property name="text">
+    <string>Show Toolbar</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="shortcut">
+    <string>F8</string>
+   </property>
+  </action>
+  <action name="actionShowMenuBar">
+   <property name="text">
+    <string>Show Menu Bar</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="shortcut">
+    <string>F10</string>
    </property>
   </action>
   <action name="actionSettings">
@@ -344,10 +410,56 @@
   </action>
   <action name="actionRefresh">
    <property name="text">
-    <string>Refresh Collection</string>
+    <string>Rescan Collection</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+F5</string>
+   </property>
+  </action>
+  <action name="actionSoftRefresh">
+   <property name="text">
+    <string>Refresh View</string>
    </property>
    <property name="shortcut">
     <string>F5</string>
+   </property>
+  </action>
+  <action name="actionSortNameAsc">
+   <property name="text">
+    <string>Name (A → Z)</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionSortNameDesc">
+   <property name="text">
+    <string>Name (Z → A)</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionSortRandom">
+   <property name="text">
+    <string>Random</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
+    <action name="actionSortSubfolders">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Exclude Subfolders</string>
+   </property>
+   <property name="toolTip">
+    <string>Exclude subcollections and virtual folders from sorting (keep at top)</string>
    </property>
   </action>
  </widget>

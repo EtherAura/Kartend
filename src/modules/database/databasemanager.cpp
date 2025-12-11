@@ -49,12 +49,16 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
   connect(this, &DatabaseManager::requestLoadItemsWithSubcollections, m_worker, &QueryManager::loadItemsWithSubcollections);
   connect(this, &DatabaseManager::requestFetchItemCount, m_worker, &QueryManager::fetchItemCount);
   connect(this, &DatabaseManager::requestFetchItemsRange, m_worker, &QueryManager::fetchItemsRange);
+  connect(this, &DatabaseManager::requestInvalidateCache, m_worker, &QueryManager::invalidateCollectionCache);
   
   connect(m_worker, &QueryManager::itemsLoaded, this, &DatabaseManager::onWorkerItemsLoaded);
   connect(m_worker, &QueryManager::itemCountLoaded, this, &DatabaseManager::onWorkerItemCountLoaded);
   connect(m_worker, &QueryManager::itemsRangeLoaded, this, &DatabaseManager::onWorkerItemsRangeLoaded);
   connect(m_worker, &QueryManager::errorOccurred, this, &DatabaseManager::errorOccurred);
   connect(m_worker, &QueryManager::scanProgress, this, &DatabaseManager::scanProgress);
+  connect(m_worker, &QueryManager::scanStarting, this, &DatabaseManager::scanStarting);
+  connect(m_worker, &QueryManager::scanItemsProgress, this, &DatabaseManager::scanItemsProgress);
+  connect(m_worker, &QueryManager::cacheInvalidated, this, &DatabaseManager::cacheInvalidated);
 
   m_workerThread->start();
 }
@@ -122,6 +126,15 @@ void DatabaseManager::initDatabase() {
                              .withDetails(query.lastError().text());
       ErrorUtils::logError(fallbackErr);
     }
+  }
+  // Set busy timeout to wait up to 30 seconds for locks to be released -
+  // prevents "database is locked" errors during concurrent access
+  if (!query.exec("PRAGMA busy_timeout = 30000")) {
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to set busy timeout",
+                                     "DatabaseManager::initDatabase")
+                   .withDetails(query.lastError().text());
+    ErrorUtils::logError(err);
   }
 
   QString collectionsTable = "CREATE TABLE IF NOT EXISTS collections ("
@@ -236,6 +249,12 @@ void DatabaseManager::onWorkerItemCountLoaded(int count) {
 
 void DatabaseManager::onWorkerItemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames) {
   emit itemsRangeLoaded(offset, filePaths, fileNames);
+}
+
+void DatabaseManager::cancelScan() {
+  if (m_worker) {
+    m_worker->requestCancelScan();
+  }
 }
 
 // Count items in collection and descendants using uuid identity
@@ -385,7 +404,12 @@ auto DatabaseManager::findArtworkDirectoryForFile(const QString &filePath) const
   return {};
 }
 
-// Clear a collection's data by uuid
+// Public wrapper to invalidate collection cache asynchronously on worker thread
+void DatabaseManager::invalidateCollectionCache(const QString &collectionUuid) {
+  emit requestInvalidateCache(collectionUuid);
+}
+
+// Clear a collection's data by uuid (main thread - only used for legacy sync operations)
 void DatabaseManager::clearCollectionFromDatabaseByUuid(
     const QString &collectionUuid) {
   if (!m_db.isOpen()) {
