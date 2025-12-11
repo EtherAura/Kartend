@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Kartend
+Comment=Organize and launch multimedia collections
+Exec=kartend
+Icon=kartend
+Terminal=false
+Type=Application
+Categories=Utility;Qt;
+Keywords=launcher;collection;media;games;
