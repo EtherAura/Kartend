@@ -77,6 +77,10 @@ Qt6 KDE application using manager-based architecture with dependency injection v
 
 Build flags: `--debug`, `--maintenance`, `--pgo`
 
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
 ---
 
 *The sculpture is already complete within the marble block, before I start my work. It is already there, I just have to chisel away the superfluous material.*

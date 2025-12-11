@@ -251,6 +251,35 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
       return;
     }
 
+    // Security: Validate core path doesn't contain command-line flags
+    // This prevents argument injection attacks where a malicious core path
+    // like "-L /safe/core --config /malicious/config" could inject extra args
+    if (expandedCorePath.startsWith("-")) {
+      auto err = ErrorContext::error(ErrorCode::InvalidFilePath,
+                                     "Core path cannot start with a dash",
+                                     "LaunchManager::launchItem")
+          .withDetails(QString("Core path '%1' looks like a command-line flag").arg(expandedCorePath));
+      ErrorUtils::logError(err);
+      QMessageBox::warning(nullptr, "Invalid Core Path",
+                           QString("Core path cannot start with '-' (looks like a command-line flag):\n%1")
+                               .arg(expandedCorePath));
+      return;
+    }
+    
+    // Also check for embedded flags separated by spaces
+    if (expandedCorePath.contains(" -")) {
+      auto err = ErrorContext::error(ErrorCode::InvalidFilePath,
+                                     "Core path contains embedded command-line flags",
+                                     "LaunchManager::launchItem")
+          .withDetails(QString("Core path '%1' contains ' -' which could inject arguments").arg(expandedCorePath));
+      ErrorUtils::logError(err);
+      QMessageBox::warning(nullptr, "Invalid Core Path",
+                           QString("Core path appears to contain command-line flags:\n%1\n\n"
+                                   "The core path should only be a file path, not include arguments.")
+                               .arg(expandedCorePath));
+      return;
+    }
+
     program = expandedLauncherPath;
     arguments << "-L" << expandedCorePath << filePath;
   } else {
