@@ -29,7 +29,9 @@
 #include <QStackedWidget>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QThread>
 #include <QtConcurrent>
+#include <algorithm>
 
 #ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
@@ -173,6 +175,13 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
           0.3,  // smoothingFactor
           10    // historySize
       }) {
+  const int idealThreads = QThread::idealThreadCount();
+  const int base = idealThreads > 0 ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
+                                     : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
+  m_artworkThreadPool.setMaxThreadCount(std::clamp(base,
+                                                  UIConstants::Concurrency::WORKER_POOL_MIN_THREADS,
+                                                  UIConstants::Concurrency::WORKER_POOL_MAX_THREADS));
+
   m_timerCoordinator = new TimerUtils::Coordinator(this);
 
   m_silentLoadTimer = new QTimer(this);
@@ -1126,6 +1135,7 @@ void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
   int batchItemCount = batch.size();
   
   QFuture<void> future = QtConcurrent::run(
+      &m_artworkThreadPool,
       [self, batch, highPriority, cancelFlag, batchItemCount, appReceiver]() {
     if (QApplication::closingDown() || !cancelFlag ||
         cancelFlag->load(std::memory_order_relaxed)) {

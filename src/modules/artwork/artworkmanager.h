@@ -16,6 +16,7 @@
 #include <QPixmap>
 #include <QPointer>
 #include <QSet>
+#include <QThreadPool>
 #include <atomic>
 #include <memory>
 
@@ -179,6 +180,10 @@ private:
 
   // Adaptive batching for performance-based batch sizing
   AdaptiveBatcher m_adaptiveBatcher;
+
+  // Dedicated pool for artwork processing to avoid contention with other
+  // QtConcurrent users (e.g., directory scans).
+  QThreadPool m_artworkThreadPool;
 
   QMutex m_dataMutex;
   QMutex m_futureMutex;

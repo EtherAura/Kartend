@@ -7,6 +7,7 @@
 #include <QStringList>
 #include <QHash>
 #include <QDateTime>
+#include <QThreadPool>
 #include <atomic>
 #include "collectionutils.h"
 #include "errorutils.h"
@@ -86,6 +87,7 @@ public:
 
 private:
   std::atomic<bool> m_scanCancelled{false};
+  QThreadPool m_scanThreadPool;
   SessionManager *m_sessionManager;
   QSqlDatabase m_db;
   QString m_connectionName;

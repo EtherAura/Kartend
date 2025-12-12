@@ -4,6 +4,7 @@
 #include "errorutils.h"
 #include "pathutils.h"
 #include "sessionmanager.h"
+#include "uiconstants.h"
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
@@ -12,10 +13,13 @@
 #include <QSqlQuery>
 #include <QStandardPaths>
 #include <QThread>
+#include <QThreadPool>
+#include <QVector>
 #include <QtConcurrent>
 #include <random>
 #include <stdexcept>
 #include <QDebug>
+#include <algorithm>
 
 #ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
@@ -36,6 +40,13 @@ static auto displayNameForBase(const QString &baseName) -> QString;
 QueryManager::QueryManager(SessionManager *sessionManager, QObject *parent)
     : QObject(parent), m_sessionManager(sessionManager) {
   m_connectionName = "kartend_worker";
+
+  const int idealThreads = QThread::idealThreadCount();
+  const int base = idealThreads > 0 ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
+                                     : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
+  m_scanThreadPool.setMaxThreadCount(std::clamp(base,
+                                               UIConstants::Concurrency::WORKER_POOL_MIN_THREADS,
+                                               UIConstants::Concurrency::WORKER_POOL_MAX_THREADS));
   
   // Register ErrorContext for queued signal/slot connections
   qRegisterMetaType<ErrorUtils::ErrorContext>("ErrorUtils::ErrorContext");
@@ -1004,46 +1015,48 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   // Step 2: Scan directories in parallel using QtConcurrent
   const QString rootPath = dir.absolutePath();
   const std::atomic<bool> &cancelFlag = m_scanCancelled;
-  
-  // Use map to scan all directories in parallel, then reduce results
-  QMutex resultMutex;
-  std::atomic<int> totalItemsScanned{0};
-  constexpr int PROGRESS_REPORT_INTERVAL = 500;
-  std::atomic<int> lastReportedCount{0};
-  
-  // Process directories in parallel
-  QtConcurrent::blockingMap(directories, [&](const QString &dirPath) {
-    DirectoryScanResult result = scanSingleDirectory(
-        dirPath, rootPath, nameFilters, cancelFlag);
-    
-    if (result.relativePaths.isEmpty()) {
-      return;
+
+  // Use a dedicated pool to avoid global QtConcurrent threadpool contention.
+  QVector<QFuture<DirectoryScanResult>> futures;
+  futures.reserve(directories.size());
+
+  for (const QString &dirPath : directories) {
+    if (cancelFlag.load(std::memory_order_acquire)) {
+      break;
     }
-    
-    // Merge results thread-safely
-    QMutexLocker locker(&resultMutex);
+    futures.append(QtConcurrent::run(&m_scanThreadPool, [dirPath, rootPath, nameFilters, &cancelFlag]() {
+      return scanSingleDirectory(dirPath, rootPath, nameFilters, cancelFlag);
+    }));
+  }
+
+  int totalItemsScanned = 0;
+  constexpr int PROGRESS_REPORT_INTERVAL = 500;
+  int lastReportedCount = 0;
+
+  for (QFuture<DirectoryScanResult> &future : futures) {
+    future.waitForFinished();
+    if (cancelFlag.load(std::memory_order_acquire)) {
+      filePaths.clear();
+      timestamps.clear();
+      return filePaths;
+    }
+
+    const DirectoryScanResult result = future.result();
+    if (result.relativePaths.isEmpty()) {
+      continue;
+    }
+
     filePaths.append(result.relativePaths);
-    for (auto it = result.timestamps.constBegin(); 
-         it != result.timestamps.constEnd(); ++it) {
+    for (auto it = result.timestamps.constBegin(); it != result.timestamps.constEnd(); ++it) {
       timestamps.insert(it.key(), it.value());
     }
-    
-    // Update progress atomically
-    int newTotal = totalItemsScanned.fetch_add(result.relativePaths.size(), 
-                                               std::memory_order_relaxed) 
-                   + result.relativePaths.size();
-    
-    // Emit progress periodically. This block runs on QtConcurrent worker
-    // threads, so the throttle state must be thread-safe.
-    int prev = lastReportedCount.load(std::memory_order_relaxed);
-    if (newTotal - prev >= PROGRESS_REPORT_INTERVAL) {
-      // Only one thread should win and emit for a given threshold window.
-      if (lastReportedCount.compare_exchange_strong(
-              prev, newTotal, std::memory_order_relaxed)) {
-        emit scanItemsProgress(newTotal, -1);
-      }
+
+    totalItemsScanned += result.relativePaths.size();
+    if (totalItemsScanned - lastReportedCount >= PROGRESS_REPORT_INTERVAL) {
+      lastReportedCount = totalItemsScanned;
+      emit scanItemsProgress(totalItemsScanned, -1);
     }
-  });
+  }
   
   // Check if cancelled during parallel scan
   if (isScanCancelled()) {
@@ -1053,9 +1066,8 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   }
   
   // Emit final progress
-  int finalCount = totalItemsScanned.load(std::memory_order_relaxed);
-  if (finalCount > 0) {
-    emit scanItemsProgress(finalCount, -1);
+  if (totalItemsScanned > 0) {
+    emit scanItemsProgress(totalItemsScanned, -1);
   }
 
   return filePaths;
