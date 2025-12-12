@@ -7,10 +7,12 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QMutex>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
 #include <QThread>
+#include <QtConcurrent>
 #include <random>
 #include <stdexcept>
 #include <QDebug>
@@ -861,6 +863,60 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
   return newer.next() && newer.value(0).toInt() > 0;
 }
 
+// Result struct for parallel directory scanning
+// Holds files found in a single directory plus their timestamps
+struct DirectoryScanResult {
+  QStringList relativePaths;
+  QHash<QString, QDateTime> timestamps;
+};
+
+// Scans a single directory (non-recursively) for matching files
+// Thread-safe: operates only on local data structures
+static DirectoryScanResult scanSingleDirectory(
+    const QString &dirPath,
+    const QString &rootPath,
+    const QStringList &nameFilters,
+    const std::atomic<bool> &cancelled) {
+  DirectoryScanResult result;
+  
+  if (cancelled.load(std::memory_order_acquire)) {
+    return result;
+  }
+  
+  QDir rootDir(rootPath);
+  QDirIterator iterator(dirPath, nameFilters, QDir::Files, QDirIterator::NoIteratorFlags);
+  
+  while (iterator.hasNext()) {
+    if (cancelled.load(std::memory_order_acquire)) {
+      result.relativePaths.clear();
+      result.timestamps.clear();
+      return result;
+    }
+    
+    iterator.next();
+    QString relativePath = rootDir.relativeFilePath(iterator.filePath());
+    result.relativePaths.append(relativePath);
+    result.timestamps[relativePath] = QFileInfo(iterator.filePath()).lastModified();
+  }
+  
+  return result;
+}
+
+// Collects all directories to scan (root + all subdirectories)
+static QStringList collectDirectoriesToScan(const QString &rootPath) {
+  QStringList directories;
+  directories.append(rootPath);
+  
+  QDirIterator dirIterator(rootPath, QDir::Dirs | QDir::NoDotAndDotDot, 
+                           QDirIterator::Subdirectories);
+  while (dirIterator.hasNext()) {
+    dirIterator.next();
+    directories.append(dirIterator.filePath());
+  }
+  
+  return directories;
+}
+
 QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
                                          QHash<QString, QDateTime> &timestamps) {
   QStringList filePaths;
@@ -877,39 +933,98 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
     }
   }
 
-  // Use recursive iteration if includeContentSubfolders is enabled
-  QDirIterator::IteratorFlags flags = collection.includeContentSubfolders
-      ? QDirIterator::Subdirectories
-      : QDirIterator::NoIteratorFlags;
-
-  // For progress reporting - report frequently so user sees scanning activity
-  constexpr int PROGRESS_REPORT_INTERVAL = 500;  // Report every 500 items
-  int itemsScanned = 0;
-
-  QDirIterator iterator(dir.absolutePath(), nameFilters, QDir::Files, flags);
-  while (iterator.hasNext()) {
-    // Check for cancellation
-    if (isScanCancelled()) {
-      filePaths.clear();
-      timestamps.clear();
-      return filePaths;
+  // For non-recursive scans or small directories, use sequential scanning
+  // Parallel scanning has overhead that only pays off with multiple directories
+  if (!collection.includeContentSubfolders) {
+    // Sequential scan for flat directories (original behavior)
+    constexpr int PROGRESS_REPORT_INTERVAL = 500;
+    int itemsScanned = 0;
+    
+    QDirIterator iterator(dir.absolutePath(), nameFilters, QDir::Files, 
+                          QDirIterator::NoIteratorFlags);
+    while (iterator.hasNext()) {
+      if (isScanCancelled()) {
+        filePaths.clear();
+        timestamps.clear();
+        return filePaths;
+      }
+      
+      iterator.next();
+      QString relativePath = dir.relativeFilePath(iterator.filePath());
+      filePaths.append(relativePath);
+      timestamps[relativePath] = QFileInfo(iterator.filePath()).lastModified();
+      
+      ++itemsScanned;
+      if (itemsScanned % PROGRESS_REPORT_INTERVAL == 0) {
+        emit scanItemsProgress(itemsScanned, -1);
+      }
     }
     
-    iterator.next();
-    QString relativePath = dir.relativeFilePath(iterator.filePath());
-    filePaths.append(relativePath);
-    timestamps[relativePath] = QFileInfo(iterator.filePath()).lastModified();
-    
-    ++itemsScanned;
-    if (itemsScanned % PROGRESS_REPORT_INTERVAL == 0) {
-      // Emit progress - use -1 for total since we don't know it yet
+    if (itemsScanned > 0) {
       emit scanItemsProgress(itemsScanned, -1);
     }
+    return filePaths;
+  }
+
+  // Parallel scanning for recursive directory structures
+  // Step 1: Collect all directories to scan
+  QStringList directories = collectDirectoriesToScan(dir.absolutePath());
+  
+  if (isScanCancelled()) {
+    return filePaths;
   }
   
-  // Emit final scan count before moving to indexing phase
-  if (itemsScanned > 0) {
-    emit scanItemsProgress(itemsScanned, -1);
+  // Step 2: Scan directories in parallel using QtConcurrent
+  const QString rootPath = dir.absolutePath();
+  const std::atomic<bool> &cancelFlag = m_scanCancelled;
+  
+  // Use map to scan all directories in parallel, then reduce results
+  QMutex resultMutex;
+  std::atomic<int> totalItemsScanned{0};
+  constexpr int PROGRESS_REPORT_INTERVAL = 500;
+  int lastReportedCount = 0;
+  
+  // Process directories in parallel
+  QtConcurrent::blockingMap(directories, [&](const QString &dirPath) {
+    DirectoryScanResult result = scanSingleDirectory(
+        dirPath, rootPath, nameFilters, cancelFlag);
+    
+    if (result.relativePaths.isEmpty()) {
+      return;
+    }
+    
+    // Merge results thread-safely
+    QMutexLocker locker(&resultMutex);
+    filePaths.append(result.relativePaths);
+    for (auto it = result.timestamps.constBegin(); 
+         it != result.timestamps.constEnd(); ++it) {
+      timestamps.insert(it.key(), it.value());
+    }
+    
+    // Update progress atomically
+    int newTotal = totalItemsScanned.fetch_add(result.relativePaths.size(), 
+                                               std::memory_order_relaxed) 
+                   + result.relativePaths.size();
+    
+    // Emit progress periodically (may be called from multiple threads,
+    // but Qt signal emission is thread-safe)
+    if (newTotal - lastReportedCount >= PROGRESS_REPORT_INTERVAL) {
+      lastReportedCount = newTotal;
+      emit scanItemsProgress(newTotal, -1);
+    }
+  });
+  
+  // Check if cancelled during parallel scan
+  if (isScanCancelled()) {
+    filePaths.clear();
+    timestamps.clear();
+    return filePaths;
+  }
+  
+  // Emit final progress
+  int finalCount = totalItemsScanned.load(std::memory_order_relaxed);
+  if (finalCount > 0) {
+    emit scanItemsProgress(finalCount, -1);
   }
 
   return filePaths;
