@@ -20,6 +20,7 @@
 #include "itemwidget.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
+#include "menucontroller.h"
 #include "metadatasidebar.h"
 #include "navigationmanager.h"
 #include "propertyutils.h"
@@ -537,259 +538,36 @@ void MainWindow::initializeAppContext() {
 }
 
 void MainWindow::createMenuBar() {
-  setupActionExit();
-  setupActionShowMenuBar();
-  setupActionShowToolbar();
-  setupActionShowSidebar();
-  setupActionSettings();
-  setupActionRefresh();
-  setupSortActions();
-  setupActionAbout();
-  setupActionAboutQt();
-  setupFullscreenAction();
-  setupShortcutsAction();
-  setupGridWidthActions();
-}
-
-void MainWindow::setupActionExit() {
-  if (ui->actionExit) {
-    QObject::connect(ui->actionExit, &QAction::triggered, this,
-                     &QWidget::close);
-    ui->actionExit->setShortcutContext(Qt::ApplicationShortcut);
-    addAction(ui->actionExit);
-  }
-}
-
-void MainWindow::setupActionShowMenuBar() {
-  if (ui->actionShowMenuBar) {
-    QObject::connect(ui->actionShowMenuBar, &QAction::triggered,
-                     [this](bool checked) {
-                       if (ui->menubar) {
-                         ui->menubar->setVisible(checked);
-                       }
-                     });
-    ui->actionShowMenuBar->setShortcutContext(Qt::ApplicationShortcut);
-    addAction(ui->actionShowMenuBar);
-  }
-}
-
-void MainWindow::setupActionShowToolbar() {
-  if (ui->actionShowToolbar) {
-    QObject::connect(ui->actionShowToolbar, &QAction::triggered,
-                     [this](bool checked) {
-                       if (ui->itemsTopBar) {
-                         ui->itemsTopBar->setVisible(checked);
-                       }
-                     });
-    ui->actionShowToolbar->setShortcutContext(Qt::ApplicationShortcut);
-    addAction(ui->actionShowToolbar);
-  }
-}
-
-void MainWindow::setupActionShowSidebar() {
-  if (ui->actionShowSidebar) {
-    QObject::connect(ui->actionShowSidebar, &QAction::triggered,
-                     [this]() {
-                       if (getSidebarManager()) {
-                         getSidebarManager()->toggleSidebar();
-                       }
-                     });
-    ui->actionShowSidebar->setShortcutContext(Qt::ApplicationShortcut);
-    addAction(ui->actionShowSidebar);
-  }
-}
-
-void MainWindow::setupActionSettings() {
-  if (ui->actionSettings) {
-    QObject::connect(
-        ui->actionSettings, &QAction::triggered, [this]() {
-          if (getSettingsManager()) {
-            SettingsDialogContext context;
-            context.parent = this;
-            context.collections = &m_collections;
-            context.currentCollectionIndex = &currentCollectionIndex;
-            context.sidebarManager = getSidebarManager();
-            context.scrollManager = getScrollManager();
-            context.navigationManager = getNavigationManager();
-            getSettingsManager()->openSettingsDialog(context);
-          }
-        });
-    ui->actionSettings->setShortcutContext(Qt::ApplicationShortcut);
-    addAction(ui->actionSettings);
-  }
-}
-
-void MainWindow::setupActionAbout() {
-  if (ui->actionAbout) {
-    QObject::connect(ui->actionAbout, &QAction::triggered,
-                     [this]() { showAbout(); });
-  }
-}
-
-void MainWindow::setupActionAboutQt() {
-  if (ui->actionAboutQt) {
-    QObject::connect(ui->actionAboutQt, &QAction::triggered,
-                     qApp, &QApplication::aboutQt);
-  }
-}
-
-void MainWindow::setupActionRefresh() {
-  // Hard refresh (Ctrl+F5) - rescan the database
-  if (ui->actionRefresh) {
-    QObject::connect(ui->actionRefresh, &QAction::triggered, [this]() {
-      if (getNavigationManager() && currentCollectionIndex >= 0) {
-        getNavigationManager()->forceRescanCollection(currentCollectionIndex);
-      }
-    });
-    ui->actionRefresh->setShortcutContext(Qt::ApplicationShortcut);
-    addAction(ui->actionRefresh);
-  }
-
-  // Soft refresh (F5) - just reload the view without database rescan
-  if (ui->actionSoftRefresh) {
-    QObject::connect(ui->actionSoftRefresh, &QAction::triggered, [this]() {
-      if (getNavigationManager() && currentCollectionIndex >= 0) {
-        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-      }
-    });
-    ui->actionSoftRefresh->setShortcutContext(Qt::ApplicationShortcut);
-    addAction(ui->actionSoftRefresh);
-  }
-}
-
-void MainWindow::setupSortActions() {
-  // Create action group for mutually exclusive sort options
-  m_sortActionGroup = new QActionGroup(this);
-  m_sortActionGroup->setExclusive(true);
-
-  if (ui->actionSortNameAsc) {
-    m_sortActionGroup->addAction(ui->actionSortNameAsc);
-    QObject::connect(ui->actionSortNameAsc, &QAction::triggered, [this]() {
-      m_generalSettings.sortMode = SortMode::NameAscending;
-      if (getNavigationManager() && currentCollectionIndex >= 0) {
-        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-      }
-    });
-  }
-
-  if (ui->actionSortNameDesc) {
-    m_sortActionGroup->addAction(ui->actionSortNameDesc);
-    QObject::connect(ui->actionSortNameDesc, &QAction::triggered, [this]() {
-      m_generalSettings.sortMode = SortMode::NameDescending;
-      if (getNavigationManager() && currentCollectionIndex >= 0) {
-        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-      }
-    });
-  }
-
-  if (ui->actionSortRandom) {
-    m_sortActionGroup->addAction(ui->actionSortRandom);
-    QObject::connect(ui->actionSortRandom, &QAction::triggered, [this]() {
-      m_generalSettings.sortMode = SortMode::Random;
-      if (getNavigationManager() && currentCollectionIndex >= 0) {
-        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-      }
-    });
-  }
-
-  // Exclude subfolders option (not part of action group - it's a toggle)
-  if (ui->actionSortSubfolders) {
-    QObject::connect(ui->actionSortSubfolders, &QAction::triggered, [this](bool checked) {
-      m_generalSettings.excludeSubfoldersFromSort = checked;
-      if (getNavigationManager() && currentCollectionIndex >= 0) {
-        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-      }
-    });
-  }
-
-  // Sync initial checked states with current settings
-  switch (m_generalSettings.sortMode) {
-    case SortMode::NameAscending:
-      if (ui->actionSortNameAsc) ui->actionSortNameAsc->setChecked(true);
-      break;
-    case SortMode::NameDescending:
-      if (ui->actionSortNameDesc) ui->actionSortNameDesc->setChecked(true);
-      break;
-    case SortMode::Random:
-      if (ui->actionSortRandom) ui->actionSortRandom->setChecked(true);
-      break;
-  }
-  if (ui->actionSortSubfolders) {
-    ui->actionSortSubfolders->setChecked(m_generalSettings.excludeSubfoldersFromSort);
-  }
-}
-
-void MainWindow::setupFullscreenAction() {
-  if (!m_fullscreenAction) {
-    m_fullscreenAction = new QAction(QObject::tr("Fullscreen"), this);
-    m_fullscreenAction->setCheckable(true);
-    m_fullscreenAction->setShortcut(QKeySequence(Qt::Key_F11));
-    m_fullscreenAction->setShortcutContext(Qt::ApplicationShortcut);
-    addAction(m_fullscreenAction);
-
-    setupFullscreenMenuAction(m_fullscreenAction);
-
-    QObject::connect(m_fullscreenAction, &QAction::triggered,
-                     [this]() {
-                       bool entering = !isFullScreen();
-                       if (entering) {
-                         showFullScreen();
-                         if (menuBar()) {
-                           menuBar()->hide();
-                         }
-                         if (m_fullscreenAction) {
-                           m_fullscreenAction->setChecked(true);
-                         }
-                       } else {
-                         showNormal();
-                         if (menuBar()) {
-                           menuBar()->show();
-                         }
-                         if (m_fullscreenAction) {
-                           m_fullscreenAction->setChecked(false);
-                         }
-                       }
-                     });
-  }
-}
-
-void MainWindow::setupShortcutsAction() {
-  if (!m_shortcutsAction) {
-    m_shortcutsAction = new QAction(QObject::tr("Keyboard Shortcuts"), this);
-    m_shortcutsAction->setShortcut(QKeySequence(Qt::Key_F1));
-    m_shortcutsAction->setShortcutContext(Qt::ApplicationShortcut);
-    addAction(m_shortcutsAction);
-
-    // Add to Help menu if it exists
-    if (ui->menuHelp) {
-      ui->menuHelp->addAction(m_shortcutsAction);
+  m_menuController = std::make_unique<MenuController>(this);
+  
+  MenuControllerContext ctx;
+  ctx.mainWindow = this;
+  ctx.ui = ui;
+  ctx.getNavigationManager = [this]() { return getNavigationManager(); };
+  ctx.getSettingsManager = [this]() { return getSettingsManager(); };
+  ctx.getSidebarManager = [this]() { return getSidebarManager(); };
+  ctx.getScrollManager = [this]() { return getScrollManager(); };
+  ctx.getArtworkManager = [this]() { return getArtworkManager(); };
+  ctx.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
+  ctx.getCollections = [this]() { return &m_collections; };
+  ctx.getGeneralSettings = [this]() { return &m_generalSettings; };
+  ctx.onOpenSettings = [this]() {
+    if (getSettingsManager()) {
+      SettingsDialogContext context;
+      context.parent = this;
+      context.collections = &m_collections;
+      context.currentCollectionIndex = &currentCollectionIndex;
+      context.sidebarManager = getSidebarManager();
+      context.scrollManager = getScrollManager();
+      context.navigationManager = getNavigationManager();
+      getSettingsManager()->openSettingsDialog(context);
     }
-
-    QObject::connect(m_shortcutsAction, &QAction::triggered, [this]() {
-      ShortcutsDialog dialog(this);
-      dialog.exec();
-    });
-  }
-}
-
-void MainWindow::setupGridWidthActions() {
-  // Ctrl++ to increase grid width (more columns, smaller items)
-  m_gridWidthIncreaseAction = new QAction(QObject::tr("Increase Grid Width"), this);
-  m_gridWidthIncreaseAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Plus));
-  m_gridWidthIncreaseAction->setShortcutContext(Qt::ApplicationShortcut);
-  addAction(m_gridWidthIncreaseAction);
-  QObject::connect(m_gridWidthIncreaseAction, &QAction::triggered, this, [this]() {
-    adjustGridWidth(1);
-  });
-
-  // Ctrl+- to decrease grid width (fewer columns, larger items)
-  m_gridWidthDecreaseAction = new QAction(QObject::tr("Decrease Grid Width"), this);
-  m_gridWidthDecreaseAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus));
-  m_gridWidthDecreaseAction->setShortcutContext(Qt::ApplicationShortcut);
-  addAction(m_gridWidthDecreaseAction);
-  QObject::connect(m_gridWidthDecreaseAction, &QAction::triggered, this, [this]() {
-    adjustGridWidth(-1);
-  });
+  };
+  ctx.onShowAbout = [this]() { showAbout(); };
+  ctx.onAdjustGridWidth = [this](int delta) { adjustGridWidth(delta); };
+  
+  m_menuController->setContext(ctx);
+  m_menuController->setupMenuBar();
 }
 
 void MainWindow::adjustGridWidth(int delta) {
@@ -1051,24 +829,6 @@ void MainWindow::setupInitialTimersWithCollections() {
       }
     }
   });
-}
-
-void MainWindow::setupFullscreenMenuAction(QAction *fullscreenAction) {
-  if (ui->menuView) {
-    QList<QAction *> acts = ui->menuView->actions();
-    QAction *insertBefore = nullptr;
-    for (QAction *action : acts) {
-      if (action == ui->actionSettings) {
-        insertBefore = action;
-        break;
-      }
-    }
-    if (insertBefore) {
-      ui->menuView->insertAction(insertBefore, fullscreenAction);
-    } else {
-      ui->menuView->addAction(fullscreenAction);
-    }
-  }
 }
 
 void MainWindow::updateWindowTitleForCollection(int collectionIndex) {
