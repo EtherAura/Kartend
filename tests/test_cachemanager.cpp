@@ -182,14 +182,16 @@ void TestCacheManager::testMetrics_memoryHit() {
   m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
   m_cacheManager->resetMetrics();
   
-  m_cacheManager->getArtwork(m_testArtworkPath);
+  QPixmap retrieved = m_cacheManager->getArtwork(m_testArtworkPath);
+  Q_UNUSED(retrieved);
   
   CacheMetrics metrics = m_cacheManager->metrics();
   QCOMPARE(metrics.memoryHits, 1);
 }
 
 void TestCacheManager::testMetrics_cacheMiss() {
-  m_cacheManager->getArtwork("/nonexistent/path.png");
+  QPixmap retrieved = m_cacheManager->getArtwork("/nonexistent/path.png");
+  Q_UNUSED(retrieved);
   
   CacheMetrics metrics = m_cacheManager->metrics();
   QCOMPARE(metrics.misses, 1);
@@ -214,11 +216,14 @@ void TestCacheManager::testMetrics_hitRate() {
   m_cacheManager->resetMetrics();
   
   // 2 hits
-  m_cacheManager->getArtwork(m_testArtworkPath);
-  m_cacheManager->getArtwork(m_testArtworkPath);
+  QPixmap hit1 = m_cacheManager->getArtwork(m_testArtworkPath);
+  QPixmap hit2 = m_cacheManager->getArtwork(m_testArtworkPath);
+  Q_UNUSED(hit1);
+  Q_UNUSED(hit2);
   
   // 1 miss
-  m_cacheManager->getArtwork("/nonexistent.png");
+  QPixmap miss = m_cacheManager->getArtwork("/nonexistent.png");
+  Q_UNUSED(miss);
   
   CacheMetrics metrics = m_cacheManager->metrics();
   QCOMPARE(metrics.memoryHits, 2);
@@ -234,7 +239,8 @@ void TestCacheManager::testMetrics_reset() {
   pixmap.fill(Qt::red);
   
   m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
-  m_cacheManager->getArtwork(m_testArtworkPath);
+  QPixmap retrieved = m_cacheManager->getArtwork(m_testArtworkPath);
+  Q_UNUSED(retrieved);
   
   CacheMetrics before = m_cacheManager->metrics();
   QVERIFY(before.inserts > 0 || before.memoryHits > 0);
