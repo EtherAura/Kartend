@@ -470,15 +470,47 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
   emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex);
 }
 
-void QueryManager::updateCachedCounts(const QList<CollectionConfig> &allCollections) {
+void QueryManager::updateCachedCounts(quint64 generation,
+                                     const QStringList &collectionUuids) {
   if (!ensureDatabaseConnection()) {
     initDatabase();
+    if (!m_db.isOpen()) {
+      emit cachedCountsComputed(generation, 0, {});
+      return;
+    }
   }
 
-  // Note: SessionManager usage here was removed because it's not thread-safe.
-  // The logic for updating cached counts should be handled in the main thread
-  // (e.g., in DatabaseManager) or SessionManager should be made thread-safe.
-  // Currently, DatabaseManager::updateCachedCounts handles the SessionManager updates.
+  qint64 globalCount = 0;
+  {
+    QSqlQuery globalQuery(m_db);
+    if (globalQuery.exec("SELECT COUNT(*) FROM items") && globalQuery.next()) {
+      globalCount = globalQuery.value(0).toLongLong();
+    }
+  }
+
+  QHash<QString, qint64> directCountsByUuid;
+  directCountsByUuid.reserve(collectionUuids.size());
+
+  if (!collectionUuids.isEmpty()) {
+    const QString clause = buildUuidInClause(collectionUuids.size());
+    QSqlQuery query(m_db);
+    query.prepare(
+        "SELECT collection_uuid, COUNT(DISTINCT path) "
+        "FROM items WHERE collection_uuid IN " + clause +
+        " GROUP BY collection_uuid");
+    for (const QString &uuid : collectionUuids) {
+      query.addBindValue(uuid);
+    }
+
+    if (query.exec()) {
+      while (query.next()) {
+        directCountsByUuid.insert(query.value(0).toString(),
+                                  query.value(1).toLongLong());
+      }
+    }
+  }
+
+  emit cachedCountsComputed(generation, globalCount, directCountsByUuid);
 }
 
 // Collects UUIDs for a collection and optionally its descendants

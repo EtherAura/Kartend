@@ -40,7 +40,7 @@ public slots:
   void loadItems(const CollectionContext &context);
   void loadItemsWithSubcollections(const CollectionContext &context,
                                    const QList<CollectionConfig> &allCollections);
-  void updateCachedCounts(const QList<CollectionConfig> &allCollections);
+  void updateCachedCounts(quint64 generation, const QStringList &collectionUuids);
   void fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter);
   void fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter);
   
@@ -56,7 +56,8 @@ signals:
   void itemCountLoaded(int count);
   void itemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void errorOccurred(const ErrorUtils::ErrorContext &error);
-  void countsUpdated();
+  void cachedCountsComputed(quint64 generation, qint64 globalCount,
+                            const QHash<QString, qint64> &directCountsByUuid);
   
   /// Emitted during loadAllCollections to report scan progress.
   /// @param current The 1-based index of the collection being scanned

@@ -7,6 +7,7 @@
 #include <QObject>
 #include <QSqlDatabase>
 #include <QStringList>
+#include <QTimer>
 
 #include "collectionutils.h"
 #include "errorutils.h"
@@ -66,6 +67,9 @@ signals:
   void itemCountLoaded(int count);
   void itemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void errorOccurred(const ErrorUtils::ErrorContext &error);
+
+  // Emitted after cached counts have been recomputed and persisted.
+  void cachedCountsUpdated();
   
   /// Emitted during collection scanning to report progress.
   /// @param current The 1-based index of the collection being scanned
@@ -87,7 +91,7 @@ signals:
   void requestLoadItems(const CollectionContext &context);
   void requestLoadItemsWithSubcollections(const CollectionContext &context,
                                           const QList<CollectionConfig> &allCollections);
-  void requestUpdateCachedCounts(const QList<CollectionConfig> &allCollections);
+  void requestUpdateCachedCounts(quint64 generation, const QStringList &collectionUuids);
   void requestFetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter);
   void requestFetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter);
   void requestInvalidateCache(const QString &collectionUuid);
@@ -104,6 +108,9 @@ private slots:
                            const QHash<QString, int> &fileToCollectionIndex);
   void onWorkerItemCountLoaded(int count);
   void onWorkerItemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
+  void onWorkerCachedCountsComputed(quint64 generation, qint64 globalCount,
+                                    const QHash<QString, qint64> &directCountsByUuid);
+  void dispatchCachedCountsUpdate();
 
 private:
   class QueryManager* m_worker;
@@ -128,6 +135,15 @@ private:
 
   QSqlDatabase m_db;
   QString m_connectionName;
+
+  // Debounced async cached-count update state.
+  QTimer *m_cachedCountsUpdateTimer = nullptr;
+  quint64 m_cachedCountsGeneration = 0;
+  quint64 m_inFlightCachedCountsGeneration = 0;
+  QList<CollectionConfig> m_pendingCountsCollections;
+  QStringList m_pendingCountsUuids;
+  QList<CollectionConfig> m_inFlightCountsCollections;
+  QStringList m_inFlightCountsUuids;
 
   mutable QMutex m_dataMutex; // Protects m_fileToArtworkDir, m_fileToCollectionIndex, m_fileToMediaDir
   QHash<QString, QString> m_fileToArtworkDir;

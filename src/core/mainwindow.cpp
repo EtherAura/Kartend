@@ -266,6 +266,15 @@ void MainWindow::connectDatabaseManager() {
   QObject::connect(getDatabaseManager(), &DatabaseManager::errorOccurred,
                    getNavigationManager(),
                    &NavigationManager::onMediaLibraryError);
+
+  // Cached counts are now recomputed asynchronously; refresh the title once
+  // the update completes so the user sees up-to-date totals.
+  QObject::connect(getDatabaseManager(), &DatabaseManager::cachedCountsUpdated,
+                   this, [this]() {
+                     if (!QApplication::closingDown()) {
+                       refreshTitleCounts();
+                     }
+                   });
   
   // Update loading overlay with scan progress during initial collection loading
   QObject::connect(getDatabaseManager(), &DatabaseManager::scanProgress,

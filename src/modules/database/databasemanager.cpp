@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <functional>
 #include <QThread>
+#include <QTimer>
 
 #include "artworkmanager.h"
 #include "collectionutils.h"
@@ -17,6 +18,7 @@
 #include "querymanager.h"
 #include "pathutils.h"
 #include "sessionmanager.h"
+#include "uiconstants.h"
 
 #ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
@@ -35,6 +37,7 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
   qRegisterMetaType<CollectionConfig>("CollectionConfig");
   qRegisterMetaType<CollectionContext>("CollectionContext");
   qRegisterMetaType<QList<CollectionConfig>>("QList<CollectionConfig>");
+  qRegisterMetaType<QHash<QString, qint64>>("QHash<QString, qint64>");
 
   m_connectionName = "kartend_main";
   initDatabase();
@@ -51,15 +54,22 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
   connect(this, &DatabaseManager::requestFetchItemCount, m_worker, &QueryManager::fetchItemCount);
   connect(this, &DatabaseManager::requestFetchItemsRange, m_worker, &QueryManager::fetchItemsRange);
   connect(this, &DatabaseManager::requestInvalidateCache, m_worker, &QueryManager::invalidateCollectionCache);
+  connect(this, &DatabaseManager::requestUpdateCachedCounts, m_worker, &QueryManager::updateCachedCounts);
   
   connect(m_worker, &QueryManager::itemsLoaded, this, &DatabaseManager::onWorkerItemsLoaded);
   connect(m_worker, &QueryManager::itemCountLoaded, this, &DatabaseManager::onWorkerItemCountLoaded);
   connect(m_worker, &QueryManager::itemsRangeLoaded, this, &DatabaseManager::onWorkerItemsRangeLoaded);
+    connect(m_worker, &QueryManager::cachedCountsComputed, this, &DatabaseManager::onWorkerCachedCountsComputed);
   connect(m_worker, &QueryManager::errorOccurred, this, &DatabaseManager::errorOccurred);
   connect(m_worker, &QueryManager::scanProgress, this, &DatabaseManager::scanProgress);
   connect(m_worker, &QueryManager::scanStarting, this, &DatabaseManager::scanStarting);
   connect(m_worker, &QueryManager::scanItemsProgress, this, &DatabaseManager::scanItemsProgress);
   connect(m_worker, &QueryManager::cacheInvalidated, this, &DatabaseManager::cacheInvalidated);
+
+    m_cachedCountsUpdateTimer = new QTimer(this);
+    m_cachedCountsUpdateTimer->setSingleShot(true);
+    connect(m_cachedCountsUpdateTimer, &QTimer::timeout,
+      this, &DatabaseManager::dispatchCachedCountsUpdate);
 
   m_workerThread->start();
 }
@@ -339,12 +349,8 @@ void DatabaseManager::updateCachedCounts(
   const int collectionCount = allCollections.size();
   QVector<QString> expandedMediaDirs;
   QVector<QString> uuids;
-  QVector<qint64> directCounts;
-  QVector<qint64> recursiveCounts;
   expandedMediaDirs.resize(collectionCount);
   uuids.resize(collectionCount);
-  directCounts.resize(collectionCount);
-  recursiveCounts.resize(collectionCount);
 
   for (int i = 0; i < collectionCount; ++i) {
     expandedMediaDirs[i] = PathUtils::validateAndExpandPath(allCollections[i].mediaDirectory,
@@ -356,17 +362,60 @@ void DatabaseManager::updateCachedCounts(
     }
   }
 
-  qint64 global = countGlobal(allCollections);
-  m_sessionManager->setGlobalItemCount(global);
+  m_pendingCountsCollections = allCollections;
+  m_pendingCountsUuids.clear();
+  m_pendingCountsUuids.reserve(collectionCount);
+  for (const QString &uuid : uuids) {
+    m_pendingCountsUuids.append(uuid);
+  }
+
+  // Debounce count recomputation to avoid redundant work when multiple loads
+  // trigger updateCachedCounts() in quick succession (e.g. navigation + filter changes).
+  if (m_cachedCountsUpdateTimer) {
+    m_cachedCountsUpdateTimer->start(UIConstants::Timing::SHORT_DELAY_MS);
+  }
+}
+
+void DatabaseManager::dispatchCachedCountsUpdate() {
+  if (!m_sessionManager) {
+    return;
+  }
+
+  m_inFlightCachedCountsGeneration = ++m_cachedCountsGeneration;
+  m_inFlightCountsCollections = m_pendingCountsCollections;
+  m_inFlightCountsUuids = m_pendingCountsUuids;
+
+  emit requestUpdateCachedCounts(m_inFlightCachedCountsGeneration,
+                                m_inFlightCountsUuids);
+}
+
+void DatabaseManager::onWorkerCachedCountsComputed(
+    quint64 generation, qint64 globalCount,
+    const QHash<QString, qint64> &directCountsByUuid) {
+  if (!m_sessionManager) {
+    return;
+  }
+  if (generation != m_inFlightCachedCountsGeneration) {
+    return;
+  }
+
+  const QList<CollectionConfig> &collections = m_inFlightCountsCollections;
+  const int collectionCount = collections.size();
+
+  QVector<qint64> directCounts;
+  QVector<qint64> recursiveCounts;
+  directCounts.resize(collectionCount);
+  recursiveCounts.resize(collectionCount);
 
   for (int i = 0; i < collectionCount; ++i) {
-    directCounts[i] = countCollectionByUuid(uuids[i]);
+    const QString uuid = (i < m_inFlightCountsUuids.size()) ? m_inFlightCountsUuids[i] : QString();
+    directCounts[i] = uuid.isEmpty() ? 0 : directCountsByUuid.value(uuid, 0);
   }
 
   QVector<QList<int>> children;
   children.resize(collectionCount);
   for (int i = 0; i < collectionCount; ++i) {
-    const int parent = allCollections[i].parentCollectionIndex;
+    const int parent = collections[i].parentCollectionIndex;
     if (parent >= 0 && parent < collectionCount) {
       children[parent].append(i);
     }
@@ -402,12 +451,13 @@ void DatabaseManager::updateCachedCounts(
     computeRecursiveCount(i);
   }
 
+  m_sessionManager->setGlobalItemCount(globalCount);
   for (int i = 0; i < collectionCount; ++i) {
-    m_sessionManager->setCollectionCounts(allCollections[i], allCollections,
+    m_sessionManager->setCollectionCounts(collections[i], collections,
                                           directCounts[i], recursiveCounts[i]);
   }
-
   m_sessionManager->saveToDisk();
+  emit cachedCountsUpdated();
 }
 
 // Get owning collection index for a file based on built maps
