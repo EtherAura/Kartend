@@ -293,5 +293,8 @@ endif()
 # Tests (optional)
 option(BUILD_TESTS "Build unit tests" OFF)
 if (BUILD_TESTS)
+  # Ensure CTest is enabled at the top-level so `ctest` run from the main build
+  # directory discovers tests defined in subdirectories.
+  enable_testing()
   add_subdirectory(tests)
 endif()
