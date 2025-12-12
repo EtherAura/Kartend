@@ -37,6 +37,31 @@ static auto canonicalKeyPath(const QString &absPath, bool dedup,
                              QHash<QString, QString> *canonicalPathCache) -> QString;
 static auto displayNameForBase(const QString &baseName) -> QString;
 
+namespace {
+class SynchronousPragmaGuard {
+public:
+  explicit SynchronousPragmaGuard(QSqlDatabase &db) : m_db(db) {}
+
+  SynchronousPragmaGuard(const SynchronousPragmaGuard &) = delete;
+  auto operator=(const SynchronousPragmaGuard &)
+      -> SynchronousPragmaGuard & = delete;
+
+  SynchronousPragmaGuard(SynchronousPragmaGuard &&) = delete;
+  auto operator=(SynchronousPragmaGuard &&) -> SynchronousPragmaGuard & = delete;
+
+  ~SynchronousPragmaGuard() {
+    if (!m_db.isOpen()) {
+      return;
+    }
+    QSqlQuery pragmaOn(m_db);
+    pragmaOn.exec("PRAGMA synchronous = NORMAL");
+  }
+
+private:
+  QSqlDatabase &m_db;
+};
+} // namespace
+
 QueryManager::QueryManager(SessionManager *sessionManager, QObject *parent)
     : QObject(parent), m_sessionManager(sessionManager) {
   m_connectionName = "kartend_worker";
@@ -1120,6 +1145,7 @@ void QueryManager::saveItemsToDatabase(
   // Temporarily disable synchronous writes for bulk insert performance
   QSqlQuery pragmaOff(m_db);
   pragmaOff.exec("PRAGMA synchronous = OFF");
+  const SynchronousPragmaGuard restoreSynchronous(m_db);
 
   // Batch insert for performance - SQLite handles up to 999 variables per statement
   // With 5 columns per row, we can insert 199 rows per batch (995 variables)
@@ -1300,10 +1326,6 @@ void QueryManager::saveItemsToDatabase(
   if (!isScanCancelled()) {
     emit scanItemsProgress(totalItems, totalItems);
   }
-  
-  // Restore synchronous mode for data safety
-  QSqlQuery pragmaOn(m_db);
-  pragmaOn.exec("PRAGMA synchronous = NORMAL");
 }
 
 QStringList QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionUuid) {
