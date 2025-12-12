@@ -23,6 +23,7 @@
 #include "extensionutils.h"
 #include "itemwidget.h"
 #include "mainwindow.h"
+#include "pathutils.h"
 #include "scrollmanager.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
@@ -1469,6 +1470,41 @@ void SettingsDialog::saveCollectionFromUI(int index) {
   }
 
   CollectionConfig collection = extractUIFieldValues();
+  
+  // Validate paths for security before saving
+  // Check each path that could be used for file operations
+  auto validatePath = [this](const QString &path, const QString &fieldName) -> bool {
+    if (path.isEmpty()) {
+      return true;  // Empty paths are allowed (optional fields)
+    }
+    auto result = PathUtils::validatePathSecurity(path);
+    if (result.isError()) {
+      QMessageBox::warning(this, tr("Invalid Path"),
+                           tr("The %1 contains invalid characters:\n\n%2\n\n"
+                              "Please remove shell metacharacters, backslashes, "
+                              "or other special characters.")
+                               .arg(fieldName, result.error().message));
+      return false;
+    }
+    return true;
+  };
+  
+  if (!validatePath(collection.mediaDirectory, tr("Media Directory"))) {
+    return;
+  }
+  if (!validatePath(collection.artworkDirectory, tr("Artwork Directory"))) {
+    return;
+  }
+  if (!validatePath(collection.launcherPath, tr("Launcher Path"))) {
+    return;
+  }
+  if (!validatePath(collection.corePath, tr("Core Path"))) {
+    return;
+  }
+  if (!validatePath(collection.backgroundImage, tr("Background Image"))) {
+    return;
+  }
+  
   updateParentCollectionFromUI(collection, index);
 
   m_workingCollections[index] = collection;

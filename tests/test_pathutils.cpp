@@ -45,6 +45,15 @@ private slots:
   void testNormalizeDisplayName_mixedCase();
   void testNormalizeDisplayName_extraSpaces();
 
+  // validatePathSecurity tests
+  void testValidatePathSecurity_validPath();
+  void testValidatePathSecurity_emptyPath();
+  void testValidatePathSecurity_shellMetacharacters_data();
+  void testValidatePathSecurity_shellMetacharacters();
+  void testValidatePathSecurity_nullBytes();
+  void testValidatePathSecurity_newlines();
+  void testValidatePathSecurity_backslash();
+
 private:
   QTemporaryDir m_tempDir;
 };
@@ -201,6 +210,63 @@ void TestPathUtils::testNormalizeDisplayName_mixedCase() {
 void TestPathUtils::testNormalizeDisplayName_extraSpaces() {
   QString result = PathUtils::normalizeDisplayName("  Game   Title  ");
   QCOMPARE(result, "game title");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// validatePathSecurity tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestPathUtils::testValidatePathSecurity_validPath() {
+  auto result = PathUtils::validatePathSecurity("/home/user/games/rom.zip");
+  QVERIFY2(result.isOk(), "Valid path should pass security check");
+}
+
+void TestPathUtils::testValidatePathSecurity_emptyPath() {
+  auto result = PathUtils::validatePathSecurity("");
+  QVERIFY2(result.isError(), "Empty path should fail security check");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidFilePath);
+}
+
+void TestPathUtils::testValidatePathSecurity_shellMetacharacters_data() {
+  QTest::addColumn<QString>("path");
+  QTest::addColumn<QString>("description");
+  
+  QTest::newRow("semicolon") << "/path/with;command" << "semicolon";
+  QTest::newRow("pipe") << "/path/with|pipe" << "pipe";
+  QTest::newRow("ampersand") << "/path/with&background" << "ampersand";
+  QTest::newRow("backtick") << "/path/with`command`" << "backtick";
+  QTest::newRow("dollar") << "/path/with$VAR" << "dollar sign";
+  QTest::newRow("redirect-in") << "/path/with<input" << "input redirect";
+  QTest::newRow("redirect-out") << "/path/with>output" << "output redirect";
+}
+
+void TestPathUtils::testValidatePathSecurity_shellMetacharacters() {
+  QFETCH(QString, path);
+  QFETCH(QString, description);
+  
+  auto result = PathUtils::validatePathSecurity(path);
+  QVERIFY2(result.isError(), 
+           qPrintable(QString("Path with %1 should fail").arg(description)));
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidFilePath);
+}
+
+void TestPathUtils::testValidatePathSecurity_nullBytes() {
+  QString pathWithNull = QString("/path/with") + QChar('\0') + QString("null");
+  auto result = PathUtils::validatePathSecurity(pathWithNull);
+  QVERIFY2(result.isError(), "Path with null bytes should fail");
+}
+
+void TestPathUtils::testValidatePathSecurity_newlines() {
+  auto result1 = PathUtils::validatePathSecurity("/path/with\nnewline");
+  QVERIFY2(result1.isError(), "Path with newline should fail");
+  
+  auto result2 = PathUtils::validatePathSecurity("/path/with\rcarriage");
+  QVERIFY2(result2.isError(), "Path with carriage return should fail");
+}
+
+void TestPathUtils::testValidatePathSecurity_backslash() {
+  auto result = PathUtils::validatePathSecurity("/path/with\\backslash");
+  QVERIFY2(result.isError(), "Path with backslash should fail");
 }
 
 QTEST_MAIN(TestPathUtils)

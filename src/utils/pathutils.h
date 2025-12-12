@@ -25,6 +25,11 @@ enum class PathValidationError {
 [[nodiscard]] QString truncatePathForDisplay(const QString &path, int maxLength = 50);
 [[nodiscard]] QString normalizeDisplayName(const QString &input);
 
+/// Validates that a path doesn't contain shell metacharacters, null bytes,
+/// newlines, or other characters that could enable command injection.
+/// Returns success if path is safe, or an error context describing the issue.
+[[nodiscard]] ErrorUtils::Result<void> validatePathSecurity(const QString &path);
+
 } // namespace PathUtils
 
 #endif
