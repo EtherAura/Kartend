@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QStandardPaths>
 
 #ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
@@ -63,26 +64,17 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<void> {
 
   // If not an absolute path, try to resolve via PATH
   if (!info.isAbsolute()) {
-    // Check if command exists in PATH
-    if (!ConfigValidation::isCommandInPath(path)) {
+    const QString executable = QStandardPaths::findExecutable(path);
+    if (executable.isEmpty()) {
       return ErrorContext::error(ErrorCode::FileNotFound,
                                  "Launcher command not found in PATH",
                                  "LaunchManager::validateLauncherPath")
           .withDetails(QString("Command '%1' is not in PATH. Specify absolute path or install the program.").arg(path));
     }
-    
-    // Resolve to absolute path using 'which' for further security validation
-    QProcess whichProcess;
-    whichProcess.start("which", QStringList() << path);
-    whichProcess.waitForFinished(1000);
-    if (whichProcess.exitCode() == 0) {
-      resolvedPath = QString::fromUtf8(whichProcess.readAllStandardOutput()).trimmed();
-      info.setFile(resolvedPath);
-    } else {
-      // Fallback: command is in PATH but 'which' failed - allow it
-      // QProcess::startDetached will handle the PATH lookup
-      return Result<void>::success();
-    }
+
+    // Resolve to an absolute path for further security validation.
+    resolvedPath = executable;
+    info.setFile(resolvedPath);
   }
 
   // Verify the file exists
@@ -280,7 +272,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
   // This reduces the window between validation and execution, though
   // cannot fully eliminate the race on systems without atomic exec.
   // Skip this check for PATH-based commands (non-absolute paths) since
-  // QFileInfo can't check them - they were already validated via 'which'.
+  // QFileInfo can't check them - they were already validated via findExecutable().
   QFileInfo launcherCheck(program);
   if (launcherCheck.isAbsolute()) {
     if (!launcherCheck.exists() || !launcherCheck.isExecutable()) {

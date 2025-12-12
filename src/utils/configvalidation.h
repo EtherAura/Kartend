@@ -5,10 +5,10 @@
 #include "errorutils.h"
 #include <QDir>
 #include <QFileInfo>
-#include <QProcess>
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QStandardPaths>
 
 /**
  * @brief Validation utilities for config file entries.
@@ -20,11 +20,7 @@ namespace ConfigValidation {
 
 // Check if a command is available in PATH (for non-path launchers like "retroarch")
 [[nodiscard]] inline bool isCommandInPath(const QString &command) {
-  // Use 'which' on Unix-like systems to check if command exists in PATH
-  QProcess process;
-  process.start("which", QStringList() << command);
-  process.waitForFinished(1000);  // 1 second timeout
-  return process.exitCode() == 0;
+  return !QStandardPaths::findExecutable(command).isEmpty();
 }
 
 // Validation result with multiple issues
