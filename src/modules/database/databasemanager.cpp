@@ -234,11 +234,42 @@ void DatabaseManager::onWorkerItemsLoaded(const QStringList &filePaths,
                                           const QHash<QString, QString> &fileToArtworkDir,
                                           const QHash<QString, QString> &fileToMediaDir,
                                           const QHash<QString, int> &fileToCollectionIndex) {
+  QHash<QString, QString> relativeToFullPath;
+  relativeToFullPath.reserve(fileNames.size() * 2);
+
+  // Build a fast lookup cache for resolveRelativeFilePath().
+  // Keep "first seen" semantics to match the previous linear scan behavior
+  // over fileNames (which returns the first match it encounters).
+  for (auto it = fileNames.constBegin(); it != fileNames.constEnd(); ++it) {
+    const QString &fullPath = it.key();
+    if (fullPath.isEmpty()) {
+      continue;
+    }
+
+    if (!relativeToFullPath.contains(fullPath)) {
+      relativeToFullPath.insert(fullPath, fullPath);
+    }
+
+    const QString leafName = QFileInfo(fullPath).fileName();
+    if (!leafName.isEmpty() && !relativeToFullPath.contains(leafName)) {
+      relativeToFullPath.insert(leafName, fullPath);
+    }
+
+    const QString mediaDir = fileToMediaDir.value(fullPath);
+    if (!mediaDir.trimmed().isEmpty()) {
+      const QString relativePath = QDir(mediaDir).relativeFilePath(fullPath);
+      if (!relativePath.isEmpty() && !relativeToFullPath.contains(relativePath)) {
+        relativeToFullPath.insert(relativePath, fullPath);
+      }
+    }
+  }
+
   {
     QMutexLocker locker(&m_dataMutex);
     m_fileToArtworkDir = fileToArtworkDir;
     m_fileToMediaDir = fileToMediaDir;
     m_fileToCollectionIndex = fileToCollectionIndex;
+    m_relativeToFullPath = std::move(relativeToFullPath);
   }
   emit itemsLoaded(filePaths, fileNames);
 }
@@ -363,7 +394,25 @@ auto DatabaseManager::resolveFilePath(const QString &rawEntry,
 auto DatabaseManager::resolveRelativeFilePath(
     const QString &rawFileName,
     const QHash<QString, QString> &fileNames) const -> QString {
-  // Search fileNames for matching full path
+  if (rawFileName.trimmed().isEmpty()) {
+    return {};
+  }
+
+  // Fast path: exact full-path key lookup.
+  if (fileNames.contains(rawFileName)) {
+    return rawFileName;
+  }
+
+  // Fast path: use precomputed cache from the latest itemsLoaded payload.
+  {
+    QMutexLocker locker(&m_dataMutex);
+    auto it = m_relativeToFullPath.constFind(rawFileName);
+    if (it != m_relativeToFullPath.constEnd()) {
+      return it.value();
+    }
+  }
+
+  // Compatibility fallback: preserve previous suffix-scan behavior.
   for (auto it = fileNames.constBegin(); it != fileNames.constEnd(); ++it) {
     const QString &key = it.key();
     if (key.endsWith("/" + rawFileName) ||

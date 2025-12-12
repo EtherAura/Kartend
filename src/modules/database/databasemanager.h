@@ -134,6 +134,11 @@ private:
   QHash<QString, int> m_fileToCollectionIndex;
   QHash<QString, QString> m_fileToMediaDir;  // Maps file paths to their media directories
 
+  // Cache for resolving relative entries (e.g. "subdir/game.rom" or "game.rom")
+  // to a known absolute path without repeatedly scanning the full fileNames map.
+  // Built from the latest onWorkerItemsLoaded() payload.
+  QHash<QString, QString> m_relativeToFullPath;
+
   static void appendFileMapsAndListCanonical(
       int collectionIndex, const CollectionConfig &expandedCollection,
       const QString &mappingArtworkDir, const QStringList &filePaths,
