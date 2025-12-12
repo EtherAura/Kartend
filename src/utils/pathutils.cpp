@@ -2,6 +2,7 @@
 #include "pathutils.h"
 #include <QDir>
 #include <QFileInfo>
+#include <QRegularExpression>
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
@@ -80,6 +81,60 @@ QString normalizeDisplayName(const QString &input) {
   out.replace('_', ' ').replace('-', ' ');
   out = out.simplified().toLower();
   return out;
+}
+
+Result<void> validatePathSecurity(const QString &path) {
+  if (path.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Path is empty",
+                               "PathUtils::validatePathSecurity");
+  }
+
+  // Normalize Unicode to NFC form to prevent homoglyph/normalization attacks
+  // This ensures consistent representation of characters
+  QString normalized = path.normalized(QString::NormalizationForm_C);
+  
+  // Reject if normalization changed the path (indicates potential obfuscation)
+  if (normalized != path) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Path contains non-canonical Unicode",
+                               "PathUtils::validatePathSecurity")
+        .withDetails("Path was modified by Unicode normalization");
+  }
+
+  // Reject shell metacharacters that could enable command injection.
+  // Note: ()[] are allowed as they're common in filenames and safe with QProcess
+  // which passes arguments directly without shell interpretation.
+  static const QRegularExpression shellMeta(R"([;|&`$<>])");
+  if (shellMeta.match(normalized).hasMatch()) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Path contains shell metacharacters",
+                               "PathUtils::validatePathSecurity")
+        .withDetails(path);
+  }
+
+  // Reject null bytes which could truncate strings in C APIs
+  if (normalized.contains(QChar('\0'))) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Path contains null bytes",
+                               "PathUtils::validatePathSecurity");
+  }
+
+  // Reject newlines which could inject additional commands
+  if (normalized.contains('\n') || normalized.contains('\r')) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Path contains newline characters",
+                               "PathUtils::validatePathSecurity");
+  }
+  
+  // Reject backslash characters (Windows-style paths that could confuse Unix systems)
+  if (normalized.contains('\\')) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Path contains backslash characters",
+                               "PathUtils::validatePathSecurity");
+  }
+
+  return Result<void>::success();
 }
 
 } // namespace PathUtils

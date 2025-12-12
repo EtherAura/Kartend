@@ -3,6 +3,7 @@
 #include "applicationcontext.h"
 #include "configvalidation.h"
 #include "errorutils.h"
+#include "pathutils.h"
 #include "setuputils.h"
 
 #include <QDateTime>
@@ -46,57 +47,8 @@ using ErrorUtils::ErrorContext;
 using ErrorUtils::Result;
 
 auto LaunchManager::validatePathSecurity(const QString &path) -> Result<void> {
-  if (path.isEmpty()) {
-    return ErrorContext::error(ErrorCode::InvalidFilePath,
-                               "Path is empty",
-                               "LaunchManager::validatePathSecurity");
-  }
-
-  // Normalize Unicode to NFC form to prevent homoglyph/normalization attacks
-  // This ensures consistent representation of characters
-  QString normalized = path.normalized(QString::NormalizationForm_C);
-  
-  // Reject if normalization changed the path (indicates potential obfuscation)
-  if (normalized != path) {
-    return ErrorContext::error(ErrorCode::InvalidFilePath,
-                               "Path contains non-canonical Unicode",
-                               "LaunchManager::validatePathSecurity")
-        .withDetails("Path was modified by Unicode normalization");
-  }
-
-  // Reject shell metacharacters that could enable command injection.
-  // Note: ()[] are allowed as they're common in filenames and safe with QProcess
-  // which passes arguments directly without shell interpretation.
-  static const QRegularExpression shellMeta(R"([;|&`$<>])");
-  if (shellMeta.match(normalized).hasMatch()) {
-    return ErrorContext::error(ErrorCode::InvalidFilePath,
-                               "Path contains shell metacharacters",
-                               "LaunchManager::validatePathSecurity")
-        .withDetails(path);
-  }
-
-  // Reject null bytes which could truncate strings in C APIs
-  if (normalized.contains(QChar('\0'))) {
-    return ErrorContext::error(ErrorCode::InvalidFilePath,
-                               "Path contains null bytes",
-                               "LaunchManager::validatePathSecurity");
-  }
-
-  // Reject newlines which could inject additional commands
-  if (normalized.contains('\n') || normalized.contains('\r')) {
-    return ErrorContext::error(ErrorCode::InvalidFilePath,
-                               "Path contains newline characters",
-                               "LaunchManager::validatePathSecurity");
-  }
-  
-  // Reject backslash characters (Windows-style paths that could confuse Unix systems)
-  if (normalized.contains('\\')) {
-    return ErrorContext::error(ErrorCode::InvalidFilePath,
-                               "Path contains backslash characters",
-                               "LaunchManager::validatePathSecurity");
-  }
-
-  return Result<void>::success();
+  // Delegate to shared utility in PathUtils
+  return PathUtils::validatePathSecurity(path);
 }
 
 auto LaunchManager::validateLauncherPath(const QString &path) -> Result<void> {

@@ -46,6 +46,7 @@ add_test(NAME InteractionStateHolder COMMAND test_interactionstateholder)
 add_executable(test_launchmanager
   test_launchmanager.cpp
   ${SRC_DIR}/modules/launch/launchmanager.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
 )
 target_link_libraries(test_launchmanager
   Qt6::Core
