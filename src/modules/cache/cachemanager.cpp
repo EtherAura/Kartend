@@ -1,5 +1,6 @@
 // Manages in-memory pixmap cache with LRU eviction and optional disk persistence.
 #include "cachemanager.h"
+#include "errorutils.h"
 #include "uiconstants.h"
 
 #include <QApplication>
@@ -10,6 +11,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSaveFile>
 #include <QScreen>
 #include <QStandardPaths>
 #include <QDateTime>
@@ -111,10 +113,44 @@ void CacheManager::writeTimestamps(const QHash<QString, qint64> &timestampsCopy)
 
   QString metadataPath = getCacheDirectory() + "/metadata/artwork_cache.json";
   QDir().mkpath(QFileInfo(metadataPath).absolutePath());
-  QFile metadataFile(metadataPath);
-  if (metadataFile.open(QIODevice::WriteOnly)) {
-    metadataFile.write(QJsonDocument(root).toJson());
-    metadataFile.close();
+
+  const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Compact);
+  QSaveFile metadataFile(metadataPath);
+  if (!metadataFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(
+            ErrorUtils::ErrorCode::FileWriteError,
+            "Failed to open cache metadata for writing",
+            "CacheManager::writeTimestamps")
+            .withDetails(QString("Path: %1, Error: %2")
+                             .arg(metadataPath, metadataFile.errorString())));
+    return;
+  }
+
+  const qint64 written = metadataFile.write(payload);
+  if (written != payload.size()) {
+    metadataFile.cancelWriting();
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(
+            ErrorUtils::ErrorCode::FileWriteError,
+            "Failed to write complete cache metadata payload",
+            "CacheManager::writeTimestamps")
+            .withDetails(QString("Path: %1, Written: %2, Expected: %3, Error: %4")
+                             .arg(metadataPath)
+                             .arg(written)
+                             .arg(payload.size())
+                             .arg(metadataFile.errorString())));
+    return;
+  }
+
+  if (!metadataFile.commit()) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(
+            ErrorUtils::ErrorCode::FileWriteError,
+            "Failed to atomically commit cache metadata",
+            "CacheManager::writeTimestamps")
+            .withDetails(QString("Path: %1, Error: %2")
+                             .arg(metadataPath, metadataFile.errorString())));
   }
 }
 // Flushes dirty artwork pixmaps to the on-disk cache.

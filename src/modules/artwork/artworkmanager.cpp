@@ -1123,10 +1123,6 @@ void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
   QPointer<ArtworkManager> self(this);
   QObject *appReceiver = QCoreApplication::instance();
   
-  // Start timing for adaptive batching (high-priority only for responsiveness)
-  if (highPriority) {
-    m_adaptiveBatcher.startBatch();
-  }
   int batchItemCount = batch.size();
   
   QFuture<void> future = QtConcurrent::run(
@@ -1136,8 +1132,10 @@ void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
       return;
     }
 
-    QList<ArtworkInfo::Result> results =
-        processBatch(batch, highPriority, *cancelFlag);
+    QElapsedTimer timer;
+    timer.start();
+    QList<ArtworkInfo::Result> results = processBatch(batch, highPriority, *cancelFlag);
+    const qint64 elapsedMs = timer.elapsed();
     if (QApplication::closingDown() || !cancelFlag ||
         cancelFlag->load(std::memory_order_relaxed)) {
       return;
@@ -1151,7 +1149,7 @@ void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
     }
     QMetaObject::invokeMethod(
         appReceiver,
-        [self, results, highPriority, batchItemCount, cancelFlag]() {
+        [self, results, highPriority, batchItemCount, elapsedMs, cancelFlag]() {
           if (QApplication::closingDown() || !self || !cancelFlag ||
               cancelFlag->load(std::memory_order_relaxed)) {
             return;
@@ -1159,7 +1157,7 @@ void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
           self->applyResultsToUi(results, highPriority);
           // Update adaptive batcher with completed batch timing (high-priority only)
           if (highPriority && !results.isEmpty()) {
-            self->m_adaptiveBatcher.endBatch(batchItemCount);
+            self->m_adaptiveBatcher.observeBatch(batchItemCount, elapsedMs);
           }
         },
         Qt::QueuedConnection);

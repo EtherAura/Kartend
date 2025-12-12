@@ -19,6 +19,11 @@ struct LaunchManagerSetup {
   SETUP_GETTER_DECL(QList<CollectionConfig>*, Collections)
 };
 
+struct LaunchCommand {
+  QString program;
+  QStringList arguments;
+};
+
 /// Handles launching media items with their configured launchers.
 /// Manages RetroArch cores, parameter parsing, and launch debouncing.
 class LaunchManager : public QObject {
@@ -31,6 +36,14 @@ public:
 
   /// Launches a media item using the specified collection's launcher config
   void launchItem(const QString &filePath, int collectionIndex);
+
+  /// Builds the program + argument list for a collection launch.
+  ///
+  /// This is a pure helper used by launchItem() and unit tests. It does NOT
+  /// validate that the launcher exists/is executable (use validateLauncherPath
+  /// for that); it only constructs and validates the argument semantics.
+  [[nodiscard]] static ErrorUtils::Result<LaunchCommand> buildLaunchCommand(
+      const CollectionConfig &collection, const QString &filePath);
 
   /// Parses command-line parameters handling quoted strings
   /// Returns error if quotes are unclosed (potential injection vector)

@@ -1,7 +1,6 @@
 #ifndef ADAPTIVEBATCHER_H
 #define ADAPTIVEBATCHER_H
 
-#include <QElapsedTimer>
 #include <QMutex>
 #include <QMutexLocker>
 #include <deque>
@@ -39,19 +38,15 @@ public:
   // Default constructor uses default config
   AdaptiveBatcher() : AdaptiveBatcher(Config::defaults()) {}
 
-  /// Start timing a batch operation
-  void startBatch() {
-    m_timer.start();
-  }
-
-  /// End timing and record performance for batch of given size
-  /// Returns the recommended batch size for the next operation
-  int endBatch(int itemsProcessed) {
+  /// Record performance for a completed batch.
+  ///
+  /// Passing elapsed time explicitly avoids shared timer state, which can be
+  /// corrupted when multiple batches overlap (common with QtConcurrent).
+  /// Returns the recommended batch size for the next operation.
+  int observeBatch(int itemsProcessed, qint64 elapsedMs) {
     if (itemsProcessed <= 0) {
       return m_currentBatchSize;
     }
-
-    qint64 elapsedMs = m_timer.elapsed();
     double timePerItem = static_cast<double>(elapsedMs) / itemsProcessed;
 
     QMutexLocker lock(&m_mutex);
@@ -139,7 +134,6 @@ private:
   int m_currentBatchSize;
   double m_avgTimePerItem;
   std::deque<Sample> m_history;
-  QElapsedTimer m_timer;
   mutable QMutex m_mutex;
 };
 

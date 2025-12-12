@@ -42,6 +42,11 @@ private slots:
   void testParseParameters_quotedArgs();
   void testParseParameters_mixedQuotes();
   void testParseParameters_unclosedQuotes();
+  void testParseParameters_rejectsNewlines();
+
+  // buildLaunchCommand tests
+  void testBuildLaunchCommand_nonRetroArch_usesLaunchParameters();
+  void testBuildLaunchCommand_retroArch_usesCorePath();
 
 private:
   QString m_tempExecutable;
@@ -291,6 +296,45 @@ void TestLaunchManager::testParseParameters_unclosedQuotes() {
   // Mixed unclosed should return error
   result = LaunchManager::parseParameters("valid \"unclosed");
   QVERIFY2(result.isError(), "Unclosed quote at end should fail");
+}
+
+void TestLaunchManager::testParseParameters_rejectsNewlines() {
+  auto result = LaunchManager::parseParameters("--foo\nbar");
+  QVERIFY(result.isError());
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
+
+  result = LaunchManager::parseParameters("--foo\rbar");
+  QVERIFY(result.isError());
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
+}
+
+void TestLaunchManager::testBuildLaunchCommand_nonRetroArch_usesLaunchParameters() {
+  CollectionConfig config;
+  config.name = "TestCollection";
+  config.launcherPath = "echo";
+  config.corePath = "--SHOULD-NOT-BE-USED";
+  config.launchParameters = "--fullscreen --scale 2";
+
+  const QString filePath = "/tmp/testfile.bin";
+  auto result = LaunchManager::buildLaunchCommand(config, filePath);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().program, QString("echo"));
+  QCOMPARE(result.value().arguments,
+           (QStringList{"--fullscreen", "--scale", "2", filePath}));
+}
+
+void TestLaunchManager::testBuildLaunchCommand_retroArch_usesCorePath() {
+  CollectionConfig config;
+  config.name = "TestCollection";
+  config.launcherPath = "retroarch";
+  config.corePath = "/tmp/core.so";
+  config.launchParameters = "--should-be-ignored";
+
+  const QString filePath = "/tmp/testfile.bin";
+  auto result = LaunchManager::buildLaunchCommand(config, filePath);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().program, QString("retroarch"));
+  QCOMPARE(result.value().arguments, (QStringList{"-L", "/tmp/core.so", filePath}));
 }
 
 QTEST_MAIN(TestLaunchManager)

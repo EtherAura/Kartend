@@ -36,6 +36,8 @@ jobs:
           make -j$(nproc)
           
       - name: Run Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
           cd build/${{ matrix.build_type }}
           ctest --output-on-failure

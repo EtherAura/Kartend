@@ -450,6 +450,13 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     return;
   }
 
+  // Flush any pending grid-width persistence before shutdown so the final
+  // user-adjusted width is not lost when closing immediately after changes.
+  if (m_gridWidthSaveDebouncer && m_gridWidthSaveDebouncer->isPending() &&
+      getSettingsManager()) {
+    m_gridWidthSaveDebouncer->triggerImmediate();
+  }
+
   m_isShuttingDown = true;
 
   // Hide window immediately so user sees instant visual response
@@ -501,6 +508,71 @@ void MainWindow::setupUI() {
   ItemWidget::setCustomFontFamily(m_generalSettings.customFontFamily);
 
   setupUIReferences();
+
+  // Debounced persistence + refresh for menu-driven grid width changes.
+  // This avoids writing settings repeatedly while the user holds +/-.
+  if (!m_gridWidthSaveDebouncer) {
+    m_gridWidthSaveDebouncer =
+        new TimerUtils::DebouncedTimer(UIConstants::Timing::LONG_DELAY_MS, this);
+    QObject::connect(m_gridWidthSaveDebouncer, &TimerUtils::DebouncedTimer::triggered,
+                     this, [this]() {
+                       if (m_isShuttingDown || QApplication::closingDown()) {
+                         return;
+                       }
+                       if (getSettingsManager()) {
+                         getSettingsManager()->saveCollections(m_collections);
+                       }
+                     });
+  }
+
+  if (!m_gridWidthPrecalcDebouncer) {
+    m_gridWidthPrecalcDebouncer =
+        new TimerUtils::DebouncedTimer(UIConstants::Timing::LONG_DELAY_MS, this);
+    QObject::connect(m_gridWidthPrecalcDebouncer,
+                     &TimerUtils::DebouncedTimer::triggered, this, [this]() {
+                       if (m_isShuttingDown || QApplication::closingDown()) {
+                         return;
+                       }
+                       if (!getScrollManager()) {
+                         return;
+                       }
+
+                       // Mark this generation as the active one for the final stage.
+                       m_gridWidthActiveGeneration = m_gridWidthPendingGeneration;
+
+                       getScrollManager()->preCalculateLayout();
+                       getScrollManager()->forceVirtualViewUpdate();
+
+                       if (m_gridWidthFinalizeDebouncer) {
+                         m_gridWidthFinalizeDebouncer->trigger();
+                       }
+                     });
+  }
+
+  if (!m_gridWidthFinalizeDebouncer) {
+    m_gridWidthFinalizeDebouncer =
+        new TimerUtils::DebouncedTimer(UIConstants::Timing::MEDIUM_DELAY_MS, this);
+    QObject::connect(m_gridWidthFinalizeDebouncer,
+                     &TimerUtils::DebouncedTimer::triggered, this, [this]() {
+                       if (m_isShuttingDown || QApplication::closingDown()) {
+                         return;
+                       }
+                       if (m_gridWidthActiveGeneration != m_gridWidthPendingGeneration) {
+                         return;
+                       }
+                       if (!getScrollManager()) {
+                         return;
+                       }
+
+                       getScrollManager()->updateVirtualView();
+                       if (getArtworkManager()) {
+                         getArtworkManager()->updateViewportArtwork();
+                       }
+                       getScrollManager()->centerHorizontalScrollbar(
+                           currentCollectionIndex, m_collections);
+                     });
+  }
+
   initializeAppContext();
   createMenuBar();
   setupSidebar();
@@ -628,8 +700,11 @@ void MainWindow::adjustGridWidth(int delta) {
   // Update the collection config
   config.gridWidth = newWidth;
 
-  // Persist the change
-  if (getSettingsManager()) {
+  // Persist the change (debounced) to avoid repeated disk writes when the user
+  // holds the shortcut.
+  if (m_gridWidthSaveDebouncer) {
+    m_gridWidthSaveDebouncer->trigger();
+  } else if (getSettingsManager()) {
     getSettingsManager()->saveCollections(m_collections);
   }
 
@@ -637,24 +712,11 @@ void MainWindow::adjustGridWidth(int delta) {
   if (getScrollManager()) {
     getScrollManager()->updateGridWidth(newWidth);
 
-    // Delay layout recalculation to allow grid width change to propagate -
-    // nested timer ensures artwork updates happen after layout is stable
-    QTimer::singleShot(UIConstants::Timing::LONG_DELAY_MS, this, [this]() {
-      if (getScrollManager()) {
-        getScrollManager()->preCalculateLayout();
-        getScrollManager()->forceVirtualViewUpdate();
-        QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this, [this]() {
-          if (getScrollManager()) {
-            getScrollManager()->updateVirtualView();
-            if (getArtworkManager()) {
-              getArtworkManager()->updateViewportArtwork();
-            }
-            getScrollManager()->centerHorizontalScrollbar(
-                currentCollectionIndex, m_collections);
-          }
-        });
-      }
-    });
+    // Coalesce expensive layout + artwork refresh for repeated adjustments.
+    ++m_gridWidthPendingGeneration;
+    if (m_gridWidthPrecalcDebouncer) {
+      m_gridWidthPrecalcDebouncer->trigger();
+    }
   }
 }
 

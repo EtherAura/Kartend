@@ -92,7 +92,7 @@ See [docs/architecture.md](docs/architecture.md) for detailed architecture docum
 
 ## License
 
-TBD
+Proprietary (pre-release). See LICENSE.
 
 ---
 

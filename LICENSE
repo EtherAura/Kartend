@@ -1,0 +1,36 @@
+Kartend Pre-Release Proprietary License
+
+Copyright (c) 2025 Kartend Project Authors
+All rights reserved.
+
+IMPORTANT: This is a pre-release proprietary license notice intended as a
+practical placeholder. It is not legal advice. If you plan to distribute this
+software or accept contributions, have this reviewed by qualified counsel.
+
+1. Grant of License
+Subject to the restrictions below, you are granted a limited, non-exclusive,
+non-transferable, revocable license to:
+- build and run the software for personal evaluation and internal testing.
+
+2. Restrictions
+You may not, without prior written permission from the copyright holder(s):
+- redistribute, sublicense, sell, rent, lease, or otherwise transfer the
+  software or any portion of it;
+- publish the software or make it available to the public (including posting
+  source or binaries online);
+- remove or alter this license notice or copyright notices.
+
+3. Ownership
+The software is licensed, not sold. All title and ownership rights remain with
+the copyright holder(s).
+
+4. No Warranty
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+5. Limitation of Liability
+IN NO EVENT SHALL THE COPYRIGHT HOLDER(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+IN THE SOFTWARE.

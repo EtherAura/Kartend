@@ -576,6 +576,35 @@ void handleScrollBranch(ScrollManager *scrollManager,
                         bool sidebarModeChanged, bool gridWidthChanged,
                         bool alignmentChanged, bool fontSizeChanged,
                         bool hideTitlesChanged) {
+  auto scheduleGridWidthRefresh =
+      [](ScrollManager *scrollManager, ArtworkManager *artworkManager,
+         int viewingIndex, const QList<CollectionConfig> *collectionsPtr) {
+        if (!scrollManager || !collectionsPtr) {
+          return;
+        }
+
+        // Delay layout recalculation to allow grid width change to propagate.
+        TimerUtils::singleShotGuarded(UIConstants::Timing::LONG_DELAY_MS,
+                                      scrollManager, [=]() {
+                                        scrollManager->preCalculateLayout();
+                                        scrollManager->forceVirtualViewUpdate();
+                                      });
+
+        // Wait for the pre-calculated layout to settle before updating the
+        // virtual view, refreshing artwork, and re-centering.
+        TimerUtils::singleShotGuarded(
+            UIConstants::Timing::LONG_DELAY_MS +
+                UIConstants::Timing::MEDIUM_DELAY_MS,
+            scrollManager, [=]() {
+              scrollManager->updateVirtualView();
+              if (artworkManager) {
+                artworkManager->updateViewportArtwork();
+              }
+              scrollManager->centerHorizontalScrollbar(viewingIndex,
+                                                       *collectionsPtr);
+            });
+      };
+
   if (!scrollManager) {
     return;
   }
@@ -587,32 +616,8 @@ void handleScrollBranch(ScrollManager *scrollManager,
   }
   if (gridWidthChanged) {
     scrollManager->updateGridWidth(collections[viewingIndex].gridWidth);
-    // Delay layout recalculation to allow grid width change to propagate -
-    // nested timer ensures artwork updates happen after layout is stable
-    QPointer<ScrollManager> scrollMgrPtr = scrollManager;
-    QPointer<ArtworkManager> artworkMgrPtr = artworkManager;
-    QTimer::singleShot(UIConstants::Timing::LONG_DELAY_MS, scrollManager,
-                       [scrollMgrPtr, artworkMgrPtr, viewingIndex, collections]() {
-      if (!scrollMgrPtr) {
-        return;
-      }
-      scrollMgrPtr->preCalculateLayout();
-      scrollMgrPtr->forceVirtualViewUpdate();
-
-      // Nested timer: ensure virtual view is updated only after the
-      // pre-calculated layout has settled.
-      QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, scrollMgrPtr,
-                         [scrollMgrPtr, artworkMgrPtr, viewingIndex, collections]() {
-        if (!scrollMgrPtr) {
-          return;
-        }
-        scrollMgrPtr->updateVirtualView();
-        if (artworkMgrPtr) {
-          artworkMgrPtr->updateViewportArtwork();
-        }
-        scrollMgrPtr->centerHorizontalScrollbar(viewingIndex, collections);
-      });
-    });
+    scheduleGridWidthRefresh(scrollManager, artworkManager, viewingIndex,
+                             &collections);
     return;
   }
   if (alignmentChanged) {

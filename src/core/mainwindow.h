@@ -9,6 +9,10 @@
 #include <QTimer>
 #include <memory>
 
+namespace TimerUtils {
+class DebouncedTimer;
+}
+
 QT_BEGIN_NAMESPACE
 class QStackedWidget;
 class QWidget;
@@ -95,6 +99,14 @@ protected:
 private:
   bool m_isShuttingDown = false;
   std::unique_ptr<MenuController> m_menuController;
+
+  // Coalesce rapid grid-width adjustments (menu shortcuts) into a single
+  // settings save + layout/artwork refresh chain.
+  TimerUtils::DebouncedTimer *m_gridWidthSaveDebouncer = nullptr;
+  TimerUtils::DebouncedTimer *m_gridWidthPrecalcDebouncer = nullptr;
+  TimerUtils::DebouncedTimer *m_gridWidthFinalizeDebouncer = nullptr;
+  int m_gridWidthPendingGeneration = 0;
+  int m_gridWidthActiveGeneration = 0;
 
   std::unique_ptr<ApplicationManager> m_appManager;
   MetadataSidebar *m_MetadataSidebar = nullptr;

@@ -47,6 +47,74 @@ using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 using ErrorUtils::Result;
 
+auto LaunchManager::buildLaunchCommand(const CollectionConfig &collection,
+                                       const QString &filePath)
+    -> ErrorUtils::Result<LaunchCommand> {
+  auto expandOnly = [&](const QString &text) -> QString {
+    QString out = text;
+    out.replace("%collection%", collection.name, Qt::CaseInsensitive);
+    return out.trimmed();
+  };
+
+  const QString expandedLauncherPath = expandOnly(collection.launcherPath);
+  const QString expandedCorePath = expandOnly(collection.corePath);
+  const QString expandedLaunchParameters = expandOnly(collection.launchParameters);
+
+  if (expandedLauncherPath.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument,
+                               "No launcher configured",
+                               "LaunchManager::buildLaunchCommand")
+        .withDetails(QString("Collection '%1'").arg(collection.name));
+  }
+
+  // Validate media file path for security.
+  // Existence is not checked here; only character-level security checks.
+  auto fileValidation = validatePathSecurity(filePath);
+  if (fileValidation.isError()) {
+    return fileValidation.error();
+  }
+
+  LaunchCommand cmd;
+  cmd.program = expandedLauncherPath;
+
+  const bool isRetroArch = expandedLauncherPath.contains("retroarch", Qt::CaseInsensitive);
+  if (isRetroArch) {
+    if (expandedCorePath.isEmpty()) {
+      return ErrorContext::error(ErrorCode::InvalidArgument,
+                                 "No RetroArch core configured",
+                                 "LaunchManager::buildLaunchCommand")
+          .withDetails(QString("Collection '%1'").arg(collection.name));
+    }
+
+    // Core path should be a file path, not a flag.
+    if (expandedCorePath.startsWith("-")) {
+      return ErrorContext::error(ErrorCode::InvalidFilePath,
+                                 "Core path cannot start with a dash",
+                                 "LaunchManager::buildLaunchCommand")
+          .withDetails(QString("Core path '%1' looks like an option").arg(expandedCorePath));
+    }
+
+    auto coreValidation = validatePathSecurity(expandedCorePath);
+    if (coreValidation.isError()) {
+      return coreValidation.error();
+    }
+
+    cmd.arguments << "-L" << expandedCorePath << filePath;
+    return cmd;
+  }
+
+  // Non-RetroArch: parse optional launch parameters string.
+  if (!expandedLaunchParameters.isEmpty()) {
+    auto parseResult = parseParameters(expandedLaunchParameters);
+    if (parseResult.isError()) {
+      return parseResult.error();
+    }
+    cmd.arguments.append(parseResult.value());
+  }
+  cmd.arguments << filePath;
+  return cmd;
+}
+
 auto LaunchManager::validatePathSecurity(const QString &path) -> Result<void> {
   // Delegate to shared utility in PathUtils
   return PathUtils::validatePathSecurity(path);
@@ -153,119 +221,35 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
 
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
 
-  auto expandOnly = [&](const QString &text) -> QString {
-    QString out = text;
-    out.replace("%collection%", collection.name, Qt::CaseInsensitive);
-    return out.trimmed();
-  };
-
-  QString expandedLauncherPath = expandOnly(collection.launcherPath);
-  QString expandedCorePath = expandOnly(collection.corePath);
-
-  if (expandedLauncherPath.isEmpty()) {
-    QMessageBox::warning(nullptr, "No Launcher",
-                         "No launcher configured for " + collection.name);
+  auto commandResult = buildLaunchCommand(collection, filePath);
+  if (commandResult.isError()) {
+    ErrorUtils::logError(commandResult.error());
+    const QString msg = commandResult.error().message;
+    if (commandResult.error().code == ErrorCode::InvalidFilePath) {
+      QMessageBox::warning(nullptr, "Invalid File Path",
+                           QString("%1\n\nPath: %2").arg(msg, filePath));
+    } else if (msg.contains("core", Qt::CaseInsensitive)) {
+      QMessageBox::warning(nullptr, "Invalid Core Path",
+                           QString("%1").arg(msg));
+    } else {
+      QMessageBox::warning(nullptr, "Launch Error",
+                           QString("%1").arg(msg));
+    }
     return;
   }
 
-  // Validate launcher path for security before execution
-  auto launcherValidation = validateLauncherPath(expandedLauncherPath);
+  const LaunchCommand cmd = commandResult.value();
+
+  // Validate launcher path for security before execution.
+  // This also resolves PATH commands to a canonical executable.
+  auto launcherValidation = validateLauncherPath(cmd.program);
   if (launcherValidation.isError()) {
     ErrorUtils::logError(launcherValidation.error());
     QMessageBox::warning(nullptr, "Invalid Launcher",
                          QString("Launcher validation failed: %1\n\nPath: %2")
                              .arg(launcherValidation.error().message)
-                             .arg(expandedLauncherPath));
+                             .arg(cmd.program));
     return;
-  }
-
-  // Validate core path if specified
-  if (!expandedCorePath.isEmpty()) {
-    auto coreValidation = validatePathSecurity(expandedCorePath);
-    if (coreValidation.isError()) {
-      ErrorUtils::logError(coreValidation.error());
-      QMessageBox::warning(nullptr, "Invalid Core Path",
-                           QString("Core path validation failed: %1\n\nPath: %2")
-                               .arg(coreValidation.error().message)
-                               .arg(expandedCorePath));
-      return;
-    }
-  }
-
-  // Validate media file path for security
-  auto fileValidation = validatePathSecurity(filePath);
-  if (fileValidation.isError()) {
-    ErrorUtils::logError(fileValidation.error());
-    QMessageBox::warning(nullptr, "Invalid File Path",
-                         QString("File path validation failed: %1\n\nPath: %2")
-                             .arg(fileValidation.error().message)
-                             .arg(filePath));
-    return;
-  }
-
-  QString program;
-  QStringList arguments;
-
-  if (expandedLauncherPath.contains("retroarch", Qt::CaseInsensitive)) {
-    if (expandedCorePath.isEmpty()) {
-      QMessageBox::warning(nullptr, "No Core",
-                           "No RetroArch core configured for " +
-                               collection.name);
-      return;
-    }
-
-    // Security: Validate core path doesn't contain command-line flags
-    // This prevents argument injection attacks where a malicious core path
-    // like "-L /safe/core --config /malicious/config" could inject extra args
-    if (expandedCorePath.startsWith("-")) {
-      auto err = ErrorContext::error(ErrorCode::InvalidFilePath,
-                                     "Core path cannot start with a dash",
-                                     "LaunchManager::launchItem")
-          .withDetails(QString("Core path '%1' looks like a command-line flag").arg(expandedCorePath));
-      ErrorUtils::logError(err);
-      QMessageBox::warning(nullptr, "Invalid Core Path",
-                           QString("Core path cannot start with '-' (looks like a command-line flag):\n%1")
-                               .arg(expandedCorePath));
-      return;
-    }
-    
-    // Also check for embedded flags separated by spaces
-    if (expandedCorePath.contains(" -")) {
-      auto err = ErrorContext::error(ErrorCode::InvalidFilePath,
-                                     "Core path contains embedded command-line flags",
-                                     "LaunchManager::launchItem")
-          .withDetails(QString("Core path '%1' contains ' -' which could inject arguments").arg(expandedCorePath));
-      ErrorUtils::logError(err);
-      QMessageBox::warning(nullptr, "Invalid Core Path",
-                           QString("Core path appears to contain command-line flags:\n%1\n\n"
-                                   "The core path should only be a file path, not include arguments.")
-                               .arg(expandedCorePath));
-      return;
-    }
-
-    program = expandedLauncherPath;
-    arguments << "-L" << expandedCorePath << filePath;
-  } else {
-    program = expandedLauncherPath;
-    arguments << filePath;
-
-    if (!expandedCorePath.isEmpty()) {
-      QString params = expandedCorePath.trimmed();
-      if (!params.isEmpty()) {
-        arguments.removeLast();
-        auto parseResult = parseParameters(params);
-        if (parseResult.isError()) {
-          ErrorUtils::logError(parseResult.error());
-          QMessageBox::warning(nullptr, "Invalid Parameters",
-                               QString("Parameter parsing failed: %1\n\nParameters: %2")
-                                   .arg(parseResult.error().message)
-                                   .arg(params));
-          return;
-        }
-        arguments.append(parseResult.value());
-        arguments << filePath;
-      }
-    }
   }
 
   // TOCTOU mitigation: Re-validate launcher right before execution.
@@ -273,25 +257,25 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
   // cannot fully eliminate the race on systems without atomic exec.
   // Skip this check for PATH-based commands (non-absolute paths) since
   // QFileInfo can't check them - they were already validated via findExecutable().
-  QFileInfo launcherCheck(program);
+  QFileInfo launcherCheck(cmd.program);
   if (launcherCheck.isAbsolute()) {
     if (!launcherCheck.exists() || !launcherCheck.isExecutable()) {
       QMessageBox::critical(nullptr, "Launch Error",
                             QString("Launcher is no longer accessible or executable:\n%1")
-                                .arg(program));
+                                .arg(cmd.program));
       return;
     }
   }
 
-  bool success = QProcess::startDetached(program, arguments);
+  bool success = QProcess::startDetached(cmd.program, cmd.arguments);
 
   if (!success) {
     QString errorMsg =
         QString("Failed to launch: %1\n\nCommand attempted:\n%2 %3\n\nMake "
                 "sure the launcher path is correct and the file is executable.")
-            .arg(expandedLauncherPath)
-            .arg(program)
-            .arg(arguments.join(" "));
+        .arg(cmd.program)
+        .arg(cmd.program)
+        .arg(cmd.arguments.join(" "));
 
     QMessageBox::critical(nullptr, "Launch Error", errorMsg);
   }
@@ -301,6 +285,13 @@ auto LaunchManager::parseParameters(const QString &paramString) -> ErrorUtils::R
   QStringList result;
   if (paramString.trimmed().isEmpty()) {
     return result;
+  }
+
+  // Reject null bytes/newlines which can cause confusing log/diagnostic output.
+  if (paramString.contains(QChar('\0')) || paramString.contains('\n') || paramString.contains('\r')) {
+    return ErrorContext::error(ErrorCode::InvalidArgument,
+                               "Launch parameters contain invalid control characters",
+                               "LaunchManager::parseParameters");
   }
 
   QString params = paramString.trimmed();
