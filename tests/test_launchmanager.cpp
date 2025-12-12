@@ -9,6 +9,7 @@
 #include <QTemporaryFile>
 #include <QTest>
 #include <QDir>
+#include <QTemporaryDir>
 
 class TestLaunchManager : public QObject {
   Q_OBJECT
@@ -29,6 +30,7 @@ private slots:
 
   // validateLauncherPath tests
   void testValidateLauncherPath_validExecutable();
+  void testValidateLauncherPath_resolvesViaPath();
   void testValidateLauncherPath_relativePath();
   void testValidateLauncherPath_nonExistent();
   void testValidateLauncherPath_notExecutable();
@@ -184,6 +186,42 @@ void TestLaunchManager::testValidateLauncherPath_validExecutable() {
   QVERIFY2(result.isOk(),
            qPrintable(QString("Valid executable should pass: %1")
                           .arg(result.isError() ? result.error().message : "")));
+
+  const QString expectedCanonical = QFileInfo(m_tempExecutable).canonicalFilePath();
+  QVERIFY2(!expectedCanonical.isEmpty(), "Test setup failed: canonical path is empty");
+  QCOMPARE(result.value(), expectedCanonical);
+}
+
+void TestLaunchManager::testValidateLauncherPath_resolvesViaPath() {
+  QTemporaryDir dir;
+  QVERIFY2(dir.isValid(), "Test setup failed: temp dir invalid");
+
+  const QString launcherName = "kartend-test-launcher";
+  const QString launcherPath = dir.filePath(launcherName);
+
+  QFile f(launcherPath);
+  QVERIFY2(f.open(QIODevice::WriteOnly | QIODevice::Truncate), "Failed to create test launcher");
+  f.write("#!/bin/sh\nexit 0\n");
+  f.close();
+
+  QVERIFY2(QFile::setPermissions(launcherPath,
+                                 QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner),
+           "Failed to make test launcher executable");
+
+  const QByteArray oldPath = qgetenv("PATH");
+  const QByteArray newPath = (dir.path().toUtf8() + ":" + oldPath);
+  qputenv("PATH", newPath);
+
+  auto result = LaunchManager::validateLauncherPath(launcherName);
+  QVERIFY2(result.isOk(),
+           qPrintable(QString("PATH-resolved launcher should validate: %1")
+                          .arg(result.isError() ? result.error().message : "")));
+
+  const QString expectedResolved = QFileInfo(launcherPath).canonicalFilePath();
+  QVERIFY2(!expectedResolved.isEmpty(), "Test setup failed: expected canonical path is empty");
+  QCOMPARE(result.value(), expectedResolved);
+
+  qputenv("PATH", oldPath);
 }
 
 void TestLaunchManager::testValidateLauncherPath_relativePath() {

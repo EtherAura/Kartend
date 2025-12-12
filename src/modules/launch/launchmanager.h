@@ -49,8 +49,12 @@ public:
   /// Returns error if quotes are unclosed (potential injection vector)
   [[nodiscard]] static ErrorUtils::Result<QStringList> parseParameters(const QString &paramString);
 
-  /// Validates a launcher path for security (must be absolute, exist, executable)
-  [[nodiscard]] static ErrorUtils::Result<void> validateLauncherPath(const QString &path);
+  /// Validates a launcher path for security and resolves it to an absolute,
+  /// canonical executable path.
+  ///
+  /// If the given path is not absolute, it is treated as a command name and
+  /// resolved via PATH.
+  [[nodiscard]] static ErrorUtils::Result<QString> validateLauncherPath(const QString &path);
 
   /// Validates that a path doesn't contain shell metacharacters or traversal
   [[nodiscard]] static ErrorUtils::Result<void> validatePathSecurity(const QString &path);

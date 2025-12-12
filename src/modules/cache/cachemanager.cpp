@@ -15,6 +15,33 @@
 #include <QScreen>
 #include <QStandardPaths>
 #include <QDateTime>
+#include <limits>
+
+namespace {
+
+[[nodiscard]] auto clampToCacheCostBytes(const QPixmap &pixmap) -> int {
+  constexpr int DEFAULT_BITS_PER_PIXEL = 32;
+  constexpr quint64 BITS_PER_BYTE = 8;
+
+  const int bitsPerPixel = pixmap.depth() > 0 ? pixmap.depth() : DEFAULT_BITS_PER_PIXEL;
+  const quint64 pixels = static_cast<quint64>(pixmap.width()) * static_cast<quint64>(pixmap.height());
+  const quint64 bpp = static_cast<quint64>(bitsPerPixel);
+
+  quint64 bits = 0;
+  if (bpp > 0 && pixels > (std::numeric_limits<quint64>::max() / bpp)) {
+    bits = std::numeric_limits<quint64>::max();
+  } else {
+    bits = pixels * bpp;
+  }
+
+  const quint64 bytes = bits / BITS_PER_BYTE;
+  const quint64 maxInt = static_cast<quint64>(std::numeric_limits<int>::max());
+  const quint64 clamped = bytes > maxInt ? maxInt : bytes;
+  const int cost = static_cast<int>(clamped);
+  return cost > 0 ? cost : 1;
+}
+
+} // namespace
 
 #ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
@@ -25,7 +52,12 @@ Q_LOGGING_CATEGORY(lcCacheManager, "kartend.cachemanager")
 #endif
 
 CacheManager::CacheManager() {
-  artworkCache.setMaxCost(UIConstants::Cache::PIXMAP_CACHE_KB * 1024);
+  constexpr qint64 BYTES_PER_KB = 1024;
+  const qint64 maxBytes = static_cast<qint64>(UIConstants::Cache::PIXMAP_CACHE_KB) * BYTES_PER_KB;
+  const qint64 maxInt = static_cast<qint64>(std::numeric_limits<int>::max());
+  artworkCache.setMaxCost(maxBytes > maxInt ? std::numeric_limits<int>::max() : static_cast<int>(maxBytes));
+
+  m_ioThreadPool.setMaxThreadCount(1);
 }
 
 auto CacheManager::snapshotTimestampsForShutdown() const
@@ -155,19 +187,19 @@ void CacheManager::writeTimestamps(const QHash<QString, qint64> &timestampsCopy)
 }
 // Flushes dirty artwork pixmaps to the on-disk cache.
 void CacheManager::flushDirtyArtwork(
-    const QList<QPair<QString, QPixmap>> &dirtyList) {
+    const QList<QPair<QString, QImage>> &dirtyList) {
   for (const auto &entry : dirtyList) {
     if (QApplication::closingDown()) {
       break;
     }
     const QString &artworkPath = entry.first;
-    const QPixmap &pixmap = entry.second;
-    if (pixmap.isNull()) {
+    const QImage &image = entry.second;
+    if (image.isNull()) {
       continue;
     }
     QString cachePath = CacheManager::getArtworkCachePath(artworkPath);
     QDir().mkpath(QFileInfo(cachePath).absolutePath());
-    pixmap.save(cachePath, "PNG");
+    image.save(cachePath, "PNG");
   }
 }
 // Saves persistent cache to disk with canonical hierarchical keys and without
@@ -176,28 +208,65 @@ void CacheManager::saveToDisk() {
   if (QApplication::closingDown()) {
     return;
   }
+  if (m_cancelIo.load(std::memory_order_acquire)) {
+    return;
+  }
 
   QHash<QString, qint64> timestampsCopy;
-  QList<QPair<QString, QPixmap>> dirtyList;
+  QList<QPair<QString, QPixmap>> dirtyPixmaps;
 
   {
     QMutexLocker locker(&m_mutex);
     timestampsCopy = fileTimestamps;
     for (const QString &path : std::as_const(dirtyArtwork)) {
       if (QPixmap *pix = artworkCache.object(path)) {
-        dirtyList.append(qMakePair(path, *pix));
+        dirtyPixmaps.append(qMakePair(path, *pix));
       }
     }
     dirtyArtwork.clear();
   }
 
-  writeTimestamps(timestampsCopy);
-  flushDirtyArtwork(dirtyList);
+  QList<QPair<QString, QImage>> dirtyImages;
+  dirtyImages.reserve(dirtyPixmaps.size());
+  for (const auto &entry : dirtyPixmaps) {
+    dirtyImages.append(qMakePair(entry.first, entry.second.toImage()));
+  }
+
+  // Offload PNG encoding and disk writes to avoid UI hitches.
+  // Dedicated pool keeps flushes sequential and reduces contention.
+  m_ioThreadPool.start([this, timestampsCopy, dirtyImages]() {
+    if (m_cancelIo.load(std::memory_order_acquire) || QApplication::closingDown()) {
+      return;
+    }
+    CacheManager::writeTimestamps(timestampsCopy);
+
+    for (const auto &entry : dirtyImages) {
+      if (m_cancelIo.load(std::memory_order_acquire) || QApplication::closingDown()) {
+        break;
+      }
+
+      const QString &artworkPath = entry.first;
+      const QImage &image = entry.second;
+      if (image.isNull()) {
+        continue;
+      }
+
+      const QString cachePath = CacheManager::getArtworkCachePath(artworkPath);
+      QDir().mkpath(QFileInfo(cachePath).absolutePath());
+      image.save(cachePath, "PNG");
+    }
+  });
 }
 
 // Saves cache metadata to disk during shutdown - skips QApplication::closingDown
 // check since we're intentionally saving during app close
 void CacheManager::saveToDiskForShutdown() {
+  // Cancel any queued or in-flight asynchronous cache flushes to avoid
+  // out-of-order writes overwriting the final shutdown snapshot.
+  m_cancelIo.store(true, std::memory_order_release);
+  m_ioThreadPool.clear();
+  m_ioThreadPool.waitForDone();
+
   QHash<QString, qint64> timestampsCopy;
   {
     QMutexLocker locker(&m_mutex);
@@ -258,15 +327,8 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
 
       QMutexLocker relocker(&m_mutex);
       ++m_metrics.diskHits;
-      
-      constexpr int DEFAULT_BITS_PER_PIXEL = 32;
-      constexpr int BITS_PER_BYTE = 8;
-      int bitsPerPixel = cachedPixmap.depth() > 0 ? cachedPixmap.depth() : DEFAULT_BITS_PER_PIXEL;
-      int cost = static_cast<int>(static_cast<quint64>(cachedPixmap.width()) *
-             static_cast<quint64>(cachedPixmap.height()) *
-             static_cast<quint64>(bitsPerPixel) / BITS_PER_BYTE);
 
-      artworkCache.insert(artworkPath, new QPixmap(cachedPixmap), cost);
+      artworkCache.insert(artworkPath, new QPixmap(cachedPixmap), clampToCacheCostBytes(cachedPixmap));
       if (fileInfo.exists()) {
         fileTimestamps[artworkPath] =
             fileInfo.lastModified().toMSecsSinceEpoch();
@@ -298,12 +360,7 @@ void CacheManager::cacheArtwork(const QString &artworkPath,
     return;
   }
 
-  constexpr int DEFAULT_BITS_PER_PIXEL = 32;
-  constexpr int BITS_PER_BYTE = 8;
-  int bitsPerPixel = pixmap.depth() > 0 ? pixmap.depth() : DEFAULT_BITS_PER_PIXEL;
-  int cost = static_cast<int>(static_cast<quint64>(pixmap.width()) *
-         static_cast<quint64>(pixmap.height()) *
-         static_cast<quint64>(bitsPerPixel) / BITS_PER_BYTE);
+  const int cost = clampToCacheCostBytes(pixmap);
 
   QMutexLocker locker(&m_mutex);
   if (QApplication::closingDown()) {

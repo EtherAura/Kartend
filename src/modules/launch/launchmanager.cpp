@@ -120,11 +120,11 @@ auto LaunchManager::validatePathSecurity(const QString &path) -> Result<void> {
   return PathUtils::validatePathSecurity(path);
 }
 
-auto LaunchManager::validateLauncherPath(const QString &path) -> Result<void> {
+auto LaunchManager::validateLauncherPath(const QString &path) -> Result<QString> {
   // First check for shell metacharacters and Unicode issues
   auto securityResult = validatePathSecurity(path);
   if (securityResult.isError()) {
-    return securityResult;
+    return securityResult.error();
   }
 
   QFileInfo info(path);
@@ -208,7 +208,7 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<void> {
     }
   }
 
-  return Result<void>::success();
+  return canonicalPath;
 }
 
 void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
@@ -242,39 +242,37 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
 
   // Validate launcher path for security before execution.
   // This also resolves PATH commands to a canonical executable.
-  auto launcherValidation = validateLauncherPath(cmd.program);
-  if (launcherValidation.isError()) {
-    ErrorUtils::logError(launcherValidation.error());
+  auto launcherPathResult = validateLauncherPath(cmd.program);
+  if (launcherPathResult.isError()) {
+    ErrorUtils::logError(launcherPathResult.error());
     QMessageBox::warning(nullptr, "Invalid Launcher",
                          QString("Launcher validation failed: %1\n\nPath: %2")
-                             .arg(launcherValidation.error().message)
+                             .arg(launcherPathResult.error().message)
                              .arg(cmd.program));
     return;
   }
 
+  const QString launcherPath = launcherPathResult.value();
+
   // TOCTOU mitigation: Re-validate launcher right before execution.
   // This reduces the window between validation and execution, though
   // cannot fully eliminate the race on systems without atomic exec.
-  // Skip this check for PATH-based commands (non-absolute paths) since
-  // QFileInfo can't check them - they were already validated via findExecutable().
-  QFileInfo launcherCheck(cmd.program);
-  if (launcherCheck.isAbsolute()) {
-    if (!launcherCheck.exists() || !launcherCheck.isExecutable()) {
-      QMessageBox::critical(nullptr, "Launch Error",
-                            QString("Launcher is no longer accessible or executable:\n%1")
-                                .arg(cmd.program));
-      return;
-    }
+  QFileInfo launcherCheck(launcherPath);
+  if (!launcherCheck.exists() || !launcherCheck.isExecutable()) {
+    QMessageBox::critical(nullptr, "Launch Error",
+                          QString("Launcher is no longer accessible or executable:\n%1")
+                              .arg(launcherPath));
+    return;
   }
 
-  bool success = QProcess::startDetached(cmd.program, cmd.arguments);
+  bool success = QProcess::startDetached(launcherPath, cmd.arguments);
 
   if (!success) {
     QString errorMsg =
         QString("Failed to launch: %1\n\nCommand attempted:\n%2 %3\n\nMake "
                 "sure the launcher path is correct and the file is executable.")
-        .arg(cmd.program)
-        .arg(cmd.program)
+      .arg(launcherPath)
+      .arg(launcherPath)
         .arg(cmd.arguments.join(" "));
 
     QMessageBox::critical(nullptr, "Launch Error", errorMsg);

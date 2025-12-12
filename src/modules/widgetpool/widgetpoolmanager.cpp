@@ -6,6 +6,28 @@
 #include <QDebug>
 #include <QTimer>
 
+namespace {
+
+void pruneNullEntries(QList<QPointer<ItemWidget>> &list) {
+  for (int i = list.size() - 1; i >= 0; --i) {
+    if (list[i].isNull()) {
+      list.removeAt(i);
+    }
+  }
+}
+
+auto takeLastValid(QList<QPointer<ItemWidget>> &list) -> ItemWidget * {
+  while (!list.isEmpty()) {
+    QPointer<ItemWidget> widget = list.takeLast();
+    if (widget) {
+      return widget.data();
+    }
+  }
+  return nullptr;
+}
+
+} // namespace
+
 WidgetPoolManager::WidgetPoolManager(QObject *parent) : QObject(parent) {}
 
 WidgetPoolManager::~WidgetPoolManager() { clearAndDelete(); }
@@ -15,9 +37,11 @@ void WidgetPoolManager::setWidgetParent(QWidget *parent) {
 }
 
 auto WidgetPoolManager::acquire() -> ItemWidget * {
+  pruneNullEntries(m_pool);
+  pruneNullEntries(m_stalePool);
+
   // First try the main pool (fresh widgets)
-  if (!m_pool.isEmpty()) {
-    ItemWidget *widget = m_pool.takeLast();
+  if (ItemWidget *widget = takeLastValid(m_pool)) {
     ++m_metrics.hits;
     return widget;
   }
@@ -26,8 +50,7 @@ auto WidgetPoolManager::acquire() -> ItemWidget * {
   // This prevents unnecessary widget creation after collection switches
   // Note: Stale widgets have been reparented to a safe parent during softClear()
   // so they can be safely reparented to the new virtual container
-  if (!m_stalePool.isEmpty()) {
-    ItemWidget *widget = m_stalePool.takeLast();
+  if (ItemWidget *widget = takeLastValid(m_stalePool)) {
     ++m_metrics.staleReused;
     ++m_metrics.hits;
     return widget;
@@ -48,6 +71,9 @@ void WidgetPoolManager::release(ItemWidget *widget) {
   if (!widget) {
     return;
   }
+
+  pruneNullEntries(m_pool);
+  pruneNullEntries(m_stalePool);
 
   // Disconnect signals before returning to pool
   disconnectAll(widget);
@@ -73,12 +99,15 @@ void WidgetPoolManager::clear() {
 }
 
 void WidgetPoolManager::softClear(QWidget *safeParent) {
+  pruneNullEntries(m_pool);
+  pruneNullEntries(m_stalePool);
+
   // Move main pool widgets to stale pool instead of deleting them
   // This allows reuse if the new collection needs widgets quickly
   // CRITICAL: Reparent widgets to safeParent before the old virtual container
   // is deleted, otherwise setParent() will crash accessing deleted memory
   if (safeParent) {
-    for (ItemWidget *widget : m_pool) {
+    for (const QPointer<ItemWidget> &widget : m_pool) {
       if (widget) {
         widget->setParent(safeParent);
         widget->hide();
@@ -91,7 +120,7 @@ void WidgetPoolManager::softClear(QWidget *safeParent) {
   // Limit stale pool size to prevent memory bloat during rapid collection switching
   // Excess widgets are deleted immediately rather than waiting for pruneStaleWidgets()
   while (m_stalePool.size() > MAX_STALE_POOL_SIZE) {
-    if (ItemWidget *excess = m_stalePool.takeFirst()) {
+    if (ItemWidget *excess = m_stalePool.takeFirst().data()) {
       excess->deleteLater();
       ++m_metrics.discards;
     }
@@ -99,9 +128,11 @@ void WidgetPoolManager::softClear(QWidget *safeParent) {
 }
 
 void WidgetPoolManager::pruneStaleWidgets() {
+  pruneNullEntries(m_stalePool);
+
   // Delete stale widgets that weren't reused
   // Call this during idle time to reclaim memory
-  for (ItemWidget *widget : m_stalePool) {
+  for (const QPointer<ItemWidget> &widget : m_stalePool) {
     if (widget) {
       widget->deleteLater();
       ++m_metrics.discards;
@@ -114,23 +145,20 @@ void WidgetPoolManager::clearAndDelete() {
   logMetrics();  // Log final metrics before clearing
   // Explicitly delete all pooled widgets - use this during cleanup
   // when widgets need to be destroyed before their parent container
-  for (ItemWidget *widget : m_pool) {
+  pruneNullEntries(m_pool);
+  pruneNullEntries(m_stalePool);
+
+  for (const QPointer<ItemWidget> &widget : m_pool) {
     if (widget) {
-      // Safety check: only delete if widget still has a valid parent
-      // This prevents double-delete if widget was already destroyed elsewhere
-      if (widget->parent()) {
-        delete widget;
-      }
+      delete widget;
     }
   }
   m_pool.clear();
   
   // Also delete stale widgets
-  for (ItemWidget *widget : m_stalePool) {
+  for (const QPointer<ItemWidget> &widget : m_stalePool) {
     if (widget) {
-      if (widget->parent()) {
-        delete widget;
-      }
+      delete widget;
     }
   }
   m_stalePool.clear();
@@ -145,6 +173,8 @@ void WidgetPoolManager::prewarm() {
   if (!m_widgetParent) {
     return;
   }
+
+  pruneNullEntries(m_pool);
   
   int targetSize = calculateOptimalSize();
   int toCreate = targetSize - m_pool.size();
@@ -161,6 +191,8 @@ void WidgetPoolManager::prewarmAsync() {
   if (!m_widgetParent) {
     return;
   }
+
+  pruneNullEntries(m_pool);
   
   m_prewarmTargetSize = calculateOptimalSize();
   
@@ -174,6 +206,7 @@ void WidgetPoolManager::prewarmAsync() {
     m_prewarmTimer = new QTimer(this);
     m_prewarmTimer->setInterval(0);  // Next event loop iteration
     connect(m_prewarmTimer, &QTimer::timeout, this, [this]() {
+      pruneNullEntries(m_pool);
       if (!m_widgetParent || m_pool.size() >= m_prewarmTargetSize) {
         m_prewarmTimer->stop();
         return;

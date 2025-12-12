@@ -10,6 +10,9 @@
 #include <QList>
 #include <QJsonObject>
 #include <QCache>
+#include <QImage>
+#include <QThreadPool>
+#include <atomic>
 
 // Statistics for monitoring cache performance
 struct CacheMetrics {
@@ -67,13 +70,20 @@ private:
   
   void readTimestamps(const QJsonObject &root);
   static void writeTimestamps(const QHash<QString, qint64> &timestampsCopy);
-  static void flushDirtyArtwork(const QList<QPair<QString, QPixmap>> &dirtyList);
+  static void flushDirtyArtwork(const QList<QPair<QString, QImage>> &dirtyList);
 
   mutable QMutex m_mutex;
   QCache<QString, QPixmap> artworkCache;
   QHash<QString, qint64> fileTimestamps;
   QSet<QString> dirtyArtwork;
   CacheMetrics m_metrics;
+
+  // Dedicated sequential pool for disk cache writes.
+  // Avoids UI hitches and reduces contention with other QtConcurrent users.
+  QThreadPool m_ioThreadPool;
+
+  // Cancellation flag for in-flight/queued I/O tasks (used during shutdown).
+  std::atomic_bool m_cancelIo{false};
 };
 
 #endif // CACHEMANAGER_H

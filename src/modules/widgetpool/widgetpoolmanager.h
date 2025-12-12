@@ -3,6 +3,7 @@
 
 #include <QList>
 #include <QObject>
+#include <QPointer>
 
 class ItemWidget;
 class QWidget;
@@ -74,7 +75,15 @@ public:
   void resetMetrics() { m_metrics.reset(); }
 
   // Get current pool size
-  [[nodiscard]] int poolSize() const { return m_pool.size(); }
+  [[nodiscard]] int poolSize() const {
+    int count = 0;
+    for (const auto &widget : m_pool) {
+      if (widget) {
+        ++count;
+      }
+    }
+    return count;
+  }
 
   // Log pool metrics for debugging (call periodically or on cleanup)
   void logMetrics() const;
@@ -85,8 +94,8 @@ private:
 
   [[nodiscard]] int calculateOptimalSize() const;
 
-  QList<ItemWidget *> m_pool;
-  QList<ItemWidget *> m_stalePool;  // Widgets marked stale but still available
+  QList<QPointer<ItemWidget>> m_pool;
+  QList<QPointer<ItemWidget>> m_stalePool;  // Widgets marked stale but still available
   QWidget *m_widgetParent = nullptr;
   WidgetPoolMetrics m_metrics;
 
