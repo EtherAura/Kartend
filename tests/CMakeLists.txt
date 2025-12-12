@@ -15,6 +15,8 @@ include_directories(
   ${SRC_DIR}/modules/interaction
   ${SRC_DIR}/modules/launch
   ${SRC_DIR}/modules/filter
+  ${SRC_DIR}/modules/cache
+  ${SRC_DIR}/modules/session
   ${SRC_DIR}/ui
 )
 
@@ -84,3 +86,38 @@ add_test(NAME WidgetPoolManager COMMAND test_widgetpoolmanager)
 add_executable(test_gridutils test_gridutils.cpp)
 target_link_libraries(test_gridutils Qt6::Core Qt6::Test)
 add_test(NAME GridUtils COMMAND test_gridutils)
+
+# CacheManager tests
+add_executable(test_cachemanager
+  test_cachemanager.cpp
+  ${SRC_DIR}/modules/cache/cachemanager.cpp
+)
+target_include_directories(test_cachemanager PRIVATE
+  ${SRC_DIR}/modules/cache
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_cachemanager
+  Qt6::Core
+  Qt6::Widgets
+  Qt6::Gui
+  Qt6::Test
+)
+add_test(NAME CacheManager COMMAND test_cachemanager)
+
+# SessionManager tests
+add_executable(test_sessionmanager
+  test_sessionmanager.cpp
+  ${SRC_DIR}/modules/session/sessionmanager.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+)
+target_include_directories(test_sessionmanager PRIVATE
+  ${SRC_DIR}/modules/session
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_sessionmanager
+  Qt6::Core
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME SessionManager COMMAND test_sessionmanager)

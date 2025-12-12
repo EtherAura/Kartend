@@ -1,0 +1,59 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    
+    strategy:
+      matrix:
+        build_type: [Release, Debug]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake lld qt6-base-dev libqt6sql6-sqlite
+          
+      - name: Create build directory
+        run: mkdir -p build/${{ matrix.build_type }}
+        
+      - name: Configure CMake
+        run: |
+          cd build/${{ matrix.build_type }}
+          cmake ../.. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DBUILD_TESTS=ON
+          
+      - name: Build
+        run: |
+          cd build/${{ matrix.build_type }}
+          make -j$(nproc)
+          
+      - name: Run Tests
+        run: |
+          cd build/${{ matrix.build_type }}
+          ctest --output-on-failure
+
+  maintenance-check:
+    runs-on: ubuntu-24.04
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake lld qt6-base-dev libqt6sql6-sqlite clang-tidy clang-format cppcheck
+          
+      - name: Run maintenance build (with -Werror)
+        run: |
+          mkdir -p build/maintenance
+          cd build/maintenance
+          cmake ../.. -DCMAKE_BUILD_TYPE=Release -DMAINTENANCE=ON
+          make -j$(nproc)
