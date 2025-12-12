@@ -13,6 +13,7 @@
 #include "uiconstants.h"
 
 #include <QApplication>
+#include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -161,6 +162,7 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
       m_silentLoadingActive(false),
       m_silentLoadBatchSize(UIConstants::Artwork::SILENT_LOAD_BATCH_SIZE_DEFAULT),
       m_lastUserActivity{QDateTime::currentMSecsSinceEpoch()},
+      m_cancellationRequested(std::make_shared<std::atomic<bool>>(false)),
       m_continuousSilentLoad(false), m_silentLoadIndex(0),
       m_persistentSilentLoad(false),
       m_adaptiveBatcher(AdaptiveBatcher::Config{
@@ -194,7 +196,9 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
 // GUI pixmap resources
 ArtworkManager::~ArtworkManager() {
   // Set cancellation flag first to signal all in-flight operations to stop
-  m_cancellationRequested.store(true, std::memory_order_release);
+  if (m_cancellationRequested) {
+    m_cancellationRequested->store(true, std::memory_order_release);
+  }
 
   TimerUtils::stopAndDisconnectTimers(
       {m_cacheTimer, m_silentLoadTimer, m_persistentLoadTimer});
@@ -495,7 +499,9 @@ void ArtworkManager::loadArtworkParallel(const QList<ArtworkInfo> &items,
 // Cancels all pending/loaded artwork state (for reload)
 void ArtworkManager::cancelAllArtworkLoading() {
   // Set cancellation flag to stop in-flight operations
-  m_cancellationRequested.store(true, std::memory_order_relaxed);
+  if (m_cancellationRequested) {
+    m_cancellationRequested->store(true, std::memory_order_relaxed);
+  }
   
   {
     QMutexLocker locker(&m_dataMutex);
@@ -507,7 +513,9 @@ void ArtworkManager::cancelAllArtworkLoading() {
   // This delay is chosen to be longer than typical thread scheduling
   // latency but short enough to allow quick successive cancellations.
   QTimer::singleShot(50, this, [this]() {
-    m_cancellationRequested.store(false, std::memory_order_relaxed);
+    if (m_cancellationRequested) {
+      m_cancellationRequested->store(false, std::memory_order_relaxed);
+    }
   });
 }
 
@@ -1108,8 +1116,12 @@ void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
     return;
   }
 
-  // Capture reference to cancellation flag for cooperative cancellation
-  const std::atomic<bool> &cancelFlag = m_cancellationRequested;
+  // Capture shared cancellation flag for cooperative cancellation.
+  // This must remain valid even if ArtworkManager is destroyed while
+  // QtConcurrent tasks are still winding down.
+  const auto cancelFlag = m_cancellationRequested;
+  QPointer<ArtworkManager> self(this);
+  QObject *appReceiver = QCoreApplication::instance();
   
   // Start timing for adaptive batching (high-priority only for responsiveness)
   if (highPriority) {
@@ -1117,24 +1129,37 @@ void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
   }
   int batchItemCount = batch.size();
   
-  QFuture<void> future = QtConcurrent::run([this, batch, highPriority, &cancelFlag, batchItemCount]() {
-    if (QApplication::closingDown() || cancelFlag.load(std::memory_order_relaxed)) {
+  QFuture<void> future = QtConcurrent::run(
+      [self, batch, highPriority, cancelFlag, batchItemCount, appReceiver]() {
+    if (QApplication::closingDown() || !cancelFlag ||
+        cancelFlag->load(std::memory_order_relaxed)) {
       return;
     }
-    QList<ArtworkInfo::Result> results = processBatch(batch, highPriority, cancelFlag);
-    if (QApplication::closingDown() || cancelFlag.load(std::memory_order_relaxed)) {
+
+    QList<ArtworkInfo::Result> results =
+        processBatch(batch, highPriority, *cancelFlag);
+    if (QApplication::closingDown() || !cancelFlag ||
+        cancelFlag->load(std::memory_order_relaxed)) {
       return;
     }
-    // Post results back to main thread with timing update
+
+    // Post results back to main thread with timing update.
+    // Use the application object as the receiver so the queued functor never
+    // targets a potentially-deleted ArtworkManager instance.
+    if (!appReceiver) {
+      return;
+    }
     QMetaObject::invokeMethod(
-        this,
-        [this, results, highPriority, batchItemCount]() {
-          if (!QApplication::closingDown() && !m_cancellationRequested.load(std::memory_order_relaxed)) {
-            applyResultsToUi(results, highPriority);
-            // Update adaptive batcher with completed batch timing (high-priority only)
-            if (highPriority && !results.isEmpty()) {
-              m_adaptiveBatcher.endBatch(batchItemCount);
-            }
+        appReceiver,
+        [self, results, highPriority, batchItemCount, cancelFlag]() {
+          if (QApplication::closingDown() || !self || !cancelFlag ||
+              cancelFlag->load(std::memory_order_relaxed)) {
+            return;
+          }
+          self->applyResultsToUi(results, highPriority);
+          // Update adaptive batcher with completed batch timing (high-priority only)
+          if (highPriority && !results.isEmpty()) {
+            self->m_adaptiveBatcher.endBatch(batchItemCount);
           }
         },
         Qt::QueuedConnection);

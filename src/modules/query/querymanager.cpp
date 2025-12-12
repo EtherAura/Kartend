@@ -1090,7 +1090,6 @@ void QueryManager::saveItemsToDatabase(
   
   const int totalItems = filePaths.size();
   int legacyId = -1;
-  bool collectionRowCreated = false;
 
   // First transaction: create/update collection row and clear old items
   // With retry logic for database lock scenarios
@@ -1132,8 +1131,6 @@ void QueryManager::saveItemsToDatabase(
           throw std::runtime_error(insert.lastError().text().toStdString());
         }
       }
-      collectionRowCreated = true;
-
       QSqlQuery del(m_db);
       del.prepare("DELETE FROM items WHERE collection_uuid = ?");
       del.addBindValue(uuid);

@@ -1622,7 +1622,7 @@ void NavigationManager::loadCurrentAndSubcollections() {
 
   // Delay filter reapplication until item count query completes -
   // ensures filter operates on the updated item list
-  QTimer::singleShot(UIConstants::Artwork::FILTER_REAPPLY_DELAY_MS, [this]() {
+  QTimer::singleShot(UIConstants::Artwork::FILTER_REAPPLY_DELAY_MS, this, [this]() {
     if (m_searchBar &&
         !m_searchBar->text().trimmed().isEmpty() &&
         m_scrollManager) {
@@ -1642,7 +1642,7 @@ void NavigationManager::loadAllCollectionsView() {
 
   // Delay filter reapplication until all-collections load completes -
   // ensures filter operates on the aggregated item list
-  QTimer::singleShot(UIConstants::Artwork::FILTER_REAPPLY_DELAY_MS, [this]() {
+  QTimer::singleShot(UIConstants::Artwork::FILTER_REAPPLY_DELAY_MS, this, [this]() {
     if (m_searchBar &&
         !m_searchBar->text().trimmed().isEmpty() &&
         m_scrollManager) {

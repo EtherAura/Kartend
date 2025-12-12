@@ -18,6 +18,7 @@
 #include <QDir>
 #include <QFile>
 #include <QLabel>
+#include <QPointer>
 #include <QScrollArea>
 #include <QTimer>
 #include <algorithm>
@@ -588,26 +589,29 @@ void handleScrollBranch(ScrollManager *scrollManager,
     scrollManager->updateGridWidth(collections[viewingIndex].gridWidth);
     // Delay layout recalculation to allow grid width change to propagate -
     // nested timer ensures artwork updates happen after layout is stable
-    QTimer::singleShot(UIConstants::Timing::LONG_DELAY_MS, [scrollManager,
-                                                       artworkManager,
-                                                       viewingIndex,
-                                                       collections]() {
-      if (scrollManager) {
-        scrollManager->preCalculateLayout();
-        scrollManager->forceVirtualViewUpdate();
-        QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, [scrollManager,
-                                                             artworkManager,
-                                                             viewingIndex,
-                                                             collections]() {
-          if (scrollManager) {
-            scrollManager->updateVirtualView();
-            if (artworkManager) {
-              artworkManager->updateViewportArtwork();
-            }
-            scrollManager->centerHorizontalScrollbar(viewingIndex, collections);
-          }
-        });
+    QPointer<ScrollManager> scrollMgrPtr = scrollManager;
+    QPointer<ArtworkManager> artworkMgrPtr = artworkManager;
+    QTimer::singleShot(UIConstants::Timing::LONG_DELAY_MS, scrollManager,
+                       [scrollMgrPtr, artworkMgrPtr, viewingIndex, collections]() {
+      if (!scrollMgrPtr) {
+        return;
       }
+      scrollMgrPtr->preCalculateLayout();
+      scrollMgrPtr->forceVirtualViewUpdate();
+
+      // Nested timer: ensure virtual view is updated only after the
+      // pre-calculated layout has settled.
+      QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, scrollMgrPtr,
+                         [scrollMgrPtr, artworkMgrPtr, viewingIndex, collections]() {
+        if (!scrollMgrPtr) {
+          return;
+        }
+        scrollMgrPtr->updateVirtualView();
+        if (artworkMgrPtr) {
+          artworkMgrPtr->updateViewportArtwork();
+        }
+        scrollMgrPtr->centerHorizontalScrollbar(viewingIndex, collections);
+      });
     });
     return;
   }

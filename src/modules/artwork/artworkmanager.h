@@ -17,6 +17,7 @@
 #include <QPointer>
 #include <QSet>
 #include <atomic>
+#include <memory>
 
 #include "adaptivebatcher.h"
 #include "setuputils.h"
@@ -171,7 +172,7 @@ private:
   bool m_silentLoadingActive;
   int m_silentLoadBatchSize;
   std::atomic<qint64> m_lastUserActivity;
-  std::atomic<bool> m_cancellationRequested{false};  // For cooperative cancellation
+  std::shared_ptr<std::atomic<bool>> m_cancellationRequested;  // For cooperative cancellation
   bool m_continuousSilentLoad;
   int m_silentLoadIndex;
   bool m_persistentSilentLoad;
