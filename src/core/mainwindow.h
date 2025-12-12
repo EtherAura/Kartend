@@ -36,6 +36,7 @@ class ScrollManager;
 class ItemWidget;
 class MetadataSidebar;
 class LoadingOverlay;
+class MenuController;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -93,11 +94,7 @@ protected:
 
 private:
   bool m_isShuttingDown = false;
-  QAction *m_fullscreenAction = nullptr;
-  QAction *m_shortcutsAction = nullptr;
-  QAction *m_gridWidthIncreaseAction = nullptr;
-  QAction *m_gridWidthDecreaseAction = nullptr;
-  QActionGroup *m_sortActionGroup = nullptr;
+  std::unique_ptr<MenuController> m_menuController;
 
   std::unique_ptr<ApplicationManager> m_appManager;
   MetadataSidebar *m_MetadataSidebar = nullptr;
@@ -115,20 +112,7 @@ private:
   void setupUI();
   void setupUIReferences();
   void createMenuBar();
-  void setupActionExit();
-  void setupActionShowMenuBar();
-  void setupActionShowToolbar();
-  void setupActionShowSidebar();
-  void setupActionSettings();
-  void setupActionAbout();
-  void setupActionAboutQt();
-  void setupActionRefresh();
-  void setupSortActions();
-  void setupFullscreenAction();
-  void setupShortcutsAction();
-  void setupGridWidthActions();
   void adjustGridWidth(int delta);
-  void setupFullscreenMenuAction(QAction *fullscreenAction);
   void setupSidebar();
   void setupArtworkManager();
   void setupLastSelectedIndices();

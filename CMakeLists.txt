@@ -41,6 +41,7 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SOURCES
   ${SRC_DIR}/core/main.cpp
   ${SRC_DIR}/core/mainwindow.cpp
+  ${SRC_DIR}/core/menucontroller.cpp
   ${SRC_DIR}/modules/animation/animationmanager.cpp
   ${SRC_DIR}/modules/application/applicationmanager.cpp
   ${SRC_DIR}/modules/artwork/artworkmanager.cpp
@@ -91,6 +92,7 @@ set(SOURCES
 
 set(HEADERS
   ${SRC_DIR}/core/mainwindow.h
+  ${SRC_DIR}/core/menucontroller.h
   ${SRC_DIR}/modules/animation/animationmanager.h
   ${SRC_DIR}/modules/application/applicationmanager.h
   ${SRC_DIR}/modules/artwork/artworkmanager.h
