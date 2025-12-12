@@ -295,7 +295,7 @@ bool SessionManager::getCollectionCounts(
   } else {
     recursiveCount = (itemCount >= 0) ? itemCount : -1;
   }
-  return hasDirect;
+  return true;
 }
 
 void SessionManager::clearStaleCollections(

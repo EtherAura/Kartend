@@ -105,6 +105,23 @@ void MainWindow::refreshTitleCounts() {
     return;
   }
 
+  auto cachedRecursiveCountForIndex = [this](int collectionIndex) -> qint64 {
+    if (!getSessionManager()) {
+      return -1;
+    }
+    if (collectionIndex < 0 || collectionIndex >= m_collections.size()) {
+      return -1;
+    }
+    qint64 direct = -1;
+    qint64 recursive = -1;
+    if (!getSessionManager()->getCollectionCounts(m_collections[collectionIndex],
+                                                  m_collections, direct,
+                                                  recursive)) {
+      return -1;
+    }
+    return recursive;
+  };
+
   // Check if we're in a subfolder
   const QString &subfolder = m_collections[cur].currentSubfolder;
   if (!subfolder.isEmpty() && getScrollManager()) {
@@ -116,11 +133,16 @@ void MainWindow::refreshTitleCounts() {
     }
     
     int subfolderItemCount = getScrollManager()->getTotalItems();
-    qint64 collectionCount = getDatabaseManager()->countCollectionRecursive(cur, m_collections);
 
-    QString counts = QString("(%1/%2 Items)")
-      .arg(StringUtils::formatCountNumber(subfolderItemCount))
-      .arg(StringUtils::formatCountNumber(collectionCount));
+    const qint64 collectionCount = cachedRecursiveCountForIndex(cur);
+    QString counts;
+    if (collectionCount >= 0) {
+      counts = QString("(%1/%2 Items)")
+                   .arg(StringUtils::formatCountNumber(subfolderItemCount))
+                   .arg(StringUtils::formatCountNumber(collectionCount));
+    } else {
+      counts = QString("(%1 Items)").arg(StringUtils::formatCountNumber(subfolderItemCount));
+    }
 
     int directSubfolderCount = CollectionUtils::countVirtualFolders(m_collections[cur]);
     int directSubcollectionCount = CollectionUtils::directChildrenOf(cur, m_collections).size();
@@ -153,24 +175,31 @@ void MainWindow::refreshTitleCounts() {
   }
 
   QStringList parts;
+  bool anyKnown = false;
   for (int idx : chain) {
-    qint64 countVal =
-        getDatabaseManager()->countCollectionRecursive(idx, m_collections);
-    parts << StringUtils::formatCountNumber(countVal);
+    const qint64 countVal = cachedRecursiveCountForIndex(idx);
+    if (countVal >= 0) {
+      anyKnown = true;
+      parts << StringUtils::formatCountNumber(countVal);
+    } else {
+      parts << QStringLiteral("…");
+    }
   }
 
   QString base = m_collections[cur].name;
   QString counts;
-  if (parts.size() == 1) {
-    counts = QString("(%1 Items)").arg(parts.first());
-  } else {
-    counts = QString("(%1 Items)").arg(parts.join('/'));
+  if (anyKnown) {
+    if (parts.size() == 1) {
+      counts = QString("(%1 Items)").arg(parts.first());
+    } else {
+      counts = QString("(%1 Items)").arg(parts.join('/'));
+    }
   }
 
   int directSubfolderCount = CollectionUtils::countVirtualFolders(m_collections[cur]);
   int directSubcollectionCount = CollectionUtils::directChildrenOf(cur, m_collections).size();
 
-  QString title = QString("%1 %2").arg(base, counts);
+  QString title = counts.isEmpty() ? base : QString("%1 %2").arg(base, counts);
   QStringList childParts;
   if (directSubfolderCount > 0) {
     childParts << QString("%1 subfolders").arg(directSubfolderCount);
