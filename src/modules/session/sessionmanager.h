@@ -24,6 +24,12 @@ public:
   void initialize();
   void saveToDisk();
   void saveToDiskForShutdown();
+
+  // Shutdown-safe persistence helpers
+  // Snapshot state while SessionManager is alive; write snapshot asynchronously
+  // without needing an instance pointer.
+  [[nodiscard]] QByteArray snapshotSessionJsonBytesForShutdown() const;
+  static void saveSessionBytesToDiskForShutdown(const QByteArray &data);
   
   // Session State
   void setLastSelected(const QString &collectionName, int index, const QString &title);

@@ -982,7 +982,7 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   QMutex resultMutex;
   std::atomic<int> totalItemsScanned{0};
   constexpr int PROGRESS_REPORT_INTERVAL = 500;
-  int lastReportedCount = 0;
+  std::atomic<int> lastReportedCount{0};
   
   // Process directories in parallel
   QtConcurrent::blockingMap(directories, [&](const QString &dirPath) {
@@ -1006,11 +1006,15 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
                                                std::memory_order_relaxed) 
                    + result.relativePaths.size();
     
-    // Emit progress periodically (may be called from multiple threads,
-    // but Qt signal emission is thread-safe)
-    if (newTotal - lastReportedCount >= PROGRESS_REPORT_INTERVAL) {
-      lastReportedCount = newTotal;
-      emit scanItemsProgress(newTotal, -1);
+    // Emit progress periodically. This block runs on QtConcurrent worker
+    // threads, so the throttle state must be thread-safe.
+    int prev = lastReportedCount.load(std::memory_order_relaxed);
+    if (newTotal - prev >= PROGRESS_REPORT_INTERVAL) {
+      // Only one thread should win and emit for a given threshold window.
+      if (lastReportedCount.compare_exchange_strong(
+              prev, newTotal, std::memory_order_relaxed)) {
+        emit scanItemsProgress(newTotal, -1);
+      }
     }
   });
   

@@ -26,6 +26,18 @@ CacheManager::CacheManager() {
   artworkCache.setMaxCost(UIConstants::Cache::PIXMAP_CACHE_KB * 1024);
 }
 
+auto CacheManager::snapshotTimestampsForShutdown() const
+    -> QHash<QString, qint64> {
+  QMutexLocker locker(&m_mutex);
+  return fileTimestamps;
+}
+
+void CacheManager::saveTimestampsSnapshotToDiskForShutdown(
+    const QHash<QString, qint64> &timestampsCopy) {
+  // Write-only operation: safe to call from a worker thread.
+  writeTimestamps(timestampsCopy);
+}
+
 // Releases GUI resources and resets in-memory accounting totals
 void CacheManager::releaseGuiResources() {
   QMutexLocker locker(&m_mutex);

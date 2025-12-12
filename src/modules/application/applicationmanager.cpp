@@ -84,14 +84,16 @@ void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
   // 5. Persist cache and session data to disk in background threads
   //    These operations can take time but don't block the UI
   if (m_cacheManager) {
-    QThreadPool::globalInstance()->start([cache = m_cacheManager.get()]() {
-      cache->saveToDiskForShutdown();
+    const auto timestampsCopy = m_cacheManager->snapshotTimestampsForShutdown();
+    QThreadPool::globalInstance()->start([timestampsCopy]() {
+      CacheManager::saveTimestampsSnapshotToDiskForShutdown(timestampsCopy);
     });
   }
 
   if (m_sessionManager) {
-    QThreadPool::globalInstance()->start([session = m_sessionManager.get()]() {
-      session->saveToDiskForShutdown();
+    const auto sessionBytes = m_sessionManager->snapshotSessionJsonBytesForShutdown();
+    QThreadPool::globalInstance()->start([sessionBytes]() {
+      SessionManager::saveSessionBytesToDiskForShutdown(sessionBytes);
     });
   }
 }

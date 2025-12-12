@@ -41,6 +41,14 @@ public:
   void initialize();
   void saveToDisk();
   void saveToDiskForShutdown();
+
+  // Shutdown-safe persistence helpers
+  // These allow ApplicationManager to snapshot state while the CacheManager is
+  // still alive and then write it out asynchronously without holding a raw
+  // pointer to this instance.
+  [[nodiscard]] QHash<QString, qint64> snapshotTimestampsForShutdown() const;
+  static void saveTimestampsSnapshotToDiskForShutdown(
+      const QHash<QString, qint64> &timestampsCopy);
   
   [[nodiscard]] QPixmap getArtwork(const QString &artworkPath);
   void cacheArtwork(const QString &artworkPath, const QPixmap &pixmap);

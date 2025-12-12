@@ -23,6 +23,18 @@ SessionManager::SessionManager(QObject *parent) : QObject(parent) {}
 
 SessionManager::~SessionManager() = default;
 
+auto SessionManager::snapshotSessionJsonBytesForShutdown() const -> QByteArray {
+  QMutexLocker locker(&m_mutex);
+  QJsonObject root = buildSessionJson();
+  return QJsonDocument(root).toJson();
+}
+
+void SessionManager::saveSessionBytesToDiskForShutdown(const QByteArray &data) {
+  const QString metadataPath = getCacheDirectory() + "/metadata/session.json";
+  QDir().mkpath(QFileInfo(metadataPath).absolutePath());
+  atomicWriteFile(metadataPath, data);
+}
+
 QString SessionManager::getCacheDirectory() {
   // Use GenericCacheLocation + app name for consistent ~/.cache/kartend path
   return QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + "/kartend";
