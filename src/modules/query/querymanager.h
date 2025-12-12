@@ -147,7 +147,9 @@ private:
       QStringList &allFilePaths, QHash<QString, QString> &allFileNames,
       QHash<QString, QString> &fileToArtworkDir,
       QHash<QString, QString> &fileToMediaDir,
-      QHash<QString, int> &fileToCollectionIndex, bool dedup);
+      QHash<QString, int> &fileToCollectionIndex, bool dedup,
+      QSet<QString> *seenCanonicalPaths = nullptr,
+      QHash<QString, QString> *canonicalPathCache = nullptr);
   
   static void sortFiles(QStringList &allFilePaths, SortMode mode = SortMode::NameAscending);
   static int getCharacterSortPriority(const QString &text);

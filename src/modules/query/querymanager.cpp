@@ -29,7 +29,8 @@ using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
 // Forward declarations of static helpers
-static auto canonicalKeyPath(const QString &absPath, bool dedup) -> QString;
+static auto canonicalKeyPath(const QString &absPath, bool dedup,
+                             QHash<QString, QString> *canonicalPathCache) -> QString;
 static auto displayNameForBase(const QString &baseName) -> QString;
 
 QueryManager::QueryManager(SessionManager *sessionManager, QObject *parent)
@@ -382,6 +383,9 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
   QHash<QString, QString> fileToMediaDir;
   QHash<QString, int> fileToCollectionIndex;
 
+  QSet<QString> seenCanonicalPaths;
+  QHash<QString, QString> canonicalPathCache;
+
   bool hasMainMediaDirectory =
       !mainCtx.config.mediaDirectory.trimmed().isEmpty();
   if (hasMainMediaDirectory) {
@@ -412,10 +416,14 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
       mainFilePaths = filtered;
     }
 
+    seenCanonicalPaths.reserve(mainFilePaths.size());
+    canonicalPathCache.reserve(mainFilePaths.size());
+
     appendFileMapsAndListCanonical(
-        mainCtx.currentIndex, mainCtx.config, mainCtx.config.artworkDirectory,
-        mainFilePaths, allFilePaths, allFileNames, fileToArtworkDir,
-        fileToMediaDir, fileToCollectionIndex, true);
+      mainCtx.currentIndex, mainCtx.config, mainCtx.config.artworkDirectory,
+      mainFilePaths, allFilePaths, allFileNames, fileToArtworkDir,
+      fileToMediaDir, fileToCollectionIndex, true, &seenCanonicalPaths,
+      &canonicalPathCache);
   }
 
   QList<int> rawDescendants =
@@ -455,20 +463,7 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
         collectionIndex, collection,
         allCollections[collectionIndex].artworkDirectory, subFilePaths,
         allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
-        fileToCollectionIndex, true);
-  }
-
-  {
-    QSet<QString> seen;
-    QStringList unique;
-    unique.reserve(allFilePaths.size());
-    for (const QString &path : allFilePaths) {
-      if (!seen.contains(path)) {
-        seen.insert(path);
-        unique.append(path);
-      }
-    }
-    allFilePaths.swap(unique);
+        fileToCollectionIndex, true, &seenCanonicalPaths, &canonicalPathCache);
   }
 
   sortFiles(allFilePaths, context.sortMode);
@@ -723,7 +718,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
         fullPath = QDir(mediaDir).absoluteFilePath(relPath);
       }
       
-      QString keyPath = canonicalKeyPath(fullPath, false);
+      QString keyPath = canonicalKeyPath(fullPath, false, nullptr);
       filePaths.append(keyPath);
       fileNames[keyPath] = displayNameForBase(QFileInfo(keyPath).completeBaseName());
     }
@@ -1370,13 +1365,26 @@ void QueryManager::clearCollectionFromDatabaseByUuid(const QString &collectionUu
 }
 
 // Static helpers
-static auto canonicalKeyPath(const QString &absPath, bool dedup) -> QString {
+static auto canonicalKeyPath(const QString &absPath, bool dedup,
+                             QHash<QString, QString> *canonicalPathCache) -> QString {
   if (!dedup) {
     return absPath;
   }
+
+  if (canonicalPathCache) {
+    auto it = canonicalPathCache->constFind(absPath);
+    if (it != canonicalPathCache->constEnd()) {
+      return it.value();
+    }
+  }
+
   QString canon = QFileInfo(absPath).canonicalFilePath();
   if (canon.isEmpty()) {
     canon = QDir::cleanPath(absPath);
+  }
+
+  if (canonicalPathCache) {
+    canonicalPathCache->insert(absPath, canon);
   }
   return canon;
 }
@@ -1400,17 +1408,26 @@ void QueryManager::appendFileMapsAndListCanonical(
     QStringList &allFilePaths, QHash<QString, QString> &allFileNames,
     QHash<QString, QString> &fileToArtworkDir,
     QHash<QString, QString> &fileToMediaDir,
-    QHash<QString, int> &fileToCollectionIndex, bool dedup) {
+    QHash<QString, int> &fileToCollectionIndex, bool dedup,
+    QSet<QString> *seenCanonicalPaths,
+    QHash<QString, QString> *canonicalPathCache) {
   const QString mediaDir = expandedCollection.mediaDirectory;
   QDir mediaQDir(mediaDir);
 
   for (const QString &file : filePaths) {
     const QString absPath = mediaQDir.absoluteFilePath(file);
-    const QString keyPath = canonicalKeyPath(absPath, dedup);
+    const QString keyPath = canonicalKeyPath(absPath, dedup, canonicalPathCache);
 
     if (dedup) {
-      if (!allFilePaths.contains(keyPath)) {
-        allFilePaths.append(keyPath);
+      if (seenCanonicalPaths) {
+        if (!seenCanonicalPaths->contains(keyPath)) {
+          seenCanonicalPaths->insert(keyPath);
+          allFilePaths.append(keyPath);
+        }
+      } else {
+        if (!allFilePaths.contains(keyPath)) {
+          allFilePaths.append(keyPath);
+        }
       }
     } else {
       allFilePaths.append(keyPath);
