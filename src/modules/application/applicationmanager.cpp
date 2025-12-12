@@ -12,8 +12,6 @@
 #include "settingsmanager.h"
 #include "sidebarmanager.h"
 
-#include <QThreadPool>
-
 #ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcApplicationManager, "kartend.applicationmanager")
@@ -81,20 +79,15 @@ void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
     m_cacheManager->releaseGuiResources();
   }
 
-  // 5. Persist cache and session data to disk in background threads
-  //    These operations can take time but don't block the UI
+  // 5. Persist cache and session data deterministically.
+  // The window is already hidden, so blocking briefly here is acceptable and
+  // ensures state is not lost if the process exits quickly after closeEvent.
   if (m_cacheManager) {
-    const auto timestampsCopy = m_cacheManager->snapshotTimestampsForShutdown();
-    QThreadPool::globalInstance()->start([timestampsCopy]() {
-      CacheManager::saveTimestampsSnapshotToDiskForShutdown(timestampsCopy);
-    });
+    m_cacheManager->saveToDiskForShutdown();
   }
 
   if (m_sessionManager) {
-    const auto sessionBytes = m_sessionManager->snapshotSessionJsonBytesForShutdown();
-    QThreadPool::globalInstance()->start([sessionBytes]() {
-      SessionManager::saveSessionBytesToDiskForShutdown(sessionBytes);
-    });
+    m_sessionManager->saveToDiskForShutdown();
   }
 }
 
