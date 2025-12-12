@@ -7,6 +7,7 @@
 #include <QSqlQuery>
 #include <QStandardPaths>
 #include <stdexcept>
+#include <functional>
 #include <QThread>
 
 #include "artworkmanager.h"
@@ -335,24 +336,75 @@ void DatabaseManager::updateCachedCounts(
 
   m_sessionManager->clearStaleCollections(allCollections);
 
-  for (const auto &config : allCollections) {
-    QString expandedMediaDir = PathUtils::validateAndExpandPath(config.mediaDirectory, config.name);
-    if (expandedMediaDir.trimmed().isEmpty()) {
-      const QString uuid = CollectionUtils::computeCollectionUuid(config.name, expandedMediaDir);
-      clearCollectionFromDatabaseByUuid(uuid);
+  const int collectionCount = allCollections.size();
+  QVector<QString> expandedMediaDirs;
+  QVector<QString> uuids;
+  QVector<qint64> directCounts;
+  QVector<qint64> recursiveCounts;
+  expandedMediaDirs.resize(collectionCount);
+  uuids.resize(collectionCount);
+  directCounts.resize(collectionCount);
+  recursiveCounts.resize(collectionCount);
+
+  for (int i = 0; i < collectionCount; ++i) {
+    expandedMediaDirs[i] = PathUtils::validateAndExpandPath(allCollections[i].mediaDirectory,
+                                                           allCollections[i].name);
+    uuids[i] = CollectionUtils::computeCollectionUuid(allCollections[i].name, expandedMediaDirs[i]);
+
+    if (expandedMediaDirs[i].trimmed().isEmpty()) {
+      clearCollectionFromDatabaseByUuid(uuids[i]);
     }
   }
 
   qint64 global = countGlobal(allCollections);
   m_sessionManager->setGlobalItemCount(global);
 
-  for (int i = 0; i < allCollections.size(); ++i) {
-    QString expandedMediaDir = PathUtils::validateAndExpandPath(allCollections[i].mediaDirectory, allCollections[i].name);
-    const QString uuid = CollectionUtils::computeCollectionUuid(allCollections[i].name, expandedMediaDir);
-    qint64 direct = countCollectionByUuid(uuid);
-    qint64 recursive = countCollectionRecursive(i, allCollections);
+  for (int i = 0; i < collectionCount; ++i) {
+    directCounts[i] = countCollectionByUuid(uuids[i]);
+  }
+
+  QVector<QList<int>> children;
+  children.resize(collectionCount);
+  for (int i = 0; i < collectionCount; ++i) {
+    const int parent = allCollections[i].parentCollectionIndex;
+    if (parent >= 0 && parent < collectionCount) {
+      children[parent].append(i);
+    }
+  }
+
+  QVector<int> visitState;
+  visitState.resize(collectionCount);
+  visitState.fill(0);
+
+  std::function<qint64(int)> computeRecursiveCount = [&](int index) -> qint64 {
+    if (index < 0 || index >= collectionCount) {
+      return 0;
+    }
+    if (visitState[index] == 2) {
+      return recursiveCounts[index];
+    }
+    if (visitState[index] == 1) {
+      // Cycle guard: treat current node as leaf.
+      return directCounts[index];
+    }
+
+    visitState[index] = 1;
+    qint64 total = directCounts[index];
+    for (int childIndex : children[index]) {
+      total += computeRecursiveCount(childIndex);
+    }
+    visitState[index] = 2;
+    recursiveCounts[index] = total;
+    return total;
+  };
+
+  for (int i = 0; i < collectionCount; ++i) {
+    computeRecursiveCount(i);
+  }
+
+  for (int i = 0; i < collectionCount; ++i) {
     m_sessionManager->setCollectionCounts(allCollections[i], allCollections,
-                                          direct, recursive);
+                                          directCounts[i], recursiveCounts[i]);
   }
 
   m_sessionManager->saveToDisk();
