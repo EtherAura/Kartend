@@ -42,8 +42,13 @@ SettingsManager::SettingsManager(SessionManager *sessionManager,
       m_artworkManager(artworkManager), m_cacheManager(cacheManager) {
   QString configPath = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
   QDir configDir(configPath);
-  if (!configDir.exists()) {
-    configDir.mkpath(".");
+  if (!configDir.exists() && !configDir.mkpath(".")) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(
+            ErrorUtils::ErrorCode::ConfigSaveFailed,
+            "Failed to create config directory",
+            "SettingsManager::SettingsManager")
+            .withDetails(QString("Path: %1").arg(configPath)));
   }
 }
 

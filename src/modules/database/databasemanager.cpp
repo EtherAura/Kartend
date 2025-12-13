@@ -102,7 +102,14 @@ void DatabaseManager::initDatabase() {
   m_db = QSqlDatabase::addDatabase("QSQLITE", m_connectionName);
   QString dbPath =
       QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-  QDir().mkpath(dbPath);
+  if (!QDir().mkpath(dbPath)) {
+    auto err = ErrorContext::critical(ErrorCode::DatabaseConnectionFailed,
+                                      "Failed to create database directory",
+                                      "DatabaseManager::initDatabase")
+                   .withDetails(QString("Path: %1").arg(dbPath));
+    ErrorUtils::logError(err);
+    return;
+  }
   m_db.setDatabaseName(dbPath + "/media.db");
 
   if (!m_db.open()) {

@@ -1,5 +1,6 @@
 // Resolves settings file paths and provides INI file handling utilities.
 #include "settingsutils.h"
+#include "errorutils.h"
 #include "uiconstants.h"
 #include "pathutils.h"
 #include <QDir>
@@ -88,8 +89,13 @@ auto SettingsUtils::getConfigPath() -> QString {
   QString appConfigPath = configDir.filePath("kartend");
 
   QDir appConfigDir(appConfigPath);
-  if (!appConfigDir.exists()) {
-    appConfigDir.mkpath(".");
+  if (!appConfigDir.exists() && !appConfigDir.mkpath(".")) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(
+            ErrorUtils::ErrorCode::ConfigSaveFailed,
+            "Failed to create application config directory",
+            "SettingsUtils::getConfigPath")
+            .withDetails(QString("Path: %1").arg(appConfigPath)));
   }
   return appConfigDir.absoluteFilePath("kartend.cfg");
 }

@@ -34,7 +34,6 @@ auto SessionManager::snapshotSessionJsonBytesForShutdown() const -> QByteArray {
 
 void SessionManager::saveSessionBytesToDiskForShutdown(const QByteArray &data) {
   const QString metadataPath = getCacheDirectory() + "/metadata/session.json";
-  QDir().mkpath(QFileInfo(metadataPath).absolutePath());
   if (!atomicWriteFile(metadataPath, data)) {
     ErrorUtils::logError(
         ErrorUtils::ErrorContext::warning(
@@ -158,7 +157,10 @@ auto SessionManager::atomicWriteFile(const QString &filePath,
     return false;
   }
 
-  QDir().mkpath(QFileInfo(filePath).absolutePath());
+  const QString parentDir = QFileInfo(filePath).absolutePath();
+  if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
+    return false;
+  }
 
   QSaveFile file(filePath);
   if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -184,7 +186,6 @@ void SessionManager::saveToDisk() {
   locker.unlock();
 
   QString metadataPath = getCacheDirectory() + "/metadata/session.json";
-  QDir().mkpath(QFileInfo(metadataPath).absolutePath());
   if (!atomicWriteFile(metadataPath, QJsonDocument(root).toJson())) {
     ErrorUtils::logError(
         ErrorUtils::ErrorContext::warning(
@@ -203,7 +204,6 @@ void SessionManager::saveToDiskForShutdown() {
   locker.unlock();
 
   QString metadataPath = getCacheDirectory() + "/metadata/session.json";
-  QDir().mkpath(QFileInfo(metadataPath).absolutePath());
   if (!atomicWriteFile(metadataPath, QJsonDocument(root).toJson())) {
     ErrorUtils::logError(
         ErrorUtils::ErrorContext::warning(

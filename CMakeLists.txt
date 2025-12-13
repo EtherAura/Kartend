@@ -137,7 +137,6 @@ set(HEADERS
   ${SRC_DIR}/ui/widgets/itemwidget.h
   ${SRC_DIR}/ui/widgets/loadingoverlay.h
   ${SRC_DIR}/utils/collectionutils.h
-  ${SRC_DIR}/utils/configutils.h
   ${SRC_DIR}/utils/configvalidation.h
   ${SRC_DIR}/utils/searchutils.h
   ${SRC_DIR}/utils/stringutils.h

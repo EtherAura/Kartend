@@ -85,9 +85,31 @@ auto CacheManager::getCacheDirectory() -> QString {
       QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) +
       "/kartend";
   QDir dir(cacheDir);
-  if (!dir.exists()) {
-    dir.mkpath(cacheDir + "/artwork");
-    dir.mkpath(cacheDir + "/metadata");
+  const QString artworkDirPath = cacheDir + "/artwork";
+  const QString metadataDirPath = cacheDir + "/metadata";
+  static bool loggedMkpathFailure = false;
+
+  if (!dir.exists("artwork") && !dir.mkpath(artworkDirPath)) {
+    if (!loggedMkpathFailure) {
+      loggedMkpathFailure = true;
+      ErrorUtils::logError(
+          ErrorUtils::ErrorContext::warning(
+              ErrorUtils::ErrorCode::FileWriteError,
+              "Failed to create artwork cache directory",
+              "CacheManager::getCacheDirectory")
+              .withDetails(QString("Path: %1").arg(artworkDirPath)));
+    }
+  }
+  if (!dir.exists("metadata") && !dir.mkpath(metadataDirPath)) {
+    if (!loggedMkpathFailure) {
+      loggedMkpathFailure = true;
+      ErrorUtils::logError(
+          ErrorUtils::ErrorContext::warning(
+              ErrorUtils::ErrorCode::FileWriteError,
+              "Failed to create cache metadata directory",
+              "CacheManager::getCacheDirectory")
+              .withDetails(QString("Path: %1").arg(metadataDirPath)));
+    }
   }
   return cacheDir;
 }
@@ -144,7 +166,16 @@ void CacheManager::writeTimestamps(const QHash<QString, qint64> &timestampsCopy)
   root["timestamps"] = timestamps;
 
   QString metadataPath = getCacheDirectory() + "/metadata/artwork_cache.json";
-  QDir().mkpath(QFileInfo(metadataPath).absolutePath());
+  const QString parentDir = QFileInfo(metadataPath).absolutePath();
+  if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(
+            ErrorUtils::ErrorCode::FileWriteError,
+            "Failed to create cache metadata directory",
+            "CacheManager::writeTimestamps")
+            .withDetails(QString("Path: %1").arg(parentDir)));
+    return;
+  }
 
   const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Compact);
   QSaveFile metadataFile(metadataPath);
@@ -198,7 +229,16 @@ void CacheManager::flushDirtyArtwork(
       continue;
     }
     QString cachePath = CacheManager::getArtworkCachePath(artworkPath);
-    QDir().mkpath(QFileInfo(cachePath).absolutePath());
+    const QString parentDir = QFileInfo(cachePath).absolutePath();
+    if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
+      ErrorUtils::logError(
+          ErrorUtils::ErrorContext::warning(
+              ErrorUtils::ErrorCode::FileWriteError,
+              "Failed to create artwork cache directory",
+              "CacheManager::flushDirtyArtwork")
+              .withDetails(QString("Path: %1").arg(parentDir)));
+      continue;
+    }
     if (!image.save(cachePath, "PNG")) {
       ErrorUtils::logError(
           ErrorUtils::ErrorContext::warning(
@@ -259,7 +299,16 @@ void CacheManager::saveToDisk() {
       }
 
       const QString cachePath = CacheManager::getArtworkCachePath(artworkPath);
-      QDir().mkpath(QFileInfo(cachePath).absolutePath());
+      const QString parentDir = QFileInfo(cachePath).absolutePath();
+      if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
+        ErrorUtils::logError(
+            ErrorUtils::ErrorContext::warning(
+                ErrorUtils::ErrorCode::FileWriteError,
+                "Failed to create artwork cache directory",
+                "CacheManager::saveToDisk")
+                .withDetails(QString("Path: %1").arg(parentDir)));
+        continue;
+      }
       if (!image.save(cachePath, "PNG")) {
         ErrorUtils::logError(
             ErrorUtils::ErrorContext::warning(
