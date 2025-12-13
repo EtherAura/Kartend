@@ -567,7 +567,15 @@ void DatabaseManager::clearCollectionFromDatabaseByUuid(
     return;
   }
 
-  m_db.transaction();
+  if (!m_db.transaction()) {
+    auto err = ErrorContext::critical(
+        ErrorCode::DatabaseTransactionFailed,
+        "Failed to start database transaction",
+        "DatabaseManager::clearCollectionFromDatabaseByUuid")
+        .withDetails(m_db.lastError().text());
+    ErrorUtils::logError(err);
+    return;
+  }
 
   try {
     QSqlQuery query(m_db);
@@ -580,9 +588,13 @@ void DatabaseManager::clearCollectionFromDatabaseByUuid(
     QSqlQuery delc(m_db);
     delc.prepare("DELETE FROM collections WHERE uuid = ?");
     delc.addBindValue(collectionUuid);
-    delc.exec();
+    if (!delc.exec()) {
+      throw std::runtime_error(delc.lastError().text().toStdString());
+    }
 
-    m_db.commit();
+    if (!m_db.commit()) {
+      throw std::runtime_error(m_db.lastError().text().toStdString());
+    }
   } catch (const std::exception &e) {
     m_db.rollback();
     auto err = ErrorContext::critical(

@@ -1144,7 +1144,14 @@ void QueryManager::saveItemsToDatabase(
 
   // Temporarily disable synchronous writes for bulk insert performance
   QSqlQuery pragmaOff(m_db);
-  pragmaOff.exec("PRAGMA synchronous = OFF");
+  if (!pragmaOff.exec("PRAGMA synchronous = OFF")) {
+    ErrorUtils::logError(
+        ErrorContext::warning(
+            ErrorCode::DatabaseQueryFailed,
+            "Failed to set synchronous=OFF for bulk insert",
+            "QueryManager::saveItemsToDatabase")
+            .withDetails(pragmaOff.lastError().text()));
+  }
   const SynchronousPragmaGuard restoreSynchronous(m_db);
 
   // Batch insert for performance - SQLite handles up to 999 variables per statement
@@ -1217,7 +1224,9 @@ void QueryManager::saveItemsToDatabase(
         }
       }
 
-      m_db.commit();
+      if (!m_db.commit()) {
+        throw std::runtime_error(m_db.lastError().text().toStdString());
+      }
       prepareSuccess = true;  // Exit retry loop
     } catch (const std::exception &e) {
       m_db.rollback();
@@ -1253,14 +1262,31 @@ void QueryManager::saveItemsToDatabase(
     // Check for cancellation between batches
     if (isScanCancelled()) {
       if (inTransaction) {
-        m_db.commit();  // Save partial progress
+        if (!m_db.commit()) {
+          auto err = ErrorContext::warning(
+              ErrorCode::DatabaseTransactionFailed,
+              "Failed to commit partial scan results",
+              "QueryManager::saveItemsToDatabase")
+              .withDetails(m_db.lastError().text());
+          ErrorUtils::logError(err);
+          emit errorOccurred(err);
+        }
       }
       break;
     }
     
     // Start new transaction if needed
     if (!inTransaction) {
-      m_db.transaction();
+      if (!m_db.transaction()) {
+        auto err = ErrorContext::critical(
+            ErrorCode::DatabaseTransactionFailed,
+            "Failed to start transaction for bulk insert",
+            "QueryManager::saveItemsToDatabase")
+            .withDetails(m_db.lastError().text());
+        ErrorUtils::logError(err);
+        emit errorOccurred(err);
+        return;
+      }
       inTransaction = true;
       batchesSinceCommit = 0;
     }
@@ -1304,7 +1330,17 @@ void QueryManager::saveItemsToDatabase(
     
     // Commit periodically to save incremental progress
     if (batchesSinceCommit >= COMMIT_INTERVAL_BATCHES) {
-      m_db.commit();
+      if (!m_db.commit()) {
+        auto err = ErrorContext::critical(
+            ErrorCode::DatabaseTransactionFailed,
+            "Failed to commit bulk insert transaction",
+            "QueryManager::saveItemsToDatabase")
+            .withDetails(m_db.lastError().text());
+        ErrorUtils::logError(err);
+        emit errorOccurred(err);
+        m_db.rollback();
+        return;
+      }
       inTransaction = false;
       
       // Report progress
@@ -1319,7 +1355,17 @@ void QueryManager::saveItemsToDatabase(
   
   // Final commit for any remaining items
   if (inTransaction) {
-    m_db.commit();
+    if (!m_db.commit()) {
+      auto err = ErrorContext::critical(
+          ErrorCode::DatabaseTransactionFailed,
+          "Failed to commit final bulk insert transaction",
+          "QueryManager::saveItemsToDatabase")
+          .withDetails(m_db.lastError().text());
+      ErrorUtils::logError(err);
+      emit errorOccurred(err);
+      m_db.rollback();
+      return;
+    }
   }
   
   // Final progress report

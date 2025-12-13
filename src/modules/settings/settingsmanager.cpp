@@ -801,6 +801,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.customFontFamily = settings.customFontFamily;
 
   QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
+  s.setAtomicSyncRequired(true);
   s.beginGroup("General");
   s.setValue("rememberSelection", m_generalSettings.rememberSelection);
   s.setValue("wrapNavigation", m_generalSettings.wrapNavigation);
@@ -817,6 +818,18 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("customFontFamily", m_generalSettings.customFontFamily);
   s.endGroup();
   s.sync();
+
+  if (s.status() != QSettings::NoError) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(
+            ErrorUtils::ErrorCode::FileWriteError,
+            "Failed to persist general settings",
+            "SettingsManager::saveGeneralSettings")
+            .withDetails(
+                QString("Path: %1, Status: %2")
+                    .arg(SettingsUtils::getConfigPath())
+                    .arg(static_cast<int>(s.status()))));
+  }
 }
 
 // Updates a single collection's last selected item (in-memory only; persistent
