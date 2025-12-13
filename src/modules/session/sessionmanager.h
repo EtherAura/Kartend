@@ -55,7 +55,7 @@ private:
   // Builds JSON object from current session state (caller must hold m_mutex)
   [[nodiscard]] QJsonObject buildSessionJson() const;
   
-  // Atomically writes data to file using temp file + rename pattern
+  // Atomically writes data to file using Qt's QSaveFile pattern.
   static bool atomicWriteFile(const QString &filePath, const QByteArray &data);
   
   mutable QMutex m_mutex;

@@ -6,8 +6,10 @@
 #include <QApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <algorithm>
 
@@ -144,30 +146,24 @@ auto SessionManager::buildSessionJson() const -> QJsonObject {
 // This prevents data loss if the application crashes during write
 auto SessionManager::atomicWriteFile(const QString &filePath,
                                      const QByteArray &data) -> bool {
-  QString tempPath = filePath + ".tmp";
-
-  // Write to temporary file first
-  QFile tempFile(tempPath);
-  if (!tempFile.open(QIODevice::WriteOnly)) {
+  if (filePath.isEmpty()) {
     return false;
   }
 
-  qint64 written = tempFile.write(data);
-  tempFile.close();
+  QDir().mkpath(QFileInfo(filePath).absolutePath());
 
+  QSaveFile file(filePath);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    return false;
+  }
+
+  const qint64 written = file.write(data);
   if (written != data.size()) {
-    // Write failed, remove partial temp file
-    QFile::remove(tempPath);
+    file.cancelWriting();
     return false;
   }
 
-  // Remove existing file if present (required for rename on some platforms)
-  if (QFile::exists(filePath)) {
-    QFile::remove(filePath);
-  }
-
-  // Atomic rename
-  return QFile::rename(tempPath, filePath);
+  return file.commit();
 }
 
 void SessionManager::saveToDisk() {
