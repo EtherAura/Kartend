@@ -1,6 +1,7 @@
 // Persists and restores selection state and item counts across application sessions.
 #include "sessionmanager.h"
 #include "collectionutils.h"
+#include "errorutils.h"
 #include "uiconstants.h"
 
 #include <QApplication>
@@ -34,7 +35,14 @@ auto SessionManager::snapshotSessionJsonBytesForShutdown() const -> QByteArray {
 void SessionManager::saveSessionBytesToDiskForShutdown(const QByteArray &data) {
   const QString metadataPath = getCacheDirectory() + "/metadata/session.json";
   QDir().mkpath(QFileInfo(metadataPath).absolutePath());
-  atomicWriteFile(metadataPath, data);
+  if (!atomicWriteFile(metadataPath, data)) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(
+            ErrorUtils::ErrorCode::FileWriteError,
+            "Failed to persist session metadata during shutdown",
+            "SessionManager::saveSessionBytesToDiskForShutdown")
+            .withDetails(QString("Path: %1").arg(metadataPath)));
+  }
 }
 
 QString SessionManager::getCacheDirectory() {
@@ -177,7 +185,14 @@ void SessionManager::saveToDisk() {
 
   QString metadataPath = getCacheDirectory() + "/metadata/session.json";
   QDir().mkpath(QFileInfo(metadataPath).absolutePath());
-  atomicWriteFile(metadataPath, QJsonDocument(root).toJson());
+  if (!atomicWriteFile(metadataPath, QJsonDocument(root).toJson())) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(
+            ErrorUtils::ErrorCode::FileWriteError,
+            "Failed to persist session metadata",
+            "SessionManager::saveToDisk")
+            .withDetails(QString("Path: %1").arg(metadataPath)));
+  }
 }
 
 // Saves session data to disk during shutdown - skips QApplication::closingDown
@@ -189,7 +204,14 @@ void SessionManager::saveToDiskForShutdown() {
 
   QString metadataPath = getCacheDirectory() + "/metadata/session.json";
   QDir().mkpath(QFileInfo(metadataPath).absolutePath());
-  atomicWriteFile(metadataPath, QJsonDocument(root).toJson());
+  if (!atomicWriteFile(metadataPath, QJsonDocument(root).toJson())) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(
+            ErrorUtils::ErrorCode::FileWriteError,
+            "Failed to persist session metadata during shutdown",
+            "SessionManager::saveToDiskForShutdown")
+            .withDetails(QString("Path: %1").arg(metadataPath)));
+  }
 }
 
 void SessionManager::setLastSelected(const QString &collectionName, int index,

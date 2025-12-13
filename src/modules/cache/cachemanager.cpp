@@ -199,7 +199,14 @@ void CacheManager::flushDirtyArtwork(
     }
     QString cachePath = CacheManager::getArtworkCachePath(artworkPath);
     QDir().mkpath(QFileInfo(cachePath).absolutePath());
-    image.save(cachePath, "PNG");
+    if (!image.save(cachePath, "PNG")) {
+      ErrorUtils::logError(
+          ErrorUtils::ErrorContext::warning(
+              ErrorUtils::ErrorCode::FileWriteError,
+              "Failed to persist artwork PNG to cache",
+              "CacheManager::flushDirtyArtwork")
+              .withDetails(QString("Path: %1").arg(cachePath)));
+    }
   }
 }
 // Saves persistent cache to disk with canonical hierarchical keys and without
@@ -253,7 +260,14 @@ void CacheManager::saveToDisk() {
 
       const QString cachePath = CacheManager::getArtworkCachePath(artworkPath);
       QDir().mkpath(QFileInfo(cachePath).absolutePath());
-      image.save(cachePath, "PNG");
+      if (!image.save(cachePath, "PNG")) {
+        ErrorUtils::logError(
+            ErrorUtils::ErrorContext::warning(
+                ErrorUtils::ErrorCode::FileWriteError,
+                "Failed to persist artwork PNG to cache",
+                "CacheManager::saveToDisk")
+                .withDetails(QString("Path: %1").arg(cachePath)));
+      }
     }
   });
 }
