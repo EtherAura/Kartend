@@ -69,7 +69,8 @@ bool writeIniFile(QIODevice &device, const QSettings::SettingsMap &map) {
         }
         out << "\n";
     }
-    return true;
+    out.flush();
+    return out.status() == QTextStream::Ok;
 }
 } // namespace
 

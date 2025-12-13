@@ -4,6 +4,7 @@
 #include "cachemanager.h"
 #include "collectionutils.h"
 #include "configvalidation.h"
+#include "errorutils.h"
 #include "extensionutils.h"
 #include "mainwindow.h"
 #include "navigationmanager.h"
@@ -224,6 +225,7 @@ void SettingsManager::loadCollections(
 void SettingsManager::saveCollections(
     const QList<CollectionConfig> &collections) const {
   QSettings settings(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
+  settings.setAtomicSyncRequired(true);
   
   QStringList sectionNames;
   QHash<QString, int> sectionToIndex;
@@ -302,6 +304,18 @@ void SettingsManager::saveCollections(
     settings.endGroup();
   }
   settings.sync();
+
+  if (settings.status() != QSettings::NoError) {
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(
+            ErrorUtils::ErrorCode::FileWriteError,
+            "Failed to persist settings",
+            "SettingsManager::saveCollections")
+            .withDetails(
+                QString("Path: %1, Status: %2")
+                    .arg(SettingsUtils::getConfigPath())
+                    .arg(static_cast<int>(settings.status()))));
+  }
 }
 
 
