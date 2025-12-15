@@ -20,23 +20,25 @@ Collection & Artwork Frontend for KDE
 - **Qt6** (Core, Gui, Widgets, Sql, Concurrent)
 - **C++23** compiler (Clang or GCC)
 - **lld** linker (for release builds)
+- **Ninja** (recommended; build script uses it by default when available)
+- **ccache** (optional; speeds up rebuilds)
 
 ### Debian/Ubuntu
 
 ```bash
-sudo apt install clang cmake lld qt6-base-dev libqt6sql6-sqlite
+sudo apt install clang cmake lld ninja-build ccache qt6-base-dev libqt6sql6-sqlite
 ```
 
 ### Fedora
 
 ```bash
-sudo dnf install clang cmake lld qt6-qtbase-devel
+sudo dnf install clang cmake lld ninja-build ccache qt6-qtbase-devel
 ```
 
 ### Arch Linux
 
 ```bash
-sudo pacman -S clang cmake lld qt6-base
+sudo pacman -S clang cmake lld ninja ccache qt6-base
 ```
 
 ## Building
@@ -45,7 +47,13 @@ sudo pacman -S clang cmake lld qt6-base
 .scripts/build.sh
 ```
 
-This produces an optimized release build at `build/release/kartend`.
+By default this produces an optimized release build at `build/ninja-release/kartend` (or `build/make-release/kartend` if Ninja is not available).
+
+For a faster inner loop during development (no reports/archive):
+
+```bash
+.scripts/build.sh --debug --tests --run-tests --fast
+```
 
 For build script options, manual CMake builds, and advanced configuration, see [docs/building.md](docs/building.md).
 
@@ -54,7 +62,7 @@ For build script options, manual CMake builds, and advanced configuration, see [
 After building, install the application system-wide:
 
 ```bash
-cd build/release
+cd build/ninja-release
 sudo cmake --install .
 ```
 
@@ -72,8 +80,24 @@ sudo cmake --install . --prefix /opt/kartend
 Or run directly from the build directory without installing:
 
 ```bash
-./build/release/kartend
+./build/ninja-release/kartend
 ```
+
+## Uninstalling
+
+CMake does not provide a built-in uninstall target by default, but it does
+write an `install_manifest.txt` file in your build directory listing every
+installed file.
+
+To uninstall a system-wide install:
+
+```bash
+cd build/ninja-release
+sudo sh -c 'while IFS= read -r f; do rm -f -- "$f"; done < install_manifest.txt'
+```
+
+If you installed with a custom prefix (e.g. `--prefix /opt/kartend`), run the
+same command from the corresponding build directory that generated that install.
 
 ## Testing
 

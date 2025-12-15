@@ -30,13 +30,9 @@
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcEventManager, "kartend.eventmanager")
-#define debugLog(msg) qCDebug(lcEventManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
+#define debugLog(msg) do { if (lcEventManager().isDebugEnabled()) { qCDebug(lcEventManager) << msg; } } while (0)
 
 // EventManagerSetup getter definitions
 SETUP_GETTER_DEF_SAME(EventManagerSetup, ScrollManager*, ScrollManager, scrollManager)

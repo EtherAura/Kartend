@@ -261,6 +261,19 @@ void MainWindow::connectDatabaseManager() {
                    getNavigationManager(), &NavigationManager::onItemsLoaded);
   QObject::connect(getDatabaseManager(), &DatabaseManager::itemCountLoaded,
                    getNavigationManager(), &NavigationManager::onItemCountLoaded);
+  QObject::connect(getDatabaseManager(), &DatabaseManager::collectionScanCompleted,
+                   getNavigationManager(),
+                   &NavigationManager::onBackgroundCollectionScanCompleted);
+  QObject::connect(getDatabaseManager(), &DatabaseManager::itemCountLoaded,
+                   this, [this](int) {
+                     // If the initial load did not start a scan, we can re-enable
+                     // scan overlays immediately. If a startup scan is in-flight,
+                     // keep overlays suppressed until it completes.
+                     if (m_suppressStartupScanOverlays &&
+                         m_startupActiveScanCount == 0) {
+                       m_suppressStartupScanOverlays = false;
+                     }
+                   });
   QObject::connect(getDatabaseManager(), &DatabaseManager::itemsRangeLoaded,
                    getNavigationManager(), &NavigationManager::onItemsRangeLoaded);
   QObject::connect(getDatabaseManager(), &DatabaseManager::errorOccurred,
@@ -279,6 +292,11 @@ void MainWindow::connectDatabaseManager() {
   // Update loading overlay with scan progress during initial collection loading
   QObject::connect(getDatabaseManager(), &DatabaseManager::scanProgress,
                    this, [this](int current, int total, const QString &name) {
+                     if (m_suppressStartupScanOverlays) {
+                       // Keep the UI interactive on startup; progress is still
+                       // visible via the title bar set by scanStarting.
+                       return;
+                     }
                      if (m_loadingOverlay) {
                        if (m_loadingOverlay->isActive()) {
                          // Update existing overlay with progress
@@ -296,16 +314,37 @@ void MainWindow::connectDatabaseManager() {
   QObject::connect(getDatabaseManager(), &DatabaseManager::scanStarting,
                    this, [this](const QString &name, int estimatedItems) {
                      Q_UNUSED(estimatedItems)
-                     if (m_loadingOverlay && !m_loadingOverlay->isActive()) {
-                       m_loadingOverlay->show(QString("Scanning %1...").arg(name));
+                     if (m_suppressStartupScanOverlays) {
+                       ++m_startupActiveScanCount;
+                     }
+                     if (!m_suppressStartupScanOverlays) {
+                       if (m_loadingOverlay && !m_loadingOverlay->isActive()) {
+                         m_loadingOverlay->show(QString("Scanning %1...").arg(name));
+                       }
                      }
                      // Show "Scanning..." in title bar instead of "0 items"
                      setWindowTitle(QString("%1 (Scanning...)").arg(name));
+                   });
+
+  QObject::connect(getDatabaseManager(), &DatabaseManager::collectionScanCompleted,
+                   this, [this](const QString &) {
+                     if (!m_suppressStartupScanOverlays) {
+                       return;
+                     }
+                     if (m_startupActiveScanCount > 0) {
+                       --m_startupActiveScanCount;
+                     }
+                     if (m_startupActiveScanCount == 0) {
+                       m_suppressStartupScanOverlays = false;
+                     }
                    });
   
   // Update progress during item scan/save
   QObject::connect(getDatabaseManager(), &DatabaseManager::scanItemsProgress,
                    this, [this](int itemsProcessed, int totalItems) {
+                     if (m_suppressStartupScanOverlays) {
+                       return;
+                     }
                      if (m_loadingOverlay && m_loadingOverlay->isActive()) {
                        if (totalItems > 0) {
                          // Indexing phase - we know the total
@@ -925,6 +964,9 @@ void MainWindow::setupInitialTimersWithCollections() {
     }
     if (rootIndex >= 0) {
       if (getNavigationManager()) {
+        // The initial fetchItemCount path may trigger a rescan; keep the UI
+        // navigable by suppressing any blocking overlay for this startup scan.
+        m_suppressStartupScanOverlays = true;
         getNavigationManager()->showCollectionItems(rootIndex);
       }
     }

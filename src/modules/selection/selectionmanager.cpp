@@ -27,13 +27,9 @@
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSelectionManager, "kartend.selectionmanager")
-#define debugLog(msg) qCDebug(lcSelectionManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
+#define debugLog(msg) do { if (lcSelectionManager().isDebugEnabled()) { qCDebug(lcSelectionManager) << msg; } } while (0)
 
 // SelectionManagerSetup getter definitions
 SETUP_GETTER_DEF_CTX_ONLY(SelectionManagerSetup, InteractionStateHolder*, InteractionState, interactionState)
@@ -188,13 +184,13 @@ void SelectionManager::persistSelection(int collectionIndex, int itemIndex,
     m_settingsManager->setLastSelectedItem(collectionIndex, itemIndex);
   }
 
-  // Use hierarchical name to match how calculateSelectionIndex looks it up
-  QString collectionName = CollectionUtils::hierarchicalNameFor(
+  // Use a stable session key that also scopes by virtual subfolder (if active).
+  QString sessionKey = CollectionUtils::selectionSessionKeyFor(
       (*m_collections)[collectionIndex], *m_collections);
-  debugLog("[SelectionRestore] persistSelection: collectionName=" << collectionName
+  debugLog("[SelectionRestore] persistSelection: sessionKey=" << sessionKey
            << "itemIndex=" << itemIndex << "title=" << title);
   if (m_sessionManager) {
-    m_sessionManager->setLastSelected(collectionName, itemIndex, title);
+    m_sessionManager->setLastSelected(sessionKey, itemIndex, title);
   }
 }
 

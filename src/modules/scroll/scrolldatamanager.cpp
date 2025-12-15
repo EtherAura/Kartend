@@ -13,6 +13,34 @@ void ScrollDataManager::initializeStorage(int totalCount) {
   }
 }
 
+void ScrollDataManager::resizeStorage(int totalCount) {
+  totalCount = std::max(0, totalCount);
+  const int oldSize = m_filePaths.size();
+  if (totalCount == oldSize) {
+    return;
+  }
+
+  // Unified sorting requires complete metadata; resizing an on-demand placeholder
+  // list should not keep unified order.
+  if (m_unifiedSortActive) {
+    m_unifiedSortActive = false;
+    m_unifiedItems.clear();
+  }
+
+  if (totalCount < oldSize) {
+    // Remove name mappings for trimmed entries.
+    for (int i = totalCount; i < oldSize; ++i) {
+      const QString &path = m_filePaths[i];
+      if (!path.isEmpty()) {
+        m_fileNames.remove(path);
+        m_filePathToDisplayName.remove(path);
+      }
+    }
+  }
+
+  m_filePaths.resize(totalCount);
+}
+
 void ScrollDataManager::initializeSubcollections(
     const CollectionContext &context,
     const QList<CollectionConfig> *collections,
@@ -22,13 +50,17 @@ void ScrollDataManager::initializeSubcollections(
   if (!collections || context.currentIndex < 0) {
     return;
   }
-  
-  // Use cache for O(1) lookup if available
-  if (hierarchyCache && hierarchyCache->isValid()) {
-    m_subcollections = hierarchyCache->directChildren(context.currentIndex);
+
+  if (context.hasSubcollectionOverride) {
+    m_subcollections = context.subcollectionOverride;
   } else {
-    // Fallback to O(n) scan
-    m_subcollections = CollectionUtils::directChildrenOf(context.currentIndex, *collections);
+    // Use cache for O(1) lookup if available
+    if (hierarchyCache && hierarchyCache->isValid()) {
+      m_subcollections = hierarchyCache->directChildren(context.currentIndex);
+    } else {
+      // Fallback to O(n) scan
+      m_subcollections = CollectionUtils::directChildrenOf(context.currentIndex, *collections);
+    }
   }
   
   // Sort subcollections: A-Z when excluded from main sort, otherwise use sort mode
@@ -72,6 +104,10 @@ void ScrollDataManager::initializeSubcollections(
 
 void ScrollDataManager::initializeVirtualFolders(const CollectionContext &context) {
   m_virtualFolders.clear();
+
+  if (context.suppressVirtualFolders) {
+    return;
+  }
   
   // Only show virtual folders if includeContentSubfolders is enabled
   // AND showAllSubfolderItems is false (otherwise items are flattened)

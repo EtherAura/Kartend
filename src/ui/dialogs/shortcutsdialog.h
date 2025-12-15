@@ -20,10 +20,19 @@ class ShortcutsDialog : public QDialog {
 public:
   explicit ShortcutsDialog(QWidget *parent = nullptr);
 
+protected:
+  void showEvent(QShowEvent *event) override;
+
 private:
   void setupUI();
+  void populateContent();
+  void clearLayout(QLayout *layout);
   void addSection(QVBoxLayout *layout, const QString &title);
   void addShortcut(QVBoxLayout *layout, const QString &keys, const QString &description);
+
+  QScrollArea *m_scrollArea = nullptr;
+  QWidget *m_contentWidget = nullptr;
+  QVBoxLayout *m_contentLayout = nullptr;
 };
 
 #endif // SHORTCUTSDIALOG_H

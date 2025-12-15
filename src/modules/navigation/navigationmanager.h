@@ -130,12 +130,15 @@ public slots:
   void loadAllCollectionsView();
   void goBackToCollections();
   void filterItems(const QString &searchText);
+  void filterItemsCurrentAndSubcollections(const QString &searchText);
+  void filterItemsAllCollections(const QString &searchText);
   auto scheduleSelectionRestore(int desiredIndex, int maxAttempts,
                                 int attemptDelayMs,
                                 int finalEnsureDelayMs) -> void;
   void onItemsLoaded(const QStringList &filePaths,
                      const QHash<QString, QString> &fileNames);
   void onItemCountLoaded(int count);
+  void onBackgroundCollectionScanCompleted(const QString &collectionUuid);
   void onItemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void fetchItemsRange(int offset, int limit);
   void onMediaLibraryError(const ErrorUtils::ErrorContext &error);
@@ -213,6 +216,7 @@ private:
   [[nodiscard]] auto setupCollectionContext(const QStringList &filePaths,
                               const QHash<QString, QString> &fileNames) const
       -> CollectionContext;
+  [[nodiscard]] auto lookupRememberedSelectionIndex(int totalItems) const -> int;
   [[nodiscard]] auto calculateSelectionIndex(int totalItems) const -> int;
   [[nodiscard]] auto computeCollectionDepth(int collectionIndex) const -> int;
   auto schedulePostLoadOperations() -> void;
@@ -221,6 +225,9 @@ private:
   [[nodiscard]] auto handleSharedItemsNavigation(int collectionIndex) -> bool;
   auto prepareNonSharedNavigation(int collectionIndex) -> void;
   auto loadCollectionData(int collectionIndex) -> void;
+
+  [[nodiscard]] CollectionContext buildExpandedContextForIndex(int collectionIndex) const;
+  void requestItemCountForContext(const CollectionContext &context, const QString &filter);
 
   void persistCurrentSelection();
   void prepareForNonSharedNavigationHelper();
@@ -232,6 +239,24 @@ private:
   bool m_isRescanInProgress = false;  // Track when force rescan is active
   int m_pendingRescanCollectionIndex = -1;  // Collection to reload after cache invalidation
   QMetaObject::Connection m_cacheInvalidatedConnection;  // One-shot connection for cache invalidation
+
+  bool m_backgroundCountRefreshInProgress = false;
+  int m_backgroundCountRefreshCollectionIndex = -1;
+
+  // When navigating between virtual subfolders, we want the next items view
+  // rebuild to start from the top (avoids restoring a stale selection index
+  // from a different folder scope).
+  bool m_forceTopOnNextItemsViewLoad = false;
+
+  // Guards against stale range-load results arriving after the items view
+  // has been rebuilt (e.g., search text changed). Offset->generation.
+  quint64 m_itemsViewGeneration = 0;
+  QHash<int, quint64> m_pendingRangeGenerations;
+
+  // Active query context for the current items view (count + on-demand ranges).
+  // This decouples DB query scope from the current collection's config.
+  bool m_hasItemsQueryContext = false;
+  CollectionContext m_itemsQueryContext;
 };
 
 #endif

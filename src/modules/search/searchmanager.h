@@ -134,6 +134,7 @@ private:
   int m_preSearchCollectionIndex = -1;
   SearchMode m_preSearchMode = SearchMode::CurrentCollection;
   int m_preSearchSelectedIndex = -1;
+  int m_preSearchTotalItems = -1;
   
   // Adaptive debounce: tracks keystroke timing to adjust debounce delay
   qint64 m_lastKeystrokeTime = 0;

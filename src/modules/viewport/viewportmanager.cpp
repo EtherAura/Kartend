@@ -18,13 +18,9 @@
 #include <QScrollBar>
 #include <QTimer>
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcViewportManager, "kartend.viewportmanager")
-#define debugLog(msg) qCDebug(lcViewportManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
+#define debugLog(msg) do { if (lcViewportManager().isDebugEnabled()) { qCDebug(lcViewportManager) << msg; } } while (0)
 
 // ViewportManagerSetup getter definitions
 SETUP_GETTER_DEF_SAME(ViewportManagerSetup, QScrollArea*, ItemScrollArea, itemScrollArea)

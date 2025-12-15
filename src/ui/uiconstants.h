@@ -114,6 +114,28 @@ inline constexpr int WORKER_POOL_DIVISOR = 2;
 } // namespace Concurrency
 
 // =============================================================================
+// Database
+// Limits and thresholds for database-backed scanning and cache validation.
+// =============================================================================
+namespace Database {
+/// How many directory samples are stored per collection for change detection.
+inline constexpr int DIR_SIGNATURE_SAMPLE_COUNT = 64;
+/// Max number of directories inspected when seeding a signature without scanning.
+inline constexpr int DIR_SIGNATURE_SEED_MAX_DIRS = 256;
+/// Minimum interval between scan progress emissions.
+/// Prevents high-frequency UI updates during very fast scans.
+inline constexpr int SCAN_PROGRESS_MIN_INTERVAL_MS = 33;
+
+/// FTS backfill batch size when building the index lazily.
+/// Kept modest to reduce lock contention with normal query operations.
+inline constexpr int FTS_BACKFILL_BATCH_SIZE = 2000;
+
+/// Time budget for each incremental FTS backfill slice.
+/// Keeps the scan worker responsive and avoids long write locks.
+inline constexpr int FTS_BACKFILL_TIME_BUDGET_MS = 80;
+} // namespace Database
+
+// =============================================================================
 // Animation
 // Durations and keyframe positions for scroll and pulse animations.
 // =============================================================================
@@ -164,6 +186,19 @@ inline constexpr int ARROW_CENTER_CLEAR_CHECK_DELAY_MS = 440;
 /// Delay to clear arrow center suppression after explicit set
 inline constexpr int ARROW_CENTER_CLEAR_AFTER_SET_MS = 240;
 } // namespace Keyboard
+
+// =============================================================================
+// Gamepad
+// Analog stick deadzones for digital navigation.
+// =============================================================================
+namespace Gamepad {
+/// Threshold to consider an axis direction engaged (press)
+inline constexpr double AXIS_DEADZONE_ON = 0.60;
+/// Threshold to consider an axis direction released (hysteresis)
+inline constexpr double AXIS_DEADZONE_OFF = 0.45;
+/// Poll interval for gamepad state in SDL2 fallback backend
+inline constexpr int POLL_INTERVAL_MS = 16;
+} // namespace Gamepad
 
 // =============================================================================
 // Mouse and Click Handling

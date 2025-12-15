@@ -44,6 +44,10 @@ public:
    * @param totalCount Number of items (excluding subcollections and virtual folders)
    */
   void initializeStorage(int totalCount);
+
+  // Resize storage without clearing already-loaded ranges.
+  // Used when item counts change after a background rescan.
+  void resizeStorage(int totalCount);
   
   /**
    * @brief Initialize subcollections from collection hierarchy.

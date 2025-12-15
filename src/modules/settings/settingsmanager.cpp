@@ -25,13 +25,9 @@
 #include <algorithm>
 #include <QStandardPaths>
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSettingsManager, "kartend.settingsmanager")
 #define debugLog(msg) qCDebug(lcSettingsManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
 
 // Construct settings manager and initialize QSettings.
 SettingsManager::SettingsManager(SessionManager *sessionManager,
@@ -231,6 +227,29 @@ void SettingsManager::saveCollections(
     const QList<CollectionConfig> &collections) const {
   QSettings settings(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   settings.setAtomicSyncRequired(true);
+
+  // Validate path-like settings before persistence to prevent storing
+  // potentially dangerous shell metacharacter injections in the config.
+  // Empty paths are allowed (some fields are optional).
+  auto sanitizePersistedPath = [&](const QString &value,
+                                  const QString &fieldName,
+                                  const QString &collectionName) -> QString {
+    if (value.isEmpty()) {
+      return value;
+    }
+    auto security = PathUtils::validatePathSecurity(value);
+    if (security.isError()) {
+      ErrorUtils::logError(
+          ErrorUtils::ErrorContext::warning(
+              ErrorUtils::ErrorCode::InvalidFilePath,
+              QString("Refusing to persist insecure %1").arg(fieldName),
+              "SettingsManager::saveCollections")
+              .withDetails(QString("Collection: %1, Value: %2, Reason: %3")
+                              .arg(collectionName, value, security.error().message)));
+      return QString();
+    }
+    return value;
+  };
   
   QStringList sectionNames;
   QHash<QString, int> sectionToIndex;
@@ -273,11 +292,19 @@ void SettingsManager::saveCollections(
 
     settings.beginGroup(iniGroupName);
     settings.setValue("name", c.name);
-    settings.setValue("launcherPath", c.launcherPath);
-    settings.setValue("corePath", c.corePath);
+    settings.setValue(
+      "launcherPath",
+      sanitizePersistedPath(c.launcherPath, "launcherPath", sectionName));
+    settings.setValue(
+      "corePath",
+      sanitizePersistedPath(c.corePath, "corePath", sectionName));
     settings.setValue("launchParameters", c.launchParameters);
-    settings.setValue("mediaDirectory", c.mediaDirectory);
-    settings.setValue("artworkDirectory", c.artworkDirectory);
+    settings.setValue(
+      "mediaDirectory",
+      sanitizePersistedPath(c.mediaDirectory, "mediaDirectory", sectionName));
+    settings.setValue(
+      "artworkDirectory",
+      sanitizePersistedPath(c.artworkDirectory, "artworkDirectory", sectionName));
     settings.setValue("includeContentSubfolders", c.includeContentSubfolders);
     settings.setValue("includeArtworkSubfolders", c.includeArtworkSubfolders);
     settings.setValue("showAllSubfolderItems", c.showAllSubfolderItems);
@@ -302,7 +329,9 @@ void SettingsManager::saveCollections(
     settings.setValue("cornerRadius", c.cornerRadius);
     settings.setValue("backgroundType", (c.backgroundType == BackgroundType::Image) ? "image" : "color");
     settings.setValue("backgroundColor", c.backgroundColor);
-    settings.setValue("backgroundImage", c.backgroundImage);
+    settings.setValue(
+      "backgroundImage",
+      sanitizePersistedPath(c.backgroundImage, "backgroundImage", sectionName));
     settings.setValue("primaryColor", c.primaryColor);
     settings.setValue("tileColor", c.tileColor);
     settings.setValue("selectionColor", c.selectionColor);
@@ -783,6 +812,37 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.titleTintLightness = s.value("titleTintLightness", 60).toInt();
   settings.titleBaseColor = s.value("titleBaseColor", QString()).toString();
   settings.customFontFamily = s.value("customFontFamily", QString()).toString();
+
+  // Controls: keyboard bindings
+  settings.keyNavLeft = s.value("keyNavLeft", static_cast<int>(Qt::Key_Left)).toInt();
+  settings.keyNavRight = s.value("keyNavRight", static_cast<int>(Qt::Key_Right)).toInt();
+  settings.keyNavUp = s.value("keyNavUp", static_cast<int>(Qt::Key_Up)).toInt();
+  settings.keyNavDown = s.value("keyNavDown", static_cast<int>(Qt::Key_Down)).toInt();
+  settings.keyConfirm = s.value("keyConfirm", static_cast<int>(Qt::Key_Return)).toInt();
+  settings.keyBack = s.value("keyBack", static_cast<int>(Qt::Key_Escape)).toInt();
+  settings.keySearch = s.value("keySearch", static_cast<int>(Qt::Key_Slash)).toInt();
+  settings.keyAlphabeticBack = s.value("keyAlphabeticBack", static_cast<int>(Qt::Key_PageUp)).toInt();
+  settings.keyAlphabeticForward = s.value("keyAlphabeticForward", static_cast<int>(Qt::Key_PageDown)).toInt();
+  settings.keyJumpFirst = s.value("keyJumpFirst", static_cast<int>(Qt::Key_Home)).toInt();
+  settings.keyJumpLast = s.value("keyJumpLast", static_cast<int>(Qt::Key_End)).toInt();
+
+  // Controls: gamepad bindings
+  settings.gamepadUseDpad = s.value("gamepadUseDpad", true).toBool();
+  settings.gamepadUseLeftStick = s.value("gamepadUseLeftStick", true).toBool();
+  settings.gamepadConfirmButton = s.value("gamepadConfirmButton", QString("A")).toString();
+  settings.gamepadBackButton = s.value("gamepadBackButton", QString("B")).toString();
+  settings.gamepadToggleSidebarButton =
+      s.value("gamepadToggleSidebarButton", QString("Y")).toString();
+
+  // Sort preferences
+  const int sortModeRaw = s.value("sortMode", static_cast<int>(SortMode::NameAscending)).toInt();
+  if (sortModeRaw >= static_cast<int>(SortMode::NameAscending) &&
+      sortModeRaw <= static_cast<int>(SortMode::Random)) {
+    settings.sortMode = static_cast<SortMode>(sortModeRaw);
+  } else {
+    settings.sortMode = SortMode::NameAscending;
+  }
+  settings.excludeSubfoldersFromSort = s.value("excludeSubfoldersFromSort", false).toBool();
   s.endGroup();
 
   settings.lastSelectedItems.clear();
@@ -805,6 +865,26 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.titleBaseColor = settings.titleBaseColor;
   m_generalSettings.customFontFamily = settings.customFontFamily;
 
+  // Controls
+  m_generalSettings.keyNavLeft = settings.keyNavLeft;
+  m_generalSettings.keyNavRight = settings.keyNavRight;
+  m_generalSettings.keyNavUp = settings.keyNavUp;
+  m_generalSettings.keyNavDown = settings.keyNavDown;
+  m_generalSettings.keyConfirm = settings.keyConfirm;
+  m_generalSettings.keyBack = settings.keyBack;
+  m_generalSettings.keySearch = settings.keySearch;
+  m_generalSettings.keyAlphabeticBack = settings.keyAlphabeticBack;
+  m_generalSettings.keyAlphabeticForward = settings.keyAlphabeticForward;
+  m_generalSettings.keyJumpFirst = settings.keyJumpFirst;
+  m_generalSettings.keyJumpLast = settings.keyJumpLast;
+  m_generalSettings.gamepadUseDpad = settings.gamepadUseDpad;
+  m_generalSettings.gamepadUseLeftStick = settings.gamepadUseLeftStick;
+  m_generalSettings.gamepadConfirmButton = settings.gamepadConfirmButton;
+  m_generalSettings.gamepadBackButton = settings.gamepadBackButton;
+  m_generalSettings.gamepadToggleSidebarButton = settings.gamepadToggleSidebarButton;
+  m_generalSettings.sortMode = settings.sortMode;
+  m_generalSettings.excludeSubfoldersFromSort = settings.excludeSubfoldersFromSort;
+
   QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   s.setAtomicSyncRequired(true);
   s.beginGroup("General");
@@ -821,6 +901,24 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("titleTintLightness", m_generalSettings.titleTintLightness);
   s.setValue("titleBaseColor", m_generalSettings.titleBaseColor);
   s.setValue("customFontFamily", m_generalSettings.customFontFamily);
+  s.setValue("keyNavLeft", m_generalSettings.keyNavLeft);
+  s.setValue("keyNavRight", m_generalSettings.keyNavRight);
+  s.setValue("keyNavUp", m_generalSettings.keyNavUp);
+  s.setValue("keyNavDown", m_generalSettings.keyNavDown);
+  s.setValue("keyConfirm", m_generalSettings.keyConfirm);
+  s.setValue("keyBack", m_generalSettings.keyBack);
+  s.setValue("keySearch", m_generalSettings.keySearch);
+  s.setValue("keyAlphabeticBack", m_generalSettings.keyAlphabeticBack);
+  s.setValue("keyAlphabeticForward", m_generalSettings.keyAlphabeticForward);
+  s.setValue("keyJumpFirst", m_generalSettings.keyJumpFirst);
+  s.setValue("keyJumpLast", m_generalSettings.keyJumpLast);
+  s.setValue("gamepadUseDpad", m_generalSettings.gamepadUseDpad);
+  s.setValue("gamepadUseLeftStick", m_generalSettings.gamepadUseLeftStick);
+  s.setValue("gamepadConfirmButton", m_generalSettings.gamepadConfirmButton);
+  s.setValue("gamepadBackButton", m_generalSettings.gamepadBackButton);
+  s.setValue("gamepadToggleSidebarButton", m_generalSettings.gamepadToggleSidebarButton);
+  s.setValue("sortMode", static_cast<int>(m_generalSettings.sortMode));
+  s.setValue("excludeSubfoldersFromSort", m_generalSettings.excludeSubfoldersFromSort);
   s.endGroup();
   s.sync();
 
@@ -850,24 +948,32 @@ auto SettingsManager::getLastSelectedItem(int collectionIndex) const -> int {
   auto *mainWindow = qobject_cast<MainWindow *>(parent());
   if ((mainWindow) && collectionIndex >= 0 &&
       collectionIndex < mainWindow->m_collections.size()) {
+    const CollectionConfig &cfg = mainWindow->m_collections[collectionIndex];
+    const bool subfolderActive = !cfg.currentSubfolder.trimmed().isEmpty();
     QString hierarchicalName = CollectionUtils::hierarchicalNameFor(
-        mainWindow->m_collections[collectionIndex], mainWindow->m_collections);
+        cfg, mainWindow->m_collections);
     int persistentIndex = -1;
     if (m_sessionManager) {
-      persistentIndex =
-          m_sessionManager->getLastSelectedIndex(hierarchicalName);
+      if (subfolderActive) {
+        const QString sessionKey =
+            CollectionUtils::selectionSessionKeyFor(cfg, mainWindow->m_collections);
+        persistentIndex = m_sessionManager->getLastSelectedIndex(sessionKey);
+      } else {
+        persistentIndex = m_sessionManager->getLastSelectedIndex(hierarchicalName);
+      }
     }
     if (persistentIndex >= 0) {
       return persistentIndex;
     }
 
-    QString collectionName = mainWindow->m_collections[collectionIndex].name;
-    if (m_sessionManager) {
-      persistentIndex =
-          m_sessionManager->getLastSelectedIndex(collectionName);
-    }
-    if (persistentIndex >= 0) {
-      return persistentIndex;
+    if (!subfolderActive) {
+      QString collectionName = cfg.name;
+      if (m_sessionManager) {
+        persistentIndex = m_sessionManager->getLastSelectedIndex(collectionName);
+      }
+      if (persistentIndex >= 0) {
+        return persistentIndex;
+      }
     }
   }
 

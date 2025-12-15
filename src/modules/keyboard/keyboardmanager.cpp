@@ -15,13 +15,9 @@
 #include "scrollmanager.h"
 #include "uiconstants.h"
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcKeyboardManager, "kartend.keyboardmanager")
-#define debugLog(msg) qCDebug(lcKeyboardManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
+#define debugLog(msg) do { if (lcKeyboardManager().isDebugEnabled()) { qCDebug(lcKeyboardManager) << msg; } } while (0)
 
 // KeyboardManagerSetup getter definitions
 SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, ScrollManager*, ScrollManager, scrollManager)
@@ -94,14 +90,34 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
 
   const int key = event->key();
 
+  const int searchKey = m_generalSettings ? m_generalSettings->keySearch
+                                         : static_cast<int>(Qt::Key_Slash);
+  const int backKey = m_generalSettings ? m_generalSettings->keyBack
+                                       : static_cast<int>(Qt::Key_Escape);
+  const int confirmKey = m_generalSettings ? m_generalSettings->keyConfirm
+                                          : static_cast<int>(Qt::Key_Return);
+
+  auto isConfirmKey = [&](int k) -> bool {
+    if (k == confirmKey) {
+      return true;
+    }
+    if (confirmKey == static_cast<int>(Qt::Key_Return) && k == Qt::Key_Enter) {
+      return true;
+    }
+    if (confirmKey == static_cast<int>(Qt::Key_Enter) && k == Qt::Key_Return) {
+      return true;
+    }
+    return false;
+  };
+
   // Handle search bar focused state
   if (searchBarFocused) {
-    if (key == Qt::Key_Slash) {
+    if (key == searchKey) {
       if (m_searchBar && m_searchBar->text().trimmed().isEmpty()) {
         emit requestSearchModeToggle();
         return true;
       }
-    } else if (key == Qt::Key_Escape) {
+    } else if (key == backKey) {
       if (m_searchBar && !m_searchBar->text().trimmed().isEmpty()) {
         emit requestClearSearchBar();
         return true;
@@ -114,23 +130,32 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
   }
 
   // Global key handling
-  if (key == Qt::Key_Slash) {
+  if (key == searchKey) {
     emit requestSearchBarFocus();
     return true;
   }
-  if (key == Qt::Key_Escape) {
+  if (key == backKey) {
     emit requestEscapeAction();
     return true;
   }
-  if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+  if (isConfirmKey(key)) {
     emit requestEnterAction();
     return true;
   }
 
   // Arrow key handling
-  const bool isArrowKey = (key == Qt::Key_Left || key == Qt::Key_Right ||
-                           key == Qt::Key_Up || key == Qt::Key_Down);
-  if (isArrowKey) {
+  const int navLeftKey = m_generalSettings ? m_generalSettings->keyNavLeft
+                                          : static_cast<int>(Qt::Key_Left);
+  const int navRightKey = m_generalSettings ? m_generalSettings->keyNavRight
+                                           : static_cast<int>(Qt::Key_Right);
+  const int navUpKey = m_generalSettings ? m_generalSettings->keyNavUp
+                                        : static_cast<int>(Qt::Key_Up);
+  const int navDownKey = m_generalSettings ? m_generalSettings->keyNavDown
+                                          : static_cast<int>(Qt::Key_Down);
+
+  const bool isNavKey = (key == navLeftKey || key == navRightKey ||
+                         key == navUpKey || key == navDownKey);
+  if (isNavKey) {
     int gridWidth = 1;
     if (m_scrollManager) {
       gridWidth = m_scrollManager->getCurrentGridWidth();
@@ -141,28 +166,55 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
 
     int direction = 0;
     bool vertical = false;
-    if (deriveDirectionForKey(key, gridWidth, direction, vertical)) {
+    if (key == navLeftKey) {
+      direction = -1;
+      vertical = false;
+    } else if (key == navRightKey) {
+      direction = 1;
+      vertical = false;
+    } else if (key == navUpKey) {
+      direction = -gridWidth;
+      vertical = true;
+    } else if (key == navDownKey) {
+      direction = gridWidth;
+      vertical = true;
+    }
+
+    if (direction != 0) {
+      m_pendingNavigationKey = static_cast<Qt::Key>(key);
+      m_pendingNavigationKeyAtMs = QDateTime::currentMSecsSinceEpoch();
+      m_hasPendingNavigationKey = true;
       emit requestSelectionMove(direction, vertical);
       return true;
     }
   }
 
   // PageUp/PageDown for alphabetic navigation
-  if (key == Qt::Key_PageUp) {
+  const int alphaBackKey = m_generalSettings
+                               ? m_generalSettings->keyAlphabeticBack
+                               : static_cast<int>(Qt::Key_PageUp);
+  const int alphaForwardKey = m_generalSettings
+                                  ? m_generalSettings->keyAlphabeticForward
+                                  : static_cast<int>(Qt::Key_PageDown);
+  if (key == alphaBackKey) {
     emit requestAlphabeticNavigation(false); // backward
     return true;
   }
-  if (key == Qt::Key_PageDown) {
+  if (key == alphaForwardKey) {
     emit requestAlphabeticNavigation(true); // forward
     return true;
   }
 
   // Home/End for jumping to first/last item
-  if (key == Qt::Key_Home) {
+  const int jumpFirstKey = m_generalSettings ? m_generalSettings->keyJumpFirst
+                                            : static_cast<int>(Qt::Key_Home);
+  const int jumpLastKey = m_generalSettings ? m_generalSettings->keyJumpLast
+                                           : static_cast<int>(Qt::Key_End);
+  if (key == jumpFirstKey) {
     emit requestJumpToEdge(false); // jump to first item
     return true;
   }
-  if (key == Qt::Key_End) {
+  if (key == jumpLastKey) {
     emit requestJumpToEdge(true); // jump to last item
     return true;
   }
@@ -176,9 +228,19 @@ bool KeyboardManager::handleKeyRelease(QKeyEvent *event) {
   }
 
   const int keyCode = event->key();
-  const bool isArrow = (keyCode == Qt::Key_Left || keyCode == Qt::Key_Right ||
-                        keyCode == Qt::Key_Up || keyCode == Qt::Key_Down);
-  if (!isArrow) {
+
+  const int navLeftKey = m_generalSettings ? m_generalSettings->keyNavLeft
+                                          : static_cast<int>(Qt::Key_Left);
+  const int navRightKey = m_generalSettings ? m_generalSettings->keyNavRight
+                                           : static_cast<int>(Qt::Key_Right);
+  const int navUpKey = m_generalSettings ? m_generalSettings->keyNavUp
+                                        : static_cast<int>(Qt::Key_Up);
+  const int navDownKey = m_generalSettings ? m_generalSettings->keyNavDown
+                                          : static_cast<int>(Qt::Key_Down);
+
+  const bool isNav = (keyCode == navLeftKey || keyCode == navRightKey ||
+                      keyCode == navUpKey || keyCode == navDownKey);
+  if (!isNav) {
     return false;
   }
 
@@ -308,6 +370,9 @@ void KeyboardManager::clearRepeatState() {
   m_repeatDelta = 0;
   m_repeatVertical = false;
   m_wrapSequenceActive = false;
+  m_hasPendingNavigationKey = false;
+  m_pendingNavigationKey = Qt::Key_unknown;
+  m_pendingNavigationKeyAtMs = 0;
 }
 
 void KeyboardManager::onRepeatStep() {
@@ -375,6 +440,45 @@ void KeyboardManager::finalizeKeyRepeat(QKeyEvent *event, int direction,
   if (m_itemsPage) {
     m_itemsPage->setFocus();
   }
+}
+
+void KeyboardManager::finalizeKeyRepeatForKey(Qt::Key key, int direction,
+                                              bool vertical) {
+  m_repeatKey = key;
+  m_repeatDelta = direction;
+  m_repeatVertical = vertical;
+
+  if (m_repeatStartTimer && !m_repeating) {
+    // Use keyboardRepeatDelayMs for initial delay before repeating starts
+    int repeatDelay = m_generalSettings ? m_generalSettings->keyboardRepeatDelayMs
+                                        : 260;
+    m_repeatStartTimer->start(repeatDelay);
+  }
+
+  if (m_itemsPage) {
+    m_itemsPage->setFocus();
+  }
+}
+
+bool KeyboardManager::consumePendingNavigationKey(Qt::Key &outKey) {
+  if (!m_hasPendingNavigationKey) {
+    return false;
+  }
+
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
+  const qint64 ageMs = now - m_pendingNavigationKeyAtMs;
+  if (ageMs > UIConstants::Timing::MEDIUM_DELAY_MS) {
+    m_hasPendingNavigationKey = false;
+    m_pendingNavigationKey = Qt::Key_unknown;
+    m_pendingNavigationKeyAtMs = 0;
+    return false;
+  }
+
+  outKey = m_pendingNavigationKey;
+  m_hasPendingNavigationKey = false;
+  m_pendingNavigationKey = Qt::Key_unknown;
+  m_pendingNavigationKeyAtMs = 0;
+  return true;
 }
 
 int KeyboardManager::calculateNewSelection(int totalItems, int currentSelection,

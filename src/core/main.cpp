@@ -1,6 +1,7 @@
 // Application entry point that initializes Qt and displays the main window.
 #include <QApplication>
 #include <QGuiApplication>
+#include <QLoggingCategory>
 #include <QSurfaceFormat>
 
 #include "artworkmanager.h"
@@ -32,6 +33,14 @@ auto main(int argc, char *argv[]) -> int {
   QApplication::setApplicationName(APP_NAME);
   QApplication::setApplicationVersion(APP_VERSION);
   QApplication::setWindowIcon(QIcon(":/icon.svg"));
+
+  // Optional runtime logging configuration.
+  // If set, this overrides Qt's default filtering rules.
+  // Example: KARTEND_LOG_RULES="kartend.*=true" ./kartend
+  const QByteArray logRules = qgetenv("KARTEND_LOG_RULES");
+  if (!logRules.isEmpty()) {
+    QLoggingCategory::setFilterRules(QString::fromUtf8(logRules));
+  }
 
   QObject::connect(&app, &QCoreApplication::aboutToQuit, []() {
     // Cleanup handled by MainWindow destructor

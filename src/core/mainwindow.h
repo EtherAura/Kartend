@@ -132,6 +132,15 @@ private:
   void setupInitialTimers();
   void setupInitialTimersEmptyCollections();
   void setupInitialTimersWithCollections();
+
+  // On startup, the initial collection load can trigger a database rescan.
+  // Suppress the loading overlay for that first scan so the UI remains
+  // immediately navigable while work continues in the background.
+  bool m_suppressStartupScanOverlays = false;
+
+  // Number of in-flight startup scan operations (tracked via scanStarting/
+  // collectionScanCompleted while m_suppressStartupScanOverlays is true).
+  int m_startupActiveScanCount = 0;
   void initializeAppContext();
   void showAbout();
 };

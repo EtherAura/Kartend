@@ -3,8 +3,10 @@
 #include "itemwidget.h"
 #include "uiconstants.h"
 #include <algorithm>
-#include <QDebug>
+#include <QLoggingCategory>
 #include <QTimer>
+
+Q_LOGGING_CATEGORY(lcWidgetPoolManager, "kartend.widgetpoolmanager")
 
 namespace {
 
@@ -114,16 +116,22 @@ void WidgetPoolManager::softClear(QWidget *safeParent) {
       }
     }
   }
+
+  m_stalePool.reserve(m_stalePool.size() + m_pool.size());
   m_stalePool.append(m_pool);
   m_pool.clear();
   
   // Limit stale pool size to prevent memory bloat during rapid collection switching
   // Excess widgets are deleted immediately rather than waiting for pruneStaleWidgets()
-  while (m_stalePool.size() > MAX_STALE_POOL_SIZE) {
-    if (ItemWidget *excess = m_stalePool.takeFirst().data()) {
-      excess->deleteLater();
-      ++m_metrics.discards;
+  if (m_stalePool.size() > MAX_STALE_POOL_SIZE) {
+    const int excessCount = m_stalePool.size() - MAX_STALE_POOL_SIZE;
+    for (int i = 0; i < excessCount; ++i) {
+      if (ItemWidget *excess = m_stalePool[i].data()) {
+        excess->deleteLater();
+        ++m_metrics.discards;
+      }
     }
+    m_stalePool.erase(m_stalePool.begin(), m_stalePool.begin() + excessCount);
   }
 }
 
@@ -178,6 +186,8 @@ void WidgetPoolManager::prewarm() {
   
   int targetSize = calculateOptimalSize();
   int toCreate = targetSize - m_pool.size();
+
+  m_pool.reserve(targetSize);
   
   // Pre-allocate widgets up to optimal pool size
   for (int i = 0; i < toCreate; ++i) {
@@ -195,6 +205,8 @@ void WidgetPoolManager::prewarmAsync() {
   pruneNullEntries(m_pool);
   
   m_prewarmTargetSize = calculateOptimalSize();
+
+  m_pool.reserve(m_prewarmTargetSize);
   
   // Already at target size
   if (m_pool.size() >= m_prewarmTargetSize) {
@@ -254,15 +266,16 @@ auto WidgetPoolManager::calculateOptimalSize() const -> int {
 }
 
 void WidgetPoolManager::logMetrics() const {
-#ifdef KARTEND_DEBUG_LOGGING
-  qDebug() << "WidgetPool metrics:"
-           << "hits=" << m_metrics.hits
-           << "misses=" << m_metrics.misses
-           << "releases=" << m_metrics.releases
-           << "discards=" << m_metrics.discards
-           << "staleReused=" << m_metrics.staleReused
-           << "hitRate=" << QString::number(m_metrics.hitRate() * 100, 'f', 1) << "%"
-           << "poolSize=" << m_pool.size()
-           << "stalePoolSize=" << m_stalePool.size();
-#endif
+  if (!lcWidgetPoolManager().isDebugEnabled()) {
+    return;
+  }
+  qCDebug(lcWidgetPoolManager) << "WidgetPool metrics:"
+                               << "hits=" << m_metrics.hits
+                               << "misses=" << m_metrics.misses
+                               << "releases=" << m_metrics.releases
+                               << "discards=" << m_metrics.discards
+                               << "staleReused=" << m_metrics.staleReused
+                               << "hitRate=" << QString::number(m_metrics.hitRate() * 100, 'f', 1) << "%"
+                               << "poolSize=" << m_pool.size()
+                               << "stalePoolSize=" << m_stalePool.size();
 }

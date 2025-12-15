@@ -15,13 +15,9 @@
 #include <QWheelEvent>
 #include <QWidget>
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcMouseManager, "kartend.mousemanager")
-#define debugLog(msg) qCDebug(lcMouseManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
+#define debugLog(msg) do { if (lcMouseManager().isDebugEnabled()) { qCDebug(lcMouseManager) << msg; } } while (0)
 
 // MouseManagerSetup getter definitions
 SETUP_GETTER_DEF_SAME(MouseManagerSetup, ScrollManager*, ScrollManager, scrollManager)

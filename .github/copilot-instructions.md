@@ -308,16 +308,19 @@ Build script flags:
 - `--debug` - Debug build with map file, **required to see `qWarning()`/`qDebug()` output**
 - `--maintenance` - Warnings as errors, enables `--apply-fixes` and `--format-apply`
 - `--pgo` - Profile-guided optimization (two-pass build)
+- `--tests --run-tests` - Build and run unit tests
+- `--fast` - Skip reports/archive for faster iteration
 
 **Debug builds:** Use `--debug` flag when you need to see debug/warning output:
 ```bash
 .scripts/build.sh --debug
 ```
-The debug binary is at `build/debug/kartend`.
+The debug binary is at `build/ninja-debug/kartend` (or `build/make-debug/kartend` if using Make).
 
 **Manual builds:**
 ```bash
-cd build/release && cmake ../.. -DCMAKE_BUILD_TYPE=Release && make -j$(nproc)
+cmake -S . -B build/ninja-release -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build/ninja-release --parallel $(nproc)
 ```
 
 ## Testing
@@ -337,22 +340,22 @@ tests/
 
 Enable tests with the `BUILD_TESTS` CMake flag:
 ```bash
-cd build/release
-cmake ../.. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
-make test_gridlayoutcalculator test_interactionstateholder
+cmake -S . -B build/ninja-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+cmake --build build/ninja-release --parallel $(nproc)
 ```
 
 ### Running Tests
 
 Run individual test:
 ```bash
+cd build/ninja-release
 ./tests/test_gridlayoutcalculator
 ./tests/test_interactionstateholder
 ```
 
 Run all tests via CTest:
 ```bash
-cd tests && ctest --output-on-failure
+ctest --test-dir build/ninja-release --output-on-failure
 ```
 
 ### Adding New Tests
@@ -417,11 +420,11 @@ All `QTimer::singleShot` calls **must** have a comment explaining WHY the delay 
 ```cpp
 // Defer clearing ProgrammaticScroll flag until after Qt processes
 // the setValue() - ensures the scroll event handler sees the flag is set
-QTimer::singleShot(0, this, [this]() { ... });
+QTimer::singleShot(0, this, [this] { ... });
 
 // Wait 50ms for in-flight QtConcurrent operations to notice the
 // cancellation flag before resetting it for future operations
-QTimer::singleShot(50, this, [this]() { ... });
+QTimer::singleShot(50, this, [this] { ... });
 ```
 
 Common reasons for 0ms delays:

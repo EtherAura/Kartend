@@ -10,11 +10,24 @@ option(USE_PGO "Enable Profile-Guided Optimization" OFF)
 option(PGO_GENERATE "Generate PGO profile data" OFF)
 option(PGO_USE "Use existing PGO profile data" OFF)
 option(PGO_PROFILE_DIR "Directory for PGO profile data" "${CMAKE_BINARY_DIR}/pgo_profiles")
+option(ENABLE_SANITIZERS "Enable ASan+UBSan in Debug builds" OFF)
+option(ENABLE_CCACHE "Use ccache for faster rebuilds (if available)" ON)
+
+if (ENABLE_CCACHE)
+  find_program(CCACHE_PROGRAM ccache)
+  if (CCACHE_PROGRAM)
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    message(STATUS "ccache enabled: ${CCACHE_PROGRAM}")
+  else()
+    message(STATUS "ccache not found; continuing without it")
+  endif()
+else()
+  message(STATUS "ccache disabled (ENABLE_CCACHE=OFF)")
+endif()
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOUIC_OUTPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
 
 # Ensure UIC can find .ui files referenced as ui_*.h
 set(CMAKE_AUTOUIC_SEARCH_PATHS
@@ -27,10 +40,36 @@ set(CMAKE_AUTOUIC_SEARCH_PATHS
 set(QT_REQUIRED_COMPONENTS Core Gui Widgets Sql Concurrent)
 find_package(Qt6 COMPONENTS ${QT_REQUIRED_COMPONENTS} REQUIRED)
 
+# Optional: Qt Gamepad support
+find_package(Qt6 COMPONENTS Gamepad QUIET)
+
+# Optional: SDL2 fallback gamepad backend (used when Qt6::Gamepad unavailable)
+find_package(PkgConfig QUIET)
+if (PkgConfig_FOUND)
+  pkg_check_modules(SDL2 QUIET IMPORTED_TARGET sdl2)
+endif()
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+if (ENABLE_SANITIZERS)
+  if (NOT (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
+    message(WARNING "ENABLE_SANITIZERS is only supported on GCC/Clang")
+  else()
+    # Debug-only to avoid fighting the aggressive Release flags (LTO, -O3,
+    # -fomit-frame-pointer, etc.).
+    add_compile_options(
+      $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+      $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
+      $<$<CONFIG:Debug>:-fno-optimize-sibling-calls>
+    )
+    add_link_options(
+      $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+    )
+  endif()
+endif()
 
 if (NOT DEFINED BUILD_DATE)
   set(BUILD_DATE "unknown")
@@ -51,6 +90,7 @@ set(SOURCES
   ${SRC_DIR}/modules/interaction/interactionmanager.cpp
   ${SRC_DIR}/modules/interaction/arrownavigationhandler.cpp
   ${SRC_DIR}/modules/interaction/interactionstateholder.cpp
+  ${SRC_DIR}/modules/gamepad/gamepadmanager.cpp
   ${SRC_DIR}/modules/keyboard/keyboardmanager.cpp
   ${SRC_DIR}/modules/keyboard/alphabeticnavigationhandler.cpp
   ${SRC_DIR}/modules/launch/launchmanager.cpp
@@ -88,6 +128,7 @@ set(SOURCES
   ${SRC_DIR}/utils/timerutils.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/artworkutils.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
 )
 
 set(HEADERS
@@ -102,6 +143,7 @@ set(HEADERS
   ${SRC_DIR}/modules/interaction/interactionmanager.h
   ${SRC_DIR}/modules/interaction/arrownavigationhandler.h
   ${SRC_DIR}/modules/interaction/interactionstateholder.h
+  ${SRC_DIR}/modules/gamepad/gamepadmanager.h
   ${SRC_DIR}/modules/keyboard/keyboardmanager.h
   ${SRC_DIR}/modules/keyboard/alphabeticnavigationhandler.h
   ${SRC_DIR}/modules/launch/launchmanager.h
@@ -153,6 +195,7 @@ set(HEADERS
   ${SRC_DIR}/utils/artworkutils.h
   ${SRC_DIR}/utils/adaptivebatcher.h
   ${SRC_DIR}/utils/forwarddecl.h
+  ${SRC_DIR}/utils/dbmigrations.h
 )
 
 set(UI_FILES
@@ -166,14 +209,11 @@ set(RESOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/src/assets/resources.qrc
 )
 
-# Generate UI headers from .ui files
-qt6_wrap_ui(UI_HEADERS ${UI_FILES})
-
 add_executable(kartend)
 target_sources(kartend PRIVATE
   ${SOURCES}
   ${HEADERS}
-  ${UI_HEADERS}
+  ${UI_FILES}
   ${RESOURCES}
 )
 
@@ -185,6 +225,17 @@ target_link_libraries(kartend
     Qt6::Sql
     Qt6::Concurrent
 )
+
+if (Qt6Gamepad_FOUND)
+  target_link_libraries(kartend PRIVATE Qt6::Gamepad)
+  target_compile_definitions(kartend PRIVATE KARTEND_HAS_QT_GAMEPAD=1)
+elseif(TARGET PkgConfig::SDL2)
+  target_link_libraries(kartend PRIVATE PkgConfig::SDL2)
+  target_compile_definitions(kartend PRIVATE KARTEND_HAS_SDL2_GAMEPAD=1)
+  message(STATUS "Qt6::Gamepad not found; using SDL2 gamepad backend")
+else()
+  message(STATUS "No gamepad backend found (Qt6::Gamepad or SDL2); building without gamepad support")
+endif()
 
 target_compile_definitions(kartend
   PRIVATE
@@ -205,6 +256,7 @@ target_include_directories(kartend PRIVATE
   ${SRC_DIR}/modules/cache
   ${SRC_DIR}/modules/database
   ${SRC_DIR}/modules/event
+  ${SRC_DIR}/modules/gamepad
   ${SRC_DIR}/modules/interaction
   ${SRC_DIR}/modules/keyboard
   ${SRC_DIR}/modules/launch
@@ -241,11 +293,11 @@ endif()
 
 # Release flags
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  set(RELEASE_COMPILE_OPTS -O3 -ffast-math -march=native -flto=auto -fomit-frame-pointer -funroll-loops -fno-signed-zeros -fno-trapping-math -fno-math-errno -fno-semantic-interposition -ftree-vectorize -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -DQT_NO_DEBUG -DQT_NO_DEBUG_OUTPUT -fmerge-all-constants -fdelete-null-pointer-checks)
+  set(RELEASE_COMPILE_OPTS -O3 -ffast-math -march=native -flto=auto -fomit-frame-pointer -funroll-loops -fno-signed-zeros -fno-trapping-math -fno-math-errno -fno-semantic-interposition -ftree-vectorize -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -DQT_NO_DEBUG -fmerge-all-constants -fdelete-null-pointer-checks)
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  set(RELEASE_COMPILE_OPTS -O3 -ffast-math -march=native -flto=auto -fomit-frame-pointer -funroll-loops -fno-signed-zeros -fno-trapping-math -fno-math-errno -fno-semantic-interposition -ftree-vectorize -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -DQT_NO_DEBUG -DQT_NO_DEBUG_OUTPUT -fmerge-all-constants -fdelete-null-pointer-checks)
+  set(RELEASE_COMPILE_OPTS -O3 -ffast-math -march=native -flto=auto -fomit-frame-pointer -funroll-loops -fno-signed-zeros -fno-trapping-math -fno-math-errno -fno-semantic-interposition -ftree-vectorize -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -DQT_NO_DEBUG -fmerge-all-constants -fdelete-null-pointer-checks)
 else()
-  set(RELEASE_COMPILE_OPTS -O3 -ffast-math -march=native -flto=auto -fomit-frame-pointer -funroll-loops -fno-signed-zeros -fno-trapping-math -fno-math-errno -fno-semantic-interposition -ftree-vectorize -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -DQT_NO_DEBUG -DQT_NO_DEBUG_OUTPUT -fmerge-all-constants -fdelete-null-pointer-checks)
+  set(RELEASE_COMPILE_OPTS -O3 -ffast-math -march=native -flto=auto -fomit-frame-pointer -funroll-loops -fno-signed-zeros -fno-trapping-math -fno-math-errno -fno-semantic-interposition -ftree-vectorize -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -DQT_NO_DEBUG -fmerge-all-constants -fdelete-null-pointer-checks)
 endif()
 set(RELEASE_LINK_OPTS -fuse-ld=lld -flto=auto -Wl,-O3 -Wl,--gc-sections -Wl,--as-needed -Wl,-z,now -Wl,-z,relro -pie)
 target_compile_options(kartend PRIVATE $<$<CONFIG:Release>:${RELEASE_COMPILE_OPTS}>)

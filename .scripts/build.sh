@@ -1,8 +1,44 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+usage() {
+  cat <<'EOF'
+Usage: .scripts/build.sh [options]
+
+Build modes (mutually exclusive):
+  --debug           Debug build (keeps qDebug/qWarning output)
+  --sanitize        Sanitizer build (Debug + sanitizers)
+  --maintenance     Release build + static analysis helpers
+  --pgo             Two-pass PGO build (generate + use)
+  --pgo-generate    Configure/build PGO generate pass only
+  --pgo-use         Configure/build PGO use pass only
+
+Build options:
+  --tests           Configure with -DBUILD_TESTS=ON
+  --run-tests       Run ctest after a successful build (requires --tests)
+  --ninja           Force Ninja generator (if available)
+  --make            Force Unix Makefiles generator
+  --incremental     Reuse existing build directory (don't rm -rf it) (default)
+  --clean           Remove build directory before configuring
+  --no-archive      Skip creating the source archive (.backups/*.tar.gz)
+  --no-reports      Skip assembling source/UI reports into .backups/reports
+  --fast            Shorthand for --no-archive --no-reports
+  --keep-builds     Don't prune other build directories
+  --no-ccache       Disable ccache launcher even if installed
+
+Maintenance-only:
+  --apply-fixes      Apply safe clang-tidy fixes (requires --maintenance)
+  --format-check     Run clang-format check (requires --maintenance)
+  --format-apply     Apply clang-format (requires --maintenance)
+
+Other:
+  -h, --help        Show this help
+EOF
+}
+
 # Parse args
 debug_build=false
+sanitize_build=false
 maintenance_build=false
 apply_fixes=false
 format_check=false
@@ -10,19 +46,44 @@ format_apply=false
 pgo_generate=false
 pgo_use=false
 pgo_build=false
+keep_builds=false
+use_ccache=true
+build_tests=false
+run_tests=false
+generator_preference="auto"  # auto|ninja|make
+incremental_build=true
+make_archive=true
+make_reports=true
 for arg in "${@:-}"; do
   case "$arg" in
+    -h|--help) usage; exit 0 ;;
     --debug)       debug_build=true ;;
+    --sanitize|--sanitizers) sanitize_build=true ;;
     --maintenance) maintenance_build=true ;;
     --apply-fixes) apply_fixes=true ;;
     --format-check) format_check=true ;;
     --format-apply) format_apply=true ;;
+    --tests)       build_tests=true ;;
+    --run-tests)   run_tests=true ;;
+    --ninja)       generator_preference="ninja" ;;
+    --make)        generator_preference="make" ;;
+    --incremental) incremental_build=true ;;
+    --clean)       incremental_build=false ;;
+    --no-archive)  make_archive=false ;;
+    --no-reports)  make_reports=false ;;
+    --fast)        make_archive=false; make_reports=false ;;
     --pgo-generate) pgo_generate=true ;;
     --pgo-use)     pgo_use=true ;;
     --pgo)         pgo_build=true ;;
+    --keep-builds) keep_builds=true ;;
+    --no-ccache)   use_ccache=false ;;
     *) ;;
   esac
 done
+if ($debug_build && $sanitize_build) || ($maintenance_build && $sanitize_build); then
+  echo "Error: --sanitize is mutually exclusive with --debug/--maintenance."
+  exit 1
+fi
 if $debug_build && $maintenance_build; then
   echo "Error: --debug and --maintenance are mutually exclusive."
   exit 1
@@ -39,6 +100,10 @@ if $pgo_build && ($debug_build || $maintenance_build || $pgo_generate || $pgo_us
   echo "Error: --pgo is mutually exclusive with other build options."
   exit 1
 fi
+if $sanitize_build && ($pgo_build || $pgo_generate || $pgo_use); then
+  echo "Error: --sanitize is mutually exclusive with PGO options."
+  exit 1
+fi
 if $apply_fixes && ! $maintenance_build; then
   echo "Error: --apply-fixes is only supported with --maintenance."
   exit 1
@@ -47,8 +112,13 @@ if $format_apply && ! $maintenance_build; then
   echo "Error: --format-apply is only supported with --maintenance."
   exit 1
 fi
-if $format_check && ($debug_build || $pgo_build || $pgo_generate || $pgo_use); then
+if $format_check && ! $maintenance_build; then
   echo "Error: --format-check is only supported with --maintenance."
+  exit 1
+fi
+
+if $run_tests && ! $build_tests; then
+  echo "Error: --run-tests requires --tests (BUILD_TESTS=ON)."
   exit 1
 fi
 
@@ -73,6 +143,12 @@ setup_colors() {
   fi
 }
 setup_colors
+
+# Optional build accelerators
+ccache_available=false
+if $use_ccache && command -v ccache >/dev/null 2>&1; then
+  ccache_available=true
+fi
 
 # Output helpers
 PROGRESS_TOTAL=0
@@ -165,9 +241,36 @@ TS_HUMAN="$(date '+%b-%d-%Y-%H%M%S')"
 target_name="kartend"
 cmake_bin="cmake"
 generator_args=()
-if command -v ninja >/dev/null 2>&1; then
-  generator_args=(-G Ninja)
+if [ "$generator_preference" = "ninja" ]; then
+  if command -v ninja >/dev/null 2>&1; then
+    generator_args=(-G Ninja)
+  else
+    echo "Error: --ninja requested but ninja is not installed (or not in PATH)." >&2
+    exit 1
+  fi
+elif [ "$generator_preference" = "make" ]; then
+  generator_args=(-G "Unix Makefiles")
+else
+  # auto
+  if command -v ninja >/dev/null 2>&1; then
+    generator_args=(-G Ninja)
+  fi
 fi
+
+build_marker_file=".kartend-build-dir"
+
+generator_tag() {
+  if [ "${#generator_args[@]}" -ge 2 ] && [ "${generator_args[1]}" = "Ninja" ]; then
+    echo "ninja"
+    return
+  fi
+  echo "make"
+}
+
+build_dir_for_mode() {
+  local mode="$1"
+  echo "$root_dir/build/$(generator_tag)-$mode"
+}
 
 # Build-directory pruning (keep only one)
 prune_other_builds() {
@@ -176,9 +279,45 @@ prune_other_builds() {
   for d in "$build_root"/*; do
     [ -d "$d" ] || continue
     [ "$(basename "$d")" = "$keep_basename" ] && continue
-    rm -rf -- "$d"
+    # Safety: only prune build dirs created by this script.
+    if [ -f "$d/$build_marker_file" ]; then
+      rm -rf -- "$d"
+    fi
   done
   shopt -u nullglob
+}
+
+write_build_marker() {
+  local dir="$1" mode="$2"
+  local gen
+  if [ "$(generator_tag)" = "ninja" ]; then
+    gen="Ninja"
+  else
+    gen="Unix Makefiles"
+  fi
+  {
+    echo "mode=${mode}"
+    echo "generator=${gen}"
+    echo "dir_tag=$(generator_tag)"
+    echo "timestamp=${TS_HUMAN}"
+  } >"$dir/$build_marker_file"
+}
+
+maybe_prepare_build_dir() {
+  local dir="$1" logs="$2" mode="$3"
+  if $incremental_build; then
+    mkdir -p "$dir" "$logs"
+    write_build_marker "$dir" "$mode"
+    return 0
+  fi
+  rm -rf "$dir"
+  mkdir -p "$dir" "$logs"
+  write_build_marker "$dir" "$mode"
+}
+
+run_ctest() {
+  local dir="$1"
+  ctest --test-dir "$dir" --output-on-failure
 }
 
 # Step planning
@@ -503,6 +642,9 @@ if $maintenance_build; then
   plan_step "Prepare build directory"
   plan_step "Configure"
   plan_step "Build"
+  if $run_tests; then
+    plan_step "Run tests"
+  fi
   plan_step "Sanitize compile_commands"
   if $format_apply; then
     plan_step "clang-format (apply fixes)"
@@ -519,20 +661,26 @@ if $maintenance_build; then
   plan_step "cppcheck analysis"
   plan_step "Heuristic duplicate checks"
   plan_step "Export symbols (nm)"
-  plan_step "Assemble reports"
-  plan_step "Remove linker map files"
-  plan_step "Stage files for archive"
-  plan_step "Create archive"
-  plan_step "Cleanup archive staging"
-  plan_step "Prune build directories"
+  if $make_reports; then
+    plan_step "Assemble reports"
+    plan_step "Remove linker map files"
+  fi
+  if $make_archive; then
+    plan_step "Stage files for archive"
+    plan_step "Create archive"
+    plan_step "Cleanup archive staging"
+  fi
+  if ! $keep_builds; then
+    plan_step "Prune build directories"
+  fi
 
   progress_clearline
   padded=$(printf "${CYAN}[*]${RESET} %-30s" "Building in MAINTENANCE mode")
   printf "%s${CYAN}[%02d${MAGENTA}/${CYAN}%02d]${RESET}\n" "$padded" 0 "$PROGRESS_TOTAL"
-  build_type="maintenance"; build_dir="$root_dir/build/$build_type"; logs_dir="$build_dir/logs"; QUIET=true
+  build_type="maintenance"; build_dir="$(build_dir_for_mode "$build_type")"; logs_dir="$build_dir/logs"; QUIET=true
 
   prep_tmp_log="$(mktemp "$root_dir/build/${build_type}.prepare.XXXX.log")"
-  run_step "Prepare build directory" "$prep_tmp_log" bash -lc "rm -rf \"$build_dir\" && mkdir -p \"$build_dir\" \"$logs_dir\""
+  run_step "Prepare build directory" "$prep_tmp_log" maybe_prepare_build_dir "$build_dir" "$logs_dir" "$build_type"
   mkdir -p "$logs_dir" && mv -f "$prep_tmp_log" "$logs_dir/prepare.log"
 
   cmake_args=(
@@ -545,9 +693,25 @@ if $maintenance_build; then
     -DCMAKE_C_COMPILER=clang
     -DCMAKE_CXX_COMPILER=clang++
     "-DBUILD_DATE=$TS_HUMAN"
+    -DBUILD_TESTS=OFF
   )
+  if $build_tests; then
+    cmake_args+=(-DBUILD_TESTS=ON)
+  fi
+  if $ccache_available; then
+    cmake_args+=(
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache
+      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+    )
+  fi
+  if ! $use_ccache; then
+    cmake_args+=(-DENABLE_CCACHE=OFF)
+  fi
   run_step "Configure" "$logs_dir/cmake_configure.log" "$cmake_bin" "${cmake_args[@]}"
   run_step "Build" "$logs_dir/cmake_build.log" "$cmake_bin" --build "$build_dir" -j"$(nproc)"
+  if $run_tests; then
+    run_step "Run tests" "$logs_dir/ctest.log" run_ctest "$build_dir"
+  fi
 
   COMPDB_FILE="$build_dir/compile_commands.json"
   SANDBOX_COMPDB_DIR="$build_dir/cc-sanitized"
@@ -601,29 +765,37 @@ EOF
   
   run_optional "Export symbols (nm)" "$logs_dir/nm.log" do_export_symbols "$build_dir/$target_name" "$build_dir/nm-list.txt"
 
-  run_step "Assemble reports" "$logs_dir/reports-assemble.log" assemble_reports
-  run_optional "Remove linker map files" "$logs_dir/remove-map.log" bash -lc "rm -f \"$reports_dir/$target_name.map\" \"$reports_dir\"/$target_name-*.map"
+  if $make_reports; then
+    run_step "Assemble reports" "$logs_dir/reports-assemble.log" assemble_reports
+    run_optional "Remove linker map files" "$logs_dir/remove-map.log" bash -lc "rm -f \"$reports_dir/$target_name.map\" \"$reports_dir\"/$target_name-*.map"
+  fi
 
   abort_if_failed
 
-  base="$(basename "$root_dir")"
-  archive_name="${base}-${build_type}-${TS_HUMAN}"
-  fname="${archive_name}.tar.gz"
-  parent_dir="$(dirname "$root_dir")"
-  archive_dir="${parent_dir}/${archive_name}"
+  if $make_archive; then
+    base="$(basename "$root_dir")"
+    archive_name="${base}-${build_type}-${TS_HUMAN}"
+    fname="${archive_name}.tar.gz"
+    parent_dir="$(dirname "$root_dir")"
+    archive_dir="${parent_dir}/${archive_name}"
 
-  run_step "Stage files for archive" "$logs_dir/archive-stage.log" bash -lc "
-    rm -rf \"$archive_dir\" &&
-    mkdir -p \"$archive_dir\" &&
-    cp -a \"$root_dir/src\" \"$archive_dir/\" &&
-    cp -a \"$root_dir/CMakeLists.txt\" \"$archive_dir/\"
-  "
-  run_step "Create archive" "$logs_dir/archive-tar.log" tar -v -C "$parent_dir" -czf "${backups_dir}/${fname}" "$archive_name"
-  run_optional "Cleanup archive staging" "$logs_dir/archive-clean.log" rm -rf "$archive_dir"
-  run_step "Prune build directories" "$logs_dir/prune-build-dirs.log" prune_other_builds "$root_dir/build" "$(basename "$build_dir")"
+    run_step "Stage files for archive" "$logs_dir/archive-stage.log" bash -lc "
+      rm -rf \"$archive_dir\" &&
+      mkdir -p \"$archive_dir\" &&
+      cp -a \"$root_dir/src\" \"$archive_dir/\" &&
+      cp -a \"$root_dir/CMakeLists.txt\" \"$archive_dir/\"
+    "
+    run_step "Create archive" "$logs_dir/archive-tar.log" tar -v -C "$parent_dir" -czf "${backups_dir}/${fname}" "$archive_name"
+    run_optional "Cleanup archive staging" "$logs_dir/archive-clean.log" rm -rf "$archive_dir"
+  fi
+  if ! $keep_builds; then
+    run_step "Prune build directories" "$logs_dir/prune-build-dirs.log" prune_other_builds "$root_dir/build" "$(basename "$build_dir")"
+  fi
 
   step_final "Build completed successfully."
-  step_final "Archive created: ${backups_dir}/${fname}"
+  if $make_archive; then
+    step_final "Archive created: ${backups_dir}/${fname}"
+  fi
   if [ "$IWYU_FAILED" = true ] || [ "$IWYU_SUGGESTED" = true ]; then
     rel_iwyu="${logs_dir#"$root_dir/"}/iwyu.log"
     step_final "Notice: IWYU reported suggestions. See ${rel_iwyu}"
@@ -654,16 +826,49 @@ fi
 ########################################
 # Regular build: release or debug (CMake)
 ########################################
-if $debug_build && ! $pgo_build; then
+if $sanitize_build; then
   ALL_STEPS=(); NEXT_STEP_IDX=0; PROGRESS_CUR=0
   plan_step "Prepare build directory"
   plan_step "Configure"
   plan_step "Build"
-  plan_step "Assemble reports"
-  plan_step "Stage files for archive"
-  plan_step "Create archive"
-  plan_step "Cleanup archive staging"
-  plan_step "Prune build directories"
+  if $run_tests; then
+    plan_step "Run tests"
+  fi
+  if $make_reports; then
+    plan_step "Assemble reports"
+  fi
+  if $make_archive; then
+    plan_step "Stage files for archive"
+    plan_step "Create archive"
+    plan_step "Cleanup archive staging"
+  fi
+  if ! $keep_builds; then
+    plan_step "Prune build directories"
+  fi
+
+  progress_clearline
+  printf "${CYAN}[*]${RESET} %-30s${CYAN}[%02d${MAGENTA}/${CYAN}%02d]${RESET}\n" "Building in SANITIZE mode" 0 "$PROGRESS_TOTAL"
+  build_type="sanitize"; debug_build=true; QUIET=true
+
+elif $debug_build && ! $pgo_build; then
+  ALL_STEPS=(); NEXT_STEP_IDX=0; PROGRESS_CUR=0
+  plan_step "Prepare build directory"
+  plan_step "Configure"
+  plan_step "Build"
+  if $run_tests; then
+    plan_step "Run tests"
+  fi
+  if $make_reports; then
+    plan_step "Assemble reports"
+  fi
+  if $make_archive; then
+    plan_step "Stage files for archive"
+    plan_step "Create archive"
+    plan_step "Cleanup archive staging"
+  fi
+  if ! $keep_builds; then
+    plan_step "Prune build directories"
+  fi
 
   progress_clearline
   printf "${CYAN}[*]${RESET} %-30s${CYAN}[%02d${MAGENTA}/${CYAN}%02d]${RESET}\n" "Building in DEBUG mode" 0 "$PROGRESS_TOTAL"
@@ -673,13 +878,22 @@ elif ! $pgo_build; then
   plan_step "Prepare build directory"
   plan_step "Configure"
   plan_step "Build"
+  if $run_tests; then
+    plan_step "Run tests"
+  fi
   plan_step "Strip binaries"
-  plan_step "Assemble reports"
-  plan_step "Remove linker map files"
-  plan_step "Stage files for archive"
-  plan_step "Create archive"
-  plan_step "Cleanup archive staging"
-  plan_step "Prune build directories"
+  if $make_reports; then
+    plan_step "Assemble reports"
+    plan_step "Remove linker map files"
+  fi
+  if $make_archive; then
+    plan_step "Stage files for archive"
+    plan_step "Create archive"
+    plan_step "Cleanup archive staging"
+  fi
+  if ! $keep_builds; then
+    plan_step "Prune build directories"
+  fi
 
   progress_clearline
   printf "${CYAN}[*]${RESET} %-30s${CYAN}[%02d${MAGENTA}/${CYAN}%02d]${RESET}\n" "Building in RELEASE mode" 0 "$PROGRESS_TOTAL"
@@ -698,24 +912,33 @@ if $pgo_build; then
   plan_step "Build PGO use"
   plan_step "Rename build directory"
   plan_step "Strip binaries"
-  plan_step "Assemble reports"
-  plan_step "Stage files for archive"
-  plan_step "Create archive"
-  plan_step "Cleanup archive staging"
-  plan_step "Prune build directories"
+  if $run_tests; then
+    plan_step "Run tests"
+  fi
+  if $make_reports; then
+    plan_step "Assemble reports"
+  fi
+  if $make_archive; then
+    plan_step "Stage files for archive"
+    plan_step "Create archive"
+    plan_step "Cleanup archive staging"
+  fi
+  if ! $keep_builds; then
+    plan_step "Prune build directories"
+  fi
 
   progress_clearline
   padded=$(printf "${CYAN}[*]${RESET} %-30s" "Building in PGO mode")
   printf "%s${CYAN}[%02d${MAGENTA}/${CYAN}%02d]${RESET}\n" "$padded" 0 "$PROGRESS_TOTAL"
   
   build_type="release"
-  build_dir="$root_dir/build/$build_type"
+  build_dir="$(build_dir_for_mode "$build_type")"
   logs_dir="$build_dir/logs"
   QUIET=true
 
   # Prepare build dir
   prep_tmp_log="$(mktemp "$root_dir/build/${build_type}.prepare.XXXX.log")"
-  run_step "Prepare build directory" "$prep_tmp_log" bash -lc "rm -rf \"$build_dir\" && mkdir -p \"$build_dir\" \"$logs_dir\""
+  run_step "Prepare build directory" "$prep_tmp_log" maybe_prepare_build_dir "$build_dir" "$logs_dir" "$build_type"
   mkdir -p "$logs_dir" && mv -f "$prep_tmp_log" "$logs_dir/prepare.log"
 
   # Configure for PGO generate
@@ -730,7 +953,20 @@ if $pgo_build; then
     -DCMAKE_CXX_COMPILER=clang++
     -DUSE_PGO=ON
     -DPGO_GENERATE=ON
+    -DBUILD_TESTS=OFF
   )
+  if $build_tests; then
+    cmake_args+=(-DBUILD_TESTS=ON)
+  fi
+  if $ccache_available; then
+    cmake_args+=(
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache
+      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+    )
+  fi
+  if ! $use_ccache; then
+    cmake_args+=(-DENABLE_CCACHE=OFF)
+  fi
   run_step "Configure PGO generate" "$logs_dir/configure.log" cmake "${cmake_args[@]}"
   run_step "Build PGO generate" "$logs_dir/build.log" cmake --build "$build_dir"
 
@@ -759,12 +995,25 @@ if $pgo_build; then
     -DCMAKE_CXX_COMPILER=clang++
     -DUSE_PGO=ON
     -DPGO_USE=ON
+    -DBUILD_TESTS=OFF
   )
+  if $build_tests; then
+    cmake_args+=(-DBUILD_TESTS=ON)
+  fi
+  if $ccache_available; then
+    cmake_args+=(
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache
+      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+    )
+  fi
+  if ! $use_ccache; then
+    cmake_args+=(-DENABLE_CCACHE=OFF)
+  fi
   run_step "Configure PGO use" "$logs_dir/configure2.log" cmake "${cmake_args[@]}"
   run_step "Build PGO use" "$logs_dir/build2.log" cmake --build "$build_dir"
 
   # Rename build directory
-  new_build_dir="$root_dir/build/release-pgo"
+  new_build_dir="$root_dir/build/$(generator_tag)-release-pgo"
   run_step "Rename build directory" "$root_dir/build/rename.log" bash -lc "mv \"$build_dir\" \"$new_build_dir\""
   build_dir="$new_build_dir"
   build_type="release-pgo"
@@ -776,38 +1025,50 @@ if $pgo_build; then
     run_step "Strip binaries" "$logs_dir/strip.log" bash -lc 'find "'"$build_dir"'" -maxdepth 1 -type f -executable -print0 | xargs -0 -r strip --strip-all'
   fi
 
+  if $run_tests; then
+    run_step "Run tests" "$logs_dir/ctest.log" run_ctest "$build_dir"
+  fi
+
   # Reports
-  run_step "Assemble reports" "$logs_dir/reports-assemble.log" assemble_reports
+  if $make_reports; then
+    run_step "Assemble reports" "$logs_dir/reports-assemble.log" assemble_reports
+  fi
 
   abort_if_failed
 
-# Archive
-base="$(basename "$root_dir")"
-archive_name="${base}-${build_type}-${TS_HUMAN}"
-fname="${archive_name}.tar.gz"
-archive_dir="${parent_dir}/${archive_name}"
-run_step "Stage files for archive" "$logs_dir/archive-stage.log" bash -lc "
-  mkdir -p \"$archive_dir\"
-  cp -r \"$root_dir\"/* \"$archive_dir\"/ 2>/dev/null || true
-  rm -rf \"$archive_dir\"/build \"$archive_dir\"/reports \"$archive_dir\"/.git \"$archive_dir\"/.github
-"
-run_step "Create archive" "$logs_dir/archive-tar.log" tar -v --exclude='build' --exclude='reports' --exclude='.*' -C "$parent_dir" -czf "${backups_dir}/${fname}" "$archive_name"
-run_optional "Cleanup archive staging" "$logs_dir/archive-clean.log" rm -rf "$archive_dir"
+  # Archive
+  if $make_archive; then
+    base="$(basename "$root_dir")"
+    archive_name="${base}-${build_type}-${TS_HUMAN}"
+    fname="${archive_name}.tar.gz"
+    archive_dir="${parent_dir}/${archive_name}"
+    run_step "Stage files for archive" "$logs_dir/archive-stage.log" bash -lc "
+      mkdir -p \"$archive_dir\"
+      cp -r \"$root_dir\"/* \"$archive_dir\"/ 2>/dev/null || true
+      rm -rf \"$archive_dir\"/build \"$archive_dir\"/reports \"$archive_dir\"/.git \"$archive_dir\"/.github
+    "
+    run_step "Create archive" "$logs_dir/archive-tar.log" tar -v --exclude='build' --exclude='reports' --exclude='.*' -C "$parent_dir" -czf "${backups_dir}/${fname}" "$archive_name"
+    run_optional "Cleanup archive staging" "$logs_dir/archive-clean.log" rm -rf "$archive_dir"
+  fi
 
 # Prune other build dirs (keep only current)
-run_step "Prune build directories" "$logs_dir/prune-build-dirs.log" prune_other_builds "$root_dir/build" "$(basename "$build_dir")"
+if ! $keep_builds; then
+  run_step "Prune build directories" "$logs_dir/prune-build-dirs.log" prune_other_builds "$root_dir/build" "$(basename "$build_dir")"
+fi
 
 step_final "Build completed successfully."
-step_final "Archive created: ${backups_dir}/${fname}"
+if $make_archive; then
+  step_final "Archive created: ${backups_dir}/${fname}"
+fi
 exit 0
 fi
 
 if ! $pgo_build; then
-  build_dir="$root_dir/build/$build_type"; logs_dir="$build_dir/logs"
+  build_dir="$(build_dir_for_mode "$build_type")"; logs_dir="$build_dir/logs"
 
   # Prepare build dir (temp log -> logs/)
   prep_tmp_log="$(mktemp "$root_dir/build/${build_type}.prepare.XXXX.log")"
-  run_step "Prepare build directory" "$prep_tmp_log" bash -lc "rm -rf \"$build_dir\" && mkdir -p \"$build_dir\" \"$logs_dir\""
+  run_step "Prepare build directory" "$prep_tmp_log" maybe_prepare_build_dir "$build_dir" "$logs_dir" "$build_type"
   mkdir -p "$logs_dir" && mv -f "$prep_tmp_log" "$logs_dir/prepare.log"
 
   # Configure and build
@@ -818,7 +1079,20 @@ if ! $pgo_build; then
     "-DCMAKE_BUILD_TYPE=$( $debug_build && echo Debug || echo Release )"
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
     "-DBUILD_DATE=$TS_HUMAN"
+    -DBUILD_TESTS=OFF
   )
+  if $build_tests; then
+    cmake_args+=(-DBUILD_TESTS=ON)
+  fi
+  if $ccache_available; then
+    cmake_args+=(
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache
+      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+    )
+  fi
+  if ! $use_ccache; then
+    cmake_args+=(-DENABLE_CCACHE=OFF)
+  fi
   if [ "$build_type" = "release" ]; then
     cmake_args+=(-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++)
   fi
@@ -831,10 +1105,18 @@ if ! $pgo_build; then
     fi
   fi
 
+  if [ "$build_type" = "sanitize" ]; then
+    cmake_args+=(-DENABLE_SANITIZERS=ON)
+  fi
+
   # Configure
   run_step "Configure" "$logs_dir/cmake_configure.log" "$cmake_bin" "${cmake_args[@]}"
   # Build
   run_step "Build" "$logs_dir/cmake_build.log" "$cmake_bin" --build "$build_dir" -j"$(nproc)"
+
+  if $run_tests; then
+    run_step "Run tests" "$logs_dir/ctest.log" run_ctest "$build_dir"
+  fi
 
   # Strip in release
   if [ "$build_type" = "release" ] && command -v strip >/dev/null 2>&1; then
@@ -842,39 +1124,47 @@ if ! $pgo_build; then
   fi
 
   # Reports
-  run_step "Assemble reports" "$logs_dir/reports-assemble.log" assemble_reports
+  if $make_reports; then
+    run_step "Assemble reports" "$logs_dir/reports-assemble.log" assemble_reports
 
-  # Remove map files for non-debug
-  if [ "$build_type" != "debug" ]; then
-    run_optional "Remove linker map files" "$logs_dir/remove-map.log" bash -lc "rm -f \"$reports_dir/$target_name.map\" \"$reports_dir\"/$target_name-*.map"
+    # Remove map files for non-debug
+    if [ "$build_type" != "debug" ]; then
+      run_optional "Remove linker map files" "$logs_dir/remove-map.log" bash -lc "rm -f \"$reports_dir/$target_name.map\" \"$reports_dir\"/$target_name-*.map"
+    fi
   fi
 
   abort_if_failed
 
   # Archive (exclude build & reports)
-  base="$(basename "$root_dir")"
-  archive_name="${base}-${build_type}-${TS_HUMAN}"
-  fname="${archive_name}.tar.gz"
-  parent_dir="$(dirname "$root_dir")"
-  archive_dir="${parent_dir}/${archive_name}"
+  if $make_archive; then
+    base="$(basename "$root_dir")"
+    archive_name="${base}-${build_type}-${TS_HUMAN}"
+    fname="${archive_name}.tar.gz"
+    parent_dir="$(dirname "$root_dir")"
+    archive_dir="${parent_dir}/${archive_name}"
 
-  run_step "Stage files for archive" "$logs_dir/archive-stage.log" bash -lc "
-    rm -rf \"$archive_dir\" &&
-    mkdir -p \"$archive_dir\" &&
-    if command -v rsync >/dev/null 2>&1; then
-      rsync -a --delete --itemize-changes --exclude='.git' --exclude='build' --exclude='reports' --exclude='.*' ./ \"$archive_dir\"/
-    else
-      cp -av . \"$archive_dir\"/ &&
-      rm -rf \"$archive_dir\"/build \"$archive_dir\"/reports \"$archive_dir\"/.*
-    fi
-  "
-  run_step "Create archive" "$logs_dir/archive-tar.log" tar -v --exclude='build' --exclude='reports' --exclude='.*' -C "$parent_dir" -czf "${backups_dir}/${fname}" "$archive_name"
-  run_optional "Cleanup archive staging" "$logs_dir/archive-clean.log" rm -rf "$archive_dir"
+    run_step "Stage files for archive" "$logs_dir/archive-stage.log" bash -lc "
+      rm -rf \"$archive_dir\" &&
+      mkdir -p \"$archive_dir\" &&
+      if command -v rsync >/dev/null 2>&1; then
+        rsync -a --delete --itemize-changes --exclude='.git' --exclude='build' --exclude='reports' --exclude='.*' ./ \"$archive_dir\"/
+      else
+        cp -av . \"$archive_dir\"/ &&
+        rm -rf \"$archive_dir\"/build \"$archive_dir\"/reports \"$archive_dir\"/.*
+      fi
+    "
+    run_step "Create archive" "$logs_dir/archive-tar.log" tar -v --exclude='build' --exclude='reports' --exclude='.*' -C "$parent_dir" -czf "${backups_dir}/${fname}" "$archive_name"
+    run_optional "Cleanup archive staging" "$logs_dir/archive-clean.log" rm -rf "$archive_dir"
+  fi
 
   # Prune other build dirs (keep only current)
-  run_step "Prune build directories" "$logs_dir/prune-build-dirs.log" prune_other_builds "$root_dir/build" "$(basename "$build_dir")"
+  if ! $keep_builds; then
+    run_step "Prune build directories" "$logs_dir/prune-build-dirs.log" prune_other_builds "$root_dir/build" "$(basename "$build_dir")"
+  fi
 
   step_final "Build completed successfully."
-  step_final "Archive created: ${backups_dir}/${fname}"
+  if $make_archive; then
+    step_final "Archive created: ${backups_dir}/${fname}"
+  fi
   exit 0
 fi

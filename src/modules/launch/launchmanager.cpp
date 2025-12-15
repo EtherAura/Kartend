@@ -15,13 +15,9 @@
 #include <QRegularExpression>
 #include <QStandardPaths>
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcLaunchManager, "kartend.launchmanager")
-#define debugLog(msg) qCDebug(lcLaunchManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
+#define debugLog(msg) do { if (lcLaunchManager().isDebugEnabled()) { qCDebug(lcLaunchManager) << msg; } } while (0)
 
 SETUP_GETTER_DEF_SAME(LaunchManagerSetup, QList<CollectionConfig>*, Collections, collections)
 

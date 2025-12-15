@@ -15,13 +15,9 @@
 #include "setuputils.h"
 #include "uiconstants.h"
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSelectionRestoreManager, "kartend.selectionrestoremanager")
-#define debugLog(msg) qCDebug(lcSelectionRestoreManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
+#define debugLog(msg) do { if (lcSelectionRestoreManager().isDebugEnabled()) { qCDebug(lcSelectionRestoreManager) << msg; } } while (0)
 
 SETUP_GETTER_DEF_SAME(SelectionRestoreManagerSetup, InteractionManager*, InteractionManager, interactionManager)
 SETUP_GETTER_DEF_SAME(SelectionRestoreManagerSetup, ScrollManager*, ScrollManager, scrollManager)
@@ -77,14 +73,22 @@ auto SelectionRestoreManager::getSelectionRestoreIndex(int collectionIndex) cons
     return -1;
   }
 
+  const CollectionConfig &cfg = (*m_collections)[collectionIndex];
+  const bool subfolderActive = !cfg.currentSubfolder.trimmed().isEmpty();
+
   QString hierarchicalName = CollectionUtils::hierarchicalNameFor(
-      (*m_collections)[collectionIndex], *m_collections);
+      cfg, *m_collections);
   int selIdx = -1;
   if (m_sessionManager) {
-    selIdx = m_sessionManager->getLastSelectedIndex(hierarchicalName);
-    if (selIdx < 0) {
-      selIdx = m_sessionManager->getLastSelectedIndex(
-          (*m_collections)[collectionIndex].name);
+    if (subfolderActive) {
+      const QString sessionKey =
+          CollectionUtils::selectionSessionKeyFor(cfg, *m_collections);
+      selIdx = m_sessionManager->getLastSelectedIndex(sessionKey);
+    } else {
+      selIdx = m_sessionManager->getLastSelectedIndex(hierarchicalName);
+      if (selIdx < 0) {
+        selIdx = m_sessionManager->getLastSelectedIndex(cfg.name);
+      }
     }
   }
   if (selIdx >= total) {

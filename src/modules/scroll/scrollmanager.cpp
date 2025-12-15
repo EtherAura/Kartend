@@ -35,13 +35,9 @@
 #include <QWidget>
 #include <algorithm>
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcScrollManager, "kartend.scrollmanager")
-#define debugLog(msg) qCDebug(lcScrollManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
+#define debugLog(msg) do { if (lcScrollManager().isDebugEnabled()) { qCDebug(lcScrollManager) << msg; } } while (0)
 
 // Initializes timers for throttle, arrow-key updates, and a short idle window
 // to treat any scrollbar interaction as user-driven scrolling
@@ -355,6 +351,28 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
   }
 
   setupNormalVirtualScrolling();
+}
+
+void ScrollManager::updateMediaItemCount(int mediaItemCount) {
+  if (!m_dataManager || !m_virtualContainer) {
+    return;
+  }
+
+  mediaItemCount = std::max(0, mediaItemCount);
+  m_dataManager->resizeStorage(mediaItemCount);
+  m_totalItems = m_dataManager->totalItemCount();
+
+  if (m_totalItems == 0) {
+    // Keep container and metrics consistent even when empty.
+    calculateVirtualMetrics();
+    positionVirtualContainer();
+    updateVirtualView();
+    return;
+  }
+
+  calculateVirtualMetrics();
+  positionVirtualContainer();
+  updateVirtualView();
 }
 
 void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames) {
@@ -888,11 +906,13 @@ void ScrollManager::scheduleArrowKeyUpdate(int selectedIndex) {
 // Updates selection visuals and manages prewarming, overlay animation, and
 // arrow-centering properties
 void ScrollManager::updateSelectionForIndex(int selectedIndex) {
-#ifdef KARTEND_DEBUG_LOGGING
-  bool forceVisible = m_overlayManager && m_overlayManager->isForceVisible();
-  debugLog(QString("updateSelectionForIndex: sel=%1 lastSel=%2 forceVisible=%3")
-           .arg(selectedIndex).arg(m_selectionState->lastSelectedIndex()).arg(forceVisible));
-#endif
+  if (lcScrollManager().isDebugEnabled()) {
+    bool forceVisible = m_overlayManager && m_overlayManager->isForceVisible();
+    debugLog(QString("updateSelectionForIndex: sel=%1 lastSel=%2 forceVisible=%3")
+             .arg(selectedIndex)
+             .arg(m_selectionState->lastSelectedIndex())
+             .arg(forceVisible));
+  }
   
   if (m_destroying || (!m_mediaScrollArea) || selectedIndex < 0 ||
       selectedIndex >= m_totalItems) {

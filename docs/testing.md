@@ -4,25 +4,50 @@ Unit tests use the Qt Test framework with CTest integration.
 
 ## Building Tests
 
+Fast path using the build script:
+
 ```bash
-cd build/release
-cmake ../.. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
-make -j$(nproc)
+./.scripts/build.sh --tests --run-tests --fast
+```
+
+Manual CMake build:
+
+```bash
+cmake -S . -B build/ninja-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+cmake --build build/ninja-release --parallel $(nproc)
 ```
 
 ## Running Tests
 
 ```bash
 # Run all tests via CTest
-cd build/release && ctest --output-on-failure
+ctest --test-dir build/ninja-release --output-on-failure
 
 # Run individual test
+cd build/ninja-release
 ./tests/test_gridlayoutcalculator
 ./tests/test_interactionstateholder
 ./tests/test_launchmanager
 ./tests/test_pathutils
 ./tests/test_widgetpoolmanager
 ./tests/test_gridutils
+```
+
+## Sanitizers (optional)
+
+Sanitizers are useful for catching memory safety bugs (use-after-free, OOB,
+UB) during development.
+
+```bash
+# Build Debug + ASan/UBSan
+./.scripts/build.sh --sanitize --keep-builds --fast
+
+# Configure and build tests
+cmake -S . -B build/ninja-sanitize -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DENABLE_SANITIZERS=ON
+cmake --build build/ninja-sanitize --parallel $(nproc)
+
+# Run the suite
+ctest --test-dir build/ninja-sanitize --output-on-failure
 ```
 
 ## Test Coverage

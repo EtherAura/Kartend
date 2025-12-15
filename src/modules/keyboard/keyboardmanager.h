@@ -64,6 +64,8 @@ public:
   void beginHoldRepeat();
   void stopRepeat(bool suppressRecentering = false);
   [[nodiscard]] bool isRepeating() const { return m_repeating; }
+  void finalizeKeyRepeatForKey(Qt::Key key, int direction, bool vertical);
+  [[nodiscard]] bool consumePendingNavigationKey(Qt::Key &outKey);
 
   // Navigation state
   [[nodiscard]] bool isPhysicalKeyDown() const { return m_physicalKeyDown; }
@@ -150,6 +152,12 @@ private:
   bool m_wrapSequenceActive = false;
   bool m_continuousScrollActive = false;
   bool m_isShuttingDown = false;
+
+  // Pending navigation key: used to associate custom key bindings with the
+  // repeat pipeline (ArrowNavigationHandler doesn't receive the QKeyEvent).
+  bool m_hasPendingNavigationKey = false;
+  Qt::Key m_pendingNavigationKey = Qt::Key_unknown;
+  qint64 m_pendingNavigationKeyAtMs = 0;
 
   // Manager references
   const GeneralSettings *m_generalSettings = nullptr;

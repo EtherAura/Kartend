@@ -17,13 +17,9 @@
 #include <QScrollBar>
 #include <QStackedWidget>
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSearchManager, "kartend.searchmanager")
-#define debugLog(msg) qCDebug(lcSearchManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
+#define debugLog(msg) do { if (lcSearchManager().isDebugEnabled()) { qCDebug(lcSearchManager) << msg; } } while (0)
 
 // SearchManagerSetup getter definitions
 SETUP_GETTER_DEF_SAME(SearchManagerSetup, DatabaseManager*, DatabaseManager, databaseManager)
@@ -350,15 +346,51 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
     if (collIndex >= 0) {
       // If we have saved pre-search state, just restore it instead of reloading
       if (m_scrollManager && m_scrollManager->hasPreSearchState()) {
-        m_scrollManager->clearFilter();
-        // For CurrentCollection mode with pre-search state, we need to restore
-        // selection manually since onItemsLoaded won't be called
-        int sel = m_preSearchSelectedIndex;
-        if (sel < 0 && m_settingsManager && collIndex >= 0) {
-          sel = m_settingsManager->getLastSelectedItem(collIndex);
-        }
-        if (sel >= 0) {
-          emit requestSelectionRestore(sel);
+        if (m_preSearchMode == SearchMode::CurrentCollection) {
+          // CurrentCollection searches are DB-backed (count + on-demand ranges),
+          // so the scroll data backing the search view is different from the
+          // pre-search view. Rebuild the pre-search view and then restore the
+          // cached widgets/scroll position for instant recovery.
+          CollectionContext context;
+          context.currentIndex = collIndex;
+          context.config = (*m_collections)[collIndex];
+          context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
+              context.config.mediaDirectory, context.config.name);
+          context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
+              context.config.artworkDirectory, context.config.name);
+          context.artworkDirectory = context.config.artworkDirectory;
+          if (m_generalSettings) {
+            context.sortMode = m_generalSettings->sortMode;
+            context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+          }
+
+          const int totalItems = (m_preSearchTotalItems >= 0)
+                                     ? m_preSearchTotalItems
+                                     : m_scrollManager->getTotalItems();
+          m_scrollManager->setupVirtualScrolling(totalItems, context);
+          m_scrollManager->restorePreSearchState();
+
+          // Restore selection manually since NavigationManager isn't driving
+          // this restoration path.
+          int sel = m_preSearchSelectedIndex;
+          if (sel < 0 && m_settingsManager && collIndex >= 0) {
+            sel = m_settingsManager->getLastSelectedItem(collIndex);
+          }
+          if (sel >= 0) {
+            emit requestSelectionRestore(sel);
+          }
+        } else {
+          // Other modes use in-memory filter, so clearFilter restores directly.
+          m_scrollManager->clearFilter();
+          // For pre-search state restoration, we need to restore selection
+          // manually since onItemsLoaded won't be called.
+          int sel = m_preSearchSelectedIndex;
+          if (sel < 0 && m_settingsManager && collIndex >= 0) {
+            sel = m_settingsManager->getLastSelectedItem(collIndex);
+          }
+          if (sel >= 0) {
+            emit requestSelectionRestore(sel);
+          }
         }
       } else {
         // For other modes, safeReloadCollection triggers onItemsLoaded which
@@ -372,6 +404,7 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
 
     emit requestScrollbarRecovery();
     m_searchActive = false;
+    m_preSearchTotalItems = -1;
     return;
   }
 
@@ -394,6 +427,7 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
       canUsePreSearchState = (*m_collections)[collIndex].showAllSubcollectionItems;
     }
     if (m_scrollManager && canUsePreSearchState) {
+      m_preSearchTotalItems = m_scrollManager->getTotalItems();
       m_scrollManager->savePreSearchState();
     }
     emit requestClearSelection();
@@ -446,50 +480,21 @@ void SearchManager::performDebouncedSearch() {
 
   switch (m_currentSearchMode) {
   case SearchMode::CurrentCollection: {
-    // For current collection, apply filter directly without reloading
-    // The items are already loaded, just filter the existing view
-    if (m_scrollManager) {
-      m_scrollManager->applyFilter(trimmed);
-    }
-    break;
-  }
-  case SearchMode::CurrentAndSubcollections: {
-    // If showAllSubcollectionItems is enabled, items are already loaded
-    // so we can filter directly like CurrentCollection mode
-    if (context.config.showAllSubcollectionItems && m_scrollManager) {
-      m_scrollManager->applyFilter(trimmed);
-    } else {
-      // Otherwise, need to load items from all subcollections
-      if (m_databaseManager) {
-        m_databaseManager->loadItemsWithSubcollections(context, *m_collections);
-      }
-      m_navigationManager->filterItems(trimmed);
-    }
-    break;
-  }
-  case SearchMode::AllCollections: {
-    m_navigationManager->loadAllCollectionsView();
+    // CurrentCollection uses on-demand range loading; in-memory filtering can
+    // be incomplete. Use the DB-backed count + range pipeline.
     m_navigationManager->filterItems(trimmed);
     break;
   }
+  case SearchMode::CurrentAndSubcollections: {
+    // DB-backed: include descendants even when showAllSubcollectionItems is false.
+    m_navigationManager->filterItemsCurrentAndSubcollections(trimmed);
+    break;
   }
-
-  // Only connect for async loading cases (not when using applyFilter)
-  bool needsAsyncLoad = (m_currentSearchMode == SearchMode::AllCollections) ||
-                        (m_currentSearchMode == SearchMode::CurrentAndSubcollections &&
-                         !context.config.showAllSubcollectionItems);
-  if (needsAsyncLoad && m_databaseManager) {
-    m_searchItemsLoadedConn = connect(
-        m_databaseManager, &DatabaseManager::itemsLoaded, this,
-        [this, trimmed]() {
-          if (!m_navigationManager || !m_searchBar) {
-            return;
-          }
-          if (m_searchBar->text().trimmed() != trimmed) {
-            return;
-          }
-          m_navigationManager->filterItems(trimmed);
-        });
+  case SearchMode::AllCollections: {
+    // DB-backed: query across all collections without loading everything into memory.
+    m_navigationManager->filterItemsAllCollections(trimmed);
+    break;
+  }
   }
 }
 

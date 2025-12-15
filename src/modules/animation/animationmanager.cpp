@@ -11,13 +11,9 @@
 #include <QTimer>
 #include <cmath>
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcAnimationManager, "kartend.animationmanager")
-#define debugLog(msg) qCDebug(lcAnimationManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
+#define debugLog(msg) do { if (lcAnimationManager().isDebugEnabled()) { qCDebug(lcAnimationManager) << msg; } } while (0)
 
 // AnimationManagerSetup getter definitions
 SETUP_GETTER_DEF_SAME(AnimationManagerSetup, QScrollArea*, ItemScrollArea, itemScrollArea)

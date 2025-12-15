@@ -21,6 +21,7 @@
 #include "arrownavigationhandler.h"
 #include "alphabeticnavigationhandler.h"
 #include "eventmanager.h"
+#include "gamepadmanager.h"
 #include "keyboardmanager.h"
 #include "launchmanager.h"
 #include "mousemanager.h"
@@ -45,18 +46,15 @@
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcInteractionManager, "kartend.interactionmanager")
-#define debugLog(msg) qCDebug(lcInteractionManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
+#define debugLog(msg) do { if (lcInteractionManager().isDebugEnabled()) { qCDebug(lcInteractionManager) << msg; } } while (0)
 
 InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
   m_searchManager = std::make_unique<SearchManager>(this);
   m_selectionManager = std::make_unique<SelectionManager>(this);
   m_keyboardManager = std::make_unique<KeyboardManager>(this);
+  m_gamepadManager = std::make_unique<GamepadManager>(this);
   m_arrowHandler = std::make_unique<ArrowNavigationHandler>(this);
   m_alphabeticHandler = std::make_unique<AlphabeticNavigationHandler>(this);
   m_animationManager = std::make_unique<AnimationManager>(this);
@@ -124,6 +122,18 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     keyboardSetup.generalSettings = m_generalSettings;
     m_keyboardManager->setupReferences(keyboardSetup);
     connectKeyboardManagerSignals();
+  }
+
+  // Setup GamepadManager after KeyboardManager so it can reuse the existing
+  // repeat/navigation pipeline.
+  if (m_gamepadManager) {
+    GamepadManagerSetup gamepadSetup;
+    gamepadSetup.ctx = setup.ctx;
+    gamepadSetup.keyboardManager = m_keyboardManager.get();
+    gamepadSetup.generalSettings = m_generalSettings;
+    gamepadSetup.isShuttingDown = m_isShuttingDown;
+    m_gamepadManager->setupReferences(gamepadSetup);
+    connectGamepadManagerSignals();
   }
 
   // Setup navigation handlers with state callbacks and signal connections
@@ -367,6 +377,42 @@ void InteractionManager::connectKeyboardManagerSignals() {
           this, &InteractionManager::onKeyboardRepeatStep);
   connect(m_keyboardManager.get(), &KeyboardManager::stopRepeatRequested,
           this, &InteractionManager::onKeyboardStopRepeat);
+}
+
+void InteractionManager::connectGamepadManagerSignals() {
+  connect(m_gamepadManager.get(), &GamepadManager::requestSelectionMove, this,
+          [this](int direction, bool vertical) {
+            int effectiveDirection = direction;
+            if (vertical) {
+              const int gridWidth = getCurrentGridWidth();
+              if (gridWidth > 0 && std::abs(direction) < gridWidth) {
+                effectiveDirection = direction * gridWidth;
+              }
+            }
+            handleArrowKeyNavigation(effectiveDirection, vertical);
+          });
+  connect(m_gamepadManager.get(), &GamepadManager::requestEnterAction, this,
+          [this]() {
+            if (m_scrollManager) {
+              const int totalItems = m_scrollManager->getTotalItems();
+              processEnterOrReturnKey(totalItems);
+            }
+          });
+  connect(m_gamepadManager.get(), &GamepadManager::requestEscapeAction, this,
+          [this]() { (void)handleEscapeKey(); });
+  connect(m_gamepadManager.get(), &GamepadManager::requestToggleSidebarAction,
+          this, [this]() {
+            if (m_sidebarManager) {
+              m_sidebarManager->toggleSidebar();
+            }
+          });
+  connect(m_gamepadManager.get(), &GamepadManager::requestScrollAnimationStop,
+          this, [this]() {
+            if (m_animationManager &&
+                m_animationManager->isVerticalAnimRunning()) {
+              m_animationManager->verticalAnimation()->stop();
+            }
+          });
 }
 
 void InteractionManager::connectAnimationManagerSignals() {
@@ -621,10 +667,16 @@ auto InteractionManager::handleGlobalKeyPress(QKeyEvent *event) -> bool {
   if (!event) {
     return false;
   }
-  if (event->key() == Qt::Key_Slash) {
+
+  const int searchKey = m_generalSettings ? m_generalSettings->keySearch
+                                         : static_cast<int>(Qt::Key_Slash);
+  const int backKey = m_generalSettings ? m_generalSettings->keyBack
+                                       : static_cast<int>(Qt::Key_Escape);
+
+  if (event->key() == searchKey) {
     return handleSlashKey();
   }
-  if (event->key() == Qt::Key_Escape) {
+  if (event->key() == backKey) {
     return handleEscapeKey();
   }
   return false;
@@ -1756,8 +1808,8 @@ void InteractionManager::persistSelectionForIndex(int coll, int idx) {
     return;
   }
   m_settingsManager->setLastSelectedItem(coll, idx);
-  // Use hierarchical name to match how calculateSelectionIndex looks it up
-  QString collectionName = CollectionUtils::hierarchicalNameFor(
+  // Use a stable session key that also scopes by virtual subfolder (if active).
+  QString sessionKey = CollectionUtils::selectionSessionKeyFor(
       (*m_collections)[coll], *m_collections);
   QString title;
   QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
@@ -1768,7 +1820,7 @@ void InteractionManager::persistSelectionForIndex(int coll, int idx) {
     title = QFileInfo(path).completeBaseName().replace('_', ' ').simplified();
   }
   if (m_sessionManager) {
-    m_sessionManager->setLastSelected(collectionName, idx, title);
+    m_sessionManager->setLastSelected(sessionKey, idx, title);
   }
   // Defer artwork update to allow UI state to settle after selection save
   QTimer::singleShot(UIConstants::Timing::SHORT_DELAY_MS, this, [this]() {
@@ -1792,4 +1844,15 @@ void InteractionManager::resetSelectionRestoreState() {
   }
   m_selectionRestoreToken++;
   m_selectionRestorePending = false;
+}
+
+void InteractionManager::stopScrollAnimations() {
+  // Prevent stale scroll animations from applying after a view rebuild
+  // (e.g., entering a virtual subfolder while wheel scrolling is still animating).
+  if (m_itemScrollArea && m_itemScrollArea->verticalScrollBar()) {
+    AnimationManager::stopArrowKeyAnimationIfRunning(m_itemScrollArea->verticalScrollBar());
+  }
+  if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
+    m_animationManager->verticalAnimation()->stop();
+  }
 }

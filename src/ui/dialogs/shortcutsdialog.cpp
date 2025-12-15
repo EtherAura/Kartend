@@ -1,11 +1,15 @@
 // Keyboard shortcuts help dialog
 #include "shortcutsdialog.h"
 
+#include "mainwindow.h"
+
 #include <QFont>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLayout>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QShowEvent>
 #include <QVBoxLayout>
 
 namespace {
@@ -22,52 +26,28 @@ ShortcutsDialog::ShortcutsDialog(QWidget *parent) : QDialog(parent) {
   setupUI();
 }
 
+void ShortcutsDialog::showEvent(QShowEvent *event) {
+  QDialog::showEvent(event);
+  populateContent();
+}
+
 void ShortcutsDialog::setupUI() {
   auto *mainLayout = new QVBoxLayout(this);
   mainLayout->setSpacing(12);
   mainLayout->setContentsMargins(20, 20, 20, 20);
 
   // Scrollable content area
-  auto *scrollArea = new QScrollArea(this);
-  scrollArea->setWidgetResizable(true);
-  scrollArea->setFrameShape(QFrame::NoFrame);
+  m_scrollArea = new QScrollArea(this);
+  m_scrollArea->setWidgetResizable(true);
+  m_scrollArea->setFrameShape(QFrame::NoFrame);
 
-  auto *contentWidget = new QWidget();
-  auto *contentLayout = new QVBoxLayout(contentWidget);
-  contentLayout->setSpacing(SECTION_SPACING);
-  contentLayout->setContentsMargins(0, 0, 10, 0);
+  m_contentWidget = new QWidget();
+  m_contentLayout = new QVBoxLayout(m_contentWidget);
+  m_contentLayout->setSpacing(SECTION_SPACING);
+  m_contentLayout->setContentsMargins(0, 0, 10, 0);
 
-  // Navigation
-  addSection(contentLayout, tr("Navigation"));
-  addShortcut(contentLayout, tr("Arrow Keys"), tr("Move selection"));
-  addShortcut(contentLayout, tr("Enter"), tr("Open selected item / Enter subcollection"));
-  addShortcut(contentLayout, tr("Escape"), tr("Go back / Clear search / Exit search mode"));
-  addShortcut(contentLayout, tr("Home"), tr("Jump to first item"));
-  addShortcut(contentLayout, tr("End"), tr("Jump to last item"));
-  addShortcut(contentLayout, tr("Page Up"), tr("Jump to previous letter (alphabetic)"));
-  addShortcut(contentLayout, tr("Page Down"), tr("Jump to next letter (alphabetic)"));
-
-  // Search
-  addSection(contentLayout, tr("Search"));
-  addShortcut(contentLayout, tr("/"), tr("Focus search bar / Toggle search mode"));
-  addShortcut(contentLayout, tr("Type letters"), tr("Quick filter (when search not focused)"));
-  addShortcut(contentLayout, tr("Escape"), tr("Clear search text / Exit search"));
-
-  // Window
-  addSection(contentLayout, tr("Window"));
-  addShortcut(contentLayout, tr("F11"), tr("Toggle fullscreen"));
-  addShortcut(contentLayout, tr("F1"), tr("Show this help dialog"));
-
-  // View
-  addSection(contentLayout, tr("View"));
-  addShortcut(contentLayout, tr("Ctrl++"), tr("Increase grid columns (smaller items)"));
-  addShortcut(contentLayout, tr("Ctrl+-"), tr("Decrease grid columns (larger items)"));
-
-  // Add stretch to push content to top
-  contentLayout->addStretch();
-
-  scrollArea->setWidget(contentWidget);
-  mainLayout->addWidget(scrollArea, 1);
+  m_scrollArea->setWidget(m_contentWidget);
+  mainLayout->addWidget(m_scrollArea, 1);
 
   // Close button
   auto *buttonLayout = new QHBoxLayout();
@@ -77,6 +57,103 @@ void ShortcutsDialog::setupUI() {
   connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);
   buttonLayout->addWidget(closeButton);
   mainLayout->addLayout(buttonLayout);
+
+  populateContent();
+}
+
+void ShortcutsDialog::populateContent() {
+  if (!m_contentLayout) {
+    return;
+  }
+
+  clearLayout(m_contentLayout);
+
+  const auto *mw = qobject_cast<MainWindow *>(parent());
+  const auto settings = mw ? mw->m_generalSettings : GeneralSettings{};
+
+  auto keyText = [](int key) -> QString {
+    const QKeySequence seq(key);
+    const QString txt = seq.toString(QKeySequence::NativeText);
+    return txt.isEmpty() ? QStringLiteral("(None)") : txt;
+  };
+
+  auto buttonText = [](const QString &btn) -> QString {
+    const QString t = btn.trimmed();
+    return t.isEmpty() ? QStringLiteral("(Unbound)") : t;
+  };
+
+  // Navigation
+  addSection(m_contentLayout, tr("Navigation"));
+  addShortcut(m_contentLayout, keyText(settings.keyNavUp), tr("Move selection up"));
+  addShortcut(m_contentLayout, keyText(settings.keyNavDown), tr("Move selection down"));
+  addShortcut(m_contentLayout, keyText(settings.keyNavLeft), tr("Move selection left"));
+  addShortcut(m_contentLayout, keyText(settings.keyNavRight), tr("Move selection right"));
+  addShortcut(m_contentLayout, keyText(settings.keyConfirm),
+              tr("Open selected item / Enter subcollection"));
+  addShortcut(m_contentLayout, keyText(settings.keyBack),
+              tr("Go back / Clear search / Exit search mode"));
+  addShortcut(m_contentLayout, keyText(settings.keyJumpFirst), tr("Jump to first item"));
+  addShortcut(m_contentLayout, keyText(settings.keyJumpLast), tr("Jump to last item"));
+  addShortcut(m_contentLayout, keyText(settings.keyAlphabeticBack),
+              tr("Jump to previous letter (alphabetic)"));
+  addShortcut(m_contentLayout, keyText(settings.keyAlphabeticForward),
+              tr("Jump to next letter (alphabetic)"));
+
+  // Search
+  addSection(m_contentLayout, tr("Search"));
+  addShortcut(m_contentLayout, keyText(settings.keySearch),
+              tr("Focus search bar / Toggle search mode"));
+  addShortcut(m_contentLayout, tr("Type letters"),
+              tr("Quick filter (when search not focused)"));
+  addShortcut(m_contentLayout, keyText(settings.keyBack),
+              tr("Clear search text / Exit search"));
+
+  // Gamepad
+  addSection(m_contentLayout, tr("Gamepad"));
+  addShortcut(m_contentLayout, tr("D-pad"),
+              settings.gamepadUseDpad ? tr("Move selection (enabled)")
+                                       : tr("Move selection (disabled)"));
+  addShortcut(m_contentLayout, tr("Left stick"),
+              settings.gamepadUseLeftStick ? tr("Move selection (enabled)")
+                                            : tr("Move selection (disabled)"));
+  addShortcut(m_contentLayout, buttonText(settings.gamepadConfirmButton),
+              tr("Confirm / Open selected item"));
+  addShortcut(m_contentLayout, buttonText(settings.gamepadBackButton),
+              tr("Back / Escape"));
+  addShortcut(m_contentLayout, buttonText(settings.gamepadToggleSidebarButton),
+              tr("Toggle metadata sidebar"));
+
+  // Window
+  addSection(m_contentLayout, tr("Window"));
+  addShortcut(m_contentLayout, tr("F11"), tr("Toggle fullscreen"));
+  addShortcut(m_contentLayout, tr("F1"), tr("Show this help dialog"));
+
+  // View
+  addSection(m_contentLayout, tr("View"));
+  addShortcut(m_contentLayout, tr("Ctrl++"),
+              tr("Increase grid columns (smaller items)"));
+  addShortcut(m_contentLayout, tr("Ctrl+-"),
+              tr("Decrease grid columns (larger items)"));
+
+  // Add stretch to push content to top
+  m_contentLayout->addStretch();
+}
+
+void ShortcutsDialog::clearLayout(QLayout *layout) {
+  if (!layout) {
+    return;
+  }
+
+  while (QLayoutItem *item = layout->takeAt(0)) {
+    if (QWidget *w = item->widget()) {
+      w->deleteLater();
+    }
+    if (QLayout *childLayout = item->layout()) {
+      clearLayout(childLayout);
+      childLayout->deleteLater();
+    }
+    delete item;
+  }
 }
 
 void ShortcutsDialog::addSection(QVBoxLayout *layout, const QString &title) {

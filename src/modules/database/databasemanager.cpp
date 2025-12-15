@@ -15,18 +15,15 @@
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "errorutils.h"
+#include "dbmigrations.h"
 #include "querymanager.h"
 #include "pathutils.h"
 #include "sessionmanager.h"
 #include "uiconstants.h"
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcDatabaseManager, "kartend.databasemanager")
 #define debugLog(msg) qCDebug(lcDatabaseManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
@@ -43,10 +40,17 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
   initDatabase();
 
   m_workerThread = new QThread(this);
-  m_worker = new QueryManager(m_sessionManager);
+  m_worker = new QueryManager(m_sessionManager, QStringLiteral("kartend_query_worker"));
   m_worker->moveToThread(m_workerThread);
 
   connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
+
+  // Dedicated scan worker (separate thread + separate DB connection) so
+  // long scans don't block query operations and UI updates.
+  m_scanThread = new QThread(this);
+  m_scanWorker = new QueryManager(m_sessionManager, QStringLiteral("kartend_scan_worker"));
+  m_scanWorker->moveToThread(m_scanThread);
+  connect(m_scanThread, &QThread::finished, m_scanWorker, &QObject::deleteLater);
   
   connect(this, &DatabaseManager::requestLoadAllCollections, m_worker, &QueryManager::loadAllCollections);
   connect(this, &DatabaseManager::requestLoadItems, m_worker, &QueryManager::loadItems);
@@ -55,16 +59,29 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
   connect(this, &DatabaseManager::requestFetchItemsRange, m_worker, &QueryManager::fetchItemsRange);
   connect(this, &DatabaseManager::requestInvalidateCache, m_worker, &QueryManager::invalidateCollectionCache);
   connect(this, &DatabaseManager::requestUpdateCachedCounts, m_worker, &QueryManager::updateCachedCounts);
+
+    // Background scanning is handled by the scan worker.
+    connect(this, &DatabaseManager::requestEnsureScannedForContext,
+      m_scanWorker, &QueryManager::ensureScannedForContext);
+
+    // Lazy background FTS backfill is handled by the scan worker.
+    connect(this, &DatabaseManager::requestEnsureItemsFtsReady,
+      m_scanWorker, &QueryManager::ensureItemsFtsReady);
   
   connect(m_worker, &QueryManager::itemsLoaded, this, &DatabaseManager::onWorkerItemsLoaded);
   connect(m_worker, &QueryManager::itemCountLoaded, this, &DatabaseManager::onWorkerItemCountLoaded);
   connect(m_worker, &QueryManager::itemsRangeLoaded, this, &DatabaseManager::onWorkerItemsRangeLoaded);
     connect(m_worker, &QueryManager::cachedCountsComputed, this, &DatabaseManager::onWorkerCachedCountsComputed);
   connect(m_worker, &QueryManager::errorOccurred, this, &DatabaseManager::errorOccurred);
-  connect(m_worker, &QueryManager::scanProgress, this, &DatabaseManager::scanProgress);
-  connect(m_worker, &QueryManager::scanStarting, this, &DatabaseManager::scanStarting);
-  connect(m_worker, &QueryManager::scanItemsProgress, this, &DatabaseManager::scanItemsProgress);
+  // Query worker should remain responsive; scan signals come from scan worker.
   connect(m_worker, &QueryManager::cacheInvalidated, this, &DatabaseManager::cacheInvalidated);
+
+  connect(m_scanWorker, &QueryManager::errorOccurred, this, &DatabaseManager::errorOccurred);
+  connect(m_scanWorker, &QueryManager::scanProgress, this, &DatabaseManager::scanProgress);
+  connect(m_scanWorker, &QueryManager::scanStarting, this, &DatabaseManager::scanStarting);
+  connect(m_scanWorker, &QueryManager::scanItemsProgress, this, &DatabaseManager::scanItemsProgress);
+  connect(m_scanWorker, &QueryManager::collectionScanCompleted,
+          this, &DatabaseManager::collectionScanCompleted);
 
     m_cachedCountsUpdateTimer = new QTimer(this);
     m_cachedCountsUpdateTimer->setSingleShot(true);
@@ -72,6 +89,11 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
       this, &DatabaseManager::dispatchCachedCountsUpdate);
 
   m_workerThread->start();
+  m_scanThread->start();
+
+  // Defer FTS backfill until after the event loop starts so startup UI is not
+  // blocked by any optional maintenance work.
+  QTimer::singleShot(0, this, [this] { emit requestEnsureItemsFtsReady(); });
 }
 
 // Destroy the database manager and close/remove the connection
@@ -79,6 +101,11 @@ DatabaseManager::~DatabaseManager() {
   if (m_workerThread) {
     m_workerThread->quit();
     m_workerThread->wait();
+  }
+
+  if (m_scanThread) {
+    m_scanThread->quit();
+    m_scanThread->wait();
   }
 
   if (m_db.isValid()) {
@@ -193,6 +220,9 @@ void DatabaseManager::initDatabase() {
     ErrorUtils::logError(err);
   }
 
+  // Ensure any schema upgrades are applied after core tables exist.
+  DbMigrations::applySchemaMigrations(m_db, QStringLiteral("DatabaseManager::initDatabase"));
+
   QSqlQuery idx(m_db);
   idx.prepare("CREATE INDEX IF NOT EXISTS idx_collections_uuid ON collections(uuid)");
   idx.exec();
@@ -240,6 +270,8 @@ void DatabaseManager::loadItems(const CollectionContext &context) {
 }
 
 void DatabaseManager::fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter) {
+  // Kick off a background scan if needed, but don't block count queries.
+  emit requestEnsureScannedForContext(context, allCollections);
   emit requestFetchItemCount(context, allCollections, filter);
 }
 
@@ -303,6 +335,9 @@ void DatabaseManager::onWorkerItemsRangeLoaded(int offset, const QStringList &fi
 void DatabaseManager::cancelScan() {
   if (m_worker) {
     m_worker->requestCancelScan();
+  }
+  if (m_scanWorker) {
+    m_scanWorker->requestCancelScan();
   }
 }
 

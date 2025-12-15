@@ -12,13 +12,9 @@
 #include <QScrollArea>
 #include <QTimer>
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSidebarManager, "kartend.sidebarmanager")
-#define debugLog(msg) qCDebug(lcSidebarManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
+#define debugLog(msg) do { if (lcSidebarManager().isDebugEnabled()) { qCDebug(lcSidebarManager) << msg; } } while (0)
 
 // SidebarManagerSetup getter definitions
 SETUP_GETTER_DEF_SAME(SidebarManagerSetup, MetadataSidebar*, Sidebar, sidebar)

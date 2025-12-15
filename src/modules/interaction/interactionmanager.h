@@ -21,6 +21,7 @@ QT_END_NAMESPACE
 // Forward declarations for owned sub-managers (only pointers used in header)
 class AnimationManager;
 class EventManager;
+class GamepadManager;
 class KeyboardManager;
 class LaunchManager;
 class MouseManager;
@@ -129,6 +130,7 @@ public:
   [[nodiscard]] ViewportManager *viewportManager() const { return m_viewportManager.get(); }
   [[nodiscard]] MouseManager *mouseManager() const { return m_mouseManager.get(); }
   [[nodiscard]] KeyboardManager *keyboardManager() const { return m_keyboardManager.get(); }
+  [[nodiscard]] GamepadManager *gamepadManager() const { return m_gamepadManager.get(); }
   [[nodiscard]] EventManager *eventManager() const { return m_eventManager.get(); }
   [[nodiscard]] SearchManager *searchManager() const { return m_searchManager.get(); }
   [[nodiscard]] LaunchManager *launchManager() const { return m_launchManager.get(); }
@@ -161,6 +163,9 @@ public:
   void cancelPendingSelectionRestore();
   void resetSelectionRestoreState();  // Reset for new navigation (allows auto-restore)
   void stopRepeat(bool suppressRecentering = false);
+  // Stops any running scroll animations (wheel/arrow key) to prevent stale
+  // animations from applying after a view rebuild (e.g., entering a subfolder).
+  void stopScrollAnimations();
   [[nodiscard]] bool isRestoringSelection() const;
   [[nodiscard]] int targetRestoreIndex() const;
   [[nodiscard]] bool forceImmediateCenter() const;
@@ -226,6 +231,9 @@ private:
   // Keyboard delegation (owned helper)
   std::unique_ptr<KeyboardManager> m_keyboardManager;
 
+  // Gamepad delegation (owned helper)
+  std::unique_ptr<GamepadManager> m_gamepadManager;
+
   // Arrow key navigation delegation (owned helper)
   std::unique_ptr<ArrowNavigationHandler> m_arrowHandler;
 
@@ -271,6 +279,7 @@ private:
   void connectSearchManagerSignals();
   void connectSelectionManagerSignals();
   void connectKeyboardManagerSignals();
+  void connectGamepadManagerSignals();
   void connectAnimationManagerSignals();
   void connectMouseManagerSignals();
   void connectViewportManagerSignals();

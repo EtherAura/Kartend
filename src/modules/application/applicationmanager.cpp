@@ -12,13 +12,9 @@
 #include "settingsmanager.h"
 #include "sidebarmanager.h"
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcApplicationManager, "kartend.applicationmanager")
-#define debugLog(msg) qCDebug(lcApplicationManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
+#define debugLog(msg) do { if (lcApplicationManager().isDebugEnabled()) { qCDebug(lcApplicationManager) << msg; } } while (0)
 
 ApplicationManager::ApplicationManager(QObject *parent) : QObject(parent) {}
 

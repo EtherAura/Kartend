@@ -82,6 +82,10 @@ signals:
   
   /// Emitted periodically during scan with items processed so far
   void scanItemsProgress(int itemsProcessed, int totalItems);
+
+  /// Emitted when a collection rescan has been applied to the database.
+  /// Consumers can refresh counts without blocking the UI.
+  void collectionScanCompleted(const QString &collectionUuid);
   
   /// Emitted when collection cache has been invalidated (async operation complete)
   void cacheInvalidated(const QString &collectionUuid);
@@ -95,6 +99,13 @@ signals:
   void requestFetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter);
   void requestFetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter);
   void requestInvalidateCache(const QString &collectionUuid);
+
+  // Internal signal to trigger background scan on dedicated scan worker.
+  void requestEnsureScannedForContext(const CollectionContext &context,
+                                     const QList<CollectionConfig> &allCollections);
+
+  // Internal signal to trigger lazy background FTS backfill on scan worker.
+  void requestEnsureItemsFtsReady();
 
 public slots:
   /// Request cancellation of any in-progress scan
@@ -114,8 +125,10 @@ private slots:
 
 private:
   class QueryManager* m_worker;
+  class QueryManager* m_scanWorker = nullptr;
   SessionManager *m_sessionManager;
   class QThread* m_workerThread;
+  class QThread* m_scanThread = nullptr;
 
   bool needsRescan(int collectionIndex, const CollectionConfig &collection);
   static QStringList scanMediaDirectory(const CollectionConfig &collection,

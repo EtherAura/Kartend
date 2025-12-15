@@ -11,6 +11,7 @@ enable_testing()
 set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 include_directories(
   ${SRC_DIR}/utils
+  ${SRC_DIR}/modules/query
   ${SRC_DIR}/modules/scroll
   ${SRC_DIR}/modules/interaction
   ${SRC_DIR}/modules/launch
@@ -122,3 +123,27 @@ target_link_libraries(test_sessionmanager
   Qt6::Test
 )
 add_test(NAME SessionManager COMMAND test_sessionmanager)
+
+# QueryManager cancellation semantics test
+add_executable(test_querymanager_cancel_scan
+  test_querymanager_cancel_scan.cpp
+  ${SRC_DIR}/modules/query/querymanager.cpp
+  ${SRC_DIR}/modules/session/sessionmanager.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+)
+target_include_directories(test_querymanager_cancel_scan PRIVATE
+  ${SRC_DIR}/modules/query
+  ${SRC_DIR}/modules/session
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_querymanager_cancel_scan
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Concurrent
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME QueryManagerCancelScan COMMAND test_querymanager_cancel_scan)

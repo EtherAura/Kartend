@@ -20,7 +20,22 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake lld qt6-base-dev libqt6sql6-sqlite
+          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev libqt6sql6-sqlite
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-${{ matrix.build_type }}-${{ hashFiles('CMakeLists.txt', 'src/**', 'tests/**') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-${{ matrix.build_type }}-
+            ${{ runner.os }}-ccache-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=cache_dir=$HOME/.cache/ccache
+          ccache --set-config=max_size=1G
+          ccache --zero-stats
           
       - name: Create build directory
         run: mkdir -p build/${{ matrix.build_type }}
@@ -28,18 +43,81 @@ jobs:
       - name: Configure CMake
         run: |
           cd build/${{ matrix.build_type }}
-          cmake ../.. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DBUILD_TESTS=ON
+          cmake -G Ninja ../.. \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DBUILD_TESTS=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           
       - name: Build
         run: |
           cd build/${{ matrix.build_type }}
-          make -j$(nproc)
+          cmake --build . --parallel $(nproc)
+
+      - name: ccache stats
+        run: ccache --show-stats
           
       - name: Run Tests
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
           cd build/${{ matrix.build_type }}
+          ctest --output-on-failure
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev libqt6sql6-sqlite
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-sanitize-${{ hashFiles('CMakeLists.txt', 'src/**', 'tests/**') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-sanitize-
+            ${{ runner.os }}-ccache-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=cache_dir=$HOME/.cache/ccache
+          ccache --set-config=max_size=1G
+          ccache --zero-stats
+
+      - name: Create build directory
+        run: mkdir -p build/Sanitize
+
+      - name: Configure CMake (Debug + sanitizers)
+        run: |
+          cd build/Sanitize
+          cmake -G Ninja ../.. \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_TESTS=ON \
+            -DENABLE_SANITIZERS=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: |
+          cd build/Sanitize
+          cmake --build . --parallel $(nproc)
+
+      - name: ccache stats
+        run: ccache --show-stats
+
+      - name: Run Tests (ASan/UBSan)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1
+        run: |
+          cd build/Sanitize
           ctest --output-on-failure
 
   maintenance-check:
@@ -51,11 +129,26 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake lld qt6-base-dev libqt6sql6-sqlite clang-tidy clang-format cppcheck
-          
-      - name: Run maintenance build (with -Werror)
+          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev libqt6sql6-sqlite clang-tidy clang-format cppcheck
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-maintenance-${{ hashFiles('CMakeLists.txt', 'src/**', 'tests/**') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-maintenance-
+            ${{ runner.os }}-ccache-
+
+      - name: Configure ccache
         run: |
-          mkdir -p build/maintenance
-          cd build/maintenance
-          cmake ../.. -DCMAKE_BUILD_TYPE=Release -DMAINTENANCE=ON
-          make -j$(nproc)
+          ccache --set-config=cache_dir=$HOME/.cache/ccache
+          ccache --set-config=max_size=1G
+          ccache --zero-stats
+          
+      - name: Run maintenance build script
+        run: |
+          bash .scripts/build.sh --maintenance --format-check
+
+      - name: ccache stats
+        run: ccache --show-stats

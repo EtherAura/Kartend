@@ -920,13 +920,23 @@
       </attribute>
       <layout class="QVBoxLayout" name="generalTabLayout">
        <item>
-        <widget class="QGroupBox" name="generalGroupBox">
-         <property name="title">
-          <string>General Settings</string>
-         </property>
-         <layout class="QVBoxLayout" name="generalContentLayout">
-          <item>
-           <layout class="QFormLayout" name="generalFormLayout">
+                <widget class="QTabWidget" name="generalSubTabWidget">
+                 <property name="currentIndex">
+                    <number>0</number>
+                 </property>
+                 <widget class="QWidget" name="generalSettingsSubTab">
+                    <attribute name="title">
+                     <string>General</string>
+                    </attribute>
+                    <layout class="QVBoxLayout" name="generalSettingsSubTabLayout">
+                     <item>
+                        <widget class="QGroupBox" name="generalGroupBox">
+                         <property name="title">
+                            <string>General Settings</string>
+                         </property>
+                         <layout class="QVBoxLayout" name="generalContentLayout">
+                            <item>
+                             <layout class="QFormLayout" name="generalFormLayout">
             <item row="0" column="0">
              <widget class="QLabel" name="rememberSelectionLabel">
               <property name="text">
@@ -1137,22 +1147,271 @@
               </property>
              </widget>
             </item>
-           </layout>
-          </item>
-          <item>
-           <spacer name="generalVerticalSpacer">
-            <property name="orientation">
-             <enum>Qt::Orientation::Vertical</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>20</width>
-              <height>40</height>
-             </size>
-            </property>
-           </spacer>
-          </item>
-         </layout>
+               </layout>
+              </item>
+              <item>
+               <spacer name="generalVerticalSpacer">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Vertical</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>40</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="controlsSubTab">
+          <attribute name="title">
+           <string>Controls</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="controlsSubTabLayout">
+           <item>
+            <widget class="QGroupBox" name="keyboardControlsGroupBox">
+             <property name="title">
+              <string>Keyboard</string>
+             </property>
+             <layout class="QFormLayout" name="keyboardControlsFormLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="keyNavUpLabel">
+                <property name="text">
+                 <string>Move Up:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QKeySequenceEdit" name="keyNavUpEdit"/>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="keyNavDownLabel">
+                <property name="text">
+                 <string>Move Down:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QKeySequenceEdit" name="keyNavDownEdit"/>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="keyNavLeftLabel">
+                <property name="text">
+                 <string>Move Left:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QKeySequenceEdit" name="keyNavLeftEdit"/>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="keyNavRightLabel">
+                <property name="text">
+                 <string>Move Right:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="1">
+               <widget class="QKeySequenceEdit" name="keyNavRightEdit"/>
+              </item>
+              <item row="4" column="0">
+               <widget class="QLabel" name="keyConfirmLabel">
+                <property name="text">
+                 <string>Confirm:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="1">
+               <widget class="QKeySequenceEdit" name="keyConfirmEdit"/>
+              </item>
+              <item row="5" column="0">
+               <widget class="QLabel" name="keyBackLabel">
+                <property name="text">
+                 <string>Back:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="1">
+               <widget class="QKeySequenceEdit" name="keyBackEdit"/>
+              </item>
+              <item row="6" column="0">
+               <widget class="QLabel" name="keySearchLabel">
+                <property name="text">
+                 <string>Search:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="6" column="1">
+               <widget class="QKeySequenceEdit" name="keySearchEdit"/>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="gamepadControlsGroupBox">
+             <property name="title">
+              <string>Gamepad</string>
+             </property>
+             <layout class="QFormLayout" name="gamepadControlsFormLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="gamepadConfirmButtonLabel">
+                <property name="text">
+                 <string>Confirm Button:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QWidget" name="gamepadConfirmButtonContainer">
+                <layout class="QHBoxLayout" name="gamepadConfirmButtonLayout">
+                         <property name="leftMargin">
+                           <number>0</number>
+                         </property>
+                         <property name="topMargin">
+                           <number>0</number>
+                         </property>
+                         <property name="rightMargin">
+                           <number>0</number>
+                         </property>
+                         <property name="bottomMargin">
+                           <number>0</number>
+                         </property>
+                 <item>
+                  <widget class="QLineEdit" name="gamepadConfirmButtonLineEdit">
+                   <property name="readOnly">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="detectGamepadConfirmButtonButton">
+                   <property name="text">
+                    <string>Detect...</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="gamepadBackButtonLabel">
+                <property name="text">
+                 <string>Back Button:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QWidget" name="gamepadBackButtonContainer">
+                <layout class="QHBoxLayout" name="gamepadBackButtonLayout">
+                         <property name="leftMargin">
+                           <number>0</number>
+                         </property>
+                         <property name="topMargin">
+                           <number>0</number>
+                         </property>
+                         <property name="rightMargin">
+                           <number>0</number>
+                         </property>
+                         <property name="bottomMargin">
+                           <number>0</number>
+                         </property>
+                 <item>
+                  <widget class="QLineEdit" name="gamepadBackButtonLineEdit">
+                   <property name="readOnly">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="detectGamepadBackButtonButton">
+                   <property name="text">
+                    <string>Detect...</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="gamepadToggleSidebarButtonLabel">
+                <property name="text">
+                 <string>Toggle Sidebar:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QWidget" name="gamepadToggleSidebarButtonContainer">
+                <layout class="QHBoxLayout" name="gamepadToggleSidebarButtonLayout">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                 <item>
+                  <widget class="QLineEdit" name="gamepadToggleSidebarButtonLineEdit">
+                   <property name="readOnly">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="detectGamepadToggleSidebarButtonButton">
+                   <property name="text">
+                    <string>Detect...</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="gamepadUseDpadLabel">
+                <property name="text">
+                 <string>Use D-pad:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="1">
+               <widget class="QCheckBox" name="gamepadUseDpadCheckBox"/>
+              </item>
+              <item row="4" column="0">
+               <widget class="QLabel" name="gamepadUseLeftStickLabel">
+                <property name="text">
+                 <string>Use Left Stick:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="1">
+               <widget class="QCheckBox" name="gamepadUseLeftStickCheckBox"/>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="controlsVerticalSpacer">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
         </widget>
        </item>
       </layout>

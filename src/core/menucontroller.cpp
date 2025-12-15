@@ -2,6 +2,7 @@
 #include "menucontroller.h"
 #include "collectionutils.h"
 #include "navigationmanager.h"
+#include "settingsmanager.h"
 #include "shortcutsdialog.h"
 #include "sidebarmanager.h"
 #include "ui_mainwindow.h"
@@ -181,6 +182,11 @@ void MenuController::setupSortActions() {
       if (m_ctx.getGeneralSettings) {
         if (auto *settings = m_ctx.getGeneralSettings()) {
           settings->sortMode = SortMode::NameAscending;
+          if (m_ctx.getSettingsManager) {
+            if (auto *mgr = m_ctx.getSettingsManager()) {
+              mgr->saveGeneralSettings(*settings);
+            }
+          }
           reloadIfNeeded();
         }
       }
@@ -193,6 +199,11 @@ void MenuController::setupSortActions() {
       if (m_ctx.getGeneralSettings) {
         if (auto *settings = m_ctx.getGeneralSettings()) {
           settings->sortMode = SortMode::NameDescending;
+          if (m_ctx.getSettingsManager) {
+            if (auto *mgr = m_ctx.getSettingsManager()) {
+              mgr->saveGeneralSettings(*settings);
+            }
+          }
           reloadIfNeeded();
         }
       }
@@ -205,6 +216,11 @@ void MenuController::setupSortActions() {
       if (m_ctx.getGeneralSettings) {
         if (auto *settings = m_ctx.getGeneralSettings()) {
           settings->sortMode = SortMode::Random;
+          if (m_ctx.getSettingsManager) {
+            if (auto *mgr = m_ctx.getSettingsManager()) {
+              mgr->saveGeneralSettings(*settings);
+            }
+          }
           reloadIfNeeded();
         }
       }
@@ -217,6 +233,11 @@ void MenuController::setupSortActions() {
       if (m_ctx.getGeneralSettings) {
         if (auto *settings = m_ctx.getGeneralSettings()) {
           settings->excludeSubfoldersFromSort = checked;
+          if (m_ctx.getSettingsManager) {
+            if (auto *mgr = m_ctx.getSettingsManager()) {
+              mgr->saveGeneralSettings(*settings);
+            }
+          }
           reloadIfNeeded();
         }
       }

@@ -144,7 +144,13 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction,
   performVisibilityForKeyMove(isNewRow, newSelection);
 
   if (m_keyboardManager) {
-    m_keyboardManager->finalizeKeyRepeat(nullptr, direction, vertical);
+    Qt::Key physicalKey = Qt::Key_unknown;
+    if (m_keyboardManager->consumePendingNavigationKey(physicalKey)) {
+      m_keyboardManager->finalizeKeyRepeatForKey(physicalKey, direction,
+                                                 vertical);
+    } else {
+      m_keyboardManager->finalizeKeyRepeat(nullptr, direction, vertical);
+    }
   }
 
   emit requestFocusItemsPage();

@@ -2,6 +2,7 @@
 #define QUERYMANAGER_H
 
 #include <QObject>
+#include <QCache>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStringList>
@@ -9,6 +10,7 @@
 #include <QDateTime>
 #include <QThreadPool>
 #include <atomic>
+#include <memory>
 #include "collectionutils.h"
 #include "errorutils.h"
 
@@ -32,11 +34,14 @@ class SessionManager;
 class QueryManager : public QObject {
   Q_OBJECT
 public:
-  explicit QueryManager(SessionManager *sessionManager, QObject *parent = nullptr);
+  explicit QueryManager(SessionManager *sessionManager,
+                        const QString &connectionName = QStringLiteral("kartend_worker"),
+                        QObject *parent = nullptr);
   ~QueryManager() override;
 
 public slots:
   void initDatabase();
+  void ensureItemsFtsReady();
   void loadAllCollections(const QList<CollectionConfig> &allCollections);
   void loadItems(const CollectionContext &context);
   void loadItemsWithSubcollections(const CollectionContext &context,
@@ -44,6 +49,11 @@ public slots:
   void updateCachedCounts(quint64 generation, const QStringList &collectionUuids);
   void fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter);
   void fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter);
+
+  // Scans the current collection (and descendants when showAllSubcollectionItems is set)
+  // if a rescan is needed, without blocking query operations in another worker.
+  void ensureScannedForContext(const CollectionContext &context,
+                              const QList<CollectionConfig> &allCollections);
   
   /// Invalidates collection cache on worker thread (async)
   void invalidateCollectionCache(const QString &collectionUuid);
@@ -71,6 +81,10 @@ signals:
   
   /// Emitted periodically during scan with items processed so far
   void scanItemsProgress(int itemsProcessed, int totalItems);
+
+  /// Emitted after a collection rescan has been applied to the database.
+  /// Allows the UI to refresh counts without blocking on the scan.
+  void collectionScanCompleted(const QString &collectionUuid);
   
   /// Emitted when collection cache has been invalidated
   void cacheInvalidated(const QString &collectionUuid);
@@ -86,7 +100,10 @@ public:
   void resetScanCancellation();
 
 private:
-  std::atomic<bool> m_scanCancelled{false};
+  // Per-scan cancellation token. Reset by swapping in a new token.
+  // This avoids old scan tasks resuming if cancellation is reset while
+  // worker tasks are still in-flight.
+  std::shared_ptr<std::atomic_bool> m_scanCancellationToken;
   QThreadPool m_scanThreadPool;
   SessionManager *m_sessionManager;
   QSqlDatabase m_db;
@@ -96,8 +113,7 @@ private:
   // Reduces overhead by reusing compiled statements
   // Limited to MAX_STATEMENT_CACHE_SIZE entries with LRU eviction
   static constexpr int MAX_STATEMENT_CACHE_SIZE = 32;
-  QHash<QString, QSqlQuery> m_statementCache;
-  QList<QString> m_statementAccessOrder;  // LRU tracking: most recent at back
+  QCache<QString, QSqlQuery> m_statementCache;
   
   // Gets or creates a prepared statement for the given SQL
   [[nodiscard]] QSqlQuery &getPreparedStatement(const QString &sql);
@@ -109,17 +125,43 @@ private:
   // Returns true if database is open (either already was or reconnection succeeded)
   [[nodiscard]] bool ensureDatabaseConnection();
 
+  // Detect optional search acceleration features (FTS, etc.).
+  void refreshSearchCapabilities();
+  bool m_itemsFtsAvailable = false;
+  bool m_itemsFtsReady = true;
+
+  [[nodiscard]] bool isItemsFtsReadyFromDb();
+
   void ensureCollectionScanned(int collectionIndex, const CollectionConfig &collection);
+  void scanAndSaveItemsToDatabase(int collectionIndex, const CollectionConfig &collection);
   bool needsRescan(int collectionIndex, const CollectionConfig &collection);
   QStringList scanMediaDirectory(const CollectionConfig &collection,
-                                 QHash<QString, QDateTime> &timestamps);
+                                 QHash<QString, QDateTime> &timestamps,
+                                 QString *dirSignatureOut);
   QStringList loadItemsFromDatabaseByUuid(const QString &collectionUuid);
   QStringList loadOrScanCollection(int collectionIndex,
                                    const CollectionConfig &collection,
                                    QHash<QString, QDateTime> &timestamps);
   void saveItemsToDatabase(int collectionIndex, const QStringList &filePaths,
                            const QHash<QString, QDateTime> &timestamps,
-                           const CollectionConfig &collection);
+                           const CollectionConfig &collection,
+                           const QString &dirSignature);
+
+  [[nodiscard]] bool prepareCollectionForItemsInsert(const CollectionConfig &collection,
+                                                     const QString &uuid,
+                                                     const QString &extSignature,
+                                                     int &legacyIdOut);
+  void insertItemsBatch(int legacyId, const QString &uuid,
+                        const QStringList &paths,
+                        const QHash<QString, QDateTime> &timestamps);
+
+  [[nodiscard]] bool ensureScannedItemsTempTable();
+  void clearScannedItemsTempTable();
+  void insertScannedItemsBatch(const QStringList &paths,
+                               const QHash<QString, QDateTime> &timestamps);
+  [[nodiscard]] bool applyScannedItemsToDatabase(int legacyId,
+                                                 const QString &collectionUuid);
+  [[nodiscard]] bool deleteMissingItemsByUuidUsingScannedItems(const QString &collectionUuid);
   
   [[nodiscard]] qint64 countCollectionByUuid(const QString &collectionUuid);
   [[nodiscard]] qint64 countGlobal(const QList<CollectionConfig> &allCollections);

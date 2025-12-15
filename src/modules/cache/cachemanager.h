@@ -11,7 +11,9 @@
 #include <QJsonObject>
 #include <QCache>
 #include <QImage>
+#include <QObject>
 #include <QThreadPool>
+#include <QTimer>
 #include <atomic>
 
 // Statistics for monitoring cache performance
@@ -41,9 +43,11 @@ struct CacheMetrics {
 class CacheManager {
 public:
   CacheManager();
+  ~CacheManager();
   void initialize();
   void saveToDisk();
   void saveToDiskForShutdown();
+  void scheduleSaveToDisk(int delayMs = -1);
 
   // Shutdown-safe persistence helpers
   // These allow ApplicationManager to snapshot state while the CacheManager is
@@ -54,7 +58,18 @@ public:
       const QHash<QString, qint64> &timestampsCopy);
   
   [[nodiscard]] QPixmap getArtwork(const QString &artworkPath);
+  // Memory-only lookup: never performs disk I/O or creates files.
+  [[nodiscard]] QPixmap getArtworkFromMemoryOnly(const QString &artworkPath);
+
+  // Worker-thread friendly disk cache read.
+  // Returns the cached image (PNG) as QImage, without creating any QPixmap.
+  [[nodiscard]] QImage tryLoadArtworkImageFromDiskCache(const QString &artworkPath);
+
   void cacheArtwork(const QString &artworkPath, const QPixmap &pixmap);
+
+  // Inserts into in-memory cache only; does not mark dirty for disk persistence.
+  void cacheArtworkInMemoryOnly(const QString &artworkPath, const QPixmap &pixmap);
+
   void clearCollectionCache(int collectionIndex);
   [[nodiscard]] static qint64 getCacheSize();
   void releaseGuiResources();
@@ -84,6 +99,13 @@ private:
 
   // Cancellation flag for in-flight/queued I/O tasks (used during shutdown).
   std::atomic_bool m_cancelIo{false};
+
+  // Debounced save timer plumbing (keeps frequent cache changes from causing
+  // repeated PNG encodes and metadata writes during active scrolling).
+  QObject *m_timerContext = nullptr;
+  QTimer *m_debouncedSaveTimer = nullptr;
+  bool m_metadataDirty = false;
+  qint64 m_firstDirtyAtMs = 0;
 };
 
 #endif // CACHEMANAGER_H

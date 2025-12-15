@@ -14,13 +14,9 @@
 #include <QStandardPaths>
 #include <algorithm>
 
-#ifdef KARTEND_DEBUG_LOGGING
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSessionManager, "kartend.sessionmanager")
-#define debugLog(msg) qCDebug(lcSessionManager) << msg
-#else
-#define debugLog(msg) do {} while(0)
-#endif
+#define debugLog(msg) do { if (lcSessionManager().isDebugEnabled()) { qCDebug(lcSessionManager) << msg; } } while (0)
 
 SessionManager::SessionManager(QObject *parent) : QObject(parent) {}
 

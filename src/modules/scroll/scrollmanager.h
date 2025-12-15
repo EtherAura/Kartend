@@ -80,6 +80,10 @@ public:
   ~ScrollManager() override;
   void setupReferences(const ScrollManagerSetup &setup);
   void setupVirtualScrolling(int totalCount, const CollectionContext &context);
+  // Updates only the media-file portion of the data model (keeps subcollections
+  // and virtual folders intact) and recalculates container metrics without
+  // tearing down the view.
+  void updateMediaItemCount(int mediaItemCount);
   void receiveItemsRange(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void cleanup();
   void updateGridWidth(int newGridWidth);

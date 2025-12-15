@@ -7,6 +7,7 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QKeySequence>
 #include <QPixmapCache>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -21,6 +22,8 @@
 #include <set>
 
 #include "extensionutils.h"
+#include "gamepadmanager.h"
+#include "interactionmanager.h"
 #include "itemwidget.h"
 #include "mainwindow.h"
 #include "pathutils.h"
@@ -141,6 +144,7 @@ auto SettingsDialog::eventFilter(QObject *obj, QEvent *event) -> bool {
 SettingsDialog::~SettingsDialog() { delete ui; }
 
 void SettingsDialog::accept() {
+  stopGamepadButtonCapture();
   if (!resolveUnsavedChanges(tr("closing the dialog"), true)) {
     return;
   }
@@ -173,6 +177,7 @@ void SettingsDialog::accept() {
 }
 
 void SettingsDialog::reject() {
+  stopGamepadButtonCapture();
   if (!resolveUnsavedChanges(tr("closing the dialog"), true)) {
     return;
   }
@@ -782,6 +787,193 @@ void SettingsDialog::setupGeneralSettingsConnections() {
       ui->selectionColorEdit->setText(color.name());
     }
   });
+
+  auto markChanged = [this]() { checkForChanges(); };
+  if (ui->keyNavUpEdit) {
+    connect(ui->keyNavUpEdit, &QKeySequenceEdit::keySequenceChanged, this,
+            markChanged);
+  }
+  if (ui->keyNavDownEdit) {
+    connect(ui->keyNavDownEdit, &QKeySequenceEdit::keySequenceChanged, this,
+            markChanged);
+  }
+  if (ui->keyNavLeftEdit) {
+    connect(ui->keyNavLeftEdit, &QKeySequenceEdit::keySequenceChanged, this,
+            markChanged);
+  }
+  if (ui->keyNavRightEdit) {
+    connect(ui->keyNavRightEdit, &QKeySequenceEdit::keySequenceChanged, this,
+            markChanged);
+  }
+  if (ui->keyConfirmEdit) {
+    connect(ui->keyConfirmEdit, &QKeySequenceEdit::keySequenceChanged, this,
+            markChanged);
+  }
+  if (ui->keyBackEdit) {
+    connect(ui->keyBackEdit, &QKeySequenceEdit::keySequenceChanged, this,
+            markChanged);
+  }
+  if (ui->keySearchEdit) {
+    connect(ui->keySearchEdit, &QKeySequenceEdit::keySequenceChanged, this,
+            markChanged);
+  }
+
+  if (ui->gamepadConfirmButtonLineEdit) {
+    connect(ui->gamepadConfirmButtonLineEdit, &QLineEdit::textChanged, this,
+            markChanged);
+  }
+  if (ui->gamepadBackButtonLineEdit) {
+    connect(ui->gamepadBackButtonLineEdit, &QLineEdit::textChanged, this,
+            markChanged);
+  }
+  if (ui->gamepadToggleSidebarButtonLineEdit) {
+    connect(ui->gamepadToggleSidebarButtonLineEdit, &QLineEdit::textChanged,
+            this, markChanged);
+  }
+  if (ui->detectGamepadConfirmButtonButton) {
+    connect(ui->detectGamepadConfirmButtonButton, &QPushButton::clicked, this,
+            [this]() { startGamepadButtonCapture(GamepadCaptureTarget::Confirm); });
+  }
+  if (ui->detectGamepadBackButtonButton) {
+    connect(ui->detectGamepadBackButtonButton, &QPushButton::clicked, this,
+            [this]() { startGamepadButtonCapture(GamepadCaptureTarget::Back); });
+  }
+  if (ui->detectGamepadToggleSidebarButtonButton) {
+    connect(ui->detectGamepadToggleSidebarButtonButton, &QPushButton::clicked,
+            this, [this]() {
+              startGamepadButtonCapture(GamepadCaptureTarget::ToggleSidebar);
+            });
+  }
+  if (ui->gamepadUseDpadCheckBox) {
+    connect(ui->gamepadUseDpadCheckBox, &QCheckBox::toggled, this,
+            markChanged);
+  }
+  if (ui->gamepadUseLeftStickCheckBox) {
+    connect(ui->gamepadUseLeftStickCheckBox, &QCheckBox::toggled, this,
+            markChanged);
+  }
+}
+
+void SettingsDialog::startGamepadButtonCapture(GamepadCaptureTarget target) {
+  auto *mainWindow = qobject_cast<MainWindow *>(parent());
+  if (!mainWindow || !mainWindow->getInteractionManager() ||
+      !mainWindow->getInteractionManager()->gamepadManager()) {
+    QMessageBox::information(
+        this, tr("Gamepad"),
+        tr("Gamepad input is not available on this build/configuration."));
+    return;
+  }
+
+  if (m_gamepadCaptureTarget == target) {
+    stopGamepadButtonCapture();
+    return;
+  }
+
+  stopGamepadButtonCapture();
+
+  m_gamepadCaptureTarget = target;
+  updateGamepadCaptureUi();
+
+  auto *gamepadManager = mainWindow->getInteractionManager()->gamepadManager();
+  gamepadManager->beginBindingCapture();
+  m_gamepadCaptureConnection =
+      connect(gamepadManager, &GamepadManager::bindingCaptureButtonPressed, this,
+              [this](const QString &buttonName) {
+                onGamepadCaptureButtonPressed(buttonName);
+              });
+}
+
+void SettingsDialog::stopGamepadButtonCapture() {
+  auto *mainWindow = qobject_cast<MainWindow *>(parent());
+  if (mainWindow && mainWindow->getInteractionManager() &&
+      mainWindow->getInteractionManager()->gamepadManager()) {
+    auto *gamepadManager = mainWindow->getInteractionManager()->gamepadManager();
+    gamepadManager->endBindingCapture();
+    QObject::disconnect(m_gamepadCaptureConnection);
+    m_gamepadCaptureConnection = QMetaObject::Connection();
+  }
+
+  m_gamepadCaptureTarget = GamepadCaptureTarget::None;
+  updateGamepadCaptureUi();
+}
+
+void SettingsDialog::onGamepadCaptureButtonPressed(const QString &buttonName) {
+  if (m_gamepadCaptureTarget == GamepadCaptureTarget::Confirm) {
+    if (ui->gamepadConfirmButtonLineEdit) {
+      ui->gamepadConfirmButtonLineEdit->setText(buttonName);
+    }
+  } else if (m_gamepadCaptureTarget == GamepadCaptureTarget::Back) {
+    if (ui->gamepadBackButtonLineEdit) {
+      ui->gamepadBackButtonLineEdit->setText(buttonName);
+    }
+  } else if (m_gamepadCaptureTarget == GamepadCaptureTarget::ToggleSidebar) {
+    if (ui->gamepadToggleSidebarButtonLineEdit) {
+      ui->gamepadToggleSidebarButtonLineEdit->setText(buttonName);
+    }
+  }
+
+  stopGamepadButtonCapture();
+  checkForChanges();
+}
+
+void SettingsDialog::updateGamepadCaptureUi() {
+  const bool capturingConfirm =
+      (m_gamepadCaptureTarget == GamepadCaptureTarget::Confirm);
+  const bool capturingBack =
+    (m_gamepadCaptureTarget == GamepadCaptureTarget::Back);
+  const bool capturingToggleSidebar =
+    (m_gamepadCaptureTarget == GamepadCaptureTarget::ToggleSidebar);
+  const bool capturingAny =
+    capturingConfirm || capturingBack || capturingToggleSidebar;
+
+  if (ui->detectGamepadConfirmButtonButton) {
+    ui->detectGamepadConfirmButtonButton->setText(
+        capturingConfirm ? tr("Press button...") : tr("Detect..."));
+    ui->detectGamepadConfirmButtonButton->setEnabled(
+        !capturingBack && !capturingToggleSidebar);
+  }
+  if (ui->detectGamepadBackButtonButton) {
+    ui->detectGamepadBackButtonButton->setText(
+        capturingBack ? tr("Press button...") : tr("Detect..."));
+    ui->detectGamepadBackButtonButton->setEnabled(
+        !capturingConfirm && !capturingToggleSidebar);
+  }
+  if (ui->detectGamepadToggleSidebarButtonButton) {
+    ui->detectGamepadToggleSidebarButtonButton->setText(
+        capturingToggleSidebar ? tr("Press button...") : tr("Detect..."));
+    ui->detectGamepadToggleSidebarButtonButton->setEnabled(
+        !capturingConfirm && !capturingBack);
+  }
+
+  if (ui->gamepadConfirmButtonLineEdit) {
+    ui->gamepadConfirmButtonLineEdit->setPlaceholderText(
+        capturingConfirm ? tr("Press any button") : QString());
+  }
+  if (ui->gamepadBackButtonLineEdit) {
+    ui->gamepadBackButtonLineEdit->setPlaceholderText(
+        capturingBack ? tr("Press any button") : QString());
+  }
+  if (ui->gamepadToggleSidebarButtonLineEdit) {
+    ui->gamepadToggleSidebarButtonLineEdit->setPlaceholderText(
+        capturingToggleSidebar ? tr("Press any button") : QString());
+  }
+
+  if (capturingAny) {
+    // While capturing, prevent checkbox changes from being confusing.
+    if (ui->gamepadUseDpadCheckBox) {
+      ui->gamepadUseDpadCheckBox->setEnabled(false);
+    }
+    if (ui->gamepadUseLeftStickCheckBox) {
+      ui->gamepadUseLeftStickCheckBox->setEnabled(false);
+    }
+  } else {
+    if (ui->gamepadUseDpadCheckBox) {
+      ui->gamepadUseDpadCheckBox->setEnabled(true);
+    }
+    if (ui->gamepadUseLeftStickCheckBox) {
+      ui->gamepadUseLeftStickCheckBox->setEnabled(true);
+    }
+  }
 }
 
 // Sets up signal/slot connections and ensures tree updates immediately after
@@ -1765,6 +1957,54 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->customFontEdit->setText(m_generalSettings.customFontFamily);
     ui->customFontEdit->blockSignals(false);
   }
+
+  auto setKeyEdit = [](QKeySequenceEdit *edit, int key) {
+    if (!edit) {
+      return;
+    }
+    edit->blockSignals(true);
+    edit->setKeySequence(QKeySequence(key));
+    edit->blockSignals(false);
+  };
+
+  setKeyEdit(ui->keyNavUpEdit, m_generalSettings.keyNavUp);
+  setKeyEdit(ui->keyNavDownEdit, m_generalSettings.keyNavDown);
+  setKeyEdit(ui->keyNavLeftEdit, m_generalSettings.keyNavLeft);
+  setKeyEdit(ui->keyNavRightEdit, m_generalSettings.keyNavRight);
+  setKeyEdit(ui->keyConfirmEdit, m_generalSettings.keyConfirm);
+  setKeyEdit(ui->keyBackEdit, m_generalSettings.keyBack);
+  setKeyEdit(ui->keySearchEdit, m_generalSettings.keySearch);
+
+  if (ui->gamepadUseDpadCheckBox) {
+    ui->gamepadUseDpadCheckBox->blockSignals(true);
+    ui->gamepadUseDpadCheckBox->setChecked(m_generalSettings.gamepadUseDpad);
+    ui->gamepadUseDpadCheckBox->blockSignals(false);
+  }
+  if (ui->gamepadUseLeftStickCheckBox) {
+    ui->gamepadUseLeftStickCheckBox->blockSignals(true);
+    ui->gamepadUseLeftStickCheckBox->setChecked(
+        m_generalSettings.gamepadUseLeftStick);
+    ui->gamepadUseLeftStickCheckBox->blockSignals(false);
+  }
+  if (ui->gamepadConfirmButtonLineEdit) {
+    ui->gamepadConfirmButtonLineEdit->blockSignals(true);
+    ui->gamepadConfirmButtonLineEdit->setText(
+        m_generalSettings.gamepadConfirmButton);
+    ui->gamepadConfirmButtonLineEdit->blockSignals(false);
+  }
+  if (ui->gamepadBackButtonLineEdit) {
+    ui->gamepadBackButtonLineEdit->blockSignals(true);
+    ui->gamepadBackButtonLineEdit->setText(m_generalSettings.gamepadBackButton);
+    ui->gamepadBackButtonLineEdit->blockSignals(false);
+  }
+  if (ui->gamepadToggleSidebarButtonLineEdit) {
+    ui->gamepadToggleSidebarButtonLineEdit->blockSignals(true);
+    ui->gamepadToggleSidebarButtonLineEdit->setText(
+        m_generalSettings.gamepadToggleSidebarButton);
+    ui->gamepadToggleSidebarButtonLineEdit->blockSignals(false);
+  }
+
+  updateGamepadCaptureUi();
 }
 
 void SettingsDialog::saveGeneralSettingsFromUI() {
@@ -1831,6 +2071,61 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
           ui->customFontEdit->text().trimmed();
       // Apply to ItemWidget static settings
       ItemWidget::setCustomFontFamily(ui->customFontEdit->text().trimmed());
+    }
+
+    auto singleKeyFromEdit = [](QKeySequenceEdit *edit, int fallbackKey) -> int {
+      if (!edit) {
+        return fallbackKey;
+      }
+      const QKeySequence seq = edit->keySequence();
+      if (seq.isEmpty()) {
+        return fallbackKey;
+      }
+      const auto combo = seq[0];
+      const int keyOnly = static_cast<int>(combo.key());
+      return (keyOnly != 0) ? keyOnly : fallbackKey;
+    };
+
+    mainWindow->m_generalSettings.keyNavUp =
+        singleKeyFromEdit(ui->keyNavUpEdit, mainWindow->m_generalSettings.keyNavUp);
+    mainWindow->m_generalSettings.keyNavDown =
+        singleKeyFromEdit(ui->keyNavDownEdit, mainWindow->m_generalSettings.keyNavDown);
+    mainWindow->m_generalSettings.keyNavLeft =
+        singleKeyFromEdit(ui->keyNavLeftEdit, mainWindow->m_generalSettings.keyNavLeft);
+    mainWindow->m_generalSettings.keyNavRight =
+        singleKeyFromEdit(ui->keyNavRightEdit, mainWindow->m_generalSettings.keyNavRight);
+    mainWindow->m_generalSettings.keyConfirm =
+        singleKeyFromEdit(ui->keyConfirmEdit, mainWindow->m_generalSettings.keyConfirm);
+    mainWindow->m_generalSettings.keyBack =
+        singleKeyFromEdit(ui->keyBackEdit, mainWindow->m_generalSettings.keyBack);
+    mainWindow->m_generalSettings.keySearch =
+        singleKeyFromEdit(ui->keySearchEdit, mainWindow->m_generalSettings.keySearch);
+
+    if (ui->gamepadUseDpadCheckBox) {
+      mainWindow->m_generalSettings.gamepadUseDpad =
+          ui->gamepadUseDpadCheckBox->isChecked();
+    }
+    if (ui->gamepadUseLeftStickCheckBox) {
+      mainWindow->m_generalSettings.gamepadUseLeftStick =
+          ui->gamepadUseLeftStickCheckBox->isChecked();
+    }
+    if (ui->gamepadConfirmButtonLineEdit) {
+      const QString v = ui->gamepadConfirmButtonLineEdit->text().trimmed();
+      if (!v.isEmpty()) {
+        mainWindow->m_generalSettings.gamepadConfirmButton = v;
+      }
+    }
+    if (ui->gamepadBackButtonLineEdit) {
+      const QString v = ui->gamepadBackButtonLineEdit->text().trimmed();
+      if (!v.isEmpty()) {
+        mainWindow->m_generalSettings.gamepadBackButton = v;
+      }
+    }
+    if (ui->gamepadToggleSidebarButtonLineEdit) {
+      const QString v = ui->gamepadToggleSidebarButtonLineEdit->text().trimmed();
+      if (!v.isEmpty()) {
+        mainWindow->m_generalSettings.gamepadToggleSidebarButton = v;
+      }
     }
     mainWindow->getSettingsManager()->saveGeneralSettings(
         mainWindow->m_generalSettings);

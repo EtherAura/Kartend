@@ -46,6 +46,7 @@ struct ArtworkInfo {
     QPointer<ItemWidget> widget;
     QString artworkPath;
     QImage image;
+    bool loadedFromDiskCache = false;
   };
 };
 
@@ -148,6 +149,7 @@ private:
                                      QList<ArtworkInfo> &uncachedItems);
   void dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
                              bool highPriority);
+  void dispatchAndTrackPrecacheBatch(const QStringList &artworkPaths);
   void pruneFinishedFutures();
 
   QList<CollectionConfig> *collections;
@@ -168,6 +170,7 @@ private:
   QHash<ItemWidget *, QString> widgetToArtworkPath;
   QList<ArtworkInfo> pendingArtwork;
   QSet<QString> m_silentlyCachedPaths;
+  QSet<QString> m_silentPendingPaths;
   QStringList m_allArtworkPaths;
 
   bool m_silentLoadingActive;

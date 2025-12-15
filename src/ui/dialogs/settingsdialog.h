@@ -5,6 +5,7 @@
 #include <QDialog>
 #include <QHash>
 #include <QList>
+#include <QMetaObject>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QTreeWidgetItem>
@@ -68,6 +69,13 @@ private slots:
   void onIncludeSubfoldersToggled(bool checked);
 
 private:
+  enum class GamepadCaptureTarget { None, Confirm, Back, ToggleSidebar };
+
+  void startGamepadButtonCapture(GamepadCaptureTarget target);
+  void stopGamepadButtonCapture();
+  void onGamepadCaptureButtonPressed(const QString &buttonName);
+  void updateGamepadCaptureUi();
+
   void updateCollectionTreeWidget();
   void expandPathToCollection(int collectionIndex);
   void populateTreeWidget();
@@ -147,6 +155,9 @@ private:
   GeneralSettings m_generalSettings;
   /// Tracks collection indices that need a rescan due to database-affecting changes
   QSet<int> m_rescanRequired;
+
+  GamepadCaptureTarget m_gamepadCaptureTarget = GamepadCaptureTarget::None;
+  QMetaObject::Connection m_gamepadCaptureConnection;
   bool eventFilter(QObject *obj, QEvent *event) override;
 };
 

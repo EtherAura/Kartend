@@ -6,6 +6,7 @@
 #include <QMetaType>
 #include <QString>
 #include <QStringList>
+#include <QtCore/Qt>
 #include <uiconstants.h>
 
 // Forward declaration for validation
@@ -242,6 +243,20 @@ struct CollectionContext {
   QHash<QString, QString> fileNames;
   SortMode sortMode = SortMode::NameAscending;  // Sort mode for this view
   bool excludeSubfoldersFromSort = false;       // Exclude subfolders/subcollections from sorting
+
+  // Query-only scope controls (do not change UI behavior):
+  // - queryIncludeDescendants: include descendants even if the collection's
+  //   showAllSubcollectionItems is false.
+  // - queryIncludeAllCollections: include all collections in DB queries.
+  bool queryIncludeDescendants = false;
+  bool queryIncludeAllCollections = false;
+
+  // Optional overrides for UI-only composition.
+  // Used for search UX: show only matching subcollections and/or suppress
+  // virtual folders without changing collection config or DB query behavior.
+  bool hasSubcollectionOverride = false;
+  QList<int> subcollectionOverride;
+  bool suppressVirtualFolders = false;
   [[nodiscard]] bool isValid() const { return currentIndex >= 0; }
 };
 
@@ -260,6 +275,32 @@ struct GeneralSettings {
   int titleTintLightness = 60;             // Title text lightness (0-255)
   QString titleBaseColor;                  // Base color for title text (empty = use highlight)
   QString customFontFamily;                // Custom font family (empty = system default)
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Controls: Keyboard bindings (single-key, no modifier semantics)
+  // Defaults match current hard-coded behavior.
+  // ─────────────────────────────────────────────────────────────────────────
+  int keyNavLeft = Qt::Key_Left;
+  int keyNavRight = Qt::Key_Right;
+  int keyNavUp = Qt::Key_Up;
+  int keyNavDown = Qt::Key_Down;
+  int keyConfirm = Qt::Key_Return;   // Return/Enter treated as equivalent
+  int keyBack = Qt::Key_Escape;
+  int keySearch = Qt::Key_Slash;
+  int keyAlphabeticBack = Qt::Key_PageUp;
+  int keyAlphabeticForward = Qt::Key_PageDown;
+  int keyJumpFirst = Qt::Key_Home;
+  int keyJumpLast = Qt::Key_End;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Controls: Gamepad bindings
+  // Button names are symbolic; backends map them as available.
+  // ─────────────────────────────────────────────────────────────────────────
+  bool gamepadUseDpad = true;
+  bool gamepadUseLeftStick = true;
+  QString gamepadConfirmButton = "A";
+  QString gamepadBackButton = "B";
+  QString gamepadToggleSidebarButton = "Y";
   SortMode sortMode = SortMode::NameAscending;  // Current sort mode
   bool excludeSubfoldersFromSort = false;  // Exclude subfolders/subcollections from sorting
   QHash<int, int> lastSelectedItems;
@@ -349,6 +390,17 @@ collectDescendantIndices(int parentIndex,
     parent = p.parentCollectionIndex;
   }
   return parts.join('/');
+}
+
+[[nodiscard]] inline QString selectionSessionKeyFor(
+    const CollectionConfig &collection,
+    const QList<CollectionConfig> &collections) {
+  const QString base = hierarchicalNameFor(collection, collections);
+  QString subfolder = QDir::cleanPath(collection.currentSubfolder.trimmed());
+  if (subfolder.isEmpty() || subfolder == ".") {
+    return base;
+  }
+  return base + "|subfolder=" + subfolder;
 }
 
 [[nodiscard]] inline QList<int> directChildrenOf(int parentIndex,
