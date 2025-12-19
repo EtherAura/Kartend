@@ -10,6 +10,7 @@
 #include <functional>
 #include <QThread>
 #include <QTimer>
+#include <QtGlobal>
 
 #include "artworkmanager.h"
 #include "collectionutils.h"
@@ -55,7 +56,7 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
   connect(this, &DatabaseManager::requestLoadAllCollections, m_worker, &QueryManager::loadAllCollections);
   connect(this, &DatabaseManager::requestLoadItems, m_worker, &QueryManager::loadItems);
   connect(this, &DatabaseManager::requestLoadItemsWithSubcollections, m_worker, &QueryManager::loadItemsWithSubcollections);
-  connect(this, &DatabaseManager::requestFetchItemCount, m_worker, &QueryManager::fetchItemCount);
+  connect(this, &DatabaseManager::requestFetchItemCount, m_worker, &QueryManager::fetchItemCountWithToken);
   connect(this, &DatabaseManager::requestFetchItemsRange, m_worker, &QueryManager::fetchItemsRange);
   connect(this, &DatabaseManager::requestInvalidateCache, m_worker, &QueryManager::invalidateCollectionCache);
   connect(this, &DatabaseManager::requestUpdateCachedCounts, m_worker, &QueryManager::updateCachedCounts);
@@ -70,6 +71,7 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
   
   connect(m_worker, &QueryManager::itemsLoaded, this, &DatabaseManager::onWorkerItemsLoaded);
   connect(m_worker, &QueryManager::itemCountLoaded, this, &DatabaseManager::onWorkerItemCountLoaded);
+  connect(m_worker, &QueryManager::itemCountLoadedWithToken, this, &DatabaseManager::onWorkerItemCountLoadedWithToken);
   connect(m_worker, &QueryManager::itemsRangeLoaded, this, &DatabaseManager::onWorkerItemsRangeLoaded);
     connect(m_worker, &QueryManager::cachedCountsComputed, this, &DatabaseManager::onWorkerCachedCountsComputed);
   connect(m_worker, &QueryManager::errorOccurred, this, &DatabaseManager::errorOccurred);
@@ -265,17 +267,37 @@ void DatabaseManager::loadItemsWithSubcollections(const CollectionContext &conte
   emit requestLoadItemsWithSubcollections(context, allCollections);
 }
 
-void DatabaseManager::loadItems(const CollectionContext &context) {
-  emit requestLoadItems(context);
+void DatabaseManager::loadItems(const CollectionContext &context,
+                                const QList<CollectionConfig> &allCollections) {
+  emit requestLoadItems(context, allCollections);
 }
 
-void DatabaseManager::fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter) {
+void DatabaseManager::fetchItemCount(const CollectionContext &context,
+                                     const QList<CollectionConfig> &allCollections,
+                                     const QString &filter,
+                                     int requestToken) {
+  if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
+    qWarning() << "[SearchDiag][DatabaseManager] fetchItemCount: collIndex="
+               << context.currentIndex << "filter='" << filter << "'"
+               << "token=" << requestToken;
+  }
   // Kick off a background scan if needed, but don't block count queries.
-  emit requestEnsureScannedForContext(context, allCollections);
-  emit requestFetchItemCount(context, allCollections, filter);
+  // IMPORTANT: Avoid scheduling scans for every search keystroke.
+  // Scans can be expensive and their completion triggers count refreshes that
+  // can invalidate in-flight paginated search range loads (causing blank views
+  // + high CPU from repeated rebuilds).
+  if (filter.trimmed().isEmpty()) {
+    emit requestEnsureScannedForContext(context, allCollections);
+  }
+  emit requestFetchItemCount(context, allCollections, filter, requestToken);
 }
 
 void DatabaseManager::fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter) {
+  if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
+    qWarning() << "[SearchDiag][DatabaseManager] fetchItemsRange: collIndex="
+               << context.currentIndex << "offset=" << offset << "limit="
+               << limit << "filter='" << filter << "'";
+  }
   emit requestFetchItemsRange(context, allCollections, offset, limit, filter);
 }
 
@@ -325,11 +347,49 @@ void DatabaseManager::onWorkerItemsLoaded(const QStringList &filePaths,
 }
 
 void DatabaseManager::onWorkerItemCountLoaded(int count) {
+  if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
+    qWarning() << "[SearchDiag][DatabaseManager] onWorkerItemCountLoaded:" << count;
+  }
   emit itemCountLoaded(count);
 }
 
-void DatabaseManager::onWorkerItemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames) {
-  emit itemsRangeLoaded(offset, filePaths, fileNames);
+void DatabaseManager::onWorkerItemCountLoadedWithToken(int count, int requestToken) {
+  if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
+    qWarning() << "[SearchDiag][DatabaseManager] onWorkerItemCountLoadedWithToken:" << count
+               << "token=" << requestToken;
+  }
+  emit itemCountLoadedWithToken(count, requestToken);
+
+  // Keep legacy listeners working (e.g., MainWindow overlay suppression).
+  emit itemCountLoaded(count);
+}
+
+void DatabaseManager::onWorkerItemsRangeLoaded(int offset, const QStringList &filePaths, 
+                                               const QHash<QString, QString> &fileNames,
+                                               const QHash<QString, QString> &fileToArtworkDir,
+                                               const QHash<QString, QString> &fileToMediaDir,
+                                               const QHash<QString, int> &fileToCollectionIndex) {
+  if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
+    qWarning() << "[SearchDiag][DatabaseManager] onWorkerItemsRangeLoaded: offset="
+               << offset << "paths=" << filePaths.size();
+  }
+  
+  // Merge the directory and collection index mappings from range query into our cache
+  // This enables findArtworkDirectoryForFile() and getCollectionIndexForFile() to work for range-loaded items
+  if (!fileToArtworkDir.isEmpty() || !fileToMediaDir.isEmpty() || !fileToCollectionIndex.isEmpty()) {
+    QMutexLocker locker(&m_dataMutex);
+    for (auto it = fileToArtworkDir.constBegin(); it != fileToArtworkDir.constEnd(); ++it) {
+      m_fileToArtworkDir.insert(it.key(), it.value());
+    }
+    for (auto it = fileToMediaDir.constBegin(); it != fileToMediaDir.constEnd(); ++it) {
+      m_fileToMediaDir.insert(it.key(), it.value());
+    }
+    for (auto it = fileToCollectionIndex.constBegin(); it != fileToCollectionIndex.constEnd(); ++it) {
+      m_fileToCollectionIndex.insert(it.key(), it.value());
+    }
+  }
+  
+  emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex);
 }
 
 void DatabaseManager::cancelScan() {
@@ -515,12 +575,14 @@ auto DatabaseManager::getCollectionIndexForFile(const QString &filePath) const
 auto DatabaseManager::resolveFilePath(const QString &rawEntry,
                                        const CollectionContext &context) const
     -> QString {
+  // DB-backed paginated queries (search) can return fully-qualified absolute
+  // paths. Those should always pass through unchanged, even when the current
+  // view's mediaDirectory is empty (e.g., container collections).
+  if (QDir::isAbsolutePath(rawEntry)) {
+    return rawEntry;
+  }
+
   if (context.config.showAllSubcollectionItems) {
-    // Absolute paths pass through directly
-    if (QDir::isAbsolutePath(rawEntry)) {
-      return rawEntry;
-    }
-    
     // Try to resolve relative path using fileNames mapping
     return resolveRelativeFilePath(rawEntry, context.fileNames);
   }

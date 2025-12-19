@@ -38,12 +38,16 @@ public:
 
   void initDatabase();
   void loadAllCollections(const QList<CollectionConfig> &allCollections);
-  void loadItems(const CollectionContext &context);
+  void loadItems(const CollectionContext &context,
+                  const QList<CollectionConfig> &allCollections);
   void loadItemsWithSubcollections(const CollectionContext &context,
                               const QList<CollectionConfig> &allCollections);
   void updateCachedCounts(const QList<CollectionConfig> &allCollections);
   
-  void fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter = QString());
+  void fetchItemCount(const CollectionContext &context,
+                      const QList<CollectionConfig> &allCollections,
+                      const QString &filter = QString(),
+                      int requestToken = 0);
   void fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter = QString());
   
   // Clears cached items for a collection to force a fresh rescan
@@ -65,7 +69,12 @@ signals:
   void itemsLoaded(const QStringList &filePaths,
                    const QHash<QString, QString> &fileNames);
   void itemCountLoaded(int count);
-  void itemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
+  void itemCountLoadedWithToken(int count, int requestToken);
+  void itemsRangeLoaded(int offset, const QStringList &filePaths, 
+                        const QHash<QString, QString> &fileNames,
+                        const QHash<QString, QString> &fileToArtworkDir,
+                        const QHash<QString, QString> &fileToMediaDir,
+                        const QHash<QString, int> &fileToCollectionIndex);
   void errorOccurred(const ErrorUtils::ErrorContext &error);
 
   // Emitted after cached counts have been recomputed and persisted.
@@ -92,11 +101,15 @@ signals:
 
   // Internal signals to trigger worker
   void requestLoadAllCollections(const QList<CollectionConfig> &allCollections);
-  void requestLoadItems(const CollectionContext &context);
+  void requestLoadItems(const CollectionContext &context,
+                         const QList<CollectionConfig> &allCollections);
   void requestLoadItemsWithSubcollections(const CollectionContext &context,
                                           const QList<CollectionConfig> &allCollections);
   void requestUpdateCachedCounts(quint64 generation, const QStringList &collectionUuids);
-  void requestFetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter);
+  void requestFetchItemCount(const CollectionContext &context,
+                             const QList<CollectionConfig> &allCollections,
+                             const QString &filter,
+                             int requestToken);
   void requestFetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter);
   void requestInvalidateCache(const QString &collectionUuid);
 
@@ -118,7 +131,12 @@ private slots:
                            const QHash<QString, QString> &fileToMediaDir,
                            const QHash<QString, int> &fileToCollectionIndex);
   void onWorkerItemCountLoaded(int count);
-  void onWorkerItemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
+  void onWorkerItemCountLoadedWithToken(int count, int requestToken);
+  void onWorkerItemsRangeLoaded(int offset, const QStringList &filePaths, 
+                                const QHash<QString, QString> &fileNames,
+                                const QHash<QString, QString> &fileToArtworkDir,
+                                const QHash<QString, QString> &fileToMediaDir,
+                                const QHash<QString, int> &fileToCollectionIndex);
   void onWorkerCachedCountsComputed(quint64 generation, qint64 globalCount,
                                     const QHash<QString, qint64> &directCountsByUuid);
   void dispatchCachedCountsUpdate();

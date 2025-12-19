@@ -43,11 +43,16 @@ public slots:
   void initDatabase();
   void ensureItemsFtsReady();
   void loadAllCollections(const QList<CollectionConfig> &allCollections);
-  void loadItems(const CollectionContext &context);
+  void loadItems(const CollectionContext &context,
+                 const QList<CollectionConfig> &allCollections);
   void loadItemsWithSubcollections(const CollectionContext &context,
                                    const QList<CollectionConfig> &allCollections);
   void updateCachedCounts(quint64 generation, const QStringList &collectionUuids);
   void fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter);
+  void fetchItemCountWithToken(const CollectionContext &context,
+                              const QList<CollectionConfig> &allCollections,
+                              const QString &filter,
+                              int requestToken);
   void fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter);
 
   // Scans the current collection (and descendants when showAllSubcollectionItems is set)
@@ -65,7 +70,12 @@ signals:
                    const QHash<QString, QString> &fileToMediaDir,
                    const QHash<QString, int> &fileToCollectionIndex);
   void itemCountLoaded(int count);
-  void itemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
+  void itemCountLoadedWithToken(int count, int requestToken);
+  void itemsRangeLoaded(int offset, const QStringList &filePaths, 
+                        const QHash<QString, QString> &fileNames,
+                        const QHash<QString, QString> &fileToArtworkDir,
+                        const QHash<QString, QString> &fileToMediaDir,
+                        const QHash<QString, int> &fileToCollectionIndex);
   void errorOccurred(const ErrorUtils::ErrorContext &error);
   void cachedCountsComputed(quint64 generation, qint64 globalCount,
                             const QHash<QString, qint64> &directCountsByUuid);
@@ -100,6 +110,10 @@ public:
   void resetScanCancellation();
 
 private:
+  [[nodiscard]] int fetchItemCountImpl(const CollectionContext &context,
+                                      const QList<CollectionConfig> &allCollections,
+                                      const QString &filter);
+
   // Per-scan cancellation token. Reset by swapping in a new token.
   // This avoids old scan tasks resuming if cancellation is reset while
   // worker tasks are still in-flight.
@@ -132,8 +146,8 @@ private:
 
   [[nodiscard]] bool isItemsFtsReadyFromDb();
 
-  void ensureCollectionScanned(int collectionIndex, const CollectionConfig &collection);
-  void scanAndSaveItemsToDatabase(int collectionIndex, const CollectionConfig &collection);
+  [[nodiscard]] bool ensureCollectionScanned(int collectionIndex, const CollectionConfig &collection);
+  [[nodiscard]] bool scanAndSaveItemsToDatabase(int collectionIndex, const CollectionConfig &collection);
   bool needsRescan(int collectionIndex, const CollectionConfig &collection);
   QStringList scanMediaDirectory(const CollectionConfig &collection,
                                  QHash<QString, QDateTime> &timestamps,
@@ -162,6 +176,45 @@ private:
   [[nodiscard]] bool applyScannedItemsToDatabase(int legacyId,
                                                  const QString &collectionUuid);
   [[nodiscard]] bool deleteMissingItemsByUuidUsingScannedItems(const QString &collectionUuid);
+
+  // Query UUID temp table helpers - used when UUID count exceeds SQLite variable limit
+  // SQLite has a default limit of 999 bind variables; we use a temp table when exceeding 500
+  static constexpr int MAX_UUIDS_FOR_IN_CLAUSE = 500;
+  [[nodiscard]] bool ensureQueryUuidsTempTable();
+  void clearQueryUuidsTempTable();
+  [[nodiscard]] bool populateQueryUuidsTempTable(const QStringList &uuids);
+  // Returns SQL fragment: either "IN (?,...)" for small lists or "IN (SELECT uuid FROM query_uuids)" for large
+  [[nodiscard]] QString buildUuidFilterClause(const QStringList &uuids, bool &useTempTable);
+  
+  // Cache to avoid repopulating temp table when UUIDs haven't changed
+  // Stores a hash of the UUID list to detect changes
+  QByteArray m_cachedQueryUuidsHash;
+  [[nodiscard]] static QByteArray computeUuidListHash(const QStringList &uuids);
+  [[nodiscard]] bool ensureQueryUuidsPopulated(const QStringList &uuids);
+  
+  // ───────────────────────────────────────────────────────────────────────────
+  // Precomputed sorted order for O(1) range lookups on large collections
+  // ───────────────────────────────────────────────────────────────────────────
+  // When item count exceeds PRECOMPUTE_SORT_THRESHOLD, we create a temp table
+  // with (position, path, uuid) that allows instant range queries via:
+  //   SELECT path, uuid FROM sorted_items_cache WHERE position BETWEEN ? AND ?
+  // This avoids expensive ORDER BY + OFFSET for every scroll position.
+  [[nodiscard]] bool ensureSortedItemsCacheTable();
+  void clearSortedItemsCache();
+  [[nodiscard]] bool populateSortedItemsCache(const QStringList &uuids, const QString &filter);
+  [[nodiscard]] bool hasSortedItemsCache() const { return m_sortedItemsCacheValid; }
+  
+  // Cache validity tracking
+  bool m_sortedItemsCacheValid = false;
+  bool m_sortCacheBuildPending = false;  // True when deferred build is scheduled
+  QByteArray m_sortedItemsCacheHash;  // Hash of (uuids + filter) to detect changes
+  QStringList m_pendingCacheUuids;       // Stored for deferred build
+  QString m_pendingCacheFilter;          // Stored for deferred build
+  [[nodiscard]] static QByteArray computeSortCacheHash(const QStringList &uuids, const QString &filter);
+  
+  // Deferred cache build - runs after returning slow-path result to avoid blocking
+  void scheduleDeferredCacheBuild(const QStringList &uuids, const QString &filter);
+  void performDeferredCacheBuild();
   
   [[nodiscard]] qint64 countCollectionByUuid(const QString &collectionUuid);
   [[nodiscard]] qint64 countGlobal(const QList<CollectionConfig> &allCollections);
@@ -173,6 +226,7 @@ private:
   struct CollectionDirMaps {
     QHash<QString, QString> uuidToMediaDir;
     QHash<QString, QString> uuidToArtworkDir;
+    QHash<QString, int> uuidToCollectionIndex;
   };
 
   // Collects UUIDs for a collection and its descendants if showAllSubcollectionItems is set

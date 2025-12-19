@@ -251,6 +251,25 @@ struct CollectionContext {
   bool queryIncludeDescendants = false;
   bool queryIncludeAllCollections = false;
 
+  // Pre-computed descendant indices from CollectionHierarchyCache.
+  // When populated, QueryManager uses these directly instead of computing
+  // descendants via O(n²) tree traversal. This provides O(1) access for
+  // large collection hierarchies (e.g., 3000+ subcollections).
+  QList<int> precomputedDescendants;
+  
+  // Pre-computed UUIDs for current collection + all descendants.
+  // Eliminates repeated PathUtils::validateAndExpandPath (filesystem exists()
+  // checks) and CollectionUtils::computeCollectionUuid (SHA1 hash) calls
+  // during search queries. Computed once during cache rebuild.
+  QStringList precomputedDescendantUuids;
+  
+  // Pre-computed directory maps for current collection + all descendants.
+  // Maps UUID → media directory and UUID → artwork directory.
+  // Eliminates repeated path expansion during range loading.
+  QHash<QString, QString> precomputedUuidToMediaDir;
+  QHash<QString, QString> precomputedUuidToArtworkDir;
+  QHash<QString, int> precomputedUuidToCollectionIndex;
+
   // Optional overrides for UI-only composition.
   // Used for search UX: show only matching subcollections and/or suppress
   // virtual folders without changing collection config or DB query behavior.
@@ -312,24 +331,9 @@ class CollectionHierarchyCache {
 public:
   CollectionHierarchyCache() = default;
   
-  void rebuild(const QList<CollectionConfig> &collections) {
-    m_directChildren.clear();
-    m_allDescendants.clear();
-    m_collections = &collections;
-    
-    // Build direct children map
-    for (int i = 0; i < collections.size(); ++i) {
-      int parent = collections[i].parentCollectionIndex;
-      if (parent >= 0) {
-        m_directChildren[parent].append(i);
-      }
-    }
-    
-    // Pre-compute all descendants for each collection
-    for (int i = 0; i < collections.size(); ++i) {
-      m_allDescendants[i] = computeDescendants(i);
-    }
-  }
+  // Rebuilds the hierarchy cache with pre-computed UUIDs and directory mappings.
+  // Implemented in collectionutils.cpp to avoid header dependencies.
+  void rebuild(const QList<CollectionConfig> &collections);
   
   [[nodiscard]] QList<int> directChildren(int parentIndex) const {
     return m_directChildren.value(parentIndex);
@@ -337,6 +341,71 @@ public:
   
   [[nodiscard]] QList<int> allDescendants(int parentIndex) const {
     return m_allDescendants.value(parentIndex);
+  }
+  
+  // UUID accessors - O(1) lookup of pre-computed values
+  [[nodiscard]] QString collectionUuid(int index) const {
+    return m_collectionUuids.value(index);
+  }
+  
+  [[nodiscard]] QString expandedMediaDir(int index) const {
+    return m_expandedMediaDirs.value(index);
+  }
+  
+  [[nodiscard]] QString expandedArtworkDir(int index) const {
+    return m_expandedArtworkDirs.value(index);
+  }
+  
+  [[nodiscard]] QString uuidToMediaDir(const QString &uuid) const {
+    return m_uuidToMediaDir.value(uuid);
+  }
+  
+  [[nodiscard]] QString uuidToArtworkDir(const QString &uuid) const {
+    return m_uuidToArtworkDir.value(uuid);
+  }
+  
+  [[nodiscard]] int uuidToCollectionIndex(const QString &uuid) const {
+    return m_uuidToCollectionIndex.value(uuid, -1);
+  }
+  
+  // Lookup artwork directory from a file path's parent directory
+  [[nodiscard]] QString artworkDirForFilePath(const QString &filePath) const {
+    // Extract the parent directory and try to find the artwork dir
+    QFileInfo fi(filePath);
+    QString parentDir = fi.absolutePath();
+    // Exact match first
+    if (m_mediaDirToArtworkDir.contains(parentDir)) {
+      return m_mediaDirToArtworkDir.value(parentDir);
+    }
+    // Try without trailing slash variations
+    if (parentDir.endsWith('/')) {
+      QString normalized = parentDir.chopped(1);
+      if (m_mediaDirToArtworkDir.contains(normalized)) {
+        return m_mediaDirToArtworkDir.value(normalized);
+      }
+    } else {
+      QString withSlash = parentDir + '/';
+      if (m_mediaDirToArtworkDir.contains(withSlash)) {
+        return m_mediaDirToArtworkDir.value(withSlash);
+      }
+    }
+    return QString();
+  }
+  
+  // Get all UUIDs for a collection and its descendants (for DB queries)
+  [[nodiscard]] QStringList descendantUuids(int parentIndex) const {
+    QStringList uuids;
+    QString parentUuid = m_collectionUuids.value(parentIndex);
+    if (!parentUuid.isEmpty()) {
+      uuids << parentUuid;
+    }
+    for (int descendant : m_allDescendants.value(parentIndex)) {
+      QString uuid = m_collectionUuids.value(descendant);
+      if (!uuid.isEmpty()) {
+        uuids << uuid;
+      }
+    }
+    return uuids;
   }
   
   [[nodiscard]] bool isValid() const { return m_collections; }
@@ -356,6 +425,15 @@ private:
   const QList<CollectionConfig> *m_collections = nullptr;
   QHash<int, QList<int>> m_directChildren;
   QHash<int, QList<int>> m_allDescendants;
+  
+  // Pre-computed UUIDs and directory mappings (eliminates SHA1 on each startup)
+  QHash<int, QString> m_collectionUuids;        // index -> UUID
+  QHash<int, QString> m_expandedMediaDirs;      // index -> expanded media dir
+  QHash<int, QString> m_expandedArtworkDirs;    // index -> expanded artwork dir
+  QHash<QString, QString> m_uuidToMediaDir;     // UUID -> expanded media dir
+  QHash<QString, QString> m_uuidToArtworkDir;   // UUID -> expanded artwork dir
+  QHash<QString, int> m_uuidToCollectionIndex;  // UUID -> collection index
+  QHash<QString, QString> m_mediaDirToArtworkDir;  // media dir -> artwork dir (for file lookups)
 };
 
 // Legacy inline functions for backward compatibility
@@ -412,6 +490,35 @@ collectDescendantIndices(int parentIndex,
     }
   }
   return children;
+}
+
+/**
+ * @brief Resolves artwork directory for a collection, falling back to parent if empty.
+ * @param collectionIndex Index of the collection to resolve artwork for.
+ * @param collections List of all collections.
+ * @return Artwork directory from this collection or nearest ancestor with one set.
+ *
+ * Walks up the parent chain until a non-empty artworkDirectory is found.
+ * Returns empty string if no ancestor has an artwork directory.
+ */
+[[nodiscard]] inline QString resolveArtworkDirectory(
+    int collectionIndex, const QList<CollectionConfig> &collections) {
+  if (collectionIndex < 0 || collectionIndex >= collections.size()) {
+    return {};
+  }
+
+  int current = collectionIndex;
+  while (current >= 0 && current < collections.size()) {
+    const CollectionConfig &c = collections[current];
+    if (!c.artworkDirectory.trimmed().isEmpty()) {
+      return c.artworkDirectory;
+    }
+    if (!c.isSubcollection || c.parentCollectionIndex < 0) {
+      break;
+    }
+    current = c.parentCollectionIndex;
+  }
+  return {};
 }
 
 /**

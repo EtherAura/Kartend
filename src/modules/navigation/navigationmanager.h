@@ -9,6 +9,7 @@
 #include <QList>
 #include <QObject>
 #include <QStringList>
+#include <QTimer>
 #include <functional>
 #include <memory>
 
@@ -105,6 +106,10 @@ public:
   explicit NavigationManager(QObject *parent = nullptr);
   ~NavigationManager() override;
   [[nodiscard]] bool isNavigationInProgress() const;
+  
+  // Persist current viewport/selection state before shutdown.
+  // Call this before blocking signals or clearing collection index.
+  void prepareForShutdown();
 
   // Navigation stack manager for hierarchy traversal
   [[nodiscard]] NavigationStackManager *stackManager() const { return m_stackManager.get(); }
@@ -137,9 +142,13 @@ public slots:
                                 int finalEnsureDelayMs) -> void;
   void onItemsLoaded(const QStringList &filePaths,
                      const QHash<QString, QString> &fileNames);
-  void onItemCountLoaded(int count);
+  void onItemCountLoaded(int count, int requestToken);
   void onBackgroundCollectionScanCompleted(const QString &collectionUuid);
-  void onItemsRangeLoaded(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
+  void onItemsRangeLoaded(int offset, const QStringList &filePaths, 
+                          const QHash<QString, QString> &fileNames,
+                          const QHash<QString, QString> &fileToArtworkDir,
+                          const QHash<QString, QString> &fileToMediaDir,
+                          const QHash<QString, int> &fileToCollectionIndex);
   void fetchItemsRange(int offset, int limit);
   void onMediaLibraryError(const ErrorUtils::ErrorContext &error);
   void onViewportChanged();
@@ -177,6 +186,14 @@ private:
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   GeneralSettings *m_generalSettings = nullptr;
   QLineEdit *m_searchBar = nullptr;
+
+  // Filter text used for the current DB-backed items view (count + paginated ranges).
+  // This keeps itemCount and itemsRange queries consistent even if the UI search bar
+  // text changes between the count request and subsequent range fetches.
+  QString m_itemsQueryFilter;
+
+  // Monotonic token for count requests; used to ignore stale itemCount responses.
+  int m_itemCountRequestToken = 0;
   QWidget *m_itemsPage = nullptr;
   QWidget *m_itemsTopBar = nullptr;
   QStackedWidget *m_stackedWidget = nullptr;
@@ -225,8 +242,13 @@ private:
   [[nodiscard]] auto handleSharedItemsNavigation(int collectionIndex) -> bool;
   auto prepareNonSharedNavigation(int collectionIndex) -> void;
   auto loadCollectionData(int collectionIndex) -> void;
+  
+  // Attempts fast startup using cached counts to render immediately.
+  // Returns true if cached count was used for immediate rendering.
+  [[nodiscard]] auto tryUseCachedCountForStartup(const CollectionContext &context) -> bool;
 
   [[nodiscard]] CollectionContext buildExpandedContextForIndex(int collectionIndex) const;
+  [[nodiscard]] CollectionContext getOrBuildExpandedContext(int collectionIndex);
   void requestItemCountForContext(const CollectionContext &context, const QString &filter);
 
   void persistCurrentSelection();
@@ -242,6 +264,9 @@ private:
 
   bool m_backgroundCountRefreshInProgress = false;
   int m_backgroundCountRefreshCollectionIndex = -1;
+  
+  // Tracks if this is the first load after startup (for cached count fast-path)
+  bool m_isInitialStartupLoad = true;
 
   // When navigating between virtual subfolders, we want the next items view
   // rebuild to start from the top (avoids restoring a stale selection index
@@ -253,10 +278,24 @@ private:
   quint64 m_itemsViewGeneration = 0;
   QHash<int, quint64> m_pendingRangeGenerations;
 
+  // Debounced reload state for safeReloadCollection().
+  // safeReloadCollection() is invoked from multiple UI entry points (virtual
+  // folder navigation, settings changes, search clear). If it fires repeatedly
+  // in quick succession, the repeated cleanup + delayed reload can result in
+  // a persistent blank grid and high CPU from churn.
+  QTimer *m_safeReloadTimer = nullptr;
+  int m_pendingSafeReloadCollectionIndex = -1;
+
   // Active query context for the current items view (count + on-demand ranges).
   // This decouples DB query scope from the current collection's config.
   bool m_hasItemsQueryContext = false;
   CollectionContext m_itemsQueryContext;
+  
+  // Cached expanded context for the current collection to avoid recomputing
+  // precomputed descendants, UUIDs, and directory maps on every search keystroke.
+  // Invalidated when collection changes.
+  int m_cachedExpandedContextIndex = -1;
+  CollectionContext m_cachedExpandedContext;
 };
 
 #endif
