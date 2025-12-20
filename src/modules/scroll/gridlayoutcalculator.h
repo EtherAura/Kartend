@@ -11,7 +11,9 @@
  * @brief Layout metrics for virtual scrolling grid.
  * 
  * Contains all computed dimensions and spacing for laying out items
- * in a virtual scrolling container.
+ * in a virtual scrolling container. For very large collections that
+ * exceed Qt's QWIDGETSIZE_MAX (16,777,215 pixels), the height is clamped
+ * and scroll positions are scaled to map the full logical range.
  */
 struct GridMetrics {
   int itemWidth = 0;
@@ -21,14 +23,55 @@ struct GridMetrics {
   int verticalSpacing = 0;
   int margins = 0;
   int totalWidth = 0;
-  int totalHeight = 0;
+  int totalHeight = 0;        // Clamped height for Qt widget (≤ QWIDGETSIZE_MAX)
+  int logicalHeight = 0;      // True logical height (may exceed Qt limits)
   int actualGridWidth = 0;
   int totalRows = 0;
-  bool isClipped = false;
-  int overflowAmount = 0;
+  double scrollScale = 1.0;   // Scale factor: logicalHeight / totalHeight
+  bool isClipped = false;     // True if logicalHeight > QWIDGETSIZE_MAX
+  int overflowAmount = 0;     // logicalHeight - totalHeight when clipped
   
   [[nodiscard]] bool isValid() const {
     return itemWidth > 0 && itemHeight > 0 && itemsPerRow > 0;
+  }
+  
+  /// Convert widget scroll position to logical scroll position.
+  /// When viewportHeight is provided, ensures scrollbar max maps exactly to
+  /// (logicalHeight - viewport) for precise endpoint mapping.
+  [[nodiscard]] int toLogicalScrollY(int widgetScrollY, int viewportHeight = 0) const {
+    if (scrollScale <= 1.0) return widgetScrollY;
+    
+    // With viewport, use proper linear interpolation for exact endpoint mapping:
+    // widget 0 -> logical 0, widgetMax -> logicalMax
+    // where widgetMax = totalHeight - viewport, logicalMax = logicalHeight - viewport
+    if (viewportHeight > 0) {
+      int widgetMax = totalHeight - viewportHeight;
+      int logicalMax = logicalHeight - viewportHeight;
+      if (widgetMax <= 0) return widgetScrollY;
+      // Linear interpolation: logicalScrollY = widgetScrollY * logicalMax / widgetMax
+      return static_cast<int>(static_cast<double>(widgetScrollY) * logicalMax / widgetMax);
+    }
+    
+    // Fallback: simple scaling when viewport not available
+    return static_cast<int>(static_cast<double>(widgetScrollY) * scrollScale);
+  }
+  
+  /// Convert logical scroll position to widget scroll position.
+  /// When viewportHeight is provided, ensures exact endpoint mapping.
+  [[nodiscard]] int toWidgetScrollY(int logicalScrollY, int viewportHeight = 0) const {
+    if (scrollScale <= 1.0) return logicalScrollY;
+    
+    // With viewport, use proper linear interpolation for exact endpoint mapping
+    if (viewportHeight > 0) {
+      int widgetMax = totalHeight - viewportHeight;
+      int logicalMax = logicalHeight - viewportHeight;
+      if (logicalMax <= 0) return logicalScrollY;
+      // Linear interpolation: widgetScrollY = logicalScrollY * widgetMax / logicalMax
+      return static_cast<int>(static_cast<double>(logicalScrollY) * widgetMax / logicalMax);
+    }
+    
+    // Fallback: simple scaling when viewport not available
+    return static_cast<int>(static_cast<double>(logicalScrollY) / scrollScale);
   }
 };
 

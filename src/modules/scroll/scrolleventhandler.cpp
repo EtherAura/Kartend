@@ -57,6 +57,10 @@ void ScrollEventHandler::connectVerticalEvents(QScrollBar *scrollBar) {
 
   connect(scrollBar, &QAbstractSlider::actionTriggered, this,
           [this, scrollBar](int) { onActionTriggered(scrollBar); });
+  
+  // Emit sliderMoved during drag for prefetch optimization
+  connect(scrollBar, &QScrollBar::sliderMoved, this,
+          &ScrollEventHandler::sliderMoved);
 }
 
 void ScrollEventHandler::connectHorizontalEvents(QScrollBar *scrollBar) {

@@ -3,10 +3,197 @@
 #include "extensionutils.h"
 
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QMutexLocker>
+#include <QtConcurrent>
 
 namespace ArtworkUtils {
+
+// Singleton instance
+DirectoryCache &DirectoryCache::instance() {
+  static DirectoryCache cache;
+  return cache;
+}
+
+void DirectoryCache::ensureDirectoryCached(const QString &directory) {
+  // NOTE: This is now called WITHOUT mutex held.
+  // Check if already cached first (with brief lock).
+  {
+    QMutexLocker locker(&m_mutex);
+    if (m_cache.contains(directory)) {
+      return;
+    }
+  }
+  
+  QElapsedTimer perfTimer;
+  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
+    perfTimer.start();
+  }
+  
+  QDir dir(directory);
+  if (!dir.exists()) {
+    // Cache empty hash to avoid repeated checks
+    QMutexLocker locker(&m_mutex);
+    m_cache.insert(directory, QHash<QString, QString>());
+    if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
+      qWarning() << "[PerfTrace] ensureDirectoryCached: dir NOT EXISTS ms=" << perfTimer.elapsed()
+                 << "dir=" << directory;
+    }
+    return;
+  }
+  
+  QHash<QString, QString> dirContents;
+  const QStringList &imageFilters = ExtensionUtils::imageFilters();
+  
+  // Scan directory WITHOUT holding mutex - this is the slow part
+  QDirIterator it(directory, imageFilters, QDir::Files);
+  int fileCount = 0;
+  while (it.hasNext()) {
+    QString path = it.next();
+    QString baseName = QFileInfo(path).completeBaseName().toLower();
+    // First match wins (preserves priority of extensions in imageFilters)
+    if (!dirContents.contains(baseName)) {
+      dirContents.insert(baseName, path);
+    }
+    ++fileCount;
+  }
+  
+  // Now briefly lock to insert results
+  {
+    QMutexLocker locker(&m_mutex);
+    // Double-check another thread didn't cache it while we were scanning
+    if (!m_cache.contains(directory)) {
+      m_cache.insert(directory, dirContents);
+    }
+  }
+  
+  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && perfTimer.elapsed() > 1) {
+    qWarning() << "[PerfTrace] ensureDirectoryCached: SCAN ms=" << perfTimer.elapsed()
+               << "files=" << fileCount
+               << "dir=" << directory;
+  }
+}
+
+QString DirectoryCache::findInDirectory(const QString &baseName,
+                                        const QString &artworkDirectory) {
+  if (baseName.isEmpty() || artworkDirectory.isEmpty()) {
+    return {};
+  }
+  
+  QElapsedTimer timer;
+  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
+    timer.start();
+  }
+  
+  QMutexLocker locker(&m_mutex);
+  
+  qint64 afterLock = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? timer.elapsed() : 0;
+  
+  // Non-blocking: if not cached, queue for background scan and return empty
+  if (!m_cache.contains(artworkDirectory)) {
+    m_queuedDirectories.insert(artworkDirectory);
+    if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
+      static int queuedLogCount = 0;
+      if (++queuedLogCount <= 10) {
+        qWarning() << "[PerfTrace] findInDirectory: QUEUED lockMs=" << afterLock
+                   << "cacheSize=" << m_cache.size()
+                   << "queueSize=" << m_queuedDirectories.size()
+                   << "dir=" << artworkDirectory;
+      }
+    }
+    return {};
+  }
+  
+  const QHash<QString, QString> &dirContents = m_cache.value(artworkDirectory);
+  QString result = dirContents.value(baseName.toLower());
+  
+  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && timer.elapsed() > 2) {
+    qWarning() << "[PerfTrace] findInDirectory: CACHED lockMs=" << afterLock
+               << "totalMs=" << timer.elapsed()
+               << "found=" << !result.isEmpty()
+               << "dirContentsSize=" << dirContents.size()
+               << "dir=" << artworkDirectory;
+  }
+  
+  return result;
+}
+
+void DirectoryCache::prewarmDirectories(const QStringList &directories) {
+  // Pre-cache multiple directories in parallel using all available CPU cores.
+  // This dramatically speeds up OS dentry cache warmup for large directory counts.
+  
+  // Filter out empty directories and already-cached ones
+  QStringList toProcess;
+  {
+    QMutexLocker locker(&m_mutex);
+    for (const QString &dir : directories) {
+      if (!dir.isEmpty() && !m_cache.contains(dir)) {
+        toProcess.append(dir);
+      }
+    }
+  }
+  
+  if (toProcess.isEmpty()) {
+    return;
+  }
+  
+  // Process directories in parallel - each thread scans a different directory
+  // This warms the OS dentry cache much faster than sequential scanning
+  QtConcurrent::blockingMap(toProcess, [this](const QString &dir) {
+    ensureDirectoryCached(dir);
+    // Brief lock to update queue
+    {
+      QMutexLocker locker(&m_mutex);
+      m_queuedDirectories.remove(dir);
+    }
+  });
+}
+
+void DirectoryCache::processQueuedDirectories() {
+  // Process directories that were requested but not yet cached.
+  // Called from background thread - uses parallel processing for speed.
+  QStringList toProcess;
+  {
+    QMutexLocker locker(&m_mutex);
+    toProcess = m_queuedDirectories.values();
+  }
+  
+  if (toProcess.isEmpty()) {
+    return;
+  }
+  
+  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
+    qWarning() << "[PerfTrace] processQueuedDirectories: count=" << toProcess.size();
+  }
+  
+  // Process in parallel for faster warmup
+  QtConcurrent::blockingMap(toProcess, [this](const QString &dir) {
+    ensureDirectoryCached(dir);
+    // Brief lock just to update queue
+    {
+      QMutexLocker locker(&m_mutex);
+      m_queuedDirectories.remove(dir);
+    }
+  });
+}
+
+bool DirectoryCache::hasQueuedDirectories() const {
+  QMutexLocker locker(&m_mutex);
+  return !m_queuedDirectories.isEmpty();
+}
+
+void DirectoryCache::clear() {
+  QMutexLocker locker(&m_mutex);
+  m_cache.clear();
+  m_queuedDirectories.clear();
+}
+
+int DirectoryCache::cachedDirectoryCount() const {
+  QMutexLocker locker(&m_mutex);
+  return m_cache.size();
+}
 
 namespace {
 
@@ -95,6 +282,44 @@ tryFindArtworkForFile(const QString &fileName, const QString &artworkDirectory) 
                             "No matching artwork found",
                             "ArtworkUtils::tryFindArtworkForFile")
       .withDetails(QString("Searched for: %1 in %2").arg(fileName, artworkDirectory));
+}
+
+QString findArtworkForFileCached(const QString &fileName,
+                                 const QString &artworkDirectory) {
+  if (fileName.isEmpty() || artworkDirectory.isEmpty()) {
+    return {};
+  }
+  
+  QElapsedTimer perfTimer;
+  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
+    perfTimer.start();
+  }
+  
+  const QString baseName = QFileInfo(fileName).completeBaseName();
+  QString result = DirectoryCache::instance().findInDirectory(baseName, artworkDirectory);
+  if (!result.isEmpty()) {
+    if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && perfTimer.elapsed() > 2) {
+      qWarning() << "[PerfTrace] findArtworkForFileCached: ms=" << perfTimer.elapsed()
+                 << "dir=" << artworkDirectory;
+    }
+    return result;
+  }
+  
+  // Try with full filename as fallback
+  const QString fullName = QFileInfo(fileName).fileName();
+  if (fullName != baseName) {
+    result = DirectoryCache::instance().findInDirectory(fullName, artworkDirectory);
+  }
+  
+  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && perfTimer.elapsed() > 2) {
+    qWarning() << "[PerfTrace] findArtworkForFileCached: ms=" << perfTimer.elapsed()
+               << "dir=" << artworkDirectory << "(fallback)";
+  }
+  return result;
+}
+
+void clearDirectoryCache() {
+  DirectoryCache::instance().clear();
 }
 
 } // namespace ArtworkUtils

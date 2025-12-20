@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
@@ -64,6 +65,7 @@ void SessionManager::initialize() {
       QJsonObject root = doc.object();
       readCollectionsData(root);
       readGlobalData(root);
+      readCachedViewports(root);
     }
     metadataFile.close();
   }
@@ -142,6 +144,39 @@ auto SessionManager::buildSessionJson() const -> QJsonObject {
 
   root["collections"] = collections;
   root["global"] = static_cast<double>(globalItemCount);
+  
+  // Serialize cached viewports for instant startup
+  QJsonObject viewportsObj;
+  for (auto it = cachedViewports.begin(); it != cachedViewports.end(); ++it) {
+    const CachedViewport &vp = it.value();
+    if (!vp.isValid()) continue;
+    
+    QJsonObject vpObj;
+    vpObj["startIndex"] = vp.startIndex;
+    vpObj["totalItems"] = vp.totalItems;
+    
+    QJsonArray pathsArray;
+    for (const QString &path : vp.filePaths) {
+      pathsArray.append(path);
+    }
+    vpObj["filePaths"] = pathsArray;
+    
+    QJsonObject namesObj;
+    for (auto nameIt = vp.fileNames.begin(); nameIt != vp.fileNames.end(); ++nameIt) {
+      namesObj[nameIt.key()] = nameIt.value();
+    }
+    vpObj["fileNames"] = namesObj;
+    
+    QJsonObject artworkObj;
+    for (auto artIt = vp.artworkPaths.begin(); artIt != vp.artworkPaths.end(); ++artIt) {
+      artworkObj[artIt.key()] = artIt.value();
+    }
+    vpObj["artworkPaths"] = artworkObj;
+    
+    viewportsObj[it.key()] = vpObj;
+  }
+  root["viewports"] = viewportsObj;
+  
   return root;
 }
 
@@ -355,4 +390,60 @@ void SessionManager::clearStaleCollections(
   for (const QString &nameKey : selToRemove) {
     lastSelectedByName.remove(nameKey);
   }
+}
+
+void SessionManager::readCachedViewports(const QJsonObject &root) {
+  if (!root.contains("viewports")) {
+    return;
+  }
+  QJsonObject viewportsObj = root["viewports"].toObject();
+  QMutexLocker locker(&m_mutex);
+  
+  for (auto it = viewportsObj.begin(); it != viewportsObj.end(); ++it) {
+    QString key = it.key();
+    QJsonObject vpObj = it.value().toObject();
+    
+    CachedViewport vp;
+    vp.startIndex = vpObj["startIndex"].toInt(0);
+    vp.totalItems = vpObj["totalItems"].toInt(0);
+    
+    QJsonArray pathsArray = vpObj["filePaths"].toArray();
+    vp.filePaths.reserve(pathsArray.size());
+    for (const QJsonValue &val : pathsArray) {
+      vp.filePaths.append(val.toString());
+    }
+    
+    QJsonObject namesObj = vpObj["fileNames"].toObject();
+    for (auto nameIt = namesObj.begin(); nameIt != namesObj.end(); ++nameIt) {
+      vp.fileNames[nameIt.key()] = nameIt.value().toString();
+    }
+    
+    QJsonObject artworkObj = vpObj["artworkPaths"].toObject();
+    for (auto artIt = artworkObj.begin(); artIt != artworkObj.end(); ++artIt) {
+      vp.artworkPaths[artIt.key()] = artIt.value().toString();
+    }
+    
+    if (vp.isValid()) {
+      cachedViewports[key] = vp;
+    }
+  }
+}
+
+void SessionManager::setCachedViewport(const QString &collectionKey, int startIndex,
+                                       int totalItems, const QStringList &filePaths,
+                                       const QHash<QString, QString> &fileNames,
+                                       const QHash<QString, QString> &artworkPaths) {
+  QMutexLocker locker(&m_mutex);
+  CachedViewport vp;
+  vp.startIndex = startIndex;
+  vp.totalItems = totalItems;
+  vp.filePaths = filePaths;
+  vp.fileNames = fileNames;
+  vp.artworkPaths = artworkPaths;
+  cachedViewports[collectionKey] = vp;
+}
+
+SessionManager::CachedViewport SessionManager::getCachedViewport(const QString &collectionKey) const {
+  QMutexLocker locker(&m_mutex);
+  return cachedViewports.value(collectionKey);
 }

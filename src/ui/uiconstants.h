@@ -82,8 +82,8 @@ inline constexpr int STARTUP_DELAY_MS = 300;
 inline constexpr int LAYOUT_UPDATE_DELAY_MS = 100;
 /// Debounce for viewport-based artwork loading
 inline constexpr int VIEWPORT_UPDATE_DELAY_MS = 100;
-/// Throttle interval for scroll event processing
-inline constexpr int SCROLL_THROTTLE_DELAY_MS = 200;
+/// Throttle interval for scroll event processing (normal scrolling)
+inline constexpr int SCROLL_THROTTLE_DELAY_MS = 100;
 /// How long tooltips remain visible
 inline constexpr int TOOLTIP_DISPLAY_MS = 2000;
 /// Delay before showing tooltip after hover
@@ -126,6 +126,15 @@ inline constexpr int DIR_SIGNATURE_SEED_MAX_DIRS = 256;
 /// Prevents high-frequency UI updates during very fast scans.
 inline constexpr int SCAN_PROGRESS_MIN_INTERVAL_MS = 33;
 
+/// Maximum number of file entries a single directory scan task will enqueue
+/// at once. Bounds peak memory when scanning very large folders.
+inline constexpr int SCAN_DIR_RESULT_CHUNK_SIZE = 2048;
+
+/// Maximum number of pending scan result chunks buffered between worker
+/// threads and the consuming scan loop. Provides backpressure to keep memory
+/// bounded during very fast directory scans.
+inline constexpr int SCAN_READY_MAX_RESULTS = 32;
+
 /// FTS backfill batch size when building the index lazily.
 /// Kept modest to reduce lock contention with normal query operations.
 inline constexpr int FTS_BACKFILL_BATCH_SIZE = 2000;
@@ -133,6 +142,32 @@ inline constexpr int FTS_BACKFILL_BATCH_SIZE = 2000;
 /// Time budget for each incremental FTS backfill slice.
 /// Keeps the scan worker responsive and avoids long write locks.
 inline constexpr int FTS_BACKFILL_TIME_BUDGET_MS = 80;
+
+/// Delay between incremental FTS backfill slices.
+/// Prevents the scan worker from running a tight 0ms timer loop that can
+/// consume a full CPU core on very large databases.
+inline constexpr int FTS_BACKFILL_SLICE_DELAY_MS = 20;
+
+/// Default chunk size for on-demand range loading during virtual scroll.
+/// Balances latency (smaller = faster first paint) vs throughput (larger = fewer round-trips).
+inline constexpr int RANGE_CHUNK_SIZE_DEFAULT = 100;
+
+/// Larger chunk size for showAllSubcollectionItems mode with many items.
+/// Reduces database round-trips when flattening 1M+ items across subcollections.
+inline constexpr int RANGE_CHUNK_SIZE_LARGE = 1000;
+
+/// Item count threshold to switch to larger chunk size.
+/// When total items exceed this, use RANGE_CHUNK_SIZE_LARGE for efficiency.
+inline constexpr int RANGE_CHUNK_LARGE_THRESHOLD = 5000;
+
+/// Number of chunks to prefetch ahead of scroll position.
+/// Prefetching reduces perceived latency during continuous scrolling.
+inline constexpr int RANGE_PREFETCH_CHUNKS = 3;
+
+/// Item count threshold to precompute sorted order for O(1) range lookups.
+/// When items exceed this, fetchItemCount creates a temp table with sorted positions.
+/// Avoids expensive ORDER BY + OFFSET for every range query on large collections.
+inline constexpr int PRECOMPUTE_SORT_THRESHOLD = 10000;
 } // namespace Database
 
 // =============================================================================
@@ -218,7 +253,7 @@ inline constexpr int CONTINUOUS_SCROLL_IDLE_MS = 300;
 /// Timer to detect when user scroll interaction ends
 inline constexpr int USER_SCROLL_IDLE_TIMER_MS = 240;
 /// Delay before clearing user scroll active flag
-inline constexpr int USER_SCROLL_ACTIVE_CLEAR_DELAY_MS = 220;
+inline constexpr int USER_SCROLL_ACTIVE_CLEAR_DELAY_MS = 50;
 /// Brief delay before recentering after repeat stops
 inline constexpr int STOP_REPEAT_RECENTER_DELAY_MS = 10;
 /// Angle delta per wheel click (Qt standard: 120 = 1 step)
@@ -309,8 +344,8 @@ inline constexpr int DEFER_SILENT_LOADING_DELAY_MS = 100;
 inline constexpr int SILENT_LOAD_THROTTLE_DIVISOR = 8;
 /// Batch size for persistent silent load when idle
 inline constexpr int PERSISTENT_SILENT_BATCH_IDLE = 8;
-/// Batch size for persistent silent load when active
-inline constexpr int PERSISTENT_SILENT_BATCH_ACTIVE = 2;
+/// Batch size for persistent silent load when active (higher = faster but more CPU)
+inline constexpr int PERSISTENT_SILENT_BATCH_ACTIVE = 4;
 /// Interval for persistent silent load operations
 inline constexpr int PERSISTENT_SILENT_LOAD_INTERVAL_MS = 50;
 /// Delay before starting silent load after items loaded

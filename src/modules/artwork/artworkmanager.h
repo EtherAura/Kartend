@@ -117,6 +117,7 @@ public:
                                     const QString &artworkDirectory);
   void scheduleViewportUpdate();
   void startSilentLoading();
+  void startEarlyDentryPrewarm(int collectionIndex);
   void preloadArtworkForCollection();
   void stopSilentLoading();
   void processPersistentSilentLoad();
@@ -124,6 +125,7 @@ public:
   void updateUserActivity();
   [[nodiscard]] bool isUserIdle() const;
   [[nodiscard]] bool isSilentLoadingActive() const { return m_silentLoadingActive; }
+  [[nodiscard]] bool hasArtworkForWidget(ItemWidget *widget) const;
   void updateViewportArtwork();
   void buildArtworkPathsList();
   void
@@ -186,7 +188,8 @@ private:
 
   // Dedicated pool for artwork processing to avoid contention with other
   // QtConcurrent users (e.g., directory scans).
-  QThreadPool m_artworkThreadPool;
+  // Raw pointer so we can abandon it on shutdown without waiting.
+  QThreadPool *m_artworkThreadPool = nullptr;
 
   QMutex m_dataMutex;
   QMutex m_futureMutex;

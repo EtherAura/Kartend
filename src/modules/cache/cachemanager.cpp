@@ -54,7 +54,8 @@ CacheManager::CacheManager() {
   const qint64 maxInt = static_cast<qint64>(std::numeric_limits<int>::max());
   artworkCache.setMaxCost(maxBytes > maxInt ? std::numeric_limits<int>::max() : static_cast<int>(maxBytes));
 
-  m_ioThreadPool.setMaxThreadCount(1);
+  m_ioThreadPool = new QThreadPool();
+  m_ioThreadPool->setMaxThreadCount(1);
 
   // Timer context lives with CacheManager lifetime.
   // CacheManager is created on the main thread (ApplicationManager::initialize).
@@ -65,7 +66,7 @@ CacheManager::CacheManager() {
     if (QApplication::closingDown()) {
       return;
     }
-    if (m_cancelIo.load(std::memory_order_acquire)) {
+    if (m_cancelIo->load(std::memory_order_acquire)) {
       return;
     }
     saveToDisk();
@@ -73,9 +74,16 @@ CacheManager::CacheManager() {
 }
 
 CacheManager::~CacheManager() {
-  m_cancelIo.store(true, std::memory_order_release);
-  m_ioThreadPool.clear();
-  m_ioThreadPool.waitForDone();
+  m_cancelIo->store(true, std::memory_order_release);
+  
+  // Clear queued tasks but DON'T delete the pool - that would block waiting
+  // for running tasks. Just abandon it; the process is exiting anyway.
+  if (m_ioThreadPool) {
+    m_ioThreadPool->clear();
+    // Intentionally NOT deleting m_ioThreadPool - ~QThreadPool blocks.
+    // The OS will clean up when the process exits.
+    m_ioThreadPool = nullptr;
+  }
 
   if (m_debouncedSaveTimer) {
     m_debouncedSaveTimer->stop();
@@ -95,6 +103,25 @@ void CacheManager::saveTimestampsSnapshotToDiskForShutdown(
     const QHash<QString, qint64> &timestampsCopy) {
   // Write-only operation: safe to call from a worker thread.
   writeTimestamps(timestampsCopy);
+}
+
+void CacheManager::cancelPendingIo() {
+  // Signal cancellation to any in-flight tasks
+  m_cancelIo->store(true, std::memory_order_release);
+  
+  // Stop the debounced save timer to prevent new tasks from starting
+  if (m_debouncedSaveTimer) {
+    m_debouncedSaveTimer->stop();
+  }
+  
+  // Clear queued tasks but DON'T wait for running ones - they check the
+  // cancellation flag and will exit quickly. Blocking here can cause
+  // multi-minute shutdown delays when a large image write batch is in progress.
+  if (m_ioThreadPool) {
+    m_ioThreadPool->clear();
+  }
+  // Note: We intentionally skip waitForDone() to avoid blocking shutdown.
+  // The in-flight task will see m_cancelIo and stop writing images.
 }
 
 // Releases GUI resources and resets in-memory accounting totals
@@ -182,7 +209,7 @@ void CacheManager::scheduleSaveToDisk(int delayMs) {
   if (QApplication::closingDown()) {
     return;
   }
-  if (m_cancelIo.load(std::memory_order_acquire)) {
+  if (m_cancelIo->load(std::memory_order_acquire)) {
     return;
   }
   if (!m_timerContext || !m_debouncedSaveTimer) {
@@ -320,7 +347,7 @@ void CacheManager::saveToDisk() {
   if (QApplication::closingDown()) {
     return;
   }
-  if (m_cancelIo.load(std::memory_order_acquire)) {
+  if (m_cancelIo->load(std::memory_order_acquire)) {
     return;
   }
 
@@ -355,10 +382,17 @@ void CacheManager::saveToDisk() {
     dirtyImages.append(qMakePair(entry.first, entry.second.toImage()));
   }
 
+  // Capture shared_ptr to cancellation flag so lambda can safely check it
+  // even after CacheManager is destroyed (QThreadPool destructor waits).
+  auto cancelFlag = m_cancelIo;
+
   // Offload PNG encoding and disk writes to avoid UI hitches.
   // Dedicated pool keeps flushes sequential and reduces contention.
-  m_ioThreadPool.start([this, shouldWriteMetadata, timestampsCopy, dirtyImages]() {
-    if (m_cancelIo.load(std::memory_order_acquire) || QApplication::closingDown()) {
+  if (!m_ioThreadPool) {
+    return;
+  }
+  m_ioThreadPool->start([cancelFlag, shouldWriteMetadata, timestampsCopy, dirtyImages]() {
+    if (cancelFlag->load(std::memory_order_acquire) || QApplication::closingDown()) {
       return;
     }
 
@@ -370,7 +404,7 @@ void CacheManager::saveToDisk() {
     }
 
     for (const auto &entry : dirtyImages) {
-      if (m_cancelIo.load(std::memory_order_acquire) || QApplication::closingDown()) {
+      if (cancelFlag->load(std::memory_order_acquire) || QApplication::closingDown()) {
         break;
       }
 
@@ -415,9 +449,11 @@ void CacheManager::saveToDisk() {
 void CacheManager::saveToDiskForShutdown() {
   // Cancel any queued or in-flight asynchronous cache flushes to avoid
   // out-of-order writes overwriting the final shutdown snapshot.
-  m_cancelIo.store(true, std::memory_order_release);
-  m_ioThreadPool.clear();
-  m_ioThreadPool.waitForDone();
+  m_cancelIo->store(true, std::memory_order_release);
+  if (m_ioThreadPool) {
+    m_ioThreadPool->clear();
+    // DON'T wait - just abandon the pool. Process is exiting anyway.
+  }
 
   QHash<QString, qint64> timestampsCopy;
   {

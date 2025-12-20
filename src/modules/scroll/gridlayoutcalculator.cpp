@@ -18,7 +18,12 @@ auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config,
       totalItems, metrics.itemsPerRow, metrics.itemWidth,
       metrics.itemHeight, metrics.horizontalSpacing,
       metrics.verticalSpacing, metrics.margins, metrics.totalWidth,
-      metrics.totalHeight, metrics.actualGridWidth);
+      metrics.totalHeight, metrics.actualGridWidth,
+      metrics.logicalHeight, metrics.scrollScale, metrics.isClipped);
+  
+  if (metrics.isClipped) {
+    metrics.overflowAmount = metrics.logicalHeight - metrics.totalHeight;
+  }
 
   metrics.totalRows =
       (totalItems + metrics.itemsPerRow - 1) / metrics.itemsPerRow;
@@ -120,10 +125,15 @@ auto GridLayoutCalculator::getVisibleRowRange(int scrollY, int viewportHeight,
     return {0, 0};
   }
 
+  // scrollY is in clamped/widget coordinates. Convert to logical coordinates
+  // to determine which rows should be visible. Pass viewportHeight for precise
+  // endpoint mapping so scrollbar max reaches the end of the collection.
+  int logicalScrollY = metrics.toLogicalScrollY(scrollY, viewportHeight);
+  
   // Account for top margin when calculating first visible row
-  int adjustedScrollY = qMax(0, scrollY - metrics.margins);
+  int adjustedScrollY = qMax(0, logicalScrollY - metrics.margins);
   int firstRow = qMax(0, adjustedScrollY / rowHeight - bufferRows);
-  int lastRow = (scrollY + viewportHeight - metrics.margins) / rowHeight + bufferRows;
+  int lastRow = (logicalScrollY + viewportHeight - metrics.margins) / rowHeight + bufferRows;
   lastRow = qMax(firstRow, qMin(lastRow, metrics.totalRows - 1));
 
   return {firstRow, lastRow};

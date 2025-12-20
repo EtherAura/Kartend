@@ -111,6 +111,8 @@ add_executable(test_sessionmanager
   test_sessionmanager.cpp
   ${SRC_DIR}/modules/session/sessionmanager.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
 )
 target_include_directories(test_sessionmanager PRIVATE
   ${SRC_DIR}/modules/session
@@ -130,6 +132,7 @@ add_executable(test_querymanager_cancel_scan
   ${SRC_DIR}/modules/query/querymanager.cpp
   ${SRC_DIR}/modules/session/sessionmanager.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
   ${SRC_DIR}/utils/pathutils.cpp
   ${SRC_DIR}/utils/dbmigrations.cpp
 )

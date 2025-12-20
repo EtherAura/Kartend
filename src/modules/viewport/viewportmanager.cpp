@@ -78,6 +78,22 @@ int ViewportManager::targetRestoreIndex() const {
   return m_selectionManager ? m_selectionManager->targetRestoreIndex() : -1;
 }
 
+double ViewportManager::getScrollScale() const {
+  if (m_scrollManager) {
+    return m_scrollManager->getMetrics().scrollScale;
+  }
+  return 1.0;
+}
+
+int ViewportManager::toWidgetScrollY(int logicalScrollY) const {
+  if (!m_scrollManager || !m_itemScrollArea) {
+    return logicalScrollY;
+  }
+  const auto &metrics = m_scrollManager->getMetrics();
+  int viewportHeight = m_itemScrollArea->viewport()->height();
+  return metrics.toWidgetScrollY(logicalScrollY, viewportHeight);
+}
+
 int ViewportManager::getCurrentGridWidth() const {
   // Prefer ScrollManager's value for filtered/nested views
   if (m_scrollManager) {
@@ -137,9 +153,18 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
   bool clickHoldAdv = m_state ? m_state->scroll().clickHoldAdvancing : false;
   bool forceClickAnim = m_state ? m_state->click().clickForceAnim : false;
 
+  // Get metrics from ScrollManager for very large collections
+  int totalHeight = 0;
+  int logicalHeight = 0;
+  if (m_scrollManager) {
+    const auto &metrics = m_scrollManager->getMetrics();
+    totalHeight = metrics.totalHeight;
+    logicalHeight = metrics.logicalHeight;
+  }
+
   int targetY = AnimationManager::computeTargetYForIndex(
       index, gridWidth, collection.itemHeight, collection.verticalSpacing,
-      viewportHeight, verticalScrollBar->maximum());
+      viewportHeight, verticalScrollBar->maximum(), totalHeight, logicalHeight);
 
   bool forceImmediate = computeForceImmediate(immediate);
   if (shouldEarlyReturnUserScroll(forceImmediate)) {
@@ -334,9 +359,15 @@ bool ViewportManager::handleImmediateCenterForEnsureVisible(int index) {
                                       hSpacing, margins);
   int itemY = GridUtils::computeItemY(index, gridWidth, collection.itemHeight,
                                       collection.verticalSpacing, margins);
+  
+  // Calculate target scroll position in logical space (center the item)
+  int logicalTargetY = itemY + (collection.itemHeight / 2) - (viewportHeight / 2);
+  logicalTargetY = qMax(0, logicalTargetY);
+  
+  // Convert logical scroll target to widget scroll position for clipped grids
+  int targetY = toWidgetScrollY(logicalTargetY);
+  targetY = qBound(0, targetY, vScrollBar->maximum());
 
-  int targetY = GridUtils::computeCenterTarget(
-      itemY, collection.itemHeight, viewportHeight, vScrollBar->maximum());
   int targetX = GridUtils::computeCenterTarget(
       itemX, collection.itemWidth, viewportWidth, hScrollBar->maximum());
   vScrollBar->setValue(targetY);
@@ -637,16 +668,25 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
 
   int itemX = GridUtils::computeItemX(index, gridWidth, collection.itemWidth,
                                       hSpacing, margins);
-  int itemY = GridUtils::computeItemY(index, gridWidth, collection.itemHeight,
+  int logicalItemY = GridUtils::computeItemY(index, gridWidth, collection.itemHeight,
                                       collection.verticalSpacing, margins);
 
   QRect viewport = m_itemScrollArea->viewport()->rect();
-  int curX = hScrollBar->value();
   int curY = vScrollBar->value();
+  int curX = hScrollBar->value();
   int viewportWidth = viewport.width();
   int viewportHeight = viewport.height();
   if (viewportHeight <= 0) {
     return;
+  }
+  
+  // For clipped grids, convert to logical scroll position for visibility check
+  int logicalCurY = curY;
+  if (m_scrollManager) {
+    const auto &metrics = m_scrollManager->getMetrics();
+    if (metrics.isClipped) {
+      logicalCurY = metrics.toLogicalScrollY(curY, viewportHeight);
+    }
   }
 
   bool isRepeating = m_repeating && m_physicalKeyDown;
@@ -663,8 +703,9 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
   bool needH = (targetX != curX);
 
   bool needV = false;
-  int desiredY = AnimationManager::computeDesiredYForVisibility(
-      itemY, collection.itemHeight, curY, viewportHeight, margins, needV);
+  // Check visibility in logical space
+  int logicalDesiredY = AnimationManager::computeDesiredYForVisibility(
+      logicalItemY, collection.itemHeight, logicalCurY, viewportHeight, margins, needV);
 
   if (!needV && !needH) {
     updateViewAndRowAfterVisibility(index, gridWidth);
@@ -679,6 +720,10 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
     updateViewAndRowAfterVisibility(index, gridWidth);
     return;
   }
+
+  // Convert logical scroll target to widget scroll position
+  int desiredY = toWidgetScrollY(logicalDesiredY);
+  desiredY = qBound(0, desiredY, vScrollBar->maximum());
 
   int startVal = curY;
   int endVal = desiredY;

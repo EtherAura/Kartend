@@ -300,9 +300,14 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   QRect viewport = m_itemScrollArea->viewport()->rect();
   int viewportHeight = viewport.height();
   
-  // Calculate target scroll position to keep selection visible
-  // Center the selection row vertically in the viewport
-  int targetPos = itemY - (viewportHeight - collection.itemHeight) / 2;
+  // Calculate target scroll position in logical space (center the item)
+  int logicalTargetY = itemY - (viewportHeight - collection.itemHeight) / 2;
+  
+  // Convert logical scroll target to widget scroll position for clipped grids
+  int targetPos = logicalTargetY;
+  if (m_viewportManager && m_viewportManager->getScrollScale() > 1.0) {
+    targetPos = m_viewportManager->toWidgetScrollY(logicalTargetY);
+  }
   targetPos = qBound(0, targetPos, vScrollBar->maximum());
 
   if (m_mouseManager) {

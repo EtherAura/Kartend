@@ -141,6 +141,10 @@ private:
   // Number of in-flight startup scan operations (tracked via scanStarting/
   // collectionScanCompleted while m_suppressStartupScanOverlays is true).
   int m_startupActiveScanCount = 0;
+
+  // Counter for active scan operations (e.g., when showAllSubcollectionItems
+  // triggers scans of all descendants). Overlay stays visible until all complete.
+  int m_activeScanCount = 0;
   void initializeAppContext();
   void showAbout();
 };

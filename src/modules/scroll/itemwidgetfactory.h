@@ -44,6 +44,13 @@ public:
 
   // File data accessors (set by ScrollManager before creating widgets)
   void setFileData(const QStringList *filePaths, const QHash<QString, QString> *fileNames);
+  
+  // Total item count for adaptive chunk sizing
+  void setTotalItemCount(int count) { m_totalItemCount = count; }
+  
+  // Cached artwork paths for instant startup (bypasses artwork directory lookup)
+  void setCachedArtworkPaths(const QHash<QString, QString> &artworkPaths);
+  void clearCachedArtworkPaths() { m_cachedArtworkPaths.clear(); }
 
   /**
    * @brief Creates a subcollection widget.
@@ -86,6 +93,32 @@ public:
    */
   void clearPendingRangeRequests() { m_pendingRangeRequests.clear(); }
 
+  /**
+   * @brief Clears a single pending range request.
+   * @param startIndex The chunk start index that was requested.
+   */
+  void clearPendingRangeRequest(int startIndex) { m_pendingRangeRequests.remove(startIndex); }
+
+  /**
+   * @brief Prefetch data for a specific range (used during scrollbar drag).
+   * @param startIndex Start of the range to prefetch.
+   * @param count Number of items to prefetch.
+   */
+  void prefetchRangeAt(int startIndex, int count);
+
+  /**
+   * @brief Re-configure artwork for a widget that may have missed initial config.
+   * 
+   * Called when directories weren't cached during initial widget creation
+   * but are now available. Will find and add artwork path to pending queue.
+   * 
+   * @param widget The widget to configure artwork for.
+   * @param fullPath Full path to the media file.
+   * @param forceDirectLookup If true, bypass cache and do direct filesystem lookup.
+   */
+  void configureArtworkForWidget(ItemWidget *widget, const QString &fullPath,
+                                 bool forceDirectLookup = false);
+
 signals:
   /**
    * @brief Emitted when a subcollection widget is double-clicked.
@@ -109,7 +142,6 @@ signals:
 private:
   [[nodiscard]] ItemWidget *acquireWidget();
   void configureBaseWidget(ItemWidget *widget);
-  void configureArtworkForWidget(ItemWidget *widget, const QString &fullPath);
   void resolveMediaItemPaths(const QString &rawFileName, QString &fullPath,
                              QString &displayName, int &collectionIndex);
   void updateCollectionIndexFromDatabase(const QString &fullPath,
@@ -127,7 +159,12 @@ private:
   SubcollectionNameResolver m_subcollectionNameResolver;
   const QStringList *m_filePaths = nullptr;
   const QHash<QString, QString> *m_fileNames = nullptr;
+  QHash<QString, QString> m_cachedArtworkPaths;  // fullPath -> artworkPath from session cache
   QSet<int> m_pendingRangeRequests;  // Tracks chunk start indices with pending requests
+  int m_totalItemCount = 0;  // Total items for adaptive chunk sizing
+  
+  [[nodiscard]] int computeChunkSize() const;
+  void prefetchAdjacentChunks(int currentMediaIndex, int chunkSize);
 };
 
 #endif // ITEMWIDGETFACTORY_H

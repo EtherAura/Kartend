@@ -401,6 +401,10 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
 
   QList<CollectionConfig> newCollections = dlg.getCollections();
 
+  // Don't switch viewingCollectionIndex - user should stay on the collection
+  // they were viewing when they opened the dialog, even if they added or
+  // selected a different collection in the dialog.
+
   bool hasChanges = false;
   bool needsReload = false;
   bool gridWidthChangedForView = false;
@@ -725,14 +729,23 @@ auto SettingsManager::handleReloadRequired(
   }
   if (viewingCollectionIndex >= 0 &&
       viewingCollectionIndex < collections.size()) {
-    const QString &mediaDirectory =
-        newCollections[viewingCollectionIndex].mediaDirectory;
-    const QString &originalMediaDirectory =
-        originalCollections[viewingCollectionIndex].mediaDirectory;
-    bool mediaDirectoryChanged = (mediaDirectory != originalMediaDirectory);
-    bool extensionsChanged =
-        (newCollections[viewingCollectionIndex].extensions !=
-         originalCollections[viewingCollectionIndex].extensions);
+    
+    // Check if this is a newly-added collection (not in originalCollections)
+    bool isNewCollection = (viewingCollectionIndex >= originalCollections.size());
+    
+    bool mediaDirectoryChanged = isNewCollection;
+    bool extensionsChanged = isNewCollection;
+    
+    if (!isNewCollection) {
+      const QString &mediaDirectory =
+          newCollections[viewingCollectionIndex].mediaDirectory;
+      const QString &originalMediaDirectory =
+          originalCollections[viewingCollectionIndex].mediaDirectory;
+      mediaDirectoryChanged = (mediaDirectory != originalMediaDirectory);
+      extensionsChanged =
+          (newCollections[viewingCollectionIndex].extensions !=
+           originalCollections[viewingCollectionIndex].extensions);
+    }
 
     if (mediaDirectoryChanged || extensionsChanged) {
       if (cacheManager) {

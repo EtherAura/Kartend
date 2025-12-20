@@ -36,6 +36,9 @@
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
 
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcMainWindow, "kartend.mainwindow")
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow), stackedWidget(nullptr),
       itemsPage(nullptr), gridContainer(nullptr), m_mainContentWidget(nullptr),
@@ -45,7 +48,7 @@ MainWindow::MainWindow(QWidget *parent)
       m_MetadataSidebar(nullptr) {
   m_appManager = std::make_unique<ApplicationManager>(this);
   m_appManager->initialize();
-  
+
   ui->setupUi(this);
   setupUI();
 }
@@ -174,10 +177,26 @@ void MainWindow::refreshTitleCounts() {
     walk = parentIndex;
   }
 
+  // When showAllSubcollectionItems is enabled, the displayed items include all
+  // descendant items. Use the actual view count for the current collection
+  // rather than the cached recursive count (which may not include flattened items).
+  const bool showAllItems = m_collections[cur].showAllSubcollectionItems;
+  const int viewTotalItems = getScrollManager() ? getScrollManager()->getTotalItems() : -1;
+
   QStringList parts;
   bool anyKnown = false;
-  for (int idx : chain) {
-    const qint64 countVal = cachedRecursiveCountForIndex(idx);
+  for (int i = 0; i < chain.size(); ++i) {
+    int idx = chain[i];
+    qint64 countVal = -1;
+    
+    // For the current collection (first in chain) with showAllSubcollectionItems,
+    // use the actual view count which includes flattened descendant items
+    if (i == 0 && showAllItems && viewTotalItems >= 0) {
+      countVal = viewTotalItems;
+    } else {
+      countVal = cachedRecursiveCountForIndex(idx);
+    }
+    
     if (countVal >= 0) {
       anyKnown = true;
       parts << StringUtils::formatCountNumber(countVal);
@@ -259,7 +278,7 @@ void MainWindow::setupManagerConnections() {
 void MainWindow::connectDatabaseManager() {
   QObject::connect(getDatabaseManager(), &DatabaseManager::itemsLoaded,
                    getNavigationManager(), &NavigationManager::onItemsLoaded);
-  QObject::connect(getDatabaseManager(), &DatabaseManager::itemCountLoaded,
+  QObject::connect(getDatabaseManager(), &DatabaseManager::itemCountLoadedWithToken,
                    getNavigationManager(), &NavigationManager::onItemCountLoaded);
   QObject::connect(getDatabaseManager(), &DatabaseManager::collectionScanCompleted,
                    getNavigationManager(),
@@ -314,6 +333,10 @@ void MainWindow::connectDatabaseManager() {
   QObject::connect(getDatabaseManager(), &DatabaseManager::scanStarting,
                    this, [this](const QString &name, int estimatedItems) {
                      Q_UNUSED(estimatedItems)
+                     // Track active scans so overlay persists until all complete
+                     // (e.g., when showAllSubcollectionItems triggers multiple scans)
+                     ++m_activeScanCount;
+                     
                      if (m_suppressStartupScanOverlays) {
                        ++m_startupActiveScanCount;
                      }
@@ -336,6 +359,40 @@ void MainWindow::connectDatabaseManager() {
                      }
                      if (m_startupActiveScanCount == 0) {
                        m_suppressStartupScanOverlays = false;
+                     }
+                   });
+
+  // Hide scan overlay once ALL scans in a batch have completed.
+  // When showAllSubcollectionItems triggers scans of many descendants,
+  // we only hide the overlay when the last one finishes.
+  QObject::connect(getDatabaseManager(), &DatabaseManager::collectionScanCompleted,
+                   this, [this](const QString &) {
+                     if (m_activeScanCount > 0) {
+                       --m_activeScanCount;
+                     }
+                     // Only hide overlay and reload when all scans are complete
+                     if (m_activeScanCount == 0) {
+                       if (m_suppressStartupScanOverlays) {
+                         return;
+                       }
+                       if (m_loadingOverlay && m_loadingOverlay->isActive()) {
+                         m_loadingOverlay->hide();
+                       }
+                       // When showAllSubcollectionItems is enabled and all descendant
+                       // scans have finished, reload the collection to get accurate counts.
+                       // NavigationManager skips intermediate reloads while the overlay
+                       // is active, so we trigger the final reload here after hiding it.
+                       if (currentCollectionIndex >= 0 &&
+                           currentCollectionIndex < m_collections.size() &&
+                           m_collections[currentCollectionIndex].showAllSubcollectionItems) {
+                         // Use a longer delay (150ms) to ensure the scan worker's
+                         // commit is visible to the query worker before we request counts.
+                         QTimer::singleShot(150, this, [this]() {
+                           if (getNavigationManager()) {
+                             getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+                           }
+                         });
+                       }
                      }
                    });
   
@@ -510,6 +567,12 @@ void MainWindow::closeEvent(QCloseEvent *event) {
   }
   if (gridContainer) {
     gridContainer->removeEventFilter(getInteractionManager());
+  }
+
+  // Persist current viewport/selection state before blocking signals.
+  // This ensures the cached viewport is available for fast startup on next launch.
+  if (getNavigationManager()) {
+    getNavigationManager()->prepareForShutdown();
   }
 
   // Block signals early to prevent cascading updates during shutdown

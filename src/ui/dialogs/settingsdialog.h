@@ -34,6 +34,9 @@ public:
 
   QList<CollectionConfig> getCollections() const { return collections; }
 
+  /// Returns the index of the collection currently selected in the tree.
+  [[nodiscard]] int getSelectedCollectionIndex() const { return currentCollectionIndex; }
+
   /// Handles dialog acceptance while guarding against unsaved changes.
   void accept() override;
 

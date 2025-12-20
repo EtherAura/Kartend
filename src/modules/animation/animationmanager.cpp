@@ -285,11 +285,29 @@ int AnimationManager::computeTargetYForIndex(int index, int gridWidth,
                                              int itemHeight,
                                              int verticalSpacing,
                                              int viewportHeight,
-                                             int scrollbarMax) {
+                                             int scrollbarMax,
+                                             int totalHeight,
+                                             int logicalHeight) {
   int itemY = GridUtils::computeItemY(index, gridWidth, itemHeight,
                                       verticalSpacing, UIConstants::Grid::MARGINS);
-  int targetYUnbounded = itemY + (itemHeight / 2) - (viewportHeight / 2);
-  return qBound(0, targetYUnbounded, scrollbarMax);
+  // Calculate target in logical space first (center the item)
+  int logicalTargetY = itemY + (itemHeight / 2) - (viewportHeight / 2);
+  
+  // For clipped grids, convert logical scroll target to widget scroll position
+  // using viewport-aware interpolation for precise endpoint mapping
+  int targetY = logicalTargetY;
+  if (totalHeight > 0 && logicalHeight > totalHeight && viewportHeight > 0) {
+    int widgetMax = totalHeight - viewportHeight;
+    int logicalMax = logicalHeight - viewportHeight;
+    if (logicalMax > 0 && widgetMax > 0) {
+      // Clamp logical target to valid range before conversion
+      logicalTargetY = qBound(0, logicalTargetY, logicalMax);
+      // Convert: widgetScrollY = logicalScrollY * widgetMax / logicalMax
+      targetY = static_cast<int>(static_cast<double>(logicalTargetY) * widgetMax / logicalMax);
+    }
+  }
+  
+  return qBound(0, targetY, scrollbarMax);
 }
 
 int AnimationManager::computeHorizontalTargetX(int itemX,

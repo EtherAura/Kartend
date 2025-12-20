@@ -62,6 +62,7 @@ public:
   QWidget *triangleIndicator;
   void setAsSubcollection(int index, const QString &name);
   void setAsVirtualFolder(const QString &folderPath, const QString &displayName, bool hideTitle = false);
+  [[nodiscard]] bool isSubcollection() const { return m_isSubcollection; }
   [[nodiscard]] bool isVirtualFolder() const { return m_isVirtualFolder; }
   [[nodiscard]] QString virtualFolderPath() const { return m_virtualFolderPath; }
   void applyTitleTint();

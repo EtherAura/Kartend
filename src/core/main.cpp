@@ -1,8 +1,12 @@
 // Application entry point that initializes Qt and displays the main window.
 #include <QApplication>
+#include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QLoggingCategory>
 #include <QSurfaceFormat>
+#include <QThreadPool>
+
+#include <cstdlib>
 
 #include "artworkmanager.h"
 #include "cachemanager.h"
@@ -46,9 +50,18 @@ auto main(int argc, char *argv[]) -> int {
     // Cleanup handled by MainWindow destructor
   });
 
-  MainWindow window;
-  window.show();
+  {
+    MainWindow window;
+    window.show();
+    (void)QApplication::exec();
+  }
+  // MainWindow is now destroyed - all our cleanup (saves, etc.) is done.
 
-  int result = QApplication::exec();
-  return result;
+  // Give the fire-and-forget save tasks a moment to complete on the global pool.
+  // These are just small JSON writes, should be <100ms.
+  QThreadPool::globalInstance()->waitForDone(200);
+
+  // Force immediate exit to skip Qt's lengthy global thread pool cleanup.
+  // Our important work is done; remaining threads are abandoned artwork loads.
+  std::quick_exit(0);
 }

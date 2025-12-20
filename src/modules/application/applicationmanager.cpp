@@ -12,45 +12,52 @@
 #include "settingsmanager.h"
 #include "sidebarmanager.h"
 
-#include <QLoggingCategory>
-Q_LOGGING_CATEGORY(lcApplicationManager, "kartend.applicationmanager")
-#define debugLog(msg) do { if (lcApplicationManager().isDebugEnabled()) { qCDebug(lcApplicationManager) << msg; } } while (0)
+#include <QtConcurrent>
 
 ApplicationManager::ApplicationManager(QObject *parent) : QObject(parent) {}
 
 ApplicationManager::~ApplicationManager() = default;
 
 void ApplicationManager::initialize() {
-  // 1. CacheManager
+  // 1. Create CacheManager and SessionManager instances (fast, no I/O)
   m_cacheManager = std::make_unique<CacheManager>();
-  m_cacheManager->initialize();
-
-  // 2. SessionManager
   m_sessionManager = std::make_unique<SessionManager>(this);
 
-  // 3. ArtworkManager (needs CacheManager)
+  // 2. Initialize session synchronously (needed for selection restore at startup).
+  // Session file is small (~160KB) and loads quickly.
+  m_sessionManager->initialize();
+
+  // 3. Defer cache metadata loading to background - the 51MB+ timestamps file
+  // is only needed for artwork cache validation, not for initial UI display.
+  // This avoids blocking startup for 2-3 seconds on large artwork caches.
+  // Result intentionally discarded - we don't need to wait for cache init.
+  (void)QtConcurrent::run([this]() {
+    m_cacheManager->initialize();
+  });
+
+  // 4. ArtworkManager (needs CacheManager - but can work without timestamps loaded)
   m_artworkManager =
       std::make_unique<ArtworkManager>(m_cacheManager.get(), this);
 
-  // 4. SettingsManager (needs SessionManager, ArtworkManager, CacheManager)
+  // 5. SettingsManager (needs SessionManager, ArtworkManager, CacheManager)
   m_settingsManager = std::make_unique<SettingsManager>(
       m_sessionManager.get(), m_artworkManager.get(), m_cacheManager.get(), this);
 
-  // 5. DatabaseManager (needs SessionManager)
+  // 6. DatabaseManager (needs SessionManager)
   m_databaseManager =
       std::make_unique<DatabaseManager>(m_sessionManager.get(), this);
 
-  // 6. ScrollManager
+  // 7. ScrollManager
   m_scrollManager = std::make_unique<ScrollManager>(this);
   m_scrollManager->setDatabaseManager(m_databaseManager.get());
 
-  // 7. SidebarManager
+  // 8. SidebarManager
   m_sidebarManager = std::make_unique<SidebarManager>(this);
 
-  // 8. NavigationManager
+  // 9. NavigationManager
   m_navigationManager = std::make_unique<NavigationManager>(this);
 
-  // 9. InteractionManager
+  // 10. InteractionManager
   m_interactionManager = std::make_unique<InteractionManager>(this);
 }
 
@@ -65,26 +72,46 @@ void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
     m_scrollManager->cleanup();
   }
 
-  // 3. Save settings synchronously (fast INI write)
+  // 3. Snapshot state for persistence BEFORE releasing GUI resources.
+  // Take snapshots while managers are still valid, then write asynchronously.
+  QByteArray sessionSnapshot;
+  QHash<QString, qint64> cacheTimestamps;
+  if (m_sessionManager) {
+    sessionSnapshot = m_sessionManager->snapshotSessionJsonBytesForShutdown();
+  }
+  if (m_cacheManager) {
+    cacheTimestamps = m_cacheManager->snapshotTimestampsForShutdown();
+  }
+
+  // 4. Save settings synchronously (fast INI write, typically <1ms)
   if (m_settingsManager) {
     m_settingsManager->saveCollections(collections);
   }
 
-  // 4. Release GUI resources from cache (clears pixmaps from memory)
+  // 5. Release GUI resources from cache (clears pixmaps from memory)
   if (m_cacheManager) {
     m_cacheManager->releaseGuiResources();
   }
 
-  // 5. Persist cache and session data deterministically.
-  // The window is already hidden, so blocking briefly here is acceptable and
-  // ensures state is not lost if the process exits quickly after closeEvent.
+  // 6. Cancel any in-flight cache I/O and wait for completion
   if (m_cacheManager) {
-    m_cacheManager->saveToDiskForShutdown();
+    m_cacheManager->cancelPendingIo();
   }
 
-  if (m_sessionManager) {
-    m_sessionManager->saveToDiskForShutdown();
-  }
+  // 7. Persist cache and session data in parallel.
+  // Fire and forget - the writes are fast (just JSON) and the process
+  // will stay alive long enough for them to complete.
+  // Using snapshots avoids needing the manager instances during write.
+  (void)QtConcurrent::run([cacheTimestamps]() {
+    CacheManager::saveTimestampsSnapshotToDiskForShutdown(cacheTimestamps);
+  });
+
+  (void)QtConcurrent::run([sessionSnapshot]() {
+    SessionManager::saveSessionBytesToDiskForShutdown(sessionSnapshot);
+  });
+
+  // DON'T wait for saves - they complete quickly and we need fast shutdown.
+  // The global thread pool will finish these before process exit.
 }
 
 ArtworkManager *ApplicationManager::getArtworkManager() const {

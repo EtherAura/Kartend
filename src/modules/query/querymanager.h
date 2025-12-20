@@ -108,6 +108,9 @@ public:
   
   /// Reset cancellation flag (call before starting new scan)
   void resetScanCancellation();
+  
+  /// Force connection to see latest WAL commits from other connections
+  void refreshWalView();
 
 private:
   [[nodiscard]] int fetchItemCountImpl(const CollectionContext &context,
@@ -118,7 +121,8 @@ private:
   // This avoids old scan tasks resuming if cancellation is reset while
   // worker tasks are still in-flight.
   std::shared_ptr<std::atomic_bool> m_scanCancellationToken;
-  QThreadPool m_scanThreadPool;
+  // Raw pointer so we can abandon on shutdown without waiting.
+  QThreadPool *m_scanThreadPool = nullptr;
   SessionManager *m_sessionManager;
   QSqlDatabase m_db;
   QString m_connectionName;

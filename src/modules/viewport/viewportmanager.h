@@ -65,6 +65,13 @@ public:
   void ensureItemVisible(int index, bool allowHorizontalScroll);
   void ensureHorizontallyVisible(int index);
   void applyImmediateViewportPositioningForSelection(int targetIndex);
+  
+  /// Get the scroll scale for very large collections (>16M pixels)
+  [[nodiscard]] double getScrollScale() const;
+  
+  /// Convert logical scroll position to widget scroll position
+  /// Uses viewport-aware interpolation for precise endpoint mapping
+  [[nodiscard]] int toWidgetScrollY(int logicalScrollY) const;
 
   // --- State Accessors/Mutators ---
   void setForceImmediateCenter(bool force) { m_forceImmediateCenter = force; }

@@ -371,7 +371,8 @@ QueryManager::QueryManager(SessionManager *sessionManager,
   const int idealThreads = QThread::idealThreadCount();
   const int base = idealThreads > 0 ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
                                      : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
-  m_scanThreadPool.setMaxThreadCount(std::clamp(base,
+  m_scanThreadPool = new QThreadPool();
+  m_scanThreadPool->setMaxThreadCount(std::clamp(base,
                                                UIConstants::Concurrency::WORKER_POOL_MIN_THREADS,
                                                UIConstants::Concurrency::WORKER_POOL_MAX_THREADS));
   
@@ -380,6 +381,13 @@ QueryManager::QueryManager(SessionManager *sessionManager,
 }
 
 QueryManager::~QueryManager() {
+  // Abandon the thread pool without waiting - process is exiting anyway.
+  if (m_scanThreadPool) {
+    m_scanThreadPool->clear();
+    // Intentionally NOT deleting - ~QThreadPool blocks. Let OS clean up.
+    m_scanThreadPool = nullptr;
+  }
+  
   clearStatementCache();
   if (m_db.isValid()) {
     QString connectionName = m_db.connectionName();
@@ -394,7 +402,9 @@ void QueryManager::requestCancelScan() {
     m_scanCancellationToken->store(true, std::memory_order_release);
   }
   // Drop any queued scan work that hasn't started yet.
-  m_scanThreadPool.clear();
+  if (m_scanThreadPool) {
+    m_scanThreadPool->clear();
+  }
 }
 
 bool QueryManager::isScanCancelled() const {
@@ -404,6 +414,23 @@ bool QueryManager::isScanCancelled() const {
 
 void QueryManager::resetScanCancellation() {
   m_scanCancellationToken = std::make_shared<std::atomic_bool>(false);
+}
+
+// Forces the connection to see the latest WAL commits from other connections.
+// In SQLite WAL mode, a connection can hold onto a stale read snapshot if it
+// has an open transaction or cached statements. This method ensures we see
+// data committed by the scan worker running on a separate connection.
+void QueryManager::refreshWalView() {
+  // Starting and immediately committing a deferred transaction forces SQLite
+  // to acquire a fresh read snapshot that includes all prior commits.
+  // This is lighter than wal_checkpoint and doesn't interfere with writes.
+  QSqlQuery query(m_db);
+  query.exec("BEGIN");
+  query.exec("COMMIT");
+  
+  // Clear statement cache to prevent stale bound values from interfering
+  // with subsequent queries that need fresh data.
+  m_statementCache.clear();
 }
 
 // Gets or creates a prepared statement for the given SQL
@@ -1309,12 +1336,23 @@ bool QueryManager::ensureCollectionScanned(int collectionIndex, const Collection
   // Reset cancellation flag before starting new scan
   resetScanCancellation();
 
+  // Compute UUID for completion signal
+  const QString uuid = CollectionUtils::computeCollectionUuid(
+      collection.name, collection.mediaDirectory);
+
   // Notify UI that a scan is starting (estimated items unknown, use -1)
   emit scanStarting(collection.name, -1);
 
   // Stream scan results directly into DB inserts to reduce peak memory.
-  // (In this call path, we don't need a full in-memory file list.)
-  return scanAndSaveItemsToDatabase(collectionIndex, collection);
+  const bool success = scanAndSaveItemsToDatabase(collectionIndex, collection);
+
+  // Always emit collectionScanCompleted when we emitted scanStarting, even if
+  // the scan failed. This ensures MainWindow's m_activeScanCount is decremented
+  // properly and the overlay is hidden. The caller can still check the return
+  // value to know if the scan was successful.
+  emit collectionScanCompleted(uuid);
+
+  return success;
 }
 
 void QueryManager::insertItemsBatch(int legacyId, const QString &uuid,
@@ -2158,7 +2196,7 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
     }
     const std::atomic<bool> &cancelFlag = *cancelToken;
 
-    const int maxThreads = std::max(1, m_scanThreadPool.maxThreadCount());
+    const int maxThreads = m_scanThreadPool ? std::max(1, m_scanThreadPool->maxThreadCount()) : 1;
     const int maxInFlight = std::max(1, maxThreads * 2);
 
     ScanCompletionQueue queue;
@@ -2176,11 +2214,14 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
       if (cancelFlag.load(std::memory_order_acquire)) {
         return;
       }
+      if (!m_scanThreadPool) {
+        return;
+      }
       {
         QMutexLocker locker(&queue.mutex);
         ++queue.inFlight;
       }
-      m_scanThreadPool.start(new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, &queue));
+      m_scanThreadPool->start(new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, &queue));
     };
 
     // Always scan the root directory.
@@ -2487,6 +2528,11 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
       return 0;
     }
   }
+  
+  // Ensure we see the latest data committed by the scan worker.
+  // Without this, our connection can return stale counts from a cached
+  // WAL snapshot, causing the UI to show old item counts after scans.
+  refreshWalView();
 
   if (!context.isValid()) {
     auto err = ErrorContext::error(ErrorCode::InvalidCollectionContext,
@@ -2701,6 +2747,12 @@ void QueryManager::ensureScannedForContext(const CollectionContext &context,
     }
   }
 
+  // Ensure we see the latest data committed by the query worker (which may have
+  // just invalidated/cleared the collection cache). Without this, the scan
+  // worker's WAL snapshot may be stale, causing needsRescan to return false
+  // because it still sees old collection data that was just deleted.
+  refreshWalView();
+
   if (!context.isValid()) {
     auto err = ErrorContext::error(ErrorCode::InvalidCollectionContext,
                                    "Invalid collection context",
@@ -2714,15 +2766,11 @@ void QueryManager::ensureScannedForContext(const CollectionContext &context,
   ctx.config.mediaDirectory = PathUtils::validateAndExpandPath(
       ctx.config.mediaDirectory, ctx.config.name);
 
-  // Scan current collection (if needed). Only emit completion when a scan was
-  // actually applied successfully; emitting completion on failure can trigger
-  // UI refresh loops that immediately retrigger scanning.
+  // Scan current collection if needed. ensureCollectionScanned now handles
+  // emitting both scanStarting and collectionScanCompleted signals internally,
+  // ensuring proper overlay tracking even when scans fail.
   if (!ctx.config.mediaDirectory.trimmed().isEmpty()) {
-    const QString uuid = CollectionUtils::computeCollectionUuid(
-        ctx.config.name, ctx.config.mediaDirectory);
-    if (ensureCollectionScanned(ctx.currentIndex, ctx.config)) {
-      emit collectionScanCompleted(uuid);
-    }
+    (void)ensureCollectionScanned(ctx.currentIndex, ctx.config);
   }
 
   // Scan all collections if the query scope requests it.
@@ -2733,10 +2781,7 @@ void QueryManager::ensureScannedForContext(const CollectionContext &context,
       if (col.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
-      const QString uuid = CollectionUtils::computeCollectionUuid(col.name, col.mediaDirectory);
-      if (ensureCollectionScanned(i, col)) {
-        emit collectionScanCompleted(uuid);
-      }
+      (void)ensureCollectionScanned(i, col);
     }
     return;
   }
@@ -2761,11 +2806,7 @@ void QueryManager::ensureScannedForContext(const CollectionContext &context,
         continue;
       }
 
-      const QString uuid = CollectionUtils::computeCollectionUuid(
-          subCol.name, subCol.mediaDirectory);
-      if (ensureCollectionScanned(descendantIndex, subCol)) {
-        emit collectionScanCompleted(uuid);
-      }
+      (void)ensureCollectionScanned(descendantIndex, subCol);
     }
   }
 }
@@ -2778,6 +2819,11 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
       return;
     }
   }
+
+  // Ensure we see the latest data committed by the scan worker.
+  // This is critical after a rescan - without it, the range query may return
+  // stale/empty results from a cached WAL snapshot.
+  refreshWalView();
 
   if (!context.isValid()) {
     auto err = ErrorContext::error(ErrorCode::InvalidCollectionContext,
@@ -3326,7 +3372,7 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   }
   const std::atomic<bool> &cancelFlag = *cancelToken;
 
-  const int maxThreads = std::max(1, m_scanThreadPool.maxThreadCount());
+  const int maxThreads = m_scanThreadPool ? std::max(1, m_scanThreadPool->maxThreadCount()) : 1;
   const int maxInFlight = std::max(1, maxThreads * 2);
   ScanCompletionQueue queue;
 
@@ -3343,11 +3389,14 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
     if (cancelFlag.load(std::memory_order_acquire)) {
       return;
     }
+    if (!m_scanThreadPool) {
+      return;
+    }
     {
       QMutexLocker locker(&queue.mutex);
       ++queue.inFlight;
     }
-    m_scanThreadPool.start(new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, &queue));
+    m_scanThreadPool->start(new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, &queue));
   };
 
   // Always scan root.

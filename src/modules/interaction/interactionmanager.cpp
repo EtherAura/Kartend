@@ -1046,13 +1046,21 @@ auto InteractionManager::isItemOffscreen(int selection, int gridWidth) const
   if (viewportH <= 0) {
     return false;
   }
-  const int itemY = GridUtils::computeItemY(
+  int logicalItemY = GridUtils::computeItemY(
       selection, gridWidth, collection.itemHeight, collection.verticalSpacing,
       UIConstants::Grid::MARGINS);
-  const int visibleTop = vbar->value();
-  const int visibleBottom = visibleTop + viewportH;
-  return (itemY + collection.itemHeight) <= visibleTop ||
-         itemY >= visibleBottom;
+  
+  // Convert widget scroll position to logical for visibility check in clipped grids
+  int logicalVisibleTop = vbar->value();
+  if (m_scrollManager) {
+    const auto &metrics = m_scrollManager->getMetrics();
+    if (metrics.isClipped) {
+      logicalVisibleTop = metrics.toLogicalScrollY(vbar->value(), viewportH);
+    }
+  }
+  const int logicalVisibleBottom = logicalVisibleTop + viewportH;
+  return (logicalItemY + collection.itemHeight) <= logicalVisibleTop ||
+         logicalItemY >= logicalVisibleBottom;
 }
 
 void InteractionManager::applyMinorHorizontalSuppress() {

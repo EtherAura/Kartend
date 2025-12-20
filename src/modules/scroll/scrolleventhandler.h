@@ -47,6 +47,9 @@ signals:
   
   // Emitted when user scroll activity ends
   void userScrollEnded();
+  
+  // Emitted continuously while scrollbar is being dragged
+  void sliderMoved(int position);
 
 private:
   void connectVerticalEvents(QScrollBar *scrollBar);

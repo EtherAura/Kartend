@@ -100,16 +100,19 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
 
 // Destroy the database manager and close/remove the connection
 DatabaseManager::~DatabaseManager() {
+  // Signal threads to quit but DON'T wait - they may be blocked on I/O.
+  // The process is exiting anyway, so the OS will clean up.
   if (m_workerThread) {
     m_workerThread->quit();
-    m_workerThread->wait();
+    // Intentionally NOT waiting - can block for minutes during shutdown
   }
 
   if (m_scanThread) {
     m_scanThread->quit();
-    m_scanThread->wait();
+    // Intentionally NOT waiting - can block for minutes during shutdown
   }
 
+  // Close database connection - this is fast and safe
   if (m_db.isValid()) {
     QString connectionName = m_db.connectionName();
     m_db.close();

@@ -106,11 +106,15 @@ public:
 
   // --- Target Calculation ---
   /// Computes target Y position for centering an item
+  /// @param totalHeight Clamped container height for large grids
+  /// @param logicalHeight True logical height (may exceed Qt limits)
   [[nodiscard]] static int computeTargetYForIndex(int index, int gridWidth,
                                                   int itemHeight,
                                                   int verticalSpacing,
                                                   int viewportHeight,
-                                                  int scrollbarMax);
+                                                  int scrollbarMax,
+                                                  int totalHeight = 0,
+                                                  int logicalHeight = 0);
 
   /// Computes horizontal target X for visibility
   [[nodiscard]] static int computeHorizontalTargetX(int itemX,

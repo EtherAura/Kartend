@@ -1065,6 +1065,9 @@ void SettingsDialog::addCollection() {
   originalCollection = m_workingCollections[newIndex];
   m_collectionSaved = true;
   updateSaveButtonStyle();
+
+  // Persist the new collection immediately to disk
+  emit collectionSaved(collections);
 }
 
 // Ensures at least one root collection exists, prompting user to create one if needed
@@ -2264,11 +2267,12 @@ void SettingsDialog::performRecursiveImport(const QString &baseDir, bool isConte
   if (currentCollectionIndex < 0 || currentCollectionIndex >= m_workingCollections.size()) {
     return;
   }
-  
+
   // Save current collection first
   handleSaveCollection(currentCollectionIndex, false);
   
-  const CollectionConfig &templateConfig = m_workingCollections[currentCollectionIndex];
+  // Copy by value to avoid reference invalidation when m_workingCollections is appended to
+  const CollectionConfig templateConfig = m_workingCollections[currentCollectionIndex];
   int parentIndex = currentCollectionIndex;
 
   // Create subcollections for each subdirectory
@@ -2303,7 +2307,7 @@ void SettingsDialog::performRecursiveImport(const QString &baseDir, bool isConte
     
     // Clear the virtual subfolder state
     newCollection.currentSubfolder.clear();
-    
+
     m_workingCollections.append(newCollection);
     collections.append(newCollection);
   }

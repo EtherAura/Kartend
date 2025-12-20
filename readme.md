@@ -29,24 +29,6 @@ Collection & Artwork Frontend for KDE
 sudo apt install clang cmake lld ninja-build ccache qt6-base-dev libqt6sql6-sqlite
 ```
 
-### Fedora
-
-```bash
-sudo dnf install clang cmake lld ninja-build ccache qt6-qtbase-devel
-```
-
-### Arch Linux
-
-```bash
-sudo pacman -S clang cmake lld ninja ccache qt6-base
-```
-
-## Building
-
-```bash
-.scripts/build.sh
-```
-
 By default this produces an optimized release build at `build/ninja-release/kartend` (or `build/make-release/kartend` if Ninja is not available).
 
 For a faster inner loop during development (no reports/archive):

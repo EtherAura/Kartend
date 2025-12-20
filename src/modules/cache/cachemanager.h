@@ -15,6 +15,7 @@
 #include <QThreadPool>
 #include <QTimer>
 #include <atomic>
+#include <memory>
 
 // Statistics for monitoring cache performance
 struct CacheMetrics {
@@ -57,6 +58,10 @@ public:
   static void saveTimestampsSnapshotToDiskForShutdown(
       const QHash<QString, qint64> &timestampsCopy);
   
+  // Cancels pending I/O operations and waits for in-flight tasks to complete.
+  // Call before shutdown to ensure clean state for final save.
+  void cancelPendingIo();
+  
   [[nodiscard]] QPixmap getArtwork(const QString &artworkPath);
   // Memory-only lookup: never performs disk I/O or creates files.
   [[nodiscard]] QPixmap getArtworkFromMemoryOnly(const QString &artworkPath);
@@ -95,10 +100,12 @@ private:
 
   // Dedicated sequential pool for disk cache writes.
   // Avoids UI hitches and reduces contention with other QtConcurrent users.
-  QThreadPool m_ioThreadPool;
+  // Raw pointer so we can abandon it on shutdown without waiting.
+  QThreadPool *m_ioThreadPool = nullptr;
 
   // Cancellation flag for in-flight/queued I/O tasks (used during shutdown).
-  std::atomic_bool m_cancelIo{false};
+  // Shared pointer so lambdas can safely check after CacheManager destruction.
+  std::shared_ptr<std::atomic_bool> m_cancelIo = std::make_shared<std::atomic_bool>(false);
 
   // Debounced save timer plumbing (keeps frequent cache changes from causing
   // repeated PNG encodes and metadata writes during active scrolling).

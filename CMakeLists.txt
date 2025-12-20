@@ -97,6 +97,7 @@ set(SOURCES
   ${SRC_DIR}/modules/mouse/mousemanager.cpp
   ${SRC_DIR}/modules/navigation/navigationmanager.cpp
   ${SRC_DIR}/modules/overlay/selectionoverlaymanager.cpp
+  ${SRC_DIR}/modules/overlay/searchloadingoverlay.cpp
   ${SRC_DIR}/modules/query/querymanager.cpp
   ${SRC_DIR}/modules/restore/selectionrestoremanager.cpp
   ${SRC_DIR}/modules/scroll/scrollmanager.cpp
@@ -151,6 +152,7 @@ set(HEADERS
   ${SRC_DIR}/modules/navigation/navigationmanager.h
   ${SRC_DIR}/modules/navigation/navigationstackmanager.h
   ${SRC_DIR}/modules/overlay/selectionoverlaymanager.h
+  ${SRC_DIR}/modules/overlay/searchloadingoverlay.h
   ${SRC_DIR}/modules/query/querymanager.h
   ${SRC_DIR}/modules/restore/selectionrestoremanager.h
   ${SRC_DIR}/modules/scroll/scrollmanager.h

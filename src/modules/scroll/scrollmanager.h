@@ -23,6 +23,7 @@ class ArtworkManager;
 class WidgetPoolManager;
 class FilterManager;
 class SelectionOverlayManager;
+class SearchLoadingOverlay;
 class VirtualContainerManager;
 class SelectionCoordinator;
 class ScrollEventHandler;
@@ -84,7 +85,9 @@ public:
   // and virtual folders intact) and recalculates container metrics without
   // tearing down the view.
   void updateMediaItemCount(int mediaItemCount);
-  void receiveItemsRange(int offset, const QStringList &filePaths, const QHash<QString, QString> &fileNames);
+  void receiveItemsRange(int offset, const QStringList &filePaths, 
+                         const QHash<QString, QString> &fileNames,
+                         const QHash<QString, QString> &fileToArtworkDir);
   void cleanup();
   void updateGridWidth(int newGridWidth);
   void updateVirtualView();
@@ -101,6 +104,8 @@ public:
   void applyFilter(const QString &searchText);
   void cleanupActiveWidgets();
   void clearFilter();
+  void showSearchLoadingOverlay();
+  void hideSearchLoadingOverlay();
   void savePreSearchState();
   void restorePreSearchState();
   [[nodiscard]] bool hasPreSearchState() const;
@@ -108,6 +113,7 @@ public:
   [[nodiscard]] int getScrollbarWidth() const;
   [[nodiscard]] bool willNeedVerticalScrollbar() const;
   [[nodiscard]] int getTotalItems() const;
+  [[nodiscard]] const GridMetrics &getMetrics() const { return m_metrics; }
   void enforceScrollContentConstraints();
   void recreateLayout();
   void centerHorizontalScrollbar(int currentCollectionIndex,
@@ -124,6 +130,15 @@ public:
   [[nodiscard]] const QHash<int, ItemWidget *> &getActiveWidgets() const {
     return m_activeWidgets;
   }
+  // Injects cached items for instant startup display (bypasses database fetch)
+  void injectCachedItems(int startIndex, const QStringList &filePaths,
+                         const QHash<QString, QString> &fileNames,
+                         const QHash<QString, QString> &artworkPaths = {});
+  // Gets current viewport data for session caching (returns true if valid data)
+  [[nodiscard]] bool getCurrentViewportForCache(int &startIndex, int &totalItems,
+                                                QStringList &filePaths,
+                                                QHash<QString, QString> &fileNames,
+                                                QHash<QString, QString> &artworkPaths) const;
   // Data accessors - delegate to ScrollDataManager
   [[nodiscard]] const QStringList &getFilePaths() const;
   [[nodiscard]] const QHash<QString, QString> &getFileNames() const;
@@ -147,6 +162,8 @@ private slots:
   void onSubcollectionDoubleClicked(int subcollectionIndex);
   void onVirtualFolderDoubleClicked(const QString &folderPath);
   void onArrowKeyViewUpdate();
+  void onSliderMoved(int position);
+  void reconfigureArtworkForActiveWidgets();
 
 private:
   void createVirtualContainer();
@@ -172,6 +189,9 @@ private:
 
   // Selection overlay manager for glide animation
   std::unique_ptr<SelectionOverlayManager> m_overlayManager;
+
+  // Search loading overlay for visual feedback during searches
+  std::unique_ptr<SearchLoadingOverlay> m_searchLoadingOverlay;
 
   // Virtual container manager for container lifecycle
   std::unique_ptr<VirtualContainerManager> m_containerManager;
@@ -231,9 +251,16 @@ private:
   bool m_processingScrollChange = false;  // Reentrancy guard for onScrollChanged
   TimerUtils::DebouncedTimer *m_userScrollIdleTimer = nullptr;
   TimerUtils::DebouncedTimer *m_prewarmIdleTimer = nullptr;
+  qint64 m_lastArtworkPrewarmTime = 0;  // Debounce artwork directory prewarm
   
   // Initial scroll index for pre-positioning before widget creation
   int m_initialScrollIndex = -1;
+
+  // Rate-limited debug aid for cases where nothing renders.
+  int m_emptyViewDebugBudget = 3;
+
+  // Rate-limited debug aid for range delivery.
+  int m_rangeReceiveDebugBudget = 10;
 
   // Helper methods to reduce cognitive complexity
   [[nodiscard]] QSet<int> calculateNeededIndices() const;

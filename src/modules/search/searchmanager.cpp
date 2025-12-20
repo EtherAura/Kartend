@@ -16,10 +16,19 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
+#include <QtGlobal>
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSearchManager, "kartend.searchmanager")
 #define debugLog(msg) do { if (lcSearchManager().isDebugEnabled()) { qCDebug(lcSearchManager) << msg; } } while (0)
+
+// Temporary diagnostic logging (release-safe) gated by env var.
+// Enable with: `KARTEND_SEARCH_DIAG=1 kartend`
+static inline bool searchDiagEnabled() {
+  return qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG");
+}
+
+#define diagLog(msg) do { if (searchDiagEnabled()) { qWarning() << "[SearchDiag][SearchManager]" << msg; } } while (0)
 
 // SearchManagerSetup getter definitions
 SETUP_GETTER_DEF_SAME(SearchManagerSetup, DatabaseManager*, DatabaseManager, databaseManager)
@@ -324,6 +333,13 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
   const int collIndex =
       (m_currentCollectionIndex) ? *m_currentCollectionIndex : -1;
 
+  diagLog(QString("onSearchTextChanged: hasSearch=%1 mode=%2 collIndex=%3 text='%4' sel=%5")
+              .arg(hasSearch)
+              .arg(static_cast<int>(m_currentSearchMode))
+              .arg(collIndex)
+              .arg(trimmed)
+              .arg(currentSelectedIndex));
+
   if (m_searchBar) {
     QFont searchFont = m_searchBar->font();
     searchFont.setItalic(!hasSearch);
@@ -397,7 +413,6 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
         // handles selection restore via calculateSelectionIndex - don't emit
         // requestSelectionRestore here to avoid duplicate/racing restores
         m_navigationManager->filterItems(QString());
-        m_navigationManager->safeReloadCollection(collIndex);
       }
       initializeSearchModeForCurrentCollection();
     }
@@ -452,6 +467,11 @@ void SearchManager::performDebouncedSearch() {
     return;
   }
 
+  diagLog(QString("performDebouncedSearch: mode=%1 collIndex=%2 query='%3'")
+              .arg(static_cast<int>(m_currentSearchMode))
+              .arg((m_currentCollectionIndex ? *m_currentCollectionIndex : -1))
+              .arg(trimmed));
+
   if (m_searchItemsLoadedConn != QMetaObject::Connection()) {
     QObject::disconnect(m_searchItemsLoadedConn);
     m_searchItemsLoadedConn = QMetaObject::Connection();
@@ -461,7 +481,6 @@ void SearchManager::performDebouncedSearch() {
       (m_currentCollectionIndex ? *m_currentCollectionIndex : -1);
   if (collIndex < 0 || !m_collections ||
       collIndex >= m_collections->size()) {
-    m_navigationManager->filterItems(trimmed);
     return;
   }
 
@@ -482,16 +501,39 @@ void SearchManager::performDebouncedSearch() {
   case SearchMode::CurrentCollection: {
     // CurrentCollection uses on-demand range loading; in-memory filtering can
     // be incomplete. Use the DB-backed count + range pipeline.
+    diagLog("dispatch filterItems(CurrentCollection)");
+    // Show loading overlay while DB query is processing
+    if (m_scrollManager) {
+      m_scrollManager->showSearchLoadingOverlay();
+    }
     m_navigationManager->filterItems(trimmed);
     break;
   }
   case SearchMode::CurrentAndSubcollections: {
-    // DB-backed: include descendants even when showAllSubcollectionItems is false.
-    m_navigationManager->filterItemsCurrentAndSubcollections(trimmed);
+    // When showAllSubcollectionItems is true, all items are already loaded
+    // in memory - use fast in-memory filtering instead of DB queries.
+    // This provides major performance improvement for large hierarchies.
+    if (context.config.showAllSubcollectionItems && m_scrollManager) {
+      diagLog("dispatch applyFilter(CurrentAndSubcollections, in-memory)");
+      m_scrollManager->applyFilter(trimmed);
+    } else {
+      // DB-backed: include descendants even when showAllSubcollectionItems is false.
+      diagLog("dispatch filterItemsCurrentAndSubcollections");
+      // Show loading overlay while DB query is processing
+      if (m_scrollManager) {
+        m_scrollManager->showSearchLoadingOverlay();
+      }
+      m_navigationManager->filterItemsCurrentAndSubcollections(trimmed);
+    }
     break;
   }
   case SearchMode::AllCollections: {
     // DB-backed: query across all collections without loading everything into memory.
+    diagLog("dispatch filterItemsAllCollections");
+    // Show loading overlay while DB query is processing
+    if (m_scrollManager) {
+      m_scrollManager->showSearchLoadingOverlay();
+    }
     m_navigationManager->filterItemsAllCollections(trimmed);
     break;
   }

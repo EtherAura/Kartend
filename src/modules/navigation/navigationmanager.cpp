@@ -638,6 +638,8 @@ void NavigationManager::requestItemCountForContext(const CollectionContext &cont
               .arg(m_itemsQueryContext.queryIncludeAllCollections));
 
   ++m_itemCountRequestToken;
+  qWarning() << "[ScanFlow] requestItemCountForContext: newToken=" << m_itemCountRequestToken 
+             << "collIdx=" << context.currentIndex << "filter='" << filter << "'";
   m_databaseManager->fetchItemCount(m_itemsQueryContext, (*m_collections),
                                     m_itemsQueryFilter, m_itemCountRequestToken);
 }
@@ -1557,6 +1559,7 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
   }
 
   diagLog("safeReloadCollection requested idx=" << collectionIndex);
+  qWarning() << "[ScanFlow] safeReloadCollection requested idx=" << collectionIndex;
 
   if (!m_safeReloadTimer) {
     m_safeReloadTimer = new QTimer(this);
@@ -1567,15 +1570,33 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
       m_pendingSafeReloadCollectionIndex = -1;
 
       diagLog("safeReloadCollection firing idx=" << pendingIndex);
+      qWarning() << "[ScanFlow] safeReloadCollection timer FIRING idx=" << pendingIndex;
 
-      if (!m_collections || !m_databaseManager || pendingIndex < 0 ||
-          pendingIndex >= (*m_collections).size()) {
+      if (!m_collections || !m_databaseManager || !m_currentCollectionIndex ||
+          pendingIndex < 0 || pendingIndex >= (*m_collections).size()) {
         return;
+      }
+      
+      // Determine which collection to reload. If the pending index doesn't match
+      // what the user is currently viewing, reload the current collection instead.
+      // This handles the case where a subcollection reload is requested but the
+      // user has navigated to a different collection.
+      int reloadIndex = pendingIndex;
+      if (pendingIndex != (*m_currentCollectionIndex)) {
+        qWarning() << "[ScanFlow] safeReloadCollection: pendingIndex" << pendingIndex 
+                   << "!= currentIndex" << (*m_currentCollectionIndex)
+                   << "- reloading current instead";
+        reloadIndex = (*m_currentCollectionIndex);
+        
+        // Validate the current collection index
+        if (reloadIndex < 0 || reloadIndex >= (*m_collections).size()) {
+          return;
+        }
       }
 
       CollectionContext context;
-      context.currentIndex = pendingIndex;
-      context.config = (*m_collections)[pendingIndex];
+      context.currentIndex = reloadIndex;
+      context.config = (*m_collections)[reloadIndex];
       context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
           context.config.mediaDirectory, context.config.name);
       context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
@@ -1591,7 +1612,7 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
       requestItemCountForContext(context, QString());
 
       // Update toolbar title to reflect subfolder if navigated into one.
-      updateItemsPageTitle(pendingIndex);
+      updateItemsPageTitle(reloadIndex);
 
       // Delay centering until items are loaded and layout is calculated.
       QTimer::singleShot(UIConstants::Timing::VIEWPORT_DELAY_MS, this, [this]() {
@@ -2252,11 +2273,14 @@ void NavigationManager::applyUiPoliciesForCollection(int collectionIndex) {
 }
 
 void NavigationManager::onItemCountLoaded(int count, int requestToken) {
+  qWarning() << "[ScanFlow] onItemCountLoaded ENTRY: count=" << count 
+             << "token=" << requestToken << "expected=" << m_itemCountRequestToken;
   if (requestToken != m_itemCountRequestToken) {
     diagLog(QString("onItemCountLoaded: ignoring stale result count=%1 token=%2 expected=%3")
                 .arg(count)
                 .arg(requestToken)
                 .arg(m_itemCountRequestToken));
+    qWarning() << "[ScanFlow] STALE token - ignoring";
     return;
   }
 
@@ -2281,25 +2305,38 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
               .arg(m_itemsViewGeneration)
               .arg(requestToken));
 
+  qWarning() << "[ScanFlow] onItemCountLoaded: count=" << count << "bgRefresh=" << m_backgroundCountRefreshInProgress
+             << "bgIdx=" << m_backgroundCountRefreshCollectionIndex << "curIdx=" << idx;
+
   if (m_backgroundCountRefreshInProgress &&
       m_backgroundCountRefreshCollectionIndex == idx &&
-      m_scrollManager && m_scrollManager->getTotalItems() > 0) {
-    // Background scan completed; refresh media count without resetting
-    // scroll/selection state.
+      m_scrollManager) {
+    const int currentViewItems = m_scrollManager->getTotalItems();
+    qWarning() << "[ScanFlow] bgRefresh path: currentViewItems=" << currentViewItems << "count=" << count;
+    // Background scan completed. If the view already has items and count is the
+    // same or lower, just update without resetting scroll/selection state.
+    // If count INCREASED (new items from scan), do a full rebuild to load them.
+    if (currentViewItems > 0 && count <= currentViewItems) {
+      m_backgroundCountRefreshInProgress = false;
+      m_backgroundCountRefreshCollectionIndex = -1;
+
+      m_scrollManager->updateMediaItemCount(count);
+      if (m_artworkManager && m_artworkManager->getTimerCoordinator()) {
+        m_artworkManager->getTimerCoordinator()->scheduleViewportUpdate();
+      }
+      if (m_refreshTitleCounts) {
+        m_refreshTitleCounts();
+      }
+      if (m_databaseManager && m_collections) {
+        m_databaseManager->updateCachedCounts((*m_collections));
+      }
+      return;
+    }
+    // View is empty OR count increased - clear the refresh flags and fall through
+    // to full rebuild so the newly-scanned items are displayed.
+    qWarning() << "[ScanFlow] Count changed or view empty, falling through to full rebuild";
     m_backgroundCountRefreshInProgress = false;
     m_backgroundCountRefreshCollectionIndex = -1;
-
-    m_scrollManager->updateMediaItemCount(count);
-    if (m_artworkManager && m_artworkManager->getTimerCoordinator()) {
-      m_artworkManager->getTimerCoordinator()->scheduleViewportUpdate();
-    }
-    if (m_refreshTitleCounts) {
-      m_refreshTitleCounts();
-    }
-    if (m_databaseManager && m_collections) {
-      m_databaseManager->updateCachedCounts((*m_collections));
-    }
-    return;
   }
 
   const bool forceTopForThisLoad = m_forceTopOnNextItemsViewLoad;
@@ -2396,6 +2433,7 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
     } else if (selIdx >= 0) {
       m_scrollManager->setInitialScrollIndex(selIdx);
     }
+    qWarning() << "[ScanFlow] Calling setupVirtualScrolling: totalItems=" << totalItems;
     m_scrollManager->setupVirtualScrolling(totalItems, context);
     
     // Hide search loading overlay once filtered results are ready
@@ -2433,7 +2471,10 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
 }
 
 void NavigationManager::onBackgroundCollectionScanCompleted(const QString &collectionUuid) {
+  qWarning() << "[ScanFlow] onBackgroundCollectionScanCompleted: uuid=" << collectionUuid;
+  
   if (!m_databaseManager || !m_collections || !m_currentCollectionIndex) {
+    qWarning() << "[ScanFlow] Early return: missing deps";
     return;
   }
 
@@ -2457,38 +2498,49 @@ void NavigationManager::onBackgroundCollectionScanCompleted(const QString &colle
   // collection (or its descendants when showAllSubcollectionItems is active).
   CollectionConfig cur = (*m_collections)[idx];
   cur.mediaDirectory = PathUtils::validateAndExpandPath(cur.mediaDirectory, cur.name);
+  
   if (!cur.mediaDirectory.trimmed().isEmpty()) {
     const QString curUuid = CollectionUtils::computeCollectionUuid(cur.name, cur.mediaDirectory);
+    qWarning() << "[ScanFlow] UUID compare: cur=" << curUuid << "incoming=" << collectionUuid << "match=" << (curUuid == collectionUuid);
     if (curUuid == collectionUuid) {
+      qWarning() << "[ScanFlow] UUID MATCH - calling loadCollectionData for idx=" << idx;
       m_backgroundCountRefreshInProgress = true;
       m_backgroundCountRefreshCollectionIndex = idx;
       loadCollectionData(idx);
       return;
     }
+  } else {
+    qWarning() << "[ScanFlow] mediaDirectory empty for" << cur.name;
   }
 
   // For descendant scans when showAllSubcollectionItems is enabled:
   // Don't trigger intermediate refreshes while the loading overlay is still
   // active (indicating more scans are pending). MainWindow will trigger a
   // final reload once all scans complete.
+  qWarning() << "[ScanFlow] Checking descendants: showAllSubcollectionItems=" << cur.showAllSubcollectionItems;
   if (cur.showAllSubcollectionItems) {
     // Skip intermediate reloads if loading overlay is active (batch scan in progress)
     if (m_loadingOverlay && m_loadingOverlay->isActive()) {
+      qWarning() << "[ScanFlow] Skipping - loading overlay is active";
       return;
     }
     
     QList<int> descendants = CollectionUtils::collectDescendantIndices(idx, (*m_collections));
+    qWarning() << "[ScanFlow] descendant count=" << descendants.size();
     for (int descendantIndex : descendants) {
       if (descendantIndex < 0 || descendantIndex >= (*m_collections).size()) {
         continue;
       }
       CollectionConfig subCol = (*m_collections)[descendantIndex];
       subCol.mediaDirectory = PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
+      qWarning() << "[ScanFlow] Checking descendant" << descendantIndex << "name=" << subCol.name << "mediaDir=" << subCol.mediaDirectory;
       if (subCol.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
       const QString subUuid = CollectionUtils::computeCollectionUuid(subCol.name, subCol.mediaDirectory);
+      qWarning() << "[ScanFlow] descendant UUID=" << subUuid << "match=" << (subUuid == collectionUuid);
       if (subUuid == collectionUuid) {
+        qWarning() << "[ScanFlow] DESCENDANT MATCH - calling loadCollectionData";
         m_backgroundCountRefreshInProgress = true;
         m_backgroundCountRefreshCollectionIndex = idx;
         loadCollectionData(idx);
