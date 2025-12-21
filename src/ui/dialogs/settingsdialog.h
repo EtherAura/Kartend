@@ -108,6 +108,8 @@ private:
                                     int potentialParentIndex) const;
   void emitGridWidthChanged();
   void updateFieldVisibility();
+  void updateExtractArchivesVisibility();
+  void onExtractArchivesToggled(bool checked);
   void updateSidebarModeVisibility();
   void updateGridWidthLimits();
   void loadGeneralSettingsToUI();

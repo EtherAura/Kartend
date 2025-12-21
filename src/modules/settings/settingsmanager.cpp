@@ -169,6 +169,8 @@ void SettingsManager::loadCollections(
     config.showAllSubfolderItems = settings.value("showAllSubfolderItems", false).toBool();
     config.hideSubfolderTitles = settings.value("hideSubfolderTitles", false).toBool();
     config.showHiddenFolders = settings.value("showHiddenFolders", false).toBool();
+    config.extractArchives = settings.value("extractArchives", false).toBool();
+    config.extractedExtension = settings.value("extractedExtension").toString();
     config.collectionIcon = settings.value("collectionIcon").toString();
     
     QString extStr = settings.value("extensions").toString();
@@ -310,6 +312,8 @@ void SettingsManager::saveCollections(
     settings.setValue("showAllSubfolderItems", c.showAllSubfolderItems);
     settings.setValue("hideSubfolderTitles", c.hideSubfolderTitles);
     settings.setValue("showHiddenFolders", c.showHiddenFolders);
+    settings.setValue("extractArchives", c.extractArchives);
+    settings.setValue("extractedExtension", c.extractedExtension);
     settings.setValue("collectionIcon", c.collectionIcon);
     settings.setValue("extensions", c.extensions.join(", "));
     settings.setValue("gridWidth", c.gridWidth);
@@ -495,6 +499,8 @@ auto compareNonReloadFields(const CollectionConfig &configA,
       configA.launcherPath != configB.launcherPath ||
       configA.corePath != configB.corePath ||
       configA.launchParameters != configB.launchParameters ||
+      configA.extractArchives != configB.extractArchives ||
+      configA.extractedExtension != configB.extractedExtension ||
       configA.parentCollectionIndex != configB.parentCollectionIndex ||
       configA.isSubcollection != configB.isSubcollection) {
     hasChanges = true;

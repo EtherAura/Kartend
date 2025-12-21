@@ -82,6 +82,10 @@ struct CollectionConfig {
   QString tileColor;          // Color for item tiles/placeholders (if blank, uses default)
   QString selectionColor;     // Color for selection rectangle and glide overlay border
   
+  // Archive extraction for cores that don't support zipped content
+  bool extractArchives = false;           // Extract archives to temp dir before launch
+  QString extractedExtension;             // File extension to launch from extracted archive
+  
   // Folder browsing options
   bool includeContentSubfolders = false;   // Show subfolders as virtual navigable folders
   bool includeArtworkSubfolders = false;   // Match artwork from subfolders
@@ -128,6 +132,8 @@ struct CollectionConfig {
            primaryColor == other.primaryColor &&
            tileColor == other.tileColor &&
            selectionColor == other.selectionColor &&
+           extractArchives == other.extractArchives &&
+           extractedExtension == other.extractedExtension &&
            includeContentSubfolders == other.includeContentSubfolders &&
            includeArtworkSubfolders == other.includeArtworkSubfolders &&
            showAllSubfolderItems == other.showAllSubfolderItems &&

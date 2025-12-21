@@ -7,6 +7,8 @@
 #include "setuputils.h"
 
 #include <QDateTime>
+#include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QHash>
 #include <QList>
@@ -14,6 +16,7 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcLaunchManager, "kartend.launchmanager")
@@ -216,8 +219,29 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
   }
 
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
+  
+  // Determine the actual file to launch (may be extracted from archive)
+  QString launchFilePath = filePath;
+  
+  if (collection.extractArchives && 
+      !collection.extractedExtension.isEmpty() &&
+      isArchiveFile(filePath)) {
+    qCDebug(lcLaunchManager) << "Archive extraction enabled for" << filePath;
+    
+    auto extractResult = extractArchiveToTemp(filePath, collection.extractedExtension);
+    if (extractResult.isError()) {
+      ErrorUtils::logError(extractResult.error());
+      QMessageBox::warning(nullptr, "Extraction Error",
+                           QString("Failed to extract archive:\n%1\n\n%2")
+                               .arg(filePath)
+                               .arg(extractResult.error().message));
+      return;
+    }
+    launchFilePath = extractResult.value();
+    qCDebug(lcLaunchManager) << "Launching extracted file:" << launchFilePath;
+  }
 
-  auto commandResult = buildLaunchCommand(collection, filePath);
+  auto commandResult = buildLaunchCommand(collection, launchFilePath);
   if (commandResult.isError()) {
     ErrorUtils::logError(commandResult.error());
     const QString msg = commandResult.error().message;
@@ -324,4 +348,138 @@ auto LaunchManager::parseParameters(const QString &paramString) -> ErrorUtils::R
   }
 
   return result;
+}
+
+bool LaunchManager::isArchiveFile(const QString &filePath) {
+  static const QStringList archiveExtensions = {
+    ".zip", ".7z", ".rar", ".gz", ".tar", ".bz2", ".xz"
+  };
+  QString lowerPath = filePath.toLower();
+  for (const QString &ext : archiveExtensions) {
+    if (lowerPath.endsWith(ext)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+auto LaunchManager::extractArchiveToTemp(const QString &archivePath,
+                                         const QString &targetExtension)
+    -> ErrorUtils::Result<QString> {
+  // Create a persistent temp directory for extractions
+  // Using a subdirectory in the standard temp location that won't auto-delete
+  QString tempBasePath = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+  QString extractDir = tempBasePath + "/kartend_extract";
+  
+  QDir baseDir(extractDir);
+  if (!baseDir.exists() && !baseDir.mkpath(".")) {
+    return ErrorContext::error(ErrorCode::FileWriteError,
+                               "Failed to create extraction directory",
+                               "LaunchManager::extractArchiveToTemp")
+        .withDetails(extractDir);
+  }
+  
+  // Create a unique subdirectory for this archive based on its name
+  QFileInfo archiveInfo(archivePath);
+  QString archiveBaseName = archiveInfo.completeBaseName();
+  QString uniqueDir = extractDir + "/" + archiveBaseName;
+  
+  QDir targetDir(uniqueDir);
+  
+  // If directory exists and has files, check if we already extracted
+  if (targetDir.exists()) {
+    QString existingFile = findFileWithExtension(uniqueDir, targetExtension);
+    if (!existingFile.isEmpty()) {
+      qCDebug(lcLaunchManager) << "Using cached extraction:" << existingFile;
+      return existingFile;
+    }
+    // Clear stale extraction
+    targetDir.removeRecursively();
+  }
+  
+  if (!targetDir.mkpath(".")) {
+    return ErrorContext::error(ErrorCode::FileWriteError,
+                               "Failed to create extraction subdirectory",
+                               "LaunchManager::extractArchiveToTemp")
+        .withDetails(uniqueDir);
+  }
+  
+  // Use system tools to extract (7z is most universal)
+  QStringList extractors = {"7z", "unzip", "bsdtar"};
+  QString extractor;
+  
+  for (const QString &cmd : extractors) {
+    if (!QStandardPaths::findExecutable(cmd).isEmpty()) {
+      extractor = cmd;
+      break;
+    }
+  }
+  
+  if (extractor.isEmpty()) {
+    return ErrorContext::error(ErrorCode::FileNotFound,
+                               "No archive extraction tool found",
+                               "LaunchManager::extractArchiveToTemp")
+        .withDetails("Install 7z, unzip, or bsdtar to extract archives");
+  }
+  
+  QProcess process;
+  process.setWorkingDirectory(uniqueDir);
+  
+  QStringList args;
+  if (extractor == "7z") {
+    args << "x" << "-y" << archivePath;
+  } else if (extractor == "unzip") {
+    args << "-o" << archivePath;
+  } else if (extractor == "bsdtar") {
+    args << "-xf" << archivePath;
+  }
+  
+  qCDebug(lcLaunchManager) << "Extracting with" << extractor << args;
+  
+  process.start(extractor, args);
+  if (!process.waitForFinished(30000)) { // 30 second timeout
+    return ErrorContext::error(ErrorCode::OperationCancelled,
+                               "Archive extraction timed out",
+                               "LaunchManager::extractArchiveToTemp")
+        .withDetails(archivePath);
+  }
+  
+  if (process.exitCode() != 0) {
+    QString errorOutput = QString::fromUtf8(process.readAllStandardError());
+    return ErrorContext::error(ErrorCode::InvalidArgument,
+                               "Archive extraction failed",
+                               "LaunchManager::extractArchiveToTemp")
+        .withDetails(QString("Exit code: %1, Error: %2")
+                         .arg(process.exitCode())
+                         .arg(errorOutput.left(200)));
+  }
+  
+  // Find the file with the target extension
+  QString targetFile = findFileWithExtension(uniqueDir, targetExtension);
+  if (targetFile.isEmpty()) {
+    return ErrorContext::error(ErrorCode::FileNotFound,
+                               "Target file not found in extracted archive",
+                               "LaunchManager::extractArchiveToTemp")
+        .withDetails(QString("Looking for *%1 in %2").arg(targetExtension, uniqueDir));
+  }
+  
+  qCDebug(lcLaunchManager) << "Extracted target file:" << targetFile;
+  return targetFile;
+}
+
+QString LaunchManager::findFileWithExtension(const QString &directory,
+                                             const QString &extension) {
+  QString normalizedExt = extension.toLower();
+  if (!normalizedExt.startsWith('.')) {
+    normalizedExt = "." + normalizedExt;
+  }
+  
+  QDirIterator it(directory, QDir::Files, QDirIterator::Subdirectories);
+  while (it.hasNext()) {
+    QString filePath = it.next();
+    if (filePath.toLower().endsWith(normalizedExt)) {
+      return filePath;
+    }
+  }
+  return {};
 }

@@ -475,6 +475,16 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->launchParamsLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
   }
+  if (ui->extractArchivesCheckBox) {
+    connect(ui->extractArchivesCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+    connect(ui->extractArchivesCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::onExtractArchivesToggled);
+  }
+  if (ui->extractedExtensionLineEdit) {
+    connect(ui->extractedExtensionLineEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
   if (ui->mediaDirLineEdit) {
     connect(ui->mediaDirLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
@@ -1247,6 +1257,12 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.launchParameters = (ui->launchParamsLineEdit)
                                 ? ui->launchParamsLineEdit->text()
                                 : config.launchParameters;
+  config.extractArchives = (ui->extractArchivesCheckBox)
+                               ? ui->extractArchivesCheckBox->isChecked()
+                               : config.extractArchives;
+  config.extractedExtension = (ui->extractedExtensionLineEdit)
+                                  ? ui->extractedExtensionLineEdit->text()
+                                  : config.extractedExtension;
   config.mediaDirectory = (ui->mediaDirLineEdit)
                               ? ui->mediaDirLineEdit->text()
                               : config.mediaDirectory;
@@ -1399,6 +1415,10 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
        ui->coreLineEdit->text() != originalConfig.corePath) ||
       ((ui->launchParamsLineEdit) &&
        ui->launchParamsLineEdit->text() != originalConfig.launchParameters) ||
+      ((ui->extractArchivesCheckBox) &&
+       ui->extractArchivesCheckBox->isChecked() != originalConfig.extractArchives) ||
+      ((ui->extractedExtensionLineEdit) &&
+       ui->extractedExtensionLineEdit->text() != originalConfig.extractedExtension) ||
       ((ui->mediaDirLineEdit) &&
        ui->mediaDirLineEdit->text() != originalConfig.mediaDirectory) ||
       ((ui->artworkDirLineEdit) &&
@@ -1748,6 +1768,9 @@ void SettingsDialog::updateUIForLauncherType(const QString &launcherPath) {
     ui->launchParamsLineEdit->setToolTip(
         "Additional command-line parameters for the launcher");
   }
+  
+  // Update extract archives visibility based on launcher type
+  updateExtractArchivesVisibility();
 }
 
 void SettingsDialog::updateParentCollectionComboBox(int currentIndex) {
@@ -1843,14 +1866,37 @@ void SettingsDialog::updateFieldVisibility() {
 
   if (hasContentDir) {
     updateUIForLauncherType(ui->launcherLineEdit->text());
+    updateExtractArchivesVisibility();
   } else {
     ui->label_core->setVisible(false);
     ui->coreLineEdit->setVisible(false);
     ui->browseCoreButton->setVisible(false);
+    ui->label_extractArchives->setVisible(false);
+    ui->extractArchivesCheckBox->setVisible(false);
+    ui->label_extractedExtension->setVisible(false);
+    ui->extractedExtensionLineEdit->setVisible(false);
   }
 
   ui->label_sidebarMode->setVisible(true);
   ui->sidebarModeComboBox->setVisible(true);
+}
+
+void SettingsDialog::updateExtractArchivesVisibility() {
+  bool isRetroArch = ui->launcherLineEdit->text().contains("retroarch", Qt::CaseInsensitive);
+  bool extractEnabled = ui->extractArchivesCheckBox->isChecked();
+  
+  // Show extract archives option only for RetroArch launchers
+  ui->label_extractArchives->setVisible(isRetroArch);
+  ui->extractArchivesCheckBox->setVisible(isRetroArch);
+  
+  // Show extracted extension field only when extraction is enabled
+  ui->label_extractedExtension->setVisible(isRetroArch && extractEnabled);
+  ui->extractedExtensionLineEdit->setVisible(isRetroArch && extractEnabled);
+}
+
+void SettingsDialog::onExtractArchivesToggled(bool checked) {
+  Q_UNUSED(checked)
+  updateExtractArchivesVisibility();
 }
 
 void SettingsDialog::updateSidebarModeVisibility() {
@@ -2350,6 +2396,12 @@ void SettingsDialog::loadCollectionToUI(int index) {
   }
   if (ui->launchParamsLineEdit) {
     ui->launchParamsLineEdit->setText(config.launchParameters);
+  }
+  if (ui->extractArchivesCheckBox) {
+    ui->extractArchivesCheckBox->setChecked(config.extractArchives);
+  }
+  if (ui->extractedExtensionLineEdit) {
+    ui->extractedExtensionLineEdit->setText(config.extractedExtension);
   }
   if (ui->mediaDirLineEdit) {
     ui->mediaDirLineEdit->setText(config.mediaDirectory);

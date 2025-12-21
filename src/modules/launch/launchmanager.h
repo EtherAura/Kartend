@@ -65,6 +65,18 @@ public:
   /// Records launch time for debounce tracking
   void recordLaunch(const QString &filePath);
 
+  /// Checks if a file path is a supported archive format
+  [[nodiscard]] static bool isArchiveFile(const QString &filePath);
+  
+  /// Extracts an archive to a temporary directory and returns the path to the
+  /// target file matching the specified extension
+  [[nodiscard]] static ErrorUtils::Result<QString> extractArchiveToTemp(
+      const QString &archivePath, const QString &targetExtension);
+  
+  /// Finds a file with the given extension in a directory (recursive)
+  [[nodiscard]] static QString findFileWithExtension(const QString &directory,
+                                                     const QString &extension);
+
 private:
   QList<CollectionConfig> *m_collections = nullptr;
 
