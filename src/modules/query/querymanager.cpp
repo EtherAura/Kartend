@@ -1713,8 +1713,8 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
     sql = "SELECT path, collection_uuid FROM items "
           "WHERE EXISTS (SELECT 1 FROM query_uuids WHERE query_uuids.uuid = collection_uuid)";
   } else {
-    sql = "SELECT path, collection_uuid FROM items WHERE collection_uuid IN (" +
-          buildUuidInClause(uuids.size()) + ")";
+    sql = "SELECT path, collection_uuid FROM items WHERE collection_uuid IN " +
+          buildUuidInClause(uuids.size());
   }
   
   if (!trimmedFilter.isEmpty()) {

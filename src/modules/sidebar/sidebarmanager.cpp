@@ -10,6 +10,7 @@
 #include <QApplication>
 #include <QHBoxLayout>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QTimer>
 
 #include <QLoggingCategory>
@@ -75,6 +76,15 @@ void SidebarManager::applySidebarStateForCollection(int collectionIndex) {
 
   updateSidebarLayout(collectionIndex);
   emit sidebarVisibilityChanged(m_sidebarVisible);
+
+  // Reposition overlay sidebar after layout is finalized - on startup, the
+  // viewport geometry may not be fully set when this is first called, causing
+  // the sidebar to overlap the scrollbar. Deferring ensures correct positioning.
+  if (m_sidebarVisible) {
+    QTimer::singleShot(50, this, [this]() {
+      positionSidebarOverlay();
+    });
+  }
 }
 
 void SidebarManager::setupSidebar() { m_sidebarVisible = false; }
@@ -90,17 +100,27 @@ void SidebarManager::positionSidebarOverlay() {
                          : UIConstants::Sidebar::MAX_WIDTH;
 
   QRect viewportRectInItems;
+  int scrollbarWidth = 0;
   if (m_itemScrollArea && m_itemScrollArea->viewport()) {
     const QPoint topLeft =
         m_itemScrollArea->viewport()->mapTo(m_itemsPage, QPoint(0, 0));
     viewportRectInItems = QRect(topLeft, m_itemScrollArea->viewport()->size());
+
+    // Account for scrollbar width - the overlay scrollbar appears over the
+    // viewport, so we need to offset the sidebar to avoid covering it.
+    // Use sizeHint for consistent positioning even before scrollbar is visible.
+    if (auto *vScrollBar = m_itemScrollArea->verticalScrollBar()) {
+      static constexpr int DEFAULT_SCROLLBAR_WIDTH = 16;
+      int barWidth = vScrollBar->sizeHint().width();
+      scrollbarWidth = barWidth > 0 ? barWidth : DEFAULT_SCROLLBAR_WIDTH;
+    }
   } else {
     viewportRectInItems = m_itemsPage->rect();
   }
 
   const int sidebarX = viewportRectInItems.left() +
                        viewportRectInItems.width() - sidebarWidth -
-                       sidebarMargin;
+                       sidebarMargin - scrollbarWidth;
   const int sidebarY = viewportRectInItems.top() + sidebarMargin;
   const int height =
       qMax(0, viewportRectInItems.height() - (sidebarMargin * 2));
@@ -135,24 +155,8 @@ void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
       int sidebarWidth = UIConstants::Sidebar::MAX_WIDTH;
       m_MetadataSidebar->setFixedWidth(sidebarWidth);
 
-      if (m_itemScrollArea &&
-          m_itemScrollArea->viewport()) {
-        QRect viewportRect = m_itemScrollArea->viewport()->rect();
-        QPoint topLeft =
-            m_itemScrollArea->viewport()->mapTo(m_itemsPage, QPoint(0, 0));
-
-        int overlaySidebarWidth = UIConstants::Sidebar::MAX_WIDTH;
-        m_MetadataSidebar->setFixedWidth(overlaySidebarWidth);
-
-        int overlayX = topLeft.x() + viewportRect.width() -
-                       overlaySidebarWidth - UIConstants::Sidebar::MARGIN;
-        int overlayY = topLeft.y() + UIConstants::Sidebar::MARGIN;
-        int height = viewportRect.height() - (UIConstants::Sidebar::MARGIN * 2);
-
-        m_MetadataSidebar->setGeometry(overlayX, overlayY, overlaySidebarWidth,
-                                       height);
-      }
-
+      // Use common positioning logic to ensure scrollbar offset is applied
+      positionSidebarOverlay();
       m_MetadataSidebar->setVisible(true);
       m_MetadataSidebar->raise();
     } else {

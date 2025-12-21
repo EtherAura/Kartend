@@ -317,8 +317,6 @@
     <addaction name="actionShowMenuBar"/>
     <addaction name="actionShowToolbar"/>
     <addaction name="actionShowSidebar"/>
-    <addaction name="separator"/>
-    <addaction name="actionSettings"/>
    </widget>
    <widget class="QMenu" name="menuSort">
     <property name="title">
@@ -338,9 +336,16 @@
     <addaction name="actionAbout"/>
     <addaction name="actionAboutQt"/>
    </widget>
+   <widget class="QMenu" name="menuSettings">
+    <property name="title">
+     <string>Se&amp;ttings</string>
+    </property>
+    <addaction name="actionSettings"/>
+   </widget>
    <addaction name="menuFile"/>
    <addaction name="menuView"/>
    <addaction name="menuSort"/>
+   <addaction name="menuSettings"/>
    <addaction name="menuHelp"/>
   </widget>
   <action name="actionExit">
