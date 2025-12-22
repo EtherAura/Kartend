@@ -172,6 +172,7 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
       m_silentLoadingActive(false),
       m_silentLoadBatchSize(UIConstants::Artwork::SILENT_LOAD_BATCH_SIZE_DEFAULT),
       m_lastUserActivity{QDateTime::currentMSecsSinceEpoch()},
+      m_lastBatchCompletionTime{0},
       m_cancellationRequested(std::make_shared<std::atomic<bool>>(false)),
       m_continuousSilentLoad(false), m_silentLoadIndex(0),
       m_persistentSilentLoad(false),
@@ -575,6 +576,10 @@ void ArtworkManager::dispatchAndTrackPrecacheBatch(const QStringList &artworkPat
                   self->m_silentlyCachedPaths.insert(r.artworkPath);
                 }
               }
+
+              // Record batch completion for cooldown enforcement
+              self->m_lastBatchCompletionTime.store(
+                  QDateTime::currentMSecsSinceEpoch());
             },
             Qt::QueuedConnection);
       });
@@ -807,16 +812,8 @@ void ArtworkManager::addPendingArtwork(ItemWidget *widget,
 
   scheduleViewportUpdate();
 
-  if (!m_silentLoadingActive && isUserIdle()) {
-    // Defer silent background loading start to confirm user is actually idle -
-    // prevents starting expensive operations during brief interaction pauses
-    QTimer::singleShot(UIConstants::Artwork::DEFER_SILENT_LOADING_DELAY_MS, this,
-                       [this]() {
-                         if (isUserIdle()) {
-                           startSilentLoading();
-                         }
-                       });
-  }
+  // Background precaching disabled - only load visible viewport items
+  // to minimize CPU usage when idle
 }
 
 // Clears all pending artwork entries and loaded state for a widget being
@@ -1033,6 +1030,33 @@ void ArtworkManager::processPersistentSilentLoad() {
     }
   }
 
+  // Cooldown: wait a minimum time after the last batch completed
+  // This gives the CPU actual idle time between batches
+  {
+    qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+    qint64 lastCompletion = m_lastBatchCompletionTime.load();
+    if (lastCompletion > 0 &&
+        (currentTime - lastCompletion) < UIConstants::Artwork::SILENT_LOAD_COOLDOWN_MS) {
+      return;  // Still in cooldown period
+    }
+  }
+
+  // Throttle: skip this tick if too many batches are already in-flight
+  // This prevents CPU saturation during background precaching
+  {
+    QMutexLocker locker(&m_futureMutex);
+    int runningCount = 0;
+    for (const auto &f : m_futures) {
+      if (f.isRunning()) {
+        ++runningCount;
+      }
+    }
+    constexpr int kMaxConcurrentSilentBatches = 2;
+    if (runningCount >= kMaxConcurrentSilentBatches) {
+      return;  // Wait for existing batches to complete
+    }
+  }
+
   if (!stackedWidget || stackedWidget->currentWidget() != itemsPage) {
     return;
   }
@@ -1083,6 +1107,33 @@ void ArtworkManager::processPersistentSilentLoad() {
 void ArtworkManager::processContinuousSilentLoad() {
   if (m_persistentSilentLoad) {
     return;
+  }
+
+  // Cooldown: wait a minimum time after the last batch completed
+  // This gives the CPU actual idle time between batches
+  {
+    qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+    qint64 lastCompletion = m_lastBatchCompletionTime.load();
+    if (lastCompletion > 0 &&
+        (currentTime - lastCompletion) < UIConstants::Artwork::SILENT_LOAD_COOLDOWN_MS) {
+      return;  // Still in cooldown period
+    }
+  }
+
+  // Throttle: skip this tick if too many batches are already in-flight
+  // This prevents CPU saturation during background precaching
+  {
+    QMutexLocker locker(&m_futureMutex);
+    int runningCount = 0;
+    for (const auto &f : m_futures) {
+      if (f.isRunning()) {
+        ++runningCount;
+      }
+    }
+    constexpr int kMaxConcurrentSilentBatches = 2;
+    if (runningCount >= kMaxConcurrentSilentBatches) {
+      return;  // Wait for existing batches to complete
+    }
   }
 
   {
@@ -1232,13 +1283,8 @@ void ArtworkManager::updateViewportArtwork() {
                << "extended=" << extendedItems.size();
   }
 
-  {
-    QMutexLocker locker(&m_dataMutex);
-    if (!m_silentLoadingActive) {
-      locker.unlock();
-      startSilentLoading();
-    }
-  }
+  // Background precaching disabled - only load visible viewport items
+  // to minimize CPU usage when idle
 
   maybeTriggerCacheSave(this, m_cacheManager);
 }

@@ -89,12 +89,14 @@ private:
   static QString getArtworkCachePath(const QString &artworkPath);
   
   void readTimestamps(const QJsonObject &root);
-  static void writeTimestamps(const QHash<QString, qint64> &timestampsCopy);
+  static void writeTimestamps(const QHash<QString, qint64> &dirtyTimestamps,
+                               const QString &metadataPath);
   static void flushDirtyArtwork(const QList<QPair<QString, QImage>> &dirtyList);
 
   mutable QMutex m_mutex;
   QCache<QString, QPixmap> artworkCache;
   QHash<QString, qint64> fileTimestamps;
+  QSet<QString> dirtyTimestamps;  // Paths whose timestamps changed since last save
   QSet<QString> dirtyArtwork;
   CacheMetrics m_metrics;
 

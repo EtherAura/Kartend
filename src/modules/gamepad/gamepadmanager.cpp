@@ -525,7 +525,15 @@ void GamepadManager::pollSdlState() {
   if (!m_controller) {
     attachToFirstConnectedController();
     if (!m_controller) {
+      // No controller connected - use slow polling to reduce idle CPU usage
+      if (m_pollTimer && m_pollTimer->interval() != UIConstants::Gamepad::POLL_INTERVAL_IDLE_MS) {
+        m_pollTimer->setInterval(UIConstants::Gamepad::POLL_INTERVAL_IDLE_MS);
+      }
       return;
+    }
+    // Controller just connected - switch to fast polling
+    if (m_pollTimer && m_pollTimer->interval() != UIConstants::Gamepad::POLL_INTERVAL_MS) {
+      m_pollTimer->setInterval(UIConstants::Gamepad::POLL_INTERVAL_MS);
     }
   }
 

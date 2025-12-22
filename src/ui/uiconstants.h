@@ -231,8 +231,10 @@ namespace Gamepad {
 inline constexpr double AXIS_DEADZONE_ON = 0.60;
 /// Threshold to consider an axis direction released (hysteresis)
 inline constexpr double AXIS_DEADZONE_OFF = 0.45;
-/// Poll interval for gamepad state in SDL2 fallback backend
+/// Poll interval for gamepad state in SDL2 fallback backend (when connected)
 inline constexpr int POLL_INTERVAL_MS = 16;
+/// Slow poll interval when no controller is connected (reduces idle CPU)
+inline constexpr int POLL_INTERVAL_IDLE_MS = 1000;
 } // namespace Gamepad
 
 // =============================================================================
@@ -336,8 +338,8 @@ inline constexpr int SILENT_LOAD_IDLE_TIME_MS = 500;
 inline constexpr int SILENT_LOAD_BATCH_SIZE = 30;
 /// Default batch size for silent loading
 inline constexpr int SILENT_LOAD_BATCH_SIZE_DEFAULT = 20;
-/// Interval between silent load batches
-inline constexpr int SILENT_LOAD_INTERVAL_MS = 25;
+/// Interval between silent load batches (higher = less CPU, slower precache)
+inline constexpr int SILENT_LOAD_INTERVAL_MS = 200;
 /// Delay before starting silent loading after scroll
 inline constexpr int DEFER_SILENT_LOADING_DELAY_MS = 100;
 /// Divisor for throttling silent load batch size
@@ -346,8 +348,10 @@ inline constexpr int SILENT_LOAD_THROTTLE_DIVISOR = 8;
 inline constexpr int PERSISTENT_SILENT_BATCH_IDLE = 8;
 /// Batch size for persistent silent load when active (higher = faster but more CPU)
 inline constexpr int PERSISTENT_SILENT_BATCH_ACTIVE = 4;
-/// Interval for persistent silent load operations
-inline constexpr int PERSISTENT_SILENT_LOAD_INTERVAL_MS = 50;
+/// Interval for persistent silent load operations (higher = less CPU, slower precache)
+inline constexpr int PERSISTENT_SILENT_LOAD_INTERVAL_MS = 300;
+/// Minimum cooldown after a batch completes before starting another (prevents CPU saturation)
+inline constexpr int SILENT_LOAD_COOLDOWN_MS = 500;
 /// Delay before starting silent load after items loaded
 inline constexpr int START_SILENT_LOAD_AFTER_ITEMS_MS = 150;
 /// Delay before reapplying filter after artwork load
