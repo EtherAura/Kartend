@@ -751,7 +751,9 @@ void ScrollManager::setupNormalVirtualScrolling() {
                                           UIConstants::Grid::MARGINS);
       // Calculate target logical scroll Y (to center the item)
       int logicalTargetY = itemY + (m_metrics.itemHeight / 2) - (viewportHeight / 2);
-      logicalTargetY = qBound(0, logicalTargetY, m_metrics.logicalHeight - viewportHeight);
+      // Ensure max >= min for qBound (content may be smaller than viewport)
+      int logicalMax = qMax(0, m_metrics.logicalHeight - viewportHeight);
+      logicalTargetY = qBound(0, logicalTargetY, logicalMax);
       // Convert logical scroll target to widget scroll position
       int targetY = m_metrics.toWidgetScrollY(logicalTargetY, viewportHeight);
       targetY = qBound(0, targetY, scrollMax);
