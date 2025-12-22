@@ -102,7 +102,9 @@ auto CacheManager::snapshotTimestampsForShutdown() const
 void CacheManager::saveTimestampsSnapshotToDiskForShutdown(
     const QHash<QString, qint64> &timestampsCopy) {
   // Write-only operation: safe to call from a worker thread.
-  writeTimestamps(timestampsCopy);
+  // On shutdown, write all timestamps (full save, not incremental).
+  QString metadataPath = getCacheDirectory() + "/metadata/artwork_cache.json";
+  writeTimestamps(timestampsCopy, metadataPath);
 }
 
 void CacheManager::cancelPendingIo() {
@@ -246,18 +248,12 @@ void CacheManager::scheduleSaveToDisk(int delayMs) {
 }
 
 // Writes metadata JSON (collections/global/timestamps) to disk.
-void CacheManager::writeTimestamps(const QHash<QString, qint64> &timestampsCopy) {
-  QJsonObject root;
-  QJsonObject timestamps;
-  for (auto timestampIt = timestampsCopy.begin();
-       timestampIt != timestampsCopy.end(); ++timestampIt) {
-    timestamps[timestampIt.key()] =
-        QDateTime::fromMSecsSinceEpoch(timestampIt.value())
-            .toString(Qt::ISODate);
+void CacheManager::writeTimestamps(const QHash<QString, qint64> &dirtyTimestamps,
+                                   const QString &metadataPath) {
+  if (dirtyTimestamps.isEmpty()) {
+    return;
   }
-  root["timestamps"] = timestamps;
 
-  QString metadataPath = getCacheDirectory() + "/metadata/artwork_cache.json";
   const QString parentDir = QFileInfo(metadataPath).absolutePath();
   if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
     ErrorUtils::logError(
@@ -268,6 +264,31 @@ void CacheManager::writeTimestamps(const QHash<QString, qint64> &timestampsCopy)
             .withDetails(QString("Path: %1").arg(parentDir)));
     return;
   }
+
+  // Read existing metadata file to merge with dirty timestamps
+  QJsonObject root;
+  QJsonObject timestamps;
+  
+  QFile existingFile(metadataPath);
+  if (existingFile.exists() && existingFile.open(QIODevice::ReadOnly)) {
+    const QByteArray data = existingFile.readAll();
+    existingFile.close();
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+      root = doc.object();
+      if (root.contains("timestamps") && root["timestamps"].isObject()) {
+        timestamps = root["timestamps"].toObject();
+      }
+    }
+  }
+
+  // Merge dirty timestamps into existing (only iterate over changed entries)
+  for (auto it = dirtyTimestamps.begin(); it != dirtyTimestamps.end(); ++it) {
+    timestamps[it.key()] = QDateTime::fromMSecsSinceEpoch(it.value())
+                               .toString(Qt::ISODate);
+  }
+  root["timestamps"] = timestamps;
 
   const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Compact);
   QSaveFile metadataFile(metadataPath);
@@ -352,15 +373,23 @@ void CacheManager::saveToDisk() {
   }
 
   bool shouldWriteMetadata = false;
-  QHash<QString, qint64> timestampsCopy;
+  QHash<QString, qint64> dirtyTimestampsCopy;
+  QString metadataPath;
   QList<QPair<QString, QPixmap>> dirtyPixmaps;
 
   {
     QMutexLocker locker(&m_mutex);
-    shouldWriteMetadata = m_metadataDirty;
+    shouldWriteMetadata = m_metadataDirty && !dirtyTimestamps.isEmpty();
     if (shouldWriteMetadata) {
-      timestampsCopy = fileTimestamps;
+      // Only copy timestamps for paths that actually changed
+      for (const QString &path : std::as_const(dirtyTimestamps)) {
+        if (fileTimestamps.contains(path)) {
+          dirtyTimestampsCopy[path] = fileTimestamps[path];
+        }
+      }
+      dirtyTimestamps.clear();
       m_metadataDirty = false;
+      metadataPath = getCacheDirectory() + "/metadata/artwork_cache.json";
     }
     for (const QString &path : std::as_const(dirtyArtwork)) {
       if (QPixmap *pix = artworkCache.object(path)) {
@@ -391,7 +420,8 @@ void CacheManager::saveToDisk() {
   if (!m_ioThreadPool) {
     return;
   }
-  m_ioThreadPool->start([cancelFlag, shouldWriteMetadata, timestampsCopy, dirtyImages]() {
+  m_ioThreadPool->start([cancelFlag, shouldWriteMetadata, dirtyTimestampsCopy, 
+                         metadataPath, dirtyImages]() {
     if (cancelFlag->load(std::memory_order_acquire) || QApplication::closingDown()) {
       return;
     }
@@ -400,7 +430,7 @@ void CacheManager::saveToDisk() {
     timer.start();
 
     if (shouldWriteMetadata) {
-      CacheManager::writeTimestamps(timestampsCopy);
+      CacheManager::writeTimestamps(dirtyTimestampsCopy, metadataPath);
     }
 
     for (const auto &entry : dirtyImages) {
@@ -462,9 +492,12 @@ void CacheManager::saveToDiskForShutdown() {
     // Skip dirty artwork flush during shutdown - pixmaps may be invalidated
     // and the flush is expensive. Timestamps are the critical metadata.
     dirtyArtwork.clear();
+    dirtyTimestamps.clear();
   }
 
-  writeTimestamps(timestampsCopy);
+  // On shutdown, write all timestamps (full save to preserve complete state).
+  QString metadataPath = getCacheDirectory() + "/metadata/artwork_cache.json";
+  writeTimestamps(timestampsCopy, metadataPath);
 }
 
 // Returns artwork pixmap if valid and up-to-date; otherwise attempts load from
@@ -651,6 +684,7 @@ void CacheManager::cacheArtwork(const QString &artworkPath,
   QFileInfo fileInfo(artworkPath);
   if (fileInfo.exists()) {
     fileTimestamps[artworkPath] = fileInfo.lastModified().toMSecsSinceEpoch();
+    dirtyTimestamps.insert(artworkPath);  // Track which timestamps are new/changed
   }
   dirtyArtwork.insert(artworkPath);
   m_metadataDirty = true;
