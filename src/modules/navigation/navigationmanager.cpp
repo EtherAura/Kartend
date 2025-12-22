@@ -1237,17 +1237,8 @@ auto NavigationManager::schedulePostLoadOperations() -> void {
   }
   
   // Delay silent loading start until items are visible and user can interact -
-  // prioritizes initial viewport over background prefetching
-  QTimer::singleShot(UIConstants::Artwork::START_SILENT_LOAD_AFTER_ITEMS_MS,
-                     this, [this]() {
-                       if (QApplication::closingDown() ||
-                           m_isShuttingDown()) {
-                         return;
-                       }
-                       if (m_artworkManager) {
-                         m_artworkManager->startSilentLoading();
-                       }
-                     });
+  // Background precaching disabled - only load visible viewport items
+  // to minimize CPU usage when idle
 
   if (m_databaseManager) {
     m_databaseManager->updateCachedCounts(

@@ -178,6 +178,7 @@ private:
   bool m_silentLoadingActive;
   int m_silentLoadBatchSize;
   std::atomic<qint64> m_lastUserActivity;
+  std::atomic<qint64> m_lastBatchCompletionTime;  // For silent load cooldown
   std::shared_ptr<std::atomic<bool>> m_cancellationRequested;  // For cooperative cancellation
   bool m_continuousSilentLoad;
   int m_silentLoadIndex;
