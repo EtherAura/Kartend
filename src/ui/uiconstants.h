@@ -82,6 +82,8 @@ inline constexpr int TEXT_LEFT_PADDING = 16;
 inline constexpr int TEXT_RIGHT_PADDING = 16;
 /// Vertical spacing between list rows
 inline constexpr int ROW_SPACING = 2;
+/// Header row height for column headers
+inline constexpr int HEADER_HEIGHT = 28;
 } // namespace ListView
 
 // =============================================================================

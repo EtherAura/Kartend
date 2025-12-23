@@ -33,6 +33,8 @@ class ArrowKeyScrollHelper;
 class ScrollDataManager;
 class PreSearchStateManager;
 class SelectionStateTracker;
+class ListHeaderWidget;
+enum class ListSortColumn;
 
 namespace TimerUtils {
 class DebouncedTimer;
@@ -164,9 +166,11 @@ private slots:
   void onArrowKeyViewUpdate();
   void onSliderMoved(int position);
   void reconfigureArtworkForActiveWidgets();
+  void onListColumnClicked(ListSortColumn column);
 
 private:
   void createVirtualContainer();
+  void updateListHeader();
   void positionVirtualContainer();
   void cleanupVirtualContainer();
   void calculateVirtualMetrics();
@@ -216,6 +220,9 @@ private:
 
   // Selection state tracker for selection indices, direction, and row
   std::unique_ptr<SelectionStateTracker> m_selectionState;
+
+  // List header widget for sortable column headers in list view mode
+  ListHeaderWidget *m_listHeader = nullptr;
 
 public:
   [[nodiscard]] const WidgetPoolManager *getWidgetPool() const { return m_widgetPool.get(); }

@@ -123,6 +123,7 @@ set(SOURCES
   ${SRC_DIR}/ui/widgets/metadatasidebar.cpp
   ${SRC_DIR}/ui/widgets/itemwidget.cpp
   ${SRC_DIR}/ui/widgets/loadingoverlay.cpp
+  ${SRC_DIR}/ui/widgets/listheaderwidget.cpp
   ${SRC_DIR}/utils/pathutils.cpp
   ${SRC_DIR}/utils/settingsutils.cpp
   ${SRC_DIR}/utils/extensionutils.cpp
@@ -180,6 +181,7 @@ set(HEADERS
   ${SRC_DIR}/ui/widgets/metadatasidebar.h
   ${SRC_DIR}/ui/widgets/itemwidget.h
   ${SRC_DIR}/ui/widgets/loadingoverlay.h
+  ${SRC_DIR}/ui/widgets/listheaderwidget.h
   ${SRC_DIR}/utils/collectionutils.h
   ${SRC_DIR}/utils/configvalidation.h
   ${SRC_DIR}/utils/searchutils.h

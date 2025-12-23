@@ -507,6 +507,18 @@ void MainWindow::connectSearchComponents() {
                      getInteractionManager(),
                      &InteractionManager::toggleSearchMode);
   }
+
+  // Connect view type toggle buttons
+  if (m_gridViewButton) {
+    QObject::connect(m_gridViewButton, &QPushButton::clicked, this, [this]() {
+      setViewType(ViewType::Grid);
+    });
+  }
+  if (m_listViewButton) {
+    QObject::connect(m_listViewButton, &QPushButton::clicked, this, [this]() {
+      setViewType(ViewType::List);
+    });
+  }
 }
 
 void MainWindow::connectScrollBars() const {
@@ -701,6 +713,8 @@ void MainWindow::setupUIReferences() {
   m_mainHorizontalLayout = ui->m_mainHorizontalLayout;
   searchBar = ui->searchBar;
   m_searchModeButton = ui->searchModeButton;
+  m_gridViewButton = ui->gridViewButton;
+  m_listViewButton = ui->listViewButton;
   m_MetadataSidebar = ui->metadataSidebarWidget;
   
   // Prevent scroll area from stealing keyboard focus - we handle PageUp/PageDown
@@ -819,6 +833,39 @@ void MainWindow::adjustGridWidth(int delta) {
     if (m_gridWidthPrecalcDebouncer) {
       m_gridWidthPrecalcDebouncer->trigger();
     }
+  }
+}
+
+void MainWindow::setViewType(ViewType viewType) {
+  if (currentCollectionIndex < 0 || 
+      currentCollectionIndex >= m_collections.size()) {
+    return;
+  }
+
+  CollectionConfig &config = m_collections[currentCollectionIndex];
+  if (config.viewType == viewType) {
+    return;  // No change needed
+  }
+
+  // Update the collection config
+  config.viewType = viewType;
+
+  // Persist the change immediately
+  if (getSettingsManager()) {
+    getSettingsManager()->saveCollections(m_collections);
+  }
+
+  // Update button checked states
+  if (m_gridViewButton) {
+    m_gridViewButton->setChecked(viewType == ViewType::Grid);
+  }
+  if (m_listViewButton) {
+    m_listViewButton->setChecked(viewType == ViewType::List);
+  }
+
+  // Trigger a full layout refresh - viewType affects widget dimensions and layout
+  if (getScrollManager()) {
+    getScrollManager()->handleLayoutChange();
   }
 }
 
@@ -1039,6 +1086,15 @@ void MainWindow::setupInitialTimersWithCollections() {
 void MainWindow::updateWindowTitleForCollection(int collectionIndex) {
   if (collectionIndex >= 0 && collectionIndex < m_collections.size()) {
     setWindowTitle(m_collections[collectionIndex].name);
+    
+    // Sync view type button states
+    ViewType viewType = m_collections[collectionIndex].viewType;
+    if (m_gridViewButton) {
+      m_gridViewButton->setChecked(viewType == ViewType::Grid);
+    }
+    if (m_listViewButton) {
+      m_listViewButton->setChecked(viewType == ViewType::List);
+    }
   }
 }
 

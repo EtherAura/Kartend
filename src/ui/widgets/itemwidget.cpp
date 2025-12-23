@@ -307,8 +307,13 @@ auto ItemWidget::isGlideActive() const -> bool {
          grandparentPtr->property(PropertyKeys::GlideAnimating).toBool();
 }
 
-// Computes the selection border rectangle around the artwork only
+// Computes the selection border rectangle - around artwork in grid mode, full widget in list mode
 auto ItemWidget::computeSelectionBorderRect() const -> QRect {
+  // In list mode, selection covers the entire row
+  if (m_isListMode) {
+    return rect().adjusted(1, 1, -1, -1);  // Slight inset for clean border
+  }
+  
   if (!imageLabel) {
     return {};
   }
@@ -403,8 +408,19 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
     return;
   }
 
-  // Paint selection border when selected
-  if (isSelectedState && (imageLabel) && !glideActive) {
+  // Paint alternating row background in list mode
+  if (m_isListMode && m_rowIndex >= 0) {
+    QColor rowColor = palette().color(QPalette::Base);
+    if (m_rowIndex % 2 == 1) {
+      // Odd rows get slightly different background
+      rowColor = palette().color(QPalette::AlternateBase);
+    }
+    painter.fillRect(rect(), rowColor);
+  }
+
+  // Paint selection border when selected (grid mode needs imageLabel, list mode uses full widget)
+  bool canPaintSelection = m_isListMode || (imageLabel != nullptr);
+  if (isSelectedState && canPaintSelection && !glideActive) {
     painter.setRenderHint(QPainter::Antialiasing);
 
     double alpha = qBound(UIConstants::Animation::PULSE_OPACITY_LOW,
@@ -680,6 +696,7 @@ void ItemWidget::resetForReuse() {
   m_subcollectionIndex = -1;
   m_isVirtualFolder = false;
   m_isListMode = false;  // Reset list mode for widget reuse
+  m_rowIndex = -1;  // Reset row index for widget reuse
   m_virtualFolderPath.clear();
   m_hideSubfolderTitle = false;
   filePath.clear();

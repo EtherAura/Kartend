@@ -17,6 +17,7 @@ auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config,
     metrics.itemsPerRow = 1;  // List is always single column
     metrics.horizontalSpacing = 0;
     metrics.verticalSpacing = UIConstants::ListView::ROW_SPACING;
+    metrics.headerOffset = UIConstants::ListView::HEADER_HEIGHT;
   } else {
     // Grid mode: use collection config
     metrics.itemWidth = config.itemWidth;
@@ -24,6 +25,7 @@ auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config,
     metrics.itemsPerRow = qMax(1, config.gridWidth);
     metrics.horizontalSpacing = config.horizontalSpacing;
     metrics.verticalSpacing = config.verticalSpacing;
+    metrics.headerOffset = 0;
   }
   
   metrics.margins = UIConstants::Grid::MARGINS;
@@ -34,6 +36,12 @@ auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config,
       metrics.verticalSpacing, metrics.margins, metrics.totalWidth,
       metrics.totalHeight, metrics.actualGridWidth,
       metrics.logicalHeight, metrics.scrollScale, metrics.isClipped);
+  
+  // Add header offset to total height in list mode
+  if (metrics.headerOffset > 0) {
+    metrics.totalHeight += metrics.headerOffset;
+    metrics.logicalHeight += metrics.headerOffset;
+  }
   
   if (metrics.isClipped) {
     metrics.overflowAmount = metrics.logicalHeight - metrics.totalHeight;
@@ -88,7 +96,8 @@ auto GridLayoutCalculator::getItemPosition(int visualIndex,
 
   int xPos = metrics.margins +
              (columnIndex * (metrics.itemWidth + metrics.horizontalSpacing));
-  int yPos = (rowIndex * (metrics.itemHeight + metrics.verticalSpacing));
+  // Add header offset for list view mode
+  int yPos = metrics.headerOffset + (rowIndex * (metrics.itemHeight + metrics.verticalSpacing));
 
   return {xPos, yPos};
 }
@@ -104,7 +113,9 @@ auto GridLayoutCalculator::getItemRect(int visualIndex,
 auto GridLayoutCalculator::indexAtPosition(const QPoint &pos,
                                             const GridMetrics &metrics,
                                             int totalItems) -> int {
-  if (pos.x() < metrics.margins || pos.y() < 0) {
+  // Account for header offset in list mode
+  int adjustedY = pos.y() - metrics.headerOffset;
+  if (pos.x() < metrics.margins || adjustedY < 0) {
     return -1;
   }
 
@@ -116,7 +127,7 @@ auto GridLayoutCalculator::indexAtPosition(const QPoint &pos,
   }
 
   int col = (pos.x() - metrics.margins) / columnWidth;
-  int row = pos.y() / rowHeight;
+  int row = adjustedY / rowHeight;
 
   if (col < 0 || col >= metrics.itemsPerRow) {
     return -1;
@@ -144,10 +155,10 @@ auto GridLayoutCalculator::getVisibleRowRange(int scrollY, int viewportHeight,
   // endpoint mapping so scrollbar max reaches the end of the collection.
   int logicalScrollY = metrics.toLogicalScrollY(scrollY, viewportHeight);
   
-  // Account for top margin when calculating first visible row
-  int adjustedScrollY = qMax(0, logicalScrollY - metrics.margins);
+  // Account for top margin and header offset when calculating first visible row
+  int adjustedScrollY = qMax(0, logicalScrollY - metrics.margins - metrics.headerOffset);
   int firstRow = qMax(0, adjustedScrollY / rowHeight - bufferRows);
-  int lastRow = (logicalScrollY + viewportHeight - metrics.margins) / rowHeight + bufferRows;
+  int lastRow = (logicalScrollY + viewportHeight - metrics.margins - metrics.headerOffset) / rowHeight + bufferRows;
   lastRow = qMax(firstRow, qMin(lastRow, metrics.totalRows - 1));
 
   return {firstRow, lastRow};

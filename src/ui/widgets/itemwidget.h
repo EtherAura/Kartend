@@ -50,6 +50,7 @@ public:
   void setHideSubcollectionTitles(bool hide);
   void setCornerRadius(int radius);
   void setListMode(bool listMode);
+  void setRowIndex(int index) { m_rowIndex = index; }
   [[nodiscard]] bool isListMode() const { return m_isListMode; }
   int m_itemWidth;
   int m_itemHeight;
@@ -116,6 +117,7 @@ private:
   int m_subcollectionIndex = -1;
   bool m_isVirtualFolder = false;
   bool m_isListMode = false;  // True when displaying in list view (no artwork)
+  int m_rowIndex = -1;  // Row index for alternating background colors in list mode
   QString m_virtualFolderPath;
   void updateTriangleIndicator();
   void paintTriangleIndicator();

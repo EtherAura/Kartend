@@ -11,6 +11,7 @@
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "itemwidgetfactory.h"
+#include "listheaderwidget.h"
 #include "presearchstatemanager.h"
 #include "scrolldatamanager.h"
 #include "scrolleventhandler.h"
@@ -1752,6 +1753,31 @@ void ScrollManager::createVirtualContainer() {
   
   connectScrollEvents();
   positionVirtualContainer();
+  
+  // Create or update list header for list view mode
+  updateListHeader();
+}
+
+// Creates, updates, or removes the list header widget based on view type
+void ScrollManager::updateListHeader() {
+  bool isListMode = (m_context.config.viewType == ViewType::List);
+  
+  if (isListMode && m_virtualContainer) {
+    if (!m_listHeader) {
+      m_listHeader = new ListHeaderWidget(m_virtualContainer);
+      // Connect column click signal to sort handler
+      connect(m_listHeader, &ListHeaderWidget::columnClicked,
+              this, &ScrollManager::onListColumnClicked);
+    }
+    // Position header at top of container
+    int headerWidth = m_metrics.itemWidth + (m_metrics.margins * 2);
+    m_listHeader->setGeometry(0, 0, headerWidth, UIConstants::ListView::HEADER_HEIGHT);
+    m_listHeader->show();
+    m_listHeader->raise();
+  } else if (m_listHeader) {
+    // Hide header in grid mode
+    m_listHeader->hide();
+  }
 }
 
 // Prime the container with target collection metrics before items are loaded
@@ -1821,6 +1847,9 @@ void ScrollManager::calculateVirtualMetrics() {
   if (isFiltered && m_totalItems > 0 && m_totalItems < m_metrics.itemsPerRow) {
     m_metrics = GridLayoutCalculator::adjustForFilter(m_metrics, m_totalItems);
   }
+  
+  // Update list header visibility and position based on view type
+  updateListHeader();
 }
 
 // Connects scrollbars to update logic and sets user scroll activity properties
@@ -1895,6 +1924,9 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
     QPoint position = getItemPosition(visualIndex);
     itemWidget->setGeometry(position.x(), position.y(), m_metrics.itemWidth,
                             m_metrics.itemHeight);
+    // Set row index for alternating background colors in list mode
+    int rowIndex = GridUtils::computeItemRow(visualIndex, m_metrics.itemsPerRow);
+    itemWidget->setRowIndex(rowIndex);
     itemWidget->show();
 
     // Restore selection state if this widget corresponds to the currently selected index
@@ -2078,6 +2110,32 @@ void ScrollManager::finalizeScrollChanges() {
 }
 
 void ScrollManager::onThrottledUpdate() { updateVirtualView(); }
+
+void ScrollManager::onListColumnClicked(ListSortColumn column) {
+  // TODO: Integrate with existing sort system in NavigationManager/MenuController
+  // For now, just update the sort indicator in the header
+  if (!m_listHeader) {
+    return;
+  }
+  
+  // Toggle direction if clicking the same column
+  static ListSortColumn lastColumn = ListSortColumn::Name;
+  static bool ascending = true;
+  
+  if (column == lastColumn) {
+    ascending = !ascending;
+  } else {
+    lastColumn = column;
+    ascending = true;
+  }
+  
+  m_listHeader->setSortColumn(column, ascending);
+  
+  // Emit signal for external sort handling (to be connected to NavigationManager)
+  // For now, this is a placeholder - the actual sort should trigger a database re-query
+  qDebug() << "List column clicked:" << static_cast<int>(column) 
+           << "ascending:" << ascending;
+}
 
 void ScrollManager::onSliderMoved(int position) {
   // Prefetch data for the scroll target position during scrollbar drag.

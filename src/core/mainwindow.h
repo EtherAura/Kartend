@@ -60,6 +60,8 @@ public:
   QHBoxLayout *m_mainHorizontalLayout;
   QLineEdit *searchBar;
   QPushButton *m_searchModeButton;
+  QPushButton *m_gridViewButton;
+  QPushButton *m_listViewButton;
   QLabel *loadingLabel;
   LoadingOverlay *m_loadingOverlay = nullptr;
 
@@ -125,6 +127,7 @@ private:
   void setupUIReferences();
   void createMenuBar();
   void adjustGridWidth(int delta);
+  void setViewType(ViewType viewType);
   void setupSidebar();
   void setupArtworkManager();
   void setupLastSelectedIndices();

@@ -30,6 +30,7 @@ struct GridMetrics {
   double scrollScale = 1.0;   // Scale factor: logicalHeight / totalHeight
   bool isClipped = false;     // True if logicalHeight > QWIDGETSIZE_MAX
   int overflowAmount = 0;     // logicalHeight - totalHeight when clipped
+  int headerOffset = 0;       // Offset for list header in list view mode
   
   [[nodiscard]] bool isValid() const {
     return itemWidth > 0 && itemHeight > 0 && itemsPerRow > 0;
