@@ -66,6 +66,25 @@ inline constexpr int MAX_CORNER_RADIUS = 100;
 } // namespace Item
 
 // =============================================================================
+// List View
+// Constants for list view mode (text-only, no artwork per item).
+// =============================================================================
+namespace ListView {
+/// Default row height in list view mode (text only, no artwork)
+inline constexpr int DEFAULT_ROW_HEIGHT = 32;
+/// Minimum row height in list view
+inline constexpr int MIN_ROW_HEIGHT = 20;
+/// Maximum row height in list view
+inline constexpr int MAX_ROW_HEIGHT = 100;
+/// Left padding for text in list view
+inline constexpr int TEXT_LEFT_PADDING = 16;
+/// Right padding for text in list view
+inline constexpr int TEXT_RIGHT_PADDING = 16;
+/// Vertical spacing between list rows
+inline constexpr int ROW_SPACING = 2;
+} // namespace ListView
+
+// =============================================================================
 // Timing - General Delays
 // All timing values are in milliseconds unless otherwise noted.
 // =============================================================================

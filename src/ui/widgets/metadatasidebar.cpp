@@ -37,10 +37,11 @@ MetadataSidebar::MetadataSidebar(QWidget *parent)
 
 MetadataSidebar::~MetadataSidebar() { delete ui; }
 
-// Sets metadata fields and loads centered artwork from a sibling "artwork"
-// directory if present
+// Sets metadata fields and loads centered artwork from the configured
+// artwork directory or a sibling "artwork" directory if present
 void MetadataSidebar::setMetadata(const QString &filePath,
-                                  const QString &itemName) {
+                                  const QString &itemName,
+                                  const QString &artworkDirectory) {
   if (filePath.isEmpty()) {
     clearMetadata();
     return;
@@ -50,50 +51,22 @@ void MetadataSidebar::setMetadata(const QString &filePath,
   updateFileInfo(filePath);
 
   QFileInfo fileInfo(filePath);
+  const QString baseName = fileInfo.completeBaseName();
 
+  // Default placeholder
   QPixmap defaultPixmap(UIConstants::Metadata::ARTWORK_SIZE,
                         UIConstants::Metadata::ARTWORK_SIZE);
   defaultPixmap.fill(palette().color(QPalette::Mid));
   ui->artworkDisplay->setPixmap(defaultPixmap);
 
-  const QString baseName = fileInfo.completeBaseName();
-  const QDir fileDir = fileInfo.dir();
-  const QDir artworkDir(fileDir.absolutePath() + "/artwork");
-
-  if (artworkDir.exists()) {
-    const QStringList &bases = ExtensionUtils::imageBaseExtensions();
-    for (const QString &ext : bases) {
-      const QString &lower = ext;
-      const QString upper = ext.toUpper();
-
-      QString artworkPath = artworkDir.absoluteFilePath(baseName + "." + lower);
-      if (!QFile::exists(artworkPath)) {
-        artworkPath = artworkDir.absoluteFilePath(baseName + "." + upper);
-      }
-      if (QFile::exists(artworkPath)) {
-        QPixmap artwork(artworkPath);
-        if (!artwork.isNull()) {
-          QPixmap scaledArtwork =
-              artwork.scaled(UIConstants::Metadata::ARTWORK_SIZE,
-                             UIConstants::Metadata::ARTWORK_SIZE,
-                             Qt::KeepAspectRatio, Qt::SmoothTransformation);
-          QPixmap centeredArtwork(UIConstants::Metadata::ARTWORK_SIZE,
-                                  UIConstants::Metadata::ARTWORK_SIZE);
-          centeredArtwork.fill(palette().color(QPalette::Base));
-
-          QPainter painter(&centeredArtwork);
-          const int centerX =
-              (UIConstants::Metadata::ARTWORK_SIZE - scaledArtwork.width()) / 2;
-          const int centerY =
-              (UIConstants::Metadata::ARTWORK_SIZE - scaledArtwork.height()) / 2;
-          painter.drawPixmap(centerX, centerY, scaledArtwork);
-          painter.end();
-
-          ui->artworkDisplay->setPixmap(centeredArtwork);
-          break;
-        }
-      }
-    }
+  // Try collection's artwork directory first if provided
+  if (!artworkDirectory.isEmpty()) {
+    loadArtwork(baseName, artworkDirectory);
+  } else {
+    // Fallback to sibling "artwork" directory
+    const QDir fileDir = fileInfo.dir();
+    const QString siblingArtworkDir = fileDir.absolutePath() + "/artwork";
+    loadArtwork(baseName, siblingArtworkDir);
   }
 
   ui->titleLabel->show();
@@ -173,6 +146,49 @@ auto MetadataSidebar::formatFileSize(qint64 bytes) -> QString {
            " KB";
   }
   return QString::number(bytes) + " bytes";
+}
+
+// Load artwork from specified directory
+void MetadataSidebar::loadArtwork(const QString &baseName,
+                                  const QString &artworkDirectory) {
+  QDir artworkDir(artworkDirectory);
+  if (!artworkDir.exists()) {
+    return;
+  }
+
+  const QStringList &bases = ExtensionUtils::imageBaseExtensions();
+  for (const QString &ext : bases) {
+    const QString &lower = ext;
+    const QString upper = ext.toUpper();
+
+    QString artworkPath = artworkDir.absoluteFilePath(baseName + "." + lower);
+    if (!QFile::exists(artworkPath)) {
+      artworkPath = artworkDir.absoluteFilePath(baseName + "." + upper);
+    }
+    if (QFile::exists(artworkPath)) {
+      QPixmap artwork(artworkPath);
+      if (!artwork.isNull()) {
+        QPixmap scaledArtwork =
+            artwork.scaled(UIConstants::Metadata::ARTWORK_SIZE,
+                           UIConstants::Metadata::ARTWORK_SIZE,
+                           Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        QPixmap centeredArtwork(UIConstants::Metadata::ARTWORK_SIZE,
+                                UIConstants::Metadata::ARTWORK_SIZE);
+        centeredArtwork.fill(palette().color(QPalette::Base));
+
+        QPainter painter(&centeredArtwork);
+        const int centerX =
+            (UIConstants::Metadata::ARTWORK_SIZE - scaledArtwork.width()) / 2;
+        const int centerY =
+            (UIConstants::Metadata::ARTWORK_SIZE - scaledArtwork.height()) / 2;
+        painter.drawPixmap(centerX, centerY, scaledArtwork);
+        painter.end();
+
+        ui->artworkDisplay->setPixmap(centeredArtwork);
+        return;  // Found and loaded artwork
+      }
+    }
+  }
 }
 
 // Apply horzontal scrolling policy

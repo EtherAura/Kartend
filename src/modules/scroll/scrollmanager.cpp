@@ -1806,6 +1806,16 @@ void ScrollManager::calculateVirtualMetrics() {
   // Use GridLayoutCalculator for metrics calculation
   m_metrics = GridLayoutCalculator::calculateMetrics(m_context.config, m_totalItems);
 
+  // List mode: set item width to fill available viewport (minus scrollbar and margins)
+  if (m_context.config.viewType == ViewType::List && m_mediaScrollArea) {
+    int viewportWidth = m_mediaScrollArea->viewport()->width();
+    int scrollbarWidth = getScrollbarWidth();
+    // Full width minus margins and scrollbar
+    m_metrics.itemWidth = viewportWidth - (m_metrics.margins * 2) - scrollbarWidth;
+    m_metrics.totalWidth = viewportWidth - scrollbarWidth;
+    m_metrics.actualGridWidth = m_metrics.itemWidth + (m_metrics.margins * 2);
+  }
+
   // Adjust for filtered view if needed
   bool isFiltered = m_filterManager && m_filterManager->isFiltered();
   if (isFiltered && m_totalItems > 0 && m_totalItems < m_metrics.itemsPerRow) {

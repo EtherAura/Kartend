@@ -54,10 +54,16 @@ void ItemWidgetFactory::configureBaseWidget(ItemWidget *widget) {
   widget->setHideSubcollectionTitles(m_context.config.hideSubcollectionTitles);
   widget->setFontSize(m_context.config.fontSize);
   widget->setCornerRadius(m_context.config.cornerRadius);
+  // Set list mode based on collection viewType - must be set before dimensions
+  bool isListMode = (m_context.config.viewType == ViewType::List);
+  widget->setListMode(isListMode);
   widget->setItemDimensions(m_itemWidth, m_itemHeight);
   // Force artwork refresh after all configuration is set to ensure
   // corner radius and other settings are applied to the placeholder
-  widget->onArtworkChanged();
+  // Skip for list mode since artwork is hidden
+  if (!isListMode) {
+    widget->onArtworkChanged();
+  }
 }
 
 void ItemWidgetFactory::releaseWidget(ItemWidget *widget, int visibleRows,
@@ -186,7 +192,10 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex,
   widget->setFilePath(fullPath);
   widget->setItemName(displayName);
 
-  configureArtworkForWidget(widget, fullPath);
+  // Skip artwork loading in list mode - artwork is hidden
+  if (m_context.config.viewType != ViewType::List) {
+    configureArtworkForWidget(widget, fullPath);
+  }
 
   return widget;
 }

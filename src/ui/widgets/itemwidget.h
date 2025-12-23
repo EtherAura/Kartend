@@ -49,6 +49,8 @@ public:
   void setHideTitles(bool hide);
   void setHideSubcollectionTitles(bool hide);
   void setCornerRadius(int radius);
+  void setListMode(bool listMode);
+  [[nodiscard]] bool isListMode() const { return m_isListMode; }
   int m_itemWidth;
   int m_itemHeight;
   int m_artworkSize = 0; // Computed artwork size for triangle indicator positioning
@@ -113,6 +115,7 @@ private:
   bool m_isSubcollection = false;
   int m_subcollectionIndex = -1;
   bool m_isVirtualFolder = false;
+  bool m_isListMode = false;  // True when displaying in list view (no artwork)
   QString m_virtualFolderPath;
   void updateTriangleIndicator();
   void paintTriangleIndicator();

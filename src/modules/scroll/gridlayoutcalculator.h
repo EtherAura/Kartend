@@ -93,6 +93,9 @@ public:
    * @return Height of one row including vertical spacing.
    */
   [[nodiscard]] static int getRowHeight(const CollectionConfig &config) {
+    if (config.viewType == ViewType::List) {
+      return UIConstants::ListView::DEFAULT_ROW_HEIGHT + UIConstants::ListView::ROW_SPACING;
+    }
     return config.itemHeight + config.verticalSpacing;
   }
 

@@ -367,13 +367,37 @@
            <item>
             <layout class="QFormLayout" name="appearanceFormLayout">
              <item row="0" column="0">
+              <widget class="QLabel" name="label_viewType">
+               <property name="text">
+                <string>View Type:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QComboBox" name="viewTypeComboBox">
+               <property name="toolTip">
+                <string>Display items as a grid with artwork or as a simple list</string>
+               </property>
+               <item>
+                <property name="text">
+                 <string>Grid</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>List</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+             <item row="1" column="0">
               <widget class="QLabel" name="label_gridLayout">
                <property name="text">
                 <string>Grid Layout:</string>
                </property>
               </widget>
              </item>
-             <item row="0" column="1">
+             <item row="1" column="1">
               <layout class="QHBoxLayout" name="gridLayoutLayout">
                <item>
                 <widget class="QLabel" name="label_gridWidth_mini">
@@ -416,14 +440,14 @@
                </item>
               </layout>
              </item>
-             <item row="1" column="0">
+             <item row="2" column="0">
               <widget class="QLabel" name="label_itemLayout">
                <property name="text">
                 <string>Item Layout:</string>
                </property>
               </widget>
              </item>
-             <item row="1" column="1">
+             <item row="2" column="1">
               <layout class="QHBoxLayout" name="itemLayoutLayout">
                <item>
                 <widget class="QLabel" name="label_itemWidth_mini">
@@ -466,14 +490,14 @@
                </item>
               </layout>
              </item>
-             <item row="2" column="0">
+             <item row="3" column="0">
               <widget class="QLabel" name="label_titles">
                <property name="text">
                 <string>Titles:</string>
                </property>
               </widget>
              </item>
-             <item row="2" column="1">
+             <item row="3" column="1">
               <layout class="QHBoxLayout" name="titlesLayout">
                <item>
                 <widget class="QLabel" name="label_fontSize_mini">
@@ -502,14 +526,14 @@
                </item>
               </layout>
              </item>
-             <item row="3" column="0">
+             <item row="4" column="0">
               <widget class="QLabel" name="label_horizontalAlignment">
                <property name="text">
                 <string>Horizontal Alignment:</string>
                </property>
               </widget>
              </item>
-             <item row="3" column="1">
+             <item row="4" column="1">
               <widget class="QComboBox" name="horizontalAlignmentComboBox">
                <property name="toolTip">
                 <string>Horizontal alignment of collection grid (Left, Center, Right)</string>
@@ -531,14 +555,14 @@
                </item>
               </widget>
              </item>
-             <item row="4" column="0">
+             <item row="5" column="0">
               <widget class="QLabel" name="label_textAppearance">
                <property name="text">
                 <string>Text Appearance:</string>
                </property>
               </widget>
              </item>
-             <item row="4" column="1">
+             <item row="5" column="1">
               <layout class="QHBoxLayout" name="textAppearanceLayout">
                <item>
                 <widget class="QLabel" name="label_saturation_mini">
@@ -568,14 +592,14 @@
                </item>
               </layout>
              </item>
-             <item row="5" column="0">
+             <item row="6" column="0">
               <widget class="QLabel" name="label_baseColor">
                <property name="text">
                 <string>Base Color:</string>
                </property>
               </widget>
              </item>
-             <item row="5" column="1">
+             <item row="6" column="1">
               <layout class="QHBoxLayout" name="baseColorLayout">
                <item>
                 <widget class="QLineEdit" name="baseColorEdit">
@@ -591,14 +615,14 @@
                </item>
               </layout>
              </item>
-             <item row="6" column="0">
+             <item row="7" column="0">
               <widget class="QLabel" name="label_customFont">
                <property name="text">
                 <string>Custom Font:</string>
                </property>
               </widget>
              </item>
-             <item row="6" column="1">
+             <item row="7" column="1">
               <layout class="QHBoxLayout" name="customFontLayout">
                <item>
                 <widget class="QLineEdit" name="customFontEdit">
@@ -614,14 +638,14 @@
                </item>
               </layout>
              </item>
-             <item row="7" column="0">
+             <item row="8" column="0">
               <widget class="QLabel" name="label_background">
                <property name="text">
                 <string>Background:</string>
                </property>
               </widget>
              </item>
-             <item row="7" column="1">
+             <item row="8" column="1">
               <layout class="QHBoxLayout" name="backgroundLayout">
                <item>
                 <widget class="QRadioButton" name="backgroundColorRadio">
@@ -648,14 +672,14 @@
                </item>
               </layout>
              </item>
-             <item row="8" column="0">
+             <item row="9" column="0">
               <widget class="QLabel" name="label_primaryColor">
                <property name="text">
                 <string>Primary Color:</string>
                </property>
               </widget>
              </item>
-             <item row="8" column="1">
+             <item row="9" column="1">
               <layout class="QHBoxLayout" name="primaryColorLayout">
                <item>
                 <widget class="QLineEdit" name="primaryColorEdit">
@@ -671,14 +695,14 @@
                </item>
               </layout>
              </item>
-             <item row="9" column="0">
+             <item row="10" column="0">
               <widget class="QLabel" name="label_tileColor">
                <property name="text">
                 <string>Tile Color:</string>
                </property>
               </widget>
              </item>
-             <item row="9" column="1">
+             <item row="10" column="1">
               <layout class="QHBoxLayout" name="tileColorLayout">
                <item>
                 <widget class="QLineEdit" name="tileColorEdit">
@@ -694,14 +718,14 @@
                </item>
               </layout>
              </item>
-             <item row="10" column="0">
+             <item row="11" column="0">
               <widget class="QLabel" name="label_selectionColor">
                <property name="text">
                 <string>Selection Color:</string>
                </property>
               </widget>
              </item>
-             <item row="10" column="1">
+             <item row="11" column="1">
               <layout class="QHBoxLayout" name="selectionColorLayout">
                <item>
                 <widget class="QLineEdit" name="selectionColorEdit">

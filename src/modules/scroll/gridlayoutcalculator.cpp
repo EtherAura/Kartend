@@ -7,11 +7,25 @@ auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config,
                                              int totalItems) -> GridMetrics {
   GridMetrics metrics;
   
-  metrics.itemWidth = config.itemWidth;
-  metrics.itemHeight = config.itemHeight;
-  metrics.itemsPerRow = qMax(1, config.gridWidth);
-  metrics.horizontalSpacing = config.horizontalSpacing;
-  metrics.verticalSpacing = config.verticalSpacing;
+  // List mode uses different dimensions: full width, single row height
+  bool isListMode = (config.viewType == ViewType::List);
+  
+  if (isListMode) {
+    // List mode: full width items, fixed row height, 1 item per row
+    metrics.itemWidth = config.itemWidth;  // Will be set to viewport width by caller
+    metrics.itemHeight = UIConstants::ListView::DEFAULT_ROW_HEIGHT;
+    metrics.itemsPerRow = 1;  // List is always single column
+    metrics.horizontalSpacing = 0;
+    metrics.verticalSpacing = UIConstants::ListView::ROW_SPACING;
+  } else {
+    // Grid mode: use collection config
+    metrics.itemWidth = config.itemWidth;
+    metrics.itemHeight = config.itemHeight;
+    metrics.itemsPerRow = qMax(1, config.gridWidth);
+    metrics.horizontalSpacing = config.horizontalSpacing;
+    metrics.verticalSpacing = config.verticalSpacing;
+  }
+  
   metrics.margins = UIConstants::Grid::MARGINS;
 
   GridUtils::calculateGridMetrics(

@@ -534,6 +534,11 @@ void SettingsDialog::setupFormFieldConnections() {
             QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::checkForChanges);
   }
+  if (ui->viewTypeComboBox) {
+    connect(ui->viewTypeComboBox,
+            QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
   if (ui->parentCollectionComboBox) {
     connect(ui->parentCollectionComboBox,
             QOverload<int>::of(&QComboBox::currentIndexChanged), this,
@@ -1049,6 +1054,7 @@ void SettingsDialog::addCollection() {
     newCollection.hideHorizontalScrollbar = parent.hideHorizontalScrollbar;
     newCollection.hideVerticalScrollbar = parent.hideVerticalScrollbar;
     newCollection.sidebarMode = parent.sidebarMode;
+    newCollection.viewType = parent.viewType;
     newCollection.showAllSubcollectionItems = parent.showAllSubcollectionItems;
     newCollection.horizontalAlignment = parent.horizontalAlignment;
     newCollection.hideTitles = parent.hideTitles;
@@ -1321,6 +1327,10 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
       (ui->sidebarModeComboBox)
           ? static_cast<SidebarMode>(ui->sidebarModeComboBox->currentIndex())
           : config.sidebarMode;
+  config.viewType =
+      (ui->viewTypeComboBox)
+          ? static_cast<ViewType>(ui->viewTypeComboBox->currentIndex())
+          : config.viewType;
   // Rebase horizontal spacing: Internal = UI - 70
   config.horizontalSpacing = (ui->horizontalSpacingSpinBox)
                                  ? ui->horizontalSpacingSpinBox->value() - 70
@@ -1434,6 +1444,9 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ((ui->sidebarModeComboBox) &&
        ui->sidebarModeComboBox->currentIndex() !=
            static_cast<int>(originalConfig.sidebarMode)) ||
+      ((ui->viewTypeComboBox) &&
+       ui->viewTypeComboBox->currentIndex() !=
+           static_cast<int>(originalConfig.viewType)) ||
       ((ui->horizontalSpacingSpinBox) &&
        (ui->horizontalSpacingSpinBox->value() - 70) !=
            originalConfig.horizontalSpacing) ||
@@ -2445,6 +2458,10 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->sidebarModeComboBox->setCurrentIndex(
         static_cast<int>(config.sidebarMode));
   }
+  if (ui->viewTypeComboBox) {
+    ui->viewTypeComboBox->setCurrentIndex(
+        static_cast<int>(config.viewType));
+  }
   if (ui->horizontalSpacingSpinBox) {
     // Rebase horizontal spacing: UI = Internal + 70
     ui->horizontalSpacingSpinBox->setValue(config.horizontalSpacing + 70);
@@ -2552,6 +2569,7 @@ void SettingsDialog::clearCollectionUI() {
   
   if (ui->horizontalAlignmentComboBox) ui->horizontalAlignmentComboBox->setCurrentIndex(0);
   if (ui->sidebarModeComboBox) ui->sidebarModeComboBox->setCurrentIndex(0);
+  if (ui->viewTypeComboBox) ui->viewTypeComboBox->setCurrentIndex(0);
   if (ui->parentCollectionComboBox) ui->parentCollectionComboBox->clear();
   
   if (ui->backgroundColorRadio) ui->backgroundColorRadio->setChecked(true);

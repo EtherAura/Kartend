@@ -474,6 +474,37 @@ void ItemWidget::applyDimensions() {
   QPixmap currentPixmap = storedPixmap;
   setFixedSize(m_itemWidth, m_itemHeight);
 
+  // List mode: simple horizontal text layout
+  if (m_isListMode) {
+    m_artworkSize = 0;  // No artwork in list mode
+    
+    if (imageLabel) {
+      imageLabel->setVisible(false);
+      imageLabel->setFixedSize(0, 0);
+    }
+    
+    if (nameLabel) {
+      nameLabel->setVisible(true);
+      nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+      // Full width minus padding for list mode text
+      int textWidth = m_itemWidth - UIConstants::ListView::TEXT_LEFT_PADDING -
+                      UIConstants::ListView::TEXT_RIGHT_PADDING;
+      nameLabel->setMaximumWidth(textWidth);
+      nameLabel->setFixedHeight(m_itemHeight);
+      nameLabel->setText(currentName);
+      
+      QFont font = this->font();
+      font.setPointSize(m_fontSize);
+      nameLabel->setFont(font);
+    }
+    
+    if (!currentPath.isEmpty()) {
+      setFilePath(currentPath);
+    }
+    return;
+  }
+
+  // Grid mode: standard artwork + title layout
   // Use the current font size for layout calculations to ensure titles don't overlap artwork
   // But ensure we don't reserve less space than the default 12pt to maintain consistent artwork sizing/spacing
   QFont referenceFont = this->font();
@@ -502,10 +533,12 @@ void ItemWidget::applyDimensions() {
   }
   
   if (imageLabel) {
+    imageLabel->setVisible(true);  // Ensure visible in grid mode
     imageLabel->setFixedSize(artworkSize, artworkSize);
   }
   if (nameLabel) {
     nameLabel->setVisible(true);
+    nameLabel->setAlignment(Qt::AlignHCenter | Qt::AlignTop);  // Reset alignment for grid mode
     nameLabel->setMaximumWidth(artworkSize);
     nameLabel->setFixedHeight(reservedTextHeight);
     
@@ -646,6 +679,7 @@ void ItemWidget::resetForReuse() {
   m_isSubcollection = false;
   m_subcollectionIndex = -1;
   m_isVirtualFolder = false;
+  m_isListMode = false;  // Reset list mode for widget reuse
   m_virtualFolderPath.clear();
   m_hideSubfolderTitle = false;
   filePath.clear();
@@ -772,6 +806,28 @@ void ItemWidget::setCornerRadius(int radius) {
   }
   m_cornerRadius = radius;
   onArtworkChanged();
+}
+
+// Set list mode - hides artwork and shows text-only row layout
+void ItemWidget::setListMode(bool listMode) {
+  if (m_isListMode == listMode) {
+    return;
+  }
+  m_isListMode = listMode;
+  
+  if (imageLabel) {
+    imageLabel->setVisible(!listMode);
+  }
+  
+  if (nameLabel && listMode) {
+    // In list mode, left-align and expand text
+    nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+  } else if (nameLabel) {
+    // Grid mode: center text below artwork
+    nameLabel->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+  }
+  
+  applyDimensions();
 }
 
 // Update triangle indicator

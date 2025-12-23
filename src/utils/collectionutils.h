@@ -20,6 +20,9 @@ enum class SidebarMode { Overlay = 0, Expand = 1 };
 
 enum class BackgroundType { Color = 0, Image = 1 };
 
+/// View type for displaying collection items
+enum class ViewType { Grid = 0, List = 1 };
+
 namespace CollectionUtils {
 
 [[nodiscard]] inline QString alignmentToString(HorizontalAlignment alignment) {
@@ -44,6 +47,23 @@ namespace CollectionUtils {
   return HorizontalAlignment::Center;
 }
 
+[[nodiscard]] inline QString viewTypeToString(ViewType viewType) {
+  switch (viewType) {
+  case ViewType::List:
+    return "list";
+  case ViewType::Grid:
+  default:
+    return "grid";
+  }
+}
+
+[[nodiscard]] inline ViewType stringToViewType(const QString &str) {
+  QString lower = str.toLower();
+  if (lower == "list")
+    return ViewType::List;
+  return ViewType::Grid;
+}
+
 } // namespace CollectionUtils
 
 struct CollectionConfig {
@@ -65,6 +85,7 @@ struct CollectionConfig {
   bool hideSubcollectionTitles = false;
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Center;
   SidebarMode sidebarMode = SidebarMode::Overlay;
+  ViewType viewType = ViewType::Grid;  // Grid (default) or List view
   int horizontalSpacing = UIConstants::Grid::SPACING;
   int verticalSpacing = 20;
   bool hideHorizontalScrollbar = false;
@@ -118,6 +139,7 @@ struct CollectionConfig {
            hideSubcollectionTitles == other.hideSubcollectionTitles &&
            horizontalAlignment == other.horizontalAlignment &&
            sidebarMode == other.sidebarMode &&
+           viewType == other.viewType &&
            horizontalSpacing == other.horizontalSpacing &&
            verticalSpacing == other.verticalSpacing &&
            hideHorizontalScrollbar == other.hideHorizontalScrollbar &&

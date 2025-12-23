@@ -189,6 +189,7 @@ void SettingsManager::loadCollections(
     config.showAllSubcollectionItems = settings.value("showAllSubcollectionItems", false).toBool();
     config.horizontalAlignment = CollectionUtils::stringToAlignment(settings.value("horizontalAlignment", "center").toString());
     config.sidebarMode = (settings.value("sidebarMode", "overlay").toString() == "fixed") ? SidebarMode::Expand : SidebarMode::Overlay;
+    config.viewType = CollectionUtils::stringToViewType(settings.value("viewType", "grid").toString());
     config.hideHorizontalScrollbar = settings.value("hideHorizontalScrollbar", false).toBool();
     config.hideVerticalScrollbar = settings.value("hideVerticalScrollbar", false).toBool();
     config.hideTitles = settings.value("hideTitles", false).toBool();
@@ -321,6 +322,7 @@ void SettingsManager::saveCollections(
     settings.setValue("showAllSubcollectionItems", c.showAllSubcollectionItems);
     settings.setValue("horizontalAlignment", CollectionUtils::alignmentToString(c.horizontalAlignment));
     settings.setValue("sidebarMode", (c.sidebarMode == SidebarMode::Expand) ? "fixed" : "overlay");
+    settings.setValue("viewType", CollectionUtils::viewTypeToString(c.viewType));
     settings.setValue("hideHorizontalScrollbar", c.hideHorizontalScrollbar);
     settings.setValue("hideVerticalScrollbar", c.hideVerticalScrollbar);
     settings.setValue("hideTitles", c.hideTitles);
@@ -569,6 +571,11 @@ void updateViewingFlags(const CollectionConfig &configA,
   if (configA.sidebarMode != configB.sidebarMode) {
     hasChanges = true;
     sidebarModeChanged = true;
+  }
+  if (configA.viewType != configB.viewType) {
+    hasChanges = true;
+    // View type changes require full layout update like spacing changes
+    spacingChanged = true;
   }
   if (configA.name != configB.name) {
     titleChanged = true;
