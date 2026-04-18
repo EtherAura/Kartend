@@ -1,0 +1,5 @@
+# LeakSanitizer suppressions for known/intentional leaks
+#
+# CacheManager intentionally leaks its QThreadPool to avoid blocking
+# in the destructor during application shutdown.
+leak:QThreadPool::QThreadPool

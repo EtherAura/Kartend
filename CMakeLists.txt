@@ -305,7 +305,12 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 else()
   set(RELEASE_COMPILE_OPTS -O3 -ffast-math -march=native -flto=auto -fomit-frame-pointer -funroll-loops -fno-signed-zeros -fno-trapping-math -fno-math-errno -fno-semantic-interposition -ftree-vectorize -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -DQT_NO_DEBUG -fmerge-all-constants -fdelete-null-pointer-checks)
 endif()
-set(RELEASE_LINK_OPTS -fuse-ld=lld -flto=auto -Wl,-O3 -Wl,--gc-sections -Wl,--as-needed -Wl,-z,now -Wl,-z,relro -pie)
+set(RELEASE_LINK_OPTS -flto=auto -Wl,-O3 -Wl,--gc-sections -Wl,--as-needed -Wl,-z,now -Wl,-z,relro -pie)
+# lld is only compatible with Clang LTO objects; GCC LTO (GIMPLE) requires
+# the GNU linker or gold.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  list(PREPEND RELEASE_LINK_OPTS -fuse-ld=lld)
+endif()
 target_compile_options(kartend PRIVATE $<$<CONFIG:Release>:${RELEASE_COMPILE_OPTS}>)
 target_link_options(kartend PRIVATE $<$<CONFIG:Release>:${RELEASE_LINK_OPTS}>)
 
