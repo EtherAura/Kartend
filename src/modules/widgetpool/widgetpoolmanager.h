@@ -5,7 +5,7 @@
 #include <QObject>
 #include <QPointer>
 
-class ItemWidget;
+#include "itemwidget.h"
 class QWidget;
 class QTimer;
 

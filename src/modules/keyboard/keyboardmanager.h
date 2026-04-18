@@ -6,10 +6,10 @@
 #include <QKeyEvent>
 #include <QObject>
 #include <QPointer>
+#include <QScrollArea>
 #include <QTimer>
 
 class QWidget;
-class QScrollArea;
 class QLineEdit;
 class QStackedWidget;
 class ScrollManager;

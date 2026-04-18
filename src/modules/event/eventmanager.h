@@ -5,12 +5,12 @@
 #include "setuputils.h"
 #include <QObject>
 #include <QPointer>
+#include <QScrollArea>
 
 QT_BEGIN_NAMESPACE
 class QEvent;
 class QLineEdit;
 class QMouseEvent;
-class QScrollArea;
 class QStackedWidget;
 class QWidget;
 QT_END_NAMESPACE

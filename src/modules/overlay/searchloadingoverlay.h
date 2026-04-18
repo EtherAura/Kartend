@@ -2,11 +2,10 @@
 #define SEARCHLOADINGOVERLAY_H
 
 #include <QObject>
+#include <QLabel>
 #include <QPointer>
-
-class QWidget;
-class QLabel;
-class QPropertyAnimation;
+#include <QPropertyAnimation>
+#include <QWidget>
 class QTimer;
 
 /**

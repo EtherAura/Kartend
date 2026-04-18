@@ -7,13 +7,13 @@
 #include "setuputils.h"
 #include <QObject>
 #include <QPointer>
+#include <QScrollArea>
 #include <memory>
 
 QT_BEGIN_NAMESPACE
 class QKeyEvent;
 class QLineEdit;
 class QPushButton;
-class QScrollArea;
 class QStackedWidget;
 class QTimer;
 QT_END_NAMESPACE

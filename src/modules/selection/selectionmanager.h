@@ -5,6 +5,7 @@
 #include "setuputils.h"
 #include <QObject>
 #include <QPointer>
+#include <QScrollArea>
 #include <QString>
 
 class ItemWidget;

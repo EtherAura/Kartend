@@ -5,9 +5,9 @@
 #include "setuputils.h"
 #include <QObject>
 #include <QPointer>
+#include <QScrollArea>
 
 QT_BEGIN_NAMESPACE
-class QScrollArea;
 class QScrollBar;
 QT_END_NAMESPACE
 

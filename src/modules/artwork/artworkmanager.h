@@ -15,12 +15,12 @@
 #include <memory>
 
 #include "adaptivebatcher.h"
+#include "itemwidget.h"
 #include "setuputils.h"
 
 class QScrollArea;
 class QStackedWidget;
 class QWidget;
-class ItemWidget;
 class QTimer;
 class CacheManager;
 class InteractionStateHolder;

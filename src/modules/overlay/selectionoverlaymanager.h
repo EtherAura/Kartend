@@ -3,10 +3,9 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QPropertyAnimation>
 #include <QRect>
-
-class QWidget;
-class QPropertyAnimation;
+#include <QWidget>
 class ItemWidget;
 class InteractionStateHolder;
 

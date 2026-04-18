@@ -4,8 +4,7 @@
 #include <QHash>
 #include <QObject>
 #include <QPointer>
-
-class QScrollArea;
+#include <QScrollArea>
 class QScrollBar;
 class QWidget;
 class ItemWidget;

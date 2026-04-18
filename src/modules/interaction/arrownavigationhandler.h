@@ -4,10 +4,10 @@
 #include "setuputils.h"
 #include <QObject>
 #include <QPointer>
+#include <QScrollArea>
 #include <functional>
 
 QT_BEGIN_NAMESPACE
-class QScrollArea;
 class QStackedWidget;
 class QWidget;
 QT_END_NAMESPACE
