@@ -1,12 +1,6 @@
 #ifndef ARTWORKMANAGER_H
 #define ARTWORKMANAGER_H
 
-#include <qcontainerfwd.h>
-#include <qlist.h>
-#include <qstring.h>
-#include <qtmetamacros.h>
-#include <qtypes.h>
-
 #include <QFuture>
 #include <QHash>
 #include <QImage>

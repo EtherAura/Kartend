@@ -2,7 +2,6 @@
 #define STRINGUTILS_H
 
 #include <QString>
-#include <qtypes.h>
 
 namespace StringUtils {
 
