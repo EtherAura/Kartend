@@ -7,3 +7,19 @@ build/
 *.dll
 .DS_Store
 .vscode/
+
+# IDE files
+*.user
+*.swp
+*.swo
+*~
+.idea/
+.cache/
+
+# Qt Creator
+CMakeLists.txt.user*
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
