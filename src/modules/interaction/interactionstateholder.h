@@ -4,6 +4,7 @@
 #include "stateutils.h"
 #include <QDateTime>
 #include <QObject>
+#include <QThread>
 
 /**
  * @brief Centralized state holder for interaction-related flags.
@@ -27,6 +28,29 @@
  *   m_state.beginProgrammaticScroll();
  *   // ... do scroll ...
  *   m_state.endProgrammaticScroll();
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * THREAD-SAFETY CONTRACT (main-thread-only)
+ * ─────────────────────────────────────────────────────────────────────────
+ * InteractionStateHolder is NOT thread-safe and is intentionally so. All
+ * reads and writes MUST occur on the thread that owns this QObject (the
+ * GUI/main thread in Kartend's architecture).
+ *
+ * Rationale: every existing consumer (InteractionManager, EventManager,
+ * MouseManager, KeyboardManager, SearchManager, SelectionOverlayManager,
+ * ArrowNavigationHandler, ArtworkManager) inspects state from main-thread
+ * slots, timers, or event handlers. Worker threads (QtConcurrent batches in
+ * ArtworkManager, the QueryManager DB worker) deliberately operate on
+ * value-typed inputs and post results back via QMetaObject::invokeMethod or
+ * queued signals — they MUST NOT call into this holder directly.
+ *
+ * If you need a flag inside a worker lambda, snapshot it on the main thread
+ * before dispatch and capture by value, OR introduce a dedicated atomic /
+ * mutex-guarded mirror. Do NOT silently start touching this holder from a
+ * worker thread.
+ *
+ * Debug builds enforce this via assertOwnerThread() in mutating helpers.
+ * Release builds rely on the contract documented here.
  */
 class InteractionStateHolder : public QObject {
   Q_OBJECT
@@ -101,6 +125,7 @@ public:
    * Sets programmaticScroll flag and clears userScrollActive.
    */
   void beginProgrammaticScroll() {
+    assertOwnerThread();
     m_scroll.programmaticScroll = true;
     m_scroll.userScrollActive = false;
   }
@@ -108,13 +133,17 @@ public:
   /**
    * @brief End a programmatic scroll operation.
    */
-  void endProgrammaticScroll() { m_scroll.programmaticScroll = false; }
+  void endProgrammaticScroll() {
+    assertOwnerThread();
+    m_scroll.programmaticScroll = false;
+  }
 
   /**
    * @brief Suppress arrow centering for a duration.
    * @param durationMs How long to suppress in milliseconds.
    */
   void suppressArrowCenterFor(qint64 durationMs) {
+    assertOwnerThread();
     m_arrow.suppressArrowCenter = true;
     m_arrow.suppressArrowCenterUntilMs =
         QDateTime::currentMSecsSinceEpoch() + durationMs;
@@ -131,6 +160,7 @@ public:
    * @brief Clear arrow center suppression.
    */
   void clearArrowCenterSuppression() {
+    assertOwnerThread();
     m_arrow.suppressArrowCenter = false;
     m_arrow.suppressArrowCenterUntilMs = 0;
   }
@@ -140,6 +170,7 @@ public:
    * @param pendingIndex The index to select when suppression ends.
    */
   void beginSelectionSuppression(int pendingIndex) {
+    assertOwnerThread();
     m_click.selectionSuppressed = true;
     m_click.pendingSelectionIndex = pendingIndex;
   }
@@ -149,6 +180,7 @@ public:
    * @return The pending selection index, or -1 if none.
    */
   int endSelectionSuppression() {
+    assertOwnerThread();
     int pending = m_click.pendingSelectionIndex;
     m_click.selectionSuppressed = false;
     m_click.pendingSelectionIndex = -1;
@@ -173,6 +205,7 @@ public:
    * @brief Reset all state to defaults.
    */
   void resetAll() {
+    assertOwnerThread();
     m_selectionRestore.reset();
     m_scroll.resetScrollFlags();
     m_artwork.reset();
@@ -204,6 +237,17 @@ signals:
   void selectionSuppressionChanged(bool suppressed, int pendingIndex);
 
 private:
+  // Debug-only thread-affinity assertion. Confirms the caller is on the
+  // QObject's owning thread (typically the GUI/main thread). No-op in
+  // release builds. See the THREAD-SAFETY CONTRACT block at the top of this
+  // header.
+  void assertOwnerThread() const {
+    Q_ASSERT_X(thread() == QThread::currentThread(),
+               "InteractionStateHolder",
+               "InteractionStateHolder accessed from a non-owner thread; "
+               "see header THREAD-SAFETY CONTRACT.");
+  }
+
   // State structs from stateutils.h
   SelectionRestoreState m_selectionRestore;
   ScrollState m_scroll;
