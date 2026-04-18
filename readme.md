@@ -105,7 +105,7 @@ See [docs/architecture.md](docs/architecture.md) for detailed architecture docum
 
 ## License
 
-Proprietary (pre-release). See LICENSE.
+This project is licensed under the [GNU General Public License v3.0](LICENSE).
 
 ---
 
