@@ -770,9 +770,9 @@ void SelectionManager::beginFullSelectionRestore(int targetIndex) {
     if (widget) {
       m_sidebarManager->updateSidebarMetadata(widget);
     }
-    constexpr int kMetadataSidebarUpdateDelayMs = 120;
-    scheduleSidebarMetadataUpdateIfVisible(targetIndex, 0,
-                                           kMetadataSidebarUpdateDelayMs);
+    scheduleSidebarMetadataUpdateIfVisible(
+        targetIndex, 0,
+        UIConstants::Selection::METADATA_SIDEBAR_UPDATE_DELAY_MS);
   }
 }
 

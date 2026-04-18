@@ -1,5 +1,6 @@
 // Provides a subtle loading overlay during search operations.
 #include "searchloadingoverlay.h"
+#include "uiconstants.h"
 #include <QGraphicsOpacityEffect>
 #include <QLabel>
 #include <QPropertyAnimation>
@@ -9,8 +10,10 @@
 
 namespace {
 // Overlay styling
-constexpr int FADE_DURATION_MS = 150;
-constexpr int PULSE_INTERVAL_MS = 800;
+constexpr int FADE_DURATION_MS =
+    UIConstants::Overlay::SEARCH_LOADING_FADE_DURATION_MS;
+constexpr int PULSE_INTERVAL_MS =
+    UIConstants::Overlay::SEARCH_LOADING_PULSE_INTERVAL_MS;
 constexpr double OVERLAY_OPACITY_MAX = 0.95;
 constexpr double LABEL_OPACITY_MIN = 0.4;
 constexpr double LABEL_OPACITY_MAX = 0.7;

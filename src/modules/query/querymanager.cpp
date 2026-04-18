@@ -480,8 +480,10 @@ void QueryManager::clearStatementCache() { m_statementCache.clear(); }
 // NOTE: Only attempts reconnection if database was previously initialized
 //       (has valid driver). Returns false for uninitialized databases.
 auto QueryManager::ensureDatabaseConnection() -> bool {
-  static constexpr int MAX_RECONNECT_ATTEMPTS = 3;
-  static constexpr int RECONNECT_DELAY_MS = 100;
+  static constexpr int MAX_RECONNECT_ATTEMPTS =
+      UIConstants::Database::WORKER_RECONNECT_ATTEMPTS;
+  static constexpr int RECONNECT_DELAY_MS =
+      UIConstants::Database::WORKER_RECONNECT_DELAY_MS;
 
   if (m_db.isOpen()) {
     return true;
@@ -523,7 +525,8 @@ auto QueryManager::ensureDatabaseConnection() -> bool {
       QSqlQuery query(m_db);
       query.exec("PRAGMA foreign_keys = ON");
       query.exec("PRAGMA journal_mode = WAL");
-      query.exec("PRAGMA busy_timeout = 500");
+      query.exec(QStringLiteral("PRAGMA busy_timeout = %1")
+                     .arg(UIConstants::Database::WORKER_BUSY_TIMEOUT_MS));
       query.exec("PRAGMA synchronous = NORMAL");
 
       return true;
@@ -620,7 +623,10 @@ void QueryManager::initDatabase() {
   // Set busy timeout to prevent indefinite blocking when another connection
   // holds a lock (e.g., FTS backfill on scan worker). Queries will fail with
   // SQLITE_BUSY after the timeout, allowing graceful fallback.
-  if (!query.exec("PRAGMA busy_timeout = 500")) {
+  const QString busyTimeoutPragma =
+      QStringLiteral("PRAGMA busy_timeout = %1")
+          .arg(UIConstants::Database::WORKER_BUSY_TIMEOUT_MS);
+  if (!query.exec(busyTimeoutPragma)) {
     auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
                                      "Failed to set busy timeout",
                                      "QueryManager::initDatabase")

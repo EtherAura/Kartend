@@ -208,7 +208,10 @@ void DatabaseManager::initDatabase() {
   }
   // Set busy timeout to wait up to 30 seconds for locks to be released -
   // prevents "database is locked" errors during concurrent access
-  if (!query.exec("PRAGMA busy_timeout = 30000")) {
+  const QString busyTimeoutPragma =
+      QStringLiteral("PRAGMA busy_timeout = %1")
+          .arg(UIConstants::Database::MAIN_BUSY_TIMEOUT_MS);
+  if (!query.exec(busyTimeoutPragma)) {
     auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
                                      "Failed to set busy timeout",
                                      "DatabaseManager::initDatabase")

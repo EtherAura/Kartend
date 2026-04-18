@@ -197,6 +197,21 @@ inline constexpr int RANGE_PREFETCH_CHUNKS = 3;
 /// positions. Avoids expensive ORDER BY + OFFSET for every range query on large
 /// collections.
 inline constexpr int PRECOMPUTE_SORT_THRESHOLD = 10000;
+
+/// SQLite busy_timeout for the main DatabaseManager connection (ms).
+/// Higher value tolerates long-running scan-worker write transactions.
+inline constexpr int MAIN_BUSY_TIMEOUT_MS = 30000;
+
+/// SQLite busy_timeout for the QueryManager worker connection (ms).
+/// Lower than the main connection: query slots are expected to fail fast and
+/// retry rather than block the UI worker thread for seconds.
+inline constexpr int WORKER_BUSY_TIMEOUT_MS = 500;
+
+/// Number of reconnect attempts before giving up on a lost worker connection.
+inline constexpr int WORKER_RECONNECT_ATTEMPTS = 3;
+
+/// Delay between worker reconnection attempts (ms).
+inline constexpr int WORKER_RECONNECT_DELAY_MS = 100;
 } // namespace Database
 
 // =============================================================================
@@ -308,6 +323,33 @@ inline constexpr int MAX_EXTRACTION_FILES_INSPECTED = 50000;
 } // namespace Launch
 
 // =============================================================================
+// Scroll
+// Tunables for virtual scrolling, viewport sizing, and artwork prewarm.
+// =============================================================================
+namespace Scroll {
+/// Item count threshold above which artwork prewarm is gated to a single
+/// debounced batch (instead of fanning out for every visible row change).
+inline constexpr int ARTWORK_PREWARM_LARGE_COLLECTION_THRESHOLD = 100;
+/// Minimum gap between consecutive artwork prewarm batches (ms).
+inline constexpr qint64 ARTWORK_PREWARM_DEBOUNCE_MS = 200;
+/// Floor for the effective viewport width used in grid math (px). Prevents
+/// degenerate layouts when the widget is briefly given a near-zero width
+/// during construction or splitter resizes.
+inline constexpr int MIN_EFFECTIVE_VIEWPORT_WIDTH = 200;
+} // namespace Scroll
+
+// =============================================================================
+// Overlay
+// Timing for transient overlays (search loading indicator, etc.).
+// =============================================================================
+namespace Overlay {
+/// Fade in/out duration for the search loading overlay (ms).
+inline constexpr int SEARCH_LOADING_FADE_DURATION_MS = 150;
+/// Pulse animation interval for the search loading overlay (ms).
+inline constexpr int SEARCH_LOADING_PULSE_INTERVAL_MS = 800;
+} // namespace Overlay
+
+// =============================================================================
 // Search
 // Debounce intervals for search input and UI refocus timing.
 // =============================================================================
@@ -341,6 +383,16 @@ inline constexpr int RESTORE_EARLY_VERIFY_2_MS = 320;
 inline constexpr int DOUBLE_CLICK_SUPPRESS_AFTER_ENTER_MS = 700;
 /// Delay before clearing double-click suppression
 inline constexpr int DOUBLE_CLICK_SUPPRESS_CLEAR_DELAY_MS = 800;
+/// Debounce delay before pushing the selected item's metadata into the
+/// sidebar. Prevents thrash during rapid keyboard / mouse navigation.
+inline constexpr int METADATA_SIDEBAR_UPDATE_DELAY_MS = 120;
+/// Selection-overlay glide animation: travel speed in pixels-per-second.
+/// Used to derive a duration proportional to the distance the overlay must
+/// move so short hops feel snappy and long jumps stay readable.
+inline constexpr double OVERLAY_GLIDE_PIXELS_PER_SECOND = 1500.0;
+/// Hard cap on selection-overlay glide animation duration (ms).
+/// Prevents very long jumps from feeling sluggish.
+inline constexpr int OVERLAY_GLIDE_MAX_DURATION_MS = 300;
 } // namespace Selection
 
 // =============================================================================

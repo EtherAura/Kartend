@@ -532,7 +532,8 @@ void ScrollManager::receiveItemsRange(
     // (which are at the start of filePaths) get their directories scanned
     // first. Limit to first ~100 items to avoid scanning hundreds of
     // directories.
-    constexpr int maxItemsToPrewarm = 100;
+    constexpr int maxItemsToPrewarm =
+        UIConstants::Scroll::ARTWORK_PREWARM_LARGE_COLLECTION_THRESHOLD;
     QStringList artworkDirs;
     QSet<QString> seen;
     int itemCount = 0;
@@ -557,7 +558,8 @@ void ScrollManager::receiveItemsRange(
     // 200ms). Multiple chunks arrive in quick succession and we don't need to
     // prewarm each.
     qint64 now = QDateTime::currentMSecsSinceEpoch();
-    constexpr qint64 prewarmDebounceMs = 200;
+    constexpr qint64 prewarmDebounceMs =
+        UIConstants::Scroll::ARTWORK_PREWARM_DEBOUNCE_MS;
     if (now - m_lastArtworkPrewarmTime < prewarmDebounceMs) {
       if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
         qWarning()
@@ -1922,8 +1924,8 @@ auto ScrollManager::getEffectiveViewportWidth() const -> int {
     return 0;
   }
   int viewportWidth = m_mediaScrollArea->viewport()->width();
-  static constexpr int MIN_EFFECTIVE_VIEWPORT_WIDTH = 200;
-  return qMax(MIN_EFFECTIVE_VIEWPORT_WIDTH, viewportWidth);
+  return qMax(UIConstants::Scroll::MIN_EFFECTIVE_VIEWPORT_WIDTH,
+              viewportWidth);
 }
 
 void ScrollManager::recalculateContainerMetrics() {
@@ -2493,7 +2495,8 @@ void ScrollManager::onSliderMoved(int position) {
 
   // Align to chunk boundary for efficient database queries
   int chunkSize =
-      m_context.config.showAllSubcollectionItems && m_totalItems > 5000
+      m_context.config.showAllSubcollectionItems &&
+              m_totalItems > UIConstants::Database::RANGE_CHUNK_LARGE_THRESHOLD
           ? UIConstants::Database::RANGE_CHUNK_SIZE_LARGE
           : UIConstants::Database::RANGE_CHUNK_SIZE_DEFAULT;
   int chunkStart = (mediaIndex / chunkSize) * chunkSize;

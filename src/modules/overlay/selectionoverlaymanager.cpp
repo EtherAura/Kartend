@@ -197,9 +197,11 @@ void SelectionOverlayManager::animateTo(const QRect &targetRect,
   double distance =
       std::sqrt(static_cast<double>(deltaX * deltaX + deltaY * deltaY));
 
-  static constexpr double PIXELS_PER_SECOND = 1500.0;
+  static constexpr double PIXELS_PER_SECOND =
+      UIConstants::Selection::OVERLAY_GLIDE_PIXELS_PER_SECOND;
   static constexpr int MIN_DURATION = 50;
-  static constexpr int MAX_DURATION = 300;
+  static constexpr int MAX_DURATION =
+      UIConstants::Selection::OVERLAY_GLIDE_MAX_DURATION_MS;
 
   int duration =
       static_cast<int>(std::round((distance / PIXELS_PER_SECOND) * 1000.0));
