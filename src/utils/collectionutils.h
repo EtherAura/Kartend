@@ -79,7 +79,7 @@ struct CollectionConfig {
   bool sidebarVisible;
   int parentCollectionIndex = -1;
   bool isSubcollection = false;
-  bool hasParent() const { return parentCollectionIndex >= 0; }
+  [[nodiscard]] bool hasParent() const { return parentCollectionIndex >= 0; }
   bool showAllSubcollectionItems = false;
   bool hideTitles = false;
   bool hideSubcollectionTitles = false;

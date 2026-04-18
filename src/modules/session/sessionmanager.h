@@ -26,7 +26,7 @@ public:
     QHash<QString, QString> fileNames; // Path -> display name
     QHash<QString, QString>
         artworkPaths; // Path -> artwork file path (resolved)
-    bool isValid() const { return totalItems > 0 && !filePaths.isEmpty(); }
+    [[nodiscard]] bool isValid() const { return totalItems > 0 && !filePaths.isEmpty(); }
   };
 
   explicit SessionManager(QObject *parent = nullptr);

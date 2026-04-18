@@ -76,7 +76,7 @@ public:
   void performDebouncedSearch();
 
   // Search state
-  bool isSearchActive() const { return m_searchActive; }
+  [[nodiscard]] bool isSearchActive() const { return m_searchActive; }
   void setSearchActive(bool active) { m_searchActive = active; }
   [[nodiscard]] const QString &currentSearchText() const {
     return m_currentSearchText;
@@ -84,7 +84,7 @@ public:
   void setCurrentSearchText(const QString &text) { m_currentSearchText = text; }
 
   // Pre-search state preservation
-  int preSearchCollectionIndex() const { return m_preSearchCollectionIndex; }
+  [[nodiscard]] int preSearchCollectionIndex() const { return m_preSearchCollectionIndex; }
   void setPreSearchCollectionIndex(int idx) {
     m_preSearchCollectionIndex = idx;
   }
