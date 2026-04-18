@@ -330,9 +330,15 @@ endif()
 target_compile_definitions(kartend PRIVATE $<$<CONFIG:Release>:NDEBUG>)
 
 # Debug-only linker map file output (fixed name)
-target_link_options(kartend PRIVATE
-  $<$<CONFIG:Debug>:-Wl,-Map,${CMAKE_BINARY_DIR}/../../../.backups/reports/kartend.map>
-)
+# Only emit when the target directory exists (local dev builds create it via
+# build.sh; CI runners do not).
+set(_MAP_DIR "${CMAKE_BINARY_DIR}/../../../.backups/reports")
+cmake_path(NORMAL_PATH _MAP_DIR)
+if (IS_DIRECTORY "${_MAP_DIR}")
+  target_link_options(kartend PRIVATE
+    $<$<CONFIG:Debug>:-Wl,-Map,${_MAP_DIR}/kartend.map>
+  )
+endif()
 
 # Install (Linux)
 if (UNIX AND NOT APPLE)
