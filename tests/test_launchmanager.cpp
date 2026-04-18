@@ -50,6 +50,13 @@ private slots:
   void testBuildLaunchCommand_nonRetroArch_usesLaunchParameters();
   void testBuildLaunchCommand_retroArch_usesCorePath();
 
+  // findFileWithExtension hardening tests
+  void testFindFileWithExtension_findsFlatFile();
+  void testFindFileWithExtension_skipsSymlink();
+  void testFindFileWithExtension_rejectsSymlinkEscapingRoot();
+  void testFindFileWithExtension_respectsDepthLimit();
+  void testFindFileWithExtension_emptyDirectory();
+
 private:
   QString m_tempExecutable;
   QString m_tempNonExecutable;
@@ -373,6 +380,106 @@ void TestLaunchManager::testBuildLaunchCommand_retroArch_usesCorePath() {
   QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
   QCOMPARE(result.value().program, QString("retroarch"));
   QCOMPARE(result.value().arguments, (QStringList{"-L", "/tmp/core.so", filePath}));
+}
+
+// ---------------------------------------------------------------------------
+// findFileWithExtension hardening
+// ---------------------------------------------------------------------------
+
+void TestLaunchManager::testFindFileWithExtension_findsFlatFile() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString target = root.path() + "/game.iso";
+  QFile f(target);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("x");
+  f.close();
+
+  const QString found =
+      LaunchManager::findFileWithExtension(root.path(), ".iso");
+  // Returned path is canonicalized.
+  QCOMPARE(found, QFileInfo(target).canonicalFilePath());
+}
+
+void TestLaunchManager::testFindFileWithExtension_skipsSymlink() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+
+  // Real file outside the root.
+  QTemporaryDir outside;
+  QVERIFY(outside.isValid());
+  const QString outsideFile = outside.path() + "/escape.iso";
+  QFile f(outsideFile);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("x");
+  f.close();
+
+  // Symlink inside the root pointing at the outside file.
+  const QString link = root.path() + "/link.iso";
+  if (!QFile::link(outsideFile, link)) {
+    QSKIP("Filesystem does not support symlinks");
+  }
+
+  const QString found =
+      LaunchManager::findFileWithExtension(root.path(), ".iso");
+  // The symlink must be skipped; nothing else with .iso exists in root.
+  QVERIFY2(found.isEmpty(),
+           qPrintable(QString("Symlink should be rejected, got: %1").arg(found)));
+}
+
+void TestLaunchManager::testFindFileWithExtension_rejectsSymlinkEscapingRoot() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+
+  QTemporaryDir outside;
+  QVERIFY(outside.isValid());
+  const QString outsideFile = outside.path() + "/escape.iso";
+  QFile f(outsideFile);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("x");
+  f.close();
+
+  // A subdirectory in root that is itself a symlink to an outside dir.
+  const QString linkDir = root.path() + "/sub";
+  if (!QFile::link(outside.path(), linkDir)) {
+    QSKIP("Filesystem does not support symlinks");
+  }
+
+  const QString found =
+      LaunchManager::findFileWithExtension(root.path(), ".iso");
+  QVERIFY2(found.isEmpty(),
+           qPrintable(QString("Escape via symlinked dir should be rejected, got: %1")
+                          .arg(found)));
+}
+
+void TestLaunchManager::testFindFileWithExtension_respectsDepthLimit() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+
+  // Build a chain deeper than MAX_EXTRACTION_DEPTH.
+  QString cur = root.path();
+  for (int i = 0; i < 32; ++i) {
+    cur += "/d";
+    QVERIFY(QDir().mkpath(cur));
+  }
+  const QString deepFile = cur + "/deep.iso";
+  QFile f(deepFile);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("x");
+  f.close();
+
+  const QString found =
+      LaunchManager::findFileWithExtension(root.path(), ".iso");
+  // Beyond MAX_EXTRACTION_DEPTH (16) - should not be returned.
+  QVERIFY2(found.isEmpty(),
+           qPrintable(QString("Should ignore files past depth limit, got: %1")
+                          .arg(found)));
+}
+
+void TestLaunchManager::testFindFileWithExtension_emptyDirectory() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  QCOMPARE(LaunchManager::findFileWithExtension(root.path(), ".iso"), QString());
 }
 
 QTEST_MAIN(TestLaunchManager)

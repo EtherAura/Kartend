@@ -6,6 +6,7 @@
 #include "errorutils.h"
 #include "pathutils.h"
 #include "setuputils.h"
+#include "uiconstants.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -497,12 +498,63 @@ QString LaunchManager::findFileWithExtension(const QString &directory,
     normalizedExt = "." + normalizedExt;
   }
 
-  QDirIterator it(directory, QDir::Files, QDirIterator::Subdirectories);
+  // Resolve the search root once so we can verify that every candidate file
+  // stays underneath it. Without this, a symlink in the extracted archive
+  // could point at /etc/passwd (or any other absolute path) and we would
+  // happily return that path to the launcher.
+  const QString rootCanonical = QFileInfo(directory).canonicalFilePath();
+  if (rootCanonical.isEmpty()) {
+    return {};
+  }
+  const QString rootPrefix = rootCanonical + QLatin1Char('/');
+  const int rootDepth =
+      rootCanonical.count(QLatin1Char('/'));
+
+  // QDir::NoSymLinks makes the iterator skip symlinked entries entirely so
+  // that a malicious archive containing symlinks cannot escape the temp dir.
+  QDirIterator it(directory,
+                  QDir::Files | QDir::NoSymLinks | QDir::NoDotAndDotDot,
+                  QDirIterator::Subdirectories);
+
+  int inspected = 0;
   while (it.hasNext()) {
-    QString filePath = it.next();
-    if (filePath.toLower().endsWith(normalizedExt)) {
-      return filePath;
+    const QString filePath = it.next();
+    if (++inspected > UIConstants::Launch::MAX_EXTRACTION_FILES_INSPECTED) {
+      qCWarning(lcLaunchManager)
+          << "Aborting extraction scan after"
+          << UIConstants::Launch::MAX_EXTRACTION_FILES_INSPECTED
+          << "files inspected; directory may be malicious:" << directory;
+      return {};
     }
+
+    // Depth bound relative to the search root.
+    const int depth = filePath.count(QLatin1Char('/')) - rootDepth;
+    if (depth > UIConstants::Launch::MAX_EXTRACTION_DEPTH) {
+      continue;
+    }
+
+    if (!filePath.toLower().endsWith(normalizedExt)) {
+      continue;
+    }
+
+    // Defense-in-depth: even with NoSymLinks, verify the candidate's canonical
+    // path is still inside the extraction root before returning it.
+    const QFileInfo info(filePath);
+    if (info.isSymLink()) {
+      continue;
+    }
+    const QString canonical = info.canonicalFilePath();
+    if (canonical.isEmpty()) {
+      continue;
+    }
+    if (canonical != rootCanonical && !canonical.startsWith(rootPrefix)) {
+      qCWarning(lcLaunchManager)
+          << "Rejecting extraction candidate outside root:" << canonical
+          << "root:" << rootCanonical;
+      continue;
+    }
+
+    return canonical;
   }
   return {};
 }
