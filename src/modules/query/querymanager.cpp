@@ -548,6 +548,30 @@ auto QueryManager::ensureDatabaseConnection() -> bool {
   return false;
 }
 
+auto QueryManager::ensureDatabaseAvailable(const char *callerContext) -> bool {
+  if (ensureDatabaseConnection()) {
+    return true;
+  }
+
+  // Last-resort fallback: re-run full init in case the connection was never
+  // registered (cold start) or was destroyed by Qt cleanup.
+  initDatabase();
+  if (m_db.isOpen()) {
+    return true;
+  }
+
+  // All recovery paths exhausted - notify the main thread so callers don't
+  // hang waiting on a result signal that will never come.
+  auto err = ErrorContext::critical(
+                 ErrorCode::DatabaseConnectionFailed,
+                 QStringLiteral("Database unavailable after reconnect + init"),
+                 callerContext)
+                 .withDetails(m_db.lastError().text());
+  ErrorUtils::logError(err);
+  emit errorOccurred(err);
+  return false;
+}
+
 void QueryManager::initDatabase() {
   if (QSqlDatabase::contains(m_connectionName)) {
     m_db = QSqlDatabase::database(m_connectionName);
@@ -740,11 +764,8 @@ bool QueryManager::isItemsFtsReadyFromDb() {
 }
 
 void QueryManager::ensureItemsFtsReady() {
-  if (!ensureDatabaseConnection()) {
-    initDatabase();
-    if (!m_db.isOpen()) {
-      return;
-    }
+  if (!ensureDatabaseAvailable("QueryManager::ensureItemsFtsReady")) {
+    return;
   }
 
   // Refresh availability and current readiness state.
@@ -863,11 +884,10 @@ void QueryManager::ensureItemsFtsReady() {
 
 void QueryManager::loadAllCollections(
     const QList<CollectionConfig> &allCollections) {
-  if (!ensureDatabaseConnection()) {
-    initDatabase();
-    if (!m_db.isOpen()) {
-      return;
-    }
+  if (!ensureDatabaseAvailable("QueryManager::loadAllCollections")) {
+    // Emit safe default so listeners (UI item count, etc.) don't hang.
+    emit itemsLoaded({}, {}, {}, {}, {});
+    return;
   }
 
   QStringList allFilePaths;
@@ -917,11 +937,10 @@ void QueryManager::loadAllCollections(
 
 void QueryManager::loadItems(const CollectionContext &context,
                              const QList<CollectionConfig> &allCollections) {
-  if (!ensureDatabaseConnection()) {
-    initDatabase();
-    if (!m_db.isOpen()) {
-      return;
-    }
+  if (!ensureDatabaseAvailable("QueryManager::loadItems")) {
+    // Emit safe default so listeners don't hang awaiting itemsLoaded.
+    emit itemsLoaded({}, {}, {}, {}, {});
+    return;
   }
 
   if (!context.isValid()) {
@@ -1001,11 +1020,10 @@ void QueryManager::loadItems(const CollectionContext &context,
 void QueryManager::loadItemsWithSubcollections(
     const CollectionContext &context,
     const QList<CollectionConfig> &allCollections) {
-  if (!ensureDatabaseConnection()) {
-    initDatabase();
-    if (!m_db.isOpen()) {
-      return;
-    }
+  if (!ensureDatabaseAvailable("QueryManager::loadItemsWithSubcollections")) {
+    // Emit safe default so listeners don't hang awaiting itemsLoaded.
+    emit itemsLoaded({}, {}, {}, {}, {});
+    return;
   }
 
   if (!context.isValid()) {
@@ -1130,12 +1148,9 @@ void QueryManager::loadItemsWithSubcollections(
 
 void QueryManager::updateCachedCounts(quint64 generation,
                                       const QStringList &collectionUuids) {
-  if (!ensureDatabaseConnection()) {
-    initDatabase();
-    if (!m_db.isOpen()) {
-      emit cachedCountsComputed(generation, 0, {});
-      return;
-    }
+  if (!ensureDatabaseAvailable("QueryManager::updateCachedCounts")) {
+    emit cachedCountsComputed(generation, 0, {});
+    return;
   }
 
   qint64 globalCount = 0;
@@ -2716,11 +2731,8 @@ bool QueryManager::scanAndSaveItemsToDatabase(
 int QueryManager::fetchItemCountImpl(
     const CollectionContext &context,
     const QList<CollectionConfig> &allCollections, const QString &filter) {
-  if (!ensureDatabaseConnection()) {
-    initDatabase();
-    if (!m_db.isOpen()) {
-      return 0;
-    }
+  if (!ensureDatabaseAvailable("QueryManager::fetchItemCountImpl")) {
+    return 0;
   }
 
   // Ensure we see the latest data committed by the scan worker.
@@ -2955,11 +2967,8 @@ void QueryManager::fetchItemCountWithToken(
 void QueryManager::ensureScannedForContext(
     const CollectionContext &context,
     const QList<CollectionConfig> &allCollections) {
-  if (!ensureDatabaseConnection()) {
-    initDatabase();
-    if (!m_db.isOpen()) {
-      return;
-    }
+  if (!ensureDatabaseAvailable("QueryManager::ensureScannedForContext")) {
+    return;
   }
 
   // Ensure we see the latest data committed by the query worker (which may have
@@ -3033,14 +3042,11 @@ void QueryManager::fetchItemsRange(
     const CollectionContext &context,
     const QList<CollectionConfig> &allCollections, int offset, int limit,
     const QString &filter) {
-  if (!ensureDatabaseConnection()) {
-    initDatabase();
-    if (!m_db.isOpen()) {
-      emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(),
-                            QHash<QString, QString>(),
-                            QHash<QString, QString>(), QHash<QString, int>());
-      return;
-    }
+  if (!ensureDatabaseAvailable("QueryManager::fetchItemsRange")) {
+    emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(),
+                          QHash<QString, QString>(),
+                          QHash<QString, QString>(), QHash<QString, int>());
+    return;
   }
 
   // Ensure we see the latest data committed by the scan worker.
@@ -3443,7 +3449,7 @@ void QueryManager::fetchVisualIndexForPath(
     return;
   }
 
-  if (!ensureDatabaseConnection()) {
+  if (!ensureDatabaseAvailable("QueryManager::fetchVisualIndexForPath")) {
     emit visualIndexForPathLoaded(-1, filePath);
     return;
   }

@@ -161,6 +161,13 @@ private:
   // succeeded)
   [[nodiscard]] bool ensureDatabaseConnection();
 
+  // Full-fallback availability check used by every public slot.
+  // Calls ensureDatabaseConnection(), then initDatabase() as a last resort.
+  // If the database is still not open, emits a critical errorOccurred so the
+  // main thread is notified instead of the slot returning silently.
+  // Returns true only if m_db.isOpen() is true after all attempts.
+  [[nodiscard]] bool ensureDatabaseAvailable(const char *callerContext);
+
   // Detect optional search acceleration features (FTS, etc.).
   void refreshSearchCapabilities();
   bool m_itemsFtsAvailable = false;
