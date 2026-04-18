@@ -1,5 +1,67 @@
 # Kartend - AI Coding Instructions
 
+## 🚨 MANDATORY WORKFLOW — BEADS-FIRST, STRICT ORDER 🚨
+
+**Every task — bug, feature, refactor, doc, chore — MUST follow this order. No exceptions.**
+
+### Before Touching Code
+
+1. **Find or file the issue** — `bd ready` (pick existing) OR `bd create --title="..." --description="..." --type=bug|feature|task|chore --priority=0..4`. Never start work without an issue ID.
+2. **Claim it** — `bd update <id> --claim`. This marks it `in_progress` atomically and prevents duplicate work.
+3. **Read context** — `bd show <id>` and check `bd memories <keyword>` for prior insights on the topic.
+
+### While Working
+
+4. **One issue in_progress at a time.** If new work surfaces, file it as a separate issue with `--deps discovered-from:<current-id>` and stay focused.
+5. **Use `bd` exclusively for tracking.** Do NOT use TodoWrite, manage_todo_list, markdown TODOs, or scratch lists. The `bd` database is the single source of truth.
+6. **Capture insights immediately** — `bd remember "<insight>"` for any non-obvious discovery (build quirk, race condition, API gotcha). Do NOT create MEMORY.md files.
+7. **Annotate the issue as you go** — `bd update <id> --append-notes="..."` for progress notes, `bd update <id> --design="..."` for design decisions.
+
+### Before Saying "Done"
+
+8. **Run quality gates** — `.scripts/build.sh --tests --run-tests` (or `--maintenance` for strict checks). Fix until clean.
+9. **Close the issue(s)** — `bd close <id1> <id2> ...` (batch when possible). Use `--reason="..."` if non-obvious.
+10. **MANDATORY PUSH** — work is NOT complete until `git push` succeeds:
+    ```bash
+    git status                # verify what changed
+    git add <files>
+    git commit -m "..."
+    git pull --rebase
+    bd dolt push              # push beads database
+    git push                  # push code
+    git status                # MUST show "up to date with origin"
+    ```
+11. **Verify** — `git status` clean, `bd list --status=in_progress` empty (or only intentionally deferred work).
+
+### Hard Rules
+
+- ❌ Never start coding before there is a `bd` issue ID claimed by you.
+- ❌ Never use `bd edit` (opens `$EDITOR`, blocks the agent). Use `--title/--description/--notes/--design/--append-notes`.
+- ❌ Never close an issue without committing AND pushing the corresponding code.
+- ❌ Never invent placeholder issue IDs — always use real `bd-*` IDs returned by `bd create`.
+- ✅ When the user describes new work, your FIRST action is `bd create` (or `bd ready` to check for an existing match).
+- ✅ When in doubt about priority: P0=critical/blocking, P1=high, P2=normal (default), P3=backlog, P4=future/nice-to-have.
+- ✅ When discovering related work mid-task, file it (`--deps discovered-from:<id>`) — don't expand the current issue's scope.
+
+### Quick Reference
+
+```bash
+bd ready                                    # what to work on next
+bd show <id>                                # full issue context
+bd update <id> --claim                      # take ownership
+bd update <id> --append-notes="progress"    # log progress without opening editor
+bd remember "<insight>"                     # persistent knowledge
+bd memories <keyword>                       # search past insights
+bd close <id> [<id2> ...]                   # finish (then commit + push)
+bd dep add <a> <b>                          # a depends on b
+bd list --status=in_progress                # what you're actively working on
+bd preflight                                # pre-PR sanity (lint, stale, orphans)
+```
+
+Run `bd prime` at the start of any session for the full command surface.
+
+---
+
 ## Architecture Overview
 
 Qt6 KDE frontend for organizing and launching multimedia collections. Uses **module-based architecture** with dependency injection via setup structs.
