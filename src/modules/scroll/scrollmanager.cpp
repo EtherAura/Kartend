@@ -2000,8 +2000,8 @@ void ScrollManager::updateListHeader() {
     m_listHeader->raise(); // Keep above scrolling content
     m_listHeader->setAttribute(Qt::WA_TransparentForMouseEvents,
                                false); // Ensure header receives clicks
-    qDebug() << "updateListHeader: header geometry=" << m_listHeader->geometry()
-             << "raised, accepts mouse events";
+    qCDebug(lcScrollManager) << "updateListHeader: header geometry=" << m_listHeader->geometry()
+                             << "raised, accepts mouse events";
   } else if (m_listHeader) {
     // Hide header in grid mode
     m_listHeader->hide();
@@ -2396,20 +2396,20 @@ void ScrollManager::onListColumnClicked(ListSortColumn column) {
   if (column == ListSortColumn::Name) {
     SortMode newSortMode =
         ascending ? SortMode::NameAscending : SortMode::NameDescending;
-    qDebug() << "onListColumnClicked: Name column, ascending=" << ascending
-             << "sortMode=" << static_cast<int>(newSortMode);
+    qCDebug(lcScrollManager) << "onListColumnClicked: Name column, ascending=" << ascending
+                             << "sortMode=" << static_cast<int>(newSortMode);
     emit sortModeChangeRequested(newSortMode);
   } else if (column == ListSortColumn::Collection) {
     SortMode newSortMode = ascending ? SortMode::CollectionAscending
                                      : SortMode::CollectionDescending;
-    qDebug() << "onListColumnClicked: Collection column, ascending="
-             << ascending << "sortMode=" << static_cast<int>(newSortMode);
+    qCDebug(lcScrollManager) << "onListColumnClicked: Collection column, ascending="
+                             << ascending << "sortMode=" << static_cast<int>(newSortMode);
     emit sortModeChangeRequested(newSortMode);
   } else if (column == ListSortColumn::Artwork) {
     SortMode newSortMode =
         ascending ? SortMode::ArtworkFirst : SortMode::ArtworkLast;
-    qDebug() << "onListColumnClicked: Artwork column, ascending=" << ascending
-             << "sortMode=" << static_cast<int>(newSortMode);
+    qCDebug(lcScrollManager) << "onListColumnClicked: Artwork column, ascending=" << ascending
+                             << "sortMode=" << static_cast<int>(newSortMode);
     emit sortModeChangeRequested(newSortMode);
   }
 }

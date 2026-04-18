@@ -16,7 +16,7 @@ else
 	KEYWORDS="~amd64 ~x86"
 fi
 
-LICENSE="MIT"
+LICENSE="GPL-3"
 SLOT="0"
 
 IUSE="gamepad sdl test"

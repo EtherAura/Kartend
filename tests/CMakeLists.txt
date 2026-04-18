@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 # Find Qt6 Test module
-find_package(Qt6 REQUIRED COMPONENTS Test)
+find_package(Qt6 REQUIRED COMPONENTS Test Gui Widgets)
 
 # Enable testing
 enable_testing()
@@ -28,6 +28,7 @@ add_executable(test_gridlayoutcalculator
 )
 target_link_libraries(test_gridlayoutcalculator
   Qt6::Core
+  Qt6::Gui
   Qt6::Test
 )
 add_test(NAME GridLayoutCalculator COMMAND test_gridlayoutcalculator)
@@ -39,6 +40,7 @@ add_executable(test_interactionstateholder
 )
 target_link_libraries(test_interactionstateholder
   Qt6::Core
+  Qt6::Gui
   Qt6::Test
 )
 add_test(NAME InteractionStateHolder COMMAND test_interactionstateholder)
@@ -86,7 +88,7 @@ add_test(NAME WidgetPoolManager COMMAND test_widgetpoolmanager)
 
 # GridUtils tests
 add_executable(test_gridutils test_gridutils.cpp)
-target_link_libraries(test_gridutils Qt6::Core Qt6::Test)
+target_link_libraries(test_gridutils Qt6::Core Qt6::Gui Qt6::Test)
 add_test(NAME GridUtils COMMAND test_gridutils)
 
 # CacheManager tests

@@ -3,12 +3,14 @@
 #include "uiconstants.h"
 
 #include <QCursor>
-#include <QDebug>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLoggingCategory>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPalette>
+
+Q_LOGGING_CATEGORY(lcListHeaderWidget, "kartend.listheaderwidget")
 
 ListHeaderWidget::ListHeaderWidget(QWidget *parent) : QWidget(parent) {
   // Enable background painting so header occludes scrolling content beneath it
@@ -246,9 +248,9 @@ void ListHeaderWidget::mouseReleaseEvent(QMouseEvent *event) {
           m_collectionLabel ? m_collectionLabel->x() : (width() - 150 - 32);
       int artworkLeft = m_artworkLabel ? m_artworkLabel->x() : (width() - 32);
 
-      qDebug() << "Header click: x=" << x << "pressX=" << pressX
-               << "collectionLeft=" << collectionLeft
-               << "artworkLeft=" << artworkLeft;
+      qCDebug(lcListHeaderWidget) << "Header click: x=" << x << "pressX=" << pressX
+                                  << "collectionLeft=" << collectionLeft
+                                  << "artworkLeft=" << artworkLeft;
 
       // Check if press and release are in the same column
       bool pressInName = pressX < collectionLeft - RESIZE_HANDLE_WIDTH;
@@ -258,19 +260,19 @@ void ListHeaderWidget::mouseReleaseEvent(QMouseEvent *event) {
       bool pressInArtwork = pressX >= artworkLeft;
       bool releaseInArtwork = x >= artworkLeft;
 
-      qDebug() << "pressInName=" << pressInName
-               << "releaseInName=" << releaseInName
-               << "pressInCollection=" << pressInCollection
-               << "releaseInCollection=" << releaseInCollection;
+      qCDebug(lcListHeaderWidget) << "pressInName=" << pressInName
+                                  << "releaseInName=" << releaseInName
+                                  << "pressInCollection=" << pressInCollection
+                                  << "releaseInCollection=" << releaseInCollection;
 
       if (pressInName && releaseInName) {
-        qDebug() << "Emitting columnClicked(Name)";
+        qCDebug(lcListHeaderWidget) << "Emitting columnClicked(Name)";
         emit columnClicked(ListSortColumn::Name);
       } else if (pressInCollection && releaseInCollection) {
-        qDebug() << "Emitting columnClicked(Collection)";
+        qCDebug(lcListHeaderWidget) << "Emitting columnClicked(Collection)";
         emit columnClicked(ListSortColumn::Collection);
       } else if (pressInArtwork && releaseInArtwork) {
-        qDebug() << "Emitting columnClicked(Artwork)";
+        qCDebug(lcListHeaderWidget) << "Emitting columnClicked(Artwork)";
         emit columnClicked(ListSortColumn::Artwork);
       }
     }

@@ -2,6 +2,20 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
 
+## Project
+
+Kartend is a Qt6/C++23 KDE frontend for organizing and launching multimedia collections.
+Architecture and code conventions: see `.github/copilot-instructions.md` and `docs/architecture.md`.
+
+## Build & Test
+
+```bash
+.scripts/build.sh              # Release build
+.scripts/build.sh --debug      # Debug build (required for qCDebug output)
+.scripts/build.sh --tests --run-tests  # Build and run tests
+.scripts/build.sh --maintenance        # Strict: -Werror, clang-tidy, clang-format
+```
+
 ## Quick Reference
 
 ```bash

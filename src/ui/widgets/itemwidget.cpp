@@ -11,6 +11,7 @@
 #include <QFontMetrics>
 #include <QLabel>
 #include <QLinearGradient>
+#include <QLoggingCategory>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -26,6 +27,8 @@
 #include <QStyle>
 #include <QTimer>
 #include <algorithm>
+
+Q_LOGGING_CATEGORY(lcItemWidget, "kartend.itemwidget")
 
 // Static configuration members - initialized to UIConstants defaults
 int ItemWidget::s_titleTintSaturation =
@@ -665,9 +668,9 @@ void ItemWidget::applyDimensions() {
 
       if (!m_collectionName.isEmpty()) {
         m_collectionLabel->show();
-        qDebug() << "applyDimensions: collection label at x=" << xOffset
-                 << "width=" << m_collectionColumnWidth
-                 << "text=" << m_collectionName;
+        qCDebug(lcItemWidget) << "applyDimensions: collection label at x=" << xOffset
+                              << "width=" << m_collectionColumnWidth
+                              << "text=" << m_collectionName;
       }
     }
     xOffset += m_collectionColumnWidth + columnSpacing;
@@ -1097,7 +1100,7 @@ void ItemWidget::setListMode(bool listMode) {
 void ItemWidget::setCollectionName(const QString &name) {
   m_collectionName = name;
 
-  qDebug() << "setCollectionName:" << name << "isListMode=" << m_isListMode;
+  qCDebug(lcItemWidget) << "setCollectionName:" << name << "isListMode=" << m_isListMode;
 
   // Create collection label lazily if needed
   if (m_isListMode && !m_collectionName.isEmpty()) {
@@ -1118,7 +1121,7 @@ void ItemWidget::setCollectionName(const QString &name) {
 void ItemWidget::setHasArtwork(bool hasArtwork) {
   m_hasArtwork = hasArtwork;
 
-  qDebug() << "setHasArtwork:" << hasArtwork << "isListMode=" << m_isListMode;
+  qCDebug(lcItemWidget) << "setHasArtwork:" << hasArtwork << "isListMode=" << m_isListMode;
 
   // Create artwork button lazily if needed
   if (m_isListMode && m_hasArtwork) {
