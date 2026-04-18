@@ -1,8 +1,10 @@
-// Manages virtual scrolling, widget pooling, and grid layout for large item collections.
+// Manages virtual scrolling, widget pooling, and grid layout for large item
+// collections.
 #include "scrollmanager.h"
 #include "applicationcontext.h"
 #include "arrowkeyscrollhelper.h"
 #include "artworkmanager.h"
+#include "artworkpreviewoverlay.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
 #include "filtermanager.h"
@@ -16,9 +18,9 @@
 #include "scrolldatamanager.h"
 #include "scrolleventhandler.h"
 #include "searchloadingoverlay.h"
-#include "selectionstatetracker.h"
 #include "selectioncoordinator.h"
 #include "selectionoverlaymanager.h"
+#include "selectionstatetracker.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 #include "virtualcontainermanager.h"
@@ -43,7 +45,12 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcScrollManager, "kartend.scrollmanager")
-#define debugLog(msg) do { if (lcScrollManager().isDebugEnabled()) { qCDebug(lcScrollManager) << msg; } } while (0)
+#define debugLog(msg)                                                          \
+  do {                                                                         \
+    if (lcScrollManager().isDebugEnabled()) {                                  \
+      qCDebug(lcScrollManager) << msg;                                         \
+    }                                                                          \
+  } while (0)
 
 // Temporary diagnostic logging (release-safe) gated by env var.
 // Enable with: `KARTEND_SEARCH_DIAG=1 kartend`
@@ -51,7 +58,12 @@ static inline bool searchDiagEnabled() {
   return qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG");
 }
 
-#define diagLog(msg) do { if (searchDiagEnabled()) { qWarning() << "[SearchDiag][ScrollManager]" << msg; } } while (0)
+#define diagLog(msg)                                                           \
+  do {                                                                         \
+    if (searchDiagEnabled()) {                                                 \
+      qWarning() << "[SearchDiag][ScrollManager]" << msg;                      \
+    }                                                                          \
+  } while (0)
 
 // Initializes timers for throttle, arrow-key updates, and a short idle window
 // to treat any scrollbar interaction as user-driven scrolling
@@ -66,20 +78,22 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
 
   // Selection overlay manager for glide animation
   m_overlayManager = std::make_unique<SelectionOverlayManager>(this);
-  connect(m_overlayManager.get(), &SelectionOverlayManager::animationFinished, this,
-          [this]() {
+  connect(m_overlayManager.get(), &SelectionOverlayManager::animationFinished,
+          this, [this]() {
             // Update widget selection states when animation finishes
-            if (m_selectionState->needsCommitUpdate(m_selectionState->lastSelectedIndex())) {
-              if (auto *prevSel =
-                      m_activeWidgets.value(m_selectionState->committedSelectedIndex(), nullptr)) {
+            if (m_selectionState->needsCommitUpdate(
+                    m_selectionState->lastSelectedIndex())) {
+              if (auto *prevSel = m_activeWidgets.value(
+                      m_selectionState->committedSelectedIndex(), nullptr)) {
                 prevSel->setSelected(false);
               }
             }
-            if (auto *newSel =
-                    m_activeWidgets.value(m_selectionState->lastSelectedIndex(), nullptr)) {
+            if (auto *newSel = m_activeWidgets.value(
+                    m_selectionState->lastSelectedIndex(), nullptr)) {
               newSel->setSelected(true);
             }
-            m_selectionState->commitSelection(m_selectionState->lastSelectedIndex());
+            m_selectionState->commitSelection(
+                m_selectionState->lastSelectedIndex());
 
             // Hide overlay if not in force-visible mode
             if (!m_overlayManager->shouldKeepVisible()) {
@@ -103,12 +117,12 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
 
   // Scroll event handler for scroll event wiring
   m_scrollEventHandler = std::make_unique<ScrollEventHandler>(this);
-  connect(m_scrollEventHandler.get(), &ScrollEventHandler::scrollChanged,
-          this, &ScrollManager::onScrollChanged);
+  connect(m_scrollEventHandler.get(), &ScrollEventHandler::scrollChanged, this,
+          &ScrollManager::onScrollChanged);
   connect(m_scrollEventHandler.get(), &ScrollEventHandler::userScrollEnded,
           this, &ScrollManager::updateVirtualView);
-  connect(m_scrollEventHandler.get(), &ScrollEventHandler::sliderMoved,
-          this, &ScrollManager::onSliderMoved);
+  connect(m_scrollEventHandler.get(), &ScrollEventHandler::sliderMoved, this,
+          &ScrollManager::onSliderMoved);
 
   // Item widget factory for creating and configuring widgets
   m_widgetFactory = std::make_unique<ItemWidgetFactory>(this);
@@ -117,21 +131,23 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
           this, &ScrollManager::onSubcollectionDoubleClicked);
   connect(m_widgetFactory.get(), &ItemWidgetFactory::virtualFolderDoubleClicked,
           this, &ScrollManager::onVirtualFolderDoubleClicked);
-    connect(m_widgetFactory.get(), &ItemWidgetFactory::requestItemsRange,
-      this, [this](int offset, int limit) {
-        debugLog("requestItemsRange: offset=" << offset << "limit=" << limit
-               << "totalItems=" << m_totalItems
-               << "mediaFileCount="
-               << (m_dataManager ? m_dataManager->fileCount() : -1));
-        emit requestItemsRange(offset, limit);
-      });
+  connect(m_widgetFactory.get(), &ItemWidgetFactory::requestItemsRange, this,
+          [this](int offset, int limit) {
+            debugLog("requestItemsRange: offset="
+                     << offset << "limit=" << limit
+                     << "totalItems=" << m_totalItems << "mediaFileCount="
+                     << (m_dataManager ? m_dataManager->fileCount() : -1));
+            emit requestItemsRange(offset, limit);
+          });
 
   // Arrow key scroll helper for centering animation
   m_arrowKeyScrollHelper = std::make_unique<ArrowKeyScrollHelper>(this);
-  connect(m_arrowKeyScrollHelper.get(), &ArrowKeyScrollHelper::requestViewUpdate,
-          this, &ScrollManager::updateVirtualView);
+  connect(m_arrowKeyScrollHelper.get(),
+          &ArrowKeyScrollHelper::requestViewUpdate, this,
+          &ScrollManager::updateVirtualView);
 
-  // Data manager for file paths, file names, subcollections, and virtual folders
+  // Data manager for file paths, file names, subcollections, and virtual
+  // folders
   m_dataManager = std::make_unique<ScrollDataManager>(this);
 
   // Pre-search state manager for fast search result restoration
@@ -156,29 +172,32 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
           &ScrollManager::onArrowKeyViewUpdate);
 
   // Debounce timer - restarts on each trigger, fires after inactivity
-  m_userScrollIdleTimer = new TimerUtils::DebouncedTimer(UIConstants::Mouse::USER_SCROLL_IDLE_TIMER_MS, this);
+  m_userScrollIdleTimer = new TimerUtils::DebouncedTimer(
+      UIConstants::Mouse::USER_SCROLL_IDLE_TIMER_MS, this);
   connect(m_userScrollIdleTimer, &TimerUtils::DebouncedTimer::triggered, this,
-          [this]() { 
+          [this]() {
             if (m_scrollEventHandler) {
               m_scrollEventHandler->setUserScrollActive(false);
             }
           });
 
   // Prewarm timer - replenishes widget pool after scroll activity settles
-  m_prewarmIdleTimer = new TimerUtils::DebouncedTimer(UIConstants::Widget::Pool::PREWARM_IDLE_MS, this);
-  connect(m_prewarmIdleTimer, &TimerUtils::DebouncedTimer::triggered, this,
-          [this]() {
-            if (m_widgetPool) {
-              // Prune stale widgets that weren't reused during collection switch
-              // This reclaims memory from the soft-cleared pool
-              m_widgetPool->pruneStaleWidgets();
-              
-              int visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1;
-              m_widgetPool->setVisibleMetrics(visibleRows, m_metrics.itemsPerRow);
-              // Use async prewarm to avoid blocking UI during idle replenishment
-              m_widgetPool->prewarmAsync();
-            }
-          });
+  m_prewarmIdleTimer = new TimerUtils::DebouncedTimer(
+      UIConstants::Widget::Pool::PREWARM_IDLE_MS, this);
+  connect(
+      m_prewarmIdleTimer, &TimerUtils::DebouncedTimer::triggered, this,
+      [this]() {
+        if (m_widgetPool) {
+          // Prune stale widgets that weren't reused during collection switch
+          // This reclaims memory from the soft-cleared pool
+          m_widgetPool->pruneStaleWidgets();
+
+          int visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1;
+          m_widgetPool->setVisibleMetrics(visibleRows, m_metrics.itemsPerRow);
+          // Use async prewarm to avoid blocking UI during idle replenishment
+          m_widgetPool->prewarmAsync();
+        }
+      });
 }
 
 // Destructor disconnects scroll events, clears timers, deletes widgets and
@@ -197,16 +216,22 @@ ScrollManager::~ScrollManager() {
     }
   }
   m_activeWidgets.clear();
-  
+
   // Discard any saved pre-search state (widgets will be cleaned up by manager)
   if (m_preSearchStateManager) {
     m_preSearchStateManager->discardSavedState();
   }
-  
+
   if (m_widgetPool) {
     m_widgetPool->clear();
   }
   cleanupVirtualContainer();
+
+  // Clean up list header (parented to viewport, not container)
+  if (m_listHeader) {
+    m_listHeader->deleteLater();
+    m_listHeader = nullptr;
+  }
 }
 
 // Widget pool management - delegates to WidgetPoolManager/ItemWidgetFactory
@@ -240,13 +265,20 @@ void ScrollManager::releaseWidget(ItemWidget *widget) {
 }
 
 // ScrollManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(ScrollManagerSetup, QWidget*, GridContainer, gridContainer)
-SETUP_GETTER_DEF(ScrollManagerSetup, QScrollArea*, MediaScrollArea, mediaScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(ScrollManagerSetup, ArtworkManager*, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_SAME(ScrollManagerSetup, const QList<CollectionConfig>*, Collections, collections)
-SETUP_GETTER_DEF_SAME(ScrollManagerSetup, const CollectionHierarchyCache*, HierarchyCache, hierarchyCache)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, InteractionStateHolder*, InteractionState, interactionState)
-SETUP_GETTER_DEF_SAME(ScrollManagerSetup, const GeneralSettings*, GeneralSettings, generalSettings)
+SETUP_GETTER_DEF_SAME(ScrollManagerSetup, QWidget *, GridContainer,
+                      gridContainer)
+SETUP_GETTER_DEF(ScrollManagerSetup, QScrollArea *, MediaScrollArea,
+                 mediaScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_SAME(ScrollManagerSetup, ArtworkManager *, ArtworkManager,
+                      artworkManager)
+SETUP_GETTER_DEF_SAME(ScrollManagerSetup, const QList<CollectionConfig> *,
+                      Collections, collections)
+SETUP_GETTER_DEF_SAME(ScrollManagerSetup, const CollectionHierarchyCache *,
+                      HierarchyCache, hierarchyCache)
+SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, InteractionStateHolder *,
+                          InteractionState, interactionState)
+SETUP_GETTER_DEF_SAME(ScrollManagerSetup, const GeneralSettings *,
+                      GeneralSettings, generalSettings)
 
 void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   m_generalSettings = setup.getGeneralSettings();
@@ -256,6 +288,14 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   m_artworkManager = setup.getArtworkManager();
   m_collections = setup.getCollections();
   m_hierarchyCache = setup.getHierarchyCache();
+
+  // Restore persisted column widths from settings
+  if (m_generalSettings && m_generalSettings->listCollectionColumnWidth > 0) {
+    m_collectionColumnWidth = m_generalSettings->listCollectionColumnWidth;
+  }
+  if (m_generalSettings && m_generalSettings->listArtworkColumnWidth > 0) {
+    m_artworkColumnWidth = m_generalSettings->listArtworkColumnWidth;
+  }
 
   // Configure container manager with scroll area and grid container
   if (m_containerManager) {
@@ -268,8 +308,9 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
     m_selectionCoordinator->setGridContainer(m_gridContainer);
     m_selectionCoordinator->setPositionCallback(
         [this](int idx) { return getItemPosition(idx); });
-    m_selectionCoordinator->setMetricsCallback(
-        [this]() { return std::make_pair(m_metrics.itemWidth, m_metrics.itemHeight); });
+    m_selectionCoordinator->setMetricsCallback([this]() {
+      return std::make_pair(m_metrics.itemWidth, m_metrics.itemHeight);
+    });
   }
 
   // Configure scroll event handler with scroll area and idle timer
@@ -281,6 +322,9 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   // Configure item widget factory with dependencies
   if (m_widgetFactory) {
     m_widgetFactory->setArtworkManager(m_artworkManager);
+    m_widgetFactory->setCollections(m_collections);
+    m_widgetFactory->setCollectionColumnWidth(m_collectionColumnWidth);
+    m_widgetFactory->setArtworkColumnWidth(m_artworkColumnWidth);
   }
 
   // Configure search loading overlay with scroll area viewport
@@ -341,7 +385,8 @@ void ScrollManager::setInitialScrollIndex(int index) {
 
 // Initializes virtual scrolling and prepares virtual container; primes mappings
 // for aggregated views.
-void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContext &context) {
+void ScrollManager::setupVirtualScrolling(int totalCount,
+                                          const CollectionContext &context) {
   if ((!m_gridContainer) || (!m_mediaScrollArea)) {
     return;
   }
@@ -352,36 +397,46 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
 
   m_context = context;
 
-  diagLog(QString("setupVirtualScrolling: totalCount=%1 collIndex=%2 mediaDir='%3' includeSubfolders=%4 showAllSubfolderItems=%5 suppressVirtualFolders=%6")
+  diagLog(QString("setupVirtualScrolling: totalCount=%1 collIndex=%2 "
+                  "mediaDir='%3' includeSubfolders=%4 showAllSubfolderItems=%5 "
+                  "suppressVirtualFolders=%6")
               .arg(totalCount)
               .arg(context.currentIndex)
               .arg(context.config.mediaDirectory)
               .arg(context.config.includeContentSubfolders)
               .arg(context.config.showAllSubfolderItems)
               .arg(context.suppressVirtualFolders));
-  
+
   initializeSubcollections();
   initializeVirtualFolders();
 
   const int subcollCount = m_dataManager->subcollectionCount();
   const int vfCount = m_dataManager->virtualFolderCount();
-  diagLog(QString("setupVirtualScrolling: after init subcollCount=%1 vfCount=%2")
-              .arg(subcollCount).arg(vfCount));
-  
+  diagLog(
+      QString("setupVirtualScrolling: after init subcollCount=%1 vfCount=%2")
+          .arg(subcollCount)
+          .arg(vfCount));
+
   if (!m_context.filePaths.isEmpty()) {
     // Preloaded data from context - copy to data manager
     m_dataManager->filePaths() = m_context.filePaths;
     m_dataManager->fileNames() = m_context.fileNames;
-    // Apply unified sorting if enabled (sorts subcollections, folders, and files together)
+    // Apply unified sorting if enabled (sorts subcollections, folders, and
+    // files together)
     m_dataManager->applyUnifiedSort(m_context, m_collections);
-    diagLog(QString("setupVirtualScrolling: preloaded filePaths=%1").arg(m_context.filePaths.size()));
+    diagLog(QString("setupVirtualScrolling: preloaded filePaths=%1")
+                .arg(m_context.filePaths.size()));
   } else {
     // On-demand loading - initialize storage with placeholder count
     // totalCount includes subcollections + virtualFolders + mediaItems
     // Storage should only hold mediaItems
     int itemCount = totalCount - subcollCount - vfCount;
-    diagLog(QString("setupVirtualScrolling: on-demand itemCount=%1 (totalCount=%2 - subcoll=%3 - vf=%4)")
-                .arg(itemCount).arg(totalCount).arg(subcollCount).arg(vfCount));
+    diagLog(QString("setupVirtualScrolling: on-demand itemCount=%1 "
+                    "(totalCount=%2 - subcoll=%3 - vf=%4)")
+                .arg(itemCount)
+                .arg(totalCount)
+                .arg(subcollCount)
+                .arg(vfCount));
     if (itemCount < 0) {
       itemCount = 0;
     }
@@ -389,14 +444,23 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
   }
 
   m_totalItems = m_dataManager->totalItemCount();
-  diagLog(QString("setupVirtualScrolling: final m_totalItems=%1").arg(m_totalItems));
-  
+  diagLog(QString("setupVirtualScrolling: final m_totalItems=%1")
+              .arg(m_totalItems));
+
   if (m_totalItems == 0) {
     setupEmptyVirtualScrolling();
     return;
   }
 
   setupNormalVirtualScrolling();
+
+  // If we have a pending selection restore, query the database now that
+  // the context and data are set up
+  if (!m_pendingRestoreFilePath.isEmpty() && m_databaseManager &&
+      m_collections) {
+    m_databaseManager->fetchVisualIndexForPath(m_context, *m_collections,
+                                               m_pendingRestoreFilePath);
+  }
 }
 
 void ScrollManager::updateMediaItemCount(int mediaItemCount) {
@@ -421,222 +485,243 @@ void ScrollManager::updateMediaItemCount(int mediaItemCount) {
   updateVirtualView();
 }
 
-void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths, 
-                                      const QHash<QString, QString> &fileNames,
-                                      const QHash<QString, QString> &fileToArtworkDir) {
-    if (m_rangeReceiveDebugBudget > 0) {
-      --m_rangeReceiveDebugBudget;
-      debugLog("receiveItemsRange: offset=" << offset << "incomingPaths="
-                                            << filePaths.size()
-                                            << "storageFileCount="
-                                            << (m_dataManager ? m_dataManager->fileCount() : -1)
-                                            << "fileNames=" << fileNames.size());
-      if (!filePaths.isEmpty()) {
-        debugLog("receiveItemsRange: firstPath=" << filePaths.first());
+void ScrollManager::receiveItemsRange(
+    int offset, const QStringList &filePaths,
+    const QHash<QString, QString> &fileNames,
+    const QHash<QString, QString> &fileToArtworkDir) {
+  if (m_rangeReceiveDebugBudget > 0) {
+    --m_rangeReceiveDebugBudget;
+    debugLog("receiveItemsRange: offset="
+             << offset << "incomingPaths=" << filePaths.size()
+             << "storageFileCount="
+             << (m_dataManager ? m_dataManager->fileCount() : -1)
+             << "fileNames=" << fileNames.size());
+    if (!filePaths.isEmpty()) {
+      debugLog("receiveItemsRange: firstPath=" << filePaths.first());
+    }
+  }
+
+  diagLog(
+      QString(
+          "receiveItemsRange: offset=%1 incomingPaths=%2 storageFileCount=%3")
+          .arg(offset)
+          .arg(filePaths.size())
+          .arg(m_dataManager ? m_dataManager->fileCount() : -1));
+
+  if (offset < 0 || offset >= m_dataManager->fileCount()) {
+    diagLog("receiveItemsRange: IGNORED (offset out of bounds)");
+    return;
+  }
+
+  // Pre-warm the artwork directory cache in a background thread to avoid
+  // blocking the main thread during widget creation. This is especially
+  // important for showAllSubcollectionItems with many subcollections.
+  //
+  // OPTIMIZATION: Only prewarm directories for visible items (first ~100),
+  // not the entire chunk. The prewarm also warms the OS dentry cache,
+  // making subsequent accesses fast.
+  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
+    qWarning() << "[PerfTrace] receiveItemsRange: fileToArtworkDir.size="
+               << fileToArtworkDir.size() << "showAllSubcollectionItems="
+               << m_context.config.showAllSubcollectionItems
+               << "offset=" << offset << "filePathsSize=" << filePaths.size();
+  }
+  if (!fileToArtworkDir.isEmpty() &&
+      m_context.config.showAllSubcollectionItems) {
+    // Build artwork directory list in filePaths ORDER so visible items
+    // (which are at the start of filePaths) get their directories scanned
+    // first. Limit to first ~100 items to avoid scanning hundreds of
+    // directories.
+    constexpr int maxItemsToPrewarm = 100;
+    QStringList artworkDirs;
+    QSet<QString> seen;
+    int itemCount = 0;
+    for (const QString &filePath : filePaths) {
+      if (itemCount >= maxItemsToPrewarm) {
+        break;
       }
+      QString artDir = fileToArtworkDir.value(filePath);
+      if (!artDir.isEmpty() && !seen.contains(artDir)) {
+        artworkDirs.append(artDir);
+        seen.insert(artDir);
+      }
+      ++itemCount;
     }
 
-    diagLog(QString("receiveItemsRange: offset=%1 incomingPaths=%2 storageFileCount=%3")
-                .arg(offset)
-                .arg(filePaths.size())
-                .arg(m_dataManager ? m_dataManager->fileCount() : -1));
-
-    if (offset < 0 || offset >= m_dataManager->fileCount()) {
-      diagLog("receiveItemsRange: IGNORED (offset out of bounds)");
-      return;
-    }
-    
-    // Pre-warm the artwork directory cache in a background thread to avoid
-    // blocking the main thread during widget creation. This is especially
-    // important for showAllSubcollectionItems with many subcollections.
-    // 
-    // OPTIMIZATION: Only prewarm directories for visible items (first ~100),
-    // not the entire chunk. The prewarm also warms the OS dentry cache,
-    // making subsequent accesses fast.
     if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
-      qWarning() << "[PerfTrace] receiveItemsRange: fileToArtworkDir.size=" << fileToArtworkDir.size()
-                 << "showAllSubcollectionItems=" << m_context.config.showAllSubcollectionItems
-                 << "offset=" << offset << "filePathsSize=" << filePaths.size();
+      qWarning() << "[PerfTrace] receiveItemsRange: PREWARM artworkDirs.size="
+                 << artworkDirs.size();
     }
-    if (!fileToArtworkDir.isEmpty() && m_context.config.showAllSubcollectionItems) {
-      // Build artwork directory list in filePaths ORDER so visible items
-      // (which are at the start of filePaths) get their directories scanned first.
-      // Limit to first ~100 items to avoid scanning hundreds of directories.
-      constexpr int maxItemsToPrewarm = 100;
-      QStringList artworkDirs;
-      QSet<QString> seen;
-      int itemCount = 0;
-      for (const QString &filePath : filePaths) {
-        if (itemCount >= maxItemsToPrewarm) {
-          break;
-        }
-        QString artDir = fileToArtworkDir.value(filePath);
-        if (!artDir.isEmpty() && !seen.contains(artDir)) {
-          artworkDirs.append(artDir);
-          seen.insert(artDir);
-        }
-        ++itemCount;
-      }
-      
-      if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
-        qWarning() << "[PerfTrace] receiveItemsRange: PREWARM artworkDirs.size=" << artworkDirs.size();
-      }
-      
-      // Debounce artwork prewarm - skip if one was triggered recently (within 200ms).
-      // Multiple chunks arrive in quick succession and we don't need to prewarm each.
-      qint64 now = QDateTime::currentMSecsSinceEpoch();
-      constexpr qint64 prewarmDebounceMs = 200;
-      if (now - m_lastArtworkPrewarmTime < prewarmDebounceMs) {
-        if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
-          qWarning() << "[PerfTrace] receiveItemsRange: SKIPPING PREWARM (debounced)";
-        }
-      } else {
-        m_lastArtworkPrewarmTime = now;
-        
-        // Pre-warm directory cache in background for FUTURE lookups.
-        // This doesn't block current widgets - they use direct file lookup as fallback.
-        // Only do a single callback when complete to avoid reconfigure spam.
-        QPointer<ScrollManager> self = this;
-        
-        QThreadPool::globalInstance()->start([artworkDirs, self]() {
-          auto &cache = ArtworkUtils::DirectoryCache::instance();
-          cache.prewarmDirectories(artworkDirs);
-          cache.processQueuedDirectories();
-          
-          // Single callback when complete
-          if (self) {
-            QMetaObject::invokeMethod(self, "reconfigureArtworkForActiveWidgets",
-                                      Qt::QueuedConnection);
-          }
-        });
-      }
-    }
-    
-    // Only clear the fulfilled chunk from pending requests.
-    // Keeping empty-range requests pending prevents a tight request loop
-    // when the DB returns no rows (e.g., filter/count mismatch).
-    if (m_widgetFactory && !filePaths.isEmpty()) {
-      m_widgetFactory->clearPendingRangeRequest(offset);
-    }
-    
-    // Store data and get visual indices that were updated
-    QList<int> updatedIndices = m_dataManager->receiveItemsRange(offset, filePaths, fileNames);
 
-    diagLog(QString("receiveItemsRange: updatedVisualIndices=%1")
-          .arg(updatedIndices.size()));
-    
-    // Release placeholder widgets so they get re-created with actual data
-    for (int visualIndex : updatedIndices) {
-        if (ItemWidget *widget = m_activeWidgets.value(visualIndex, nullptr)) {
-            releaseWidget(widget);
-            m_activeWidgets.remove(visualIndex);
+    // Debounce artwork prewarm - skip if one was triggered recently (within
+    // 200ms). Multiple chunks arrive in quick succession and we don't need to
+    // prewarm each.
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+    constexpr qint64 prewarmDebounceMs = 200;
+    if (now - m_lastArtworkPrewarmTime < prewarmDebounceMs) {
+      if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
+        qWarning()
+            << "[PerfTrace] receiveItemsRange: SKIPPING PREWARM (debounced)";
+      }
+    } else {
+      m_lastArtworkPrewarmTime = now;
+
+      // Pre-warm directory cache in background for FUTURE lookups.
+      // This doesn't block current widgets - they use direct file lookup as
+      // fallback. Only do a single callback when complete to avoid reconfigure
+      // spam.
+      QPointer<ScrollManager> self = this;
+
+      QThreadPool::globalInstance()->start([artworkDirs, self]() {
+        auto &cache = ArtworkUtils::DirectoryCache::instance();
+        cache.prewarmDirectories(artworkDirs);
+        cache.processQueuedDirectories();
+
+        // Single callback when complete
+        if (self) {
+          QMetaObject::invokeMethod(self, "reconfigureArtworkForActiveWidgets",
+                                    Qt::QueuedConnection);
         }
+      });
     }
-    
-    // Trigger update of visible widgets
-    updateVirtualView();
+  }
+
+  // Only clear the fulfilled chunk from pending requests.
+  // Keeping empty-range requests pending prevents a tight request loop
+  // when the DB returns no rows (e.g., filter/count mismatch).
+  if (m_widgetFactory && !filePaths.isEmpty()) {
+    m_widgetFactory->clearPendingRangeRequest(offset);
+  }
+
+  // Store data and get visual indices that were updated
+  QList<int> updatedIndices =
+      m_dataManager->receiveItemsRange(offset, filePaths, fileNames);
+
+  diagLog(QString("receiveItemsRange: updatedVisualIndices=%1")
+              .arg(updatedIndices.size()));
+
+  // Release placeholder widgets so they get re-created with actual data
+  for (int visualIndex : updatedIndices) {
+    if (ItemWidget *widget = m_activeWidgets.value(visualIndex, nullptr)) {
+      releaseWidget(widget);
+      m_activeWidgets.remove(visualIndex);
+    }
+  }
+
+  // Trigger update of visible widgets
+  updateVirtualView();
 }
 
-void ScrollManager::injectCachedItems(int startIndex, const QStringList &filePaths,
-                                      const QHash<QString, QString> &fileNames,
-                                      const QHash<QString, QString> &artworkPaths) {
+void ScrollManager::injectCachedItems(
+    int startIndex, const QStringList &filePaths,
+    const QHash<QString, QString> &fileNames,
+    const QHash<QString, QString> &artworkPaths) {
   if (!m_dataManager || filePaths.isEmpty()) {
     return;
   }
-  
+
   // Calculate the media offset (accounting for subcollections/virtual folders)
   int subcollectionCount = m_dataManager->subcollectionCount();
   int virtualFolderCount = m_dataManager->virtualFolderCount();
   int prefixCount = subcollectionCount + virtualFolderCount;
-  
+
   // Convert visual startIndex to media offset
-  int mediaOffset = (startIndex >= prefixCount) ? (startIndex - prefixCount) : 0;
-  
-  diagLog(QString("injectCachedItems: startIndex=%1 mediaOffset=%2 pathCount=%3 prefixCount=%4")
+  int mediaOffset =
+      (startIndex >= prefixCount) ? (startIndex - prefixCount) : 0;
+
+  diagLog(QString("injectCachedItems: startIndex=%1 mediaOffset=%2 "
+                  "pathCount=%3 prefixCount=%4")
               .arg(startIndex)
               .arg(mediaOffset)
               .arg(filePaths.size())
               .arg(prefixCount));
-  
+
   // Store cached data directly into the data manager
-  QList<int> updatedIndices = m_dataManager->receiveItemsRange(mediaOffset, filePaths, fileNames);
-  
+  QList<int> updatedIndices =
+      m_dataManager->receiveItemsRange(mediaOffset, filePaths, fileNames);
+
   // Set cached artwork paths on the widget factory for instant artwork lookup
   if (!artworkPaths.isEmpty() && m_widgetFactory) {
     m_widgetFactory->setCachedArtworkPaths(artworkPaths);
     if (qEnvironmentVariableIsSet("KARTEND_ARTWORK_DIAG")) {
-      qWarning() << "[ArtworkDiag] injectCachedItems: setting" << artworkPaths.size() 
-                 << "cached artwork paths";
+      qWarning() << "[ArtworkDiag] injectCachedItems: setting"
+                 << artworkPaths.size() << "cached artwork paths";
       if (!artworkPaths.isEmpty()) {
         auto it = artworkPaths.constBegin();
-        qWarning() << "[ArtworkDiag] first cached entry: key=" << it.key() << "value=" << it.value();
+        qWarning() << "[ArtworkDiag] first cached entry: key=" << it.key()
+                   << "value=" << it.value();
       }
     }
   } else if (qEnvironmentVariableIsSet("KARTEND_ARTWORK_DIAG")) {
-    qWarning() << "[ArtworkDiag] injectCachedItems: artworkPaths.isEmpty=" << artworkPaths.isEmpty()
+    qWarning() << "[ArtworkDiag] injectCachedItems: artworkPaths.isEmpty="
+               << artworkPaths.isEmpty()
                << "m_widgetFactory=" << (m_widgetFactory != nullptr);
   }
-  
+
   diagLog(QString("injectCachedItems: updatedVisualIndices=%1 artworkPaths=%2")
               .arg(updatedIndices.size())
               .arg(artworkPaths.size()));
-  
+
   // Trigger immediate update of visible widgets
   updateVirtualView();
 }
 
-bool ScrollManager::getCurrentViewportForCache(int &startIndex, int &totalItems,
-                                               QStringList &filePaths,
-                                               QHash<QString, QString> &fileNames,
-                                               QHash<QString, QString> &artworkPaths) const {
+bool ScrollManager::getCurrentViewportForCache(
+    int &startIndex, int &totalItems, QStringList &filePaths,
+    QHash<QString, QString> &fileNames,
+    QHash<QString, QString> &artworkPaths) const {
   if (!m_dataManager || !m_mediaScrollArea) {
     return false;
   }
-  
+
   totalItems = getTotalItems();
   if (totalItems <= 0) {
     return false;
   }
-  
+
   // Get the first visible row to determine start index
   int firstVisibleRow = getFirstVisibleRow();
   int lastVisibleRow = getLastVisibleRow();
   int gridWidth = getCurrentGridWidth();
-  if (gridWidth <= 0) gridWidth = 1;
-  
+  if (gridWidth <= 0)
+    gridWidth = 1;
+
   // Calculate visible range with buffer (cache 2 extra rows on each side)
   int bufferRows = 2;
   int startRow = std::max(0, firstVisibleRow - bufferRows);
   int endRow = lastVisibleRow + bufferRows;
-  
+
   startIndex = startRow * gridWidth;
   int endIndex = std::min((endRow + 1) * gridWidth, totalItems);
-  
+
   // Get the prefix count (subcollections + virtual folders)
-  int prefixCount = m_dataManager->subcollectionCount() + m_dataManager->virtualFolderCount();
-  
+  int prefixCount =
+      m_dataManager->subcollectionCount() + m_dataManager->virtualFolderCount();
+
   // We only cache media items (not subcollection tiles)
   int mediaStartIndex = std::max(0, startIndex - prefixCount);
   int mediaEndIndex = std::max(0, endIndex - prefixCount);
-  
+
   if (mediaEndIndex <= mediaStartIndex) {
     return false;
   }
-  
+
   // Collect file paths and names for the visible + buffered range
   filePaths.clear();
   fileNames.clear();
   artworkPaths.clear();
-  
+
   const QStringList &allPaths = m_dataManager->filePaths();
   const QHash<QString, QString> &allNames = m_dataManager->fileNames();
   const QString &defaultArtworkDir = m_context.artworkDirectory;
-  const bool showAllSubcollectionItems = m_context.config.showAllSubcollectionItems;
-  
-  static const bool diagEnabled = qEnvironmentVariableIntValue("KARTEND_ARTWORK_DIAG");
+  const bool showAllSubcollectionItems =
+      m_context.config.showAllSubcollectionItems;
+
+  static const bool diagEnabled =
+      qEnvironmentVariableIntValue("KARTEND_ARTWORK_DIAG");
   int artworkMisses = 0;
   int artworkHits = 0;
-  
+
   int pathsCollected = 0;
   for (int i = mediaStartIndex; i < mediaEndIndex && i < allPaths.size(); ++i) {
     const QString &path = allPaths.at(i);
@@ -645,13 +730,15 @@ bool ScrollManager::getCurrentViewportForCache(int &startIndex, int &totalItems,
       if (allNames.contains(path)) {
         fileNames[path] = allNames.value(path);
       }
-      
+
       // Resolve artwork path for this file.
-      // For showAllSubcollectionItems, each file may have a different artwork directory.
-      // Use hierarchy cache for O(1) lookup instead of m_fileToArtworkDir which may be empty.
+      // For showAllSubcollectionItems, each file may have a different artwork
+      // directory. Use hierarchy cache for O(1) lookup instead of
+      // m_fileToArtworkDir which may be empty.
       QString artworkDir = defaultArtworkDir;
       if (showAllSubcollectionItems && m_hierarchyCache) {
-        QString cachedArtworkDir = m_hierarchyCache->artworkDirForFilePath(path);
+        QString cachedArtworkDir =
+            m_hierarchyCache->artworkDirForFilePath(path);
         if (!cachedArtworkDir.isEmpty()) {
           artworkDir = cachedArtworkDir;
           ++artworkHits;
@@ -659,15 +746,17 @@ bool ScrollManager::getCurrentViewportForCache(int &startIndex, int &totalItems,
           ++artworkMisses;
           if (diagEnabled && artworkMisses <= 3) {
             QFileInfo fi(path);
-            qWarning() << "[ArtworkDiag] getCurrentViewportForCache: MISS for path" << path
-                       << "parentDir=" << fi.absolutePath();
+            qWarning()
+                << "[ArtworkDiag] getCurrentViewportForCache: MISS for path"
+                << path << "parentDir=" << fi.absolutePath();
           }
         }
       }
-      
+
       if (!artworkDir.isEmpty()) {
         QString fileName = QFileInfo(path).completeBaseName();
-        QString artPath = ArtworkUtils::findArtworkForFile(fileName, artworkDir);
+        QString artPath =
+            ArtworkUtils::findArtworkForFile(fileName, artworkDir);
         if (!artPath.isEmpty()) {
           artworkPaths[path] = artPath;
         }
@@ -675,27 +764,30 @@ bool ScrollManager::getCurrentViewportForCache(int &startIndex, int &totalItems,
       ++pathsCollected;
     }
   }
-  
+
   if (diagEnabled) {
-    qWarning() << "[ArtworkDiag] getCurrentViewportForCache: showAllSubcollectionItems=" 
-               << showAllSubcollectionItems << "hierarchyCache=" << (m_hierarchyCache != nullptr)
+    qWarning() << "[ArtworkDiag] getCurrentViewportForCache: "
+                  "showAllSubcollectionItems="
+               << showAllSubcollectionItems
+               << "hierarchyCache=" << (m_hierarchyCache != nullptr)
                << "hits=" << artworkHits << "misses=" << artworkMisses
                << "artworkPaths=" << artworkPaths.size();
   }
-  
+
   // Need at least some valid paths
   if (pathsCollected == 0) {
     return false;
   }
-  
+
   // Return the visual start index (including prefixes)
   startIndex = startRow * gridWidth;
-  
+
   return true;
 }
 
 void ScrollManager::initializeSubcollections() {
-  m_dataManager->initializeSubcollections(m_context, m_collections, m_hierarchyCache);
+  m_dataManager->initializeSubcollections(m_context, m_collections,
+                                          m_hierarchyCache);
 }
 
 void ScrollManager::initializeVirtualFolders() {
@@ -724,7 +816,8 @@ void ScrollManager::setupNormalVirtualScrolling() {
 
   // Bail early if container creation failed (null gridContainer)
   if (!m_virtualContainer) {
-    qWarning() << "ScrollManager::setupNormalVirtualScrolling: Failed to create virtual container";
+    qWarning() << "ScrollManager::setupNormalVirtualScrolling: Failed to "
+                  "create virtual container";
     return;
   }
 
@@ -734,7 +827,8 @@ void ScrollManager::setupNormalVirtualScrolling() {
     m_widgetFactory->setParentWidget(m_virtualContainer);
     m_widgetFactory->setCollectionContext(m_context);
     m_widgetFactory->setMetrics(m_metrics.itemWidth, m_metrics.itemHeight);
-    m_widgetFactory->setFileData(&m_dataManager->filePaths(), &m_dataManager->fileNames());
+    m_widgetFactory->setFileData(&m_dataManager->filePaths(),
+                                 &m_dataManager->fileNames());
     m_widgetFactory->setTotalItemCount(m_dataManager->fileCount());
     m_widgetFactory->setSubcollectionNameResolver(
         [this](int idx) { return getSubcollectionName(idx); });
@@ -747,22 +841,24 @@ void ScrollManager::setupNormalVirtualScrolling() {
       int viewportHeight = m_mediaScrollArea->viewport()->height();
       // Use clamped totalHeight for scrollbar range
       int scrollMax = qMax(0, m_metrics.totalHeight - viewportHeight);
-      int itemY = GridUtils::computeItemY(m_initialScrollIndex, m_metrics.itemsPerRow,
-                                          m_metrics.itemHeight, m_metrics.verticalSpacing,
-                                          UIConstants::Grid::MARGINS);
+      int itemY = GridUtils::computeItemY(
+          m_initialScrollIndex, m_metrics.itemsPerRow, m_metrics.itemHeight,
+          m_metrics.verticalSpacing, UIConstants::Grid::MARGINS);
       // Calculate target logical scroll Y (to center the item)
-      int logicalTargetY = itemY + (m_metrics.itemHeight / 2) - (viewportHeight / 2);
+      int logicalTargetY =
+          itemY + (m_metrics.itemHeight / 2) - (viewportHeight / 2);
       // Ensure max >= min for qBound (content may be smaller than viewport)
       int logicalMax = qMax(0, m_metrics.logicalHeight - viewportHeight);
       logicalTargetY = qBound(0, logicalTargetY, logicalMax);
       // Convert logical scroll target to widget scroll position
       int targetY = m_metrics.toWidgetScrollY(logicalTargetY, viewportHeight);
       targetY = qBound(0, targetY, scrollMax);
-      // Set scrollbar range explicitly before setting value to ensure it takes effect
+      // Set scrollbar range explicitly before setting value to ensure it takes
+      // effect
       scrollbar->setRange(0, scrollMax);
       scrollbar->setValue(targetY);
     }
-    m_initialScrollIndex = -1;  // Reset after use
+    m_initialScrollIndex = -1; // Reset after use
   }
 
   updateVirtualView();
@@ -770,14 +866,14 @@ void ScrollManager::setupNormalVirtualScrolling() {
   if (m_virtualContainer) {
     m_virtualContainer->setVisible(true);
   }
-  
+
   // Pre-warm widget pool during initial setup for smoother scrolling
   if (m_widgetPool) {
     int visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1;
     m_widgetPool->setVisibleMetrics(visibleRows, m_metrics.itemsPerRow);
     m_widgetPool->prewarm();
   }
-  
+
   emit virtualScrollSetupComplete();
 }
 
@@ -785,10 +881,11 @@ void ScrollManager::cleanup() {
   if (m_destroying) {
     return;
   }
-  bool hasPreSearch = m_preSearchStateManager && m_preSearchStateManager->hasSavedState();
+  bool hasPreSearch =
+      m_preSearchStateManager && m_preSearchStateManager->hasSavedState();
   if (m_activeWidgets.isEmpty() && (!m_virtualContainer) &&
-      m_dataManager->filePaths().isEmpty() && m_dataManager->subcollections().isEmpty() &&
-      !hasPreSearch) {
+      m_dataManager->filePaths().isEmpty() &&
+      m_dataManager->subcollections().isEmpty() && !hasPreSearch) {
     return;
   }
 
@@ -799,7 +896,7 @@ void ScrollManager::cleanup() {
   if (m_artworkManager) {
     m_artworkManager->clearWidgetReferences();
   }
-  
+
   // Clear cached artwork paths - no longer valid for new collection
   if (m_widgetFactory) {
     m_widgetFactory->clearCachedArtworkPaths();
@@ -814,9 +911,9 @@ void ScrollManager::cleanup() {
   }
   m_activeWidgets.clear();
 
-  // DO NOT delete pre-search widgets here - they are reparented to m_gridContainer
-  // and will be restored when search is cleared. Only delete them on full cleanup
-  // (when m_destroying is true, which returns early above)
+  // DO NOT delete pre-search widgets here - they are reparented to
+  // m_gridContainer and will be restored when search is cleared. Only delete
+  // them on full cleanup (when m_destroying is true, which returns early above)
 
   // Clear the widget pool - if we have pre-search widgets, use soft clear
   // to allow potential reuse when search is cleared
@@ -828,8 +925,8 @@ void ScrollManager::cleanup() {
       // Pre-search widgets exist - soft clear allows widget reuse
       m_widgetPool->softClear(m_gridContainer);
     } else {
-      // Full cleanup - use soft clear to allow reuse during next collection load
-      // The prewarm timer will prune unused stale widgets during idle
+      // Full cleanup - use soft clear to allow reuse during next collection
+      // load The prewarm timer will prune unused stale widgets during idle
       m_widgetPool->softClear(m_gridContainer);
     }
   }
@@ -840,6 +937,26 @@ void ScrollManager::cleanup() {
   }
   m_dataManager->clear();
   m_totalItems = 0;
+}
+
+void ScrollManager::updateViewType(ViewType viewType) {
+  if (m_context.config.viewType == viewType) {
+    return;
+  }
+  m_context.config.viewType = viewType;
+
+  // Update the factory's context as well
+  if (m_widgetFactory) {
+    m_widgetFactory->setCollectionContext(m_context);
+  }
+
+  // Reset scroll position before layout change - grid and list modes have
+  // different row heights, so the old scroll position is meaningless
+  if (m_mediaScrollArea && m_mediaScrollArea->verticalScrollBar()) {
+    m_mediaScrollArea->verticalScrollBar()->setValue(0);
+  }
+
+  handleLayoutChange();
 }
 
 void ScrollManager::updateGridWidth(int newGridWidth) {
@@ -873,9 +990,10 @@ void ScrollManager::updateVirtualView() {
   if ((!m_virtualContainer) || (!m_mediaScrollArea)) {
     if (m_emptyViewDebugBudget > 0) {
       --m_emptyViewDebugBudget;
-      debugLog("updateVirtualView: early return - missing container/scrollArea (virtualContainer="
-               << (m_virtualContainer != nullptr) << " scrollArea="
-               << (m_mediaScrollArea != nullptr) << ")");
+      debugLog("updateVirtualView: early return - missing container/scrollArea "
+               "(virtualContainer="
+               << (m_virtualContainer != nullptr)
+               << " scrollArea=" << (m_mediaScrollArea != nullptr) << ")");
     }
     return;
   }
@@ -893,10 +1011,10 @@ void ScrollManager::updateVirtualView() {
   if (needed.isEmpty()) {
     if (m_emptyViewDebugBudget > 0) {
       --m_emptyViewDebugBudget;
-      debugLog("updateVirtualView: needed is EMPTY (totalItems=" << m_totalItems
-                                                                 << "itemsPerRow=" << m_metrics.itemsPerRow
-                                                                 << "itemWxH=" << m_metrics.itemWidth << "x" << m_metrics.itemHeight
-                                                                 << ")");
+      debugLog("updateVirtualView: needed is EMPTY (totalItems="
+               << m_totalItems << "itemsPerRow=" << m_metrics.itemsPerRow
+               << "itemWxH=" << m_metrics.itemWidth << "x"
+               << m_metrics.itemHeight << ")");
     }
     return;
   }
@@ -907,22 +1025,21 @@ void ScrollManager::updateVirtualView() {
 
   if (m_activeWidgets.isEmpty() && m_emptyViewDebugBudget > 0) {
     --m_emptyViewDebugBudget;
-    debugLog("updateVirtualView: NO widgets materialized (needed=" << needed.size()
-                                                                   << "firstRow=" << getFirstVisibleRow()
-                                                                   << "lastRow=" << getLastVisibleRow()
-                                                                   << "totalItems=" << m_totalItems
-                                                                   << "itemsPerRow=" << m_metrics.itemsPerRow
-                                                                   << "itemWxH=" << m_metrics.itemWidth << "x" << m_metrics.itemHeight
-                                                                   << "virtualContainer=" << (m_virtualContainer != nullptr)
-                                                                   << "scrollArea=" << (m_mediaScrollArea != nullptr)
-                                                                   << ")");
+    debugLog("updateVirtualView: NO widgets materialized (needed="
+             << needed.size() << "firstRow=" << getFirstVisibleRow()
+             << "lastRow=" << getLastVisibleRow() << "totalItems="
+             << m_totalItems << "itemsPerRow=" << m_metrics.itemsPerRow
+             << "itemWxH=" << m_metrics.itemWidth << "x" << m_metrics.itemHeight
+             << "virtualContainer=" << (m_virtualContainer != nullptr)
+             << "scrollArea=" << (m_mediaScrollArea != nullptr) << ")");
   }
 
   removeUnneededWidgets(needed);
   updateArtworkIfAllowed();
 
   if (m_overlayManager) {
-    if (m_overlayManager->isForceVisible() && m_selectionState->hasSelection()) {
+    if (m_overlayManager->isForceVisible() &&
+        m_selectionState->hasSelection()) {
       refreshSelectionOverlayState();
     }
     m_overlayManager->raise();
@@ -1009,7 +1126,7 @@ auto ScrollManager::getLastVisibleRow() const -> int {
 // Handles arrow key scroll animation to center selected item
 void ScrollManager::onArrowKeyViewUpdate() {
   if (!m_arrowKeyScrollHelper || !m_virtualContainer ||
-      !m_selectionState->hasSelection() || 
+      !m_selectionState->hasSelection() ||
       m_selectionState->lastSelectedIndex() >= m_totalItems) {
     return;
   }
@@ -1020,7 +1137,8 @@ void ScrollManager::onArrowKeyViewUpdate() {
 
   // Delegate to helper with position callback
   m_arrowKeyScrollHelper->performUpdate(
-      m_selectionState->lastSelectedIndex(), m_totalItems, m_metrics.itemsPerRow,
+      m_selectionState->lastSelectedIndex(), m_totalItems,
+      m_metrics.itemsPerRow,
       [this](int idx) { return getItemPosition(idx).y(); });
 }
 
@@ -1030,7 +1148,7 @@ auto ScrollManager::selectionOverlayRectForIndex(int visualIndex) const
   if (m_selectionCoordinator) {
     return m_selectionCoordinator->rectForIndex(visualIndex, m_totalItems);
   }
-  
+
   // Fallback for when coordinator is not configured
   if (visualIndex < 0 || visualIndex >= m_totalItems) {
     return {};
@@ -1044,10 +1162,13 @@ void ScrollManager::refreshSelectionOverlayState() {
   if (!m_overlayManager) {
     return;
   }
-  
-  debugLog(QString("refreshSelectionOverlayState: lastSelectedIndex=%1 forceVisible=%2")
-           .arg(m_selectionState->lastSelectedIndex()).arg(m_overlayManager->isForceVisible()));
-  
+
+  debugLog(
+      QString(
+          "refreshSelectionOverlayState: lastSelectedIndex=%1 forceVisible=%2")
+          .arg(m_selectionState->lastSelectedIndex())
+          .arg(m_overlayManager->isForceVisible()));
+
   if (!m_overlayManager->shouldKeepVisible()) {
     debugLog("  HIDING overlay (not force visible)");
     m_overlayManager->hide();
@@ -1059,8 +1180,8 @@ void ScrollManager::refreshSelectionOverlayState() {
 
     if (glideWasActive && m_selectionState->hasSelection()) {
       ensureWidgetForIndex(m_selectionState->lastSelectedIndex());
-      if (auto *selectedWidget =
-              m_activeWidgets.value(m_selectionState->lastSelectedIndex(), nullptr)) {
+      if (auto *selectedWidget = m_activeWidgets.value(
+              m_selectionState->lastSelectedIndex(), nullptr)) {
         debugLog("  requesting widget repaint for selection border");
         selectedWidget->update();
       }
@@ -1075,8 +1196,9 @@ void ScrollManager::refreshSelectionOverlayState() {
     return;
   }
 
-  // During click-hold, we respect the current visibility state (managed by move handlers)
-  // If visible, keep it on top. If hidden (e.g. wrapped row), keep it hidden.
+  // During click-hold, we respect the current visibility state (managed by move
+  // handlers) If visible, keep it on top. If hidden (e.g. wrapped row), keep it
+  // hidden.
   if (m_overlayManager->isForceVisible()) {
     if (m_overlayManager->isVisible()) {
       debugLog("  click-hold mode, raising visible overlay");
@@ -1092,9 +1214,13 @@ void ScrollManager::refreshSelectionOverlayState() {
   }
 
   // Position overlay directly (non-click-hold case or initial positioning)
-  QRect rect = selectionOverlayRectForIndex(m_selectionState->lastSelectedIndex());
+  QRect rect =
+      selectionOverlayRectForIndex(m_selectionState->lastSelectedIndex());
   debugLog(QString("  setting geometry to rect: x=%1 y=%2 w=%3 h=%4")
-           .arg(rect.x()).arg(rect.y()).arg(rect.width()).arg(rect.height()));
+               .arg(rect.x())
+               .arg(rect.y())
+               .arg(rect.width())
+               .arg(rect.height()));
   if (rect.isValid()) {
     m_overlayManager->showAtRect(rect);
   }
@@ -1117,9 +1243,12 @@ void ScrollManager::handleHorizontalMoveAnimation(int selectedIndex,
   if (!m_overlayManager) {
     return;
   }
-  
-  debugLog(QString("handleHorizontalMoveAnimation: prev=%1 sel=%2 forceVisible=%3")
-           .arg(prevIndex).arg(selectedIndex).arg(m_overlayManager->isForceVisible()));
+
+  debugLog(
+      QString("handleHorizontalMoveAnimation: prev=%1 sel=%2 forceVisible=%3")
+          .arg(prevIndex)
+          .arg(selectedIndex)
+          .arg(m_overlayManager->isForceVisible()));
 
   // Calculate target rect for the new selection
   QRect targetRect = selectionOverlayRectForIndex(selectedIndex);
@@ -1134,7 +1263,9 @@ void ScrollManager::handleHorizontalMoveAnimation(int selectedIndex,
     return;
   }
 
-  debugLog(QString("  targetRect: x=%1 y=%2").arg(targetRect.x()).arg(targetRect.y()));
+  debugLog(QString("  targetRect: x=%1 y=%2")
+               .arg(targetRect.x())
+               .arg(targetRect.y()));
 
   // Get start rect from previous selection if overlay not visible
   QRect startRect;
@@ -1165,14 +1296,15 @@ void ScrollManager::handleHorizontalMoveAnimation(int selectedIndex,
 
   // Animate to target
   m_overlayManager->animateTo(targetRect, startRect);
-  
+
   debugLog(QString("  animation started to (%1,%2)")
-           .arg(targetRect.x()).arg(targetRect.y()));
+               .arg(targetRect.x())
+               .arg(targetRect.y()));
 }
 
 void ScrollManager::handleDirectSelectionUpdate(int selectedIndex) {
   bool keepOverlay = m_overlayManager && m_overlayManager->shouldKeepVisible();
-  
+
   if (m_overlayManager && m_overlayManager->isVisible()) {
     m_overlayManager->stopAnimation();
     if (!keepOverlay) {
@@ -1184,8 +1316,8 @@ void ScrollManager::handleDirectSelectionUpdate(int selectedIndex) {
   }
 
   if (m_selectionState->needsCommitUpdate(selectedIndex)) {
-    if (auto *prevSel =
-            m_activeWidgets.value(m_selectionState->committedSelectedIndex(), nullptr)) {
+    if (auto *prevSel = m_activeWidgets.value(
+            m_selectionState->committedSelectedIndex(), nullptr)) {
       prevSel->setSelected(false);
     }
   }
@@ -1196,7 +1328,7 @@ void ScrollManager::handleDirectSelectionUpdate(int selectedIndex) {
     // Force update to ensure border is drawn if we are in widget-border mode
     currSel->update();
   }
-  
+
   if (keepOverlay) {
     // For direct updates (non-gliding) during click-hold (e.g. row wrap),
     // use widget border instead of overlay to avoid visual glitches.
@@ -1206,7 +1338,8 @@ void ScrollManager::handleDirectSelectionUpdate(int selectedIndex) {
     }
     if (m_overlayManager) {
       m_overlayManager->hide();
-      debugLog("  handleDirectSelectionUpdate: hiding overlay, using widget border");
+      debugLog(
+          "  handleDirectSelectionUpdate: hiding overlay, using widget border");
     }
   }
   m_selectionState->commitSelection(selectedIndex);
@@ -1215,8 +1348,7 @@ void ScrollManager::handleDirectSelectionUpdate(int selectedIndex) {
 void ScrollManager::prewarmSurroundingWidgets(int selectedIndex) {
   const int itemsPerRow =
       (m_metrics.itemsPerRow > 0 ? m_metrics.itemsPerRow : 1);
-  const int prewarmRows =
-      (UIConstants::Grid::BUFFER_ROWS > 0 ? UIConstants::Grid::BUFFER_ROWS : 2);
+  const int prewarmRows = UIConstants::Grid::BUFFER_ROWS;
   const int halfWindow = prewarmRows * itemsPerRow;
   int start = std::max(0, selectedIndex - halfWindow);
   int end = std::min(m_totalItems - 1, selectedIndex + halfWindow);
@@ -1241,7 +1373,7 @@ void ScrollManager::scheduleArrowKeyUpdate(int selectedIndex) {
   const int delayMs = extendedHold ? ARROW_KEY_UPDATE_DELAY_EXTENDED_MS
                                    : ARROW_KEY_UPDATE_DELAY_NORMAL_MS;
   m_arrowKeyViewUpdateTimer->start(delayMs);
-  
+
   Q_UNUSED(selectedIndex)
 }
 
@@ -1250,12 +1382,13 @@ void ScrollManager::scheduleArrowKeyUpdate(int selectedIndex) {
 void ScrollManager::updateSelectionForIndex(int selectedIndex) {
   if (lcScrollManager().isDebugEnabled()) {
     bool forceVisible = m_overlayManager && m_overlayManager->isForceVisible();
-    debugLog(QString("updateSelectionForIndex: sel=%1 lastSel=%2 forceVisible=%3")
-             .arg(selectedIndex)
-             .arg(m_selectionState->lastSelectedIndex())
-             .arg(forceVisible));
+    debugLog(
+        QString("updateSelectionForIndex: sel=%1 lastSel=%2 forceVisible=%3")
+            .arg(selectedIndex)
+            .arg(m_selectionState->lastSelectedIndex())
+            .arg(forceVisible));
   }
-  
+
   if (m_destroying || (!m_mediaScrollArea) || selectedIndex < 0 ||
       selectedIndex >= m_totalItems) {
     debugLog("  early return due to invalid state");
@@ -1274,9 +1407,10 @@ void ScrollManager::updateSelectionForIndex(int selectedIndex) {
   // Ensure widget exists and get reference
   ensureWidgetForIndex(selectedIndex);
   ItemWidget *currentWidget = m_activeWidgets.value(selectedIndex, nullptr);
-  
-  const bool keepOverlay = m_overlayManager && m_overlayManager->shouldKeepVisible();
-  
+
+  const bool keepOverlay =
+      m_overlayManager && m_overlayManager->shouldKeepVisible();
+
   if (!currentWidget) {
     handleMissingWidgetSelection(selectedIndex, keepOverlay);
     return;
@@ -1292,30 +1426,39 @@ void ScrollManager::updateSelectionForIndex(int selectedIndex) {
 }
 
 void ScrollManager::updateSelectionDirection(int selectedIndex, int prevIndex) {
-  m_selectionState->updateForNewSelection(selectedIndex, prevIndex, m_metrics.itemsPerRow);
+  m_selectionState->updateForNewSelection(selectedIndex, prevIndex,
+                                          m_metrics.itemsPerRow);
   debugLog(QString("  updated lastSelectedIndex to %1").arg(selectedIndex));
 }
 
-void ScrollManager::handleMissingWidgetSelection(int selectedIndex, bool keepOverlay) {
+void ScrollManager::handleMissingWidgetSelection(int selectedIndex,
+                                                 bool keepOverlay) {
   debugLog(QString("  currentWidget is null for index %1").arg(selectedIndex));
-  // Widget not available, but during click-hold we still update overlay position
+  // Widget not available, but during click-hold we still update overlay
+  // position
   if (keepOverlay && m_overlayManager) {
     QRect rect = selectionOverlayRectForIndex(selectedIndex);
     if (rect.isValid()) {
       m_overlayManager->showAtRect(rect);
-      debugLog(QString("  positioned overlay directly at (%1,%2)").arg(rect.x()).arg(rect.y()));
+      debugLog(QString("  positioned overlay directly at (%1,%2)")
+                   .arg(rect.x())
+                   .arg(rect.y()));
     }
   }
 }
 
-void ScrollManager::handleSameSelectionUpdate(int selectedIndex, ItemWidget *currentWidget, bool keepOverlay) {
+void ScrollManager::handleSameSelectionUpdate(int selectedIndex,
+                                              ItemWidget *currentWidget,
+                                              bool keepOverlay) {
   debugLog("  same selection, returning");
-  
-  // If an animation is running, we MUST let it finish to achieve the "glide" effect.
-  // Interrupting it here would cause the overlay to disappear and the widget border 
-  // to snap back immediately, defeating the purpose of the animation.
+
+  // If an animation is running, we MUST let it finish to achieve the "glide"
+  // effect. Interrupting it here would cause the overlay to disappear and the
+  // widget border to snap back immediately, defeating the purpose of the
+  // animation.
   if (m_overlayManager && m_overlayManager->isAnimating()) {
-    debugLog("  animation running during same-selection update - letting it continue");
+    debugLog("  animation running during same-selection update - letting it "
+             "continue");
     if (!m_overlayManager->isVisible()) {
       m_overlayManager->raise();
     }
@@ -1334,22 +1477,24 @@ void ScrollManager::handleSameSelectionUpdate(int selectedIndex, ItemWidget *cur
   } else if (m_overlayManager && m_overlayManager->isVisible()) {
     m_overlayManager->hide();
   }
-  
+
   if (m_selectionState->needsCommitUpdate(selectedIndex)) {
-    if (auto *prevSel = m_activeWidgets.value(m_selectionState->committedSelectedIndex(), nullptr)) {
+    if (auto *prevSel = m_activeWidgets.value(
+            m_selectionState->committedSelectedIndex(), nullptr)) {
       prevSel->setSelected(false);
     }
   }
   currentWidget->setSelected(true);
   m_selectionState->commitSelection(selectedIndex);
-  
+
   if (m_state && !keepOverlay) {
     m_state->setGlideAnimating(false);
   }
   scheduleArrowKeyUpdate(selectedIndex);
 }
 
-void ScrollManager::handleNewSelectionUpdate(int selectedIndex, int prevIndex, ItemWidget *currentWidget) {
+void ScrollManager::handleNewSelectionUpdate(int selectedIndex, int prevIndex,
+                                             ItemWidget *currentWidget) {
   // Use coordinator for movement analysis
   bool isHorizontalMove = false;
   if (m_selectionCoordinator) {
@@ -1360,7 +1505,7 @@ void ScrollManager::handleNewSelectionUpdate(int selectedIndex, int prevIndex, I
     calculateMovementDirection(selectedIndex, prevIndex, m_metrics.itemsPerRow,
                                isHorizontalMove);
   }
-  
+
   debugLog(QString("  isHorizontalMove=%1").arg(isHorizontalMove));
 
   if (isHorizontalMove) {
@@ -1368,7 +1513,7 @@ void ScrollManager::handleNewSelectionUpdate(int selectedIndex, int prevIndex, I
   } else {
     handleDirectSelectionUpdate(selectedIndex);
   }
-  
+
   Q_UNUSED(currentWidget)
 }
 
@@ -1388,6 +1533,45 @@ void ScrollManager::setDatabaseManager(DatabaseManager *manager) {
   }
 }
 
+void ScrollManager::setPendingSelectionRestoreByPath(const QString &filePath) {
+  // Just store the path - we'll query the database after the collection reloads
+  // (in setupVirtualScrolling) when the context and data are ready
+  m_pendingRestoreFilePath = filePath;
+}
+
+void ScrollManager::onVisualIndexForPathLoaded(int visualIndex,
+                                               const QString &filePath) {
+  // Only process if this is the path we're waiting for
+  if (filePath != m_pendingRestoreFilePath) {
+    return;
+  }
+
+  m_pendingRestoreFilePath.clear();
+
+  if (visualIndex >= 0) {
+    // The database returns position among media items only. In the UI,
+    // subcollections and virtual folders appear before media items,
+    // so we need to offset the index accordingly.
+    int prefixCount = m_dataManager ? (m_dataManager->subcollectionCount() +
+                                       m_dataManager->virtualFolderCount())
+                                    : 0;
+    int adjustedIndex = visualIndex + prefixCount;
+    emit selectItemByIndex(adjustedIndex);
+  }
+}
+
+bool ScrollManager::isArtworkPreviewVisible() const {
+  return m_artworkPreviewOverlay && m_artworkPreviewOverlay->isVisible();
+}
+
+bool ScrollManager::hideArtworkPreview() {
+  if (isArtworkPreviewVisible()) {
+    m_artworkPreviewOverlay->hideOverlay();
+    return true;
+  }
+  return false;
+}
+
 void ScrollManager::recenterVirtualContainer() { positionVirtualContainer(); }
 
 auto ScrollManager::getCurrentAlignment() const -> HorizontalAlignment {
@@ -1404,15 +1588,17 @@ void ScrollManager::applyFilter(const QString &searchText) {
   }
 
   // Update FilterManager's source data before applying filter
-  m_filterManager->setSourceData(m_dataManager->filePaths(), m_dataManager->fileNames(),
-                                  m_dataManager->filePathToDisplayName(), m_dataManager->subcollections());
+  m_filterManager->setSourceData(
+      m_dataManager->filePaths(), m_dataManager->fileNames(),
+      m_dataManager->filePathToDisplayName(), m_dataManager->subcollections());
   m_filterManager->setContext(m_context);
   m_filterManager->applyFilter(searchText);
 
   // Update local state from FilterManager
-  m_totalItems = m_filterManager->isFiltered()
-                     ? m_filterManager->filteredCount()
-                     : m_dataManager->subcollectionCount() + m_dataManager->fileCount();
+  m_totalItems =
+      m_filterManager->isFiltered()
+          ? m_filterManager->filteredCount()
+          : m_dataManager->subcollectionCount() + m_dataManager->fileCount();
 
   calculateVirtualMetrics();
   positionVirtualContainer();
@@ -1451,20 +1637,15 @@ void ScrollManager::restorePreSearchState() {
   if (!m_preSearchStateManager || !m_preSearchStateManager->hasSavedState()) {
     return;
   }
-  
+
   // Create position callback for widget repositioning
   auto getPositionFunc = [this](int index) -> QPoint {
     return getItemPosition(index);
   };
-  
+
   m_preSearchStateManager->restoreState(
-      m_activeWidgets,
-      m_virtualContainer,
-      m_widgetPool.get(),
-      m_artworkManager,
-      getPositionFunc,
-      m_metrics.itemWidth,
-      m_metrics.itemHeight);
+      m_activeWidgets, m_virtualContainer, m_widgetPool.get(), m_artworkManager,
+      getPositionFunc, m_metrics.itemWidth, m_metrics.itemHeight);
 }
 
 auto ScrollManager::hasPreSearchState() const -> bool {
@@ -1490,7 +1671,7 @@ void ScrollManager::clearFilter() {
   }
 
   bool hasPreSearch = hasPreSearchState();
-  
+
   if (!m_filterManager->isFiltered()) {
     // Filter not active, but we may still have pre-search widgets to restore
     if (hasPreSearch) {
@@ -1504,9 +1685,10 @@ void ScrollManager::clearFilter() {
   m_totalItems = m_dataManager->totalItemCount();
 
   calculateVirtualMetrics();
-  
-  // Pre-set scroll position BEFORE positionVirtualContainer to prevent visual jump
-  // where list briefly shows at position 0 then jumps to remembered position
+
+  // Pre-set scroll position BEFORE positionVirtualContainer to prevent visual
+  // jump where list briefly shows at position 0 then jumps to remembered
+  // position
   if (hasPreSearch && m_mediaScrollArea && m_preSearchStateManager) {
     if (QScrollBar *scrollbar = m_mediaScrollArea->verticalScrollBar()) {
       int viewportHeight = m_mediaScrollArea->viewport()->height();
@@ -1516,7 +1698,7 @@ void ScrollManager::clearFilter() {
       scrollbar->setValue(m_preSearchStateManager->savedScrollPosition());
     }
   }
-  
+
   positionVirtualContainer();
 
   // Try to restore saved pre-search state for instant recovery
@@ -1574,17 +1756,22 @@ void ScrollManager::enforceScrollContentConstraints() {
     return;
   }
   // Use totalHeight (clamped to Qt's QWIDGETSIZE_MAX) for container.
-  // Scrollbar stays at clamped range - scroll scaling maps to logical positions.
+  // Scrollbar stays at clamped range - scroll scaling maps to logical
+  // positions.
   m_gridContainer->setMinimumHeight(m_metrics.totalHeight);
   m_gridContainer->setMaximumHeight(m_metrics.totalHeight);
 }
 
 void ScrollManager::recreateLayout() {
-  if (m_dataManager->filePaths().isEmpty() && m_dataManager->subcollections().isEmpty()) {
+  if (m_dataManager->filePaths().isEmpty() &&
+      m_dataManager->subcollections().isEmpty()) {
     return;
   }
   calculateVirtualMetrics();
   positionVirtualContainer();
+  bool isListMode = (m_context.config.viewType == ViewType::List);
+  int fontSize =
+      isListMode ? m_context.config.listFontSize : m_context.config.fontSize;
   for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
     ItemWidget *widget = it.value();
     if (!widget) {
@@ -1593,7 +1780,7 @@ void ScrollManager::recreateLayout() {
     widget->setHideTitles(m_context.config.hideTitles);
     widget->setHideSubcollectionTitles(
         m_context.config.hideSubcollectionTitles);
-    widget->setFontSize(m_context.config.fontSize);
+    widget->setFontSize(fontSize);
     widget->setCornerRadius(m_context.config.cornerRadius);
     widget->setItemDimensions(m_metrics.itemWidth, m_metrics.itemHeight);
     QPoint position = getItemPosition(it.key());
@@ -1613,19 +1800,27 @@ void ScrollManager::handleLayoutChange() {
   if (m_destroying || QApplication::closingDown()) {
     return;
   }
-  calculateVirtualMetrics();
-  positionVirtualContainer();
+
+  // Release all active widgets back to the pool - they need to be recreated
+  // because layout changes (especially view type changes) require fresh widgets
+  // with different configurations (e.g., list mode has no image label)
   for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
     ItemWidget *widget = it.value();
-    if (!widget) {
-      continue;
+    if (widget && m_widgetPool) {
+      m_widgetPool->release(widget);
     }
-    widget->setCornerRadius(m_context.config.cornerRadius);
-    widget->setItemDimensions(m_metrics.itemWidth, m_metrics.itemHeight);
-    QPoint position = getItemPosition(it.key());
-    widget->setGeometry(position.x(), position.y(), m_metrics.itemWidth,
-                        m_metrics.itemHeight);
   }
+  m_activeWidgets.clear();
+
+  calculateVirtualMetrics();
+
+  // Update factory with new metrics before creating widgets
+  // Critical for view type changes where item dimensions differ significantly
+  if (m_widgetFactory) {
+    m_widgetFactory->setMetrics(m_metrics.itemWidth, m_metrics.itemHeight);
+  }
+
+  positionVirtualContainer();
   updateVirtualView();
 
   // Clear user scroll state after layout change - scroll position changes
@@ -1653,9 +1848,16 @@ void ScrollManager::updateContextForSubcollection(int subcollectionIndex) {
   m_context.currentIndex = subcollectionIndex;
   m_context.config = (*m_collections)[subcollectionIndex];
   // Reinitialize subcollections for the new context
-  m_dataManager->initializeSubcollections(m_context, m_collections, m_hierarchyCache);
+  m_dataManager->initializeSubcollections(m_context, m_collections,
+                                          m_hierarchyCache);
   m_totalItems = m_dataManager->totalItemCount();
   calculateVirtualMetrics();
+  // Update factory metrics after calculation - critical for list mode where
+  // itemWidth depends on viewport width
+  if (m_widgetFactory) {
+    m_widgetFactory->setCollectionContext(m_context);
+    m_widgetFactory->setMetrics(m_metrics.itemWidth, m_metrics.itemHeight);
+  }
   positionVirtualContainer();
   updateVirtualView();
 }
@@ -1668,7 +1870,8 @@ void ScrollManager::applySubcollectionFilter(int subcollectionIndex) {
       subcollectionIndex >= m_collections->size()) {
     return;
   }
-  if (m_dataManager->filePaths().isEmpty() && m_dataManager->subcollections().isEmpty()) {
+  if (m_dataManager->filePaths().isEmpty() &&
+      m_dataManager->subcollections().isEmpty()) {
     return;
   }
 
@@ -1681,8 +1884,9 @@ void ScrollManager::applySubcollectionFilter(int subcollectionIndex) {
   }
 
   // Update FilterManager's source data and apply subcollection filter
-  m_filterManager->setSourceData(m_dataManager->filePaths(), m_dataManager->fileNames(),
-                                  m_dataManager->filePathToDisplayName(), m_dataManager->subcollections());
+  m_filterManager->setSourceData(
+      m_dataManager->filePaths(), m_dataManager->fileNames(),
+      m_dataManager->filePathToDisplayName(), m_dataManager->subcollections());
   m_filterManager->setContext(m_context);
   m_filterManager->applySubcollectionFilter(subcollectionIndex);
 
@@ -1691,7 +1895,8 @@ void ScrollManager::applySubcollectionFilter(int subcollectionIndex) {
 
 void ScrollManager::rebuildFilteredView() {
   m_totalItems = m_filterManager ? m_filterManager->filteredCount()
-                                 : m_dataManager->subcollectionCount() + m_dataManager->fileCount();
+                                 : m_dataManager->subcollectionCount() +
+                                       m_dataManager->fileCount();
   calculateVirtualMetrics();
   positionVirtualContainer();
 
@@ -1703,8 +1908,7 @@ void ScrollManager::rebuildFilteredView() {
   }
   m_activeWidgets.clear();
 
-  if ((m_mediaScrollArea) &&
-      (m_mediaScrollArea->verticalScrollBar())) {
+  if ((m_mediaScrollArea) && (m_mediaScrollArea->verticalScrollBar())) {
     m_mediaScrollArea->verticalScrollBar()->setValue(0);
   }
 
@@ -1747,33 +1951,57 @@ void ScrollManager::createVirtualContainer() {
   if (!m_containerManager) {
     return;
   }
-  
+
   m_containerManager->createContainer();
   m_virtualContainer = m_containerManager->container();
-  
+
   connectScrollEvents();
   positionVirtualContainer();
-  
+
   // Create or update list header for list view mode
   updateListHeader();
 }
 
 // Creates, updates, or removes the list header widget based on view type
+// Header is parented to viewport (not virtual container) so it stays fixed
+// while scrolling
 void ScrollManager::updateListHeader() {
   bool isListMode = (m_context.config.viewType == ViewType::List);
-  
-  if (isListMode && m_virtualContainer) {
+
+  if (isListMode && m_mediaScrollArea && m_mediaScrollArea->viewport()) {
+    QWidget *viewport = m_mediaScrollArea->viewport();
     if (!m_listHeader) {
-      m_listHeader = new ListHeaderWidget(m_virtualContainer);
+      // Parent to viewport so header stays fixed while content scrolls
+      m_listHeader = new ListHeaderWidget(viewport);
       // Connect column click signal to sort handler
-      connect(m_listHeader, &ListHeaderWidget::columnClicked,
-              this, &ScrollManager::onListColumnClicked);
+      connect(m_listHeader, &ListHeaderWidget::columnClicked, this,
+              &ScrollManager::onListColumnClicked);
+      // Connect column width change signals for drag-to-resize
+      connect(m_listHeader, &ListHeaderWidget::columnWidthChanged, this,
+              &ScrollManager::onListColumnWidthChanged);
+      connect(m_listHeader, &ListHeaderWidget::artworkColumnWidthChanged, this,
+              &ScrollManager::onListArtworkColumnWidthChanged);
+      // Sync initial column widths
+      m_listHeader->setCollectionColumnWidth(m_collectionColumnWidth);
+      m_listHeader->setArtworkColumnWidth(m_artworkColumnWidth);
+    } else {
+      // Always sync column widths - settings may have been loaded after header
+      // creation
+      m_listHeader->setCollectionColumnWidth(m_collectionColumnWidth);
+      m_listHeader->setArtworkColumnWidth(m_artworkColumnWidth);
     }
-    // Position header at top of container
+    // Position header at top of viewport - calculate x position based on
+    // container position
     int headerWidth = m_metrics.itemWidth + (m_metrics.margins * 2);
-    m_listHeader->setGeometry(0, 0, headerWidth, UIConstants::ListView::HEADER_HEIGHT);
+    int containerX = m_virtualContainer ? m_virtualContainer->x() : 0;
+    m_listHeader->setGeometry(containerX, 0, headerWidth,
+                              UIConstants::ListView::HEADER_HEIGHT);
     m_listHeader->show();
-    m_listHeader->raise();
+    m_listHeader->raise(); // Keep above scrolling content
+    m_listHeader->setAttribute(Qt::WA_TransparentForMouseEvents,
+                               false); // Ensure header receives clicks
+    qDebug() << "updateListHeader: header geometry=" << m_listHeader->geometry()
+             << "raised, accepts mouse events";
   } else if (m_listHeader) {
     // Hide header in grid mode
     m_listHeader->hide();
@@ -1786,13 +2014,19 @@ void ScrollManager::primeLayoutFor(const CollectionConfig &config) {
     return;
   }
   m_context.config = config;
-  // Update factory context so new widgets get correct settings (corner radius, etc.)
+  // Update factory context so new widgets get correct settings (corner radius,
+  // etc.)
   if (m_widgetFactory) {
     m_widgetFactory->setCollectionContext(m_context);
   }
   int savedTotal = m_totalItems;
   m_totalItems = 0;
   calculateVirtualMetrics();
+  // Update factory metrics after calculation - critical for list mode where
+  // itemWidth depends on viewport width calculated in calculateVirtualMetrics()
+  if (m_widgetFactory) {
+    m_widgetFactory->setMetrics(m_metrics.itemWidth, m_metrics.itemHeight);
+  }
   if (!m_virtualContainer) {
     createVirtualContainer();
   }
@@ -1807,7 +2041,7 @@ void ScrollManager::positionVirtualContainer() {
   }
 
   bool isFiltered = m_filterManager && m_filterManager->isFiltered();
-  
+
   ContainerPositionParams params;
   params.totalWidth = m_metrics.totalWidth;
   params.totalHeight = m_metrics.totalHeight;
@@ -1817,6 +2051,10 @@ void ScrollManager::positionVirtualContainer() {
   params.isFiltered = isFiltered;
 
   m_containerManager->positionContainer(params);
+
+  // Update list header position after container is positioned to ensure
+  // header x-position matches the container's final position
+  updateListHeader();
 }
 
 // Cleans up the virtual container and persistent selection overlay resources
@@ -1826,18 +2064,23 @@ void ScrollManager::cleanupVirtualContainer() {
     m_containerManager->cleanupContainer();
   }
   m_virtualContainer = nullptr;
+  // Note: Don't delete the list header here - it persists across collection
+  // reloads and is parented to the viewport (not the virtual container)
 }
 
 void ScrollManager::calculateVirtualMetrics() {
   // Use GridLayoutCalculator for metrics calculation
-  m_metrics = GridLayoutCalculator::calculateMetrics(m_context.config, m_totalItems);
+  m_metrics =
+      GridLayoutCalculator::calculateMetrics(m_context.config, m_totalItems);
 
-  // List mode: set item width to fill available viewport (minus scrollbar and margins)
+  // List mode: set item width to fill available viewport (minus scrollbar and
+  // margins)
   if (m_context.config.viewType == ViewType::List && m_mediaScrollArea) {
     int viewportWidth = m_mediaScrollArea->viewport()->width();
     int scrollbarWidth = getScrollbarWidth();
     // Full width minus margins and scrollbar
-    m_metrics.itemWidth = viewportWidth - (m_metrics.margins * 2) - scrollbarWidth;
+    m_metrics.itemWidth =
+        viewportWidth - (m_metrics.margins * 2) - scrollbarWidth;
     m_metrics.totalWidth = viewportWidth - scrollbarWidth;
     m_metrics.actualGridWidth = m_metrics.itemWidth + (m_metrics.margins * 2);
   }
@@ -1847,9 +2090,10 @@ void ScrollManager::calculateVirtualMetrics() {
   if (isFiltered && m_totalItems > 0 && m_totalItems < m_metrics.itemsPerRow) {
     m_metrics = GridLayoutCalculator::adjustForFilter(m_metrics, m_totalItems);
   }
-  
-  // Update list header visibility and position based on view type
-  updateListHeader();
+
+  // Note: updateListHeader() is called separately AFTER
+  // positionVirtualContainer() to ensure header x-position matches the
+  // container's final position
 }
 
 // Connects scrollbars to update logic and sets user scroll activity properties
@@ -1882,10 +2126,13 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
     if (!existing->isVisible()) {
       existing->show();
     }
+    bool isListMode = (m_context.config.viewType == ViewType::List);
+    int fontSize =
+        isListMode ? m_context.config.listFontSize : m_context.config.fontSize;
     existing->setHideTitles(m_context.config.hideTitles);
     existing->setHideSubcollectionTitles(
         m_context.config.hideSubcollectionTitles);
-    existing->setFontSize(m_context.config.fontSize);
+    existing->setFontSize(fontSize);
     existing->setCornerRadius(m_context.config.cornerRadius);
     existing->setItemDimensions(m_metrics.itemWidth, m_metrics.itemHeight);
     QPoint position = getItemPosition(visualIndex);
@@ -1906,8 +2153,10 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
   if (m_widgetFactory) {
     if (actualIndex < subCount) {
       // Subcollection item
-      int subcollectionIndex = m_dataManager->subcollectionIndexFromActual(actualIndex);
-      itemWidget = m_widgetFactory->createSubcollectionWidget(subcollectionIndex);
+      int subcollectionIndex =
+          m_dataManager->subcollectionIndexFromActual(actualIndex);
+      itemWidget =
+          m_widgetFactory->createSubcollectionWidget(subcollectionIndex);
     } else if (actualIndex < subCount + folderCount) {
       // Virtual folder item
       QString folderPath = m_dataManager->virtualFolderFromActual(actualIndex);
@@ -1916,7 +2165,8 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
       // Media item
       int mediaIndex = m_dataManager->mediaIndexFromActual(actualIndex);
       int collectionIndex = m_context.currentIndex;
-      itemWidget = m_widgetFactory->createMediaWidget(mediaIndex, collectionIndex);
+      itemWidget =
+          m_widgetFactory->createMediaWidget(mediaIndex, collectionIndex);
     }
   }
 
@@ -1925,14 +2175,21 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
     itemWidget->setGeometry(position.x(), position.y(), m_metrics.itemWidth,
                             m_metrics.itemHeight);
     // Set row index for alternating background colors in list mode
-    int rowIndex = GridUtils::computeItemRow(visualIndex, m_metrics.itemsPerRow);
+    int rowIndex =
+        GridUtils::computeItemRow(visualIndex, m_metrics.itemsPerRow);
     itemWidget->setRowIndex(rowIndex);
     itemWidget->show();
 
-    // Restore selection state if this widget corresponds to the currently selected index
+    // Restore selection state if this widget corresponds to the currently
+    // selected index
     if (visualIndex == m_selectionState->committedSelectedIndex()) {
       itemWidget->setSelected(true);
     }
+
+    // Connect artwork preview signal for list mode (use UniqueConnection to
+    // avoid duplicates on widget reuse)
+    connect(itemWidget, &ItemWidget::artworkPreviewRequested, this,
+            &ScrollManager::onArtworkPreviewRequested, Qt::UniqueConnection);
 
     m_activeWidgets.insert(visualIndex, itemWidget);
   }
@@ -1940,9 +2197,9 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
 
 auto ScrollManager::getItemPosition(int visualIndex) const -> QPoint {
   bool isFiltered = m_filterManager && m_filterManager->isFiltered();
-  QPoint pos = GridLayoutCalculator::getItemPosition(
-      visualIndex, m_metrics, isFiltered, m_totalItems);
-  
+  QPoint pos = GridLayoutCalculator::getItemPosition(visualIndex, m_metrics,
+                                                     isFiltered, m_totalItems);
+
   // For very large grids that exceed Qt's size limit, position widgets
   // relative to the viewport. The scrollbar is in clamped (widget) space,
   // but we calculate which rows are visible using logical scroll position.
@@ -1952,14 +2209,15 @@ auto ScrollManager::getItemPosition(int visualIndex) const -> QPoint {
     int viewportHeight = m_mediaScrollArea->viewport()->height();
     // Convert clamped scroll position to logical scroll position with viewport
     // for precise endpoint mapping (scrollbar max reaches end of collection)
-    int logicalScrollY = m_metrics.toLogicalScrollY(widgetScrollY, viewportHeight);
+    int logicalScrollY =
+        m_metrics.toLogicalScrollY(widgetScrollY, viewportHeight);
     // Widget appears at (logicalY - logicalScrollY) pixels from viewport top,
     // which means placing it at widgetScrollY + (logicalY - logicalScrollY)
     // in container coordinates
     int relativeY = widgetScrollY + (pos.y() - logicalScrollY);
     return QPoint(pos.x(), relativeY);
   }
-  
+
   return pos;
 }
 
@@ -1967,7 +2225,7 @@ void ScrollManager::reconfigureArtworkForActiveWidgets() {
   if (!m_widgetFactory || !m_artworkManager) {
     return;
   }
-  
+
   // Re-configure artwork for active widgets that may not have gotten
   // artwork paths on initial creation (directories weren't cached yet).
   // Skip widgets that already have artwork to avoid redundant work.
@@ -1989,14 +2247,17 @@ void ScrollManager::reconfigureArtworkForActiveWidgets() {
       continue;
     }
     // Force direct lookup - prewarm has warmed the OS filesystem cache
-    m_widgetFactory->configureArtworkForWidget(widget, filePath, /*forceDirectLookup=*/true);
+    m_widgetFactory->configureArtworkForWidget(widget, filePath,
+                                               /*forceDirectLookup=*/true);
     ++reconfigured;
   }
-  
+
   if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
-    qWarning() << "[PerfTrace] reconfigureArtworkForActiveWidgets: reconfigured=" << reconfigured << "skipped=" << skipped;
+    qWarning()
+        << "[PerfTrace] reconfigureArtworkForActiveWidgets: reconfigured="
+        << reconfigured << "skipped=" << skipped;
   }
-  
+
   // Trigger viewport update to load the newly-configured artwork
   m_artworkManager->scheduleViewportUpdate();
 }
@@ -2010,7 +2271,7 @@ void ScrollManager::onScrollChanged() {
   if (!m_scrollTimer) {
     return;
   }
-  
+
   // Prevent reentrant scroll handling which can occur when scroll animations
   // trigger valueChanged signals during processing
   if (m_processingScrollChange) {
@@ -2074,7 +2335,8 @@ void ScrollManager::setupScrollSuppression() {
   // Clear arrow center suppression after the suppression window expires -
   // checks timestamp to avoid clearing if another suppress was scheduled
   QTimer::singleShot(
-      UIConstants::Keyboard::ARROW_CENTER_CLEAR_CHECK_DELAY_MS, this, [statePtr]() {
+      UIConstants::Keyboard::ARROW_CENTER_CLEAR_CHECK_DELAY_MS, this,
+      [statePtr]() {
         if (!statePtr) {
           return;
         }
@@ -2091,17 +2353,18 @@ void ScrollManager::finalizeScrollChanges() {
   // Delay clearing UserScrollActive to allow any pending scroll events
   // to be processed with the flag still set. After clearing, trigger
   // artwork update since it was deferred during scrolling.
-  QTimer::singleShot(
-      UIConstants::Mouse::USER_SCROLL_ACTIVE_CLEAR_DELAY_MS, this, [this]() {
-        if (m_state) {
-          m_state->scroll().userScrollActive = false;
-        }
-        // Trigger artwork update now that user scroll is complete -
-        // artwork loading was deferred while userScrollActive was true
-        if (m_artworkManager) {
-          m_artworkManager->updateViewportArtwork();
-        }
-      });
+  QTimer::singleShot(UIConstants::Mouse::USER_SCROLL_ACTIVE_CLEAR_DELAY_MS,
+                     this, [this]() {
+                       if (m_state) {
+                         m_state->scroll().userScrollActive = false;
+                       }
+                       // Trigger artwork update now that user scroll is
+                       // complete - artwork loading was deferred while
+                       // userScrollActive was true
+                       if (m_artworkManager) {
+                         m_artworkManager->updateViewportArtwork();
+                       }
+                     });
 
   notifyUserActivity();
   if (!m_scrollTimer->isActive()) {
@@ -2112,29 +2375,99 @@ void ScrollManager::finalizeScrollChanges() {
 void ScrollManager::onThrottledUpdate() { updateVirtualView(); }
 
 void ScrollManager::onListColumnClicked(ListSortColumn column) {
-  // TODO: Integrate with existing sort system in NavigationManager/MenuController
-  // For now, just update the sort indicator in the header
   if (!m_listHeader) {
     return;
   }
-  
+
   // Toggle direction if clicking the same column
   static ListSortColumn lastColumn = ListSortColumn::Name;
   static bool ascending = true;
-  
+
   if (column == lastColumn) {
     ascending = !ascending;
   } else {
     lastColumn = column;
     ascending = true;
   }
-  
+
   m_listHeader->setSortColumn(column, ascending);
-  
-  // Emit signal for external sort handling (to be connected to NavigationManager)
-  // For now, this is a placeholder - the actual sort should trigger a database re-query
-  qDebug() << "List column clicked:" << static_cast<int>(column) 
-           << "ascending:" << ascending;
+
+  // Determine sort mode based on column and direction and emit signal
+  if (column == ListSortColumn::Name) {
+    SortMode newSortMode =
+        ascending ? SortMode::NameAscending : SortMode::NameDescending;
+    qDebug() << "onListColumnClicked: Name column, ascending=" << ascending
+             << "sortMode=" << static_cast<int>(newSortMode);
+    emit sortModeChangeRequested(newSortMode);
+  } else if (column == ListSortColumn::Collection) {
+    SortMode newSortMode = ascending ? SortMode::CollectionAscending
+                                     : SortMode::CollectionDescending;
+    qDebug() << "onListColumnClicked: Collection column, ascending="
+             << ascending << "sortMode=" << static_cast<int>(newSortMode);
+    emit sortModeChangeRequested(newSortMode);
+  } else if (column == ListSortColumn::Artwork) {
+    SortMode newSortMode =
+        ascending ? SortMode::ArtworkFirst : SortMode::ArtworkLast;
+    qDebug() << "onListColumnClicked: Artwork column, ascending=" << ascending
+             << "sortMode=" << static_cast<int>(newSortMode);
+    emit sortModeChangeRequested(newSortMode);
+  }
+}
+
+void ScrollManager::onListColumnWidthChanged(int collectionWidth) {
+  m_collectionColumnWidth = collectionWidth;
+
+  // Update factory so new widgets get the correct width
+  if (m_widgetFactory) {
+    m_widgetFactory->setCollectionColumnWidth(collectionWidth);
+  }
+
+  // Update all visible widgets with the new column width
+  for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
+    ItemWidget *widget = it.value();
+    if (widget && widget->isListMode()) {
+      widget->setCollectionColumnWidth(collectionWidth);
+    }
+  }
+
+  // Emit signal for persistence
+  emit listColumnWidthChanged(collectionWidth);
+}
+
+void ScrollManager::onListArtworkColumnWidthChanged(int artworkWidth) {
+  m_artworkColumnWidth = artworkWidth;
+
+  // Update factory so new widgets get the correct width
+  if (m_widgetFactory) {
+    m_widgetFactory->setArtworkColumnWidth(artworkWidth);
+  }
+
+  // Update all visible widgets with the new column width
+  for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
+    ItemWidget *widget = it.value();
+    if (widget && widget->isListMode()) {
+      widget->setArtworkColumnWidth(artworkWidth);
+    }
+  }
+
+  // Emit signal for persistence
+  emit listArtworkColumnWidthChanged(artworkWidth);
+}
+
+void ScrollManager::onArtworkPreviewRequested(const QString &filePath,
+                                              const QString &artworkDir) {
+  if (!m_mediaScrollArea) {
+    return;
+  }
+
+  // Create overlay lazily on first use
+  if (!m_artworkPreviewOverlay) {
+    m_artworkPreviewOverlay =
+        std::make_unique<ArtworkPreviewOverlay>(m_mediaScrollArea);
+  }
+
+  // Show artwork preview using the item's collection artwork directory
+  m_artworkPreviewOverlay->showArtworkForFile(filePath, artworkDir);
 }
 
 void ScrollManager::onSliderMoved(int position) {
@@ -2144,23 +2477,27 @@ void ScrollManager::onSliderMoved(int position) {
   if (!m_mediaScrollArea || !m_widgetFactory || m_metrics.itemHeight <= 0) {
     return;
   }
-  
+
   // Calculate which row the slider position corresponds to
   int targetRow = position / m_metrics.itemHeight;
   int targetIndex = targetRow * m_metrics.itemsPerRow;
-  
-  // Calculate the media index offset (accounting for subcollections/virtual folders)
-  int subcollectionCount = m_dataManager ? m_dataManager->subcollectionCount() : 0;
-  int virtualFolderCount = m_dataManager ? m_dataManager->virtualFolderCount() : 0;
+
+  // Calculate the media index offset (accounting for subcollections/virtual
+  // folders)
+  int subcollectionCount =
+      m_dataManager ? m_dataManager->subcollectionCount() : 0;
+  int virtualFolderCount =
+      m_dataManager ? m_dataManager->virtualFolderCount() : 0;
   int prefixCount = subcollectionCount + virtualFolderCount;
   int mediaIndex = qMax(0, targetIndex - prefixCount);
-  
+
   // Align to chunk boundary for efficient database queries
-  int chunkSize = m_context.config.showAllSubcollectionItems && m_totalItems > 5000
-                      ? UIConstants::Database::RANGE_CHUNK_SIZE_LARGE
-                      : UIConstants::Database::RANGE_CHUNK_SIZE_DEFAULT;
+  int chunkSize =
+      m_context.config.showAllSubcollectionItems && m_totalItems > 5000
+          ? UIConstants::Database::RANGE_CHUNK_SIZE_LARGE
+          : UIConstants::Database::RANGE_CHUNK_SIZE_DEFAULT;
   int chunkStart = (mediaIndex / chunkSize) * chunkSize;
-  
+
   // Request the chunk at the target position to prefetch data
   if (m_widgetFactory) {
     m_widgetFactory->prefetchRangeAt(chunkStart, chunkSize);
@@ -2175,8 +2512,10 @@ void ScrollManager::onVirtualFolderDoubleClicked(const QString &folderPath) {
   emit virtualFolderEntered(folderPath);
 }
 
-// Returns the virtual folder path for a visual index, or empty string if not a virtual folder
-auto ScrollManager::virtualFolderPathForVisualIndex(int visualIndex) const -> QString {
+// Returns the virtual folder path for a visual index, or empty string if not a
+// virtual folder
+auto ScrollManager::virtualFolderPathForVisualIndex(int visualIndex) const
+    -> QString {
   int actualIndex = getFilteredIndex(visualIndex);
   return m_dataManager->virtualFolderFromActual(actualIndex);
 }
@@ -2212,7 +2551,7 @@ void ScrollManager::calculateMovementDirection(int selectedIndex, int prevIndex,
   // Allow jumps > 1 if on the same row (for rapid click-hold advancing)
   int prevRow = GridUtils::computeItemRow(prevIndex, itemsPerRow);
   int currRow = GridUtils::computeItemRow(selectedIndex, itemsPerRow);
-  
+
   if (prevRow == currRow) {
     isHorizontalMove = true;
     return;

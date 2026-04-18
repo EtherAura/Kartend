@@ -1,8 +1,8 @@
 // Handles alphabetic navigation via PageUp/PageDown keys.
 #include "alphabeticnavigationhandler.h"
+#include "filtermanager.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
-#include "filtermanager.h"
 
 #include <QFileInfo>
 
@@ -129,7 +129,7 @@ auto AlphabeticNavigationHandler::findNextLetterIndex(int currentIndex,
         break;
       }
     }
-    
+
     // If not found before current, wrap and search from end
     if (prevGroupChar.isNull()) {
       for (int i = totalItems - 1; i > currentIndex; --i) {
@@ -141,11 +141,11 @@ auto AlphabeticNavigationHandler::findNextLetterIndex(int currentIndex,
         }
       }
     }
-    
+
     if (prevGroupChar.isNull()) {
       return -1; // All items have the same first character
     }
-    
+
     // Find the start of the contiguous group containing prevGroupFoundAt
     // Walk backward from prevGroupFoundAt until we find a different character
     int groupStart = prevGroupFoundAt;
@@ -158,15 +158,15 @@ auto AlphabeticNavigationHandler::findNextLetterIndex(int currentIndex,
         break;
       }
     }
-    
+
     return groupStart;
   }
 
   return -1;
 }
 
-auto AlphabeticNavigationHandler::getAdjacentLetter(QChar current,
-                                                    bool forward) -> QChar {
+auto AlphabeticNavigationHandler::getAdjacentLetter(QChar current, bool forward)
+    -> QChar {
   // This function is no longer used but kept for potential future use
   if (!current.isLetter()) {
     return forward ? QChar('A') : QChar('Z');

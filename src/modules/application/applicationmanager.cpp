@@ -1,4 +1,5 @@
-// Owns and coordinates all manager lifecycles with controlled destruction order.
+// Owns and coordinates all manager lifecycles with controlled destruction
+// order.
 #include "applicationmanager.h"
 
 #include "artworkmanager.h"
@@ -23,25 +24,25 @@ void ApplicationManager::initialize() {
   m_cacheManager = std::make_unique<CacheManager>();
   m_sessionManager = std::make_unique<SessionManager>(this);
 
-  // 2. Initialize session synchronously (needed for selection restore at startup).
-  // Session file is small (~160KB) and loads quickly.
+  // 2. Initialize session synchronously (needed for selection restore at
+  // startup). Session file is small (~160KB) and loads quickly.
   m_sessionManager->initialize();
 
   // 3. Defer cache metadata loading to background - the 51MB+ timestamps file
   // is only needed for artwork cache validation, not for initial UI display.
   // This avoids blocking startup for 2-3 seconds on large artwork caches.
   // Result intentionally discarded - we don't need to wait for cache init.
-  (void)QtConcurrent::run([this]() {
-    m_cacheManager->initialize();
-  });
+  (void)QtConcurrent::run([this]() { m_cacheManager->initialize(); });
 
-  // 4. ArtworkManager (needs CacheManager - but can work without timestamps loaded)
+  // 4. ArtworkManager (needs CacheManager - but can work without timestamps
+  // loaded)
   m_artworkManager =
       std::make_unique<ArtworkManager>(m_cacheManager.get(), this);
 
   // 5. SettingsManager (needs SessionManager, ArtworkManager, CacheManager)
   m_settingsManager = std::make_unique<SettingsManager>(
-      m_sessionManager.get(), m_artworkManager.get(), m_cacheManager.get(), this);
+      m_sessionManager.get(), m_artworkManager.get(), m_cacheManager.get(),
+      this);
 
   // 6. DatabaseManager (needs SessionManager)
   m_databaseManager =

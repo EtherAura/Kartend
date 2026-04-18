@@ -44,20 +44,19 @@ signals:
   void collectionsModified();
 
 public:
-
-
-
-  auto handleReloadRequired(
-      QList<CollectionConfig> &collections,
-      const QList<CollectionConfig> &newCollections,
-      const QList<CollectionConfig> &originalCollections,
-      int viewingCollectionIndex, SidebarManager *sidebarManager,
-      ScrollManager *scrollManager, NavigationManager *navigationManager,
-      ArtworkManager *artworkManager, CacheManager *cacheManager,
-      int currentCollectionIndex) -> void;
+  auto handleReloadRequired(const QList<CollectionConfig> &collections,
+                            const QList<CollectionConfig> &newCollections,
+                            const QList<CollectionConfig> &originalCollections,
+                            int viewingCollectionIndex,
+                            SidebarManager *sidebarManager,
+                            ScrollManager *scrollManager,
+                            NavigationManager *navigationManager,
+                            ArtworkManager *artworkManager,
+                            CacheManager *cacheManager,
+                            int currentCollectionIndex) -> void;
 
   auto handleLayoutChanges(
-      QWidget *parent, QList<CollectionConfig> &collections,
+      QWidget *parent, const QList<CollectionConfig> &collections,
       int viewingCollectionIndex, bool titleChangedForView,
       bool scrollbarChangedForView, bool sidebarModeChangedForView,
       bool gridWidthChangedForView, bool spacingChangedForView,
@@ -75,9 +74,7 @@ private:
   void
   finalizeCollections(const QHash<QString, CollectionConfig> &tempCollections,
                       QList<CollectionConfig> &collections,
-                      bool &needsRewrite) const;
+                      const bool &needsRewrite) const;
 };
-
-
 
 #endif // SETTINGSMANAGER_H

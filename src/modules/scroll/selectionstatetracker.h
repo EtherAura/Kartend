@@ -19,24 +19,30 @@ public:
   SelectionStateTracker() = default;
 
   // --- Selection Index ---
-  
+
   [[nodiscard]] int lastSelectedIndex() const { return m_lastSelectedIndex; }
-  [[nodiscard]] int committedSelectedIndex() const { return m_committedSelectedIndex; }
-  
+  [[nodiscard]] int committedSelectedIndex() const {
+    return m_committedSelectedIndex;
+  }
+
   void setLastSelectedIndex(int index) { m_lastSelectedIndex = index; }
-  void setCommittedSelectedIndex(int index) { m_committedSelectedIndex = index; }
+  void setCommittedSelectedIndex(int index) {
+    m_committedSelectedIndex = index;
+  }
 
   // --- Selection Direction ---
-  
+
   /// Returns -1 (up), 0 (none), or 1 (down)
   [[nodiscard]] int selectionDirection() const { return m_selectionDirection; }
-  
-  void setSelectionDirection(int direction) { m_selectionDirection = direction; }
+
+  void setSelectionDirection(int direction) {
+    m_selectionDirection = direction;
+  }
 
   // --- Row Tracking ---
-  
+
   [[nodiscard]] int lastSelectedRow() const { return m_lastSelectedRow; }
-  
+
   void setLastSelectedRow(int row) { m_lastSelectedRow = row; }
 
   // --- Convenience Methods ---
@@ -70,9 +76,7 @@ public:
   }
 
   /// Commits the current selection (makes it the "confirmed" selection)
-  void commitSelection(int index) {
-    m_committedSelectedIndex = index;
-  }
+  void commitSelection(int index) { m_committedSelectedIndex = index; }
 
   /// Resets all state to initial values
   void reset() {
@@ -83,9 +87,7 @@ public:
   }
 
   /// Returns true if there's a valid last selection
-  [[nodiscard]] bool hasSelection() const {
-    return m_lastSelectedIndex >= 0;
-  }
+  [[nodiscard]] bool hasSelection() const { return m_lastSelectedIndex >= 0; }
 
   /// Returns true if the committed selection differs from the given index
   [[nodiscard]] bool needsCommitUpdate(int index) const {

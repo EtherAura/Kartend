@@ -1,4 +1,5 @@
-// Handles search bar logic, search modes, and query debouncing for item filtering.
+// Handles search bar logic, search modes, and query debouncing for item
+// filtering.
 #include "searchmanager.h"
 #include "applicationcontext.h"
 #include "databasemanager.h"
@@ -20,7 +21,12 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSearchManager, "kartend.searchmanager")
-#define debugLog(msg) do { if (lcSearchManager().isDebugEnabled()) { qCDebug(lcSearchManager) << msg; } } while (0)
+#define debugLog(msg)                                                          \
+  do {                                                                         \
+    if (lcSearchManager().isDebugEnabled()) {                                  \
+      qCDebug(lcSearchManager) << msg;                                         \
+    }                                                                          \
+  } while (0)
 
 // Temporary diagnostic logging (release-safe) gated by env var.
 // Enable with: `KARTEND_SEARCH_DIAG=1 kartend`
@@ -28,22 +34,38 @@ static inline bool searchDiagEnabled() {
   return qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG");
 }
 
-#define diagLog(msg) do { if (searchDiagEnabled()) { qWarning() << "[SearchDiag][SearchManager]" << msg; } } while (0)
+#define diagLog(msg)                                                           \
+  do {                                                                         \
+    if (searchDiagEnabled()) {                                                 \
+      qWarning() << "[SearchDiag][SearchManager]" << msg;                      \
+    }                                                                          \
+  } while (0)
 
 // SearchManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, DatabaseManager*, DatabaseManager, databaseManager)
-SETUP_GETTER_DEF_CTX_ONLY(SearchManagerSetup, InteractionStateHolder*, InteractionState, interactionState)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, NavigationManager*, NavigationManager, navigationManager)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, ScrollManager*, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, SettingsManager*, SettingsManager, settingsManager)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QLineEdit*, SearchBar, searchBar)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QPushButton*, SearchModeButton, searchModeButton)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QScrollArea*, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QStackedWidget*, StackedWidget, stackedWidget)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QWidget*, ItemsPage, itemsPage)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QList<CollectionConfig>*, Collections, collections)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, int*, CurrentCollectionIndex, currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, const CollectionHierarchyCache*, HierarchyCache, hierarchyCache)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, DatabaseManager *, DatabaseManager,
+                      databaseManager)
+SETUP_GETTER_DEF_CTX_ONLY(SearchManagerSetup, InteractionStateHolder *,
+                          InteractionState, interactionState)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, NavigationManager *,
+                      NavigationManager, navigationManager)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, ScrollManager *, ScrollManager,
+                      scrollManager)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, SettingsManager *, SettingsManager,
+                      settingsManager)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, QLineEdit *, SearchBar, searchBar)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, QPushButton *, SearchModeButton,
+                      searchModeButton)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, QScrollArea *, ItemScrollArea,
+                      itemScrollArea)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, QStackedWidget *, StackedWidget,
+                      stackedWidget)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, QList<CollectionConfig> *,
+                      Collections, collections)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, int *, CurrentCollectionIndex,
+                      currentCollectionIndex)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, const CollectionHierarchyCache *,
+                      HierarchyCache, hierarchyCache)
 
 SearchManager::SearchManager(QObject *parent) : QObject(parent) {
   m_searchDebounceTimer = new TimerUtils::DebouncedTimer(
@@ -105,29 +127,20 @@ void SearchManager::updateSearchModeButton() {
 
   constexpr int kSearchIconSizePx = 18;
 
-  auto themed = [](std::initializer_list<const char *> names) -> QIcon {
-    for (const auto *name : names) {
-      QIcon iconCandidate = QIcon::fromTheme(QString::fromUtf8(name));
-      if (!iconCandidate.isNull()) {
-        return iconCandidate;
-      }
-    }
-    return {};
-  };
-
   QIcon icon;
   QString tip;
   switch (m_currentSearchMode) {
   case SearchMode::CurrentCollection:
-    icon = themed({"search"});
+    icon = UIConstants::Icons::fromTheme(UIConstants::Icons::SEARCH_LOCAL);
     tip = "Search: Current collection";
     break;
   case SearchMode::CurrentAndSubcollections:
-    icon = themed({"folder-stash-symbolic"});
+    icon = UIConstants::Icons::fromTheme(
+        UIConstants::Icons::SEARCH_SUBCOLLECTIONS);
     tip = "Search: Current + subcollections";
     break;
   case SearchMode::AllCollections:
-    icon = themed({"emblem-shared-symbolic"});
+    icon = UIConstants::Icons::fromTheme(UIConstants::Icons::SEARCH_GLOBAL);
     tip = "Search: All collections";
     break;
   }
@@ -135,7 +148,8 @@ void SearchManager::updateSearchModeButton() {
   m_searchModeButton->setText(QString());
   if (!icon.isNull()) {
     m_searchModeButton->setIcon(icon);
-    m_searchModeButton->setIconSize(QSize(kSearchIconSizePx, kSearchIconSizePx));
+    m_searchModeButton->setIconSize(
+        QSize(kSearchIconSizePx, kSearchIconSizePx));
   } else {
     m_searchModeButton->setIcon(QIcon());
   }
@@ -203,8 +217,7 @@ SearchContext SearchManager::computeSearchContext() const {
 
   const int collIndex =
       (m_currentCollectionIndex) ? *m_currentCollectionIndex : -1;
-  if (!m_collections || collIndex < 0 ||
-      collIndex >= m_collections->size()) {
+  if (!m_collections || collIndex < 0 || collIndex >= m_collections->size()) {
     return ctx;
   }
 
@@ -234,8 +247,8 @@ SearchManager::buildSearchModeCycle(const SearchContext &ctx) const {
 
   const int collIndex =
       ((m_currentCollectionIndex) ? *m_currentCollectionIndex : -1);
-  const bool valid = ((m_collections) && collIndex >= 0 &&
-                      collIndex < m_collections->size());
+  const bool valid =
+      ((m_collections) && collIndex >= 0 && collIndex < m_collections->size());
   bool isRoot = false;
   if (valid) {
     isRoot = ((*m_collections)[collIndex].parentCollectionIndex == -1);
@@ -280,8 +293,8 @@ bool SearchManager::hasDirectItemsForIndex(int idx) const {
     // For now, use filesystem check as fallback
   }
 
-  QString mediaDir = SettingsUtils::expandConfigVariables(collCfg.mediaDirectory,
-                                                          collCfg.name);
+  QString mediaDir = SettingsUtils::expandConfigVariables(
+      collCfg.mediaDirectory, collCfg.name);
   if (mediaDir.trimmed().isEmpty()) {
     return false;
   }
@@ -291,9 +304,9 @@ bool SearchManager::hasDirectItemsForIndex(int idx) const {
   }
   const QStringList filters =
       collCfg.extensions.isEmpty() ? QStringList() : collCfg.extensions;
-  const QStringList files =
-      filters.isEmpty() ? dir.entryList(QDir::Files)
-                        : dir.entryList(filters, QDir::Files);
+  const QStringList files = filters.isEmpty()
+                                ? dir.entryList(QDir::Files)
+                                : dir.entryList(filters, QDir::Files);
   return !files.isEmpty();
 }
 
@@ -323,7 +336,8 @@ bool SearchManager::allowAllFor(const CollectionConfig &cfg, int collIndex,
   return false;
 }
 
-void SearchManager::onSearchTextChanged(const QString &text, int currentSelectedIndex) {
+void SearchManager::onSearchTextChanged(const QString &text,
+                                        int currentSelectedIndex) {
   if (!m_navigationManager) {
     return;
   }
@@ -333,7 +347,8 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
   const int collIndex =
       (m_currentCollectionIndex) ? *m_currentCollectionIndex : -1;
 
-  diagLog(QString("onSearchTextChanged: hasSearch=%1 mode=%2 collIndex=%3 text='%4' sel=%5")
+  diagLog(QString("onSearchTextChanged: hasSearch=%1 mode=%2 collIndex=%3 "
+                  "text='%4' sel=%5")
               .arg(hasSearch)
               .arg(static_cast<int>(m_currentSearchMode))
               .arg(collIndex)
@@ -353,7 +368,7 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
     // Reset adaptive debounce state when search is cleared
     m_lastKeystrokeTime = 0;
     m_adaptiveDebounceMs = 0;
-    
+
     if (m_searchItemsLoadedConn != QMetaObject::Connection()) {
       QObject::disconnect(m_searchItemsLoadedConn);
       m_searchItemsLoadedConn = QMetaObject::Connection();
@@ -363,21 +378,23 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
       // If we have saved pre-search state, just restore it instead of reloading
       if (m_scrollManager && m_scrollManager->hasPreSearchState()) {
         if (m_preSearchMode == SearchMode::CurrentCollection) {
-          // CurrentCollection searches are DB-backed (count + on-demand ranges),
-          // so the scroll data backing the search view is different from the
-          // pre-search view. Rebuild the pre-search view and then restore the
-          // cached widgets/scroll position for instant recovery.
+          // CurrentCollection searches are DB-backed (count + on-demand
+          // ranges), so the scroll data backing the search view is different
+          // from the pre-search view. Rebuild the pre-search view and then
+          // restore the cached widgets/scroll position for instant recovery.
           CollectionContext context;
           context.currentIndex = collIndex;
           context.config = (*m_collections)[collIndex];
           context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
               context.config.mediaDirectory, context.config.name);
-          context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
-              context.config.artworkDirectory, context.config.name);
+          context.config.artworkDirectory =
+              SettingsUtils::expandConfigVariables(
+                  context.config.artworkDirectory, context.config.name);
           context.artworkDirectory = context.config.artworkDirectory;
           if (m_generalSettings) {
             context.sortMode = m_generalSettings->sortMode;
-            context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+            context.excludeSubfoldersFromSort =
+                m_generalSettings->excludeSubfoldersFromSort;
           }
 
           const int totalItems = (m_preSearchTotalItems >= 0)
@@ -428,18 +445,20 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
     m_preSearchCollectionIndex = collIndex;
     m_preSearchMode = m_currentSearchMode;
     m_preSearchSelectedIndex = currentSelectedIndex;
-    if (m_preSearchSelectedIndex < 0 && m_settingsManager &&
-        collIndex >= 0) {
+    if (m_preSearchSelectedIndex < 0 && m_settingsManager && collIndex >= 0) {
       m_preSearchSelectedIndex =
           m_settingsManager->getLastSelectedItem(collIndex);
     }
     // Save scroll view state for fast restoration when search is cleared
     // For CurrentCollection mode, items are already loaded
-    // For CurrentAndSubcollections with showAllSubcollectionItems, items are also already loaded
-    bool canUsePreSearchState = (m_currentSearchMode == SearchMode::CurrentCollection);
+    // For CurrentAndSubcollections with showAllSubcollectionItems, items are
+    // also already loaded
+    bool canUsePreSearchState =
+        (m_currentSearchMode == SearchMode::CurrentCollection);
     if (m_currentSearchMode == SearchMode::CurrentAndSubcollections &&
         m_collections && collIndex >= 0 && collIndex < m_collections->size()) {
-      canUsePreSearchState = (*m_collections)[collIndex].showAllSubcollectionItems;
+      canUsePreSearchState =
+          (*m_collections)[collIndex].showAllSubcollectionItems;
     }
     if (m_scrollManager && canUsePreSearchState) {
       m_preSearchTotalItems = m_scrollManager->getTotalItems();
@@ -450,8 +469,9 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
 
   if (m_searchDebounceTimer) {
     updateAdaptiveDebounce();
-    int debounceMs = (m_adaptiveDebounceMs > 0) ? m_adaptiveDebounceMs 
-                                                 : UIConstants::Search::TYPING_DEBOUNCE_MS;
+    int debounceMs = (m_adaptiveDebounceMs > 0)
+                         ? m_adaptiveDebounceMs
+                         : UIConstants::Search::TYPING_DEBOUNCE_MS;
     m_searchDebounceTimer->setInterval(debounceMs);
     m_searchDebounceTimer->trigger();
   }
@@ -479,8 +499,7 @@ void SearchManager::performDebouncedSearch() {
 
   const int collIndex =
       (m_currentCollectionIndex ? *m_currentCollectionIndex : -1);
-  if (collIndex < 0 || !m_collections ||
-      collIndex >= m_collections->size()) {
+  if (collIndex < 0 || !m_collections || collIndex >= m_collections->size()) {
     return;
   }
 
@@ -494,7 +513,8 @@ void SearchManager::performDebouncedSearch() {
   context.artworkDirectory = context.config.artworkDirectory;
   if (m_generalSettings) {
     context.sortMode = m_generalSettings->sortMode;
-    context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    context.excludeSubfoldersFromSort =
+        m_generalSettings->excludeSubfoldersFromSort;
   }
 
   switch (m_currentSearchMode) {
@@ -517,7 +537,8 @@ void SearchManager::performDebouncedSearch() {
       diagLog("dispatch applyFilter(CurrentAndSubcollections, in-memory)");
       m_scrollManager->applyFilter(trimmed);
     } else {
-      // DB-backed: include descendants even when showAllSubcollectionItems is false.
+      // DB-backed: include descendants even when showAllSubcollectionItems is
+      // false.
       diagLog("dispatch filterItemsCurrentAndSubcollections");
       // Show loading overlay while DB query is processing
       if (m_scrollManager) {
@@ -528,7 +549,8 @@ void SearchManager::performDebouncedSearch() {
     break;
   }
   case SearchMode::AllCollections: {
-    // DB-backed: query across all collections without loading everything into memory.
+    // DB-backed: query across all collections without loading everything into
+    // memory.
     diagLog("dispatch filterItemsAllCollections");
     // Show loading overlay while DB query is processing
     if (m_scrollManager) {
@@ -564,41 +586,43 @@ void SearchManager::scheduleSearchBarRefocusIfNeeded() {
                        }
                      });
   // Long delay: Final retry to catch slow focus changes from animations
-  QTimer::singleShot(UIConstants::Search::REFOCUS_DELAY_LONG_MS, this, [this]() {
-    if (m_searchBar && m_searchBar->isVisible()) {
-      m_searchBar->setFocus(Qt::OtherFocusReason);
-    }
-  });
+  QTimer::singleShot(UIConstants::Search::REFOCUS_DELAY_LONG_MS, this,
+                     [this]() {
+                       if (m_searchBar && m_searchBar->isVisible()) {
+                         m_searchBar->setFocus(Qt::OtherFocusReason);
+                       }
+                     });
 }
 
 // Updates debounce interval based on typing speed
-// Fast typing (< 100ms between keystrokes) = shorter debounce for responsiveness
-// Slow typing (> 300ms between keystrokes) = longer debounce to avoid premature searches
+// Fast typing (< 100ms between keystrokes) = shorter debounce for
+// responsiveness Slow typing (> 300ms between keystrokes) = longer debounce to
+// avoid premature searches
 void SearchManager::updateAdaptiveDebounce() {
   qint64 now = QDateTime::currentMSecsSinceEpoch();
-  
+
   if (m_lastKeystrokeTime > 0) {
     qint64 timeSinceLastKeystroke = now - m_lastKeystrokeTime;
-    
+
     // Clamp to reasonable range for calculation
-    int keystrokeInterval = static_cast<int>(std::clamp(timeSinceLastKeystroke, 
-                                                         static_cast<qint64>(50), 
-                                                         static_cast<qint64>(500)));
-    
+    int keystrokeInterval = static_cast<int>(
+        std::clamp(timeSinceLastKeystroke, static_cast<qint64>(50),
+                   static_cast<qint64>(500)));
+
     // Map keystroke interval to debounce delay:
     // Fast typing (50-100ms between keys) -> short debounce (80-120ms)
     // Slow typing (300-500ms between keys) -> long debounce (180-250ms)
     // Formula: debounce = MIN + (interval - 50) * (MAX - MIN) / (500 - 50)
     int range = MAX_ADAPTIVE_DEBOUNCE_MS - MIN_ADAPTIVE_DEBOUNCE_MS;
-    int debounce = MIN_ADAPTIVE_DEBOUNCE_MS + 
-                   ((keystrokeInterval - 50) * range) / 450;
-    
-    m_adaptiveDebounceMs = std::clamp(debounce, MIN_ADAPTIVE_DEBOUNCE_MS, 
-                                       MAX_ADAPTIVE_DEBOUNCE_MS);
+    int debounce =
+        MIN_ADAPTIVE_DEBOUNCE_MS + ((keystrokeInterval - 50) * range) / 450;
+
+    m_adaptiveDebounceMs = std::clamp(debounce, MIN_ADAPTIVE_DEBOUNCE_MS,
+                                      MAX_ADAPTIVE_DEBOUNCE_MS);
   } else {
     // First keystroke - use default
     m_adaptiveDebounceMs = UIConstants::Search::TYPING_DEBOUNCE_MS;
   }
-  
+
   m_lastKeystrokeTime = now;
 }

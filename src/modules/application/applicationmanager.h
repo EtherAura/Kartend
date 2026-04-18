@@ -41,8 +41,9 @@ public:
 
 private:
   // Order of declaration determines order of destruction (reverse).
-  // Dependencies must be declared BEFORE dependents so they are destroyed AFTER.
-  
+  // Dependencies must be declared BEFORE dependents so they are destroyed
+  // AFTER.
+
   std::unique_ptr<CacheManager> m_cacheManager;
   std::unique_ptr<SessionManager> m_sessionManager;
   std::unique_ptr<ArtworkManager> m_artworkManager;

@@ -6,19 +6,20 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QSet>
+#include <QStandardPaths>
 #include <QString>
 #include <QStringList>
-#include <QStandardPaths>
 
 /**
  * @brief Validation utilities for config file entries.
- * 
+ *
  * Provides schema validation, path existence checks, and comprehensive
  * error reporting for collection configurations.
  */
 namespace ConfigValidation {
 
-// Check if a command is available in PATH (for non-path launchers like "retroarch")
+// Check if a command is available in PATH (for non-path launchers like
+// "retroarch")
 [[nodiscard]] inline bool isCommandInPath(const QString &command) {
   return !QStandardPaths::findExecutable(command).isEmpty();
 }
@@ -26,22 +27,20 @@ namespace ConfigValidation {
 // Validation result with multiple issues
 struct ValidationResult {
   bool valid = true;
-  QStringList warnings;  // Non-critical issues
-  QStringList errors;    // Critical issues that prevent operation
-  
-  void addWarning(const QString &msg) {
-    warnings << msg;
-  }
-  
+  QStringList warnings; // Non-critical issues
+  QStringList errors;   // Critical issues that prevent operation
+
+  void addWarning(const QString &msg) { warnings << msg; }
+
   void addError(const QString &msg) {
     errors << msg;
     valid = false;
   }
-  
+
   [[nodiscard]] bool hasIssues() const {
     return !warnings.isEmpty() || !errors.isEmpty();
   }
-  
+
   [[nodiscard]] QString summary() const {
     QStringList lines;
     if (!errors.isEmpty()) {
@@ -61,9 +60,11 @@ struct ValidationResult {
 };
 
 // Validate a single collection configuration
-// isContainer: true if this collection has children (shell/container collection)
-[[nodiscard]] inline ValidationResult validateCollection(
-    const CollectionConfig &config, int index, bool isContainer = false) {
+// isContainer: true if this collection has children (shell/container
+// collection)
+[[nodiscard]] inline ValidationResult
+validateCollection(const CollectionConfig &config, int index,
+                   bool isContainer = false) {
   ValidationResult result;
   QString prefix = QString("Collection '%1' (index %2): ")
                        .arg(config.name.isEmpty() ? "<unnamed>" : config.name)
@@ -75,7 +76,8 @@ struct ValidationResult {
   }
 
   // Media directory validation
-  // Container/shell collections don't need media directories - they only hold subcollections
+  // Container/shell collections don't need media directories - they only hold
+  // subcollections
   if (config.mediaDirectory.isEmpty()) {
     if (!isContainer) {
       result.addWarning(prefix + "no media directory specified");
@@ -87,14 +89,14 @@ struct ValidationResult {
     }
     QFileInfo mediaInfo(expandedPath);
     if (!mediaInfo.exists()) {
-      result.addError(prefix + "media directory does not exist: " +
-                      config.mediaDirectory);
+      result.addError(
+          prefix + "media directory does not exist: " + config.mediaDirectory);
     } else if (!mediaInfo.isDir()) {
-      result.addError(prefix + "media path is not a directory: " +
-                      config.mediaDirectory);
+      result.addError(
+          prefix + "media path is not a directory: " + config.mediaDirectory);
     } else if (!mediaInfo.isReadable()) {
-      result.addError(prefix + "media directory is not readable: " +
-                      config.mediaDirectory);
+      result.addError(
+          prefix + "media directory is not readable: " + config.mediaDirectory);
     }
   }
 
@@ -118,7 +120,7 @@ struct ValidationResult {
   if (!config.launcherPath.isEmpty()) {
     QString launcherPath = config.launcherPath;
     bool launcherValid = false;
-    
+
     // Check if it's an absolute or relative path
     if (launcherPath.contains('/') || launcherPath.startsWith("~")) {
       QString expandedPath = launcherPath;
@@ -130,15 +132,15 @@ struct ValidationResult {
         if (launcherInfo.isExecutable()) {
           launcherValid = true;
         } else {
-          result.addWarning(prefix + "launcher is not executable: " +
-                            launcherPath);
+          result.addWarning(prefix +
+                            "launcher is not executable: " + launcherPath);
         }
       }
     } else {
       // It's a command name - check if it's in PATH
       launcherValid = isCommandInPath(launcherPath);
     }
-    
+
     if (!launcherValid && !launcherPath.contains('/')) {
       // Only warn if we haven't already added a warning above
       result.addWarning(prefix + "launcher not found in PATH: " + launcherPath);
@@ -152,7 +154,8 @@ struct ValidationResult {
     result.addWarning(prefix + "gridWidth less than 1, will be clamped");
   }
   if (config.itemWidth < 50 || config.itemHeight < 50) {
-    result.addWarning(prefix + "very small item dimensions may cause display issues");
+    result.addWarning(prefix +
+                      "very small item dimensions may cause display issues");
   }
 
   // Parent index validation
@@ -165,8 +168,8 @@ struct ValidationResult {
 }
 
 // Validate all collections including cross-references
-[[nodiscard]] inline ValidationResult validateAllCollections(
-    const QList<CollectionConfig> &collections) {
+[[nodiscard]] inline ValidationResult
+validateAllCollections(const QList<CollectionConfig> &collections) {
   ValidationResult result;
 
   if (collections.isEmpty()) {
@@ -186,7 +189,8 @@ struct ValidationResult {
   // Validate each collection
   for (int i = 0; i < collections.size(); ++i) {
     bool isContainer = containerIndices.contains(i);
-    ValidationResult collResult = validateCollection(collections[i], i, isContainer);
+    ValidationResult collResult =
+        validateCollection(collections[i], i, isContainer);
     result.warnings << collResult.warnings;
     result.errors << collResult.errors;
     if (!collResult.valid) {
@@ -206,10 +210,9 @@ struct ValidationResult {
     }
     // Detect circular parent references
     if (parentIndex == i) {
-      result.addError(
-          QString("Collection '%1' (index %2) has itself as parent")
-              .arg(collections[i].name)
-              .arg(i));
+      result.addError(QString("Collection '%1' (index %2) has itself as parent")
+                          .arg(collections[i].name)
+                          .arg(i));
     }
   }
 
@@ -238,16 +241,16 @@ struct ValidationResult {
     if (c.mediaDirectory.isEmpty()) {
       continue;
     }
-    QString uuid = CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
+    QString uuid =
+        CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
     uuidToIndices[uuid].append(i);
   }
   for (auto it = uuidToIndices.begin(); it != uuidToIndices.end(); ++it) {
     if (it.value().size() > 1) {
       QStringList collisionNames;
       for (int idx : it.value()) {
-        collisionNames << QString("'%1' (index %2)")
-                              .arg(collections[idx].name)
-                              .arg(idx);
+        collisionNames
+            << QString("'%1' (index %2)").arg(collections[idx].name).arg(idx);
       }
       result.addError(
           QString("UUID collision detected: collections %1 have identical "
@@ -262,7 +265,7 @@ struct ValidationResult {
 
 // Log validation results using Qt logging
 inline void logValidationResult(const ValidationResult &result,
-                               const QString &context = QString()) {
+                                const QString &context = QString()) {
   if (!result.hasIssues()) {
     return;
   }
@@ -277,6 +280,6 @@ inline void logValidationResult(const ValidationResult &result,
   }
 }
 
-}  // namespace ConfigValidation
+} // namespace ConfigValidation
 
-#endif  // CONFIGVALIDATION_H
+#endif // CONFIGVALIDATION_H

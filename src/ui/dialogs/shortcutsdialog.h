@@ -11,7 +11,7 @@ QT_END_NAMESPACE
 
 /**
  * @brief Dialog displaying keyboard shortcuts help.
- * 
+ *
  * Shows all available keyboard shortcuts organized by category.
  * Can be opened via F1 or Help menu.
  */
@@ -28,7 +28,8 @@ private:
   void populateContent();
   void clearLayout(QLayout *layout);
   void addSection(QVBoxLayout *layout, const QString &title);
-  void addShortcut(QVBoxLayout *layout, const QString &keys, const QString &description);
+  void addShortcut(QVBoxLayout *layout, const QString &keys,
+                   const QString &description);
 
   QScrollArea *m_scrollArea = nullptr;
   QWidget *m_contentWidget = nullptr;

@@ -11,7 +11,7 @@ class QTimer;
 
 /**
  * @brief Manages a subtle loading overlay shown during search operations.
- * 
+ *
  * The overlay covers the scroll area with a semi-transparent background
  * to hide non-filtered items while search results are being computed.
  * Includes a subtle pulsing animation to indicate activity.

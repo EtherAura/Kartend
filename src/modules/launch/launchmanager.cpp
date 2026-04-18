@@ -1,4 +1,5 @@
-// Launches media items with configured emulators, handling RetroArch cores and parameters.
+// Launches media items with configured emulators, handling RetroArch cores and
+// parameters.
 #include "launchmanager.h"
 #include "applicationcontext.h"
 #include "configvalidation.h"
@@ -20,9 +21,15 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcLaunchManager, "kartend.launchmanager")
-#define debugLog(msg) do { if (lcLaunchManager().isDebugEnabled()) { qCDebug(lcLaunchManager) << msg; } } while (0)
+#define debugLog(msg)                                                          \
+  do {                                                                         \
+    if (lcLaunchManager().isDebugEnabled()) {                                  \
+      qCDebug(lcLaunchManager) << msg;                                         \
+    }                                                                          \
+  } while (0)
 
-SETUP_GETTER_DEF_SAME(LaunchManagerSetup, QList<CollectionConfig>*, Collections, collections)
+SETUP_GETTER_DEF_SAME(LaunchManagerSetup, QList<CollectionConfig> *,
+                      Collections, collections)
 
 LaunchManager::LaunchManager(QObject *parent) : QObject(parent) {}
 
@@ -57,7 +64,8 @@ auto LaunchManager::buildLaunchCommand(const CollectionConfig &collection,
 
   const QString expandedLauncherPath = expandOnly(collection.launcherPath);
   const QString expandedCorePath = expandOnly(collection.corePath);
-  const QString expandedLaunchParameters = expandOnly(collection.launchParameters);
+  const QString expandedLaunchParameters =
+      expandOnly(collection.launchParameters);
 
   if (expandedLauncherPath.isEmpty()) {
     return ErrorContext::error(ErrorCode::InvalidArgument,
@@ -76,7 +84,8 @@ auto LaunchManager::buildLaunchCommand(const CollectionConfig &collection,
   LaunchCommand cmd;
   cmd.program = expandedLauncherPath;
 
-  const bool isRetroArch = expandedLauncherPath.contains("retroarch", Qt::CaseInsensitive);
+  const bool isRetroArch =
+      expandedLauncherPath.contains("retroarch", Qt::CaseInsensitive);
   if (isRetroArch) {
     if (expandedCorePath.isEmpty()) {
       return ErrorContext::error(ErrorCode::InvalidArgument,
@@ -90,7 +99,8 @@ auto LaunchManager::buildLaunchCommand(const CollectionConfig &collection,
       return ErrorContext::error(ErrorCode::InvalidFilePath,
                                  "Core path cannot start with a dash",
                                  "LaunchManager::buildLaunchCommand")
-          .withDetails(QString("Core path '%1' looks like an option").arg(expandedCorePath));
+          .withDetails(QString("Core path '%1' looks like an option")
+                           .arg(expandedCorePath));
     }
 
     auto coreValidation = validatePathSecurity(expandedCorePath);
@@ -119,7 +129,8 @@ auto LaunchManager::validatePathSecurity(const QString &path) -> Result<void> {
   return PathUtils::validatePathSecurity(path);
 }
 
-auto LaunchManager::validateLauncherPath(const QString &path) -> Result<QString> {
+auto LaunchManager::validateLauncherPath(const QString &path)
+    -> Result<QString> {
   // First check for shell metacharacters and Unicode issues
   auto securityResult = validatePathSecurity(path);
   if (securityResult.isError()) {
@@ -136,7 +147,9 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<QString>
       return ErrorContext::error(ErrorCode::FileNotFound,
                                  "Launcher command not found in PATH",
                                  "LaunchManager::validateLauncherPath")
-          .withDetails(QString("Command '%1' is not in PATH. Specify absolute path or install the program.").arg(path));
+          .withDetails(QString("Command '%1' is not in PATH. Specify absolute "
+                               "path or install the program.")
+                           .arg(path));
     }
 
     // Resolve to an absolute path for further security validation.
@@ -159,12 +172,11 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<QString>
                                "LaunchManager::validateLauncherPath")
         .withDetails(resolvedPath);
   }
-  
+
   // Check original path against sensitive directories BEFORE canonicalization
-  // This catches paths like /proc/self/exe which would otherwise resolve to a valid location
-  static const QStringList sensitiveDirectories = {
-    "/proc", "/sys", "/dev"
-  };
+  // This catches paths like /proc/self/exe which would otherwise resolve to a
+  // valid location
+  static const QStringList sensitiveDirectories = {"/proc", "/sys", "/dev"};
   for (const QString &sensitive : sensitiveDirectories) {
     if (resolvedPath.startsWith(sensitive + "/") || resolvedPath == sensitive) {
       return ErrorContext::error(ErrorCode::InvalidFilePath,
@@ -173,9 +185,10 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<QString>
           .withDetails(QString("Path: %1").arg(resolvedPath));
     }
   }
-  
+
   // Resolve symlinks and verify the canonical path
-  // This prevents symlink-based attacks where a symlink points to an unexpected location
+  // This prevents symlink-based attacks where a symlink points to an unexpected
+  // location
   QString canonicalPath = info.canonicalFilePath();
   if (canonicalPath.isEmpty()) {
     return ErrorContext::error(ErrorCode::InvalidFilePath,
@@ -183,27 +196,32 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<QString>
                                "LaunchManager::validateLauncherPath")
         .withDetails(path);
   }
-  
+
   // Ensure canonical path is still in a reasonable location
-  // Reject if it resolves to a sensitive system directory (double-check after symlink resolution)
+  // Reject if it resolves to a sensitive system directory (double-check after
+  // symlink resolution)
   for (const QString &sensitive : sensitiveDirectories) {
-    if (canonicalPath.startsWith(sensitive + "/") || canonicalPath == sensitive) {
-      return ErrorContext::error(ErrorCode::InvalidFilePath,
-                                 "Launcher path resolves to restricted directory",
-                                 "LaunchManager::validateLauncherPath")
+    if (canonicalPath.startsWith(sensitive + "/") ||
+        canonicalPath == sensitive) {
+      return ErrorContext::error(
+                 ErrorCode::InvalidFilePath,
+                 "Launcher path resolves to restricted directory",
+                 "LaunchManager::validateLauncherPath")
           .withDetails(QString("Canonical path: %1").arg(canonicalPath));
     }
   }
-  
+
   // Verify the canonical path also passes security checks
   // (in case symlink resolution introduced new issues)
   if (canonicalPath != path) {
     auto canonicalSecurityResult = validatePathSecurity(canonicalPath);
     if (canonicalSecurityResult.isError()) {
-      return ErrorContext::error(ErrorCode::InvalidFilePath,
-                                 "Resolved symlink path failed security validation",
-                                 "LaunchManager::validateLauncherPath")
-          .withDetails(QString("Original: %1, Canonical: %2").arg(path, canonicalPath));
+      return ErrorContext::error(
+                 ErrorCode::InvalidFilePath,
+                 "Resolved symlink path failed security validation",
+                 "LaunchManager::validateLauncherPath")
+          .withDetails(
+              QString("Original: %1, Canonical: %2").arg(path, canonicalPath));
     }
   }
 
@@ -219,16 +237,16 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
   }
 
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
-  
+
   // Determine the actual file to launch (may be extracted from archive)
   QString launchFilePath = filePath;
-  
-  if (collection.extractArchives && 
-      !collection.extractedExtension.isEmpty() &&
+
+  if (collection.extractArchives && !collection.extractedExtension.isEmpty() &&
       isArchiveFile(filePath)) {
     qCDebug(lcLaunchManager) << "Archive extraction enabled for" << filePath;
-    
-    auto extractResult = extractArchiveToTemp(filePath, collection.extractedExtension);
+
+    auto extractResult =
+        extractArchiveToTemp(filePath, collection.extractedExtension);
     if (extractResult.isError()) {
       ErrorUtils::logError(extractResult.error());
       QMessageBox::warning(nullptr, "Extraction Error",
@@ -252,8 +270,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
       QMessageBox::warning(nullptr, "Invalid Core Path",
                            QString("%1").arg(msg));
     } else {
-      QMessageBox::warning(nullptr, "Launch Error",
-                           QString("%1").arg(msg));
+      QMessageBox::warning(nullptr, "Launch Error", QString("%1").arg(msg));
     }
     return;
   }
@@ -279,9 +296,10 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
   // cannot fully eliminate the race on systems without atomic exec.
   QFileInfo launcherCheck(launcherPath);
   if (!launcherCheck.exists() || !launcherCheck.isExecutable()) {
-    QMessageBox::critical(nullptr, "Launch Error",
-                          QString("Launcher is no longer accessible or executable:\n%1")
-                              .arg(launcherPath));
+    QMessageBox::critical(
+        nullptr, "Launch Error",
+        QString("Launcher is no longer accessible or executable:\n%1")
+            .arg(launcherPath));
     return;
   }
 
@@ -291,25 +309,28 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
     QString errorMsg =
         QString("Failed to launch: %1\n\nCommand attempted:\n%2 %3\n\nMake "
                 "sure the launcher path is correct and the file is executable.")
-      .arg(launcherPath)
-      .arg(launcherPath)
-        .arg(cmd.arguments.join(" "));
+            .arg(launcherPath)
+            .arg(launcherPath)
+            .arg(cmd.arguments.join(" "));
 
     QMessageBox::critical(nullptr, "Launch Error", errorMsg);
   }
 }
 
-auto LaunchManager::parseParameters(const QString &paramString) -> ErrorUtils::Result<QStringList> {
+auto LaunchManager::parseParameters(const QString &paramString)
+    -> ErrorUtils::Result<QStringList> {
   QStringList result;
   if (paramString.trimmed().isEmpty()) {
     return result;
   }
 
   // Reject null bytes/newlines which can cause confusing log/diagnostic output.
-  if (paramString.contains(QChar('\0')) || paramString.contains('\n') || paramString.contains('\r')) {
-    return ErrorContext::error(ErrorCode::InvalidArgument,
-                               "Launch parameters contain invalid control characters",
-                               "LaunchManager::parseParameters");
+  if (paramString.contains(QChar('\0')) || paramString.contains('\n') ||
+      paramString.contains('\r')) {
+    return ErrorContext::error(
+        ErrorCode::InvalidArgument,
+        "Launch parameters contain invalid control characters",
+        "LaunchManager::parseParameters");
   }
 
   QString params = paramString.trimmed();
@@ -340,7 +361,8 @@ auto LaunchManager::parseParameters(const QString &paramString) -> ErrorUtils::R
     return ErrorContext::error(ErrorCode::InvalidArgument,
                                "Unclosed quote in launch parameters",
                                "LaunchManager::parseParameters")
-        .withDetails(QString("Quote character '%1' was not closed").arg(quoteChar));
+        .withDetails(
+            QString("Quote character '%1' was not closed").arg(quoteChar));
   }
 
   if (!currentParam.isEmpty()) {
@@ -351,9 +373,8 @@ auto LaunchManager::parseParameters(const QString &paramString) -> ErrorUtils::R
 }
 
 bool LaunchManager::isArchiveFile(const QString &filePath) {
-  static const QStringList archiveExtensions = {
-    ".zip", ".7z", ".rar", ".gz", ".tar", ".bz2", ".xz"
-  };
+  static const QStringList archiveExtensions = {".zip", ".7z",  ".rar", ".gz",
+                                                ".tar", ".bz2", ".xz"};
   QString lowerPath = filePath.toLower();
   for (const QString &ext : archiveExtensions) {
     if (lowerPath.endsWith(ext)) {
@@ -368,9 +389,10 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath,
     -> ErrorUtils::Result<QString> {
   // Create a persistent temp directory for extractions
   // Using a subdirectory in the standard temp location that won't auto-delete
-  QString tempBasePath = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+  QString tempBasePath =
+      QStandardPaths::writableLocation(QStandardPaths::TempLocation);
   QString extractDir = tempBasePath + "/kartend_extract";
-  
+
   QDir baseDir(extractDir);
   if (!baseDir.exists() && !baseDir.mkpath(".")) {
     return ErrorContext::error(ErrorCode::FileWriteError,
@@ -378,14 +400,14 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath,
                                "LaunchManager::extractArchiveToTemp")
         .withDetails(extractDir);
   }
-  
+
   // Create a unique subdirectory for this archive based on its name
   QFileInfo archiveInfo(archivePath);
   QString archiveBaseName = archiveInfo.completeBaseName();
   QString uniqueDir = extractDir + "/" + archiveBaseName;
-  
+
   QDir targetDir(uniqueDir);
-  
+
   // If directory exists and has files, check if we already extracted
   if (targetDir.exists()) {
     QString existingFile = findFileWithExtension(uniqueDir, targetExtension);
@@ -396,35 +418,35 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath,
     // Clear stale extraction
     targetDir.removeRecursively();
   }
-  
+
   if (!targetDir.mkpath(".")) {
     return ErrorContext::error(ErrorCode::FileWriteError,
                                "Failed to create extraction subdirectory",
                                "LaunchManager::extractArchiveToTemp")
         .withDetails(uniqueDir);
   }
-  
+
   // Use system tools to extract (7z is most universal)
   QStringList extractors = {"7z", "unzip", "bsdtar"};
   QString extractor;
-  
+
   for (const QString &cmd : extractors) {
     if (!QStandardPaths::findExecutable(cmd).isEmpty()) {
       extractor = cmd;
       break;
     }
   }
-  
+
   if (extractor.isEmpty()) {
     return ErrorContext::error(ErrorCode::FileNotFound,
                                "No archive extraction tool found",
                                "LaunchManager::extractArchiveToTemp")
         .withDetails("Install 7z, unzip, or bsdtar to extract archives");
   }
-  
+
   QProcess process;
   process.setWorkingDirectory(uniqueDir);
-  
+
   QStringList args;
   if (extractor == "7z") {
     args << "x" << "-y" << archivePath;
@@ -433,9 +455,9 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath,
   } else if (extractor == "bsdtar") {
     args << "-xf" << archivePath;
   }
-  
+
   qCDebug(lcLaunchManager) << "Extracting with" << extractor << args;
-  
+
   process.start(extractor, args);
   if (!process.waitForFinished(30000)) { // 30 second timeout
     return ErrorContext::error(ErrorCode::OperationCancelled,
@@ -443,7 +465,7 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath,
                                "LaunchManager::extractArchiveToTemp")
         .withDetails(archivePath);
   }
-  
+
   if (process.exitCode() != 0) {
     QString errorOutput = QString::fromUtf8(process.readAllStandardError());
     return ErrorContext::error(ErrorCode::InvalidArgument,
@@ -453,16 +475,17 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath,
                          .arg(process.exitCode())
                          .arg(errorOutput.left(200)));
   }
-  
+
   // Find the file with the target extension
   QString targetFile = findFileWithExtension(uniqueDir, targetExtension);
   if (targetFile.isEmpty()) {
     return ErrorContext::error(ErrorCode::FileNotFound,
                                "Target file not found in extracted archive",
                                "LaunchManager::extractArchiveToTemp")
-        .withDetails(QString("Looking for *%1 in %2").arg(targetExtension, uniqueDir));
+        .withDetails(
+            QString("Looking for *%1 in %2").arg(targetExtension, uniqueDir));
   }
-  
+
   qCDebug(lcLaunchManager) << "Extracted target file:" << targetFile;
   return targetFile;
 }
@@ -473,7 +496,7 @@ QString LaunchManager::findFileWithExtension(const QString &directory,
   if (!normalizedExt.startsWith('.')) {
     normalizedExt = "." + normalizedExt;
   }
-  
+
   QDirIterator it(directory, QDir::Files, QDirIterator::Subdirectories);
   while (it.hasNext()) {
     QString filePath = it.next();

@@ -6,7 +6,8 @@
 
 namespace StringUtils {
 
-/// Formats an integer with comma-separated thousands (e.g., 1234567 -> "1,234,567")
+/// Formats an integer with comma-separated thousands (e.g., 1234567 ->
+/// "1,234,567")
 [[nodiscard]] inline auto formatCountNumber(qint64 value) -> QString {
   QString digits = QString::number(value);
   int pos = digits.size() - 3;

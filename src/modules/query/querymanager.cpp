@@ -1,4 +1,5 @@
-// Executes SQLite queries on worker thread for paginated item loading and filtering.
+// Executes SQLite queries on worker thread for paginated item loading and
+// filtering.
 #include "querymanager.h"
 #include "collectionutils.h"
 #include "dbmigrations.h"
@@ -7,31 +8,31 @@
 #include "sessionmanager.h"
 #include "uiconstants.h"
 #include <QCryptographicHash>
+#include <QDebug>
 #include <QDir>
 #include <QDirIterator>
+#include <QElapsedTimer>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMutex>
+#include <QRegularExpression>
+#include <QRunnable>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
 #include <QThread>
 #include <QThreadPool>
+#include <QTimer>
 #include <QVector>
+#include <QWaitCondition>
 #include <QtConcurrent>
-#include <random>
-#include <stdexcept>
-#include <QDebug>
+#include <QtGlobal>
 #include <algorithm>
 #include <atomic>
-#include <QRunnable>
-#include <QWaitCondition>
-#include <QElapsedTimer>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QRegularExpression>
-#include <QTimer>
-#include <QtGlobal>
+#include <random>
+#include <stdexcept>
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcQueryManager, "kartend.querymanager")
@@ -42,7 +43,8 @@ using ErrorUtils::ErrorContext;
 
 // Forward declarations of static helpers
 static auto canonicalKeyPath(const QString &absPath, bool dedup,
-                             QHash<QString, QString> *canonicalPathCache) -> QString;
+                             QHash<QString, QString> *canonicalPathCache)
+    -> QString;
 static auto displayNameForBase(const QString &baseName) -> QString;
 
 namespace {
@@ -54,13 +56,13 @@ struct DirectoryScanResult {
 };
 
 struct DirSignatureSample {
-  QString relPath;   // Relative to collection root. Empty means root.
+  QString relPath; // Relative to collection root. Empty means root.
   qint64 mtimeSec = 0;
 };
 
 static auto addDirSignatureSample(QVector<DirSignatureSample> &samples,
-                                 const DirSignatureSample &candidate,
-                                 int maxSamples) -> void {
+                                  const DirSignatureSample &candidate,
+                                  int maxSamples) -> void {
   if (maxSamples <= 0) {
     return;
   }
@@ -117,7 +119,8 @@ static auto buildFtsPrefixQuery(const QString &raw) -> QString {
 }
 
 static auto buildDirSignatureJson(bool includeSubfolders,
-                                 const QVector<DirSignatureSample> &samples) -> QString {
+                                  const QVector<DirSignatureSample> &samples)
+    -> QString {
   QJsonObject root;
   root.insert(QStringLiteral("v"), 1);
   root.insert(QStringLiteral("sub"), includeSubfolders);
@@ -134,8 +137,9 @@ static auto buildDirSignatureJson(bool includeSubfolders,
 }
 
 static auto parseDirSignatureJson(const QString &json,
-                                 bool &includeSubfoldersOut,
-                                 QVector<DirSignatureSample> &samplesOut) -> bool {
+                                  bool &includeSubfoldersOut,
+                                  QVector<DirSignatureSample> &samplesOut)
+    -> bool {
   includeSubfoldersOut = false;
   samplesOut.clear();
 
@@ -169,14 +173,15 @@ static auto parseDirSignatureJson(const QString &json,
     const QJsonObject o = v.toObject();
     DirSignatureSample s;
     s.relPath = o.value(QStringLiteral("p")).toString();
-    s.mtimeSec = static_cast<qint64>(o.value(QStringLiteral("t")).toDouble(0.0));
+    s.mtimeSec =
+        static_cast<qint64>(o.value(QStringLiteral("t")).toDouble(0.0));
     samplesOut.append(std::move(s));
   }
   return !samplesOut.isEmpty();
 }
 
 static auto seedDirSignatureFromFilesystem(const QString &rootPath,
-                                          bool includeSubfolders) -> QString {
+                                           bool includeSubfolders) -> QString {
   QVector<DirSignatureSample> samples;
   samples.reserve(UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
 
@@ -184,19 +189,22 @@ static auto seedDirSignatureFromFilesystem(const QString &rootPath,
   if (!rootInfo.exists()) {
     return QString();
   }
-  addDirSignatureSample(samples,
-                        DirSignatureSample{QString(), rootInfo.lastModified().toSecsSinceEpoch()},
-                        UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
+  addDirSignatureSample(
+      samples,
+      DirSignatureSample{QString(), rootInfo.lastModified().toSecsSinceEpoch()},
+      UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
 
   if (includeSubfolders) {
     QDirIterator it(rootPath, QDir::Dirs | QDir::NoDotAndDotDot,
                     QDirIterator::Subdirectories);
     int inspected = 0;
-    while (it.hasNext() && inspected < UIConstants::Database::DIR_SIGNATURE_SEED_MAX_DIRS) {
+    while (it.hasNext() &&
+           inspected < UIConstants::Database::DIR_SIGNATURE_SEED_MAX_DIRS) {
       it.next();
       const QString absPath = it.filePath();
       const QString relPath = QDir(rootPath).relativeFilePath(absPath);
-      const qint64 mtimeSec = QFileInfo(absPath).lastModified().toSecsSinceEpoch();
+      const qint64 mtimeSec =
+          QFileInfo(absPath).lastModified().toSecsSinceEpoch();
       addDirSignatureSample(samples, DirSignatureSample{relPath, mtimeSec},
                             UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
       ++inspected;
@@ -207,8 +215,8 @@ static auto seedDirSignatureFromFilesystem(const QString &rootPath,
 }
 
 static auto dirSignatureStillValid(const QString &rootPath,
-                                  bool includeSubfolders,
-                                  const QString &storedSignature) -> bool {
+                                   bool includeSubfolders,
+                                   const QString &storedSignature) -> bool {
   bool storedSub = false;
   QVector<DirSignatureSample> samples;
   if (!parseDirSignatureJson(storedSignature, storedSub, samples)) {
@@ -223,7 +231,8 @@ static auto dirSignatureStillValid(const QString &rootPath,
 
   QDir root(rootPath);
   for (const auto &s : samples) {
-    const QString absPath = s.relPath.isEmpty() ? rootPath : root.absoluteFilePath(s.relPath);
+    const QString absPath =
+        s.relPath.isEmpty() ? rootPath : root.absoluteFilePath(s.relPath);
     QFileInfo info(absPath);
     if (!info.exists()) {
       return false;
@@ -250,11 +259,9 @@ public:
   DirectoryScanTask(QString dirPath, QString rootPath, QStringList nameFilters,
                     std::shared_ptr<std::atomic_bool> cancelToken,
                     ScanCompletionQueue *queue)
-      : m_dirPath(std::move(dirPath)),
-        m_rootPath(std::move(rootPath)),
+      : m_dirPath(std::move(dirPath)), m_rootPath(std::move(rootPath)),
         m_nameFilters(std::move(nameFilters)),
-        m_cancelToken(std::move(cancelToken)),
-        m_queue(queue) {
+        m_cancelToken(std::move(cancelToken)), m_queue(queue) {
     setAutoDelete(true);
   }
 
@@ -266,7 +273,8 @@ public:
     // Scan this directory (non-recursively) but emit bounded chunks so a single
     // huge folder cannot allocate an unbounded QStringList/QHash in memory.
     QDir rootDir(m_rootPath);
-    QDirIterator iterator(m_dirPath, m_nameFilters, QDir::Files, QDirIterator::NoIteratorFlags);
+    QDirIterator iterator(m_dirPath, m_nameFilters, QDir::Files,
+                          QDirIterator::NoIteratorFlags);
 
     auto pushChunk = [&](DirectoryScanResult &&chunk) {
       if (!m_queue) {
@@ -276,7 +284,8 @@ public:
       // Backpressure: block (with timeout) if the queue is full, so memory
       // stays bounded even when directory scans outpace the consumer.
       QMutexLocker locker(&m_queue->mutex);
-      while (m_queue->ready.size() >= UIConstants::Database::SCAN_READY_MAX_RESULTS &&
+      while (m_queue->ready.size() >=
+                 UIConstants::Database::SCAN_READY_MAX_RESULTS &&
              !m_cancelToken->load(std::memory_order_acquire)) {
         m_queue->hasSpace.wait(&m_queue->mutex, 50);
       }
@@ -290,8 +299,10 @@ public:
     };
 
     DirectoryScanResult chunk;
-    chunk.relativePaths.reserve(UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE);
-    chunk.timestamps.reserve(UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE * 2);
+    chunk.relativePaths.reserve(
+        UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE);
+    chunk.timestamps.reserve(UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE *
+                             2);
 
     while (iterator.hasNext()) {
       if (m_cancelToken->load(std::memory_order_acquire)) {
@@ -306,15 +317,19 @@ public:
       chunk.relativePaths.append(relativePath);
       chunk.timestamps.insert(relativePath, info.lastModified());
 
-      if (chunk.relativePaths.size() >= UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE) {
+      if (chunk.relativePaths.size() >=
+          UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE) {
         pushChunk(std::move(chunk));
         chunk = DirectoryScanResult{};
-        chunk.relativePaths.reserve(UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE);
-        chunk.timestamps.reserve(UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE * 2);
+        chunk.relativePaths.reserve(
+            UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE);
+        chunk.timestamps.reserve(
+            UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE * 2);
       }
     }
 
-    if (!m_cancelToken->load(std::memory_order_acquire) && !chunk.relativePaths.isEmpty()) {
+    if (!m_cancelToken->load(std::memory_order_acquire) &&
+        !chunk.relativePaths.isEmpty()) {
       pushChunk(std::move(chunk));
     }
 
@@ -343,7 +358,8 @@ public:
       -> SynchronousPragmaGuard & = delete;
 
   SynchronousPragmaGuard(SynchronousPragmaGuard &&) = delete;
-  auto operator=(SynchronousPragmaGuard &&) -> SynchronousPragmaGuard & = delete;
+  auto operator=(SynchronousPragmaGuard &&)
+      -> SynchronousPragmaGuard & = delete;
 
   ~SynchronousPragmaGuard() {
     if (!m_db.isOpen()) {
@@ -359,23 +375,23 @@ private:
 } // namespace
 
 QueryManager::QueryManager(SessionManager *sessionManager,
-                           const QString &connectionName,
-                           QObject *parent)
-    : QObject(parent), m_sessionManager(sessionManager) {
-  m_connectionName = connectionName;
-  m_scanCancellationToken = std::make_shared<std::atomic_bool>(false);
-
+                           const QString &connectionName, QObject *parent)
+    : QObject(parent),
+      m_scanCancellationToken(std::make_shared<std::atomic_bool>(false)),
+      m_sessionManager(sessionManager), m_connectionName(connectionName) {
   // Pointer-based cache with automatic LRU eviction.
   m_statementCache.setMaxCost(MAX_STATEMENT_CACHE_SIZE);
 
   const int idealThreads = QThread::idealThreadCount();
-  const int base = idealThreads > 0 ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
-                                     : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
+  const int base =
+      idealThreads > 0
+          ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
+          : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
   m_scanThreadPool = new QThreadPool();
-  m_scanThreadPool->setMaxThreadCount(std::clamp(base,
-                                               UIConstants::Concurrency::WORKER_POOL_MIN_THREADS,
-                                               UIConstants::Concurrency::WORKER_POOL_MAX_THREADS));
-  
+  m_scanThreadPool->setMaxThreadCount(
+      std::clamp(base, UIConstants::Concurrency::WORKER_POOL_MIN_THREADS,
+                 UIConstants::Concurrency::WORKER_POOL_MAX_THREADS));
+
   // Register ErrorContext for queued signal/slot connections
   qRegisterMetaType<ErrorUtils::ErrorContext>("ErrorUtils::ErrorContext");
 }
@@ -387,7 +403,7 @@ QueryManager::~QueryManager() {
     // Intentionally NOT deleting - ~QThreadPool blocks. Let OS clean up.
     m_scanThreadPool = nullptr;
   }
-  
+
   clearStatementCache();
   if (m_db.isValid()) {
     QString connectionName = m_db.connectionName();
@@ -427,7 +443,7 @@ void QueryManager::refreshWalView() {
   QSqlQuery query(m_db);
   query.exec("BEGIN");
   query.exec("COMMIT");
-  
+
   // Clear statement cache to prevent stale bound values from interfering
   // with subsequent queries that need fresh data.
   m_statementCache.clear();
@@ -456,9 +472,7 @@ auto QueryManager::getPreparedStatement(const QString &sql) -> QSqlQuery & {
 }
 
 // Clears statement cache - call when database connection changes
-void QueryManager::clearStatementCache() {
-  m_statementCache.clear();
-}
+void QueryManager::clearStatementCache() { m_statementCache.clear(); }
 
 // Attempts to reconnect to the database if connection was lost
 // Used to handle transient SQLite errors (disk full, I/O errors, etc.)
@@ -468,17 +482,17 @@ void QueryManager::clearStatementCache() {
 auto QueryManager::ensureDatabaseConnection() -> bool {
   static constexpr int MAX_RECONNECT_ATTEMPTS = 3;
   static constexpr int RECONNECT_DELAY_MS = 100;
-  
+
   if (m_db.isOpen()) {
     return true;
   }
-  
+
   // Don't attempt reconnection if database was never initialized
   // (no driver means initDatabase() hasn't been called yet)
   if (!m_db.isValid() || m_db.driverName().isEmpty()) {
     return false;
   }
-  
+
   auto logReconnectAttempt = [this](int attempt) {
     auto info = ErrorContext::info(
         ErrorCode::DatabaseConnectionLost,
@@ -488,48 +502,49 @@ auto QueryManager::ensureDatabaseConnection() -> bool {
         "QueryManager::ensureDatabaseConnection");
     ErrorUtils::logError(info);
   };
-  
+
   for (int attempt = 1; attempt <= MAX_RECONNECT_ATTEMPTS; ++attempt) {
     logReconnectAttempt(attempt);
-    
+
     // Close and clear the old connection state
     clearStatementCache();
     m_db.close();
-    
+
     // Try to reopen
     if (m_db.open()) {
       auto success = ErrorContext::info(
           ErrorCode::DatabaseConnectionRestored,
-          QString("Database reconnection successful on attempt %1").arg(attempt),
+          QString("Database reconnection successful on attempt %1")
+              .arg(attempt),
           "QueryManager::ensureDatabaseConnection");
       ErrorUtils::logError(success);
-      
+
       // Re-initialize PRAGMAs after reconnection
       QSqlQuery query(m_db);
       query.exec("PRAGMA foreign_keys = ON");
       query.exec("PRAGMA journal_mode = WAL");
       query.exec("PRAGMA busy_timeout = 500");
       query.exec("PRAGMA synchronous = NORMAL");
-      
+
       return true;
     }
-    
+
     // Wait before next attempt (unless it's the last one)
     if (attempt < MAX_RECONNECT_ATTEMPTS) {
       QThread::msleep(RECONNECT_DELAY_MS);
     }
   }
-  
+
   // All attempts failed
   auto err = ErrorContext::critical(
-      ErrorCode::DatabaseConnectionFailed,
-      QString("Failed to reconnect to database after %1 attempts")
-          .arg(MAX_RECONNECT_ATTEMPTS),
-      "QueryManager::ensureDatabaseConnection")
-      .withDetails(m_db.lastError().text());
+                 ErrorCode::DatabaseConnectionFailed,
+                 QString("Failed to reconnect to database after %1 attempts")
+                     .arg(MAX_RECONNECT_ATTEMPTS),
+                 "QueryManager::ensureDatabaseConnection")
+                 .withDetails(m_db.lastError().text());
   ErrorUtils::logError(err);
   emit errorOccurred(err);
-  
+
   return false;
 }
 
@@ -543,11 +558,10 @@ void QueryManager::initDatabase() {
   QString dbPath =
       QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
   if (!QDir().mkpath(dbPath)) {
-    auto err = ErrorContext::critical(
-        ErrorCode::DatabaseConnectionFailed,
-        "Failed to create database directory",
-        "QueryManager::initDatabase")
-        .withDetails(QString("Path: %1").arg(dbPath));
+    auto err = ErrorContext::critical(ErrorCode::DatabaseConnectionFailed,
+                                      "Failed to create database directory",
+                                      "QueryManager::initDatabase")
+                   .withDetails(QString("Path: %1").arg(dbPath));
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return;
@@ -555,11 +569,10 @@ void QueryManager::initDatabase() {
   m_db.setDatabaseName(dbPath + "/media.db");
 
   if (!m_db.open()) {
-    auto err = ErrorContext::critical(
-        ErrorCode::DatabaseConnectionFailed,
-        "Failed to open database",
-        "QueryManager::initDatabase")
-        .withDetails(m_db.lastError().text());
+    auto err = ErrorContext::critical(ErrorCode::DatabaseConnectionFailed,
+                                      "Failed to open database",
+                                      "QueryManager::initDatabase")
+                   .withDetails(m_db.lastError().text());
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return;
@@ -567,40 +580,36 @@ void QueryManager::initDatabase() {
 
   QSqlQuery query(m_db);
   if (!query.exec("PRAGMA foreign_keys = ON")) {
-    auto err = ErrorContext::warning(
-        ErrorCode::DatabaseQueryFailed,
-        "Failed to enable foreign keys",
-        "QueryManager::initDatabase")
-        .withDetails(query.lastError().text());
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to enable foreign keys",
+                                     "QueryManager::initDatabase")
+                   .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
   }
   if (!query.exec("PRAGMA journal_mode = WAL")) {
-    auto err = ErrorContext::warning(
-        ErrorCode::DatabaseQueryFailed,
-        "Failed to enable WAL mode",
-        "QueryManager::initDatabase")
-        .withDetails(query.lastError().text());
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to enable WAL mode",
+                                     "QueryManager::initDatabase")
+                   .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
   }
   // Set busy timeout to prevent indefinite blocking when another connection
   // holds a lock (e.g., FTS backfill on scan worker). Queries will fail with
   // SQLITE_BUSY after the timeout, allowing graceful fallback.
   if (!query.exec("PRAGMA busy_timeout = 500")) {
-    auto err = ErrorContext::warning(
-        ErrorCode::DatabaseQueryFailed,
-        "Failed to set busy timeout",
-        "QueryManager::initDatabase")
-        .withDetails(query.lastError().text());
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to set busy timeout",
+                                     "QueryManager::initDatabase")
+                   .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
   }
   // Use NORMAL synchronous mode for better write performance while maintaining
   // data safety - WAL mode already provides crash recovery guarantees
   if (!query.exec("PRAGMA synchronous = NORMAL")) {
-    auto err = ErrorContext::warning(
-        ErrorCode::DatabaseQueryFailed,
-        "Failed to set synchronous mode",
-        "QueryManager::initDatabase")
-        .withDetails(query.lastError().text());
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to set synchronous mode",
+                                     "QueryManager::initDatabase")
+                   .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
   }
 
@@ -630,20 +639,26 @@ void QueryManager::initDatabase() {
       ")");
 
   // Keep core indexes available even in worker-only initialization.
-  query.exec("CREATE INDEX IF NOT EXISTS idx_collections_uuid ON collections(uuid)");
-  query.exec("CREATE INDEX IF NOT EXISTS idx_items_collection_uuid ON items(collection_uuid)");
+  query.exec(
+      "CREATE INDEX IF NOT EXISTS idx_collections_uuid ON collections(uuid)");
+  query.exec("CREATE INDEX IF NOT EXISTS idx_items_collection_uuid ON "
+             "items(collection_uuid)");
   // Composite index for sorted range queries - enables efficient ORDER BY name
-  // when filtering by collection_uuid (common in showAllSubcollectionItems mode)
-  query.exec("CREATE INDEX IF NOT EXISTS idx_items_uuid_name ON items(collection_uuid, name COLLATE NOCASE)");
+  // when filtering by collection_uuid (common in showAllSubcollectionItems
+  // mode)
+  query.exec("CREATE INDEX IF NOT EXISTS idx_items_uuid_name ON "
+             "items(collection_uuid, name COLLATE NOCASE)");
 
-  DbMigrations::applySchemaMigrations(m_db, QStringLiteral("QueryManager::initDatabase"));
+  DbMigrations::applySchemaMigrations(
+      m_db, QStringLiteral("QueryManager::initDatabase"));
 
   refreshSearchCapabilities();
 }
 
 void QueryManager::refreshSearchCapabilities() {
   m_itemsFtsAvailable = false;
-  m_itemsFtsReady = false;  // Conservative default - will be set true by isItemsFtsReadyFromDb()
+  m_itemsFtsReady = false; // Conservative default - will be set true by
+                           // isItemsFtsReadyFromDb()
   if (!m_db.isOpen()) {
     return;
   }
@@ -666,7 +681,8 @@ static auto ensureMetaTable(QSqlDatabase &db) -> void {
     return;
   }
   QSqlQuery q(db);
-  q.exec("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+  q.exec("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT "
+         "NOT NULL)");
 }
 
 static auto tryReadMetaValue(QSqlDatabase &db, const QString &key,
@@ -748,7 +764,8 @@ void QueryManager::ensureItemsFtsReady() {
   slice.start();
 
   qint64 indexedUpToId = 0;
-  (void)tryReadMetaInt(m_db, QStringLiteral("items_fts_indexed_up_to_id"), indexedUpToId);
+  (void)tryReadMetaInt(m_db, QStringLiteral("items_fts_indexed_up_to_id"),
+                       indexedUpToId);
 
   while (slice.elapsed() < UIConstants::Database::FTS_BACKFILL_TIME_BUDGET_MS) {
     // Determine the current max id in the content table.
@@ -768,37 +785,39 @@ void QueryManager::ensureItemsFtsReady() {
     }
 
     if (maxId <= indexedUpToId) {
-      writeMetaValue(m_db, QStringLiteral("items_fts_ready"), QStringLiteral("1"));
+      writeMetaValue(m_db, QStringLiteral("items_fts_ready"),
+                     QStringLiteral("1"));
       m_itemsFtsReady = true;
       return;
     }
 
     if (!m_db.transaction()) {
-      auto err = ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
-                                       "Failed to start transaction for FTS backfill",
-                                       "QueryManager::ensureItemsFtsReady")
-                     .withDetails(m_db.lastError().text());
+      auto err =
+          ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
+                                "Failed to start transaction for FTS backfill",
+                                "QueryManager::ensureItemsFtsReady")
+              .withDetails(m_db.lastError().text());
       ErrorUtils::logError(err);
       emit errorOccurred(err);
       return;
     }
 
     QSqlQuery insertQ(m_db);
-    insertQ.prepare(
-        "INSERT INTO items_fts(rowid, name, path, collection_uuid) "
-        "SELECT id, name, path, collection_uuid "
-        "FROM items "
-        "WHERE id > ? "
-        "ORDER BY id "
-        "LIMIT ?");
+    insertQ.prepare("INSERT INTO items_fts(rowid, name, path, collection_uuid) "
+                    "SELECT id, name, path, collection_uuid "
+                    "FROM items "
+                    "WHERE id > ? "
+                    "ORDER BY id "
+                    "LIMIT ?");
     insertQ.addBindValue(indexedUpToId);
     insertQ.addBindValue(UIConstants::Database::FTS_BACKFILL_BATCH_SIZE);
 
     if (!insertQ.exec()) {
       m_db.rollback();
-      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                       "FTS backfill insert failed (search will use LIKE)",
-                                       "QueryManager::ensureItemsFtsReady")
+      auto err = ErrorContext::warning(
+                     ErrorCode::DatabaseQueryFailed,
+                     "FTS backfill insert failed (search will use LIKE)",
+                     "QueryManager::ensureItemsFtsReady")
                      .withDetails(insertQ.lastError().text());
       ErrorUtils::logError(err);
       emit errorOccurred(err);
@@ -812,10 +831,9 @@ void QueryManager::ensureItemsFtsReady() {
       // ids concurrently (e.g., during scans), which would incorrectly skip
       // unindexed rows.
       QSqlQuery lastIdQ(m_db);
-      lastIdQ.prepare(
-          "SELECT COALESCE(MAX(id), ?) FROM ("
-          "  SELECT id FROM items WHERE id > ? ORDER BY id LIMIT ?"
-          ")");
+      lastIdQ.prepare("SELECT COALESCE(MAX(id), ?) FROM ("
+                      "  SELECT id FROM items WHERE id > ? ORDER BY id LIMIT ?"
+                      ")");
       lastIdQ.addBindValue(indexedUpToId);
       lastIdQ.addBindValue(indexedUpToId);
       lastIdQ.addBindValue(UIConstants::Database::FTS_BACKFILL_BATCH_SIZE);
@@ -843,7 +861,8 @@ void QueryManager::ensureItemsFtsReady() {
                      &QueryManager::ensureItemsFtsReady);
 }
 
-void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollections) {
+void QueryManager::loadAllCollections(
+    const QList<CollectionConfig> &allCollections) {
   if (!ensureDatabaseConnection()) {
     initDatabase();
     if (!m_db.isOpen()) {
@@ -858,11 +877,11 @@ void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollecti
   QHash<QString, int> fileToCollectionIndex;
 
   const int totalCollections = allCollections.size();
-  
+
   for (int collectionIndex = 0; collectionIndex < allCollections.size();
        ++collectionIndex) {
     CollectionConfig collection = allCollections[collectionIndex];
-    
+
     collection.mediaDirectory = PathUtils::validateAndExpandPath(
         collection.mediaDirectory, collection.name);
     collection.artworkDirectory = PathUtils::validateAndExpandPath(
@@ -872,7 +891,8 @@ void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollecti
       continue;
     }
 
-    // Only emit progress signal when a scan is actually needed (not for cached loads)
+    // Only emit progress signal when a scan is actually needed (not for cached
+    // loads)
     if (needsRescan(collectionIndex, collection)) {
       emit scanProgress(collectionIndex + 1, totalCollections, collection.name);
     }
@@ -881,16 +901,18 @@ void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollecti
     QStringList filePaths =
         loadOrScanCollection(collectionIndex, collection, timestamps);
 
-    appendFileMapsAndListCanonical(
-        collectionIndex, collection,
-        CollectionUtils::resolveArtworkDirectory(collectionIndex, allCollections),
-        filePaths, allFilePaths, allFileNames, fileToArtworkDir,
-        fileToMediaDir, fileToCollectionIndex, false);
+    appendFileMapsAndListCanonical(collectionIndex, collection,
+                                   CollectionUtils::resolveArtworkDirectory(
+                                       collectionIndex, allCollections),
+                                   filePaths, allFilePaths, allFileNames,
+                                   fileToArtworkDir, fileToMediaDir,
+                                   fileToCollectionIndex, false);
   }
 
   sortFiles(allFilePaths);
 
-  emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex);
+  emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
+                   fileToCollectionIndex);
 }
 
 void QueryManager::loadItems(const CollectionContext &context,
@@ -918,7 +940,9 @@ void QueryManager::loadItems(const CollectionContext &context,
       ctx.config.artworkDirectory, ctx.config.name);
 
   if (ctx.config.mediaDirectory.trimmed().isEmpty()) {
-    emit itemsLoaded(QStringList(), QHash<QString, QString>(), QHash<QString, QString>(), QHash<QString, QString>(), QHash<QString, int>());
+    emit itemsLoaded(QStringList(), QHash<QString, QString>(),
+                     QHash<QString, QString>(), QHash<QString, QString>(),
+                     QHash<QString, int>());
     return;
   }
 
@@ -938,8 +962,10 @@ void QueryManager::loadItems(const CollectionContext &context,
       }
     }
     filePaths = filtered;
-  } else if (ctx.config.includeContentSubfolders && !ctx.config.showAllSubfolderItems) {
-    // At root with subfolders enabled but NOT showing all items - exclude items in subfolders
+  } else if (ctx.config.includeContentSubfolders &&
+             !ctx.config.showAllSubfolderItems) {
+    // At root with subfolders enabled but NOT showing all items - exclude items
+    // in subfolders
     QStringList filtered;
     for (const QString &path : filePaths) {
       if (!path.contains('/')) {
@@ -948,7 +974,8 @@ void QueryManager::loadItems(const CollectionContext &context,
     }
     filePaths = filtered;
   }
-  // If showAllSubfolderItems is true, we don't filter - all items are shown mixed together
+  // If showAllSubfolderItems is true, we don't filter - all items are shown
+  // mixed together
 
   QStringList allFilePaths;
   QHash<QString, QString> allFileNames;
@@ -961,17 +988,19 @@ void QueryManager::loadItems(const CollectionContext &context,
       ctx.currentIndex, allCollections);
 
   appendFileMapsAndListCanonical(ctx.currentIndex, ctx.config,
-                                 resolvedArtworkDir, filePaths,
-                                 allFilePaths, allFileNames, fileToArtworkDir,
-                                 fileToMediaDir, fileToCollectionIndex, false);
+                                 resolvedArtworkDir, filePaths, allFilePaths,
+                                 allFileNames, fileToArtworkDir, fileToMediaDir,
+                                 fileToCollectionIndex, false);
 
   sortFiles(allFilePaths, ctx.sortMode);
 
-  emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex);
+  emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
+                   fileToCollectionIndex);
 }
 
-void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
-                                                 const QList<CollectionConfig> &allCollections) {
+void QueryManager::loadItemsWithSubcollections(
+    const CollectionContext &context,
+    const QList<CollectionConfig> &allCollections) {
   if (!ensureDatabaseConnection()) {
     initDatabase();
     if (!m_db.isOpen()) {
@@ -1022,8 +1051,10 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
         }
       }
       mainFilePaths = filtered;
-    } else if (mainCtx.config.includeContentSubfolders && !mainCtx.config.showAllSubfolderItems) {
-      // At root with subfolders enabled but NOT showing all items - exclude items in subfolders
+    } else if (mainCtx.config.includeContentSubfolders &&
+               !mainCtx.config.showAllSubfolderItems) {
+      // At root with subfolders enabled but NOT showing all items - exclude
+      // items in subfolders
       QStringList filtered;
       for (const QString &path : mainFilePaths) {
         if (!path.contains('/')) {
@@ -1036,19 +1067,22 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
     seenCanonicalPaths.reserve(mainFilePaths.size());
     canonicalPathCache.reserve(mainFilePaths.size());
 
-    appendFileMapsAndListCanonical(
-      mainCtx.currentIndex, mainCtx.config,
-      CollectionUtils::resolveArtworkDirectory(mainCtx.currentIndex, allCollections),
-      mainFilePaths, allFilePaths, allFileNames, fileToArtworkDir,
-      fileToMediaDir, fileToCollectionIndex, true, &seenCanonicalPaths,
-      &canonicalPathCache);
+    appendFileMapsAndListCanonical(mainCtx.currentIndex, mainCtx.config,
+                                   CollectionUtils::resolveArtworkDirectory(
+                                       mainCtx.currentIndex, allCollections),
+                                   mainFilePaths, allFilePaths, allFileNames,
+                                   fileToArtworkDir, fileToMediaDir,
+                                   fileToCollectionIndex, true,
+                                   &seenCanonicalPaths, &canonicalPathCache);
   }
 
   // Use pre-computed descendants if available (O(1) from cache), otherwise
   // fall back to O(n²) tree traversal for backward compatibility
-  const QList<int> &rawDescendants = mainCtx.precomputedDescendants.isEmpty()
-      ? CollectionUtils::collectDescendantIndices(mainCtx.currentIndex, allCollections)
-      : mainCtx.precomputedDescendants;
+  const QList<int> &rawDescendants =
+      mainCtx.precomputedDescendants.isEmpty()
+          ? CollectionUtils::collectDescendantIndices(mainCtx.currentIndex,
+                                                      allCollections)
+          : mainCtx.precomputedDescendants;
   QSet<int> seenDesc;
   QList<int> descendants;
   descendants.reserve(rawDescendants.size());
@@ -1080,20 +1114,22 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
     QStringList subFilePaths =
         loadOrScanCollection(collectionIndex, collection, subTimestamps);
 
-    appendFileMapsAndListCanonical(
-        collectionIndex, collection,
-        CollectionUtils::resolveArtworkDirectory(collectionIndex, allCollections),
-        subFilePaths, allFilePaths, allFileNames, fileToArtworkDir,
-        fileToMediaDir, fileToCollectionIndex, true, &seenCanonicalPaths,
-        &canonicalPathCache);
+    appendFileMapsAndListCanonical(collectionIndex, collection,
+                                   CollectionUtils::resolveArtworkDirectory(
+                                       collectionIndex, allCollections),
+                                   subFilePaths, allFilePaths, allFileNames,
+                                   fileToArtworkDir, fileToMediaDir,
+                                   fileToCollectionIndex, true,
+                                   &seenCanonicalPaths, &canonicalPathCache);
   }
 
   sortFiles(allFilePaths, context.sortMode);
-  emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex);
+  emit itemsLoaded(allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
+                   fileToCollectionIndex);
 }
 
 void QueryManager::updateCachedCounts(quint64 generation,
-                                     const QStringList &collectionUuids) {
+                                      const QStringList &collectionUuids) {
   if (!ensureDatabaseConnection()) {
     initDatabase();
     if (!m_db.isOpen()) {
@@ -1117,27 +1153,27 @@ void QueryManager::updateCachedCounts(quint64 generation,
     // Check if we need to use temp table for large UUID lists
     bool useTempTable = false;
     const QString clause = buildUuidFilterClause(collectionUuids, useTempTable);
-    
+
     if (useTempTable) {
       if (!ensureQueryUuidsPopulated(collectionUuids)) {
         emit cachedCountsComputed(generation, globalCount, directCountsByUuid);
         return;
       }
     }
-    
+
     QSqlQuery query(m_db);
     QString sql;
     if (useTempTable) {
       sql = "SELECT collection_uuid, COUNT(DISTINCT path) "
-            "FROM items WHERE EXISTS " + clause +
-            " GROUP BY collection_uuid";
+            "FROM items WHERE EXISTS " +
+            clause + " GROUP BY collection_uuid";
     } else {
       sql = "SELECT collection_uuid, COUNT(DISTINCT path) "
-            "FROM items WHERE collection_uuid IN " + clause +
-            " GROUP BY collection_uuid";
+            "FROM items WHERE collection_uuid IN " +
+            clause + " GROUP BY collection_uuid";
     }
     query.prepare(sql);
-    
+
     // Only bind UUIDs when not using temp table
     if (!useTempTable) {
       for (const QString &uuid : collectionUuids) {
@@ -1157,8 +1193,9 @@ void QueryManager::updateCachedCounts(quint64 generation,
 }
 
 // Collects UUIDs for a collection and optionally its descendants
-auto QueryManager::collectCollectionUuids(const CollectionContext &ctx,
-                                          const QList<CollectionConfig> &allCollections) -> QStringList {
+auto QueryManager::collectCollectionUuids(
+    const CollectionContext &ctx, const QList<CollectionConfig> &allCollections)
+    -> QStringList {
   QStringList uuids;
 
   if (ctx.queryIncludeAllCollections) {
@@ -1166,11 +1203,13 @@ auto QueryManager::collectCollectionUuids(const CollectionContext &ctx,
     uuids.reserve(allCollections.size());
     for (int i = 0; i < allCollections.size(); ++i) {
       CollectionConfig c = allCollections[i];
-      c.mediaDirectory = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+      c.mediaDirectory =
+          PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
       if (c.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
-      const QString uuid = CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
+      const QString uuid =
+          CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
       if (!uuid.isEmpty() && !seen.contains(uuid)) {
         seen.insert(uuid);
         uuids.append(uuid);
@@ -1180,23 +1219,28 @@ auto QueryManager::collectCollectionUuids(const CollectionContext &ctx,
   }
 
   // Check if we need descendants (for subcollection search modes)
-  const bool needsDescendants = ctx.config.showAllSubcollectionItems || ctx.queryIncludeDescendants;
-  
+  const bool needsDescendants =
+      ctx.config.showAllSubcollectionItems || ctx.queryIncludeDescendants;
+
   // Use pre-computed UUIDs if available and we need descendants
-  // This provides major performance improvement for large hierarchies (3000+ subcollections)
-  // by eliminating repeated filesystem exists() checks and SHA1 hash computations
+  // This provides major performance improvement for large hierarchies (3000+
+  // subcollections) by eliminating repeated filesystem exists() checks and SHA1
+  // hash computations
   if (needsDescendants && !ctx.precomputedDescendantUuids.isEmpty()) {
     return ctx.precomputedDescendantUuids;
   }
 
-  uuids << CollectionUtils::computeCollectionUuid(ctx.config.name, ctx.config.mediaDirectory);
+  uuids << CollectionUtils::computeCollectionUuid(ctx.config.name,
+                                                  ctx.config.mediaDirectory);
 
   if (needsDescendants) {
     // Use pre-computed descendants if available (O(1) from cache), otherwise
     // fall back to O(n²) tree traversal for backward compatibility
-    const QList<int> &descendants = ctx.precomputedDescendants.isEmpty()
-        ? CollectionUtils::collectDescendantIndices(ctx.currentIndex, allCollections)
-        : ctx.precomputedDescendants;
+    const QList<int> &descendants =
+        ctx.precomputedDescendants.isEmpty()
+            ? CollectionUtils::collectDescendantIndices(ctx.currentIndex,
+                                                        allCollections)
+            : ctx.precomputedDescendants;
     uuids.reserve(uuids.size() + descendants.size());
     for (int descendantIndex : descendants) {
       if (descendantIndex == ctx.currentIndex || descendantIndex < 0 ||
@@ -1209,23 +1253,27 @@ auto QueryManager::collectCollectionUuids(const CollectionContext &ctx,
       if (subCol.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
-      uuids << CollectionUtils::computeCollectionUuid(subCol.name, subCol.mediaDirectory);
+      uuids << CollectionUtils::computeCollectionUuid(subCol.name,
+                                                      subCol.mediaDirectory);
     }
   }
   return uuids;
 }
 
 // Builds UUID-to-directory mappings for resolving paths from query results
-auto QueryManager::buildDirectoryMaps(const CollectionContext &ctx,
-                                      const QList<CollectionConfig> &allCollections) -> CollectionDirMaps {
+auto QueryManager::buildDirectoryMaps(
+    const CollectionContext &ctx, const QList<CollectionConfig> &allCollections)
+    -> CollectionDirMaps {
   CollectionDirMaps maps;
-  
+
   // Check if we need descendants (for subcollection search modes)
-  const bool needsDescendants = ctx.config.showAllSubcollectionItems || ctx.queryIncludeDescendants;
-  
+  const bool needsDescendants =
+      ctx.config.showAllSubcollectionItems || ctx.queryIncludeDescendants;
+
   // Use pre-computed directory maps if available and we need descendants
-  // This provides major performance improvement for large hierarchies (3000+ subcollections)
-  // by eliminating repeated path expansions and artwork resolution during range loading
+  // This provides major performance improvement for large hierarchies (3000+
+  // subcollections) by eliminating repeated path expansions and artwork
+  // resolution during range loading
   if (needsDescendants && !ctx.precomputedUuidToMediaDir.isEmpty()) {
     maps.uuidToMediaDir = ctx.precomputedUuidToMediaDir;
     maps.uuidToArtworkDir = ctx.precomputedUuidToArtworkDir;
@@ -1236,7 +1284,8 @@ auto QueryManager::buildDirectoryMaps(const CollectionContext &ctx,
   // Helper to add mapping for a collection at a given index, resolving artwork
   // directory from parent chain if not set on the collection itself
   auto addMapping = [&](int collectionIndex, const CollectionConfig &c) {
-    const QString uuid = CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
+    const QString uuid =
+        CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
     if (uuid.isEmpty()) {
       return;
     }
@@ -1261,8 +1310,10 @@ auto QueryManager::buildDirectoryMaps(const CollectionContext &ctx,
     maps.uuidToCollectionIndex.reserve(allCollections.size());
     for (int i = 0; i < allCollections.size(); ++i) {
       CollectionConfig c = allCollections[i];
-      c.mediaDirectory = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
-      c.artworkDirectory = PathUtils::validateAndExpandPath(c.artworkDirectory, c.name);
+      c.mediaDirectory =
+          PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+      c.artworkDirectory =
+          PathUtils::validateAndExpandPath(c.artworkDirectory, c.name);
       if (c.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
@@ -1277,8 +1328,9 @@ auto QueryManager::buildDirectoryMaps(const CollectionContext &ctx,
     // Use pre-computed descendants if available (O(1) from cache), otherwise
     // fall back to O(n²) tree traversal for backward compatibility
     descendants = ctx.precomputedDescendants.isEmpty()
-        ? CollectionUtils::collectDescendantIndices(ctx.currentIndex, allCollections)
-        : ctx.precomputedDescendants;
+                      ? CollectionUtils::collectDescendantIndices(
+                            ctx.currentIndex, allCollections)
+                      : ctx.precomputedDescendants;
     expectedMappings += descendants.size();
   }
 
@@ -1297,8 +1349,8 @@ auto QueryManager::buildDirectoryMaps(const CollectionContext &ctx,
       CollectionConfig subCol = allCollections[descendantIndex];
       subCol.mediaDirectory =
           PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
-      subCol.artworkDirectory =
-          PathUtils::validateAndExpandPath(subCol.artworkDirectory, subCol.name);
+      subCol.artworkDirectory = PathUtils::validateAndExpandPath(
+          subCol.artworkDirectory, subCol.name);
       if (subCol.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
@@ -1318,13 +1370,15 @@ auto QueryManager::buildUuidInClause(int uuidCount) -> QString {
   return clause;
 }
 
-bool QueryManager::ensureCollectionScanned(int collectionIndex, const CollectionConfig &collection) {
+bool QueryManager::ensureCollectionScanned(int collectionIndex,
+                                           const CollectionConfig &collection) {
   if (collection.mediaDirectory.trimmed().isEmpty()) {
     return false;
   }
 
-  // If the directory isn't present, don't emit scan-starting UI or attempt a scan.
-  // This avoids rapid "scan" loops when a collection points to a missing mount.
+  // If the directory isn't present, don't emit scan-starting UI or attempt a
+  // scan. This avoids rapid "scan" loops when a collection points to a missing
+  // mount.
   if (!QFileInfo(collection.mediaDirectory).exists()) {
     return false;
   }
@@ -1355,16 +1409,17 @@ bool QueryManager::ensureCollectionScanned(int collectionIndex, const Collection
   return success;
 }
 
-void QueryManager::insertItemsBatch(int legacyId, const QString &uuid,
-                                   const QStringList &paths,
-                                   const QHash<QString, QDateTime> &timestamps) {
+void QueryManager::insertItemsBatch(
+    int legacyId, const QString &uuid, const QStringList &paths,
+    const QHash<QString, QDateTime> &timestamps) {
   if (paths.isEmpty()) {
     return;
   }
 
   // Batch upsert for performance.
-  // IMPORTANT: preserve user state fields (play_count/last_played/rating/artwork_path).
-  // We only update name + last_modified (and collection_id) when a row already exists.
+  // IMPORTANT: preserve user state fields
+  // (play_count/last_played/rating/artwork_path). We only update name +
+  // last_modified (and collection_id) when a row already exists.
   QString sql = "INSERT INTO items (collection_id, collection_uuid, "
                 "path, name, last_modified) VALUES ";
   QStringList valueSets;
@@ -1389,11 +1444,10 @@ void QueryManager::insertItemsBatch(int legacyId, const QString &uuid,
   }
 
   if (!ins.exec()) {
-    auto err = ErrorContext::warning(
-        ErrorCode::DatabaseQueryFailed,
-        "Failed to insert items batch",
-        "QueryManager::insertItemsBatch")
-        .withDetails(ins.lastError().text());
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to insert items batch",
+                                     "QueryManager::insertItemsBatch")
+                   .withDetails(ins.lastError().text());
     ErrorUtils::logError(err);
   }
 }
@@ -1403,17 +1457,15 @@ bool QueryManager::ensureScannedItemsTempTable() {
     return false;
   }
   QSqlQuery q(m_db);
-  if (!q.exec(
-          "CREATE TEMP TABLE IF NOT EXISTS scanned_items ("
-          "path TEXT PRIMARY KEY, "
-          "name TEXT, "
-          "last_modified TEXT"
-          ")")) {
+  if (!q.exec("CREATE TEMP TABLE IF NOT EXISTS scanned_items ("
+              "path TEXT PRIMARY KEY, "
+              "name TEXT, "
+              "last_modified TEXT"
+              ")")) {
     ErrorUtils::logError(
-        ErrorContext::warning(
-            ErrorCode::DatabaseQueryFailed,
-            "Failed to create scanned_items temp table",
-            "QueryManager::ensureScannedItemsTempTable")
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                              "Failed to create scanned_items temp table",
+                              "QueryManager::ensureScannedItemsTempTable")
             .withDetails(q.lastError().text()));
     return false;
   }
@@ -1437,12 +1489,12 @@ bool QueryManager::ensureQueryUuidsTempTable() {
     return false;
   }
   QSqlQuery q(m_db);
-  if (!q.exec("CREATE TEMP TABLE IF NOT EXISTS query_uuids (uuid TEXT PRIMARY KEY)")) {
+  if (!q.exec("CREATE TEMP TABLE IF NOT EXISTS query_uuids (uuid TEXT PRIMARY "
+              "KEY)")) {
     ErrorUtils::logError(
-        ErrorContext::warning(
-            ErrorCode::DatabaseQueryFailed,
-            "Failed to create query_uuids temp table",
-            "QueryManager::ensureQueryUuidsTempTable")
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                              "Failed to create query_uuids temp table",
+                              "QueryManager::ensureQueryUuidsTempTable")
             .withDetails(q.lastError().text()));
     return false;
   }
@@ -1473,11 +1525,12 @@ bool QueryManager::populateQueryUuidsTempTable(const QStringList &uuids) {
   // Insert UUIDs in batches to stay under SQLite variable limit
   // Each row has 1 column, so batch size can be up to 999
   constexpr int BATCH_SIZE = 500;
-  
-  for (int batchStart = 0; batchStart < uuids.size(); batchStart += BATCH_SIZE) {
+
+  for (int batchStart = 0; batchStart < uuids.size();
+       batchStart += BATCH_SIZE) {
     const int batchEnd = qMin(batchStart + BATCH_SIZE, uuids.size());
     const int batchCount = batchEnd - batchStart;
-    
+
     QString sql = "INSERT OR IGNORE INTO query_uuids (uuid) VALUES ";
     QStringList placeholders;
     placeholders.reserve(batchCount);
@@ -1485,41 +1538,43 @@ bool QueryManager::populateQueryUuidsTempTable(const QStringList &uuids) {
       placeholders.append("(?)");
     }
     sql += placeholders.join(", ");
-    
+
     QSqlQuery ins(m_db);
     ins.prepare(sql);
     for (int i = batchStart; i < batchEnd; ++i) {
       ins.addBindValue(uuids[i]);
     }
-    
+
     if (!ins.exec()) {
       m_db.rollback();
       ErrorUtils::logError(
-          ErrorContext::warning(
-              ErrorCode::DatabaseQueryFailed,
-              "Failed to populate query_uuids batch",
-              "QueryManager::populateQueryUuidsTempTable")
+          ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                "Failed to populate query_uuids batch",
+                                "QueryManager::populateQueryUuidsTempTable")
               .withDetails(ins.lastError().text()));
       return false;
     }
   }
-  
+
   m_db.commit();
   return true;
 }
 
-QString QueryManager::buildUuidFilterClause(const QStringList &uuids, bool &useTempTable) {
+QString QueryManager::buildUuidFilterClause(const QStringList &uuids,
+                                            bool &useTempTable) {
   if (uuids.size() <= MAX_UUIDS_FOR_IN_CLAUSE) {
     // Small enough - use standard IN clause with placeholders
     useTempTable = false;
     return buildUuidInClause(uuids.size());
   }
-  
-  // Too many UUIDs - use temp table. Use EXISTS which is often faster than IN for subqueries
+
+  // Too many UUIDs - use temp table. Use EXISTS which is often faster than IN
+  // for subqueries
   useTempTable = true;
   // For items table: collection_uuid; for items_fts: collection_uuid
   // The caller must use this in an EXISTS clause context
-  return QStringLiteral("(SELECT 1 FROM query_uuids WHERE query_uuids.uuid = collection_uuid)");
+  return QStringLiteral(
+      "(SELECT 1 FROM query_uuids WHERE query_uuids.uuid = collection_uuid)");
 }
 
 QByteArray QueryManager::computeUuidListHash(const QStringList &uuids) {
@@ -1543,29 +1598,32 @@ QByteArray QueryManager::computeUuidListHash(const QStringList &uuids) {
 
 bool QueryManager::ensureQueryUuidsPopulated(const QStringList &uuids) {
   const QByteArray newHash = computeUuidListHash(uuids);
-  
+
   // Skip repopulation if hash matches (same UUIDs as last query)
   if (newHash == m_cachedQueryUuidsHash) {
     if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-      qWarning() << "[RangeDiag] UUID temp table cache HIT, uuids=" << uuids.size();
+      qWarning() << "[RangeDiag] UUID temp table cache HIT, uuids="
+                 << uuids.size();
     }
     return true;
   }
-  
+
   QElapsedTimer timer;
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     timer.start();
-    qWarning() << "[RangeDiag] UUID temp table cache MISS, populating" << uuids.size() << "uuids...";
+    qWarning() << "[RangeDiag] UUID temp table cache MISS, populating"
+               << uuids.size() << "uuids...";
   }
-  
+
   if (!populateQueryUuidsTempTable(uuids)) {
     return false;
   }
-  
+
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-    qWarning() << "[RangeDiag] UUID temp table populated in" << timer.elapsed() << "ms";
+    qWarning() << "[RangeDiag] UUID temp table populated in" << timer.elapsed()
+               << "ms";
   }
-  
+
   m_cachedQueryUuidsHash = newHash;
   return true;
 }
@@ -1582,16 +1640,16 @@ bool QueryManager::ensureSortedItemsCacheTable() {
     return false;
   }
   QSqlQuery q(m_db);
-  // position is the 0-based index in sorted order, used for instant BETWEEN queries
+  // position is the 0-based index in sorted order, used for instant BETWEEN
+  // queries
   if (!q.exec("CREATE TEMP TABLE IF NOT EXISTS sorted_items_cache ("
               "position INTEGER PRIMARY KEY, "
               "path TEXT NOT NULL, "
               "uuid TEXT NOT NULL)")) {
     ErrorUtils::logError(
-        ErrorContext::warning(
-            ErrorCode::DatabaseQueryFailed,
-            "Failed to create sorted_items_cache temp table",
-            "QueryManager::ensureSortedItemsCacheTable")
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                              "Failed to create sorted_items_cache temp table",
+                              "QueryManager::ensureSortedItemsCacheTable")
             .withDetails(q.lastError().text()));
     return false;
   }
@@ -1608,8 +1666,10 @@ void QueryManager::clearSortedItemsCache() {
   q.exec("DELETE FROM sorted_items_cache");
 }
 
-QByteArray QueryManager::computeSortCacheHash(const QStringList &uuids, const QString &filter) {
-  // Hash of UUIDs + filter to detect when cache needs rebuilding
+QByteArray QueryManager::computeSortCacheHash(const QStringList &uuids,
+                                              const QString &filter,
+                                              SortMode sortMode) {
+  // Hash of UUIDs + filter + sortMode to detect when cache needs rebuilding
   QByteArray data;
   data.reserve(256);
   data.append(QByteArray::number(uuids.size()));
@@ -1623,52 +1683,61 @@ QByteArray QueryManager::computeSortCacheHash(const QStringList &uuids, const QS
     }
   }
   data.append(filter.toUtf8());
+  data.append(QByteArray::number(static_cast<int>(sortMode)));
   return QCryptographicHash::hash(data, QCryptographicHash::Md5);
 }
 
-void QueryManager::scheduleDeferredCacheBuild(const QStringList &uuids, const QString &filter) {
+void QueryManager::scheduleDeferredCacheBuild(const QStringList &uuids,
+                                              const QString &filter,
+                                              SortMode sortMode) {
   // Schedule cache build to run after current event processing completes.
   // This allows the slow-path query to return immediately while the cache
   // builds in the background. Subsequent queries will use the cache once ready.
   if (m_sortCacheBuildPending) {
-    return;  // Already scheduled
+    return; // Already scheduled
   }
-  
+
   m_sortCacheBuildPending = true;
   m_pendingCacheUuids = uuids;
   m_pendingCacheFilter = filter;
-  
+  m_pendingCacheSortMode = sortMode;
+
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-    qWarning() << "[RangeDiag] Deferred cache build scheduled for" << uuids.size() << "uuids";
+    qWarning() << "[RangeDiag] Deferred cache build scheduled for"
+               << uuids.size() << "uuids";
   }
-  
+
   // Use queued invocation so this runs after the current function returns
-  QMetaObject::invokeMethod(this, &QueryManager::performDeferredCacheBuild, Qt::QueuedConnection);
+  QMetaObject::invokeMethod(this, &QueryManager::performDeferredCacheBuild,
+                            Qt::QueuedConnection);
 }
 
 void QueryManager::performDeferredCacheBuild() {
   if (!m_sortCacheBuildPending) {
     return;
   }
-  
+
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     qWarning() << "[RangeDiag] Starting deferred cache build...";
   }
-  
-  (void)populateSortedItemsCache(m_pendingCacheUuids, m_pendingCacheFilter);
-  
+
+  (void)populateSortedItemsCache(m_pendingCacheUuids, m_pendingCacheFilter,
+                                 m_pendingCacheSortMode);
+
   m_sortCacheBuildPending = false;
   m_pendingCacheUuids.clear();
   m_pendingCacheFilter.clear();
 }
 
-bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QString &filter) {
+bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
+                                            const QString &filter,
+                                            SortMode sortMode) {
   if (!m_db.isOpen() || uuids.isEmpty()) {
     return false;
   }
 
-  const QByteArray newHash = computeSortCacheHash(uuids, filter);
-  
+  const QByteArray newHash = computeSortCacheHash(uuids, filter, sortMode);
+
   // Skip if cache is valid and hash matches
   if (m_sortedItemsCacheValid && newHash == m_sortedItemsCacheHash) {
     if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
@@ -1684,7 +1753,9 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   QElapsedTimer timer;
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     timer.start();
-    qWarning() << "[RangeDiag] Building sorted items cache for" << uuids.size() << "uuids, filter='" << filter << "'";
+    qWarning() << "[RangeDiag] Building sorted items cache for" << uuids.size()
+               << "uuids, filter='" << filter
+               << "', sortMode=" << static_cast<int>(sortMode);
   }
 
   m_db.transaction();
@@ -1701,30 +1772,85 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   // Build the sorted result set once and insert with position numbers
   // This is the expensive operation, but we only do it once per collection load
   const QString trimmedFilter = filter.trimmed();
-  
+
   bool useTempTable = uuids.size() > MAX_UUIDS_FOR_IN_CLAUSE;
   if (useTempTable && !ensureQueryUuidsPopulated(uuids)) {
     m_db.rollback();
     return false;
   }
 
+  // For collection sorting, we need to join with collections table
+  bool needsCollectionJoin = (sortMode == SortMode::CollectionAscending ||
+                              sortMode == SortMode::CollectionDescending);
+
   QString sql;
-  if (useTempTable) {
-    sql = "SELECT path, collection_uuid FROM items "
-          "WHERE EXISTS (SELECT 1 FROM query_uuids WHERE query_uuids.uuid = collection_uuid)";
-  } else {
-    sql = "SELECT path, collection_uuid FROM items WHERE collection_uuid IN " +
-          buildUuidInClause(uuids.size());
-  }
-  
+  QString filterClause;
   if (!trimmedFilter.isEmpty()) {
-    sql += " AND name LIKE ?";
+    filterClause =
+        needsCollectionJoin ? " AND i.name LIKE ?" : " AND name LIKE ?";
   }
-  sql += " ORDER BY name COLLATE NOCASE";
+
+  if (needsCollectionJoin) {
+    // Join with collections to get collection name for sorting.
+    // Use GROUP BY path to deduplicate paths that appear in multiple
+    // collections (e.g., when showAllSubcollectionItems=true).
+    // MIN(collection_uuid) picks one arbitrarily. This ensures cache size
+    // matches COUNT(DISTINCT path).
+    if (useTempTable) {
+      sql = "SELECT i.path, MIN(i.collection_uuid) as collection_uuid FROM "
+            "items i "
+            "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
+            "WHERE EXISTS (SELECT 1 FROM query_uuids WHERE query_uuids.uuid = "
+            "i.collection_uuid)" +
+            filterClause + " GROUP BY i.path";
+    } else {
+      sql = "SELECT i.path, MIN(i.collection_uuid) as collection_uuid FROM "
+            "items i "
+            "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
+            "WHERE i.collection_uuid IN " +
+            buildUuidInClause(uuids.size()) + filterClause + " GROUP BY i.path";
+    }
+  } else {
+    // Use GROUP BY path to deduplicate - MIN picks one collection_uuid per
+    // unique path
+    if (useTempTable) {
+      sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM items "
+            "WHERE EXISTS (SELECT 1 FROM query_uuids WHERE query_uuids.uuid = "
+            "collection_uuid)" +
+            filterClause + " GROUP BY path";
+    } else {
+      sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM items "
+            "WHERE collection_uuid IN " +
+            buildUuidInClause(uuids.size()) + filterClause + " GROUP BY path";
+    }
+  }
+
+  // Apply sort order based on sortMode
+  // For name sorting, we can sort by path directly (same filename)
+  // For collection sorting, we use MIN(c.name) since we're grouping
+  // For random sorting, we skip ORDER BY and shuffle in memory
+  const bool isRandomSort = (sortMode == SortMode::Random);
+  if (!isRandomSort) {
+    switch (sortMode) {
+    case SortMode::NameDescending:
+      sql += " ORDER BY path COLLATE NOCASE DESC";
+      break;
+    case SortMode::CollectionAscending:
+      sql += " ORDER BY MIN(c.name) COLLATE NOCASE, path COLLATE NOCASE";
+      break;
+    case SortMode::CollectionDescending:
+      sql += " ORDER BY MIN(c.name) COLLATE NOCASE DESC, path COLLATE NOCASE";
+      break;
+    default:
+      sql += " ORDER BY path COLLATE NOCASE";
+      break;
+    }
+  }
+  // For random sort, no ORDER BY - we'll shuffle in memory after fetching
 
   QSqlQuery selectQuery(m_db);
   selectQuery.prepare(sql);
-  
+
   int bindPos = 0;
   if (!useTempTable) {
     for (const QString &uuid : uuids) {
@@ -1738,12 +1864,41 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   if (!selectQuery.exec()) {
     m_db.rollback();
     ErrorUtils::logError(
-        ErrorContext::warning(
-            ErrorCode::DatabaseQueryFailed,
-            "Failed to fetch sorted items for cache",
-            "QueryManager::populateSortedItemsCache")
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                              "Failed to fetch sorted items for cache",
+                              "QueryManager::populateSortedItemsCache")
             .withDetails(selectQuery.lastError().text()));
     return false;
+  }
+
+  // For random sort: collect all items, shuffle, then insert
+  // For other sorts: stream directly into cache (already ordered by SQL)
+  struct PathUuidPair {
+    QString path;
+    QString uuid;
+  };
+
+  QVector<PathUuidPair> allItems;
+  if (isRandomSort) {
+    // Collect all items for shuffling
+    while (selectQuery.next()) {
+      allItems.append({selectQuery.value(0).toString(),
+                       selectQuery.value(1).toString()});
+    }
+
+    // Fisher-Yates shuffle
+    auto seed = static_cast<unsigned>(QDateTime::currentMSecsSinceEpoch());
+    std::mt19937 rng(seed);
+    for (int i = allItems.size() - 1; i > 0; --i) {
+      std::uniform_int_distribution<int> dist(0, i);
+      int j = dist(rng);
+      std::swap(allItems[i], allItems[j]);
+    }
+
+    if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
+      qWarning() << "[RangeDiag] Random sort: shuffled" << allItems.size()
+                 << "items";
+    }
   }
 
   // Insert in batches for efficiency
@@ -1755,16 +1910,18 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   int position = 0;
 
   auto flushBatch = [&]() -> bool {
-    if (paths.isEmpty()) return true;
-    
-    QString insertSql = "INSERT INTO sorted_items_cache (position, path, uuid) VALUES ";
+    if (paths.isEmpty())
+      return true;
+
+    QString insertSql =
+        "INSERT INTO sorted_items_cache (position, path, uuid) VALUES ";
     QStringList placeholders;
     placeholders.reserve(paths.size());
     for (int i = 0; i < paths.size(); ++i) {
       placeholders.append("(?, ?, ?)");
     }
     insertSql += placeholders.join(", ");
-    
+
     QSqlQuery ins(m_db);
     ins.prepare(insertSql);
     int startPos = position - paths.size();
@@ -1773,35 +1930,51 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
       ins.addBindValue(paths[i]);
       ins.addBindValue(pathUuids[i]);
     }
-    
+
     if (!ins.exec()) {
       ErrorUtils::logError(
-          ErrorContext::warning(
-              ErrorCode::DatabaseQueryFailed,
-              "Failed to insert sorted items cache batch",
-              "QueryManager::populateSortedItemsCache")
+          ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                "Failed to insert sorted items cache batch",
+                                "QueryManager::populateSortedItemsCache")
               .withDetails(ins.lastError().text()));
       return false;
     }
-    
+
     paths.clear();
     pathUuids.clear();
     return true;
   };
 
-  while (selectQuery.next()) {
-    paths.append(selectQuery.value(0).toString());
-    pathUuids.append(selectQuery.value(1).toString());
-    ++position;
-    
-    if (paths.size() >= INSERT_BATCH_SIZE) {
-      if (!flushBatch()) {
-        m_db.rollback();
-        return false;
+  if (isRandomSort) {
+    // Insert from shuffled vector
+    for (const auto &item : allItems) {
+      paths.append(item.path);
+      pathUuids.append(item.uuid);
+      ++position;
+
+      if (paths.size() >= INSERT_BATCH_SIZE) {
+        if (!flushBatch()) {
+          m_db.rollback();
+          return false;
+        }
+      }
+    }
+  } else {
+    // Stream from query result (already ordered)
+    while (selectQuery.next()) {
+      paths.append(selectQuery.value(0).toString());
+      pathUuids.append(selectQuery.value(1).toString());
+      ++position;
+
+      if (paths.size() >= INSERT_BATCH_SIZE) {
+        if (!flushBatch()) {
+          m_db.rollback();
+          return false;
+        }
       }
     }
   }
-  
+
   // Flush remaining
   if (!flushBatch()) {
     m_db.rollback();
@@ -1809,14 +1982,15 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   }
 
   m_db.commit();
-  
+
   m_sortedItemsCacheValid = true;
   m_sortedItemsCacheHash = newHash;
-  
+
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-    qWarning() << "[RangeDiag] Sorted items cache built:" << position << "items in" << timer.elapsed() << "ms";
+    qWarning() << "[RangeDiag] Sorted items cache built:" << position
+               << "items in" << timer.elapsed() << "ms";
   }
-  
+
   return true;
 }
 
@@ -1827,7 +2001,8 @@ void QueryManager::insertScannedItemsBatch(
   }
 
   // 3 columns per row -> keep under SQLite 999 variable limit.
-  QString sql = "INSERT OR REPLACE INTO scanned_items (path, name, last_modified) VALUES ";
+  QString sql = "INSERT OR REPLACE INTO scanned_items (path, name, "
+                "last_modified) VALUES ";
   QStringList valueSets;
   valueSets.reserve(paths.size());
   for (int i = 0; i < paths.size(); ++i) {
@@ -1844,10 +2019,9 @@ void QueryManager::insertScannedItemsBatch(
   }
   if (!ins.exec()) {
     ErrorUtils::logError(
-        ErrorContext::warning(
-            ErrorCode::DatabaseQueryFailed,
-            "Failed to insert scanned_items batch",
-            "QueryManager::insertScannedItemsBatch")
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                              "Failed to insert scanned_items batch",
+                              "QueryManager::insertScannedItemsBatch")
             .withDetails(ins.lastError().text()));
   }
 }
@@ -1859,21 +2033,20 @@ bool QueryManager::applyScannedItemsToDatabase(int legacyId,
   }
 
   QSqlQuery upsert(m_db);
-  upsert.prepare(
-      "INSERT INTO items (collection_id, collection_uuid, path, name, last_modified) "
-      "SELECT ?, ?, path, name, last_modified FROM scanned_items "
-      "ON CONFLICT(collection_uuid, path) DO UPDATE SET "
-      "collection_id=excluded.collection_id, "
-      "name=excluded.name, "
-      "last_modified=excluded.last_modified");
+  upsert.prepare("INSERT INTO items (collection_id, collection_uuid, path, "
+                 "name, last_modified) "
+                 "SELECT ?, ?, path, name, last_modified FROM scanned_items "
+                 "ON CONFLICT(collection_uuid, path) DO UPDATE SET "
+                 "collection_id=excluded.collection_id, "
+                 "name=excluded.name, "
+                 "last_modified=excluded.last_modified");
   upsert.addBindValue(legacyId);
   upsert.addBindValue(collectionUuid);
   if (!upsert.exec()) {
     ErrorUtils::logError(
-        ErrorContext::warning(
-            ErrorCode::DatabaseQueryFailed,
-            "Failed to apply scanned_items upsert",
-            "QueryManager::applyScannedItemsToDatabase")
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                              "Failed to apply scanned_items upsert",
+                              "QueryManager::applyScannedItemsToDatabase")
             .withDetails(upsert.lastError().text()));
     return false;
   }
@@ -1886,9 +2059,9 @@ bool QueryManager::deleteMissingItemsByUuidUsingScannedItems(
     return false;
   }
   QSqlQuery q(m_db);
-  q.prepare(
-      "DELETE FROM items WHERE collection_uuid = ? "
-      "AND NOT EXISTS (SELECT 1 FROM scanned_items si WHERE si.path = items.path)");
+  q.prepare("DELETE FROM items WHERE collection_uuid = ? "
+            "AND NOT EXISTS (SELECT 1 FROM scanned_items si WHERE si.path = "
+            "items.path)");
   q.addBindValue(collectionUuid);
   if (!q.exec()) {
     ErrorUtils::logError(
@@ -1902,10 +2075,9 @@ bool QueryManager::deleteMissingItemsByUuidUsingScannedItems(
   return true;
 }
 
-auto QueryManager::prepareCollectionForItemsInsert(const CollectionConfig &collection,
-                                                   const QString &uuid,
-                                                   const QString &extSignature,
-                                                   int &legacyIdOut) -> bool {
+auto QueryManager::prepareCollectionForItemsInsert(
+    const CollectionConfig &collection, const QString &uuid,
+    const QString &extSignature, int &legacyIdOut) -> bool {
   legacyIdOut = -1;
 
   // Retry constants for lock handling
@@ -1925,7 +2097,8 @@ auto QueryManager::prepareCollectionForItemsInsert(const CollectionConfig &colle
 
     try {
       QSqlQuery update(m_db);
-      update.prepare("UPDATE collections SET name=?, ext_signature=? WHERE uuid=?");
+      update.prepare(
+          "UPDATE collections SET name=?, ext_signature=? WHERE uuid=?");
       update.addBindValue(collection.name);
       update.addBindValue(extSignature);
       update.addBindValue(uuid);
@@ -1934,7 +2107,8 @@ auto QueryManager::prepareCollectionForItemsInsert(const CollectionConfig &colle
       QSqlQuery check(m_db);
       check.prepare("SELECT COUNT(*) FROM collections WHERE uuid=?");
       check.addBindValue(uuid);
-      bool exists = (check.exec() && check.next() && check.value(0).toInt() > 0);
+      bool exists =
+          (check.exec() && check.next() && check.value(0).toInt() > 0);
 
       if (!exists) {
         QSqlQuery insert(m_db);
@@ -1972,10 +2146,10 @@ auto QueryManager::prepareCollectionForItemsInsert(const CollectionConfig &colle
 
       if (!isLockError || attempt == MAX_RETRIES - 1) {
         auto err = ErrorContext::critical(
-            ErrorCode::DatabaseTransactionFailed,
-            "Failed to prepare collection for items",
-            "QueryManager::prepareCollectionForItemsInsert")
-            .withDetails(errorText);
+                       ErrorCode::DatabaseTransactionFailed,
+                       "Failed to prepare collection for items",
+                       "QueryManager::prepareCollectionForItemsInsert")
+                       .withDetails(errorText);
         ErrorUtils::logError(err);
         emit errorOccurred(err);
         return false;
@@ -1986,15 +2160,14 @@ auto QueryManager::prepareCollectionForItemsInsert(const CollectionConfig &colle
   return prepareSuccess;
 }
 
-bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
-                                              const CollectionConfig &collection) {
+bool QueryManager::scanAndSaveItemsToDatabase(
+    int collectionIndex, const CollectionConfig &collection) {
   Q_UNUSED(collectionIndex)
 
   if (!m_db.isOpen()) {
-    auto err = ErrorContext::error(
-        ErrorCode::DatabaseNotOpen,
-        "Database is not open",
-        "QueryManager::scanAndSaveItemsToDatabase");
+    auto err =
+        ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database is not open",
+                            "QueryManager::scanAndSaveItemsToDatabase");
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return false;
@@ -2002,13 +2175,12 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
 
   QDir dir(collection.mediaDirectory);
   if (!dir.exists()) {
-    // Avoid treating this as a successful scan; otherwise the UI may refresh and
-    // immediately retrigger scans.
-    auto err = ErrorContext::warning(
-        ErrorCode::MediaDirectoryNotFound,
-        "Media directory does not exist",
-        "QueryManager::scanAndSaveItemsToDatabase")
-        .withDetails(collection.mediaDirectory);
+    // Avoid treating this as a successful scan; otherwise the UI may refresh
+    // and immediately retrigger scans.
+    auto err = ErrorContext::warning(ErrorCode::MediaDirectoryNotFound,
+                                     "Media directory does not exist",
+                                     "QueryManager::scanAndSaveItemsToDatabase")
+                   .withDetails(collection.mediaDirectory);
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return false;
@@ -2020,16 +2192,16 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
                              : collection.extensions.join('|');
   extSignature += collection.includeContentSubfolders ? "|subfolders" : "";
 
-  const QString uuid = CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
+  const QString uuid = CollectionUtils::computeCollectionUuid(
+      collection.name, collection.mediaDirectory);
 
   // Temporarily disable synchronous writes for bulk insert performance
   QSqlQuery pragmaOff(m_db);
   if (!pragmaOff.exec("PRAGMA synchronous = OFF")) {
     ErrorUtils::logError(
-        ErrorContext::warning(
-            ErrorCode::DatabaseQueryFailed,
-            "Failed to set synchronous=OFF for bulk insert",
-            "QueryManager::scanAndSaveItemsToDatabase")
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                              "Failed to set synchronous=OFF for bulk insert",
+                              "QueryManager::scanAndSaveItemsToDatabase")
             .withDetails(pragmaOff.lastError().text()));
   }
   const SynchronousPragmaGuard restoreSynchronous(m_db);
@@ -2066,16 +2238,19 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
   // Throttle scan progress emissions to avoid spamming the UI event loop.
   QElapsedTimer progressTimer;
   progressTimer.start();
-  qint64 lastProgressEmitMs = -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
+  qint64 lastProgressEmitMs =
+      -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
 
-  auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
+  auto maybeEmitScanProgress = [&](int processed, int total,
+                                   bool force = false) {
     if (force) {
       emit scanItemsProgress(processed, total);
       lastProgressEmitMs = progressTimer.elapsed();
       return;
     }
     const qint64 nowMs = progressTimer.elapsed();
-    if (nowMs - lastProgressEmitMs < UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
+    if (nowMs - lastProgressEmitMs <
+        UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
       return;
     }
     emit scanItemsProgress(processed, total);
@@ -2110,10 +2285,10 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
     if (!inTransaction) {
       if (!m_db.transaction()) {
         auto err = ErrorContext::critical(
-            ErrorCode::DatabaseTransactionFailed,
-            "Failed to start transaction for streaming insert",
-            "QueryManager::scanAndSaveItemsToDatabase")
-            .withDetails(m_db.lastError().text());
+                       ErrorCode::DatabaseTransactionFailed,
+                       "Failed to start transaction for streaming insert",
+                       "QueryManager::scanAndSaveItemsToDatabase")
+                       .withDetails(m_db.lastError().text());
         ErrorUtils::logError(err);
         emit errorOccurred(err);
         return false;
@@ -2132,10 +2307,10 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
     if (batchesSinceCommit >= COMMIT_INTERVAL_BATCHES) {
       if (!m_db.commit()) {
         auto err = ErrorContext::critical(
-            ErrorCode::DatabaseTransactionFailed,
-            "Failed to commit streaming insert transaction",
-            "QueryManager::scanAndSaveItemsToDatabase")
-            .withDetails(m_db.lastError().text());
+                       ErrorCode::DatabaseTransactionFailed,
+                       "Failed to commit streaming insert transaction",
+                       "QueryManager::scanAndSaveItemsToDatabase")
+                       .withDetails(m_db.lastError().text());
         ErrorUtils::logError(err);
         emit errorOccurred(err);
         m_db.rollback();
@@ -2196,7 +2371,8 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
     }
     const std::atomic<bool> &cancelFlag = *cancelToken;
 
-    const int maxThreads = m_scanThreadPool ? std::max(1, m_scanThreadPool->maxThreadCount()) : 1;
+    const int maxThreads =
+        m_scanThreadPool ? std::max(1, m_scanThreadPool->maxThreadCount()) : 1;
     const int maxInFlight = std::max(1, maxThreads * 2);
 
     ScanCompletionQueue queue;
@@ -2205,9 +2381,11 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
     signatureSamples.reserve(UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
     {
       QFileInfo rootInfo(rootPath);
-      addDirSignatureSample(signatureSamples,
-                            DirSignatureSample{QString(), rootInfo.lastModified().toSecsSinceEpoch()},
-                            UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
+      addDirSignatureSample(
+          signatureSamples,
+          DirSignatureSample{QString(),
+                             rootInfo.lastModified().toSecsSinceEpoch()},
+          UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
     }
 
     auto enqueue = [&](const QString &dirPath) {
@@ -2221,7 +2399,8 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
         QMutexLocker locker(&queue.mutex);
         ++queue.inFlight;
       }
-      m_scanThreadPool->start(new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, &queue));
+      m_scanThreadPool->start(new DirectoryScanTask(
+          dirPath, rootPath, nameFilters, cancelToken, &queue));
     };
 
     // Always scan the root directory.
@@ -2232,12 +2411,13 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
 
     int totalItemsScanned = 0;
     int lastReportedCount = 0;
-    int directoriesEnqueued = 1;  // root
+    int directoriesEnqueued = 1; // root
     int directoryResultsConsumed = 0;
 
     while (!cancelFlag.load(std::memory_order_acquire)) {
       // Keep the number of outstanding tasks bounded.
-      while (dirIterator.hasNext() && !cancelFlag.load(std::memory_order_acquire)) {
+      while (dirIterator.hasNext() &&
+             !cancelFlag.load(std::memory_order_acquire)) {
         int inFlight = 0;
         {
           QMutexLocker locker(&queue.mutex);
@@ -2251,9 +2431,11 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
         enqueue(dirPath);
         {
           const QString relPath = QDir(rootPath).relativeFilePath(dirPath);
-          const qint64 mtimeSec = QFileInfo(dirPath).lastModified().toSecsSinceEpoch();
-          addDirSignatureSample(signatureSamples, DirSignatureSample{relPath, mtimeSec},
-                                UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
+          const qint64 mtimeSec =
+              QFileInfo(dirPath).lastModified().toSecsSinceEpoch();
+          addDirSignatureSample(
+              signatureSamples, DirSignatureSample{relPath, mtimeSec},
+              UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
         }
         ++directoriesEnqueued;
       }
@@ -2318,16 +2500,17 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
     }
 
     if (lcQueryManager().isDebugEnabled()) {
-      qCDebug(lcQueryManager) << "Recursive scan+stream done"
-                              << "collectionIndex=" << collectionIndex
-                              << "cancelled=" << (cancelFlag.load(std::memory_order_acquire) ? "yes" : "no")
-                              << "dirsEnqueued=" << directoriesEnqueued
-                              << "dirResults=" << directoryResultsConsumed
-                              << "filesFound=" << totalItemsScanned
-                              << "elapsedMs=" << scanTimer.elapsed();
+      qCDebug(lcQueryManager)
+          << "Recursive scan+stream done"
+          << "collectionIndex=" << collectionIndex << "cancelled="
+          << (cancelFlag.load(std::memory_order_acquire) ? "yes" : "no")
+          << "dirsEnqueued=" << directoriesEnqueued
+          << "dirResults=" << directoryResultsConsumed
+          << "filesFound=" << totalItemsScanned
+          << "elapsedMs=" << scanTimer.elapsed();
     }
 
-                  dirSignature = buildDirSignatureJson(true, signatureSamples);
+    dirSignature = buildDirSignatureJson(true, signatureSamples);
 
     (void)flushBatch();
   }
@@ -2336,10 +2519,10 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
   if (inTransaction) {
     if (!m_db.commit()) {
       auto err = ErrorContext::critical(
-          ErrorCode::DatabaseTransactionFailed,
-          "Failed to commit final streaming insert transaction",
-          "QueryManager::scanAndSaveItemsToDatabase")
-          .withDetails(m_db.lastError().text());
+                     ErrorCode::DatabaseTransactionFailed,
+                     "Failed to commit final streaming insert transaction",
+                     "QueryManager::scanAndSaveItemsToDatabase")
+                     .withDetails(m_db.lastError().text());
       ErrorUtils::logError(err);
       emit errorOccurred(err);
       m_db.rollback();
@@ -2356,36 +2539,37 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
   }
 
   int legacyId = -1;
-  if (!prepareCollectionForItemsInsert(collection, uuid, extSignature, legacyId)) {
+  if (!prepareCollectionForItemsInsert(collection, uuid, extSignature,
+                                       legacyId)) {
     return false;
   }
 
   // Apply staged scan results to persistent DB in one transaction.
   if (!m_db.transaction()) {
     auto err = ErrorContext::critical(
-        ErrorCode::DatabaseTransactionFailed,
-        "Failed to start transaction to apply scan results",
-        "QueryManager::scanAndSaveItemsToDatabase")
-        .withDetails(m_db.lastError().text());
+                   ErrorCode::DatabaseTransactionFailed,
+                   "Failed to start transaction to apply scan results",
+                   "QueryManager::scanAndSaveItemsToDatabase")
+                   .withDetails(m_db.lastError().text());
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return false;
   }
 
-  // Indexing/apply phase: upsert staged results into the persistent items table.
-  // We do this in batches so the UI can show a real "Indexing X of Y" progress
-  // (totalItems > 0) instead of appearing stuck after scanning.
+  // Indexing/apply phase: upsert staged results into the persistent items
+  // table. We do this in batches so the UI can show a real "Indexing X of Y"
+  // progress (totalItems > 0) instead of appearing stuck after scanning.
   qint64 totalToApply = 0;
   {
     QSqlQuery count(m_db);
     if (count.exec("SELECT COUNT(*) FROM scanned_items") && count.next()) {
       totalToApply = count.value(0).toLongLong();
     } else {
-      auto err = ErrorContext::warning(
-          ErrorCode::DatabaseQueryFailed,
-          "Failed to count staged scan results",
-          "QueryManager::scanAndSaveItemsToDatabase")
-          .withDetails(count.lastError().text());
+      auto err =
+          ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                "Failed to count staged scan results",
+                                "QueryManager::scanAndSaveItemsToDatabase")
+              .withDetails(count.lastError().text());
       ErrorUtils::logError(err);
       emit errorOccurred(err);
       m_db.rollback();
@@ -2394,11 +2578,15 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
   }
 
   // Force the overlay into "Indexing" mode (total known) immediately.
-  maybeEmitScanProgress(0, static_cast<int>(std::min<qint64>(totalToApply, std::numeric_limits<int>::max())), true);
+  maybeEmitScanProgress(0,
+                        static_cast<int>(std::min<qint64>(
+                            totalToApply, std::numeric_limits<int>::max())),
+                        true);
 
   bool upsertOk = true;
   if (totalToApply > 0) {
-    constexpr int APPLY_BATCH_SIZE = 199; // 5 cols/row -> stays under SQLite 999 bind limit
+    constexpr int APPLY_BATCH_SIZE =
+        199; // 5 cols/row -> stays under SQLite 999 bind limit
     qint64 applied = 0;
     qint64 lastRowId = 0;
 
@@ -2409,15 +2597,16 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
       }
 
       QSqlQuery sel(m_db);
-      sel.prepare("SELECT rowid, path, name, last_modified FROM scanned_items WHERE rowid > ? ORDER BY rowid LIMIT ?");
+      sel.prepare("SELECT rowid, path, name, last_modified FROM scanned_items "
+                  "WHERE rowid > ? ORDER BY rowid LIMIT ?");
       sel.addBindValue(lastRowId);
       sel.addBindValue(APPLY_BATCH_SIZE);
       if (!sel.exec()) {
-        auto err = ErrorContext::warning(
-            ErrorCode::DatabaseQueryFailed,
-            "Failed to read staged scan results",
-            "QueryManager::scanAndSaveItemsToDatabase")
-            .withDetails(sel.lastError().text());
+        auto err =
+            ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                  "Failed to read staged scan results",
+                                  "QueryManager::scanAndSaveItemsToDatabase")
+                .withDetails(sel.lastError().text());
         ErrorUtils::logError(err);
         emit errorOccurred(err);
         upsertOk = false;
@@ -2444,7 +2633,8 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
         break;
       }
 
-      QString sql = "INSERT INTO items (collection_id, collection_uuid, path, name, last_modified) VALUES ";
+      QString sql = "INSERT INTO items (collection_id, collection_uuid, path, "
+                    "name, last_modified) VALUES ";
       QStringList valueSets;
       valueSets.reserve(paths.size());
       for (int i = 0; i < paths.size(); ++i) {
@@ -2466,11 +2656,11 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
         ins.addBindValue(lastModified[i]);
       }
       if (!ins.exec()) {
-        auto err = ErrorContext::warning(
-            ErrorCode::DatabaseQueryFailed,
-            "Failed to apply staged scan results",
-            "QueryManager::scanAndSaveItemsToDatabase")
-            .withDetails(ins.lastError().text());
+        auto err =
+            ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                  "Failed to apply staged scan results",
+                                  "QueryManager::scanAndSaveItemsToDatabase")
+                .withDetails(ins.lastError().text());
         ErrorUtils::logError(err);
         emit errorOccurred(err);
         upsertOk = false;
@@ -2480,20 +2670,24 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
       lastRowId = batchMaxRowId;
       applied += paths.size();
 
-      const int clampedApplied = static_cast<int>(std::min<qint64>(applied, std::numeric_limits<int>::max()));
-      const int clampedTotal = static_cast<int>(std::min<qint64>(totalToApply, std::numeric_limits<int>::max()));
+      const int clampedApplied = static_cast<int>(
+          std::min<qint64>(applied, std::numeric_limits<int>::max()));
+      const int clampedTotal = static_cast<int>(
+          std::min<qint64>(totalToApply, std::numeric_limits<int>::max()));
       maybeEmitScanProgress(clampedApplied, clampedTotal);
     }
 
     // Force a final progress update so the overlay reaches 100% for indexing.
-    const int clampedTotal = static_cast<int>(std::min<qint64>(totalToApply, std::numeric_limits<int>::max()));
+    const int clampedTotal = static_cast<int>(
+        std::min<qint64>(totalToApply, std::numeric_limits<int>::max()));
     maybeEmitScanProgress(clampedTotal, clampedTotal, true);
   }
 
   const bool deleteOk = deleteMissingItemsByUuidUsingScannedItems(uuid);
 
-  QSqlQuery &meta = getPreparedStatement(
-      "UPDATE collections SET last_scanned = ?, dir_signature = ? WHERE uuid = ?");
+  QSqlQuery &meta =
+      getPreparedStatement("UPDATE collections SET last_scanned = ?, "
+                           "dir_signature = ? WHERE uuid = ?");
   meta.bindValue(0, QDateTime::currentDateTime().toString(Qt::ISODate));
   meta.bindValue(1, dirSignature);
   meta.bindValue(2, uuid);
@@ -2503,11 +2697,11 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
   if (upsertOk && deleteOk && metaOk) {
     committed = m_db.commit();
     if (!committed) {
-      auto err = ErrorContext::critical(
-          ErrorCode::DatabaseTransactionFailed,
-          "Failed to commit scan results",
-          "QueryManager::scanAndSaveItemsToDatabase")
-          .withDetails(m_db.lastError().text());
+      auto err =
+          ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                 "Failed to commit scan results",
+                                 "QueryManager::scanAndSaveItemsToDatabase")
+              .withDetails(m_db.lastError().text());
       ErrorUtils::logError(err);
       emit errorOccurred(err);
       m_db.rollback();
@@ -2519,16 +2713,16 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
   return upsertOk && deleteOk && metaOk && committed;
 }
 
-int QueryManager::fetchItemCountImpl(const CollectionContext &context,
-                                     const QList<CollectionConfig> &allCollections,
-                                     const QString &filter) {
+int QueryManager::fetchItemCountImpl(
+    const CollectionContext &context,
+    const QList<CollectionConfig> &allCollections, const QString &filter) {
   if (!ensureDatabaseConnection()) {
     initDatabase();
     if (!m_db.isOpen()) {
       return 0;
     }
   }
-  
+
   // Ensure we see the latest data committed by the scan worker.
   // Without this, our connection can return stale counts from a cached
   // WAL snapshot, causing the UI to show old item counts after scans.
@@ -2553,10 +2747,10 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
 
   QStringList uuids = collectCollectionUuids(ctx, allCollections);
   if (uuids.isEmpty()) {
-    auto err = ErrorContext::warning(
-        ErrorCode::InvalidArgument,
-        "No valid collection UUIDs for item count query",
-        "QueryManager::fetchItemCount");
+    auto err =
+        ErrorContext::warning(ErrorCode::InvalidArgument,
+                              "No valid collection UUIDs for item count query",
+                              "QueryManager::fetchItemCount");
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return 0;
@@ -2564,25 +2758,30 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
   const QString trimmedFilter = filter.trimmed();
 
   if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    qWarning() << "[SearchDiag][QueryManager] fetchItemCount: uuidCount=" << uuids.size()
-               << "showAllSubcollectionItems=" << ctx.config.showAllSubcollectionItems
+    qWarning() << "[SearchDiag][QueryManager] fetchItemCount: uuidCount="
+               << uuids.size() << "showAllSubcollectionItems="
+               << ctx.config.showAllSubcollectionItems
                << "queryIncludeDescendants=" << ctx.queryIncludeDescendants;
   }
 
   if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
     qWarning() << "[SearchDiag][QueryManager] fetchItemCount: collIndex="
                << context.currentIndex << "filter='" << trimmedFilter
-               << "' includeSubfolders=" << context.config.includeContentSubfolders
-               << " showAllSubfolderItems=" << context.config.showAllSubfolderItems
-               << " currentSubfolder='" << context.config.currentSubfolder << "'";
+               << "' includeSubfolders="
+               << context.config.includeContentSubfolders
+               << " showAllSubfolderItems="
+               << context.config.showAllSubfolderItems << " currentSubfolder='"
+               << context.config.currentSubfolder << "'";
   }
   if (m_itemsFtsAvailable && !m_itemsFtsReady) {
     if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-      qWarning() << "[SearchDiag][QueryManager] fetchItemCount: checking FTS readiness from DB...";
+      qWarning() << "[SearchDiag][QueryManager] fetchItemCount: checking FTS "
+                    "readiness from DB...";
     }
     m_itemsFtsReady = isItemsFtsReadyFromDb();
     if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-      qWarning() << "[SearchDiag][QueryManager] fetchItemCount: FTS ready =" << m_itemsFtsReady;
+      qWarning() << "[SearchDiag][QueryManager] fetchItemCount: FTS ready ="
+                 << m_itemsFtsReady;
     }
   }
   const QString ftsQuery =
@@ -2595,7 +2794,7 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
   // SQLite has a default limit of 999 bind variables
   bool useTempTable = false;
   const QString uuidClause = buildUuidFilterClause(uuids, useTempTable);
-  
+
   if (useTempTable) {
     if (!ensureQueryUuidsPopulated(uuids)) {
       auto err = ErrorContext::warning(
@@ -2614,16 +2813,19 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
     // path, and collection_uuid so we can filter directly.
     if (useTempTable) {
       sql = "SELECT COUNT(*) FROM items_fts "
-            "WHERE items_fts MATCH ? AND EXISTS " + uuidClause;
+            "WHERE items_fts MATCH ? AND EXISTS " +
+            uuidClause;
     } else {
       sql = "SELECT COUNT(*) FROM items_fts "
-            "WHERE items_fts MATCH ? AND collection_uuid IN " + uuidClause;
+            "WHERE items_fts MATCH ? AND collection_uuid IN " +
+            uuidClause;
     }
   } else {
     if (useTempTable) {
       sql = "SELECT COUNT(DISTINCT path) FROM items WHERE EXISTS " + uuidClause;
     } else {
-      sql = "SELECT COUNT(DISTINCT path) FROM items WHERE collection_uuid IN " + uuidClause;
+      sql = "SELECT COUNT(DISTINCT path) FROM items WHERE collection_uuid IN " +
+            uuidClause;
     }
   }
 
@@ -2641,7 +2843,8 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
     // find matches even in \"virtual folders only\" collections.
     sql += " AND path NOT LIKE '%/%'";
   }
-  // If showAllSubfolderItems is true, we don't filter - all items are shown mixed together
+  // If showAllSubfolderItems is true, we don't filter - all items are shown
+  // mixed together
 
   if (!trimmedFilter.isEmpty()) {
     if (!useFts) {
@@ -2671,8 +2874,10 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
   }
 
   if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    qWarning() << "[SearchDiag][QueryManager] fetchItemCount: executing SQL, useFts=" << useFts
-               << "useTempTable=" << useTempTable << "uuidCount=" << uuids.size();
+    qWarning()
+        << "[SearchDiag][QueryManager] fetchItemCount: executing SQL, useFts="
+        << useFts << "useTempTable=" << useTempTable
+        << "uuidCount=" << uuids.size();
   }
   if (query.exec() && query.next()) {
     const int count = query.value(0).toInt();
@@ -2680,26 +2885,33 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
       qWarning() << "[SearchDiag][QueryManager] fetchItemCount: result="
                  << count;
     }
-    
-    // For large collections, schedule deferred cache build for O(1) range lookups.
-    // This avoids expensive ORDER BY + OFFSET on every fetchItemsRange call.
-    // We don't block here - the cache builds after this function returns,
+
+    // For large collections, schedule deferred cache build for O(1) range
+    // lookups. This avoids expensive ORDER BY + OFFSET on every fetchItemsRange
+    // call. We don't block here - the cache builds after this function returns,
     // so the UI can start displaying items immediately using the slow path.
-    if (count >= UIConstants::Database::PRECOMPUTE_SORT_THRESHOLD) {
+    //
+    // Random sort mode ALWAYS requires a cache because SQL ORDER BY RANDOM()
+    // with OFFSET cannot provide consistent results across paginated requests.
+    const bool isRandomSort = (ctx.sortMode == SortMode::Random);
+    if (isRandomSort ||
+        count >= UIConstants::Database::PRECOMPUTE_SORT_THRESHOLD) {
       if (!hasSortedItemsCache() && !m_sortCacheBuildPending) {
         if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-          qWarning() << "[RangeDiag] fetchItemCount: count=" << count 
-                     << ">= threshold, scheduling deferred cache build...";
+          qWarning() << "[RangeDiag] fetchItemCount: count=" << count
+                     << (isRandomSort ? " (random mode)" : " >= threshold")
+                     << ", scheduling deferred cache build...";
         }
-        scheduleDeferredCacheBuild(uuids, trimmedFilter);
+        scheduleDeferredCacheBuild(uuids, trimmedFilter, ctx.sortMode);
       }
     } else {
-      // Small collection - clear any stale cache and use standard ORDER BY
+      // Small collection with non-random sort - clear any stale cache and use
+      // standard ORDER BY
       if (m_sortedItemsCacheValid) {
         clearSortedItemsCache();
       }
     }
-    
+
     return count;
   }
 
@@ -2722,24 +2934,27 @@ void QueryManager::fetchItemCount(const CollectionContext &context,
   emit itemCountLoaded(fetchItemCountImpl(context, allCollections, filter));
 }
 
-void QueryManager::fetchItemCountWithToken(const CollectionContext &context,
-                                           const QList<CollectionConfig> &allCollections,
-                                           const QString &filter,
-                                           int requestToken) {
+void QueryManager::fetchItemCountWithToken(
+    const CollectionContext &context,
+    const QList<CollectionConfig> &allCollections, const QString &filter,
+    int requestToken) {
   if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    qWarning() << "[SearchDiag][QueryManager] fetchItemCountWithToken: ENTRY token="
-               << requestToken << "filter='" << filter << "'";
+    qWarning()
+        << "[SearchDiag][QueryManager] fetchItemCountWithToken: ENTRY token="
+        << requestToken << "filter='" << filter << "'";
   }
   const int count = fetchItemCountImpl(context, allCollections, filter);
   if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    qWarning() << "[SearchDiag][QueryManager] fetchItemCountWithToken: EMIT token="
-               << requestToken << "count=" << count;
+    qWarning()
+        << "[SearchDiag][QueryManager] fetchItemCountWithToken: EMIT token="
+        << requestToken << "count=" << count;
   }
   emit itemCountLoadedWithToken(count, requestToken);
 }
 
-void QueryManager::ensureScannedForContext(const CollectionContext &context,
-                                          const QList<CollectionConfig> &allCollections) {
+void QueryManager::ensureScannedForContext(
+    const CollectionContext &context,
+    const QList<CollectionConfig> &allCollections) {
   if (!ensureDatabaseConnection()) {
     initDatabase();
     if (!m_db.isOpen()) {
@@ -2777,7 +2992,8 @@ void QueryManager::ensureScannedForContext(const CollectionContext &context,
   if (ctx.queryIncludeAllCollections) {
     for (int i = 0; i < allCollections.size(); ++i) {
       CollectionConfig col = allCollections[i];
-      col.mediaDirectory = PathUtils::validateAndExpandPath(col.mediaDirectory, col.name);
+      col.mediaDirectory =
+          PathUtils::validateAndExpandPath(col.mediaDirectory, col.name);
       if (col.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
@@ -2790,9 +3006,11 @@ void QueryManager::ensureScannedForContext(const CollectionContext &context,
   if (ctx.config.showAllSubcollectionItems || ctx.queryIncludeDescendants) {
     // Use pre-computed descendants if available (O(1) from cache), otherwise
     // fall back to O(n²) tree traversal for backward compatibility
-    const QList<int> &rawDescendants = ctx.precomputedDescendants.isEmpty()
-        ? CollectionUtils::collectDescendantIndices(ctx.currentIndex, allCollections)
-        : ctx.precomputedDescendants;
+    const QList<int> &rawDescendants =
+        ctx.precomputedDescendants.isEmpty()
+            ? CollectionUtils::collectDescendantIndices(ctx.currentIndex,
+                                                        allCollections)
+            : ctx.precomputedDescendants;
     for (int descendantIndex : rawDescendants) {
       if (descendantIndex == ctx.currentIndex || descendantIndex < 0 ||
           descendantIndex >= allCollections.size()) {
@@ -2800,8 +3018,8 @@ void QueryManager::ensureScannedForContext(const CollectionContext &context,
       }
 
       CollectionConfig subCol = allCollections[descendantIndex];
-      subCol.mediaDirectory = PathUtils::validateAndExpandPath(
-          subCol.mediaDirectory, subCol.name);
+      subCol.mediaDirectory =
+          PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
       if (subCol.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
@@ -2811,11 +3029,16 @@ void QueryManager::ensureScannedForContext(const CollectionContext &context,
   }
 }
 
-void QueryManager::fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter) {
+void QueryManager::fetchItemsRange(
+    const CollectionContext &context,
+    const QList<CollectionConfig> &allCollections, int offset, int limit,
+    const QString &filter) {
   if (!ensureDatabaseConnection()) {
     initDatabase();
     if (!m_db.isOpen()) {
-      emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(), QHash<QString, QString>(), QHash<QString, QString>(), QHash<QString, int>());
+      emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(),
+                            QHash<QString, QString>(),
+                            QHash<QString, QString>(), QHash<QString, int>());
       return;
     }
   }
@@ -2838,8 +3061,10 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
   // For performance, we don't re-scan here.
 
   CollectionContext ctx = context;
-  ctx.config.mediaDirectory = PathUtils::validateAndExpandPath(ctx.config.mediaDirectory, ctx.config.name);
-  ctx.config.artworkDirectory = PathUtils::validateAndExpandPath(ctx.config.artworkDirectory, ctx.config.name);
+  ctx.config.mediaDirectory = PathUtils::validateAndExpandPath(
+      ctx.config.mediaDirectory, ctx.config.name);
+  ctx.config.artworkDirectory = PathUtils::validateAndExpandPath(
+      ctx.config.artworkDirectory, ctx.config.name);
 
   QStringList uuids = collectCollectionUuids(ctx, allCollections);
   CollectionDirMaps dirMaps = buildDirectoryMaps(ctx, allCollections);
@@ -2848,11 +3073,13 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
 
   if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
     qWarning() << "[SearchDiag][QueryManager] fetchItemsRange: collIndex="
-               << context.currentIndex << "offset=" << offset << "limit="
-               << limit << "filter='" << trimmedFilter
-               << "' includeSubfolders=" << context.config.includeContentSubfolders
-               << " showAllSubfolderItems=" << context.config.showAllSubfolderItems
-               << " currentSubfolder='" << context.config.currentSubfolder << "'";
+               << context.currentIndex << "offset=" << offset
+               << "limit=" << limit << "filter='" << trimmedFilter
+               << "' includeSubfolders="
+               << context.config.includeContentSubfolders
+               << " showAllSubfolderItems="
+               << context.config.showAllSubfolderItems << " currentSubfolder='"
+               << context.config.currentSubfolder << "'";
   }
 
   QElapsedTimer rangeTimer;
@@ -2870,35 +3097,55 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
   //
   // For cached startup paths that skip fetchItemCount, we build the cache
   // on-demand here when offset is high enough to benefit from it.
-  
+
   // Schedule deferred cache build for large collections if not already built.
   // This handles the case where the app starts from cached viewport and
   // fetchItemCount was never called to build the cache. We don't block the
   // first query - instead we schedule the build to run after this query
   // returns, so subsequent queries can use the cache.
-  if (!hasSortedItemsCache() && !m_sortCacheBuildPending && 
-      uuids.size() >= 10 && offset >= UIConstants::Database::PRECOMPUTE_SORT_THRESHOLD) {
-    if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-      qWarning() << "[RangeDiag] fetchItemsRange: scheduling deferred cache build, offset=" << offset;
+  //
+  // EXCEPTION: Random sort mode requires a cache because SQL ORDER BY with
+  // OFFSET cannot provide consistent random order across paginated requests.
+  // Each page would get different random items. So for random mode, we build
+  // the cache synchronously before proceeding.
+  const bool isRandomSort = (ctx.sortMode == SortMode::Random);
+  if (!hasSortedItemsCache() && !m_sortCacheBuildPending) {
+    if (isRandomSort) {
+      // Random mode: must build cache synchronously for consistent pagination
+      if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
+        qWarning() << "[RangeDiag] fetchItemsRange: Random sort requires cache, "
+                      "building synchronously";
+      }
+      (void)populateSortedItemsCache(uuids, trimmedFilter, ctx.sortMode);
+      // Fall through to use the cache we just built
+    } else if (uuids.size() >= 10 &&
+               offset >= UIConstants::Database::PRECOMPUTE_SORT_THRESHOLD) {
+      if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
+        qWarning() << "[RangeDiag] fetchItemsRange: scheduling deferred cache "
+                      "build, offset="
+                   << offset;
+      }
+      scheduleDeferredCacheBuild(uuids, trimmedFilter, ctx.sortMode);
+      // Fall through to slow path for this query
     }
-    scheduleDeferredCacheBuild(uuids, trimmedFilter);
-    // Fall through to slow path for this query
   }
-  
+
   if (hasSortedItemsCache()) {
-    // Verify cache hash still matches (in case filter changed)
-    const QByteArray currentHash = computeSortCacheHash(uuids, trimmedFilter);
+    // Verify cache hash still matches (in case filter or sortMode changed)
+    const QByteArray currentHash =
+        computeSortCacheHash(uuids, trimmedFilter, ctx.sortMode);
     if (currentHash == m_sortedItemsCacheHash) {
       if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-        qWarning() << "[RangeDiag] fetchItemsRange: using sorted cache, offset=" << offset << "limit=" << limit;
+        qWarning() << "[RangeDiag] fetchItemsRange: using sorted cache, offset="
+                   << offset << "limit=" << limit;
       }
-      
+
       QStringList filePaths;
       QHash<QString, QString> fileNames;
       QHash<QString, QString> fileToArtworkDir;
       QHash<QString, QString> fileToMediaDir;
       QHash<QString, int> fileToCollectionIndex;
-      
+
       // Simple position-based range query - O(1) regardless of offset
       QSqlQuery cacheQuery(m_db);
       cacheQuery.prepare("SELECT path, uuid FROM sorted_items_cache "
@@ -2906,7 +3153,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
                          "ORDER BY position");
       cacheQuery.bindValue(0, offset);
       cacheQuery.bindValue(1, offset + limit);
-      
+
       if (cacheQuery.exec()) {
         while (cacheQuery.next()) {
           QString relPath = cacheQuery.value(0).toString();
@@ -2914,17 +3161,18 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
           QString mediaDir = dirMaps.uuidToMediaDir.value(uuid);
           QString artworkDir = dirMaps.uuidToArtworkDir.value(uuid);
           int collectionIndex = dirMaps.uuidToCollectionIndex.value(uuid, -1);
-          
+
           QString fullPath;
           if (QDir::isAbsolutePath(relPath)) {
             fullPath = relPath;
           } else {
             fullPath = QDir(mediaDir).absoluteFilePath(relPath);
           }
-          
+
           QString keyPath = canonicalKeyPath(fullPath, false, nullptr);
           filePaths.append(keyPath);
-          fileNames[keyPath] = displayNameForBase(QFileInfo(keyPath).completeBaseName());
+          fileNames[keyPath] =
+              displayNameForBase(QFileInfo(keyPath).completeBaseName());
           if (!artworkDir.isEmpty()) {
             fileToArtworkDir[keyPath] = artworkDir;
           }
@@ -2935,25 +3183,29 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
             fileToCollectionIndex[keyPath] = collectionIndex;
           }
         }
-        
+
         if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-          qWarning() << "[RangeDiag] fetchItemsRange (cached): totalMs=" << rangeTimer.elapsed()
+          qWarning() << "[RangeDiag] fetchItemsRange (cached): totalMs="
+                     << rangeTimer.elapsed()
                      << "resultCount=" << filePaths.size();
         }
-        
-        emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex);
+
+        emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir,
+                              fileToMediaDir, fileToCollectionIndex);
         return;
       } else {
         // Cache query failed - fall through to standard path
         if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-          qWarning() << "[RangeDiag] fetchItemsRange: cache query failed, falling back:"
+          qWarning() << "[RangeDiag] fetchItemsRange: cache query failed, "
+                        "falling back:"
                      << cacheQuery.lastError().text();
         }
       }
     } else {
       // Hash mismatch - cache is stale (filter changed)
       if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-        qWarning() << "[RangeDiag] fetchItemsRange: cache hash mismatch, using slow path";
+        qWarning() << "[RangeDiag] fetchItemsRange: cache hash mismatch, using "
+                      "slow path";
       }
       clearSortedItemsCache();
     }
@@ -2966,16 +3218,17 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
   if (m_itemsFtsAvailable && !m_itemsFtsReady) {
     m_itemsFtsReady = isItemsFtsReadyFromDb();
   }
-  const QString ftsQuery = (m_itemsFtsAvailable && m_itemsFtsReady && !trimmedFilter.isEmpty())
-                               ? buildFtsPrefixQuery(trimmedFilter)
-                               : QString();
+  const QString ftsQuery =
+      (m_itemsFtsAvailable && m_itemsFtsReady && !trimmedFilter.isEmpty())
+          ? buildFtsPrefixQuery(trimmedFilter)
+          : QString();
   const bool useFts = !ftsQuery.isEmpty();
 
   // Check if we need to use temp table for large UUID lists
   // SQLite has a default limit of 999 bind variables
   bool useTempTable = false;
   const QString uuidClause = buildUuidFilterClause(uuids, useTempTable);
-  
+
   if (useTempTable) {
     if (!ensureQueryUuidsPopulated(uuids)) {
       auto err = ErrorContext::warning(
@@ -2984,7 +3237,9 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
           "QueryManager::fetchItemsRange");
       ErrorUtils::logError(err);
       emit errorOccurred(err);
-      emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(), QHash<QString, QString>(), QHash<QString, QString>(), QHash<QString, int>());
+      emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(),
+                            QHash<QString, QString>(),
+                            QHash<QString, QString>(), QHash<QString, int>());
       return;
     }
   }
@@ -2993,27 +3248,42 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
   if (useFts) {
     // Query FTS table directly - the FTS table contains name,
     // path, and collection_uuid so we can filter and sort directly.
+    // Use GROUP BY path to deduplicate paths that appear in multiple
+    // collections.
     if (useTempTable) {
-      sql = "SELECT path, collection_uuid FROM items_fts "
-            "WHERE items_fts MATCH ? AND EXISTS " + uuidClause;
+      sql =
+          "SELECT path, MIN(collection_uuid) as collection_uuid FROM items_fts "
+          "WHERE items_fts MATCH ? AND EXISTS " +
+          uuidClause;
     } else {
-      sql = "SELECT path, collection_uuid FROM items_fts "
-            "WHERE items_fts MATCH ? AND collection_uuid IN " + uuidClause;
+      sql =
+          "SELECT path, MIN(collection_uuid) as collection_uuid FROM items_fts "
+          "WHERE items_fts MATCH ? AND collection_uuid IN " +
+          uuidClause;
     }
   } else {
+    // Use GROUP BY path to deduplicate paths that appear in multiple
+    // collections (e.g., when showAllSubcollectionItems=true).
+    // MIN(collection_uuid) picks one arbitrarily. This ensures the result count
+    // matches COUNT(DISTINCT path).
     if (useTempTable) {
-      sql = "SELECT DISTINCT path, collection_uuid FROM items WHERE EXISTS " + uuidClause;
+      sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM items "
+            "WHERE EXISTS " +
+            uuidClause;
     } else {
-      sql = "SELECT DISTINCT path, collection_uuid FROM items WHERE collection_uuid IN " + uuidClause;
+      sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM items "
+            "WHERE collection_uuid IN " +
+            uuidClause;
     }
   }
-  
+
   // Apply subfolder filtering when browsing subfolders
   const QString &subfolder = ctx.config.currentSubfolder;
   if (!subfolder.isEmpty()) {
     // In a subfolder - show only items whose path starts with subfolder/
     sql += " AND path LIKE ?";
-  } else if (ctx.config.includeContentSubfolders && !ctx.config.showAllSubfolderItems && trimmedFilter.isEmpty()) {
+  } else if (ctx.config.includeContentSubfolders &&
+             !ctx.config.showAllSubfolderItems && trimmedFilter.isEmpty()) {
     // At root with subfolders enabled but NOT showing all items, we normally
     // exclude items in subfolders so the UI can present folder tiles.
     //
@@ -3021,21 +3291,55 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
     // find matches even in "virtual folders only" collections.
     sql += " AND path NOT LIKE '%/%'";
   }
-  // If showAllSubfolderItems is true, we don't filter - all items are shown mixed together
-  
+  // If showAllSubfolderItems is true, we don't filter - all items are shown
+  // mixed together
+
   if (!trimmedFilter.isEmpty()) {
     if (!useFts) {
       sql += " AND name LIKE ?";
     }
   }
-  sql += " ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?";
-  
+
+  // Add GROUP BY path to deduplicate paths (required since we use
+  // MIN(collection_uuid))
+  sql += " GROUP BY path";
+
+  // Apply sort order based on sortMode
+  // NOTE: Random sort should never reach the slow path - it's handled by
+  // synchronous cache building above. If we get here for random, fall back to
+  // alphabetical as a safeguard (items won't be truly random but at least
+  // pagination will be consistent).
+  switch (ctx.sortMode) {
+  case SortMode::NameDescending:
+    sql += " ORDER BY name COLLATE NOCASE DESC LIMIT ? OFFSET ?";
+    break;
+  case SortMode::CollectionAscending:
+    // For collection sorting in slow path, we can't easily join, so fall back
+    // to name sort The cache path handles this correctly with proper joins
+    sql += " ORDER BY collection_uuid, name COLLATE NOCASE LIMIT ? OFFSET ?";
+    break;
+  case SortMode::CollectionDescending:
+    sql +=
+        " ORDER BY collection_uuid DESC, name COLLATE NOCASE LIMIT ? OFFSET ?";
+    break;
+  case SortMode::Random:
+    // This shouldn't happen - Random mode forces cache creation above.
+    // Fall back to alphabetical for consistent pagination.
+    qWarning() << "[QueryManager] fetchItemsRange: Random sort reached slow "
+                  "path unexpectedly";
+    sql += " ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?";
+    break;
+  default:
+    sql += " ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?";
+    break;
+  }
+
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-    qWarning() << "[RangeDiag] fetchItemsRange (slow path): offset=" << offset 
+    qWarning() << "[RangeDiag] fetchItemsRange (slow path): offset=" << offset
                << "limit=" << limit << "uuids=" << uuids.size()
                << "useTempTable=" << useTempTable;
   }
-  
+
   // Use cached prepared statement - dynamic SQL is cached by query string
   QSqlQuery &query = getPreparedStatement(sql);
   int bindPos = 0;
@@ -3076,17 +3380,18 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
       QString mediaDir = dirMaps.uuidToMediaDir.value(uuid);
       QString artworkDir = dirMaps.uuidToArtworkDir.value(uuid);
       int collectionIndex = dirMaps.uuidToCollectionIndex.value(uuid, -1);
-      
+
       QString fullPath;
       if (QDir::isAbsolutePath(relPath)) {
         fullPath = relPath;
       } else {
         fullPath = QDir(mediaDir).absoluteFilePath(relPath);
       }
-      
+
       QString keyPath = canonicalKeyPath(fullPath, false, nullptr);
       filePaths.append(keyPath);
-      fileNames[keyPath] = displayNameForBase(QFileInfo(keyPath).completeBaseName());
+      fileNames[keyPath] =
+          displayNameForBase(QFileInfo(keyPath).completeBaseName());
       if (!artworkDir.isEmpty()) {
         fileToArtworkDir[keyPath] = artworkDir;
       }
@@ -3105,8 +3410,9 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
     }
 
     if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-      qWarning() << "[SearchDiag][QueryManager] fetchItemsRange: returned paths="
-                 << filePaths.size();
+      qWarning()
+          << "[SearchDiag][QueryManager] fetchItemsRange: returned paths="
+          << filePaths.size();
       if (!filePaths.isEmpty()) {
         qWarning() << "[SearchDiag][QueryManager] fetchItemsRange: firstPath="
                    << filePaths.first();
@@ -3114,61 +3420,240 @@ void QueryManager::fetchItemsRange(const CollectionContext &context, const QList
     }
   } else {
     if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-      qWarning() << "[RangeDiag] fetchItemsRange: QUERY FAILED after" 
+      qWarning() << "[RangeDiag] fetchItemsRange: QUERY FAILED after"
                  << rangeTimer.elapsed() << "ms:" << query.lastError().text();
     }
-    auto err = ErrorContext::error(
-        ErrorCode::DatabaseQueryFailed,
-        "Fetch items range failed",
-        "QueryManager::fetchItemsRange")
-        .withDetails(query.lastError().text());
+    auto err = ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                   "Fetch items range failed",
+                                   "QueryManager::fetchItemsRange")
+                   .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
     emit errorOccurred(err);
   }
 
-  emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex);
+  emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir,
+                        fileToMediaDir, fileToCollectionIndex);
+}
+
+void QueryManager::fetchVisualIndexForPath(
+    const CollectionContext &context,
+    const QList<CollectionConfig> &allCollections, const QString &filePath) {
+  if (filePath.isEmpty()) {
+    emit visualIndexForPathLoaded(-1, filePath);
+    return;
+  }
+
+  if (!ensureDatabaseConnection()) {
+    emit visualIndexForPathLoaded(-1, filePath);
+    return;
+  }
+
+  refreshWalView();
+
+  if (!context.isValid()) {
+    emit visualIndexForPathLoaded(-1, filePath);
+    return;
+  }
+
+  CollectionContext ctx = context;
+  ctx.config.mediaDirectory = PathUtils::validateAndExpandPath(
+      ctx.config.mediaDirectory, ctx.config.name);
+  ctx.config.artworkDirectory = PathUtils::validateAndExpandPath(
+      ctx.config.artworkDirectory, ctx.config.name);
+
+  QStringList uuids = collectCollectionUuids(ctx, allCollections);
+  CollectionDirMaps dirMaps = buildDirectoryMaps(ctx, allCollections);
+
+  // Try sorted cache first (fast path)
+  if (hasSortedItemsCache()) {
+    const QByteArray currentHash =
+        computeSortCacheHash(uuids, QString(), ctx.sortMode);
+    if (currentHash == m_sortedItemsCacheHash) {
+      // Query sorted cache for this path
+      // The cache stores relative paths, so we need to check both
+      QSqlQuery cacheQuery(m_db);
+      cacheQuery.prepare(
+          "SELECT position FROM sorted_items_cache WHERE path = ?");
+
+      // Convert to relative path if it's absolute
+      for (auto it = dirMaps.uuidToMediaDir.begin();
+           it != dirMaps.uuidToMediaDir.end(); ++it) {
+        if (filePath.startsWith(it.value())) {
+          QString candidate = filePath.mid(it.value().length());
+          if (candidate.startsWith('/')) {
+            candidate = candidate.mid(1);
+          }
+          // Try this relative path
+          cacheQuery.bindValue(0, candidate);
+          if (cacheQuery.exec() && cacheQuery.next()) {
+            int position = cacheQuery.value(0).toInt();
+            emit visualIndexForPathLoaded(position, filePath);
+            return;
+          }
+        }
+      }
+
+      // Also try with the full canonical path
+      cacheQuery.bindValue(0, filePath);
+      if (cacheQuery.exec() && cacheQuery.next()) {
+        int position = cacheQuery.value(0).toInt();
+        emit visualIndexForPathLoaded(position, filePath);
+        return;
+      }
+    }
+  }
+
+  // Slow path: query with ROW_NUMBER to find position
+  // Build ORDER BY clause based on sort mode
+  QString orderClause;
+  switch (ctx.sortMode) {
+  case SortMode::NameDescending:
+    orderClause = "ORDER BY name COLLATE NOCASE DESC";
+    break;
+  case SortMode::CollectionAscending:
+    orderClause = "ORDER BY collection_uuid, name COLLATE NOCASE";
+    break;
+  case SortMode::CollectionDescending:
+    orderClause = "ORDER BY collection_uuid DESC, name COLLATE NOCASE";
+    break;
+  case SortMode::NameAscending:
+  case SortMode::ArtworkFirst:
+  case SortMode::ArtworkLast:
+  case SortMode::Random:
+  default:
+    orderClause = "ORDER BY name COLLATE NOCASE";
+    break;
+  }
+
+  // Build WHERE clause for UUIDs
+  QString uuidPlaceholders;
+  for (int i = 0; i < uuids.size(); ++i) {
+    if (i > 0)
+      uuidPlaceholders += ", ";
+    uuidPlaceholders += "?";
+  }
+
+  // Use window function to get row number for matching path.
+  // IMPORTANT: Use GROUP BY path to deduplicate paths that appear in multiple
+  // collections (e.g., when showAllSubcollectionItems=true). SELECT DISTINCT
+  // path, name doesn't work because the same path can have different
+  // collection_uuid values. GROUP BY path ensures exactly one row per unique
+  // path, matching COUNT(DISTINCT path) used by fetchItemCount.
+  QString sql = QString("SELECT rn FROM ("
+                        "  SELECT path, ROW_NUMBER() OVER (%1) - 1 as rn "
+                        "  FROM (SELECT path, name FROM items WHERE "
+                        "collection_uuid IN (%2) GROUP BY path)"
+                        ") WHERE path = ?")
+                    .arg(orderClause, uuidPlaceholders);
+
+  QSqlQuery query(m_db);
+  query.prepare(sql);
+
+  int bindPos = 0;
+  for (const QString &uuid : uuids) {
+    query.bindValue(bindPos++, uuid);
+  }
+
+  // Convert full path to relative for database lookup
+  QString relPath;
+  for (auto it = dirMaps.uuidToMediaDir.begin();
+       it != dirMaps.uuidToMediaDir.end(); ++it) {
+    if (filePath.startsWith(it.value())) {
+      relPath = filePath.mid(it.value().length());
+      if (relPath.startsWith('/')) {
+        relPath = relPath.mid(1);
+      }
+      break;
+    }
+  }
+
+  if (relPath.isEmpty()) {
+    // Try the full path as-is
+    query.bindValue(bindPos++, filePath);
+  } else {
+    query.bindValue(bindPos++, relPath);
+  }
+
+  // Debug: count how many distinct paths the subquery produces (should match
+  // fetchItemCount)
+  QString countSql = QString("SELECT COUNT(DISTINCT path) FROM items WHERE "
+                             "collection_uuid IN (%1)")
+                         .arg(uuidPlaceholders);
+  QSqlQuery countQuery(m_db);
+  countQuery.prepare(countSql);
+  int countBindPos = 0;
+  for (const QString &uuid : uuids) {
+    countQuery.bindValue(countBindPos++, uuid);
+  }
+  int rowCount = -1;
+  if (countQuery.exec() && countQuery.next()) {
+    rowCount = countQuery.value(0).toInt();
+  }
+
+  QString boundPath = relPath.isEmpty() ? filePath : relPath;
+  qWarning() << "[SelectionRestore] fetchVisualIndexForPath:"
+             << "rowCount in subquery:" << rowCount << "uuids:" << uuids.size()
+             << "filePath:" << filePath << "relPath:" << relPath
+             << "boundPath:" << boundPath;
+
+  if (query.exec() && query.next()) {
+    int position = query.value(0).toInt();
+    qWarning() << "[SelectionRestore] Query returned position:" << position;
+    emit visualIndexForPathLoaded(position, filePath);
+  } else {
+    qWarning() << "[SelectionRestore] Query returned NO MATCH, lastError:"
+               << query.lastError().text();
+    emit visualIndexForPathLoaded(-1, filePath);
+  }
 }
 
 // ... Helper implementations ...
 
 // SQL constants for prepared statement caching
 namespace QuerySQL {
-  constexpr const char* COLLECTION_INFO = 
-  "SELECT last_scanned, name, ext_signature, dir_signature FROM collections WHERE uuid = ?";
-  constexpr const char* ITEM_PATH_CHECK = 
-      "SELECT path FROM items WHERE collection_uuid = ? LIMIT 1";
-  constexpr const char* ITEMS_MODIFIED_COUNT = 
-      "SELECT COUNT(*) FROM items WHERE collection_uuid = ? AND last_modified > ?";
-  constexpr const char* ITEMS_COUNT_BY_UUID = 
-      "SELECT COUNT(*) FROM items WHERE collection_uuid = ?";
-  constexpr const char* DELETE_ITEMS_BY_UUID = 
-      "DELETE FROM items WHERE collection_uuid = ?";
-  constexpr const char* DELETE_COLLECTION_BY_UUID = 
-      "DELETE FROM collections WHERE uuid = ?";
-  constexpr const char* LOAD_ITEMS_BY_UUID = 
-      "SELECT DISTINCT path FROM items WHERE collection_uuid = ? ORDER BY name COLLATE NOCASE";
-  constexpr const char* UPDATE_COLLECTION_SCAN_METADATA =
-      "UPDATE collections SET last_scanned = ?, dir_signature = ? WHERE uuid = ?";
-}
+constexpr const char *COLLECTION_INFO =
+    "SELECT last_scanned, name, ext_signature, dir_signature FROM collections "
+    "WHERE uuid = ?";
+constexpr const char *ITEM_PATH_CHECK =
+    "SELECT path FROM items WHERE collection_uuid = ? LIMIT 1";
+constexpr const char *ITEMS_MODIFIED_COUNT =
+    "SELECT COUNT(*) FROM items WHERE collection_uuid = ? AND last_modified > "
+    "?";
+constexpr const char *ITEMS_COUNT_BY_UUID =
+    "SELECT COUNT(*) FROM items WHERE collection_uuid = ?";
+constexpr const char *DELETE_ITEMS_BY_UUID =
+    "DELETE FROM items WHERE collection_uuid = ?";
+constexpr const char *DELETE_COLLECTION_BY_UUID =
+    "DELETE FROM collections WHERE uuid = ?";
+constexpr const char *LOAD_ITEMS_BY_UUID =
+    "SELECT DISTINCT path FROM items WHERE collection_uuid = ? ORDER BY name "
+    "COLLATE NOCASE";
+constexpr const char *UPDATE_COLLECTION_SCAN_METADATA =
+    "UPDATE collections SET last_scanned = ?, dir_signature = ? WHERE uuid = ?";
+} // namespace QuerySQL
 
-bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &collection) {
+bool QueryManager::needsRescan(int collectionIndex,
+                               const CollectionConfig &collection) {
   Q_UNUSED(collectionIndex)
 
   if (collection.mediaDirectory.trimmed().isEmpty()) {
     if (m_db.isOpen()) {
-      const QString uuid = CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
+      const QString uuid = CollectionUtils::computeCollectionUuid(
+          collection.name, collection.mediaDirectory);
       clearCollectionFromDatabaseByUuid(uuid);
     }
     return false;
   }
 
-  // Include includeContentSubfolders in the signature - changing it requires rescan
+  // Include includeContentSubfolders in the signature - changing it requires
+  // rescan
   QString currentSignature = collection.extensions.isEmpty()
                                  ? QString()
                                  : collection.extensions.join('|');
   currentSignature += collection.includeContentSubfolders ? "|subfolders" : "";
-  
-  const QString uuid = CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
+
+  const QString uuid = CollectionUtils::computeCollectionUuid(
+      collection.name, collection.mediaDirectory);
 
   // Use cached prepared statement for collection info lookup
   QSqlQuery &query = getPreparedStatement(QuerySQL::COLLECTION_INFO);
@@ -3183,7 +3668,8 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
   QString storedSignature = query.value(2).toString();
   QString storedDirSignature = query.value(3).toString();
 
-  // Capture lastScanned before any early returns that might invalidate query state
+  // Capture lastScanned before any early returns that might invalidate query
+  // state
   QDateTime lastScanned =
       QDateTime::fromString(query.value(0).toString(), Qt::ISODate);
 
@@ -3191,13 +3677,13 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
     return true;
   }
 
-  // If an older DB is missing ext_signature metadata, don't force a full rescan.
-  // Seed it from the current config when items already exist.
+  // If an older DB is missing ext_signature metadata, don't force a full
+  // rescan. Seed it from the current config when items already exist.
   if (storedSignature != currentSignature) {
     QSqlQuery &countQuery = getPreparedStatement(QuerySQL::ITEMS_COUNT_BY_UUID);
     countQuery.bindValue(0, uuid);
-    const bool hasItems =
-        (countQuery.exec() && countQuery.next() && countQuery.value(0).toInt() > 0);
+    const bool hasItems = (countQuery.exec() && countQuery.next() &&
+                           countQuery.value(0).toInt() > 0);
     if (hasItems && storedSignature.trimmed().isEmpty()) {
       QSqlQuery update(m_db);
       update.prepare("UPDATE collections SET ext_signature = ? WHERE uuid = ?");
@@ -3227,46 +3713,53 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
   if (!dirInfo.exists()) {
     return true;
   }
-  
-  // When includeContentSubfolders is enabled, check for subdirectory modifications.
-  // For large collections, this check is expensive (iterates all subdirs). 
-  // Skip deep check if collection has items in DB - trust cached data on startup.
-  // Full validation happens when user navigates into subfolders or forces refresh.
+
+  // When includeContentSubfolders is enabled, check for subdirectory
+  // modifications. For large collections, this check is expensive (iterates all
+  // subdirs). Skip deep check if collection has items in DB - trust cached data
+  // on startup. Full validation happens when user navigates into subfolders or
+  // forces refresh.
   if (collection.includeContentSubfolders) {
     // If we have items in the database, validate the stored directory signature
-    // by checking a bounded set of sampled directories (cheap, avoids deep scans).
+    // by checking a bounded set of sampled directories (cheap, avoids deep
+    // scans).
     QSqlQuery &countQuery = getPreparedStatement(QuerySQL::ITEMS_COUNT_BY_UUID);
     countQuery.bindValue(0, uuid);
-    const bool hasItems =
-        (countQuery.exec() && countQuery.next() && countQuery.value(0).toInt() > 0);
+    const bool hasItems = (countQuery.exec() && countQuery.next() &&
+                           countQuery.value(0).toInt() > 0);
     if (!hasItems) {
       return true;
     }
 
     if (!storedDirSignature.trimmed().isEmpty()) {
-      if (!dirSignatureStillValid(collection.mediaDirectory, true, storedDirSignature)) {
+      if (!dirSignatureStillValid(collection.mediaDirectory, true,
+                                  storedDirSignature)) {
         return true;
       }
     } else {
       // Older DBs may have no dir_signature. Avoid forcing a full rescan when
       // items already exist; seed a bounded signature from the filesystem.
-      const QString seeded = seedDirSignatureFromFilesystem(collection.mediaDirectory, true);
+      const QString seeded =
+          seedDirSignatureFromFilesystem(collection.mediaDirectory, true);
       if (seeded.trimmed().isEmpty()) {
         return true;
       }
 
       // Preserve the existing last_scanned value while recording the signature.
-      QSqlQuery &meta = getPreparedStatement(QuerySQL::UPDATE_COLLECTION_SCAN_METADATA);
-      const QString lastScannedIso = lastScanned.isValid()
-                                        ? lastScanned.toString(Qt::ISODate)
-                                        : QDateTime::currentDateTime().toString(Qt::ISODate);
+      QSqlQuery &meta =
+          getPreparedStatement(QuerySQL::UPDATE_COLLECTION_SCAN_METADATA);
+      const QString lastScannedIso =
+          lastScanned.isValid()
+              ? lastScanned.toString(Qt::ISODate)
+              : QDateTime::currentDateTime().toString(Qt::ISODate);
       meta.bindValue(0, lastScannedIso);
       meta.bindValue(1, seeded);
       meta.bindValue(2, uuid);
       (void)meta.exec();
     }
   } else {
-    // Flat collections: directory mtime is a sufficient cheap proxy for new/deleted files.
+    // Flat collections: directory mtime is a sufficient cheap proxy for
+    // new/deleted files.
     if (dirInfo.lastModified() > lastScanned) {
       return true;
     }
@@ -3281,9 +3774,10 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
   return newer.next() && newer.value(0).toInt() > 0;
 }
 
-QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
-                                         QHash<QString, QDateTime> &timestamps,
-                                         QString *dirSignatureOut) {
+QStringList
+QueryManager::scanMediaDirectory(const CollectionConfig &collection,
+                                 QHash<QString, QDateTime> &timestamps,
+                                 QString *dirSignatureOut) {
   QStringList filePaths;
   QDir dir(collection.mediaDirectory);
 
@@ -3306,21 +3800,25 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   // Parallel scanning has overhead that only pays off with multiple directories
   if (!collection.includeContentSubfolders) {
     if (dirSignatureOut) {
-      *dirSignatureOut = seedDirSignatureFromFilesystem(dir.absolutePath(), false);
+      *dirSignatureOut =
+          seedDirSignatureFromFilesystem(dir.absolutePath(), false);
     }
 
     // Throttle scan progress emissions to avoid spamming the UI event loop.
     QElapsedTimer progressTimer;
     progressTimer.start();
-    qint64 lastProgressEmitMs = -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
-    auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
+    qint64 lastProgressEmitMs =
+        -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
+    auto maybeEmitScanProgress = [&](int processed, int total,
+                                     bool force = false) {
       if (force) {
         emit scanItemsProgress(processed, total);
         lastProgressEmitMs = progressTimer.elapsed();
         return;
       }
       const qint64 nowMs = progressTimer.elapsed();
-      if (nowMs - lastProgressEmitMs < UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
+      if (nowMs - lastProgressEmitMs <
+          UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
         return;
       }
       emit scanItemsProgress(processed, total);
@@ -3330,8 +3828,8 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
     // Sequential scan for flat directories (original behavior)
     constexpr int PROGRESS_REPORT_INTERVAL = 500;
     int itemsScanned = 0;
-    
-    QDirIterator iterator(dir.absolutePath(), nameFilters, QDir::Files, 
+
+    QDirIterator iterator(dir.absolutePath(), nameFilters, QDir::Files,
                           QDirIterator::NoIteratorFlags);
     while (iterator.hasNext()) {
       if (isScanCancelled()) {
@@ -3339,19 +3837,19 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
         timestamps.clear();
         return filePaths;
       }
-      
+
       iterator.next();
       const QString relativePath = iterator.fileName();
       const QFileInfo info = iterator.fileInfo();
       filePaths.append(relativePath);
       timestamps[relativePath] = info.lastModified();
-      
+
       ++itemsScanned;
       if (itemsScanned % PROGRESS_REPORT_INTERVAL == 0) {
         maybeEmitScanProgress(itemsScanned, -1);
       }
     }
-    
+
     if (itemsScanned > 0) {
       maybeEmitScanProgress(itemsScanned, -1, true);
     }
@@ -3372,7 +3870,8 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   }
   const std::atomic<bool> &cancelFlag = *cancelToken;
 
-  const int maxThreads = m_scanThreadPool ? std::max(1, m_scanThreadPool->maxThreadCount()) : 1;
+  const int maxThreads =
+      m_scanThreadPool ? std::max(1, m_scanThreadPool->maxThreadCount()) : 1;
   const int maxInFlight = std::max(1, maxThreads * 2);
   ScanCompletionQueue queue;
 
@@ -3380,9 +3879,11 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   signatureSamples.reserve(UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
   {
     QFileInfo rootInfo(rootPath);
-    addDirSignatureSample(signatureSamples,
-                          DirSignatureSample{QString(), rootInfo.lastModified().toSecsSinceEpoch()},
-                          UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
+    addDirSignatureSample(
+        signatureSamples,
+        DirSignatureSample{QString(),
+                           rootInfo.lastModified().toSecsSinceEpoch()},
+        UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
   }
 
   auto enqueue = [&](const QString &dirPath) {
@@ -3396,7 +3897,8 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
       QMutexLocker locker(&queue.mutex);
       ++queue.inFlight;
     }
-    m_scanThreadPool->start(new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, &queue));
+    m_scanThreadPool->start(new DirectoryScanTask(
+        dirPath, rootPath, nameFilters, cancelToken, &queue));
   };
 
   // Always scan root.
@@ -3408,21 +3910,24 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   int totalItemsScanned = 0;
   constexpr int PROGRESS_REPORT_INTERVAL = 500;
   int lastReportedCount = 0;
-  int directoriesEnqueued = 1;  // root
+  int directoriesEnqueued = 1; // root
   int directoryResultsConsumed = 0;
 
   // Throttle scan progress emissions to avoid spamming the UI event loop.
   QElapsedTimer progressTimer;
   progressTimer.start();
-  qint64 lastProgressEmitMs = -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
-  auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
+  qint64 lastProgressEmitMs =
+      -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
+  auto maybeEmitScanProgress = [&](int processed, int total,
+                                   bool force = false) {
     if (force) {
       emit scanItemsProgress(processed, total);
       lastProgressEmitMs = progressTimer.elapsed();
       return;
     }
     const qint64 nowMs = progressTimer.elapsed();
-    if (nowMs - lastProgressEmitMs < UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
+    if (nowMs - lastProgressEmitMs <
+        UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
       return;
     }
     emit scanItemsProgress(processed, total);
@@ -3431,7 +3936,8 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
 
   while (!cancelFlag.load(std::memory_order_acquire)) {
     // Fill in-flight queue.
-    while (dirIterator.hasNext() && !cancelFlag.load(std::memory_order_acquire)) {
+    while (dirIterator.hasNext() &&
+           !cancelFlag.load(std::memory_order_acquire)) {
       int inFlight = 0;
       {
         QMutexLocker locker(&queue.mutex);
@@ -3447,8 +3953,9 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
       {
         const QString relPath = rootDir.relativeFilePath(dirPath);
         const qint64 mtimeSec = dirInfo.lastModified().toSecsSinceEpoch();
-        addDirSignatureSample(signatureSamples, DirSignatureSample{relPath, mtimeSec},
-                              UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
+        addDirSignatureSample(
+            signatureSamples, DirSignatureSample{relPath, mtimeSec},
+            UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
       }
       ++directoriesEnqueued;
     }
@@ -3491,7 +3998,8 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
     filePaths.append(result.relativePaths);
 
     timestamps.reserve(timestamps.size() + result.timestamps.size());
-    for (auto it = result.timestamps.constBegin(); it != result.timestamps.constEnd(); ++it) {
+    for (auto it = result.timestamps.constBegin();
+         it != result.timestamps.constEnd(); ++it) {
       timestamps.insert(it.key(), it.value());
     }
 
@@ -3513,15 +4021,16 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   }
 
   if (lcQueryManager().isDebugEnabled()) {
-    qCDebug(lcQueryManager) << "Recursive scan done"
-                            << "collection=" << collection.name
-                            << "cancelled=" << (cancelFlag.load(std::memory_order_acquire) ? "yes" : "no")
-                            << "dirsEnqueued=" << directoriesEnqueued
-                            << "dirResults=" << directoryResultsConsumed
-                            << "filesFound=" << totalItemsScanned
-                            << "elapsedMs=" << scanTimer.elapsed();
+    qCDebug(lcQueryManager)
+        << "Recursive scan done"
+        << "collection=" << collection.name << "cancelled="
+        << (cancelFlag.load(std::memory_order_acquire) ? "yes" : "no")
+        << "dirsEnqueued=" << directoriesEnqueued
+        << "dirResults=" << directoryResultsConsumed
+        << "filesFound=" << totalItemsScanned
+        << "elapsedMs=" << scanTimer.elapsed();
   }
-  
+
   // Check if cancelled during parallel scan
   if (isScanCancelled()) {
     filePaths.clear();
@@ -3532,7 +4041,7 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   if (dirSignatureOut) {
     *dirSignatureOut = buildDirSignatureJson(true, signatureSamples);
   }
-  
+
   // Emit final progress
   if (totalItemsScanned > 0) {
     maybeEmitScanProgress(totalItemsScanned, -1, true);
@@ -3541,9 +4050,10 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   return filePaths;
 }
 
-QStringList QueryManager::loadOrScanCollection(
-    int collectionIndex, const CollectionConfig &collection,
-    QHash<QString, QDateTime> &timestamps) {
+QStringList
+QueryManager::loadOrScanCollection(int collectionIndex,
+                                   const CollectionConfig &collection,
+                                   QHash<QString, QDateTime> &timestamps) {
   QStringList filePaths;
   if (collection.mediaDirectory.trimmed().isEmpty()) {
     return filePaths;
@@ -3553,10 +4063,12 @@ QStringList QueryManager::loadOrScanCollection(
     QString dirSignature;
     filePaths = scanMediaDirectory(collection, timestamps, &dirSignature);
     if (!filePaths.isEmpty()) {
-      saveItemsToDatabase(collectionIndex, filePaths, timestamps, collection, dirSignature);
+      saveItemsToDatabase(collectionIndex, filePaths, timestamps, collection,
+                          dirSignature);
     }
   } else {
-    const QString uuid = CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
+    const QString uuid = CollectionUtils::computeCollectionUuid(
+        collection.name, collection.mediaDirectory);
     filePaths = loadItemsFromDatabaseByUuid(uuid);
   }
 
@@ -3566,15 +4078,13 @@ QStringList QueryManager::loadOrScanCollection(
 void QueryManager::saveItemsToDatabase(
     int collectionIndex, const QStringList &filePaths,
     const QHash<QString, QDateTime> &timestamps,
-  const CollectionConfig &collection,
-  const QString &dirSignature) {
+    const CollectionConfig &collection, const QString &dirSignature) {
   Q_UNUSED(collectionIndex)
 
   if (!m_db.isOpen()) {
-    auto err = ErrorContext::error(
-        ErrorCode::DatabaseNotOpen,
-        "Database is not open",
-        "QueryManager::saveItemsToDatabase");
+    auto err =
+        ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database is not open",
+                            "QueryManager::saveItemsToDatabase");
     ErrorUtils::logError(err);
     return;
   }
@@ -3584,28 +4094,30 @@ void QueryManager::saveItemsToDatabase(
                              ? QString()
                              : collection.extensions.join('|');
   extSignature += collection.includeContentSubfolders ? "|subfolders" : "";
-  
-  const QString uuid = CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
+
+  const QString uuid = CollectionUtils::computeCollectionUuid(
+      collection.name, collection.mediaDirectory);
 
   // Temporarily disable synchronous writes for bulk insert performance
   QSqlQuery pragmaOff(m_db);
   if (!pragmaOff.exec("PRAGMA synchronous = OFF")) {
     ErrorUtils::logError(
-        ErrorContext::warning(
-            ErrorCode::DatabaseQueryFailed,
-            "Failed to set synchronous=OFF for bulk insert",
-            "QueryManager::saveItemsToDatabase")
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                              "Failed to set synchronous=OFF for bulk insert",
+                              "QueryManager::saveItemsToDatabase")
             .withDetails(pragmaOff.lastError().text()));
   }
   const SynchronousPragmaGuard restoreSynchronous(m_db);
 
-  // Batch insert for performance - SQLite handles up to 999 variables per statement
-  // With 5 columns per row, we can insert 199 rows per batch (995 variables)
+  // Batch insert for performance - SQLite handles up to 999 variables per
+  // statement With 5 columns per row, we can insert 199 rows per batch (995
+  // variables)
   constexpr int BATCH_SIZE = 199;
-  // Commit every N batches to save incremental progress (~100K items per commit)
+  // Commit every N batches to save incremental progress (~100K items per
+  // commit)
   constexpr int COMMIT_INTERVAL_BATCHES = 500;
-  constexpr int PROGRESS_REPORT_INTERVAL = 50000;  // Report every 50K items
-  
+  constexpr int PROGRESS_REPORT_INTERVAL = 50000; // Report every 50K items
+
   const int totalItems = filePaths.size();
 
   // Cancellation-safe writes: stage into TEMP table and only apply to
@@ -3629,8 +4141,8 @@ void QueryManager::saveItemsToDatabase(
   // Second phase: insert items in batches with periodic commits
   int batchesSinceCommit = 0;
   bool inTransaction = false;
-  int itemsInserted = 0;
-  
+  int itemsInserted = 0;  // cppcheck-suppress unreadVariable - used for progress reporting
+
   for (int batchStart = 0; batchStart < totalItems; batchStart += BATCH_SIZE) {
     // Check for cancellation between batches
     if (isScanCancelled()) {
@@ -3640,15 +4152,15 @@ void QueryManager::saveItemsToDatabase(
       }
       break;
     }
-    
+
     // Start new transaction if needed
     if (!inTransaction) {
       if (!m_db.transaction()) {
         auto err = ErrorContext::critical(
-            ErrorCode::DatabaseTransactionFailed,
-            "Failed to start transaction for bulk insert",
-            "QueryManager::saveItemsToDatabase")
-            .withDetails(m_db.lastError().text());
+                       ErrorCode::DatabaseTransactionFailed,
+                       "Failed to start transaction for bulk insert",
+                       "QueryManager::saveItemsToDatabase")
+                       .withDetails(m_db.lastError().text());
         ErrorUtils::logError(err);
         emit errorOccurred(err);
         return;
@@ -3656,10 +4168,10 @@ void QueryManager::saveItemsToDatabase(
       inTransaction = true;
       batchesSinceCommit = 0;
     }
-    
+
     const int batchEnd = qMin(batchStart + BATCH_SIZE, totalItems);
     const int batchCount = batchEnd - batchStart;
-    
+
     // Stage scanned items into TEMP table.
     QStringList batchPaths;
     batchPaths.reserve(batchCount);
@@ -3667,66 +4179,67 @@ void QueryManager::saveItemsToDatabase(
       batchPaths.append(filePaths[i]);
     }
     insertScannedItemsBatch(batchPaths, timestamps);
-    
+
     itemsInserted = batchEnd;
     ++batchesSinceCommit;
-    
+
     // Commit periodically to save incremental progress
     if (batchesSinceCommit >= COMMIT_INTERVAL_BATCHES) {
       if (!m_db.commit()) {
-        auto err = ErrorContext::critical(
-            ErrorCode::DatabaseTransactionFailed,
-            "Failed to commit bulk insert transaction",
-            "QueryManager::saveItemsToDatabase")
-            .withDetails(m_db.lastError().text());
+        auto err =
+            ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                   "Failed to commit bulk insert transaction",
+                                   "QueryManager::saveItemsToDatabase")
+                .withDetails(m_db.lastError().text());
         ErrorUtils::logError(err);
         emit errorOccurred(err);
         m_db.rollback();
         return;
       }
       inTransaction = false;
-      
+
       // Report progress
       emit scanItemsProgress(itemsInserted, totalItems);
     }
-    
+
     // Report progress at intervals even within transaction
     if (itemsInserted % PROGRESS_REPORT_INTERVAL == 0) {
       emit scanItemsProgress(itemsInserted, totalItems);
     }
   }
-  
+
   // Final commit for any remaining items
   if (inTransaction) {
     if (!m_db.commit()) {
       auto err = ErrorContext::critical(
-          ErrorCode::DatabaseTransactionFailed,
-          "Failed to commit final bulk insert transaction",
-          "QueryManager::saveItemsToDatabase")
-          .withDetails(m_db.lastError().text());
+                     ErrorCode::DatabaseTransactionFailed,
+                     "Failed to commit final bulk insert transaction",
+                     "QueryManager::saveItemsToDatabase")
+                     .withDetails(m_db.lastError().text());
       ErrorUtils::logError(err);
       emit errorOccurred(err);
       m_db.rollback();
       return;
     }
   }
-  
+
   // Final progress report
   if (!isScanCancelled()) {
     emit scanItemsProgress(totalItems, totalItems);
 
     int legacyId = -1;
-    if (!prepareCollectionForItemsInsert(collection, uuid, extSignature, legacyId)) {
+    if (!prepareCollectionForItemsInsert(collection, uuid, extSignature,
+                                         legacyId)) {
       return;
     }
 
     // Apply staged results atomically.
     if (!m_db.transaction()) {
       auto err = ErrorContext::critical(
-          ErrorCode::DatabaseTransactionFailed,
-          "Failed to start transaction to apply staged scan results",
-          "QueryManager::saveItemsToDatabase")
-          .withDetails(m_db.lastError().text());
+                     ErrorCode::DatabaseTransactionFailed,
+                     "Failed to start transaction to apply staged scan results",
+                     "QueryManager::saveItemsToDatabase")
+                     .withDetails(m_db.lastError().text());
       ErrorUtils::logError(err);
       emit errorOccurred(err);
       return;
@@ -3735,7 +4248,8 @@ void QueryManager::saveItemsToDatabase(
     const bool upsertOk = applyScannedItemsToDatabase(legacyId, uuid);
     const bool deleteOk = deleteMissingItemsByUuidUsingScannedItems(uuid);
 
-    QSqlQuery &meta = getPreparedStatement(QuerySQL::UPDATE_COLLECTION_SCAN_METADATA);
+    QSqlQuery &meta =
+        getPreparedStatement(QuerySQL::UPDATE_COLLECTION_SCAN_METADATA);
     meta.bindValue(0, QDateTime::currentDateTime().toString(Qt::ISODate));
     meta.bindValue(1, dirSignature);
     meta.bindValue(2, uuid);
@@ -3749,14 +4263,14 @@ void QueryManager::saveItemsToDatabase(
   }
 }
 
-QStringList QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionUuid) {
+QStringList
+QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionUuid) {
   QStringList filePaths;
 
   if (!m_db.isOpen()) {
-    auto err = ErrorContext::error(
-        ErrorCode::DatabaseNotOpen,
-        "Database is not open, cannot load items",
-        "QueryManager::loadItemsFromDatabaseByUuid");
+    auto err = ErrorContext::error(ErrorCode::DatabaseNotOpen,
+                                   "Database is not open, cannot load items",
+                                   "QueryManager::loadItemsFromDatabaseByUuid");
     ErrorUtils::logError(err);
     return filePaths;
   }
@@ -3766,11 +4280,10 @@ QStringList QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionU
   query.bindValue(0, collectionUuid);
 
   if (!query.exec()) {
-    auto err = ErrorContext::error(
-        ErrorCode::DatabaseQueryFailed,
-        "Failed to load items from database",
-        "QueryManager::loadItemsFromDatabaseByUuid")
-        .withDetails(query.lastError().text());
+    auto err = ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                   "Failed to load items from database",
+                                   "QueryManager::loadItemsFromDatabaseByUuid")
+                   .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
     return filePaths;
   }
@@ -3788,7 +4301,7 @@ void QueryManager::invalidateCollectionCache(const QString &collectionUuid) {
 
   // Invalidate UUID temp table cache so next query repopulates
   m_cachedQueryUuidsHash.clear();
-  
+
   // Invalidate sorted items cache - forces rebuild on next fetchItemCount
   clearSortedItemsCache();
 
@@ -3796,7 +4309,8 @@ void QueryManager::invalidateCollectionCache(const QString &collectionUuid) {
   emit cacheInvalidated(collectionUuid);
 }
 
-void QueryManager::clearCollectionFromDatabaseByUuid(const QString &collectionUuid) {
+void QueryManager::clearCollectionFromDatabaseByUuid(
+    const QString &collectionUuid) {
   if (!m_db.isOpen()) {
     return;
   }
@@ -3804,15 +4318,15 @@ void QueryManager::clearCollectionFromDatabaseByUuid(const QString &collectionUu
   // Retry logic for database lock scenarios
   constexpr int MAX_RETRIES = 5;
   constexpr int BASE_DELAY_MS = 100;
-  
+
   for (int attempt = 0; attempt < MAX_RETRIES; ++attempt) {
     if (attempt > 0) {
       // Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
       QThread::msleep(BASE_DELAY_MS * (1 << (attempt - 1)));
     }
-    
+
     if (!m_db.transaction()) {
-      continue;  // Retry if can't start transaction
+      continue; // Retry if can't start transaction
     }
 
     try {
@@ -3824,25 +4338,26 @@ void QueryManager::clearCollectionFromDatabaseByUuid(const QString &collectionUu
       }
 
       // Use cached prepared statement for deleting collection
-      QSqlQuery &delc = getPreparedStatement(QuerySQL::DELETE_COLLECTION_BY_UUID);
+      QSqlQuery &delc =
+          getPreparedStatement(QuerySQL::DELETE_COLLECTION_BY_UUID);
       delc.bindValue(0, collectionUuid);
       delc.exec();
 
       m_db.commit();
-      return;  // Success - exit retry loop
+      return; // Success - exit retry loop
     } catch (const std::exception &e) {
       m_db.rollback();
-      
+
       QString errorText = QString::fromStdString(e.what());
       bool isLockError = errorText.contains("locked", Qt::CaseInsensitive);
-      
+
       if (!isLockError || attempt == MAX_RETRIES - 1) {
         // Non-lock error or final attempt - log and give up
         auto err = ErrorContext::critical(
-            ErrorCode::DatabaseTransactionFailed,
-            "Failed to clear collection from database",
-            "QueryManager::clearCollectionFromDatabaseByUuid")
-            .withDetails(errorText);
+                       ErrorCode::DatabaseTransactionFailed,
+                       "Failed to clear collection from database",
+                       "QueryManager::clearCollectionFromDatabaseByUuid")
+                       .withDetails(errorText);
         ErrorUtils::logError(err);
         return;
       }
@@ -3853,7 +4368,8 @@ void QueryManager::clearCollectionFromDatabaseByUuid(const QString &collectionUu
 
 // Static helpers
 static auto canonicalKeyPath(const QString &absPath, bool dedup,
-                             QHash<QString, QString> *canonicalPathCache) -> QString {
+                             QHash<QString, QString> *canonicalPathCache)
+    -> QString {
   if (!dedup) {
     return absPath;
   }
@@ -3932,10 +4448,12 @@ void QueryManager::appendFileMapsAndListCanonical(
 
   for (const QString &file : filePaths) {
     const QString absPath = mediaQDir.absoluteFilePath(file);
-    const QString keyPath = canonicalKeyPath(absPath, dedup, canonicalPathCache);
+    const QString keyPath =
+        canonicalKeyPath(absPath, dedup, canonicalPathCache);
 
     if (dedup) {
-      if (effectiveSeenCanonicalPaths && !effectiveSeenCanonicalPaths->contains(keyPath)) {
+      if (effectiveSeenCanonicalPaths &&
+          !effectiveSeenCanonicalPaths->contains(keyPath)) {
         effectiveSeenCanonicalPaths->insert(keyPath);
         allFilePaths.append(keyPath);
       }
@@ -3943,8 +4461,10 @@ void QueryManager::appendFileMapsAndListCanonical(
       allFilePaths.append(keyPath);
     }
 
-    const int lastSeparator = std::max(file.lastIndexOf('/'), file.lastIndexOf('\\'));
-    const QString fileName = (lastSeparator >= 0) ? file.mid(lastSeparator + 1) : file;
+    const int lastSeparator =
+        std::max(file.lastIndexOf('/'), file.lastIndexOf('\\'));
+    const QString fileName =
+        (lastSeparator >= 0) ? file.mid(lastSeparator + 1) : file;
     const int lastDot = fileName.lastIndexOf('.');
     const QString baseName = (lastDot > 0) ? fileName.left(lastDot) : fileName;
     const QString displayName = displayNameForBase(baseName);
@@ -4015,7 +4535,8 @@ void QueryManager::sortFiles(QStringList &allFilePaths, SortMode mode) {
 
   std::ranges::sort(entries, [&](const SortEntry &lhs, const SortEntry &rhs) {
     if (lhs.priority != rhs.priority) {
-      return descending ? lhs.priority > rhs.priority : lhs.priority < rhs.priority;
+      return descending ? lhs.priority > rhs.priority
+                        : lhs.priority < rhs.priority;
     }
     const int cmp = lhs.sortKey.compare(rhs.sortKey, Qt::CaseInsensitive);
     return descending ? cmp > 0 : cmp < 0;

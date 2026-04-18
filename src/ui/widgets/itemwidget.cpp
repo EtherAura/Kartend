@@ -1,4 +1,5 @@
-// Media item widget displaying artwork, title, and selection state with pulse animation.
+// Media item widget displaying artwork, title, and selection state with pulse
+// animation.
 #include "itemwidget.h"
 #include "propertyutils.h"
 #include "uiconstants.h"
@@ -19,6 +20,7 @@
 #include <QPointer>
 #include <QPolygon>
 #include <QPropertyAnimation>
+#include <QPushButton>
 #include <QRandomGenerator>
 #include <QScreen>
 #include <QStyle>
@@ -26,13 +28,16 @@
 #include <algorithm>
 
 // Static configuration members - initialized to UIConstants defaults
-int ItemWidget::s_titleTintSaturation = UIConstants::Color::TITLE_TINT_SATURATION;
+int ItemWidget::s_titleTintSaturation =
+    UIConstants::Color::TITLE_TINT_SATURATION;
 int ItemWidget::s_titleTintLightness = UIConstants::Color::TITLE_TINT_LIGHTNESS;
 QString ItemWidget::s_titleBaseColor;
 QString ItemWidget::s_customFontFamily;
 QString ItemWidget::s_primaryColor;
 QString ItemWidget::s_tileColor;
 QString ItemWidget::s_selectionColor;
+QString ItemWidget::s_listRowColor;
+QString ItemWidget::s_listAltRowColor;
 
 void ItemWidget::setTitleTintSaturation(int saturation) {
   s_titleTintSaturation = qBound(0, saturation, 255);
@@ -60,6 +65,14 @@ void ItemWidget::setTileColor(const QString &hexColor) {
 
 void ItemWidget::setSelectionColor(const QString &hexColor) {
   s_selectionColor = hexColor;
+}
+
+void ItemWidget::setListRowColor(const QString &hexColor) {
+  s_listRowColor = hexColor;
+}
+
+void ItemWidget::setListAltRowColor(const QString &hexColor) {
+  s_listAltRowColor = hexColor;
 }
 
 ItemWidget::ItemWidget(QWidget *parent)
@@ -92,7 +105,8 @@ ItemWidget::ItemWidget(QWidget *parent)
 
   m_pulseDelayTimer = new QTimer(this);
   m_pulseDelayTimer->setSingleShot(true);
-  m_pulseDelayTimer->setInterval(UIConstants::Animation::PULSE_INACTIVITY_DELAY_MS);
+  m_pulseDelayTimer->setInterval(
+      UIConstants::Animation::PULSE_INACTIVITY_DELAY_MS);
   connect(m_pulseDelayTimer, &QTimer::timeout, this,
           &ItemWidget::startPulseAnimation);
 }
@@ -111,30 +125,33 @@ ItemWidget::~ItemWidget() {
   storedPixmap = QPixmap();
 }
 
-// Compute title tint from highlight color with configurable saturation/lightness
+// Compute title tint from highlight color with configurable
+// saturation/lightness
 auto ItemWidget::titleTint() -> QColor {
   // Title tint is NOT affected by per-collection primary color
   // Primary color only affects selection borders and placeholder patterns
   QColor baseColor;
-  if (!s_titleBaseColor.isEmpty() && QColor::isValidColorName(s_titleBaseColor)) {
+  if (!s_titleBaseColor.isEmpty() &&
+      QColor::isValidColorName(s_titleBaseColor)) {
     baseColor = QColor(s_titleBaseColor);
   } else {
     baseColor = QApplication::palette().color(QPalette::Highlight);
   }
-  
+
   int hue = 0;
   int saturation = 0;
   int lightness = 0;
   int alpha = 0;
   baseColor.getHsl(&hue, &saturation, &lightness, &alpha);
-  
-  int targetLightness = qBound(0, s_titleTintLightness, 
-                               UIConstants::Color::CHANNEL_MAX);
-  int targetSaturation = qBound(0, s_titleTintSaturation,
-                                UIConstants::Color::CHANNEL_MAX);
-  
+
+  int targetLightness =
+      qBound(0, s_titleTintLightness, UIConstants::Color::CHANNEL_MAX);
+  int targetSaturation =
+      qBound(0, s_titleTintSaturation, UIConstants::Color::CHANNEL_MAX);
+
   QColor color;
-  color.setHsl(hue, targetSaturation, targetLightness, UIConstants::Color::CHANNEL_MAX);
+  color.setHsl(hue, targetSaturation, targetLightness,
+               UIConstants::Color::CHANNEL_MAX);
   return color;
 }
 
@@ -174,10 +191,10 @@ void ItemWidget::applyTitleTint() {
   m_titleTintColor = titleTint();
   if (nameLabel) {
     // Make label text transparent - we'll paint it ourselves in paintEvent
-    nameLabel->setStyleSheet(
-        QStringLiteral("QLabel { color: transparent; background: transparent; }"));
+    nameLabel->setStyleSheet(QStringLiteral(
+        "QLabel { color: transparent; background: transparent; }"));
   }
-  update();  // Trigger repaint to draw tinted text
+  update(); // Trigger repaint to draw tinted text
 }
 
 // Handle mouse press - only tracks click position for double-click detection.
@@ -196,7 +213,7 @@ void ItemWidget::mouseDoubleClickEvent(QMouseEvent *event) {
     // Trust Qt's double-click detection - it already validated timing.
     // Only check position tolerance to ensure clicks are on the same spot.
     bool validDoubleClick = true;
-    
+
     if (m_lastClickTimer.isValid()) {
       QPoint currentPos = event->pos();
       int distance = (currentPos - m_lastClickPos).manhattanLength();
@@ -209,15 +226,17 @@ void ItemWidget::mouseDoubleClickEvent(QMouseEvent *event) {
       // Guard against widget deletion during signal handling -
       // subcollection navigation may destroy this widget
       QPointer<ItemWidget> guard = this;
-      
-      // Only subcollection double-clicks reach here - EventManager passes them through
+
+      // Only subcollection double-clicks reach here - EventManager passes them
+      // through
       if (m_isSubcollection) {
         emit subcollectionDoubleClicked(m_subcollectionIndex);
       } else if (m_isVirtualFolder) {
         emit virtualFolderDoubleClicked(m_virtualFolderPath);
       }
-      // Media item double-clicks are handled by EventManager::widgetDoubleClicked
-      
+      // Media item double-clicks are handled by
+      // EventManager::widgetDoubleClicked
+
       // Widget may have been deleted during navigation - don't access members
       if (!guard) {
         return;
@@ -243,9 +262,7 @@ void ItemWidget::enterEvent(QEvent *event)
 void ItemWidget::leaveEvent(QEvent *event) { QWidget::leaveEvent(event); }
 
 // Show event
-void ItemWidget::showEvent(QShowEvent *event) {
-  QWidget::showEvent(event);
-}
+void ItemWidget::showEvent(QShowEvent *event) { QWidget::showEvent(event); }
 
 // Handles palette change to trigger artwork change respecting
 // DeferArtworkUpdate
@@ -307,13 +324,14 @@ auto ItemWidget::isGlideActive() const -> bool {
          grandparentPtr->property(PropertyKeys::GlideAnimating).toBool();
 }
 
-// Computes the selection border rectangle - around artwork in grid mode, full widget in list mode
+// Computes the selection border rectangle - around artwork in grid mode, full
+// widget in list mode
 auto ItemWidget::computeSelectionBorderRect() const -> QRect {
   // In list mode, selection covers the entire row
   if (m_isListMode) {
-    return rect().adjusted(1, 1, -1, -1);  // Slight inset for clean border
+    return rect().adjusted(1, 1, -1, -1); // Slight inset for clean border
   }
-  
+
   if (!imageLabel) {
     return {};
   }
@@ -321,8 +339,10 @@ auto ItemWidget::computeSelectionBorderRect() const -> QRect {
 
   const int left = imageRect.left() - UIConstants::CollectionIcon::ITEM_SPACING;
   const int top = imageRect.top() - UIConstants::CollectionIcon::ITEM_SPACING;
-  const int right = imageRect.right() + UIConstants::CollectionIcon::ITEM_SPACING;
-  const int bottom = imageRect.bottom() + UIConstants::CollectionIcon::ITEM_SPACING;
+  const int right =
+      imageRect.right() + UIConstants::CollectionIcon::ITEM_SPACING;
+  const int bottom =
+      imageRect.bottom() + UIConstants::CollectionIcon::ITEM_SPACING;
 
   return {left, top, right - left, bottom - top};
 }
@@ -355,7 +375,8 @@ void ItemWidget::applySelectedUiEffects() {
 // Applies visual changes when deselected
 void ItemWidget::applyDeselectedUiEffects() {
   // Stop pulse animation when deselected to prevent visual artifacts
-  if (pulseAnimation && pulseAnimation->state() == QAbstractAnimation::Running) {
+  if (pulseAnimation &&
+      pulseAnimation->state() == QAbstractAnimation::Running) {
     pulseAnimation->stop();
   }
   if (m_pulseDelayTimer && m_pulseDelayTimer->isActive()) {
@@ -410,15 +431,29 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
 
   // Paint alternating row background in list mode
   if (m_isListMode && m_rowIndex >= 0) {
-    QColor rowColor = palette().color(QPalette::Base);
+    QColor rowColor;
     if (m_rowIndex % 2 == 1) {
-      // Odd rows get slightly different background
-      rowColor = palette().color(QPalette::AlternateBase);
+      // Odd rows - use custom alt color if set, otherwise system AlternateBase
+      if (!s_listAltRowColor.isEmpty() &&
+          QColor::isValidColorName(s_listAltRowColor)) {
+        rowColor = QColor(s_listAltRowColor);
+      } else {
+        rowColor = palette().color(QPalette::AlternateBase);
+      }
+    } else {
+      // Even rows - use custom color if set, otherwise system Base
+      if (!s_listRowColor.isEmpty() &&
+          QColor::isValidColorName(s_listRowColor)) {
+        rowColor = QColor(s_listRowColor);
+      } else {
+        rowColor = palette().color(QPalette::Base);
+      }
     }
     painter.fillRect(rect(), rowColor);
   }
 
-  // Paint selection border when selected (grid mode needs imageLabel, list mode uses full widget)
+  // Paint selection border when selected (grid mode needs imageLabel, list mode
+  // uses full widget)
   bool canPaintSelection = m_isListMode || (imageLabel != nullptr);
   if (isSelectedState && canPaintSelection && !glideActive) {
     painter.setRenderHint(QPainter::Antialiasing);
@@ -429,7 +464,8 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
 
     // Use per-collection selection color if set, otherwise system highlight
     QColor borderColor;
-    if (!s_selectionColor.isEmpty() && QColor::isValidColorName(s_selectionColor)) {
+    if (!s_selectionColor.isEmpty() &&
+        QColor::isValidColorName(s_selectionColor)) {
       borderColor = QColor(s_selectionColor);
     } else {
       borderColor = palette().color(QPalette::Highlight);
@@ -446,7 +482,8 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
                             UIConstants::Widget::BORDER_RADIUS);
   }
 
-  // Paint title text with tint color - bypasses broken QLabel stylesheet in Qt 6.9
+  // Paint title text with tint color - bypasses broken QLabel stylesheet in
+  // Qt 6.9
   if (nameLabel && !itemName.isEmpty() && nameLabel->isVisible()) {
     bool shouldShowTitle = false;
     if (m_isVirtualFolder) {
@@ -459,17 +496,74 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
     if (shouldShowTitle) {
       painter.setRenderHint(QPainter::TextAntialiasing);
       painter.setPen(m_titleTintColor);
-      
+
       // Apply custom font if configured
       QFont titleFont = nameLabel->font();
       if (!s_customFontFamily.isEmpty()) {
         titleFont.setFamily(s_customFontFamily);
       }
       painter.setFont(titleFont);
-      
+
       // Draw text in the same rect as the nameLabel
       QRect textRect = nameLabel->geometry();
-      painter.drawText(textRect, nameLabel->alignment() | Qt::TextWordWrap, itemName);
+      // Offset for folder icon in subcollections/virtual folders
+      // The nameLabel is layout-managed so move() doesn't work - offset the
+      // paint rect instead
+      bool hasFolderIcon =
+          (m_isSubcollection || m_isVirtualFolder) && m_folderIconLabel;
+      if (m_isListMode) {
+        if (hasFolderIcon) {
+          textRect.setLeft(textRect.left() +
+                           UIConstants::ListView::FOLDER_ICON_COLUMN_WIDTH);
+        }
+        // List mode: elide text only if it exceeds available width
+        QFontMetrics fm(titleFont);
+        int textWidth = fm.horizontalAdvance(itemName);
+        if (textWidth > textRect.width()) {
+          QString elidedText =
+              fm.elidedText(itemName, Qt::ElideRight, textRect.width());
+          painter.drawText(textRect, nameLabel->alignment(), elidedText);
+        } else {
+          painter.drawText(textRect, nameLabel->alignment(), itemName);
+        }
+      } else {
+        // Grid mode: allow word wrap for multi-line titles
+        // For subcollections/virtual folders, draw small icon to the left of
+        // centered title
+        int flags = nameLabel->alignment() | Qt::TextWordWrap;
+        if (hasFolderIcon && m_folderIconLabel) {
+          constexpr int gridFolderIconSize = 12; // Smaller icon for grid mode
+          constexpr int iconSpacing = 3;
+          QPixmap iconPix = m_folderIconLabel->pixmap();
+          QFontMetrics fm(painter.font());
+          int lineHeight = fm.height();
+          int textWidth = fm.horizontalAdvance(itemName);
+
+          // Calculate total width of icon+spacing+text to center as a unit
+          int totalWidth = gridFolderIconSize + iconSpacing + textWidth;
+          int availableWidth = textRect.width();
+
+          // Center the combined icon+text block, clamping to available width
+          int blockStartX =
+              textRect.left() +
+              (availableWidth - qMin(totalWidth, availableWidth)) / 2;
+
+          // Draw folder icon vertically centered with the first line of text
+          if (!iconPix.isNull()) {
+            int iconY = textRect.top() + (lineHeight - gridFolderIconSize) / 2;
+            painter.drawPixmap(blockStartX, iconY, gridFolderIconSize,
+                               gridFolderIconSize, iconPix);
+          }
+
+          // Draw text immediately after the icon (left-aligned from that point)
+          QRect textDrawRect = textRect;
+          textDrawRect.setLeft(blockStartX + gridFolderIconSize + iconSpacing);
+          flags = Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap;
+          painter.drawText(textDrawRect, flags, itemName);
+        } else {
+          painter.drawText(textRect, flags, itemName);
+        }
+      }
     }
   }
 }
@@ -490,39 +584,129 @@ void ItemWidget::applyDimensions() {
   QPixmap currentPixmap = storedPixmap;
   setFixedSize(m_itemWidth, m_itemHeight);
 
-  // List mode: simple horizontal text layout
+  // List mode: horizontal layout with name, collection, and artwork icon
   if (m_isListMode) {
-    m_artworkSize = 0;  // No artwork in list mode
-    
+    m_artworkSize = 0; // No artwork display in list mode (icon only)
+
+    // Remove layout margins in list mode for proper vertical centering
+    if (layout()) {
+      layout()->setContentsMargins(UIConstants::ListView::TEXT_LEFT_PADDING, 0,
+                                   UIConstants::ListView::TEXT_RIGHT_PADDING,
+                                   0);
+      layout()->setSpacing(0);
+    }
+
     if (imageLabel) {
       imageLabel->setVisible(false);
+      // Clear min/max constraints from .ui file (200x200) to allow zero size in
+      // list mode
+      imageLabel->setMinimumSize(0, 0);
+      imageLabel->setMaximumSize(0, 0);
       imageLabel->setFixedSize(0, 0);
     }
-    
+
+    // Calculate column widths for list mode
+    // Layout: [name.....................] [collection] [artwork_icon]
+    constexpr int columnSpacing = 8;
+    constexpr int folderIconWidth =
+        UIConstants::ListView::FOLDER_ICON_COLUMN_WIDTH;
+
+    int leftPadding = UIConstants::ListView::TEXT_LEFT_PADDING;
+    int rightPadding = UIConstants::ListView::TEXT_RIGHT_PADDING;
+
+    int xOffset = leftPadding;
+
+    // Position folder icon for subcollections/virtual folders
+    bool hasFolderIcon =
+        (m_isSubcollection || m_isVirtualFolder) && m_folderIconLabel;
+    if (hasFolderIcon) {
+      m_folderIconLabel->setFixedSize(folderIconWidth, m_itemHeight);
+      m_folderIconLabel->move(xOffset, 0);
+      m_folderIconLabel->show();
+      xOffset += folderIconWidth;
+    } else if (m_folderIconLabel) {
+      m_folderIconLabel->hide();
+    }
+
+    // Calculate name width (remaining space minus collection and artwork
+    // columns)
+    int nameWidth = m_itemWidth - xOffset - rightPadding -
+                    m_collectionColumnWidth - m_artworkColumnWidth -
+                    (columnSpacing * 2);
+
     if (nameLabel) {
       nameLabel->setVisible(true);
       nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-      // Full width minus padding for list mode text
-      int textWidth = m_itemWidth - UIConstants::ListView::TEXT_LEFT_PADDING -
-                      UIConstants::ListView::TEXT_RIGHT_PADDING;
-      nameLabel->setMaximumWidth(textWidth);
-      nameLabel->setFixedHeight(m_itemHeight);
+      nameLabel->setWordWrap(
+          false); // No word wrap in list mode - use elided text
+      // Clear min/max constraints from .ui file to allow proper sizing in list
+      // mode
+      nameLabel->setMinimumSize(0, 0);
+      nameLabel->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+      nameLabel->setFixedSize(
+          nameWidth, m_itemHeight); // Use fixed size for both dimensions
+      nameLabel->move(xOffset, 0);
       nameLabel->setText(currentName);
-      
+
       QFont font = this->font();
       font.setPointSize(m_fontSize);
       nameLabel->setFont(font);
     }
-    
+    xOffset += nameWidth + columnSpacing;
+
+    // Position collection label after name
+    if (m_collectionLabel) {
+      m_collectionLabel->setGeometry(xOffset, 0, m_collectionColumnWidth,
+                                     m_itemHeight);
+
+      QFont font = this->font();
+      font.setPointSize(m_fontSize);
+      m_collectionLabel->setFont(font);
+
+      if (!m_collectionName.isEmpty()) {
+        m_collectionLabel->show();
+        qDebug() << "applyDimensions: collection label at x=" << xOffset
+                 << "width=" << m_collectionColumnWidth
+                 << "text=" << m_collectionName;
+      }
+    }
+    xOffset += m_collectionColumnWidth + columnSpacing;
+
+    // Position artwork button on the right (only visible if has artwork)
+    if (m_artworkButton) {
+      m_artworkButton->setFixedSize(m_artworkColumnWidth, m_itemHeight - 4);
+      m_artworkButton->move(xOffset, 2);
+      if (m_hasArtwork) {
+        m_artworkButton->show();
+      } else {
+        m_artworkButton->hide();
+      }
+    }
+
     if (!currentPath.isEmpty()) {
       setFilePath(currentPath);
     }
     return;
   }
 
-  // Grid mode: standard artwork + title layout
-  // Use the current font size for layout calculations to ensure titles don't overlap artwork
-  // But ensure we don't reserve less space than the default 12pt to maintain consistent artwork sizing/spacing
+  // Hide list mode elements in grid mode
+  if (m_collectionLabel) {
+    m_collectionLabel->hide();
+  }
+  if (m_artworkButton) {
+    m_artworkButton->hide();
+  }
+
+  // Grid mode: restore standard margins
+  if (layout()) {
+    layout()->setContentsMargins(
+        UIConstants::Widget::MARGIN, UIConstants::Widget::MARGIN,
+        UIConstants::Widget::MARGIN, UIConstants::Widget::MARGIN);
+    layout()->setSpacing(UIConstants::Widget::SPACING);
+  }
+  // Use the current font size for layout calculations to ensure titles don't
+  // overlap artwork But ensure we don't reserve less space than the default
+  // 12pt to maintain consistent artwork sizing/spacing
   QFont referenceFont = this->font();
   referenceFont.setPointSize(std::max(12, m_fontSize));
   QFontMetrics referenceFm(referenceFont);
@@ -536,9 +720,10 @@ void ItemWidget::applyDimensions() {
   int availableWidth = m_itemWidth - UIConstants::Widget::PADDING;
   int artworkSize = qMin(availableWidth, availableHeight);
   m_artworkSize = artworkSize;
-  
-  // Show title if: regular item with titles visible, OR subcollection with subcollection titles visible,
-  // OR virtual folder with subfolder titles visible
+
+  // Show title if: regular item with titles visible, OR subcollection with
+  // subcollection titles visible, OR virtual folder with subfolder titles
+  // visible
   bool shouldShowTitle = false;
   if (m_isVirtualFolder) {
     shouldShowTitle = !m_hideSubfolderTitle;
@@ -547,17 +732,32 @@ void ItemWidget::applyDimensions() {
   } else {
     shouldShowTitle = !m_hideTitles;
   }
-  
+
   if (imageLabel) {
-    imageLabel->setVisible(true);  // Ensure visible in grid mode
+    imageLabel->setVisible(true); // Ensure visible in grid mode
+    // Reset min/max constraints that may have been zeroed in list mode
+    imageLabel->setMinimumSize(0, 0);
+    imageLabel->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
     imageLabel->setFixedSize(artworkSize, artworkSize);
   }
+
+  // In grid mode, folder icons are drawn in paintEvent for correct positioning
+  // relative to nameLabel geometry (layout-managed). Hide the QLabel here.
+  if (m_folderIconLabel) {
+    m_folderIconLabel->hide();
+  }
+
   if (nameLabel) {
     nameLabel->setVisible(true);
-    nameLabel->setAlignment(Qt::AlignHCenter | Qt::AlignTop);  // Reset alignment for grid mode
-    nameLabel->setMaximumWidth(artworkSize);
+    nameLabel->setAlignment(Qt::AlignHCenter |
+                            Qt::AlignTop); // Reset alignment for grid mode
+    nameLabel->setWordWrap(true);          // Re-enable word wrap for grid mode
+    // Reset min/max constraints that may have been set in list mode
+    nameLabel->setMinimumSize(0, 0);
+    nameLabel->setMaximumSize(artworkSize, reservedTextHeight);
     nameLabel->setFixedHeight(reservedTextHeight);
-    
+    // Let layout manage horizontal positioning (centered below artwork)
+
     if (!shouldShowTitle) {
       nameLabel->setText("");
     } else {
@@ -598,6 +798,9 @@ void ItemWidget::onArtworkChanged() {
   if (shouldDefer || forcePlaceholder) {
     int width = imageLabel->width();
     int height = imageLabel->height();
+    if (width <= 0 || height <= 0) {
+      return;
+    }
     imageLabel->setPixmap(buildPlaceholderPattern(width, height));
     imageLabel->setStyleSheet(QString());
     return;
@@ -605,6 +808,12 @@ void ItemWidget::onArtworkChanged() {
 
   int width = imageLabel->width();
   int height = imageLabel->height();
+
+  // Guard against zero-sized widgets (can happen during layout transitions)
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
   if (storedPixmap.isNull()) {
     imageLabel->setPixmap(buildPlaceholderPattern(width, height));
     imageLabel->setStyleSheet(QString());
@@ -614,20 +823,18 @@ void ItemWidget::onArtworkChanged() {
     if (QGuiApplication::primaryScreen()) {
       dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
     }
-    
+
     // Physical dimensions for the output
     int physicalW = qRound(width * dpr);
     int physicalH = qRound(height * dpr);
-    
+
     // Create a copy of source with DPR=1 so we work in raw physical pixels
     QPixmap sourceNoDpr = storedPixmap;
     sourceNoDpr.setDevicePixelRatio(1.0);
-    
+
     // Scale to fit within physical target size
     QPixmap scaledArtwork = sourceNoDpr.scaled(
-        physicalW, physicalH,
-        Qt::KeepAspectRatio,
-        Qt::SmoothTransformation);
+        physicalW, physicalH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
     // Create result at physical size
     QPixmap resultPixmap(physicalW, physicalH);
@@ -648,17 +855,17 @@ void ItemWidget::onArtworkChanged() {
       int physicalRadius = qRound(m_cornerRadius * dpr);
       QPixmap maskedPixmap(physicalW, physicalH);
       maskedPixmap.fill(Qt::transparent);
-      
+
       QPainter maskPainter(&maskedPixmap);
       maskPainter.setRenderHint(QPainter::Antialiasing, true);
-      
+
       QPainterPath clipPath;
       clipPath.addRoundedRect(QRectF(0, 0, physicalW, physicalH),
                               physicalRadius, physicalRadius);
       maskPainter.setClipPath(clipPath);
       maskPainter.drawPixmap(0, 0, resultPixmap);
       maskPainter.end();
-      
+
       resultPixmap = maskedPixmap;
     }
 
@@ -695,17 +902,29 @@ void ItemWidget::resetForReuse() {
   m_isSubcollection = false;
   m_subcollectionIndex = -1;
   m_isVirtualFolder = false;
-  m_isListMode = false;  // Reset list mode for widget reuse
-  m_rowIndex = -1;  // Reset row index for widget reuse
+  m_isListMode = false;     // Reset list mode for widget reuse
+  m_rowIndex = -1;          // Reset row index for widget reuse
+  m_hasArtwork = false;     // Reset artwork flag
+  m_collectionName.clear(); // Clear collection name
   m_virtualFolderPath.clear();
   m_hideSubfolderTitle = false;
   filePath.clear();
   itemName.clear();
-  storedPixmap = QPixmap();  // Clear stored artwork
+  storedPixmap = QPixmap(); // Clear stored artwork
   // Don't generate placeholder here - onArtworkChanged() will be called after
   // configuration and will generate the placeholder with correct dimensions
   if (triangleIndicator) {
     triangleIndicator->hide();
+  }
+  // Hide list mode elements
+  if (m_collectionLabel) {
+    m_collectionLabel->hide();
+  }
+  if (m_artworkButton) {
+    m_artworkButton->hide();
+  }
+  if (m_folderIconLabel) {
+    m_folderIconLabel->hide();
   }
 }
 
@@ -713,17 +932,43 @@ void ItemWidget::resetForReuse() {
 void ItemWidget::setAsSubcollection(int index, const QString &name) {
   m_isSubcollection = true;
   m_subcollectionIndex = index;
-  setItemName(QStringLiteral("📁 ") + name);
+
+  // Create folder icon label lazily
+  if (!m_folderIconLabel) {
+    m_folderIconLabel = new QLabel(this);
+    m_folderIconLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    m_folderIconLabel->setAlignment(Qt::AlignCenter);
+  }
+  QIcon folderIcon =
+      UIConstants::Icons::fromTheme(UIConstants::Icons::SUBCOLLECTION);
+  m_folderIconLabel->setPixmap(folderIcon.pixmap(16, 16));
+  m_folderIconLabel->setVisible(true);
+
+  setItemName(name);
   applyDimensions();
 }
 
 // Set as virtual folder (subfolder navigation without subcollection)
-void ItemWidget::setAsVirtualFolder(const QString &folderPath, const QString &displayName, bool hideTitle) {
+void ItemWidget::setAsVirtualFolder(const QString &folderPath,
+                                    const QString &displayName,
+                                    bool hideTitle) {
   m_isVirtualFolder = true;
   m_virtualFolderPath = folderPath;
   m_hideSubfolderTitle = hideTitle;
-  // Use folder icon (🗂️) to distinguish from subcollection icon (📂)
-  setItemName(QStringLiteral("🗂️ ") + displayName);
+
+  // Create folder icon label lazily
+  if (!m_folderIconLabel) {
+    m_folderIconLabel = new QLabel(this);
+    m_folderIconLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    m_folderIconLabel->setAlignment(Qt::AlignCenter);
+  }
+  // Use documents folder icon to distinguish from subcollection icon
+  QIcon folderIcon =
+      UIConstants::Icons::fromTheme(UIConstants::Icons::VIRTUAL_FOLDER);
+  m_folderIconLabel->setPixmap(folderIcon.pixmap(16, 16));
+  m_folderIconLabel->setVisible(true);
+
+  setItemName(displayName);
   applyDimensions();
 }
 
@@ -731,8 +976,9 @@ void ItemWidget::setAsVirtualFolder(const QString &folderPath, const QString &di
 void ItemWidget::setItemName(const QString &name) {
   itemName = name;
   if (nameLabel) {
-    // Show title if: regular item with titles visible, OR subcollection with subcollection titles visible,
-    // OR virtual folder with subfolder titles visible
+    // Show title if: regular item with titles visible, OR subcollection with
+    // subcollection titles visible, OR virtual folder with subfolder titles
+    // visible
     bool shouldShowTitle = false;
     if (m_isVirtualFolder) {
       shouldShowTitle = !m_hideSubfolderTitle;
@@ -741,7 +987,7 @@ void ItemWidget::setItemName(const QString &name) {
     } else {
       shouldShowTitle = !m_hideTitles;
     }
-    
+
     if (!shouldShowTitle) {
       // Keep the label visible but empty to reserve layout space
       nameLabel->setText("");
@@ -831,11 +1077,11 @@ void ItemWidget::setListMode(bool listMode) {
     return;
   }
   m_isListMode = listMode;
-  
+
   if (imageLabel) {
     imageLabel->setVisible(!listMode);
   }
-  
+
   if (nameLabel && listMode) {
     // In list mode, left-align and expand text
     nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -843,8 +1089,77 @@ void ItemWidget::setListMode(bool listMode) {
     // Grid mode: center text below artwork
     nameLabel->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
   }
-  
+
   applyDimensions();
+}
+
+// Set the parent collection name for display in list mode
+void ItemWidget::setCollectionName(const QString &name) {
+  m_collectionName = name;
+
+  qDebug() << "setCollectionName:" << name << "isListMode=" << m_isListMode;
+
+  // Create collection label lazily if needed
+  if (m_isListMode && !m_collectionName.isEmpty()) {
+    if (!m_collectionLabel) {
+      m_collectionLabel = new QLabel(this);
+      m_collectionLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+      m_collectionLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    }
+    m_collectionLabel->setText(m_collectionName);
+    m_collectionLabel->show();
+    applyDimensions(); // Position the newly created/shown label
+  } else if (m_collectionLabel) {
+    m_collectionLabel->hide();
+  }
+}
+
+// Set whether artwork exists for this item (controls artwork button visibility)
+void ItemWidget::setHasArtwork(bool hasArtwork) {
+  m_hasArtwork = hasArtwork;
+
+  qDebug() << "setHasArtwork:" << hasArtwork << "isListMode=" << m_isListMode;
+
+  // Create artwork button lazily if needed
+  if (m_isListMode && m_hasArtwork) {
+    if (!m_artworkButton) {
+      m_artworkButton = new QPushButton(this);
+      m_artworkButton->setIcon(
+          UIConstants::Icons::fromTheme(UIConstants::Icons::IMAGE));
+      m_artworkButton->setFlat(true);
+      m_artworkButton->setCursor(Qt::PointingHandCursor);
+      // Click emits signal for artwork preview
+      connect(m_artworkButton, &QPushButton::clicked, this, [this]() {
+        if (!filePath.isEmpty()) {
+          emit artworkPreviewRequested(filePath, m_artworkDirectory);
+        }
+      });
+    }
+    m_artworkButton->show();
+    applyDimensions(); // Position the newly created/shown button
+  } else if (m_artworkButton) {
+    m_artworkButton->hide();
+  }
+}
+
+// Set collection column width for list mode (resizable)
+void ItemWidget::setCollectionColumnWidth(int width) {
+  if (m_collectionColumnWidth != width) {
+    m_collectionColumnWidth = width;
+    if (m_isListMode) {
+      applyDimensions(); // Re-layout with new column width
+    }
+  }
+}
+
+// Set artwork column width for list mode (resizable)
+void ItemWidget::setArtworkColumnWidth(int width) {
+  if (m_artworkColumnWidth != width) {
+    m_artworkColumnWidth = width;
+    if (m_isListMode) {
+      applyDimensions(); // Re-layout with new column width
+    }
+  }
 }
 
 // Update triangle indicator
@@ -857,21 +1172,23 @@ void ItemWidget::updateTriangleIndicator() {
     if (layout()) {
       layout()->activate();
     }
-    
-    // Use imageLabel geometry if valid, otherwise calculate from known dimensions
+
+    // Use imageLabel geometry if valid, otherwise calculate from known
+    // dimensions
     QRect imageRect = imageLabel ? imageLabel->geometry() : QRect();
-    if (imageRect.width() != m_artworkSize || imageRect.height() != m_artworkSize) {
+    if (imageRect.width() != m_artworkSize ||
+        imageRect.height() != m_artworkSize) {
       // Geometry not yet updated - calculate expected position
       // Layout has 10px margins, imageLabel is centered horizontally
       int leftMargin = (m_itemWidth - m_artworkSize) / 2;
-      int topMargin = UIConstants::Widget::MARGIN;  // 10px from .ui file
+      int topMargin = UIConstants::Widget::MARGIN; // 10px from .ui file
       imageRect = QRect(leftMargin, topMargin, m_artworkSize, m_artworkSize);
     }
-    
+
     int borderSpacing = UIConstants::CollectionIcon::ITEM_SPACING;
-    int indicatorX =
-        imageRect.right() + borderSpacing -
-        (UIConstants::Widget::TRIANGLE_SIZE + UIConstants::Metadata::VALUE_PADDING);
+    int indicatorX = imageRect.right() + borderSpacing -
+                     (UIConstants::Widget::TRIANGLE_SIZE +
+                      UIConstants::Metadata::VALUE_PADDING);
     int indicatorY =
         imageRect.top() - borderSpacing + UIConstants::Metadata::VALUE_PADDING;
     triangleIndicator->setGeometry(indicatorX, indicatorY,
@@ -890,11 +1207,12 @@ void ItemWidget::paintTriangleIndicator() {
   if ((!triangleIndicator) || !triangleIndicator->isVisible()) {
     return;
   }
-  QPixmap pixmap(UIConstants::Widget::TRIANGLE_SIZE, UIConstants::Widget::TRIANGLE_SIZE);
+  QPixmap pixmap(UIConstants::Widget::TRIANGLE_SIZE,
+                 UIConstants::Widget::TRIANGLE_SIZE);
   pixmap.fill(Qt::transparent);
   QPainter painter(&pixmap);
   painter.setRenderHint(QPainter::Antialiasing);
-  
+
   // Use per-collection tile color if set, otherwise system highlight
   QColor badgeColor;
   if (!s_tileColor.isEmpty() && QColor::isValidColorName(s_tileColor)) {
@@ -944,8 +1262,8 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   quint64 key = (static_cast<quint64>(width) << kKeyWidthShiftBits) |
                 (static_cast<quint64>(height) << kKeyHeightShiftBits) |
                 (static_cast<quint64>(base.rgba()) & kRgbaMask32);
-  if (!cache.isNull() && cacheKey == key && cachedCornerRadius == m_cornerRadius 
-      && cachedTileColor == s_tileColor) {
+  if (!cache.isNull() && cacheKey == key &&
+      cachedCornerRadius == m_cornerRadius && cachedTileColor == s_tileColor) {
     return cache;
   }
 
@@ -1017,26 +1335,27 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
       UIConstants::Placeholder::SECONDARY_TINT_DEN);
   secondary.setAlpha(UIConstants::Placeholder::SECONDARY_ALPHA);
 
-  int step = qBound(UIConstants::Placeholder::STEP_MIN,
-                    qMin(width, height) / UIConstants::Placeholder::STEP_DIVISOR,
-                    UIConstants::Placeholder::STEP_MAX);
+  int step =
+      qBound(UIConstants::Placeholder::STEP_MIN,
+             qMin(width, height) / UIConstants::Placeholder::STEP_DIVISOR,
+             UIConstants::Placeholder::STEP_MAX);
 
   // Determine background color - use tileColor if set, otherwise use palette
   QColor bgColor = base;
   if (!s_tileColor.isEmpty() && QColor::isValidColorName(s_tileColor)) {
     bgColor = QColor(s_tileColor);
-    // Adjust based on tileColor lightness for better hatch visibility
-    int bgLightness = bgColor.lightness();
-    dark = (bgLightness < kLightnessDarkThreshold);
+    // Note: dark was originally recalculated here for tileColor lightness,
+    // but primaryDelta/secondaryDelta are already computed above using the
+    // original dark value based on base color, which is the intended behavior
   }
 
   {
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing, false);
-    
+
     // Fill background with tileColor or palette base
     painter.fillRect(0, 0, width, height, bgColor);
-    
+
     painter.setPen(QPen(primary, 1));
     for (int diag = -height; diag < width; diag += step) {
       painter.drawLine(diag, 0, diag + height, height);
@@ -1060,9 +1379,10 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
         int red = qRed(pixel);
         int green = qGreen(pixel);
         int blue = qBlue(pixel);
-        int noiseDelta = static_cast<int>(generator.generate() &
-                                          UIConstants::Placeholder::NOISE_MASK) -
-                         UIConstants::Placeholder::NOISE_BIAS;
+        int noiseDelta =
+            static_cast<int>(generator.generate() &
+                             UIConstants::Placeholder::NOISE_MASK) -
+            UIConstants::Placeholder::NOISE_BIAS;
         noiseDelta = std::min(noiseDelta, noiseAmp);
         noiseDelta = std::max(noiseDelta, -noiseAmp);
         red = qBound(0, red + noiseDelta, UIConstants::Color::CHANNEL_MAX);
@@ -1090,17 +1410,17 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   if (m_cornerRadius > 0) {
     QPixmap maskedPixmap(width, height);
     maskedPixmap.fill(Qt::transparent);
-    
+
     QPainter maskPainter(&maskedPixmap);
     maskPainter.setRenderHint(QPainter::Antialiasing, true);
-    
+
     QPainterPath clipPath;
-    clipPath.addRoundedRect(QRectF(0, 0, width, height),
-                            m_cornerRadius, m_cornerRadius);
+    clipPath.addRoundedRect(QRectF(0, 0, width, height), m_cornerRadius,
+                            m_cornerRadius);
     maskPainter.setClipPath(clipPath);
     maskPainter.drawPixmap(0, 0, pixmap);
     maskPainter.end();
-    
+
     pixmap = maskedPixmap;
   }
 

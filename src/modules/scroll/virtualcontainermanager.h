@@ -25,9 +25,9 @@ struct ContainerPositionParams {
 
 /**
  * @brief Manages the virtual container widget lifecycle and positioning.
- * 
- * Handles creation, cleanup, and positioning of the virtual scrolling container.
- * Delegates to SelectionOverlayManager for overlay parenting.
+ *
+ * Handles creation, cleanup, and positioning of the virtual scrolling
+ * container. Delegates to SelectionOverlayManager for overlay parenting.
  */
 class VirtualContainerManager : public QObject {
   Q_OBJECT
@@ -38,7 +38,9 @@ public:
   // Setup
   void setGridContainer(QWidget *container) { m_gridContainer = container; }
   void setScrollArea(QScrollArea *scrollArea) { m_scrollArea = scrollArea; }
-  void setOverlayManager(SelectionOverlayManager *overlay) { m_overlayManager = overlay; }
+  void setOverlayManager(SelectionOverlayManager *overlay) {
+    m_overlayManager = overlay;
+  }
   void setFilterManager(FilterManager *filter) { m_filterManager = filter; }
 
   // Container lifecycle
@@ -59,16 +61,17 @@ public:
 
 private:
   // Positioning helpers
-  void setupContainerSizes(int availableWidth, int contentWidth, 
-                          int totalHeight, bool overflow);
-  [[nodiscard]] HorizontalAlignment getEffectiveAlignment(
-      const ContainerPositionParams &params) const;
+  void setupContainerSizes(int availableWidth, int contentWidth,
+                           int totalHeight, bool overflow);
+  [[nodiscard]] HorizontalAlignment
+  getEffectiveAlignment(const ContainerPositionParams &params) const;
   void calculateScrollbarOffsets(bool verticalBarHidden, int &leftOffset,
-                                int &rightOffset, int &centerOffset) const;
-  [[nodiscard]] int calculateContainerPosition(int availableWidth, int contentWidth,
-                                bool overflow, HorizontalAlignment align,
-                                int leftOffset, int rightOffset,
-                                int centerOffset) const;
+                                 int &rightOffset, int &centerOffset) const;
+  [[nodiscard]] int calculateContainerPosition(int availableWidth,
+                                               int contentWidth, bool overflow,
+                                               HorizontalAlignment align,
+                                               int leftOffset, int rightOffset,
+                                               int centerOffset) const;
   void configureHorizontalScrollbar(bool overflow);
 
   QWidget *m_gridContainer = nullptr;

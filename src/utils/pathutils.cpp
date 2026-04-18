@@ -13,14 +13,14 @@ namespace PathUtils {
 // Helper to expand placeholders and ~ in path
 static QString expandPath(const QString &path, const QString &collectionName) {
   QString result = path.trimmed();
-  
+
   // Expand ~ to home directory (must be at start of path)
   if (result.startsWith("~/")) {
-    result = QDir::homePath() + result.mid(1);  // Replace ~ with home path
+    result = QDir::homePath() + result.mid(1); // Replace ~ with home path
   } else if (result == "~") {
     result = QDir::homePath();
   }
-  
+
   if (!collectionName.isEmpty()) {
     result.replace("%collection%", collectionName, Qt::CaseInsensitive);
   }
@@ -31,33 +31,30 @@ static QString expandPath(const QString &path, const QString &collectionName) {
 Result<QString> tryValidateAndExpandPath(const QString &path,
                                          const QString &collectionName) {
   QString result = expandPath(path, collectionName);
-  
+
   if (result.isEmpty()) {
-    return ErrorContext::error(
-        ErrorCode::InvalidFilePath,
-        "Path is empty after expansion",
-        "PathUtils::tryValidateAndExpandPath")
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Path is empty after expansion",
+                               "PathUtils::tryValidateAndExpandPath")
         .withDetails(QString("Original: '%1', Collection: '%2'")
                          .arg(path, collectionName));
   }
 
   QDir dir(result);
   if (!dir.isAbsolute()) {
-    return ErrorContext::error(
-        ErrorCode::InvalidFilePath,
-        "Path is not absolute",
-        "PathUtils::tryValidateAndExpandPath")
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Path is not absolute",
+                               "PathUtils::tryValidateAndExpandPath")
         .withDetails(QString("Path: '%1'").arg(result));
   }
-  
+
   if (!dir.exists()) {
-    return ErrorContext::error(
-        ErrorCode::FileNotFound,
-        "Directory does not exist",
-        "PathUtils::tryValidateAndExpandPath")
+    return ErrorContext::error(ErrorCode::FileNotFound,
+                               "Directory does not exist",
+                               "PathUtils::tryValidateAndExpandPath")
         .withDetails(QString("Path: '%1'").arg(result));
   }
-  
+
   return dir.absolutePath();
 }
 
@@ -85,15 +82,14 @@ QString normalizeDisplayName(const QString &input) {
 
 Result<void> validatePathSecurity(const QString &path) {
   if (path.isEmpty()) {
-    return ErrorContext::error(ErrorCode::InvalidFilePath,
-                               "Path is empty",
+    return ErrorContext::error(ErrorCode::InvalidFilePath, "Path is empty",
                                "PathUtils::validatePathSecurity");
   }
 
   // Normalize Unicode to NFC form to prevent homoglyph/normalization attacks
   // This ensures consistent representation of characters
   QString normalized = path.normalized(QString::NormalizationForm_C);
-  
+
   // Reject if normalization changed the path (indicates potential obfuscation)
   if (normalized != path) {
     return ErrorContext::error(ErrorCode::InvalidFilePath,
@@ -103,8 +99,8 @@ Result<void> validatePathSecurity(const QString &path) {
   }
 
   // Reject shell metacharacters that could enable command injection.
-  // Note: ()[] are allowed as they're common in filenames and safe with QProcess
-  // which passes arguments directly without shell interpretation.
+  // Note: ()[] are allowed as they're common in filenames and safe with
+  // QProcess which passes arguments directly without shell interpretation.
   static const QRegularExpression shellMeta(R"([;|&`$<>])");
   if (shellMeta.match(normalized).hasMatch()) {
     return ErrorContext::error(ErrorCode::InvalidFilePath,
@@ -126,8 +122,9 @@ Result<void> validatePathSecurity(const QString &path) {
                                "Path contains newline characters",
                                "PathUtils::validatePathSecurity");
   }
-  
-  // Reject backslash characters (Windows-style paths that could confuse Unix systems)
+
+  // Reject backslash characters (Windows-style paths that could confuse Unix
+  // systems)
   if (normalized.contains('\\')) {
     return ErrorContext::error(ErrorCode::InvalidFilePath,
                                "Path contains backslash characters",

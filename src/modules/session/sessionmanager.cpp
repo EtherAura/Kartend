@@ -1,4 +1,5 @@
-// Persists and restores selection state and item counts across application sessions.
+// Persists and restores selection state and item counts across application
+// sessions.
 #include "sessionmanager.h"
 #include "collectionutils.h"
 #include "errorutils.h"
@@ -17,7 +18,12 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSessionManager, "kartend.sessionmanager")
-#define debugLog(msg) do { if (lcSessionManager().isDebugEnabled()) { qCDebug(lcSessionManager) << msg; } } while (0)
+#define debugLog(msg)                                                          \
+  do {                                                                         \
+    if (lcSessionManager().isDebugEnabled()) {                                 \
+      qCDebug(lcSessionManager) << msg;                                        \
+    }                                                                          \
+  } while (0)
 
 SessionManager::SessionManager(QObject *parent) : QObject(parent) {}
 
@@ -43,7 +49,9 @@ void SessionManager::saveSessionBytesToDiskForShutdown(const QByteArray &data) {
 
 QString SessionManager::getCacheDirectory() {
   // Use GenericCacheLocation + app name for consistent ~/.cache/kartend path
-  return QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + "/kartend";
+  return QStandardPaths::writableLocation(
+             QStandardPaths::GenericCacheLocation) +
+         "/kartend";
 }
 
 void SessionManager::initialize() {
@@ -54,7 +62,7 @@ void SessionManager::initialize() {
     metadataPath = getCacheDirectory() + "/metadata/cache.json";
     metadataFile.setFileName(metadataPath);
     if (!metadataFile.exists()) {
-        return;
+      return;
     }
   }
 
@@ -119,8 +127,8 @@ auto SessionManager::buildSessionJson() const -> QJsonObject {
                               collectionNameItemCountCache.keyEnd()));
   allKeys.unite(QSet<QString>(collectionNameRecursiveCountCache.keyBegin(),
                               collectionNameRecursiveCountCache.keyEnd()));
-  allKeys.unite(
-      QSet<QString>(lastSelectedByName.keyBegin(), lastSelectedByName.keyEnd()));
+  allKeys.unite(QSet<QString>(lastSelectedByName.keyBegin(),
+                              lastSelectedByName.keyEnd()));
 
   for (const QString &name : allKeys) {
     QJsonObject coll;
@@ -144,39 +152,42 @@ auto SessionManager::buildSessionJson() const -> QJsonObject {
 
   root["collections"] = collections;
   root["global"] = static_cast<double>(globalItemCount);
-  
+
   // Serialize cached viewports for instant startup
   QJsonObject viewportsObj;
   for (auto it = cachedViewports.begin(); it != cachedViewports.end(); ++it) {
     const CachedViewport &vp = it.value();
-    if (!vp.isValid()) continue;
-    
+    if (!vp.isValid())
+      continue;
+
     QJsonObject vpObj;
     vpObj["startIndex"] = vp.startIndex;
     vpObj["totalItems"] = vp.totalItems;
-    
+
     QJsonArray pathsArray;
     for (const QString &path : vp.filePaths) {
       pathsArray.append(path);
     }
     vpObj["filePaths"] = pathsArray;
-    
+
     QJsonObject namesObj;
-    for (auto nameIt = vp.fileNames.begin(); nameIt != vp.fileNames.end(); ++nameIt) {
+    for (auto nameIt = vp.fileNames.begin(); nameIt != vp.fileNames.end();
+         ++nameIt) {
       namesObj[nameIt.key()] = nameIt.value();
     }
     vpObj["fileNames"] = namesObj;
-    
+
     QJsonObject artworkObj;
-    for (auto artIt = vp.artworkPaths.begin(); artIt != vp.artworkPaths.end(); ++artIt) {
+    for (auto artIt = vp.artworkPaths.begin(); artIt != vp.artworkPaths.end();
+         ++artIt) {
       artworkObj[artIt.key()] = artIt.value();
     }
     vpObj["artworkPaths"] = artworkObj;
-    
+
     viewportsObj[it.key()] = vpObj;
   }
   root["viewports"] = viewportsObj;
-  
+
   return root;
 }
 
@@ -219,10 +230,9 @@ void SessionManager::saveToDisk() {
   QString metadataPath = getCacheDirectory() + "/metadata/session.json";
   if (!atomicWriteFile(metadataPath, QJsonDocument(root).toJson())) {
     ErrorUtils::logError(
-        ErrorUtils::ErrorContext::warning(
-            ErrorUtils::ErrorCode::FileWriteError,
-            "Failed to persist session metadata",
-            "SessionManager::saveToDisk")
+        ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                          "Failed to persist session metadata",
+                                          "SessionManager::saveToDisk")
             .withDetails(QString("Path: %1").arg(metadataPath)));
   }
 }
@@ -317,7 +327,8 @@ void SessionManager::setCollectionCounts(
     const CollectionConfig &collection,
     const QList<CollectionConfig> &allCollections, qint64 itemCount,
     qint64 recursiveCount) {
-  QString hierarchicalName = CollectionUtils::hierarchicalNameFor(collection, allCollections);
+  QString hierarchicalName =
+      CollectionUtils::hierarchicalNameFor(collection, allCollections);
   QMutexLocker locker(&m_mutex);
   collectionNameRecursiveCountCache[hierarchicalName] = recursiveCount;
   collectionNameItemCountCache[hierarchicalName] = itemCount;
@@ -327,7 +338,8 @@ bool SessionManager::getCollectionCounts(
     const CollectionConfig &collection,
     const QList<CollectionConfig> &allCollections, qint64 &itemCount,
     qint64 &recursiveCount) const {
-  const QString key = CollectionUtils::hierarchicalNameFor(collection, allCollections);
+  const QString key =
+      CollectionUtils::hierarchicalNameFor(collection, allCollections);
   QMutexLocker locker(&m_mutex);
   const bool hasDirect = collectionNameItemCountCache.contains(key);
   const bool hasRec = collectionNameRecursiveCountCache.contains(key);
@@ -353,7 +365,8 @@ void SessionManager::clearStaleCollections(
 
   QSet<QString> validHierNames;
   for (const CollectionConfig &config : currentCollections) {
-    QString hierarchicalName = CollectionUtils::hierarchicalNameFor(config, currentCollections);
+    QString hierarchicalName =
+        CollectionUtils::hierarchicalNameFor(config, currentCollections);
     validHierNames.insert(hierarchicalName);
   }
 
@@ -398,41 +411,41 @@ void SessionManager::readCachedViewports(const QJsonObject &root) {
   }
   QJsonObject viewportsObj = root["viewports"].toObject();
   QMutexLocker locker(&m_mutex);
-  
+
   for (auto it = viewportsObj.begin(); it != viewportsObj.end(); ++it) {
     QString key = it.key();
     QJsonObject vpObj = it.value().toObject();
-    
+
     CachedViewport vp;
     vp.startIndex = vpObj["startIndex"].toInt(0);
     vp.totalItems = vpObj["totalItems"].toInt(0);
-    
+
     QJsonArray pathsArray = vpObj["filePaths"].toArray();
     vp.filePaths.reserve(pathsArray.size());
     for (const QJsonValue &val : pathsArray) {
       vp.filePaths.append(val.toString());
     }
-    
+
     QJsonObject namesObj = vpObj["fileNames"].toObject();
     for (auto nameIt = namesObj.begin(); nameIt != namesObj.end(); ++nameIt) {
       vp.fileNames[nameIt.key()] = nameIt.value().toString();
     }
-    
+
     QJsonObject artworkObj = vpObj["artworkPaths"].toObject();
     for (auto artIt = artworkObj.begin(); artIt != artworkObj.end(); ++artIt) {
       vp.artworkPaths[artIt.key()] = artIt.value().toString();
     }
-    
+
     if (vp.isValid()) {
       cachedViewports[key] = vp;
     }
   }
 }
 
-void SessionManager::setCachedViewport(const QString &collectionKey, int startIndex,
-                                       int totalItems, const QStringList &filePaths,
-                                       const QHash<QString, QString> &fileNames,
-                                       const QHash<QString, QString> &artworkPaths) {
+void SessionManager::setCachedViewport(
+    const QString &collectionKey, int startIndex, int totalItems,
+    const QStringList &filePaths, const QHash<QString, QString> &fileNames,
+    const QHash<QString, QString> &artworkPaths) {
   QMutexLocker locker(&m_mutex);
   CachedViewport vp;
   vp.startIndex = startIndex;
@@ -443,7 +456,8 @@ void SessionManager::setCachedViewport(const QString &collectionKey, int startIn
   cachedViewports[collectionKey] = vp;
 }
 
-SessionManager::CachedViewport SessionManager::getCachedViewport(const QString &collectionKey) const {
+SessionManager::CachedViewport
+SessionManager::getCachedViewport(const QString &collectionKey) const {
   QMutexLocker locker(&m_mutex);
   return cachedViewports.value(collectionKey);
 }

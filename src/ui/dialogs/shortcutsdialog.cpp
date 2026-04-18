@@ -17,7 +17,7 @@ constexpr int DIALOG_WIDTH = 450;
 constexpr int DIALOG_HEIGHT = 500;
 constexpr int SECTION_SPACING = 12;
 constexpr int SHORTCUT_SPACING = 4;
-}  // namespace
+} // namespace
 
 ShortcutsDialog::ShortcutsDialog(QWidget *parent) : QDialog(parent) {
   setWindowTitle(tr("Keyboard Shortcuts"));
@@ -84,16 +84,22 @@ void ShortcutsDialog::populateContent() {
 
   // Navigation
   addSection(m_contentLayout, tr("Navigation"));
-  addShortcut(m_contentLayout, keyText(settings.keyNavUp), tr("Move selection up"));
-  addShortcut(m_contentLayout, keyText(settings.keyNavDown), tr("Move selection down"));
-  addShortcut(m_contentLayout, keyText(settings.keyNavLeft), tr("Move selection left"));
-  addShortcut(m_contentLayout, keyText(settings.keyNavRight), tr("Move selection right"));
+  addShortcut(m_contentLayout, keyText(settings.keyNavUp),
+              tr("Move selection up"));
+  addShortcut(m_contentLayout, keyText(settings.keyNavDown),
+              tr("Move selection down"));
+  addShortcut(m_contentLayout, keyText(settings.keyNavLeft),
+              tr("Move selection left"));
+  addShortcut(m_contentLayout, keyText(settings.keyNavRight),
+              tr("Move selection right"));
   addShortcut(m_contentLayout, keyText(settings.keyConfirm),
               tr("Open selected item / Enter subcollection"));
   addShortcut(m_contentLayout, keyText(settings.keyBack),
               tr("Go back / Clear search / Exit search mode"));
-  addShortcut(m_contentLayout, keyText(settings.keyJumpFirst), tr("Jump to first item"));
-  addShortcut(m_contentLayout, keyText(settings.keyJumpLast), tr("Jump to last item"));
+  addShortcut(m_contentLayout, keyText(settings.keyJumpFirst),
+              tr("Jump to first item"));
+  addShortcut(m_contentLayout, keyText(settings.keyJumpLast),
+              tr("Jump to last item"));
   addShortcut(m_contentLayout, keyText(settings.keyAlphabeticBack),
               tr("Jump to previous letter (alphabetic)"));
   addShortcut(m_contentLayout, keyText(settings.keyAlphabeticForward),
@@ -112,10 +118,10 @@ void ShortcutsDialog::populateContent() {
   addSection(m_contentLayout, tr("Gamepad"));
   addShortcut(m_contentLayout, tr("D-pad"),
               settings.gamepadUseDpad ? tr("Move selection (enabled)")
-                                       : tr("Move selection (disabled)"));
+                                      : tr("Move selection (disabled)"));
   addShortcut(m_contentLayout, tr("Left stick"),
               settings.gamepadUseLeftStick ? tr("Move selection (enabled)")
-                                            : tr("Move selection (disabled)"));
+                                           : tr("Move selection (disabled)"));
   addShortcut(m_contentLayout, buttonText(settings.gamepadConfirmButton),
               tr("Confirm / Open selected item"));
   addShortcut(m_contentLayout, buttonText(settings.gamepadBackButton),
@@ -173,13 +179,12 @@ void ShortcutsDialog::addShortcut(QVBoxLayout *layout, const QString &keys,
 
   auto *keysLabel = new QLabel(keys, this);
   keysLabel->setFixedWidth(120);
-  keysLabel->setStyleSheet(
-      "QLabel { "
-      "background-color: palette(mid); "
-      "border-radius: 3px; "
-      "padding: 2px 6px; "
-      "font-family: monospace; "
-      "}");
+  keysLabel->setStyleSheet("QLabel { "
+                           "background-color: palette(mid); "
+                           "border-radius: 3px; "
+                           "padding: 2px 6px; "
+                           "font-family: monospace; "
+                           "}");
   keysLabel->setAlignment(Qt::AlignCenter);
 
   auto *descLabel = new QLabel(description, this);

@@ -40,19 +40,19 @@ struct SearchManagerSetup {
   int *currentCollectionIndex = nullptr;
   const CollectionHierarchyCache *hierarchyCache = nullptr;
 
-  SETUP_GETTER_DECL(DatabaseManager*, DatabaseManager)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder*, InteractionState)
-  SETUP_GETTER_DECL(NavigationManager*, NavigationManager)
-  SETUP_GETTER_DECL(ScrollManager*, ScrollManager)
-  SETUP_GETTER_DECL(SettingsManager*, SettingsManager)
-  SETUP_GETTER_DECL(QLineEdit*, SearchBar)
-  SETUP_GETTER_DECL(QPushButton*, SearchModeButton)
-  SETUP_GETTER_DECL(QScrollArea*, ItemScrollArea)
-  SETUP_GETTER_DECL(QStackedWidget*, StackedWidget)
-  SETUP_GETTER_DECL(QWidget*, ItemsPage)
-  SETUP_GETTER_DECL(QList<CollectionConfig>*, Collections)
-  SETUP_GETTER_DECL(int*, CurrentCollectionIndex)
-  SETUP_GETTER_DECL(const CollectionHierarchyCache*, HierarchyCache)
+  SETUP_GETTER_DECL(DatabaseManager *, DatabaseManager)
+  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
+  SETUP_GETTER_DECL(NavigationManager *, NavigationManager)
+  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
+  SETUP_GETTER_DECL(SettingsManager *, SettingsManager)
+  SETUP_GETTER_DECL(QLineEdit *, SearchBar)
+  SETUP_GETTER_DECL(QPushButton *, SearchModeButton)
+  SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
+  SETUP_GETTER_DECL(QStackedWidget *, StackedWidget)
+  SETUP_GETTER_DECL(QWidget *, ItemsPage)
+  SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
+  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(const CollectionHierarchyCache *, HierarchyCache)
 };
 
 class SearchManager : public QObject {
@@ -78,27 +78,38 @@ public:
   // Search state
   bool isSearchActive() const { return m_searchActive; }
   void setSearchActive(bool active) { m_searchActive = active; }
-  QString currentSearchText() const { return m_currentSearchText; }
+  [[nodiscard]] const QString &currentSearchText() const {
+    return m_currentSearchText;
+  }
   void setCurrentSearchText(const QString &text) { m_currentSearchText = text; }
 
   // Pre-search state preservation
   int preSearchCollectionIndex() const { return m_preSearchCollectionIndex; }
-  void setPreSearchCollectionIndex(int idx) { m_preSearchCollectionIndex = idx; }
+  void setPreSearchCollectionIndex(int idx) {
+    m_preSearchCollectionIndex = idx;
+  }
   [[nodiscard]] SearchMode preSearchMode() const { return m_preSearchMode; }
   void setPreSearchMode(SearchMode mode) { m_preSearchMode = mode; }
-  [[nodiscard]] int preSearchSelectedIndex() const { return m_preSearchSelectedIndex; }
+  [[nodiscard]] int preSearchSelectedIndex() const {
+    return m_preSearchSelectedIndex;
+  }
   void setPreSearchSelectedIndex(int idx) { m_preSearchSelectedIndex = idx; }
 
   // Timer access for InteractionManager
-  [[nodiscard]] TimerUtils::DebouncedTimer *debounceTimer() const { return m_searchDebounceTimer; }
-  QMetaObject::Connection &itemsLoadedConnection() { return m_searchItemsLoadedConn; }
+  [[nodiscard]] TimerUtils::DebouncedTimer *debounceTimer() const {
+    return m_searchDebounceTimer;
+  }
+  QMetaObject::Connection &itemsLoadedConnection() {
+    return m_searchItemsLoadedConn;
+  }
 
   // Helpers
   [[nodiscard]] SearchContext computeSearchContext() const;
-  [[nodiscard]] QVector<SearchMode> buildSearchModeCycle(const SearchContext &ctx) const;
+  [[nodiscard]] QVector<SearchMode>
+  buildSearchModeCycle(const SearchContext &ctx) const;
   [[nodiscard]] bool hasDirectItemsForIndex(int idx) const;
   [[nodiscard]] bool allowAllFor(const CollectionConfig &cfg, int collIndex,
-                   bool hasSubs) const;
+                                 bool hasSubs) const;
 
 signals:
   void searchModeChanged(SearchMode mode);
@@ -135,10 +146,10 @@ private:
   SearchMode m_preSearchMode = SearchMode::CurrentCollection;
   int m_preSearchSelectedIndex = -1;
   int m_preSearchTotalItems = -1;
-  
+
   // Adaptive debounce: tracks keystroke timing to adjust debounce delay
   qint64 m_lastKeystrokeTime = 0;
-  int m_adaptiveDebounceMs = 0;  // 0 = use default from UIConstants
+  int m_adaptiveDebounceMs = 0; // 0 = use default from UIConstants
   static constexpr int MIN_ADAPTIVE_DEBOUNCE_MS = 80;
   static constexpr int MAX_ADAPTIVE_DEBOUNCE_MS = 250;
   void updateAdaptiveDebounce();

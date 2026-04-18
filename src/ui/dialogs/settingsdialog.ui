@@ -744,6 +744,91 @@
             </layout>
            </item>
            <item>
+            <widget class="QGroupBox" name="listModeGroupBox">
+             <property name="title">
+              <string>List Mode Settings</string>
+             </property>
+             <layout class="QFormLayout" name="listModeFormLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="label_listFontSize">
+                <property name="text">
+                 <string>Text Size:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QSpinBox" name="listFontSizeSpinBox">
+                <property name="toolTip"><string>Font size for list view text (6-48 pt)</string></property>
+                <property name="minimum"><number>6</number></property>
+                <property name="maximum"><number>48</number></property>
+                <property name="value"><number>12</number></property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="label_listRowHeight">
+                <property name="text">
+                 <string>Row Height:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QSpinBox" name="listRowHeightSpinBox">
+                <property name="toolTip"><string>Height of each row in list view (20-100 px)</string></property>
+                <property name="minimum"><number>20</number></property>
+                <property name="maximum"><number>100</number></property>
+                <property name="value"><number>32</number></property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="label_listRowColor">
+                <property name="text">
+                 <string>Row Color:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <layout class="QHBoxLayout" name="listRowColorLayout">
+                <item>
+                 <widget class="QLineEdit" name="listRowColorEdit">
+                  <property name="toolTip"><string>Primary row background color (hex format like #FF5500)</string></property>
+                  <property name="placeholderText"><string>System Default</string></property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="browseListRowColorButton">
+                  <property name="text"><string>Pick...</string></property>
+                  <property name="toolTip"><string>Select row color</string></property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="label_listAltRowColor">
+                <property name="text">
+                 <string>Alternate Row Color:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="1">
+               <layout class="QHBoxLayout" name="listAltRowColorLayout">
+                <item>
+                 <widget class="QLineEdit" name="listAltRowColorEdit">
+                  <property name="toolTip"><string>Alternate row background color (hex format like #FF5500)</string></property>
+                  <property name="placeholderText"><string>System Default</string></property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="browseListAltRowColorButton">
+                  <property name="text"><string>Pick...</string></property>
+                  <property name="toolTip"><string>Select alternate row color</string></property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
             <spacer name="appearanceVerticalSpacer">
              <property name="orientation">
               <enum>Qt::Orientation::Vertical</enum>
@@ -1058,14 +1143,14 @@
             <item row="3" column="0">
              <widget class="QLabel" name="keyboardSpeedLabel">
               <property name="text">
-               <string>Keyboard Repeat Interval:</string>
+               <string>Grid View Key Repeat Interval:</string>
               </property>
              </widget>
             </item>
             <item row="3" column="1">
              <widget class="QSpinBox" name="keyboardSpeedSpinBox">
               <property name="toolTip">
-               <string>Interval between arrow key repeats when holding keys (milliseconds)</string>
+               <string>Interval between arrow key repeats when holding keys in grid view (milliseconds)</string>
               </property>
               <property name="suffix">
                <string> ms</string>
@@ -1185,14 +1270,14 @@
             <item row="8" column="0">
              <widget class="QLabel" name="clickHoldRepeatIntervalLabel">
               <property name="text">
-               <string>Click-Hold Repeat Interval:</string>
+               <string>Grid View Click-Hold Repeat:</string>
               </property>
              </widget>
             </item>
             <item row="8" column="1">
              <widget class="QSpinBox" name="clickHoldRepeatIntervalSpinBox">
               <property name="toolTip">
-               <string>Interval between steps during click-hold scrolling (milliseconds)</string>
+               <string>Interval between steps during click-hold scrolling in grid view (milliseconds)</string>
               </property>
               <property name="suffix">
                <string> ms</string>
@@ -1205,6 +1290,58 @@
               </property>
               <property name="value">
                <number>320</number>
+              </property>
+             </widget>
+            </item>
+            <item row="9" column="0">
+             <widget class="QLabel" name="listKeyboardRepeatLabel">
+              <property name="text">
+               <string>List View Key Repeat Interval:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="9" column="1">
+             <widget class="QSpinBox" name="listKeyboardRepeatSpinBox">
+              <property name="toolTip">
+               <string>Interval between arrow key repeats when holding keys in list view (milliseconds)</string>
+              </property>
+              <property name="suffix">
+               <string> ms</string>
+              </property>
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>99999</number>
+              </property>
+              <property name="value">
+               <number>50</number>
+              </property>
+             </widget>
+            </item>
+            <item row="10" column="0">
+             <widget class="QLabel" name="listClickHoldRepeatLabel">
+              <property name="text">
+               <string>List View Click-Hold Repeat:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="10" column="1">
+             <widget class="QSpinBox" name="listClickHoldRepeatSpinBox">
+              <property name="toolTip">
+               <string>Interval between steps during click-hold scrolling in list view (milliseconds)</string>
+              </property>
+              <property name="suffix">
+               <string> ms</string>
+              </property>
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>99999</number>
+              </property>
+              <property name="value">
+               <number>80</number>
               </property>
              </widget>
             </item>

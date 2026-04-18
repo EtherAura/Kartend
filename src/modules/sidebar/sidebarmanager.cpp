@@ -15,15 +15,24 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSidebarManager, "kartend.sidebarmanager")
-#define debugLog(msg) do { if (lcSidebarManager().isDebugEnabled()) { qCDebug(lcSidebarManager) << msg; } } while (0)
+#define debugLog(msg)                                                          \
+  do {                                                                         \
+    if (lcSidebarManager().isDebugEnabled()) {                                 \
+      qCDebug(lcSidebarManager) << msg;                                        \
+    }                                                                          \
+  } while (0)
 
 // SidebarManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(SidebarManagerSetup, MetadataSidebar*, Sidebar, sidebar)
-SETUP_GETTER_DEF_SAME(SidebarManagerSetup, QWidget*, ItemsPage, itemsPage)
-SETUP_GETTER_DEF(SidebarManagerSetup, QScrollArea*, ScrollArea, scrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(SidebarManagerSetup, SettingsManager*, SettingsManager, settingsManager)
-SETUP_GETTER_DEF_SAME(SidebarManagerSetup, ArtworkManager*, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_SAME(SidebarManagerSetup, QList<CollectionConfig>*, Collections, collections)
+SETUP_GETTER_DEF_SAME(SidebarManagerSetup, MetadataSidebar *, Sidebar, sidebar)
+SETUP_GETTER_DEF_SAME(SidebarManagerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF(SidebarManagerSetup, QScrollArea *, ScrollArea, scrollArea,
+                 itemScrollArea)
+SETUP_GETTER_DEF_SAME(SidebarManagerSetup, SettingsManager *, SettingsManager,
+                      settingsManager)
+SETUP_GETTER_DEF_SAME(SidebarManagerSetup, ArtworkManager *, ArtworkManager,
+                      artworkManager)
+SETUP_GETTER_DEF_SAME(SidebarManagerSetup, QList<CollectionConfig> *,
+                      Collections, collections)
 
 SidebarManager::SidebarManager(QObject *parent)
     : QObject(parent), m_MetadataSidebar(nullptr), m_itemsPage(nullptr),
@@ -65,7 +74,8 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
   QString artworkDirectory;
   if (m_collections && m_currentCollectionIndex >= 0 &&
       m_currentCollectionIndex < m_collections->size()) {
-    artworkDirectory = (*m_collections)[m_currentCollectionIndex].artworkDirectory;
+    artworkDirectory =
+        (*m_collections)[m_currentCollectionIndex].artworkDirectory;
   }
 
   m_MetadataSidebar->setMetadata(filePath, itemName, artworkDirectory);
@@ -86,11 +96,10 @@ void SidebarManager::applySidebarStateForCollection(int collectionIndex) {
 
   // Reposition overlay sidebar after layout is finalized - on startup, the
   // viewport geometry may not be fully set when this is first called, causing
-  // the sidebar to overlap the scrollbar. Deferring ensures correct positioning.
+  // the sidebar to overlap the scrollbar. Deferring ensures correct
+  // positioning.
   if (m_sidebarVisible) {
-    QTimer::singleShot(50, this, [this]() {
-      positionSidebarOverlay();
-    });
+    QTimer::singleShot(50, this, [this]() { positionSidebarOverlay(); });
   }
 }
 
@@ -171,8 +180,9 @@ void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
       int desired = viewportWidth / 4;
       int sidebarWidth = qMax(UIConstants::Sidebar::MIN_WIDTH,
                               qMin(UIConstants::Sidebar::MAX_WIDTH, desired));
-      sidebarWidth = qMax(UIConstants::Sidebar::MIN_WIDTH,
-                          sidebarWidth - UIConstants::Sidebar::SCROLLBAR_OFFSET);
+      sidebarWidth =
+          qMax(UIConstants::Sidebar::MIN_WIDTH,
+               sidebarWidth - UIConstants::Sidebar::SCROLLBAR_OFFSET);
       m_MetadataSidebar->setParent(m_itemsPage);
       if (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1) {
         m_mainHorizontalLayout->removeWidget(m_MetadataSidebar);
@@ -199,8 +209,7 @@ void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
   }
 
   if (m_artworkManager) {
-    if (auto *timerCoordinator =
-            m_artworkManager->getTimerCoordinator()) {
+    if (auto *timerCoordinator = m_artworkManager->getTimerCoordinator()) {
       timerCoordinator->scheduleLayoutUpdate();
     }
   }

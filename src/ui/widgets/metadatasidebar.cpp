@@ -1,4 +1,5 @@
-// Displays file metadata, artwork preview, and item details in the sidebar panel.
+// Displays file metadata, artwork preview, and item details in the sidebar
+// panel.
 #include <QApplication>
 #include <QDir>
 #include <QFile>
@@ -185,7 +186,7 @@ void MetadataSidebar::loadArtwork(const QString &baseName,
         painter.end();
 
         ui->artworkDisplay->setPixmap(centeredArtwork);
-        return;  // Found and loaded artwork
+        return; // Found and loaded artwork
       }
     }
   }

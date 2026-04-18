@@ -15,7 +15,7 @@ constexpr int DIALOG_MIN_WIDTH = 400;
 constexpr int DIALOG_MAX_WIDTH = 600;
 constexpr int DETAILS_HEIGHT = 150;
 constexpr int ICON_SIZE = 48;
-}  // namespace
+} // namespace
 
 ErrorDialog::ErrorDialog(QWidget *parent) : QDialog(parent) {
   setWindowTitle(tr("Error"));
@@ -51,9 +51,8 @@ void ErrorDialog::setupUI() {
   m_detailsEdit->setReadOnly(true);
   m_detailsEdit->setFixedHeight(DETAILS_HEIGHT);
   m_detailsEdit->setVisible(false);
-  m_detailsEdit->setStyleSheet(
-      "QTextEdit { background-color: palette(window); "
-      "font-family: monospace; font-size: 11px; }");
+  m_detailsEdit->setStyleSheet("QTextEdit { background-color: palette(window); "
+                               "font-family: monospace; font-size: 11px; }");
   m_mainLayout->addWidget(m_detailsEdit);
 
   // Button row
@@ -104,25 +103,24 @@ void ErrorDialog::setError(const ErrorUtils::ErrorContext &context) {
   m_detailsEdit->setText(formatTechnicalDetails(context));
 
   // Show/hide details button based on whether we have details
-  bool hasDetails =
-      !context.details.isEmpty() || !context.source.isEmpty();
+  bool hasDetails = !context.details.isEmpty() || !context.source.isEmpty();
   m_detailsButton->setVisible(hasDetails);
   m_copyButton->setVisible(hasDetails);
 
   // Update window title based on severity
   switch (context.severity) {
-    case ErrorUtils::Severity::Info:
-      setWindowTitle(tr("Information"));
-      break;
-    case ErrorUtils::Severity::Warning:
-      setWindowTitle(tr("Warning"));
-      break;
-    case ErrorUtils::Severity::Error:
-      setWindowTitle(tr("Error"));
-      break;
-    case ErrorUtils::Severity::Critical:
-      setWindowTitle(tr("Critical Error"));
-      break;
+  case ErrorUtils::Severity::Info:
+    setWindowTitle(tr("Information"));
+    break;
+  case ErrorUtils::Severity::Warning:
+    setWindowTitle(tr("Warning"));
+    break;
+  case ErrorUtils::Severity::Error:
+    setWindowTitle(tr("Error"));
+    break;
+  case ErrorUtils::Severity::Critical:
+    setWindowTitle(tr("Critical Error"));
+    break;
   }
 
   adjustSize();
@@ -131,16 +129,16 @@ void ErrorDialog::setError(const ErrorUtils::ErrorContext &context) {
 void ErrorDialog::updateIcon(ErrorUtils::Severity severity) {
   QStyle::StandardPixmap pixmap;
   switch (severity) {
-    case ErrorUtils::Severity::Info:
-      pixmap = QStyle::SP_MessageBoxInformation;
-      break;
-    case ErrorUtils::Severity::Warning:
-      pixmap = QStyle::SP_MessageBoxWarning;
-      break;
-    case ErrorUtils::Severity::Error:
-    case ErrorUtils::Severity::Critical:
-      pixmap = QStyle::SP_MessageBoxCritical;
-      break;
+  case ErrorUtils::Severity::Info:
+    pixmap = QStyle::SP_MessageBoxInformation;
+    break;
+  case ErrorUtils::Severity::Warning:
+    pixmap = QStyle::SP_MessageBoxWarning;
+    break;
+  case ErrorUtils::Severity::Error:
+  case ErrorUtils::Severity::Critical:
+    pixmap = QStyle::SP_MessageBoxCritical;
+    break;
   }
 
   QIcon icon = style()->standardIcon(pixmap);
@@ -153,27 +151,27 @@ auto ErrorDialog::formatUserMessage(
 
   // Add user-friendly suggestions based on error code
   switch (context.code) {
-    case ErrorUtils::ErrorCode::DatabaseConnectionFailed:
-    case ErrorUtils::ErrorCode::DatabaseNotOpen:
-      message +=
-          tr("\n\nPlease check that the database file exists and is accessible.");
-      break;
-    case ErrorUtils::ErrorCode::MediaDirectoryNotFound:
-      message += tr("\n\nPlease verify the media directory path in settings.");
-      break;
-    case ErrorUtils::ErrorCode::ArtworkDirectoryNotFound:
-      message += tr("\n\nPlease verify the artwork directory path in settings.");
-      break;
-    case ErrorUtils::ErrorCode::ConfigLoadFailed:
-    case ErrorUtils::ErrorCode::ConfigSaveFailed:
-      message +=
-          tr("\n\nPlease check file permissions for the configuration file.");
-      break;
-    case ErrorUtils::ErrorCode::InvalidFilePath:
-      message += tr("\n\nPlease check that the file path is valid.");
-      break;
-    default:
-      break;
+  case ErrorUtils::ErrorCode::DatabaseConnectionFailed:
+  case ErrorUtils::ErrorCode::DatabaseNotOpen:
+    message +=
+        tr("\n\nPlease check that the database file exists and is accessible.");
+    break;
+  case ErrorUtils::ErrorCode::MediaDirectoryNotFound:
+    message += tr("\n\nPlease verify the media directory path in settings.");
+    break;
+  case ErrorUtils::ErrorCode::ArtworkDirectoryNotFound:
+    message += tr("\n\nPlease verify the artwork directory path in settings.");
+    break;
+  case ErrorUtils::ErrorCode::ConfigLoadFailed:
+  case ErrorUtils::ErrorCode::ConfigSaveFailed:
+    message +=
+        tr("\n\nPlease check file permissions for the configuration file.");
+    break;
+  case ErrorUtils::ErrorCode::InvalidFilePath:
+    message += tr("\n\nPlease check that the file path is valid.");
+    break;
+  default:
+    break;
   }
 
   return message;

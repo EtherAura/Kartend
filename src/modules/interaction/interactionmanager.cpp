@@ -1,4 +1,5 @@
-// Orchestrates user interactions, delegating to specialized managers for input handling.
+// Orchestrates user interactions, delegating to specialized managers for input
+// handling.
 #include "interactionmanager.h"
 
 #include <QApplication>
@@ -17,9 +18,9 @@
 #include <algorithm>
 
 // Include full headers for forward-declared owned managers
+#include "alphabeticnavigationhandler.h"
 #include "animationmanager.h"
 #include "arrownavigationhandler.h"
-#include "alphabeticnavigationhandler.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
 #include "keyboardmanager.h"
@@ -48,7 +49,12 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcInteractionManager, "kartend.interactionmanager")
-#define debugLog(msg) do { if (lcInteractionManager().isDebugEnabled()) { qCDebug(lcInteractionManager) << msg; } } while (0)
+#define debugLog(msg)                                                          \
+  do {                                                                         \
+    if (lcInteractionManager().isDebugEnabled()) {                             \
+      qCDebug(lcInteractionManager) << msg;                                    \
+    }                                                                          \
+  } while (0)
 
 InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
   m_searchManager = std::make_unique<SearchManager>(this);
@@ -82,7 +88,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   m_navigationManager = setup.getNavigationManager();
   m_sessionManager = setup.getSessionManager();
   m_artworkManager = setup.getArtworkManager();
-  
+
   // UI elements - use accessors that check context fallback
   m_itemScrollArea = setup.getItemScrollArea();
   m_gridContainer = setup.getGridContainer();
@@ -221,26 +227,25 @@ void InteractionManager::setupArrowNavigationHandler(
       [this]() { return currentSelectedIndex(); });
   m_arrowHandler->setGetCurrentGridWidth(
       [this]() { return getCurrentGridWidth(); });
-  m_arrowHandler->setIsItemOffscreen(
-      [this](int selection, int gridWidth) {
-        return isItemOffscreen(selection, gridWidth);
-      });
+  m_arrowHandler->setIsItemOffscreen([this](int selection, int gridWidth) {
+    return isItemOffscreen(selection, gridWidth);
+  });
 
   // Connect handler signals
-  connect(m_arrowHandler.get(),
-          &ArrowNavigationHandler::requestFullSelectionUpdate, this,
-          [this](int index) {
-            const QList<int> subs = getSubcollections(*m_currentCollectionIndex);
-            updateFilePathForSelection(index, subs);
-            selectItemByIndex(index, true);
-          });
-  connect(m_arrowHandler.get(), &ArrowNavigationHandler::requestRecenter,
-          this, &InteractionManager::recenterCurrentSelection);
+  connect(
+      m_arrowHandler.get(), &ArrowNavigationHandler::requestFullSelectionUpdate,
+      this, [this](int index) {
+        const QList<int> subs = getSubcollections(*m_currentCollectionIndex);
+        updateFilePathForSelection(index, subs);
+        selectItemByIndex(index, true);
+      });
+  connect(m_arrowHandler.get(), &ArrowNavigationHandler::requestRecenter, this,
+          &InteractionManager::recenterCurrentSelection);
   connect(m_arrowHandler.get(),
           &ArrowNavigationHandler::requestMinorHorizontalSuppress, this,
           &InteractionManager::applyMinorHorizontalSuppress);
-  connect(m_arrowHandler.get(),
-          &ArrowNavigationHandler::requestFocusItemsPage, this, [this]() {
+  connect(m_arrowHandler.get(), &ArrowNavigationHandler::requestFocusItemsPage,
+          this, [this]() {
             if (m_itemsPage) {
               m_itemsPage->setFocus();
             }
@@ -296,10 +301,10 @@ void InteractionManager::installEventFilters() {
 }
 
 void InteractionManager::connectSearchManagerSignals() {
-  connect(m_searchManager.get(), &SearchManager::requestClearSelection,
-          this, &InteractionManager::clearSelection);
-  connect(m_searchManager.get(), &SearchManager::requestSelectionRestore,
-          this, [this](int index) {
+  connect(m_searchManager.get(), &SearchManager::requestClearSelection, this,
+          &InteractionManager::clearSelection);
+  connect(m_searchManager.get(), &SearchManager::requestSelectionRestore, this,
+          [this](int index) {
             if (m_navigationManager) {
               m_navigationManager->scheduleSelectionRestore(
                   index, UIConstants::Selection::RESTORE_STEPS,
@@ -307,42 +312,45 @@ void InteractionManager::connectSearchManagerSignals() {
                   UIConstants::Selection::RESTORE_MAX_DELAY_MS);
             }
           });
-  connect(m_searchManager.get(), &SearchManager::requestScrollbarRecovery,
-          this, &InteractionManager::scheduleScrollbarRecovery);
+  connect(m_searchManager.get(), &SearchManager::requestScrollbarRecovery, this,
+          &InteractionManager::scheduleScrollbarRecovery);
 }
 
 void InteractionManager::connectSelectionManagerSignals() {
-  connect(m_selectionManager.get(), &SelectionManager::selectionChanged,
-          this, [this](int index) { emit selectionChanged(index); });
+  connect(m_selectionManager.get(), &SelectionManager::selectionChanged, this,
+          [this](int index) { emit selectionChanged(index); });
   connect(m_selectionManager.get(), &SelectionManager::requestFocusItemsPage,
           this, [this]() {
             if (m_itemsPage) {
               m_itemsPage->setFocus();
             }
           });
-  connect(m_selectionManager.get(), &SelectionManager::requestStopScrollAnimations,
-          this, [this]() {
-            if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
+  connect(m_selectionManager.get(),
+          &SelectionManager::requestStopScrollAnimations, this, [this]() {
+            if (m_animationManager &&
+                m_animationManager->isVerticalAnimRunning()) {
               m_animationManager->verticalAnimation()->stop();
             }
           });
   connect(m_selectionManager.get(), &SelectionManager::requestCenterVertically,
           this, &InteractionManager::centerItemVertically);
-  connect(m_selectionManager.get(), &SelectionManager::requestEnsureHorizontallyVisible,
-          this, &InteractionManager::ensureHorizontallyVisible);
-  connect(m_selectionManager.get(), &SelectionManager::requestStopRepeat,
-          this, [this]() { stopRepeat(); });
+  connect(m_selectionManager.get(),
+          &SelectionManager::requestEnsureHorizontallyVisible, this,
+          &InteractionManager::ensureHorizontallyVisible);
+  connect(m_selectionManager.get(), &SelectionManager::requestStopRepeat, this,
+          [this]() { stopRepeat(); });
 }
 
 void InteractionManager::connectKeyboardManagerSignals() {
-  connect(m_keyboardManager.get(), &KeyboardManager::requestSelectionMove,
-          this, &InteractionManager::handleArrowKeyNavigation);
-  connect(m_keyboardManager.get(), &KeyboardManager::requestAlphabeticNavigation,
-          this, &InteractionManager::handleAlphabeticNavigation);
-  connect(m_keyboardManager.get(), &KeyboardManager::requestJumpToEdge,
-          this, &InteractionManager::handleJumpToEdge);
-  connect(m_keyboardManager.get(), &KeyboardManager::requestEnterAction,
-          this, [this]() {
+  connect(m_keyboardManager.get(), &KeyboardManager::requestSelectionMove, this,
+          &InteractionManager::handleArrowKeyNavigation);
+  connect(m_keyboardManager.get(),
+          &KeyboardManager::requestAlphabeticNavigation, this,
+          &InteractionManager::handleAlphabeticNavigation);
+  connect(m_keyboardManager.get(), &KeyboardManager::requestJumpToEdge, this,
+          &InteractionManager::handleJumpToEdge);
+  connect(m_keyboardManager.get(), &KeyboardManager::requestEnterAction, this,
+          [this]() {
             if (m_scrollManager) {
               const int totalItems = m_scrollManager->getTotalItems();
               processEnterOrReturnKey(totalItems);
@@ -352,8 +360,8 @@ void InteractionManager::connectKeyboardManagerSignals() {
           this, &InteractionManager::toggleSearchMode);
   connect(m_keyboardManager.get(), &KeyboardManager::requestSearchBarFocus,
           this, [this]() { (void)handleSlashKey(); });
-  connect(m_keyboardManager.get(), &KeyboardManager::requestEscapeAction,
-          this, [this]() { (void)handleEscapeKey(); });
+  connect(m_keyboardManager.get(), &KeyboardManager::requestEscapeAction, this,
+          [this]() { (void)handleEscapeKey(); });
   connect(m_keyboardManager.get(), &KeyboardManager::requestClearSearchBar,
           this, [this]() {
             if (m_searchBar) {
@@ -361,22 +369,23 @@ void InteractionManager::connectKeyboardManagerSignals() {
               m_searchBar->clear();
             }
           });
-  connect(m_keyboardManager.get(), &KeyboardManager::requestFocusGrid,
-          this, [this]() {
+  connect(m_keyboardManager.get(), &KeyboardManager::requestFocusGrid, this,
+          [this]() {
             if (m_gridContainer) {
               m_gridContainer->setFocus(Qt::OtherFocusReason);
             }
           });
   connect(m_keyboardManager.get(), &KeyboardManager::requestScrollAnimationStop,
           this, [this]() {
-            if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
+            if (m_animationManager &&
+                m_animationManager->isVerticalAnimRunning()) {
               m_animationManager->verticalAnimation()->stop();
             }
           });
-  connect(m_keyboardManager.get(), &KeyboardManager::repeatStepRequested,
-          this, &InteractionManager::onKeyboardRepeatStep);
-  connect(m_keyboardManager.get(), &KeyboardManager::stopRepeatRequested,
-          this, &InteractionManager::onKeyboardStopRepeat);
+  connect(m_keyboardManager.get(), &KeyboardManager::repeatStepRequested, this,
+          &InteractionManager::onKeyboardRepeatStep);
+  connect(m_keyboardManager.get(), &KeyboardManager::stopRepeatRequested, this,
+          &InteractionManager::onKeyboardStopRepeat);
 }
 
 void InteractionManager::connectGamepadManagerSignals() {
@@ -384,9 +393,19 @@ void InteractionManager::connectGamepadManagerSignals() {
           [this](int direction, bool vertical) {
             int effectiveDirection = direction;
             if (vertical) {
-              const int gridWidth = getCurrentGridWidth();
-              if (gridWidth > 0 && std::abs(direction) < gridWidth) {
-                effectiveDirection = direction * gridWidth;
+              // Check if we're in list mode - don't multiply by gridWidth
+              bool isListMode = false;
+              if (CollectionUtils::isValidIndex(m_currentCollectionIndex,
+                                                m_collections)) {
+                isListMode =
+                    (*m_collections)[*m_currentCollectionIndex].viewType ==
+                    ViewType::List;
+              }
+              if (!isListMode) {
+                const int gridWidth = getCurrentGridWidth();
+                if (gridWidth > 0 && std::abs(direction) < gridWidth) {
+                  effectiveDirection = direction * gridWidth;
+                }
               }
             }
             handleArrowKeyNavigation(effectiveDirection, vertical);
@@ -416,14 +435,14 @@ void InteractionManager::connectGamepadManagerSignals() {
 }
 
 void InteractionManager::connectAnimationManagerSignals() {
-  connect(m_animationManager.get(),
-          &AnimationManager::requestVirtualViewUpdate, this, [this]() {
+  connect(m_animationManager.get(), &AnimationManager::requestVirtualViewUpdate,
+          this, [this]() {
             if (m_scrollManager) {
               m_scrollManager->updateVirtualView();
             }
           });
-  connect(m_animationManager.get(),
-          &AnimationManager::requestSelectionUpdate, this, [this]() {
+  connect(m_animationManager.get(), &AnimationManager::requestSelectionUpdate,
+          this, [this]() {
             if (m_scrollManager) {
               int idxDyn = m_state.isSelectionSuppressed()
                                ? m_state.pendingSelectionIndex()
@@ -479,7 +498,8 @@ void InteractionManager::connectMouseManagerSignals() {
                 selectItemByIndex(pending, true);
               }
             }
-            bool repeating = m_viewportManager ? m_viewportManager->isRepeating() : false;
+            bool repeating =
+                m_viewportManager ? m_viewportManager->isRepeating() : false;
             if (!repeating) {
               if (m_viewportManager) {
                 m_viewportManager->setContinuousScrollActive(false);
@@ -537,32 +557,41 @@ void InteractionManager::connectViewportManagerSignals() {
 }
 
 void InteractionManager::connectEventManagerSignals() {
-  connect(m_eventManager.get(), &EventManager::widgetDoubleClicked,
-          this, &InteractionManager::handleWidgetDoubleClickedWithCollection);
-  connect(m_eventManager.get(), &EventManager::widgetClicked,
-          this, [this](ItemWidget *widget, int visualIndex, const QPoint &clickPos, QMouseEvent *event) {
+  connect(m_eventManager.get(), &EventManager::widgetDoubleClicked, this,
+          &InteractionManager::handleWidgetDoubleClickedWithCollection);
+  connect(m_eventManager.get(), &EventManager::widgetClicked, this,
+          [this](ItemWidget *widget, int visualIndex, const QPoint &clickPos,
+                 QMouseEvent *event) {
             Q_UNUSED(widget);
             if (m_selectionManager && visualIndex >= 0) {
-              // Get previous selection BEFORE handleWidgetSelectionByIndex changes it
+              // Get previous selection BEFORE handleWidgetSelectionByIndex
+              // changes it
               const int previousSelection = currentSelectedIndex();
-              const int clickedIndex = m_selectionManager->handleWidgetSelectionByIndex(visualIndex, clickPos, event);
+              const int clickedIndex =
+                  m_selectionManager->handleWidgetSelectionByIndex(
+                      visualIndex, clickPos, event);
               if (clickedIndex >= 0 && m_mouseManager) {
                 const int gridWidth = getCurrentGridWidth();
-                const int totalItems = m_scrollManager ? m_scrollManager->getTotalItems() : 0;
-                m_mouseManager->updateClickHoldHorizontalCandidate(previousSelection, clickedIndex, gridWidth);
-                m_mouseManager->startClickHoldTimer(clickPos, clickedIndex, gridWidth, totalItems);
+                const int totalItems =
+                    m_scrollManager ? m_scrollManager->getTotalItems() : 0;
+                m_mouseManager->updateClickHoldHorizontalCandidate(
+                    previousSelection, clickedIndex, gridWidth);
+                m_mouseManager->startClickHoldTimer(clickPos, clickedIndex,
+                                                    gridWidth, totalItems);
               }
             }
           });
-  connect(m_eventManager.get(), &EventManager::clearSelectionRequested,
-          this, &InteractionManager::clearSelectionAndFocus);
-  connect(m_eventManager.get(), &EventManager::requestStopRepeat,
-          this, &InteractionManager::stopRepeat);
+  connect(m_eventManager.get(), &EventManager::clearSelectionRequested, this,
+          &InteractionManager::clearSelectionAndFocus);
+  connect(m_eventManager.get(), &EventManager::requestStopRepeat, this,
+          &InteractionManager::stopRepeat);
 }
 
 // KeyboardManager callback: handles arrow key navigation
-void InteractionManager::handleArrowKeyNavigation(int direction, bool vertical) {
-  bool restoringSelection = m_selectionManager && m_selectionManager->isRestoringSelection();
+void InteractionManager::handleArrowKeyNavigation(int direction,
+                                                  bool vertical) {
+  bool restoringSelection =
+      m_selectionManager && m_selectionManager->isRestoringSelection();
   if (restoringSelection || m_navigationInProgress) {
     return;
   }
@@ -573,7 +602,8 @@ void InteractionManager::handleArrowKeyNavigation(int direction, bool vertical) 
 
 // KeyboardManager callback: handles alphabetic navigation via PageUp/PageDown
 void InteractionManager::handleAlphabeticNavigation(bool forward) {
-  bool restoringSelection = m_selectionManager && m_selectionManager->isRestoringSelection();
+  bool restoringSelection =
+      m_selectionManager && m_selectionManager->isRestoringSelection();
   if (restoringSelection || m_navigationInProgress) {
     return;
   }
@@ -584,24 +614,25 @@ void InteractionManager::handleAlphabeticNavigation(bool forward) {
 
 // KeyboardManager callback: handles Home/End key to jump to first/last item
 void InteractionManager::handleJumpToEdge(bool toEnd) {
-  bool restoringSelection = m_selectionManager && m_selectionManager->isRestoringSelection();
+  bool restoringSelection =
+      m_selectionManager && m_selectionManager->isRestoringSelection();
   if (restoringSelection || m_navigationInProgress) {
     return;
   }
   if (!m_scrollManager) {
     return;
   }
-  
+
   const int totalItems = m_scrollManager->getTotalItems();
   if (totalItems <= 0) {
     return;
   }
-  
+
   // Stop any ongoing scroll animation
   if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
     m_animationManager->verticalAnimation()->stop();
   }
-  
+
   // Clear stale state that could interfere with immediate jump
   m_state.click().deferCenterOnClick = false;
   m_state.click().deferredCenterIndex = -1;
@@ -613,11 +644,11 @@ void InteractionManager::handleJumpToEdge(bool toEnd) {
     m_viewportManager->setContinuousScrollActive(false);
     m_viewportManager->setForceImmediateCenter(true);
   }
-  
+
   // Calculate target index: 0 for Home, last item for End
   const int targetIndex = toEnd ? (totalItems - 1) : 0;
   const int currentIndex = currentSelectedIndex();
-  
+
   if (targetIndex == currentIndex) {
     // Already at edge - just ensure it's centered
     if (m_viewportManager) {
@@ -626,24 +657,24 @@ void InteractionManager::handleJumpToEdge(bool toEnd) {
     }
     return;
   }
-  
+
   // Set selection directly without triggering additional centering logic
   if (m_selectionManager) {
     m_selectionManager->setSelectedIndex(targetIndex);
   }
-  
+
   // Center immediately on the target
   if (m_viewportManager) {
     m_viewportManager->centerItemVertically(targetIndex, true);
     m_viewportManager->setForceImmediateCenter(false);
   }
-  
+
   // Update virtual view and selection overlay
   if (m_scrollManager) {
     m_scrollManager->updateVirtualView();
     m_scrollManager->updateSelectionForIndex(targetIndex);
   }
-  
+
   emit selectionChanged(targetIndex);
 }
 
@@ -669,9 +700,9 @@ auto InteractionManager::handleGlobalKeyPress(QKeyEvent *event) -> bool {
   }
 
   const int searchKey = m_generalSettings ? m_generalSettings->keySearch
-                                         : static_cast<int>(Qt::Key_Slash);
+                                          : static_cast<int>(Qt::Key_Slash);
   const int backKey = m_generalSettings ? m_generalSettings->keyBack
-                                       : static_cast<int>(Qt::Key_Escape);
+                                        : static_cast<int>(Qt::Key_Escape);
 
   if (event->key() == searchKey) {
     return handleSlashKey();
@@ -683,17 +714,18 @@ auto InteractionManager::handleGlobalKeyPress(QKeyEvent *event) -> bool {
 }
 
 // Focuses the search bar and selects all text when '/' is pressed.
-// If the search bar already has focus and is empty, toggles search mode instead.
+// If the search bar already has focus and is empty, toggles search mode
+// instead.
 auto InteractionManager::handleSlashKey() -> bool {
   if (!m_searchBar || !m_searchBar->isVisible()) {
     return false;
   }
-  
+
   if (m_searchBar->hasFocus() && m_searchBar->text().trimmed().isEmpty()) {
     toggleSearchMode();
     return true;
   }
-  
+
   m_searchBar->setFocus(Qt::ShortcutFocusReason);
   m_searchBar->selectAll();
   return true;
@@ -703,10 +735,15 @@ auto InteractionManager::handleSlashKey() -> bool {
 // collection when possible. If search bar is focused and empty, returns focus
 // to the grid.
 auto InteractionManager::handleEscapeKey() -> bool {
+  // First check if artwork preview overlay is open - close it and return
+  if (m_scrollManager && m_scrollManager->hideArtworkPreview()) {
+    return true;
+  }
+
   const QString current =
       (m_searchBar ? m_searchBar->text().trimmed() : QString());
   const bool searchBarFocused = (m_searchBar && m_searchBar->hasFocus());
-  
+
   if (!current.isEmpty()) {
     if (m_searchBar) {
       m_state.search().clearedByEscape = true;
@@ -715,7 +752,7 @@ auto InteractionManager::handleEscapeKey() -> bool {
     }
     return true;
   }
-  
+
   // If search bar is focused but empty, return focus to grid
   if (searchBarFocused) {
     if (m_gridContainer) {
@@ -726,10 +763,9 @@ auto InteractionManager::handleEscapeKey() -> bool {
 
   const int collIndex =
       (m_currentCollectionIndex ? *m_currentCollectionIndex : -1);
-  if (m_collections && collIndex >= 0 &&
-      collIndex < m_collections->size()) {
+  if (m_collections && collIndex >= 0 && collIndex < m_collections->size()) {
     const CollectionConfig &cfg = (*m_collections)[collIndex];
-    
+
     // First check if we're in a virtual subfolder - go back one level
     if (!cfg.currentSubfolder.isEmpty()) {
       if (m_navigationManager) {
@@ -737,7 +773,7 @@ auto InteractionManager::handleEscapeKey() -> bool {
       }
       return true;
     }
-    
+
     // Then check if we're in a subcollection - go to parent
     if (cfg.isSubcollection && cfg.parentCollectionIndex >= 0 &&
         cfg.parentCollectionIndex < m_collections->size()) {
@@ -811,11 +847,11 @@ auto InteractionManager::resolveOwnerForPath(const QString &path) const -> int {
 
 // Helper: fallback collection index based on current selection or view
 auto InteractionManager::getFallbackCollectionIndex() const -> int {
-  QString selectedPath = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+  QString selectedPath =
+      m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
   if (!selectedPath.isEmpty()) {
     if (m_databaseManager) {
-      int owner =
-          m_databaseManager->getCollectionIndexForFile(selectedPath);
+      int owner = m_databaseManager->getCollectionIndexForFile(selectedPath);
       if (owner >= 0) {
         return owner;
       }
@@ -831,7 +867,8 @@ auto InteractionManager::getFallbackCollectionIndex() const -> int {
 void InteractionManager::handleWidgetDoubleClickedWithCollection(
     const QString &filePath, int collectionIndex) {
   // Delegate debounce check to LaunchManager
-  if (m_launchManager && !filePath.isEmpty() && !m_launchManager->canLaunch(filePath)) {
+  if (m_launchManager && !filePath.isEmpty() &&
+      !m_launchManager->canLaunch(filePath)) {
     return;
   }
 
@@ -861,7 +898,8 @@ void InteractionManager::handleWidgetDoubleClickedWithCollection(
     return;
   }
   const int fallbackIdx = getFallbackCollectionIndex();
-  QString selectedPath = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+  QString selectedPath =
+      m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
   if (fallbackIdx >= 0 && !selectedPath.isEmpty()) {
     launchItemWithCollection(selectedPath, fallbackIdx);
   }
@@ -915,11 +953,13 @@ void InteractionManager::setSelectedMediaItem(ItemWidget *widget) {
 }
 
 auto InteractionManager::selectedFilePath() const -> QString {
-  return m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+  return m_selectionManager ? m_selectionManager->selectedFilePath()
+                            : QString();
 }
 
 auto InteractionManager::isRestoringSelection() const -> bool {
-  return m_selectionManager ? m_selectionManager->isRestoringSelection() : false;
+  return m_selectionManager ? m_selectionManager->isRestoringSelection()
+                            : false;
 }
 
 auto InteractionManager::targetRestoreIndex() const -> int {
@@ -957,15 +997,16 @@ auto InteractionManager::processEnterOrReturnKey(int totalItems) -> bool {
   if (currentSelection < subs.size()) {
     return handleEnterOnSubcollection(currentSelection, subs);
   }
-  
+
   // Check if this is a virtual folder
   if (m_scrollManager) {
-    QString folderPath = m_scrollManager->virtualFolderPathForVisualIndex(currentSelection);
+    QString folderPath =
+        m_scrollManager->virtualFolderPathForVisualIndex(currentSelection);
     if (!folderPath.isEmpty()) {
       return handleEnterOnVirtualFolder(folderPath);
     }
   }
-  
+
   return handleEnterOnItem(currentSelection, totalItems);
 }
 
@@ -992,8 +1033,8 @@ auto InteractionManager::handleEnterOnSubcollection(int currentSelection,
         m_itemsPage->setFocus();
       }
     } else {
-      // Delay horizontal centering until after subcollection navigation animations
-      // complete and layout is stable
+      // Delay horizontal centering until after subcollection navigation
+      // animations complete and layout is stable
       constexpr int kHorizontalCenterDelayMs = 600;
       QTimer::singleShot(kHorizontalCenterDelayMs, this, [this]() {
         if (!QApplication::closingDown() && m_scrollManager) {
@@ -1006,7 +1047,8 @@ auto InteractionManager::handleEnterOnSubcollection(int currentSelection,
   return true;
 }
 
-auto InteractionManager::handleEnterOnVirtualFolder(const QString &folderPath) -> bool {
+auto InteractionManager::handleEnterOnVirtualFolder(const QString &folderPath)
+    -> bool {
   if (m_navigationManager) {
     m_navigationManager->onVirtualFolderEntered(folderPath);
   }
@@ -1015,7 +1057,8 @@ auto InteractionManager::handleEnterOnVirtualFolder(const QString &folderPath) -
 
 auto InteractionManager::handleEnterOnItem(int currentSelection,
                                            int /*totalItems*/) -> bool {
-  QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+  QString path =
+      m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
   if (path.isEmpty() && (m_scrollManager)) {
     path = m_scrollManager->filePathForVisualIndex(currentSelection);
   }
@@ -1049,8 +1092,9 @@ auto InteractionManager::isItemOffscreen(int selection, int gridWidth) const
   int logicalItemY = GridUtils::computeItemY(
       selection, gridWidth, collection.itemHeight, collection.verticalSpacing,
       UIConstants::Grid::MARGINS);
-  
-  // Convert widget scroll position to logical for visibility check in clipped grids
+
+  // Convert widget scroll position to logical for visibility check in clipped
+  // grids
   int logicalVisibleTop = vbar->value();
   if (m_scrollManager) {
     const auto &metrics = m_scrollManager->getMetrics();
@@ -1067,11 +1111,11 @@ void InteractionManager::applyMinorHorizontalSuppress() {
   constexpr qint64 kMinorHorizSuppressMs = 220;
   constexpr int kMinorHorizSuppressClearMs = 240;
   m_state.suppressArrowCenterFor(kMinorHorizSuppressMs);
-  // Clear arrow center suppression slightly after the suppression window expires -
-  // ensures horizontal navigation completes before vertical centering resumes
-  QTimer::singleShot(kMinorHorizSuppressClearMs, this, [this]() {
-    m_state.clearArrowCenterSuppression();
-  });
+  // Clear arrow center suppression slightly after the suppression window
+  // expires - ensures horizontal navigation completes before vertical centering
+  // resumes
+  QTimer::singleShot(kMinorHorizSuppressClearMs, this,
+                     [this]() { m_state.clearArrowCenterSuppression(); });
 }
 
 void InteractionManager::setPendingSelectionIfNeeded(bool condition,
@@ -1120,6 +1164,14 @@ void InteractionManager::ensureItemVisible(int index,
   }
 }
 
+void InteractionManager::applyImmediateViewportPositioningForSelection(
+    int targetIndex) {
+  if (m_viewportManager) {
+    m_viewportManager->applyImmediateViewportPositioningForSelection(
+        targetIndex);
+  }
+}
+
 void InteractionManager::selectItemByIndex(int index,
                                            bool allowHorizontalScroll) {
   Q_UNUSED(allowHorizontalScroll);
@@ -1143,12 +1195,10 @@ void InteractionManager::selectItemByIndex(int index,
     m_state.scroll().userFreeScroll = false;
   }
 
-  ItemWidget *widget = m_selectionManager
-      ? m_selectionManager->widgetForIndex(index)
-      : nullptr;
-  bool suppressed =
-      m_state.click().selectionSuppressed &&
-      m_state.click().pendingSelectionIndex == index;
+  ItemWidget *widget =
+      m_selectionManager ? m_selectionManager->widgetForIndex(index) : nullptr;
+  bool suppressed = m_state.click().selectionSuppressed &&
+                    m_state.click().pendingSelectionIndex == index;
   bool skipCenter = m_state.click().suppressInitialClickCenter;
 
   if (widget) {
@@ -1183,16 +1233,14 @@ void InteractionManager::selectItemByIndex(int index,
 
 void InteractionManager::persistSuppressedSelectionAndMaybeCenter(
     int index, const QList<int> &subcollections, bool skipCenter) {
-  bool deferCenter =
-      m_state.click().deferCenterOnClick &&
-      m_state.click().deferredCenterIndex == index;
+  bool deferCenter = m_state.click().deferCenterOnClick &&
+                     m_state.click().deferredCenterIndex == index;
   if (!deferCenter && !skipCenter) {
     centerItemVertically(index, false);
   }
-  int curColl =
-      ((m_currentCollectionIndex) ? *m_currentCollectionIndex : -1);
-  if (m_collections && curColl >= 0 &&
-      curColl < m_collections->size() && m_selectionManager) {
+  int curColl = ((m_currentCollectionIndex) ? *m_currentCollectionIndex : -1);
+  if (m_collections && curColl >= 0 && curColl < m_collections->size() &&
+      m_selectionManager) {
     QString title = m_selectionManager->titleForIndex(index, subcollections);
     m_selectionManager->persistSelection(curColl, index, title);
   }
@@ -1242,9 +1290,8 @@ void InteractionManager::trySelectWidget(int index,
     return;
   }
 
-  ItemWidget *widget = m_selectionManager
-      ? m_selectionManager->widgetForIndex(index)
-      : nullptr;
+  ItemWidget *widget =
+      m_selectionManager ? m_selectionManager->widgetForIndex(index) : nullptr;
 
   if (widget) {
     if (m_selectionManager) {
@@ -1282,7 +1329,8 @@ void InteractionManager::toggleSearchMode() {
   // Do not reload or change the grid when search text is empty.
   // Only reapply results if the user has entered text.
   if ((m_searchBar) && !m_searchBar->text().trimmed().isEmpty()) {
-    m_searchManager->onSearchTextChanged(m_searchBar->text(), currentSelectedIndex());
+    m_searchManager->onSearchTextChanged(m_searchBar->text(),
+                                         currentSelectedIndex());
   }
 }
 
@@ -1311,7 +1359,8 @@ void InteractionManager::updateSearchBarPlaceholder() {
 // Restores selection instantly, ensures viewport positioning, and updates
 // sidebar metadata
 void InteractionManager::beginSelectionRestore(int targetIndex) {
-  debugLog("[SelectionRestore] beginSelectionRestore: targetIndex=" << targetIndex);
+  debugLog(
+      "[SelectionRestore] beginSelectionRestore: targetIndex=" << targetIndex);
   if (targetIndex < 0) {
     return;
   }
@@ -1319,7 +1368,8 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
   // Check if user has made an explicit selection since navigation started -
   // if so, don't override their choice with automatic restore
   if (m_state.selectionRestore().userSelectionMade) {
-    debugLog("[SelectionRestore] Skipping restore - user made explicit selection");
+    debugLog(
+        "[SelectionRestore] Skipping restore - user made explicit selection");
     return;
   }
 
@@ -1327,7 +1377,8 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
   if (m_selectionManager) {
     m_selectionManager->prepareForRestore(targetIndex);
     if (m_viewportManager) {
-      m_viewportManager->setForceImmediateCenter(m_selectionManager->forceImmediateCenter());
+      m_viewportManager->setForceImmediateCenter(
+          m_selectionManager->forceImmediateCenter());
     }
   }
 
@@ -1338,7 +1389,8 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
 
   applySelectionStateForIndex(targetIndex);
   if (m_viewportManager) {
-    m_viewportManager->applyImmediateViewportPositioningForSelection(targetIndex);
+    m_viewportManager->applyImmediateViewportPositioningForSelection(
+        targetIndex);
   }
   selectItemByIndex(targetIndex, false);
 
@@ -1351,7 +1403,8 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
   if (m_selectionManager) {
     m_selectionManager->finalizeRestore();
     if (m_viewportManager) {
-      m_viewportManager->setForceImmediateCenter(m_selectionManager->forceImmediateCenter());
+      m_viewportManager->setForceImmediateCenter(
+          m_selectionManager->forceImmediateCenter());
     }
   }
 
@@ -1398,10 +1451,8 @@ void InteractionManager::finalizeRestoreFlagsAndFocus() {
   }
   // Clear arrow center suppression after restore completes - ensures the
   // selection is fully visible before allowing subsequent centering operations
-  QTimer::singleShot(UIConstants::Keyboard::ARROW_CENTER_CLEAR_AFTER_RESTORE_MS, this,
-                     [this]() {
-                       m_state.clearArrowCenterSuppression();
-                     });
+  QTimer::singleShot(UIConstants::Keyboard::ARROW_CENTER_CLEAR_AFTER_RESTORE_MS,
+                     this, [this]() { m_state.clearArrowCenterSuppression(); });
 }
 
 void InteractionManager::scheduleSidebarMetadataUpdateIfVisible(
@@ -1418,9 +1469,8 @@ void InteractionManager::scheduleSidebarMetadataUpdateIfVisible(
       if (!guard->m_sidebarManager->isSidebarVisible()) {
         return;
       }
-      ItemWidget *itemWidget =
-          guard->m_scrollManager->getActiveWidgets().value(targetIndex,
-                                                           nullptr);
+      ItemWidget *itemWidget = guard->m_scrollManager->getActiveWidgets().value(
+          targetIndex, nullptr);
       if (itemWidget) {
         guard->m_sidebarManager->updateSidebarMetadata(itemWidget);
       }
@@ -1446,8 +1496,8 @@ struct ResetClearedFlag {
 // Schedules repeated attempts plus a layout-complete hook to restore vertical
 // scrollbar visibility after clearing search
 void InteractionManager::scheduleScrollbarRecovery() {
-  if (!m_itemScrollArea || !m_scrollManager ||
-      !m_collections || !m_currentCollectionIndex) {
+  if (!m_itemScrollArea || !m_scrollManager || !m_collections ||
+      !m_currentCollectionIndex) {
     return;
   }
   int idx = *m_currentCollectionIndex;
@@ -1464,8 +1514,7 @@ void InteractionManager::scheduleScrollbarRecovery() {
     if (!guard) {
       return;
     }
-    if (!guard->m_scrollManager ||
-        !guard->m_itemScrollArea) {
+    if (!guard->m_scrollManager || !guard->m_itemScrollArea) {
       return;
     }
     guard->m_scrollManager->recalculateContainerMetrics();
@@ -1483,12 +1532,12 @@ void InteractionManager::scheduleScrollbarRecovery() {
   attempt();
   // Retry scrollbar recovery at increasing intervals - handles race conditions
   // where the scrollbar maximum isn't set immediately after collection load
-  QTimer::singleShot(UIConstants::Navigation::SCROLLBAR_RECOVERY_ATTEMPT_1_MS, this,
-                     attempt);
-  QTimer::singleShot(UIConstants::Navigation::SCROLLBAR_RECOVERY_ATTEMPT_2_MS, this,
-                     attempt);
-  QTimer::singleShot(UIConstants::Navigation::SCROLLBAR_RECOVERY_ATTEMPT_3_MS, this,
-                     attempt);
+  QTimer::singleShot(UIConstants::Navigation::SCROLLBAR_RECOVERY_ATTEMPT_1_MS,
+                     this, attempt);
+  QTimer::singleShot(UIConstants::Navigation::SCROLLBAR_RECOVERY_ATTEMPT_2_MS,
+                     this, attempt);
+  QTimer::singleShot(UIConstants::Navigation::SCROLLBAR_RECOVERY_ATTEMPT_3_MS,
+                     this, attempt);
 
   if (!m_scrollbarRecoveryConn) {
     m_scrollbarRecoveryConn = QObject::connect(
@@ -1593,14 +1642,14 @@ void InteractionManager::stopRepeat(bool suppressRecentering) {
   }
 
   const int selected = currentSelectedIndex();
-  if (!QApplication::closingDown() && selected >= 0 &&
-      !suppressRecentering) {
-    // Delay re-centering to allow scroll animations to settle after key repeat stops
+  if (!QApplication::closingDown() && selected >= 0 && !suppressRecentering) {
+    // Delay re-centering to allow scroll animations to settle after key repeat
+    // stops
     QTimer::singleShot(
         UIConstants::Mouse::STOP_REPEAT_RECENTER_DELAY_MS, this, [this]() {
           const int sel = currentSelectedIndex();
-          if (!QApplication::closingDown() && sel >= 0 &&
-              m_viewportManager && !m_viewportManager->continuousScrollActive()) {
+          if (!QApplication::closingDown() && sel >= 0 && m_viewportManager &&
+              !m_viewportManager->continuousScrollActive()) {
             centerItemVertically(sel, false);
           }
         });
@@ -1611,10 +1660,11 @@ auto InteractionManager::isWheelScrolling() const -> bool {
   return m_mouseManager ? m_mouseManager->isWheelScrolling() : false;
 }
 
-// Advances selection during mouse-hold scrolling (called via MouseManager signal)
-void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal) {
-  if (!m_scrollManager || !m_collections ||
-      !m_currentCollectionIndex) {
+// Advances selection during mouse-hold scrolling (called via MouseManager
+// signal)
+void InteractionManager::onMouseHoldScrollStep(int direction,
+                                               bool isHorizontal) {
+  if (!m_scrollManager || !m_collections || !m_currentCollectionIndex) {
     if (m_mouseManager) {
       m_mouseManager->stopMouseHoldScrolling();
     }
@@ -1639,9 +1689,7 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
 
   if (isHorizontal) {
     int currentIndex = std::max(0, currentSelectedIndex());
-    bool wrap = m_generalSettings
-                    ? m_generalSettings->wrapNavigation
-                    : false;
+    bool wrap = m_generalSettings ? m_generalSettings->wrapNavigation : false;
     bool didWrap = false;
     int nextIndex = KeyboardManager::calculateHorizontalSelection(
         totalItems, currentIndex, direction, wrap, didWrap);
@@ -1655,7 +1703,8 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
         m_viewportManager->setForceImmediateCenter(true);
         m_viewportManager->setWrapSequenceActive(true);
         m_viewportManager->setContinuousScrollActive(false);
-        // Clear any pending selection on wrap - the wrap jump is the final position
+        // Clear any pending selection on wrap - the wrap jump is the final
+        // position
         m_state.click().selectionSuppressed = false;
         m_state.click().pendingSelectionIndex = -1;
       } else {
@@ -1663,14 +1712,16 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
       }
     }
 
-    bool rowChanged = KeyboardManager::hasRowChanged(gridWidth, currentIndex, nextIndex);
+    bool rowChanged =
+        KeyboardManager::hasRowChanged(gridWidth, currentIndex, nextIndex);
     // Only suppress selection for row changes if NOT wrapping
     // Wraps should immediately finalize at the target position
     if (rowChanged && !didWrap) {
       m_state.click().selectionSuppressed = true;
     }
     // Always update pending index to current position during horizontal hold
-    // so releasing the mouse lands on the current item, not the first item after row change
+    // so releasing the mouse lands on the current item, not the first item
+    // after row change
     if (m_state.click().selectionSuppressed) {
       m_state.click().pendingSelectionIndex = nextIndex;
     }
@@ -1680,11 +1731,12 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
     }
     QList<int> subs = getSubcollections(*m_currentCollectionIndex);
     updateFilePathForSelection(nextIndex, subs);
-    
-    // Set properties before selectItemByIndex so the selection update knows we're in hold mode
+
+    // Set properties before selectItemByIndex so the selection update knows
+    // we're in hold mode
     m_state.scroll().clickScroll = true;
     m_state.scroll().clickHoldAdvancing = true;
-    
+
     // selectItemByIndex will call updateSelectionForIndex internally
     selectItemByIndex(nextIndex, true);
 
@@ -1698,11 +1750,17 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
 
   // Vertical scrolling
   int currentIndex = std::max(0, currentSelectedIndex());
-  int nextIndex = currentIndex + (direction * gridWidth);
 
-  bool wrap = m_generalSettings
-                  ? m_generalSettings->wrapNavigation
-                  : false;
+  // In list mode, move by 1 item per step instead of gridWidth
+  bool isListMode = false;
+  if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+    isListMode =
+        (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
+  }
+  int stepSize = isListMode ? 1 : gridWidth;
+  int nextIndex = currentIndex + (direction * stepSize);
+
+  bool wrap = m_generalSettings ? m_generalSettings->wrapNavigation : false;
   bool didWrap = false;
 
   if (wrap) {
@@ -1749,11 +1807,12 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
   }
   QList<int> subs = getSubcollections(*m_currentCollectionIndex);
   updateFilePathForSelection(nextIndex, subs);
-  
-  // Set properties before selectItemByIndex so the selection update knows we're in hold mode
+
+  // Set properties before selectItemByIndex so the selection update knows we're
+  // in hold mode
   m_state.scroll().clickScroll = true;
   m_state.scroll().clickHoldAdvancing = true;
-  
+
   // selectItemByIndex will call updateSelectionForIndex internally
   selectItemByIndex(nextIndex, true);
 
@@ -1764,12 +1823,12 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
 // key for user-free-scroll
 void InteractionManager::handleSuccessfulSelection(int index) {
   m_state.scroll().userFreeScroll = false;
-  
+
   bool restoringMatch = false;
   if (m_selectionManager) {
     restoringMatch = m_selectionManager->checkAndFinalizeRestore(index);
   }
-  
+
   if ((m_isShuttingDown) && *m_isShuttingDown) {
     return;
   }
@@ -1783,7 +1842,9 @@ void InteractionManager::handleSuccessfulSelection(int index) {
     return;
   }
 
-  bool immediate = (m_viewportManager && m_viewportManager->forceImmediateCenter()) || restoringMatch;
+  bool immediate =
+      (m_viewportManager && m_viewportManager->forceImmediateCenter()) ||
+      restoringMatch;
   centerItemVertically(index, immediate);
   if (m_scrollManager) {
     m_scrollManager->updateVirtualView();
@@ -1800,7 +1861,8 @@ auto InteractionManager::titleForIndexInColl(int coll, int idx) const
     }
     return {};
   }
-  QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+  QString path =
+      m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
   if (path.isEmpty() && (m_scrollManager)) {
     path = m_scrollManager->filePathForVisualIndex(idx);
   }
@@ -1820,7 +1882,8 @@ void InteractionManager::persistSelectionForIndex(int coll, int idx) {
   QString sessionKey = CollectionUtils::selectionSessionKeyFor(
       (*m_collections)[coll], *m_collections);
   QString title;
-  QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+  QString path =
+      m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
   if (path.isEmpty() && (m_scrollManager)) {
     path = m_scrollManager->filePathForVisualIndex(idx);
   }
@@ -1856,9 +1919,11 @@ void InteractionManager::resetSelectionRestoreState() {
 
 void InteractionManager::stopScrollAnimations() {
   // Prevent stale scroll animations from applying after a view rebuild
-  // (e.g., entering a virtual subfolder while wheel scrolling is still animating).
+  // (e.g., entering a virtual subfolder while wheel scrolling is still
+  // animating).
   if (m_itemScrollArea && m_itemScrollArea->verticalScrollBar()) {
-    AnimationManager::stopArrowKeyAnimationIfRunning(m_itemScrollArea->verticalScrollBar());
+    AnimationManager::stopArrowKeyAnimationIfRunning(
+        m_itemScrollArea->verticalScrollBar());
   }
   if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
     m_animationManager->verticalAnimation()->stop();

@@ -16,7 +16,7 @@ struct LaunchManagerSetup {
 
   QList<CollectionConfig> *collections = nullptr;
 
-  SETUP_GETTER_DECL(QList<CollectionConfig>*, Collections)
+  SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
 };
 
 struct LaunchCommand {
@@ -42,22 +42,26 @@ public:
   /// This is a pure helper used by launchItem() and unit tests. It does NOT
   /// validate that the launcher exists/is executable (use validateLauncherPath
   /// for that); it only constructs and validates the argument semantics.
-  [[nodiscard]] static ErrorUtils::Result<LaunchCommand> buildLaunchCommand(
-      const CollectionConfig &collection, const QString &filePath);
+  [[nodiscard]] static ErrorUtils::Result<LaunchCommand>
+  buildLaunchCommand(const CollectionConfig &collection,
+                     const QString &filePath);
 
   /// Parses command-line parameters handling quoted strings
   /// Returns error if quotes are unclosed (potential injection vector)
-  [[nodiscard]] static ErrorUtils::Result<QStringList> parseParameters(const QString &paramString);
+  [[nodiscard]] static ErrorUtils::Result<QStringList>
+  parseParameters(const QString &paramString);
 
   /// Validates a launcher path for security and resolves it to an absolute,
   /// canonical executable path.
   ///
   /// If the given path is not absolute, it is treated as a command name and
   /// resolved via PATH.
-  [[nodiscard]] static ErrorUtils::Result<QString> validateLauncherPath(const QString &path);
+  [[nodiscard]] static ErrorUtils::Result<QString>
+  validateLauncherPath(const QString &path);
 
   /// Validates that a path doesn't contain shell metacharacters or traversal
-  [[nodiscard]] static ErrorUtils::Result<void> validatePathSecurity(const QString &path);
+  [[nodiscard]] static ErrorUtils::Result<void>
+  validatePathSecurity(const QString &path);
 
   /// Checks if launch is allowed (debounce guard)
   [[nodiscard]] bool canLaunch(const QString &filePath) const;
@@ -67,12 +71,13 @@ public:
 
   /// Checks if a file path is a supported archive format
   [[nodiscard]] static bool isArchiveFile(const QString &filePath);
-  
+
   /// Extracts an archive to a temporary directory and returns the path to the
   /// target file matching the specified extension
-  [[nodiscard]] static ErrorUtils::Result<QString> extractArchiveToTemp(
-      const QString &archivePath, const QString &targetExtension);
-  
+  [[nodiscard]] static ErrorUtils::Result<QString>
+  extractArchiveToTemp(const QString &archivePath,
+                       const QString &targetExtension);
+
   /// Finds a file with the given extension in a directory (recursive)
   [[nodiscard]] static QString findFileWithExtension(const QString &directory,
                                                      const QString &extension);

@@ -29,7 +29,7 @@ TimerUtils::DebouncedTimer::~DebouncedTimer() {
 
 void TimerUtils::DebouncedTimer::trigger() {
   if (m_timer) {
-    m_timer->start();  // Restarts timer, extending the debounce window
+    m_timer->start(); // Restarts timer, extending the debounce window
   }
 }
 
@@ -137,7 +137,7 @@ void TimerUtils::Coordinator::onViewportTimerTimeout() {
 
 // Stops a list of timers
 void TimerUtils::stopTimers(const QList<QTimer *> &timers) {
-  for (QTimer *timerPtr : timers) {
+  for (QTimer *const timerPtr : timers) {
     if ((timerPtr) && timerPtr->isActive()) {
       timerPtr->stop();
     }
@@ -146,7 +146,7 @@ void TimerUtils::stopTimers(const QList<QTimer *> &timers) {
 
 // Disconnects a list of timers
 void TimerUtils::disconnectTimers(const QList<QTimer *> &timers) {
-  for (QTimer *timerPtr : timers) {
+  for (const QTimer *const timerPtr : timers) {
     if (timerPtr) {
       QObject::disconnect(timerPtr, nullptr, nullptr, nullptr);
     }

@@ -1,10 +1,10 @@
 #ifndef ALPHABETICNAVIGATIONHANDLER_H
 #define ALPHABETICNAVIGATIONHANDLER_H
 
+#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QStringList>
-#include <QHash>
 #include <functional>
 
 class ScrollManager;
@@ -30,11 +30,14 @@ public:
 
   // Dependencies
   void setScrollManager(ScrollManager *manager) { m_scrollManager = manager; }
-  void setSelectionManager(SelectionManager *manager) { m_selectionManager = manager; }
+  void setSelectionManager(SelectionManager *manager) {
+    m_selectionManager = manager;
+  }
 
   /**
    * @brief Navigate to the next letter (PageDown) or previous letter (PageUp).
-   * @param forward true for next letter (PageDown), false for previous (PageUp).
+   * @param forward true for next letter (PageDown), false for previous
+   * (PageUp).
    * @return The new selection index, or -1 if no navigation occurred.
    */
   [[nodiscard]] int navigateToNextLetter(bool forward);

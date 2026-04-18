@@ -33,14 +33,14 @@ struct MouseManagerSetup {
   const int *currentCollectionIndex = nullptr;
   GeneralSettings *generalSettings = nullptr;
 
-  SETUP_GETTER_DECL(ScrollManager*, ScrollManager)
-  SETUP_GETTER_DECL(SelectionManager*, SelectionManager)
-  SETUP_GETTER_DECL(QScrollArea*, ItemScrollArea)
-  SETUP_GETTER_DECL(QWidget*, GridContainer)
-  SETUP_GETTER_DECL(const QVector<CollectionConfig>*, Collections)
-  SETUP_GETTER_DECL(const int*, CurrentCollectionIndex)
-  SETUP_GETTER_DECL(GeneralSettings*, GeneralSettings)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder*, InteractionState)
+  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
+  SETUP_GETTER_DECL(SelectionManager *, SelectionManager)
+  SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
+  SETUP_GETTER_DECL(QWidget *, GridContainer)
+  SETUP_GETTER_DECL(const QVector<CollectionConfig> *, Collections)
+  SETUP_GETTER_DECL(const int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(GeneralSettings *, GeneralSettings)
+  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
 };
 
 /// Manages mouse hold scrolling behavior for click-and-hold navigation.
@@ -55,10 +55,14 @@ public:
   void setupReferences(const MouseManagerSetup &setup);
 
   // --- State Queries ---
-  [[nodiscard]] bool isMouseHoldScrolling() const { return m_mouseHoldScrolling; }
+  [[nodiscard]] bool isMouseHoldScrolling() const {
+    return m_mouseHoldScrolling;
+  }
   [[nodiscard]] bool isHorizontalMode() const { return m_mouseHoldHorizontal; }
   [[nodiscard]] int holdDirection() const { return m_mouseHoldDirection; }
-  [[nodiscard]] int horizontalDirection() const { return m_mouseHoldHorizontalDirection; }
+  [[nodiscard]] int horizontalDirection() const {
+    return m_mouseHoldHorizontalDirection;
+  }
   [[nodiscard]] bool isLeftMouseDown() const { return m_leftMouseDown; }
   [[nodiscard]] bool isWheelScrolling() const { return m_wheelScrolling; }
 
@@ -86,8 +90,7 @@ public:
   // --- Click Hold Horizontal Candidate ---
   /// Updates horizontal hold candidate based on click selection change
   void updateClickHoldHorizontalCandidate(int previousSelection,
-                                          int targetSelection,
-                                          int gridWidth);
+                                          int targetSelection, int gridWidth);
 
   /// Clears the horizontal hold candidate state
   void clearHorizontalCandidate();
@@ -99,23 +102,22 @@ public:
 
   /// Attempts to start horizontal click hold mode
   /// Returns true if horizontal hold was started
-  [[nodiscard]] bool tryStartHorizontalClickHold(int totalItems, int selectedItemIndex);
+  [[nodiscard]] bool tryStartHorizontalClickHold(int totalItems,
+                                                 int selectedItemIndex);
 
   /// Stops mouse hold scrolling
   void stopMouseHoldScrolling();
 
   // --- Widget Finding Utilities (static) ---
-  /// Finds the best widget at the given click position and returns its visual index
-  /// Returns {widget, visualIndex} pair; visualIndex is -1 if not found
-  static std::pair<ItemWidget *, int> findBestWidgetForClick(
-      const QPoint &clickPos,
-      ScrollManager *scrollManager,
-      QWidget *gridContainer);
+  /// Finds the best widget at the given click position and returns its visual
+  /// index Returns {widget, visualIndex} pair; visualIndex is -1 if not found
+  static std::pair<ItemWidget *, int>
+  findBestWidgetForClick(const QPoint &clickPos, ScrollManager *scrollManager,
+                         QWidget *gridContainer);
 
   /// Finds the closest widget to the click position from candidates
-  static ItemWidget *findClosestWidget(
-      const QVector<ItemWidget *> &candidates,
-      const QPoint &clickPos);
+  static ItemWidget *findClosestWidget(const QVector<ItemWidget *> &candidates,
+                                       const QPoint &clickPos);
 
 signals:
   /// Emitted when a scroll step should advance selection
@@ -147,7 +149,8 @@ private slots:
 
 private:
   /// Computes vertical scroll direction based on selected item position
-  [[nodiscard]] int computeVerticalDirection(int selectedItemIndex, int gridWidth) const;
+  [[nodiscard]] int computeVerticalDirection(int selectedItemIndex,
+                                             int gridWidth) const;
 
   // References (not owned)
   ScrollManager *m_scrollManager = nullptr;

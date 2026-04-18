@@ -4,16 +4,18 @@
 #include <algorithm>
 
 auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config,
-                                             int totalItems) -> GridMetrics {
+                                            int totalItems) -> GridMetrics {
   GridMetrics metrics;
-  
+
   // List mode uses different dimensions: full width, single row height
   bool isListMode = (config.viewType == ViewType::List);
-  
+
   if (isListMode) {
-    // List mode: full width items, fixed row height, 1 item per row
-    metrics.itemWidth = config.itemWidth;  // Will be set to viewport width by caller
-    metrics.itemHeight = UIConstants::ListView::DEFAULT_ROW_HEIGHT;
+    // List mode: full width items, custom or default row height, 1 item per row
+    metrics.itemWidth =
+        config.itemWidth; // Will be set to viewport width by caller
+    metrics.itemHeight =
+        config.listRowHeight; // Use custom row height from config
     metrics.itemsPerRow = 1;  // List is always single column
     metrics.horizontalSpacing = 0;
     metrics.verticalSpacing = UIConstants::ListView::ROW_SPACING;
@@ -27,22 +29,21 @@ auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config,
     metrics.verticalSpacing = config.verticalSpacing;
     metrics.headerOffset = 0;
   }
-  
+
   metrics.margins = UIConstants::Grid::MARGINS;
 
   GridUtils::calculateGridMetrics(
-      totalItems, metrics.itemsPerRow, metrics.itemWidth,
-      metrics.itemHeight, metrics.horizontalSpacing,
-      metrics.verticalSpacing, metrics.margins, metrics.totalWidth,
-      metrics.totalHeight, metrics.actualGridWidth,
+      totalItems, metrics.itemsPerRow, metrics.itemWidth, metrics.itemHeight,
+      metrics.horizontalSpacing, metrics.verticalSpacing, metrics.margins,
+      metrics.totalWidth, metrics.totalHeight, metrics.actualGridWidth,
       metrics.logicalHeight, metrics.scrollScale, metrics.isClipped);
-  
+
   // Add header offset to total height in list mode
   if (metrics.headerOffset > 0) {
     metrics.totalHeight += metrics.headerOffset;
     metrics.logicalHeight += metrics.headerOffset;
   }
-  
+
   if (metrics.isClipped) {
     metrics.overflowAmount = metrics.logicalHeight - metrics.totalHeight;
   }
@@ -54,28 +55,31 @@ auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config,
 }
 
 auto GridLayoutCalculator::adjustForFilter(const GridMetrics &baseMetrics,
-                                            int filteredItemCount) -> GridMetrics {
+                                           int filteredItemCount)
+    -> GridMetrics {
   GridMetrics adjusted = baseMetrics;
-  
+
   // If filtered items fit in a single partial row, adjust width
   if (filteredItemCount > 0 && filteredItemCount < baseMetrics.itemsPerRow) {
     int used = filteredItemCount;
     int horizontalSpacingContribution =
         (used > 1) ? (used - 1) * baseMetrics.horizontalSpacing : 0;
-    adjusted.totalWidth = baseMetrics.margins * 2 + 
+    adjusted.totalWidth = baseMetrics.margins * 2 +
                           used * baseMetrics.itemWidth +
                           horizontalSpacingContribution;
     adjusted.actualGridWidth = adjusted.totalWidth;
     adjusted.totalRows = 1;
   } else {
-    adjusted.totalRows =
-        (filteredItemCount + baseMetrics.itemsPerRow - 1) / baseMetrics.itemsPerRow;
+    adjusted.totalRows = (filteredItemCount + baseMetrics.itemsPerRow - 1) /
+                         baseMetrics.itemsPerRow;
   }
 
   // Recalculate total height for filtered count
   int verticalSpacingContribution =
-      (adjusted.totalRows > 1) ? (adjusted.totalRows - 1) * baseMetrics.verticalSpacing : 0;
-  adjusted.totalHeight = baseMetrics.margins + 
+      (adjusted.totalRows > 1)
+          ? (adjusted.totalRows - 1) * baseMetrics.verticalSpacing
+          : 0;
+  adjusted.totalHeight = baseMetrics.margins +
                          adjusted.totalRows * baseMetrics.itemHeight +
                          verticalSpacingContribution;
 
@@ -83,36 +87,41 @@ auto GridLayoutCalculator::adjustForFilter(const GridMetrics &baseMetrics,
 }
 
 auto GridLayoutCalculator::getItemPosition(int visualIndex,
-                                            const GridMetrics &metrics,
-                                            bool isFiltered,
-                                            int filteredItemCount) -> QPoint {
+                                           const GridMetrics &metrics,
+                                           bool isFiltered,
+                                           int filteredItemCount) -> QPoint {
   // When filtered to a single partial row, center by using actual item count
-  bool centerSingleRow = isFiltered && filteredItemCount > 0 && 
+  bool centerSingleRow = isFiltered && filteredItemCount > 0 &&
                          filteredItemCount < metrics.itemsPerRow;
-  int itemsPerRowForLayout = centerSingleRow ? filteredItemCount : metrics.itemsPerRow;
+  int itemsPerRowForLayout =
+      centerSingleRow ? filteredItemCount : metrics.itemsPerRow;
 
-  int rowIndex = (itemsPerRowForLayout > 0) ? visualIndex / itemsPerRowForLayout : 0;
-  int columnIndex = (itemsPerRowForLayout > 0) ? visualIndex % itemsPerRowForLayout : 0;
+  int rowIndex =
+      (itemsPerRowForLayout > 0) ? visualIndex / itemsPerRowForLayout : 0;
+  int columnIndex =
+      (itemsPerRowForLayout > 0) ? visualIndex % itemsPerRowForLayout : 0;
 
   int xPos = metrics.margins +
              (columnIndex * (metrics.itemWidth + metrics.horizontalSpacing));
   // Add header offset for list view mode
-  int yPos = metrics.headerOffset + (rowIndex * (metrics.itemHeight + metrics.verticalSpacing));
+  int yPos = metrics.headerOffset +
+             (rowIndex * (metrics.itemHeight + metrics.verticalSpacing));
 
   return {xPos, yPos};
 }
 
 auto GridLayoutCalculator::getItemRect(int visualIndex,
-                                        const GridMetrics &metrics,
-                                        bool isFiltered,
-                                        int filteredItemCount) -> QRect {
-  QPoint pos = getItemPosition(visualIndex, metrics, isFiltered, filteredItemCount);
+                                       const GridMetrics &metrics,
+                                       bool isFiltered, int filteredItemCount)
+    -> QRect {
+  QPoint pos =
+      getItemPosition(visualIndex, metrics, isFiltered, filteredItemCount);
   return {pos.x(), pos.y(), metrics.itemWidth, metrics.itemHeight};
 }
 
 auto GridLayoutCalculator::indexAtPosition(const QPoint &pos,
-                                            const GridMetrics &metrics,
-                                            int totalItems) -> int {
+                                           const GridMetrics &metrics,
+                                           int totalItems) -> int {
   // Account for header offset in list mode
   int adjustedY = pos.y() - metrics.headerOffset;
   if (pos.x() < metrics.margins || adjustedY < 0) {
@@ -142,8 +151,8 @@ auto GridLayoutCalculator::indexAtPosition(const QPoint &pos,
 }
 
 auto GridLayoutCalculator::getVisibleRowRange(int scrollY, int viewportHeight,
-                                               const GridMetrics &metrics,
-                                               int bufferRows)
+                                              const GridMetrics &metrics,
+                                              int bufferRows)
     -> std::pair<int, int> {
   int rowHeight = metrics.itemHeight + metrics.verticalSpacing;
   if (rowHeight <= 0) {
@@ -154,37 +163,39 @@ auto GridLayoutCalculator::getVisibleRowRange(int scrollY, int viewportHeight,
   // to determine which rows should be visible. Pass viewportHeight for precise
   // endpoint mapping so scrollbar max reaches the end of the collection.
   int logicalScrollY = metrics.toLogicalScrollY(scrollY, viewportHeight);
-  
+
   // Account for top margin and header offset when calculating first visible row
-  int adjustedScrollY = qMax(0, logicalScrollY - metrics.margins - metrics.headerOffset);
+  int adjustedScrollY =
+      qMax(0, logicalScrollY - metrics.margins - metrics.headerOffset);
   int firstRow = qMax(0, adjustedScrollY / rowHeight - bufferRows);
-  int lastRow = (logicalScrollY + viewportHeight - metrics.margins - metrics.headerOffset) / rowHeight + bufferRows;
+  int lastRow = (logicalScrollY + viewportHeight - metrics.margins -
+                 metrics.headerOffset) /
+                    rowHeight +
+                bufferRows;
   lastRow = qMax(firstRow, qMin(lastRow, metrics.totalRows - 1));
 
   return {firstRow, lastRow};
 }
 
 auto GridLayoutCalculator::getVisibleIndexRange(int scrollY, int viewportHeight,
-                                                 const GridMetrics &metrics,
-                                                 int totalItems, int bufferRows)
+                                                const GridMetrics &metrics,
+                                                int totalItems, int bufferRows)
     -> std::pair<int, int> {
-  auto [firstRow, lastRow] = getVisibleRowRange(scrollY, viewportHeight, 
-                                                 metrics, bufferRows);
-  
+  auto [firstRow, lastRow] =
+      getVisibleRowRange(scrollY, viewportHeight, metrics, bufferRows);
+
   int firstIndex = firstRow * metrics.itemsPerRow;
   int lastIndex = qMin((lastRow + 1) * metrics.itemsPerRow - 1, totalItems - 1);
 
   return {qMax(0, firstIndex), qMax(0, lastIndex)};
 }
 
-auto GridLayoutCalculator::calculateCenterScrollTarget(int itemIndex,
-                                                        int viewportHeight,
-                                                        int maxScroll,
-                                                        const GridMetrics &metrics)
-    -> int {
+auto GridLayoutCalculator::calculateCenterScrollTarget(
+    int itemIndex, int viewportHeight, int maxScroll,
+    const GridMetrics &metrics) -> int {
   int row = GridUtils::computeItemRow(itemIndex, metrics.itemsPerRow);
   int itemY = row * (metrics.itemHeight + metrics.verticalSpacing);
-  
-  return GridUtils::computeCenterTarget(itemY, metrics.itemHeight, 
+
+  return GridUtils::computeCenterTarget(itemY, metrics.itemHeight,
                                         viewportHeight, maxScroll);
 }

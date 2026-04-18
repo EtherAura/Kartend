@@ -29,7 +29,8 @@ void SelectionOverlayManager::setGridContainer(QWidget *gridContainer) {
   m_gridContainer = gridContainer;
 }
 
-void SelectionOverlayManager::setInteractionState(InteractionStateHolder *state) {
+void SelectionOverlayManager::setInteractionState(
+    InteractionStateHolder *state) {
   m_state = state;
 }
 
@@ -57,17 +58,18 @@ void SelectionOverlayManager::updateOverlayStyle() {
   if (!m_overlay) {
     return;
   }
-  
+
   QString borderColor;
-  if (!ItemWidget::s_selectionColor.isEmpty() && 
+  if (!ItemWidget::s_selectionColor.isEmpty() &&
       QColor::isValidColorName(ItemWidget::s_selectionColor)) {
     borderColor = ItemWidget::s_selectionColor;
   } else {
     borderColor = "palette(highlight)";
   }
-  
+
   m_overlay->setStyleSheet(
-      QString("background: transparent; border:%1px solid %2; border-radius:%3px;")
+      QString(
+          "background: transparent; border:%1px solid %2; border-radius:%3px;")
           .arg(UIConstants::Widget::BORDER_WIDTH_SELECTION)
           .arg(borderColor)
           .arg(UIConstants::Widget::BORDER_RADIUS));
@@ -77,7 +79,7 @@ void SelectionOverlayManager::ensureAnimation() {
   if (m_animation.isNull() && m_overlay) {
     m_animation = new QPropertyAnimation(m_overlay, "geometry", this);
     m_animation->setEasingCurve(QEasingCurve::Linear);
-    
+
     connect(m_animation, &QPropertyAnimation::finished, this, [this]() {
       // If we're restarting the animation, don't run finish logic
       if (m_restartingAnim) {
@@ -152,7 +154,7 @@ auto SelectionOverlayManager::isVisible() const -> bool {
 }
 
 void SelectionOverlayManager::animateTo(const QRect &targetRect,
-                                         const QRect &startRect) {
+                                        const QRect &startRect) {
   ensureOverlay();
   ensureAnimation();
 
@@ -234,7 +236,8 @@ void SelectionOverlayManager::setGeometry(const QRect &rect) {
   }
 }
 
-auto SelectionOverlayManager::overlayRectForWidget(ItemWidget *widget) -> QRect {
+auto SelectionOverlayManager::overlayRectForWidget(ItemWidget *widget)
+    -> QRect {
   if (!widget) {
     return {};
   }
@@ -253,8 +256,8 @@ auto SelectionOverlayManager::overlayRectForWidget(ItemWidget *widget) -> QRect 
 }
 
 auto SelectionOverlayManager::overlayRectForPosition(const QPoint &pos,
-                                                      int itemWidth,
-                                                      int itemHeight) -> QRect {
+                                                     int itemWidth,
+                                                     int itemHeight) -> QRect {
   const int inset = UIConstants::CollectionIcon::ITEM_SPACING;
   return QRect(pos.x() - inset, pos.y() - inset, itemWidth + 2 * inset,
                itemHeight + 2 * inset);

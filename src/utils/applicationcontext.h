@@ -44,33 +44,33 @@ class CacheManager;
  * This struct aggregates frequently-shared pointers and state references
  * that are passed to multiple managers. Individual manager setup structs
  * can include a pointer to this context instead of duplicating all fields.
- * 
+ *
  * Field Categories:
- * 
+ *
  * REQUIRED (must be set before any manager setup):
  * - collections, currentCollectionIndex - Core collection state
  * - isShuttingDown - Shutdown coordination flag
- * 
+ *
  * REQUIRED FOR UI (must be set for any UI-related manager):
  * - itemScrollArea, gridContainer - Primary UI containers
  * - stackedWidget, itemsPage - Page switching
- * 
+ *
  * OPTIONAL (set based on feature needs):
  * - searchBar, searchModeButton - Search functionality
  * - sidebar - Metadata display
  * - menubar - Menu integration
  * - loadingLabel, loadingOverlay - Loading feedback
- * 
+ *
  * POPULATED AFTER SETUP:
  * - All manager pointers (scrollManager, artworkManager, etc.)
  * - interactionState - Set after InteractionManager created
- * 
+ *
  * Usage pattern:
  *   // In MainWindow, create once:
  *   m_appContext.collections = &m_collections;
  *   m_appContext.currentCollectionIndex = &currentCollectionIndex;
  *   ...
- * 
+ *
  *   // In setup structs:
  *   SomeManagerSetup setup;
  *   setup.ctx = &m_appContext;
@@ -94,7 +94,7 @@ struct ApplicationContext {
   QWidget *itemsPage = nullptr;
   QWidget *itemsTopBar = nullptr;
   QWidget *gridContainer = nullptr;
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // Optional: Feature-specific UI elements
   // ─────────────────────────────────────────────────────────────────────────
@@ -134,15 +134,15 @@ struct ApplicationContext {
   [[nodiscard]] bool isValid() const {
     return collections && currentCollectionIndex;
   }
-  
+
   [[nodiscard]] int currentIndex() const {
     return currentCollectionIndex ? *currentCollectionIndex : -1;
   }
-  
+
   [[nodiscard]] bool shuttingDown() const {
     return isShuttingDown ? *isShuttingDown : false;
   }
-  
+
   // Collection validation helper
   [[nodiscard]] bool isValidCollectionIndex() const {
     return collections && currentCollectionIndex &&

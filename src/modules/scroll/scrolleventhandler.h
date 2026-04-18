@@ -14,7 +14,7 @@ class DebouncedTimer;
 
 /**
  * @brief Handles scroll event wiring and user scroll activity tracking.
- * 
+ *
  * Encapsulates the connection/disconnection of scroll events and the
  * tracking of user scroll activity state. Emits signals when scroll
  * events occur for the parent manager to handle.
@@ -41,13 +41,13 @@ public:
 signals:
   // Emitted when any scroll value changes
   void scrollChanged();
-  
+
   // Emitted when user scroll activity starts
   void userScrollStarted();
-  
+
   // Emitted when user scroll activity ends
   void userScrollEnded();
-  
+
   // Emitted continuously while scrollbar is being dragged
   void sliderMoved(int position);
 

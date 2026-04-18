@@ -12,11 +12,13 @@
 class DatabaseManager;
 
 /**
- * @brief Manages search filtering and subcollection filtering for the scroll view.
+ * @brief Manages search filtering and subcollection filtering for the scroll
+ * view.
  *
  * FilterManager handles two types of filtering:
  * 1. Text search filtering - matches items by display name
- * 2. Subcollection filtering - shows items belonging to a subcollection and its descendants
+ * 2. Subcollection filtering - shows items belonging to a subcollection and its
+ * descendants
  *
  * The manager maintains a list of filtered indices that map visual positions
  * to actual item indices, enabling efficient virtual scrolling with filtering.
@@ -25,7 +27,8 @@ class DatabaseManager;
  *   // Setup dependencies
  *   filterManager->setDatabaseManager(dbManager);
  *   filterManager->setCollections(&collections);
- *   filterManager->setSourceData(filePaths, fileNames, displayNames, subcollections);
+ *   filterManager->setSourceData(filePaths, fileNames, displayNames,
+ * subcollections);
  *
  *   // Apply text search
  *   filterManager->applyFilter("search text");
@@ -75,7 +78,8 @@ public:
   void applyFilter(const QString &searchText);
 
   /**
-   * @brief Apply subcollection filter to show items from subcollection and descendants.
+   * @brief Apply subcollection filter to show items from subcollection and
+   * descendants.
    * @param subcollectionIndex Index of the subcollection to filter by.
    */
   void applySubcollectionFilter(int subcollectionIndex);
@@ -121,12 +125,14 @@ private:
                                                 const QString &needle) const;
   [[nodiscard]] bool matchesMediaItemFilter(int mediaIndex,
                                             const QString &needle) const;
-  [[nodiscard]] QString getDisplayNameForMediaItem(const QString &rawEntry) const;
+  [[nodiscard]] QString
+  getDisplayNameForMediaItem(const QString &rawEntry) const;
 
   void determineTargetCollections(int subcollectionIndex,
                                   QSet<int> &targetCollections);
-  [[nodiscard]] bool itemBelongsToTargetCollections(
-      const QString &entry, const QSet<int> &targetCollections) const;
+  [[nodiscard]] bool
+  itemBelongsToTargetCollections(const QString &entry,
+                                 const QSet<int> &targetCollections) const;
 
   // Dependencies
   DatabaseManager *m_databaseManager = nullptr;

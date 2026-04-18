@@ -5,8 +5,8 @@
 #include <QDialog>
 #include <QHash>
 #include <QList>
-#include <QMetaObject>
 #include <QMessageBox>
+#include <QMetaObject>
 #include <QMouseEvent>
 #include <QTreeWidgetItem>
 
@@ -30,12 +30,16 @@ public:
   explicit SettingsDialog(QWidget *parent,
                           const QList<CollectionConfig> &initialCollections,
                           int initialIndex = -1);
-  ~SettingsDialog();
+  ~SettingsDialog() override;
 
-  QList<CollectionConfig> getCollections() const { return collections; }
+  [[nodiscard]] const QList<CollectionConfig> &getCollections() const {
+    return collections;
+  }
 
   /// Returns the index of the collection currently selected in the tree.
-  [[nodiscard]] int getSelectedCollectionIndex() const { return currentCollectionIndex; }
+  [[nodiscard]] int getSelectedCollectionIndex() const {
+    return currentCollectionIndex;
+  }
 
   /// Handles dialog acceptance while guarding against unsaved changes.
   void accept() override;
@@ -102,10 +106,11 @@ private:
   void updateSaveButtonStyle();
   void updateDeleteButtonState();
   void updateUIForLauncherType(const QString &launcherPath);
-  /// Populates and selects the parent collection combo box for the active collection.
+  /// Populates and selects the parent collection combo box for the active
+  /// collection.
   void updateParentCollectionComboBox(int currentIndex);
-  [[nodiscard]] bool wouldCreateCircularReference(int childIndex,
-                                    int potentialParentIndex) const;
+  [[nodiscard]] bool
+  wouldCreateCircularReference(int childIndex, int potentialParentIndex) const;
   void emitGridWidthChanged();
   void updateFieldVisibility();
   void updateExtractArchivesVisibility();
@@ -122,17 +127,23 @@ private:
   auto performCollectionRemoval(int index) -> void;
   auto updateParentReferences(int removedIndex) -> void;
   auto rebuildParentIndices() -> void;
-  auto restoreExpandedStates(const QList<int> &expandedBefore, int removedIndex) -> void;
+  auto restoreExpandedStates(const QList<int> &expandedBefore, int removedIndex)
+      -> void;
   auto selectTargetAfterRemoval(int parentIdx, int removedIndex) -> void;
-  // Helper methods for saveCollectionFromUI refactoring  
+  // Helper methods for saveCollectionFromUI refactoring
   auto extractUIFieldValues() -> CollectionConfig;
-  auto updateParentCollectionFromUI(CollectionConfig &collection, int index) -> void;
+  auto updateParentCollectionFromUI(CollectionConfig &collection, int index)
+      -> void;
   // Helper methods for hasUnsavedChanges refactoring
   auto checkBasicFieldChanges() const -> bool;
   auto checkExtensionChanges() const -> bool;
   auto checkTreeNameChanges() const -> bool;
   auto checkParentCollectionChanges() const -> bool;
   auto checkDimensionChanges() const -> bool;
+  auto checkColorChanges() const -> bool;
+  auto checkListModeChanges() const -> bool;
+  auto checkBackgroundChanges() const -> bool;
+  auto checkGeneralSettingsChanges() const -> bool;
   /// Prompts the user to resolve unsaved changes for the specified action.
   auto promptUnsavedChanges(const QString &actionDescription)
       -> QMessageBox::StandardButton;
@@ -158,7 +169,9 @@ private:
   QList<int> m_parentCollectionMapping;
   bool m_isLoading;
   GeneralSettings m_generalSettings;
-  /// Tracks collection indices that need a rescan due to database-affecting changes
+  GeneralSettings m_originalGeneralSettings;
+  /// Tracks collection indices that need a rescan due to database-affecting
+  /// changes
   QSet<int> m_rescanRequired;
 
   GamepadCaptureTarget m_gamepadCaptureTarget = GamepadCaptureTarget::None;

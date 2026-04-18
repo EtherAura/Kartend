@@ -1,4 +1,5 @@
-// Manages smooth scroll animations with easing curves for vertical and horizontal scrolling.
+// Manages smooth scroll animations with easing curves for vertical and
+// horizontal scrolling.
 #include "animationmanager.h"
 #include "applicationcontext.h"
 #include "artworkmanager.h"
@@ -13,16 +14,24 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcAnimationManager, "kartend.animationmanager")
-#define debugLog(msg) do { if (lcAnimationManager().isDebugEnabled()) { qCDebug(lcAnimationManager) << msg; } } while (0)
+#define debugLog(msg)                                                          \
+  do {                                                                         \
+    if (lcAnimationManager().isDebugEnabled()) {                               \
+      qCDebug(lcAnimationManager) << msg;                                      \
+    }                                                                          \
+  } while (0)
 
 // AnimationManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(AnimationManagerSetup, QScrollArea*, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(AnimationManagerSetup, ScrollManager*, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(AnimationManagerSetup, ArtworkManager*, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_CTX_ONLY(AnimationManagerSetup, InteractionStateHolder*, InteractionState, interactionState)
+SETUP_GETTER_DEF_SAME(AnimationManagerSetup, QScrollArea *, ItemScrollArea,
+                      itemScrollArea)
+SETUP_GETTER_DEF_SAME(AnimationManagerSetup, ScrollManager *, ScrollManager,
+                      scrollManager)
+SETUP_GETTER_DEF_SAME(AnimationManagerSetup, ArtworkManager *, ArtworkManager,
+                      artworkManager)
+SETUP_GETTER_DEF_CTX_ONLY(AnimationManagerSetup, InteractionStateHolder *,
+                          InteractionState, interactionState)
 
-AnimationManager::AnimationManager(QObject *parent)
-    : QObject(parent) {}
+AnimationManager::AnimationManager(QObject *parent) : QObject(parent) {}
 
 AnimationManager::~AnimationManager() {
   if (m_vScrollAnim) {
@@ -33,8 +42,7 @@ AnimationManager::~AnimationManager() {
   }
 }
 
-void AnimationManager::setupReferences(
-    const AnimationManagerSetup &setup) {
+void AnimationManager::setupReferences(const AnimationManagerSetup &setup) {
   m_generalSettings = setup.generalSettings;
   m_itemScrollArea = setup.getItemScrollArea();
   m_scrollManager = setup.getScrollManager();
@@ -66,7 +74,7 @@ void AnimationManager::configureAndStartVerticalAnimation(
             // Emit signals for external handling
             emit requestVirtualViewUpdate();
             emit requestSelectionOverlayRefresh();
-            
+
             // Check for near-completion of click scroll
             if (clickScroll && !clickHoldAdv &&
                 qAbs(m_vScrollAnim->currentValue().toInt() -
@@ -84,8 +92,7 @@ void AnimationManager::configureAndStartVerticalAnimation(
   m_vScrollAnim->start();
 }
 
-void AnimationManager::stopActiveVerticalAnims(
-    QScrollBar *verticalScrollBar) {
+void AnimationManager::stopActiveVerticalAnims(QScrollBar *verticalScrollBar) {
   if ((m_vScrollAnim) &&
       m_vScrollAnim->state() == QAbstractAnimation::Running) {
     m_vScrollAnim->stop();
@@ -142,7 +149,7 @@ void AnimationManager::updateVirtualViewAndSelectionDuringVAnim(
     bool clickScroll, bool clickHoldAdv) {
   emit requestVirtualViewUpdate();
   emit requestSelectionUpdate();
-  
+
   if (clickScroll && !clickHoldAdv && (m_vScrollAnim) &&
       qAbs(m_vScrollAnim->currentValue().toInt() -
            m_vScrollAnim->endValue().toInt()) < 3) {
@@ -167,8 +174,8 @@ void AnimationManager::initHorizontalAnimIfNeeded(QScrollBar *hScrollBar) {
   }
 }
 
-void AnimationManager::animateHorizontalHold(QScrollBar *hScrollBar,
-                                                   int startX, int targetX) {
+void AnimationManager::animateHorizontalHold(QScrollBar *hScrollBar, int startX,
+                                             int targetX) {
   initHorizontalAnimIfNeeded(hScrollBar);
 
   int distance = qAbs(targetX - startX);
@@ -209,7 +216,7 @@ void AnimationManager::animateHorizontalHold(QScrollBar *hScrollBar,
 }
 
 void AnimationManager::animateHorizontalSmooth(QScrollBar *hScrollBar,
-                                                     int startX, int targetX) {
+                                               int startX, int targetX) {
   initHorizontalAnimIfNeeded(hScrollBar);
 
   if (m_hScrollAnim->state() == QAbstractAnimation::Running) {
@@ -268,31 +275,27 @@ int AnimationManager::computeVerticalCenterDuration(int distance,
 
   // Use provided duration directly
   int baseDuration = durationMs;
-  int perRow = repeatActive ? baseDuration : baseDuration;
-  double raw = rows * static_cast<double>(perRow);
-
-  int minDur = repeatActive ? baseDuration : baseDuration;
-  int maxDur = repeatActive ? baseDuration : baseDuration;
+  double raw = rows * static_cast<double>(baseDuration);
 
   int duration = static_cast<int>(std::round(raw));
-  duration = qBound(minDur, duration, maxDur);
+  duration = qBound(baseDuration, duration, baseDuration);
   return duration;
 }
 
 // --- Target Calculation ---
 
-int AnimationManager::computeTargetYForIndex(int index, int gridWidth,
-                                             int itemHeight,
-                                             int verticalSpacing,
-                                             int viewportHeight,
-                                             int scrollbarMax,
-                                             int totalHeight,
-                                             int logicalHeight) {
-  int itemY = GridUtils::computeItemY(index, gridWidth, itemHeight,
-                                      verticalSpacing, UIConstants::Grid::MARGINS);
+int AnimationManager::computeTargetYForIndex(
+    int index, int gridWidth, int itemHeight, int verticalSpacing,
+    int viewportHeight, int scrollbarMax, int totalHeight, int logicalHeight,
+    int headerOffset) {
+  int itemY =
+      GridUtils::computeItemY(index, gridWidth, itemHeight, verticalSpacing,
+                              UIConstants::Grid::MARGINS);
+  // Add header offset for list view mode
+  itemY += headerOffset;
   // Calculate target in logical space first (center the item)
   int logicalTargetY = itemY + (itemHeight / 2) - (viewportHeight / 2);
-  
+
   // For clipped grids, convert logical scroll target to widget scroll position
   // using viewport-aware interpolation for precise endpoint mapping
   int targetY = logicalTargetY;
@@ -303,18 +306,18 @@ int AnimationManager::computeTargetYForIndex(int index, int gridWidth,
       // Clamp logical target to valid range before conversion
       logicalTargetY = qBound(0, logicalTargetY, logicalMax);
       // Convert: widgetScrollY = logicalScrollY * widgetMax / logicalMax
-      targetY = static_cast<int>(static_cast<double>(logicalTargetY) * widgetMax / logicalMax);
+      targetY = static_cast<int>(static_cast<double>(logicalTargetY) *
+                                 widgetMax / logicalMax);
     }
   }
-  
+
   return qBound(0, targetY, scrollbarMax);
 }
 
 int AnimationManager::computeHorizontalTargetX(int itemX,
                                                int collectionItemWidth,
                                                int curX, int viewportWidth,
-                                               int margins,
-                                               int scrollMax) {
+                                               int margins, int scrollMax) {
   int itemLeft = itemX;
   int itemRight = itemX + collectionItemWidth;
   int visibleLeft = curX;
@@ -334,10 +337,8 @@ int AnimationManager::computeHorizontalTargetX(int itemX,
   return qBound(0, targetX, scrollMax);
 }
 
-int AnimationManager::computeDesiredYForVisibility(int itemY,
-                                                   int itemHeight,
-                                                   int curY,
-                                                   int viewportHeight,
+int AnimationManager::computeDesiredYForVisibility(int itemY, int itemHeight,
+                                                   int curY, int viewportHeight,
                                                    int margins,
                                                    bool &needVertical) {
   int itemTop = itemY;
@@ -376,11 +377,10 @@ void AnimationManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar,
   }
 
   int distance = qAbs(endVal - startVal);
-  int durationMs = m_generalSettings 
-      ? m_generalSettings->scrollAnimationDurationMs 
-      : 1500;
-  int duration =
-      computeVerticalCenterDuration(distance, itemHeight, verticalSpacing, isRepeating, durationMs);
+  int durationMs =
+      m_generalSettings ? m_generalSettings->scrollAnimationDurationMs : 1500;
+  int duration = computeVerticalCenterDuration(
+      distance, itemHeight, verticalSpacing, isRepeating, durationMs);
 
   m_vScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
   m_vScrollAnim->setStartValue(startVal);
@@ -423,16 +423,16 @@ void AnimationManager::startWheelScrollAnimation(
 
   m_vScrollAnim->setStartValue(effectiveStart);
   m_vScrollAnim->setEndValue(endVal);
-  
+
   // Use configured scroll animation duration for consistent glide feel.
   // The chaining from current position prevents stuttering while preserving
   // the smooth deceleration over the full duration.
-  int duration = m_generalSettings 
-      ? m_generalSettings->scrollAnimationDurationMs 
-      : UIConstants::Animation::SMOOTH_SCROLL_WHEEL_DURATION_MS;
-  
+  int duration = m_generalSettings
+                     ? m_generalSettings->scrollAnimationDurationMs
+                     : UIConstants::Animation::SMOOTH_SCROLL_WHEEL_DURATION_MS;
+
   m_vScrollAnim->setDuration(duration);
-  
+
   // OutCubic provides smooth deceleration for natural momentum feel
   m_vScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
 

@@ -21,7 +21,8 @@
  *
  * ### Declaration Macros (for .h files)
  * - `SETUP_GETTER_DECL(TYPE, NAME)` - Declares getter with local + ctx fallback
- * - `SETUP_GETTER_DECL_CTX_ONLY(TYPE, NAME)` - Declares getter for ctx-only field
+ * - `SETUP_GETTER_DECL_CTX_ONLY(TYPE, NAME)` - Declares getter for ctx-only
+ * field
  *
  * ### Definition Macros (for .cpp files)
  * - `SETUP_GETTER_DEF(STRUCT, TYPE, NAME, FIELD, CTX_FIELD)` - Full definition
@@ -52,14 +53,17 @@
  * In source file (e.g., mymanager.cpp):
  * @code
  *   // Field names match between struct and ctx:
- *   SETUP_GETTER_DEF_SAME(MyManagerSetup, ScrollManager*, ScrollManager, scrollManager)
- *   SETUP_GETTER_DEF_SAME(MyManagerSetup, QWidget*, GridContainer, gridContainer)
+ *   SETUP_GETTER_DEF_SAME(MyManagerSetup, ScrollManager*, ScrollManager,
+ * scrollManager) SETUP_GETTER_DEF_SAME(MyManagerSetup, QWidget*, GridContainer,
+ * gridContainer)
  *
  *   // Field only exists in ctx:
- *   SETUP_GETTER_DEF_CTX_ONLY(MyManagerSetup, InteractionStateHolder*, InteractionState, interactionState)
+ *   SETUP_GETTER_DEF_CTX_ONLY(MyManagerSetup, InteractionStateHolder*,
+ * InteractionState, interactionState)
  *
  *   // Different field names in struct vs ctx:
- *   SETUP_GETTER_DEF(MyManagerSetup, QScrollArea*, MediaScrollArea, mediaScrollArea, itemScrollArea)
+ *   SETUP_GETTER_DEF(MyManagerSetup, QScrollArea*, MediaScrollArea,
+ * mediaScrollArea, itemScrollArea)
  * @endcode
  *
  * ## Fallback Behavior
@@ -82,13 +86,13 @@
  * @param TYPE   The return type (e.g., ScrollManager*)
  * @param NAME   The getter suffix (e.g., ScrollManager -> getScrollManager())
  */
-#define SETUP_GETTER_DECL(TYPE, NAME) \
+#define SETUP_GETTER_DECL(TYPE, NAME)                                          \
   [[nodiscard]] auto get##NAME() const -> TYPE;
 
 /**
  * @brief Declares a getter for ctx-only fields (no local field).
  */
-#define SETUP_GETTER_DECL_CTX_ONLY(TYPE, NAME) \
+#define SETUP_GETTER_DECL_CTX_ONLY(TYPE, NAME)                                 \
   [[nodiscard]] auto get##NAME() const -> TYPE;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -104,9 +108,9 @@
  * @param FIELD     The local field name (e.g., scrollManager)
  * @param CTX_FIELD The ApplicationContext field name (e.g., scrollManager)
  */
-#define SETUP_GETTER_DEF(STRUCT, TYPE, NAME, FIELD, CTX_FIELD) \
-  auto STRUCT::get##NAME() const -> TYPE { \
-    return FIELD ? FIELD : (ctx ? ctx->CTX_FIELD : nullptr); \
+#define SETUP_GETTER_DEF(STRUCT, TYPE, NAME, FIELD, CTX_FIELD)                 \
+  auto STRUCT::get##NAME() const->TYPE {                                       \
+    return FIELD ? FIELD : (ctx ? ctx->CTX_FIELD : nullptr);                   \
   }
 
 /**
@@ -117,7 +121,7 @@
  * @param NAME   The getter suffix
  * @param FIELD  The field name (same in struct and ctx)
  */
-#define SETUP_GETTER_DEF_SAME(STRUCT, TYPE, NAME, FIELD) \
+#define SETUP_GETTER_DEF_SAME(STRUCT, TYPE, NAME, FIELD)                       \
   SETUP_GETTER_DEF(STRUCT, TYPE, NAME, FIELD, FIELD)
 
 /**
@@ -128,9 +132,9 @@
  * @param NAME      The getter suffix
  * @param CTX_FIELD The ApplicationContext field name
  */
-#define SETUP_GETTER_DEF_CTX_ONLY(STRUCT, TYPE, NAME, CTX_FIELD) \
-  auto STRUCT::get##NAME() const -> TYPE { \
-    return ctx ? ctx->CTX_FIELD : nullptr; \
+#define SETUP_GETTER_DEF_CTX_ONLY(STRUCT, TYPE, NAME, CTX_FIELD)               \
+  auto STRUCT::get##NAME() const->TYPE {                                       \
+    return ctx ? ctx->CTX_FIELD : nullptr;                                     \
   }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -142,23 +146,23 @@
  *
  * Use when you want the getter defined inline in the header.
  */
-#define SETUP_GETTER_INLINE(TYPE, NAME, FIELD, CTX_FIELD) \
-  [[nodiscard]] auto get##NAME() const -> TYPE { \
-    return FIELD ? FIELD : (ctx ? ctx->CTX_FIELD : nullptr); \
+#define SETUP_GETTER_INLINE(TYPE, NAME, FIELD, CTX_FIELD)                      \
+  [[nodiscard]] auto get##NAME() const -> TYPE {                               \
+    return FIELD ? FIELD : (ctx ? ctx->CTX_FIELD : nullptr);                   \
   }
 
 /**
  * @brief Inline getter for same-named field in struct and ctx.
  */
-#define SETUP_GETTER_INLINE_SAME(TYPE, NAME, FIELD) \
+#define SETUP_GETTER_INLINE_SAME(TYPE, NAME, FIELD)                            \
   SETUP_GETTER_INLINE(TYPE, NAME, FIELD, FIELD)
 
 /**
  * @brief Inline getter for ctx-only fields.
  */
-#define SETUP_GETTER_INLINE_CTX_ONLY(TYPE, NAME, CTX_FIELD) \
-  [[nodiscard]] auto get##NAME() const -> TYPE { \
-    return ctx ? ctx->CTX_FIELD : nullptr; \
+#define SETUP_GETTER_INLINE_CTX_ONLY(TYPE, NAME, CTX_FIELD)                    \
+  [[nodiscard]] auto get##NAME() const -> TYPE {                               \
+    return ctx ? ctx->CTX_FIELD : nullptr;                                     \
   }
 
 #endif // SETUPUTILS_H

@@ -26,12 +26,12 @@ struct SidebarManagerSetup {
   ArtworkManager *artworkManager = nullptr;
   QList<CollectionConfig> *collections = nullptr;
 
-  SETUP_GETTER_DECL(MetadataSidebar*, Sidebar)
-  SETUP_GETTER_DECL(QWidget*, ItemsPage)
-  SETUP_GETTER_DECL(QScrollArea*, ScrollArea)
-  SETUP_GETTER_DECL(SettingsManager*, SettingsManager)
-  SETUP_GETTER_DECL(ArtworkManager*, ArtworkManager)
-  SETUP_GETTER_DECL(QList<CollectionConfig>*, Collections)
+  SETUP_GETTER_DECL(MetadataSidebar *, Sidebar)
+  SETUP_GETTER_DECL(QWidget *, ItemsPage)
+  SETUP_GETTER_DECL(QScrollArea *, ScrollArea)
+  SETUP_GETTER_DECL(SettingsManager *, SettingsManager)
+  SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
+  SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
 };
 
 class SidebarManager : public QObject {
@@ -50,7 +50,9 @@ public:
   void saveSidebarStateForCollection(int collectionIndex, bool visible);
   void saveSidebarStateForCollection(const QString &collectionName,
                                      bool visible);
-  [[nodiscard]] int currentCollectionIndex() const { return m_currentCollectionIndex; }
+  [[nodiscard]] int currentCollectionIndex() const {
+    return m_currentCollectionIndex;
+  }
 
 signals:
   void sidebarVisibilityChanged(bool visible);

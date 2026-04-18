@@ -4,8 +4,8 @@
 #define FORWARDDECL_H
 
 // Qt forward declarations
-#include <QList>
 #include <QHash>
+#include <QList>
 #include <QString>
 
 // Application types - use these when only pointers/references are needed.
@@ -25,9 +25,8 @@ struct ApplicationContext;
 // From errorutils.h
 namespace ErrorUtils {
 struct ErrorContext;
-template <typename T>
-class Result;
-}
+template <typename T> class Result;
+} // namespace ErrorUtils
 
 // From stateutils.h
 struct SelectionRestoreState;

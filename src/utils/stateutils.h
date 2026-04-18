@@ -4,11 +4,13 @@
 #include <QObject>
 
 /**
- * @brief Centralized selection restore state to replace scattered dynamic properties.
+ * @brief Centralized selection restore state to replace scattered dynamic
+ * properties.
  *
- * This struct provides a single source of truth for selection restoration state,
- * replacing the duplicated state previously maintained in ViewportManager,
- * SelectionManager, and EventManager, as well as various PropertyKeys.
+ * This struct provides a single source of truth for selection restoration
+ * state, replacing the duplicated state previously maintained in
+ * ViewportManager, SelectionManager, and EventManager, as well as various
+ * PropertyKeys.
  *
  * Ownership: SelectionManager owns the canonical instance.
  * Access: Other managers query SelectionManager rather than maintaining copies.
@@ -19,7 +21,8 @@ struct SelectionRestoreState {
   bool forceImmediateCenter = false;
   int restoreToken = 0;
   bool restorePending = false;
-  bool userSelectionMade = false;  // Set when user makes explicit selection, blocks auto-restore
+  bool userSelectionMade =
+      false; // Set when user makes explicit selection, blocks auto-restore
 
   void reset() {
     restoring = false;
@@ -27,12 +30,11 @@ struct SelectionRestoreState {
     forceImmediateCenter = false;
     restorePending = false;
     userSelectionMade = false;
-    // Note: restoreToken is not reset - it increments to invalidate old operations
+    // Note: restoreToken is not reset - it increments to invalidate old
+    // operations
   }
 
-  [[nodiscard]] bool isActive() const {
-    return restoring && targetIndex >= 0;
-  }
+  [[nodiscard]] bool isActive() const { return restoring && targetIndex >= 0; }
 
   [[nodiscard]] bool matchesTarget(int index) const {
     return restoring && index == targetIndex;
@@ -202,9 +204,7 @@ struct StreamScrollState {
 struct SearchState {
   bool clearedByEscape = false;
 
-  void reset() {
-    clearedByEscape = false;
-  }
+  void reset() { clearedByEscape = false; }
 };
 
 #endif // STATEUTILS_H

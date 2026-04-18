@@ -1,4 +1,5 @@
-// Filters and dispatches input events to specialized handlers for mouse, keyboard, and wheel.
+// Filters and dispatches input events to specialized handlers for mouse,
+// keyboard, and wheel.
 #include "eventmanager.h"
 
 #include <QApplication>
@@ -32,26 +33,45 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcEventManager, "kartend.eventmanager")
-#define debugLog(msg) do { if (lcEventManager().isDebugEnabled()) { qCDebug(lcEventManager) << msg; } } while (0)
+#define debugLog(msg)                                                          \
+  do {                                                                         \
+    if (lcEventManager().isDebugEnabled()) {                                   \
+      qCDebug(lcEventManager) << msg;                                          \
+    }                                                                          \
+  } while (0)
 
 // EventManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(EventManagerSetup, ScrollManager*, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, AnimationManager*, AnimationManager, animationManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, ViewportManager*, ViewportManager, viewportManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, SelectionManager*, SelectionManager, selectionManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, ArtworkManager*, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, DatabaseManager*, DatabaseManager, databaseManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, SidebarManager*, SidebarManager, sidebarManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QScrollArea*, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget*, GridContainer, gridContainer)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QStackedWidget*, StackedWidget, stackedWidget)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget*, ItemsPage, itemsPage)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget*, ItemsTopBar, itemsTopBar)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QLineEdit*, SearchBar, searchBar)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QList<CollectionConfig>*, Collections, collections)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, int*, CurrentCollectionIndex, currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, GeneralSettings*, GeneralSettings, generalSettings)
-SETUP_GETTER_DEF_CTX_ONLY(EventManagerSetup, InteractionStateHolder*, InteractionState, interactionState)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, ScrollManager *, ScrollManager,
+                      scrollManager)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, AnimationManager *, AnimationManager,
+                      animationManager)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, ViewportManager *, ViewportManager,
+                      viewportManager)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, SelectionManager *, SelectionManager,
+                      selectionManager)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, ArtworkManager *, ArtworkManager,
+                      artworkManager)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, DatabaseManager *, DatabaseManager,
+                      databaseManager)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, SidebarManager *, SidebarManager,
+                      sidebarManager)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, QScrollArea *, ItemScrollArea,
+                      itemScrollArea)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget *, GridContainer,
+                      gridContainer)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, QStackedWidget *, StackedWidget,
+                      stackedWidget)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget *, ItemsTopBar, itemsTopBar)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, QLineEdit *, SearchBar, searchBar)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, QList<CollectionConfig> *, Collections,
+                      collections)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, int *, CurrentCollectionIndex,
+                      currentCollectionIndex)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, GeneralSettings *, GeneralSettings,
+                      generalSettings)
+SETUP_GETTER_DEF_CTX_ONLY(EventManagerSetup, InteractionStateHolder *,
+                          InteractionState, interactionState)
 
 EventManager::EventManager(QObject *parent) : QObject(parent) {}
 
@@ -153,7 +173,8 @@ bool EventManager::handleActivityEvent(QEvent *event) {
   if (activityEvent) {
     qint64 now = QDateTime::currentMSecsSinceEpoch();
     qint64 last = m_state ? m_state->lastUiActivityMs() : 0;
-    if (last > 0 && (now - last) >= UIConstants::Timing::USER_IDLE_THRESHOLD_MS) {
+    if (last > 0 &&
+        (now - last) >= UIConstants::Timing::USER_IDLE_THRESHOLD_MS) {
       if (m_state) {
         m_state->click().armFirstClickDelay = true;
       }
@@ -169,13 +190,13 @@ bool EventManager::handleActivityEvent(QEvent *event) {
 
 bool EventManager::handleMouseButtonPress(QObject *obj, QEvent *event) {
   if ((obj && qobject_cast<QScrollBar *>(obj)) ||
-      qobject_cast<QScrollBar *>(obj ? obj->parent() : nullptr) !=
-          nullptr) {
+      qobject_cast<QScrollBar *>(obj ? obj->parent() : nullptr) != nullptr) {
     if (m_viewportManager) {
       m_viewportManager->setContinuousScrollActive(true);
     }
     // Clear continuous scroll state after user finishes scrollbar interaction -
-    // allows time for the drag/click to complete before re-enabling auto-centering
+    // allows time for the drag/click to complete before re-enabling
+    // auto-centering
     QTimer::singleShot(UIConstants::Mouse::CONTINUOUS_SCROLL_IDLE_MS, this,
                        [this]() {
                          if (m_viewportManager) {
@@ -193,8 +214,7 @@ bool EventManager::handleMouseButtonPress(QObject *obj, QEvent *event) {
 bool EventManager::handleMouseButtonRelease(QObject *obj, QEvent *event) {
   Q_UNUSED(obj);
   auto *mouseReleaseEvent = static_cast<QMouseEvent *>(event);
-  if (mouseReleaseEvent &&
-      mouseReleaseEvent->button() == Qt::LeftButton) {
+  if (mouseReleaseEvent && mouseReleaseEvent->button() == Qt::LeftButton) {
     if (m_mouseManager) {
       m_mouseManager->setLeftMouseDown(false);
       m_mouseManager->stopClickHoldTimer();
@@ -214,15 +234,15 @@ bool EventManager::handleMouseButtonRelease(QObject *obj, QEvent *event) {
 
 bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   Q_UNUSED(obj);
-  
+
   // Prevent reentrant wheel handling which can occur when animations
   // or signal processing trigger additional wheel events
   if (m_processingWheelEvent) {
-    return true;  // Accept event to prevent default handling
+    return true; // Accept event to prevent default handling
   }
   m_processingWheelEvent = true;
-  
-  QWidget *activeModal = QApplication::activeModalWidget();
+
+  const QWidget *activeModal = QApplication::activeModalWidget();
   if (activeModal) {
     m_processingWheelEvent = false;
     return false;
@@ -261,7 +281,8 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   if (m_state) {
     m_state->scroll().userScrollActive = true;
     m_state->scroll().programmaticScroll = true;
-    m_state->suppressArrowCenterFor(UIConstants::Mouse::WHEEL_SUPPRESS_ARROW_CENTER_MS);
+    m_state->suppressArrowCenterFor(
+        UIConstants::Mouse::WHEEL_SUPPRESS_ARROW_CENTER_MS);
     // Skip refreshSelectionOverlayState here - too frequent during rapid
     // wheel events; animation completion will refresh the state
   }
@@ -286,23 +307,40 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
 
   // Calculate target scroll position based on new selection position
   // This ensures the selection always stays visible during wheel scrolling
-  int selectedIndex = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
+  int selectedIndex =
+      m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
   if (selectedIndex < 0) {
     event->accept();
     return true;
   }
 
+  // Get metrics from ScrollManager for correct dimensions in both grid and list
+  // modes
   int gridWidth = collection.gridWidth;
+  int itemHeight = collection.itemHeight;
+  int vSpacing = collection.verticalSpacing;
+  int headerOffset = 0;
+
+  if (m_scrollManager) {
+    const auto &metrics = m_scrollManager->getMetrics();
+    gridWidth = metrics.itemsPerRow;
+    itemHeight = metrics.itemHeight;
+    vSpacing = metrics.verticalSpacing;
+    headerOffset = metrics.headerOffset;
+  }
+
   int margins = UIConstants::Grid::MARGINS;
-  int itemY = GridUtils::computeItemY(selectedIndex, gridWidth, collection.itemHeight,
-                                       collection.verticalSpacing, margins);
-  
+  int itemY = GridUtils::computeItemY(selectedIndex, gridWidth, itemHeight,
+                                      vSpacing, margins);
+  // Add header offset for list view mode
+  itemY += headerOffset;
+
   QRect viewport = m_itemScrollArea->viewport()->rect();
   int viewportHeight = viewport.height();
-  
+
   // Calculate target scroll position in logical space (center the item)
-  int logicalTargetY = itemY - (viewportHeight - collection.itemHeight) / 2;
-  
+  int logicalTargetY = itemY - (viewportHeight - itemHeight) / 2;
+
   // Convert logical scroll target to widget scroll position for clipped grids
   int targetPos = logicalTargetY;
   if (m_viewportManager && m_viewportManager->getScrollScale() > 1.0) {
@@ -321,7 +359,8 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
     m_state->scroll().userScrollActive = true;
     m_state->scroll().programmaticScroll = true;
     // Skip refreshSelectionOverlayState here - called too frequently during
-    // rapid wheel events and causes overhead; let animation completion handle it
+    // rapid wheel events and causes overhead; let animation completion handle
+    // it
   }
 
   if (m_animationManager) {
@@ -341,7 +380,9 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
               m_scrollManager->refreshSelectionOverlayState();
             }
           }
-          int selectedIndex = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
+          int selectedIndex = m_selectionManager
+                                  ? m_selectionManager->currentSelectedIndex()
+                                  : -1;
           if (m_scrollManager && selectedIndex >= 0) {
             m_scrollManager->updateSelectionForIndex(selectedIndex);
           }
@@ -380,8 +421,7 @@ bool EventManager::handleKeyPressEvent(QObject *obj, QEvent *event) {
 
   // Delegate to KeyboardManager for key handling
   if (m_keyboardManager) {
-    const bool searchBarFocused =
-        (m_searchBar) && m_searchBar->hasFocus();
+    const bool searchBarFocused = (m_searchBar) && m_searchBar->hasFocus();
     const bool handled =
         m_keyboardManager->handleKeyPress(keyEvent, searchBarFocused);
     if (handled) {
@@ -480,8 +520,8 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
     return false;
   }
 
-  if (!m_itemScrollArea || (!m_gridContainer) ||
-      (!m_stackedWidget) || (!m_itemsPage)) {
+  if (!m_itemScrollArea || (!m_gridContainer) || (!m_stackedWidget) ||
+      (!m_itemsPage)) {
     return false;
   }
   if (m_stackedWidget->currentWidget() != m_itemsPage) {
@@ -496,16 +536,17 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
       // Check if the clicked widget is the toolbar or a child of it
       for (QWidget *w = widget; w; w = w->parentWidget()) {
         if (w == m_itemsTopBar) {
-          return false;  // Let Qt handle toolbar interactions normally
+          return false; // Let Qt handle toolbar interactions normally
         }
       }
       // Check if click position falls within the toolbar geometry
       QPoint globalPos = mouseEvent->globalPosition().toPoint();
       QRect toolbarRect = m_itemsTopBar->geometry();
-      QPoint toolbarTopLeft = m_itemsTopBar->parentWidget()->mapToGlobal(toolbarRect.topLeft());
+      QPoint toolbarTopLeft =
+          m_itemsTopBar->parentWidget()->mapToGlobal(toolbarRect.topLeft());
       QRect globalToolbarRect(toolbarTopLeft, toolbarRect.size());
       if (globalToolbarRect.contains(globalPos)) {
-        return false;  // Click is over the toolbar, ignore
+        return false; // Click is over the toolbar, ignore
       }
     }
   }
@@ -589,21 +630,22 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
     return false;
   }
 
-  int currentSelection = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
+  int currentSelection =
+      m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
   if (currentSelection < 0) {
     currentSelection = 0;
   }
 
   // Get row multiplier from settings
-  int rowMultiplier = m_generalSettings 
-      ? m_generalSettings->mouseWheelRows 
-      : 1;
+  int rowMultiplier = m_generalSettings ? m_generalSettings->mouseWheelRows : 1;
   int rowDelta = -wheelSteps * rowMultiplier;
-  int newSelection = currentSelection + (rowDelta * gridWidth);
 
-  bool wrap = m_generalSettings
-                  ? m_generalSettings->wrapNavigation
-                  : false;
+  // In list mode, move by 1 item per step instead of gridWidth
+  bool isListMode = (collection.viewType == ViewType::List);
+  int selectionDelta = isListMode ? rowDelta : (rowDelta * gridWidth);
+  int newSelection = currentSelection + selectionDelta;
+
+  bool wrap = m_generalSettings ? m_generalSettings->wrapNavigation : false;
   bool wrapTriggered = false;
 
   if (wrap) {
@@ -642,7 +684,8 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
   }
 
   if (wrapTriggered && m_viewportManager) {
-    m_viewportManager->applyImmediateViewportPositioningForSelection(newSelection);
+    m_viewportManager->applyImmediateViewportPositioningForSelection(
+        newSelection);
     if (m_scrollManager) {
       m_scrollManager->updateVirtualView();
     }

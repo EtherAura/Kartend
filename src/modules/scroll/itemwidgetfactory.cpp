@@ -25,14 +25,16 @@ void ItemWidgetFactory::setFileData(const QStringList *filePaths,
   m_fileNames = fileNames;
 }
 
-void ItemWidgetFactory::setCachedArtworkPaths(const QHash<QString, QString> &artworkPaths) {
+void ItemWidgetFactory::setCachedArtworkPaths(
+    const QHash<QString, QString> &artworkPaths) {
   m_cachedArtworkPaths = artworkPaths;
 }
 
 ItemWidget *ItemWidgetFactory::acquireWidget() {
   // Cannot create widgets without a valid parent
   if (!m_parentWidget) {
-    qWarning() << "ItemWidgetFactory::acquireWidget: m_parentWidget is null, cannot acquire widget";
+    qWarning() << "ItemWidgetFactory::acquireWidget: m_parentWidget is null, "
+                  "cannot acquire widget";
     return nullptr;
   }
   if (!m_widgetPool) {
@@ -43,8 +45,9 @@ ItemWidget *ItemWidgetFactory::acquireWidget() {
 }
 
 void ItemWidgetFactory::configureBaseWidget(ItemWidget *widget) {
-  // Set parent BEFORE resetForReuse() to ensure child widgets (imageLabel, etc.)
-  // are in a valid state - reparenting first prevents stale child pointers
+  // Set parent BEFORE resetForReuse() to ensure child widgets (imageLabel,
+  // etc.) are in a valid state - reparenting first prevents stale child
+  // pointers
   if (m_parentWidget) {
     widget->setParent(m_parentWidget);
   }
@@ -52,11 +55,24 @@ void ItemWidgetFactory::configureBaseWidget(ItemWidget *widget) {
   widget->setFocusPolicy(Qt::NoFocus);
   widget->setHideTitles(m_context.config.hideTitles);
   widget->setHideSubcollectionTitles(m_context.config.hideSubcollectionTitles);
-  widget->setFontSize(m_context.config.fontSize);
-  widget->setCornerRadius(m_context.config.cornerRadius);
-  // Set list mode based on collection viewType - must be set before dimensions
+
+  // Set list mode based on collection viewType - must be set before
+  // dimensions/font
   bool isListMode = (m_context.config.viewType == ViewType::List);
   widget->setListMode(isListMode);
+
+  // Set collection column width for list mode (synced from header drag-resize)
+  if (isListMode) {
+    widget->setCollectionColumnWidth(m_collectionColumnWidth);
+    widget->setArtworkColumnWidth(m_artworkColumnWidth);
+  }
+
+  // Use list-specific font size in list mode, grid font size otherwise
+  int fontSize =
+      isListMode ? m_context.config.listFontSize : m_context.config.fontSize;
+  widget->setFontSize(fontSize);
+
+  widget->setCornerRadius(m_context.config.cornerRadius);
   widget->setItemDimensions(m_itemWidth, m_itemHeight);
   // Force artwork refresh after all configuration is set to ensure
   // corner radius and other settings are applied to the placeholder
@@ -79,7 +95,8 @@ void ItemWidgetFactory::releaseWidget(ItemWidget *widget, int visibleRows,
   }
 }
 
-ItemWidget *ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex) {
+ItemWidget *
+ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex) {
   auto *widget = acquireWidget();
   if (!widget) {
     return nullptr;
@@ -92,15 +109,26 @@ ItemWidget *ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex)
   }
   widget->setAsSubcollection(subcollectionIndex, subcollectionName);
 
+  // Set current collection name for list mode display
+  if (m_context.config.viewType == ViewType::List && m_collections &&
+      m_context.currentIndex >= 0 &&
+      m_context.currentIndex < m_collections->size()) {
+    widget->setCollectionName(m_collections->at(m_context.currentIndex).name);
+  }
+
   // Try to find artwork for the subcollection using the folder name
   // Artwork is searched in the current collection's artwork directory
   if (!subcollectionName.isEmpty() && m_artworkManager) {
     QString artworkDir = m_context.config.artworkDirectory;
     if (!artworkDir.isEmpty()) {
-      QString artworkPath = ArtworkUtils::findArtworkForFile(
-          subcollectionName, artworkDir);
+      QString artworkPath =
+          ArtworkUtils::findArtworkForFile(subcollectionName, artworkDir);
       if (!artworkPath.isEmpty()) {
         m_artworkManager->addPendingArtwork(widget, artworkPath);
+        // Set hasArtwork for list mode button
+        if (m_context.config.viewType == ViewType::List) {
+          widget->setHasArtwork(true);
+        }
       }
     }
   }
@@ -112,7 +140,8 @@ ItemWidget *ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex)
   return widget;
 }
 
-ItemWidget *ItemWidgetFactory::createVirtualFolderWidget(const QString &folderPath) {
+ItemWidget *
+ItemWidgetFactory::createVirtualFolderWidget(const QString &folderPath) {
   auto *widget = acquireWidget();
   if (!widget) {
     return nullptr;
@@ -126,15 +155,16 @@ ItemWidget *ItemWidgetFactory::createVirtualFolderWidget(const QString &folderPa
     displayName = folderPath.mid(lastSlash + 1);
   }
 
-  widget->setAsVirtualFolder(folderPath, displayName, m_context.config.hideSubfolderTitles);
+  widget->setAsVirtualFolder(folderPath, displayName,
+                             m_context.config.hideSubfolderTitles);
 
   // Try to find artwork for the virtual folder using the folder name
   // Artwork is searched in the current collection's artwork directory
   if (!displayName.isEmpty() && m_artworkManager) {
     QString artworkDir = m_context.config.artworkDirectory;
     if (!artworkDir.isEmpty()) {
-      QString artworkPath = ArtworkUtils::findArtworkForFile(
-          displayName, artworkDir);
+      QString artworkPath =
+          ArtworkUtils::findArtworkForFile(displayName, artworkDir);
       if (!artworkPath.isEmpty()) {
         m_artworkManager->addPendingArtwork(widget, artworkPath);
       }
@@ -163,12 +193,13 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex,
     if (!m_pendingRangeRequests.contains(chunkStart)) {
       m_pendingRangeRequests.insert(chunkStart);
       if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-        qWarning() << "[SearchDiag][ItemWidgetFactory] requestItemsRange: mediaIndex="
-                   << mediaIndex << "chunkStart=" << chunkStart
-                   << "chunkSize=" << chunkSize;
+        qWarning()
+            << "[SearchDiag][ItemWidgetFactory] requestItemsRange: mediaIndex="
+            << mediaIndex << "chunkStart=" << chunkStart
+            << "chunkSize=" << chunkSize;
       }
       emit requestItemsRange(chunkStart, chunkSize);
-      
+
       // Prefetch adjacent chunks to reduce perceived latency during scrolling
       prefetchAdjacentChunks(mediaIndex, chunkSize);
     }
@@ -192,9 +223,35 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex,
   widget->setFilePath(fullPath);
   widget->setItemName(displayName);
 
-  // Skip artwork loading in list mode - artwork is hidden
+  // Set collection name for list mode display
+  if (m_context.config.viewType == ViewType::List && m_collections &&
+      collectionIndex >= 0 && collectionIndex < m_collections->size()) {
+    widget->setCollectionName(m_collections->at(collectionIndex).name);
+  }
+
+  // Skip artwork loading in list mode - but check if artwork exists for the
+  // icon
   if (m_context.config.viewType != ViewType::List) {
     configureArtworkForWidget(widget, fullPath);
+  } else {
+    // In list mode, check if artwork exists to show the preview button
+    // Need to look up artwork from the item's collection, not the current
+    // collection
+    QString artworkDir;
+    if (m_collections && collectionIndex >= 0 &&
+        collectionIndex < m_collections->size()) {
+      artworkDir = m_collections->at(collectionIndex).artworkDirectory;
+    }
+    if (artworkDir.isEmpty()) {
+      artworkDir = m_context.config.artworkDirectory;
+    }
+    // Store artwork directory for preview overlay to use
+    widget->setArtworkDirectory(artworkDir);
+    if (!artworkDir.isEmpty()) {
+      QString artworkPath = ArtworkUtils::findArtworkForFileCached(
+          QFileInfo(fullPath).fileName(), artworkDir);
+      widget->setHasArtwork(!artworkPath.isEmpty());
+    }
   }
 
   return widget;
@@ -225,26 +282,26 @@ void ItemWidgetFactory::resolveMediaItemPaths(const QString &rawFileName,
 
   if (!fullPath.isEmpty()) {
     if (m_context.config.showAllSubcollectionItems) {
-      displayName =
-          m_fileNames
-              ? m_fileNames->value(fullPath, QFileInfo(fullPath)
-                                                 .completeBaseName()
-                                                 .replace('_', ' ')
-                                                 .simplified())
-              : QFileInfo(fullPath)
-                    .completeBaseName()
-                    .replace('_', ' ')
-                    .simplified();
-    } else {
       displayName = m_fileNames
-                        ? m_fileNames->value(fullPath,
-                                             QFileInfo(rawFileName).completeBaseName())
-                        : QFileInfo(rawFileName).completeBaseName();
+                        ? m_fileNames->value(fullPath, QFileInfo(fullPath)
+                                                           .completeBaseName()
+                                                           .replace('_', ' ')
+                                                           .simplified())
+                        : QFileInfo(fullPath)
+                              .completeBaseName()
+                              .replace('_', ' ')
+                              .simplified();
+    } else {
+      displayName =
+          m_fileNames ? m_fileNames->value(
+                            fullPath, QFileInfo(rawFileName).completeBaseName())
+                      : QFileInfo(rawFileName).completeBaseName();
     }
 
     // When searching with virtual folders, prepend the subfolder path to help
     // identify which folder the result came from. This applies when:
-    // - Collection uses virtual folders (includeContentSubfolders && !showAllSubfolderItems)
+    // - Collection uses virtual folders (includeContentSubfolders &&
+    // !showAllSubfolderItems)
     // - Search is active (suppressVirtualFolders is set during search)
     if (m_context.suppressVirtualFolders &&
         m_context.config.includeContentSubfolders &&
@@ -282,23 +339,26 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget,
   if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
     perfTimer.start();
   }
-  
+
   // Check cached artwork paths first (instant startup optimization)
   if (!m_cachedArtworkPaths.isEmpty()) {
     QString cachedPath = m_cachedArtworkPaths.value(fullPath);
     if (qEnvironmentVariableIsSet("KARTEND_ARTWORK_DIAG")) {
-      qWarning() << "[ArtworkDiag] configureArtworkForWidget: fullPath=" << fullPath
+      qWarning() << "[ArtworkDiag] configureArtworkForWidget: fullPath="
+                 << fullPath
                  << "cachedArtworkPaths.size=" << m_cachedArtworkPaths.size()
-                 << "cachedPath=" << (cachedPath.isEmpty() ? "(not found)" : cachedPath);
+                 << "cachedPath="
+                 << (cachedPath.isEmpty() ? "(not found)" : cachedPath);
     }
     if (!cachedPath.isEmpty() && m_artworkManager) {
       m_artworkManager->addPendingArtwork(widget, cachedPath);
       return;
     }
   }
-  
-  qint64 afterCacheCheck = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
-  
+
+  qint64 afterCacheCheck =
+      qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
+
   QString artworkDir = m_context.config.artworkDirectory;
 
   if (m_databaseManager && m_context.config.showAllSubcollectionItems) {
@@ -308,12 +368,15 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget,
       artworkDir = foundArtworkDir;
     }
   }
-  
-  qint64 afterDirLookup = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
 
-  // Mirror the subfolder structure from media directory to artwork directory when:
+  qint64 afterDirLookup =
+      qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
+
+  // Mirror the subfolder structure from media directory to artwork directory
+  // when:
   // 1. includeArtworkSubfolders is explicitly enabled, OR
-  // 2. artworkDirectory equals mediaDirectory (artwork is co-located with media)
+  // 2. artworkDirectory equals mediaDirectory (artwork is co-located with
+  // media)
   const QString &mediaDir = m_context.config.mediaDirectory;
   bool shouldMirrorSubfolders =
       m_context.config.includeArtworkSubfolders ||
@@ -333,13 +396,15 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget,
   // For large collections with subcollections, ONLY use cached lookup to avoid
   // blocking the UI with cold filesystem cache. The background prewarm will
   // populate the cache and reconfigure widgets afterward.
-  // If forceDirectLookup is set, always do direct filesystem lookup (used after prewarm).
+  // If forceDirectLookup is set, always do direct filesystem lookup (used after
+  // prewarm).
   QString artworkPath;
   if (forceDirectLookup) {
     // Called from reconfigure after prewarm - OS cache should be warm
     artworkPath = ArtworkUtils::findArtworkForFile(
         QFileInfo(fullPath).fileName(), artworkDir);
-  } else if (m_context.config.showAllSubcollectionItems && m_totalItemCount > 1000) {
+  } else if (m_context.config.showAllSubcollectionItems &&
+             m_totalItemCount > 1000) {
     // Only use cached lookup - don't block UI with filesystem calls
     artworkPath = ArtworkUtils::findArtworkForFileCached(
         QFileInfo(fullPath).fileName(), artworkDir);
@@ -348,12 +413,13 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget,
     artworkPath = ArtworkUtils::findArtworkForFile(
         QFileInfo(fullPath).fileName(), artworkDir);
   }
-  
-  qint64 afterArtworkFind = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
-  
+
+  qint64 afterArtworkFind =
+      qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
+
   if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && afterArtworkFind > 5) {
-    qWarning() << "[PerfTrace] configureArtworkForWidget: totalMs=" << afterArtworkFind
-               << "cacheCheck=" << afterCacheCheck
+    qWarning() << "[PerfTrace] configureArtworkForWidget: totalMs="
+               << afterArtworkFind << "cacheCheck=" << afterCacheCheck
                << "dirLookup=" << (afterDirLookup - afterCacheCheck)
                << "artworkFind=" << (afterArtworkFind - afterDirLookup)
                << "artworkDir=" << artworkDir;
@@ -361,11 +427,13 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget,
 
   if (!artworkPath.isEmpty() && m_artworkManager) {
     m_artworkManager->addPendingArtwork(widget, artworkPath);
-  } else if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && artworkPath.isEmpty()) {
+  } else if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") &&
+             artworkPath.isEmpty()) {
     static int emptyCount = 0;
-    if (++emptyCount <= 5) {  // Only log first 5 to avoid spam
-      qWarning() << "[PerfTrace] configureArtworkForWidget: NO ARTWORK artworkDir=" << artworkDir
-                 << "fileName=" << QFileInfo(fullPath).fileName();
+    if (++emptyCount <= 5) { // Only log first 5 to avoid spam
+      qWarning()
+          << "[PerfTrace] configureArtworkForWidget: NO ARTWORK artworkDir="
+          << artworkDir << "fileName=" << QFileInfo(fullPath).fileName();
     }
   }
 }
@@ -380,37 +448,41 @@ int ItemWidgetFactory::computeChunkSize() const {
   return UIConstants::Database::RANGE_CHUNK_SIZE_DEFAULT;
 }
 
-void ItemWidgetFactory::prefetchAdjacentChunks(int currentMediaIndex, int chunkSize) {
+void ItemWidgetFactory::prefetchAdjacentChunks(int currentMediaIndex,
+                                               int chunkSize) {
   if (!m_filePaths) {
     return;
   }
-  
+
   const int fileCount = m_filePaths->size();
   const int prefetchCount = UIConstants::Database::RANGE_PREFETCH_CHUNKS;
-  
+
   // Calculate current chunk
   int currentChunk = currentMediaIndex / chunkSize;
-  
+
   // Prefetch chunks ahead and behind current position
   for (int i = 1; i <= prefetchCount; ++i) {
     // Prefetch ahead
     int aheadChunk = currentChunk + i;
     int aheadStart = aheadChunk * chunkSize;
-    if (aheadStart < fileCount && !m_pendingRangeRequests.contains(aheadStart)) {
+    if (aheadStart < fileCount &&
+        !m_pendingRangeRequests.contains(aheadStart)) {
       // Check if this chunk has unloaded items
-      if (aheadStart < m_filePaths->size() && m_filePaths->at(aheadStart).isEmpty()) {
+      if (aheadStart < m_filePaths->size() &&
+          m_filePaths->at(aheadStart).isEmpty()) {
         m_pendingRangeRequests.insert(aheadStart);
         emit requestItemsRange(aheadStart, chunkSize);
       }
     }
-    
+
     // Prefetch behind (useful for scroll-up after scroll-down)
     int behindChunk = currentChunk - i;
     if (behindChunk >= 0) {
       int behindStart = behindChunk * chunkSize;
       if (!m_pendingRangeRequests.contains(behindStart)) {
         // Check if this chunk has unloaded items
-        if (behindStart < m_filePaths->size() && m_filePaths->at(behindStart).isEmpty()) {
+        if (behindStart < m_filePaths->size() &&
+            m_filePaths->at(behindStart).isEmpty()) {
           m_pendingRangeRequests.insert(behindStart);
           emit requestItemsRange(behindStart, chunkSize);
         }
@@ -421,22 +493,23 @@ void ItemWidgetFactory::prefetchAdjacentChunks(int currentMediaIndex, int chunkS
 
 void ItemWidgetFactory::prefetchRangeAt(int startIndex, int count) {
   // Prefetch data for a specific range, typically called during scrollbar drag.
-  // This allows starting database queries before the user releases the scrollbar.
+  // This allows starting database queries before the user releases the
+  // scrollbar.
   if (!m_filePaths || startIndex < 0) {
     return;
   }
-  
+
   const int fileCount = m_filePaths->size();
   if (startIndex >= fileCount) {
     return;
   }
-  
+
   // Only request if not already pending and the chunk has unloaded items
   if (!m_pendingRangeRequests.contains(startIndex)) {
     if (m_filePaths->at(startIndex).isEmpty()) {
       m_pendingRangeRequests.insert(startIndex);
       emit requestItemsRange(startIndex, count);
-      
+
       // Also prefetch adjacent chunks to improve continuity
       prefetchAdjacentChunks(startIndex, count);
     }

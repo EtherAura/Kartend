@@ -22,7 +22,7 @@ namespace ArtworkUtils {
  * Caches the contents of artwork directories to avoid repeated filesystem
  * scans. The cache maps base names (without extension) to full file paths.
  * Thread-safe.
- * 
+ *
  * Non-blocking mode: When a directory isn't cached, findInDirectory returns
  * empty immediately and queues the directory for background scanning.
  * This prevents main-thread stalls during scrollbar jumps.
@@ -30,45 +30,46 @@ namespace ArtworkUtils {
 class DirectoryCache {
 public:
   static DirectoryCache &instance();
-  
+
   /**
    * @brief Find artwork in directory using cached directory listing.
-   * 
+   *
    * Non-blocking: If directory is not yet cached, returns empty immediately
    * and queues the directory for background scanning. Call again after
    * the prewarm thread has run to get results.
-   * 
+   *
    * @param baseName The base name (without extension) to search for.
    * @param artworkDirectory The directory to search in.
    * @return Full path to artwork file if found, empty string otherwise.
    */
   [[nodiscard]] QString findInDirectory(const QString &baseName,
                                         const QString &artworkDirectory);
-  
+
   /**
-   * @brief Pre-warm cache for multiple directories (call from background thread).
+   * @brief Pre-warm cache for multiple directories (call from background
+   * thread).
    * @param directories List of directories to cache.
    */
   void prewarmDirectories(const QStringList &directories);
-  
+
   /**
    * @brief Process queued directories in background.
    * Called by the background thread to scan directories that were
    * requested but not yet cached.
    */
   void processQueuedDirectories();
-  
+
   /**
    * @brief Check if there are directories waiting to be scanned.
    */
   [[nodiscard]] bool hasQueuedDirectories() const;
-  
+
   /**
    * @brief Clear all cached directory contents and queued directories.
    * Call when collection changes or artwork directories are modified.
    */
   void clear();
-  
+
   /**
    * @brief Get cache statistics for diagnostics.
    */
@@ -77,7 +78,7 @@ public:
 private:
   DirectoryCache() = default;
   void ensureDirectoryCached(const QString &directory);
-  
+
   mutable QMutex m_mutex;
   // Maps directory path -> (baseName lowercase -> full artwork path)
   QHash<QString, QHash<QString, QString>> m_cache;
@@ -130,7 +131,8 @@ private:
  *
  * @param fileName The media filename to find artwork for.
  * @param artworkDirectory The directory to search in.
- * @return Result containing artwork path on success, or ErrorContext on failure.
+ * @return Result containing artwork path on success, or ErrorContext on
+ * failure.
  */
 [[nodiscard]] ErrorUtils::Result<QString>
 tryFindArtworkForFile(const QString &fileName, const QString &artworkDirectory);

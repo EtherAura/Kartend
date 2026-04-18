@@ -10,7 +10,8 @@
  *
  * Replaces scattered Qt dynamic properties with typed, discoverable state.
  * This class owns the canonical state structs from stateutils.h and provides
- * a single point of access for managers that need to read/write interaction state.
+ * a single point of access for managers that need to read/write interaction
+ * state.
  *
  * Usage:
  *   // In InteractionManager or ApplicationContext
@@ -38,8 +39,12 @@ public:
   // State struct accessors (non-const for read/write access)
   // ─────────────────────────────────────────────────────────────────────────
 
-  [[nodiscard]] SelectionRestoreState &selectionRestore() { return m_selectionRestore; }
-  [[nodiscard]] const SelectionRestoreState &selectionRestore() const { return m_selectionRestore; }
+  [[nodiscard]] SelectionRestoreState &selectionRestore() {
+    return m_selectionRestore;
+  }
+  [[nodiscard]] const SelectionRestoreState &selectionRestore() const {
+    return m_selectionRestore;
+  }
 
   [[nodiscard]] ScrollState &scroll() { return m_scroll; }
   [[nodiscard]] const ScrollState &scroll() const { return m_scroll; }
@@ -54,7 +59,9 @@ public:
   [[nodiscard]] const ClickState &click() const { return m_click; }
 
   [[nodiscard]] StreamScrollState &streamScroll() { return m_streamScroll; }
-  [[nodiscard]] const StreamScrollState &streamScroll() const { return m_streamScroll; }
+  [[nodiscard]] const StreamScrollState &streamScroll() const {
+    return m_streamScroll;
+  }
 
   [[nodiscard]] SearchState &search() { return m_search; }
   [[nodiscard]] const SearchState &search() const { return m_search; }
@@ -75,11 +82,15 @@ public:
 
   [[nodiscard]] qint64 clickSeriesLastMs() const { return m_clickSeriesLastMs; }
   void setClickSeriesLastMs(qint64 ms) { m_clickSeriesLastMs = ms; }
-  void updateClickSeriesLastMs() { m_clickSeriesLastMs = QDateTime::currentMSecsSinceEpoch(); }
+  void updateClickSeriesLastMs() {
+    m_clickSeriesLastMs = QDateTime::currentMSecsSinceEpoch();
+  }
 
   [[nodiscard]] qint64 lastUiActivityMs() const { return m_lastUiActivityMs; }
   void setLastUiActivityMs(qint64 ms) { m_lastUiActivityMs = ms; }
-  void updateLastUiActivity() { m_lastUiActivityMs = QDateTime::currentMSecsSinceEpoch(); }
+  void updateLastUiActivity() {
+    m_lastUiActivityMs = QDateTime::currentMSecsSinceEpoch();
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Convenience methods for common state transitions
@@ -97,9 +108,7 @@ public:
   /**
    * @brief End a programmatic scroll operation.
    */
-  void endProgrammaticScroll() {
-    m_scroll.programmaticScroll = false;
-  }
+  void endProgrammaticScroll() { m_scroll.programmaticScroll = false; }
 
   /**
    * @brief Suppress arrow centering for a duration.

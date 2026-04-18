@@ -28,13 +28,30 @@ public:
 
   // Dependencies
   void setWidgetPool(WidgetPoolManager *pool) { m_widgetPool = pool; }
-  void setArtworkManager(ArtworkManager *manager) { m_artworkManager = manager; }
-  void setDatabaseManager(DatabaseManager *manager) { m_databaseManager = manager; }
+  void setArtworkManager(ArtworkManager *manager) {
+    m_artworkManager = manager;
+  }
+  void setDatabaseManager(DatabaseManager *manager) {
+    m_databaseManager = manager;
+  }
   void setParentWidget(QWidget *parent) { m_parentWidget = parent; }
 
   // Context for widget creation
-  void setCollectionContext(const CollectionContext &context) { m_context = context; }
+  void setCollectionContext(const CollectionContext &context) {
+    m_context = context;
+  }
   void setMetrics(int itemWidth, int itemHeight);
+
+  // Collections list for looking up collection names
+  void setCollections(const QList<CollectionConfig> *collections) {
+    m_collections = collections;
+  }
+
+  // Collection column width for list mode (synced from header drag-resize)
+  void setCollectionColumnWidth(int width) { m_collectionColumnWidth = width; }
+
+  // Artwork column width for list mode (synced from header drag-resize)
+  void setArtworkColumnWidth(int width) { m_artworkColumnWidth = width; }
 
   // Subcollection name resolver callback
   using SubcollectionNameResolver = std::function<QString(int)>;
@@ -43,12 +60,14 @@ public:
   }
 
   // File data accessors (set by ScrollManager before creating widgets)
-  void setFileData(const QStringList *filePaths, const QHash<QString, QString> *fileNames);
-  
+  void setFileData(const QStringList *filePaths,
+                   const QHash<QString, QString> *fileNames);
+
   // Total item count for adaptive chunk sizing
   void setTotalItemCount(int count) { m_totalItemCount = count; }
-  
-  // Cached artwork paths for instant startup (bypasses artwork directory lookup)
+
+  // Cached artwork paths for instant startup (bypasses artwork directory
+  // lookup)
   void setCachedArtworkPaths(const QHash<QString, QString> &artworkPaths);
   void clearCachedArtworkPaths() { m_cachedArtworkPaths.clear(); }
 
@@ -65,14 +84,16 @@ public:
    * @param collectionIndex Output: detected collection index for the item.
    * @return Configured ItemWidget for the media item, or nullptr if invalid.
    */
-  [[nodiscard]] ItemWidget *createMediaWidget(int mediaIndex, int &collectionIndex);
+  [[nodiscard]] ItemWidget *createMediaWidget(int mediaIndex,
+                                              int &collectionIndex);
 
   /**
    * @brief Creates a virtual folder widget for navigating subfolders.
    * @param folderPath The relative path of the folder.
    * @return Configured ItemWidget for the virtual folder.
    */
-  [[nodiscard]] ItemWidget *createVirtualFolderWidget(const QString &folderPath);
+  [[nodiscard]] ItemWidget *
+  createVirtualFolderWidget(const QString &folderPath);
 
   /**
    * @brief Creates a placeholder widget for items still loading.
@@ -89,7 +110,8 @@ public:
   void releaseWidget(ItemWidget *widget, int visibleRows, int itemsPerRow);
 
   /**
-   * @brief Clears pending range requests, allowing new requests after data arrives.
+   * @brief Clears pending range requests, allowing new requests after data
+   * arrives.
    */
   void clearPendingRangeRequests() { m_pendingRangeRequests.clear(); }
 
@@ -97,7 +119,9 @@ public:
    * @brief Clears a single pending range request.
    * @param startIndex The chunk start index that was requested.
    */
-  void clearPendingRangeRequest(int startIndex) { m_pendingRangeRequests.remove(startIndex); }
+  void clearPendingRangeRequest(int startIndex) {
+    m_pendingRangeRequests.remove(startIndex);
+  }
 
   /**
    * @brief Prefetch data for a specific range (used during scrollbar drag).
@@ -107,14 +131,16 @@ public:
   void prefetchRangeAt(int startIndex, int count);
 
   /**
-   * @brief Re-configure artwork for a widget that may have missed initial config.
-   * 
+   * @brief Re-configure artwork for a widget that may have missed initial
+   * config.
+   *
    * Called when directories weren't cached during initial widget creation
    * but are now available. Will find and add artwork path to pending queue.
-   * 
+   *
    * @param widget The widget to configure artwork for.
    * @param fullPath Full path to the media file.
-   * @param forceDirectLookup If true, bypass cache and do direct filesystem lookup.
+   * @param forceDirectLookup If true, bypass cache and do direct filesystem
+   * lookup.
    */
   void configureArtworkForWidget(ItemWidget *widget, const QString &fullPath,
                                  bool forceDirectLookup = false);
@@ -159,10 +185,16 @@ private:
   SubcollectionNameResolver m_subcollectionNameResolver;
   const QStringList *m_filePaths = nullptr;
   const QHash<QString, QString> *m_fileNames = nullptr;
-  QHash<QString, QString> m_cachedArtworkPaths;  // fullPath -> artworkPath from session cache
-  QSet<int> m_pendingRangeRequests;  // Tracks chunk start indices with pending requests
-  int m_totalItemCount = 0;  // Total items for adaptive chunk sizing
-  
+  QHash<QString, QString>
+      m_cachedArtworkPaths; // fullPath -> artworkPath from session cache
+  QSet<int> m_pendingRangeRequests; // Tracks chunk start indices with pending
+                                    // requests
+  int m_totalItemCount = 0;         // Total items for adaptive chunk sizing
+  const QList<CollectionConfig> *m_collections =
+      nullptr;                       // Collection list for name lookup
+  int m_collectionColumnWidth = 150; // Collection column width for list mode
+  int m_artworkColumnWidth = 32;     // Artwork column width for list mode
+
   [[nodiscard]] int computeChunkSize() const;
   void prefetchAdjacentChunks(int currentMediaIndex, int chunkSize);
 };

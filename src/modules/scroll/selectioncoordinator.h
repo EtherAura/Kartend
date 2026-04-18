@@ -11,10 +11,10 @@ class SelectionOverlayManager;
 
 /**
  * @brief Coordinates selection state and overlay animations.
- * 
+ *
  * Encapsulates the logic for tracking selected indices, calculating movement
  * direction, and coordinating with SelectionOverlayManager for visual updates.
- * 
+ *
  * This is an incremental extraction from ScrollManager - reduces cognitive
  * complexity of selection handling by grouping related state and operations.
  */
@@ -41,18 +41,21 @@ public:
   // Movement analysis
   struct MovementInfo {
     bool isHorizontal = false;
-    int direction = 0;  // -1, 0, or 1
+    int direction = 0; // -1, 0, or 1
   };
-  [[nodiscard]] MovementInfo analyzeMovement(int newIndex, int prevIndex, 
-                                              int itemsPerRow) const;
+  [[nodiscard]] MovementInfo analyzeMovement(int newIndex, int prevIndex,
+                                             int itemsPerRow) const;
 
   // Overlay rect calculation (requires item position callback)
   using PositionCallback = std::function<QPoint(int)>;
-  using MetricsCallback = std::function<std::pair<int, int>()>;  // returns (width, height)
-  
-  void setPositionCallback(PositionCallback cb) { m_getPosition = std::move(cb); }
+  using MetricsCallback =
+      std::function<std::pair<int, int>()>; // returns (width, height)
+
+  void setPositionCallback(PositionCallback cb) {
+    m_getPosition = std::move(cb);
+  }
   void setMetricsCallback(MetricsCallback cb) { m_getMetrics = std::move(cb); }
-  
+
   [[nodiscard]] QRect rectForIndex(int visualIndex, int totalItems) const;
 
   // Reset state
@@ -64,12 +67,12 @@ signals:
 private:
   SelectionOverlayManager *m_overlayManager = nullptr;
   QWidget *m_gridContainer = nullptr;
-  
+
   int m_selectedIndex = -1;
   int m_committedIndex = -1;
   int m_selectedRow = -1;
   int m_direction = 0;
-  
+
   PositionCallback m_getPosition;
   MetricsCallback m_getMetrics;
 };

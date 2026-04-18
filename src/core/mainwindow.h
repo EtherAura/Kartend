@@ -68,19 +68,27 @@ public:
   int currentCollectionIndex;
   QList<CollectionConfig> m_collections;
   CollectionHierarchyCache m_hierarchyCache;
-  ApplicationContext m_appContext;  // Shared context for manager setup
-  
+  ApplicationContext m_appContext; // Shared context for manager setup
+
   void refreshTitleCounts();
   void updateWindowTitleForCollection(int collectionIndex);
   void rebuildHierarchyCache();
-  [[nodiscard]] const CollectionHierarchyCache &getHierarchyCache() const { return m_hierarchyCache; }
-  [[nodiscard]] const ApplicationContext &getAppContext() const { return m_appContext; }
+  [[nodiscard]] const CollectionHierarchyCache &getHierarchyCache() const {
+    return m_hierarchyCache;
+  }
+  [[nodiscard]] const ApplicationContext &getAppContext() const {
+    return m_appContext;
+  }
   [[nodiscard]] bool isShuttingDown() const { return m_isShuttingDown; }
 
   // Getters for Managers
-  [[nodiscard]] ApplicationManager *getApplicationManager() const { return m_appManager.get(); }
-  [[nodiscard]] MetadataSidebar *getMetadataSidebar() const { return m_MetadataSidebar; }
-  
+  [[nodiscard]] ApplicationManager *getApplicationManager() const {
+    return m_appManager.get();
+  }
+  [[nodiscard]] MetadataSidebar *getMetadataSidebar() const {
+    return m_MetadataSidebar;
+  }
+
   // Delegated Getters
   [[nodiscard]] SidebarManager *getSidebarManager() const;
   [[nodiscard]] SettingsManager *getSettingsManager() const;
@@ -146,7 +154,8 @@ private:
   int m_startupActiveScanCount = 0;
 
   // Counter for active scan operations (e.g., when showAllSubcollectionItems
-  // triggers scans of all descendants). Overlay stays visible until all complete.
+  // triggers scans of all descendants). Overlay stays visible until all
+  // complete.
   int m_activeScanCount = 0;
   void initializeAppContext();
   void showAbout();

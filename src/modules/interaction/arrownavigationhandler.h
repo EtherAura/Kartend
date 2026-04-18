@@ -35,32 +35,32 @@ struct ArrowNavigationHandlerSetup {
   AnimationManager *animationManager = nullptr;
   ViewportManager *viewportManager = nullptr;
   SelectionManager *selectionManager = nullptr;
-  
+
   // UI elements
   QScrollArea *itemScrollArea = nullptr;
   QWidget *gridContainer = nullptr;
   QStackedWidget *stackedWidget = nullptr;
   QWidget *itemsPage = nullptr;
-  
+
   // State references
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
   GeneralSettings *generalSettings = nullptr;
-  
+
   // Getters with ctx fallback
-  SETUP_GETTER_DECL(KeyboardManager*, KeyboardManager)
-  SETUP_GETTER_DECL(ScrollManager*, ScrollManager)
-  SETUP_GETTER_DECL(AnimationManager*, AnimationManager)
-  SETUP_GETTER_DECL(ViewportManager*, ViewportManager)
-  SETUP_GETTER_DECL(SelectionManager*, SelectionManager)
-  SETUP_GETTER_DECL(QScrollArea*, ItemScrollArea)
-  SETUP_GETTER_DECL(QWidget*, GridContainer)
-  SETUP_GETTER_DECL(QStackedWidget*, StackedWidget)
-  SETUP_GETTER_DECL(QWidget*, ItemsPage)
-  SETUP_GETTER_DECL(QList<CollectionConfig>*, Collections)
-  SETUP_GETTER_DECL(int*, CurrentCollectionIndex)
-  SETUP_GETTER_DECL(GeneralSettings*, GeneralSettings)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder*, InteractionState)
+  SETUP_GETTER_DECL(KeyboardManager *, KeyboardManager)
+  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
+  SETUP_GETTER_DECL(AnimationManager *, AnimationManager)
+  SETUP_GETTER_DECL(ViewportManager *, ViewportManager)
+  SETUP_GETTER_DECL(SelectionManager *, SelectionManager)
+  SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
+  SETUP_GETTER_DECL(QWidget *, GridContainer)
+  SETUP_GETTER_DECL(QStackedWidget *, StackedWidget)
+  SETUP_GETTER_DECL(QWidget *, ItemsPage)
+  SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
+  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(GeneralSettings *, GeneralSettings)
+  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
 };
 
 /**

@@ -29,15 +29,15 @@ struct KeyboardManagerSetup {
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
 
-  SETUP_GETTER_DECL(ScrollManager*, ScrollManager)
-  SETUP_GETTER_DECL(QWidget*, GridContainer)
-  SETUP_GETTER_DECL(QWidget*, ItemsPage)
-  SETUP_GETTER_DECL(QScrollArea*, ItemScrollArea)
-  SETUP_GETTER_DECL(QStackedWidget*, StackedWidget)
-  SETUP_GETTER_DECL(QLineEdit*, SearchBar)
-  SETUP_GETTER_DECL(QList<CollectionConfig>*, Collections)
-  SETUP_GETTER_DECL(int*, CurrentCollectionIndex)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder*, InteractionState)
+  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
+  SETUP_GETTER_DECL(QWidget *, GridContainer)
+  SETUP_GETTER_DECL(QWidget *, ItemsPage)
+  SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
+  SETUP_GETTER_DECL(QStackedWidget *, StackedWidget)
+  SETUP_GETTER_DECL(QLineEdit *, SearchBar)
+  SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
+  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
 };
 
 /**
@@ -115,7 +115,7 @@ signals:
   // Action requests for InteractionManager
   void requestSelectionMove(int direction, bool vertical);
   void requestAlphabeticNavigation(bool forward);
-  void requestJumpToEdge(bool toEnd);  // Home/End key navigation
+  void requestJumpToEdge(bool toEnd); // Home/End key navigation
   void requestEnterAction();
   void requestSearchModeToggle();
   void requestSearchBarFocus();
@@ -123,7 +123,7 @@ signals:
   void requestEscapeAction();
   void requestClearSearchBar();
   void requestFocusGrid();
-  
+
   // Repeat step request - for InteractionManager to perform repeat navigation
   void repeatStepRequested();
   void stopRepeatRequested(bool suppressRecentering);

@@ -1,4 +1,5 @@
-// Coordinates SQLite database access via worker thread for collection metadata queries.
+// Coordinates SQLite database access via worker thread for collection metadata
+// queries.
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
@@ -6,19 +7,19 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
-#include <stdexcept>
-#include <functional>
 #include <QThread>
 #include <QTimer>
 #include <QtGlobal>
+#include <functional>
+#include <stdexcept>
 
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
-#include "errorutils.h"
 #include "dbmigrations.h"
-#include "querymanager.h"
+#include "errorutils.h"
 #include "pathutils.h"
+#include "querymanager.h"
 #include "sessionmanager.h"
 #include "uiconstants.h"
 
@@ -30,18 +31,20 @@ using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
 // Construct the database manager and initialize the database
-DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent)
-    : QObject(parent), m_sessionManager(sessionManager) {
+DatabaseManager::DatabaseManager(SessionManager *sessionManager,
+                                 QObject *parent)
+    : QObject(parent), m_sessionManager(sessionManager),
+      m_connectionName(QStringLiteral("kartend_main")) {
   qRegisterMetaType<CollectionConfig>("CollectionConfig");
   qRegisterMetaType<CollectionContext>("CollectionContext");
   qRegisterMetaType<QList<CollectionConfig>>("QList<CollectionConfig>");
   qRegisterMetaType<QHash<QString, qint64>>("QHash<QString, qint64>");
 
-  m_connectionName = "kartend_main";
   initDatabase();
 
   m_workerThread = new QThread(this);
-  m_worker = new QueryManager(m_sessionManager, QStringLiteral("kartend_query_worker"));
+  m_worker = new QueryManager(m_sessionManager,
+                              QStringLiteral("kartend_query_worker"));
   m_worker->moveToThread(m_workerThread);
 
   connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
@@ -49,46 +52,70 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
   // Dedicated scan worker (separate thread + separate DB connection) so
   // long scans don't block query operations and UI updates.
   m_scanThread = new QThread(this);
-  m_scanWorker = new QueryManager(m_sessionManager, QStringLiteral("kartend_scan_worker"));
+  m_scanWorker =
+      new QueryManager(m_sessionManager, QStringLiteral("kartend_scan_worker"));
   m_scanWorker->moveToThread(m_scanThread);
-  connect(m_scanThread, &QThread::finished, m_scanWorker, &QObject::deleteLater);
-  
-  connect(this, &DatabaseManager::requestLoadAllCollections, m_worker, &QueryManager::loadAllCollections);
-  connect(this, &DatabaseManager::requestLoadItems, m_worker, &QueryManager::loadItems);
-  connect(this, &DatabaseManager::requestLoadItemsWithSubcollections, m_worker, &QueryManager::loadItemsWithSubcollections);
-  connect(this, &DatabaseManager::requestFetchItemCount, m_worker, &QueryManager::fetchItemCountWithToken);
-  connect(this, &DatabaseManager::requestFetchItemsRange, m_worker, &QueryManager::fetchItemsRange);
-  connect(this, &DatabaseManager::requestInvalidateCache, m_worker, &QueryManager::invalidateCollectionCache);
-  connect(this, &DatabaseManager::requestUpdateCachedCounts, m_worker, &QueryManager::updateCachedCounts);
+  connect(m_scanThread, &QThread::finished, m_scanWorker,
+          &QObject::deleteLater);
 
-    // Background scanning is handled by the scan worker.
-    connect(this, &DatabaseManager::requestEnsureScannedForContext,
-      m_scanWorker, &QueryManager::ensureScannedForContext);
+  connect(this, &DatabaseManager::requestLoadAllCollections, m_worker,
+          &QueryManager::loadAllCollections);
+  connect(this, &DatabaseManager::requestLoadItems, m_worker,
+          &QueryManager::loadItems);
+  connect(this, &DatabaseManager::requestLoadItemsWithSubcollections, m_worker,
+          &QueryManager::loadItemsWithSubcollections);
+  connect(this, &DatabaseManager::requestFetchItemCount, m_worker,
+          &QueryManager::fetchItemCountWithToken);
+  connect(this, &DatabaseManager::requestFetchItemsRange, m_worker,
+          &QueryManager::fetchItemsRange);
+  connect(this, &DatabaseManager::requestFetchVisualIndexForPath, m_worker,
+          &QueryManager::fetchVisualIndexForPath);
+  connect(this, &DatabaseManager::requestInvalidateCache, m_worker,
+          &QueryManager::invalidateCollectionCache);
+  connect(this, &DatabaseManager::requestUpdateCachedCounts, m_worker,
+          &QueryManager::updateCachedCounts);
 
-    // Lazy background FTS backfill is handled by the scan worker.
-    connect(this, &DatabaseManager::requestEnsureItemsFtsReady,
-      m_scanWorker, &QueryManager::ensureItemsFtsReady);
-  
-  connect(m_worker, &QueryManager::itemsLoaded, this, &DatabaseManager::onWorkerItemsLoaded);
-  connect(m_worker, &QueryManager::itemCountLoaded, this, &DatabaseManager::onWorkerItemCountLoaded);
-  connect(m_worker, &QueryManager::itemCountLoadedWithToken, this, &DatabaseManager::onWorkerItemCountLoadedWithToken);
-  connect(m_worker, &QueryManager::itemsRangeLoaded, this, &DatabaseManager::onWorkerItemsRangeLoaded);
-    connect(m_worker, &QueryManager::cachedCountsComputed, this, &DatabaseManager::onWorkerCachedCountsComputed);
-  connect(m_worker, &QueryManager::errorOccurred, this, &DatabaseManager::errorOccurred);
+  // Background scanning is handled by the scan worker.
+  connect(this, &DatabaseManager::requestEnsureScannedForContext, m_scanWorker,
+          &QueryManager::ensureScannedForContext);
+
+  // Lazy background FTS backfill is handled by the scan worker.
+  connect(this, &DatabaseManager::requestEnsureItemsFtsReady, m_scanWorker,
+          &QueryManager::ensureItemsFtsReady);
+
+  connect(m_worker, &QueryManager::itemsLoaded, this,
+          &DatabaseManager::onWorkerItemsLoaded);
+  connect(m_worker, &QueryManager::itemCountLoaded, this,
+          &DatabaseManager::onWorkerItemCountLoaded);
+  connect(m_worker, &QueryManager::itemCountLoadedWithToken, this,
+          &DatabaseManager::onWorkerItemCountLoadedWithToken);
+  connect(m_worker, &QueryManager::itemsRangeLoaded, this,
+          &DatabaseManager::onWorkerItemsRangeLoaded);
+  connect(m_worker, &QueryManager::visualIndexForPathLoaded, this,
+          &DatabaseManager::visualIndexForPathLoaded);
+  connect(m_worker, &QueryManager::cachedCountsComputed, this,
+          &DatabaseManager::onWorkerCachedCountsComputed);
+  connect(m_worker, &QueryManager::errorOccurred, this,
+          &DatabaseManager::errorOccurred);
   // Query worker should remain responsive; scan signals come from scan worker.
-  connect(m_worker, &QueryManager::cacheInvalidated, this, &DatabaseManager::cacheInvalidated);
+  connect(m_worker, &QueryManager::cacheInvalidated, this,
+          &DatabaseManager::cacheInvalidated);
 
-  connect(m_scanWorker, &QueryManager::errorOccurred, this, &DatabaseManager::errorOccurred);
-  connect(m_scanWorker, &QueryManager::scanProgress, this, &DatabaseManager::scanProgress);
-  connect(m_scanWorker, &QueryManager::scanStarting, this, &DatabaseManager::scanStarting);
-  connect(m_scanWorker, &QueryManager::scanItemsProgress, this, &DatabaseManager::scanItemsProgress);
-  connect(m_scanWorker, &QueryManager::collectionScanCompleted,
-          this, &DatabaseManager::collectionScanCompleted);
+  connect(m_scanWorker, &QueryManager::errorOccurred, this,
+          &DatabaseManager::errorOccurred);
+  connect(m_scanWorker, &QueryManager::scanProgress, this,
+          &DatabaseManager::scanProgress);
+  connect(m_scanWorker, &QueryManager::scanStarting, this,
+          &DatabaseManager::scanStarting);
+  connect(m_scanWorker, &QueryManager::scanItemsProgress, this,
+          &DatabaseManager::scanItemsProgress);
+  connect(m_scanWorker, &QueryManager::collectionScanCompleted, this,
+          &DatabaseManager::collectionScanCompleted);
 
-    m_cachedCountsUpdateTimer = new QTimer(this);
-    m_cachedCountsUpdateTimer->setSingleShot(true);
-    connect(m_cachedCountsUpdateTimer, &QTimer::timeout,
-      this, &DatabaseManager::dispatchCachedCountsUpdate);
+  m_cachedCountsUpdateTimer = new QTimer(this);
+  m_cachedCountsUpdateTimer->setSingleShot(true);
+  connect(m_cachedCountsUpdateTimer, &QTimer::timeout, this,
+          &DatabaseManager::dispatchCachedCountsUpdate);
 
   m_workerThread->start();
   m_scanThread->start();
@@ -162,18 +189,20 @@ void DatabaseManager::initDatabase() {
     ErrorUtils::logError(err);
   }
   if (!query.exec("PRAGMA journal_mode = WAL")) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to enable WAL mode, falling back to DELETE mode",
-                                     "DatabaseManager::initDatabase")
+    auto err = ErrorContext::warning(
+                   ErrorCode::DatabaseQueryFailed,
+                   "Failed to enable WAL mode, falling back to DELETE mode",
+                   "DatabaseManager::initDatabase")
                    .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
     // Fall back to DELETE journal mode for safer operation on systems
     // that don't support WAL (e.g., network filesystems, older SQLite)
     if (!query.exec("PRAGMA journal_mode = DELETE")) {
-      auto fallbackErr = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                               "Failed to set DELETE journal mode",
-                                               "DatabaseManager::initDatabase")
-                             .withDetails(query.lastError().text());
+      auto fallbackErr =
+          ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                "Failed to set DELETE journal mode",
+                                "DatabaseManager::initDatabase")
+              .withDetails(query.lastError().text());
       ErrorUtils::logError(fallbackErr);
     }
   }
@@ -226,47 +255,53 @@ void DatabaseManager::initDatabase() {
   }
 
   // Ensure any schema upgrades are applied after core tables exist.
-  DbMigrations::applySchemaMigrations(m_db, QStringLiteral("DatabaseManager::initDatabase"));
+  DbMigrations::applySchemaMigrations(
+      m_db, QStringLiteral("DatabaseManager::initDatabase"));
 
   QSqlQuery idx(m_db);
-  idx.prepare("CREATE INDEX IF NOT EXISTS idx_collections_uuid ON collections(uuid)");
+  idx.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_collections_uuid ON collections(uuid)");
   idx.exec();
 
-  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_collection_uuid ON items(collection_uuid)");
+  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_collection_uuid ON "
+              "items(collection_uuid)");
   idx.exec();
 
-  idx.prepare("CREATE UNIQUE INDEX IF NOT EXISTS uniq_items_uuid_path ON items(collection_uuid, path)");
+  idx.prepare("CREATE UNIQUE INDEX IF NOT EXISTS uniq_items_uuid_path ON "
+              "items(collection_uuid, path)");
   idx.exec();
 
   // Index on name for search filtering and ORDER BY name COLLATE NOCASE
-  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_name ON items(name COLLATE NOCASE)");
+  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_name ON items(name COLLATE "
+              "NOCASE)");
   idx.exec();
 
-  // Composite index for common query pattern: WHERE collection_uuid IN (...) ORDER BY name
-  // This covers filtering by collection UUID and sorting by name in a single index scan
-  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_uuid_name ON items(collection_uuid, name COLLATE NOCASE)");
+  // Composite index for common query pattern: WHERE collection_uuid IN (...)
+  // ORDER BY name This covers filtering by collection UUID and sorting by name
+  // in a single index scan
+  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_uuid_name ON "
+              "items(collection_uuid, name COLLATE NOCASE)");
   idx.exec();
-  
+
   // Covering index for paginated queries: includes path to avoid table lookup
-  // Query pattern: SELECT path, collection_uuid FROM items WHERE collection_uuid IN (...)
+  // Query pattern: SELECT path, collection_uuid FROM items WHERE
+  // collection_uuid IN (...)
   //                ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?
-  // This index covers: filtering (uuid), sorting (name), and result columns (path)
-  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_covering ON items(collection_uuid, name COLLATE NOCASE, path)");
+  // This index covers: filtering (uuid), sorting (name), and result columns
+  // (path)
+  idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_covering ON "
+              "items(collection_uuid, name COLLATE NOCASE, path)");
   idx.exec();
 }
 
-
-
-
-
-
-
-void DatabaseManager::loadAllCollections(const QList<CollectionConfig> &allCollections) {
+void DatabaseManager::loadAllCollections(
+    const QList<CollectionConfig> &allCollections) {
   emit requestLoadAllCollections(allCollections);
 }
 
-void DatabaseManager::loadItemsWithSubcollections(const CollectionContext &context,
-                                                  const QList<CollectionConfig> &allCollections) {
+void DatabaseManager::loadItemsWithSubcollections(
+    const CollectionContext &context,
+    const QList<CollectionConfig> &allCollections) {
   emit requestLoadItemsWithSubcollections(context, allCollections);
 }
 
@@ -275,10 +310,10 @@ void DatabaseManager::loadItems(const CollectionContext &context,
   emit requestLoadItems(context, allCollections);
 }
 
-void DatabaseManager::fetchItemCount(const CollectionContext &context,
-                                     const QList<CollectionConfig> &allCollections,
-                                     const QString &filter,
-                                     int requestToken) {
+void DatabaseManager::fetchItemCount(
+    const CollectionContext &context,
+    const QList<CollectionConfig> &allCollections, const QString &filter,
+    int requestToken) {
   if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
     qWarning() << "[SearchDiag][DatabaseManager] fetchItemCount: collIndex="
                << context.currentIndex << "filter='" << filter << "'"
@@ -295,20 +330,29 @@ void DatabaseManager::fetchItemCount(const CollectionContext &context,
   emit requestFetchItemCount(context, allCollections, filter, requestToken);
 }
 
-void DatabaseManager::fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter) {
+void DatabaseManager::fetchItemsRange(
+    const CollectionContext &context,
+    const QList<CollectionConfig> &allCollections, int offset, int limit,
+    const QString &filter) {
   if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
     qWarning() << "[SearchDiag][DatabaseManager] fetchItemsRange: collIndex="
-               << context.currentIndex << "offset=" << offset << "limit="
-               << limit << "filter='" << filter << "'";
+               << context.currentIndex << "offset=" << offset
+               << "limit=" << limit << "filter='" << filter << "'";
   }
   emit requestFetchItemsRange(context, allCollections, offset, limit, filter);
 }
 
-void DatabaseManager::onWorkerItemsLoaded(const QStringList &filePaths,
-                                          const QHash<QString, QString> &fileNames,
-                                          const QHash<QString, QString> &fileToArtworkDir,
-                                          const QHash<QString, QString> &fileToMediaDir,
-                                          const QHash<QString, int> &fileToCollectionIndex) {
+void DatabaseManager::fetchVisualIndexForPath(
+    const CollectionContext &context,
+    const QList<CollectionConfig> &allCollections, const QString &filePath) {
+  emit requestFetchVisualIndexForPath(context, allCollections, filePath);
+}
+
+void DatabaseManager::onWorkerItemsLoaded(
+    const QStringList &filePaths, const QHash<QString, QString> &fileNames,
+    const QHash<QString, QString> &fileToArtworkDir,
+    const QHash<QString, QString> &fileToMediaDir,
+    const QHash<QString, int> &fileToCollectionIndex) {
   QHash<QString, QString> relativeToFullPath;
   relativeToFullPath.reserve(fileNames.size() * 2);
 
@@ -333,7 +377,8 @@ void DatabaseManager::onWorkerItemsLoaded(const QStringList &filePaths,
     const QString mediaDir = fileToMediaDir.value(fullPath);
     if (!mediaDir.trimmed().isEmpty()) {
       const QString relativePath = QDir(mediaDir).relativeFilePath(fullPath);
-      if (!relativePath.isEmpty() && !relativeToFullPath.contains(relativePath)) {
+      if (!relativePath.isEmpty() &&
+          !relativeToFullPath.contains(relativePath)) {
         relativeToFullPath.insert(relativePath, fullPath);
       }
     }
@@ -351,15 +396,18 @@ void DatabaseManager::onWorkerItemsLoaded(const QStringList &filePaths,
 
 void DatabaseManager::onWorkerItemCountLoaded(int count) {
   if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    qWarning() << "[SearchDiag][DatabaseManager] onWorkerItemCountLoaded:" << count;
+    qWarning() << "[SearchDiag][DatabaseManager] onWorkerItemCountLoaded:"
+               << count;
   }
   emit itemCountLoaded(count);
 }
 
-void DatabaseManager::onWorkerItemCountLoadedWithToken(int count, int requestToken) {
+void DatabaseManager::onWorkerItemCountLoadedWithToken(int count,
+                                                       int requestToken) {
   if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    qWarning() << "[SearchDiag][DatabaseManager] onWorkerItemCountLoadedWithToken:" << count
-               << "token=" << requestToken;
+    qWarning()
+        << "[SearchDiag][DatabaseManager] onWorkerItemCountLoadedWithToken:"
+        << count << "token=" << requestToken;
   }
   emit itemCountLoadedWithToken(count, requestToken);
 
@@ -367,32 +415,40 @@ void DatabaseManager::onWorkerItemCountLoadedWithToken(int count, int requestTok
   emit itemCountLoaded(count);
 }
 
-void DatabaseManager::onWorkerItemsRangeLoaded(int offset, const QStringList &filePaths, 
-                                               const QHash<QString, QString> &fileNames,
-                                               const QHash<QString, QString> &fileToArtworkDir,
-                                               const QHash<QString, QString> &fileToMediaDir,
-                                               const QHash<QString, int> &fileToCollectionIndex) {
+void DatabaseManager::onWorkerItemsRangeLoaded(
+    int offset, const QStringList &filePaths,
+    const QHash<QString, QString> &fileNames,
+    const QHash<QString, QString> &fileToArtworkDir,
+    const QHash<QString, QString> &fileToMediaDir,
+    const QHash<QString, int> &fileToCollectionIndex) {
   if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    qWarning() << "[SearchDiag][DatabaseManager] onWorkerItemsRangeLoaded: offset="
-               << offset << "paths=" << filePaths.size();
+    qWarning()
+        << "[SearchDiag][DatabaseManager] onWorkerItemsRangeLoaded: offset="
+        << offset << "paths=" << filePaths.size();
   }
-  
-  // Merge the directory and collection index mappings from range query into our cache
-  // This enables findArtworkDirectoryForFile() and getCollectionIndexForFile() to work for range-loaded items
-  if (!fileToArtworkDir.isEmpty() || !fileToMediaDir.isEmpty() || !fileToCollectionIndex.isEmpty()) {
+
+  // Merge the directory and collection index mappings from range query into our
+  // cache This enables findArtworkDirectoryForFile() and
+  // getCollectionIndexForFile() to work for range-loaded items
+  if (!fileToArtworkDir.isEmpty() || !fileToMediaDir.isEmpty() ||
+      !fileToCollectionIndex.isEmpty()) {
     QMutexLocker locker(&m_dataMutex);
-    for (auto it = fileToArtworkDir.constBegin(); it != fileToArtworkDir.constEnd(); ++it) {
+    for (auto it = fileToArtworkDir.constBegin();
+         it != fileToArtworkDir.constEnd(); ++it) {
       m_fileToArtworkDir.insert(it.key(), it.value());
     }
-    for (auto it = fileToMediaDir.constBegin(); it != fileToMediaDir.constEnd(); ++it) {
+    for (auto it = fileToMediaDir.constBegin(); it != fileToMediaDir.constEnd();
+         ++it) {
       m_fileToMediaDir.insert(it.key(), it.value());
     }
-    for (auto it = fileToCollectionIndex.constBegin(); it != fileToCollectionIndex.constEnd(); ++it) {
+    for (auto it = fileToCollectionIndex.constBegin();
+         it != fileToCollectionIndex.constEnd(); ++it) {
       m_fileToCollectionIndex.insert(it.key(), it.value());
     }
   }
-  
-  emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex);
+
+  emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir,
+                        fileToMediaDir, fileToCollectionIndex);
 }
 
 void DatabaseManager::cancelScan() {
@@ -411,16 +467,20 @@ auto DatabaseManager::countCollectionRecursive(
   if (!CollectionUtils::isValidIndex(collectionIndex, &allCollections)) {
     return 0;
   }
-  QString expandedMediaDir = PathUtils::validateAndExpandPath(allCollections[collectionIndex].mediaDirectory, allCollections[collectionIndex].name);
-  const QString uuid =
-      CollectionUtils::computeCollectionUuid(allCollections[collectionIndex].name, expandedMediaDir);
+  QString expandedMediaDir = PathUtils::validateAndExpandPath(
+      allCollections[collectionIndex].mediaDirectory,
+      allCollections[collectionIndex].name);
+  const QString uuid = CollectionUtils::computeCollectionUuid(
+      allCollections[collectionIndex].name, expandedMediaDir);
   qint64 total = countCollectionByUuid(uuid);
-  QList<int> descendants =
-      CollectionUtils::collectDescendantIndices(collectionIndex, allCollections);
+  QList<int> descendants = CollectionUtils::collectDescendantIndices(
+      collectionIndex, allCollections);
   for (int descendantIndex : descendants) {
-    QString descExpandedMediaDir = PathUtils::validateAndExpandPath(allCollections[descendantIndex].mediaDirectory, allCollections[descendantIndex].name);
-    const QString descendantUuid =
-        CollectionUtils::computeCollectionUuid(allCollections[descendantIndex].name, descExpandedMediaDir);
+    QString descExpandedMediaDir = PathUtils::validateAndExpandPath(
+        allCollections[descendantIndex].mediaDirectory,
+        allCollections[descendantIndex].name);
+    const QString descendantUuid = CollectionUtils::computeCollectionUuid(
+        allCollections[descendantIndex].name, descExpandedMediaDir);
     total += countCollectionByUuid(descendantUuid);
   }
   return total;
@@ -440,8 +500,6 @@ auto DatabaseManager::countGlobal(const QList<CollectionConfig> &allCollections)
   return query.value(0).toLongLong();
 }
 
-
-
 // Recomputes and persists direct and recursive item counts for all collections
 void DatabaseManager::updateCachedCounts(
     const QList<CollectionConfig> &allCollections) {
@@ -458,9 +516,10 @@ void DatabaseManager::updateCachedCounts(
   uuids.resize(collectionCount);
 
   for (int i = 0; i < collectionCount; ++i) {
-    expandedMediaDirs[i] = PathUtils::validateAndExpandPath(allCollections[i].mediaDirectory,
-                                                           allCollections[i].name);
-    uuids[i] = CollectionUtils::computeCollectionUuid(allCollections[i].name, expandedMediaDirs[i]);
+    expandedMediaDirs[i] = PathUtils::validateAndExpandPath(
+        allCollections[i].mediaDirectory, allCollections[i].name);
+    uuids[i] = CollectionUtils::computeCollectionUuid(allCollections[i].name,
+                                                      expandedMediaDirs[i]);
 
     if (expandedMediaDirs[i].trimmed().isEmpty()) {
       clearCollectionFromDatabaseByUuid(uuids[i]);
@@ -475,7 +534,8 @@ void DatabaseManager::updateCachedCounts(
   }
 
   // Debounce count recomputation to avoid redundant work when multiple loads
-  // trigger updateCachedCounts() in quick succession (e.g. navigation + filter changes).
+  // trigger updateCachedCounts() in quick succession (e.g. navigation + filter
+  // changes).
   if (m_cachedCountsUpdateTimer) {
     m_cachedCountsUpdateTimer->start(UIConstants::Timing::SHORT_DELAY_MS);
   }
@@ -491,7 +551,7 @@ void DatabaseManager::dispatchCachedCountsUpdate() {
   m_inFlightCountsUuids = m_pendingCountsUuids;
 
   emit requestUpdateCachedCounts(m_inFlightCachedCountsGeneration,
-                                m_inFlightCountsUuids);
+                                 m_inFlightCountsUuids);
 }
 
 void DatabaseManager::onWorkerCachedCountsComputed(
@@ -513,7 +573,9 @@ void DatabaseManager::onWorkerCachedCountsComputed(
   recursiveCounts.resize(collectionCount);
 
   for (int i = 0; i < collectionCount; ++i) {
-    const QString uuid = (i < m_inFlightCountsUuids.size()) ? m_inFlightCountsUuids[i] : QString();
+    const QString uuid = (i < m_inFlightCountsUuids.size())
+                             ? m_inFlightCountsUuids[i]
+                             : QString();
     directCounts[i] = uuid.isEmpty() ? 0 : directCountsByUuid.value(uuid, 0);
   }
 
@@ -576,7 +638,7 @@ auto DatabaseManager::getCollectionIndexForFile(const QString &filePath) const
 // Handles both absolute paths and relative paths that need resolution via
 // collection mappings when showAllSubcollectionItems is enabled.
 auto DatabaseManager::resolveFilePath(const QString &rawEntry,
-                                       const CollectionContext &context) const
+                                      const CollectionContext &context) const
     -> QString {
   // DB-backed paginated queries (search) can return fully-qualified absolute
   // paths. Those should always pass through unchanged, even when the current
@@ -601,8 +663,8 @@ auto DatabaseManager::resolveFilePath(const QString &rawEntry,
 // Resolve a relative file path by searching fileNames map and falling back
 // to collection index lookup for media directory resolution.
 auto DatabaseManager::resolveRelativeFilePath(
-    const QString &rawFileName,
-    const QHash<QString, QString> &fileNames) const -> QString {
+    const QString &rawFileName, const QHash<QString, QString> &fileNames) const
+    -> QString {
   if (rawFileName.trimmed().isEmpty()) {
     return {};
   }
@@ -639,7 +701,7 @@ auto DatabaseManager::resolveRelativeFilePath(
       return QDir(mediaDir).absoluteFilePath(rawFileName);
     }
   }
-  
+
   return {};
 }
 
@@ -667,7 +729,8 @@ void DatabaseManager::invalidateCollectionCache(const QString &collectionUuid) {
   emit requestInvalidateCache(collectionUuid);
 }
 
-// Clear a collection's data by uuid (main thread - only used for legacy sync operations)
+// Clear a collection's data by uuid (main thread - only used for legacy sync
+// operations)
 void DatabaseManager::clearCollectionFromDatabaseByUuid(
     const QString &collectionUuid) {
   if (!m_db.isOpen()) {
@@ -676,10 +739,10 @@ void DatabaseManager::clearCollectionFromDatabaseByUuid(
 
   if (!m_db.transaction()) {
     auto err = ErrorContext::critical(
-        ErrorCode::DatabaseTransactionFailed,
-        "Failed to start database transaction",
-        "DatabaseManager::clearCollectionFromDatabaseByUuid")
-        .withDetails(m_db.lastError().text());
+                   ErrorCode::DatabaseTransactionFailed,
+                   "Failed to start database transaction",
+                   "DatabaseManager::clearCollectionFromDatabaseByUuid")
+                   .withDetails(m_db.lastError().text());
     ErrorUtils::logError(err);
     return;
   }
@@ -705,10 +768,10 @@ void DatabaseManager::clearCollectionFromDatabaseByUuid(
   } catch (const std::exception &e) {
     m_db.rollback();
     auto err = ErrorContext::critical(
-        ErrorCode::DatabaseTransactionFailed,
-        "Failed to clear collection from database",
-        "DatabaseManager::clearCollectionFromDatabaseByUuid")
-        .withDetails(QString::fromStdString(e.what()));
+                   ErrorCode::DatabaseTransactionFailed,
+                   "Failed to clear collection from database",
+                   "DatabaseManager::clearCollectionFromDatabaseByUuid")
+                   .withDetails(QString::fromStdString(e.what()));
     ErrorUtils::logError(err);
   }
 }

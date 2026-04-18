@@ -1,4 +1,5 @@
-// Handles keyboard input processing, arrow key navigation, and key repeat behavior.
+// Handles keyboard input processing, arrow key navigation, and key repeat
+// behavior.
 #include "keyboardmanager.h"
 
 #include <QApplication>
@@ -17,18 +18,30 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcKeyboardManager, "kartend.keyboardmanager")
-#define debugLog(msg) do { if (lcKeyboardManager().isDebugEnabled()) { qCDebug(lcKeyboardManager) << msg; } } while (0)
+#define debugLog(msg)                                                          \
+  do {                                                                         \
+    if (lcKeyboardManager().isDebugEnabled()) {                                \
+      qCDebug(lcKeyboardManager) << msg;                                       \
+    }                                                                          \
+  } while (0)
 
 // KeyboardManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, ScrollManager*, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QWidget*, GridContainer, gridContainer)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QWidget*, ItemsPage, itemsPage)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QScrollArea*, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QStackedWidget*, StackedWidget, stackedWidget)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QLineEdit*, SearchBar, searchBar)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QList<CollectionConfig>*, Collections, collections)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, int*, CurrentCollectionIndex, currentCollectionIndex)
-SETUP_GETTER_DEF_CTX_ONLY(KeyboardManagerSetup, InteractionStateHolder*, InteractionState, interactionState)
+SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, ScrollManager *, ScrollManager,
+                      scrollManager)
+SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QWidget *, GridContainer,
+                      gridContainer)
+SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QScrollArea *, ItemScrollArea,
+                      itemScrollArea)
+SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QStackedWidget *, StackedWidget,
+                      stackedWidget)
+SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QLineEdit *, SearchBar, searchBar)
+SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QList<CollectionConfig> *,
+                      Collections, collections)
+SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, int *, CurrentCollectionIndex,
+                      currentCollectionIndex)
+SETUP_GETTER_DEF_CTX_ONLY(KeyboardManagerSetup, InteractionStateHolder *,
+                          InteractionState, interactionState)
 
 KeyboardManager::KeyboardManager(QObject *parent) : QObject(parent) {
   initTimers();
@@ -91,11 +104,11 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
   const int key = event->key();
 
   const int searchKey = m_generalSettings ? m_generalSettings->keySearch
-                                         : static_cast<int>(Qt::Key_Slash);
+                                          : static_cast<int>(Qt::Key_Slash);
   const int backKey = m_generalSettings ? m_generalSettings->keyBack
-                                       : static_cast<int>(Qt::Key_Escape);
+                                        : static_cast<int>(Qt::Key_Escape);
   const int confirmKey = m_generalSettings ? m_generalSettings->keyConfirm
-                                          : static_cast<int>(Qt::Key_Return);
+                                           : static_cast<int>(Qt::Key_Return);
 
   auto isConfirmKey = [&](int k) -> bool {
     if (k == confirmKey) {
@@ -145,13 +158,13 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
 
   // Arrow key handling
   const int navLeftKey = m_generalSettings ? m_generalSettings->keyNavLeft
-                                          : static_cast<int>(Qt::Key_Left);
+                                           : static_cast<int>(Qt::Key_Left);
   const int navRightKey = m_generalSettings ? m_generalSettings->keyNavRight
-                                           : static_cast<int>(Qt::Key_Right);
+                                            : static_cast<int>(Qt::Key_Right);
   const int navUpKey = m_generalSettings ? m_generalSettings->keyNavUp
-                                        : static_cast<int>(Qt::Key_Up);
+                                         : static_cast<int>(Qt::Key_Up);
   const int navDownKey = m_generalSettings ? m_generalSettings->keyNavDown
-                                          : static_cast<int>(Qt::Key_Down);
+                                           : static_cast<int>(Qt::Key_Down);
 
   const bool isNavKey = (key == navLeftKey || key == navRightKey ||
                          key == navUpKey || key == navDownKey);
@@ -164,6 +177,14 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
       }
     }
 
+    // Check if we're in list mode - use step of 1 for vertical navigation
+    bool isListMode = false;
+    if (CollectionUtils::isValidIndex(m_currentCollectionIndex,
+                                      m_collections)) {
+      isListMode = (*m_collections)[*m_currentCollectionIndex].viewType ==
+                   ViewType::List;
+    }
+
     int direction = 0;
     bool vertical = false;
     if (key == navLeftKey) {
@@ -173,10 +194,12 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
       direction = 1;
       vertical = false;
     } else if (key == navUpKey) {
-      direction = -gridWidth;
+      // In list mode, move by 1 item; in grid mode, move by gridWidth
+      direction = isListMode ? -1 : -gridWidth;
       vertical = true;
     } else if (key == navDownKey) {
-      direction = gridWidth;
+      // In list mode, move by 1 item; in grid mode, move by gridWidth
+      direction = isListMode ? 1 : gridWidth;
       vertical = true;
     }
 
@@ -207,9 +230,9 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
 
   // Home/End for jumping to first/last item
   const int jumpFirstKey = m_generalSettings ? m_generalSettings->keyJumpFirst
-                                            : static_cast<int>(Qt::Key_Home);
+                                             : static_cast<int>(Qt::Key_Home);
   const int jumpLastKey = m_generalSettings ? m_generalSettings->keyJumpLast
-                                           : static_cast<int>(Qt::Key_End);
+                                            : static_cast<int>(Qt::Key_End);
   if (key == jumpFirstKey) {
     emit requestJumpToEdge(false); // jump to first item
     return true;
@@ -230,13 +253,13 @@ bool KeyboardManager::handleKeyRelease(QKeyEvent *event) {
   const int keyCode = event->key();
 
   const int navLeftKey = m_generalSettings ? m_generalSettings->keyNavLeft
-                                          : static_cast<int>(Qt::Key_Left);
+                                           : static_cast<int>(Qt::Key_Left);
   const int navRightKey = m_generalSettings ? m_generalSettings->keyNavRight
-                                           : static_cast<int>(Qt::Key_Right);
+                                            : static_cast<int>(Qt::Key_Right);
   const int navUpKey = m_generalSettings ? m_generalSettings->keyNavUp
-                                        : static_cast<int>(Qt::Key_Up);
+                                         : static_cast<int>(Qt::Key_Up);
   const int navDownKey = m_generalSettings ? m_generalSettings->keyNavDown
-                                          : static_cast<int>(Qt::Key_Down);
+                                           : static_cast<int>(Qt::Key_Down);
 
   const bool isNav = (keyCode == navLeftKey || keyCode == navRightKey ||
                       keyCode == navUpKey || keyCode == navDownKey);
@@ -273,10 +296,24 @@ void KeyboardManager::beginHoldRepeat() {
     return;
   }
 
-  // Get repeat interval from settings, adjust for vertical vs horizontal
-  int baseInterval = m_generalSettings 
-      ? m_generalSettings->keyboardRepeatIntervalMs 
-      : 260;
+  // Check if we're in list mode for faster repeat intervals
+  bool isListMode = false;
+  if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+    isListMode =
+        (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
+  }
+
+  // Get repeat interval from settings, use list or grid settings based on view
+  // mode
+  int baseInterval;
+  if (isListMode) {
+    baseInterval = m_generalSettings
+                       ? m_generalSettings->listKeyboardRepeatIntervalMs
+                       : 50;
+  } else {
+    baseInterval =
+        m_generalSettings ? m_generalSettings->keyboardRepeatIntervalMs : 260;
+  }
   int verticalInterval = baseInterval;
   int horizontalInterval = baseInterval / 2;
   constexpr qint64 kSuppressArrowCenterHoldMs = 60000; // 60s safeguard window
@@ -292,8 +329,7 @@ void KeyboardManager::beginHoldRepeat() {
   }
 
   m_repeating = true;
-  m_repeatInterval =
-      m_repeatVertical ? verticalInterval : horizontalInterval;
+  m_repeatInterval = m_repeatVertical ? verticalInterval : horizontalInterval;
 
   if (m_state) {
     m_state->scroll().horizHoldActive = !m_repeatVertical;
@@ -380,8 +416,7 @@ void KeyboardManager::onRepeatStep() {
     stopRepeat();
     return;
   }
-  if (!m_scrollManager || !m_collections ||
-      !m_currentCollectionIndex) {
+  if (!m_scrollManager || !m_collections || !m_currentCollectionIndex) {
     stopRepeat();
     return;
   }
@@ -398,9 +433,7 @@ void KeyboardManager::onRepeatStep() {
   emit repeatStepRequested();
 }
 
-void KeyboardManager::onRepeatStartTimeout() {
-  beginHoldRepeat();
-}
+void KeyboardManager::onRepeatStartTimeout() { beginHoldRepeat(); }
 
 void KeyboardManager::prepareKeyNavigationState() {
   if (m_state) {
@@ -431,9 +464,8 @@ void KeyboardManager::finalizeKeyRepeat(QKeyEvent *event, int direction,
 
   if (m_repeatStartTimer && !m_repeating) {
     // Use keyboardRepeatDelayMs for initial delay before repeating starts
-    int repeatDelay = m_generalSettings 
-        ? m_generalSettings->keyboardRepeatDelayMs 
-        : 260;
+    int repeatDelay =
+        m_generalSettings ? m_generalSettings->keyboardRepeatDelayMs : 260;
     m_repeatStartTimer->start(repeatDelay);
   }
 
@@ -450,8 +482,8 @@ void KeyboardManager::finalizeKeyRepeatForKey(Qt::Key key, int direction,
 
   if (m_repeatStartTimer && !m_repeating) {
     // Use keyboardRepeatDelayMs for initial delay before repeating starts
-    int repeatDelay = m_generalSettings ? m_generalSettings->keyboardRepeatDelayMs
-                                        : 260;
+    int repeatDelay =
+        m_generalSettings ? m_generalSettings->keyboardRepeatDelayMs : 260;
     m_repeatStartTimer->start(repeatDelay);
   }
 

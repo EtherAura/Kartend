@@ -24,10 +24,10 @@ struct AnimationManagerSetup {
   ScrollManager *scrollManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
 
-  SETUP_GETTER_DECL(QScrollArea*, ItemScrollArea)
-  SETUP_GETTER_DECL(ScrollManager*, ScrollManager)
-  SETUP_GETTER_DECL(ArtworkManager*, ArtworkManager)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder*, InteractionState)
+  SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
+  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
+  SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
+  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
 };
 
 /// Handles scroll animation creation, configuration, and execution for
@@ -58,10 +58,9 @@ public:
   /// If running, updates or stops animation based on click mode.
   /// Returns true if animation was handled (caller should return early).
   /// If not click-scroll mode, updates curY and distance from scrollbar.
-  [[nodiscard]] bool handleExistingVerticalAnimIfRunning(QScrollBar *verticalScrollBar,
-                                           int targetY, bool clickScroll,
-                                           bool clickHoldAdv, int &curY,
-                                           int &distance);
+  [[nodiscard]] bool handleExistingVerticalAnimIfRunning(
+      QScrollBar *verticalScrollBar, int targetY, bool clickScroll,
+      bool clickHoldAdv, int &curY, int &distance);
 
   /// Returns the current vertical animation (may be nullptr)
   [[nodiscard]] QPropertyAnimation *verticalAnimation() const {
@@ -97,7 +96,8 @@ public:
   static void stopArrowKeyAnimationIfRunning(QScrollBar *scrollBar);
 
   // --- Duration Calculation ---
-  /// Computes animation duration based on distance, item dimensions, repeat state, and base duration
+  /// Computes animation duration based on distance, item dimensions, repeat
+  /// state, and base duration
   [[nodiscard]] static int computeVerticalCenterDuration(int distance,
                                                          int itemHeight,
                                                          int verticalSpacing,
@@ -108,13 +108,12 @@ public:
   /// Computes target Y position for centering an item
   /// @param totalHeight Clamped container height for large grids
   /// @param logicalHeight True logical height (may exceed Qt limits)
-  [[nodiscard]] static int computeTargetYForIndex(int index, int gridWidth,
-                                                  int itemHeight,
-                                                  int verticalSpacing,
-                                                  int viewportHeight,
-                                                  int scrollbarMax,
-                                                  int totalHeight = 0,
-                                                  int logicalHeight = 0);
+  /// @param headerOffset Offset for list header (list view mode)
+  [[nodiscard]] static int
+  computeTargetYForIndex(int index, int gridWidth, int itemHeight,
+                         int verticalSpacing, int viewportHeight,
+                         int scrollbarMax, int totalHeight = 0,
+                         int logicalHeight = 0, int headerOffset = 0);
 
   /// Computes horizontal target X for visibility
   [[nodiscard]] static int computeHorizontalTargetX(int itemX,
@@ -123,11 +122,10 @@ public:
                                                     int margins, int scrollMax);
 
   /// Computes desired Y for visibility (returns true if vertical scroll needed)
-  [[nodiscard]] static int computeDesiredYForVisibility(int itemY,
-                                                        int itemHeight, int curY,
-                                                        int viewportHeight,
-                                                        int margins,
-                                                        bool &needVertical);
+  [[nodiscard]] static int
+  computeDesiredYForVisibility(int itemY, int itemHeight, int curY,
+                               int viewportHeight, int margins,
+                               bool &needVertical);
 
   // --- Ensure Visible Animation ---
   /// Starts animation for ensuring an item is visible
@@ -136,7 +134,8 @@ public:
                                bool isRepeating);
 
   // --- Wheel Scroll Animation ---
-  /// Gets the current end value of vertical animation (for chaining wheel scrolls)
+  /// Gets the current end value of vertical animation (for chaining wheel
+  /// scrolls)
   [[nodiscard]] int getVerticalAnimEndValue() const;
 
   /// Starts a wheel scroll animation with custom finish callback

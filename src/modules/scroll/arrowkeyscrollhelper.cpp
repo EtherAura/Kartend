@@ -10,8 +10,7 @@
 #include <QTimer>
 #include <cmath>
 
-ArrowKeyScrollHelper::ArrowKeyScrollHelper(QObject *parent)
-    : QObject(parent) {
+ArrowKeyScrollHelper::ArrowKeyScrollHelper(QObject *parent) : QObject(parent) {
   m_updateTimer = new QTimer(this);
   m_updateTimer->setSingleShot(true);
 }
@@ -29,7 +28,8 @@ void ArrowKeyScrollHelper::setItemMetrics(int itemHeight, int verticalSpacing,
   m_margins = margins;
 }
 
-void ArrowKeyScrollHelper::scheduleUpdate(int selectedIndex, bool extendedHold) {
+void ArrowKeyScrollHelper::scheduleUpdate(int selectedIndex,
+                                          bool extendedHold) {
   if (!m_updateTimer) {
     return;
   }
@@ -72,9 +72,9 @@ auto ArrowKeyScrollHelper::shouldSkipUpdate() const -> bool {
   return (until > 0 && QDateTime::currentMSecsSinceEpoch() < until);
 }
 
-void ArrowKeyScrollHelper::performUpdate(int selectedIndex, int totalItems,
-                                         int itemsPerRow,
-                                         std::function<int(int)> getItemPositionY) {
+void ArrowKeyScrollHelper::performUpdate(
+    int selectedIndex, int totalItems, int itemsPerRow,
+    std::function<int(int)> getItemPositionY) {
   if (!m_scrollArea || selectedIndex < 0 || selectedIndex >= totalItems) {
     return;
   }
@@ -89,9 +89,8 @@ void ArrowKeyScrollHelper::performUpdate(int selectedIndex, int totalItems,
     return;
   }
 
-  int viewportHeight = m_scrollArea->viewport()
-                           ? m_scrollArea->viewport()->height()
-                           : 0;
+  int viewportHeight =
+      m_scrollArea->viewport() ? m_scrollArea->viewport()->height() : 0;
   if (viewportHeight <= 0) {
     return;
   }
@@ -111,8 +110,10 @@ void ArrowKeyScrollHelper::performUpdate(int selectedIndex, int totalItems,
 }
 
 auto ArrowKeyScrollHelper::calculateCenterTarget(int itemY,
-                                                 int viewportHeight) const -> int {
-  int itemHeight = m_itemHeight > 0 ? m_itemHeight : UIConstants::Item::DEFAULT_HEIGHT;
+                                                 int viewportHeight) const
+    -> int {
+  int itemHeight =
+      m_itemHeight > 0 ? m_itemHeight : UIConstants::Item::DEFAULT_HEIGHT;
   int margins = m_margins > 0 ? m_margins : UIConstants::Grid::MARGINS;
 
   int target = (margins + itemY) + (itemHeight / 2) - (viewportHeight / 2);
@@ -132,13 +133,13 @@ auto ArrowKeyScrollHelper::calculateCenterTarget(int itemY,
 void ArrowKeyScrollHelper::setupAndStartAnimation(QScrollBar *scrollBar,
                                                   int current, int target) {
   // Get base duration from settings
-  int baseDuration = m_generalSettings 
-      ? m_generalSettings->scrollAnimationDurationMs 
-      : 1500;
-  
+  int baseDuration =
+      m_generalSettings ? m_generalSettings->scrollAnimationDurationMs : 1500;
+
   int rowStride = m_itemHeight + m_verticalSpacing;
   int singleRowDuration = baseDuration + baseDuration;
-  singleRowDuration = std::max(baseDuration, std::min(singleRowDuration, baseDuration));
+  singleRowDuration =
+      std::max(baseDuration, std::min(singleRowDuration, baseDuration));
 
   static constexpr double DEFAULT_PIXELS_PER_MILLISECOND = 0.5;
   double pixelsPerMillisecond = (rowStride > 0 && singleRowDuration > 0)
@@ -160,7 +161,7 @@ void ArrowKeyScrollHelper::setupAndStartAnimation(QScrollBar *scrollBar,
     int animStart = animation->startValue().toInt();
     bool movingDown = animEnd > animStart;
     bool newTargetDown = target > current;
-    
+
     // If continuing in the same direction, just update the target
     // This creates smooth continuous scrolling instead of stuttering restarts
     if (movingDown == newTargetDown) {
@@ -171,13 +172,13 @@ void ArrowKeyScrollHelper::setupAndStartAnimation(QScrollBar *scrollBar,
                                             pixelsPerMillisecond))
               : singleRowDuration;
       newDuration = std::max(baseDuration, std::min(newDuration, baseDuration));
-      
+
       // Update end value and duration without stopping - smooth extension
       animation->setEndValue(target);
       animation->setDuration(newDuration);
       return;
     }
-    
+
     // Direction changed - need to stop and restart
     animation->stop();
   }

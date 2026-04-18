@@ -1,4 +1,4 @@
-# Building
+emerge --ask dev-build/cmake dev-build/ninja llvm-core/clang llvm-core/lld dev-qt/qtbase:6 dev-qt/qttools:6 dev-util/ccache# Building
 
 ## Build Script Options
 
@@ -156,3 +156,36 @@ cmake --build build/ninja-pgo --parallel $(nproc)
 cmake -S . -B build/ninja-pgo -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_PGO=ON -DPGO_USE=ON
 cmake --build build/ninja-pgo --parallel $(nproc)
 ```
+
+## Linting Configuration
+
+The maintenance build runs several static analysis tools. Configuration files in the project root customize their behavior:
+
+### clang-tidy (`.clang-tidy`)
+
+Configured to focus on actionable warnings, disabling noisy style checks:
+
+- **Enabled**: `clang-analyzer-*`, `bugprone-*`, `performance-*`, `modernize-*`, `readability-*`, `misc-*`
+- **Disabled**: Trailing return types, identifier naming/length, magic numbers, braces around statements, and other style-only checks
+
+### IWYU (`.iwyu.imp`)
+
+Include-What-You-Use mapping file for Qt6. Maps Qt internal headers to public equivalents to reduce false positives.
+
+**Note**: IWYU with Qt is known to be noisy. "Remove" suggestions are more reliable than "add" suggestions. The "add" suggestions often reference Qt internal headers that should not be included directly.
+
+### cppcheck
+
+Uses built-in checks with `--enable=all`. Focuses on real bugs, memory issues, and performance problems.
+
+### Linting Logs
+
+Maintenance build logs are written to `build/ninja-maintenance/logs/`:
+
+| Log File | Tool | Priority |
+|----------|------|----------|
+| `cppcheck.log` | cppcheck | High - real bugs |
+| `clang-tidy.log` | clang-tidy | Medium - code quality |
+| `iwyu.log` | IWYU | Low - verify before applying |
+| `clang-format.log` | clang-format | Style only |
+

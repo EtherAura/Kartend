@@ -1,0 +1,14 @@
+# Clang-Tidy Configuration for Kartend
+# Focuses on actionable warnings, disabling noisy style checks
+
+# Start with all checks disabled, then enable specific categories
+Checks: "-*,clang-analyzer-*,bugprone-*,performance-*,modernize-*,readability-*,misc-*,-modernize-use-trailing-return-type,-modernize-use-designated-initializers,-modernize-use-nodiscard,-modernize-return-braced-init-list,-modernize-use-ranges,-readability-implicit-bool-conversion,-readability-identifier-length,-readability-magic-numbers,-readability-braces-around-statements,-readability-else-after-return,-readability-named-parameter,-readability-uppercase-literal-suffix,-readability-redundant-access-specifiers,-readability-simplify-boolean-expr,-readability-identifier-naming,-readability-math-missing-parentheses,-readability-use-std-min-max,-readability-function-cognitive-complexity,-readability-static-definition-in-anonymous-namespace,-readability-convert-member-functions-to-static,-readability-function-size,-performance-enum-size,-performance-avoid-endl,-performance-no-automatic-move,-misc-non-private-member-variables-in-classes,-misc-const-correctness,-misc-use-anonymous-namespace,-misc-include-cleaner,-misc-no-recursion,-misc-use-internal-linkage,-bugprone-easily-swappable-parameters,-bugprone-branch-clone,-bugprone-narrowing-conversions,-bugprone-macro-parentheses,-bugprone-implicit-widening-of-multiplication-result"
+
+# Only analyze project headers, not Qt or system headers
+HeaderFilterRegex: '.*/src/.*'
+
+# Warnings as errors for specific critical checks (none for now)
+WarningsAsErrors: ''
+
+# Apply fixes when running with --fix (conservative)
+FormatStyle: 'file'

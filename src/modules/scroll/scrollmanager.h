@@ -6,12 +6,12 @@
 #include "setuputils.h"
 #include <QDateTime>
 #include <QHash>
-#include <memory>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
 #include <QSet>
 #include <QTimer>
+#include <memory>
 
 class QWidget;
 class QScrollArea;
@@ -34,6 +34,7 @@ class ScrollDataManager;
 class PreSearchStateManager;
 class SelectionStateTracker;
 class ListHeaderWidget;
+class ArtworkPreviewOverlay;
 enum class ListSortColumn;
 
 namespace TimerUtils {
@@ -56,25 +57,28 @@ struct ScrollManagerSetup {
   ArtworkManager *artworkManager = nullptr;
   const QList<CollectionConfig> *collections = nullptr;
   const CollectionHierarchyCache *hierarchyCache = nullptr;
-  
-  SETUP_GETTER_DECL(QWidget*, GridContainer)
-  SETUP_GETTER_DECL(QScrollArea*, MediaScrollArea)
-  SETUP_GETTER_DECL(ArtworkManager*, ArtworkManager)
-  SETUP_GETTER_DECL(const QList<CollectionConfig>*, Collections)
-  SETUP_GETTER_DECL(const CollectionHierarchyCache*, HierarchyCache)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder*, InteractionState)
-  SETUP_GETTER_DECL(const GeneralSettings*, GeneralSettings)
+
+  SETUP_GETTER_DECL(QWidget *, GridContainer)
+  SETUP_GETTER_DECL(QScrollArea *, MediaScrollArea)
+  SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
+  SETUP_GETTER_DECL(const QList<CollectionConfig> *, Collections)
+  SETUP_GETTER_DECL(const CollectionHierarchyCache *, HierarchyCache)
+  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
+  SETUP_GETTER_DECL(const GeneralSettings *, GeneralSettings)
 };
 
 /**
- * @brief Manages virtual scrolling, widget pooling, and grid layout for large item collections.
- * 
+ * @brief Manages virtual scrolling, widget pooling, and grid layout for large
+ * item collections.
+ *
  * Memory Ownership Model:
  * - Owns helper managers via std::unique_ptr (explicit lifetime management)
  * - Owns QTimer instances via Qt parent ownership (new QTimer(this))
- * - Does NOT own: m_gridContainer, m_mediaScrollArea, m_artworkManager, m_databaseManager,
- *   m_collections, m_hierarchyCache, m_generalSettings, m_state (borrowed references)
- * - Widget ownership: ItemWidgets in m_activeWidgets are managed by WidgetPoolManager
+ * - Does NOT own: m_gridContainer, m_mediaScrollArea, m_artworkManager,
+ * m_databaseManager, m_collections, m_hierarchyCache, m_generalSettings,
+ * m_state (borrowed references)
+ * - Widget ownership: ItemWidgets in m_activeWidgets are managed by
+ * WidgetPoolManager
  */
 class ScrollManager : public QObject {
   Q_OBJECT
@@ -87,11 +91,12 @@ public:
   // and virtual folders intact) and recalculates container metrics without
   // tearing down the view.
   void updateMediaItemCount(int mediaItemCount);
-  void receiveItemsRange(int offset, const QStringList &filePaths, 
+  void receiveItemsRange(int offset, const QStringList &filePaths,
                          const QHash<QString, QString> &fileNames,
                          const QHash<QString, QString> &fileToArtworkDir);
   void cleanup();
   void updateGridWidth(int newGridWidth);
+  void updateViewType(ViewType viewType);
   void updateVirtualView();
   [[nodiscard]] int getEffectiveHorizontalSpacing() const;
   [[nodiscard]] int getFirstVisibleRow() const;
@@ -118,6 +123,23 @@ public:
   [[nodiscard]] const GridMetrics &getMetrics() const { return m_metrics; }
   void enforceScrollContentConstraints();
   void recreateLayout();
+
+  /// Set file path to restore selection to after items are loaded (for sort
+  /// changes)
+  void setPendingSelectionRestoreByPath(const QString &filePath);
+
+  /// Check if there's a pending selection restore by file path
+  /// Used to skip index-based selection restore during sort changes
+  [[nodiscard]] bool hasPendingSelectionRestoreByPath() const {
+    return !m_pendingRestoreFilePath.isEmpty();
+  }
+
+  /// Check if artwork preview overlay is currently visible
+  [[nodiscard]] bool isArtworkPreviewVisible() const;
+  /// Hide the artwork preview overlay if visible (returns true if it was
+  /// visible)
+  bool hideArtworkPreview();
+
   void centerHorizontalScrollbar(int currentCollectionIndex,
                                  const QList<CollectionConfig> &collections);
   void handleLayoutChange();
@@ -137,10 +159,11 @@ public:
                          const QHash<QString, QString> &fileNames,
                          const QHash<QString, QString> &artworkPaths = {});
   // Gets current viewport data for session caching (returns true if valid data)
-  [[nodiscard]] bool getCurrentViewportForCache(int &startIndex, int &totalItems,
-                                                QStringList &filePaths,
-                                                QHash<QString, QString> &fileNames,
-                                                QHash<QString, QString> &artworkPaths) const;
+  [[nodiscard]] bool
+  getCurrentViewportForCache(int &startIndex, int &totalItems,
+                             QStringList &filePaths,
+                             QHash<QString, QString> &fileNames,
+                             QHash<QString, QString> &artworkPaths) const;
   // Data accessors - delegate to ScrollDataManager
   [[nodiscard]] const QStringList &getFilePaths() const;
   [[nodiscard]] const QHash<QString, QString> &getFileNames() const;
@@ -157,6 +180,18 @@ signals:
   void requestItemsRange(int offset, int limit);
   void virtualScrollSetupComplete();
   void filterChanged(int visibleItems, int totalOriginal);
+  void sortModeChangeRequested(
+      SortMode sortMode); // Request sort mode change from list header click
+  void selectItemByIndex(
+      int index); // Request selection of item at index (for post-sort restore)
+  void listColumnWidthChanged(
+      int width); // Emitted when list column width is resized
+  void listArtworkColumnWidthChanged(
+      int width); // Emitted when list artwork column width is resized
+
+public slots:
+  /// Receives the visual index for a file path from database query
+  void onVisualIndexForPathLoaded(int visualIndex, const QString &filePath);
 
 private slots:
   void onScrollChanged();
@@ -167,6 +202,10 @@ private slots:
   void onSliderMoved(int position);
   void reconfigureArtworkForActiveWidgets();
   void onListColumnClicked(ListSortColumn column);
+  void onListColumnWidthChanged(int collectionWidth);
+  void onListArtworkColumnWidthChanged(int artworkWidth);
+  void onArtworkPreviewRequested(const QString &filePath,
+                                 const QString &artworkDir);
 
 private:
   void createVirtualContainer();
@@ -182,7 +221,7 @@ private:
   // ─────────────────────────────────────────────────────────────────────────
   // Owned helper managers (unique_ptr for explicit ownership)
   // ─────────────────────────────────────────────────────────────────────────
-  
+
   // Widget pool manager for recycling ItemWidgets
   std::unique_ptr<WidgetPoolManager> m_widgetPool;
   ItemWidget *acquireWidget();
@@ -212,7 +251,8 @@ private:
   // Arrow key scroll helper for centering animation
   std::unique_ptr<ArrowKeyScrollHelper> m_arrowKeyScrollHelper;
 
-  // Data manager for file paths, file names, subcollections, and virtual folders
+  // Data manager for file paths, file names, subcollections, and virtual
+  // folders
   std::unique_ptr<ScrollDataManager> m_dataManager;
 
   // Pre-search state manager for fast search result restoration
@@ -224,19 +264,46 @@ private:
   // List header widget for sortable column headers in list view mode
   ListHeaderWidget *m_listHeader = nullptr;
 
+  // Collection column width for list view mode (synced between header and
+  // items)
+  int m_collectionColumnWidth = 150;
+
+  // Artwork column width for list view mode (synced between header and items)
+  int m_artworkColumnWidth = 32;
+
+  // Artwork preview overlay for list view mode
+  std::unique_ptr<ArtworkPreviewOverlay> m_artworkPreviewOverlay;
+
 public:
-  [[nodiscard]] const WidgetPoolManager *getWidgetPool() const { return m_widgetPool.get(); }
-  [[nodiscard]] const FilterManager *getFilterManager() const { return m_filterManager.get(); }
-  [[nodiscard]] const SelectionOverlayManager *getOverlayManager() const { return m_overlayManager.get(); }
-  [[nodiscard]] const VirtualContainerManager *getContainerManager() const { return m_containerManager.get(); }
-  [[nodiscard]] const SelectionCoordinator *getSelectionCoordinator() const { return m_selectionCoordinator.get(); }
-  [[nodiscard]] const ScrollEventHandler *getScrollEventHandler() const { return m_scrollEventHandler.get(); }
-  [[nodiscard]] const ScrollDataManager *getDataManager() const { return m_dataManager.get(); }
-  [[nodiscard]] const PreSearchStateManager *getPreSearchStateManager() const { return m_preSearchStateManager.get(); }
-  [[nodiscard]] const SelectionStateTracker *getSelectionState() const { return m_selectionState.get(); }
+  [[nodiscard]] const WidgetPoolManager *getWidgetPool() const {
+    return m_widgetPool.get();
+  }
+  [[nodiscard]] const FilterManager *getFilterManager() const {
+    return m_filterManager.get();
+  }
+  [[nodiscard]] const SelectionOverlayManager *getOverlayManager() const {
+    return m_overlayManager.get();
+  }
+  [[nodiscard]] const VirtualContainerManager *getContainerManager() const {
+    return m_containerManager.get();
+  }
+  [[nodiscard]] const SelectionCoordinator *getSelectionCoordinator() const {
+    return m_selectionCoordinator.get();
+  }
+  [[nodiscard]] const ScrollEventHandler *getScrollEventHandler() const {
+    return m_scrollEventHandler.get();
+  }
+  [[nodiscard]] const ScrollDataManager *getDataManager() const {
+    return m_dataManager.get();
+  }
+  [[nodiscard]] const PreSearchStateManager *getPreSearchStateManager() const {
+    return m_preSearchStateManager.get();
+  }
+  [[nodiscard]] const SelectionStateTracker *getSelectionState() const {
+    return m_selectionState.get();
+  }
 
 private:
-
   const GeneralSettings *m_generalSettings = nullptr;
   InteractionStateHolder *m_state = nullptr;
   QWidget *m_gridContainer = nullptr;
@@ -248,20 +315,23 @@ private:
   const QList<CollectionConfig> *m_collections = nullptr;
   CollectionContext m_context;
   VirtualMetrics m_metrics;
-  QTimer *m_scrollTimer = nullptr;  // Throttle timer (not debounce)
+  QTimer *m_scrollTimer = nullptr; // Throttle timer (not debounce)
   QTimer *m_arrowKeyViewUpdateTimer = nullptr;
   int m_totalItems = 0;
   qint64 m_lastScrollTime = 0;
   bool m_isMutating = false;
   DatabaseManager *m_databaseManager = nullptr;
   bool m_destroying = false;
-  bool m_processingScrollChange = false;  // Reentrancy guard for onScrollChanged
+  bool m_processingScrollChange = false; // Reentrancy guard for onScrollChanged
   TimerUtils::DebouncedTimer *m_userScrollIdleTimer = nullptr;
   TimerUtils::DebouncedTimer *m_prewarmIdleTimer = nullptr;
-  qint64 m_lastArtworkPrewarmTime = 0;  // Debounce artwork directory prewarm
-  
+  qint64 m_lastArtworkPrewarmTime = 0; // Debounce artwork directory prewarm
+
   // Initial scroll index for pre-positioning before widget creation
   int m_initialScrollIndex = -1;
+
+  // Pending file path for selection restore after sort/reload
+  QString m_pendingRestoreFilePath;
 
   // Rate-limited debug aid for cases where nothing renders.
   int m_emptyViewDebugBudget = 3;
@@ -295,8 +365,10 @@ private:
 
   // Selection update helpers (split from updateSelectionForIndex)
   void updateSelectionDirection(int selectedIndex, int prevIndex);
-  void handleSameSelectionUpdate(int selectedIndex, ItemWidget *currentWidget, bool keepOverlay);
-  void handleNewSelectionUpdate(int selectedIndex, int prevIndex, ItemWidget *currentWidget);
+  void handleSameSelectionUpdate(int selectedIndex, ItemWidget *currentWidget,
+                                 bool keepOverlay);
+  void handleNewSelectionUpdate(int selectedIndex, int prevIndex,
+                                ItemWidget *currentWidget);
   void handleMissingWidgetSelection(int selectedIndex, bool keepOverlay);
 
   void rebuildFilteredView();

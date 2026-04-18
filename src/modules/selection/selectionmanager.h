@@ -44,23 +44,23 @@ struct SelectionManagerSetup {
   const CollectionHierarchyCache *hierarchyCache = nullptr;
   QLineEdit *searchBar = nullptr;
 
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder*, InteractionState)
-  SETUP_GETTER_DECL(ScrollManager*, ScrollManager)
-  SETUP_GETTER_DECL(SidebarManager*, SidebarManager)
-  SETUP_GETTER_DECL(SessionManager*, SessionManager)
-  SETUP_GETTER_DECL(SettingsManager*, SettingsManager)
-  SETUP_GETTER_DECL(NavigationManager*, NavigationManager)
-  SETUP_GETTER_DECL(AnimationManager*, AnimationManager)
-  SETUP_GETTER_DECL(ViewportManager*, ViewportManager)
-  SETUP_GETTER_DECL(ArtworkManager*, ArtworkManager)
-  SETUP_GETTER_DECL(MetadataSidebar*, Sidebar)
-  SETUP_GETTER_DECL(QWidget*, ItemsPage)
-  SETUP_GETTER_DECL(QWidget*, GridContainer)
-  SETUP_GETTER_DECL(QScrollArea*, ItemScrollArea)
-  SETUP_GETTER_DECL(QList<CollectionConfig>*, Collections)
-  SETUP_GETTER_DECL(int*, CurrentCollectionIndex)
-  SETUP_GETTER_DECL(const CollectionHierarchyCache*, HierarchyCache)
-  SETUP_GETTER_DECL(QLineEdit*, SearchBar)
+  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
+  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
+  SETUP_GETTER_DECL(SidebarManager *, SidebarManager)
+  SETUP_GETTER_DECL(SessionManager *, SessionManager)
+  SETUP_GETTER_DECL(SettingsManager *, SettingsManager)
+  SETUP_GETTER_DECL(NavigationManager *, NavigationManager)
+  SETUP_GETTER_DECL(AnimationManager *, AnimationManager)
+  SETUP_GETTER_DECL(ViewportManager *, ViewportManager)
+  SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
+  SETUP_GETTER_DECL(MetadataSidebar *, Sidebar)
+  SETUP_GETTER_DECL(QWidget *, ItemsPage)
+  SETUP_GETTER_DECL(QWidget *, GridContainer)
+  SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
+  SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
+  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(const CollectionHierarchyCache *, HierarchyCache)
+  SETUP_GETTER_DECL(QLineEdit *, SearchBar)
 };
 
 /**
@@ -82,7 +82,9 @@ public:
 
   // Core selection state accessors
   [[nodiscard]] int currentSelectedIndex() const { return m_selectedItemIndex; }
-  [[nodiscard]] QString selectedFilePath() const { return m_selectedFilePath; }
+  [[nodiscard]] const QString &selectedFilePath() const {
+    return m_selectedFilePath;
+  }
   [[nodiscard]] ItemWidget *selectedWidget() const {
     return m_selectedMediaItem;
   }
@@ -99,7 +101,8 @@ public:
   // Selection restore operations
   void beginSelectionRestore(int targetIndex);
   void cancelPendingSelectionRestore();
-  void resetSelectionRestoreState();  // Reset state for new navigation (doesn't set userSelectionMade)
+  void resetSelectionRestoreState(); // Reset state for new navigation (doesn't
+                                     // set userSelectionMade)
   void prepareForRestore(int targetIndex);
   void finalizeRestore();
   [[nodiscard]] bool isRestoringSelection() const {
@@ -123,7 +126,7 @@ public:
 
   // Derive title for an index (used for persistence)
   [[nodiscard]] QString titleForIndex(int index,
-                                       const QList<int> &subcollections) const;
+                                      const QList<int> &subcollections) const;
 
   // File path resolution for selection
   void updateFilePathForSelection(int index, const QList<int> &subcollections);
@@ -143,9 +146,8 @@ public:
 
   // Click selection helpers
   [[nodiscard]] bool shouldTreatAsNewRow(int targetIndex, int gridWidth) const;
-  [[nodiscard]] static bool shouldAnimateHorizontalHop(int fromIndex,
-                                                        int toIndex,
-                                                        int gridWidth);
+  [[nodiscard]] static bool
+  shouldAnimateHorizontalHop(int fromIndex, int toIndex, int gridWidth);
   [[nodiscard]] static bool isNewRow(int currentSelection, int newSelection,
                                      int gridWidth);
 
@@ -157,13 +159,16 @@ public:
   void processSingleClickSelection(int visualIndex, const QString &filePath);
   void runHorizontalHopAnimation(int start, int target, qint64 nowMs);
   void handleNewRowClickSelection(int visualIndex, qint64 nowMs);
-  void handleSameRowClickSelection(int visualIndex, bool skipCenter, qint64 nowMs);
+  void handleSameRowClickSelection(int visualIndex, bool skipCenter,
+                                   qint64 nowMs);
 
   // Widget click handling via EventManager
-  // handleWidgetSelectionByIndex is preferred - uses pre-computed index from click detection
+  // handleWidgetSelectionByIndex is preferred - uses pre-computed index from
+  // click detection
   int handleWidgetSelectionByIndex(int visualIndex, const QPoint &clickPos,
                                    QMouseEvent *originalEvent);
-  // Legacy method - searches for widget in activeWidgets (may fail during rapid scrolling)
+  // Legacy method - searches for widget in activeWidgets (may fail during rapid
+  // scrolling)
   int handleWidgetSelection(ItemWidget *widget, const QPoint &clickPos,
                             QMouseEvent *originalEvent);
 

@@ -1,42 +1,43 @@
 #ifndef QUERYMANAGER_H
 #define QUERYMANAGER_H
 
-#include <QObject>
+#include "collectionutils.h"
+#include "errorutils.h"
 #include <QCache>
+#include <QDateTime>
+#include <QHash>
+#include <QObject>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStringList>
-#include <QHash>
-#include <QDateTime>
 #include <QThreadPool>
 #include <atomic>
 #include <memory>
-#include "collectionutils.h"
-#include "errorutils.h"
 
 class SessionManager;
 
 /**
  * @brief Worker thread database query executor.
- * 
+ *
  * Threading Model:
  * - Lives on worker thread: moveToThread() in DatabaseManager constructor
  * - All slots are invoked via Qt::QueuedConnection from main thread
  * - All signals are automatically queued back to main thread
- * 
+ *
  * Thread-safe by design:
  * - Owns its own QSqlDatabase connection (m_db)
  * - Uses thread-local prepared statement cache
  * - No direct access from main thread - only via signals/slots
- * 
+ *
  * NEVER call methods directly from main thread - use DatabaseManager's API.
  */
 class QueryManager : public QObject {
   Q_OBJECT
 public:
-  explicit QueryManager(SessionManager *sessionManager,
-                        const QString &connectionName = QStringLiteral("kartend_worker"),
-                        QObject *parent = nullptr);
+  explicit QueryManager(
+      SessionManager *sessionManager,
+      const QString &connectionName = QStringLiteral("kartend_worker"),
+      QObject *parent = nullptr);
   ~QueryManager() override;
 
 public slots:
@@ -45,21 +46,33 @@ public slots:
   void loadAllCollections(const QList<CollectionConfig> &allCollections);
   void loadItems(const CollectionContext &context,
                  const QList<CollectionConfig> &allCollections);
-  void loadItemsWithSubcollections(const CollectionContext &context,
-                                   const QList<CollectionConfig> &allCollections);
-  void updateCachedCounts(quint64 generation, const QStringList &collectionUuids);
-  void fetchItemCount(const CollectionContext &context, const QList<CollectionConfig> &allCollections, const QString &filter);
-  void fetchItemCountWithToken(const CollectionContext &context,
-                              const QList<CollectionConfig> &allCollections,
-                              const QString &filter,
-                              int requestToken);
-  void fetchItemsRange(const CollectionContext &context, const QList<CollectionConfig> &allCollections, int offset, int limit, const QString &filter);
-
-  // Scans the current collection (and descendants when showAllSubcollectionItems is set)
-  // if a rescan is needed, without blocking query operations in another worker.
-  void ensureScannedForContext(const CollectionContext &context,
+  void
+  loadItemsWithSubcollections(const CollectionContext &context,
                               const QList<CollectionConfig> &allCollections);
-  
+  void updateCachedCounts(quint64 generation,
+                          const QStringList &collectionUuids);
+  void fetchItemCount(const CollectionContext &context,
+                      const QList<CollectionConfig> &allCollections,
+                      const QString &filter);
+  void fetchItemCountWithToken(const CollectionContext &context,
+                               const QList<CollectionConfig> &allCollections,
+                               const QString &filter, int requestToken);
+  void fetchItemsRange(const CollectionContext &context,
+                       const QList<CollectionConfig> &allCollections,
+                       int offset, int limit, const QString &filter);
+
+  /// Finds the 0-based visual index of a specific file path in the current
+  /// sorted order. Used to restore selection after sort mode changes.
+  void fetchVisualIndexForPath(const CollectionContext &context,
+                               const QList<CollectionConfig> &allCollections,
+                               const QString &filePath);
+
+  // Scans the current collection (and descendants when
+  // showAllSubcollectionItems is set) if a rescan is needed, without blocking
+  // query operations in another worker.
+  void ensureScannedForContext(const CollectionContext &context,
+                               const QList<CollectionConfig> &allCollections);
+
   /// Invalidates collection cache on worker thread (async)
   void invalidateCollectionCache(const QString &collectionUuid);
 
@@ -71,51 +84,55 @@ signals:
                    const QHash<QString, int> &fileToCollectionIndex);
   void itemCountLoaded(int count);
   void itemCountLoadedWithToken(int count, int requestToken);
-  void itemsRangeLoaded(int offset, const QStringList &filePaths, 
+  void itemsRangeLoaded(int offset, const QStringList &filePaths,
                         const QHash<QString, QString> &fileNames,
                         const QHash<QString, QString> &fileToArtworkDir,
                         const QHash<QString, QString> &fileToMediaDir,
                         const QHash<QString, int> &fileToCollectionIndex);
+  /// Emitted when the visual index for a specific file path is found.
+  /// Index is -1 if the file was not found in the collection.
+  void visualIndexForPathLoaded(int visualIndex, const QString &filePath);
   void errorOccurred(const ErrorUtils::ErrorContext &error);
   void cachedCountsComputed(quint64 generation, qint64 globalCount,
                             const QHash<QString, qint64> &directCountsByUuid);
-  
+
   /// Emitted during loadAllCollections to report scan progress.
   /// @param current The 1-based index of the collection being scanned
   /// @param total The total number of collections to scan
   /// @param collectionName The name of the collection being scanned
   void scanProgress(int current, int total, const QString &collectionName);
-  
+
   /// Emitted when a long-running scan is starting (allows UI to show overlay)
   void scanStarting(const QString &collectionName, int estimatedItems);
-  
+
   /// Emitted periodically during scan with items processed so far
   void scanItemsProgress(int itemsProcessed, int totalItems);
 
   /// Emitted after a collection rescan has been applied to the database.
   /// Allows the UI to refresh counts without blocking on the scan.
   void collectionScanCompleted(const QString &collectionUuid);
-  
+
   /// Emitted when collection cache has been invalidated
   void cacheInvalidated(const QString &collectionUuid);
 
 public:
   /// Request cancellation of any in-progress scan (thread-safe)
   void requestCancelScan();
-  
+
   /// Check if scan cancellation was requested (thread-safe)
   [[nodiscard]] bool isScanCancelled() const;
-  
+
   /// Reset cancellation flag (call before starting new scan)
   void resetScanCancellation();
-  
+
   /// Force connection to see latest WAL commits from other connections
   void refreshWalView();
 
 private:
-  [[nodiscard]] int fetchItemCountImpl(const CollectionContext &context,
-                                      const QList<CollectionConfig> &allCollections,
-                                      const QString &filter);
+  [[nodiscard]] int
+  fetchItemCountImpl(const CollectionContext &context,
+                     const QList<CollectionConfig> &allCollections,
+                     const QString &filter);
 
   // Per-scan cancellation token. Reset by swapping in a new token.
   // This avoids old scan tasks resuming if cancellation is reset while
@@ -132,15 +149,16 @@ private:
   // Limited to MAX_STATEMENT_CACHE_SIZE entries with LRU eviction
   static constexpr int MAX_STATEMENT_CACHE_SIZE = 32;
   QCache<QString, QSqlQuery> m_statementCache;
-  
+
   // Gets or creates a prepared statement for the given SQL
   [[nodiscard]] QSqlQuery &getPreparedStatement(const QString &sql);
-  
+
   // Clears the statement cache (called when database is reopened)
   void clearStatementCache();
-  
+
   // Attempts to reconnect to the database if connection was lost
-  // Returns true if database is open (either already was or reconnection succeeded)
+  // Returns true if database is open (either already was or reconnection
+  // succeeded)
   [[nodiscard]] bool ensureDatabaseConnection();
 
   // Detect optional search acceleration features (FTS, etc.).
@@ -150,8 +168,12 @@ private:
 
   [[nodiscard]] bool isItemsFtsReadyFromDb();
 
-  [[nodiscard]] bool ensureCollectionScanned(int collectionIndex, const CollectionConfig &collection);
-  [[nodiscard]] bool scanAndSaveItemsToDatabase(int collectionIndex, const CollectionConfig &collection);
+  [[nodiscard]] bool
+  ensureCollectionScanned(int collectionIndex,
+                          const CollectionConfig &collection);
+  [[nodiscard]] bool
+  scanAndSaveItemsToDatabase(int collectionIndex,
+                             const CollectionConfig &collection);
   bool needsRescan(int collectionIndex, const CollectionConfig &collection);
   QStringList scanMediaDirectory(const CollectionConfig &collection,
                                  QHash<QString, QDateTime> &timestamps,
@@ -165,10 +187,9 @@ private:
                            const CollectionConfig &collection,
                            const QString &dirSignature);
 
-  [[nodiscard]] bool prepareCollectionForItemsInsert(const CollectionConfig &collection,
-                                                     const QString &uuid,
-                                                     const QString &extSignature,
-                                                     int &legacyIdOut);
+  [[nodiscard]] bool prepareCollectionForItemsInsert(
+      const CollectionConfig &collection, const QString &uuid,
+      const QString &extSignature, int &legacyIdOut);
   void insertItemsBatch(int legacyId, const QString &uuid,
                         const QStringList &paths,
                         const QHash<QString, QDateTime> &timestamps);
@@ -179,23 +200,27 @@ private:
                                const QHash<QString, QDateTime> &timestamps);
   [[nodiscard]] bool applyScannedItemsToDatabase(int legacyId,
                                                  const QString &collectionUuid);
-  [[nodiscard]] bool deleteMissingItemsByUuidUsingScannedItems(const QString &collectionUuid);
+  [[nodiscard]] bool
+  deleteMissingItemsByUuidUsingScannedItems(const QString &collectionUuid);
 
-  // Query UUID temp table helpers - used when UUID count exceeds SQLite variable limit
-  // SQLite has a default limit of 999 bind variables; we use a temp table when exceeding 500
+  // Query UUID temp table helpers - used when UUID count exceeds SQLite
+  // variable limit SQLite has a default limit of 999 bind variables; we use a
+  // temp table when exceeding 500
   static constexpr int MAX_UUIDS_FOR_IN_CLAUSE = 500;
   [[nodiscard]] bool ensureQueryUuidsTempTable();
   void clearQueryUuidsTempTable();
   [[nodiscard]] bool populateQueryUuidsTempTable(const QStringList &uuids);
-  // Returns SQL fragment: either "IN (?,...)" for small lists or "IN (SELECT uuid FROM query_uuids)" for large
-  [[nodiscard]] QString buildUuidFilterClause(const QStringList &uuids, bool &useTempTable);
-  
+  // Returns SQL fragment: either "IN (?,...)" for small lists or "IN (SELECT
+  // uuid FROM query_uuids)" for large
+  [[nodiscard]] QString buildUuidFilterClause(const QStringList &uuids,
+                                              bool &useTempTable);
+
   // Cache to avoid repopulating temp table when UUIDs haven't changed
   // Stores a hash of the UUID list to detect changes
   QByteArray m_cachedQueryUuidsHash;
   [[nodiscard]] static QByteArray computeUuidListHash(const QStringList &uuids);
   [[nodiscard]] bool ensureQueryUuidsPopulated(const QStringList &uuids);
-  
+
   // ───────────────────────────────────────────────────────────────────────────
   // Precomputed sorted order for O(1) range lookups on large collections
   // ───────────────────────────────────────────────────────────────────────────
@@ -205,25 +230,38 @@ private:
   // This avoids expensive ORDER BY + OFFSET for every scroll position.
   [[nodiscard]] bool ensureSortedItemsCacheTable();
   void clearSortedItemsCache();
-  [[nodiscard]] bool populateSortedItemsCache(const QStringList &uuids, const QString &filter);
-  [[nodiscard]] bool hasSortedItemsCache() const { return m_sortedItemsCacheValid; }
-  
+  [[nodiscard]] bool populateSortedItemsCache(const QStringList &uuids,
+                                              const QString &filter,
+                                              SortMode sortMode);
+  [[nodiscard]] bool hasSortedItemsCache() const {
+    return m_sortedItemsCacheValid;
+  }
+
   // Cache validity tracking
   bool m_sortedItemsCacheValid = false;
-  bool m_sortCacheBuildPending = false;  // True when deferred build is scheduled
-  QByteArray m_sortedItemsCacheHash;  // Hash of (uuids + filter) to detect changes
-  QStringList m_pendingCacheUuids;       // Stored for deferred build
-  QString m_pendingCacheFilter;          // Stored for deferred build
-  [[nodiscard]] static QByteArray computeSortCacheHash(const QStringList &uuids, const QString &filter);
-  
-  // Deferred cache build - runs after returning slow-path result to avoid blocking
-  void scheduleDeferredCacheBuild(const QStringList &uuids, const QString &filter);
+  bool m_sortCacheBuildPending = false; // True when deferred build is scheduled
+  QByteArray m_sortedItemsCacheHash; // Hash of (uuids + filter + sortMode) to
+                                     // detect changes
+  QStringList m_pendingCacheUuids;   // Stored for deferred build
+  QString m_pendingCacheFilter;      // Stored for deferred build
+  SortMode m_pendingCacheSortMode =
+      SortMode::NameAscending; // Stored for deferred build
+  [[nodiscard]] static QByteArray computeSortCacheHash(const QStringList &uuids,
+                                                       const QString &filter,
+                                                       SortMode sortMode);
+
+  // Deferred cache build - runs after returning slow-path result to avoid
+  // blocking
+  void scheduleDeferredCacheBuild(const QStringList &uuids,
+                                  const QString &filter, SortMode sortMode);
   void performDeferredCacheBuild();
-  
+
   [[nodiscard]] qint64 countCollectionByUuid(const QString &collectionUuid);
-  [[nodiscard]] qint64 countGlobal(const QList<CollectionConfig> &allCollections);
-  [[nodiscard]] qint64 countCollectionRecursive(int collectionIndex,
-                                  const QList<CollectionConfig> &allCollections);
+  [[nodiscard]] qint64
+  countGlobal(const QList<CollectionConfig> &allCollections);
+  [[nodiscard]] qint64
+  countCollectionRecursive(int collectionIndex,
+                           const QList<CollectionConfig> &allCollections);
   void clearCollectionFromDatabaseByUuid(const QString &collectionUuid);
 
   // Helper struct for UUID-to-directory mappings
@@ -233,13 +271,16 @@ private:
     QHash<QString, int> uuidToCollectionIndex;
   };
 
-  // Collects UUIDs for a collection and its descendants if showAllSubcollectionItems is set
-  [[nodiscard]] QStringList collectCollectionUuids(const CollectionContext &ctx,
-                                     const QList<CollectionConfig> &allCollections);
+  // Collects UUIDs for a collection and its descendants if
+  // showAllSubcollectionItems is set
+  [[nodiscard]] QStringList
+  collectCollectionUuids(const CollectionContext &ctx,
+                         const QList<CollectionConfig> &allCollections);
 
   // Builds UUID-to-directory mappings for path resolution
-  [[nodiscard]] CollectionDirMaps buildDirectoryMaps(const CollectionContext &ctx,
-                                       const QList<CollectionConfig> &allCollections);
+  [[nodiscard]] CollectionDirMaps
+  buildDirectoryMaps(const CollectionContext &ctx,
+                     const QList<CollectionConfig> &allCollections);
 
   // Builds SQL IN clause with placeholders for the given UUID count
   [[nodiscard]] static QString buildUuidInClause(int uuidCount);
@@ -253,8 +294,9 @@ private:
       QHash<QString, int> &fileToCollectionIndex, bool dedup,
       QSet<QString> *seenCanonicalPaths = nullptr,
       QHash<QString, QString> *canonicalPathCache = nullptr);
-  
-  static void sortFiles(QStringList &allFilePaths, SortMode mode = SortMode::NameAscending);
+
+  static void sortFiles(QStringList &allFilePaths,
+                        SortMode mode = SortMode::NameAscending);
   static int getCharacterSortPriority(const QString &text);
 };
 

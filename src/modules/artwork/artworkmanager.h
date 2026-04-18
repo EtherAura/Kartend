@@ -67,14 +67,14 @@ struct ArtworkManagerSetup {
   QScrollArea *itemScrollArea = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
-  
-  SETUP_GETTER_DECL(QStackedWidget*, StackedWidget)
-  SETUP_GETTER_DECL(QWidget*, ItemsPage)
-  SETUP_GETTER_DECL(QWidget*, GridContainer)
-  SETUP_GETTER_DECL(QScrollArea*, ItemScrollArea)
-  SETUP_GETTER_DECL(QList<CollectionConfig>*, Collections)
-  SETUP_GETTER_DECL(int*, CurrentCollectionIndex)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder*, InteractionState)
+
+  SETUP_GETTER_DECL(QStackedWidget *, StackedWidget)
+  SETUP_GETTER_DECL(QWidget *, ItemsPage)
+  SETUP_GETTER_DECL(QWidget *, GridContainer)
+  SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
+  SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
+  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
 };
 
 struct UIReferences {
@@ -82,29 +82,31 @@ struct UIReferences {
 };
 
 /**
- * @brief Manages async artwork loading with viewport prioritization and caching.
- * 
+ * @brief Manages async artwork loading with viewport prioritization and
+ * caching.
+ *
  * Threading Model:
  * - Main thread: All public API calls, signal emissions, widget updates
  * - Worker threads: QtConcurrent tasks for image loading/scaling
- * 
+ *
  * Thread-safe operations:
  * - findArtworkForFile() - static, no shared state
  * - loadArtworkParallel() - dispatches work to thread pool safely
  * - m_cancelFlag (std::atomic) - signals cancellation to worker threads
- * 
+ *
  * NOT thread-safe (main thread only):
  * - addPendingArtwork(), clearPendingArtwork(), clearWidgetReferences()
  * - All widget-related operations
  * - setupReferences() and configuration methods
- * 
+ *
  * Results are delivered back to main thread via queued signal connections.
  */
 class ArtworkManager : public QObject {
   Q_OBJECT
 
 public:
-  explicit ArtworkManager(CacheManager *cacheManager, QObject *parent = nullptr);
+  explicit ArtworkManager(CacheManager *cacheManager,
+                          QObject *parent = nullptr);
 
   void setupReferences(const ArtworkManagerSetup &setup);
   void loadArtworkParallel(const QList<ArtworkInfo> &items, bool highPriority,
@@ -124,7 +126,9 @@ public:
   void processContinuousSilentLoad();
   void updateUserActivity();
   [[nodiscard]] bool isUserIdle() const;
-  [[nodiscard]] bool isSilentLoadingActive() const { return m_silentLoadingActive; }
+  [[nodiscard]] bool isSilentLoadingActive() const {
+    return m_silentLoadingActive;
+  }
   [[nodiscard]] bool hasArtworkForWidget(ItemWidget *widget) const;
   void updateViewportArtwork();
   void buildArtworkPathsList();
@@ -135,7 +139,8 @@ public:
   void clearLoadedArtworkState();
   [[nodiscard]] TimerUtils::Coordinator *getTimerCoordinator() const;
 
-  [[nodiscard]] static QPixmap createProcessedArtwork(const QPixmap &originalPixmap);
+  [[nodiscard]] static QPixmap
+  createProcessedArtwork(const QPixmap &originalPixmap);
   [[nodiscard]] QPixmap getCachedPixmap(const QString &artworkPath);
   [[nodiscard]] QPixmap loadArtworkFromFile(const QString &artworkPath);
 
@@ -168,7 +173,9 @@ private:
   QTimer *m_persistentLoadTimer;
   QTimer *m_cacheTimer;
 
-  QSet<ItemWidget *> loadedArtwork;
+  // Using QPointer to automatically detect deleted widgets and prevent crashes
+  // on dangling pointers during clearWidgetReferences()
+  QList<QPointer<ItemWidget>> loadedArtwork;
   QHash<ItemWidget *, QString> widgetToArtworkPath;
   QList<ArtworkInfo> pendingArtwork;
   QSet<QString> m_silentlyCachedPaths;
@@ -178,8 +185,9 @@ private:
   bool m_silentLoadingActive;
   int m_silentLoadBatchSize;
   std::atomic<qint64> m_lastUserActivity;
-  std::atomic<qint64> m_lastBatchCompletionTime;  // For silent load cooldown
-  std::shared_ptr<std::atomic<bool>> m_cancellationRequested;  // For cooperative cancellation
+  std::atomic<qint64> m_lastBatchCompletionTime; // For silent load cooldown
+  std::shared_ptr<std::atomic<bool>>
+      m_cancellationRequested; // For cooperative cancellation
   bool m_continuousSilentLoad;
   int m_silentLoadIndex;
   bool m_persistentSilentLoad;

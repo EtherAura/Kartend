@@ -1,6 +1,7 @@
 #ifndef UICONSTANTS_H
 #define UICONSTANTS_H
 
+#include <QIcon>
 #include <QString>
 
 namespace UIConstants {
@@ -80,10 +81,13 @@ inline constexpr int MAX_ROW_HEIGHT = 100;
 inline constexpr int TEXT_LEFT_PADDING = 16;
 /// Right padding for text in list view
 inline constexpr int TEXT_RIGHT_PADDING = 16;
-/// Vertical spacing between list rows
-inline constexpr int ROW_SPACING = 2;
+/// Vertical spacing between list rows (0 = no gaps, eliminates background color
+/// bleeding through)
+inline constexpr int ROW_SPACING = 0;
 /// Header row height for column headers
 inline constexpr int HEADER_HEIGHT = 28;
+/// Width of folder icon column for subcollections/virtual folders in list mode
+inline constexpr int FOLDER_ICON_COLUMN_WIDTH = 20;
 } // namespace ListView
 
 // =============================================================================
@@ -141,7 +145,8 @@ inline constexpr int WORKER_POOL_DIVISOR = 2;
 namespace Database {
 /// How many directory samples are stored per collection for change detection.
 inline constexpr int DIR_SIGNATURE_SAMPLE_COUNT = 64;
-/// Max number of directories inspected when seeding a signature without scanning.
+/// Max number of directories inspected when seeding a signature without
+/// scanning.
 inline constexpr int DIR_SIGNATURE_SEED_MAX_DIRS = 256;
 /// Minimum interval between scan progress emissions.
 /// Prevents high-frequency UI updates during very fast scans.
@@ -170,11 +175,13 @@ inline constexpr int FTS_BACKFILL_TIME_BUDGET_MS = 80;
 inline constexpr int FTS_BACKFILL_SLICE_DELAY_MS = 20;
 
 /// Default chunk size for on-demand range loading during virtual scroll.
-/// Balances latency (smaller = faster first paint) vs throughput (larger = fewer round-trips).
+/// Balances latency (smaller = faster first paint) vs throughput (larger =
+/// fewer round-trips).
 inline constexpr int RANGE_CHUNK_SIZE_DEFAULT = 100;
 
 /// Larger chunk size for showAllSubcollectionItems mode with many items.
-/// Reduces database round-trips when flattening 1M+ items across subcollections.
+/// Reduces database round-trips when flattening 1M+ items across
+/// subcollections.
 inline constexpr int RANGE_CHUNK_SIZE_LARGE = 1000;
 
 /// Item count threshold to switch to larger chunk size.
@@ -186,8 +193,9 @@ inline constexpr int RANGE_CHUNK_LARGE_THRESHOLD = 5000;
 inline constexpr int RANGE_PREFETCH_CHUNKS = 3;
 
 /// Item count threshold to precompute sorted order for O(1) range lookups.
-/// When items exceed this, fetchItemCount creates a temp table with sorted positions.
-/// Avoids expensive ORDER BY + OFFSET for every range query on large collections.
+/// When items exceed this, fetchItemCount creates a temp table with sorted
+/// positions. Avoids expensive ORDER BY + OFFSET for every range query on large
+/// collections.
 inline constexpr int PRECOMPUTE_SORT_THRESHOLD = 10000;
 } // namespace Database
 
@@ -323,7 +331,8 @@ inline constexpr int DOUBLE_CLICK_SUPPRESS_CLEAR_DELAY_MS = 800;
 
 // =============================================================================
 // Navigation
-// Timing for collection navigation, progress indicators, and scrollbar recovery.
+// Timing for collection navigation, progress indicators, and scrollbar
+// recovery.
 // =============================================================================
 namespace Navigation {
 /// Early clear of loading progress indicator
@@ -367,11 +376,14 @@ inline constexpr int DEFER_SILENT_LOADING_DELAY_MS = 100;
 inline constexpr int SILENT_LOAD_THROTTLE_DIVISOR = 8;
 /// Batch size for persistent silent load when idle
 inline constexpr int PERSISTENT_SILENT_BATCH_IDLE = 8;
-/// Batch size for persistent silent load when active (higher = faster but more CPU)
+/// Batch size for persistent silent load when active (higher = faster but more
+/// CPU)
 inline constexpr int PERSISTENT_SILENT_BATCH_ACTIVE = 4;
-/// Interval for persistent silent load operations (higher = less CPU, slower precache)
+/// Interval for persistent silent load operations (higher = less CPU, slower
+/// precache)
 inline constexpr int PERSISTENT_SILENT_LOAD_INTERVAL_MS = 300;
-/// Minimum cooldown after a batch completes before starting another (prevents CPU saturation)
+/// Minimum cooldown after a batch completes before starting another (prevents
+/// CPU saturation)
 inline constexpr int SILENT_LOAD_COOLDOWN_MS = 500;
 /// Delay before starting silent load after items loaded
 inline constexpr int START_SILENT_LOAD_AFTER_ITEMS_MS = 150;
@@ -624,19 +636,49 @@ inline constexpr int ABOUT_HEIGHT = 200;
 } // namespace Dialog
 
 // =============================================================================
-// Emoji Icons
-// Unicode emoji used in the UI for visual indicators.
+// Theme Icons
+// Breeze/Plasma icon names for visual indicators.
+// Use with QIcon::fromTheme() or UIConstants::Icons::fromTheme().
 // =============================================================================
-namespace Emoji {
+namespace Icons {
 /// Folder icon for collections
-inline const QString FOLDER = QStringLiteral("📁");
+inline constexpr const char *FOLDER = "folder";
 /// Open folder icon for subcollections
-inline const QString SUBCOLLECTION = QStringLiteral("📂");
+inline constexpr const char *SUBCOLLECTION = "folder-open";
+/// Card file box icon for virtual folders (subfolder navigation)
+inline constexpr const char *VIRTUAL_FOLDER = "folder-documents";
 /// Magnifying glass for search
-inline const QString SEARCH = QStringLiteral("🔎");
+inline constexpr const char *SEARCH = "edit-find";
+/// Search current collection only
+inline constexpr const char *SEARCH_LOCAL = "edit-find";
+/// Search current + subcollections
+inline constexpr const char *SEARCH_SUBCOLLECTIONS = "folder-saved-search";
+/// Search all collections (global)
+inline constexpr const char *SEARCH_GLOBAL = "system-search";
 /// Globe for global search mode
-inline const QString GLOBE = QStringLiteral("🌍");
-} // namespace Emoji
+inline constexpr const char *GLOBE = "internet-services";
+/// Image/picture icon for artwork preview
+inline constexpr const char *IMAGE = "view-preview";
+
+/// Get a themed icon with fallback support
+/// @param names List of icon names to try in order
+/// @param fallback Optional fallback text if no icon found
+/// @return The first available icon, or empty icon if none found
+inline QIcon fromTheme(std::initializer_list<const char *> names) {
+  for (const char *name : names) {
+    QIcon icon = QIcon::fromTheme(QString::fromUtf8(name));
+    if (!icon.isNull()) {
+      return icon;
+    }
+  }
+  return {};
+}
+
+/// Get a themed icon by single name
+inline QIcon fromTheme(const char *name) {
+  return QIcon::fromTheme(QString::fromUtf8(name));
+}
+} // namespace Icons
 
 } // namespace UIConstants
 

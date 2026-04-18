@@ -16,27 +16,27 @@ constexpr double LABEL_OPACITY_MIN = 0.4;
 constexpr double LABEL_OPACITY_MAX = 0.7;
 
 // Use a color that matches the typical dark theme background
-const QString OVERLAY_STYLE = QStringLiteral(
-    "background-color: rgba(30, 30, 30, 230);"
-    "border: none;");
+const QString OVERLAY_STYLE =
+    QStringLiteral("background-color: rgba(30, 30, 30, 230);"
+                   "border: none;");
 
-const QString LABEL_STYLE = QStringLiteral(
-    "color: rgba(180, 180, 180, 180);"
-    "font-size: 13px;"
-    "font-weight: normal;"
-    "background: transparent;");
+const QString LABEL_STYLE = QStringLiteral("color: rgba(180, 180, 180, 180);"
+                                           "font-size: 13px;"
+                                           "font-weight: normal;"
+                                           "background: transparent;");
 } // namespace
 
-SearchLoadingOverlay::SearchLoadingOverlay(QObject *parent)
-    : QObject(parent) {
+SearchLoadingOverlay::SearchLoadingOverlay(QObject *parent) : QObject(parent) {
   m_pulseTimer = new QTimer(this);
   m_pulseTimer->setInterval(PULSE_INTERVAL_MS);
   connect(m_pulseTimer, &QTimer::timeout, this, [this]() {
     if (m_label && m_label->graphicsEffect()) {
-      auto *effect = qobject_cast<QGraphicsOpacityEffect *>(m_label->graphicsEffect());
+      auto *effect =
+          qobject_cast<QGraphicsOpacityEffect *>(m_label->graphicsEffect());
       if (effect) {
-        double targetOpacity = m_pulseDimming ? LABEL_OPACITY_MIN : LABEL_OPACITY_MAX;
-        
+        double targetOpacity =
+            m_pulseDimming ? LABEL_OPACITY_MIN : LABEL_OPACITY_MAX;
+
         // Animate opacity change
         if (m_pulseAnimation) {
           m_pulseAnimation->stop();
@@ -47,16 +47,14 @@ SearchLoadingOverlay::SearchLoadingOverlay(QObject *parent)
         m_pulseAnimation->setEndValue(targetOpacity);
         m_pulseAnimation->setEasingCurve(QEasingCurve::InOutSine);
         m_pulseAnimation->start(QAbstractAnimation::DeleteWhenStopped);
-        
+
         m_pulseDimming = !m_pulseDimming;
       }
     }
   });
 }
 
-SearchLoadingOverlay::~SearchLoadingOverlay() {
-  hideImmediate();
-}
+SearchLoadingOverlay::~SearchLoadingOverlay() { hideImmediate(); }
 
 void SearchLoadingOverlay::setParentWidget(QWidget *parent) {
   if (m_parentWidget != parent) {
@@ -73,7 +71,7 @@ void SearchLoadingOverlay::ensureOverlay() {
   m_overlay = new QWidget(m_parentWidget);
   m_overlay->setStyleSheet(OVERLAY_STYLE);
   m_overlay->setAttribute(Qt::WA_TransparentForMouseEvents, false);
-  
+
   // Create opacity effect for fade animation
   auto *overlayEffect = new QGraphicsOpacityEffect(m_overlay);
   overlayEffect->setOpacity(0.0);
@@ -82,18 +80,18 @@ void SearchLoadingOverlay::ensureOverlay() {
   // Create centered label with search indicator
   auto *layout = new QVBoxLayout(m_overlay);
   layout->setAlignment(Qt::AlignCenter);
-  
+
   m_label = new QLabel(QStringLiteral("Searching..."), m_overlay);
   m_label->setStyleSheet(LABEL_STYLE);
   m_label->setAlignment(Qt::AlignCenter);
-  
+
   // Separate opacity effect for label pulsing
   auto *labelEffect = new QGraphicsOpacityEffect(m_label);
   labelEffect->setOpacity(LABEL_OPACITY_MAX);
   m_label->setGraphicsEffect(labelEffect);
-  
+
   layout->addWidget(m_label);
-  
+
   m_overlay->setLayout(layout);
   m_overlay->hide();
 }
@@ -109,7 +107,8 @@ void SearchLoadingOverlay::show() {
   m_overlay->show();
 
   // Fade in
-  auto *effect = qobject_cast<QGraphicsOpacityEffect *>(m_overlay->graphicsEffect());
+  auto *effect =
+      qobject_cast<QGraphicsOpacityEffect *>(m_overlay->graphicsEffect());
   if (effect) {
     if (m_fadeAnimation) {
       m_fadeAnimation->stop();
@@ -133,7 +132,8 @@ void SearchLoadingOverlay::hide() {
   stopPulseAnimation();
 
   // Fade out
-  auto *effect = qobject_cast<QGraphicsOpacityEffect *>(m_overlay->graphicsEffect());
+  auto *effect =
+      qobject_cast<QGraphicsOpacityEffect *>(m_overlay->graphicsEffect());
   if (effect) {
     if (m_fadeAnimation) {
       m_fadeAnimation->stop();

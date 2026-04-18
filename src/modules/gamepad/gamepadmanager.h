@@ -18,9 +18,9 @@ struct GamepadManagerSetup {
   const GeneralSettings *generalSettings = nullptr;
   const bool *isShuttingDown = nullptr;
 
-  SETUP_GETTER_DECL(KeyboardManager*, KeyboardManager)
-  SETUP_GETTER_DECL(const GeneralSettings*, GeneralSettings)
-  SETUP_GETTER_DECL(const bool*, IsShuttingDown)
+  SETUP_GETTER_DECL(KeyboardManager *, KeyboardManager)
+  SETUP_GETTER_DECL(const GeneralSettings *, GeneralSettings)
+  SETUP_GETTER_DECL(const bool *, IsShuttingDown)
 };
 
 /**
@@ -41,7 +41,9 @@ public:
 
   void beginBindingCapture();
   void endBindingCapture();
-  [[nodiscard]] bool isBindingCaptureActive() const { return m_bindingCaptureActive; }
+  [[nodiscard]] bool isBindingCaptureActive() const {
+    return m_bindingCaptureActive;
+  }
 
 signals:
   void requestSelectionMove(int direction, bool vertical);

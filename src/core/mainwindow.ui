@@ -126,28 +126,6 @@
             </spacer>
            </item>
            <item>
-            <widget class="QPushButton" name="searchModeButton">
-             <property name="maximumSize">
-              <size>
-               <width>30</width>
-               <height>30</height>
-              </size>
-             </property>
-             <property name="toolTip">
-              <string>Search: Current collection only</string>
-             </property>
-             <property name="text">
-              <string>🔍</string>
-             </property>
-             <property name="flat">
-              <bool>true</bool>
-             </property>
-             <property name="focusPolicy">
-              <enum>Qt::NoFocus</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
             <widget class="QPushButton" name="gridViewButton">
              <property name="maximumSize">
               <size>
@@ -190,6 +168,50 @@
               <bool>true</bool>
              </property>
              <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QFrame" name="viewSearchSeparator">
+             <property name="minimumSize">
+              <size>
+               <width>1</width>
+               <height>20</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>1</width>
+               <height>20</height>
+              </size>
+             </property>
+             <property name="frameShape">
+              <enum>QFrame::VLine</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Sunken</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="searchModeButton">
+             <property name="maximumSize">
+              <size>
+               <width>30</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Search: Current collection only</string>
+             </property>
+             <property name="text">
+              <string></string>
+             </property>
+             <property name="flat">
               <bool>true</bool>
              </property>
              <property name="focusPolicy">

@@ -509,13 +509,21 @@ sanitize_compdb() {
 do_clang_tidy() {
   local compdb="$1" srcdir="$2" checks="$3"
   if command -v clang-tidy >/dev/null 2>&1 && [ -f "$compdb" ]; then
-    local tmpdir rc
+    local tmpdir rc rootdir
     tmpdir="$(mktemp -d)"
+    rootdir="$(dirname "$srcdir")"
     sanitize_compdb "$compdb" "$tmpdir/compile_commands.json"
     # Focus on project code only, exclude Qt/system headers
+    # Use .clang-tidy config file if present (checks arg is fallback)
+    local config_arg=""
+    if [ -f "$rootdir/.clang-tidy" ]; then
+      config_arg="--config-file=$rootdir/.clang-tidy"
+    else
+      config_arg="-checks=$checks"
+    fi
     find "$srcdir" -name '*.cpp' -print0 | xargs -0 -n1 -P"$(nproc)" clang-tidy \
       -p="$tmpdir" \
-      -checks="$checks" \
+      $config_arg \
       --header-filter="$srcdir/.*"
     rc=$?
     rm -rf "$tmpdir"
@@ -548,24 +556,32 @@ do_clang_tidy_apply_fixes() {
 do_iwyu() {
   local compdb="$1" srcdir="$2"
   if [ -f "$compdb" ]; then
-    local tmpdir rc
+    local tmpdir rc rootdir mapping_arg
     tmpdir="$(mktemp -d)"
+    rootdir="$(dirname "$srcdir")"
     sanitize_compdb "$compdb" "$tmpdir/compile_commands.json"
     
-    # Use standard iwyu-tool if available
-    if command -v iwyu-tool >/dev/null 2>&1; then
-      iwyu-tool -p "$tmpdir" -- -Xiwyu --max_line_length=100
+    # Use mapping file if present (maps Qt internal headers to public headers)
+    mapping_arg=""
+    if [ -f "$rootdir/.iwyu.imp" ]; then
+      mapping_arg="-Xiwyu --mapping_file=$rootdir/.iwyu.imp"
+    fi
+    
+    # Use iwyu_tool wrapper (preferred - handles compile_commands.json properly)
+    # Check various names: iwyu_tool (Arch/common), iwyu-tool (Debian), iwyu_tool.py (pip)
+    if command -v iwyu_tool >/dev/null 2>&1; then
+      iwyu_tool -p "$tmpdir" -- -Xiwyu --max_line_length=100 $mapping_arg
       rc=$?
-    elif command -v include-what-you-use >/dev/null 2>&1; then
-      # Simple direct invocation for each cpp file
-      rc=0
-      while IFS= read -r -d '' cpp_file; do
-        if ! include-what-you-use -p "$tmpdir" -Xiwyu --max_line_length=100 "$cpp_file"; then
-          rc=1
-        fi
-      done < <(find "$srcdir" -name '*.cpp' -print0)
+    elif command -v iwyu-tool >/dev/null 2>&1; then
+      iwyu-tool -p "$tmpdir" -- -Xiwyu --max_line_length=100 $mapping_arg
+      rc=$?
+    elif command -v iwyu_tool.py >/dev/null 2>&1; then
+      iwyu_tool.py -p "$tmpdir" -- -Xiwyu --max_line_length=100 $mapping_arg
+      rc=$?
     else
-      echo "skipped: IWYU not available"
+      # Direct include-what-you-use invocation requires extracting flags from compile_commands.json
+      # This is complex and error-prone; skip if iwyu-tool is not available
+      echo "skipped: iwyu_tool not available (install iwyu package with iwyu_tool wrapper)"
       rm -rf "$tmpdir"
       return 0
     fi

@@ -1,4 +1,5 @@
-// Manages collection switching, navigation stack, and subcollection hierarchy traversal.
+// Manages collection switching, navigation stack, and subcollection hierarchy
+// traversal.
 #include "navigationmanager.h"
 #include "artworkmanager.h"
 #include "artworkutils.h"
@@ -10,12 +11,12 @@
 #include "loadingoverlay.h"
 #include "metadatasidebar.h"
 #include "navigationstackmanager.h"
+#include "pathutils.h"
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "pathutils.h"
 #include "sidebarmanager.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
@@ -24,8 +25,8 @@
 #include <QDateTime>
 #include <QDir>
 #include <QLabel>
-#include <QScrollBar>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QStackedWidget>
 #include <QTimer>
 #include <QtGlobal>
@@ -33,7 +34,12 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcNavigationManager, "kartend.navigationmanager")
-#define debugLog(msg) do { if (lcNavigationManager().isDebugEnabled()) { qCDebug(lcNavigationManager) << msg; } } while (0)
+#define debugLog(msg)                                                          \
+  do {                                                                         \
+    if (lcNavigationManager().isDebugEnabled()) {                              \
+      qCDebug(lcNavigationManager) << msg;                                     \
+    }                                                                          \
+  } while (0)
 
 // Temporary diagnostic logging (release-safe) gated by env var.
 // Enable with: `KARTEND_SEARCH_DIAG=1 kartend`
@@ -41,17 +47,22 @@ static inline bool searchDiagEnabled() {
   return qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG");
 }
 
-#define diagLog(msg) do { if (searchDiagEnabled()) { qWarning() << "[SearchDiag][NavigationManager]" << msg; } } while (0)
+#define diagLog(msg)                                                           \
+  do {                                                                         \
+    if (searchDiagEnabled()) {                                                 \
+      qWarning() << "[SearchDiag][NavigationManager]" << msg;                  \
+    }                                                                          \
+  } while (0)
 
 NavigationManager::NavigationManager(QObject *parent)
     : QObject(parent),
       m_stackManager(std::make_unique<NavigationStackManager>(this)),
-      m_selectionRestoreManager(std::make_unique<SelectionRestoreManager>(this)) {}
+      m_selectionRestoreManager(
+          std::make_unique<SelectionRestoreManager>(this)) {}
 
 NavigationManager::~NavigationManager() = default;
 
-void NavigationManager::setupReferences(
-    const NavigationManagerSetup &setup) {
+void NavigationManager::setupReferences(const NavigationManagerSetup &setup) {
   // Manager dependencies - use accessors that check context fallback
   m_interactionManager = setup.getInteractionManager();
   m_state = setup.getInteractionState();
@@ -61,7 +72,7 @@ void NavigationManager::setupReferences(
   m_databaseManager = setup.getDatabaseManager();
   m_sessionManager = setup.getSessionManager();
   m_artworkManager = setup.getArtworkManager();
-  
+
   // UI elements - use accessors that check context fallback
   m_MetadataSidebar = setup.getSidebar();
   m_currentCollectionIndex = setup.getCurrentCollectionIndex();
@@ -77,7 +88,7 @@ void NavigationManager::setupReferences(
   m_loadingOverlay = setup.getLoadingOverlay();
   m_itemScrollArea = setup.getItemScrollArea();
   m_gridContainer = setup.getGridContainer();
-  
+
   // Callbacks
   m_isShuttingDown = setup.isShuttingDown;
   m_refreshTitleCounts = setup.refreshTitleCounts;
@@ -99,9 +110,7 @@ bool NavigationManager::isNavigationInProgress() const {
   return m_stackManager && m_stackManager->isInProgress();
 }
 
-void NavigationManager::prepareForShutdown() {
-  persistCurrentSelection();
-}
+void NavigationManager::prepareForShutdown() { persistCurrentSelection(); }
 
 // Navigates to a subcollection using the shared parent view
 void NavigationManager::navigateWithSharedItems(int collectionIndex) {
@@ -127,8 +136,7 @@ void NavigationManager::navigateWithSharedItems(int collectionIndex) {
   (*m_currentCollectionIndex) = collectionIndex;
 
   if (m_interactionManager) {
-    m_interactionManager
-        ->initializeSearchModeForCurrentCollection();
+    m_interactionManager->initializeSearchModeForCurrentCollection();
   }
 
   updateItemsPageTitle(collectionIndex);
@@ -147,18 +155,19 @@ void NavigationManager::navigateWithSharedItems(int collectionIndex) {
 }
 
 auto NavigationManager::initializeNavigationState() -> void {
-  const bool isStartupNavigation = (m_currentCollectionIndex && (*m_currentCollectionIndex) < 0);
+  const bool isStartupNavigation =
+      (m_currentCollectionIndex && (*m_currentCollectionIndex) < 0);
 
-  // Show loading overlay during navigation (will be updated with collection name later).
-  // On startup, keep the UI immediately navigable while background scanning runs.
+  // Show loading overlay during navigation (will be updated with collection
+  // name later). On startup, keep the UI immediately navigable while background
+  // scanning runs.
   if (!isStartupNavigation) {
     if (m_loadingOverlay) {
       m_loadingOverlay->show("Preparing...");
     }
   }
-  
-  if ((parent()) &&
-      (m_interactionManager)) {
+
+  if ((parent()) && (m_interactionManager)) {
     m_interactionManager->stopRepeat();
     if (!isStartupNavigation) {
       m_interactionManager->setNavigationInProgress(true);
@@ -185,8 +194,7 @@ auto NavigationManager::initializeNavigationState() -> void {
 
 auto NavigationManager::validateAndPrepareNavigation(int collectionIndex)
     -> bool {
-  if (collectionIndex < 0 ||
-      collectionIndex >= (*m_collections).size()) {
+  if (collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     return false;
   }
 
@@ -199,13 +207,11 @@ auto NavigationManager::validateAndPrepareNavigation(int collectionIndex)
   bool hasSub = false;
   bool hasItems = false;
   if (!getHasSubAndItems(collectionIndex, hasSub, hasItems)) {
-    if ((parent()) &&
-        (m_interactionManager)) {
+    if ((parent()) && (m_interactionManager)) {
       // Clear navigation progress flag early when validation fails -
       // prevents navigation from being blocked indefinitely
       QTimer::singleShot(
-          UIConstants::Navigation::PROGRESS_CLEAR_EARLY_MS, this,
-          [this]() {
+          UIConstants::Navigation::PROGRESS_CLEAR_EARLY_MS, this, [this]() {
             if (parent() && m_interactionManager) {
               m_interactionManager->setNavigationInProgress(false);
             }
@@ -221,8 +227,7 @@ auto NavigationManager::handleSubcollectionNavigation(int collectionIndex,
     -> void {
   Q_UNUSED(previousIndex)
   if (m_scrollManager) {
-    m_scrollManager->updateContextForSubcollection(
-        collectionIndex);
+    m_scrollManager->updateContextForSubcollection(collectionIndex);
     m_scrollManager->applySubcollectionFilter(collectionIndex);
   }
 
@@ -240,18 +245,18 @@ auto NavigationManager::handleRegularNavigation(int collectionIndex) -> void {
 
 auto NavigationManager::finalizeNavigation(int collectionIndex) -> void {
   applyCollectionSettingsOnly(collectionIndex);
-  if ((m_searchBar) &&
-      m_searchBar->text().trimmed().isEmpty()) {
+  if ((m_searchBar) && m_searchBar->text().trimmed().isEmpty()) {
     m_searchBar->clear();
   }
   // Delay horizontal centering until layout has settled after navigation
   QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this, [this]() {
     if (m_scrollManager && m_currentCollectionIndex && m_collections) {
-      m_scrollManager->centerHorizontalScrollbar(
-          (*m_currentCollectionIndex), (*m_collections));
+      m_scrollManager->centerHorizontalScrollbar((*m_currentCollectionIndex),
+                                                 (*m_collections));
     }
   });
-  if (m_refreshTitleCounts) m_refreshTitleCounts();
+  if (m_refreshTitleCounts)
+    m_refreshTitleCounts();
 
   // Hide loading overlay after navigation completes
   if (m_loadingOverlay) {
@@ -260,12 +265,12 @@ auto NavigationManager::finalizeNavigation(int collectionIndex) -> void {
 
   // Clear navigation progress flag after all animations complete -
   // allows user input to be processed again
-  QTimer::singleShot(
-      UIConstants::Navigation::PROGRESS_CLEAR_MS, this, [this]() {
-        if (parent() && m_interactionManager) {
-          m_interactionManager->setNavigationInProgress(false);
-        }
-      });
+  QTimer::singleShot(UIConstants::Navigation::PROGRESS_CLEAR_MS, this,
+                     [this]() {
+                       if (parent() && m_interactionManager) {
+                         m_interactionManager->setNavigationInProgress(false);
+                       }
+                     });
 }
 
 // Delegates to SelectionRestoreManager for selection restoration
@@ -286,8 +291,7 @@ auto NavigationManager::validateCollectionIndex(int collectionIndex) const
   if (!parent() || !m_collections) {
     return false;
   }
-  if (collectionIndex < 0 ||
-      collectionIndex >= (*m_collections).size()) {
+  if (collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     return false;
   }
 
@@ -303,7 +307,8 @@ auto NavigationManager::handleSharedItemsNavigation(int collectionIndex)
       areItemsShared((*m_currentCollectionIndex), collectionIndex);
   if (itemsAreShared) {
     navigateWithSharedItems(collectionIndex);
-    if (m_refreshTitleCounts) m_refreshTitleCounts();
+    if (m_refreshTitleCounts)
+      m_refreshTitleCounts();
     return true;
   }
   return false;
@@ -315,7 +320,7 @@ auto NavigationManager::prepareNonSharedNavigation(int collectionIndex)
   if (!m_collections || !m_currentCollectionIndex) {
     return;
   }
-  
+
   prepareForNonSharedNavigationHelper();
   suspendItemsPageRendering();
 
@@ -325,12 +330,10 @@ auto NavigationManager::prepareNonSharedNavigation(int collectionIndex)
   applyCollectionSettingsOnly(collectionIndex);
 
   if (m_scrollManager) {
-    m_scrollManager->primeLayoutFor(
-        (*m_collections)[collectionIndex]);
+    m_scrollManager->primeLayoutFor((*m_collections)[collectionIndex]);
   }
   if (m_interactionManager) {
-    m_interactionManager
-        ->initializeSearchModeForCurrentCollection();
+    m_interactionManager->initializeSearchModeForCurrentCollection();
   }
 
   updateItemsPageTitle(collectionIndex);
@@ -345,8 +348,7 @@ auto NavigationManager::prepareNonSharedNavigation(int collectionIndex)
         (*m_currentCollectionIndex));
   }
 
-  if ((m_searchBar) &&
-      m_searchBar->text().trimmed().isEmpty()) {
+  if ((m_searchBar) && m_searchBar->text().trimmed().isEmpty()) {
     m_searchBar->clear();
   }
 
@@ -361,33 +363,33 @@ auto NavigationManager::loadCollectionData(int collectionIndex) -> void {
   if (!m_databaseManager || !m_collections || !m_currentCollectionIndex) {
     return;
   }
-  
+
   if ((*m_currentCollectionIndex) >= 0 &&
-      (*m_currentCollectionIndex) <
-          (*m_collections).size()) {
+      (*m_currentCollectionIndex) < (*m_collections).size()) {
     CollectionContext context;
     context.currentIndex = (*m_currentCollectionIndex);
-    context.config =
-        (*m_collections)[(*m_currentCollectionIndex)];
-        context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
+    context.config = (*m_collections)[(*m_currentCollectionIndex)];
+    context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
         context.config.mediaDirectory, context.config.name);
     context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
         context.config.artworkDirectory, context.config.name);
     context.artworkDirectory = context.config.artworkDirectory;
     if (m_generalSettings) {
       context.sortMode = m_generalSettings->sortMode;
-      context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+      context.excludeSubfoldersFromSort =
+          m_generalSettings->excludeSubfoldersFromSort;
     }
 
     bool hasMediaDirectory = !context.config.mediaDirectory.trimmed().isEmpty();
     if (hasMediaDirectory || context.config.showAllSubcollectionItems) {
       // NOTE: Don't show overlay here - it will be shown by scanStarting signal
-      // if a scan is actually needed. For cached collections, no overlay appears.
-      
-      // Fast startup path: use cached counts for immediate rendering at startup.
-      // This allows the UI to be responsive immediately while the background
-      // count query runs for verification. If counts differ, onItemCountLoaded
-      // will update the view.
+      // if a scan is actually needed. For cached collections, no overlay
+      // appears.
+
+      // Fast startup path: use cached counts for immediate rendering at
+      // startup. This allows the UI to be responsive immediately while the
+      // background count query runs for verification. If counts differ,
+      // onItemCountLoaded will update the view.
       if (tryUseCachedCountForStartup(context)) {
         // Still request actual count in background for verification/update
         m_backgroundCountRefreshInProgress = true;
@@ -395,7 +397,7 @@ auto NavigationManager::loadCollectionData(int collectionIndex) -> void {
         requestItemCountForContext(context, QString());
         return;
       }
-      
+
       // Standard path: wait for count query before rendering
       // Items are fetched on-demand via fetchItemsRange as user scrolls
       requestItemCountForContext(context, QString());
@@ -410,93 +412,112 @@ auto NavigationManager::loadCollectionData(int collectionIndex) -> void {
 // Attempts to use cached viewport for immediate rendering at startup.
 // This provides instant item display by using cached file paths and names
 // without waiting for database queries.
-// Returns true if cached viewport was used; background query still runs for verification.
-auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &context) -> bool {
+// Returns true if cached viewport was used; background query still runs for
+// verification.
+auto NavigationManager::tryUseCachedCountForStartup(
+    const CollectionContext &context) -> bool {
   // Only use fast path on initial startup with rememberSelection enabled
   if (!m_isInitialStartupLoad) {
     if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-      qWarning() << "[SearchDiag][NavigationManager] tryUseCachedCountForStartup: SKIP - not initial startup";
+      qWarning() << "[SearchDiag][NavigationManager] "
+                    "tryUseCachedCountForStartup: SKIP - not initial startup";
     }
     return false;
   }
-  if (!m_sessionManager || !m_generalSettings || !m_generalSettings->rememberSelection) {
+  if (!m_sessionManager || !m_generalSettings ||
+      !m_generalSettings->rememberSelection) {
     if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-      qWarning() << "[SearchDiag][NavigationManager] tryUseCachedCountForStartup: SKIP - no sessionManager or rememberSelection disabled";
+      qWarning()
+          << "[SearchDiag][NavigationManager] tryUseCachedCountForStartup: "
+             "SKIP - no sessionManager or rememberSelection disabled";
     }
     return false;
   }
-  if (!m_collections || context.currentIndex < 0 || context.currentIndex >= (*m_collections).size()) {
+  if (!m_collections || context.currentIndex < 0 ||
+      context.currentIndex >= (*m_collections).size()) {
     if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-      qWarning() << "[SearchDiag][NavigationManager] tryUseCachedCountForStartup: SKIP - invalid collection index";
+      qWarning()
+          << "[SearchDiag][NavigationManager] tryUseCachedCountForStartup: "
+             "SKIP - invalid collection index";
     }
     return false;
   }
-  
+
   // Look up cached viewport with file paths for instant rendering
   const CollectionConfig &cfg = (*m_collections)[context.currentIndex];
-  const QString collectionKey = CollectionUtils::hierarchicalNameFor(cfg, *m_collections);
-  SessionManager::CachedViewport cachedVp = m_sessionManager->getCachedViewport(collectionKey);
-  
+  const QString collectionKey =
+      CollectionUtils::hierarchicalNameFor(cfg, *m_collections);
+  SessionManager::CachedViewport cachedVp =
+      m_sessionManager->getCachedViewport(collectionKey);
+
   if (!cachedVp.isValid()) {
     if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-      qWarning() << "[SearchDiag][NavigationManager] tryUseCachedCountForStartup: SKIP - no valid cached viewport for" << collectionKey;
+      qWarning()
+          << "[SearchDiag][NavigationManager] tryUseCachedCountForStartup: "
+             "SKIP - no valid cached viewport for"
+          << collectionKey;
     }
     return false;
   }
-  
+
   if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    qWarning() << "[SearchDiag][NavigationManager] tryUseCachedCountForStartup: USING cached viewport for" << collectionKey
-               << "with" << cachedVp.filePaths.size() << "paths and" << cachedVp.artworkPaths.size() << "artwork paths";
+    qWarning() << "[SearchDiag][NavigationManager] "
+                  "tryUseCachedCountForStartup: USING cached viewport for"
+               << collectionKey << "with" << cachedVp.filePaths.size()
+               << "paths and" << cachedVp.artworkPaths.size()
+               << "artwork paths";
   }
-  
+
   // Mark that we've used the fast path - clear the initial startup flag
   m_isInitialStartupLoad = false;
-  
+
   int totalItems = cachedVp.totalItems;
   if (totalItems <= 0) {
     return false;
   }
-  
-  // Use minimal context for immediate display - skip expensive UUID computation.
-  // The cached viewport already has file paths resolved, so we don't need
-  // precomputed UUID maps for initial rendering. Those will be built lazily
-  // when the background count query completes.
+
+  // Use minimal context for immediate display - skip expensive UUID
+  // computation. The cached viewport already has file paths resolved, so we
+  // don't need precomputed UUID maps for initial rendering. Those will be built
+  // lazily when the background count query completes.
   CollectionContext minimalContext;
   minimalContext.currentIndex = context.currentIndex;
   minimalContext.config = context.config;
   minimalContext.artworkDirectory = context.artworkDirectory;
   if (m_generalSettings) {
     minimalContext.sortMode = m_generalSettings->sortMode;
-    minimalContext.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    minimalContext.excludeSubfoldersFromSort =
+        m_generalSettings->excludeSubfoldersFromSort;
   }
-  
+
   // Store minimal context for now - will be replaced with full context
   // when background query completes
   m_hasItemsQueryContext = true;
   m_itemsQueryContext = minimalContext;
   m_itemsQueryFilter = QString();
-  
+
   // Increment generation to mark this as a fresh view
   ++m_itemsViewGeneration;
   m_pendingRangeGenerations.clear();
-  
+
   // Use the cached start index as our selection position
   int selIdx = cachedVp.startIndex;
   if (selIdx < 0 || selIdx >= totalItems) {
     selIdx = 0;
   }
-  
+
   // Set up virtual scrolling immediately with cached count
   if (m_scrollManager) {
     m_scrollManager->setInitialScrollIndex(selIdx);
     m_scrollManager->setupVirtualScrolling(totalItems, minimalContext);
-    
+
     // Inject cached items directly into scroll manager for instant display
     // Including cached artwork paths for instant artwork resolution
-    m_scrollManager->injectCachedItems(cachedVp.startIndex, cachedVp.filePaths, 
-                                       cachedVp.fileNames, cachedVp.artworkPaths);
+    m_scrollManager->injectCachedItems(cachedVp.startIndex, cachedVp.filePaths,
+                                       cachedVp.fileNames,
+                                       cachedVp.artworkPaths);
   }
-  
+
   // Show the items page
   resumeItemsPageRendering();
   if (m_loadingLabel) {
@@ -505,7 +526,7 @@ auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &con
   if (m_stackedWidget && m_itemsPage) {
     m_stackedWidget->setCurrentWidget(m_itemsPage);
   }
-  
+
   // Update artwork for visible items - use paths directly from cache
   if (m_artworkManager) {
     m_artworkManager->updateViewportArtwork();
@@ -513,60 +534,66 @@ auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &con
   if (m_artworkManager && m_artworkManager->getTimerCoordinator()) {
     m_artworkManager->getTimerCoordinator()->scheduleViewportUpdate();
   }
-  
+
   // Schedule selection restore
   if (selIdx >= 0 && m_interactionManager) {
     scheduleSelectionRestore(selIdx, UIConstants::Selection::RESTORE_STEPS,
                              UIConstants::Selection::RESTORE_STEP_DELAY_MS,
                              UIConstants::Selection::RESTORE_MAX_DELAY_MS);
   }
-  
+
   schedulePostLoadOperations();
-  
-  diagLog(QString("tryUseCachedCountForStartup: used cached viewport startIdx=%1 totalItems=%2 cachedPaths=%3")
+
+  diagLog(QString("tryUseCachedCountForStartup: used cached viewport "
+                  "startIdx=%1 totalItems=%2 cachedPaths=%3")
               .arg(cachedVp.startIndex)
               .arg(totalItems)
               .arg(cachedVp.filePaths.size()));
-  
+
   return true;
 }
 
 // Returns cached expanded context if available for the same collection index,
 // otherwise builds and caches a new one. This avoids recomputing precomputed
 // descendants, UUIDs, and directory maps on every search keystroke.
-CollectionContext NavigationManager::getOrBuildExpandedContext(int collectionIndex) {
+CollectionContext
+NavigationManager::getOrBuildExpandedContext(int collectionIndex) {
   // Return cached context if it matches the requested collection
-  if (m_cachedExpandedContextIndex == collectionIndex && 
+  if (m_cachedExpandedContextIndex == collectionIndex &&
       m_cachedExpandedContext.isValid()) {
     return m_cachedExpandedContext;
   }
-  
+
   // Build and cache new context
   m_cachedExpandedContext = buildExpandedContextForIndex(collectionIndex);
   m_cachedExpandedContextIndex = collectionIndex;
   return m_cachedExpandedContext;
 }
 
-CollectionContext NavigationManager::buildExpandedContextForIndex(int collectionIndex) const {
+CollectionContext
+NavigationManager::buildExpandedContextForIndex(int collectionIndex) const {
   CollectionContext context;
   context.currentIndex = collectionIndex;
-  if (!m_collections || collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
+  if (!m_collections || collectionIndex < 0 ||
+      collectionIndex >= (*m_collections).size()) {
     return context;
   }
 
   context.config = (*m_collections)[collectionIndex];
-  
+
   // Use pre-computed expanded directories from hierarchy cache if available
   // This eliminates repeated path expansion (variable substitution)
   if (m_hierarchyCache && m_hierarchyCache->isValid()) {
-    context.config.mediaDirectory = m_hierarchyCache->expandedMediaDir(collectionIndex);
-    context.config.artworkDirectory = m_hierarchyCache->expandedArtworkDir(collectionIndex);
+    context.config.mediaDirectory =
+        m_hierarchyCache->expandedMediaDir(collectionIndex);
+    context.config.artworkDirectory =
+        m_hierarchyCache->expandedArtworkDir(collectionIndex);
   } else {
     context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
         context.config.mediaDirectory, context.config.name);
     context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
         context.config.artworkDirectory, context.config.name);
-    
+
     // Resolve artwork directory with parent fallback
     if (context.config.artworkDirectory.trimmed().isEmpty()) {
       QString resolvedArtwork = CollectionUtils::resolveArtworkDirectory(
@@ -575,49 +602,51 @@ CollectionContext NavigationManager::buildExpandedContextForIndex(int collection
           resolvedArtwork, context.config.name);
     }
   }
-  
+
   context.artworkDirectory = context.config.artworkDirectory;
   if (m_generalSettings) {
     context.sortMode = m_generalSettings->sortMode;
-    context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    context.excludeSubfoldersFromSort =
+        m_generalSettings->excludeSubfoldersFromSort;
   }
-  
+
   // Use pre-computed UUIDs and directory maps from hierarchy cache
   // for O(1) query performance. This eliminates repeated SHA1 hash
   // computations and path expansions during search queries.
   if (m_hierarchyCache && m_hierarchyCache->isValid()) {
-    context.precomputedDescendants = m_hierarchyCache->allDescendants(collectionIndex);
-    
+    context.precomputedDescendants =
+        m_hierarchyCache->allDescendants(collectionIndex);
+
     // Use cached UUID for current collection
     QString currentUuid = m_hierarchyCache->collectionUuid(collectionIndex);
     if (!currentUuid.isEmpty()) {
       context.precomputedDescendantUuids << currentUuid;
-      context.precomputedUuidToMediaDir[currentUuid] = 
+      context.precomputedUuidToMediaDir[currentUuid] =
           m_hierarchyCache->uuidToMediaDir(currentUuid);
-      context.precomputedUuidToArtworkDir[currentUuid] = 
+      context.precomputedUuidToArtworkDir[currentUuid] =
           m_hierarchyCache->uuidToArtworkDir(currentUuid);
       context.precomputedUuidToCollectionIndex[currentUuid] = collectionIndex;
     }
-    
+
     // Use cached UUIDs for all descendants - O(1) lookups
     for (int descendantIndex : context.precomputedDescendants) {
       QString uuid = m_hierarchyCache->collectionUuid(descendantIndex);
       if (!uuid.isEmpty()) {
         context.precomputedDescendantUuids << uuid;
-        context.precomputedUuidToMediaDir[uuid] = 
+        context.precomputedUuidToMediaDir[uuid] =
             m_hierarchyCache->uuidToMediaDir(uuid);
-        context.precomputedUuidToArtworkDir[uuid] = 
+        context.precomputedUuidToArtworkDir[uuid] =
             m_hierarchyCache->uuidToArtworkDir(uuid);
         context.precomputedUuidToCollectionIndex[uuid] = descendantIndex;
       }
     }
   }
-  
+
   return context;
 }
 
-void NavigationManager::requestItemCountForContext(const CollectionContext &context,
-                                                  const QString &filter) {
+void NavigationManager::requestItemCountForContext(
+    const CollectionContext &context, const QString &filter) {
   if (!m_databaseManager || !m_collections) {
     return;
   }
@@ -628,7 +657,9 @@ void NavigationManager::requestItemCountForContext(const CollectionContext &cont
   // range requests can use the exact same filter string.
   m_itemsQueryFilter = filter.trimmed();
 
-  diagLog(QString("requestItemCountForContext: collIndex=%1 filter='%2' includeSubfolders=%3 showAllSubfolderItems=%4 currentSubfolder='%5' includeDesc=%6 includeAll=%7")
+  diagLog(QString("requestItemCountForContext: collIndex=%1 filter='%2' "
+                  "includeSubfolders=%3 showAllSubfolderItems=%4 "
+                  "currentSubfolder='%5' includeDesc=%6 includeAll=%7")
               .arg(m_itemsQueryContext.currentIndex)
               .arg(m_itemsQueryFilter)
               .arg(m_itemsQueryContext.config.includeContentSubfolders)
@@ -638,10 +669,12 @@ void NavigationManager::requestItemCountForContext(const CollectionContext &cont
               .arg(m_itemsQueryContext.queryIncludeAllCollections));
 
   ++m_itemCountRequestToken;
-  qWarning() << "[ScanFlow] requestItemCountForContext: newToken=" << m_itemCountRequestToken 
-             << "collIdx=" << context.currentIndex << "filter='" << filter << "'";
+  qWarning() << "[ScanFlow] requestItemCountForContext: newToken="
+             << m_itemCountRequestToken << "collIdx=" << context.currentIndex
+             << "filter='" << filter << "'";
   m_databaseManager->fetchItemCount(m_itemsQueryContext, (*m_collections),
-                                    m_itemsQueryFilter, m_itemCountRequestToken);
+                                    m_itemsQueryFilter,
+                                    m_itemCountRequestToken);
 }
 
 // Shows items for a collection, prepares the view, and primes data loading
@@ -652,22 +685,22 @@ auto NavigationManager::showCollectionItems(int collectionIndex) -> bool {
 
   // Invalidate cached expanded context when changing collections
   m_cachedExpandedContextIndex = -1;
-  
+
   // Clear artwork directory cache when changing collections to ensure
   // fresh filesystem data and prevent stale cache entries
   ArtworkUtils::clearDirectoryCache();
-  
+
   // Clear initial startup flag after any navigation
   // (fast path only applies to very first load)
   if (*m_currentCollectionIndex >= 0) {
     m_isInitialStartupLoad = false;
   }
 
-  if ((parent()) &&
-      (m_interactionManager)) {
+  if ((parent()) && (m_interactionManager)) {
     m_interactionManager->stopRepeat();
     // Only cancel pending restore when navigating FROM an existing collection
-    // On initial startup (*m_currentCollectionIndex < 0), allow restore to proceed
+    // On initial startup (*m_currentCollectionIndex < 0), allow restore to
+    // proceed
     if (*m_currentCollectionIndex >= 0) {
       m_interactionManager->cancelPendingSelectionRestore();
     }
@@ -681,7 +714,8 @@ auto NavigationManager::showCollectionItems(int collectionIndex) -> bool {
 
   prepareNonSharedNavigation(collectionIndex);
   loadCollectionData(collectionIndex);
-  if (m_refreshTitleCounts) m_refreshTitleCounts();
+  if (m_refreshTitleCounts)
+    m_refreshTitleCounts();
   return true;
 }
 
@@ -695,18 +729,17 @@ auto NavigationManager::setSuppressArrowCenter(QScrollArea *scrollArea,
   m_state->suppressArrowCenterFor(settleMs);
   // Clear arrow center suppression after settle period expires -
   // allows navigation animations to complete before centering resumes
-  QTimer::singleShot(
-      UIConstants::Keyboard::ARROW_CENTER_CLEAR_AFTER_SET_MS, this, [this]() {
-        if (m_state) {
-          m_state->clearArrowCenterSuppression();
-        }
-      });
+  QTimer::singleShot(UIConstants::Keyboard::ARROW_CENTER_CLEAR_AFTER_SET_MS,
+                     this, [this]() {
+                       if (m_state) {
+                         m_state->clearArrowCenterSuppression();
+                       }
+                     });
 }
 
 auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const
     -> bool {
-  if (fromIndex < 0 || toIndex < 0 ||
-      fromIndex >= (*m_collections).size() ||
+  if (fromIndex < 0 || toIndex < 0 || fromIndex >= (*m_collections).size() ||
       toIndex >= (*m_collections).size()) {
     return false;
   }
@@ -725,7 +758,8 @@ auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const
   }
 
   // Check if target is a container collection (no media directory)
-  // Container collections cannot share items - they only show subcollection folders
+  // Container collections cannot share items - they only show subcollection
+  // folders
   QString toMediaDir = SettingsUtils::expandConfigVariables(
       toCollection.mediaDirectory, toCollection.name);
   if (toMediaDir.trimmed().isEmpty()) {
@@ -739,8 +773,7 @@ auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const
   QList<int> childCollections = getAllDescendantCollections(toIndex);
   const bool anyDescendantWithMedia =
       std::ranges::any_of(childCollections, [this](int childIndex) {
-        if (childIndex < 0 ||
-            childIndex >= (*m_collections).size()) {
+        if (childIndex < 0 || childIndex >= (*m_collections).size()) {
           return false;
         }
         QString childMediaDir = SettingsUtils::expandConfigVariables(
@@ -753,16 +786,13 @@ auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const
 
 auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex)
     -> void {
-  if (collectionIndex < 0 ||
-      collectionIndex >= (*m_collections).size()) {
+  if (collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     return;
   }
 
-  const CollectionConfig &collection =
-      (*m_collections)[collectionIndex];
+  const CollectionConfig &collection = (*m_collections)[collectionIndex];
 
-  if (collection.gridWidth !=
-      m_scrollManager->getCurrentGridWidth()) {
+  if (collection.gridWidth != m_scrollManager->getCurrentGridWidth()) {
     m_scrollManager->updateGridWidth(collection.gridWidth);
   }
 
@@ -775,8 +805,7 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex)
   applyPrimaryColorForCollection(collectionIndex);
 
   if (m_sidebarManager) {
-    m_sidebarManager->applySidebarStateForCollection(
-        collectionIndex);
+    m_sidebarManager->applySidebarStateForCollection(collectionIndex);
   }
 }
 
@@ -799,14 +828,13 @@ void NavigationManager::applyBackgroundForCollection(int collectionIndex) {
     QString imagePath = collection.backgroundImage;
     // Escape backslashes for CSS
     imagePath.replace("\\", "/");
-    styleSheet = QString(
-        "QWidget { "
-        "background-image: url(\"%1\"); "
-        "background-repeat: no-repeat; "
-        "background-position: center; "
-        "background-attachment: fixed; "
-        "}")
-        .arg(imagePath);
+    styleSheet = QString("QWidget { "
+                         "background-image: url(\"%1\"); "
+                         "background-repeat: no-repeat; "
+                         "background-position: center; "
+                         "background-attachment: fixed; "
+                         "}")
+                     .arg(imagePath);
   } else if (!collection.backgroundColor.isEmpty()) {
     // Background color mode
     styleSheet = QString("QWidget { background-color: %1; }")
@@ -828,17 +856,19 @@ void NavigationManager::applyPrimaryColorForCollection(int collectionIndex) {
   ItemWidget::setPrimaryColor(collection.primaryColor);
   ItemWidget::setTileColor(collection.tileColor);
   ItemWidget::setSelectionColor(collection.selectionColor);
+  ItemWidget::setListRowColor(collection.listRowColor);
+  ItemWidget::setListAltRowColor(collection.listAltRowColor);
+  ItemWidget::setCustomFontFamily(collection.customFontFamily);
 
-  bool hasPrimaryColor = !collection.primaryColor.isEmpty() && 
+  bool hasPrimaryColor = !collection.primaryColor.isEmpty() &&
                          QColor::isValidColorName(collection.primaryColor);
 
   // Apply primary color to toolbar/top bar (exact color, not tinted)
   if (m_itemsTopBar) {
     QString toolbarStyle;
     if (hasPrimaryColor) {
-      toolbarStyle = QString(
-          "QWidget#itemsTopBar { background-color: %1; }")
-          .arg(collection.primaryColor);
+      toolbarStyle = QString("QWidget#itemsTopBar { background-color: %1; }")
+                         .arg(collection.primaryColor);
     }
     m_itemsTopBar->setStyleSheet(toolbarStyle);
   }
@@ -847,11 +877,11 @@ void NavigationManager::applyPrimaryColorForCollection(int collectionIndex) {
   if (m_menubar) {
     QString menubarStyle;
     if (hasPrimaryColor) {
-      menubarStyle = QString(
-          "QMenuBar { background-color: %1; }"
-          "QMenuBar::item { background-color: transparent; }"
-          "QMenuBar::item:selected { background-color: rgba(255,255,255,0.2); }")
-          .arg(collection.primaryColor);
+      menubarStyle = QString("QMenuBar { background-color: %1; }"
+                             "QMenuBar::item { background-color: transparent; }"
+                             "QMenuBar::item:selected { background-color: "
+                             "rgba(255,255,255,0.2); }")
+                         .arg(collection.primaryColor);
     }
     m_menubar->setStyleSheet(menubarStyle);
   }
@@ -863,12 +893,12 @@ void NavigationManager::applyPrimaryColorForCollection(int collectionIndex) {
       // Tint the primary color slightly for the search bar background
       QColor baseColor(collection.primaryColor);
       QColor bgColor = baseColor.lighter(130);
-      searchBarStyle = QString(
-          "QLineEdit { background-color: %1; border: 1px solid %2; border-radius: 4px; padding: 4px; }"
-          "QLineEdit:focus { border-color: %3; }")
-          .arg(bgColor.name())
-          .arg(baseColor.darker(110).name())
-          .arg(baseColor.name());
+      searchBarStyle = QString("QLineEdit { background-color: %1; border: 1px "
+                               "solid %2; border-radius: 4px; padding: 4px; }"
+                               "QLineEdit:focus { border-color: %3; }")
+                           .arg(bgColor.name())
+                           .arg(baseColor.darker(110).name())
+                           .arg(baseColor.name());
     }
     m_searchBar->setStyleSheet(searchBarStyle);
   }
@@ -878,8 +908,7 @@ void NavigationManager::restoreSelectionForCurrentCollection() {
   if ((!parent()) || QApplication::closingDown()) {
     return;
   }
-  if ((!m_scrollManager) ||
-      (!m_interactionManager)) {
+  if ((!m_scrollManager) || (!m_interactionManager)) {
     return;
   }
   int coll = (*m_currentCollectionIndex);
@@ -892,8 +921,6 @@ void NavigationManager::restoreSelectionForCurrentCollection() {
   }
   int desired = -1;
   if (m_settingsManager) {
-    desired = m_settingsManager->getLastSelectedItem(coll);
-  } else {
     desired = m_settingsManager->getLastSelectedItem(coll);
   }
   if (desired < 0 || desired >= total) {
@@ -933,8 +960,7 @@ auto NavigationManager::findSubcollectionVisualIndex(int targetCollectionIndex,
 
   QList<int> subcollections;
   for (int i = 0; i < (*m_collections).size(); ++i) {
-    if ((*m_collections)[i].parentCollectionIndex ==
-        targetCollectionIndex) {
+    if ((*m_collections)[i].parentCollectionIndex == targetCollectionIndex) {
       subcollections.append(i);
     }
   }
@@ -956,17 +982,15 @@ auto NavigationManager::scheduleNavigationReturn(int targetCollectionIndex,
           m_interactionManager->setNavigationInProgress(false);
         }
 
-        if (subcollectionVisualIndex >= 0 &&
-            m_interactionManager) {
+        if (subcollectionVisualIndex >= 0 && m_interactionManager) {
           // Delay selection restore until layout is stable after navigation
-          QTimer::singleShot(
-              UIConstants::Timing::MEDIUM_DELAY_MS, this,
-              [this, subcollectionVisualIndex]() {
-                if (m_interactionManager) {
-                  m_interactionManager->beginSelectionRestore(
-                      subcollectionVisualIndex);
-                }
-              });
+          QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this,
+                             [this, subcollectionVisualIndex]() {
+                               if (m_interactionManager) {
+                                 m_interactionManager->beginSelectionRestore(
+                                     subcollectionVisualIndex);
+                               }
+                             });
         }
       });
 }
@@ -994,12 +1018,11 @@ auto NavigationManager::handleNavigationStackPop() -> void {
 
 // Handles navigation fallback when the navigation stack is empty
 auto NavigationManager::handleNavigationFallback() -> void {
-  m_stackManager->clear();  // Ensure depth is reset
+  m_stackManager->clear(); // Ensure depth is reset
   int previousIndex = (*m_currentCollectionIndex);
 
   int fallbackIndex = (*m_currentCollectionIndex);
-  if (fallbackIndex < 0 ||
-      fallbackIndex >= (*m_collections).size()) {
+  if (fallbackIndex < 0 || fallbackIndex >= (*m_collections).size()) {
     fallbackIndex = -1;
     for (int i = 0; i < (*m_collections).size(); ++i) {
       if ((*m_collections)[i].parentCollectionIndex == -1) {
@@ -1035,8 +1058,7 @@ void NavigationManager::goBackToCollections() {
   if (!parent()) {
     return;
   }
-  if ((parent()) &&
-      (m_interactionManager)) {
+  if ((parent()) && (m_interactionManager)) {
     m_interactionManager->stopRepeat();
   }
 
@@ -1050,20 +1072,19 @@ void NavigationManager::goBackToCollections() {
 }
 
 void NavigationManager::onCollectionSelected(int collectionIndex) {
-  // Start dentry prewarm early - while DB query runs, we warm the filesystem cache
-  // so artwork lookups are fast when widgets appear
+  // Start dentry prewarm early - while DB query runs, we warm the filesystem
+  // cache so artwork lookups are fast when widgets appear
   if (m_artworkManager) {
     m_artworkManager->startEarlyDentryPrewarm(collectionIndex);
   }
-  
+
   m_stackManager->clear();
   showCollectionItems(collectionIndex);
 }
 
 // Validates basic context for items loaded operations
 auto NavigationManager::validateItemsLoadedContext() const -> bool {
-  return parent() && !QApplication::closingDown() &&
-         !m_isShuttingDown();
+  return parent() && !QApplication::closingDown() && !m_isShuttingDown();
 }
 
 // Cleans up existing no-items widgets from previous loads
@@ -1087,8 +1108,7 @@ auto NavigationManager::determineContentAvailability(
   bool hasContent = !filePaths.isEmpty() || !subcollections.isEmpty();
 
   if ((*m_currentCollectionIndex) >= 0 &&
-      (*m_currentCollectionIndex) <
-          (*m_collections).size()) {
+      (*m_currentCollectionIndex) < (*m_collections).size()) {
     const CollectionConfig &collection =
         (*m_collections)[(*m_currentCollectionIndex)];
     if (collection.showAllSubcollectionItems && filePaths.isEmpty() &&
@@ -1096,8 +1116,7 @@ auto NavigationManager::determineContentAvailability(
       QList<int> allDescendants =
           getAllDescendantCollections((*m_currentCollectionIndex));
       for (int descendantIndex : allDescendants) {
-        if (descendantIndex >= 0 &&
-            descendantIndex < (*m_collections).size()) {
+        if (descendantIndex >= 0 && descendantIndex < (*m_collections).size()) {
           if (!(*m_collections)[descendantIndex]
                    .mediaDirectory.trimmed()
                    .isEmpty()) {
@@ -1118,8 +1137,8 @@ auto NavigationManager::handleEmptyContent() -> void {
     m_loadingOverlay->hide();
   }
 
-  const bool shuttingDown = QApplication::closingDown() ||
-                            (m_isShuttingDown && m_isShuttingDown());
+  const bool shuttingDown =
+      QApplication::closingDown() || (m_isShuttingDown && m_isShuttingDown());
 
   if (!shuttingDown) {
     if (m_loadingLabel) {
@@ -1127,10 +1146,10 @@ auto NavigationManager::handleEmptyContent() -> void {
       m_loadingLabel->setVisible(true);
     }
     resumeItemsPageRendering();
-    if (m_refreshTitleCounts) m_refreshTitleCounts();
+    if (m_refreshTitleCounts)
+      m_refreshTitleCounts();
   }
-  if ((parent()) &&
-      (m_interactionManager)) {
+  if ((parent()) && (m_interactionManager)) {
     m_interactionManager->setNavigationInProgress(false);
   }
 }
@@ -1141,14 +1160,14 @@ auto NavigationManager::setupCollectionContext(
     const QHash<QString, QString> &fileNames) const -> CollectionContext {
   CollectionContext context;
   context.currentIndex = (*m_currentCollectionIndex);
-  context.config =
-      (*m_collections)[(*m_currentCollectionIndex)];
+  context.config = (*m_collections)[(*m_currentCollectionIndex)];
   context.artworkDirectory = context.config.artworkDirectory;
   context.filePaths = filePaths;
   context.fileNames = fileNames;
   if (m_generalSettings) {
     context.sortMode = m_generalSettings->sortMode;
-    context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    context.excludeSubfoldersFromSort =
+        m_generalSettings->excludeSubfoldersFromSort;
   }
   if (m_allCollectionsActive) {
     context.config.showAllSubcollectionItems = true;
@@ -1168,11 +1187,13 @@ auto NavigationManager::lookupRememberedSelectionIndex(int totalItems) const
   const CollectionConfig &cfg = (*m_collections)[(*m_currentCollectionIndex)];
   const bool subfolderActive = !cfg.currentSubfolder.trimmed().isEmpty();
 
+  // cppcheck-suppress redundantAssignment - initialized to -1, set in if/else branches
   int selIdx = -1;
   if (subfolderActive) {
     const QString sessionKey =
         CollectionUtils::selectionSessionKeyFor(cfg, (*m_collections));
     selIdx = m_sessionManager->getLastSelectedIndex(sessionKey);
+    // selIdx is set in this branch, else branch below sets it differently
   } else {
     const QString hierarchicalName =
         CollectionUtils::hierarchicalNameFor(cfg, (*m_collections));
@@ -1193,8 +1214,8 @@ auto NavigationManager::lookupRememberedSelectionIndex(int totalItems) const
 
 // Calculates the appropriate selection index for restoration
 auto NavigationManager::calculateSelectionIndex(int totalItems) const -> int {
-  bool searchActive = ((m_searchBar) &&
-                       !m_searchBar->text().trimmed().isEmpty());
+  bool searchActive =
+      ((m_searchBar) && !m_searchBar->text().trimmed().isEmpty());
 
   if (searchActive || !(*m_generalSettings).rememberSelection ||
       totalItems <= 0) {
@@ -1230,34 +1251,33 @@ auto NavigationManager::schedulePostLoadOperations() -> void {
   // Track if we're completing a rescan (affects title refresh timing)
   bool wasRescan = m_isRescanInProgress;
   m_isRescanInProgress = false;
-  
+
   // Hide loading overlay after items have loaded
   if (m_loadingOverlay) {
     m_loadingOverlay->hide();
   }
-  
+
   // Delay silent loading start until items are visible and user can interact -
   // Background precaching disabled - only load visible viewport items
   // to minimize CPU usage when idle
 
   if (m_databaseManager) {
-    m_databaseManager->updateCachedCounts(
-        (*m_collections));
+    m_databaseManager->updateCachedCounts((*m_collections));
   }
-  
+
   // After a rescan, delay title refresh to allow main thread database to see
   // the new data committed by the worker thread (SQLite WAL read visibility)
   if (wasRescan) {
     QTimer::singleShot(100, this, [this]() {
-      if (m_refreshTitleCounts) m_refreshTitleCounts();
+      if (m_refreshTitleCounts)
+        m_refreshTitleCounts();
     });
   } else {
-    if (m_refreshTitleCounts) m_refreshTitleCounts();
+    if (m_refreshTitleCounts)
+      m_refreshTitleCounts();
   }
 
-  if (m_allCollectionsActive) {
-    m_allCollectionsActive = false;
-  }
+  m_allCollectionsActive = false;
 
   // Clear navigation progress flag after viewport settles -
   // allows user input to be processed again after load completes
@@ -1278,8 +1298,7 @@ void NavigationManager::onItemsLoaded(
 
   cleanupExistingNoItemsWidgets();
 
-  QList<int> subcollections =
-      getSubcollections((*m_currentCollectionIndex));
+  QList<int> subcollections = getSubcollections((*m_currentCollectionIndex));
   bool hasContent = determineContentAvailability(filePaths, subcollections);
 
   if (!hasContent) {
@@ -1305,21 +1324,25 @@ void NavigationManager::onItemsLoaded(
   if (m_artworkManager) {
     m_artworkManager->updateViewportArtwork();
   }
-  if (m_artworkManager &&
-      m_artworkManager->getTimerCoordinator()) {
+  if (m_artworkManager && m_artworkManager->getTimerCoordinator()) {
     m_artworkManager->getTimerCoordinator()->scheduleViewportUpdate();
   }
 
   bool pendingRestore =
       m_state ? m_state->selectionRestore().restorePending : false;
-  debugLog("[SelectionRestore] onItemsLoaded: selIdx=" << selIdx 
-           << "totalItems=" << totalItems << "pendingRestore=" << pendingRestore
+  // Also skip if there's a pending path-based restore (from sort change)
+  bool pendingPathRestore =
+      m_scrollManager && m_scrollManager->hasPendingSelectionRestoreByPath();
+  debugLog("[SelectionRestore] onItemsLoaded: selIdx="
+           << selIdx << "totalItems=" << totalItems << "pendingRestore="
+           << pendingRestore << "pendingPathRestore=" << pendingPathRestore
            << "collectionIndex=" << (*m_currentCollectionIndex));
-  if (selIdx >= 0 && (m_interactionManager) &&
-      !pendingRestore) {
+  if (selIdx >= 0 && (m_interactionManager) && !pendingRestore &&
+      !pendingPathRestore) {
     if (lcNavigationManager().isDebugEnabled()) {
       int depth = computeCollectionDepth((*m_currentCollectionIndex));
-      debugLog("[SelectionRestore] depth=" << depth << "for collection" 
+      debugLog("[SelectionRestore] depth="
+               << depth << "for collection"
                << (*m_collections)[(*m_currentCollectionIndex)].name);
     }
     // Use scheduleSelectionRestore for all depths to ensure widgets are
@@ -1332,7 +1355,8 @@ void NavigationManager::onItemsLoaded(
   schedulePostLoadOperations();
 }
 
-void NavigationManager::onMediaLibraryError(const ErrorUtils::ErrorContext &error) {
+void NavigationManager::onMediaLibraryError(
+    const ErrorUtils::ErrorContext &error) {
   if (m_loadingLabel) {
     m_loadingLabel->deleteLater();
     m_loadingLabel = nullptr;
@@ -1376,15 +1400,14 @@ void NavigationManager::onMediaLibraryError(const ErrorUtils::ErrorContext &erro
   errorWidget->raise();
 
   if (m_databaseManager) {
-    m_databaseManager->updateCachedCounts(
-        (*m_collections));
+    m_databaseManager->updateCachedCounts((*m_collections));
   }
-  if (m_refreshTitleCounts) m_refreshTitleCounts();
+  if (m_refreshTitleCounts)
+    m_refreshTitleCounts();
 }
 
 void NavigationManager::onViewportChanged() {
-  if ((m_interactionManager) &&
-      m_interactionManager->isWheelScrolling() &&
+  if ((m_interactionManager) && m_interactionManager->isWheelScrolling() &&
       m_stackedWidget && m_stackedWidget->currentWidget() == m_itemsPage) {
     // Delay viewport update during wheel scrolling to batch rapid events -
     // reduces CPU load from frequent artwork updates during fast scrolling
@@ -1417,17 +1440,21 @@ void NavigationManager::filterItems(const QString &searchText) {
 
   CollectionContext context = getOrBuildExpandedContext(idx);
 
-  diagLog(QString("filterItems: idx=%1 query='%2' mediaDir='%3' includeSubfolders=%4 showAllSubfolderItems=%5 currentSubfolder='%6'")
-              .arg(idx)
-              .arg(searchText)
-              .arg(context.config.mediaDirectory)
-              .arg(context.config.includeContentSubfolders)
-              .arg(context.config.showAllSubfolderItems)
-              .arg(context.config.currentSubfolder));
+  diagLog(
+      QString(
+          "filterItems: idx=%1 query='%2' mediaDir='%3' includeSubfolders=%4 "
+          "showAllSubfolderItems=%5 currentSubfolder='%6'")
+          .arg(idx)
+          .arg(searchText)
+          .arg(context.config.mediaDirectory)
+          .arg(context.config.includeContentSubfolders)
+          .arg(context.config.showAllSubfolderItems)
+          .arg(context.config.currentSubfolder));
   requestItemCountForContext(context, searchText);
 }
 
-void NavigationManager::filterItemsCurrentAndSubcollections(const QString &searchText) {
+void NavigationManager::filterItemsCurrentAndSubcollections(
+    const QString &searchText) {
   if (!m_currentCollectionIndex || !m_collections) {
     return;
   }
@@ -1440,7 +1467,8 @@ void NavigationManager::filterItemsCurrentAndSubcollections(const QString &searc
   CollectionContext context = getOrBuildExpandedContext(idx);
   context.queryIncludeDescendants = true;
 
-  diagLog(QString("filterItemsCurrentAndSubcollections: idx=%1 query='%2' includeDesc=%3")
+  diagLog(QString("filterItemsCurrentAndSubcollections: idx=%1 query='%2' "
+                  "includeDesc=%3")
               .arg(idx)
               .arg(searchText)
               .arg(context.queryIncludeDescendants));
@@ -1478,61 +1506,61 @@ auto NavigationManager::collectionHasDescendantWithMedia(int parentIndex) const
     if (childIndex < 0 || childIndex >= (*m_collections).size()) {
       return false;
     }
-    const QString &mediaDir =
-        (*m_collections)[childIndex].mediaDirectory;
+    const QString &mediaDir = (*m_collections)[childIndex].mediaDirectory;
     return !mediaDir.trimmed().isEmpty();
   });
 }
 
 // Forces a full rescan of the collection by clearing cached data first
 void NavigationManager::forceRescanCollection(int collectionIndex) {
-  if (!m_collections || !m_databaseManager ||
-      collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
+  if (!m_collections || !m_databaseManager || collectionIndex < 0 ||
+      collectionIndex >= (*m_collections).size()) {
     return;
   }
-  
+
   // Show loading overlay during rescan
   if (m_loadingOverlay) {
     m_loadingOverlay->show("Clearing cache...");
   }
-  
+
   // Clear cached items to force a fresh scan (async operation)
   const CollectionConfig &config = (*m_collections)[collectionIndex];
-  QString mediaDir = SettingsUtils::expandConfigVariables(
-      config.mediaDirectory, config.name);
+  QString mediaDir =
+      SettingsUtils::expandConfigVariables(config.mediaDirectory, config.name);
   QString uuid = CollectionUtils::computeCollectionUuid(config.name, mediaDir);
-  
+
   // Mark that we're rescanning so onItemCountLoaded knows to hide the overlay
   m_isRescanInProgress = true;
   m_pendingRescanCollectionIndex = collectionIndex;
-  
+
   // Disconnect any previous connection to avoid duplicate calls
   if (m_cacheInvalidatedConnection) {
     QObject::disconnect(m_cacheInvalidatedConnection);
   }
-  
+
   // Connect one-shot handler to proceed after cache invalidation completes
   m_cacheInvalidatedConnection = QObject::connect(
-      m_databaseManager, &DatabaseManager::cacheInvalidated,
-      this, [this](const QString &/*invalidatedUuid*/) {
+      m_databaseManager, &DatabaseManager::cacheInvalidated, this,
+      [this](const QString & /*invalidatedUuid*/) {
         // Disconnect immediately to ensure one-shot behavior
         QObject::disconnect(m_cacheInvalidatedConnection);
         m_cacheInvalidatedConnection = {};
-        
+
         if (m_pendingRescanCollectionIndex >= 0) {
           // Update overlay message now that scan is starting
           if (m_loadingOverlay) {
             m_loadingOverlay->setMessage("Rescanning collection...");
           }
-          
+
           int idx = m_pendingRescanCollectionIndex;
           m_pendingRescanCollectionIndex = -1;
-          
-          // Now reload - ensureCollectionScanned will scan since cache is cleared
+
+          // Now reload - ensureCollectionScanned will scan since cache is
+          // cleared
           safeReloadCollection(idx);
         }
       });
-  
+
   // Initiate async cache invalidation
   m_databaseManager->invalidateCollectionCache(uuid);
 }
@@ -1550,7 +1578,8 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
   }
 
   diagLog("safeReloadCollection requested idx=" << collectionIndex);
-  qWarning() << "[ScanFlow] safeReloadCollection requested idx=" << collectionIndex;
+  qWarning() << "[ScanFlow] safeReloadCollection requested idx="
+             << collectionIndex;
 
   if (!m_safeReloadTimer) {
     m_safeReloadTimer = new QTimer(this);
@@ -1561,24 +1590,26 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
       m_pendingSafeReloadCollectionIndex = -1;
 
       diagLog("safeReloadCollection firing idx=" << pendingIndex);
-      qWarning() << "[ScanFlow] safeReloadCollection timer FIRING idx=" << pendingIndex;
+      qWarning() << "[ScanFlow] safeReloadCollection timer FIRING idx="
+                 << pendingIndex;
 
       if (!m_collections || !m_databaseManager || !m_currentCollectionIndex ||
           pendingIndex < 0 || pendingIndex >= (*m_collections).size()) {
         return;
       }
-      
-      // Determine which collection to reload. If the pending index doesn't match
-      // what the user is currently viewing, reload the current collection instead.
-      // This handles the case where a subcollection reload is requested but the
-      // user has navigated to a different collection.
+
+      // Determine which collection to reload. If the pending index doesn't
+      // match what the user is currently viewing, reload the current collection
+      // instead. This handles the case where a subcollection reload is
+      // requested but the user has navigated to a different collection.
       int reloadIndex = pendingIndex;
       if (pendingIndex != (*m_currentCollectionIndex)) {
-        qWarning() << "[ScanFlow] safeReloadCollection: pendingIndex" << pendingIndex 
-                   << "!= currentIndex" << (*m_currentCollectionIndex)
+        qWarning() << "[ScanFlow] safeReloadCollection: pendingIndex"
+                   << pendingIndex << "!= currentIndex"
+                   << (*m_currentCollectionIndex)
                    << "- reloading current instead";
         reloadIndex = (*m_currentCollectionIndex);
-        
+
         // Validate the current collection index
         if (reloadIndex < 0 || reloadIndex >= (*m_collections).size()) {
           return;
@@ -1595,24 +1626,25 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
       context.artworkDirectory = context.config.artworkDirectory;
       if (m_generalSettings) {
         context.sortMode = m_generalSettings->sortMode;
-        context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+        context.excludeSubfoldersFromSort =
+            m_generalSettings->excludeSubfoldersFromSort;
       }
 
-      // Reload after cleanup has settled to avoid use-after-free and re-entrancy
-      // issues when UI events fire during widget destruction.
+      // Reload after cleanup has settled to avoid use-after-free and
+      // re-entrancy issues when UI events fire during widget destruction.
       requestItemCountForContext(context, QString());
 
       // Update toolbar title to reflect subfolder if navigated into one.
       updateItemsPageTitle(reloadIndex);
 
       // Delay centering until items are loaded and layout is calculated.
-      QTimer::singleShot(UIConstants::Timing::VIEWPORT_DELAY_MS, this, [this]() {
-        if (m_scrollManager && m_currentCollectionIndex && m_collections) {
-          m_scrollManager->centerHorizontalScrollbar(
-              (*m_currentCollectionIndex),
-              (*m_collections));
-        }
-      });
+      QTimer::singleShot(
+          UIConstants::Timing::VIEWPORT_DELAY_MS, this, [this]() {
+            if (m_scrollManager && m_currentCollectionIndex && m_collections) {
+              m_scrollManager->centerHorizontalScrollbar(
+                  (*m_currentCollectionIndex), (*m_collections));
+            }
+          });
     });
   }
 
@@ -1655,46 +1687,45 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
   if ((!parent()) || (!m_itemsPage)) {
     return;
   }
-  auto *titleLabel =
-      m_itemsPage->findChild<QLabel *>("itemsTitleLabel");
-  auto *subfolderLabel =
-      m_itemsPage->findChild<QLabel *>("subfolderPathLabel");
+  auto *titleLabel = m_itemsPage->findChild<QLabel *>("itemsTitleLabel");
+  auto *subfolderLabel = m_itemsPage->findChild<QLabel *>("subfolderPathLabel");
 
   if (!titleLabel) {
     return;
   }
 
-  if (collectionIndex < 0 ||
-      collectionIndex >= (*m_collections).size()) {
+  if (collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     titleLabel->clear();
-    if (subfolderLabel) subfolderLabel->setVisible(false);
+    if (subfolderLabel)
+      subfolderLabel->setVisible(false);
     return;
   }
 
   // Connect linkActivated signal if not already connected
   static bool linkConnected = false;
   if (!linkConnected) {
-    QObject::connect(titleLabel, &QLabel::linkActivated,
-                     this, &NavigationManager::onBreadcrumbLinkClicked);
+    QObject::connect(titleLabel, &QLabel::linkActivated, this,
+                     &NavigationManager::onBreadcrumbLinkClicked);
     linkConnected = true;
   }
 
   const CollectionConfig &config = (*m_collections)[collectionIndex];
-  
+
   // Build breadcrumb with clickable parent links
   QString titleHtml;
-  
+
   // Get tinted color for clickable links
   QPalette pal = titleLabel->palette();
   QColor highlightColor = pal.color(QPalette::Highlight);
   int h, s, l;
   highlightColor.getHsl(&h, &s, &l);
-  QColor linkColor = QColor::fromHsl(h, s / 2, 170);  // Tinted, slightly saturated
+  QColor linkColor =
+      QColor::fromHsl(h, s / 2, 170); // Tinted, slightly saturated
   QString linkColorHex = linkColor.name();
-  
+
   // Check if we're in a subfolder - if so, make the collection name clickable
   bool inSubfolder = !config.currentSubfolder.isEmpty();
-  
+
   if (config.isSubcollection) {
     int parentIdx = config.parentCollectionIndex;
     if (parentIdx >= 0 && parentIdx < (*m_collections).size()) {
@@ -1702,18 +1733,21 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
       QString parentName = (*m_collections)[parentIdx].name.toHtmlEscaped();
       if (inSubfolder) {
         // Both parent and current collection are clickable when in subfolder
-        titleHtml = QString("<a href=\"collection:%1\" style=\"color:%2; text-decoration:none;\">%3</a> › "
-                           "<a href=\"root:\" style=\"color:%2; text-decoration:none;\">%4</a>")
-            .arg(parentIdx)
-            .arg(linkColorHex)
-            .arg(parentName)
-            .arg(config.name.toHtmlEscaped());
+        titleHtml = QString("<a href=\"collection:%1\" style=\"color:%2; "
+                            "text-decoration:none;\">%3</a> › "
+                            "<a href=\"root:\" style=\"color:%2; "
+                            "text-decoration:none;\">%4</a>")
+                        .arg(parentIdx)
+                        .arg(linkColorHex)
+                        .arg(parentName)
+                        .arg(config.name.toHtmlEscaped());
       } else {
-        titleHtml = QString("<a href=\"collection:%1\" style=\"color:%2; text-decoration:none;\">%3</a> › %4")
-            .arg(parentIdx)
-            .arg(linkColorHex)
-            .arg(parentName)
-            .arg(config.name.toHtmlEscaped());
+        titleHtml = QString("<a href=\"collection:%1\" style=\"color:%2; "
+                            "text-decoration:none;\">%3</a> › %4")
+                        .arg(parentIdx)
+                        .arg(linkColorHex)
+                        .arg(parentName)
+                        .arg(config.name.toHtmlEscaped());
       }
     } else {
       titleHtml = config.name.toHtmlEscaped();
@@ -1721,14 +1755,15 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
   } else {
     // Root collection - make clickable only if in a subfolder
     if (inSubfolder) {
-      titleHtml = QString("<a href=\"root:\" style=\"color:%1; text-decoration:none;\">%2</a>")
-          .arg(linkColorHex)
-          .arg(config.name.toHtmlEscaped());
+      titleHtml = QString("<a href=\"root:\" style=\"color:%1; "
+                          "text-decoration:none;\">%2</a>")
+                      .arg(linkColorHex)
+                      .arg(config.name.toHtmlEscaped());
     } else {
       titleHtml = config.name.toHtmlEscaped();
     }
   }
-  
+
   titleLabel->setText(titleHtml);
 
   // Show subfolder path if we're navigated into a virtual folder
@@ -1738,40 +1773,41 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
       // Connect subfolder label linkActivated if not already connected
       static bool subfolderLinkConnected = false;
       if (!subfolderLinkConnected) {
-        QObject::connect(subfolderLabel, &QLabel::linkActivated,
-                         this, &NavigationManager::onBreadcrumbLinkClicked);
+        QObject::connect(subfolderLabel, &QLabel::linkActivated, this,
+                         &NavigationManager::onBreadcrumbLinkClicked);
         subfolderLabel->setTextFormat(Qt::RichText);
         subfolderLabel->setOpenExternalLinks(false);
         subfolderLinkConnected = true;
       }
-      
+
       // Build subfolder breadcrumb - show path segments as clickable links
       QStringList pathParts = subfolder.split('/', Qt::SkipEmptyParts);
       QString subfolderHtml;
       QString accumulatedPath;
-      
+
       for (int i = 0; i < pathParts.size(); ++i) {
         if (!accumulatedPath.isEmpty()) {
           accumulatedPath += '/';
         }
         accumulatedPath += pathParts[i];
-        
+
         if (i > 0) {
           subfolderHtml += " › ";
         }
-        
+
         if (i < pathParts.size() - 1) {
           // Intermediate folder - clickable to navigate to that level
-          subfolderHtml += QString("<a href=\"subfolder:%1\" style=\"color:%2; text-decoration:none;\">%3</a>")
-              .arg(accumulatedPath.toHtmlEscaped())
-              .arg(linkColorHex)
-              .arg(pathParts[i].toHtmlEscaped());
+          subfolderHtml += QString("<a href=\"subfolder:%1\" style=\"color:%2; "
+                                   "text-decoration:none;\">%3</a>")
+                               .arg(accumulatedPath.toHtmlEscaped())
+                               .arg(linkColorHex)
+                               .arg(pathParts[i].toHtmlEscaped());
         } else {
           // Current folder - not clickable, just styled
           subfolderHtml += pathParts[i].toHtmlEscaped();
         }
       }
-      
+
       subfolderLabel->setText(subfolderHtml);
       subfolderLabel->setStyleSheet(QString("color: %1;").arg(linkColorHex));
       subfolderLabel->setVisible(true);
@@ -1792,11 +1828,10 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub,
     return false;
   }
 
-  const CollectionConfig &collection =
-      (*m_collections)[collectionIndex];
+  const CollectionConfig &collection = (*m_collections)[collectionIndex];
 
-  for (auto &m_collection : (*m_collections)) {
-    if (m_collection.parentCollectionIndex == collectionIndex) {
+  for (const auto &coll : (*m_collections)) {
+    if (coll.parentCollectionIndex == collectionIndex) {
       hasSub = true;
       break;
     }
@@ -1816,10 +1851,12 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub,
                               ? dir.entryList(QDir::Files)
                               : dir.entryList(filters, QDir::Files);
       hasItems = !files.isEmpty();
-      
+
       // When showAllSubfolderItems is true, also check subdirectories for files
-      // This handles cases where the root mediaDirectory has no files but subdirs do
-      if (!hasItems && collection.includeContentSubfolders && collection.showAllSubfolderItems) {
+      // This handles cases where the root mediaDirectory has no files but
+      // subdirs do
+      if (!hasItems && collection.includeContentSubfolders &&
+          collection.showAllSubfolderItems) {
         QDir::Filters dirFilters = QDir::Dirs | QDir::NoDotAndDotDot;
         if (collection.showHiddenFolders) {
           dirFilters |= QDir::Hidden;
@@ -1836,10 +1873,12 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub,
           }
         }
       }
-      
+
       // Also check for virtual folders (subdirectories as navigable content)
-      // when includeContentSubfolders is enabled and showAllSubfolderItems is false
-      if (!hasItems && collection.includeContentSubfolders && !collection.showAllSubfolderItems) {
+      // when includeContentSubfolders is enabled and showAllSubfolderItems is
+      // false
+      if (!hasItems && collection.includeContentSubfolders &&
+          !collection.showAllSubfolderItems) {
         QDir::Filters dirFilters = QDir::Dirs | QDir::NoDotAndDotDot;
         if (collection.showHiddenFolders) {
           dirFilters |= QDir::Hidden;
@@ -1867,32 +1906,27 @@ auto NavigationManager::getSubcollections(int parentIndex) const -> QList<int> {
 
 // Sets the collections pointer used for subcollection queries
 void NavigationManager::onSubcollectionEntered(int subcollectionIndex) {
-  if (subcollectionIndex >= 0 &&
-      subcollectionIndex < (*m_collections).size()) {
+  if (subcollectionIndex >= 0 && subcollectionIndex < (*m_collections).size()) {
     if (m_state) {
       qint64 now = QDateTime::currentMSecsSinceEpoch();
       m_state->click().suppressDoubleClickUntilMs =
           now + UIConstants::Selection::DOUBLE_CLICK_SUPPRESS_AFTER_ENTER_MS;
     }
 
-    if ((*m_currentCollectionIndex) >= 0 &&
-        (m_interactionManager)) {
-      int currentSelection =
-          m_interactionManager->currentSelectedIndex();
+    if ((*m_currentCollectionIndex) >= 0 && (m_interactionManager)) {
+      int currentSelection = m_interactionManager->currentSelectedIndex();
       if (currentSelection >= 0) {
-        m_settingsManager->setLastSelectedItem(
-            (*m_currentCollectionIndex), currentSelection);
+        m_settingsManager->setLastSelectedItem((*m_currentCollectionIndex),
+                                               currentSelection);
       }
     }
 
     if ((*m_currentCollectionIndex) >= 0 &&
-        (*m_currentCollectionIndex) <
-            (*m_collections).size()) {
+        (*m_currentCollectionIndex) < (*m_collections).size()) {
       m_stackManager->push(*m_currentCollectionIndex);
     }
 
-    m_settingsManager->setLastSelectedItem(subcollectionIndex,
-                                                         -1);
+    m_settingsManager->setLastSelectedItem(subcollectionIndex, -1);
 
     bool success = showCollectionItems(subcollectionIndex);
     if (!success) {
@@ -1906,17 +1940,17 @@ void NavigationManager::onSubcollectionEntered(int subcollectionIndex) {
         UIConstants::Navigation::SUBCOLLECTION_SCROLL_CENTER_DELAY_MS, this,
         [this]() {
           m_scrollManager->centerHorizontalScrollbar(
-              (*m_currentCollectionIndex),
-              (*m_collections));
+              (*m_currentCollectionIndex), (*m_collections));
         });
 
     // Clear double-click suppression after navigation animation completes
-    QTimer::singleShot(UIConstants::Selection::DOUBLE_CLICK_SUPPRESS_CLEAR_DELAY_MS,
-                       this, [this]() {
-                         if (m_state) {
-                           m_state->click().suppressDoubleClickUntilMs = 0;
-                         }
-                       });
+    QTimer::singleShot(
+        UIConstants::Selection::DOUBLE_CLICK_SUPPRESS_CLEAR_DELAY_MS, this,
+        [this]() {
+          if (m_state) {
+            m_state->click().suppressDoubleClickUntilMs = 0;
+          }
+        });
   }
 }
 
@@ -1934,7 +1968,7 @@ void NavigationManager::onVirtualFolderEntered(const QString &folderPath) {
   if (m_interactionManager) {
     m_interactionManager->stopScrollAnimations();
   }
-  
+
   // Update the current subfolder path in the collection config
   CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
 
@@ -1950,7 +1984,7 @@ void NavigationManager::onVirtualFolderEntered(const QString &folderPath) {
   }
 
   config.currentSubfolder = folderPath;
-  
+
   // Reload the collection to show the new folder contents
   safeReloadCollection(*m_currentCollectionIndex);
 }
@@ -1969,9 +2003,9 @@ void NavigationManager::goBackFromVirtualFolder() {
   if (m_interactionManager) {
     m_interactionManager->stopScrollAnimations();
   }
-  
+
   CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
-  
+
   if (config.currentSubfolder.isEmpty()) {
     // Already at root, nothing to go back to
     return;
@@ -1982,7 +2016,7 @@ void NavigationManager::goBackFromVirtualFolder() {
   if (m_itemScrollArea && m_itemScrollArea->verticalScrollBar()) {
     m_itemScrollArea->verticalScrollBar()->setValue(0);
   }
-  
+
   // Go up one level
   int lastSlash = config.currentSubfolder.lastIndexOf('/');
   if (lastSlash > 0) {
@@ -1990,7 +2024,7 @@ void NavigationManager::goBackFromVirtualFolder() {
   } else {
     config.currentSubfolder.clear();
   }
-  
+
   // Reload to show parent folder
   safeReloadCollection(*m_currentCollectionIndex);
 }
@@ -1999,10 +2033,10 @@ void NavigationManager::onBreadcrumbLinkClicked(const QString &link) {
   if (link.startsWith("collection:")) {
     // Navigate to parent collection
     bool ok = false;
-    int targetIndex = link.mid(11).toInt(&ok);  // Skip "collection:" prefix
+    int targetIndex = link.mid(11).toInt(&ok); // Skip "collection:" prefix
     if (ok && targetIndex >= 0 && targetIndex < (*m_collections).size()) {
       // Clear current subfolder before navigating to parent
-      if (*m_currentCollectionIndex >= 0 && 
+      if (*m_currentCollectionIndex >= 0 &&
           *m_currentCollectionIndex < (*m_collections).size()) {
         (*m_collections)[*m_currentCollectionIndex].currentSubfolder.clear();
       }
@@ -2010,8 +2044,8 @@ void NavigationManager::onBreadcrumbLinkClicked(const QString &link) {
     }
   } else if (link.startsWith("subfolder:")) {
     // Navigate to a specific subfolder level
-    QString targetPath = link.mid(10);  // Skip "subfolder:" prefix
-    if (*m_currentCollectionIndex >= 0 && 
+    QString targetPath = link.mid(10); // Skip "subfolder:" prefix
+    if (*m_currentCollectionIndex >= 0 &&
         *m_currentCollectionIndex < (*m_collections).size()) {
       CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
       if (config.currentSubfolder != targetPath) {
@@ -2031,7 +2065,7 @@ void NavigationManager::onBreadcrumbLinkClicked(const QString &link) {
     }
   } else if (link == "root:") {
     // Navigate back to root of current collection (clear subfolder)
-    if (*m_currentCollectionIndex >= 0 && 
+    if (*m_currentCollectionIndex >= 0 &&
         *m_currentCollectionIndex < (*m_collections).size()) {
       CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
       if (!config.currentSubfolder.isEmpty()) {
@@ -2070,7 +2104,8 @@ void NavigationManager::loadCurrentAndSubcollections() {
   context.artworkDirectory = context.config.artworkDirectory;
   if (m_generalSettings) {
     context.sortMode = m_generalSettings->sortMode;
-    context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    context.excludeSubfoldersFromSort =
+        m_generalSettings->excludeSubfoldersFromSort;
   }
 
   context.queryIncludeDescendants = true;
@@ -2078,15 +2113,14 @@ void NavigationManager::loadCurrentAndSubcollections() {
 
   // Delay filter reapplication until item count query completes -
   // ensures filter operates on the updated item list
-  QTimer::singleShot(UIConstants::Artwork::FILTER_REAPPLY_DELAY_MS, this, [this]() {
-    if (m_searchBar &&
-        !m_searchBar->text().trimmed().isEmpty() &&
-        m_scrollManager) {
-      const QString currentSearchText =
-          m_searchBar->text().trimmed();
-      m_scrollManager->applyFilter(currentSearchText);
-    }
-  });
+  QTimer::singleShot(
+      UIConstants::Artwork::FILTER_REAPPLY_DELAY_MS, this, [this]() {
+        if (m_searchBar && !m_searchBar->text().trimmed().isEmpty() &&
+            m_scrollManager) {
+          const QString currentSearchText = m_searchBar->text().trimmed();
+          m_scrollManager->applyFilter(currentSearchText);
+        }
+      });
 }
 
 // Loads the aggregated view across all collections and reapplies any active
@@ -2105,7 +2139,8 @@ void NavigationManager::loadAllCollectionsView() {
   context.subcollectionOverride = {};
   context.suppressVirtualFolders = true;
 
-  const QString currentFilter = (m_searchBar) ? m_searchBar->text().trimmed() : QString();
+  const QString currentFilter =
+      (m_searchBar) ? m_searchBar->text().trimmed() : QString();
   requestItemCountForContext(context, currentFilter);
 }
 
@@ -2122,7 +2157,8 @@ auto NavigationManager::getAllDescendantCollections(int parentIndex) const
     return result;
   }
 
-  QList<int> stack = CollectionUtils::directChildrenOf(parentIndex, *m_collections);
+  QList<int> stack =
+      CollectionUtils::directChildrenOf(parentIndex, *m_collections);
   QSet<int> seen;
   while (!stack.isEmpty()) {
     int idx = stack.takeLast();
@@ -2135,7 +2171,8 @@ auto NavigationManager::getAllDescendantCollections(int parentIndex) const
     seen.insert(idx);
     result.append(idx);
 
-    const QList<int> children = CollectionUtils::directChildrenOf(idx, *m_collections);
+    const QList<int> children =
+        CollectionUtils::directChildrenOf(idx, *m_collections);
     for (int childIdx : children) {
       if (!seen.contains(childIdx)) {
         stack.append(childIdx);
@@ -2146,16 +2183,17 @@ auto NavigationManager::getAllDescendantCollections(int parentIndex) const
 }
 
 void NavigationManager::persistCurrentSelection() {
-  static const bool diagEnabled = qEnvironmentVariableIntValue("KARTEND_SEARCH_DIAG");
+  static const bool diagEnabled =
+      qEnvironmentVariableIntValue("KARTEND_SEARCH_DIAG");
   if (diagEnabled) {
-    qWarning() << "[SearchDiag][NavigationManager] persistCurrentSelection: ENTRY";
+    qWarning()
+        << "[SearchDiag][NavigationManager] persistCurrentSelection: ENTRY";
   }
-  if ((!m_interactionManager) ||
-      (!m_settingsManager) ||
-      (!m_currentCollectionIndex) ||
-      (!m_collections)) {
+  if ((!m_interactionManager) || (!m_settingsManager) ||
+      (!m_currentCollectionIndex) || (!m_collections)) {
     if (diagEnabled) {
-      qWarning() << "[SearchDiag][NavigationManager] persistCurrentSelection: missing deps"
+      qWarning() << "[SearchDiag][NavigationManager] persistCurrentSelection: "
+                    "missing deps"
                  << "interaction=" << (m_interactionManager != nullptr)
                  << "settings=" << (m_settingsManager != nullptr)
                  << "collIndex=" << (m_currentCollectionIndex != nullptr)
@@ -2166,46 +2204,59 @@ void NavigationManager::persistCurrentSelection() {
   int coll = *m_currentCollectionIndex;
   if (!CollectionUtils::isValidIndex(coll, m_collections)) {
     if (diagEnabled) {
-      qWarning() << "[SearchDiag][NavigationManager] persistCurrentSelection: invalid collection index" << coll;
+      qWarning() << "[SearchDiag][NavigationManager] persistCurrentSelection: "
+                    "invalid collection index"
+                 << coll;
     }
     return;
   }
   int sel = m_interactionManager->currentSelectedIndex();
   if (sel < 0) {
     if (diagEnabled) {
-      qWarning() << "[SearchDiag][NavigationManager] persistCurrentSelection: no selection, caching viewport anyway";
+      qWarning() << "[SearchDiag][NavigationManager] persistCurrentSelection: "
+                    "no selection, caching viewport anyway";
     }
     // Still try to cache viewport even without selection for fast startup
   } else {
     m_settingsManager->setLastSelectedItem(coll, sel);
   }
-  
+
   // Also cache the current viewport for instant startup
-  if (m_scrollManager && m_sessionManager && m_generalSettings && m_generalSettings->rememberSelection) {
+  if (m_scrollManager && m_sessionManager && m_generalSettings &&
+      m_generalSettings->rememberSelection) {
     int startIndex = 0;
     int totalItems = 0;
     QStringList filePaths;
     QHash<QString, QString> fileNames;
     QHash<QString, QString> artworkPaths;
-    
-    if (m_scrollManager->getCurrentViewportForCache(startIndex, totalItems, filePaths, fileNames, artworkPaths)) {
+
+    if (m_scrollManager->getCurrentViewportForCache(
+            startIndex, totalItems, filePaths, fileNames, artworkPaths)) {
       const CollectionConfig &cfg = (*m_collections)[coll];
-      const QString collectionKey = CollectionUtils::hierarchicalNameFor(cfg, *m_collections);
+      const QString collectionKey =
+          CollectionUtils::hierarchicalNameFor(cfg, *m_collections);
       if (diagEnabled) {
-        qWarning() << "[SearchDiag][NavigationManager] persistCurrentSelection: caching viewport for" 
-                   << collectionKey << "startIndex=" << startIndex << "totalItems=" << totalItems
+        qWarning() << "[SearchDiag][NavigationManager] "
+                      "persistCurrentSelection: caching viewport for"
+                   << collectionKey << "startIndex=" << startIndex
+                   << "totalItems=" << totalItems
                    << "filePaths=" << filePaths.size();
       }
-      m_sessionManager->setCachedViewport(collectionKey, startIndex, totalItems, filePaths, fileNames, artworkPaths);
+      m_sessionManager->setCachedViewport(collectionKey, startIndex, totalItems,
+                                          filePaths, fileNames, artworkPaths);
     } else if (diagEnabled) {
-      qWarning() << "[SearchDiag][NavigationManager] persistCurrentSelection: getCurrentViewportForCache returned false";
+      qWarning() << "[SearchDiag][NavigationManager] persistCurrentSelection: "
+                    "getCurrentViewportForCache returned false";
     }
   } else if (diagEnabled) {
-    qWarning() << "[SearchDiag][NavigationManager] persistCurrentSelection: cannot cache viewport"
+    qWarning() << "[SearchDiag][NavigationManager] persistCurrentSelection: "
+                  "cannot cache viewport"
                << "scrollManager=" << (m_scrollManager != nullptr)
                << "sessionManager=" << (m_sessionManager != nullptr)
                << "generalSettings=" << (m_generalSettings != nullptr)
-               << "rememberSelection=" << (m_generalSettings ? m_generalSettings->rememberSelection : false);
+               << "rememberSelection="
+               << (m_generalSettings ? m_generalSettings->rememberSelection
+                                     : false);
   }
 }
 
@@ -2258,16 +2309,18 @@ void NavigationManager::applyUiPoliciesForCollection(int collectionIndex) {
   if (m_settingsManager && m_itemScrollArea && m_collections) {
     SettingsUtils::applyHorizontalScrollbarSetting(
         m_itemScrollArea, collectionIndex, *m_collections);
-    SettingsUtils::applyVerticalScrollbarSetting(m_itemScrollArea, collectionIndex,
-                                                   *m_collections);
+    SettingsUtils::applyVerticalScrollbarSetting(
+        m_itemScrollArea, collectionIndex, *m_collections);
   }
 }
 
 void NavigationManager::onItemCountLoaded(int count, int requestToken) {
-  qWarning() << "[ScanFlow] onItemCountLoaded ENTRY: count=" << count 
-             << "token=" << requestToken << "expected=" << m_itemCountRequestToken;
+  qWarning() << "[ScanFlow] onItemCountLoaded ENTRY: count=" << count
+             << "token=" << requestToken
+             << "expected=" << m_itemCountRequestToken;
   if (requestToken != m_itemCountRequestToken) {
-    diagLog(QString("onItemCountLoaded: ignoring stale result count=%1 token=%2 expected=%3")
+    diagLog(QString("onItemCountLoaded: ignoring stale result count=%1 "
+                    "token=%2 expected=%3")
                 .arg(count)
                 .arg(requestToken)
                 .arg(m_itemCountRequestToken));
@@ -2283,27 +2336,30 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   // Use the filter that produced this count. This prevents a mismatch where
   // count is computed with an explicit filter, but subsequent range loads use
   // a different/empty searchBar value (common during debounced search updates).
-  const QString searchText = !m_itemsQueryFilter.isEmpty()
-                                 ? m_itemsQueryFilter
-                                 : ((m_searchBar) ? m_searchBar->text().trimmed()
-                                                  : QString());
+  const QString searchText =
+      !m_itemsQueryFilter.isEmpty()
+          ? m_itemsQueryFilter
+          : ((m_searchBar) ? m_searchBar->text().trimmed() : QString());
   const bool searchActive = !searchText.isEmpty();
 
-  diagLog(QString("onItemCountLoaded: count=%1 searchActive=%2 searchText='%3' itemsViewGen(before)=%4 token=%5")
+  diagLog(QString("onItemCountLoaded: count=%1 searchActive=%2 searchText='%3' "
+                  "itemsViewGen(before)=%4 token=%5")
               .arg(count)
               .arg(searchActive)
               .arg(searchText)
               .arg(m_itemsViewGeneration)
               .arg(requestToken));
 
-  qWarning() << "[ScanFlow] onItemCountLoaded: count=" << count << "bgRefresh=" << m_backgroundCountRefreshInProgress
-             << "bgIdx=" << m_backgroundCountRefreshCollectionIndex << "curIdx=" << idx;
+  qWarning() << "[ScanFlow] onItemCountLoaded: count=" << count
+             << "bgRefresh=" << m_backgroundCountRefreshInProgress
+             << "bgIdx=" << m_backgroundCountRefreshCollectionIndex
+             << "curIdx=" << idx;
 
   if (m_backgroundCountRefreshInProgress &&
-      m_backgroundCountRefreshCollectionIndex == idx &&
-      m_scrollManager) {
+      m_backgroundCountRefreshCollectionIndex == idx && m_scrollManager) {
     const int currentViewItems = m_scrollManager->getTotalItems();
-    qWarning() << "[ScanFlow] bgRefresh path: currentViewItems=" << currentViewItems << "count=" << count;
+    qWarning() << "[ScanFlow] bgRefresh path: currentViewItems="
+               << currentViewItems << "count=" << count;
     // Background scan completed. If the view already has items and count is the
     // same or lower, just update without resetting scroll/selection state.
     // If count INCREASED (new items from scan), do a full rebuild to load them.
@@ -2323,9 +2379,10 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
       }
       return;
     }
-    // View is empty OR count increased - clear the refresh flags and fall through
-    // to full rebuild so the newly-scanned items are displayed.
-    qWarning() << "[ScanFlow] Count changed or view empty, falling through to full rebuild";
+    // View is empty OR count increased - clear the refresh flags and fall
+    // through to full rebuild so the newly-scanned items are displayed.
+    qWarning() << "[ScanFlow] Count changed or view empty, falling through to "
+                  "full rebuild";
     m_backgroundCountRefreshInProgress = false;
     m_backgroundCountRefreshCollectionIndex = -1;
   }
@@ -2343,8 +2400,9 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   // Clean up existing "no items" widgets
   cleanupExistingNoItemsWidgets();
 
-  CollectionContext context = m_hasItemsQueryContext ? m_itemsQueryContext
-                                                     : buildExpandedContextForIndex(idx);
+  CollectionContext context = m_hasItemsQueryContext
+                                  ? m_itemsQueryContext
+                                  : buildExpandedContextForIndex(idx);
 
   // Get subcollections for this view (shown as folder tiles)
   QList<int> subcollections;
@@ -2369,13 +2427,17 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   }
 
   // Count virtual folders (subdirectories shown as navigable tiles)
-  const bool suppressVirtualFolders = context.suppressVirtualFolders || searchActive;
-  int virtualFolderCount = suppressVirtualFolders ? 0
-                                                  : CollectionUtils::countVirtualFolders(context.config);
-  
+  const bool suppressVirtualFolders =
+      context.suppressVirtualFolders || searchActive;
+  int virtualFolderCount =
+      suppressVirtualFolders
+          ? 0
+          : CollectionUtils::countVirtualFolders(context.config);
+
   int totalItems = subcollections.size() + virtualFolderCount + count;
 
-  diagLog(QString("onItemCountLoaded: subcollections=%1 virtualFolders=%2 dbCount=%3 totalItems=%4")
+  diagLog(QString("onItemCountLoaded: subcollections=%1 virtualFolders=%2 "
+                  "dbCount=%3 totalItems=%4")
               .arg(subcollections.size())
               .arg(virtualFolderCount)
               .arg(count)
@@ -2395,8 +2457,9 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   // Update loading overlay to show item count found
   if (m_loadingOverlay && m_loadingOverlay->isActive()) {
     const QString &collectionName = (*m_collections)[idx].name;
-    m_loadingOverlay->setMessage(
-        QString("Loading %1 (%2 items)...").arg(collectionName).arg(totalItems));
+    m_loadingOverlay->setMessage(QString("Loading %1 (%2 items)...")
+                                     .arg(collectionName)
+                                     .arg(totalItems));
   }
 
   if (searchActive) {
@@ -2407,7 +2470,8 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
 
   // Calculate selection index for initial scroll position
   int rememberedSelIdx = -1;
-  if (!searchActive && m_generalSettings && m_generalSettings->rememberSelection) {
+  if (!searchActive && m_generalSettings &&
+      m_generalSettings->rememberSelection) {
     rememberedSelIdx = lookupRememberedSelectionIndex(totalItems);
   }
 
@@ -2416,7 +2480,7 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   if (forceTopForThisLoad && !searchActive && rememberedSelIdx < 0) {
     selIdx = 0;
   }
-  
+
   if (m_scrollManager) {
     // Pre-set scroll position to avoid visual jump
     if (searchActive) {
@@ -2424,16 +2488,17 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
     } else if (selIdx >= 0) {
       m_scrollManager->setInitialScrollIndex(selIdx);
     }
-    qWarning() << "[ScanFlow] Calling setupVirtualScrolling: totalItems=" << totalItems;
+    qWarning() << "[ScanFlow] Calling setupVirtualScrolling: totalItems="
+               << totalItems;
     m_scrollManager->setupVirtualScrolling(totalItems, context);
-    
+
     // Hide search loading overlay once filtered results are ready
     m_scrollManager->hideSearchLoadingOverlay();
   }
 
   // Resume rendering on the items page
   resumeItemsPageRendering();
-  
+
   if (m_loadingLabel) {
     m_loadingLabel->hide();
   }
@@ -2448,11 +2513,15 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   if (m_artworkManager && m_artworkManager->getTimerCoordinator()) {
     m_artworkManager->getTimerCoordinator()->scheduleViewportUpdate();
   }
-  
+
   // Restore selection if needed
   bool pendingRestore =
       m_state ? m_state->selectionRestore().restorePending : false;
-  if (selIdx >= 0 && m_interactionManager && !pendingRestore) {
+  // Also skip if there's a pending path-based restore (from sort change)
+  bool pendingPathRestore =
+      m_scrollManager && m_scrollManager->hasPendingSelectionRestoreByPath();
+  if (selIdx >= 0 && m_interactionManager && !pendingRestore &&
+      !pendingPathRestore) {
     scheduleSelectionRestore(selIdx, UIConstants::Selection::RESTORE_STEPS,
                              UIConstants::Selection::RESTORE_STEP_DELAY_MS,
                              UIConstants::Selection::RESTORE_MAX_DELAY_MS);
@@ -2461,9 +2530,11 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   schedulePostLoadOperations();
 }
 
-void NavigationManager::onBackgroundCollectionScanCompleted(const QString &collectionUuid) {
-  qWarning() << "[ScanFlow] onBackgroundCollectionScanCompleted: uuid=" << collectionUuid;
-  
+void NavigationManager::onBackgroundCollectionScanCompleted(
+    const QString &collectionUuid) {
+  qWarning() << "[ScanFlow] onBackgroundCollectionScanCompleted: uuid="
+             << collectionUuid;
+
   if (!m_databaseManager || !m_collections || !m_currentCollectionIndex) {
     qWarning() << "[ScanFlow] Early return: missing deps";
     return;
@@ -2488,13 +2559,19 @@ void NavigationManager::onBackgroundCollectionScanCompleted(const QString &colle
   // Only refresh counts if the completed scan affects the currently visible
   // collection (or its descendants when showAllSubcollectionItems is active).
   CollectionConfig cur = (*m_collections)[idx];
-  cur.mediaDirectory = PathUtils::validateAndExpandPath(cur.mediaDirectory, cur.name);
-  
+  cur.mediaDirectory =
+      PathUtils::validateAndExpandPath(cur.mediaDirectory, cur.name);
+
   if (!cur.mediaDirectory.trimmed().isEmpty()) {
-    const QString curUuid = CollectionUtils::computeCollectionUuid(cur.name, cur.mediaDirectory);
-    qWarning() << "[ScanFlow] UUID compare: cur=" << curUuid << "incoming=" << collectionUuid << "match=" << (curUuid == collectionUuid);
+    const QString curUuid =
+        CollectionUtils::computeCollectionUuid(cur.name, cur.mediaDirectory);
+    qWarning() << "[ScanFlow] UUID compare: cur=" << curUuid
+               << "incoming=" << collectionUuid
+               << "match=" << (curUuid == collectionUuid);
     if (curUuid == collectionUuid) {
-      qWarning() << "[ScanFlow] UUID MATCH - calling loadCollectionData for idx=" << idx;
+      qWarning()
+          << "[ScanFlow] UUID MATCH - calling loadCollectionData for idx="
+          << idx;
       m_backgroundCountRefreshInProgress = true;
       m_backgroundCountRefreshCollectionIndex = idx;
       loadCollectionData(idx);
@@ -2508,30 +2585,39 @@ void NavigationManager::onBackgroundCollectionScanCompleted(const QString &colle
   // Don't trigger intermediate refreshes while the loading overlay is still
   // active (indicating more scans are pending). MainWindow will trigger a
   // final reload once all scans complete.
-  qWarning() << "[ScanFlow] Checking descendants: showAllSubcollectionItems=" << cur.showAllSubcollectionItems;
+  qWarning() << "[ScanFlow] Checking descendants: showAllSubcollectionItems="
+             << cur.showAllSubcollectionItems;
   if (cur.showAllSubcollectionItems) {
-    // Skip intermediate reloads if loading overlay is active (batch scan in progress)
+    // Skip intermediate reloads if loading overlay is active (batch scan in
+    // progress)
     if (m_loadingOverlay && m_loadingOverlay->isActive()) {
       qWarning() << "[ScanFlow] Skipping - loading overlay is active";
       return;
     }
-    
-    QList<int> descendants = CollectionUtils::collectDescendantIndices(idx, (*m_collections));
+
+    QList<int> descendants =
+        CollectionUtils::collectDescendantIndices(idx, (*m_collections));
     qWarning() << "[ScanFlow] descendant count=" << descendants.size();
     for (int descendantIndex : descendants) {
       if (descendantIndex < 0 || descendantIndex >= (*m_collections).size()) {
         continue;
       }
       CollectionConfig subCol = (*m_collections)[descendantIndex];
-      subCol.mediaDirectory = PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
-      qWarning() << "[ScanFlow] Checking descendant" << descendantIndex << "name=" << subCol.name << "mediaDir=" << subCol.mediaDirectory;
+      subCol.mediaDirectory =
+          PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
+      qWarning() << "[ScanFlow] Checking descendant" << descendantIndex
+                 << "name=" << subCol.name
+                 << "mediaDir=" << subCol.mediaDirectory;
       if (subCol.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
-      const QString subUuid = CollectionUtils::computeCollectionUuid(subCol.name, subCol.mediaDirectory);
-      qWarning() << "[ScanFlow] descendant UUID=" << subUuid << "match=" << (subUuid == collectionUuid);
+      const QString subUuid = CollectionUtils::computeCollectionUuid(
+          subCol.name, subCol.mediaDirectory);
+      qWarning() << "[ScanFlow] descendant UUID=" << subUuid
+                 << "match=" << (subUuid == collectionUuid);
       if (subUuid == collectionUuid) {
-        qWarning() << "[ScanFlow] DESCENDANT MATCH - calling loadCollectionData";
+        qWarning()
+            << "[ScanFlow] DESCENDANT MATCH - calling loadCollectionData";
         m_backgroundCountRefreshInProgress = true;
         m_backgroundCountRefreshCollectionIndex = idx;
         loadCollectionData(idx);
@@ -2541,16 +2627,18 @@ void NavigationManager::onBackgroundCollectionScanCompleted(const QString &colle
   }
 }
 
-void NavigationManager::onItemsRangeLoaded(int offset, const QStringList &filePaths, 
-                                           const QHash<QString, QString> &fileNames,
-                                           const QHash<QString, QString> &fileToArtworkDir,
-                                           const QHash<QString, QString> &fileToMediaDir,
-                                           const QHash<QString, int> &fileToCollectionIndex) {
+void NavigationManager::onItemsRangeLoaded(
+    int offset, const QStringList &filePaths,
+    const QHash<QString, QString> &fileNames,
+    const QHash<QString, QString> &fileToArtworkDir,
+    const QHash<QString, QString> &fileToMediaDir,
+    const QHash<QString, int> &fileToCollectionIndex) {
   Q_UNUSED(fileToMediaDir)
   Q_UNUSED(fileToCollectionIndex)
   const auto expectedGen = m_pendingRangeGenerations.value(offset, 0);
   if (expectedGen != m_itemsViewGeneration) {
-    diagLog(QString("onItemsRangeLoaded: DROPPED offset=%1 paths=%2 expectedGen=%3 currentGen=%4")
+    diagLog(QString("onItemsRangeLoaded: DROPPED offset=%1 paths=%2 "
+                    "expectedGen=%3 currentGen=%4")
                 .arg(offset)
                 .arg(filePaths.size())
                 .arg(expectedGen)
@@ -2562,7 +2650,8 @@ void NavigationManager::onItemsRangeLoaded(int offset, const QStringList &filePa
     diagLog(QString("onItemsRangeLoaded: forward offset=%1 paths=%2")
                 .arg(offset)
                 .arg(filePaths.size()));
-    m_scrollManager->receiveItemsRange(offset, filePaths, fileNames, fileToArtworkDir);
+    m_scrollManager->receiveItemsRange(offset, filePaths, fileNames,
+                                       fileToArtworkDir);
   }
 }
 
@@ -2572,12 +2661,14 @@ void NavigationManager::fetchItemsRange(int offset, int limit) {
     return;
   }
 
-  CollectionContext context = m_hasItemsQueryContext ? m_itemsQueryContext
-                                                     : buildExpandedContextForIndex(idx);
+  CollectionContext context = m_hasItemsQueryContext
+                                  ? m_itemsQueryContext
+                                  : buildExpandedContextForIndex(idx);
 
   // Use the same filter that produced the current items view, if available.
   // Falls back to the search bar (legacy behavior) when no query filter is set.
-  QString filter = !m_itemsQueryFilter.isEmpty() ? m_itemsQueryFilter : QString();
+  QString filter =
+      !m_itemsQueryFilter.isEmpty() ? m_itemsQueryFilter : QString();
   if (filter.isEmpty() && m_searchBar) {
     filter = m_searchBar->text().trimmed();
   }
@@ -2590,5 +2681,6 @@ void NavigationManager::fetchItemsRange(int offset, int limit) {
               .arg(filter)
               .arg(m_itemsViewGeneration));
 
-  m_databaseManager->fetchItemsRange(context, *m_collections, offset, limit, filter);
+  m_databaseManager->fetchItemsRange(context, *m_collections, offset, limit,
+                                     filter);
 }

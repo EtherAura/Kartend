@@ -14,7 +14,8 @@ QString computeCollectionUuid(const QString &name, const QString &mediaDir) {
 
 } // namespace CollectionUtils
 
-void CollectionHierarchyCache::rebuild(const QList<CollectionConfig> &collections) {
+void CollectionHierarchyCache::rebuild(
+    const QList<CollectionConfig> &collections) {
   m_directChildren.clear();
   m_allDescendants.clear();
   m_collectionUuids.clear();
@@ -25,7 +26,7 @@ void CollectionHierarchyCache::rebuild(const QList<CollectionConfig> &collection
   m_expandedArtworkDirs.clear();
   m_mediaDirToArtworkDir.clear();
   m_collections = &collections;
-  
+
   // Build direct children map
   for (int i = 0; i < collections.size(); ++i) {
     int parent = collections[i].parentCollectionIndex;
@@ -33,42 +34,42 @@ void CollectionHierarchyCache::rebuild(const QList<CollectionConfig> &collection
       m_directChildren[parent].append(i);
     }
   }
-  
+
   // Pre-compute all descendants for each collection
   for (int i = 0; i < collections.size(); ++i) {
     m_allDescendants[i] = computeDescendants(i);
   }
-  
+
   // Pre-compute UUIDs and directory mappings for all collections.
   // This eliminates repeated SHA1 hashing and path expansion during startup
   // when showAllSubcollectionItems is enabled.
   for (int i = 0; i < collections.size(); ++i) {
     const CollectionConfig &cfg = collections[i];
-    QString expandedMediaDir = SettingsUtils::expandConfigVariables(
-        cfg.mediaDirectory, cfg.name);
-    QString expandedArtworkDir = SettingsUtils::expandConfigVariables(
-        cfg.artworkDirectory, cfg.name);
-    
+    QString mediaDir =
+        SettingsUtils::expandConfigVariables(cfg.mediaDirectory, cfg.name);
+    QString artworkDir =
+        SettingsUtils::expandConfigVariables(cfg.artworkDirectory, cfg.name);
+
     // Resolve artwork directory with parent fallback for subcollections
-    if (expandedArtworkDir.trimmed().isEmpty() && cfg.isSubcollection) {
-      expandedArtworkDir = SettingsUtils::expandConfigVariables(
+    if (artworkDir.trimmed().isEmpty() && cfg.isSubcollection) {
+      artworkDir = SettingsUtils::expandConfigVariables(
           CollectionUtils::resolveArtworkDirectory(i, collections), cfg.name);
     }
-    
-    m_expandedMediaDirs[i] = expandedMediaDir;
-    m_expandedArtworkDirs[i] = expandedArtworkDir;
-    
+
+    m_expandedMediaDirs[i] = mediaDir;
+    m_expandedArtworkDirs[i] = artworkDir;
+
     // Build media dir → artwork dir mapping for file path lookups
-    if (!expandedMediaDir.trimmed().isEmpty() && !expandedArtworkDir.trimmed().isEmpty()) {
-      m_mediaDirToArtworkDir[expandedMediaDir] = expandedArtworkDir;
+    if (!mediaDir.trimmed().isEmpty() && !artworkDir.trimmed().isEmpty()) {
+      m_mediaDirToArtworkDir[mediaDir] = artworkDir;
     }
-    
+
     // Only compute UUID if media directory exists
-    if (!expandedMediaDir.trimmed().isEmpty()) {
-      QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+    if (!mediaDir.trimmed().isEmpty()) {
+      QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, mediaDir);
       m_collectionUuids[i] = uuid;
-      m_uuidToMediaDir[uuid] = expandedMediaDir;
-      m_uuidToArtworkDir[uuid] = expandedArtworkDir;
+      m_uuidToMediaDir[uuid] = mediaDir;
+      m_uuidToArtworkDir[uuid] = artworkDir;
       m_uuidToCollectionIndex[uuid] = i;
     }
   }

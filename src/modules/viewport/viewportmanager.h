@@ -32,16 +32,16 @@ struct ViewportManagerSetup {
   int *currentCollectionIndex = nullptr;
   const bool *isShuttingDown = nullptr;
 
-  SETUP_GETTER_DECL(QScrollArea*, ItemScrollArea)
-  SETUP_GETTER_DECL(ScrollManager*, ScrollManager)
-  SETUP_GETTER_DECL(SelectionManager*, SelectionManager)
-  SETUP_GETTER_DECL(AnimationManager*, AnimationManager)
-  SETUP_GETTER_DECL(ArtworkManager*, ArtworkManager)
-  SETUP_GETTER_DECL(InteractionStateHolder*, InteractionState)
-  SETUP_GETTER_DECL(QList<CollectionConfig>*, Collections)
-  SETUP_GETTER_DECL(int*, CurrentCollectionIndex)
-  SETUP_GETTER_DECL(const bool*, IsShuttingDown)
-  SETUP_GETTER_DECL(const GeneralSettings*, GeneralSettings)
+  SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
+  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
+  SETUP_GETTER_DECL(SelectionManager *, SelectionManager)
+  SETUP_GETTER_DECL(AnimationManager *, AnimationManager)
+  SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
+  SETUP_GETTER_DECL(InteractionStateHolder *, InteractionState)
+  SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
+  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(const bool *, IsShuttingDown)
+  SETUP_GETTER_DECL(const GeneralSettings *, GeneralSettings)
 };
 
 /**
@@ -65,10 +65,10 @@ public:
   void ensureItemVisible(int index, bool allowHorizontalScroll);
   void ensureHorizontallyVisible(int index);
   void applyImmediateViewportPositioningForSelection(int targetIndex);
-  
+
   /// Get the scroll scale for very large collections (>16M pixels)
   [[nodiscard]] double getScrollScale() const;
-  
+
   /// Convert logical scroll position to widget scroll position
   /// Uses viewport-aware interpolation for precise endpoint mapping
   [[nodiscard]] int toWidgetScrollY(int logicalScrollY) const;
@@ -141,10 +141,11 @@ private:
   void adjustForForceClickZeroDistance(QScrollBar *verticalScrollBar,
                                        int targetY, int &curY, int &distance,
                                        int &duration, bool forceClickAnim);
-  [[nodiscard]] bool maybeHandleImmediateCenter(
-      bool distanceSmall, bool useSmooth, bool forceImmediate,
-      bool forceClickAnim, QScrollBar *verticalScrollBar, int targetY,
-      int index, int currentRow);
+  [[nodiscard]] bool
+  maybeHandleImmediateCenter(bool distanceSmall, bool useSmooth,
+                             bool forceImmediate, bool forceClickAnim,
+                             QScrollBar *verticalScrollBar, int targetY,
+                             int index, int currentRow);
   bool handleImmediateCenterPath(QScrollBar *verticalScrollBar, int targetY,
                                  int index, int currentRow);
   void finalizeImmediateCenteringState(int index, int currentRow);

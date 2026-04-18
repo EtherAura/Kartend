@@ -59,25 +59,27 @@ struct EventManagerSetup {
   GeneralSettings *generalSettings = nullptr;
 
   // Accessors with ctx fallback
-  SETUP_GETTER_DECL(ScrollManager*, ScrollManager)
-  [[nodiscard]] KeyboardManager *getKeyboardManager() const { return keyboardManager; }
+  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
+  [[nodiscard]] KeyboardManager *getKeyboardManager() const {
+    return keyboardManager;
+  }
   [[nodiscard]] MouseManager *getMouseManager() const { return mouseManager; }
-  SETUP_GETTER_DECL(AnimationManager*, AnimationManager)
-  SETUP_GETTER_DECL(ViewportManager*, ViewportManager)
-  SETUP_GETTER_DECL(SelectionManager*, SelectionManager)
-  SETUP_GETTER_DECL(ArtworkManager*, ArtworkManager)
-  SETUP_GETTER_DECL(DatabaseManager*, DatabaseManager)
-  SETUP_GETTER_DECL(SidebarManager*, SidebarManager)
-  SETUP_GETTER_DECL(QScrollArea*, ItemScrollArea)
-  SETUP_GETTER_DECL(QWidget*, GridContainer)
-  SETUP_GETTER_DECL(QStackedWidget*, StackedWidget)
-  SETUP_GETTER_DECL(QWidget*, ItemsPage)
-  SETUP_GETTER_DECL(QWidget*, ItemsTopBar)
-  SETUP_GETTER_DECL(QLineEdit*, SearchBar)
-  SETUP_GETTER_DECL(QList<CollectionConfig>*, Collections)
-  SETUP_GETTER_DECL(int*, CurrentCollectionIndex)
-  SETUP_GETTER_DECL(GeneralSettings*, GeneralSettings)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder*, InteractionState)
+  SETUP_GETTER_DECL(AnimationManager *, AnimationManager)
+  SETUP_GETTER_DECL(ViewportManager *, ViewportManager)
+  SETUP_GETTER_DECL(SelectionManager *, SelectionManager)
+  SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
+  SETUP_GETTER_DECL(DatabaseManager *, DatabaseManager)
+  SETUP_GETTER_DECL(SidebarManager *, SidebarManager)
+  SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
+  SETUP_GETTER_DECL(QWidget *, GridContainer)
+  SETUP_GETTER_DECL(QStackedWidget *, StackedWidget)
+  SETUP_GETTER_DECL(QWidget *, ItemsPage)
+  SETUP_GETTER_DECL(QWidget *, ItemsTopBar)
+  SETUP_GETTER_DECL(QLineEdit *, SearchBar)
+  SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
+  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(GeneralSettings *, GeneralSettings)
+  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
 };
 
 /**
@@ -109,7 +111,8 @@ public:
 signals:
   // Event signals for InteractionManager to handle
   void widgetDoubleClicked(const QString &filePath, int collectionIndex);
-  void widgetClicked(ItemWidget *widget, int visualIndex, const QPoint &clickPos, QMouseEvent *event);
+  void widgetClicked(ItemWidget *widget, int visualIndex,
+                     const QPoint &clickPos, QMouseEvent *event);
   void clearSelectionRequested();
   void slashKeyPressed();
   void escapeKeyPressed();
@@ -157,7 +160,7 @@ private:
   QLineEdit *m_searchBar = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   int *m_currentCollectionIndex = nullptr;
-  
+
   // Reentrancy guard for wheel event handling
   bool m_processingWheelEvent = false;
 };

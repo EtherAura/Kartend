@@ -17,6 +17,7 @@ class QPaintEvent;
 class QShowEvent;
 class QResizeEvent;
 class QTimer;
+class QPushButton;
 
 class ItemWidget : public QWidget {
   Q_OBJECT
@@ -36,8 +37,8 @@ public:
   virtual void setSelected(bool selected);
   void resetForReuse();
 
-  [[nodiscard]] QString getItemName() const { return itemName; }
-  [[nodiscard]] QString getFilePath() const { return filePath; }
+  [[nodiscard]] const QString &getItemName() const { return itemName; }
+  [[nodiscard]] const QString &getFilePath() const { return filePath; }
   [[nodiscard]] QRect selectionBorderRectInParent() const;
   [[nodiscard]] bool isSelected() const { return isSelectedState; }
 
@@ -51,11 +52,22 @@ public:
   void setCornerRadius(int radius);
   void setListMode(bool listMode);
   void setRowIndex(int index) { m_rowIndex = index; }
+  void setCollectionName(const QString &name);
+  void setHasArtwork(bool hasArtwork);
+  void setArtworkDirectory(const QString &dir) { m_artworkDirectory = dir; }
+  void setCollectionColumnWidth(int width);
+  void setArtworkColumnWidth(int width);
   [[nodiscard]] bool isListMode() const { return m_isListMode; }
+  [[nodiscard]] bool hasArtwork() const { return m_hasArtwork; }
+  [[nodiscard]] int collectionColumnWidth() const {
+    return m_collectionColumnWidth;
+  }
+  [[nodiscard]] int artworkColumnWidth() const { return m_artworkColumnWidth; }
   int m_itemWidth;
   int m_itemHeight;
-  int m_artworkSize = 0; // Computed artwork size for triangle indicator positioning
-  int m_fontSize = 12; // Default font size
+  int m_artworkSize =
+      0; // Computed artwork size for triangle indicator positioning
+  int m_fontSize = 12;    // Default font size
   int m_cornerRadius = 0; // Corner radius for artwork clipping
   bool m_hideTitles = false;
   bool m_hideSubcollectionTitles = false;
@@ -64,13 +76,16 @@ public:
   QLabel *nameLabel = nullptr;
   QWidget *triangleIndicator;
   void setAsSubcollection(int index, const QString &name);
-  void setAsVirtualFolder(const QString &folderPath, const QString &displayName, bool hideTitle = false);
+  void setAsVirtualFolder(const QString &folderPath, const QString &displayName,
+                          bool hideTitle = false);
   [[nodiscard]] bool isSubcollection() const { return m_isSubcollection; }
   [[nodiscard]] bool isVirtualFolder() const { return m_isVirtualFolder; }
-  [[nodiscard]] QString virtualFolderPath() const { return m_virtualFolderPath; }
+  [[nodiscard]] const QString &virtualFolderPath() const {
+    return m_virtualFolderPath;
+  }
   void applyTitleTint();
   static QColor titleTint();
-  QColor m_titleTintColor;  // Cached tint color for custom painting
+  QColor m_titleTintColor; // Cached tint color for custom painting
 
   // Static configuration for title appearance (set from GeneralSettings)
   static void setTitleTintSaturation(int saturation);
@@ -80,6 +95,8 @@ public:
   static void setPrimaryColor(const QString &hexColor);
   static void setTileColor(const QString &hexColor);
   static void setSelectionColor(const QString &hexColor);
+  static void setListRowColor(const QString &hexColor);
+  static void setListAltRowColor(const QString &hexColor);
   static int s_titleTintSaturation;
   static int s_titleTintLightness;
   static QString s_titleBaseColor;
@@ -87,15 +104,21 @@ public:
   static QString s_primaryColor;
   static QString s_tileColor;
   static QString s_selectionColor;
+  static QString s_listRowColor;
+  static QString s_listAltRowColor;
 
   void mousePressEvent(QMouseEvent *event) override;
 
   void onArtworkChanged();
 
 signals:
-  // Only subcollectionDoubleClicked is used - EventManager intercepts all other clicks
+  // Only subcollectionDoubleClicked is used - EventManager intercepts all other
+  // clicks
   void subcollectionDoubleClicked(int index);
   void virtualFolderDoubleClicked(const QString &folderPath);
+  // Emitted when artwork preview button is clicked in list mode
+  void artworkPreviewRequested(const QString &filePath,
+                               const QString &artworkDir);
 
 protected:
   void paintEvent(QPaintEvent *event) override;
@@ -113,12 +136,25 @@ protected:
 private:
   QString itemName;
   QString filePath;
+  QString m_collectionName;   // Parent collection name for list mode display
+  QString m_artworkDirectory; // Artwork directory for this item's collection
   bool m_isSubcollection = false;
   int m_subcollectionIndex = -1;
   bool m_isVirtualFolder = false;
-  bool m_isListMode = false;  // True when displaying in list view (no artwork)
-  int m_rowIndex = -1;  // Row index for alternating background colors in list mode
+  bool m_isListMode = false; // True when displaying in list view (no artwork)
+  bool m_hasArtwork = false; // True when artwork exists for this item
+  int m_rowIndex =
+      -1; // Row index for alternating background colors in list mode
+  int m_collectionColumnWidth =
+      150; // Collection column width for list mode (resizable)
+  int m_artworkColumnWidth =
+      32; // Artwork column width for list mode (resizable)
   QString m_virtualFolderPath;
+  QLabel *m_collectionLabel = nullptr; // Collection name label for list mode
+  QLabel *m_folderIconLabel =
+      nullptr; // Folder icon for subcollection/virtual folder
+  QPushButton *m_artworkButton =
+      nullptr; // Artwork preview button for list mode
   void updateTriangleIndicator();
   void paintTriangleIndicator();
   [[nodiscard]] QPixmap buildPlaceholderPattern(int width, int height) const;

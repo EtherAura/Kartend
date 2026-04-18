@@ -2,9 +2,9 @@
 #include "widgetpoolmanager.h"
 #include "itemwidget.h"
 #include "uiconstants.h"
-#include <algorithm>
 #include <QLoggingCategory>
 #include <QTimer>
+#include <algorithm>
 
 Q_LOGGING_CATEGORY(lcWidgetPoolManager, "kartend.widgetpoolmanager")
 
@@ -47,17 +47,17 @@ auto WidgetPoolManager::acquire() -> ItemWidget * {
     ++m_metrics.hits;
     return widget;
   }
-  
+
   // Fall back to stale pool if main pool is empty
   // This prevents unnecessary widget creation after collection switches
-  // Note: Stale widgets have been reparented to a safe parent during softClear()
-  // so they can be safely reparented to the new virtual container
+  // Note: Stale widgets have been reparented to a safe parent during
+  // softClear() so they can be safely reparented to the new virtual container
   if (ItemWidget *widget = takeLastValid(m_stalePool)) {
     ++m_metrics.staleReused;
     ++m_metrics.hits;
     return widget;
   }
-  
+
   ++m_metrics.misses;
   return new ItemWidget(m_widgetParent);
 }
@@ -93,7 +93,7 @@ void WidgetPoolManager::release(ItemWidget *widget) {
 }
 
 void WidgetPoolManager::clear() {
-  logMetrics();  // Log final metrics before clearing
+  logMetrics(); // Log final metrics before clearing
   // Don't delete widgets - just clear the pool list.
   // Caller is responsible for widget lifetime.
   m_pool.clear();
@@ -120,9 +120,10 @@ void WidgetPoolManager::softClear(QWidget *safeParent) {
   m_stalePool.reserve(m_stalePool.size() + m_pool.size());
   m_stalePool.append(m_pool);
   m_pool.clear();
-  
-  // Limit stale pool size to prevent memory bloat during rapid collection switching
-  // Excess widgets are deleted immediately rather than waiting for pruneStaleWidgets()
+
+  // Limit stale pool size to prevent memory bloat during rapid collection
+  // switching Excess widgets are deleted immediately rather than waiting for
+  // pruneStaleWidgets()
   if (m_stalePool.size() > MAX_STALE_POOL_SIZE) {
     const int excessCount = m_stalePool.size() - MAX_STALE_POOL_SIZE;
     for (int i = 0; i < excessCount; ++i) {
@@ -150,7 +151,7 @@ void WidgetPoolManager::pruneStaleWidgets() {
 }
 
 void WidgetPoolManager::clearAndDelete() {
-  logMetrics();  // Log final metrics before clearing
+  logMetrics(); // Log final metrics before clearing
   // Explicitly delete all pooled widgets - use this during cleanup
   // when widgets need to be destroyed before their parent container
   pruneNullEntries(m_pool);
@@ -162,7 +163,7 @@ void WidgetPoolManager::clearAndDelete() {
     }
   }
   m_pool.clear();
-  
+
   // Also delete stale widgets
   for (const QPointer<ItemWidget> &widget : m_stalePool) {
     if (widget) {
@@ -183,12 +184,12 @@ void WidgetPoolManager::prewarm() {
   }
 
   pruneNullEntries(m_pool);
-  
+
   int targetSize = calculateOptimalSize();
   int toCreate = targetSize - m_pool.size();
 
   m_pool.reserve(targetSize);
-  
+
   // Pre-allocate widgets up to optimal pool size
   for (int i = 0; i < toCreate; ++i) {
     auto *widget = new ItemWidget(m_widgetParent);
@@ -203,44 +204,44 @@ void WidgetPoolManager::prewarmAsync() {
   }
 
   pruneNullEntries(m_pool);
-  
+
   m_prewarmTargetSize = calculateOptimalSize();
 
   m_pool.reserve(m_prewarmTargetSize);
-  
+
   // Already at target size
   if (m_pool.size() >= m_prewarmTargetSize) {
     return;
   }
-  
+
   // Create timer if needed
   if (!m_prewarmTimer) {
     m_prewarmTimer = new QTimer(this);
-    m_prewarmTimer->setInterval(0);  // Next event loop iteration
+    m_prewarmTimer->setInterval(0); // Next event loop iteration
     connect(m_prewarmTimer, &QTimer::timeout, this, [this]() {
       pruneNullEntries(m_pool);
       if (!m_widgetParent || m_pool.size() >= m_prewarmTargetSize) {
         m_prewarmTimer->stop();
         return;
       }
-      
+
       // Create a small batch per tick to avoid blocking
       int remaining = m_prewarmTargetSize - m_pool.size();
       int toCreate = qMin(PREWARM_BATCH_SIZE, remaining);
-      
+
       for (int i = 0; i < toCreate; ++i) {
         auto *widget = new ItemWidget(m_widgetParent);
         widget->hide();
         m_pool.append(widget);
       }
-      
+
       // Stop when done
       if (m_pool.size() >= m_prewarmTargetSize) {
         m_prewarmTimer->stop();
       }
     });
   }
-  
+
   if (!m_prewarmTimer->isActive()) {
     m_prewarmTimer->start();
   }
@@ -259,9 +260,10 @@ auto WidgetPoolManager::calculateOptimalSize() const -> int {
 
   int bufferedRows = m_visibleRows + UIConstants::Grid::BUFFER_ROWS;
   int visibleWidgets = bufferedRows * m_itemsPerRow;
-  int poolSize = visibleWidgets * UIConstants::Widget::Pool::BUFFER_MULTIPLIER;
+  int calculatedPoolSize =
+      visibleWidgets * UIConstants::Widget::Pool::BUFFER_MULTIPLIER;
 
-  return std::clamp(poolSize, UIConstants::Widget::Pool::MIN_SIZE,
+  return std::clamp(calculatedPoolSize, UIConstants::Widget::Pool::MIN_SIZE,
                     UIConstants::Widget::Pool::MAX_SIZE);
 }
 
@@ -269,13 +271,11 @@ void WidgetPoolManager::logMetrics() const {
   if (!lcWidgetPoolManager().isDebugEnabled()) {
     return;
   }
-  qCDebug(lcWidgetPoolManager) << "WidgetPool metrics:"
-                               << "hits=" << m_metrics.hits
-                               << "misses=" << m_metrics.misses
-                               << "releases=" << m_metrics.releases
-                               << "discards=" << m_metrics.discards
-                               << "staleReused=" << m_metrics.staleReused
-                               << "hitRate=" << QString::number(m_metrics.hitRate() * 100, 'f', 1) << "%"
-                               << "poolSize=" << m_pool.size()
-                               << "stalePoolSize=" << m_stalePool.size();
+  qCDebug(lcWidgetPoolManager)
+      << "WidgetPool metrics:"
+      << "hits=" << m_metrics.hits << "misses=" << m_metrics.misses
+      << "releases=" << m_metrics.releases << "discards=" << m_metrics.discards
+      << "staleReused=" << m_metrics.staleReused
+      << "hitRate=" << QString::number(m_metrics.hitRate() * 100, 'f', 1) << "%"
+      << "poolSize=" << m_pool.size() << "stalePoolSize=" << m_stalePool.size();
 }

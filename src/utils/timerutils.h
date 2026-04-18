@@ -1,9 +1,9 @@
 #ifndef TIMERUTILS_H
 #define TIMERUTILS_H
 
-#include <QObject>
-#include <QList>
 #include <QHash>
+#include <QList>
+#include <QObject>
 #include <QPointer>
 #include <QString>
 #include <QTimer>
@@ -12,12 +12,14 @@
 namespace TimerUtils {
 
 /**
- * @brief A generic debounced timer that coalesces rapid calls into single executions.
+ * @brief A generic debounced timer that coalesces rapid calls into single
+ * executions.
  *
  * Usage:
  *   DebouncedTimer timer(100, this);  // 100ms debounce interval
- *   connect(&timer, &DebouncedTimer::triggered, this, &MyClass::handleDebounced);
- *   timer.trigger();  // Call many times, only fires once after 100ms of inactivity
+ *   connect(&timer, &DebouncedTimer::triggered, this,
+ * &MyClass::handleDebounced); timer.trigger();  // Call many times, only fires
+ * once after 100ms of inactivity
  */
 class DebouncedTimer : public QObject {
   Q_OBJECT
@@ -25,9 +27,9 @@ public:
   explicit DebouncedTimer(int intervalMs, QObject *parent = nullptr);
   ~DebouncedTimer() override;
 
-  void trigger();           // Schedule a debounced trigger
-  void triggerImmediate();  // Trigger immediately, resetting any pending
-  void cancel();            // Cancel any pending trigger
+  void trigger();          // Schedule a debounced trigger
+  void triggerImmediate(); // Trigger immediately, resetting any pending
+  void cancel();           // Cancel any pending trigger
   [[nodiscard]] bool isPending() const;
   [[nodiscard]] int interval() const;
   void setInterval(int intervalMs);
@@ -44,64 +46,65 @@ private:
  *
  * Provides centralized debounced timers for common UI update patterns.
  */
-class Coordinator : public QObject
-{
-    Q_OBJECT
+class Coordinator : public QObject {
+  Q_OBJECT
 public:
-    explicit Coordinator(QObject* parent = nullptr);
-    ~Coordinator() override;
-    void scheduleLayoutUpdate();
-    void scheduleViewportUpdate();
-    void stopAllTimers();
+  explicit Coordinator(QObject *parent = nullptr);
+  ~Coordinator() override;
+  void scheduleLayoutUpdate();
+  void scheduleViewportUpdate();
+  void stopAllTimers();
 
 signals:
-    void layoutUpdateRequested();
-    void viewportUpdateRequested();
+  void layoutUpdateRequested();
+  void viewportUpdateRequested();
 
 private slots:
-    void onLayoutTimerTimeout();
-    void onViewportTimerTimeout();
+  void onLayoutTimerTimeout();
+  void onViewportTimerTimeout();
 
 private:
-    QTimer* m_layoutTimer;
-    QTimer* m_viewportTimer;
+  QTimer *m_layoutTimer;
+  QTimer *m_viewportTimer;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper functions for timer management
 // ─────────────────────────────────────────────────────────────────────────────
 
-void stopTimers(const QList<QTimer*>& timers);
-void disconnectTimers(const QList<QTimer*>& timers);
-void stopAndDisconnectTimers(const QList<QTimer*>& timers);
-void deleteLaterTimer(QTimer*& timer);
+void stopTimers(const QList<QTimer *> &timers);
+void disconnectTimers(const QList<QTimer *> &timers);
+void stopAndDisconnectTimers(const QList<QTimer *> &timers);
+void deleteLaterTimer(QTimer *&timer);
 
 /**
  * @brief Execute a callback after a delay, with object lifetime guard.
- * 
+ *
  * Uses QPointer to ensure the target object is still valid when the
  * callback executes. Safer than raw QTimer::singleShot for member lambdas.
- * 
+ *
  * @param delayMs Delay in milliseconds (0 = next event loop iteration)
  * @param target The QObject to guard (typically 'this')
  * @param callback The function to execute if target is still valid
  */
-template<typename T, typename Func>
+template <typename T, typename Func>
 void singleShotGuarded(int delayMs, T *target, Func &&callback) {
   QPointer<T> guard(target);
-  QTimer::singleShot(delayMs, target, [guard, cb = std::forward<Func>(callback)]() {
-    if (guard) {
-      cb();
-    }
-  });
+  QTimer::singleShot(delayMs, target,
+                     [guard, cb = std::forward<Func>(callback)]() {
+                       if (guard) {
+                         cb();
+                       }
+                     });
 }
 
 /**
- * @brief Execute a callback on next event loop iteration, with object lifetime guard.
- * 
+ * @brief Execute a callback on next event loop iteration, with object lifetime
+ * guard.
+ *
  * Convenience overload for the common case of deferring to next event loop.
  */
-template<typename T, typename Func>
+template <typename T, typename Func>
 void deferGuarded(T *target, Func &&callback) {
   singleShotGuarded(0, target, std::forward<Func>(callback));
 }

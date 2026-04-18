@@ -4,8 +4,7 @@
 #include <QWidget>
 #include <cmath>
 
-SelectionCoordinator::SelectionCoordinator(QObject *parent)
-    : QObject(parent) {}
+SelectionCoordinator::SelectionCoordinator(QObject *parent) : QObject(parent) {}
 
 void SelectionCoordinator::setOverlayManager(SelectionOverlayManager *overlay) {
   m_overlayManager = overlay;
@@ -17,7 +16,7 @@ void SelectionCoordinator::setSelectedIndex(int index) {
   }
   int prevIndex = m_selectedIndex;
   m_selectedIndex = index;
-  
+
   // Calculate direction
   if (prevIndex >= 0 && index >= 0) {
     int delta = index - prevIndex;
@@ -25,23 +24,24 @@ void SelectionCoordinator::setSelectedIndex(int index) {
   } else {
     m_direction = 0;
   }
-  
+
   emit selectionChanged(index, prevIndex);
 }
 
 auto SelectionCoordinator::analyzeMovement(int newIndex, int prevIndex,
-                                            int itemsPerRow) const -> MovementInfo {
+                                           int itemsPerRow) const
+    -> MovementInfo {
   MovementInfo info;
-  
+
   if (prevIndex < 0 || newIndex < 0 || itemsPerRow <= 0) {
     return info;
   }
-  
+
   int delta = newIndex - prevIndex;
   info.direction = (delta > 0) ? 1 : (delta < 0) ? -1 : 0;
-  
+
   int absDelta = std::abs(delta);
-  
+
   // Horizontal move: same row, adjacent column
   // Also treat small movements (1-2 items) as horizontal for smooth animation
   if (absDelta == 1) {
@@ -62,22 +62,23 @@ auto SelectionCoordinator::analyzeMovement(int newIndex, int prevIndex,
     // Multi-row jump - vertical
     info.isHorizontal = false;
   }
-  
+
   return info;
 }
 
-auto SelectionCoordinator::rectForIndex(int visualIndex, int totalItems) const -> QRect {
+auto SelectionCoordinator::rectForIndex(int visualIndex, int totalItems) const
+    -> QRect {
   if (visualIndex < 0 || visualIndex >= totalItems) {
     return {};
   }
-  
+
   if (!m_getPosition || !m_getMetrics) {
     return {};
   }
-  
+
   QPoint pos = m_getPosition(visualIndex);
   auto [width, height] = m_getMetrics();
-  
+
   return SelectionOverlayManager::overlayRectForPosition(pos, width, height);
 }
 

@@ -1,17 +1,17 @@
 #ifndef CACHEMANAGER_H
 #define CACHEMANAGER_H
 
+#include <QCache>
 #include <QHash>
+#include <QImage>
+#include <QJsonObject>
+#include <QList>
 #include <QMutex>
+#include <QObject>
+#include <QPair>
 #include <QPixmap>
 #include <QSet>
 #include <QString>
-#include <QPair>
-#include <QList>
-#include <QJsonObject>
-#include <QCache>
-#include <QImage>
-#include <QObject>
 #include <QThreadPool>
 #include <QTimer>
 #include <atomic>
@@ -19,12 +19,12 @@
 
 // Statistics for monitoring cache performance
 struct CacheMetrics {
-  qint64 memoryHits = 0;     // Found in QCache (fastest)
-  qint64 diskHits = 0;       // Loaded from disk cache
-  qint64 misses = 0;         // Not cached anywhere
-  qint64 inserts = 0;        // New items cached
-  qint64 evictions = 0;      // Items evicted by LRU
-  qint64 invalidations = 0;  // Stale items removed
+  qint64 memoryHits = 0;    // Found in QCache (fastest)
+  qint64 diskHits = 0;      // Loaded from disk cache
+  qint64 misses = 0;        // Not cached anywhere
+  qint64 inserts = 0;       // New items cached
+  qint64 evictions = 0;     // Items evicted by LRU
+  qint64 invalidations = 0; // Stale items removed
 
   [[nodiscard]] double memoryHitRate() const {
     qint64 total = memoryHits + diskHits + misses;
@@ -45,6 +45,12 @@ class CacheManager {
 public:
   CacheManager();
   ~CacheManager();
+
+  // Non-copyable, non-movable (singleton-like usage)
+  CacheManager(const CacheManager &) = delete;
+  CacheManager &operator=(const CacheManager &) = delete;
+  CacheManager(CacheManager &&) = delete;
+  CacheManager &operator=(CacheManager &&) = delete;
   void initialize();
   void saveToDisk();
   void saveToDiskForShutdown();
@@ -57,23 +63,26 @@ public:
   [[nodiscard]] QHash<QString, qint64> snapshotTimestampsForShutdown() const;
   static void saveTimestampsSnapshotToDiskForShutdown(
       const QHash<QString, qint64> &timestampsCopy);
-  
+
   // Cancels pending I/O operations and waits for in-flight tasks to complete.
   // Call before shutdown to ensure clean state for final save.
   void cancelPendingIo();
-  
+
   [[nodiscard]] QPixmap getArtwork(const QString &artworkPath);
   // Memory-only lookup: never performs disk I/O or creates files.
   [[nodiscard]] QPixmap getArtworkFromMemoryOnly(const QString &artworkPath);
 
   // Worker-thread friendly disk cache read.
   // Returns the cached image (PNG) as QImage, without creating any QPixmap.
-  [[nodiscard]] QImage tryLoadArtworkImageFromDiskCache(const QString &artworkPath);
+  [[nodiscard]] QImage
+  tryLoadArtworkImageFromDiskCache(const QString &artworkPath);
 
   void cacheArtwork(const QString &artworkPath, const QPixmap &pixmap);
 
-  // Inserts into in-memory cache only; does not mark dirty for disk persistence.
-  void cacheArtworkInMemoryOnly(const QString &artworkPath, const QPixmap &pixmap);
+  // Inserts into in-memory cache only; does not mark dirty for disk
+  // persistence.
+  void cacheArtworkInMemoryOnly(const QString &artworkPath,
+                                const QPixmap &pixmap);
 
   void clearCollectionCache(int collectionIndex);
   [[nodiscard]] static qint64 getCacheSize();
@@ -87,16 +96,16 @@ public:
 private:
   static QString getCacheDirectory();
   static QString getArtworkCachePath(const QString &artworkPath);
-  
+
   void readTimestamps(const QJsonObject &root);
   static void writeTimestamps(const QHash<QString, qint64> &dirtyTimestamps,
-                               const QString &metadataPath);
-  static void flushDirtyArtwork(const QList<QPair<QString, QImage>> &dirtyList);
+                              const QString &metadataPath);
 
   mutable QMutex m_mutex;
   QCache<QString, QPixmap> artworkCache;
   QHash<QString, qint64> fileTimestamps;
-  QSet<QString> dirtyTimestamps;  // Paths whose timestamps changed since last save
+  QSet<QString>
+      dirtyTimestamps; // Paths whose timestamps changed since last save
   QSet<QString> dirtyArtwork;
   CacheMetrics m_metrics;
 
@@ -107,7 +116,8 @@ private:
 
   // Cancellation flag for in-flight/queued I/O tasks (used during shutdown).
   // Shared pointer so lambdas can safely check after CacheManager destruction.
-  std::shared_ptr<std::atomic_bool> m_cancelIo = std::make_shared<std::atomic_bool>(false);
+  std::shared_ptr<std::atomic_bool> m_cancelIo =
+      std::make_shared<std::atomic_bool>(false);
 
   // Debounced save timer plumbing (keeps frequent cache changes from causing
   // repeated PNG encodes and metadata writes during active scrolling).

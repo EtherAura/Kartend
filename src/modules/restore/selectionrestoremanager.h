@@ -36,15 +36,15 @@ struct SelectionRestoreManagerSetup {
   GeneralSettings *generalSettings = nullptr;
   std::function<bool()> isShuttingDown;
 
-  SETUP_GETTER_DECL(InteractionManager*, InteractionManager)
-  SETUP_GETTER_DECL(ScrollManager*, ScrollManager)
-  SETUP_GETTER_DECL(SessionManager*, SessionManager)
-  SETUP_GETTER_DECL(SettingsManager*, SettingsManager)
-  SETUP_GETTER_DECL(QLineEdit*, SearchBar)
-  SETUP_GETTER_DECL(int*, CurrentCollectionIndex)
-  SETUP_GETTER_DECL(QList<CollectionConfig>*, Collections)
-  SETUP_GETTER_DECL(GeneralSettings*, GeneralSettings)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder*, InteractionState)
+  SETUP_GETTER_DECL(InteractionManager *, InteractionManager)
+  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
+  SETUP_GETTER_DECL(SessionManager *, SessionManager)
+  SETUP_GETTER_DECL(SettingsManager *, SettingsManager)
+  SETUP_GETTER_DECL(QLineEdit *, SearchBar)
+  SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
+  SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
+  SETUP_GETTER_DECL(GeneralSettings *, GeneralSettings)
+  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
 };
 
 /**
@@ -67,15 +67,18 @@ public:
   /**
    * @brief Schedules selection restoration with retry attempts.
    * @param desiredIndex The index to restore selection to.
-   * @param maxAttempts Maximum number of retry attempts (unused, kept for API compatibility).
-   * @param attemptDelayMs Delay between attempts (unused, kept for API compatibility).
+   * @param maxAttempts Maximum number of retry attempts (unused, kept for API
+   * compatibility).
+   * @param attemptDelayMs Delay between attempts (unused, kept for API
+   * compatibility).
    * @param finalEnsureDelayMs Final verification delay.
    */
   void scheduleSelectionRestore(int desiredIndex, int maxAttempts,
                                 int attemptDelayMs, int finalEnsureDelayMs);
 
   /**
-   * @brief Checks if selection should be restored based on settings and search state.
+   * @brief Checks if selection should be restored based on settings and search
+   * state.
    * @return True if selection restoration is appropriate.
    */
   [[nodiscard]] bool shouldRestoreSelection() const;

@@ -36,14 +36,14 @@ class NavigationStackManager;
 
 /**
  * @brief Setup struct for NavigationManager dependencies.
- * 
+ *
  * Fields can be set individually, or common fields can be populated
  * from an ApplicationContext via the ctx pointer.
  */
 struct NavigationManagerSetup {
   // Optional: shared context for common fields
   const ApplicationContext *ctx = nullptr;
-  
+
   // Manager dependencies (can be overridden or taken from ctx)
   InteractionManager *interactionManager = nullptr;
   SettingsManager *settingsManager = nullptr;
@@ -52,7 +52,7 @@ struct NavigationManagerSetup {
   DatabaseManager *databaseManager = nullptr;
   SessionManager *sessionManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
-  
+
   // UI elements (can be overridden or taken from ctx)
   MetadataSidebar *sidebar = nullptr;
   int *currentCollectionIndex = nullptr;
@@ -68,36 +68,40 @@ struct NavigationManagerSetup {
   LoadingOverlay *loadingOverlay = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QWidget *gridContainer = nullptr;
-  
+
   // Callbacks (not in context)
   std::function<bool()> isShuttingDown;
   std::function<void()> refreshTitleCounts;
-  
+
   // Manager accessors that check ctx fallback
-  SETUP_GETTER_INLINE_SAME(InteractionManager*, InteractionManager, interactionManager)
-  SETUP_GETTER_INLINE_SAME(SettingsManager*, SettingsManager, settingsManager)
-  SETUP_GETTER_INLINE_SAME(SidebarManager*, SidebarManager, sidebarManager)
-  SETUP_GETTER_INLINE_SAME(ScrollManager*, ScrollManager, scrollManager)
-  SETUP_GETTER_INLINE_SAME(DatabaseManager*, DatabaseManager, databaseManager)
-  SETUP_GETTER_INLINE_SAME(SessionManager*, SessionManager, sessionManager)
-  SETUP_GETTER_INLINE_SAME(ArtworkManager*, ArtworkManager, artworkManager)
+  SETUP_GETTER_INLINE_SAME(InteractionManager *, InteractionManager,
+                           interactionManager)
+  SETUP_GETTER_INLINE_SAME(SettingsManager *, SettingsManager, settingsManager)
+  SETUP_GETTER_INLINE_SAME(SidebarManager *, SidebarManager, sidebarManager)
+  SETUP_GETTER_INLINE_SAME(ScrollManager *, ScrollManager, scrollManager)
+  SETUP_GETTER_INLINE_SAME(DatabaseManager *, DatabaseManager, databaseManager)
+  SETUP_GETTER_INLINE_SAME(SessionManager *, SessionManager, sessionManager)
+  SETUP_GETTER_INLINE_SAME(ArtworkManager *, ArtworkManager, artworkManager)
 
   // UI element accessors that check ctx fallback
-  SETUP_GETTER_INLINE_SAME(QScrollArea*, ItemScrollArea, itemScrollArea)
-  SETUP_GETTER_INLINE_SAME(QWidget*, GridContainer, gridContainer)
-  SETUP_GETTER_INLINE_SAME(QWidget*, ItemsPage, itemsPage)
-  SETUP_GETTER_INLINE_SAME(QWidget*, ItemsTopBar, itemsTopBar)
-  SETUP_GETTER_INLINE_SAME(QStackedWidget*, StackedWidget, stackedWidget)
-  SETUP_GETTER_INLINE_SAME(QMenuBar*, Menubar, menubar)
-  SETUP_GETTER_INLINE_SAME(QLineEdit*, SearchBar, searchBar)
-  SETUP_GETTER_INLINE_SAME(QLabel*, LoadingLabel, loadingLabel)
-  SETUP_GETTER_INLINE_SAME(LoadingOverlay*, LoadingOverlay, loadingOverlay)
-  SETUP_GETTER_INLINE_SAME(MetadataSidebar*, Sidebar, sidebar)
-  SETUP_GETTER_INLINE_SAME(QList<CollectionConfig>*, Collections, collections)
-  SETUP_GETTER_INLINE_SAME(int*, CurrentCollectionIndex, currentCollectionIndex)
-  SETUP_GETTER_INLINE_SAME(const CollectionHierarchyCache*, HierarchyCache, hierarchyCache)
-  SETUP_GETTER_INLINE_SAME(GeneralSettings*, GeneralSettings, generalSettings)
-  SETUP_GETTER_INLINE_CTX_ONLY(InteractionStateHolder*, InteractionState, interactionState)
+  SETUP_GETTER_INLINE_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
+  SETUP_GETTER_INLINE_SAME(QWidget *, GridContainer, gridContainer)
+  SETUP_GETTER_INLINE_SAME(QWidget *, ItemsPage, itemsPage)
+  SETUP_GETTER_INLINE_SAME(QWidget *, ItemsTopBar, itemsTopBar)
+  SETUP_GETTER_INLINE_SAME(QStackedWidget *, StackedWidget, stackedWidget)
+  SETUP_GETTER_INLINE_SAME(QMenuBar *, Menubar, menubar)
+  SETUP_GETTER_INLINE_SAME(QLineEdit *, SearchBar, searchBar)
+  SETUP_GETTER_INLINE_SAME(QLabel *, LoadingLabel, loadingLabel)
+  SETUP_GETTER_INLINE_SAME(LoadingOverlay *, LoadingOverlay, loadingOverlay)
+  SETUP_GETTER_INLINE_SAME(MetadataSidebar *, Sidebar, sidebar)
+  SETUP_GETTER_INLINE_SAME(QList<CollectionConfig> *, Collections, collections)
+  SETUP_GETTER_INLINE_SAME(int *, CurrentCollectionIndex,
+                           currentCollectionIndex)
+  SETUP_GETTER_INLINE_SAME(const CollectionHierarchyCache *, HierarchyCache,
+                           hierarchyCache)
+  SETUP_GETTER_INLINE_SAME(GeneralSettings *, GeneralSettings, generalSettings)
+  SETUP_GETTER_INLINE_CTX_ONLY(InteractionStateHolder *, InteractionState,
+                               interactionState)
 };
 
 class NavigationManager : public QObject {
@@ -106,19 +110,20 @@ public:
   explicit NavigationManager(QObject *parent = nullptr);
   ~NavigationManager() override;
   [[nodiscard]] bool isNavigationInProgress() const;
-  
+
   // Persist current viewport/selection state before shutdown.
   // Call this before blocking signals or clearing collection index.
   void prepareForShutdown();
 
   // Navigation stack manager for hierarchy traversal
-  [[nodiscard]] NavigationStackManager *stackManager() const { return m_stackManager.get(); }
+  [[nodiscard]] NavigationStackManager *stackManager() const {
+    return m_stackManager.get();
+  }
 
 private:
   std::unique_ptr<NavigationStackManager> m_stackManager;
 
 public:
-
   void restoreSelectionForCurrentCollection();
   void setupReferences(const NavigationManagerSetup &setup);
 
@@ -138,13 +143,13 @@ public slots:
   void filterItemsCurrentAndSubcollections(const QString &searchText);
   void filterItemsAllCollections(const QString &searchText);
   auto scheduleSelectionRestore(int desiredIndex, int maxAttempts,
-                                int attemptDelayMs,
-                                int finalEnsureDelayMs) -> void;
+                                int attemptDelayMs, int finalEnsureDelayMs)
+      -> void;
   void onItemsLoaded(const QStringList &filePaths,
                      const QHash<QString, QString> &fileNames);
   void onItemCountLoaded(int count, int requestToken);
   void onBackgroundCollectionScanCompleted(const QString &collectionUuid);
-  void onItemsRangeLoaded(int offset, const QStringList &filePaths, 
+  void onItemsRangeLoaded(int offset, const QStringList &filePaths,
                           const QHash<QString, QString> &fileNames,
                           const QHash<QString, QString> &fileToArtworkDir,
                           const QHash<QString, QString> &fileToMediaDir,
@@ -154,7 +159,7 @@ public slots:
   void onViewportChanged();
   /// Handles clicks on breadcrumb links in the toolbar title
   void onBreadcrumbLinkClicked(const QString &link);
-  
+
   // Appearance methods - can be called from SettingsManager after dialog closes
   void applyBackgroundForCollection(int collectionIndex);
   void applyPrimaryColorForCollection(int collectionIndex);
@@ -171,7 +176,8 @@ private:
   [[nodiscard]] auto areItemsShared(int fromIndex, int toIndex) const -> bool;
   auto applyCollectionSettingsOnly(int collectionIndex) -> void;
   [[nodiscard]] auto getSubcollections(int parentIndex) const -> QList<int>;
-  [[nodiscard]] auto getAllDescendantCollections(int parentIndex) const -> QList<int>;
+  [[nodiscard]] auto getAllDescendantCollections(int parentIndex) const
+      -> QList<int>;
 
   InteractionManager *m_interactionManager = nullptr;
   InteractionStateHolder *m_state = nullptr;
@@ -187,12 +193,14 @@ private:
   GeneralSettings *m_generalSettings = nullptr;
   QLineEdit *m_searchBar = nullptr;
 
-  // Filter text used for the current DB-backed items view (count + paginated ranges).
-  // This keeps itemCount and itemsRange queries consistent even if the UI search bar
-  // text changes between the count request and subsequent range fetches.
+  // Filter text used for the current DB-backed items view (count + paginated
+  // ranges). This keeps itemCount and itemsRange queries consistent even if the
+  // UI search bar text changes between the count request and subsequent range
+  // fetches.
   QString m_itemsQueryFilter;
 
-  // Monotonic token for count requests; used to ignore stale itemCount responses.
+  // Monotonic token for count requests; used to ignore stale itemCount
+  // responses.
   int m_itemCountRequestToken = 0;
   QWidget *m_itemsPage = nullptr;
   QWidget *m_itemsTopBar = nullptr;
@@ -209,31 +217,35 @@ private:
   std::unique_ptr<SelectionRestoreManager> m_selectionRestoreManager;
 
   bool m_virtualScrollConnected = false;
-  [[nodiscard]] auto collectionHasDescendantWithMedia(int parentIndex) const -> bool;
+  [[nodiscard]] auto collectionHasDescendantWithMedia(int parentIndex) const
+      -> bool;
   bool m_allCollectionsActive = false;
   auto setSuppressArrowCenter(QScrollArea *scrollArea, int settleMs) -> void;
   [[nodiscard]] auto getHasSubAndItems(int collectionIndex, bool &hasSub,
-                         bool &hasItems) const -> bool;
+                                       bool &hasItems) const -> bool;
   auto updateItemsPageTitle(int collectionIndex) -> void;
   // Helper methods for goBackToCollections refactoring
   auto performNavigationStackCleanup() -> void;
   auto handleNavigationStackPop() -> void;
   auto handleNavigationFallback() -> void;
   [[nodiscard]] auto findSubcollectionVisualIndex(int targetCollectionIndex,
-                                    int previousIndex) const -> int;
+                                                  int previousIndex) const
+      -> int;
   auto scheduleNavigationReturn(int targetCollectionIndex,
                                 int subcollectionVisualIndex) -> void;
   // Helper methods for onItemsLoaded refactoring
   [[nodiscard]] auto validateItemsLoadedContext() const -> bool;
   auto cleanupExistingNoItemsWidgets() -> void;
-  [[nodiscard]] auto determineContentAvailability(const QStringList &filePaths,
-                                    const QList<int> &subcollections) const
-      -> bool;
+  [[nodiscard]] auto
+  determineContentAvailability(const QStringList &filePaths,
+                               const QList<int> &subcollections) const -> bool;
   auto handleEmptyContent() -> void;
-  [[nodiscard]] auto setupCollectionContext(const QStringList &filePaths,
-                              const QHash<QString, QString> &fileNames) const
+  [[nodiscard]] auto
+  setupCollectionContext(const QStringList &filePaths,
+                         const QHash<QString, QString> &fileNames) const
       -> CollectionContext;
-  [[nodiscard]] auto lookupRememberedSelectionIndex(int totalItems) const -> int;
+  [[nodiscard]] auto lookupRememberedSelectionIndex(int totalItems) const
+      -> int;
   [[nodiscard]] auto calculateSelectionIndex(int totalItems) const -> int;
   [[nodiscard]] auto computeCollectionDepth(int collectionIndex) const -> int;
   auto schedulePostLoadOperations() -> void;
@@ -242,14 +254,18 @@ private:
   [[nodiscard]] auto handleSharedItemsNavigation(int collectionIndex) -> bool;
   auto prepareNonSharedNavigation(int collectionIndex) -> void;
   auto loadCollectionData(int collectionIndex) -> void;
-  
+
   // Attempts fast startup using cached counts to render immediately.
   // Returns true if cached count was used for immediate rendering.
-  [[nodiscard]] auto tryUseCachedCountForStartup(const CollectionContext &context) -> bool;
+  [[nodiscard]] auto
+  tryUseCachedCountForStartup(const CollectionContext &context) -> bool;
 
-  [[nodiscard]] CollectionContext buildExpandedContextForIndex(int collectionIndex) const;
-  [[nodiscard]] CollectionContext getOrBuildExpandedContext(int collectionIndex);
-  void requestItemCountForContext(const CollectionContext &context, const QString &filter);
+  [[nodiscard]] CollectionContext
+  buildExpandedContextForIndex(int collectionIndex) const;
+  [[nodiscard]] CollectionContext
+  getOrBuildExpandedContext(int collectionIndex);
+  void requestItemCountForContext(const CollectionContext &context,
+                                  const QString &filter);
 
   void persistCurrentSelection();
   void prepareForNonSharedNavigationHelper();
@@ -258,13 +274,16 @@ private:
   void applyUiPoliciesForCollection(int collectionIndex);
 
   QList<CollectionConfig> *m_collections = nullptr;
-  bool m_isRescanInProgress = false;  // Track when force rescan is active
-  int m_pendingRescanCollectionIndex = -1;  // Collection to reload after cache invalidation
-  QMetaObject::Connection m_cacheInvalidatedConnection;  // One-shot connection for cache invalidation
+  bool m_isRescanInProgress = false; // Track when force rescan is active
+  int m_pendingRescanCollectionIndex =
+      -1; // Collection to reload after cache invalidation
+  QMetaObject::Connection
+      m_cacheInvalidatedConnection; // One-shot connection for cache
+                                    // invalidation
 
   bool m_backgroundCountRefreshInProgress = false;
   int m_backgroundCountRefreshCollectionIndex = -1;
-  
+
   // Tracks if this is the first load after startup (for cached count fast-path)
   bool m_isInitialStartupLoad = true;
 
@@ -290,10 +309,10 @@ private:
   // This decouples DB query scope from the current collection's config.
   bool m_hasItemsQueryContext = false;
   CollectionContext m_itemsQueryContext;
-  
+
   // Cached expanded context for the current collection to avoid recomputing
-  // precomputed descendants, UUIDs, and directory maps on every search keystroke.
-  // Invalidated when collection changes.
+  // precomputed descendants, UUIDs, and directory maps on every search
+  // keystroke. Invalidated when collection changes.
   int m_cachedExpandedContextIndex = -1;
   CollectionContext m_cachedExpandedContext;
 };

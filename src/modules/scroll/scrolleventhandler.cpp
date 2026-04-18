@@ -8,12 +8,9 @@
 #include <QScrollBar>
 #include <QTimer>
 
-ScrollEventHandler::ScrollEventHandler(QObject *parent)
-    : QObject(parent) {}
+ScrollEventHandler::ScrollEventHandler(QObject *parent) : QObject(parent) {}
 
-ScrollEventHandler::~ScrollEventHandler() {
-  disconnectEvents();
-}
+ScrollEventHandler::~ScrollEventHandler() { disconnectEvents(); }
 
 void ScrollEventHandler::setScrollArea(QScrollArea *scrollArea) {
   disconnectEvents();
@@ -57,7 +54,7 @@ void ScrollEventHandler::connectVerticalEvents(QScrollBar *scrollBar) {
 
   connect(scrollBar, &QAbstractSlider::actionTriggered, this,
           [this, scrollBar](int) { onActionTriggered(scrollBar); });
-  
+
   // Emit sliderMoved during drag for prefetch optimization
   connect(scrollBar, &QScrollBar::sliderMoved, this,
           &ScrollEventHandler::sliderMoved);
@@ -79,15 +76,15 @@ void ScrollEventHandler::connectHorizontalEvents(QScrollBar *scrollBar) {
 
 void ScrollEventHandler::onSliderPressed(QScrollBar *scrollBar) {
   m_userScrollActive = true;
-  
+
   if (m_idleTimer) {
     m_idleTimer->trigger();
   }
-  
+
   if (m_state) {
     m_state->scroll().userScrollActive = true;
   }
-  
+
   // Stop any arrow key animation
   if (scrollBar) {
     if (auto *arrowKeyAnimation =
@@ -97,40 +94,40 @@ void ScrollEventHandler::onSliderPressed(QScrollBar *scrollBar) {
       }
     }
   }
-  
+
   emit userScrollStarted();
 }
 
 void ScrollEventHandler::onSliderReleased() {
   m_userScrollActive = false;
-  
+
   if (m_idleTimer) {
     m_idleTimer->trigger();
   }
-  
+
   // Delay clearing UserScrollActive to allow any pending scroll events
   // to be processed with the flag still set
-  QTimer::singleShot(UIConstants::Mouse::USER_SCROLL_ACTIVE_CLEAR_DELAY_MS, this,
-                     [this]() {
+  QTimer::singleShot(UIConstants::Mouse::USER_SCROLL_ACTIVE_CLEAR_DELAY_MS,
+                     this, [this]() {
                        if (m_state) {
                          m_state->scroll().userScrollActive = false;
                        }
                      });
-  
+
   emit userScrollEnded();
 }
 
 void ScrollEventHandler::onActionTriggered(QScrollBar *scrollBar) {
   m_userScrollActive = true;
-  
+
   if (m_idleTimer) {
     m_idleTimer->trigger();
   }
-  
+
   if (m_state) {
     m_state->scroll().userScrollActive = true;
   }
-  
+
   // Stop any arrow key animation (for vertical scrollbar)
   if (scrollBar) {
     if (auto *arrowKeyAnimation =
