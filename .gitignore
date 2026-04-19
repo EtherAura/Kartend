@@ -19,6 +19,21 @@ build/
 # Qt Creator
 CMakeLists.txt.user*
 
+# Python bytecode (e.g. .scripts/ helpers)
+__pycache__/
+*.pyc
+
+# Logs and crash dumps
+*.log
+core
+core.*
+
+# Root compile_commands.json (CMake export sometimes mirrored here)
+/compile_commands.json
+
+# Per-developer agent / editor state
+.claude/
+
 # Obsidian vault metadata (personal note-taking, not project state)
 .obsidian/
 
