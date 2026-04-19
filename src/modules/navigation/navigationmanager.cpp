@@ -757,31 +757,15 @@ auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const
     return false;
   }
 
-  // Check if target is a container collection (no media directory)
-  // Container collections cannot share items - they only show subcollection
-  // folders
-  QString toMediaDir = SettingsUtils::expandConfigVariables(
-      toCollection.mediaDirectory, toCollection.name);
-  if (toMediaDir.trimmed().isEmpty()) {
-    return false;
-  }
-
-  if (!toCollection.showAllSubcollectionItems) {
-    return true;
-  }
-
-  QList<int> childCollections = getAllDescendantCollections(toIndex);
-  const bool anyDescendantWithMedia =
-      std::ranges::any_of(childCollections, [this](int childIndex) {
-        if (childIndex < 0 || childIndex >= (*m_collections).size()) {
-          return false;
-        }
-        QString childMediaDir = SettingsUtils::expandConfigVariables(
-            (*m_collections)[childIndex].mediaDirectory,
-            (*m_collections)[childIndex].name);
-        return !childMediaDir.trimmed().isEmpty();
-      });
-  return !anyDescendantWithMedia;
+  // Shared-items navigation filters the parent's in-memory file list to show
+  // only the target subcollection. With on-demand virtual scrolling
+  // (showAllSubcollectionItems no longer eagerly loads all items), the
+  // parent's file list is mostly empty placeholders, causing the filtered
+  // child view to silently truncate at whatever offset has been loaded.
+  // Until the optimization can guarantee a fully materialized parent list,
+  // fall through to the standard DB count + on-demand range pipeline, which
+  // is fast (~10ms per page in practice). See bd Kartend-w9c.
+  return false;
 }
 
 auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex)

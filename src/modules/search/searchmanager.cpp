@@ -449,17 +449,14 @@ void SearchManager::onSearchTextChanged(const QString &text,
       m_preSearchSelectedIndex =
           m_settingsManager->getLastSelectedItem(collIndex);
     }
-    // Save scroll view state for fast restoration when search is cleared
-    // For CurrentCollection mode, items are already loaded
-    // For CurrentAndSubcollections with showAllSubcollectionItems, items are
-    // also already loaded
-    bool canUsePreSearchState =
+    // Save scroll view state for fast restoration when search is cleared.
+    // Only CurrentCollection uses the pre-search restore path: it reloads via
+    // setupVirtualScrolling on the same collection context. CurrentAndSub-
+    // collections and AllCollections are DB-backed and can change the visible
+    // data backing (and the subcollection/virtual-folder tile composition), so
+    // they take the full reload path on clear instead. See bd Kartend-w9c.
+    const bool canUsePreSearchState =
         (m_currentSearchMode == SearchMode::CurrentCollection);
-    if (m_currentSearchMode == SearchMode::CurrentAndSubcollections &&
-        m_collections && collIndex >= 0 && collIndex < m_collections->size()) {
-      canUsePreSearchState =
-          (*m_collections)[collIndex].showAllSubcollectionItems;
-    }
     if (m_scrollManager && canUsePreSearchState) {
       m_preSearchTotalItems = m_scrollManager->getTotalItems();
       m_scrollManager->savePreSearchState();
@@ -530,22 +527,16 @@ void SearchManager::performDebouncedSearch() {
     break;
   }
   case SearchMode::CurrentAndSubcollections: {
-    // When showAllSubcollectionItems is true, all items are already loaded
-    // in memory - use fast in-memory filtering instead of DB queries.
-    // This provides major performance improvement for large hierarchies.
-    if (context.config.showAllSubcollectionItems && m_scrollManager) {
-      diagLog("dispatch applyFilter(CurrentAndSubcollections, in-memory)");
-      m_scrollManager->applyFilter(trimmed);
-    } else {
-      // DB-backed: include descendants even when showAllSubcollectionItems is
-      // false.
-      diagLog("dispatch filterItemsCurrentAndSubcollections");
-      // Show loading overlay while DB query is processing
-      if (m_scrollManager) {
-        m_scrollManager->showSearchLoadingOverlay();
-      }
-      m_navigationManager->filterItemsCurrentAndSubcollections(trimmed);
+    // Always DB-backed: items are loaded on-demand even when
+    // showAllSubcollectionItems is true, so the in-memory file list is mostly
+    // empty placeholders. Filtering it would silently drop unloaded items.
+    // The DB-backed path uses FTS/LIKE and returns the full result set.
+    // See bd Kartend-w9c.
+    diagLog("dispatch filterItemsCurrentAndSubcollections");
+    if (m_scrollManager) {
+      m_scrollManager->showSearchLoadingOverlay();
     }
+    m_navigationManager->filterItemsCurrentAndSubcollections(trimmed);
     break;
   }
   case SearchMode::AllCollections: {
