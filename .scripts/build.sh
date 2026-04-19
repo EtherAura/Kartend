@@ -17,6 +17,8 @@ Build modes (mutually exclusive):
 Build options:
   --tests           Configure with -DBUILD_TESTS=ON
   --run-tests       Run ctest after a successful build (requires --tests)
+  --install         Run `cmake --install` after a successful build (honors DESTDIR;
+                    may require sudo when installing to system prefixes)
   --ninja           Force Ninja generator (if available)
   --make            Force Unix Makefiles generator
   --incremental     Reuse existing build directory (don't rm -rf it) (default)
@@ -52,6 +54,7 @@ keep_builds=false
 use_ccache=true
 build_tests=false
 run_tests=false
+install_after_build=false
 generator_preference="auto"  # auto|ninja|make
 incremental_build=true
 make_archive=true
@@ -68,6 +71,7 @@ for arg in "${@:-}"; do
     --format-apply) format_apply=true ;;
     --tests)       build_tests=true ;;
     --run-tests)   run_tests=true ;;
+    --install)     install_after_build=true ;;
     --ninja)       generator_preference="ninja" ;;
     --make)        generator_preference="make" ;;
     --incremental) incremental_build=true ;;
@@ -692,6 +696,9 @@ if $maintenance_build; then
     plan_step "Assemble reports"
     plan_step "Remove linker map files"
   fi
+  if $install_after_build; then
+    plan_step "Install"
+  fi
   if $make_archive; then
     plan_step "Stage files for archive"
     plan_step "Create archive"
@@ -797,6 +804,10 @@ EOF
     run_optional "Remove linker map files" "$logs_dir/remove-map.log" bash -lc "rm -f \"$reports_dir/$target_name.map\" \"$reports_dir\"/$target_name-*.map"
   fi
 
+  if $install_after_build; then
+    run_step "Install" "$logs_dir/install.log" "$cmake_bin" --install "$build_dir"
+  fi
+
   abort_if_failed
 
   if $make_archive; then
@@ -864,6 +875,9 @@ if $sanitize_build; then
   if $make_reports; then
     plan_step "Assemble reports"
   fi
+  if $install_after_build; then
+    plan_step "Install"
+  fi
   if $make_archive; then
     plan_step "Stage files for archive"
     plan_step "Create archive"
@@ -888,6 +902,9 @@ elif $debug_build && ! $pgo_build; then
   if $make_reports; then
     plan_step "Assemble reports"
   fi
+  if $install_after_build; then
+    plan_step "Install"
+  fi
   if $make_archive; then
     plan_step "Stage files for archive"
     plan_step "Create archive"
@@ -910,6 +927,9 @@ elif $relwithdebinfo_build && ! $pgo_build; then
   fi
   if $make_reports; then
     plan_step "Assemble reports"
+  fi
+  if $install_after_build; then
+    plan_step "Install"
   fi
   if $make_archive; then
     plan_step "Stage files for archive"
@@ -935,6 +955,9 @@ elif ! $pgo_build; then
   if $make_reports; then
     plan_step "Assemble reports"
     plan_step "Remove linker map files"
+  fi
+  if $install_after_build; then
+    plan_step "Install"
   fi
   if $make_archive; then
     plan_step "Stage files for archive"
@@ -967,6 +990,9 @@ if $pgo_build; then
   fi
   if $make_reports; then
     plan_step "Assemble reports"
+  fi
+  if $install_after_build; then
+    plan_step "Install"
   fi
   if $make_archive; then
     plan_step "Stage files for archive"
@@ -1084,6 +1110,10 @@ if $pgo_build; then
     run_step "Assemble reports" "$logs_dir/reports-assemble.log" assemble_reports
   fi
 
+  if $install_after_build; then
+    run_step "Install" "$logs_dir/install.log" cmake --install "$build_dir"
+  fi
+
   abort_if_failed
 
   # Archive
@@ -1186,6 +1216,10 @@ if ! $pgo_build; then
     if [ "$build_type" != "debug" ]; then
       run_optional "Remove linker map files" "$logs_dir/remove-map.log" bash -lc "rm -f \"$reports_dir/$target_name.map\" \"$reports_dir\"/$target_name-*.map"
     fi
+  fi
+
+  if $install_after_build; then
+    run_step "Install" "$logs_dir/install.log" "$cmake_bin" --install "$build_dir"
   fi
 
   abort_if_failed
