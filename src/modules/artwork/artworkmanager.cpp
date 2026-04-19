@@ -627,28 +627,36 @@ void ArtworkManager::applyResultsToUi(
       continue;
     }
 
-    // Virtual folders and subcollections use folder/collection name for
-    // identity, not file path Skip stale-check for these since their artwork is
-    // based on folder/subcollection name
-    if (!widget->isVirtualFolder() && !widget->isSubcollection()) {
-      // Verify the widget is still displaying the same file - widget may have
-      // been recycled to display a different file while artwork was loading
-      // async
+    // Verify the widget's current identity still matches the artwork being
+    // delivered. Widgets are pooled and recycled across roles (item ↔
+    // subcollection ↔ virtual folder); without this check, an in-flight
+    // artwork load queued for the previous role can clobber the new role's
+    // pixmap (bd Kartend-dxz: subcollection tiles displaying item artwork).
+    //   - Items:           identity = file path basename
+    //   - Subcollections:  identity = subcollection name (== itemName)
+    //   - Virtual folders: identity = folder display name (== itemName)
+    // All three lookups go through ArtworkUtils::findArtworkForFile() which
+    // matches on basename, so basename equality is the correct stale check.
+    QString widgetBaseName;
+    if (widget->isSubcollection() || widget->isVirtualFolder()) {
+      widgetBaseName = widget->getItemName();
+    } else {
       const QString widgetFilePath = widget->getFilePath();
       if (widgetFilePath.isEmpty()) {
         // Widget has no file path (placeholder or reset) - skip stale artwork
         continue;
       }
-
-      // Extract base name from both paths for comparison
-      const QString widgetBaseName =
-          QFileInfo(widgetFilePath).completeBaseName();
-      const QString artworkBaseName =
-          QFileInfo(result.artworkPath).completeBaseName();
-      if (widgetBaseName != artworkBaseName) {
-        // Widget is now displaying a different file, skip this stale artwork
-        continue;
-      }
+      widgetBaseName = QFileInfo(widgetFilePath).completeBaseName();
+    }
+    if (widgetBaseName.isEmpty()) {
+      // Widget identity not yet established - skip stale artwork
+      continue;
+    }
+    const QString artworkBaseName =
+        QFileInfo(result.artworkPath).completeBaseName();
+    if (widgetBaseName != artworkBaseName) {
+      // Widget has been recycled to a different identity, skip stale artwork
+      continue;
     }
 
     {
@@ -1521,28 +1529,32 @@ void ArtworkManager::collectUncachedAndApplyCached(
       continue;
     }
 
-    // Virtual folders and subcollections use folder/collection name for
-    // identity, not file path Skip stale-check for these since their artwork is
-    // based on folder/subcollection name
-    if (!info.mediaItem->isVirtualFolder() &&
-        !info.mediaItem->isSubcollection()) {
-      // Verify the widget is still displaying the same file - widget may have
-      // been recycled to display a different file while waiting in queue
+    // Verify the widget's current identity still matches the artwork being
+    // delivered. Widgets are pooled and recycled across roles (item ↔
+    // subcollection ↔ virtual folder); without this check, a queued artwork
+    // load for the previous role can clobber the new role's pixmap
+    // (bd Kartend-dxz).
+    QString widgetBaseName;
+    if (info.mediaItem->isSubcollection() ||
+        info.mediaItem->isVirtualFolder()) {
+      widgetBaseName = info.mediaItem->getItemName();
+    } else {
       const QString widgetFilePath = info.mediaItem->getFilePath();
       if (widgetFilePath.isEmpty()) {
         // Widget has no file path (placeholder or reset) - skip
         continue;
       }
-
-      // Extract base name from both paths for comparison
-      const QString widgetBaseName =
-          QFileInfo(widgetFilePath).completeBaseName();
-      const QString artworkBaseName =
-          QFileInfo(info.artworkPath).completeBaseName();
-      if (widgetBaseName != artworkBaseName) {
-        // Widget is now displaying a different file, skip this stale artwork
-        continue;
-      }
+      widgetBaseName = QFileInfo(widgetFilePath).completeBaseName();
+    }
+    if (widgetBaseName.isEmpty()) {
+      // Widget identity not yet established - skip
+      continue;
+    }
+    const QString artworkBaseName =
+        QFileInfo(info.artworkPath).completeBaseName();
+    if (widgetBaseName != artworkBaseName) {
+      // Widget has been recycled to a different identity, skip stale artwork
+      continue;
     }
 
     QPixmap cached = ArtworkManager::getCachedPixmap(info.artworkPath);
