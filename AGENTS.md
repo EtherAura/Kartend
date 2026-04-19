@@ -1,54 +1,8 @@
 # Agent Instructions
 
-This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
+The canonical agent instructions for this project live in [.github/copilot-instructions.md](.github/copilot-instructions.md).
 
-## Project
-
-Kartend is a Qt6/C++23 KDE frontend for organizing and launching multimedia collections.
-Architecture and code conventions: see `.github/copilot-instructions.md` and `docs/architecture.md`.
-
-## Build & Test
-
-```bash
-.scripts/build.sh              # Release build
-.scripts/build.sh --debug      # Debug build (required for qCDebug output)
-.scripts/build.sh --tests --run-tests  # Build and run tests
-.scripts/build.sh --maintenance        # Strict: -Werror, clang-tidy, clang-format
-```
-
-## Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
-```
-
-## Non-Interactive Shell Commands
-
-**ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
-
-Shell commands like `cp`, `mv`, and `rm` may be aliased to include `-i` (interactive) mode on some systems, causing the agent to hang indefinitely waiting for y/n input.
-
-**Use these forms instead:**
-```bash
-# Force overwrite without prompting
-cp -f source dest           # NOT: cp source dest
-mv -f source dest           # NOT: mv source dest
-rm -f file                  # NOT: rm file
-
-# For recursive operations
-rm -rf directory            # NOT: rm -r directory
-cp -rf source dest          # NOT: cp -r source dest
-```
-
-**Other commands that may prompt:**
-- `scp` - use `-o BatchMode=yes` for non-interactive
-- `ssh` - use `-o BatchMode=yes` to fail instead of prompting
-- `apt-get` - use `-y` flag
-- `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
+All agents (Copilot, Claude Code, Codex, Cursor, Aider, opencode, etc.) should read that file as the single source of truth for architecture, conventions, build/test commands, and workflow rules. The bd issue-tracker integration block below is auto-managed by `bd` and must remain intact.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker

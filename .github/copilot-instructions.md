@@ -763,3 +763,24 @@ if (path.isEmpty()) { /* no context about why */ }
 - Clang or GCC with C++23 support
 - lld linker (for release builds)
 
+## Non-Interactive Shell Commands
+
+**ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts. On some systems `cp`/`mv`/`rm` are aliased to `-i` (interactive) and will hang indefinitely waiting for y/n input.
+
+```bash
+# Force overwrite without prompting
+cp -f source dest           # NOT: cp source dest
+mv -f source dest           # NOT: mv source dest
+rm -f file                  # NOT: rm file
+
+# Recursive operations
+rm -rf directory            # NOT: rm -r directory
+cp -rf source dest          # NOT: cp -r source dest
+```
+
+Other commands that may prompt:
+- `scp` — use `-o BatchMode=yes`
+- `ssh` — use `-o BatchMode=yes` to fail instead of prompting
+- `apt-get` — use `-y`
+- `brew` — set `HOMEBREW_NO_AUTO_UPDATE=1`
+

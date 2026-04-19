@@ -1,6 +1,8 @@
 # Project Instructions for AI Agents
 
-This file provides instructions and context for AI coding agents working on this project.
+The canonical agent instructions for this project live in [.github/copilot-instructions.md](.github/copilot-instructions.md).
+
+All agents (Copilot, Claude Code, Codex, Cursor, Aider, opencode, etc.) should read that file as the single source of truth for architecture, conventions, build/test commands, and workflow rules. The bd issue-tracker integration block below is auto-managed by `bd` and must remain intact.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
@@ -48,22 +50,3 @@ bd close <id>         # Complete work
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
-
-
-## Build & Test
-
-_Add your build and test commands here_
-
-```bash
-# Example:
-# npm install
-# npm test
-```
-
-## Architecture Overview
-
-_Add a brief overview of your project architecture_
-
-## Conventions & Patterns
-
-_Add your project-specific conventions here_
