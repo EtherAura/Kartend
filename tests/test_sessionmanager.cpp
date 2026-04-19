@@ -8,12 +8,13 @@
 
 #include "sessionmanager.h"
 #include "collectionutils.h"
-#include <QTemporaryDir>
-#include <QTest>
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QStandardPaths>
+#include <QTemporaryDir>
+#include <QTest>
 
 class TestSessionManager : public QObject {
   Q_OBJECT
@@ -43,6 +44,13 @@ private slots:
   void testClearStaleCollections_removesInvalid();
   void testClearStaleCollections_keepsValid();
 
+  // Corrupted-input recovery (Kartend-9c9)
+  void testInitialize_missingFile();
+  void testInitialize_emptyFile();
+  void testInitialize_truncatedJson();
+  void testInitialize_garbageBytes();
+  void testInitialize_nonObjectRoot();
+
 private:
   SessionManager *m_sessionManager;
   QTemporaryDir *m_tempDir;
@@ -56,11 +64,15 @@ private:
 void TestSessionManager::initTestCase() {
   m_tempDir = new QTemporaryDir();
   QVERIFY(m_tempDir->isValid());
+  // Redirect QStandardPaths to a writable test sandbox so initialize()
+  // reads from a controlled location instead of the real ~/.cache/kartend.
+  QStandardPaths::setTestModeEnabled(true);
 }
 
 void TestSessionManager::cleanupTestCase() {
   delete m_tempDir;
   m_tempDir = nullptr;
+  QStandardPaths::setTestModeEnabled(false);
 }
 
 void TestSessionManager::init() {
@@ -220,6 +232,72 @@ void TestSessionManager::testClearStaleCollections_keepsValid() {
                                                       itemCount, recursiveCount);
   QVERIFY(found);
   QCOMPARE(itemCount, 25);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Corrupted-input recovery (Kartend-9c9)
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+QString writeSessionFile(const QByteArray &bytes) {
+  const QString cacheRoot =
+      QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) +
+      "/kartend";
+  const QString metadataDir = cacheRoot + "/metadata";
+  QDir().mkpath(metadataDir);
+  const QString path = metadataDir + "/session.json";
+  // Also remove the legacy fallback so initialize() doesn't pick it up.
+  QFile::remove(metadataDir + "/cache.json");
+  QFile f(path);
+  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    return path;
+  }
+  f.write(bytes);
+  f.close();
+  return path;
+}
+
+void removeSessionFiles() {
+  const QString metadataDir =
+      QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) +
+      "/kartend/metadata";
+  QFile::remove(metadataDir + "/session.json");
+  QFile::remove(metadataDir + "/cache.json");
+}
+} // namespace
+
+void TestSessionManager::testInitialize_missingFile() {
+  removeSessionFiles();
+  m_sessionManager->initialize();
+  QCOMPARE(m_sessionManager->getGlobalItemCount(), qint64{0});
+  QCOMPARE(m_sessionManager->getLastSelectedIndex("AnyCollection"), -1);
+}
+
+void TestSessionManager::testInitialize_emptyFile() {
+  writeSessionFile(QByteArray{});
+  m_sessionManager->initialize();
+  QCOMPARE(m_sessionManager->getGlobalItemCount(), qint64{0});
+  QCOMPARE(m_sessionManager->getLastSelectedIndex("AnyCollection"), -1);
+}
+
+void TestSessionManager::testInitialize_truncatedJson() {
+  writeSessionFile(QByteArray("{\"global\": 42, \"collections\": {\"Games\": "));
+  m_sessionManager->initialize();
+  QCOMPARE(m_sessionManager->getGlobalItemCount(), qint64{0});
+}
+
+void TestSessionManager::testInitialize_garbageBytes() {
+  writeSessionFile(QByteArray("\x00\x01\x02not-json-at-all\xff", 19));
+  m_sessionManager->initialize();
+  QCOMPARE(m_sessionManager->getGlobalItemCount(), qint64{0});
+  QCOMPARE(m_sessionManager->getLastSelectedIndex("AnyCollection"), -1);
+}
+
+void TestSessionManager::testInitialize_nonObjectRoot() {
+  writeSessionFile(QByteArray("[1, 2, 3]"));
+  m_sessionManager->initialize();
+  QCOMPARE(m_sessionManager->getGlobalItemCount(), qint64{0});
+  QCOMPARE(m_sessionManager->getLastSelectedIndex("AnyCollection"), -1);
 }
 
 QTEST_MAIN(TestSessionManager)
