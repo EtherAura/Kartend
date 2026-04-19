@@ -655,7 +655,18 @@ m_debouncer->trigger();
 
 ### Error Handling
 
-Use `ErrorUtils` for structured error reporting:
+Use `ErrorUtils` for structured error reporting. The canonical patterns are:
+
+- Test for an error with `ctx.isError()` (or `result.isError()` for `Result<T>`).
+  Do **not** compare `ctx.code` against `ErrorCode::Success` directly.
+- Test for a specific failure mode on a `Result<T>` with
+  `result.hasErrorCode(ErrorCode::SomeCode)`. Do **not** dereference
+  `result.error().code` for that purpose.
+- Prefer `Result<T>` at I/O boundaries (file, database, network, parsing) and
+  raw `ErrorContext` for fire-and-log call sites that have no value to return.
+- `ErrorCode::Success` is the sentinel for non-error contexts; never raise an
+  error with this code.
+
 ```cpp
 #include "errorutils.h"
 

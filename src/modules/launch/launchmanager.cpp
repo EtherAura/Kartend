@@ -264,7 +264,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
   if (commandResult.isError()) {
     ErrorUtils::logError(commandResult.error());
     const QString msg = commandResult.error().message;
-    if (commandResult.error().code == ErrorCode::InvalidFilePath) {
+    if (commandResult.hasErrorCode(ErrorCode::InvalidFilePath)) {
       QMessageBox::warning(nullptr, "Invalid File Path",
                            QString("%1\n\nPath: %2").arg(msg, filePath));
     } else if (msg.contains("core", Qt::CaseInsensitive)) {

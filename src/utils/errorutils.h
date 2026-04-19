@@ -17,7 +17,10 @@ enum class Severity {
 
 // Error codes for categorizing errors across the application
 enum class ErrorCode {
-  None = 0,
+  // Sentinel value for non-error contexts. Test against errors via
+  // ErrorContext::isError() or Result::isError() rather than comparing
+  // against this enumerator directly.
+  Success = 0,
 
   // Database errors (100-199)
   DatabaseConnectionFailed = 100,
@@ -56,13 +59,13 @@ enum class ErrorCode {
 
 // Structured error context for detailed error reporting
 struct ErrorContext {
-  ErrorCode code = ErrorCode::None;
+  ErrorCode code = ErrorCode::Success;
   Severity severity = Severity::Error;
   QString message;
   QString details;
   QString source; // e.g., "QueryManager::fetchItemCount"
 
-  [[nodiscard]] bool isError() const { return code != ErrorCode::None; }
+  [[nodiscard]] bool isError() const { return code != ErrorCode::Success; }
   [[nodiscard]] bool isCritical() const {
     return severity == Severity::Critical;
   }
@@ -177,8 +180,8 @@ inline void logError(const ErrorContext &ctx) {
 // Convert error code to human-readable string
 [[nodiscard]] inline QString errorCodeToString(ErrorCode code) {
   switch (code) {
-  case ErrorCode::None:
-    return "None";
+  case ErrorCode::Success:
+    return "Success";
   case ErrorCode::DatabaseConnectionFailed:
     return "DatabaseConnectionFailed";
   case ErrorCode::DatabaseQueryFailed:
