@@ -2087,9 +2087,14 @@ void ScrollManager::calculateVirtualMetrics() {
     m_metrics.actualGridWidth = m_metrics.itemWidth + (m_metrics.margins * 2);
   }
 
-  // Adjust for filtered view if needed
-  bool isFiltered = m_filterManager && m_filterManager->isFiltered();
-  if (isFiltered && m_totalItems > 0 && m_totalItems < m_metrics.itemsPerRow) {
+  // Shrink the virtual container width when the entire grid fits in a
+  // single partial row. Without this, totalWidth always reflects a full
+  // itemsPerRow-wide row, so a centered container ends up looking left-
+  // aligned because the partial widgets occupy slots 0..N-1 of a wider
+  // block. Applies to both naturally small collections (e.g. a parent
+  // showing only 3 subcollections at gridWidth=7) and search-filtered
+  // result sets.
+  if (m_totalItems > 0 && m_totalItems < m_metrics.itemsPerRow) {
     m_metrics = GridLayoutCalculator::adjustForFilter(m_metrics, m_totalItems);
   }
 
