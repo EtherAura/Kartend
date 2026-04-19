@@ -18,7 +18,8 @@ Build options:
   --tests           Configure with -DBUILD_TESTS=ON
   --run-tests       Run ctest after a successful build (requires --tests)
   --install         Run `cmake --install` after a successful build (honors DESTDIR;
-                    may require sudo when installing to system prefixes)
+                    auto-elevates with sudo or doas when the install prefix
+                    isn't writable by the current user)
   --ninja           Force Ninja generator (if available)
   --make            Force Unix Makefiles generator
   --incremental     Reuse existing build directory (don't rm -rf it) (default)
@@ -338,6 +339,37 @@ run_ctest() {
 # Step planning
 plan_step() { ALL_STEPS+=("$1"); PROGRESS_TOTAL=${#ALL_STEPS[@]}; }
 mark_next_step() { CURRENT_STEP_DESC="$1"; CURRENT_STEP_IDX="$NEXT_STEP_IDX"; NEXT_STEP_IDX=$((NEXT_STEP_IDX + 1)); }
+
+# Run `cmake --install` and transparently elevate with sudo when the install
+# prefix isn't writable by the current user (e.g. /usr/local). DESTDIR is honored.
+do_cmake_install() {
+  local cmake_exe="$1"; shift
+  local bdir="$1"; shift
+  local prefix
+  prefix="$("$cmake_exe" -L -N "$bdir" 2>/dev/null | awk -F= '/^CMAKE_INSTALL_PREFIX:/{print $2; exit}')"
+  local target="${DESTDIR:-}${prefix:-/usr/local}"
+  # Walk up to the first existing ancestor; that's what we need write access to.
+  local probe="$target"
+  while [ -n "$probe" ] && [ ! -e "$probe" ]; do
+    probe="$(dirname "$probe")"
+  done
+  if [ -n "$probe" ] && [ -w "$probe" ]; then
+    "$cmake_exe" --install "$bdir"
+  elif command -v sudo >/dev/null 2>&1; then
+    echo "Install prefix '$target' is not writable; elevating with sudo." >&2
+    sudo -E "$cmake_exe" --install "$bdir"
+  elif command -v doas >/dev/null 2>&1; then
+    echo "Install prefix '$target' is not writable; elevating with doas." >&2
+    # doas doesn't have a generic env-preserve flag; pass DESTDIR explicitly if set.
+    if [ -n "${DESTDIR:-}" ]; then
+      doas env "DESTDIR=$DESTDIR" "$cmake_exe" --install "$bdir"
+    else
+      doas "$cmake_exe" --install "$bdir"
+    fi
+  else
+    "$cmake_exe" --install "$bdir"
+  fi
+}
 
 # Critical step: fails immediately on error
 run_step() {
@@ -805,7 +837,7 @@ EOF
   fi
 
   if $install_after_build; then
-    run_step "Install" "$logs_dir/install.log" "$cmake_bin" --install "$build_dir"
+    run_step "Install" "$logs_dir/install.log" do_cmake_install "$cmake_bin" "$build_dir"
   fi
 
   abort_if_failed
@@ -1111,7 +1143,7 @@ if $pgo_build; then
   fi
 
   if $install_after_build; then
-    run_step "Install" "$logs_dir/install.log" cmake --install "$build_dir"
+    run_step "Install" "$logs_dir/install.log" do_cmake_install cmake "$build_dir"
   fi
 
   abort_if_failed
@@ -1219,7 +1251,7 @@ if ! $pgo_build; then
   fi
 
   if $install_after_build; then
-    run_step "Install" "$logs_dir/install.log" "$cmake_bin" --install "$build_dir"
+    run_step "Install" "$logs_dir/install.log" do_cmake_install "$cmake_bin" "$build_dir"
   fi
 
   abort_if_failed
