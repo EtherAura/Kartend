@@ -356,15 +356,19 @@ do_cmake_install() {
   if [ -n "$probe" ] && [ -w "$probe" ]; then
     "$cmake_exe" --install "$bdir"
   elif command -v sudo >/dev/null 2>&1; then
-    echo "Install prefix '$target' is not writable; elevating with sudo." >&2
+    # Clear the in-progress step line on the user's TTY so the password prompt
+    # doesn't collide with the progress indicator. Prime sudo so the prompt
+    # appears even when stderr is captured by the run_step harness.
+    [ -w /dev/tty ] && printf '\r\033[2K' >/dev/tty || true
+    sudo -v </dev/tty >/dev/tty 2>/dev/tty || true
     sudo -E "$cmake_exe" --install "$bdir"
   elif command -v doas >/dev/null 2>&1; then
-    echo "Install prefix '$target' is not writable; elevating with doas." >&2
+    [ -w /dev/tty ] && printf '\r\033[2K' >/dev/tty || true
     # doas doesn't have a generic env-preserve flag; pass DESTDIR explicitly if set.
     if [ -n "${DESTDIR:-}" ]; then
-      doas env "DESTDIR=$DESTDIR" "$cmake_exe" --install "$bdir"
+      doas env "DESTDIR=$DESTDIR" "$cmake_exe" --install "$bdir" </dev/tty
     else
-      doas "$cmake_exe" --install "$bdir"
+      doas "$cmake_exe" --install "$bdir" </dev/tty
     fi
   else
     "$cmake_exe" --install "$bdir"
