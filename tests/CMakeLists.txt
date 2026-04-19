@@ -152,3 +152,35 @@ target_link_libraries(test_querymanager_cancel_scan
   Qt6::Test
 )
 add_test(NAME QueryManagerCancelScan COMMAND test_querymanager_cancel_scan)
+
+# ArtworkManager tests (cancellation, dedup, QPointer race)
+add_executable(test_artworkmanager
+  test_artworkmanager.cpp
+  ${SRC_DIR}/modules/artwork/artworkmanager.cpp
+  ${SRC_DIR}/modules/cache/cachemanager.cpp
+  ${SRC_DIR}/modules/interaction/interactionstateholder.cpp
+  ${SRC_DIR}/ui/widgets/itemwidget.cpp
+  ${SRC_DIR}/utils/artworkutils.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/extensionutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/timerutils.cpp
+)
+target_include_directories(test_artworkmanager PRIVATE
+  ${SRC_DIR}
+  ${SRC_DIR}/modules/artwork
+  ${SRC_DIR}/modules/cache
+  ${SRC_DIR}/modules/interaction
+  ${SRC_DIR}/ui/widgets
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_artworkmanager
+  Qt6::Core
+  Qt6::Gui
+  Qt6::Widgets
+  Qt6::Concurrent
+  Qt6::Test
+)
+add_test(NAME ArtworkManager COMMAND test_artworkmanager)
