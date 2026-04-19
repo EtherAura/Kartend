@@ -19,6 +19,9 @@ build/
 # Qt Creator
 CMakeLists.txt.user*
 
+# Obsidian vault metadata (personal note-taking, not project state)
+.obsidian/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
