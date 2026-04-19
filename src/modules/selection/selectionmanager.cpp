@@ -832,6 +832,8 @@ void SelectionManager::scheduleSidebarMetadataUpdateIfVisible(
   }
 
   if (secondaryDelayMs > 0) {
+    // Second pass after the layout has settled, in case the first attempt
+    // ran before the widget completed asynchronous metadata loading.
     QTimer::singleShot(secondaryDelayMs, this, updateSidebar);
   }
 }

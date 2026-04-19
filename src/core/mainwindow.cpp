@@ -1065,6 +1065,8 @@ void MainWindow::setupEventFilters() {
 }
 
 void MainWindow::setupInitialTimers() {
+  // Defer initial horizontal centering until after the first show event so
+  // the scroll area has accurate viewport metrics to center against.
   QTimer::singleShot(UIConstants::Sidebar::INITIAL_CENTER_SCROLL_DELAY_MS, this,
                      [this]() {
                        if (getScrollManager()) {

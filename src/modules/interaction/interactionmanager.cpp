@@ -1459,6 +1459,8 @@ void InteractionManager::scheduleSidebarMetadataUpdateIfVisible(
     int targetIndex, int initialDelayMs, int secondaryDelayMs) {
   QPointer<InteractionManager> guard(this);
   auto schedule = [guard, targetIndex](int delay) {
+    // Defer the sidebar metadata refresh so the target ItemWidget has
+    // a chance to materialize and populate metadata before we read it.
     QTimer::singleShot(delay, guard, [guard, targetIndex]() {
       if (!guard) {
         return;
