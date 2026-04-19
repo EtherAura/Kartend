@@ -1804,14 +1804,59 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
   bool needsCollectionJoin = (sortMode == SortMode::CollectionAscending ||
                               sortMode == SortMode::CollectionDescending);
 
+  // When filtering, use FTS to match the semantics of fetchItemCount and the
+  // slow-path fetchItemsRange. Mixing FTS-prefix counting with LIKE-substring
+  // cache building leaves a count > cache-size mismatch, surfacing as blank
+  // placeholder tiles at the tail of the result grid (bd Kartend-m9s).
+  const QString ftsQuery =
+      (m_itemsFtsAvailable && m_itemsFtsReady && !trimmedFilter.isEmpty())
+          ? buildFtsPrefixQuery(trimmedFilter)
+          : QString();
+  const bool useFts = !ftsQuery.isEmpty();
+
   QString sql;
   QString filterClause;
-  if (!trimmedFilter.isEmpty()) {
+  if (!trimmedFilter.isEmpty() && !useFts) {
     filterClause =
         needsCollectionJoin ? " AND i.name LIKE ?" : " AND name LIKE ?";
   }
 
-  if (needsCollectionJoin) {
+  if (useFts) {
+    // FTS-backed select: filter rowids via items_fts MATCH then resolve to
+    // items rows for collection joining / dedup. Mirrors the slow path's
+    // FTS branch in fetchItemsRange so cache size matches count.
+    if (needsCollectionJoin) {
+      if (useTempTable) {
+        sql = "SELECT i.path, MIN(i.collection_uuid) as collection_uuid FROM "
+              "items i "
+              "JOIN items_fts f ON f.rowid = i.id "
+              "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
+              "WHERE f MATCH ? AND EXISTS "
+              "(SELECT 1 FROM query_uuids WHERE query_uuids.uuid = "
+              "i.collection_uuid) GROUP BY i.path";
+      } else {
+        sql = "SELECT i.path, MIN(i.collection_uuid) as collection_uuid FROM "
+              "items i "
+              "JOIN items_fts f ON f.rowid = i.id "
+              "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
+              "WHERE f MATCH ? AND i.collection_uuid IN " +
+              buildUuidInClause(uuids.size()) + " GROUP BY i.path";
+      }
+    } else {
+      if (useTempTable) {
+        sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM "
+              "items_fts "
+              "WHERE items_fts MATCH ? AND EXISTS "
+              "(SELECT 1 FROM query_uuids WHERE query_uuids.uuid = "
+              "collection_uuid) GROUP BY path";
+      } else {
+        sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM "
+              "items_fts "
+              "WHERE items_fts MATCH ? AND collection_uuid IN " +
+              buildUuidInClause(uuids.size()) + " GROUP BY path";
+      }
+    }
+  } else if (needsCollectionJoin) {
     // Join with collections to get collection name for sorting.
     // Use GROUP BY path to deduplicate paths that appear in multiple
     // collections (e.g., when showAllSubcollectionItems=true).
@@ -1873,12 +1918,16 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
   selectQuery.prepare(sql);
 
   int bindPos = 0;
+  // Bind FTS MATCH first when present (it appears first in the FTS SQL)
+  if (useFts) {
+    selectQuery.bindValue(bindPos++, ftsQuery);
+  }
   if (!useTempTable) {
     for (const QString &uuid : uuids) {
       selectQuery.bindValue(bindPos++, uuid);
     }
   }
-  if (!trimmedFilter.isEmpty()) {
+  if (!trimmedFilter.isEmpty() && !useFts) {
     selectQuery.bindValue(bindPos++, "%" + trimmedFilter + "%");
   }
 
@@ -2829,12 +2878,17 @@ int QueryManager::fetchItemCountImpl(
   if (useFts) {
     // Query FTS table directly - the FTS table contains name,
     // path, and collection_uuid so we can filter directly.
+    // Use COUNT(DISTINCT path) to match fetchItemsRange's GROUP BY path
+    // dedup — same path can appear in multiple collections (e.g. with
+    // showAllSubcollectionItems=true), which would otherwise leave blank
+    // placeholder tiles at the tail when count > distinct rows
+    // (bd Kartend-m9s).
     if (useTempTable) {
-      sql = "SELECT COUNT(*) FROM items_fts "
+      sql = "SELECT COUNT(DISTINCT path) FROM items_fts "
             "WHERE items_fts MATCH ? AND EXISTS " +
             uuidClause;
     } else {
-      sql = "SELECT COUNT(*) FROM items_fts "
+      sql = "SELECT COUNT(DISTINCT path) FROM items_fts "
             "WHERE items_fts MATCH ? AND collection_uuid IN " +
             uuidClause;
     }
