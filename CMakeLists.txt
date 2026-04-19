@@ -80,6 +80,7 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SOURCES
   ${SRC_DIR}/core/main.cpp
   ${SRC_DIR}/core/mainwindow.cpp
+  ${SRC_DIR}/core/mainwindowwiring.cpp
   ${SRC_DIR}/core/menucontroller.cpp
   ${SRC_DIR}/modules/animation/animationmanager.cpp
   ${SRC_DIR}/modules/application/applicationmanager.cpp
@@ -88,6 +89,7 @@ set(SOURCES
   ${SRC_DIR}/modules/database/databasemanager.cpp
   ${SRC_DIR}/modules/event/eventmanager.cpp
   ${SRC_DIR}/modules/interaction/interactionmanager.cpp
+  ${SRC_DIR}/modules/interaction/interactionmanagerwiring.cpp
   ${SRC_DIR}/modules/interaction/arrownavigationhandler.cpp
   ${SRC_DIR}/modules/interaction/interactionstateholder.cpp
   ${SRC_DIR}/modules/gamepad/gamepadmanager.cpp
@@ -132,6 +134,7 @@ set(SOURCES
   ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/artworkutils.cpp
   ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/configvalidation.cpp
 )
 
 set(HEADERS
