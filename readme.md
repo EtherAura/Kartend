@@ -6,17 +6,15 @@ Collection & Artwork Frontend for KDE
 
 ## Demos
 
+> GitHub strips inline `<video>` tags from rendered READMEs, so click a thumbnail to download/play the 4K WebM.
+
 ### Launching items
 
-<video src="docs/media/launch-item.webm" controls width="720"></video>
-
-> If the video does not play in your browser, [download it](docs/media/launch-item.webm).
+[![Launching items demo](docs/media/launch-item-poster.png)](docs/media/launch-item.webm)
 
 ### Settings
 
-<video src="docs/media/settings.webm" controls width="720"></video>
-
-> If the video does not play in your browser, [download it](docs/media/settings.webm).
+[![Settings demo](docs/media/settings-poster.png)](docs/media/settings.webm)
 
 ## Features
 
