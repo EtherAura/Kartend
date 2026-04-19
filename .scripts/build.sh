@@ -7,6 +7,7 @@ Usage: .scripts/build.sh [options]
 
 Build modes (mutually exclusive):
   --debug           Debug build (keeps qDebug/qWarning output)
+  --relwithdebinfo  Release build with debug symbols (for profiling)
   --sanitize        Sanitizer build (Debug + sanitizers)
   --maintenance     Release build + static analysis helpers
   --pgo             Two-pass PGO build (generate + use)
@@ -38,6 +39,7 @@ EOF
 
 # Parse args
 debug_build=false
+relwithdebinfo_build=false
 sanitize_build=false
 maintenance_build=false
 apply_fixes=false
@@ -58,6 +60,7 @@ for arg in "${@:-}"; do
   case "$arg" in
     -h|--help) usage; exit 0 ;;
     --debug)       debug_build=true ;;
+    --relwithdebinfo) relwithdebinfo_build=true ;;
     --sanitize|--sanitizers) sanitize_build=true ;;
     --maintenance) maintenance_build=true ;;
     --apply-fixes) apply_fixes=true ;;
@@ -86,6 +89,14 @@ if ($debug_build && $sanitize_build) || ($maintenance_build && $sanitize_build);
 fi
 if $debug_build && $maintenance_build; then
   echo "Error: --debug and --maintenance are mutually exclusive."
+  exit 1
+fi
+if $relwithdebinfo_build && ($debug_build || $sanitize_build || $maintenance_build); then
+  echo "Error: --relwithdebinfo is mutually exclusive with --debug/--sanitize/--maintenance."
+  exit 1
+fi
+if $relwithdebinfo_build && ($pgo_build || $pgo_generate || $pgo_use); then
+  echo "Error: --relwithdebinfo is mutually exclusive with PGO options."
   exit 1
 fi
 if $pgo_generate && $pgo_use; then
@@ -889,6 +900,29 @@ elif $debug_build && ! $pgo_build; then
   progress_clearline
   printf "${CYAN}[*]${RESET} %-30s${CYAN}[%02d${MAGENTA}/${CYAN}%02d]${RESET}\n" "Building in DEBUG mode" 0 "$PROGRESS_TOTAL"
   build_type="debug"; QUIET=true
+elif $relwithdebinfo_build && ! $pgo_build; then
+  ALL_STEPS=(); NEXT_STEP_IDX=0; PROGRESS_CUR=0
+  plan_step "Prepare build directory"
+  plan_step "Configure"
+  plan_step "Build"
+  if $run_tests; then
+    plan_step "Run tests"
+  fi
+  if $make_reports; then
+    plan_step "Assemble reports"
+  fi
+  if $make_archive; then
+    plan_step "Stage files for archive"
+    plan_step "Create archive"
+    plan_step "Cleanup archive staging"
+  fi
+  if ! $keep_builds; then
+    plan_step "Prune build directories"
+  fi
+
+  progress_clearline
+  printf "${CYAN}[*]${RESET} %-30s${CYAN}[%02d${MAGENTA}/${CYAN}%02d]${RESET}\n" "Building in RELWITHDEBINFO mode" 0 "$PROGRESS_TOTAL"
+  build_type="relwithdebinfo"; QUIET=true
 elif ! $pgo_build; then
   ALL_STEPS=(); NEXT_STEP_IDX=0; PROGRESS_CUR=0
   plan_step "Prepare build directory"
@@ -1088,11 +1122,16 @@ if ! $pgo_build; then
   mkdir -p "$logs_dir" && mv -f "$prep_tmp_log" "$logs_dir/prepare.log"
 
   # Configure and build
+  case "$build_type" in
+    debug|sanitize) cmake_build_type="Debug" ;;
+    relwithdebinfo) cmake_build_type="RelWithDebInfo" ;;
+    *)              cmake_build_type="Release" ;;
+  esac
   cmake_args=(
     -S "$root_dir"
     -B "$build_dir"
     "${generator_args[@]}"
-    "-DCMAKE_BUILD_TYPE=$( $debug_build && echo Debug || echo Release )"
+    "-DCMAKE_BUILD_TYPE=$cmake_build_type"
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
     "-DBUILD_DATE=$TS_HUMAN"
     -DBUILD_TESTS=OFF
@@ -1109,7 +1148,7 @@ if ! $pgo_build; then
   if ! $use_ccache; then
     cmake_args+=(-DENABLE_CCACHE=OFF)
   fi
-  if [ "$build_type" = "release" ]; then
+  if [ "$build_type" = "release" ] || [ "$build_type" = "relwithdebinfo" ]; then
     cmake_args+=(-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++)
   fi
   if $pgo_generate || $pgo_use; then
