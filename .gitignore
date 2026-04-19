@@ -25,8 +25,8 @@ __pycache__/
 
 # Logs and crash dumps
 *.log
-core
-core.*
+/core
+/core.*
 
 # Root compile_commands.json (CMake export sometimes mirrored here)
 /compile_commands.json
