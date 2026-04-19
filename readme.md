@@ -1,15 +1,22 @@
 # Kartend
 
-[![CI](https://github.com/EtherAura/Kartend/actions/workflows/build.yml/badge.svg)](https://github.com/EtherAura/Kartend/actions/workflows/build.yml)
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/EtherAura/Kartend)](https://github.com/EtherAura/Kartend/releases)
-
 Collection & Artwork Frontend for KDE
 
 **Kartend** (German: *Carding*) — Carding is a mechanical process that aligns cotton, wool or other fibers in the manufacture of textiles. Kartend is a highly customizable frontend that will allow you to organize, manage, and launch your files.
 
-<!-- TODO: Add screenshot here -->
-<!-- ![Kartend Screenshot](docs/screenshot.png) -->
+## Demos
+
+### Launching items
+
+<video src="docs/media/launch-item.webm" controls width="720"></video>
+
+> If the video does not play in your browser, [download it](docs/media/launch-item.webm).
+
+### Settings
+
+<video src="docs/media/settings.webm" controls width="720"></video>
+
+> If the video does not play in your browser, [download it](docs/media/settings.webm).
 
 ## Features
 
@@ -105,7 +112,7 @@ See [docs/architecture.md](docs/architecture.md) for detailed architecture docum
 
 ## License
 
-This project is licensed under the [GNU General Public License v3.0](LICENSE).
+Proprietary (pre-release). See LICENSE.
 
 ---
 
