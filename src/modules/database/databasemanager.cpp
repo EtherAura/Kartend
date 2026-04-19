@@ -465,7 +465,7 @@ void DatabaseManager::cancelScan() {
 
 // Count items in collection and descendants using uuid identity
 auto DatabaseManager::countCollectionRecursive(
-    int collectionIndex, const QList<CollectionConfig> &allCollections)
+    int collectionIndex, const QList<CollectionConfig> &allCollections) const
     -> qint64 {
   if (!CollectionUtils::isValidIndex(collectionIndex, &allCollections)) {
     return 0;
@@ -658,6 +658,10 @@ auto DatabaseManager::resolveFilePath(const QString &rawEntry,
   // Simple case: prepend media directory
   const QString mediaDir = context.config.mediaDirectory.trimmed();
   if (mediaDir.isEmpty()) {
+    qCDebug(lcDatabaseManager)
+        << "resolveFilePath: cannot resolve relative entry" << rawEntry
+        << "-- collection" << context.config.name
+        << "has empty mediaDirectory and showAllSubcollectionItems is false";
     return {};
   }
   return QDir(mediaDir).absoluteFilePath(rawEntry);
@@ -705,6 +709,10 @@ auto DatabaseManager::resolveRelativeFilePath(
     }
   }
 
+  qCDebug(lcDatabaseManager)
+      << "resolveRelativeFilePath: failed to resolve" << rawFileName
+      << "-- not found in fileNames map (" << fileNames.size()
+      << "entries), m_relativeToFullPath cache, or collection-index lookup";
   return {};
 }
 
@@ -780,7 +788,7 @@ void DatabaseManager::clearCollectionFromDatabaseByUuid(
 }
 
 // Count items in a single collection by uuid
-auto DatabaseManager::countCollectionByUuid(const QString &collectionUuid)
+auto DatabaseManager::countCollectionByUuid(const QString &collectionUuid) const
     -> qint64 {
   if (!m_db.isOpen()) {
     return 0;

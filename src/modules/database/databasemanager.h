@@ -76,7 +76,7 @@ public:
                           const QHash<QString, QString> &fileNames) const;
   [[nodiscard]] qint64
   countCollectionRecursive(int collectionIndex,
-                           const QList<CollectionConfig> &allCollections);
+                           const QList<CollectionConfig> &allCollections) const;
 
 signals:
   void itemsLoaded(const QStringList &filePaths,
@@ -185,7 +185,7 @@ private:
                            const CollectionConfig &collection);
   static int getCharacterSortPriority(const QString &text);
   static void sortFiles(QStringList &allFilePaths);
-  [[nodiscard]] qint64 countCollectionByUuid(const QString &collectionUuid);
+  [[nodiscard]] qint64 countCollectionByUuid(const QString &collectionUuid) const;
   [[nodiscard]] qint64
   countGlobal(const QList<CollectionConfig> &allCollections);
   void clearCollectionFromDatabaseByUuid(const QString &collectionUuid);
