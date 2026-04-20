@@ -125,6 +125,7 @@ set(SOURCES
   ${SRC_DIR}/modules/settings/settingsdialogcontroller.cpp
   ${SRC_DIR}/modules/sidebar/sidebarmanager.cpp
   ${SRC_DIR}/modules/viewport/viewportmanager.cpp
+  ${SRC_DIR}/modules/viewport/viewportmanagervisibility.cpp
   ${SRC_DIR}/ui/dialogs/errordialog.cpp
   ${SRC_DIR}/ui/dialogs/settingsdialog.cpp
   ${SRC_DIR}/ui/dialogs/shortcutsdialog.cpp
