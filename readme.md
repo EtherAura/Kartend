@@ -112,7 +112,7 @@ See [docs/architecture.md](docs/architecture.md) for detailed architecture docum
 
 ## License
 
-Proprietary (pre-release). See LICENSE.
+See LICENSE.
 
 ---
 
