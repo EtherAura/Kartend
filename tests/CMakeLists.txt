@@ -133,6 +133,7 @@ add_test(NAME SessionManager COMMAND test_sessionmanager)
 add_executable(test_querymanager_cancel_scan
   test_querymanager_cancel_scan.cpp
   ${SRC_DIR}/modules/query/querymanager.cpp
+  ${SRC_DIR}/modules/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/session/sessionmanager.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/settingsutils.cpp

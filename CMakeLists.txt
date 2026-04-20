@@ -104,6 +104,7 @@ set(SOURCES
   ${SRC_DIR}/modules/overlay/selectionoverlaymanager.cpp
   ${SRC_DIR}/modules/overlay/searchloadingoverlay.cpp
   ${SRC_DIR}/modules/query/querymanager.cpp
+  ${SRC_DIR}/modules/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/restore/selectionrestoremanager.cpp
   ${SRC_DIR}/modules/scroll/scrollmanager.cpp
   ${SRC_DIR}/modules/scroll/arrowkeyscrollhelper.cpp
