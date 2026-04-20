@@ -184,3 +184,22 @@ target_link_libraries(test_artworkmanager
   Qt6::Test
 )
 add_test(NAME ArtworkManager COMMAND test_artworkmanager)
+
+# StringUtils tests (header-only)
+add_executable(test_stringutils test_stringutils.cpp)
+target_link_libraries(test_stringutils Qt6::Core Qt6::Test)
+add_test(NAME StringUtils COMMAND test_stringutils)
+
+# CollectionUtils tests (enum conversions, validation, UUID)
+add_executable(test_collectionutils
+  test_collectionutils.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
+)
+target_include_directories(test_collectionutils PRIVATE
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_collectionutils Qt6::Core Qt6::Widgets Qt6::Test)
+add_test(NAME CollectionUtils COMMAND test_collectionutils)
