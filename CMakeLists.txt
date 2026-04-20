@@ -85,6 +85,7 @@ set(SOURCES
   ${SRC_DIR}/modules/animation/animationmanager.cpp
   ${SRC_DIR}/modules/application/applicationmanager.cpp
   ${SRC_DIR}/modules/artwork/artworkmanager.cpp
+  ${SRC_DIR}/modules/artwork/artworksilentloading.cpp
   ${SRC_DIR}/modules/cache/cachemanager.cpp
   ${SRC_DIR}/modules/database/databasemanager.cpp
   ${SRC_DIR}/modules/event/eventmanager.cpp

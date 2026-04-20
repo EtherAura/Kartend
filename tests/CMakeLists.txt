@@ -157,6 +157,7 @@ add_test(NAME QueryManagerCancelScan COMMAND test_querymanager_cancel_scan)
 add_executable(test_artworkmanager
   test_artworkmanager.cpp
   ${SRC_DIR}/modules/artwork/artworkmanager.cpp
+  ${SRC_DIR}/modules/artwork/artworksilentloading.cpp
   ${SRC_DIR}/modules/cache/cachemanager.cpp
   ${SRC_DIR}/modules/interaction/interactionstateholder.cpp
   ${SRC_DIR}/ui/widgets/itemwidget.cpp
