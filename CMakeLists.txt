@@ -129,6 +129,7 @@ set(SOURCES
   ${SRC_DIR}/ui/dialogs/shortcutsdialog.cpp
   ${SRC_DIR}/ui/widgets/metadatasidebar.cpp
   ${SRC_DIR}/ui/widgets/itemwidget.cpp
+  ${SRC_DIR}/ui/widgets/itemwidgetpaint.cpp
   ${SRC_DIR}/ui/widgets/itemwidgetsetters.cpp
   ${SRC_DIR}/ui/widgets/loadingoverlay.cpp
   ${SRC_DIR}/ui/widgets/listheaderwidget.cpp

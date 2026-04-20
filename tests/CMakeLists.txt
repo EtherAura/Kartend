@@ -74,6 +74,7 @@ add_executable(test_widgetpoolmanager
   test_widgetpoolmanager.cpp
   ${SRC_DIR}/modules/widgetpool/widgetpoolmanager.cpp
   ${SRC_DIR}/ui/widgets/itemwidget.cpp
+  ${SRC_DIR}/ui/widgets/itemwidgetpaint.cpp
   ${SRC_DIR}/ui/widgets/itemwidgetsetters.cpp
 )
 target_include_directories(test_widgetpoolmanager PRIVATE
@@ -163,6 +164,7 @@ add_executable(test_artworkmanager
   ${SRC_DIR}/modules/cache/cachemanager.cpp
   ${SRC_DIR}/modules/interaction/interactionstateholder.cpp
   ${SRC_DIR}/ui/widgets/itemwidget.cpp
+  ${SRC_DIR}/ui/widgets/itemwidgetpaint.cpp
   ${SRC_DIR}/ui/widgets/itemwidgetsetters.cpp
   ${SRC_DIR}/utils/artworkutils.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
