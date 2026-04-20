@@ -91,6 +91,7 @@ set(SOURCES
   ${SRC_DIR}/modules/event/eventmanager.cpp
   ${SRC_DIR}/modules/interaction/interactionmanager.cpp
   ${SRC_DIR}/modules/interaction/interactionmanagerwiring.cpp
+  ${SRC_DIR}/modules/interaction/interactionmanagerholdscroll.cpp
   ${SRC_DIR}/modules/interaction/arrownavigationhandler.cpp
   ${SRC_DIR}/modules/interaction/interactionstateholder.cpp
   ${SRC_DIR}/modules/gamepad/gamepadmanager.cpp
