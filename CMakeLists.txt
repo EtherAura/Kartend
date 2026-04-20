@@ -107,6 +107,7 @@ set(SOURCES
   ${SRC_DIR}/modules/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/restore/selectionrestoremanager.cpp
   ${SRC_DIR}/modules/scroll/scrollmanager.cpp
+  ${SRC_DIR}/modules/scroll/scrollmanagerfilter.cpp
   ${SRC_DIR}/modules/scroll/arrowkeyscrollhelper.cpp
   ${SRC_DIR}/modules/scroll/virtualcontainermanager.cpp
   ${SRC_DIR}/modules/scroll/selectioncoordinator.cpp
