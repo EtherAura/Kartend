@@ -101,6 +101,7 @@ set(SOURCES
   ${SRC_DIR}/modules/navigation/navigationmanager.cpp
   ${SRC_DIR}/modules/navigation/navigationmanagerfilter.cpp
   ${SRC_DIR}/modules/navigation/navigationmanagersubcollection.cpp
+  ${SRC_DIR}/modules/navigation/navigationmanagertitle.cpp
   ${SRC_DIR}/modules/overlay/selectionoverlaymanager.cpp
   ${SRC_DIR}/modules/overlay/searchloadingoverlay.cpp
   ${SRC_DIR}/modules/query/querymanager.cpp
