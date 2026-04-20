@@ -122,6 +122,7 @@ set(SOURCES
   ${SRC_DIR}/modules/selection/selectionmanager.cpp
   ${SRC_DIR}/modules/session/sessionmanager.cpp
   ${SRC_DIR}/modules/settings/settingsmanager.cpp
+  ${SRC_DIR}/modules/settings/settingsdialogcontroller.cpp
   ${SRC_DIR}/modules/sidebar/sidebarmanager.cpp
   ${SRC_DIR}/modules/viewport/viewportmanager.cpp
   ${SRC_DIR}/ui/dialogs/errordialog.cpp

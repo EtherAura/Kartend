@@ -1,0 +1,482 @@
+// Settings dialog orchestration extracted from settingsmanager.cpp:
+//   - openSettingsDialog
+//   - handleReloadRequired
+//   - handleLayoutChanges
+// Plus the file-local anonymous-namespace helpers used by these methods
+// (compareNonReloadFields, compareReloadFields, updateViewingFlags,
+// updateWindowTitle, applyScrollbarSettings, refreshSidebar,
+// handleScrollBranch, detectChanges).
+#include "artworkmanager.h"
+#include "cachemanager.h"
+#include "collectionutils.h"
+#include "mainwindow.h"
+#include "navigationmanager.h"
+#include "scrollmanager.h"
+#include "settingsdialog.h"
+#include "settingsmanager.h"
+#include "settingsutils.h"
+#include "sidebarmanager.h"
+#include "timerutils.h"
+#include "uiconstants.h"
+#include <QDialog>
+#include <QLabel>
+#include <QList>
+#include <QScrollArea>
+#include <QTimer>
+#include <QWidget>
+
+namespace {
+// Compares fields that do not require a reload
+auto compareNonReloadFields(const CollectionConfig &configA,
+                            const CollectionConfig &configB, bool &hasChanges)
+    -> void {
+  if (configA.name != configB.name ||
+      configA.launcherPath != configB.launcherPath ||
+      configA.corePath != configB.corePath ||
+      configA.launchParameters != configB.launchParameters ||
+      configA.extractArchives != configB.extractArchives ||
+      configA.extractedExtension != configB.extractedExtension ||
+      configA.parentCollectionIndex != configB.parentCollectionIndex ||
+      configA.isSubcollection != configB.isSubcollection) {
+    hasChanges = true;
+  }
+}
+
+// Compares fields that trigger reload
+void compareReloadFields(const CollectionConfig &configA,
+                         const CollectionConfig &configB, bool &hasChanges,
+                         bool &needsReload) {
+  if (configA.mediaDirectory != configB.mediaDirectory ||
+      configA.artworkDirectory != configB.artworkDirectory ||
+      configA.includeContentSubfolders != configB.includeContentSubfolders ||
+      configA.includeArtworkSubfolders != configB.includeArtworkSubfolders ||
+      configA.showAllSubcollectionItems != configB.showAllSubcollectionItems ||
+      configA.showAllSubfolderItems != configB.showAllSubfolderItems ||
+      configA.hideSubfolderTitles != configB.hideSubfolderTitles ||
+      configA.showHiddenFolders != configB.showHiddenFolders ||
+      configA.extensions != configB.extensions) {
+    hasChanges = true;
+    needsReload = true;
+  }
+}
+
+// Updates flags for the viewing collection only
+void updateViewingFlags(const CollectionConfig &configA,
+                        const CollectionConfig &configB, bool &hasChanges,
+                        bool &gridWidthChanged, bool &alignmentChanged,
+                        bool &spacingChanged, bool &scrollbarChanged,
+                        bool &sidebarModeChanged, bool &titleChanged,
+                        bool &fontSizeChanged, bool &hideTitlesChanged,
+                        bool &appearanceChanged) {
+  if (configA.gridWidth != configB.gridWidth) {
+    hasChanges = true;
+    gridWidthChanged = true;
+  }
+  if (configA.horizontalAlignment != configB.horizontalAlignment) {
+    hasChanges = true;
+    alignmentChanged = true;
+  }
+  if (configA.horizontalSpacing != configB.horizontalSpacing ||
+      configA.verticalSpacing != configB.verticalSpacing) {
+    hasChanges = true;
+    spacingChanged = true;
+  }
+  if (configA.itemWidth != configB.itemWidth ||
+      configA.itemHeight != configB.itemHeight) {
+    hasChanges = true;
+    spacingChanged = true;
+  }
+  if (configA.fontSize != configB.fontSize ||
+      configA.listFontSize != configB.listFontSize ||
+      configA.cornerRadius != configB.cornerRadius) {
+    hasChanges = true;
+    fontSizeChanged = true;
+  }
+  if (configA.hideTitles != configB.hideTitles ||
+      configA.hideSubcollectionTitles != configB.hideSubcollectionTitles) {
+    hasChanges = true;
+    hideTitlesChanged = true;
+  }
+  if (configA.hideHorizontalScrollbar != configB.hideHorizontalScrollbar ||
+      configA.hideVerticalScrollbar != configB.hideVerticalScrollbar) {
+    hasChanges = true;
+    scrollbarChanged = true;
+  }
+  if (configA.sidebarMode != configB.sidebarMode) {
+    hasChanges = true;
+    sidebarModeChanged = true;
+  }
+  if (configA.viewType != configB.viewType) {
+    hasChanges = true;
+    // View type changes require full layout update like spacing changes
+    spacingChanged = true;
+  }
+  if (configA.name != configB.name) {
+    titleChanged = true;
+  }
+  // Appearance changes (colors)
+  if (configA.primaryColor != configB.primaryColor ||
+      configA.tileColor != configB.tileColor ||
+      configA.selectionColor != configB.selectionColor ||
+      configA.backgroundColor != configB.backgroundColor ||
+      configA.backgroundImage != configB.backgroundImage ||
+      configA.backgroundType != configB.backgroundType ||
+      configA.listRowColor != configB.listRowColor ||
+      configA.listAltRowColor != configB.listAltRowColor ||
+      configA.listRowHeight != configB.listRowHeight) {
+    hasChanges = true;
+    appearanceChanged = true;
+  }
+}
+
+// Title update logic separated from handleLayoutChanges
+void updateWindowTitle(QWidget *parent, int viewingIndex,
+                       const QList<CollectionConfig> &collections) {
+  if (auto *mw = qobject_cast<MainWindow *>(parent)) {
+    mw->updateWindowTitleForCollection(viewingIndex);
+  }
+  auto *titleLabel = parent->findChild<QLabel *>("itemsTitleLabel");
+  if (titleLabel) {
+    QString title = collections[viewingIndex].name;
+    if (collections[viewingIndex].isSubcollection &&
+        collections[viewingIndex].parentCollectionIndex >= 0 &&
+        collections[viewingIndex].parentCollectionIndex < collections.size()) {
+      const QString parentName =
+          collections[collections[viewingIndex].parentCollectionIndex].name;
+      title = parentName + " > " + title;
+    }
+    titleLabel->setText(title);
+  }
+}
+
+// Applies scrollbar settings for the viewing collection
+void applyScrollbarSettings(QWidget *parent, int viewingIndex,
+                            const QList<CollectionConfig> &collections) {
+  auto *scrollArea = parent->findChild<QScrollArea *>("itemScrollArea");
+  if (scrollArea) {
+    SettingsUtils::applyHorizontalScrollbarSetting(scrollArea, viewingIndex,
+                                                   collections);
+    SettingsUtils::applyVerticalScrollbarSetting(scrollArea, viewingIndex,
+                                                 collections);
+  }
+}
+
+// Updates sidebar layout when mode changes
+void refreshSidebar(SidebarManager *sidebarManager,
+                    const QList<CollectionConfig> & /*collections*/,
+                    int currentCollectionIndex) {
+  if (sidebarManager) {
+    sidebarManager->updateSidebarLayout(currentCollectionIndex);
+  }
+}
+
+// Handles scroll manager branching
+void handleScrollBranch(ScrollManager *scrollManager,
+                        ArtworkManager *artworkManager,
+                        const QList<CollectionConfig> &collections,
+                        int viewingIndex, bool spacingChanged,
+                        bool sidebarModeChanged, bool gridWidthChanged,
+                        bool alignmentChanged, bool fontSizeChanged,
+                        bool hideTitlesChanged) {
+  auto scheduleGridWidthRefresh =
+      [](ScrollManager *scrollManager, ArtworkManager *artworkManager,
+         int viewingIndex, const QList<CollectionConfig> *collectionsPtr) {
+        if (!scrollManager || !collectionsPtr) {
+          return;
+        }
+
+        // Delay layout recalculation to allow grid width change to propagate.
+        TimerUtils::singleShotGuarded(UIConstants::Timing::LONG_DELAY_MS,
+                                      scrollManager, [=]() {
+                                        scrollManager->preCalculateLayout();
+                                        scrollManager->forceVirtualViewUpdate();
+                                      });
+
+        // Wait for the pre-calculated layout to settle before updating the
+        // virtual view, refreshing artwork, and re-centering.
+        TimerUtils::singleShotGuarded(
+            UIConstants::Timing::LONG_DELAY_MS +
+                UIConstants::Timing::MEDIUM_DELAY_MS,
+            scrollManager, [=]() {
+              scrollManager->updateVirtualView();
+              if (artworkManager) {
+                artworkManager->updateViewportArtwork();
+              }
+              scrollManager->centerHorizontalScrollbar(viewingIndex,
+                                                       *collectionsPtr);
+            });
+      };
+
+  if (!scrollManager) {
+    return;
+  }
+  if (spacingChanged || sidebarModeChanged || fontSizeChanged ||
+      hideTitlesChanged) {
+    scrollManager->primeLayoutFor(collections[viewingIndex]);
+    scrollManager->recreateLayout();
+    return;
+  }
+  if (gridWidthChanged) {
+    scrollManager->updateGridWidth(collections[viewingIndex].gridWidth);
+    scheduleGridWidthRefresh(scrollManager, artworkManager, viewingIndex,
+                             &collections);
+    return;
+  }
+  if (alignmentChanged) {
+    scrollManager->recenterVirtualContainer();
+  } else {
+    scrollManager->handleLayoutChange();
+  }
+}
+auto detectChanges(const QList<CollectionConfig> &newCollections,
+                   const QList<CollectionConfig> &originalCollections,
+                   int viewingCollectionIndex, bool &needsReload,
+                   bool &gridWidthChangedForView, bool &alignmentChangedForView,
+                   bool &spacingChangedForView, bool &scrollbarChangedForView,
+                   bool &sidebarModeChangedForView, bool &titleChangedForView,
+                   bool &fontSizeChangedForView, bool &hideTitlesChangedForView,
+                   bool &appearanceChangedForView) -> bool {
+  bool hasChanges = false;
+  if (newCollections.size() != originalCollections.size()) {
+    hasChanges = true;
+    needsReload = true;
+  }
+
+  for (int i = 0; i < newCollections.size(); ++i) {
+    if (i >= originalCollections.size()) {
+      hasChanges = true;
+      needsReload = true;
+      continue;
+    }
+    const CollectionConfig &newConfig = newCollections[i];
+    const CollectionConfig &oldConfig = originalCollections[i];
+    compareNonReloadFields(newConfig, oldConfig, hasChanges);
+    compareReloadFields(newConfig, oldConfig, hasChanges, needsReload);
+    if (i == viewingCollectionIndex) {
+      updateViewingFlags(newConfig, oldConfig, hasChanges,
+                         gridWidthChangedForView, alignmentChangedForView,
+                         spacingChangedForView, scrollbarChangedForView,
+                         sidebarModeChangedForView, titleChangedForView,
+                         fontSizeChangedForView, hideTitlesChangedForView,
+                         appearanceChangedForView);
+    }
+  }
+  return hasChanges;
+}
+
+} // namespace
+
+void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
+  if (!context.collections || !context.currentCollectionIndex) {
+    return;
+  }
+
+  QList<CollectionConfig> &collections = *context.collections;
+  int &currentCollectionIndex = *context.currentCollectionIndex;
+  QWidget *parent = context.parent;
+  SidebarManager *sidebarManager = context.sidebarManager;
+  ScrollManager *scrollManager = context.scrollManager;
+  NavigationManager *navigationManager = context.navigationManager;
+
+  int viewingCollectionIndex = currentCollectionIndex;
+  QList<CollectionConfig> originalCollections = collections;
+
+  SettingsDialog dlg(parent, collections, viewingCollectionIndex);
+
+  connect(
+      &dlg, &SettingsDialog::collectionSaved, this,
+      [this, &collections](const QList<CollectionConfig> &savedCollections) {
+        collections = savedCollections;
+        saveCollections(collections);
+      });
+
+  // Connect rescan signal to trigger database rescan after dialog closes
+  connect(&dlg, &SettingsDialog::rescanRequired, this,
+          [navigationManager](int collectionIndex) {
+            if (navigationManager) {
+              // Defer rescan to allow dialog to fully close first
+              QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS,
+                                 [navigationManager, collectionIndex]() {
+                                   navigationManager->forceRescanCollection(
+                                       collectionIndex);
+                                 });
+            }
+          });
+
+  if (dlg.exec() != QDialog::Accepted) {
+    return;
+  }
+
+  QList<CollectionConfig> newCollections = dlg.getCollections();
+
+  // Don't switch viewingCollectionIndex - user should stay on the collection
+  // they were viewing when they opened the dialog, even if they added or
+  // selected a different collection in the dialog.
+
+  bool hasChanges = false;
+  bool needsReload = false;
+  bool gridWidthChangedForView = false;
+  bool alignmentChangedForView = false;
+  bool spacingChangedForView = false;
+  bool scrollbarChangedForView = false;
+  bool sidebarModeChangedForView = false;
+  bool titleChangedForView = false;
+  bool fontSizeChangedForView = false;
+  bool hideTitlesChangedForView = false;
+  bool appearanceChangedForView = false;
+
+  hasChanges = detectChanges(
+      newCollections, originalCollections, viewingCollectionIndex, needsReload,
+      gridWidthChangedForView, alignmentChangedForView, spacingChangedForView,
+      scrollbarChangedForView, sidebarModeChangedForView, titleChangedForView,
+      fontSizeChangedForView, hideTitlesChangedForView,
+      appearanceChangedForView);
+
+  if (!hasChanges) {
+    return;
+  }
+
+  if (m_artworkManager->getTimerCoordinator()) {
+    m_artworkManager->getTimerCoordinator()->stopAllTimers();
+  }
+
+  collections = newCollections;
+  saveCollections(collections);
+  emit collectionsModified();
+  auto normalizeCollectionIndex = [](const QList<CollectionConfig> &list,
+                                     int desiredIndex) -> int {
+    if (list.isEmpty()) {
+      return -1;
+    }
+    if (desiredIndex < 0) {
+      return 0;
+    }
+    if (desiredIndex >= list.size()) {
+      return list.size() - 1;
+    }
+    return desiredIndex;
+  };
+
+  int resolvedCollectionIndex =
+      normalizeCollectionIndex(collections, viewingCollectionIndex);
+  currentCollectionIndex = resolvedCollectionIndex;
+  viewingCollectionIndex = resolvedCollectionIndex;
+
+  if (sidebarManager) {
+    if (resolvedCollectionIndex >= 0) {
+      sidebarManager->applySidebarStateForCollection(resolvedCollectionIndex);
+    }
+  }
+
+  // Always apply appearance settings (colors) after any changes
+  if (navigationManager && resolvedCollectionIndex >= 0) {
+    navigationManager->applyBackgroundForCollection(resolvedCollectionIndex);
+    navigationManager->applyPrimaryColorForCollection(resolvedCollectionIndex);
+  }
+
+  if (needsReload) {
+    handleReloadRequired(collections, newCollections, originalCollections,
+                         viewingCollectionIndex, sidebarManager, scrollManager,
+                         navigationManager, m_artworkManager, m_cacheManager,
+                         currentCollectionIndex);
+  } else {
+    handleLayoutChanges(
+        parent, collections, viewingCollectionIndex, titleChangedForView,
+        scrollbarChangedForView, sidebarModeChangedForView,
+        gridWidthChangedForView, spacingChangedForView, alignmentChangedForView,
+        fontSizeChangedForView, hideTitlesChangedForView, sidebarManager,
+        scrollManager, m_artworkManager, currentCollectionIndex);
+
+    // If only appearance changed, still refresh widgets to show new colors
+    if (appearanceChangedForView && scrollManager) {
+      scrollManager->recreateLayout();
+    }
+  }
+}
+
+auto SettingsManager::handleReloadRequired(
+    const QList<CollectionConfig> &collections,
+    const QList<CollectionConfig> &newCollections,
+    const QList<CollectionConfig> &originalCollections,
+    int viewingCollectionIndex, SidebarManager *sidebarManager,
+    ScrollManager *scrollManager, NavigationManager *navigationManager,
+    ArtworkManager *artworkManager, CacheManager *cacheManager,
+    int currentCollectionIndex) -> void {
+  if (artworkManager) {
+    artworkManager->cancelAllArtworkLoading();
+  }
+  if (viewingCollectionIndex >= 0 &&
+      viewingCollectionIndex < collections.size()) {
+
+    // Check if this is a newly-added collection (not in originalCollections)
+    bool isNewCollection =
+        (viewingCollectionIndex >= originalCollections.size());
+
+    bool mediaDirectoryChanged = isNewCollection;
+    bool extensionsChanged = isNewCollection;
+
+    if (!isNewCollection) {
+      const QString &mediaDirectory =
+          newCollections[viewingCollectionIndex].mediaDirectory;
+      const QString &originalMediaDirectory =
+          originalCollections[viewingCollectionIndex].mediaDirectory;
+      mediaDirectoryChanged = (mediaDirectory != originalMediaDirectory);
+      extensionsChanged =
+          (newCollections[viewingCollectionIndex].extensions !=
+           originalCollections[viewingCollectionIndex].extensions);
+    }
+
+    if (mediaDirectoryChanged || extensionsChanged) {
+      if (cacheManager) {
+        cacheManager->clearCollectionCache(viewingCollectionIndex);
+      }
+      if (artworkManager) {
+        artworkManager->clearLoadedArtworkState();
+        artworkManager->clearWidgetReferences();
+      }
+    }
+
+    if (scrollManager) {
+      scrollManager->cleanup();
+    }
+
+    // Delay collection reload to allow cleanup operations to complete -
+    // prevents race conditions with ongoing artwork loads or animations
+    QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS,
+                       [navigationManager, viewingCollectionIndex]() {
+                         if (navigationManager) {
+                           navigationManager->safeReloadCollection(
+                               viewingCollectionIndex);
+                         }
+                       });
+  }
+}
+
+auto SettingsManager::handleLayoutChanges(
+    QWidget *parent, const QList<CollectionConfig> &collections,
+    int viewingCollectionIndex, bool titleChangedForView,
+    bool scrollbarChangedForView, bool sidebarModeChangedForView,
+    bool gridWidthChangedForView, bool spacingChangedForView,
+    bool alignmentChangedForView, bool fontSizeChangedForView,
+    bool hideTitlesChangedForView, SidebarManager *sidebarManager,
+    ScrollManager *scrollManager, ArtworkManager *artworkManager,
+    int currentCollectionIndex) -> void {
+  if (viewingCollectionIndex < 0 ||
+      viewingCollectionIndex >= collections.size()) {
+    return;
+  }
+  if (titleChangedForView) {
+    updateWindowTitle(parent, viewingCollectionIndex, collections);
+  }
+  if (scrollbarChangedForView) {
+    applyScrollbarSettings(parent, viewingCollectionIndex, collections);
+  }
+  if (sidebarModeChangedForView) {
+    refreshSidebar(sidebarManager, collections, currentCollectionIndex);
+  }
+  handleScrollBranch(scrollManager, artworkManager, collections,
+                     viewingCollectionIndex, spacingChangedForView,
+                     sidebarModeChangedForView, gridWidthChangedForView,
+                     alignmentChangedForView, fontSizeChangedForView,
+                     hideTitlesChangedForView);
+}
