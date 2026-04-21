@@ -109,6 +109,8 @@ set(SOURCES
   ${SRC_DIR}/modules/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/modules/query/querymanagerscan.cpp
+  ${SRC_DIR}/modules/query/querymanagerpersist.cpp
   ${SRC_DIR}/modules/restore/selectionrestoremanager.cpp
   ${SRC_DIR}/modules/scroll/scrollmanager.cpp
   ${SRC_DIR}/modules/scroll/scrollmanagerfilter.cpp

@@ -137,6 +137,8 @@ add_executable(test_querymanager_cancel_scan
   ${SRC_DIR}/modules/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/query/querymanagerlifecycle.cpp
   ${SRC_DIR}/modules/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/modules/query/querymanagerscan.cpp
+  ${SRC_DIR}/modules/query/querymanagerpersist.cpp
   ${SRC_DIR}/modules/session/sessionmanager.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/settingsutils.cpp
