@@ -22,6 +22,7 @@ class QPropertyAnimation;
 class ArtworkManager;
 class WidgetPoolManager;
 class FilterManager;
+class DataSourceManager;
 class SelectionOverlayManager;
 class SearchLoadingOverlay;
 class VirtualContainerManager;
@@ -225,8 +226,18 @@ private:
   ItemWidget *acquireWidget();
   void releaseWidget(ItemWidget *widget);
 
-  // Filter manager for search and subcollection filtering
-  std::unique_ptr<FilterManager> m_filterManager;
+  // Data source manager: owns FilterManager + ScrollDataManager +
+  // PreSearchStateManager + SearchLoadingOverlay (extracted from
+  // ScrollManager, Kartend-gg2).
+  std::unique_ptr<DataSourceManager> m_dataSource;
+
+  // Raw aliases into m_dataSource for the in-place filter/data update
+  // logic that still lives in ScrollManager (scrollmanagerfilter.cpp).
+  // Lifetime is tied to m_dataSource; never delete through these pointers.
+  FilterManager *m_filterManager = nullptr;
+  ScrollDataManager *m_dataManager = nullptr;
+  PreSearchStateManager *m_preSearchStateManager = nullptr;
+  SearchLoadingOverlay *m_searchLoadingOverlay = nullptr;
 
   // Selection display manager owns overlay + state tracker + list header +
   // artwork preview overlay (extracted from ScrollManager, Kartend-3u5).
@@ -238,8 +249,8 @@ private:
   SelectionOverlayManager *m_overlayManager = nullptr;
   SelectionStateTracker *m_selectionState = nullptr;
 
-  // Search loading overlay for visual feedback during searches
-  std::unique_ptr<SearchLoadingOverlay> m_searchLoadingOverlay;
+  // Search loading overlay, virtual container, selection coordinator, etc.
+  // continue to be owned directly below.
 
   // Virtual container manager for container lifecycle
   std::unique_ptr<VirtualContainerManager> m_containerManager;
@@ -256,12 +267,8 @@ private:
   // Arrow key scroll helper for centering animation
   std::unique_ptr<ArrowKeyScrollHelper> m_arrowKeyScrollHelper;
 
-  // Data manager for file paths, file names, subcollections, and virtual
-  // folders
-  std::unique_ptr<ScrollDataManager> m_dataManager;
-
-  // Pre-search state manager for fast search result restoration
-  std::unique_ptr<PreSearchStateManager> m_preSearchStateManager;
+  // Data manager and pre-search state manager are now owned by m_dataSource
+  // (Kartend-gg2). Raw aliases above (m_dataManager, m_preSearchStateManager).
 
   // List header widget, column widths, and artwork preview overlay are now
   // owned by m_selectionDisplay (Kartend-3u5).
@@ -271,7 +278,7 @@ public:
     return m_widgetPool.get();
   }
   [[nodiscard]] const FilterManager *getFilterManager() const {
-    return m_filterManager.get();
+    return m_filterManager;
   }
   [[nodiscard]] const SelectionOverlayManager *getOverlayManager() const {
     return m_overlayManager;
@@ -286,10 +293,10 @@ public:
     return m_scrollEventHandler.get();
   }
   [[nodiscard]] const ScrollDataManager *getDataManager() const {
-    return m_dataManager.get();
+    return m_dataManager;
   }
   [[nodiscard]] const PreSearchStateManager *getPreSearchStateManager() const {
-    return m_preSearchStateManager.get();
+    return m_preSearchStateManager;
   }
   [[nodiscard]] const SelectionStateTracker *getSelectionState() const {
     return m_selectionState;

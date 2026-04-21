@@ -7,6 +7,7 @@
 #include "artworkpreviewoverlay.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
+#include "datasourcemanager.h"
 #include "filtermanager.h"
 #include "gridlayoutcalculator.h"
 #include "gridutils.h"
@@ -72,9 +73,14 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   // Widget pool for recycling ItemWidgets
   m_widgetPool = std::make_unique<WidgetPoolManager>(this);
 
-  // Filter manager for search and subcollection filtering
-  m_filterManager = std::make_unique<FilterManager>(this);
-  connect(m_filterManager.get(), &FilterManager::filterChanged, this,
+  // Data source manager: owns FilterManager + ScrollDataManager +
+  // PreSearchStateManager + SearchLoadingOverlay (Kartend-gg2).
+  m_dataSource = std::make_unique<DataSourceManager>(this);
+  m_filterManager = m_dataSource->filterManager();
+  m_dataManager = m_dataSource->dataManager();
+  m_preSearchStateManager = m_dataSource->preSearchStateManager();
+  m_searchLoadingOverlay = m_dataSource->searchLoadingOverlay();
+  connect(m_dataSource.get(), &DataSourceManager::filterChanged, this,
           &ScrollManager::filterChanged);
 
   // Selection display manager: owns overlay + state tracker + list header +
@@ -120,8 +126,7 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
             updateVirtualView();
           });
 
-  // Search loading overlay for visual feedback during searches
-  m_searchLoadingOverlay = std::make_unique<SearchLoadingOverlay>(this);
+  // SearchLoadingOverlay is now owned by m_dataSource (Kartend-gg2).
 
   // Virtual container manager for container lifecycle
   m_containerManager = std::make_unique<VirtualContainerManager>(this);
@@ -162,12 +167,9 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
           &ArrowKeyScrollHelper::requestViewUpdate, this,
           &ScrollManager::updateVirtualView);
 
-  // Data manager for file paths, file names, subcollections, and virtual
-  // folders
-  m_dataManager = std::make_unique<ScrollDataManager>(this);
-
-  // Pre-search state manager for fast search result restoration
-  m_preSearchStateManager = std::make_unique<PreSearchStateManager>(this);
+  // ScrollDataManager and PreSearchStateManager are now owned by m_dataSource
+  // (Kartend-gg2). Raw aliases (m_dataManager, m_preSearchStateManager) were
+  // set up at construction.
 
   // Note: SelectionStateTracker is now owned by m_selectionDisplay; the
   // m_selectionState raw alias was set up above.
@@ -350,8 +352,8 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   }
 
   // Configure search loading overlay with scroll area viewport
-  if (m_searchLoadingOverlay && m_mediaScrollArea) {
-    m_searchLoadingOverlay->setParentWidget(m_mediaScrollArea->viewport());
+  if (m_dataSource && m_mediaScrollArea) {
+    m_dataSource->setSearchOverlayParent(m_mediaScrollArea->viewport());
   }
   // Configure arrow key scroll helper with dependencies
   if (m_arrowKeyScrollHelper) {
@@ -1552,8 +1554,8 @@ auto ScrollManager::getSubcollectionName(int subcollectionIndex) const
 
 void ScrollManager::setDatabaseManager(DatabaseManager *manager) {
   m_databaseManager = manager;
-  if (m_filterManager) {
-    m_filterManager->setDatabaseManager(manager);
+  if (m_dataSource) {
+    m_dataSource->setDatabaseManager(manager);
   }
 }
 

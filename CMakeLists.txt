@@ -113,6 +113,7 @@ set(SOURCES
   ${SRC_DIR}/modules/scroll/scrollmanager.cpp
   ${SRC_DIR}/modules/scroll/scrollmanagerfilter.cpp
   ${SRC_DIR}/modules/scroll/selectiondisplaymanager.cpp
+  ${SRC_DIR}/modules/scroll/datasourcemanager.cpp
   ${SRC_DIR}/modules/scroll/arrowkeyscrollhelper.cpp
   ${SRC_DIR}/modules/scroll/virtualcontainermanager.cpp
   ${SRC_DIR}/modules/scroll/selectioncoordinator.cpp
@@ -186,6 +187,7 @@ set(HEADERS
   ${SRC_DIR}/modules/scroll/presearchstatemanager.h
   ${SRC_DIR}/modules/scroll/selectionstatetracker.h
   ${SRC_DIR}/modules/scroll/selectiondisplaymanager.h
+  ${SRC_DIR}/modules/scroll/datasourcemanager.h
   ${SRC_DIR}/modules/filter/filtermanager.h
   ${SRC_DIR}/modules/widgetpool/widgetpoolmanager.h
   ${SRC_DIR}/modules/search/searchmanager.h

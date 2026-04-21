@@ -1,11 +1,11 @@
 // Search/filter/pre-search-state methods extracted from scrollmanager.cpp.
-// These all operate on existing ScrollManager state (m_filterManager,
-// m_dataManager, m_preSearchStateManager, etc.) — no new state, no API change.
+// Operate on raw aliases (m_filterManager, m_dataManager,
+// m_preSearchStateManager) into m_dataSource (Kartend-gg2).
+#include "datasourcemanager.h"
 #include "filtermanager.h"
 #include "presearchstatemanager.h"
 #include "scrolldatamanager.h"
 #include "scrollmanager.h"
-#include "searchloadingoverlay.h"
 #include "widgetpoolmanager.h"
 #include <QScrollArea>
 #include <QScrollBar>
@@ -77,18 +77,18 @@ void ScrollManager::restorePreSearchState() {
 }
 
 auto ScrollManager::hasPreSearchState() const -> bool {
-  return m_preSearchStateManager && m_preSearchStateManager->hasSavedState();
+  return m_dataSource && m_dataSource->hasPreSearchState();
 }
 
 void ScrollManager::showSearchLoadingOverlay() {
-  if (m_searchLoadingOverlay) {
-    m_searchLoadingOverlay->show();
+  if (m_dataSource) {
+    m_dataSource->showSearchLoadingOverlay();
   }
 }
 
 void ScrollManager::hideSearchLoadingOverlay() {
-  if (m_searchLoadingOverlay) {
-    m_searchLoadingOverlay->hide();
+  if (m_dataSource) {
+    m_dataSource->hideSearchLoadingOverlay();
   }
 }
 
@@ -145,8 +145,6 @@ void ScrollManager::clearFilter() {
 }
 
 auto ScrollManager::getFilteredIndex(int visualIndex) const -> int {
-  if (!m_filterManager || !m_filterManager->isFiltered()) {
-    return visualIndex;
-  }
-  return m_filterManager->getActualIndex(visualIndex);
+  return m_dataSource ? m_dataSource->getFilteredIndex(visualIndex)
+                      : visualIndex;
 }
