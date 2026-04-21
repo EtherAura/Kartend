@@ -33,6 +33,7 @@ class ArrowKeyScrollHelper;
 class ScrollDataManager;
 class PreSearchStateManager;
 class SelectionStateTracker;
+class SelectionDisplayManager;
 class ListHeaderWidget;
 class ArtworkPreviewOverlay;
 enum class ListSortColumn;
@@ -201,9 +202,6 @@ private slots:
   void onArrowKeyViewUpdate();
   void onSliderMoved(int position);
   void reconfigureArtworkForActiveWidgets();
-  void onListColumnClicked(ListSortColumn column);
-  void onListColumnWidthChanged(int collectionWidth);
-  void onListArtworkColumnWidthChanged(int artworkWidth);
   void onArtworkPreviewRequested(const QString &filePath,
                                  const QString &artworkDir);
 
@@ -230,8 +228,15 @@ private:
   // Filter manager for search and subcollection filtering
   std::unique_ptr<FilterManager> m_filterManager;
 
-  // Selection overlay manager for glide animation
-  std::unique_ptr<SelectionOverlayManager> m_overlayManager;
+  // Selection display manager owns overlay + state tracker + list header +
+  // artwork preview overlay (extracted from ScrollManager, Kartend-3u5).
+  std::unique_ptr<SelectionDisplayManager> m_selectionDisplay;
+
+  // Raw aliases into m_selectionDisplay for the in-place selection update
+  // logic that still lives in ScrollManager. Lifetime is tied to
+  // m_selectionDisplay; never delete through these pointers.
+  SelectionOverlayManager *m_overlayManager = nullptr;
+  SelectionStateTracker *m_selectionState = nullptr;
 
   // Search loading overlay for visual feedback during searches
   std::unique_ptr<SearchLoadingOverlay> m_searchLoadingOverlay;
@@ -258,21 +263,8 @@ private:
   // Pre-search state manager for fast search result restoration
   std::unique_ptr<PreSearchStateManager> m_preSearchStateManager;
 
-  // Selection state tracker for selection indices, direction, and row
-  std::unique_ptr<SelectionStateTracker> m_selectionState;
-
-  // List header widget for sortable column headers in list view mode
-  ListHeaderWidget *m_listHeader = nullptr;
-
-  // Collection column width for list view mode (synced between header and
-  // items)
-  int m_collectionColumnWidth = 150;
-
-  // Artwork column width for list view mode (synced between header and items)
-  int m_artworkColumnWidth = 32;
-
-  // Artwork preview overlay for list view mode
-  std::unique_ptr<ArtworkPreviewOverlay> m_artworkPreviewOverlay;
+  // List header widget, column widths, and artwork preview overlay are now
+  // owned by m_selectionDisplay (Kartend-3u5).
 
 public:
   [[nodiscard]] const WidgetPoolManager *getWidgetPool() const {
@@ -282,7 +274,7 @@ public:
     return m_filterManager.get();
   }
   [[nodiscard]] const SelectionOverlayManager *getOverlayManager() const {
-    return m_overlayManager.get();
+    return m_overlayManager;
   }
   [[nodiscard]] const VirtualContainerManager *getContainerManager() const {
     return m_containerManager.get();
@@ -300,7 +292,7 @@ public:
     return m_preSearchStateManager.get();
   }
   [[nodiscard]] const SelectionStateTracker *getSelectionState() const {
-    return m_selectionState.get();
+    return m_selectionState;
   }
 
 private:

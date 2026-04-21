@@ -19,6 +19,7 @@
 #include "scrolleventhandler.h"
 #include "searchloadingoverlay.h"
 #include "selectioncoordinator.h"
+#include "selectiondisplaymanager.h"
 #include "selectionoverlaymanager.h"
 #include "selectionstatetracker.h"
 #include "timerutils.h"
@@ -76,10 +77,25 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   connect(m_filterManager.get(), &FilterManager::filterChanged, this,
           &ScrollManager::filterChanged);
 
-  // Selection overlay manager for glide animation
-  m_overlayManager = std::make_unique<SelectionOverlayManager>(this);
-  connect(m_overlayManager.get(), &SelectionOverlayManager::animationFinished,
-          this, [this]() {
+  // Selection display manager: owns overlay + state tracker + list header +
+  // artwork preview overlay (Kartend-3u5).
+  m_selectionDisplay = std::make_unique<SelectionDisplayManager>(this);
+  m_overlayManager = m_selectionDisplay->overlay();
+  m_selectionState = m_selectionDisplay->state();
+
+  // Forward list-mode signals from display manager out through ScrollManager.
+  connect(m_selectionDisplay.get(),
+          &SelectionDisplayManager::sortModeChangeRequested, this,
+          &ScrollManager::sortModeChangeRequested);
+  connect(m_selectionDisplay.get(),
+          &SelectionDisplayManager::listColumnWidthChanged, this,
+          &ScrollManager::listColumnWidthChanged);
+  connect(m_selectionDisplay.get(),
+          &SelectionDisplayManager::listArtworkColumnWidthChanged, this,
+          &ScrollManager::listArtworkColumnWidthChanged);
+
+  connect(m_overlayManager, &SelectionOverlayManager::animationFinished, this,
+          [this]() {
             // Update widget selection states when animation finishes
             if (m_selectionState->needsCommitUpdate(
                     m_selectionState->lastSelectedIndex())) {
@@ -109,11 +125,11 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
 
   // Virtual container manager for container lifecycle
   m_containerManager = std::make_unique<VirtualContainerManager>(this);
-  m_containerManager->setOverlayManager(m_overlayManager.get());
+  m_containerManager->setOverlayManager(m_overlayManager);
 
   // Selection coordinator for selection state and movement analysis
   m_selectionCoordinator = std::make_unique<SelectionCoordinator>(this);
-  m_selectionCoordinator->setOverlayManager(m_overlayManager.get());
+  m_selectionCoordinator->setOverlayManager(m_overlayManager);
 
   // Scroll event handler for scroll event wiring
   m_scrollEventHandler = std::make_unique<ScrollEventHandler>(this);
@@ -153,8 +169,8 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   // Pre-search state manager for fast search result restoration
   m_preSearchStateManager = std::make_unique<PreSearchStateManager>(this);
 
-  // Selection state tracker for selection indices, direction, and row
-  m_selectionState = std::make_unique<SelectionStateTracker>();
+  // Note: SelectionStateTracker is now owned by m_selectionDisplay; the
+  // m_selectionState raw alias was set up above.
 
   // Throttle timer - only fires once per interval, ignores subsequent triggers
   m_scrollTimer = new QTimer(this);
@@ -227,10 +243,10 @@ ScrollManager::~ScrollManager() {
   }
   cleanupVirtualContainer();
 
-  // Clean up list header (parented to viewport, not container)
-  if (m_listHeader) {
-    m_listHeader->deleteLater();
-    m_listHeader = nullptr;
+  // Clean up list header (parented to viewport, not container) via the
+  // display manager which owns it.
+  if (m_selectionDisplay) {
+    m_selectionDisplay->destroyListHeader();
   }
 }
 
@@ -289,12 +305,13 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   m_collections = setup.getCollections();
   m_hierarchyCache = setup.getHierarchyCache();
 
-  // Restore persisted column widths from settings
-  if (m_generalSettings && m_generalSettings->listCollectionColumnWidth > 0) {
-    m_collectionColumnWidth = m_generalSettings->listCollectionColumnWidth;
-  }
-  if (m_generalSettings && m_generalSettings->listArtworkColumnWidth > 0) {
-    m_artworkColumnWidth = m_generalSettings->listArtworkColumnWidth;
+  // Apply persisted column widths from settings via display manager.
+  if (m_selectionDisplay) {
+    m_selectionDisplay->applyGeneralSettings(m_generalSettings);
+    m_selectionDisplay->setMediaScrollArea(m_mediaScrollArea);
+    m_selectionDisplay->setCollectionContext(&m_context);
+    m_selectionDisplay->setMetrics(&m_metrics);
+    m_selectionDisplay->setActiveWidgets(&m_activeWidgets);
   }
 
   // Configure container manager with scroll area and grid container
@@ -323,8 +340,13 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   if (m_widgetFactory) {
     m_widgetFactory->setArtworkManager(m_artworkManager);
     m_widgetFactory->setCollections(m_collections);
-    m_widgetFactory->setCollectionColumnWidth(m_collectionColumnWidth);
-    m_widgetFactory->setArtworkColumnWidth(m_artworkColumnWidth);
+    m_widgetFactory->setCollectionColumnWidth(
+        m_selectionDisplay ? m_selectionDisplay->collectionColumnWidth() : 150);
+    m_widgetFactory->setArtworkColumnWidth(
+        m_selectionDisplay ? m_selectionDisplay->artworkColumnWidth() : 32);
+  }
+  if (m_selectionDisplay) {
+    m_selectionDisplay->setWidgetFactory(m_widgetFactory.get());
   }
 
   // Configure search loading overlay with scroll area viewport
@@ -1563,15 +1585,11 @@ void ScrollManager::onVisualIndexForPathLoaded(int visualIndex,
 }
 
 bool ScrollManager::isArtworkPreviewVisible() const {
-  return m_artworkPreviewOverlay && m_artworkPreviewOverlay->isVisible();
+  return m_selectionDisplay && m_selectionDisplay->isArtworkPreviewVisible();
 }
 
 bool ScrollManager::hideArtworkPreview() {
-  if (isArtworkPreviewVisible()) {
-    m_artworkPreviewOverlay->hideOverlay();
-    return true;
-  }
-  return false;
+  return m_selectionDisplay && m_selectionDisplay->hideArtworkPreview();
 }
 
 void ScrollManager::recenterVirtualContainer() { positionVirtualContainer(); }
@@ -1822,6 +1840,24 @@ void ScrollManager::createVirtualContainer() {
 
   // Create or update list header for list view mode
   updateListHeader();
+}
+
+// Forwarder: list-header rendering lives on SelectionDisplayManager. Sync the
+// virtual container pointer first since it changes across collection reloads.
+void ScrollManager::updateListHeader() {
+  if (!m_selectionDisplay) {
+    return;
+  }
+  m_selectionDisplay->setVirtualContainer(m_virtualContainer);
+  m_selectionDisplay->updateListHeader();
+}
+
+// Forwarder: artwork preview overlay lives on SelectionDisplayManager.
+void ScrollManager::onArtworkPreviewRequested(const QString &filePath,
+                                              const QString &artworkDir) {
+  if (m_selectionDisplay) {
+    m_selectionDisplay->showArtworkPreview(filePath, artworkDir);
+  }
 }
 
 // Prime the container with target collection metrics before items are loaded
