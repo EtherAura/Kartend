@@ -112,6 +112,9 @@ set(SOURCES
   ${SRC_DIR}/modules/restore/selectionrestoremanager.cpp
   ${SRC_DIR}/modules/scroll/scrollmanager.cpp
   ${SRC_DIR}/modules/scroll/scrollmanagerfilter.cpp
+  ${SRC_DIR}/modules/scroll/scrollmanagerselection.cpp
+  ${SRC_DIR}/modules/scroll/scrollmanagerevents.cpp
+  ${SRC_DIR}/modules/scroll/scrollmanagerdata.cpp
   ${SRC_DIR}/modules/scroll/selectiondisplaymanager.cpp
   ${SRC_DIR}/modules/scroll/datasourcemanager.cpp
   ${SRC_DIR}/modules/scroll/arrowkeyscrollhelper.cpp
