@@ -24,42 +24,9 @@
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
+using QueryManagerInternal::buildFtsPrefixQuery;
 using QueryManagerInternal::canonicalKeyPath;
 using QueryManagerInternal::displayNameForBase;
-
-namespace {
-
-auto buildFtsPrefixQuery(const QString &raw) -> QString {
-  QString trimmed = raw.trimmed();
-  if (trimmed.isEmpty()) {
-    return {};
-  }
-
-  // Sanitize into simple terms to avoid FTS query parser edge-cases.
-  // Keep letters/numbers/underscore; replace everything else with spaces.
-  QString cleaned = trimmed;
-  cleaned.replace(QRegularExpression(QStringLiteral("[^\\p{L}\\p{N}_]+")),
-                  QStringLiteral(" "));
-  const QStringList terms = cleaned.split(' ', Qt::SkipEmptyParts);
-  if (terms.isEmpty()) {
-    return {};
-  }
-
-  QStringList tokens;
-  tokens.reserve(terms.size());
-  for (const QString &t : terms) {
-    if (t.isEmpty()) {
-      continue;
-    }
-    tokens.append(t + "*");
-  }
-  if (tokens.isEmpty()) {
-    return {};
-  }
-  return tokens.join(QStringLiteral(" AND "));
-}
-
-} // namespace
 
 void QueryManager::fetchItemsRange(
     const CollectionContext &context,
