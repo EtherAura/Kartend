@@ -1345,6 +1345,20 @@
               </property>
              </widget>
             </item>
+            <item row="11" column="0">
+             <widget class="QLabel" name="startupCollectionLabel">
+              <property name="text">
+               <string>Startup Collection:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="11" column="1">
+             <widget class="QComboBox" name="startupCollectionComboBox">
+              <property name="toolTip">
+               <string>Collection to open on startup. &quot;(Default)&quot; opens the first root collection.</string>
+              </property>
+             </widget>
+            </item>
                </layout>
               </item>
               <item>

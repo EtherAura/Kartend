@@ -58,8 +58,9 @@ src/
 | `interactionmanager` | Orchestrates user interactions, delegating to specialized managers for input handling. |
 | `selectionmanager` | Owns selection state and coordinates selection operations with visual feedback. |
 | `viewportmanager` | Manages viewport positioning, item centering, and scroll-to-visible operations. |
-| `keyboardmanager` | Handles keyboard input processing, arrow key navigation, and key repeat behavior. |
+| `keyboardmanager` | Handles keyboard input processing, arrow + alphabetic navigation, and key repeat. |
 | `mousemanager` | Handles mouse input including click-hold scrolling, wheel events, and widget finding. |
+| `gamepadmanager` | Optional gamepad backend (Qt6::Gamepad or SDL2) translating input to navigation events. |
 | `searchmanager` | Handles search bar logic, search modes, and query debouncing for item filtering. |
 | `eventmanager` | Filters and dispatches input events to specialized handlers for mouse, keyboard, and wheel. |
 | `animationmanager` | Manages smooth scroll animations with easing curves for vertical and horizontal scrolling. |
@@ -71,12 +72,18 @@ src/
 | `sessionmanager` | Persists and restores selection state and item counts across application sessions. |
 | `settingsmanager` | Handles config file I/O, collection settings, and the settings dialog interface. |
 | `sidebarmanager` | Controls metadata sidebar visibility, positioning, and content updates. |
+| `filtermanager` | Applies search and subcollection filters to the active item set (helper owned by ScrollManager). |
+| `widgetpoolmanager` | Recycles ItemWidget instances for virtual scrolling (helper owned by ScrollManager). |
+| `overlay` | SelectionOverlayManager / SearchLoadingOverlay rendering helpers for glide and loading visuals. |
+| `restore` | SelectionRestoreManager coordinating selection restoration during navigation transitions. |
 
 ## Manager Hierarchy
 
 **Two-tier ownership model:**
 - **ApplicationManager** owns: `CacheManager`, `SessionManager`, `ArtworkManager`, `SettingsManager`, `DatabaseManager`, `ScrollManager`, `SidebarManager`, `NavigationManager`, `InteractionManager`
-- **InteractionManager** owns: `SearchManager`, `SelectionManager`, `KeyboardManager`, `ArrowNavigationHandler`, `AnimationManager`, `MouseManager`, `LaunchManager`, `ViewportManager`, `EventManager`
+- **InteractionManager** owns: `SearchManager`, `SelectionManager`, `KeyboardManager`, `GamepadManager`, `ArrowNavigationHandler`, `AlphabeticNavigationHandler`, `AnimationManager`, `MouseManager`, `LaunchManager`, `ViewportManager`, `EventManager`
+
+Additional helper managers owned by their parent feature module (not top-level): `WidgetPoolManager`, `FilterManager`, `SelectionRestoreManager`, `SelectionOverlayManager`, `SearchLoadingOverlay`, `NavigationStackManager`.
 
 ## UI (`src/ui/`)
 

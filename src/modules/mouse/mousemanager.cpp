@@ -7,6 +7,7 @@
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "keyboardmanager.h"
+#include "mousehelpers.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
 #include "uiconstants.h"
@@ -83,22 +84,12 @@ int MouseManager::computeWheelSteps(const QWheelEvent *wheelEvent) {
   }
   const int wheelAngle = wheelEvent->angleDelta().y();
   if (wheelAngle != 0) {
-    int steps = wheelAngle / UIConstants::Mouse::WHEEL_ANGLE_STEP;
-    if (steps == 0) {
-      steps = (wheelAngle > 0 ? 1 : -1);
-    }
-    return steps;
+    return MouseHelpers::wheelStepsFromAngle(
+        wheelAngle, UIConstants::Mouse::WHEEL_ANGLE_STEP);
   }
   const QPoint pixelDelta = wheelEvent->pixelDelta();
-  const int pixelDeltaY = pixelDelta.y();
-  if (pixelDeltaY == 0) {
-    return 0;
-  }
-  int steps = pixelDeltaY / UIConstants::Mouse::WHEEL_PIXEL_STEP;
-  if (steps == 0) {
-    steps = (pixelDeltaY > 0 ? 1 : -1);
-  }
-  return steps;
+  return MouseHelpers::wheelStepsFromPixel(
+      pixelDelta.y(), UIConstants::Mouse::WHEEL_PIXEL_STEP);
 }
 
 // --- Click Hold Timer ---
@@ -363,20 +354,10 @@ int MouseManager::computeVerticalDirection(int selectedItemIndex,
 
   int scrollTop = vBar->value();
   int viewportHeight = m_itemScrollArea->viewport()->height();
-  int viewportTop = scrollTop;
-  int viewportBottom = scrollTop + viewportHeight;
-  int viewportCenterY = scrollTop + (viewportHeight / 2);
-
-  if (selectedItemY < viewportTop + rowHeight) {
-    return -1;
-  } else if (selectedItemY > viewportBottom - rowHeight) {
-    return 1;
-  } else if (selectedItemY < viewportCenterY) {
-    return -1;
-  } else if (selectedItemY > viewportCenterY) {
-    return 1;
-  }
-  return 0;
+  return MouseHelpers::verticalScrollDirection(
+      selectedItemY, /*viewportTopY=*/scrollTop,
+      /*viewportBottomY=*/scrollTop + viewportHeight,
+      /*viewportCenterY=*/scrollTop + (viewportHeight / 2), rowHeight);
 }
 
 void MouseManager::onMouseHoldScrollStep() {

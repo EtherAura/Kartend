@@ -1,6 +1,7 @@
 #ifndef APPLICATIONMANAGER_H
 #define APPLICATIONMANAGER_H
 
+#include <QFuture>
 #include <QObject>
 #include <memory>
 
@@ -53,6 +54,11 @@ private:
   std::unique_ptr<SidebarManager> m_sidebarManager;
   std::unique_ptr<NavigationManager> m_navigationManager;
   std::unique_ptr<InteractionManager> m_interactionManager;
+
+  // Tracks the background CacheManager::initialize() task so shutdown can
+  // wait for it before destroying the cache (prevents use-after-free of
+  // m_cacheManager when the app exits before initialize() completes).
+  QFuture<void> m_cacheInitFuture;
 };
 
 #endif // APPLICATIONMANAGER_H

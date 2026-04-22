@@ -95,6 +95,16 @@ sudo sh -c 'while IFS= read -r f; do rm -f -- "$f"; done < install_manifest.txt'
 If you installed with a custom prefix (e.g. `--prefix /opt/kartend`), run the
 same command from the corresponding build directory that generated that install.
 
+## Getting Started
+
+New to Kartend? See [docs/usage.md](docs/usage.md) for a first-run
+walkthrough (adding a collection, browsing, launching, organizing
+subcollections).
+
+Hitting a snag? See [docs/troubleshooting.md](docs/troubleshooting.md) for
+fixes to common issues (empty collections, missing artwork, launcher
+problems, performance tuning).
+
 ## Testing
 
 See [docs/testing.md](docs/testing.md) for unit test documentation.
@@ -104,6 +114,42 @@ See [docs/testing.md](docs/testing.md) for unit test documentation.
 See [docs/configuration.md](docs/configuration.md) for detailed configuration documentation.
 
 Configuration is stored in `~/.config/kartend/kartend.cfg` (INI format). Collections can be configured via the Settings Dialog or by editing the file directly.
+
+## Keyboard Shortcuts
+
+Defaults — all navigation keys are user-rebindable in **Settings → General** (a complete in-app reference is available via **F1** or **Help → Shortcuts**).
+
+### Navigation
+
+| Key                         | Action                                  |
+|-----------------------------|-----------------------------------------|
+| `←` / `→` / `↑` / `↓`       | Move selection                          |
+| `Enter` / `Return`          | Launch / enter subcollection            |
+| `Escape`                    | Back / close overlay                    |
+| `Home` / `End`              | Jump to first / last item               |
+| `Page Up` / `Page Down`     | Alphabetic jump (previous/next letter)  |
+| `/`                         | Focus search bar                        |
+
+### View
+
+| Key              | Action                                          |
+|------------------|-------------------------------------------------|
+| `Ctrl + +`       | Increase grid width (more items per row)        |
+| `Ctrl + -`       | Decrease grid width                             |
+| `F5`             | Refresh current view                            |
+| `Ctrl + F5`      | Rescan collection (force re-read from disk)     |
+| `F8`             | Toggle metadata sidebar                         |
+| `F9`             | Toggle menu bar                                 |
+| `F10`            | Toggle toolbar                                  |
+| `F11`            | Toggle fullscreen                               |
+
+### Application
+
+| Key              | Action                  |
+|------------------|-------------------------|
+| `F1`             | Show keyboard shortcuts |
+| `Ctrl + ,`       | Open settings           |
+| `Ctrl + Q`       | Exit                    |
 
 ## Architecture
 

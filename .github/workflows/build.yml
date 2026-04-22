@@ -121,6 +121,21 @@ jobs:
           cd build/Sanitize
           ctest --output-on-failure
 
+      - name: Smoke-test kartend binary (ASan/UBSan, full teardown)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          KARTEND_SMOKE_TEST_EXIT_MS: "2000"
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=1:exitcode=42
+          UBSAN_OPTIONS: halt_on_error=1:exitcode=42
+        run: |
+          # Launches the actual app under sanitizers and exits via graceful
+          # quit (no quick_exit) so destruction order is fully exercised.
+          # Uses a clean throwaway HOME so no real user config is touched.
+          export HOME="$RUNNER_TEMP/kartend-smoke-home"
+          mkdir -p "$HOME"
+          cd build/Sanitize
+          ./kartend
+
   maintenance-check:
     runs-on: ubuntu-24.04
     
@@ -152,4 +167,93 @@ jobs:
           bash .scripts/build.sh --maintenance --format-check
 
       - name: ccache stats
+        run: ccache --show-stats
+
+  coverage:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ cmake ninja-build ccache qt6-base-dev libqt6sql6-sqlite lcov
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-coverage-${{ hashFiles('CMakeLists.txt', 'src/**', 'tests/**') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-coverage-
+            ${{ runner.os }}-ccache-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=cache_dir=$HOME/.cache/ccache
+          ccache --set-config=max_size=1G
+          ccache --zero-stats
+
+      - name: Configure CMake (Debug + coverage)
+        run: |
+          cmake -S . -B build/coverage -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_TESTS=ON \
+            -DENABLE_COVERAGE=ON \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build/coverage --parallel $(nproc)
+
+      - name: ccache stats
+        run: ccache --show-stats
+
+      - name: Reset coverage counters
+        run: lcov --directory build/coverage --zerocounters
+
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build/coverage --output-on-failure
+
+      - name: Capture coverage data
+        run: |
+          lcov --directory build/coverage \
+               --capture \
+               --output-file build/coverage/coverage.info \
+               --ignore-errors mismatch,unused,inconsistent,gcov \
+               --no-external \
+               --base-directory $GITHUB_WORKSPACE
+          lcov --remove build/coverage/coverage.info \
+               '*/tests/*' \
+               '*/build/*' \
+               '/usr/*' \
+               '*/qt6/*' \
+               --output-file build/coverage/coverage.filtered.info \
+               --ignore-errors unused,inconsistent
+
+      - name: Generate coverage summary
+        run: |
+          lcov --list build/coverage/coverage.filtered.info \
+               --ignore-errors inconsistent | tee build/coverage/coverage-summary.txt
+
+      - name: Generate HTML report
+        run: |
+          genhtml build/coverage/coverage.filtered.info \
+                  --output-directory build/coverage/html \
+                  --title "Kartend Coverage" \
+                  --ignore-errors inconsistent,source
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            build/coverage/coverage.filtered.info
+            build/coverage/coverage-summary.txt
+            build/coverage/html/
+          if-no-files-found: error
+          retention-days: 14
         run: ccache --show-stats
