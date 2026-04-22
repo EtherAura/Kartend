@@ -8,6 +8,7 @@
 #include <QTreeWidgetItem>
 #include <algorithm>
 #include <functional>
+#include <set>
 
 #include "mainwindow.h"
 #include "settingsdialog.h"
