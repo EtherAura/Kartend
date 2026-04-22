@@ -256,4 +256,3 @@ jobs:
             build/coverage/html/
           if-no-files-found: error
           retention-days: 14
-        run: ccache --show-stats
