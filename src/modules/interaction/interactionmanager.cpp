@@ -74,6 +74,16 @@ InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
 
 // Destructor: stop timers/animations and clear selection
 InteractionManager::~InteractionManager() {
+  // Detach the application-wide event filter installed in
+  // installEventFilters() before any owned sub-manager (notably
+  // m_eventManager, which the filter delegates to) starts being
+  // destroyed. Without this, Qt can still deliver events to
+  // eventFilter() while ~EventManager runs, producing a UBSan
+  // vptr violation when m_eventManager->filterEvent() is invoked
+  // on a partially-destroyed object.
+  if (qApp) {
+    qApp->removeEventFilter(this);
+  }
   stopRepeat();
   clearSelection();
 }
