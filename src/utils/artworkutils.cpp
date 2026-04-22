@@ -1,5 +1,6 @@
 // Utility functions for artwork file operations.
 #include "artworkutils.h"
+#include "loggingcategories.h"
 #include "extensionutils.h"
 
 #include <QDir>
@@ -37,10 +38,8 @@ void DirectoryCache::ensureDirectoryCached(const QString &directory) {
     // Cache empty hash to avoid repeated checks
     QMutexLocker locker(&m_mutex);
     m_cache.insert(directory, QHash<QString, QString>());
-    if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
-      qWarning() << "[PerfTrace] ensureDirectoryCached: dir NOT EXISTS ms="
+      qCDebug(lcPerfTrace) << "ensureDirectoryCached: dir NOT EXISTS ms="
                  << perfTimer.elapsed() << "dir=" << directory;
-    }
     return;
   }
 
@@ -71,7 +70,7 @@ void DirectoryCache::ensureDirectoryCached(const QString &directory) {
 
   if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") &&
       perfTimer.elapsed() > 1) {
-    qWarning() << "[PerfTrace] ensureDirectoryCached: SCAN ms="
+    qCDebug(lcPerfTrace) << "ensureDirectoryCached: SCAN ms="
                << perfTimer.elapsed() << "files=" << fileCount
                << "dir=" << directory;
   }
@@ -99,7 +98,7 @@ QString DirectoryCache::findInDirectory(const QString &baseName,
     if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
       static int queuedLogCount = 0;
       if (++queuedLogCount <= 10) {
-        qWarning() << "[PerfTrace] findInDirectory: QUEUED lockMs=" << afterLock
+        qCDebug(lcPerfTrace) << "findInDirectory: QUEUED lockMs=" << afterLock
                    << "cacheSize=" << m_cache.size()
                    << "queueSize=" << m_queuedDirectories.size()
                    << "dir=" << artworkDirectory;
@@ -112,7 +111,7 @@ QString DirectoryCache::findInDirectory(const QString &baseName,
   QString result = dirContents.value(baseName.toLower());
 
   if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && timer.elapsed() > 2) {
-    qWarning() << "[PerfTrace] findInDirectory: CACHED lockMs=" << afterLock
+    qCDebug(lcPerfTrace) << "findInDirectory: CACHED lockMs=" << afterLock
                << "totalMs=" << timer.elapsed() << "found=" << !result.isEmpty()
                << "dirContentsSize=" << dirContents.size()
                << "dir=" << artworkDirectory;
@@ -166,11 +165,8 @@ void DirectoryCache::processQueuedDirectories() {
     return;
   }
 
-  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
-    qWarning() << "[PerfTrace] processQueuedDirectories: count="
+    qCDebug(lcPerfTrace) << "processQueuedDirectories: count="
                << toProcess.size();
-  }
-
   // Process in parallel for faster warmup
   QtConcurrent::blockingMap(toProcess, [this](const QString &dir) {
     ensureDirectoryCached(dir);
@@ -306,7 +302,7 @@ QString findArtworkForFileCached(const QString &fileName,
   if (!result.isEmpty()) {
     if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") &&
         perfTimer.elapsed() > 2) {
-      qWarning() << "[PerfTrace] findArtworkForFileCached: ms="
+      qCDebug(lcPerfTrace) << "findArtworkForFileCached: ms="
                  << perfTimer.elapsed() << "dir=" << artworkDirectory;
     }
     return result;
@@ -321,7 +317,7 @@ QString findArtworkForFileCached(const QString &fileName,
 
   if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") &&
       perfTimer.elapsed() > 2) {
-    qWarning() << "[PerfTrace] findArtworkForFileCached: ms="
+    qCDebug(lcPerfTrace) << "findArtworkForFileCached: ms="
                << perfTimer.elapsed() << "dir=" << artworkDirectory
                << "(fallback)";
   }

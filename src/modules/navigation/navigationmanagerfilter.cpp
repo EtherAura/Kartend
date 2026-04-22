@@ -2,6 +2,7 @@
 // Extracted from navigationmanager.cpp during LOC-reduction refactor.
 // These remain NavigationManager members; this is a translation-unit split.
 #include "artworkmanager.h"
+#include "loggingcategories.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "interactionmanager.h"
@@ -23,19 +24,6 @@
 // Local mirror of the diagnostic logging macro used in navigationmanager.cpp.
 // Re-defined here so this TU has the same release-safe diagnostic gate
 // without leaking the macro through a header.
-namespace {
-inline bool searchDiagEnabledFilter() {
-  return qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG");
-}
-} // namespace
-
-#define diagLog(msg)                                                           \
-  do {                                                                         \
-    if (::searchDiagEnabledFilter()) {                                         \
-      qWarning() << "[SearchDiag][NavigationManager]" << msg;                  \
-    }                                                                          \
-  } while (0)
-
 void NavigationManager::filterItems(const QString &searchText) {
   if (!m_currentCollectionIndex || !m_collections) {
     return;
@@ -48,7 +36,7 @@ void NavigationManager::filterItems(const QString &searchText) {
 
   CollectionContext context = getOrBuildExpandedContext(idx);
 
-  diagLog(
+  qCDebug(lcSearchDiag) << 
       QString(
           "filterItems: idx=%1 query='%2' mediaDir='%3' includeSubfolders=%4 "
           "showAllSubfolderItems=%5 currentSubfolder='%6'")
@@ -57,7 +45,7 @@ void NavigationManager::filterItems(const QString &searchText) {
           .arg(context.config.mediaDirectory)
           .arg(context.config.includeContentSubfolders)
           .arg(context.config.showAllSubfolderItems)
-          .arg(context.config.currentSubfolder));
+          .arg(context.config.currentSubfolder);
   requestItemCountForContext(context, searchText);
 }
 
@@ -75,11 +63,11 @@ void NavigationManager::filterItemsCurrentAndSubcollections(
   CollectionContext context = getOrBuildExpandedContext(idx);
   context.queryIncludeDescendants = true;
 
-  diagLog(QString("filterItemsCurrentAndSubcollections: idx=%1 query='%2' "
+  qCDebug(lcSearchDiag) << QString("filterItemsCurrentAndSubcollections: idx=%1 query='%2' "
                   "includeDesc=%3")
               .arg(idx)
               .arg(searchText)
-              .arg(context.queryIncludeDescendants));
+              .arg(context.queryIncludeDescendants);
   requestItemCountForContext(context, searchText);
 }
 
@@ -99,10 +87,10 @@ void NavigationManager::filterItemsAllCollections(const QString &searchText) {
   context.subcollectionOverride = {};
   context.suppressVirtualFolders = true;
 
-  diagLog(QString("filterItemsAllCollections: idx=%1 query='%2' includeAll=%3")
+  qCDebug(lcSearchDiag) << QString("filterItemsAllCollections: idx=%1 query='%2' includeAll=%3")
               .arg(idx)
               .arg(searchText)
-              .arg(context.queryIncludeAllCollections));
+              .arg(context.queryIncludeAllCollections);
   requestItemCountForContext(context, searchText);
 }
 
@@ -185,8 +173,8 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
     return;
   }
 
-  diagLog("safeReloadCollection requested idx=" << collectionIndex);
-  qWarning() << "[ScanFlow] safeReloadCollection requested idx="
+  qCDebug(lcSearchDiag) << "safeReloadCollection requested idx=" << collectionIndex;
+  qCWarning(lcScanFlow) << "safeReloadCollection requested idx="
              << collectionIndex;
 
   if (!m_safeReloadTimer) {
@@ -197,8 +185,8 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
       const int pendingIndex = m_pendingSafeReloadCollectionIndex;
       m_pendingSafeReloadCollectionIndex = -1;
 
-      diagLog("safeReloadCollection firing idx=" << pendingIndex);
-      qWarning() << "[ScanFlow] safeReloadCollection timer FIRING idx="
+      qCDebug(lcSearchDiag) << "safeReloadCollection firing idx=" << pendingIndex;
+      qCWarning(lcScanFlow) << "safeReloadCollection timer FIRING idx="
                  << pendingIndex;
 
       if (!m_collections || !m_databaseManager || !m_currentCollectionIndex ||
@@ -212,7 +200,7 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
       // requested but the user has navigated to a different collection.
       int reloadIndex = pendingIndex;
       if (pendingIndex != (*m_currentCollectionIndex)) {
-        qWarning() << "[ScanFlow] safeReloadCollection: pendingIndex"
+        qCWarning(lcScanFlow) << "safeReloadCollection: pendingIndex"
                    << pendingIndex << "!= currentIndex"
                    << (*m_currentCollectionIndex)
                    << "- reloading current instead";
@@ -282,8 +270,8 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
     }
   }
 
-  diagLog("safeReloadCollection scheduled (debounced) idx="
-          << m_pendingSafeReloadCollectionIndex);
+  qCDebug(lcSearchDiag) << "safeReloadCollection scheduled (debounced) idx="
+          << m_pendingSafeReloadCollectionIndex;
 
   // Wait for cleanup to complete and coalesce repeated reload requests.
   m_safeReloadTimer->start(UIConstants::Timing::MEDIUM_DELAY_MS);

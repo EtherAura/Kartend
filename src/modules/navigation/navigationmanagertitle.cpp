@@ -4,6 +4,7 @@
 //   - onItemCountLoaded (~215 LOC)
 // Both remain NavigationManager members and access existing class state.
 #include "applicationcontext.h"
+#include "loggingcategories.h"
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
@@ -32,19 +33,6 @@
 Q_DECLARE_LOGGING_CATEGORY(lcNavigationManager)
 
 // Re-define diagnostic logging macro (file-local in main TU).
-namespace {
-inline bool searchDiagEnabled() {
-  return qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG");
-}
-} // namespace
-
-#define diagLog(msg)                                                           \
-  do {                                                                         \
-    if (searchDiagEnabled()) {                                                 \
-      qWarning() << "[SearchDiag][NavigationManager]" << msg;                  \
-    }                                                                          \
-  } while (0)
-
 auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
   if ((!parent()) || (!m_itemsPage)) {
     return;
@@ -180,16 +168,16 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
 }
 
 void NavigationManager::onItemCountLoaded(int count, int requestToken) {
-  qWarning() << "[ScanFlow] onItemCountLoaded ENTRY: count=" << count
+  qCWarning(lcScanFlow) << "onItemCountLoaded ENTRY: count=" << count
              << "token=" << requestToken
              << "expected=" << m_itemCountRequestToken;
   if (requestToken != m_itemCountRequestToken) {
-    diagLog(QString("onItemCountLoaded: ignoring stale result count=%1 "
+    qCDebug(lcSearchDiag) << QString("onItemCountLoaded: ignoring stale result count=%1 "
                     "token=%2 expected=%3")
                 .arg(count)
                 .arg(requestToken)
-                .arg(m_itemCountRequestToken));
-    qWarning() << "[ScanFlow] STALE token - ignoring";
+                .arg(m_itemCountRequestToken);
+    qCWarning(lcScanFlow) << "STALE token - ignoring";
     return;
   }
 
@@ -207,15 +195,15 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
           : ((m_searchBar) ? m_searchBar->text().trimmed() : QString());
   const bool searchActive = !searchText.isEmpty();
 
-  diagLog(QString("onItemCountLoaded: count=%1 searchActive=%2 searchText='%3' "
+  qCDebug(lcSearchDiag) << QString("onItemCountLoaded: count=%1 searchActive=%2 searchText='%3' "
                   "itemsViewGen(before)=%4 token=%5")
               .arg(count)
               .arg(searchActive)
               .arg(searchText)
               .arg(m_itemsViewGeneration)
-              .arg(requestToken));
+              .arg(requestToken);
 
-  qWarning() << "[ScanFlow] onItemCountLoaded: count=" << count
+  qCWarning(lcScanFlow) << "onItemCountLoaded: count=" << count
              << "bgRefresh=" << m_backgroundCountRefreshInProgress
              << "bgIdx=" << m_backgroundCountRefreshCollectionIndex
              << "curIdx=" << idx;
@@ -223,7 +211,7 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   if (m_backgroundCountRefreshInProgress &&
       m_backgroundCountRefreshCollectionIndex == idx && m_scrollManager) {
     const int currentViewItems = m_scrollManager->getTotalItems();
-    qWarning() << "[ScanFlow] bgRefresh path: currentViewItems="
+    qCWarning(lcScanFlow) << "bgRefresh path: currentViewItems="
                << currentViewItems << "count=" << count;
     // Background scan completed. If the view already has items and count is the
     // same or lower, just update without resetting scroll/selection state.
@@ -246,7 +234,7 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
     }
     // View is empty OR count increased - clear the refresh flags and fall
     // through to full rebuild so the newly-scanned items are displayed.
-    qWarning() << "[ScanFlow] Count changed or view empty, falling through to "
+    qCWarning(lcScanFlow) << "Count changed or view empty, falling through to "
                   "full rebuild";
     m_backgroundCountRefreshInProgress = false;
     m_backgroundCountRefreshCollectionIndex = -1;
@@ -259,8 +247,8 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   ++m_itemsViewGeneration;
   m_pendingRangeGenerations.clear();
 
-  diagLog(QString("onItemCountLoaded: itemsViewGen(after)=%1")
-              .arg(m_itemsViewGeneration));
+  qCDebug(lcSearchDiag) << QString("onItemCountLoaded: itemsViewGen(after)=%1")
+              .arg(m_itemsViewGeneration);
 
   // Clean up existing "no items" widgets
   cleanupExistingNoItemsWidgets();
@@ -301,16 +289,16 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
 
   int totalItems = subcollections.size() + virtualFolderCount + count;
 
-  diagLog(QString("onItemCountLoaded: subcollections=%1 virtualFolders=%2 "
+  qCDebug(lcSearchDiag) << QString("onItemCountLoaded: subcollections=%1 virtualFolders=%2 "
                   "dbCount=%3 totalItems=%4")
               .arg(subcollections.size())
               .arg(virtualFolderCount)
               .arg(count)
-              .arg(totalItems));
+              .arg(totalItems);
 
   // Check if collection has any content
   if (totalItems == 0) {
-    diagLog("onItemCountLoaded: totalItems==0, calling handleEmptyContent");
+    qCDebug(lcSearchDiag) << "onItemCountLoaded: totalItems==0, calling handleEmptyContent";
     // Hide search loading overlay even when no results
     if (m_scrollManager) {
       m_scrollManager->hideSearchLoadingOverlay();
@@ -353,7 +341,7 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
     } else if (selIdx >= 0) {
       m_scrollManager->setInitialScrollIndex(selIdx);
     }
-    qWarning() << "[ScanFlow] Calling setupVirtualScrolling: totalItems="
+    qCWarning(lcScanFlow) << "Calling setupVirtualScrolling: totalItems="
                << totalItems;
     m_scrollManager->setupVirtualScrolling(totalItems, context);
 

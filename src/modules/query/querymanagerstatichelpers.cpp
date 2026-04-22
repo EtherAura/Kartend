@@ -5,6 +5,7 @@
 // These are pure (non-state-touching) member functions that operate on
 // caller-supplied containers / strings.
 #include "pathutils.h"
+#include "queryhelpers.h"
 #include "querymanager.h"
 #include "querymanagerhelpers.h"
 #include <QDateTime>
@@ -165,23 +166,5 @@ void QueryManager::sortFiles(QStringList &allFilePaths, SortMode mode) {
 }
 
 int QueryManager::getCharacterSortPriority(const QString &text) {
-  if (text.isEmpty()) {
-    return 3;
-  }
-
-  QChar firstChar = text[0];
-  if (firstChar == '[' || firstChar == '(') {
-    return 0;
-  }
-  if (firstChar == '\'' && text.length() > 1 &&
-      (text[1].isDigit() || text[1].isLetter())) {
-    return text[1].isDigit() ? 2 : 3;
-  }
-  if (firstChar.isDigit()) {
-    return 2;
-  }
-  if (firstChar.isLetter()) {
-    return 3;
-  }
-  return 1;
+  return QueryHelpers::characterSortPriority(text);
 }

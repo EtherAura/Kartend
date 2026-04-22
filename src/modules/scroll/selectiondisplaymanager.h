@@ -5,15 +5,22 @@
 #include "gridlayoutcalculator.h"
 #include <QHash>
 #include <QObject>
+#include <QPoint>
+#include <QRect>
 #include <QString>
+#include <functional>
 #include <memory>
 
 class QWidget;
 class QScrollArea;
+class QTimer;
 class ItemWidget;
 class ItemWidgetFactory;
 class SelectionOverlayManager;
 class SelectionStateTracker;
+class SelectionCoordinator;
+class ArrowKeyScrollHelper;
+class InteractionStateHolder;
 class ListHeaderWidget;
 class ArtworkPreviewOverlay;
 struct GeneralSettings;
@@ -66,6 +73,28 @@ public:
   void setCollectionContext(const CollectionContext *context) {
     m_context = context;
   }
+  void setSelectionCoordinator(SelectionCoordinator *coord) {
+    m_selectionCoordinator = coord;
+  }
+  void setArrowKeyScrollHelper(ArrowKeyScrollHelper *helper) {
+    m_arrowKeyScrollHelper = helper;
+  }
+  void setInteractionState(InteractionStateHolder *state) { m_state = state; }
+  void setArrowKeyViewUpdateTimer(QTimer *timer) {
+    m_arrowKeyViewUpdateTimer = timer;
+  }
+  void setEnsureWidgetCallback(std::function<void(int)> cb) {
+    m_ensureWidget = std::move(cb);
+  }
+  void setItemPositionCallback(std::function<QPoint(int)> cb) {
+    m_itemPosition = std::move(cb);
+  }
+  void setTotalItemsProvider(std::function<int()> cb) {
+    m_totalItemsProvider = std::move(cb);
+  }
+  void setDestroyingProvider(std::function<bool()> cb) {
+    m_destroyingProvider = std::move(cb);
+  }
   /// Applies persisted column widths from settings, if any.
   void applyGeneralSettings(const GeneralSettings *settings);
 
@@ -107,6 +136,24 @@ public:
   /// Lazy-creates the overlay if needed and shows it for the given file.
   void showArtworkPreview(const QString &filePath, const QString &artworkDir);
 
+  // ─────────────────────────────────────────────────────────────────────
+  // Selection update logic (moved from ScrollManager, Kartend-p79)
+  // ─────────────────────────────────────────────────────────────────────
+
+  /// Updates selection visuals and manages prewarming, overlay animation, and
+  /// arrow-centering for the given visual index.
+  void updateSelectionForIndex(int selectedIndex);
+  /// Refreshes overlay visibility based on current selection and force flag.
+  void refreshSelectionOverlayState();
+  /// Sets whether the selection overlay must remain visible (e.g. during
+  /// click-hold scrolling) and refreshes accordingly.
+  void setForceSelectionOverlayVisible(bool force);
+  /// Returns the overlay rect for the given visual index.
+  [[nodiscard]] QRect selectionOverlayRectForIndex(int visualIndex) const;
+  /// Slot for the arrow-key view update timer; recenters the view on the
+  /// selected item.
+  void onArrowKeyViewUpdate();
+
 signals:
   /// Emitted when the user clicks a list header column to change sort.
   void sortModeChangeRequested(SortMode sortMode);
@@ -121,6 +168,21 @@ private slots:
   void onListArtworkColumnWidthChanged(int artworkWidth);
 
 private:
+  // Selection update internal helpers (moved from ScrollManager, Kartend-p79)
+  void prewarmSurroundingWidgets(int selectedIndex);
+  void scheduleArrowKeyUpdate(int selectedIndex);
+  void updateSelectionDirection(int selectedIndex, int prevIndex);
+  void handleSameSelectionUpdate(int selectedIndex, ItemWidget *currentWidget,
+                                 bool keepOverlay);
+  void handleNewSelectionUpdate(int selectedIndex, int prevIndex,
+                                ItemWidget *currentWidget);
+  void handleMissingWidgetSelection(int selectedIndex, bool keepOverlay);
+  void handleHorizontalMoveAnimation(int selectedIndex, int prevIndex);
+  void handleDirectSelectionUpdate(int selectedIndex);
+  static void calculateMovementDirection(int selectedIndex, int prevIndex,
+                                         int itemsPerRow,
+                                         bool &isHorizontalMove);
+
   // Owned sub-objects
   std::unique_ptr<SelectionOverlayManager> m_overlay;
   std::unique_ptr<SelectionStateTracker> m_stateTracker;
@@ -134,6 +196,17 @@ private:
   const QHash<int, ItemWidget *> *m_activeWidgets = nullptr;
   const GridMetrics *m_metrics = nullptr;
   const CollectionContext *m_context = nullptr;
+  SelectionCoordinator *m_selectionCoordinator = nullptr;
+  ArrowKeyScrollHelper *m_arrowKeyScrollHelper = nullptr;
+  InteractionStateHolder *m_state = nullptr;
+  QTimer *m_arrowKeyViewUpdateTimer = nullptr;
+
+  // Callbacks back into ScrollManager (avoid cyclic include + keep state
+  // ownership clean)
+  std::function<void(int)> m_ensureWidget;
+  std::function<QPoint(int)> m_itemPosition;
+  std::function<int()> m_totalItemsProvider;
+  std::function<bool()> m_destroyingProvider;
 
   // List view column widths
   int m_collectionColumnWidth = 150;

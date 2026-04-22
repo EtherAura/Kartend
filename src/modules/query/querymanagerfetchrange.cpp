@@ -5,6 +5,7 @@
 // it here so this TU does not depend on private symbols of the main TU.
 #include "querymanager.h"
 
+#include "loggingcategories.h"
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -67,8 +68,7 @@ void QueryManager::fetchItemsRange(
 
   const QString trimmedFilter = filter.trimmed();
 
-  if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    qWarning() << "[SearchDiag][QueryManager] fetchItemsRange: collIndex="
+    qCDebug(lcSearchDiag) << "[QueryManager] fetchItemsRange: collIndex="
                << context.currentIndex << "offset=" << offset
                << "limit=" << limit << "filter='" << trimmedFilter
                << "' includeSubfolders="
@@ -76,8 +76,6 @@ void QueryManager::fetchItemsRange(
                << " showAllSubfolderItems="
                << context.config.showAllSubfolderItems << " currentSubfolder='"
                << context.config.currentSubfolder << "'";
-  }
-
   QElapsedTimer rangeTimer;
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     rangeTimer.start();
@@ -109,7 +107,7 @@ void QueryManager::fetchItemsRange(
     if (isRandomSort) {
       // Random mode: must build cache synchronously for consistent pagination
       if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-        qWarning() << "[RangeDiag] fetchItemsRange: Random sort requires cache, "
+        qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: Random sort requires cache, "
                       "building synchronously";
       }
       (void)populateSortedItemsCache(uuids, trimmedFilter, ctx.sortMode);
@@ -117,7 +115,7 @@ void QueryManager::fetchItemsRange(
     } else if (uuids.size() >= 10 &&
                offset >= UIConstants::Database::PRECOMPUTE_SORT_THRESHOLD) {
       if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-        qWarning() << "[RangeDiag] fetchItemsRange: scheduling deferred cache "
+        qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: scheduling deferred cache "
                       "build, offset="
                    << offset;
       }
@@ -132,7 +130,7 @@ void QueryManager::fetchItemsRange(
         computeSortCacheHash(uuids, trimmedFilter, ctx.sortMode);
     if (currentHash == m_sortedItemsCacheHash) {
       if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-        qWarning() << "[RangeDiag] fetchItemsRange: using sorted cache, offset="
+        qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: using sorted cache, offset="
                    << offset << "limit=" << limit;
       }
 
@@ -181,7 +179,7 @@ void QueryManager::fetchItemsRange(
         }
 
         if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-          qWarning() << "[RangeDiag] fetchItemsRange (cached): totalMs="
+          qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange (cached): totalMs="
                      << rangeTimer.elapsed()
                      << "resultCount=" << filePaths.size();
         }
@@ -192,7 +190,7 @@ void QueryManager::fetchItemsRange(
       } else {
         // Cache query failed - fall through to standard path
         if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-          qWarning() << "[RangeDiag] fetchItemsRange: cache query failed, "
+          qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: cache query failed, "
                         "falling back:"
                      << cacheQuery.lastError().text();
         }
@@ -200,7 +198,7 @@ void QueryManager::fetchItemsRange(
     } else {
       // Hash mismatch - cache is stale (filter changed)
       if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-        qWarning() << "[RangeDiag] fetchItemsRange: cache hash mismatch, using "
+        qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: cache hash mismatch, using "
                       "slow path";
       }
       clearSortedItemsCache();
@@ -331,7 +329,7 @@ void QueryManager::fetchItemsRange(
   }
 
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-    qWarning() << "[RangeDiag] fetchItemsRange (slow path): offset=" << offset
+    qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange (slow path): offset=" << offset
                << "limit=" << limit << "uuids=" << uuids.size()
                << "useTempTable=" << useTempTable;
   }
@@ -400,23 +398,22 @@ void QueryManager::fetchItemsRange(
     }
 
     if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-      qWarning() << "[RangeDiag] fetchItemsRange: execMs=" << execMs
+      qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: execMs=" << execMs
                  << "totalMs=" << rangeTimer.elapsed()
                  << "resultCount=" << filePaths.size();
     }
 
     if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-      qWarning()
-          << "[SearchDiag][QueryManager] fetchItemsRange: returned paths="
+      qCDebug(lcSearchDiag) << "[QueryManager] fetchItemsRange: returned paths="
           << filePaths.size();
       if (!filePaths.isEmpty()) {
-        qWarning() << "[SearchDiag][QueryManager] fetchItemsRange: firstPath="
+        qCDebug(lcSearchDiag) << "[QueryManager] fetchItemsRange: firstPath="
                    << filePaths.first();
       }
     }
   } else {
     if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-      qWarning() << "[RangeDiag] fetchItemsRange: QUERY FAILED after"
+      qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: QUERY FAILED after"
                  << rangeTimer.elapsed() << "ms:" << query.lastError().text();
     }
     auto err = ErrorContext::error(ErrorCode::DatabaseQueryFailed,

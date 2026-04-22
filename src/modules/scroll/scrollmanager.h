@@ -53,20 +53,15 @@ struct ApplicationContext;
  */
 struct ScrollManagerSetup {
   const ApplicationContext *ctx = nullptr;
-  const GeneralSettings *generalSettings = nullptr;
-  QWidget *gridContainer = nullptr;
-  QScrollArea *mediaScrollArea = nullptr;
-  ArtworkManager *artworkManager = nullptr;
-  const QList<CollectionConfig> *collections = nullptr;
-  const CollectionHierarchyCache *hierarchyCache = nullptr;
 
-  SETUP_GETTER_DECL(QWidget *, GridContainer)
-  SETUP_GETTER_DECL(QScrollArea *, MediaScrollArea)
-  SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
-  SETUP_GETTER_DECL(const QList<CollectionConfig> *, Collections)
-  SETUP_GETTER_DECL(const CollectionHierarchyCache *, HierarchyCache)
+  // All fields resolved through ApplicationContext typed accessors.
+  SETUP_GETTER_DECL_CTX_ONLY(QWidget *, GridContainer)
+  SETUP_GETTER_DECL_CTX_ONLY(QScrollArea *, MediaScrollArea)
+  SETUP_GETTER_DECL_CTX_ONLY(ArtworkManager *, ArtworkManager)
+  SETUP_GETTER_DECL_CTX_ONLY(const QList<CollectionConfig> *, Collections)
+  SETUP_GETTER_DECL_CTX_ONLY(const CollectionHierarchyCache *, HierarchyCache)
   SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
-  SETUP_GETTER_DECL(const GeneralSettings *, GeneralSettings)
+  SETUP_GETTER_DECL_CTX_ONLY(const GeneralSettings *, GeneralSettings)
 };
 
 /**
@@ -354,21 +349,11 @@ private:
   void setupScrollSuppression();
   void finalizeScrollChanges();
 
-  void calculateMovementDirection(int selectedIndex, int prevIndex,
-                                  int itemsPerRow, bool &isHorizontalMove);
-  [[nodiscard]] QRect selectionOverlayRectForIndex(int visualIndex) const;
-  void handleHorizontalMoveAnimation(int selectedIndex, int prevIndex);
-  void handleDirectSelectionUpdate(int selectedIndex);
-  void prewarmSurroundingWidgets(int selectedIndex);
-  void scheduleArrowKeyUpdate(int selectedIndex);
-
-  // Selection update helpers (split from updateSelectionForIndex)
-  void updateSelectionDirection(int selectedIndex, int prevIndex);
-  void handleSameSelectionUpdate(int selectedIndex, ItemWidget *currentWidget,
-                                 bool keepOverlay);
-  void handleNewSelectionUpdate(int selectedIndex, int prevIndex,
-                                ItemWidget *currentWidget);
-  void handleMissingWidgetSelection(int selectedIndex, bool keepOverlay);
+  // Selection update helpers and related internals were moved to
+  // SelectionDisplayManager (Kartend-p79). ScrollManager keeps thin facade
+  // methods (updateSelectionForIndex, refreshSelectionOverlayState,
+  // setForceSelectionOverlayVisible, selectionOverlayRectForIndex,
+  // onArrowKeyViewUpdate) declared in the public/slots sections above.
 
   void rebuildFilteredView();
 };

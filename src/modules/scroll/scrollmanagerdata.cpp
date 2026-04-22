@@ -3,6 +3,7 @@
 // access existing class state (m_dataManager, m_filterManager,
 // m_widgetFactory, m_widgetPool, m_artworkManager, m_metrics, etc.).
 #include "applicationcontext.h"
+#include "loggingcategories.h"
 #include "arrowkeyscrollhelper.h"
 #include "artworkmanager.h"
 #include "artworkutils.h"
@@ -34,19 +35,6 @@ Q_DECLARE_LOGGING_CATEGORY(lcScrollManager)
   do {                                                                         \
     if (lcScrollManager().isDebugEnabled()) {                                  \
       qCDebug(lcScrollManager) << msg;                                         \
-    }                                                                          \
-  } while (0)
-
-// Temporary diagnostic logging (release-safe) gated by env var.
-// Enable with: `KARTEND_SEARCH_DIAG=1 kartend`
-static inline bool searchDiagEnabled() {
-  return qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG");
-}
-
-#define diagLog(msg)                                                           \
-  do {                                                                         \
-    if (searchDiagEnabled()) {                                                 \
-      qWarning() << "[SearchDiag][ScrollManager]" << msg;                      \
     }                                                                          \
   } while (0)
 
@@ -88,15 +76,15 @@ void ScrollManager::receiveItemsRange(
     }
   }
 
-  diagLog(
+  qCDebug(lcSearchDiag) << 
       QString(
           "receiveItemsRange: offset=%1 incomingPaths=%2 storageFileCount=%3")
           .arg(offset)
           .arg(filePaths.size())
-          .arg(m_dataManager ? m_dataManager->fileCount() : -1));
+          .arg(m_dataManager ? m_dataManager->fileCount() : -1);
 
   if (offset < 0 || offset >= m_dataManager->fileCount()) {
-    diagLog("receiveItemsRange: IGNORED (offset out of bounds)");
+    qCDebug(lcSearchDiag) << "receiveItemsRange: IGNORED (offset out of bounds)";
     return;
   }
 
@@ -107,12 +95,10 @@ void ScrollManager::receiveItemsRange(
   // OPTIMIZATION: Only prewarm directories for visible items (first ~100),
   // not the entire chunk. The prewarm also warms the OS dentry cache,
   // making subsequent accesses fast.
-  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
-    qWarning() << "[PerfTrace] receiveItemsRange: fileToArtworkDir.size="
+    qCDebug(lcPerfTrace) << "receiveItemsRange: fileToArtworkDir.size="
                << fileToArtworkDir.size() << "showAllSubcollectionItems="
                << m_context.config.showAllSubcollectionItems
                << "offset=" << offset << "filePathsSize=" << filePaths.size();
-  }
   if (!fileToArtworkDir.isEmpty() &&
       m_context.config.showAllSubcollectionItems) {
     // Build artwork directory list in filePaths ORDER so visible items
@@ -136,11 +122,8 @@ void ScrollManager::receiveItemsRange(
       ++itemCount;
     }
 
-    if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
-      qWarning() << "[PerfTrace] receiveItemsRange: PREWARM artworkDirs.size="
+      qCDebug(lcPerfTrace) << "receiveItemsRange: PREWARM artworkDirs.size="
                  << artworkDirs.size();
-    }
-
     // Debounce artwork prewarm - skip if one was triggered recently (within
     // 200ms). Multiple chunks arrive in quick succession and we don't need to
     // prewarm each.
@@ -148,10 +131,7 @@ void ScrollManager::receiveItemsRange(
     constexpr qint64 prewarmDebounceMs =
         UIConstants::Scroll::ARTWORK_PREWARM_DEBOUNCE_MS;
     if (now - m_lastArtworkPrewarmTime < prewarmDebounceMs) {
-      if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
-        qWarning()
-            << "[PerfTrace] receiveItemsRange: SKIPPING PREWARM (debounced)";
-      }
+        qCDebug(lcPerfTrace) << "receiveItemsRange: SKIPPING PREWARM (debounced)";
     } else {
       m_lastArtworkPrewarmTime = now;
 
@@ -186,8 +166,8 @@ void ScrollManager::receiveItemsRange(
   QList<int> updatedIndices =
       m_dataManager->receiveItemsRange(offset, filePaths, fileNames);
 
-  diagLog(QString("receiveItemsRange: updatedVisualIndices=%1")
-              .arg(updatedIndices.size()));
+  qCDebug(lcSearchDiag) << QString("receiveItemsRange: updatedVisualIndices=%1")
+              .arg(updatedIndices.size());
 
   // Release placeholder widgets so they get re-created with actual data
   for (int visualIndex : updatedIndices) {
@@ -218,12 +198,12 @@ void ScrollManager::injectCachedItems(
   int mediaOffset =
       (startIndex >= prefixCount) ? (startIndex - prefixCount) : 0;
 
-  diagLog(QString("injectCachedItems: startIndex=%1 mediaOffset=%2 "
+  qCDebug(lcSearchDiag) << QString("injectCachedItems: startIndex=%1 mediaOffset=%2 "
                   "pathCount=%3 prefixCount=%4")
               .arg(startIndex)
               .arg(mediaOffset)
               .arg(filePaths.size())
-              .arg(prefixCount));
+              .arg(prefixCount);
 
   // Store cached data directly into the data manager
   QList<int> updatedIndices =
@@ -233,23 +213,23 @@ void ScrollManager::injectCachedItems(
   if (!artworkPaths.isEmpty() && m_widgetFactory) {
     m_widgetFactory->setCachedArtworkPaths(artworkPaths);
     if (qEnvironmentVariableIsSet("KARTEND_ARTWORK_DIAG")) {
-      qWarning() << "[ArtworkDiag] injectCachedItems: setting"
+      qCDebug(lcSearchDiag) << "[ArtworkDiag] injectCachedItems: setting"
                  << artworkPaths.size() << "cached artwork paths";
       if (!artworkPaths.isEmpty()) {
         auto it = artworkPaths.constBegin();
-        qWarning() << "[ArtworkDiag] first cached entry: key=" << it.key()
+        qCDebug(lcSearchDiag) << "[ArtworkDiag] first cached entry: key=" << it.key()
                    << "value=" << it.value();
       }
     }
   } else if (qEnvironmentVariableIsSet("KARTEND_ARTWORK_DIAG")) {
-    qWarning() << "[ArtworkDiag] injectCachedItems: artworkPaths.isEmpty="
+    qCDebug(lcSearchDiag) << "[ArtworkDiag] injectCachedItems: artworkPaths.isEmpty="
                << artworkPaths.isEmpty()
                << "m_widgetFactory=" << (m_widgetFactory != nullptr);
   }
 
-  diagLog(QString("injectCachedItems: updatedVisualIndices=%1 artworkPaths=%2")
+  qCDebug(lcSearchDiag) << QString("injectCachedItems: updatedVisualIndices=%1 artworkPaths=%2")
               .arg(updatedIndices.size())
-              .arg(artworkPaths.size()));
+              .arg(artworkPaths.size());
 
   // Trigger immediate update of visible widgets
   updateVirtualView();
@@ -335,8 +315,7 @@ bool ScrollManager::getCurrentViewportForCache(
           ++artworkMisses;
           if (diagEnabled && artworkMisses <= 3) {
             QFileInfo fi(path);
-            qWarning()
-                << "[ArtworkDiag] getCurrentViewportForCache: MISS for path"
+            qCDebug(lcSearchDiag) << "[ArtworkDiag] getCurrentViewportForCache: MISS for path"
                 << path << "parentDir=" << fi.absolutePath();
           }
         }
@@ -355,7 +334,7 @@ bool ScrollManager::getCurrentViewportForCache(
   }
 
   if (diagEnabled) {
-    qWarning() << "[ArtworkDiag] getCurrentViewportForCache: "
+    qCDebug(lcSearchDiag) << "[ArtworkDiag] getCurrentViewportForCache: "
                   "showAllSubcollectionItems="
                << showAllSubcollectionItems
                << "hierarchyCache=" << (m_hierarchyCache != nullptr)

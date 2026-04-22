@@ -11,6 +11,7 @@ option(PGO_GENERATE "Generate PGO profile data" OFF)
 option(PGO_USE "Use existing PGO profile data" OFF)
 option(PGO_PROFILE_DIR "Directory for PGO profile data" "${CMAKE_BINARY_DIR}/pgo_profiles")
 option(ENABLE_SANITIZERS "Enable ASan+UBSan in Debug builds" OFF)
+option(ENABLE_COVERAGE "Enable gcov/lcov coverage instrumentation in Debug builds" OFF)
 option(ENABLE_CCACHE "Use ccache for faster rebuilds (if available)" ON)
 
 if (ENABLE_CCACHE)
@@ -71,189 +72,33 @@ if (ENABLE_SANITIZERS)
   endif()
 endif()
 
+if (ENABLE_COVERAGE)
+  if (NOT (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
+    message(WARNING "ENABLE_COVERAGE is only supported on GCC/Clang")
+  else()
+    # Debug-only: full coverage instrumentation requires no optimization
+    # to map back to source lines reliably.
+    add_compile_options(
+      $<$<CONFIG:Debug>:--coverage>
+      $<$<CONFIG:Debug>:-fprofile-arcs>
+      $<$<CONFIG:Debug>:-ftest-coverage>
+      $<$<CONFIG:Debug>:-O0>
+      $<$<CONFIG:Debug>:-g>
+    )
+    add_link_options(
+      $<$<CONFIG:Debug>:--coverage>
+    )
+  endif()
+endif()
+
 if (NOT DEFINED BUILD_DATE)
   set(BUILD_DATE "unknown")
 endif()
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-set(SOURCES
-  ${SRC_DIR}/core/main.cpp
-  ${SRC_DIR}/core/mainwindow.cpp
-  ${SRC_DIR}/core/mainwindowwiring.cpp
-  ${SRC_DIR}/core/menucontroller.cpp
-  ${SRC_DIR}/modules/animation/animationmanager.cpp
-  ${SRC_DIR}/modules/application/applicationmanager.cpp
-  ${SRC_DIR}/modules/artwork/artworkmanager.cpp
-  ${SRC_DIR}/modules/artwork/artworksilentloading.cpp
-  ${SRC_DIR}/modules/cache/cachemanager.cpp
-  ${SRC_DIR}/modules/database/databasemanager.cpp
-  ${SRC_DIR}/modules/event/eventmanager.cpp
-  ${SRC_DIR}/modules/interaction/interactionmanager.cpp
-  ${SRC_DIR}/modules/interaction/interactionmanagerwiring.cpp
-  ${SRC_DIR}/modules/interaction/interactionmanagerholdscroll.cpp
-  ${SRC_DIR}/modules/interaction/arrownavigationhandler.cpp
-  ${SRC_DIR}/modules/interaction/interactionstateholder.cpp
-  ${SRC_DIR}/modules/gamepad/gamepadmanager.cpp
-  ${SRC_DIR}/modules/keyboard/keyboardmanager.cpp
-  ${SRC_DIR}/modules/keyboard/alphabeticnavigationhandler.cpp
-  ${SRC_DIR}/modules/launch/launchmanager.cpp
-  ${SRC_DIR}/modules/mouse/mousemanager.cpp
-  ${SRC_DIR}/modules/navigation/navigationmanager.cpp
-  ${SRC_DIR}/modules/navigation/navigationmanagerfilter.cpp
-  ${SRC_DIR}/modules/navigation/navigationmanagersubcollection.cpp
-  ${SRC_DIR}/modules/navigation/navigationmanagertitle.cpp
-  ${SRC_DIR}/modules/overlay/selectionoverlaymanager.cpp
-  ${SRC_DIR}/modules/overlay/searchloadingoverlay.cpp
-  ${SRC_DIR}/modules/query/querymanager.cpp
-  ${SRC_DIR}/modules/query/querymanagerstatichelpers.cpp
-  ${SRC_DIR}/modules/query/querymanagerlifecycle.cpp
-  ${SRC_DIR}/modules/query/querymanagerfetchrange.cpp
-  ${SRC_DIR}/modules/query/querymanagerscan.cpp
-  ${SRC_DIR}/modules/query/querymanagerpersist.cpp
-  ${SRC_DIR}/modules/query/querymanagerconnection.cpp
-  ${SRC_DIR}/modules/query/querymanagercache.cpp
-  ${SRC_DIR}/modules/query/querymanagerload.cpp
-  ${SRC_DIR}/modules/restore/selectionrestoremanager.cpp
-  ${SRC_DIR}/modules/scroll/scrollmanager.cpp
-  ${SRC_DIR}/modules/scroll/scrollmanagerfilter.cpp
-  ${SRC_DIR}/modules/scroll/scrollmanagerselection.cpp
-  ${SRC_DIR}/modules/scroll/scrollmanagerevents.cpp
-  ${SRC_DIR}/modules/scroll/scrollmanagerdata.cpp
-  ${SRC_DIR}/modules/scroll/selectiondisplaymanager.cpp
-  ${SRC_DIR}/modules/scroll/datasourcemanager.cpp
-  ${SRC_DIR}/modules/scroll/arrowkeyscrollhelper.cpp
-  ${SRC_DIR}/modules/scroll/virtualcontainermanager.cpp
-  ${SRC_DIR}/modules/scroll/selectioncoordinator.cpp
-  ${SRC_DIR}/modules/scroll/scrolleventhandler.cpp
-  ${SRC_DIR}/modules/scroll/gridlayoutcalculator.cpp
-  ${SRC_DIR}/modules/scroll/itemwidgetfactory.cpp
-  ${SRC_DIR}/modules/scroll/scrolldatamanager.cpp
-  ${SRC_DIR}/modules/scroll/presearchstatemanager.cpp
-  ${SRC_DIR}/modules/filter/filtermanager.cpp
-  ${SRC_DIR}/modules/widgetpool/widgetpoolmanager.cpp
-  ${SRC_DIR}/modules/search/searchmanager.cpp
-  ${SRC_DIR}/modules/selection/selectionmanager.cpp
-  ${SRC_DIR}/modules/session/sessionmanager.cpp
-  ${SRC_DIR}/modules/settings/settingsmanager.cpp
-  ${SRC_DIR}/modules/settings/settingsdialogcontroller.cpp
-  ${SRC_DIR}/modules/settings/settingsmanagercollections.cpp
-  ${SRC_DIR}/modules/sidebar/sidebarmanager.cpp
-  ${SRC_DIR}/modules/viewport/viewportmanager.cpp
-  ${SRC_DIR}/modules/viewport/viewportmanagervisibility.cpp
-  ${SRC_DIR}/ui/dialogs/errordialog.cpp
-  ${SRC_DIR}/ui/dialogs/settingsdialog.cpp
-  ${SRC_DIR}/ui/dialogs/settingsdialoggamepad.cpp
-  ${SRC_DIR}/ui/dialogs/settingsdialogtree.cpp
-  ${SRC_DIR}/ui/dialogs/settingsdialogform.cpp
-  ${SRC_DIR}/ui/dialogs/shortcutsdialog.cpp
-  ${SRC_DIR}/ui/widgets/metadatasidebar.cpp
-  ${SRC_DIR}/ui/widgets/itemwidget.cpp
-  ${SRC_DIR}/ui/widgets/itemwidgetpaint.cpp
-  ${SRC_DIR}/ui/widgets/itemwidgetsetters.cpp
-  ${SRC_DIR}/ui/widgets/loadingoverlay.cpp
-  ${SRC_DIR}/ui/widgets/listheaderwidget.cpp
-  ${SRC_DIR}/ui/widgets/artworkpreviewoverlay.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
-  ${SRC_DIR}/utils/settingsutils.cpp
-  ${SRC_DIR}/utils/extensionutils.cpp
-  ${SRC_DIR}/utils/timerutils.cpp
-  ${SRC_DIR}/utils/collectionutils.cpp
-  ${SRC_DIR}/utils/artworkutils.cpp
-  ${SRC_DIR}/utils/dbmigrations.cpp
-  ${SRC_DIR}/utils/configvalidation.cpp
-)
-
-set(HEADERS
-  ${SRC_DIR}/core/mainwindow.h
-  ${SRC_DIR}/core/menucontroller.h
-  ${SRC_DIR}/modules/animation/animationmanager.h
-  ${SRC_DIR}/modules/application/applicationmanager.h
-  ${SRC_DIR}/modules/artwork/artworkmanager.h
-  ${SRC_DIR}/modules/cache/cachemanager.h
-  ${SRC_DIR}/modules/database/databasemanager.h
-  ${SRC_DIR}/modules/event/eventmanager.h
-  ${SRC_DIR}/modules/interaction/interactionmanager.h
-  ${SRC_DIR}/modules/interaction/arrownavigationhandler.h
-  ${SRC_DIR}/modules/interaction/interactionstateholder.h
-  ${SRC_DIR}/modules/gamepad/gamepadmanager.h
-  ${SRC_DIR}/modules/keyboard/keyboardmanager.h
-  ${SRC_DIR}/modules/keyboard/alphabeticnavigationhandler.h
-  ${SRC_DIR}/modules/launch/launchmanager.h
-  ${SRC_DIR}/modules/mouse/mousemanager.h
-  ${SRC_DIR}/modules/navigation/navigationmanager.h
-  ${SRC_DIR}/modules/navigation/navigationstackmanager.h
-  ${SRC_DIR}/modules/overlay/selectionoverlaymanager.h
-  ${SRC_DIR}/modules/overlay/searchloadingoverlay.h
-  ${SRC_DIR}/modules/query/querymanager.h
-  ${SRC_DIR}/modules/restore/selectionrestoremanager.h
-  ${SRC_DIR}/modules/scroll/scrollmanager.h
-  ${SRC_DIR}/modules/scroll/arrowkeyscrollhelper.h
-  ${SRC_DIR}/modules/scroll/virtualcontainermanager.h
-  ${SRC_DIR}/modules/scroll/selectioncoordinator.h
-  ${SRC_DIR}/modules/scroll/scrolleventhandler.h
-  ${SRC_DIR}/modules/scroll/gridlayoutcalculator.h
-  ${SRC_DIR}/modules/scroll/itemwidgetfactory.h
-  ${SRC_DIR}/modules/scroll/scrolldatamanager.h
-  ${SRC_DIR}/modules/scroll/presearchstatemanager.h
-  ${SRC_DIR}/modules/scroll/selectionstatetracker.h
-  ${SRC_DIR}/modules/scroll/selectiondisplaymanager.h
-  ${SRC_DIR}/modules/scroll/datasourcemanager.h
-  ${SRC_DIR}/modules/filter/filtermanager.h
-  ${SRC_DIR}/modules/widgetpool/widgetpoolmanager.h
-  ${SRC_DIR}/modules/search/searchmanager.h
-  ${SRC_DIR}/modules/selection/selectionmanager.h
-  ${SRC_DIR}/modules/session/sessionmanager.h
-  ${SRC_DIR}/modules/settings/settingsmanager.h
-  ${SRC_DIR}/modules/sidebar/sidebarmanager.h
-  ${SRC_DIR}/modules/viewport/viewportmanager.h
-  ${SRC_DIR}/ui/uiconstants.h
-  ${SRC_DIR}/ui/dialogs/errordialog.h
-  ${SRC_DIR}/ui/dialogs/settingsdialog.h
-  ${SRC_DIR}/ui/dialogs/shortcutsdialog.h
-  ${SRC_DIR}/ui/widgets/metadatasidebar.h
-  ${SRC_DIR}/ui/widgets/itemwidget.h
-  ${SRC_DIR}/ui/widgets/loadingoverlay.h
-  ${SRC_DIR}/ui/widgets/listheaderwidget.h
-  ${SRC_DIR}/ui/widgets/artworkpreviewoverlay.h
-  ${SRC_DIR}/utils/collectionutils.h
-  ${SRC_DIR}/utils/configvalidation.h
-  ${SRC_DIR}/utils/searchutils.h
-  ${SRC_DIR}/utils/stringutils.h
-  ${SRC_DIR}/utils/settingsutils.h
-  ${SRC_DIR}/utils/pathutils.h
-  ${SRC_DIR}/utils/gridutils.h
-  ${SRC_DIR}/utils/extensionutils.h
-  ${SRC_DIR}/utils/timerutils.h
-  ${SRC_DIR}/utils/propertyutils.h
-  ${SRC_DIR}/utils/errorutils.h
-  ${SRC_DIR}/utils/applicationcontext.h
-  ${SRC_DIR}/utils/stateutils.h
-  ${SRC_DIR}/utils/setuputils.h
-  ${SRC_DIR}/utils/artworkutils.h
-  ${SRC_DIR}/utils/adaptivebatcher.h
-  ${SRC_DIR}/utils/forwarddecl.h
-  ${SRC_DIR}/utils/dbmigrations.h
-)
-
-set(UI_FILES
-  ${SRC_DIR}/core/mainwindow.ui
-  ${SRC_DIR}/ui/dialogs/settingsdialog.ui
-  ${SRC_DIR}/ui/widgets/metadatasidebar.ui
-  ${SRC_DIR}/ui/widgets/itemwidget.ui
-)
-
-set(RESOURCES
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/assets/resources.qrc
-)
-
 add_executable(kartend)
-target_sources(kartend PRIVATE
-  ${SOURCES}
-  ${HEADERS}
-  ${UI_FILES}
-  ${RESOURCES}
-)
+add_subdirectory(src)
 
 target_link_libraries(kartend
   PRIVATE

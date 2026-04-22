@@ -14,6 +14,7 @@
 #include <stdexcept>
 
 #include "artworkmanager.h"
+#include "loggingcategories.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "dbmigrations.h"
@@ -42,7 +43,11 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager,
 
   initDatabase();
 
-  m_workerThread = new QThread(this);
+  // NOTE: QThreads are intentionally NOT parented to DatabaseManager. If they
+  // were, ~QObject would auto-delete them mid-run during shutdown, and
+  // ~QThread qFatals when destroyed while running. The destructor handles
+  // bounded shutdown explicitly.
+  m_workerThread = new QThread();
   m_worker = new QueryManager(m_sessionManager,
                               QStringLiteral("kartend_query_worker"));
   m_worker->moveToThread(m_workerThread);
@@ -51,7 +56,7 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager,
 
   // Dedicated scan worker (separate thread + separate DB connection) so
   // long scans don't block query operations and UI updates.
-  m_scanThread = new QThread(this);
+  m_scanThread = new QThread();
   m_scanWorker =
       new QueryManager(m_sessionManager, QStringLiteral("kartend_scan_worker"));
   m_scanWorker->moveToThread(m_scanThread);
@@ -127,16 +132,35 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager,
 
 // Destroy the database manager and close/remove the connection
 DatabaseManager::~DatabaseManager() {
-  // Signal threads to quit but DON'T wait - they may be blocked on I/O.
-  // The process is exiting anyway, so the OS will clean up.
+  // Cancel any in-flight scans so the workers can return promptly.
+  if (m_worker) {
+    m_worker->requestCancelScan();
+  }
+  if (m_scanWorker) {
+    m_scanWorker->requestCancelScan();
+  }
+
+  // Quit + bounded wait. If the worker thread doesn't return within the
+  // budget, intentionally leak it (set pointer to nullptr) rather than let
+  // ~QThread qFatal on a still-running thread. The OS will reclaim threads
+  // and SQLite handles at process exit (we use std::quick_exit in main).
+  constexpr int SHUTDOWN_WAIT_MS = 2000;
   if (m_workerThread) {
     m_workerThread->quit();
-    // Intentionally NOT waiting - can block for minutes during shutdown
+    if (m_workerThread->wait(SHUTDOWN_WAIT_MS)) {
+      delete m_workerThread;
+    }
+    // else: leak intentionally to avoid ~QThread qFatal
+    m_workerThread = nullptr;
   }
 
   if (m_scanThread) {
     m_scanThread->quit();
-    // Intentionally NOT waiting - can block for minutes during shutdown
+    if (m_scanThread->wait(SHUTDOWN_WAIT_MS)) {
+      delete m_scanThread;
+    }
+    // else: leak intentionally
+    m_scanThread = nullptr;
   }
 
   // Close database connection - this is fast and safe
@@ -317,11 +341,9 @@ void DatabaseManager::fetchItemCount(
     const CollectionContext &context,
     const QList<CollectionConfig> &allCollections, const QString &filter,
     int requestToken) {
-  if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    qWarning() << "[SearchDiag][DatabaseManager] fetchItemCount: collIndex="
+    qCDebug(lcSearchDiag) << "[DatabaseManager] fetchItemCount: collIndex="
                << context.currentIndex << "filter='" << filter << "'"
                << "token=" << requestToken;
-  }
   // Kick off a background scan if needed, but don't block count queries.
   // IMPORTANT: Avoid scheduling scans for every search keystroke.
   // Scans can be expensive and their completion triggers count refreshes that
@@ -337,11 +359,9 @@ void DatabaseManager::fetchItemsRange(
     const CollectionContext &context,
     const QList<CollectionConfig> &allCollections, int offset, int limit,
     const QString &filter) {
-  if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    qWarning() << "[SearchDiag][DatabaseManager] fetchItemsRange: collIndex="
+    qCDebug(lcSearchDiag) << "[DatabaseManager] fetchItemsRange: collIndex="
                << context.currentIndex << "offset=" << offset
                << "limit=" << limit << "filter='" << filter << "'";
-  }
   emit requestFetchItemsRange(context, allCollections, offset, limit, filter);
 }
 
@@ -351,391 +371,6 @@ void DatabaseManager::fetchVisualIndexForPath(
   emit requestFetchVisualIndexForPath(context, allCollections, filePath);
 }
 
-void DatabaseManager::onWorkerItemsLoaded(
-    const QStringList &filePaths, const QHash<QString, QString> &fileNames,
-    const QHash<QString, QString> &fileToArtworkDir,
-    const QHash<QString, QString> &fileToMediaDir,
-    const QHash<QString, int> &fileToCollectionIndex) {
-  QHash<QString, QString> relativeToFullPath;
-  relativeToFullPath.reserve(fileNames.size() * 2);
-
-  // Build a fast lookup cache for resolveRelativeFilePath().
-  // Keep "first seen" semantics to match the previous linear scan behavior
-  // over fileNames (which returns the first match it encounters).
-  for (auto it = fileNames.constBegin(); it != fileNames.constEnd(); ++it) {
-    const QString &fullPath = it.key();
-    if (fullPath.isEmpty()) {
-      continue;
-    }
-
-    if (!relativeToFullPath.contains(fullPath)) {
-      relativeToFullPath.insert(fullPath, fullPath);
-    }
-
-    const QString leafName = QFileInfo(fullPath).fileName();
-    if (!leafName.isEmpty() && !relativeToFullPath.contains(leafName)) {
-      relativeToFullPath.insert(leafName, fullPath);
-    }
-
-    const QString mediaDir = fileToMediaDir.value(fullPath);
-    if (!mediaDir.trimmed().isEmpty()) {
-      const QString relativePath = QDir(mediaDir).relativeFilePath(fullPath);
-      if (!relativePath.isEmpty() &&
-          !relativeToFullPath.contains(relativePath)) {
-        relativeToFullPath.insert(relativePath, fullPath);
-      }
-    }
-  }
-
-  {
-    QMutexLocker locker(&m_dataMutex);
-    m_fileToArtworkDir = fileToArtworkDir;
-    m_fileToMediaDir = fileToMediaDir;
-    m_fileToCollectionIndex = fileToCollectionIndex;
-    m_relativeToFullPath = std::move(relativeToFullPath);
-  }
-  emit itemsLoaded(filePaths, fileNames);
-}
-
-void DatabaseManager::onWorkerItemCountLoaded(int count) {
-  if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    qWarning() << "[SearchDiag][DatabaseManager] onWorkerItemCountLoaded:"
-               << count;
-  }
-  emit itemCountLoaded(count);
-}
-
-void DatabaseManager::onWorkerItemCountLoadedWithToken(int count,
-                                                       int requestToken) {
-  if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    qWarning()
-        << "[SearchDiag][DatabaseManager] onWorkerItemCountLoadedWithToken:"
-        << count << "token=" << requestToken;
-  }
-  emit itemCountLoadedWithToken(count, requestToken);
-
-  // Keep legacy listeners working (e.g., MainWindow overlay suppression).
-  emit itemCountLoaded(count);
-}
-
-void DatabaseManager::onWorkerItemsRangeLoaded(
-    int offset, const QStringList &filePaths,
-    const QHash<QString, QString> &fileNames,
-    const QHash<QString, QString> &fileToArtworkDir,
-    const QHash<QString, QString> &fileToMediaDir,
-    const QHash<QString, int> &fileToCollectionIndex) {
-  if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    qWarning()
-        << "[SearchDiag][DatabaseManager] onWorkerItemsRangeLoaded: offset="
-        << offset << "paths=" << filePaths.size();
-  }
-
-  // Merge the directory and collection index mappings from range query into our
-  // cache This enables findArtworkDirectoryForFile() and
-  // getCollectionIndexForFile() to work for range-loaded items
-  if (!fileToArtworkDir.isEmpty() || !fileToMediaDir.isEmpty() ||
-      !fileToCollectionIndex.isEmpty()) {
-    QMutexLocker locker(&m_dataMutex);
-    for (auto it = fileToArtworkDir.constBegin();
-         it != fileToArtworkDir.constEnd(); ++it) {
-      m_fileToArtworkDir.insert(it.key(), it.value());
-    }
-    for (auto it = fileToMediaDir.constBegin(); it != fileToMediaDir.constEnd();
-         ++it) {
-      m_fileToMediaDir.insert(it.key(), it.value());
-    }
-    for (auto it = fileToCollectionIndex.constBegin();
-         it != fileToCollectionIndex.constEnd(); ++it) {
-      m_fileToCollectionIndex.insert(it.key(), it.value());
-    }
-  }
-
-  emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir,
-                        fileToMediaDir, fileToCollectionIndex);
-}
-
-void DatabaseManager::cancelScan() {
-  if (m_worker) {
-    m_worker->requestCancelScan();
-  }
-  if (m_scanWorker) {
-    m_scanWorker->requestCancelScan();
-  }
-}
-
-// Count items in collection and descendants using uuid identity
-auto DatabaseManager::countCollectionRecursive(
-    int collectionIndex, const QList<CollectionConfig> &allCollections) const
-    -> qint64 {
-  if (!CollectionUtils::isValidIndex(collectionIndex, &allCollections)) {
-    return 0;
-  }
-  QString expandedMediaDir = PathUtils::validateAndExpandPath(
-      allCollections[collectionIndex].mediaDirectory,
-      allCollections[collectionIndex].name);
-  const QString uuid = CollectionUtils::computeCollectionUuid(
-      allCollections[collectionIndex].name, expandedMediaDir);
-  qint64 total = countCollectionByUuid(uuid);
-  QList<int> descendants = CollectionUtils::collectDescendantIndices(
-      collectionIndex, allCollections);
-  for (int descendantIndex : descendants) {
-    QString descExpandedMediaDir = PathUtils::validateAndExpandPath(
-        allCollections[descendantIndex].mediaDirectory,
-        allCollections[descendantIndex].name);
-    const QString descendantUuid = CollectionUtils::computeCollectionUuid(
-        allCollections[descendantIndex].name, descExpandedMediaDir);
-    total += countCollectionByUuid(descendantUuid);
-  }
-  return total;
-}
-
-// Count items globally across all collections
-auto DatabaseManager::countGlobal(const QList<CollectionConfig> &allCollections)
-    -> qint64 {
-  Q_UNUSED(allCollections)
-  if (!m_db.isOpen()) {
-    return 0;
-  }
-  QSqlQuery query("SELECT COUNT(*) FROM items", m_db);
-  if (!query.next()) {
-    return 0;
-  }
-  return query.value(0).toLongLong();
-}
-
-// Recomputes and persists direct and recursive item counts for all collections
-void DatabaseManager::updateCachedCounts(
-    const QList<CollectionConfig> &allCollections) {
-  if (!m_db.isOpen() || !m_sessionManager) {
-    return;
-  }
-
-  m_sessionManager->clearStaleCollections(allCollections);
-
-  const int collectionCount = allCollections.size();
-  QVector<QString> expandedMediaDirs;
-  QVector<QString> uuids;
-  expandedMediaDirs.resize(collectionCount);
-  uuids.resize(collectionCount);
-
-  for (int i = 0; i < collectionCount; ++i) {
-    expandedMediaDirs[i] = PathUtils::validateAndExpandPath(
-        allCollections[i].mediaDirectory, allCollections[i].name);
-    uuids[i] = CollectionUtils::computeCollectionUuid(allCollections[i].name,
-                                                      expandedMediaDirs[i]);
-
-    if (expandedMediaDirs[i].trimmed().isEmpty()) {
-      clearCollectionFromDatabaseByUuid(uuids[i]);
-    }
-  }
-
-  m_pendingCountsCollections = allCollections;
-  m_pendingCountsUuids.clear();
-  m_pendingCountsUuids.reserve(collectionCount);
-  for (const QString &uuid : uuids) {
-    m_pendingCountsUuids.append(uuid);
-  }
-
-  // Debounce count recomputation to avoid redundant work when multiple loads
-  // trigger updateCachedCounts() in quick succession (e.g. navigation + filter
-  // changes).
-  if (m_cachedCountsUpdateTimer) {
-    m_cachedCountsUpdateTimer->start(UIConstants::Timing::SHORT_DELAY_MS);
-  }
-}
-
-void DatabaseManager::dispatchCachedCountsUpdate() {
-  if (!m_sessionManager) {
-    return;
-  }
-
-  m_inFlightCachedCountsGeneration = ++m_cachedCountsGeneration;
-  m_inFlightCountsCollections = m_pendingCountsCollections;
-  m_inFlightCountsUuids = m_pendingCountsUuids;
-
-  emit requestUpdateCachedCounts(m_inFlightCachedCountsGeneration,
-                                 m_inFlightCountsUuids);
-}
-
-void DatabaseManager::onWorkerCachedCountsComputed(
-    quint64 generation, qint64 globalCount,
-    const QHash<QString, qint64> &directCountsByUuid) {
-  if (!m_sessionManager) {
-    return;
-  }
-  if (generation != m_inFlightCachedCountsGeneration) {
-    return;
-  }
-
-  const QList<CollectionConfig> &collections = m_inFlightCountsCollections;
-  const int collectionCount = collections.size();
-
-  QVector<qint64> directCounts;
-  QVector<qint64> recursiveCounts;
-  directCounts.resize(collectionCount);
-  recursiveCounts.resize(collectionCount);
-
-  for (int i = 0; i < collectionCount; ++i) {
-    const QString uuid = (i < m_inFlightCountsUuids.size())
-                             ? m_inFlightCountsUuids[i]
-                             : QString();
-    directCounts[i] = uuid.isEmpty() ? 0 : directCountsByUuid.value(uuid, 0);
-  }
-
-  QVector<QList<int>> children;
-  children.resize(collectionCount);
-  for (int i = 0; i < collectionCount; ++i) {
-    const int parent = collections[i].parentCollectionIndex;
-    if (parent >= 0 && parent < collectionCount) {
-      children[parent].append(i);
-    }
-  }
-
-  QVector<int> visitState;
-  visitState.resize(collectionCount);
-  visitState.fill(0);
-
-  std::function<qint64(int)> computeRecursiveCount = [&](int index) -> qint64 {
-    if (index < 0 || index >= collectionCount) {
-      return 0;
-    }
-    if (visitState[index] == 2) {
-      return recursiveCounts[index];
-    }
-    if (visitState[index] == 1) {
-      // Cycle guard: treat current node as leaf.
-      return directCounts[index];
-    }
-
-    visitState[index] = 1;
-    qint64 total = directCounts[index];
-    for (int childIndex : children[index]) {
-      total += computeRecursiveCount(childIndex);
-    }
-    visitState[index] = 2;
-    recursiveCounts[index] = total;
-    return total;
-  };
-
-  for (int i = 0; i < collectionCount; ++i) {
-    computeRecursiveCount(i);
-  }
-
-  m_sessionManager->setGlobalItemCount(globalCount);
-  for (int i = 0; i < collectionCount; ++i) {
-    m_sessionManager->setCollectionCounts(collections[i], collections,
-                                          directCounts[i], recursiveCounts[i]);
-  }
-  m_sessionManager->saveToDisk();
-  emit cachedCountsUpdated();
-}
-
-// Get owning collection index for a file based on built maps
-auto DatabaseManager::getCollectionIndexForFile(const QString &filePath) const
-    -> int {
-  QMutexLocker locker(&m_dataMutex);
-  return m_fileToCollectionIndex.value(filePath, -1);
-}
-
-// Resolve a raw file entry to its full absolute path.
-// Handles both absolute paths and relative paths that need resolution via
-// collection mappings when showAllSubcollectionItems is enabled.
-auto DatabaseManager::resolveFilePath(const QString &rawEntry,
-                                      const CollectionContext &context) const
-    -> QString {
-  // DB-backed paginated queries (search) can return fully-qualified absolute
-  // paths. Those should always pass through unchanged, even when the current
-  // view's mediaDirectory is empty (e.g., container collections).
-  if (QDir::isAbsolutePath(rawEntry)) {
-    return rawEntry;
-  }
-
-  if (context.config.showAllSubcollectionItems) {
-    // Try to resolve relative path using fileNames mapping
-    return resolveRelativeFilePath(rawEntry, context.fileNames);
-  }
-
-  // Simple case: prepend media directory
-  const QString mediaDir = context.config.mediaDirectory.trimmed();
-  if (mediaDir.isEmpty()) {
-    qCDebug(lcDatabaseManager)
-        << "resolveFilePath: cannot resolve relative entry" << rawEntry
-        << "-- collection" << context.config.name
-        << "has empty mediaDirectory and showAllSubcollectionItems is false";
-    return {};
-  }
-  return QDir(mediaDir).absoluteFilePath(rawEntry);
-}
-
-// Resolve a relative file path by searching fileNames map and falling back
-// to collection index lookup for media directory resolution.
-auto DatabaseManager::resolveRelativeFilePath(
-    const QString &rawFileName, const QHash<QString, QString> &fileNames) const
-    -> QString {
-  if (rawFileName.trimmed().isEmpty()) {
-    return {};
-  }
-
-  // Fast path: exact full-path key lookup.
-  if (fileNames.contains(rawFileName)) {
-    return rawFileName;
-  }
-
-  // Fast path: use precomputed cache from the latest itemsLoaded payload.
-  {
-    QMutexLocker locker(&m_dataMutex);
-    auto it = m_relativeToFullPath.constFind(rawFileName);
-    if (it != m_relativeToFullPath.constEnd()) {
-      return it.value();
-    }
-  }
-
-  // Compatibility fallback: preserve previous suffix-scan behavior.
-  for (auto it = fileNames.constBegin(); it != fileNames.constEnd(); ++it) {
-    const QString &key = it.key();
-    if (key.endsWith("/" + rawFileName) ||
-        key.endsWith(QDir::separator() + rawFileName) || key == rawFileName) {
-      return key;
-    }
-  }
-
-  // Fallback: use collection index to find media directory
-  QMutexLocker locker(&m_dataMutex);
-  int ownerIndex = m_fileToCollectionIndex.value(rawFileName, -1);
-  if (ownerIndex >= 0) {
-    QString mediaDir = m_fileToMediaDir.value(rawFileName);
-    if (!mediaDir.trimmed().isEmpty()) {
-      return QDir(mediaDir).absoluteFilePath(rawFileName);
-    }
-  }
-
-  qCDebug(lcDatabaseManager)
-      << "resolveRelativeFilePath: failed to resolve" << rawFileName
-      << "-- not found in fileNames map (" << fileNames.size()
-      << "entries), m_relativeToFullPath cache, or collection-index lookup";
-  return {};
-}
-
-// Resolve artwork directory for a file using best-available mapping
-auto DatabaseManager::findArtworkDirectoryForFile(const QString &filePath) const
-    -> QString {
-  QMutexLocker locker(&m_dataMutex);
-  if (m_fileToArtworkDir.contains(filePath)) {
-    return m_fileToArtworkDir.value(filePath);
-  }
-  QString fileName = QFileInfo(filePath).fileName();
-  QString baseName = QFileInfo(filePath).completeBaseName();
-
-  if (m_fileToArtworkDir.contains(fileName)) {
-    return m_fileToArtworkDir.value(fileName);
-  }
-  if (m_fileToArtworkDir.contains(baseName)) {
-    return m_fileToArtworkDir.value(baseName);
-  }
-  return {};
-}
-
-// Public wrapper to invalidate collection cache asynchronously on worker thread
 void DatabaseManager::invalidateCollectionCache(const QString &collectionUuid) {
   emit requestInvalidateCache(collectionUuid);
 }

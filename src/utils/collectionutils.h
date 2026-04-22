@@ -398,6 +398,11 @@ struct GeneralSettings {
       false; // Exclude subfolders/subcollections from sorting
   int listCollectionColumnWidth = 150; // Collection column width in list view
   int listArtworkColumnWidth = 32;     // Artwork column width in list view
+  // Name of the collection to open on startup. When empty (default), the first
+  // root-level collection is opened. When set, takes priority over the default
+  // root-collection selection. If the named collection no longer exists, falls
+  // back to the default behavior.
+  QString startupCollection;
   QHash<int, int> lastSelectedItems;
   GeneralSettings() = default;
 };

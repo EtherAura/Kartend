@@ -6,6 +6,7 @@
 // Members of QueryManager; access existing class state.
 #include "querymanager.h"
 
+#include "loggingcategories.h"
 #include <QCryptographicHash>
 #include <QElapsedTimer>
 #include <QLoggingCategory>
@@ -148,7 +149,7 @@ bool QueryManager::ensureQueryUuidsPopulated(const QStringList &uuids) {
   // Skip repopulation if hash matches (same UUIDs as last query)
   if (newHash == m_cachedQueryUuidsHash) {
     if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-      qWarning() << "[RangeDiag] UUID temp table cache HIT, uuids="
+      qCDebug(lcSearchDiag) << "[RangeDiag] UUID temp table cache HIT, uuids="
                  << uuids.size();
     }
     return true;
@@ -157,7 +158,7 @@ bool QueryManager::ensureQueryUuidsPopulated(const QStringList &uuids) {
   QElapsedTimer timer;
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     timer.start();
-    qWarning() << "[RangeDiag] UUID temp table cache MISS, populating"
+    qCDebug(lcSearchDiag) << "[RangeDiag] UUID temp table cache MISS, populating"
                << uuids.size() << "uuids...";
   }
 
@@ -166,7 +167,7 @@ bool QueryManager::ensureQueryUuidsPopulated(const QStringList &uuids) {
   }
 
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-    qWarning() << "[RangeDiag] UUID temp table populated in" << timer.elapsed()
+    qCDebug(lcSearchDiag) << "[RangeDiag] UUID temp table populated in" << timer.elapsed()
                << "ms";
   }
 
@@ -249,7 +250,7 @@ void QueryManager::scheduleDeferredCacheBuild(const QStringList &uuids,
   m_pendingCacheSortMode = sortMode;
 
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-    qWarning() << "[RangeDiag] Deferred cache build scheduled for"
+    qCDebug(lcSearchDiag) << "[RangeDiag] Deferred cache build scheduled for"
                << uuids.size() << "uuids";
   }
 
@@ -264,7 +265,7 @@ void QueryManager::performDeferredCacheBuild() {
   }
 
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-    qWarning() << "[RangeDiag] Starting deferred cache build...";
+    qCDebug(lcSearchDiag) << "[RangeDiag] Starting deferred cache build...";
   }
 
   (void)populateSortedItemsCache(m_pendingCacheUuids, m_pendingCacheFilter,
@@ -287,7 +288,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
   // Skip if cache is valid and hash matches
   if (m_sortedItemsCacheValid && newHash == m_sortedItemsCacheHash) {
     if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-      qWarning() << "[RangeDiag] Sorted items cache HIT";
+      qCDebug(lcSearchDiag) << "[RangeDiag] Sorted items cache HIT";
     }
     return true;
   }
@@ -299,7 +300,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
   QElapsedTimer timer;
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     timer.start();
-    qWarning() << "[RangeDiag] Building sorted items cache for" << uuids.size()
+    qCDebug(lcSearchDiag) << "[RangeDiag] Building sorted items cache for" << uuids.size()
                << "uuids, filter='" << filter
                << "', sortMode=" << static_cast<int>(sortMode);
   }
@@ -491,7 +492,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
     }
 
     if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-      qWarning() << "[RangeDiag] Random sort: shuffled" << allItems.size()
+      qCDebug(lcSearchDiag) << "[RangeDiag] Random sort: shuffled" << allItems.size()
                  << "items";
     }
   }
@@ -582,7 +583,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
   m_sortedItemsCacheHash = newHash;
 
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-    qWarning() << "[RangeDiag] Sorted items cache built:" << position
+    qCDebug(lcSearchDiag) << "[RangeDiag] Sorted items cache built:" << position
                << "items in" << timer.elapsed() << "ms";
   }
 

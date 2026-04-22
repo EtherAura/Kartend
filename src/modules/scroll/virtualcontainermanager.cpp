@@ -1,5 +1,6 @@
 #include "virtualcontainermanager.h"
 #include "filtermanager.h"
+#include "scrollhelpers.h"
 #include "selectionoverlaymanager.h"
 #include "uiconstants.h"
 #include <QScrollArea>
@@ -139,13 +140,9 @@ void VirtualContainerManager::setupContainerSizes(int availableWidth,
 
 HorizontalAlignment VirtualContainerManager::getEffectiveAlignment(
     const ContainerPositionParams &params) const {
-  HorizontalAlignment align = params.alignment;
-  if (params.isFiltered && params.totalItems > 0 && params.itemsPerRow > 0) {
-    if (params.totalItems < (params.itemsPerRow - 2)) {
-      align = HorizontalAlignment::Center;
-    }
-  }
-  return align;
+  return ScrollHelpers::effectiveAlignment(params.alignment, params.isFiltered,
+                                           params.totalItems,
+                                           params.itemsPerRow);
 }
 
 void VirtualContainerManager::calculateScrollbarOffsets(

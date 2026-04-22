@@ -21,38 +21,13 @@
 
 #include "collectionutils.h"
 #include "errorutils.h"
+#include "querymanagerhelpers.h"
 #include "querymanagersql.h"
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
+using QueryManagerInternal::SynchronousPragmaGuard;
 
-namespace {
-
-class SynchronousPragmaGuard {
-public:
-  explicit SynchronousPragmaGuard(QSqlDatabase &db) : m_db(db) {}
-
-  SynchronousPragmaGuard(const SynchronousPragmaGuard &) = delete;
-  auto operator=(const SynchronousPragmaGuard &)
-      -> SynchronousPragmaGuard & = delete;
-
-  SynchronousPragmaGuard(SynchronousPragmaGuard &&) = delete;
-  auto operator=(SynchronousPragmaGuard &&)
-      -> SynchronousPragmaGuard & = delete;
-
-  ~SynchronousPragmaGuard() {
-    if (!m_db.isOpen()) {
-      return;
-    }
-    QSqlQuery pragmaOn(m_db);
-    pragmaOn.exec("PRAGMA synchronous = NORMAL");
-  }
-
-private:
-  QSqlDatabase &m_db;
-};
-
-} // namespace
 
 void QueryManager::saveItemsToDatabase(
     int collectionIndex, const QStringList &filePaths,

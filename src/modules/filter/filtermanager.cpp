@@ -1,6 +1,7 @@
 // Manages search filtering and subcollection filtering for scroll view
 #include "filtermanager.h"
 #include "databasemanager.h"
+#include "filterhelpers.h"
 #include <QDir>
 #include <QFileInfo>
 
@@ -114,13 +115,8 @@ void FilterManager::clearFilter() {
 }
 
 auto FilterManager::getActualIndex(int visualIndex) const -> int {
-  if (!m_isFiltered) {
-    return visualIndex;
-  }
-  if (visualIndex < 0 || visualIndex >= m_filteredIndices.size()) {
-    return -1;
-  }
-  return m_filteredIndices[visualIndex];
+  return FilterHelpers::mapVisualToActualIndex(visualIndex, m_isFiltered,
+                                               m_filteredIndices);
 }
 
 void FilterManager::rebuildFilteredIndices() {
@@ -161,9 +157,8 @@ auto FilterManager::matchesSubcollectionFilter(int subcollectionIndex,
       actualSubcollectionIndex >= m_collections->size()) {
     return false;
   }
-  QString subcollectionName =
-      (*m_collections)[actualSubcollectionIndex].name.toLower();
-  return subcollectionName.contains(needle);
+  return FilterHelpers::subcollectionNameMatches(
+      (*m_collections)[actualSubcollectionIndex].name, needle);
 }
 
 auto FilterManager::matchesMediaItemFilter(int mediaIndex,
@@ -179,26 +174,9 @@ auto FilterManager::matchesMediaItemFilter(int mediaIndex,
 
 auto FilterManager::getDisplayNameForMediaItem(const QString &rawEntry) const
     -> QString {
-  if (m_context.config.showAllSubcollectionItems) {
-    if (m_filePathToDisplayName) {
-      QString display = m_filePathToDisplayName->value(rawEntry);
-      if (!display.isEmpty()) {
-        return display;
-      }
-    }
-    return QFileInfo(rawEntry).completeBaseName();
-  }
-
-  const QString mediaDir = m_context.config.mediaDirectory.trimmed();
-  if (mediaDir.isEmpty()) {
-    return QFileInfo(rawEntry).completeBaseName();
-  }
-
-  QString fullPath = QDir(mediaDir).absoluteFilePath(rawEntry);
-  if (m_fileNames) {
-    return m_fileNames->value(fullPath, QFileInfo(rawEntry).completeBaseName());
-  }
-  return QFileInfo(rawEntry).completeBaseName();
+  return FilterHelpers::displayNameForMediaEntry(
+      rawEntry, m_context.config.showAllSubcollectionItems,
+      m_context.config.mediaDirectory, m_filePathToDisplayName, m_fileNames);
 }
 
 void FilterManager::determineTargetCollections(int subcollectionIndex,

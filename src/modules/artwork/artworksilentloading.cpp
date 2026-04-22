@@ -2,6 +2,7 @@
 // Extracted from artworkmanager.cpp during LOC-reduction refactor.
 // These remain ArtworkManager members; this is a translation-unit split only.
 #include "artworkmanager.h"
+#include "loggingcategories.h"
 #include "artworkutils.h"
 #include "collectionutils.h"
 #include "uiconstants.h"
@@ -70,16 +71,12 @@ void ArtworkManager::startEarlyDentryPrewarm(int collectionIndex) {
     auto &cache = ArtworkUtils::DirectoryCache::instance();
     cache.prewarmDirectories(dirList);
     cache.processQueuedDirectories();
-    if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
-      qWarning() << "[PerfTrace] Early dentry prewarm complete: dirs="
+      qCDebug(lcPerfTrace) << "Early dentry prewarm complete: dirs="
                  << dirList.size();
-    }
   });
 
-  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
-    qWarning() << "[PerfTrace] Started early dentry prewarm: dirs="
+    qCDebug(lcPerfTrace) << "Started early dentry prewarm: dirs="
                << allDirs.size();
-  }
 }
 
 // Starts silent loading when on items page

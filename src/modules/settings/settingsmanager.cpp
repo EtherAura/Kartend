@@ -130,6 +130,8 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
       s.value("listCollectionColumnWidth", 150).toInt();
   settings.listArtworkColumnWidth =
       s.value("listArtworkColumnWidth", 32).toInt();
+  settings.startupCollection =
+      s.value("startupCollection", QString()).toString();
   s.endGroup();
 
   settings.lastSelectedItems.clear();
@@ -183,6 +185,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.listCollectionColumnWidth =
       settings.listCollectionColumnWidth;
   m_generalSettings.listArtworkColumnWidth = settings.listArtworkColumnWidth;
+  m_generalSettings.startupCollection = settings.startupCollection;
 
   QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   s.setAtomicSyncRequired(true);
@@ -230,6 +233,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
              m_generalSettings.listCollectionColumnWidth);
   s.setValue("listArtworkColumnWidth",
              m_generalSettings.listArtworkColumnWidth);
+  s.setValue("startupCollection", m_generalSettings.startupCollection);
   s.endGroup();
   s.sync();
 

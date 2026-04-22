@@ -333,8 +333,7 @@ private:
   void setPendingSelectionIfNeeded(bool condition, int newSelection);
   void updateSelectionStateAfterMove(int newSelection);
   auto processEnterOrReturnKey(int totalItems) -> bool;
-  auto handleEnterOnSubcollection(int currentSelection, const QList<int> &subs)
-      -> bool;
+  auto handleEnterOnSubcollection(int subActualIndex, int subCollIdx) -> bool;
   auto handleEnterOnVirtualFolder(const QString &folderPath) -> bool;
   [[nodiscard]] auto handleEnterOnItem(int currentSelection, int totalItems)
       -> bool;
