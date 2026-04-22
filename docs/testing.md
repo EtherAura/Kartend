@@ -26,11 +26,9 @@ ctest --test-dir build/ninja-release --output-on-failure
 # Run individual test
 cd build/ninja-release
 ./tests/test_gridlayoutcalculator
-./tests/test_interactionstateholder
-./tests/test_launchmanager
-./tests/test_pathutils
-./tests/test_widgetpoolmanager
-./tests/test_gridutils
+./tests/test_sessionmanager
+./tests/test_artworkmanager
+# ... one binary per suite under tests/ (23 suites total)
 ```
 
 ## Sanitizers (optional)
@@ -54,12 +52,31 @@ ctest --test-dir build/ninja-sanitize --output-on-failure
 
 | Test Suite | Tests | Coverage |
 |------------|-------|----------|
-| `test_gridlayoutcalculator` | 19 | Grid metrics, item positioning, row ranges |
-| `test_interactionstateholder` | 15 | State flags, suppression timers, struct access |
-| `test_launchmanager` | 12 | Security validation, path checking, parameter parsing |
-| `test_pathutils` | 10 | Path validation, expansion, Result<T> error handling |
-| `test_widgetpoolmanager` | 20 | Widget acquisition, release, soft/hard clear |
-| `test_gridutils` | 24 | Row/column math, centering, grid metrics calculation |
+| `test_artworkmanager` | 15 | Artwork path resolution, batch loading, suppression |
+| `test_cachemanager` | 15 | Pixmap cache, LRU eviction, disk persistence |
+| `test_collectionutils` | 30 | CollectionConfig, hierarchy cache, validation helpers |
+| `test_dbmigrations` | 10 | SQLite schema migration steps |
+| `test_filterhelpers` | 15 | Filter predicate helpers |
+| `test_gridlayoutcalculator` | 17 | Grid metrics, item positioning, row ranges |
+| `test_gridutils` | 22 | Row/column math, centering, grid metrics calculation |
+| `test_interactionstateholder` | 13 | State flags, suppression timers, struct access |
+| `test_keyboardmanager` | 27 | Key repeat, arrow + alphabetic navigation handlers |
+| `test_launchmanager` | 29 | Security validation, path checking, parameter parsing |
+| `test_mousehelpers` | 17 | Mouse helper math (hold scroll, wheel) |
+| `test_navigationhelpers` | 18 | Navigation helper utilities |
+| `test_navigationstackmanager` | 19 | Navigation stack push/pop/clear |
+| `test_pathutils` | 27 | Path validation, expansion, Result<T> error handling |
+| `test_queryhelpers` | 21 | SQL helper builders |
+| `test_querymanager_cancel_scan` | 1 | Scan cancellation flow |
+| `test_scrollhelpers` | 16 | Scroll helper math |
+| `test_searchhelpers` | 16 | Search helper utilities |
+| `test_searchutils` | 3 | SearchMode utilities |
+| `test_selectionhelpers` | 17 | Selection helper math |
+| `test_sessionmanager` | 17 | Session persistence with atomic writes |
+| `test_stringutils` | 10 | String formatting |
+| `test_widgetpoolmanager` | 17 | Widget acquisition, release, soft/hard clear, stale limits |
+
+**Total: 392 unit test methods across 23 test suites.**
 
 ## Adding New Tests
 

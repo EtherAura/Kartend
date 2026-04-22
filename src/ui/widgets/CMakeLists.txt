@@ -1,0 +1,19 @@
+target_sources(kartend PRIVATE
+  artworkpreviewoverlay.cpp
+  itemwidget.cpp
+  itemwidgetindicator.cpp
+  itemwidgetlifecycle.cpp
+  itemwidgetpaint.cpp
+  itemwidgetplaceholder.cpp
+  itemwidgetsetters.cpp
+  listheaderwidget.cpp
+  loadingoverlay.cpp
+  metadatasidebar.cpp
+  artworkpreviewoverlay.h
+  itemwidget.h
+  listheaderwidget.h
+  loadingoverlay.h
+  metadatasidebar.h
+  itemwidget.ui
+  metadatasidebar.ui
+)

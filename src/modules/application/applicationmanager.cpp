@@ -17,7 +17,14 @@
 
 ApplicationManager::ApplicationManager(QObject *parent) : QObject(parent) {}
 
-ApplicationManager::~ApplicationManager() = default;
+ApplicationManager::~ApplicationManager() {
+  // Defensive: ensure the deferred cache initialize() task is finished before
+  // m_cacheManager is destroyed. shutdown() handles this normally; this guard
+  // covers paths where shutdown() is skipped (e.g. abnormal teardown).
+  if (m_cacheInitFuture.isRunning()) {
+    m_cacheInitFuture.waitForFinished();
+  }
+}
 
 void ApplicationManager::initialize() {
   // 1. Create CacheManager and SessionManager instances (fast, no I/O)
@@ -31,8 +38,12 @@ void ApplicationManager::initialize() {
   // 3. Defer cache metadata loading to background - the 51MB+ timestamps file
   // is only needed for artwork cache validation, not for initial UI display.
   // This avoids blocking startup for 2-3 seconds on large artwork caches.
-  // Result intentionally discarded - we don't need to wait for cache init.
-  (void)QtConcurrent::run([this]() { m_cacheManager->initialize(); });
+  // The QFuture is retained so shutdown() can wait for completion before
+  // destroying m_cacheManager (avoids use-after-free if the app exits
+  // before this task finishes).
+  CacheManager *cachePtr = m_cacheManager.get();
+  m_cacheInitFuture =
+      QtConcurrent::run([cachePtr]() { cachePtr->initialize(); });
 
   // 4. ArtworkManager (needs CacheManager - but can work without timestamps
   // loaded)
@@ -63,6 +74,13 @@ void ApplicationManager::initialize() {
 }
 
 void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
+  // 0. Wait for the deferred cache initialize() task to complete before
+  // touching the cache - prevents use-after-free if shutdown begins while
+  // CacheManager::initialize() is still parsing the metadata file.
+  if (m_cacheInitFuture.isRunning()) {
+    m_cacheInitFuture.waitForFinished();
+  }
+
   // 1. Cancel artwork loading first (non-blocking) to stop in-flight operations
   if (m_artworkManager) {
     m_artworkManager->cancelAllArtworkLoading();

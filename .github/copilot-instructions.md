@@ -78,22 +78,27 @@ src/
 │   ├── cache/      # In-memory pixmap cache, disk persistence
 │   ├── database/   # SQLite coordination via worker thread
 │   ├── event/      # Event filtering, gesture detection
+│   ├── filter/     # Search and subcollection filtering
+│   ├── gamepad/    # Optional Qt6::Gamepad / SDL2 input backend
 │   ├── interaction/# Input handling, selection state
-│   ├── keyboard/   # Arrow key navigation, key repeat
+│   ├── keyboard/   # Arrow key navigation, key repeat, alphabetic jumping
 │   ├── launch/     # Item launching, process spawning
 │   ├── mouse/      # Click hold scrolling, wheel events
 │   ├── navigation/ # Collection switching, navigation stack
+│   ├── overlay/    # Selection / search loading overlays
 │   ├── query/      # Worker thread SQL queries
+│   ├── restore/    # Selection state restoration during navigation
 │   ├── scroll/     # Virtual scrolling, grid layout, widget factory
 │   ├── search/     # Search bar logic, search modes
 │   ├── selection/  # Selection logic, click processing
 │   ├── session/    # Selection state persistence
 │   ├── settings/   # Config file I/O, settings dialog
 │   ├── sidebar/    # Metadata sidebar visibility
-│   └── viewport/   # Centering, viewport positioning
+│   ├── viewport/   # Centering, viewport positioning
+│   └── widgetpool/ # Widget recycling pool for ItemWidget reuse
 ├── ui/             # UI components and constants
-│   ├── dialogs/    # Settings dialog
-│   └── widgets/    # Item widget, metadata sidebar
+│   ├── dialogs/    # Settings dialog, error dialog, shortcuts dialog
+│   └── widgets/    # Item widget, metadata sidebar, list header, overlays
 └── utils/          # Shared utilities and data structures
 ```
 
@@ -103,7 +108,9 @@ src/
 
 **Two-tier ownership model:**
 - **ApplicationManager** owns: `CacheManager`, `SessionManager`, `ArtworkManager`, `SettingsManager`, `DatabaseManager`, `ScrollManager`, `SidebarManager`, `NavigationManager`, `InteractionManager`
-- **InteractionManager** owns: `SearchManager`, `SelectionManager`, `KeyboardManager`, `ArrowNavigationHandler`, `AnimationManager`, `MouseManager`, `LaunchManager`, `ViewportManager`, `EventManager`
+- **InteractionManager** owns: `SearchManager`, `SelectionManager`, `KeyboardManager`, `GamepadManager`, `ArrowNavigationHandler`, `AlphabeticNavigationHandler`, `AnimationManager`, `MouseManager`, `LaunchManager`, `ViewportManager`, `EventManager`
+
+Additional helper managers owned by their parent feature module (not top-level): `WidgetPoolManager`, `FilterManager`, `SelectionRestoreManager`, `SelectionOverlayManager`, `SearchLoadingOverlay`, `NavigationStackManager`.
 
 **Sub-manager registration:** InteractionManager's owned sub-managers are registered in `ApplicationContext` after setup, enabling sibling access via ctx:
 ```cpp
@@ -134,6 +141,13 @@ m_appContext.selectionManager = getInteractionManager()->selectionManager();
 | `SessionManager` | ApplicationManager | |
 | `SettingsManager` | ApplicationManager | |
 | `SidebarManager` | ApplicationManager | |
+| `GamepadManager` | InteractionManager | `dpadPressed`, `buttonPressed` (compiled in when Qt6::Gamepad or SDL2 is found) |
+| `AlphabeticNavigationHandler` | InteractionManager | `requestSelectionByIndex` |
+| `WidgetPoolManager` | ScrollManager | (helper, no signals) |
+| `FilterManager` | ScrollManager | (helper, no signals) |
+| `SelectionOverlayManager` | ScrollManager | (helper, no signals) |
+| `SelectionRestoreManager` | NavigationManager | (helper, no signals) |
+| `NavigationStackManager` | NavigationManager | (helper, no signals) |
 
 ### Atomic File Writes Pattern
 
@@ -393,9 +407,30 @@ Unit tests use the **Qt Test framework** with CTest integration.
 
 ```
 tests/
-├── CMakeLists.txt              # Test build configuration
-├── test_gridlayoutcalculator.cpp  # Grid layout math tests
-└── test_interactionstateholder.cpp # State holder tests
+├── CMakeLists.txt                       # Test build configuration
+├── test_artworkmanager.cpp              # Artwork loading & path resolution
+├── test_cachemanager.cpp                # Pixmap cache, LRU, disk persistence
+├── test_collectionutils.cpp             # CollectionConfig + hierarchy helpers
+├── test_dbmigrations.cpp                # SQLite schema migrations
+├── test_filterhelpers.cpp               # Filter predicate helpers
+├── test_gridlayoutcalculator.cpp        # Grid layout math
+├── test_gridutils.cpp                   # Grid math utilities
+├── test_interactionstateholder.cpp      # Centralized interaction state
+├── test_keyboardmanager.cpp             # Key repeat, arrow/alpha handlers
+├── test_launchmanager.cpp               # Launch security validation
+├── test_mousehelpers.cpp                # Mouse helper math
+├── test_navigationhelpers.cpp           # Navigation helpers
+├── test_navigationstackmanager.cpp      # Navigation stack push/pop
+├── test_pathutils.cpp                   # Path validation, Result<T>
+├── test_queryhelpers.cpp                # SQL helper builders
+├── test_querymanager_cancel_scan.cpp    # Scan cancellation flow
+├── test_scrollhelpers.cpp               # Scroll math helpers
+├── test_searchhelpers.cpp               # Search helpers
+├── test_searchutils.cpp                 # SearchMode utilities
+├── test_selectionhelpers.cpp            # Selection helpers
+├── test_sessionmanager.cpp              # Session persistence (atomic writes)
+├── test_stringutils.cpp                 # String formatting
+└── test_widgetpoolmanager.cpp           # Widget recycling pool
 ```
 
 ### Building Tests
@@ -412,7 +447,8 @@ Run individual test:
 ```bash
 cd build/ninja-release
 ./tests/test_gridlayoutcalculator
-./tests/test_interactionstateholder
+./tests/test_sessionmanager
+# ... one binary per suite under tests/
 ```
 
 Run all tests via CTest:
@@ -452,14 +488,31 @@ add_test(NAME test_classname COMMAND test_classname)
 
 | Test Suite | Tests | Coverage |
 |------------|-------|----------|
-| `test_gridlayoutcalculator` | 19 | Grid metrics, item positioning, row ranges |
-| `test_interactionstateholder` | 15 | State flags, suppression timers, struct access, search state |
-| `test_launchmanager` | 12 | Security validation, path checking, parameter parsing |
-| `test_pathutils` | 10 | Path validation, expansion, Result<T> error handling |
-| `test_widgetpoolmanager` | 20 | Widget acquisition, release, soft/hard clear, stale limits |
-| `test_gridutils` | 24 | Row/column math, centering, grid metrics calculation |
+| `test_artworkmanager` | 15 | Artwork path resolution, batch loading, suppression |
+| `test_cachemanager` | 15 | Pixmap cache, LRU eviction, disk persistence |
+| `test_collectionutils` | 30 | CollectionConfig, hierarchy cache, validation helpers |
+| `test_dbmigrations` | 10 | SQLite schema migration steps |
+| `test_filterhelpers` | 15 | Filter predicate helpers |
+| `test_gridlayoutcalculator` | 17 | Grid metrics, item positioning, row ranges |
+| `test_gridutils` | 22 | Row/column math, centering, grid metrics calculation |
+| `test_interactionstateholder` | 13 | State flags, suppression timers, struct access, search state |
+| `test_keyboardmanager` | 27 | Key repeat, arrow + alphabetic navigation handlers |
+| `test_launchmanager` | 29 | Security validation, path checking, parameter parsing |
+| `test_mousehelpers` | 17 | Mouse helper math (hold scroll, wheel) |
+| `test_navigationhelpers` | 18 | Navigation helper utilities |
+| `test_navigationstackmanager` | 19 | Navigation stack push/pop/clear |
+| `test_pathutils` | 27 | Path validation, expansion, Result<T> error handling |
+| `test_queryhelpers` | 21 | SQL helper builders |
+| `test_querymanager_cancel_scan` | 1 | Scan cancellation flow |
+| `test_scrollhelpers` | 16 | Scroll helper math |
+| `test_searchhelpers` | 16 | Search helper utilities |
+| `test_searchutils` | 3 | SearchMode utilities |
+| `test_selectionhelpers` | 17 | Selection helper math |
+| `test_sessionmanager` | 17 | Session persistence with atomic writes |
+| `test_stringutils` | 10 | String formatting |
+| `test_widgetpoolmanager` | 17 | Widget acquisition, release, soft/hard clear, stale limits |
 
-**Total: 100+ unit tests across 6 test suites**
+**Total: 392 unit test methods across 23 test suites**
 
 ## Code Conventions
 

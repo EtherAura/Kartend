@@ -18,12 +18,14 @@ The configuration file uses standard INI format with sections for general settin
 [General]
 MainScreen_gridWidth=6
 rememberSelection=true
+startupCollection=
 ```
 
 | Key | Type | Description |
 |-----|------|-------------|
 | `MainScreen_gridWidth` | int | Default grid width for the main screen |
 | `rememberSelection` | bool | Persist selection state across sessions |
+| `startupCollection` | string | Name of the collection to open on startup. Empty (default) opens the first root collection. If the named collection no longer exists, falls back to the default behavior. |
 
 ### Collection Settings
 

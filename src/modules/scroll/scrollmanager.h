@@ -22,6 +22,7 @@ class QPropertyAnimation;
 class ArtworkManager;
 class WidgetPoolManager;
 class FilterManager;
+class DataSourceManager;
 class SelectionOverlayManager;
 class SearchLoadingOverlay;
 class VirtualContainerManager;
@@ -33,6 +34,7 @@ class ArrowKeyScrollHelper;
 class ScrollDataManager;
 class PreSearchStateManager;
 class SelectionStateTracker;
+class SelectionDisplayManager;
 class ListHeaderWidget;
 class ArtworkPreviewOverlay;
 enum class ListSortColumn;
@@ -51,20 +53,15 @@ struct ApplicationContext;
  */
 struct ScrollManagerSetup {
   const ApplicationContext *ctx = nullptr;
-  const GeneralSettings *generalSettings = nullptr;
-  QWidget *gridContainer = nullptr;
-  QScrollArea *mediaScrollArea = nullptr;
-  ArtworkManager *artworkManager = nullptr;
-  const QList<CollectionConfig> *collections = nullptr;
-  const CollectionHierarchyCache *hierarchyCache = nullptr;
 
-  SETUP_GETTER_DECL(QWidget *, GridContainer)
-  SETUP_GETTER_DECL(QScrollArea *, MediaScrollArea)
-  SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
-  SETUP_GETTER_DECL(const QList<CollectionConfig> *, Collections)
-  SETUP_GETTER_DECL(const CollectionHierarchyCache *, HierarchyCache)
+  // All fields resolved through ApplicationContext typed accessors.
+  SETUP_GETTER_DECL_CTX_ONLY(QWidget *, GridContainer)
+  SETUP_GETTER_DECL_CTX_ONLY(QScrollArea *, MediaScrollArea)
+  SETUP_GETTER_DECL_CTX_ONLY(ArtworkManager *, ArtworkManager)
+  SETUP_GETTER_DECL_CTX_ONLY(const QList<CollectionConfig> *, Collections)
+  SETUP_GETTER_DECL_CTX_ONLY(const CollectionHierarchyCache *, HierarchyCache)
   SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
-  SETUP_GETTER_DECL(const GeneralSettings *, GeneralSettings)
+  SETUP_GETTER_DECL_CTX_ONLY(const GeneralSettings *, GeneralSettings)
 };
 
 /**
@@ -201,9 +198,6 @@ private slots:
   void onArrowKeyViewUpdate();
   void onSliderMoved(int position);
   void reconfigureArtworkForActiveWidgets();
-  void onListColumnClicked(ListSortColumn column);
-  void onListColumnWidthChanged(int collectionWidth);
-  void onListArtworkColumnWidthChanged(int artworkWidth);
   void onArtworkPreviewRequested(const QString &filePath,
                                  const QString &artworkDir);
 
@@ -227,14 +221,31 @@ private:
   ItemWidget *acquireWidget();
   void releaseWidget(ItemWidget *widget);
 
-  // Filter manager for search and subcollection filtering
-  std::unique_ptr<FilterManager> m_filterManager;
+  // Data source manager: owns FilterManager + ScrollDataManager +
+  // PreSearchStateManager + SearchLoadingOverlay (extracted from
+  // ScrollManager, Kartend-gg2).
+  std::unique_ptr<DataSourceManager> m_dataSource;
 
-  // Selection overlay manager for glide animation
-  std::unique_ptr<SelectionOverlayManager> m_overlayManager;
+  // Raw aliases into m_dataSource for the in-place filter/data update
+  // logic that still lives in ScrollManager (scrollmanagerfilter.cpp).
+  // Lifetime is tied to m_dataSource; never delete through these pointers.
+  FilterManager *m_filterManager = nullptr;
+  ScrollDataManager *m_dataManager = nullptr;
+  PreSearchStateManager *m_preSearchStateManager = nullptr;
+  SearchLoadingOverlay *m_searchLoadingOverlay = nullptr;
 
-  // Search loading overlay for visual feedback during searches
-  std::unique_ptr<SearchLoadingOverlay> m_searchLoadingOverlay;
+  // Selection display manager owns overlay + state tracker + list header +
+  // artwork preview overlay (extracted from ScrollManager, Kartend-3u5).
+  std::unique_ptr<SelectionDisplayManager> m_selectionDisplay;
+
+  // Raw aliases into m_selectionDisplay for the in-place selection update
+  // logic that still lives in ScrollManager. Lifetime is tied to
+  // m_selectionDisplay; never delete through these pointers.
+  SelectionOverlayManager *m_overlayManager = nullptr;
+  SelectionStateTracker *m_selectionState = nullptr;
+
+  // Search loading overlay, virtual container, selection coordinator, etc.
+  // continue to be owned directly below.
 
   // Virtual container manager for container lifecycle
   std::unique_ptr<VirtualContainerManager> m_containerManager;
@@ -251,38 +262,21 @@ private:
   // Arrow key scroll helper for centering animation
   std::unique_ptr<ArrowKeyScrollHelper> m_arrowKeyScrollHelper;
 
-  // Data manager for file paths, file names, subcollections, and virtual
-  // folders
-  std::unique_ptr<ScrollDataManager> m_dataManager;
+  // Data manager and pre-search state manager are now owned by m_dataSource
+  // (Kartend-gg2). Raw aliases above (m_dataManager, m_preSearchStateManager).
 
-  // Pre-search state manager for fast search result restoration
-  std::unique_ptr<PreSearchStateManager> m_preSearchStateManager;
-
-  // Selection state tracker for selection indices, direction, and row
-  std::unique_ptr<SelectionStateTracker> m_selectionState;
-
-  // List header widget for sortable column headers in list view mode
-  ListHeaderWidget *m_listHeader = nullptr;
-
-  // Collection column width for list view mode (synced between header and
-  // items)
-  int m_collectionColumnWidth = 150;
-
-  // Artwork column width for list view mode (synced between header and items)
-  int m_artworkColumnWidth = 32;
-
-  // Artwork preview overlay for list view mode
-  std::unique_ptr<ArtworkPreviewOverlay> m_artworkPreviewOverlay;
+  // List header widget, column widths, and artwork preview overlay are now
+  // owned by m_selectionDisplay (Kartend-3u5).
 
 public:
   [[nodiscard]] const WidgetPoolManager *getWidgetPool() const {
     return m_widgetPool.get();
   }
   [[nodiscard]] const FilterManager *getFilterManager() const {
-    return m_filterManager.get();
+    return m_filterManager;
   }
   [[nodiscard]] const SelectionOverlayManager *getOverlayManager() const {
-    return m_overlayManager.get();
+    return m_overlayManager;
   }
   [[nodiscard]] const VirtualContainerManager *getContainerManager() const {
     return m_containerManager.get();
@@ -294,13 +288,13 @@ public:
     return m_scrollEventHandler.get();
   }
   [[nodiscard]] const ScrollDataManager *getDataManager() const {
-    return m_dataManager.get();
+    return m_dataManager;
   }
   [[nodiscard]] const PreSearchStateManager *getPreSearchStateManager() const {
-    return m_preSearchStateManager.get();
+    return m_preSearchStateManager;
   }
   [[nodiscard]] const SelectionStateTracker *getSelectionState() const {
-    return m_selectionState.get();
+    return m_selectionState;
   }
 
 private:
@@ -355,21 +349,11 @@ private:
   void setupScrollSuppression();
   void finalizeScrollChanges();
 
-  void calculateMovementDirection(int selectedIndex, int prevIndex,
-                                  int itemsPerRow, bool &isHorizontalMove);
-  [[nodiscard]] QRect selectionOverlayRectForIndex(int visualIndex) const;
-  void handleHorizontalMoveAnimation(int selectedIndex, int prevIndex);
-  void handleDirectSelectionUpdate(int selectedIndex);
-  void prewarmSurroundingWidgets(int selectedIndex);
-  void scheduleArrowKeyUpdate(int selectedIndex);
-
-  // Selection update helpers (split from updateSelectionForIndex)
-  void updateSelectionDirection(int selectedIndex, int prevIndex);
-  void handleSameSelectionUpdate(int selectedIndex, ItemWidget *currentWidget,
-                                 bool keepOverlay);
-  void handleNewSelectionUpdate(int selectedIndex, int prevIndex,
-                                ItemWidget *currentWidget);
-  void handleMissingWidgetSelection(int selectedIndex, bool keepOverlay);
+  // Selection update helpers and related internals were moved to
+  // SelectionDisplayManager (Kartend-p79). ScrollManager keeps thin facade
+  // methods (updateSelectionForIndex, refreshSelectionOverlayState,
+  // setForceSelectionOverlayVisible, selectionOverlayRectForIndex,
+  // onArrowKeyViewUpdate) declared in the public/slots sections above.
 
   void rebuildFilteredView();
 };
