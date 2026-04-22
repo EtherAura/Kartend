@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.2] - 2026-04-21
+
+### Added
+
+- Unit tests for StringUtils and CollectionUtils helpers
+- Prereleases included in the readme Release badge
+
+### Changed
+
+- Large LOC-reduction refactor: split `ScrollManager`, `QueryManager`,
+  `SettingsManager`, `NavigationManager`, `InteractionManager`,
+  `ViewportManager`, `ItemWidget`, `MainWindow`, and `SettingsDialog`
+  into focused sibling translation units
+- Extracted `DataSourceManager` and `SelectionDisplayManager` from
+  `ScrollManager`
+- `build.sh` now invokes clang-format with `--style=file` so the
+  project `.clang-format` is honored
+
+### Fixed
+
+- UBSan vptr violation on `EventManager` during shutdown:
+  `~InteractionManager` now detaches the qApp event filter before
+  owned sub-managers are destroyed
+- Missing `<set>` include in `settingsdialogtree.cpp` that broke the
+  build on Ubuntu 24.04 libstdc++
+- CI workflow YAML: removed orphan trailing `run:` line that caused
+  GitHub Actions to schedule zero jobs
+- Core-dump gitignore rules anchored to the repo root
+- License section formatting in the readme
+
 ## [0.0.1] - 2026-04-18
 
 ### Added
