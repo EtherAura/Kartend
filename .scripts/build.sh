@@ -666,7 +666,7 @@ do_clang_format() {
     # Check formatting without applying changes, report issues but don't fail
     local issues=0
     while IFS= read -r -d '' file; do
-      if ! clang-format --style=LLVM --dry-run --Werror "$file" >/dev/null 2>&1; then
+      if ! clang-format --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
         echo "Format issue: $file"
         issues=$((issues + 1))
       fi
@@ -686,7 +686,7 @@ do_clang_format_apply() {
   if command -v clang-format >/dev/null 2>&1; then
     # Apply formatting fixes to all source files
     find "$srcdir" \( -name '*.cpp' -o -name '*.h' \) -print0 | \
-      xargs -0 clang-format --style=LLVM -i
+      xargs -0 clang-format --style=file -i
     return $?
   else
     echo "skipped: clang-format not available"; return 0
