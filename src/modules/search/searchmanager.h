@@ -64,7 +64,7 @@ public:
   void setupReferences(const SearchManagerSetup &setup);
 
   // Mode management
-  SearchMode currentMode() const { return m_currentSearchMode; }
+  [[nodiscard]] SearchMode currentMode() const { return m_currentSearchMode; }
   void setCurrentMode(SearchMode mode) { m_currentSearchMode = mode; }
   void toggleSearchMode();
   void updateSearchModeButton();
