@@ -286,6 +286,34 @@ void MainWindow::updateWindowTitleWithFilter(int visible, int total) {
       setWindowTitle(QString("%1 (%2 items)").arg(base).arg(total));
     }
   }
+  // Keep the top-bar position label in sync with the denominator.
+  updateItemPositionLabel();
+}
+
+void MainWindow::updateItemPositionLabel() {
+  // Kartend-tof: show "<pos> / <total>" next to the view-mode buttons.
+  // Hidden until we have a concrete total. `currentSelectedIndex()` is a
+  // visual index (includes subcollection tiles + virtual folders + media
+  // files), which matches ScrollManager::getTotalItems() — so presenting
+  // them as a fraction is coherent without further translation.
+  if (!ui->itemPositionLabel) {
+    return;
+  }
+  const int total = getScrollManager() ? getScrollManager()->getTotalItems() : 0;
+  if (total <= 0) {
+    ui->itemPositionLabel->clear();
+    ui->itemPositionLabel->setVisible(false);
+    return;
+  }
+  const int sel =
+      getInteractionManager() ? getInteractionManager()->currentSelectedIndex() : -1;
+  if (sel < 0) {
+    ui->itemPositionLabel->setText(QString("%1").arg(total));
+  } else {
+    // User-facing positions are 1-based.
+    ui->itemPositionLabel->setText(QString("%1 / %2").arg(sel + 1).arg(total));
+  }
+  ui->itemPositionLabel->setVisible(true);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {

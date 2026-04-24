@@ -242,6 +242,19 @@ void MainWindow::connectScrollManager() {
                        updateWindowTitleWithFilter(visible, total);
                      }
                    });
+
+  // Kartend-tof: refresh the top-bar "pos / total" label on selection and
+  // collection-size transitions. The filterChanged connection above already
+  // calls updateItemPositionLabel via updateWindowTitleWithFilter; here we
+  // also update on direct selection moves.
+  if (getInteractionManager()) {
+    QObject::connect(getInteractionManager(), &InteractionManager::selectionChanged, this,
+                     [this](int) {
+                       if (!QApplication::closingDown()) {
+                         updateItemPositionLabel();
+                       }
+                     });
+  }
 }
 
 void MainWindow::connectSidebarManager() {
