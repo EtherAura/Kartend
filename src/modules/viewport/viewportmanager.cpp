@@ -15,6 +15,7 @@
 
 #include <QApplication>
 #include <QDateTime>
+#include <QPointer>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QTimer>
@@ -147,10 +148,11 @@ void ViewportManager::setProgrammaticScrollGuarded(bool enable) {
     }
   } else {
     QPointer<ScrollManager> scrollMgrPtr = m_scrollManager;
-    InteractionStateHolder *statePtr = m_state;
+    QPointer<InteractionStateHolder> statePtr = m_state;
     // Defer clearing ProgrammaticScroll flag until after Qt processes pending
     // scroll events - prevents selection overlay flicker during programmatic
-    // scrolls
+    // scrolls. Use QPointer for both captures so the lambda is lifetime-safe
+    // if either object is destroyed before the timer fires.
     QTimer::singleShot(0, this, [statePtr, scrollMgrPtr]() {
       if (statePtr) {
         statePtr->scroll().programmaticScroll = false;
