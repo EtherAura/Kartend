@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QScrollArea>
+#include <QTimer>
 
 QT_BEGIN_NAMESPACE
 class QEvent;
@@ -138,6 +139,7 @@ private:
   [[nodiscard]] bool applyWheelSelectionDelta(int wheelSteps);
   [[nodiscard]] ItemWidget *itemWidgetForObject(QObject *obj) const;
   [[nodiscard]] int visualIndexForWidget(ItemWidget *widget) const;
+  void commitPendingHoverSelection();
 
   // Manager references
   ScrollManager *m_scrollManager = nullptr;
@@ -164,6 +166,9 @@ private:
 
   // Reentrancy guard for wheel event handling
   bool m_processingWheelEvent = false;
+  QPointer<ItemWidget> m_pendingHoverWidget;
+  int m_pendingHoverIndex = -1;
+  QTimer m_hoverSelectTimer;
 };
 
 #endif // EVENTMANAGER_H
