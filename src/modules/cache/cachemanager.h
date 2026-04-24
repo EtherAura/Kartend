@@ -1,6 +1,8 @@
 #ifndef CACHEMANAGER_H
 #define CACHEMANAGER_H
 
+#include <atomic>
+#include <memory>
 #include <QCache>
 #include <QHash>
 #include <QImage>
@@ -14,8 +16,6 @@
 #include <QString>
 #include <QThreadPool>
 #include <QTimer>
-#include <atomic>
-#include <memory>
 
 // Statistics for monitoring cache performance
 struct CacheMetrics {
@@ -36,9 +36,7 @@ struct CacheMetrics {
     return total > 0 ? static_cast<double>(memoryHits + diskHits) / total : 0.0;
   }
 
-  void reset() {
-    memoryHits = diskHits = misses = inserts = evictions = invalidations = 0;
-  }
+  void reset() { memoryHits = diskHits = misses = inserts = evictions = invalidations = 0; }
 };
 
 class CacheManager {
@@ -61,8 +59,7 @@ public:
   // still alive and then write it out asynchronously without holding a raw
   // pointer to this instance.
   [[nodiscard]] QHash<QString, qint64> snapshotTimestampsForShutdown() const;
-  static void saveTimestampsSnapshotToDiskForShutdown(
-      const QHash<QString, qint64> &timestampsCopy);
+  static void saveTimestampsSnapshotToDiskForShutdown(const QHash<QString, qint64> &timestampsCopy);
 
   // Cancels pending I/O operations and waits for in-flight tasks to complete.
   // Call before shutdown to ensure clean state for final save.
@@ -74,15 +71,13 @@ public:
 
   // Worker-thread friendly disk cache read.
   // Returns the cached image (PNG) as QImage, without creating any QPixmap.
-  [[nodiscard]] QImage
-  tryLoadArtworkImageFromDiskCache(const QString &artworkPath);
+  [[nodiscard]] QImage tryLoadArtworkImageFromDiskCache(const QString &artworkPath);
 
   void cacheArtwork(const QString &artworkPath, const QPixmap &pixmap);
 
   // Inserts into in-memory cache only; does not mark dirty for disk
   // persistence.
-  void cacheArtworkInMemoryOnly(const QString &artworkPath,
-                                const QPixmap &pixmap);
+  void cacheArtworkInMemoryOnly(const QString &artworkPath, const QPixmap &pixmap);
 
   void clearCollectionCache(int collectionIndex);
   [[nodiscard]] static qint64 getCacheSize();
@@ -104,8 +99,7 @@ private:
   mutable QMutex m_mutex;
   QCache<QString, QPixmap> artworkCache;
   QHash<QString, qint64> fileTimestamps;
-  QSet<QString>
-      dirtyTimestamps; // Paths whose timestamps changed since last save
+  QSet<QString> dirtyTimestamps; // Paths whose timestamps changed since last save
   QSet<QString> dirtyArtwork;
   CacheMetrics m_metrics;
 
@@ -116,8 +110,7 @@ private:
 
   // Cancellation flag for in-flight/queued I/O tasks (used during shutdown).
   // Shared pointer so lambdas can safely check after CacheManager destruction.
-  std::shared_ptr<std::atomic_bool> m_cancelIo =
-      std::make_shared<std::atomic_bool>(false);
+  std::shared_ptr<std::atomic_bool> m_cancelIo = std::make_shared<std::atomic_bool>(false);
 
   // Debounced save timer plumbing (keeps frequent cache changes from causing
   // repeated PNG encodes and metadata writes during active scrolling).

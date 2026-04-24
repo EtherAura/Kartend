@@ -8,13 +8,13 @@
 #include "queryhelpers.h"
 #include "querymanager.h"
 #include "querymanagerhelpers.h"
+#include <algorithm>
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QString>
 #include <QStringList>
 #include <QVector>
-#include <algorithm>
 #include <random>
 
 using QueryManagerInternal::canonicalKeyPath;
@@ -23,13 +23,10 @@ using QueryManagerInternal::insertIfAbsent;
 
 void QueryManager::appendFileMapsAndListCanonical(
     int collectionIndex, const CollectionConfig &expandedCollection,
-    const QString &mappingArtworkDir, const QStringList &filePaths,
-    QStringList &allFilePaths, QHash<QString, QString> &allFileNames,
-    QHash<QString, QString> &fileToArtworkDir,
-    QHash<QString, QString> &fileToMediaDir,
-    QHash<QString, int> &fileToCollectionIndex, bool dedup,
-    QSet<QString> *seenCanonicalPaths,
-    QHash<QString, QString> *canonicalPathCache) {
+    const QString &mappingArtworkDir, const QStringList &filePaths, QStringList &allFilePaths,
+    QHash<QString, QString> &allFileNames, QHash<QString, QString> &fileToArtworkDir,
+    QHash<QString, QString> &fileToMediaDir, QHash<QString, int> &fileToCollectionIndex, bool dedup,
+    QSet<QString> *seenCanonicalPaths, QHash<QString, QString> *canonicalPathCache) {
   const QString mediaDir = expandedCollection.mediaDirectory;
   QDir mediaQDir(mediaDir);
 
@@ -64,12 +61,10 @@ void QueryManager::appendFileMapsAndListCanonical(
 
   for (const QString &file : filePaths) {
     const QString absPath = mediaQDir.absoluteFilePath(file);
-    const QString keyPath =
-        canonicalKeyPath(absPath, dedup, canonicalPathCache);
+    const QString keyPath = canonicalKeyPath(absPath, dedup, canonicalPathCache);
 
     if (dedup) {
-      if (effectiveSeenCanonicalPaths &&
-          !effectiveSeenCanonicalPaths->contains(keyPath)) {
+      if (effectiveSeenCanonicalPaths && !effectiveSeenCanonicalPaths->contains(keyPath)) {
         effectiveSeenCanonicalPaths->insert(keyPath);
         allFilePaths.append(keyPath);
       }
@@ -77,10 +72,8 @@ void QueryManager::appendFileMapsAndListCanonical(
       allFilePaths.append(keyPath);
     }
 
-    const int lastSeparator =
-        std::max(file.lastIndexOf('/'), file.lastIndexOf('\\'));
-    const QString fileName =
-        (lastSeparator >= 0) ? file.mid(lastSeparator + 1) : file;
+    const int lastSeparator = std::max(file.lastIndexOf('/'), file.lastIndexOf('\\'));
+    const QString fileName = (lastSeparator >= 0) ? file.mid(lastSeparator + 1) : file;
     const int lastDot = fileName.lastIndexOf('.');
     const QString baseName = (lastDot > 0) ? fileName.left(lastDot) : fileName;
     const QString displayName = displayNameForBase(baseName);
@@ -151,8 +144,7 @@ void QueryManager::sortFiles(QStringList &allFilePaths, SortMode mode) {
 
   std::ranges::sort(entries, [&](const SortEntry &lhs, const SortEntry &rhs) {
     if (lhs.priority != rhs.priority) {
-      return descending ? lhs.priority > rhs.priority
-                        : lhs.priority < rhs.priority;
+      return descending ? lhs.priority > rhs.priority : lhs.priority < rhs.priority;
     }
     const int cmp = lhs.sortKey.compare(rhs.sortKey, Qt::CaseInsensitive);
     return descending ? cmp > 0 : cmp < 0;

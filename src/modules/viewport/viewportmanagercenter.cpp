@@ -1,5 +1,4 @@
 // Sibling TU: centering/scroll-to-visible logic for ViewportManager.
-#include "viewportmanager.h"
 #include "animationmanager.h"
 #include "applicationcontext.h"
 #include "artworkmanager.h"
@@ -8,6 +7,7 @@
 #include "interactionstateholder.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
+#include "viewportmanager.h"
 
 #include "gridutils.h"
 #include "uiconstants.h"
@@ -20,11 +20,11 @@
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcViewportManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcViewportManager().isDebugEnabled()) {                                \
-      qCDebug(lcViewportManager) << msg;                                       \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcViewportManager().isDebugEnabled()) {                                                    \
+      qCDebug(lcViewportManager) << msg;                                                           \
+    }                                                                                              \
   } while (0)
 
 void ViewportManager::centerItemVertically(int index, bool immediate) {
@@ -39,8 +39,7 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
     return;
   }
 
-  const CollectionConfig &collection =
-      (*m_collections)[*m_currentCollectionIndex];
+  const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
 
   // Get metrics from ScrollManager for correct dimensions in both grid and list
   // modes
@@ -84,8 +83,8 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
   }
 
   int targetY = AnimationManager::computeTargetYForIndex(
-      index, gridWidth, itemHeight, vSpacing, viewportHeight,
-      verticalScrollBar->maximum(), totalHeight, logicalHeight, headerOffset);
+      index, gridWidth, itemHeight, vSpacing, viewportHeight, verticalScrollBar->maximum(),
+      totalHeight, logicalHeight, headerOffset);
 
   bool forceImmediate = computeForceImmediate(immediate);
   if (shouldEarlyReturnUserScroll(forceImmediate)) {
@@ -99,21 +98,18 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
   int smallThreshold = computeSmallThreshold(currentRow);
 
   bool useSmooth = forceClickAnim ||
-                   (m_continuousScrollActive && !m_instantPositioning &&
-                    !m_wrapSequenceActive) ||
+                   (m_continuousScrollActive && !m_instantPositioning && !m_wrapSequenceActive) ||
                    (m_state && m_state->scroll().clickContinuous) ||
                    (m_state && m_state->scroll().keyContinuous);
 
   if (!forceImmediate && distance <= smallThreshold) {
-    if (handleSmallMovementEarlyReturn(distance, clickScroll, index,
-                                       currentRow)) {
+    if (handleSmallMovementEarlyReturn(distance, clickScroll, index, currentRow)) {
       return;
     }
   }
 
-  if (maybeHandleImmediateCenter(distance <= 1, useSmooth, forceImmediate,
-                                 forceClickAnim, verticalScrollBar, targetY,
-                                 index, currentRow)) {
+  if (maybeHandleImmediateCenter(distance <= 1, useSmooth, forceImmediate, forceClickAnim,
+                                 verticalScrollBar, targetY, index, currentRow)) {
     return;
   }
 
@@ -121,8 +117,7 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
     m_animationManager->ensureVAnimCreated(verticalScrollBar);
 
     if (m_animationManager->handleExistingVerticalAnimIfRunning(
-            verticalScrollBar, targetY, clickScroll, clickHoldAdv, curY,
-            distance)) {
+            verticalScrollBar, targetY, clickScroll, clickHoldAdv, curY, distance)) {
       return;
     }
   }
@@ -130,41 +125,36 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
   int duration = computeVerticalCenterDuration(distance, m_repeating);
 
   if (forceClickAnim && distance <= 1) {
-    adjustForForceClickZeroDistance(verticalScrollBar, targetY, curY, distance,
-                                    duration, forceClickAnim);
+    adjustForForceClickZeroDistance(verticalScrollBar, targetY, curY, distance, duration,
+                                    forceClickAnim);
   }
 
   if (m_animationManager) {
-    m_animationManager->configureAndStartVerticalAnimation(
-        verticalScrollBar, curY, targetY, duration, clickScroll, clickHoldAdv);
+    m_animationManager->configureAndStartVerticalAnimation(verticalScrollBar, curY, targetY,
+                                                           duration, clickScroll, clickHoldAdv);
   }
 }
 
 bool ViewportManager::computeForceImmediate(bool immediate) const {
   // Query SelectionManager as the source of truth for restore state
-  bool restoringSelection =
-      m_selectionManager && m_selectionManager->isRestoringSelection();
-  return immediate || m_forceImmediateCenter || m_isWrappingNavigation ||
-         restoringSelection || m_instantPositioning || m_wrapSequenceActive;
+  bool restoringSelection = m_selectionManager && m_selectionManager->isRestoringSelection();
+  return immediate || m_forceImmediateCenter || m_isWrappingNavigation || restoringSelection ||
+         m_instantPositioning || m_wrapSequenceActive;
 }
 
 int ViewportManager::computeSmallThreshold(int currentRow) const {
   constexpr int kSmallThresholdSameRow = 8;
   constexpr int kSmallThresholdOtherRow = 2;
-  return (m_lastSelectedRow >= 0 && m_lastSelectedRow == currentRow)
-             ? kSmallThresholdSameRow
-             : kSmallThresholdOtherRow;
+  return (m_lastSelectedRow >= 0 && m_lastSelectedRow == currentRow) ? kSmallThresholdSameRow
+                                                                     : kSmallThresholdOtherRow;
 }
 
-bool ViewportManager::handleSmallMovementEarlyReturn(int /*distance*/,
-                                                     bool clickScroll,
-                                                     int index,
+bool ViewportManager::handleSmallMovementEarlyReturn(int /*distance*/, bool clickScroll, int index,
                                                      int currentRow) {
   if (m_scrollManager) {
     m_scrollManager->updateVirtualView();
-    int idxDyn = (m_state && m_state->isSelectionSuppressed())
-                     ? m_state->pendingSelectionIndex()
-                     : index;
+    int idxDyn =
+        (m_state && m_state->isSelectionSuppressed()) ? m_state->pendingSelectionIndex() : index;
     if (idxDyn >= 0) {
       m_scrollManager->updateSelectionForIndex(idxDyn);
     }
@@ -198,17 +188,16 @@ bool ViewportManager::shouldEarlyReturnUserScroll(bool forceImmediate) const {
   return (m_state && m_state->scroll().userScrollActive) && !forceImmediate;
 }
 
-bool ViewportManager::handlePendingInitialCenterIfNeeded(
-    QScrollBar *verticalScrollBar, int index, int targetYUnbounded,
-    bool immediate) {
+bool ViewportManager::handlePendingInitialCenterIfNeeded(QScrollBar *verticalScrollBar, int index,
+                                                         int targetYUnbounded, bool immediate) {
   Q_UNUSED(targetYUnbounded);
   if (verticalScrollBar->maximum() == 0 && !immediate) {
     if (m_state && !m_state->click().pendingInitialCenter) {
       m_state->click().pendingInitialCenter = true;
       // Defer centering until scrollbar has a valid range - happens during
       // initial layout when content height isn't calculated yet
-      QTimer::singleShot(UIConstants::Sidebar::INITIAL_CENTER_SCROLL_DELAY_MS,
-                         this, [this, index]() {
+      QTimer::singleShot(UIConstants::Sidebar::INITIAL_CENTER_SCROLL_DELAY_MS, this,
+                         [this, index]() {
                            if (m_state) {
                              m_state->click().pendingInitialCenter = false;
                            }
@@ -222,9 +211,9 @@ bool ViewportManager::handlePendingInitialCenterIfNeeded(
   return false;
 }
 
-void ViewportManager::adjustForForceClickZeroDistance(
-    QScrollBar *verticalScrollBar, int targetY, int &curY, int &distance,
-    int &duration, bool /*forceClickAnim*/) {
+void ViewportManager::adjustForForceClickZeroDistance(QScrollBar *verticalScrollBar, int targetY,
+                                                      int &curY, int &distance, int &duration,
+                                                      bool /*forceClickAnim*/) {
   if (targetY == curY) {
     int adjust = (targetY > 0 ? -1 : 1);
     if (m_state) {
@@ -259,8 +248,7 @@ bool ViewportManager::handleImmediateCenterForEnsureVisible(int index) {
       !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     return false;
   }
-  const CollectionConfig &collection =
-      (*m_collections)[*m_currentCollectionIndex];
+  const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
   QScrollBar *vScrollBar = m_itemScrollArea->verticalScrollBar();
   QScrollBar *hScrollBar = m_itemScrollArea->horizontalScrollBar();
   if ((!vScrollBar) || (!hScrollBar)) {
@@ -273,26 +261,23 @@ bool ViewportManager::handleImmediateCenterForEnsureVisible(int index) {
   if (gridWidth <= 0 || viewportHeight <= 0) {
     return false;
   }
-  int hSpacing = (m_scrollManager)
-                     ? m_scrollManager->getEffectiveHorizontalSpacing()
-                     : collection.horizontalSpacing;
+  int hSpacing = (m_scrollManager) ? m_scrollManager->getEffectiveHorizontalSpacing()
+                                   : collection.horizontalSpacing;
   int margins = UIConstants::Grid::MARGINS;
-  int itemX = GridUtils::computeItemX(index, gridWidth, collection.itemWidth,
-                                      hSpacing, margins);
+  int itemX = GridUtils::computeItemX(index, gridWidth, collection.itemWidth, hSpacing, margins);
   int itemY = GridUtils::computeItemY(index, gridWidth, collection.itemHeight,
                                       collection.verticalSpacing, margins);
 
   // Calculate target scroll position in logical space (center the item)
-  int logicalTargetY =
-      itemY + (collection.itemHeight / 2) - (viewportHeight / 2);
+  int logicalTargetY = itemY + (collection.itemHeight / 2) - (viewportHeight / 2);
   logicalTargetY = qMax(0, logicalTargetY);
 
   // Convert logical scroll target to widget scroll position for clipped grids
   int targetY = toWidgetScrollY(logicalTargetY);
   targetY = qBound(0, targetY, vScrollBar->maximum());
 
-  int targetX = GridUtils::computeCenterTarget(
-      itemX, collection.itemWidth, viewportWidth, hScrollBar->maximum());
+  int targetX = GridUtils::computeCenterTarget(itemX, collection.itemWidth, viewportWidth,
+                                               hScrollBar->maximum());
   vScrollBar->setValue(targetY);
   hScrollBar->setValue(targetX);
   if (m_scrollManager) {
@@ -312,22 +297,20 @@ bool ViewportManager::handleImmediateCenterForEnsureVisible(int index) {
   return true;
 }
 
-bool ViewportManager::maybeHandleImmediateCenter(
-    bool distanceSmall, bool useSmooth, bool forceImmediate,
-    bool forceClickAnim, QScrollBar *verticalScrollBar, int targetY, int index,
-    int currentRow) {
+bool ViewportManager::maybeHandleImmediateCenter(bool distanceSmall, bool useSmooth,
+                                                 bool forceImmediate, bool forceClickAnim,
+                                                 QScrollBar *verticalScrollBar, int targetY,
+                                                 int index, int currentRow) {
   if (((distanceSmall && !useSmooth) || forceImmediate) && !forceClickAnim) {
-    if (handleImmediateCenterPath(verticalScrollBar, targetY, index,
-                                  currentRow)) {
+    if (handleImmediateCenterPath(verticalScrollBar, targetY, index, currentRow)) {
       return true;
     }
   }
   return false;
 }
 
-bool ViewportManager::handleImmediateCenterPath(QScrollBar *verticalScrollBar,
-                                                int targetY, int index,
-                                                int currentRow) {
+bool ViewportManager::handleImmediateCenterPath(QScrollBar *verticalScrollBar, int targetY,
+                                                int index, int currentRow) {
   if (m_animationManager) {
     m_animationManager->stopActiveVerticalAnims(verticalScrollBar);
   }
@@ -339,4 +322,3 @@ bool ViewportManager::handleImmediateCenterPath(QScrollBar *verticalScrollBar,
   clearArrowCenterSuppressionWhenDue();
   return true;
 }
-

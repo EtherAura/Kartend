@@ -1,13 +1,13 @@
 #ifndef TIMERUTILS_H
 #define TIMERUTILS_H
 
+#include <functional>
 #include <QHash>
 #include <QList>
 #include <QObject>
 #include <QPointer>
 #include <QString>
 #include <QTimer>
-#include <functional>
 
 namespace TimerUtils {
 
@@ -90,12 +90,11 @@ void deleteLaterTimer(QTimer *&timer);
 template <typename T, typename Func>
 void singleShotGuarded(int delayMs, T *target, Func &&callback) {
   QPointer<T> guard(target);
-  QTimer::singleShot(delayMs, target,
-                     [guard, cb = std::forward<Func>(callback)]() {
-                       if (guard) {
-                         cb();
-                       }
-                     });
+  QTimer::singleShot(delayMs, target, [guard, cb = std::forward<Func>(callback)]() {
+    if (guard) {
+      cb();
+    }
+  });
 }
 
 /**
@@ -104,8 +103,7 @@ void singleShotGuarded(int delayMs, T *target, Func &&callback) {
  *
  * Convenience overload for the common case of deferring to next event loop.
  */
-template <typename T, typename Func>
-void deferGuarded(T *target, Func &&callback) {
+template <typename T, typename Func> void deferGuarded(T *target, Func &&callback) {
   singleShotGuarded(0, target, std::forward<Func>(callback));
 }
 

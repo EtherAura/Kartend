@@ -1,10 +1,10 @@
 #ifndef ERRORUTILS_H
 #define ERRORUTILS_H
 
+#include <optional>
 #include <QDebug>
 #include <QLoggingCategory>
 #include <QString>
-#include <optional>
 
 namespace ErrorUtils {
 
@@ -81,9 +81,7 @@ struct ErrorContext {
   QString source; // e.g., "QueryManager::fetchItemCount"
 
   [[nodiscard]] bool isError() const { return code != ErrorCode::Success; }
-  [[nodiscard]] bool isCritical() const {
-    return severity == Severity::Critical;
-  }
+  [[nodiscard]] bool isCritical() const { return severity == Severity::Critical; }
 
   // Create success context (no error)
   static ErrorContext success() { return ErrorContext{}; }
@@ -122,9 +120,7 @@ struct ErrorContext {
 // Result type combining a value with optional error context
 template <typename T> class Result {
 public:
-  Result(T value)
-      : m_value(std::move(value)), m_error() {
-  } // NOLINT(google-explicit-constructor)
+  Result(T value) : m_value(std::move(value)), m_error() {} // NOLINT(google-explicit-constructor)
   Result(ErrorContext error) // NOLINT(google-explicit-constructor)
       : m_value(std::nullopt), m_error(std::move(error)) {}
 
@@ -153,8 +149,7 @@ private:
 template <> class Result<void> {
 public:
   Result() : m_error() {}
-  Result(ErrorContext error)
-      : m_error(std::move(error)) {} // NOLINT(google-explicit-constructor)
+  Result(ErrorContext error) : m_error(std::move(error)) {} // NOLINT(google-explicit-constructor)
 
   [[nodiscard]] bool isOk() const { return !m_error.isError(); }
   [[nodiscard]] bool isError() const { return m_error.isError(); }

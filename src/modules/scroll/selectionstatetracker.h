@@ -21,23 +21,17 @@ public:
   // --- Selection Index ---
 
   [[nodiscard]] int lastSelectedIndex() const { return m_lastSelectedIndex; }
-  [[nodiscard]] int committedSelectedIndex() const {
-    return m_committedSelectedIndex;
-  }
+  [[nodiscard]] int committedSelectedIndex() const { return m_committedSelectedIndex; }
 
   void setLastSelectedIndex(int index) { m_lastSelectedIndex = index; }
-  void setCommittedSelectedIndex(int index) {
-    m_committedSelectedIndex = index;
-  }
+  void setCommittedSelectedIndex(int index) { m_committedSelectedIndex = index; }
 
   // --- Selection Direction ---
 
   /// Returns -1 (up), 0 (none), or 1 (down)
   [[nodiscard]] int selectionDirection() const { return m_selectionDirection; }
 
-  void setSelectionDirection(int direction) {
-    m_selectionDirection = direction;
-  }
+  void setSelectionDirection(int direction) { m_selectionDirection = direction; }
 
   // --- Row Tracking ---
 

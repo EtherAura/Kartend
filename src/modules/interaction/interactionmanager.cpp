@@ -2,6 +2,7 @@
 // handling.
 #include "interactionmanager.h"
 
+#include <algorithm>
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
@@ -15,7 +16,6 @@
 #include <QScrollBar>
 #include <QTimer>
 #include <QWheelEvent>
-#include <algorithm>
 
 // Include full headers for forward-declared owned managers
 #include "alphabeticnavigationhandler.h"
@@ -49,11 +49,11 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcInteractionManager, "kartend.interactionmanager")
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcInteractionManager().isDebugEnabled()) {                             \
-      qCDebug(lcInteractionManager) << msg;                                    \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcInteractionManager().isDebugEnabled()) {                                                 \
+      qCDebug(lcInteractionManager) << msg;                                                        \
+    }                                                                                              \
   } while (0)
 
 InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
@@ -126,8 +126,7 @@ auto InteractionManager::resolveOwnerForPath(const QString &path) const -> int {
 
 // Helper: fallback collection index based on current selection or view
 auto InteractionManager::getFallbackCollectionIndex() const -> int {
-  QString selectedPath =
-      m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+  QString selectedPath = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
   if (!selectedPath.isEmpty()) {
     if (m_databaseManager) {
       int owner = m_databaseManager->getCollectionIndexForFile(selectedPath);
@@ -143,11 +142,10 @@ auto InteractionManager::getFallbackCollectionIndex() const -> int {
 }
 
 // Launches on double‑click without altering or interrupting any scroll state
-void InteractionManager::handleWidgetDoubleClickedWithCollection(
-    const QString &filePath, int collectionIndex) {
+void InteractionManager::handleWidgetDoubleClickedWithCollection(const QString &filePath,
+                                                                 int collectionIndex) {
   // Delegate debounce check to LaunchManager
-  if (m_launchManager && !filePath.isEmpty() &&
-      !m_launchManager->canLaunch(filePath)) {
+  if (m_launchManager && !filePath.isEmpty() && !m_launchManager->canLaunch(filePath)) {
     return;
   }
 
@@ -177,8 +175,7 @@ void InteractionManager::handleWidgetDoubleClickedWithCollection(
     return;
   }
   const int fallbackIdx = getFallbackCollectionIndex();
-  QString selectedPath =
-      m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+  QString selectedPath = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
   if (fallbackIdx >= 0 && !selectedPath.isEmpty()) {
     launchItemWithCollection(selectedPath, fallbackIdx);
   }
@@ -204,8 +201,7 @@ auto InteractionManager::eventFilter(QObject *obj, QEvent *event) -> bool {
 
 // Updates the selected file path and safely refreshes sidebar metadata without
 // using stale widget pointers
-void InteractionManager::updateFilePathForSelection(
-    int index, const QList<int> &subcollections) {
+void InteractionManager::updateFilePathForSelection(int index, const QList<int> &subcollections) {
   if (m_selectionManager) {
     m_selectionManager->updateFilePathForSelection(index, subcollections);
   }
@@ -232,13 +228,11 @@ void InteractionManager::setSelectedMediaItem(ItemWidget *widget) {
 }
 
 auto InteractionManager::selectedFilePath() const -> QString {
-  return m_selectionManager ? m_selectionManager->selectedFilePath()
-                            : QString();
+  return m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
 }
 
 auto InteractionManager::isRestoringSelection() const -> bool {
-  return m_selectionManager ? m_selectionManager->isRestoringSelection()
-                            : false;
+  return m_selectionManager ? m_selectionManager->isRestoringSelection() : false;
 }
 
 auto InteractionManager::targetRestoreIndex() const -> int {
@@ -267,7 +261,6 @@ auto InteractionManager::getCurrentGridWidth() const -> int {
   return CollectionUtils::getGridWidth(m_currentCollectionIndex, m_collections);
 }
 
-
 void InteractionManager::applyMinorHorizontalSuppress() {
   constexpr qint64 kMinorHorizSuppressMs = 220;
   constexpr int kMinorHorizSuppressClearMs = 240;
@@ -279,8 +272,7 @@ void InteractionManager::applyMinorHorizontalSuppress() {
                      [this]() { m_state.clearArrowCenterSuppression(); });
 }
 
-void InteractionManager::setPendingSelectionIfNeeded(bool condition,
-                                                     int newSelection) {
+void InteractionManager::setPendingSelectionIfNeeded(bool condition, int newSelection) {
   if (condition) {
     m_state.beginSelectionSuppression(newSelection);
   }
@@ -318,23 +310,19 @@ void InteractionManager::ensureHorizontallyVisible(int index) {
   }
 }
 
-void InteractionManager::ensureItemVisible(int index,
-                                           bool allowHorizontalScroll) {
+void InteractionManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
   if (m_viewportManager) {
     m_viewportManager->ensureItemVisible(index, allowHorizontalScroll);
   }
 }
 
-void InteractionManager::applyImmediateViewportPositioningForSelection(
-    int targetIndex) {
+void InteractionManager::applyImmediateViewportPositioningForSelection(int targetIndex) {
   if (m_viewportManager) {
-    m_viewportManager->applyImmediateViewportPositioningForSelection(
-        targetIndex);
+    m_viewportManager->applyImmediateViewportPositioningForSelection(targetIndex);
   }
 }
 
-void InteractionManager::selectItemByIndex(int index,
-                                           bool allowHorizontalScroll) {
+void InteractionManager::selectItemByIndex(int index, bool allowHorizontalScroll) {
   Q_UNUSED(allowHorizontalScroll);
   if (!m_scrollManager || !m_itemScrollArea ||
       !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
@@ -356,10 +344,9 @@ void InteractionManager::selectItemByIndex(int index,
     m_state.scroll().userFreeScroll = false;
   }
 
-  ItemWidget *widget =
-      m_selectionManager ? m_selectionManager->widgetForIndex(index) : nullptr;
-  bool suppressed = m_state.click().selectionSuppressed &&
-                    m_state.click().pendingSelectionIndex == index;
+  ItemWidget *widget = m_selectionManager ? m_selectionManager->widgetForIndex(index) : nullptr;
+  bool suppressed =
+      m_state.click().selectionSuppressed && m_state.click().pendingSelectionIndex == index;
   bool skipCenter = m_state.click().suppressInitialClickCenter;
 
   if (widget) {
@@ -392,16 +379,16 @@ void InteractionManager::selectItemByIndex(int index,
   }
 }
 
-void InteractionManager::persistSuppressedSelectionAndMaybeCenter(
-    int index, const QList<int> &subcollections, bool skipCenter) {
-  bool deferCenter = m_state.click().deferCenterOnClick &&
-                     m_state.click().deferredCenterIndex == index;
+void InteractionManager::persistSuppressedSelectionAndMaybeCenter(int index,
+                                                                  const QList<int> &subcollections,
+                                                                  bool skipCenter) {
+  bool deferCenter =
+      m_state.click().deferCenterOnClick && m_state.click().deferredCenterIndex == index;
   if (!deferCenter && !skipCenter) {
     centerItemVertically(index, false);
   }
   int curColl = ((m_currentCollectionIndex) ? *m_currentCollectionIndex : -1);
-  if (m_collections && curColl >= 0 && curColl < m_collections->size() &&
-      m_selectionManager) {
+  if (m_collections && curColl >= 0 && curColl < m_collections->size() && m_selectionManager) {
     QString title = m_selectionManager->titleForIndex(index, subcollections);
     m_selectionManager->persistSelection(curColl, index, title);
   }
@@ -415,8 +402,7 @@ void InteractionManager::persistSuppressedSelectionAndMaybeCenter(
 }
 
 // Returns the direct child subcollection indices for a parent collection
-auto InteractionManager::getSubcollections(int parentIndex) const
-    -> QList<int> {
+auto InteractionManager::getSubcollections(int parentIndex) const -> QList<int> {
   // Delegate to SelectionManager which owns the canonical implementation
   if (m_selectionManager) {
     return m_selectionManager->getSubcollections(parentIndex);
@@ -435,11 +421,8 @@ void InteractionManager::clearSelectionAndFocus() {
   }
 }
 
-void InteractionManager::trySelectWidget(int index,
-                                         const QList<int> &subcollections,
-                                         int attempt) {
-  if ((!m_scrollManager) || currentSelectedIndex() != index ||
-      QApplication::closingDown()) {
+void InteractionManager::trySelectWidget(int index, const QList<int> &subcollections, int attempt) {
+  if ((!m_scrollManager) || currentSelectedIndex() != index || QApplication::closingDown()) {
     return;
   }
   constexpr int kMaxSelectAttempts = 10;
@@ -451,8 +434,7 @@ void InteractionManager::trySelectWidget(int index,
     return;
   }
 
-  ItemWidget *widget =
-      m_selectionManager ? m_selectionManager->widgetForIndex(index) : nullptr;
+  ItemWidget *widget = m_selectionManager ? m_selectionManager->widgetForIndex(index) : nullptr;
 
   if (widget) {
     if (m_selectionManager) {

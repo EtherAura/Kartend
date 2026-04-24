@@ -1,8 +1,8 @@
 #ifndef SEARCHLOADINGOVERLAY_H
 #define SEARCHLOADINGOVERLAY_H
 
-#include <QObject>
 #include <QLabel>
+#include <QObject>
 #include <QPointer>
 #include <QPropertyAnimation>
 #include <QWidget>

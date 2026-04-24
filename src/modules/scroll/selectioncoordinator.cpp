@@ -1,8 +1,8 @@
 #include "selectioncoordinator.h"
 #include "gridutils.h"
 #include "selectionoverlaymanager.h"
-#include <QWidget>
 #include <cmath>
+#include <QWidget>
 
 SelectionCoordinator::SelectionCoordinator(QObject *parent) : QObject(parent) {}
 
@@ -28,8 +28,7 @@ void SelectionCoordinator::setSelectedIndex(int index) {
   emit selectionChanged(index, prevIndex);
 }
 
-auto SelectionCoordinator::analyzeMovement(int newIndex, int prevIndex,
-                                           int itemsPerRow) const
+auto SelectionCoordinator::analyzeMovement(int newIndex, int prevIndex, int itemsPerRow) const
     -> MovementInfo {
   MovementInfo info;
 
@@ -66,8 +65,7 @@ auto SelectionCoordinator::analyzeMovement(int newIndex, int prevIndex,
   return info;
 }
 
-auto SelectionCoordinator::rectForIndex(int visualIndex, int totalItems) const
-    -> QRect {
+auto SelectionCoordinator::rectForIndex(int visualIndex, int totalItems) const -> QRect {
   if (visualIndex < 0 || visualIndex >= totalItems) {
     return {};
   }

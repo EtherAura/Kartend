@@ -34,8 +34,7 @@ void ViewportManager::ensureHorizontallyVisible(int index) {
     return;
   }
 
-  const CollectionConfig &collection =
-      (*m_collections)[*m_currentCollectionIndex];
+  const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
   int gridWidth = collection.gridWidth;
   if (gridWidth <= 0) {
     return;
@@ -46,12 +45,10 @@ void ViewportManager::ensureHorizontallyVisible(int index) {
     return;
   }
 
-  int hSpacing = (m_scrollManager)
-                     ? m_scrollManager->getEffectiveHorizontalSpacing()
-                     : collection.horizontalSpacing;
+  int hSpacing = (m_scrollManager) ? m_scrollManager->getEffectiveHorizontalSpacing()
+                                   : collection.horizontalSpacing;
   int margins = UIConstants::Grid::MARGINS;
-  int itemX = GridUtils::computeItemX(index, gridWidth, collection.itemWidth,
-                                      hSpacing, margins);
+  int itemX = GridUtils::computeItemX(index, gridWidth, collection.itemWidth, hSpacing, margins);
 
   QRect viewport = m_itemScrollArea->viewport()->rect();
   int curX = hScrollBar->value();
@@ -61,9 +58,8 @@ void ViewportManager::ensureHorizontallyVisible(int index) {
   if (itemX < curX + margins) {
     targetX = qMax(0, itemX - margins);
   } else if (itemX + collection.itemWidth > curX + viewportWidth - margins) {
-    targetX =
-        qMax(0, qMin(itemX + collection.itemWidth - viewportWidth + margins,
-                     hScrollBar->maximum()));
+    targetX = qMax(
+        0, qMin(itemX + collection.itemWidth - viewportWidth + margins, hScrollBar->maximum()));
   }
 
   if (targetX == curX) {
@@ -99,8 +95,7 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
   if (m_state && m_state->click().deferCenterOnClick && !m_physicalKeyDown) {
     return;
   }
-  const CollectionConfig &collection =
-      (*m_collections)[*m_currentCollectionIndex];
+  const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
 
   // Get metrics from ScrollManager for correct dimensions in both grid and list
   // modes
@@ -131,10 +126,8 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
 
   int margins = UIConstants::Grid::MARGINS;
 
-  int itemX =
-      GridUtils::computeItemX(index, gridWidth, itemWidth, hSpacing, margins);
-  int logicalItemY =
-      GridUtils::computeItemY(index, gridWidth, itemHeight, vSpacing, margins);
+  int itemX = GridUtils::computeItemX(index, gridWidth, itemWidth, hSpacing, margins);
+  int logicalItemY = GridUtils::computeItemY(index, gridWidth, itemHeight, vSpacing, margins);
 
   // Account for header offset in list mode
   if (m_scrollManager) {
@@ -170,8 +163,7 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
 
   int targetX = allowHorizontalScroll
                     ? AnimationManager::computeHorizontalTargetX(
-                          itemX, itemWidth, curX, viewportWidth, margins,
-                          hScrollBar->maximum())
+                          itemX, itemWidth, curX, viewportWidth, margins, hScrollBar->maximum())
                     : curX;
   bool needH = (targetX != curX);
 
@@ -218,8 +210,7 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
   }
 }
 
-void ViewportManager::updateViewAndRowAfterVisibility(int index,
-                                                      int gridWidth) {
+void ViewportManager::updateViewAndRowAfterVisibility(int index, int gridWidth) {
   if (m_scrollManager) {
     m_scrollManager->updateVirtualView();
   }
@@ -230,8 +221,7 @@ void ViewportManager::updateViewAndRowAfterVisibility(int index,
 }
 
 bool ViewportManager::shouldExitEnsureItemVisible(int index) const {
-  if (QApplication::closingDown() ||
-      ((m_isShuttingDown) && *m_isShuttingDown)) {
+  if (QApplication::closingDown() || ((m_isShuttingDown) && *m_isShuttingDown)) {
     return true;
   }
   if (!m_itemScrollArea ||
@@ -244,8 +234,7 @@ bool ViewportManager::shouldExitEnsureItemVisible(int index) const {
   return false;
 }
 
-void ViewportManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar,
-                                              int startVal, int endVal,
+void ViewportManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar, int startVal, int endVal,
                                               bool isRepeating) {
   if (!m_animationManager) {
     return;
@@ -258,8 +247,8 @@ void ViewportManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar,
     vSpacing = (*m_collections)[*m_currentCollectionIndex].verticalSpacing;
   }
 
-  m_animationManager->startEnsureVisibleVAnim(
-      vScrollBar, startVal, endVal, itemHeight, vSpacing, isRepeating);
+  m_animationManager->startEnsureVisibleVAnim(vScrollBar, startVal, endVal, itemHeight, vSpacing,
+                                              isRepeating);
 }
 
 void ViewportManager::ensureVerticalScrollbarPolicy() {
@@ -273,8 +262,7 @@ void ViewportManager::ensureVerticalScrollbarPolicy() {
   }
 }
 
-void ViewportManager::applyImmediateViewportPositioningForSelection(
-    int targetIndex) {
+void ViewportManager::applyImmediateViewportPositioningForSelection(int targetIndex) {
   if (!m_itemScrollArea ||
       !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     return;
@@ -290,8 +278,7 @@ void ViewportManager::applyImmediateViewportPositioningForSelection(
       *m_currentCollectionIndex < m_collections->size()) {
     // Use ScrollManager metrics for accurate list/grid mode dimensions
     int gridWidth = 1;
-    int rowHeight = UIConstants::ListView::DEFAULT_ROW_HEIGHT +
-                    UIConstants::ListView::ROW_SPACING;
+    int rowHeight = UIConstants::ListView::DEFAULT_ROW_HEIGHT + UIConstants::ListView::ROW_SPACING;
     int itemHeight = UIConstants::ListView::DEFAULT_ROW_HEIGHT;
     int headerOffset = 0;
 
@@ -303,8 +290,7 @@ void ViewportManager::applyImmediateViewportPositioningForSelection(
       headerOffset = metrics.headerOffset;
     } else {
       // Fallback to collection config for grid mode
-      const CollectionConfig &collection =
-          (*m_collections)[*m_currentCollectionIndex];
+      const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
       if (collection.gridWidth > 0) {
         gridWidth = collection.gridWidth;
         rowHeight = GridLayoutCalculator::getRowHeight(collection);
@@ -320,8 +306,7 @@ void ViewportManager::applyImmediateViewportPositioningForSelection(
       int viewportW = m_itemScrollArea->viewport()->width();
 
       if (viewportH > 0) {
-        int itemY =
-            UIConstants::Grid::MARGINS + headerOffset + (row * rowHeight);
+        int itemY = UIConstants::Grid::MARGINS + headerOffset + (row * rowHeight);
         int targetY = itemY + (itemHeight / 2) - (viewportH / 2);
         targetY = qBound(0, targetY, qMax(0, targetY));
         AnimationManager::stopArrowKeyAnimationIfRunning(verticalScrollBar);
@@ -349,8 +334,7 @@ void ViewportManager::applyImmediateViewportPositioningForSelection(
       }
 
       if (viewportW > 0 && (horizontalScrollBar)) {
-        const CollectionConfig &collection =
-            (*m_collections)[*m_currentCollectionIndex];
+        const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
         int colWidth = GridLayoutCalculator::getColumnWidth(collection);
         int itemX = UIConstants::Grid::MARGINS + (col * colWidth);
         int targetX = itemX + (collection.itemWidth / 2) - (viewportW / 2);
@@ -367,7 +351,6 @@ void ViewportManager::applyImmediateCenterSuppression() {
     m_state->arrow().suppressArrowCenter = true;
     m_state->scroll().userScrollActive = false;
     m_state->arrow().suppressArrowCenterUntilMs =
-        QDateTime::currentMSecsSinceEpoch() +
-        UIConstants::Keyboard::ANIMATION_SETTLE_MS;
+        QDateTime::currentMSecsSinceEpoch() + UIConstants::Keyboard::ANIMATION_SETTLE_MS;
   }
 }

@@ -84,22 +84,16 @@ void ShortcutsDialog::populateContent() {
 
   // Navigation
   addSection(m_contentLayout, tr("Navigation"));
-  addShortcut(m_contentLayout, keyText(settings.keyNavUp),
-              tr("Move selection up"));
-  addShortcut(m_contentLayout, keyText(settings.keyNavDown),
-              tr("Move selection down"));
-  addShortcut(m_contentLayout, keyText(settings.keyNavLeft),
-              tr("Move selection left"));
-  addShortcut(m_contentLayout, keyText(settings.keyNavRight),
-              tr("Move selection right"));
+  addShortcut(m_contentLayout, keyText(settings.keyNavUp), tr("Move selection up"));
+  addShortcut(m_contentLayout, keyText(settings.keyNavDown), tr("Move selection down"));
+  addShortcut(m_contentLayout, keyText(settings.keyNavLeft), tr("Move selection left"));
+  addShortcut(m_contentLayout, keyText(settings.keyNavRight), tr("Move selection right"));
   addShortcut(m_contentLayout, keyText(settings.keyConfirm),
               tr("Open selected item / Enter subcollection"));
   addShortcut(m_contentLayout, keyText(settings.keyBack),
               tr("Go back / Clear search / Exit search mode"));
-  addShortcut(m_contentLayout, keyText(settings.keyJumpFirst),
-              tr("Jump to first item"));
-  addShortcut(m_contentLayout, keyText(settings.keyJumpLast),
-              tr("Jump to last item"));
+  addShortcut(m_contentLayout, keyText(settings.keyJumpFirst), tr("Jump to first item"));
+  addShortcut(m_contentLayout, keyText(settings.keyJumpLast), tr("Jump to last item"));
   addShortcut(m_contentLayout, keyText(settings.keyAlphabeticBack),
               tr("Jump to previous letter (alphabetic)"));
   addShortcut(m_contentLayout, keyText(settings.keyAlphabeticForward),
@@ -109,10 +103,8 @@ void ShortcutsDialog::populateContent() {
   addSection(m_contentLayout, tr("Search"));
   addShortcut(m_contentLayout, keyText(settings.keySearch),
               tr("Focus search bar / Toggle search mode"));
-  addShortcut(m_contentLayout, tr("Type letters"),
-              tr("Quick filter (when search not focused)"));
-  addShortcut(m_contentLayout, keyText(settings.keyBack),
-              tr("Clear search text / Exit search"));
+  addShortcut(m_contentLayout, tr("Type letters"), tr("Quick filter (when search not focused)"));
+  addShortcut(m_contentLayout, keyText(settings.keyBack), tr("Clear search text / Exit search"));
 
   // Gamepad
   addSection(m_contentLayout, tr("Gamepad"));
@@ -124,8 +116,7 @@ void ShortcutsDialog::populateContent() {
                                            : tr("Move selection (disabled)"));
   addShortcut(m_contentLayout, buttonText(settings.gamepadConfirmButton),
               tr("Confirm / Open selected item"));
-  addShortcut(m_contentLayout, buttonText(settings.gamepadBackButton),
-              tr("Back / Escape"));
+  addShortcut(m_contentLayout, buttonText(settings.gamepadBackButton), tr("Back / Escape"));
   addShortcut(m_contentLayout, buttonText(settings.gamepadToggleSidebarButton),
               tr("Toggle metadata sidebar"));
 
@@ -136,10 +127,8 @@ void ShortcutsDialog::populateContent() {
 
   // View
   addSection(m_contentLayout, tr("View"));
-  addShortcut(m_contentLayout, tr("Ctrl++"),
-              tr("Increase grid columns (smaller items)"));
-  addShortcut(m_contentLayout, tr("Ctrl+-"),
-              tr("Decrease grid columns (larger items)"));
+  addShortcut(m_contentLayout, tr("Ctrl++"), tr("Increase grid columns (smaller items)"));
+  addShortcut(m_contentLayout, tr("Ctrl+-"), tr("Decrease grid columns (larger items)"));
 
   // Add stretch to push content to top
   m_contentLayout->addStretch();

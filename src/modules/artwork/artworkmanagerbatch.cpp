@@ -1,8 +1,8 @@
 // Sibling translation unit for ArtworkManager.
 // Extracted from artworkmanager.cpp during LOC-reduction refactor.
 // These remain ArtworkManager members; this is a translation-unit split.
-#include "artworkmanager.h"
 #include "applicationcontext.h"
+#include "artworkmanager.h"
 #include "artworkmanagerinternal.h"
 #include "artworkutils.h"
 #include "cachemanager.h"
@@ -15,6 +15,8 @@
 #include "ui/widgets/itemwidget.h"
 #include "uiconstants.h"
 
+#include <algorithm>
+#include <functional>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDir>
@@ -32,30 +34,25 @@
 #include <QScrollBar>
 #include <QStackedWidget>
 #include <QStandardPaths>
+#include <QtConcurrent>
 #include <QTextStream>
 #include <QThread>
 #include <QTimer>
-#include <QtConcurrent>
-#include <algorithm>
-#include <functional>
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcArtworkManager)
 #define debugLog(msg) qCDebug(lcArtworkManager) << msg
 
-
 // Processes a batch of artwork items in parallel (with cancellation support)
-auto processBatch(const QList<ArtworkInfo> &batch,
-                  [[maybe_unused]] bool highPriority,
-                  const std::atomic<bool> &cancelled,
-                  CacheManager *cacheManager) -> QList<ArtworkInfo::Result> {
+auto processBatch(const QList<ArtworkInfo> &batch, [[maybe_unused]] bool highPriority,
+                  const std::atomic<bool> &cancelled, CacheManager *cacheManager)
+    -> QList<ArtworkInfo::Result> {
   QList<ArtworkInfo::Result> results;
   results.reserve(batch.size());
 
   for (const ArtworkInfo &info : batch) {
     // Check cancellation at start of each iteration
-    if (QApplication::closingDown() ||
-        cancelled.load(std::memory_order_relaxed)) {
+    if (QApplication::closingDown() || cancelled.load(std::memory_order_relaxed)) {
       break;
     }
     if (info.mediaItem.isNull()) {
@@ -77,24 +74,22 @@ auto processBatch(const QList<ArtworkInfo> &batch,
 
     // Check cancellation again after expensive I/O operation
     // This ensures we exit quickly even if file loading was slow
-    if (QApplication::closingDown() ||
-        cancelled.load(std::memory_order_relaxed)) {
+    if (QApplication::closingDown() || cancelled.load(std::memory_order_relaxed)) {
       break;
     }
     if (img.isNull()) {
       continue;
     }
-    results.append(
-        ArtworkInfo::Result{.widget = info.mediaItem,
-                            .artworkPath = info.artworkPath,
-                            .image = img,
-                            .loadedFromDiskCache = loadedFromDiskCache});
+    results.append(ArtworkInfo::Result{.widget = info.mediaItem,
+                                       .artworkPath = info.artworkPath,
+                                       .image = img,
+                                       .loadedFromDiskCache = loadedFromDiskCache});
   }
 
   return results;
 }
-void ArtworkManager::collectUncachedAndApplyCached(
-    const QList<ArtworkInfo> &items, QList<ArtworkInfo> &uncachedItems) {
+void ArtworkManager::collectUncachedAndApplyCached(const QList<ArtworkInfo> &items,
+                                                   QList<ArtworkInfo> &uncachedItems) {
   for (const ArtworkInfo &info : items) {
     if (info.mediaItem.isNull()) {
       continue;
@@ -106,8 +101,7 @@ void ArtworkManager::collectUncachedAndApplyCached(
     // load for the previous role can clobber the new role's pixmap
     // (bd Kartend-dxz).
     QString widgetBaseName;
-    if (info.mediaItem->isSubcollection() ||
-        info.mediaItem->isVirtualFolder()) {
+    if (info.mediaItem->isSubcollection() || info.mediaItem->isVirtualFolder()) {
       widgetBaseName = info.mediaItem->getItemName();
     } else {
       const QString widgetFilePath = info.mediaItem->getFilePath();
@@ -121,8 +115,7 @@ void ArtworkManager::collectUncachedAndApplyCached(
       // Widget identity not yet established - skip
       continue;
     }
-    const QString artworkBaseName =
-        QFileInfo(info.artworkPath).completeBaseName();
+    const QString artworkBaseName = QFileInfo(info.artworkPath).completeBaseName();
     if (widgetBaseName != artworkBaseName) {
       // Widget has been recycled to a different identity, skip stale artwork
       continue;
@@ -146,8 +139,7 @@ void ArtworkManager::collectUncachedAndApplyCached(
 }
 
 // Dispatches a batch of artwork loading tasks to QtConcurrent
-void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
-                                           bool highPriority) {
+void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch, bool highPriority) {
   if (batch.isEmpty()) {
     return;
   }
@@ -168,63 +160,59 @@ void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
   if (!m_artworkThreadPool) {
     return;
   }
-  QFuture<void> future = QtConcurrent::run(
-      m_artworkThreadPool, [self, batch, highPriority, cancelFlag,
-                            batchItemCount, appReceiver, cacheManager]() {
-        if (QApplication::closingDown() || !cancelFlag ||
-            cancelFlag->load(std::memory_order_relaxed)) {
-          return;
-        }
+  QFuture<void> future = QtConcurrent::run(m_artworkThreadPool, [self, batch, highPriority,
+                                                                 cancelFlag, batchItemCount,
+                                                                 appReceiver, cacheManager]() {
+    if (QApplication::closingDown() || !cancelFlag || cancelFlag->load(std::memory_order_relaxed)) {
+      return;
+    }
 
-        QElapsedTimer timer;
-        timer.start();
-        QList<ArtworkInfo::Result> results =
-            processBatch(batch, highPriority, *cancelFlag, cacheManager);
-        const qint64 elapsedMs = timer.elapsed();
-        if (QApplication::closingDown() || !cancelFlag ||
-            cancelFlag->load(std::memory_order_relaxed)) {
-          return;
-        }
+    QElapsedTimer timer;
+    timer.start();
+    QList<ArtworkInfo::Result> results =
+        processBatch(batch, highPriority, *cancelFlag, cacheManager);
+    const qint64 elapsedMs = timer.elapsed();
+    if (QApplication::closingDown() || !cancelFlag || cancelFlag->load(std::memory_order_relaxed)) {
+      return;
+    }
 
-        // Post results back to main thread with timing update.
-        // Use the application object as the receiver so the queued functor
-        // never targets a potentially-deleted ArtworkManager instance.
-        if (!appReceiver) {
-          return;
-        }
-        QMetaObject::invokeMethod(
-            appReceiver,
-            [self, results, highPriority, batchItemCount, elapsedMs,
-             cancelFlag]() {
-              if (QApplication::closingDown() || !self || !cancelFlag ||
-                  cancelFlag->load(std::memory_order_relaxed)) {
-                return;
+    // Post results back to main thread with timing update.
+    // Use the application object as the receiver so the queued functor
+    // never targets a potentially-deleted ArtworkManager instance.
+    if (!appReceiver) {
+      return;
+    }
+    QMetaObject::invokeMethod(
+        appReceiver,
+        [self, results, highPriority, batchItemCount, elapsedMs, cancelFlag]() {
+          if (QApplication::closingDown() || !self || !cancelFlag ||
+              cancelFlag->load(std::memory_order_relaxed)) {
+            return;
+          }
+
+          if (lcArtworkManager().isDebugEnabled()) {
+            int diskHits = 0;
+            for (const auto &r : results) {
+              if (r.loadedFromDiskCache) {
+                ++diskHits;
               }
+            }
+            qCDebug(lcArtworkManager)
+                << "Artwork batch done"
+                << "priority=" << (highPriority ? "high" : "low") << "requested=" << batchItemCount
+                << "produced=" << results.size() << "diskHits=" << diskHits
+                << "elapsedMs=" << elapsedMs;
+          }
 
-              if (lcArtworkManager().isDebugEnabled()) {
-                int diskHits = 0;
-                for (const auto &r : results) {
-                  if (r.loadedFromDiskCache) {
-                    ++diskHits;
-                  }
-                }
-                qCDebug(lcArtworkManager)
-                    << "Artwork batch done"
-                    << "priority=" << (highPriority ? "high" : "low")
-                    << "requested=" << batchItemCount
-                    << "produced=" << results.size() << "diskHits=" << diskHits
-                    << "elapsedMs=" << elapsedMs;
-              }
-
-              self->applyResultsToUi(results, highPriority);
-              // Update adaptive batcher with completed batch timing
-              // (high-priority only)
-              if (highPriority && !results.isEmpty()) {
-                self->m_adaptiveBatcher.observeBatch(batchItemCount, elapsedMs);
-              }
-            },
-            Qt::QueuedConnection);
-      });
+          self->applyResultsToUi(results, highPriority);
+          // Update adaptive batcher with completed batch timing
+          // (high-priority only)
+          if (highPriority && !results.isEmpty()) {
+            self->m_adaptiveBatcher.observeBatch(batchItemCount, elapsedMs);
+          }
+        },
+        Qt::QueuedConnection);
+  });
 
   {
     QMutexLocker futureLock(&m_futureMutex);

@@ -21,8 +21,7 @@ struct SelectionRestoreState {
   bool forceImmediateCenter = false;
   int restoreToken = 0;
   bool restorePending = false;
-  bool userSelectionMade =
-      false; // Set when user makes explicit selection, blocks auto-restore
+  bool userSelectionMade = false; // Set when user makes explicit selection, blocks auto-restore
 
   void reset() {
     restoring = false;
@@ -36,9 +35,7 @@ struct SelectionRestoreState {
 
   [[nodiscard]] bool isActive() const { return restoring && targetIndex >= 0; }
 
-  [[nodiscard]] bool matchesTarget(int index) const {
-    return restoring && index == targetIndex;
-  }
+  [[nodiscard]] bool matchesTarget(int index) const { return restoring && index == targetIndex; }
 
   void beginRestore(int index) {
     restoring = true;

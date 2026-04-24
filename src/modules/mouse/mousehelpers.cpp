@@ -24,9 +24,8 @@ auto wheelStepsFromPixel(int pixelDeltaY, int pixelStep) -> int {
   return steps;
 }
 
-auto verticalScrollDirection(int selectedItemCenterY, int viewportTopY,
-                             int viewportBottomY, int viewportCenterY,
-                             int rowHeight) -> int {
+auto verticalScrollDirection(int selectedItemCenterY, int viewportTopY, int viewportBottomY,
+                             int viewportCenterY, int rowHeight) -> int {
   if (selectedItemCenterY < viewportTopY + rowHeight) {
     return -1;
   }

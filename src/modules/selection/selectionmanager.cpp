@@ -32,45 +32,33 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSelectionManager, "kartend.selectionmanager")
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcSelectionManager().isDebugEnabled()) {                               \
-      qCDebug(lcSelectionManager) << msg;                                      \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcSelectionManager().isDebugEnabled()) {                                                   \
+      qCDebug(lcSelectionManager) << msg;                                                          \
+    }                                                                                              \
   } while (0)
 
 // SelectionManagerSetup getter definitions
-SETUP_GETTER_DEF_CTX_ONLY(SelectionManagerSetup, InteractionStateHolder *,
-                          InteractionState, interactionState)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, ScrollManager *, ScrollManager,
-                      scrollManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, SidebarManager *, SidebarManager,
-                      sidebarManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, SessionManager *, SessionManager,
-                      sessionManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, SettingsManager *, SettingsManager,
-                      settingsManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, NavigationManager *,
-                      NavigationManager, navigationManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, AnimationManager *,
-                      AnimationManager, animationManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, ViewportManager *, ViewportManager,
-                      viewportManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, ArtworkManager *, ArtworkManager,
-                      artworkManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, MetadataSidebar *, Sidebar,
-                      sidebar)
+SETUP_GETTER_DEF_CTX_ONLY(SelectionManagerSetup, InteractionStateHolder *, InteractionState,
+                          interactionState)
+SETUP_GETTER_DEF_SAME(SelectionManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_SAME(SelectionManagerSetup, SidebarManager *, SidebarManager, sidebarManager)
+SETUP_GETTER_DEF_SAME(SelectionManagerSetup, SessionManager *, SessionManager, sessionManager)
+SETUP_GETTER_DEF_SAME(SelectionManagerSetup, SettingsManager *, SettingsManager, settingsManager)
+SETUP_GETTER_DEF_SAME(SelectionManagerSetup, NavigationManager *, NavigationManager,
+                      navigationManager)
+SETUP_GETTER_DEF_SAME(SelectionManagerSetup, AnimationManager *, AnimationManager, animationManager)
+SETUP_GETTER_DEF_SAME(SelectionManagerSetup, ViewportManager *, ViewportManager, viewportManager)
+SETUP_GETTER_DEF_SAME(SelectionManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_SAME(SelectionManagerSetup, MetadataSidebar *, Sidebar, sidebar)
 SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QWidget *, ItemsPage, itemsPage)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QWidget *, GridContainer,
-                      gridContainer)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QScrollArea *, ItemScrollArea,
-                      itemScrollArea)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QList<CollectionConfig> *,
-                      Collections, collections)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, int *, CurrentCollectionIndex,
-                      currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, const CollectionHierarchyCache *,
-                      HierarchyCache, hierarchyCache)
+SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QList<CollectionConfig> *, Collections, collections)
+SETUP_GETTER_DEF_SAME(SelectionManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
+SETUP_GETTER_DEF_SAME(SelectionManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
+                      hierarchyCache)
 SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QLineEdit *, SearchBar, searchBar)
 
 SelectionManager::SelectionManager(QObject *parent) : QObject(parent) {}
@@ -175,17 +163,15 @@ QList<int> SelectionManager::getSubcollections(int parentIndex) const {
   return CollectionUtils::directChildrenOf(parentIndex, *m_collections);
 }
 
-void SelectionManager::updateFilePathForSelection(
-    int index, const QList<int> & /*subcollections*/) {
+void SelectionManager::updateFilePathForSelection(int index,
+                                                  const QList<int> & /*subcollections*/) {
   // Use the *rendered* subcollection count, not the hierarchy-cache list:
   // during search the visible sub list is filtered (often to zero) but the
   // hierarchy-cache size still reflects the full parent. Misclassifying a
   // filtered media item as a subcollection here would clear the cached file
   // path and break subsequent launch / sidebar metadata.
-  const int actualIndex =
-      m_scrollManager ? m_scrollManager->getFilteredIndex(index) : index;
-  const int renderedSubCount =
-      m_scrollManager ? m_scrollManager->getSubcollectionCount() : 0;
+  const int actualIndex = m_scrollManager ? m_scrollManager->getFilteredIndex(index) : index;
+  const int renderedSubCount = m_scrollManager ? m_scrollManager->getSubcollectionCount() : 0;
   if (actualIndex >= 0 && actualIndex < renderedSubCount) {
     m_selectedFilePath.clear();
   } else {
@@ -205,10 +191,8 @@ void SelectionManager::updateFilePathForSelection(
   }
 }
 
-void SelectionManager::persistSelection(int collectionIndex, int itemIndex,
-                                        const QString &title) {
-  if (!m_collections || collectionIndex < 0 ||
-      collectionIndex >= m_collections->size()) {
+void SelectionManager::persistSelection(int collectionIndex, int itemIndex, const QString &title) {
+  if (!m_collections || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
     return;
   }
 
@@ -217,26 +201,21 @@ void SelectionManager::persistSelection(int collectionIndex, int itemIndex,
   }
 
   // Use a stable session key that also scopes by virtual subfolder (if active).
-  QString sessionKey = CollectionUtils::selectionSessionKeyFor(
-      (*m_collections)[collectionIndex], *m_collections);
-  debugLog("[SelectionRestore] persistSelection: sessionKey="
-           << sessionKey << "itemIndex=" << itemIndex << "title=" << title);
+  QString sessionKey =
+      CollectionUtils::selectionSessionKeyFor((*m_collections)[collectionIndex], *m_collections);
+  debugLog("[SelectionRestore] persistSelection: sessionKey=" << sessionKey << "itemIndex="
+                                                              << itemIndex << "title=" << title);
   if (m_sessionManager) {
     m_sessionManager->setLastSelected(sessionKey, itemIndex, title);
   }
 }
 
-QString
-SelectionManager::titleForIndex(int index,
-                                const QList<int> & /*subcollections*/) const {
-  const int actualIndex =
-      m_scrollManager ? m_scrollManager->getFilteredIndex(index) : index;
-  const int renderedSubCount =
-      m_scrollManager ? m_scrollManager->getSubcollectionCount() : 0;
+QString SelectionManager::titleForIndex(int index, const QList<int> & /*subcollections*/) const {
+  const int actualIndex = m_scrollManager ? m_scrollManager->getFilteredIndex(index) : index;
+  const int renderedSubCount = m_scrollManager ? m_scrollManager->getSubcollectionCount() : 0;
   if (actualIndex >= 0 && actualIndex < renderedSubCount) {
     int subIdx = (m_scrollManager && m_scrollManager->getDataManager())
-                     ? m_scrollManager->getDataManager()
-                           ->subcollectionIndexFromActual(actualIndex)
+                     ? m_scrollManager->getDataManager()->subcollectionIndexFromActual(actualIndex)
                      : -1;
     if (m_collections && subIdx >= 0 && subIdx < m_collections->size()) {
       return (*m_collections)[subIdx].name;
@@ -274,23 +253,18 @@ ItemWidget *SelectionManager::widgetForIndex(int index) const {
   return activeWidgets.value(index, nullptr);
 }
 
-bool SelectionManager::shouldTreatAsNewRow(int targetIndex,
-                                           int gridWidth) const {
+bool SelectionManager::shouldTreatAsNewRow(int targetIndex, int gridWidth) const {
   if (!CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     return false;
   }
-  return SelectionHelpers::shouldTreatAsNewRow(targetIndex, m_lastSelectedRow,
-                                               gridWidth);
+  return SelectionHelpers::shouldTreatAsNewRow(targetIndex, m_lastSelectedRow, gridWidth);
 }
 
-bool SelectionManager::shouldAnimateHorizontalHop(int fromIndex, int toIndex,
-                                                  int gridWidth) {
-  return SelectionHelpers::shouldAnimateHorizontalHop(fromIndex, toIndex,
-                                                      gridWidth);
+bool SelectionManager::shouldAnimateHorizontalHop(int fromIndex, int toIndex, int gridWidth) {
+  return SelectionHelpers::shouldAnimateHorizontalHop(fromIndex, toIndex, gridWidth);
 }
 
-bool SelectionManager::isNewRow(int currentSelection, int newSelection,
-                                int gridWidth) {
+bool SelectionManager::isNewRow(int currentSelection, int newSelection, int gridWidth) {
   return SelectionHelpers::isNewRow(currentSelection, newSelection, gridWidth);
 }
 
@@ -305,8 +279,7 @@ int SelectionManager::getCurrentGridWidth() const {
   return CollectionUtils::getGridWidth(m_currentCollectionIndex, m_collections);
 }
 
-void SelectionManager::selectItemByIndex(int index,
-                                         bool allowHorizontalScroll) {
+void SelectionManager::selectItemByIndex(int index, bool allowHorizontalScroll) {
   Q_UNUSED(allowHorizontalScroll);
   if (!m_scrollManager || !m_itemScrollArea ||
       !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
@@ -316,8 +289,7 @@ void SelectionManager::selectItemByIndex(int index,
   const QStringList &filePaths = m_scrollManager->getFilePaths();
   QList<int> subcollections = getSubcollections(*m_currentCollectionIndex);
   int virtualFolderCount = m_scrollManager->getVirtualFolderCount();
-  int totalItems =
-      subcollections.size() + virtualFolderCount + filePaths.size();
+  int totalItems = subcollections.size() + virtualFolderCount + filePaths.size();
   if (index < 0 || index >= totalItems) {
     return;
   }
@@ -370,8 +342,9 @@ void SelectionManager::selectItemByIndex(int index,
   }
 }
 
-void SelectionManager::persistSuppressedSelectionAndMaybeCenter(
-    int index, const QList<int> &subcollections, bool skipCenter) {
+void SelectionManager::persistSuppressedSelectionAndMaybeCenter(int index,
+                                                                const QList<int> &subcollections,
+                                                                bool skipCenter) {
   bool deferCenter = m_state && m_state->click().deferCenterOnClick &&
                      m_state->click().deferredCenterIndex == index;
   if (!deferCenter && !skipCenter) {
@@ -399,8 +372,7 @@ void SelectionManager::handleSuccessfulSelection(int index) {
 
   bool restoringMatch = m_restoringSelection && (index == m_targetRestoreIndex);
 
-  int currentColl =
-      ((m_currentCollectionIndex) ? *m_currentCollectionIndex : -1);
+  int currentColl = ((m_currentCollectionIndex) ? *m_currentCollectionIndex : -1);
   if ((m_collections) && currentColl >= 0 && index >= 0) {
     persistSelectionForIndex(currentColl, index);
   }
@@ -424,15 +396,13 @@ QString SelectionManager::titleForIndexInColl(int coll, int idx) const {
   // discriminator agrees with what the user sees (sub vs media). For other
   // collections, fall back to the hierarchy-cache list since their data is
   // not currently rendered.
-  const bool isCurrent =
-      m_currentCollectionIndex && coll == *m_currentCollectionIndex;
+  const bool isCurrent = m_currentCollectionIndex && coll == *m_currentCollectionIndex;
   if (isCurrent && m_scrollManager) {
     const int actualIdx = m_scrollManager->getFilteredIndex(idx);
     const int renderedSubCount = m_scrollManager->getSubcollectionCount();
     if (actualIdx >= 0 && actualIdx < renderedSubCount) {
       int subIdx = m_scrollManager->getDataManager()
-                       ? m_scrollManager->getDataManager()
-                             ->subcollectionIndexFromActual(actualIdx)
+                       ? m_scrollManager->getDataManager()->subcollectionIndexFromActual(actualIdx)
                        : -1;
       if (subIdx >= 0 && subIdx < m_collections->size()) {
         return (*m_collections)[subIdx].name;
@@ -453,10 +423,7 @@ QString SelectionManager::titleForIndexInColl(int coll, int idx) const {
   if (m_selectedFilePath.isEmpty()) {
     return {};
   }
-  return QFileInfo(m_selectedFilePath)
-      .completeBaseName()
-      .replace('_', ' ')
-      .simplified();
+  return QFileInfo(m_selectedFilePath).completeBaseName().replace('_', ' ').simplified();
 }
 
 void SelectionManager::persistSelectionForIndex(int coll, int idx) {
@@ -467,9 +434,7 @@ void SelectionManager::persistSelectionForIndex(int coll, int idx) {
   persistSelection(coll, idx, title);
 }
 
-void SelectionManager::trySelectWidget(int index,
-                                       const QList<int> &subcollections,
-                                       int attempt) {
+void SelectionManager::trySelectWidget(int index, const QList<int> &subcollections, int attempt) {
   if (!m_scrollManager) {
     return;
   }
@@ -496,4 +461,3 @@ void SelectionManager::trySelectWidget(int index,
     trySelectWidget(index, subcollections, attempt + 1);
   });
 }
-

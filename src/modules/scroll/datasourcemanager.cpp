@@ -11,8 +11,7 @@
 #include <QWidget>
 
 DataSourceManager::DataSourceManager(QObject *parent)
-    : QObject(parent),
-      m_filterManager(std::make_unique<FilterManager>(this)),
+    : QObject(parent), m_filterManager(std::make_unique<FilterManager>(this)),
       m_dataManager(std::make_unique<ScrollDataManager>(this)),
       m_preSearchStateManager(std::make_unique<PreSearchStateManager>(this)),
       m_searchLoadingOverlay(std::make_unique<SearchLoadingOverlay>(this)) {

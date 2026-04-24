@@ -1,11 +1,11 @@
 // Sibling TU: query handling + debounce for SearchManager.
-#include "searchmanager.h"
-#include "loggingcategories.h"
 #include "applicationcontext.h"
 #include "databasemanager.h"
 #include "interactionstateholder.h"
+#include "loggingcategories.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
+#include "searchmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
 #include "uiconstants.h"
@@ -21,31 +21,29 @@
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcSearchManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcSearchManager().isDebugEnabled()) {                                  \
-      qCDebug(lcSearchManager) << msg;                                         \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcSearchManager().isDebugEnabled()) {                                                      \
+      qCDebug(lcSearchManager) << msg;                                                             \
+    }                                                                                              \
   } while (0)
 
-void SearchManager::onSearchTextChanged(const QString &text,
-                                        int currentSelectedIndex) {
+void SearchManager::onSearchTextChanged(const QString &text, int currentSelectedIndex) {
   if (!m_navigationManager) {
     return;
   }
 
   const QString trimmed = text.trimmed();
   const bool hasSearch = !trimmed.isEmpty();
-  const int collIndex =
-      (m_currentCollectionIndex) ? *m_currentCollectionIndex : -1;
+  const int collIndex = (m_currentCollectionIndex) ? *m_currentCollectionIndex : -1;
 
   qCDebug(lcSearchDiag) << QString("onSearchTextChanged: hasSearch=%1 mode=%2 collIndex=%3 "
-                  "text='%4' sel=%5")
-              .arg(hasSearch)
-              .arg(static_cast<int>(m_currentSearchMode))
-              .arg(collIndex)
-              .arg(trimmed)
-              .arg(currentSelectedIndex);
+                                   "text='%4' sel=%5")
+                               .arg(hasSearch)
+                               .arg(static_cast<int>(m_currentSearchMode))
+                               .arg(collIndex)
+                               .arg(trimmed)
+                               .arg(currentSelectedIndex);
 
   if (m_searchBar) {
     QFont searchFont = m_searchBar->font();
@@ -79,19 +77,16 @@ void SearchManager::onSearchTextChanged(const QString &text,
           context.config = (*m_collections)[collIndex];
           context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
               context.config.mediaDirectory, context.config.name);
-          context.config.artworkDirectory =
-              SettingsUtils::expandConfigVariables(
-                  context.config.artworkDirectory, context.config.name);
+          context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
+              context.config.artworkDirectory, context.config.name);
           context.artworkDirectory = context.config.artworkDirectory;
           if (m_generalSettings) {
             context.sortMode = m_generalSettings->sortMode;
-            context.excludeSubfoldersFromSort =
-                m_generalSettings->excludeSubfoldersFromSort;
+            context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
           }
 
-          const int totalItems = (m_preSearchTotalItems >= 0)
-                                     ? m_preSearchTotalItems
-                                     : m_scrollManager->getTotalItems();
+          const int totalItems = (m_preSearchTotalItems >= 0) ? m_preSearchTotalItems
+                                                              : m_scrollManager->getTotalItems();
           m_scrollManager->setupVirtualScrolling(totalItems, context);
           m_scrollManager->restorePreSearchState();
 
@@ -138,8 +133,7 @@ void SearchManager::onSearchTextChanged(const QString &text,
     m_preSearchMode = m_currentSearchMode;
     m_preSearchSelectedIndex = currentSelectedIndex;
     if (m_preSearchSelectedIndex < 0 && m_settingsManager && collIndex >= 0) {
-      m_preSearchSelectedIndex =
-          m_settingsManager->getLastSelectedItem(collIndex);
+      m_preSearchSelectedIndex = m_settingsManager->getLastSelectedItem(collIndex);
     }
     // Save scroll view state for fast restoration when search is cleared.
     // Only CurrentCollection uses the pre-search restore path: it reloads via
@@ -147,8 +141,7 @@ void SearchManager::onSearchTextChanged(const QString &text,
     // collections and AllCollections are DB-backed and can change the visible
     // data backing (and the subcollection/virtual-folder tile composition), so
     // they take the full reload path on clear instead. See bd Kartend-w9c.
-    const bool canUsePreSearchState =
-        (m_currentSearchMode == SearchMode::CurrentCollection);
+    const bool canUsePreSearchState = (m_currentSearchMode == SearchMode::CurrentCollection);
     if (m_scrollManager && canUsePreSearchState) {
       m_preSearchTotalItems = m_scrollManager->getTotalItems();
       m_scrollManager->savePreSearchState();
@@ -158,9 +151,8 @@ void SearchManager::onSearchTextChanged(const QString &text,
 
   if (m_searchDebounceTimer) {
     updateAdaptiveDebounce();
-    int debounceMs = (m_adaptiveDebounceMs > 0)
-                         ? m_adaptiveDebounceMs
-                         : UIConstants::Search::TYPING_DEBOUNCE_MS;
+    int debounceMs =
+        (m_adaptiveDebounceMs > 0) ? m_adaptiveDebounceMs : UIConstants::Search::TYPING_DEBOUNCE_MS;
     m_searchDebounceTimer->setInterval(debounceMs);
     m_searchDebounceTimer->trigger();
   }
@@ -177,17 +169,16 @@ void SearchManager::performDebouncedSearch() {
   }
 
   qCDebug(lcSearchDiag) << QString("performDebouncedSearch: mode=%1 collIndex=%2 query='%3'")
-              .arg(static_cast<int>(m_currentSearchMode))
-              .arg((m_currentCollectionIndex ? *m_currentCollectionIndex : -1))
-              .arg(trimmed);
+                               .arg(static_cast<int>(m_currentSearchMode))
+                               .arg((m_currentCollectionIndex ? *m_currentCollectionIndex : -1))
+                               .arg(trimmed);
 
   if (m_searchItemsLoadedConn != QMetaObject::Connection()) {
     QObject::disconnect(m_searchItemsLoadedConn);
     m_searchItemsLoadedConn = QMetaObject::Connection();
   }
 
-  const int collIndex =
-      (m_currentCollectionIndex ? *m_currentCollectionIndex : -1);
+  const int collIndex = (m_currentCollectionIndex ? *m_currentCollectionIndex : -1);
   if (collIndex < 0 || !m_collections || collIndex >= m_collections->size()) {
     return;
   }
@@ -195,15 +186,14 @@ void SearchManager::performDebouncedSearch() {
   CollectionContext context;
   context.currentIndex = collIndex;
   context.config = (*m_collections)[collIndex];
-  context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
-      context.config.mediaDirectory, context.config.name);
-  context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
-      context.config.artworkDirectory, context.config.name);
+  context.config.mediaDirectory =
+      SettingsUtils::expandConfigVariables(context.config.mediaDirectory, context.config.name);
+  context.config.artworkDirectory =
+      SettingsUtils::expandConfigVariables(context.config.artworkDirectory, context.config.name);
   context.artworkDirectory = context.config.artworkDirectory;
   if (m_generalSettings) {
     context.sortMode = m_generalSettings->sortMode;
-    context.excludeSubfoldersFromSort =
-        m_generalSettings->excludeSubfoldersFromSort;
+    context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
   }
 
   switch (m_currentSearchMode) {
@@ -262,19 +252,17 @@ void SearchManager::scheduleSearchBarRefocusIfNeeded() {
     }
   });
   // Short delay: Retry after widgets have finished their initial layout
-  QTimer::singleShot(UIConstants::Search::REFOCUS_DELAY_SHORT_MS, this,
-                     [this]() {
-                       if (m_searchBar && m_searchBar->isVisible()) {
-                         m_searchBar->setFocus(Qt::OtherFocusReason);
-                       }
-                     });
+  QTimer::singleShot(UIConstants::Search::REFOCUS_DELAY_SHORT_MS, this, [this]() {
+    if (m_searchBar && m_searchBar->isVisible()) {
+      m_searchBar->setFocus(Qt::OtherFocusReason);
+    }
+  });
   // Long delay: Final retry to catch slow focus changes from animations
-  QTimer::singleShot(UIConstants::Search::REFOCUS_DELAY_LONG_MS, this,
-                     [this]() {
-                       if (m_searchBar && m_searchBar->isVisible()) {
-                         m_searchBar->setFocus(Qt::OtherFocusReason);
-                       }
-                     });
+  QTimer::singleShot(UIConstants::Search::REFOCUS_DELAY_LONG_MS, this, [this]() {
+    if (m_searchBar && m_searchBar->isVisible()) {
+      m_searchBar->setFocus(Qt::OtherFocusReason);
+    }
+  });
 }
 
 // Updates debounce interval based on typing speed
@@ -289,19 +277,16 @@ void SearchManager::updateAdaptiveDebounce() {
 
     // Clamp to reasonable range for calculation
     int keystrokeInterval = static_cast<int>(
-        std::clamp(timeSinceLastKeystroke, static_cast<qint64>(50),
-                   static_cast<qint64>(500)));
+        std::clamp(timeSinceLastKeystroke, static_cast<qint64>(50), static_cast<qint64>(500)));
 
     // Map keystroke interval to debounce delay:
     // Fast typing (50-100ms between keys) -> short debounce (80-120ms)
     // Slow typing (300-500ms between keys) -> long debounce (180-250ms)
     // Formula: debounce = MIN + (interval - 50) * (MAX - MIN) / (500 - 50)
     int range = MAX_ADAPTIVE_DEBOUNCE_MS - MIN_ADAPTIVE_DEBOUNCE_MS;
-    int debounce =
-        MIN_ADAPTIVE_DEBOUNCE_MS + ((keystrokeInterval - 50) * range) / 450;
+    int debounce = MIN_ADAPTIVE_DEBOUNCE_MS + ((keystrokeInterval - 50) * range) / 450;
 
-    m_adaptiveDebounceMs = std::clamp(debounce, MIN_ADAPTIVE_DEBOUNCE_MS,
-                                      MAX_ADAPTIVE_DEBOUNCE_MS);
+    m_adaptiveDebounceMs = std::clamp(debounce, MIN_ADAPTIVE_DEBOUNCE_MS, MAX_ADAPTIVE_DEBOUNCE_MS);
   } else {
     // First keystroke - use default
     m_adaptiveDebounceMs = UIConstants::Search::TYPING_DEBOUNCE_MS;

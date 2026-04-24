@@ -11,17 +11,13 @@ namespace QuerySQL {
 constexpr const char *COLLECTION_INFO =
     "SELECT last_scanned, name, ext_signature, dir_signature FROM collections "
     "WHERE uuid = ?";
-constexpr const char *ITEM_PATH_CHECK =
-    "SELECT path FROM items WHERE collection_uuid = ? LIMIT 1";
+constexpr const char *ITEM_PATH_CHECK = "SELECT path FROM items WHERE collection_uuid = ? LIMIT 1";
 constexpr const char *ITEMS_MODIFIED_COUNT =
     "SELECT COUNT(*) FROM items WHERE collection_uuid = ? AND last_modified > "
     "?";
-constexpr const char *ITEMS_COUNT_BY_UUID =
-    "SELECT COUNT(*) FROM items WHERE collection_uuid = ?";
-constexpr const char *DELETE_ITEMS_BY_UUID =
-    "DELETE FROM items WHERE collection_uuid = ?";
-constexpr const char *DELETE_COLLECTION_BY_UUID =
-    "DELETE FROM collections WHERE uuid = ?";
+constexpr const char *ITEMS_COUNT_BY_UUID = "SELECT COUNT(*) FROM items WHERE collection_uuid = ?";
+constexpr const char *DELETE_ITEMS_BY_UUID = "DELETE FROM items WHERE collection_uuid = ?";
+constexpr const char *DELETE_COLLECTION_BY_UUID = "DELETE FROM collections WHERE uuid = ?";
 constexpr const char *LOAD_ITEMS_BY_UUID =
     "SELECT DISTINCT path FROM items WHERE collection_uuid = ? ORDER BY name "
     "COLLATE NOCASE";

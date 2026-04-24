@@ -1,9 +1,9 @@
 // Routing/dispatch cluster split out from navigationmanager.cpp.
-#include "navigationmanager.h"
-#include "loggingcategories.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "loadingoverlay.h"
+#include "loggingcategories.h"
+#include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
@@ -19,15 +19,14 @@
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcNavigationManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcNavigationManager().isDebugEnabled()) {                              \
-      qCDebug(lcNavigationManager) << msg;                                     \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcNavigationManager().isDebugEnabled()) {                                                  \
+      qCDebug(lcNavigationManager) << msg;                                                         \
+    }                                                                                              \
   } while (0)
 
-auto NavigationManager::validateAndPrepareNavigation(int collectionIndex)
-    -> bool {
+auto NavigationManager::validateAndPrepareNavigation(int collectionIndex) -> bool {
   if (collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     return false;
   }
@@ -44,20 +43,18 @@ auto NavigationManager::validateAndPrepareNavigation(int collectionIndex)
     if ((parent()) && (m_interactionManager)) {
       // Clear navigation progress flag early when validation fails -
       // prevents navigation from being blocked indefinitely
-      QTimer::singleShot(
-          UIConstants::Navigation::PROGRESS_CLEAR_EARLY_MS, this, [this]() {
-            if (parent() && m_interactionManager) {
-              m_interactionManager->setNavigationInProgress(false);
-            }
-          });
+      QTimer::singleShot(UIConstants::Navigation::PROGRESS_CLEAR_EARLY_MS, this, [this]() {
+        if (parent() && m_interactionManager) {
+          m_interactionManager->setNavigationInProgress(false);
+        }
+      });
     }
     return false;
   }
   return true;
 }
 
-auto NavigationManager::handleSubcollectionNavigation(int collectionIndex,
-                                                      int previousIndex)
+auto NavigationManager::handleSubcollectionNavigation(int collectionIndex, int previousIndex)
     -> void {
   Q_UNUSED(previousIndex)
   if (m_scrollManager) {
@@ -85,12 +82,10 @@ auto NavigationManager::finalizeNavigation(int collectionIndex) -> void {
   // Delay horizontal centering until layout has settled after navigation
   QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this, [this]() {
     if (m_scrollManager && m_currentCollectionIndex && m_collections) {
-      m_scrollManager->centerHorizontalScrollbar((*m_currentCollectionIndex),
-                                                 (*m_collections));
+      m_scrollManager->centerHorizontalScrollbar((*m_currentCollectionIndex), (*m_collections));
     }
   });
-  if (m_refreshTitleCounts)
-    m_refreshTitleCounts();
+  if (m_refreshTitleCounts) m_refreshTitleCounts();
 
   // Hide loading overlay after navigation completes
   if (m_loadingOverlay) {
@@ -99,29 +94,25 @@ auto NavigationManager::finalizeNavigation(int collectionIndex) -> void {
 
   // Clear navigation progress flag after all animations complete -
   // allows user input to be processed again
-  QTimer::singleShot(UIConstants::Navigation::PROGRESS_CLEAR_MS, this,
-                     [this]() {
-                       if (parent() && m_interactionManager) {
-                         m_interactionManager->setNavigationInProgress(false);
-                       }
-                     });
+  QTimer::singleShot(UIConstants::Navigation::PROGRESS_CLEAR_MS, this, [this]() {
+    if (parent() && m_interactionManager) {
+      m_interactionManager->setNavigationInProgress(false);
+    }
+  });
 }
 
 // Delegates to SelectionRestoreManager for selection restoration
-auto NavigationManager::scheduleSelectionRestore(int desiredIndex,
-                                                 int maxAttempts,
-                                                 int attemptDelayMs,
-                                                 int finalEnsureDelayMs)
+auto NavigationManager::scheduleSelectionRestore(int desiredIndex, int maxAttempts,
+                                                 int attemptDelayMs, int finalEnsureDelayMs)
     -> void {
   if (m_selectionRestoreManager) {
-    m_selectionRestoreManager->scheduleSelectionRestore(
-        desiredIndex, maxAttempts, attemptDelayMs, finalEnsureDelayMs);
+    m_selectionRestoreManager->scheduleSelectionRestore(desiredIndex, maxAttempts, attemptDelayMs,
+                                                        finalEnsureDelayMs);
   }
 }
 
 // Validates collection index for showCollectionItems operation
-auto NavigationManager::validateCollectionIndex(int collectionIndex) const
-    -> bool {
+auto NavigationManager::validateCollectionIndex(int collectionIndex) const -> bool {
   if (!parent() || !m_collections) {
     return false;
   }
@@ -135,22 +126,18 @@ auto NavigationManager::validateCollectionIndex(int collectionIndex) const
 }
 
 // Handles navigation when items are shared between collections
-auto NavigationManager::handleSharedItemsNavigation(int collectionIndex)
-    -> bool {
-  bool itemsAreShared =
-      areItemsShared((*m_currentCollectionIndex), collectionIndex);
+auto NavigationManager::handleSharedItemsNavigation(int collectionIndex) -> bool {
+  bool itemsAreShared = areItemsShared((*m_currentCollectionIndex), collectionIndex);
   if (itemsAreShared) {
     navigateWithSharedItems(collectionIndex);
-    if (m_refreshTitleCounts)
-      m_refreshTitleCounts();
+    if (m_refreshTitleCounts) m_refreshTitleCounts();
     return true;
   }
   return false;
 }
 
 // Prepares UI for non-shared navigation
-auto NavigationManager::prepareNonSharedNavigation(int collectionIndex)
-    -> void {
+auto NavigationManager::prepareNonSharedNavigation(int collectionIndex) -> void {
   if (!m_collections || !m_currentCollectionIndex) {
     return;
   }
@@ -178,8 +165,7 @@ auto NavigationManager::prepareNonSharedNavigation(int collectionIndex)
   }
 
   if (m_sidebarManager) {
-    m_sidebarManager->applySidebarStateForCollection(
-        (*m_currentCollectionIndex));
+    m_sidebarManager->applySidebarStateForCollection((*m_currentCollectionIndex));
   }
 
   if ((m_searchBar) && m_searchBar->text().trimmed().isEmpty()) {

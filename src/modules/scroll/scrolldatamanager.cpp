@@ -1,7 +1,7 @@
 #include "scrolldatamanager.h"
 #include "artworkutils.h"
-#include <QFileInfo>
 #include <algorithm>
+#include <QFileInfo>
 
 ScrollDataManager::ScrollDataManager(QObject *parent) : QObject(parent) {}
 
@@ -42,10 +42,9 @@ void ScrollDataManager::resizeStorage(int totalCount) {
   m_filePaths.resize(totalCount);
 }
 
-void ScrollDataManager::initializeSubcollections(
-    const CollectionContext &context,
-    const QList<CollectionConfig> *collections,
-    const CollectionHierarchyCache *hierarchyCache) {
+void ScrollDataManager::initializeSubcollections(const CollectionContext &context,
+                                                 const QList<CollectionConfig> *collections,
+                                                 const CollectionHierarchyCache *hierarchyCache) {
   m_subcollections.clear();
 
   if (!collections || context.currentIndex < 0) {
@@ -60,8 +59,7 @@ void ScrollDataManager::initializeSubcollections(
       m_subcollections = hierarchyCache->directChildren(context.currentIndex);
     } else {
       // Fallback to O(n) scan
-      m_subcollections =
-          CollectionUtils::directChildrenOf(context.currentIndex, *collections);
+      m_subcollections = CollectionUtils::directChildrenOf(context.currentIndex, *collections);
     }
   }
 
@@ -70,32 +68,26 @@ void ScrollDataManager::initializeSubcollections(
   if (m_subcollections.size() > 1) {
     if (context.excludeSubfoldersFromSort) {
       // Always sort A-Z when excluded from main sorting
-      std::sort(m_subcollections.begin(), m_subcollections.end(),
-                [collections](int a, int b) {
-                  return QString::compare((*collections)[a].name,
-                                          (*collections)[b].name,
-                                          Qt::CaseInsensitive) < 0;
-                });
+      std::sort(m_subcollections.begin(), m_subcollections.end(), [collections](int a, int b) {
+        return QString::compare((*collections)[a].name, (*collections)[b].name,
+                                Qt::CaseInsensitive) < 0;
+      });
     } else {
       switch (context.sortMode) {
       case SortMode::NameAscending:
       case SortMode::ArtworkFirst:
       case SortMode::ArtworkLast:
         // Artwork sorting doesn't apply to subcollections, use name A-Z
-        std::sort(m_subcollections.begin(), m_subcollections.end(),
-                  [collections](int a, int b) {
-                    return QString::compare((*collections)[a].name,
-                                            (*collections)[b].name,
-                                            Qt::CaseInsensitive) < 0;
-                  });
+        std::sort(m_subcollections.begin(), m_subcollections.end(), [collections](int a, int b) {
+          return QString::compare((*collections)[a].name, (*collections)[b].name,
+                                  Qt::CaseInsensitive) < 0;
+        });
         break;
       case SortMode::NameDescending:
-        std::sort(m_subcollections.begin(), m_subcollections.end(),
-                  [collections](int a, int b) {
-                    return QString::compare((*collections)[a].name,
-                                            (*collections)[b].name,
-                                            Qt::CaseInsensitive) > 0;
-                  });
+        std::sort(m_subcollections.begin(), m_subcollections.end(), [collections](int a, int b) {
+          return QString::compare((*collections)[a].name, (*collections)[b].name,
+                                  Qt::CaseInsensitive) > 0;
+        });
         break;
       case SortMode::Random: {
         std::random_device rd;
@@ -106,20 +98,17 @@ void ScrollDataManager::initializeSubcollections(
       case SortMode::CollectionAscending:
       case SortMode::CollectionDescending:
         // Collection sorting doesn't apply to subcollections, use name A-Z
-        std::sort(m_subcollections.begin(), m_subcollections.end(),
-                  [collections](int a, int b) {
-                    return QString::compare((*collections)[a].name,
-                                            (*collections)[b].name,
-                                            Qt::CaseInsensitive) < 0;
-                  });
+        std::sort(m_subcollections.begin(), m_subcollections.end(), [collections](int a, int b) {
+          return QString::compare((*collections)[a].name, (*collections)[b].name,
+                                  Qt::CaseInsensitive) < 0;
+        });
         break;
       }
     }
   }
 }
 
-void ScrollDataManager::initializeVirtualFolders(
-    const CollectionContext &context) {
+void ScrollDataManager::initializeVirtualFolders(const CollectionContext &context) {
   m_virtualFolders.clear();
 
   if (context.suppressVirtualFolders) {
@@ -128,8 +117,7 @@ void ScrollDataManager::initializeVirtualFolders(
 
   // Only show virtual folders if includeContentSubfolders is enabled
   // AND showAllSubfolderItems is false (otherwise items are flattened)
-  if (!context.config.includeContentSubfolders ||
-      context.config.showAllSubfolderItems) {
+  if (!context.config.includeContentSubfolders || context.config.showAllSubfolderItems) {
     return;
   }
 
@@ -167,8 +155,7 @@ void ScrollDataManager::initializeVirtualFolders(
       // Always sort A-Z when excluded from main sorting
       std::sort(m_virtualFolders.begin(), m_virtualFolders.end(),
                 [](const QString &a, const QString &b) {
-                  return QString::compare(QFileInfo(a).fileName(),
-                                          QFileInfo(b).fileName(),
+                  return QString::compare(QFileInfo(a).fileName(), QFileInfo(b).fileName(),
                                           Qt::CaseInsensitive) < 0;
                 });
     } else {
@@ -179,16 +166,14 @@ void ScrollDataManager::initializeVirtualFolders(
         // Artwork sorting doesn't apply to virtual folders, use name A-Z
         std::sort(m_virtualFolders.begin(), m_virtualFolders.end(),
                   [](const QString &a, const QString &b) {
-                    return QString::compare(QFileInfo(a).fileName(),
-                                            QFileInfo(b).fileName(),
+                    return QString::compare(QFileInfo(a).fileName(), QFileInfo(b).fileName(),
                                             Qt::CaseInsensitive) < 0;
                   });
         break;
       case SortMode::NameDescending:
         std::sort(m_virtualFolders.begin(), m_virtualFolders.end(),
                   [](const QString &a, const QString &b) {
-                    return QString::compare(QFileInfo(a).fileName(),
-                                            QFileInfo(b).fileName(),
+                    return QString::compare(QFileInfo(a).fileName(), QFileInfo(b).fileName(),
                                             Qt::CaseInsensitive) > 0;
                   });
         break;
@@ -203,8 +188,7 @@ void ScrollDataManager::initializeVirtualFolders(
         // Collection sorting doesn't apply to virtual folders, use name A-Z
         std::sort(m_virtualFolders.begin(), m_virtualFolders.end(),
                   [](const QString &a, const QString &b) {
-                    return QString::compare(QFileInfo(a).fileName(),
-                                            QFileInfo(b).fileName(),
+                    return QString::compare(QFileInfo(a).fileName(), QFileInfo(b).fileName(),
                                             Qt::CaseInsensitive) < 0;
                   });
         break;
@@ -213,9 +197,8 @@ void ScrollDataManager::initializeVirtualFolders(
   }
 }
 
-void ScrollDataManager::applyUnifiedSort(
-    const CollectionContext &context,
-    const QList<CollectionConfig> *collections) {
+void ScrollDataManager::applyUnifiedSort(const CollectionContext &context,
+                                         const QList<CollectionConfig> *collections) {
   m_unifiedItems.clear();
   m_unifiedSortActive = false;
 
@@ -232,8 +215,7 @@ void ScrollDataManager::applyUnifiedSort(
     item.originalIndex = i;
     // Get display name from collections list
     int collectionIndex = m_subcollections[i];
-    if (collections && collectionIndex >= 0 &&
-        collectionIndex < collections->size()) {
+    if (collections && collectionIndex >= 0 && collectionIndex < collections->size()) {
       item.displayName = (*collections)[collectionIndex].name;
     }
     m_unifiedItems.append(item);
@@ -256,8 +238,7 @@ void ScrollDataManager::applyUnifiedSort(
     item.originalIndex = i;
     // Use file name hash if available, otherwise file name from path
     QString filePath = m_filePaths[i];
-    item.displayName =
-        m_fileNames.value(filePath, QFileInfo(filePath).completeBaseName());
+    item.displayName = m_fileNames.value(filePath, QFileInfo(filePath).completeBaseName());
     m_unifiedItems.append(item);
   }
 
@@ -270,16 +251,14 @@ void ScrollDataManager::applyUnifiedSort(
   case SortMode::NameAscending:
     std::sort(m_unifiedItems.begin(), m_unifiedItems.end(),
               [](const UnifiedItem &a, const UnifiedItem &b) {
-                return QString::compare(a.displayName, b.displayName,
-                                        Qt::CaseInsensitive) < 0;
+                return QString::compare(a.displayName, b.displayName, Qt::CaseInsensitive) < 0;
               });
     break;
 
   case SortMode::NameDescending:
     std::sort(m_unifiedItems.begin(), m_unifiedItems.end(),
               [](const UnifiedItem &a, const UnifiedItem &b) {
-                return QString::compare(a.displayName, b.displayName,
-                                        Qt::CaseInsensitive) > 0;
+                return QString::compare(a.displayName, b.displayName, Qt::CaseInsensitive) > 0;
               });
     break;
 
@@ -296,8 +275,8 @@ void ScrollDataManager::applyUnifiedSort(
     for (int i = 0; i < m_filePaths.size(); ++i) {
       QString filePath = m_filePaths[i];
       if (!filePath.isEmpty() && !artworkDir.isEmpty()) {
-        QString artworkPath = ArtworkUtils::findArtworkForFileCached(
-            QFileInfo(filePath).fileName(), artworkDir);
+        QString artworkPath =
+            ArtworkUtils::findArtworkForFileCached(QFileInfo(filePath).fileName(), artworkDir);
         mediaHasArtwork[i] = !artworkPath.isEmpty();
       } else {
         mediaHasArtwork[i] = false;
@@ -305,8 +284,7 @@ void ScrollDataManager::applyUnifiedSort(
     }
 
     std::sort(m_unifiedItems.begin(), m_unifiedItems.end(),
-              [&mediaHasArtwork, artworkFirst](const UnifiedItem &a,
-                                               const UnifiedItem &b) {
+              [&mediaHasArtwork, artworkFirst](const UnifiedItem &a, const UnifiedItem &b) {
                 // Non-media items (subcollections, virtual folders) sort by
                 // name after media
                 bool aIsMedia = (a.type == UnifiedItem::Type::MediaFile);
@@ -314,19 +292,14 @@ void ScrollDataManager::applyUnifiedSort(
 
                 if (!aIsMedia && !bIsMedia) {
                   // Both non-media: sort by name
-                  return QString::compare(a.displayName, b.displayName,
-                                          Qt::CaseInsensitive) < 0;
+                  return QString::compare(a.displayName, b.displayName, Qt::CaseInsensitive) < 0;
                 }
-                if (!aIsMedia)
-                  return false; // Non-media comes after media
-                if (!bIsMedia)
-                  return true; // Media comes before non-media
+                if (!aIsMedia) return false; // Non-media comes after media
+                if (!bIsMedia) return true;  // Media comes before non-media
 
                 // Both are media files - sort by artwork presence
-                bool aHasArtwork =
-                    mediaHasArtwork.value(a.originalIndex, false);
-                bool bHasArtwork =
-                    mediaHasArtwork.value(b.originalIndex, false);
+                bool aHasArtwork = mediaHasArtwork.value(a.originalIndex, false);
+                bool bHasArtwork = mediaHasArtwork.value(b.originalIndex, false);
 
                 if (aHasArtwork != bHasArtwork) {
                   // One has artwork, one doesn't
@@ -334,8 +307,7 @@ void ScrollDataManager::applyUnifiedSort(
                                       : (!aHasArtwork && bHasArtwork);
                 }
                 // Same artwork status - sort by name as secondary
-                return QString::compare(a.displayName, b.displayName,
-                                        Qt::CaseInsensitive) < 0;
+                return QString::compare(a.displayName, b.displayName, Qt::CaseInsensitive) < 0;
               });
     break;
   }
@@ -353,11 +325,9 @@ void ScrollDataManager::applyUnifiedSort(
     // For the unified sort, just sort by name since subcollections/folders
     // don't have a "collection" property to sort by
     std::sort(m_unifiedItems.begin(), m_unifiedItems.end(),
-              [sortMode = context.sortMode](const UnifiedItem &a,
-                                            const UnifiedItem &b) {
+              [sortMode = context.sortMode](const UnifiedItem &a, const UnifiedItem &b) {
                 bool ascending = (sortMode == SortMode::CollectionAscending);
-                int cmp = QString::compare(a.displayName, b.displayName,
-                                           Qt::CaseInsensitive);
+                int cmp = QString::compare(a.displayName, b.displayName, Qt::CaseInsensitive);
                 return ascending ? (cmp < 0) : (cmp > 0);
               });
     break;
@@ -366,12 +336,10 @@ void ScrollDataManager::applyUnifiedSort(
   m_unifiedSortActive = true;
 }
 
-void ScrollDataManager::setupFilePathMappings(
-    const CollectionContext &context) {
+void ScrollDataManager::setupFilePathMappings(const CollectionContext &context) {
   m_filePathToDisplayName.clear();
   if (context.config.showAllSubcollectionItems) {
-    for (auto it = m_fileNames.constBegin(); it != m_fileNames.constEnd();
-         ++it) {
+    for (auto it = m_fileNames.constBegin(); it != m_fileNames.constEnd(); ++it) {
       m_filePathToDisplayName[it.key()] = it.value();
     }
   }
@@ -387,9 +355,8 @@ void ScrollDataManager::clear() {
   m_unifiedSortActive = false;
 }
 
-QList<int>
-ScrollDataManager::receiveItemsRange(int offset, const QStringList &paths,
-                                     const QHash<QString, QString> &names) {
+QList<int> ScrollDataManager::receiveItemsRange(int offset, const QStringList &paths,
+                                                const QHash<QString, QString> &names) {
   QList<int> updatedVisualIndices;
 
   if (offset < 0 || offset >= m_filePaths.size()) {

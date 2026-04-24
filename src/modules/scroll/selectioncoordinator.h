@@ -43,17 +43,13 @@ public:
     bool isHorizontal = false;
     int direction = 0; // -1, 0, or 1
   };
-  [[nodiscard]] MovementInfo analyzeMovement(int newIndex, int prevIndex,
-                                             int itemsPerRow) const;
+  [[nodiscard]] MovementInfo analyzeMovement(int newIndex, int prevIndex, int itemsPerRow) const;
 
   // Overlay rect calculation (requires item position callback)
   using PositionCallback = std::function<QPoint(int)>;
-  using MetricsCallback =
-      std::function<std::pair<int, int>()>; // returns (width, height)
+  using MetricsCallback = std::function<std::pair<int, int>()>; // returns (width, height)
 
-  void setPositionCallback(PositionCallback cb) {
-    m_getPosition = std::move(cb);
-  }
+  void setPositionCallback(PositionCallback cb) { m_getPosition = std::move(cb); }
   void setMetricsCallback(MetricsCallback cb) { m_getMetrics = std::move(cb); }
 
   [[nodiscard]] QRect rectForIndex(int visualIndex, int totalItems) const;

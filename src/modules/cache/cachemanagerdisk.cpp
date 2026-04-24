@@ -3,6 +3,7 @@
 #include "errorutils.h"
 #include "uiconstants.h"
 
+#include <limits>
 #include <QApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -16,15 +17,14 @@
 #include <QSaveFile>
 #include <QScreen>
 #include <QStandardPaths>
-#include <limits>
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcCacheManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcCacheManager().isDebugEnabled()) {                                   \
-      qCDebug(lcCacheManager) << msg;                                          \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcCacheManager().isDebugEnabled()) {                                                       \
+      qCDebug(lcCacheManager) << msg;                                                              \
+    }                                                                                              \
   } while (0)
 
 void CacheManager::initialize() {
@@ -56,8 +56,7 @@ void CacheManager::scheduleSaveToDisk(int delayMs) {
     return;
   }
 
-  const int resolvedDelay =
-      delayMs >= 0 ? delayMs : UIConstants::Cache::FLUSH_DEBOUNCE_MS;
+  const int resolvedDelay = delayMs >= 0 ? delayMs : UIConstants::Cache::FLUSH_DEBOUNCE_MS;
 
   const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
   int effectiveDelay = resolvedDelay;
@@ -71,8 +70,7 @@ void CacheManager::scheduleSaveToDisk(int delayMs) {
     }
     if (nowMs - m_firstDirtyAtMs >= UIConstants::Cache::SAVE_DEFER_MS) {
       // Don't postpone forever during continuous background loading.
-      effectiveDelay =
-          qMin(effectiveDelay, UIConstants::Cache::QUICK_SAVE_DELAY_MS);
+      effectiveDelay = qMin(effectiveDelay, UIConstants::Cache::QUICK_SAVE_DELAY_MS);
     }
   }
 
@@ -88,20 +86,19 @@ void CacheManager::scheduleSaveToDisk(int delayMs) {
 }
 
 // Writes metadata JSON (collections/global/timestamps) to disk.
-void CacheManager::writeTimestamps(
-    const QHash<QString, qint64> &dirtyTimestamps,
-    const QString &metadataPath) {
+void CacheManager::writeTimestamps(const QHash<QString, qint64> &dirtyTimestamps,
+                                   const QString &metadataPath) {
   if (dirtyTimestamps.isEmpty()) {
     return;
   }
 
   const QString parentDir = QFileInfo(metadataPath).absolutePath();
   if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
-    ErrorUtils::logError(ErrorUtils::ErrorContext::warning(
-                             ErrorUtils::ErrorCode::FileWriteError,
-                             "Failed to create cache metadata directory",
-                             "CacheManager::writeTimestamps")
-                             .withDetails(QString("Path: %1").arg(parentDir)));
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                          "Failed to create cache metadata directory",
+                                          "CacheManager::writeTimestamps")
+            .withDetails(QString("Path: %1").arg(parentDir)));
     return;
   }
 
@@ -125,8 +122,7 @@ void CacheManager::writeTimestamps(
 
   // Merge dirty timestamps into existing (only iterate over changed entries)
   for (auto it = dirtyTimestamps.begin(); it != dirtyTimestamps.end(); ++it) {
-    timestamps[it.key()] =
-        QDateTime::fromMSecsSinceEpoch(it.value()).toString(Qt::ISODate);
+    timestamps[it.key()] = QDateTime::fromMSecsSinceEpoch(it.value()).toString(Qt::ISODate);
   }
   root["timestamps"] = timestamps;
 
@@ -134,12 +130,11 @@ void CacheManager::writeTimestamps(
   QSaveFile metadataFile(metadataPath);
   if (!metadataFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
     ErrorUtils::logError(
-        ErrorUtils::ErrorContext::warning(
-            ErrorUtils::ErrorCode::FileWriteError,
-            "Failed to open cache metadata for writing",
-            "CacheManager::writeTimestamps")
-            .withDetails(QString("Path: %1, Error: %2")
-                             .arg(metadataPath, metadataFile.errorString())));
+        ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                          "Failed to open cache metadata for writing",
+                                          "CacheManager::writeTimestamps")
+            .withDetails(
+                QString("Path: %1, Error: %2").arg(metadataPath, metadataFile.errorString())));
     return;
   }
 
@@ -147,27 +142,24 @@ void CacheManager::writeTimestamps(
   if (written != payload.size()) {
     metadataFile.cancelWriting();
     ErrorUtils::logError(
-        ErrorUtils::ErrorContext::warning(
-            ErrorUtils::ErrorCode::FileWriteError,
-            "Failed to write complete cache metadata payload",
-            "CacheManager::writeTimestamps")
-            .withDetails(
-                QString("Path: %1, Written: %2, Expected: %3, Error: %4")
-                    .arg(metadataPath)
-                    .arg(written)
-                    .arg(payload.size())
-                    .arg(metadataFile.errorString())));
+        ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                          "Failed to write complete cache metadata payload",
+                                          "CacheManager::writeTimestamps")
+            .withDetails(QString("Path: %1, Written: %2, Expected: %3, Error: %4")
+                             .arg(metadataPath)
+                             .arg(written)
+                             .arg(payload.size())
+                             .arg(metadataFile.errorString())));
     return;
   }
 
   if (!metadataFile.commit()) {
     ErrorUtils::logError(
-        ErrorUtils::ErrorContext::warning(
-            ErrorUtils::ErrorCode::FileWriteError,
-            "Failed to atomically commit cache metadata",
-            "CacheManager::writeTimestamps")
-            .withDetails(QString("Path: %1, Error: %2")
-                             .arg(metadataPath, metadataFile.errorString())));
+        ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                          "Failed to atomically commit cache metadata",
+                                          "CacheManager::writeTimestamps")
+            .withDetails(
+                QString("Path: %1, Error: %2").arg(metadataPath, metadataFile.errorString())));
   }
 }
 // Saves persistent cache to disk with canonical hierarchical keys and without
@@ -228,10 +220,9 @@ void CacheManager::saveToDisk() {
   if (!m_ioThreadPool) {
     return;
   }
-  m_ioThreadPool->start([cancelFlag, shouldWriteMetadata, dirtyTimestampsCopy,
-                         metadataPath, dirtyImages]() {
-    if (cancelFlag->load(std::memory_order_acquire) ||
-        QApplication::closingDown()) {
+  m_ioThreadPool->start([cancelFlag, shouldWriteMetadata, dirtyTimestampsCopy, metadataPath,
+                         dirtyImages]() {
+    if (cancelFlag->load(std::memory_order_acquire) || QApplication::closingDown()) {
       return;
     }
 
@@ -243,8 +234,7 @@ void CacheManager::saveToDisk() {
     }
 
     for (const auto &entry : dirtyImages) {
-      if (cancelFlag->load(std::memory_order_acquire) ||
-          QApplication::closingDown()) {
+      if (cancelFlag->load(std::memory_order_acquire) || QApplication::closingDown()) {
         break;
       }
 
@@ -258,28 +248,25 @@ void CacheManager::saveToDisk() {
       const QString parentDir = QFileInfo(cachePath).absolutePath();
       if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
         ErrorUtils::logError(
-            ErrorUtils::ErrorContext::warning(
-                ErrorUtils::ErrorCode::FileWriteError,
-                "Failed to create artwork cache directory",
-                "CacheManager::saveToDisk")
+            ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                              "Failed to create artwork cache directory",
+                                              "CacheManager::saveToDisk")
                 .withDetails(QString("Path: %1").arg(parentDir)));
         continue;
       }
       if (!image.save(cachePath, "PNG")) {
         ErrorUtils::logError(
-            ErrorUtils::ErrorContext::warning(
-                ErrorUtils::ErrorCode::FileWriteError,
-                "Failed to persist artwork PNG to cache",
-                "CacheManager::saveToDisk")
+            ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                              "Failed to persist artwork PNG to cache",
+                                              "CacheManager::saveToDisk")
                 .withDetails(QString("Path: %1").arg(cachePath)));
       }
     }
 
     if (lcCacheManager().isDebugEnabled()) {
-      qCDebug(lcCacheManager)
-          << "CacheManager saveToDisk flushed"
-          << "metadata=" << (shouldWriteMetadata ? "yes" : "no")
-          << "images=" << dirtyImages.size() << "elapsedMs=" << timer.elapsed();
+      qCDebug(lcCacheManager) << "CacheManager saveToDisk flushed"
+                              << "metadata=" << (shouldWriteMetadata ? "yes" : "no")
+                              << "images=" << dirtyImages.size() << "elapsedMs=" << timer.elapsed();
     }
   });
 }

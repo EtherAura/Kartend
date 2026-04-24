@@ -31,14 +31,13 @@ using QueryManagerInternal::displayNameForBase;
 
 Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 
-void QueryManager::fetchItemsRange(
-    const CollectionContext &context,
-    const QList<CollectionConfig> &allCollections, int offset, int limit,
-    const QString &filter) {
+void QueryManager::fetchItemsRange(const CollectionContext &context,
+                                   const QList<CollectionConfig> &allCollections, int offset,
+                                   int limit, const QString &filter) {
   if (!ensureDatabaseAvailable("QueryManager::fetchItemsRange")) {
     emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(),
-                          QHash<QString, QString>(),
-                          QHash<QString, QString>(), QHash<QString, int>());
+                          QHash<QString, QString>(), QHash<QString, QString>(),
+                          QHash<QString, int>());
     return;
   }
 
@@ -49,8 +48,7 @@ void QueryManager::fetchItemsRange(
 
   if (!context.isValid()) {
     auto err = ErrorContext::error(ErrorCode::InvalidCollectionContext,
-                                   "Invalid collection context",
-                                   "QueryManager::fetchItemsRange");
+                                   "Invalid collection context", "QueryManager::fetchItemsRange");
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return;
@@ -60,24 +58,21 @@ void QueryManager::fetchItemsRange(
   // For performance, we don't re-scan here.
 
   CollectionContext ctx = context;
-  ctx.config.mediaDirectory = PathUtils::validateAndExpandPath(
-      ctx.config.mediaDirectory, ctx.config.name);
-  ctx.config.artworkDirectory = PathUtils::validateAndExpandPath(
-      ctx.config.artworkDirectory, ctx.config.name);
+  ctx.config.mediaDirectory =
+      PathUtils::validateAndExpandPath(ctx.config.mediaDirectory, ctx.config.name);
+  ctx.config.artworkDirectory =
+      PathUtils::validateAndExpandPath(ctx.config.artworkDirectory, ctx.config.name);
 
   QStringList uuids = collectCollectionUuids(ctx, allCollections);
   CollectionDirMaps dirMaps = buildDirectoryMaps(ctx, allCollections);
 
   const QString trimmedFilter = filter.trimmed();
 
-    qCDebug(lcSearchDiag) << "[QueryManager] fetchItemsRange: collIndex="
-               << context.currentIndex << "offset=" << offset
-               << "limit=" << limit << "filter='" << trimmedFilter
-               << "' includeSubfolders="
-               << context.config.includeContentSubfolders
-               << " showAllSubfolderItems="
-               << context.config.showAllSubfolderItems << " currentSubfolder='"
-               << context.config.currentSubfolder << "'";
+  qCDebug(lcSearchDiag) << "[QueryManager] fetchItemsRange: collIndex=" << context.currentIndex
+                        << "offset=" << offset << "limit=" << limit << "filter='" << trimmedFilter
+                        << "' includeSubfolders=" << context.config.includeContentSubfolders
+                        << " showAllSubfolderItems=" << context.config.showAllSubfolderItems
+                        << " currentSubfolder='" << context.config.currentSubfolder << "'";
   QElapsedTimer rangeTimer;
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     rangeTimer.start();
@@ -110,16 +105,15 @@ void QueryManager::fetchItemsRange(
       // Random mode: must build cache synchronously for consistent pagination
       if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
         qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: Random sort requires cache, "
-                      "building synchronously";
+                                 "building synchronously";
       }
       (void)populateSortedItemsCache(uuids, trimmedFilter, ctx.sortMode);
       // Fall through to use the cache we just built
-    } else if (uuids.size() >= 10 &&
-               offset >= UIConstants::Database::PRECOMPUTE_SORT_THRESHOLD) {
+    } else if (uuids.size() >= 10 && offset >= UIConstants::Database::PRECOMPUTE_SORT_THRESHOLD) {
       if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
         qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: scheduling deferred cache "
-                      "build, offset="
-                   << offset;
+                                 "build, offset="
+                              << offset;
       }
       scheduleDeferredCacheBuild(uuids, trimmedFilter, ctx.sortMode);
       // Fall through to slow path for this query
@@ -128,12 +122,11 @@ void QueryManager::fetchItemsRange(
 
   if (hasSortedItemsCache()) {
     // Verify cache hash still matches (in case filter or sortMode changed)
-    const QByteArray currentHash =
-        computeSortCacheHash(uuids, trimmedFilter, ctx.sortMode);
+    const QByteArray currentHash = computeSortCacheHash(uuids, trimmedFilter, ctx.sortMode);
     if (currentHash == m_sortedItemsCacheHash) {
       if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
         qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: using sorted cache, offset="
-                   << offset << "limit=" << limit;
+                              << offset << "limit=" << limit;
       }
 
       QStringList filePaths;
@@ -167,8 +160,7 @@ void QueryManager::fetchItemsRange(
 
           QString keyPath = canonicalKeyPath(fullPath, false, nullptr);
           filePaths.append(keyPath);
-          fileNames[keyPath] =
-              displayNameForBase(QFileInfo(keyPath).completeBaseName());
+          fileNames[keyPath] = displayNameForBase(QFileInfo(keyPath).completeBaseName());
           if (!artworkDir.isEmpty()) {
             fileToArtworkDir[keyPath] = artworkDir;
           }
@@ -182,26 +174,25 @@ void QueryManager::fetchItemsRange(
 
         if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
           qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange (cached): totalMs="
-                     << rangeTimer.elapsed()
-                     << "resultCount=" << filePaths.size();
+                                << rangeTimer.elapsed() << "resultCount=" << filePaths.size();
         }
 
-        emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir,
-                              fileToMediaDir, fileToCollectionIndex);
+        emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir, fileToMediaDir,
+                              fileToCollectionIndex);
         return;
       } else {
         // Cache query failed - fall through to standard path
         if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
           qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: cache query failed, "
-                        "falling back:"
-                     << cacheQuery.lastError().text();
+                                   "falling back:"
+                                << cacheQuery.lastError().text();
         }
       }
     } else {
       // Hash mismatch - cache is stale (filter changed)
       if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
         qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: cache hash mismatch, using "
-                      "slow path";
+                                 "slow path";
       }
       clearSortedItemsCache();
     }
@@ -214,10 +205,9 @@ void QueryManager::fetchItemsRange(
   if (m_itemsFtsAvailable && !m_itemsFtsReady) {
     m_itemsFtsReady = isItemsFtsReadyFromDb();
   }
-  const QString ftsQuery =
-      (m_itemsFtsAvailable && m_itemsFtsReady && !trimmedFilter.isEmpty())
-          ? buildFtsPrefixQuery(trimmedFilter)
-          : QString();
+  const QString ftsQuery = (m_itemsFtsAvailable && m_itemsFtsReady && !trimmedFilter.isEmpty())
+                               ? buildFtsPrefixQuery(trimmedFilter)
+                               : QString();
   const bool useFts = !ftsQuery.isEmpty();
 
   // Check if we need to use temp table for large UUID lists
@@ -227,15 +217,14 @@ void QueryManager::fetchItemsRange(
 
   if (useTempTable) {
     if (!ensureQueryUuidsPopulated(uuids)) {
-      auto err = ErrorContext::warning(
-          ErrorCode::DatabaseQueryFailed,
-          "Failed to populate UUID temp table for range query",
-          "QueryManager::fetchItemsRange");
+      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                       "Failed to populate UUID temp table for range query",
+                                       "QueryManager::fetchItemsRange");
       ErrorUtils::logError(err);
       emit errorOccurred(err);
       emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(),
-                            QHash<QString, QString>(),
-                            QHash<QString, QString>(), QHash<QString, int>());
+                            QHash<QString, QString>(), QHash<QString, QString>(),
+                            QHash<QString, int>());
       return;
     }
   }
@@ -247,15 +236,13 @@ void QueryManager::fetchItemsRange(
     // Use GROUP BY path to deduplicate paths that appear in multiple
     // collections.
     if (useTempTable) {
-      sql =
-          "SELECT path, MIN(collection_uuid) as collection_uuid FROM items_fts "
-          "WHERE items_fts MATCH ? AND EXISTS " +
-          uuidClause;
+      sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM items_fts "
+            "WHERE items_fts MATCH ? AND EXISTS " +
+            uuidClause;
     } else {
-      sql =
-          "SELECT path, MIN(collection_uuid) as collection_uuid FROM items_fts "
-          "WHERE items_fts MATCH ? AND collection_uuid IN " +
-          uuidClause;
+      sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM items_fts "
+            "WHERE items_fts MATCH ? AND collection_uuid IN " +
+            uuidClause;
     }
   } else {
     // Use GROUP BY path to deduplicate paths that appear in multiple
@@ -278,8 +265,8 @@ void QueryManager::fetchItemsRange(
   if (!subfolder.isEmpty()) {
     // In a subfolder - show only items whose path starts with subfolder/
     sql += " AND path LIKE ?";
-  } else if (ctx.config.includeContentSubfolders &&
-             !ctx.config.showAllSubfolderItems && trimmedFilter.isEmpty()) {
+  } else if (ctx.config.includeContentSubfolders && !ctx.config.showAllSubfolderItems &&
+             trimmedFilter.isEmpty()) {
     // At root with subfolders enabled but NOT showing all items, we normally
     // exclude items in subfolders so the UI can present folder tiles.
     //
@@ -315,15 +302,13 @@ void QueryManager::fetchItemsRange(
     sql += " ORDER BY collection_uuid, name COLLATE NOCASE LIMIT ? OFFSET ?";
     break;
   case SortMode::CollectionDescending:
-    sql +=
-        " ORDER BY collection_uuid DESC, name COLLATE NOCASE LIMIT ? OFFSET ?";
+    sql += " ORDER BY collection_uuid DESC, name COLLATE NOCASE LIMIT ? OFFSET ?";
     break;
   case SortMode::Random:
     // This shouldn't happen - Random mode forces cache creation above.
     // Fall back to alphabetical for consistent pagination.
-    qCWarning(lcQueryManager)
-        << "[QueryManager] fetchItemsRange: Random sort reached slow "
-           "path unexpectedly";
+    qCWarning(lcQueryManager) << "[QueryManager] fetchItemsRange: Random sort reached slow "
+                                 "path unexpectedly";
     sql += " ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?";
     break;
   default:
@@ -333,8 +318,8 @@ void QueryManager::fetchItemsRange(
 
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange (slow path): offset=" << offset
-               << "limit=" << limit << "uuids=" << uuids.size()
-               << "useTempTable=" << useTempTable;
+                          << "limit=" << limit << "uuids=" << uuids.size()
+                          << "useTempTable=" << useTempTable;
   }
 
   // Use cached prepared statement - dynamic SQL is cached by query string
@@ -387,8 +372,7 @@ void QueryManager::fetchItemsRange(
 
       QString keyPath = canonicalKeyPath(fullPath, false, nullptr);
       filePaths.append(keyPath);
-      fileNames[keyPath] =
-          displayNameForBase(QFileInfo(keyPath).completeBaseName());
+      fileNames[keyPath] = displayNameForBase(QFileInfo(keyPath).completeBaseName());
       if (!artworkDir.isEmpty()) {
         fileToArtworkDir[keyPath] = artworkDir;
       }
@@ -402,31 +386,29 @@ void QueryManager::fetchItemsRange(
 
     if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
       qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: execMs=" << execMs
-                 << "totalMs=" << rangeTimer.elapsed()
-                 << "resultCount=" << filePaths.size();
+                            << "totalMs=" << rangeTimer.elapsed()
+                            << "resultCount=" << filePaths.size();
     }
 
     if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
       qCDebug(lcSearchDiag) << "[QueryManager] fetchItemsRange: returned paths="
-          << filePaths.size();
+                            << filePaths.size();
       if (!filePaths.isEmpty()) {
-        qCDebug(lcSearchDiag) << "[QueryManager] fetchItemsRange: firstPath="
-                   << filePaths.first();
+        qCDebug(lcSearchDiag) << "[QueryManager] fetchItemsRange: firstPath=" << filePaths.first();
       }
     }
   } else {
     if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
       qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: QUERY FAILED after"
-                 << rangeTimer.elapsed() << "ms:" << query.lastError().text();
+                            << rangeTimer.elapsed() << "ms:" << query.lastError().text();
     }
-    auto err = ErrorContext::error(ErrorCode::DatabaseQueryFailed,
-                                   "Fetch items range failed",
+    auto err = ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Fetch items range failed",
                                    "QueryManager::fetchItemsRange")
                    .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
     emit errorOccurred(err);
   }
 
-  emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir,
-                        fileToMediaDir, fileToCollectionIndex);
+  emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir, fileToMediaDir,
+                        fileToCollectionIndex);
 }

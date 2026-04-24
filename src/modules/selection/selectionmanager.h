@@ -83,12 +83,8 @@ public:
 
   // Core selection state accessors
   [[nodiscard]] int currentSelectedIndex() const { return m_selectedItemIndex; }
-  [[nodiscard]] const QString &selectedFilePath() const {
-    return m_selectedFilePath;
-  }
-  [[nodiscard]] ItemWidget *selectedWidget() const {
-    return m_selectedMediaItem;
-  }
+  [[nodiscard]] const QString &selectedFilePath() const { return m_selectedFilePath; }
+  [[nodiscard]] ItemWidget *selectedWidget() const { return m_selectedMediaItem; }
 
   // Selection state mutators
   void setSelectedIndex(int index);
@@ -106,28 +102,20 @@ public:
                                      // set userSelectionMade)
   void prepareForRestore(int targetIndex);
   void finalizeRestore();
-  [[nodiscard]] bool isRestoringSelection() const {
-    return m_restoringSelection;
-  }
+  [[nodiscard]] bool isRestoringSelection() const { return m_restoringSelection; }
   [[nodiscard]] int targetRestoreIndex() const { return m_targetRestoreIndex; }
 
   // Restore state flags (exposed for InteractionManager coordination)
-  void setRestoringSelection(bool restoring) {
-    m_restoringSelection = restoring;
-  }
+  void setRestoringSelection(bool restoring) { m_restoringSelection = restoring; }
   void setTargetRestoreIndex(int index) { m_targetRestoreIndex = index; }
   void setForceImmediateCenter(bool force) { m_forceImmediateCenter = force; }
-  [[nodiscard]] bool forceImmediateCenter() const {
-    return m_forceImmediateCenter;
-  }
+  [[nodiscard]] bool forceImmediateCenter() const { return m_forceImmediateCenter; }
 
   // Selection persistence
-  void persistSelection(int collectionIndex, int itemIndex,
-                        const QString &title);
+  void persistSelection(int collectionIndex, int itemIndex, const QString &title);
 
   // Derive title for an index (used for persistence)
-  [[nodiscard]] QString titleForIndex(int index,
-                                      const QList<int> &subcollections) const;
+  [[nodiscard]] QString titleForIndex(int index, const QList<int> &subcollections) const;
 
   // File path resolution for selection
   void updateFilePathForSelection(int index, const QList<int> &subcollections);
@@ -147,10 +135,8 @@ public:
 
   // Click selection helpers
   [[nodiscard]] bool shouldTreatAsNewRow(int targetIndex, int gridWidth) const;
-  [[nodiscard]] static bool
-  shouldAnimateHorizontalHop(int fromIndex, int toIndex, int gridWidth);
-  [[nodiscard]] static bool isNewRow(int currentSelection, int newSelection,
-                                     int gridWidth);
+  [[nodiscard]] static bool shouldAnimateHorizontalHop(int fromIndex, int toIndex, int gridWidth);
+  [[nodiscard]] static bool isNewRow(int currentSelection, int newSelection, int gridWidth);
 
   // Row tracking for click detection
   void setLastSelectedRow(int row) { m_lastSelectedRow = row; }
@@ -160,8 +146,7 @@ public:
   void processSingleClickSelection(int visualIndex, const QString &filePath);
   void runHorizontalHopAnimation(int start, int target, qint64 nowMs);
   void handleNewRowClickSelection(int visualIndex, qint64 nowMs);
-  void handleSameRowClickSelection(int visualIndex, bool skipCenter,
-                                   qint64 nowMs);
+  void handleSameRowClickSelection(int visualIndex, bool skipCenter, qint64 nowMs);
 
   // Widget click handling via EventManager
   // handleWidgetSelectionByIndex is preferred - uses pre-computed index from
@@ -170,30 +155,27 @@ public:
                                    QMouseEvent *originalEvent);
   // Legacy method - searches for widget in activeWidgets (may fail during rapid
   // scrolling)
-  int handleWidgetSelection(ItemWidget *widget, const QPoint &clickPos,
-                            QMouseEvent *originalEvent);
+  int handleWidgetSelection(ItemWidget *widget, const QPoint &clickPos, QMouseEvent *originalEvent);
 
   // Selection restore (full implementation)
   void beginFullSelectionRestore(int targetIndex);
   void applySelectionStateForIndex(int idx);
   void finalizeRestoreFlagsAndFocus();
-  void scheduleSidebarMetadataUpdateIfVisible(int targetIndex,
-                                              int initialDelayMs,
+  void scheduleSidebarMetadataUpdateIfVisible(int targetIndex, int initialDelayMs,
                                               int secondaryDelayMs);
 
   // Select item by index with full update
   void selectItemByIndex(int index, bool allowHorizontalScroll);
 
   // Persistence helpers
-  void persistSuppressedSelectionAndMaybeCenter(
-      int index, const QList<int> &subcollections, bool skipCenter);
+  void persistSuppressedSelectionAndMaybeCenter(int index, const QList<int> &subcollections,
+                                                bool skipCenter);
   void handleSuccessfulSelection(int index);
   [[nodiscard]] QString titleForIndexInColl(int coll, int idx) const;
   void persistSelectionForIndex(int coll, int idx);
 
   // Try to select widget with retry
-  void trySelectWidget(int index, const QList<int> &subcollections,
-                       int attempt);
+  void trySelectWidget(int index, const QList<int> &subcollections, int attempt);
 
 signals:
   void selectionChanged(int index);

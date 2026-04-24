@@ -5,13 +5,13 @@
 
 #include "applicationcontext.h"
 #include "artworkmanager.h"
-#include "timerutils.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
 #include "settingsmanager.h"
+#include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
 
@@ -20,15 +20,15 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
-#include <QTimer>
 #include <QtGlobal>
+#include <QTimer>
 
 Q_DECLARE_LOGGING_CATEGORY(lcNavigationManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcNavigationManager().isDebugEnabled()) {                              \
-      qCDebug(lcNavigationManager) << msg;                                     \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcNavigationManager().isDebugEnabled()) {                                                  \
+      qCDebug(lcNavigationManager) << msg;                                                         \
+    }                                                                                              \
   } while (0)
 
 auto NavigationManager::performNavigationStackCleanup() -> void {
@@ -46,10 +46,8 @@ auto NavigationManager::performNavigationStackCleanup() -> void {
 
 // Finds the visual index of a subcollection within its parent
 auto NavigationManager::findSubcollectionVisualIndex(int targetCollectionIndex,
-                                                     int previousIndex) const
-    -> int {
-  if (targetCollectionIndex < 0 ||
-      targetCollectionIndex >= (*m_collections).size()) {
+                                                     int previousIndex) const -> int {
+  if (targetCollectionIndex < 0 || targetCollectionIndex >= (*m_collections).size()) {
     return -1;
   }
 
@@ -64,30 +62,28 @@ auto NavigationManager::findSubcollectionVisualIndex(int targetCollectionIndex,
 
 // Schedules the navigation return with proper timing and selection restoration
 auto NavigationManager::scheduleNavigationReturn(int targetCollectionIndex,
-                                                 int subcollectionVisualIndex)
-    -> void {
+                                                 int subcollectionVisualIndex) -> void {
   // Delay navigation return to allow current animations to complete -
   // nested timer handles selection restoration after layout settles
-  QTimer::singleShot(
-      UIConstants::Timing::SHORT_DELAY_MS, this,
-      [this, targetCollectionIndex, subcollectionVisualIndex]() {
-        showCollectionItems(targetCollectionIndex);
+  QTimer::singleShot(UIConstants::Timing::SHORT_DELAY_MS, this,
+                     [this, targetCollectionIndex, subcollectionVisualIndex]() {
+                       showCollectionItems(targetCollectionIndex);
 
-        if (m_interactionManager) {
-          m_interactionManager->setNavigationInProgress(false);
-        }
+                       if (m_interactionManager) {
+                         m_interactionManager->setNavigationInProgress(false);
+                       }
 
-        if (subcollectionVisualIndex >= 0 && m_interactionManager) {
-          // Delay selection restore until layout is stable after navigation
-          QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this,
-                             [this, subcollectionVisualIndex]() {
-                               if (m_interactionManager) {
-                                 m_interactionManager->beginSelectionRestore(
-                                     subcollectionVisualIndex);
-                               }
-                             });
-        }
-      });
+                       if (subcollectionVisualIndex >= 0 && m_interactionManager) {
+                         // Delay selection restore until layout is stable after navigation
+                         QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this,
+                                            [this, subcollectionVisualIndex]() {
+                                              if (m_interactionManager) {
+                                                m_interactionManager->beginSelectionRestore(
+                                                    subcollectionVisualIndex);
+                                              }
+                                            });
+                       }
+                     });
 }
 
 // Handles navigation when the navigation stack is not empty
@@ -106,8 +102,7 @@ auto NavigationManager::handleNavigationStackPop() -> void {
     }
   }
 
-  int subcollectionVisualIndex =
-      findSubcollectionVisualIndex(targetCollectionIndex, previousIndex);
+  int subcollectionVisualIndex = findSubcollectionVisualIndex(targetCollectionIndex, previousIndex);
   scheduleNavigationReturn(targetCollectionIndex, subcollectionVisualIndex);
 }
 
@@ -165,4 +160,3 @@ void NavigationManager::goBackToCollections() {
     handleNavigationFallback();
   }
 }
-

@@ -11,6 +11,8 @@
 // in via `using namespace QueryManagerInternal;` below.
 #include "querymanager.h"
 
+#include <atomic>
+#include <memory>
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
@@ -32,8 +34,6 @@
 #include <QThreadPool>
 #include <QVector>
 #include <QWaitCondition>
-#include <atomic>
-#include <memory>
 #include <stdexcept>
 
 #include "collectionutils.h"
@@ -48,14 +48,13 @@ using namespace QueryManagerInternal;
 
 Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 #define debugLog(msg) qCDebug(lcQueryManager) << msg
-bool QueryManager::scanAndSaveItemsToDatabase(
-    int collectionIndex, const CollectionConfig &collection) {
+bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
+                                              const CollectionConfig &collection) {
   Q_UNUSED(collectionIndex)
 
   if (!m_db.isOpen()) {
-    auto err =
-        ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database is not open",
-                            "QueryManager::scanAndSaveItemsToDatabase");
+    auto err = ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database is not open",
+                                   "QueryManager::scanAndSaveItemsToDatabase");
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return false;
@@ -65,32 +64,30 @@ bool QueryManager::scanAndSaveItemsToDatabase(
   if (!dir.exists()) {
     // Avoid treating this as a successful scan; otherwise the UI may refresh
     // and immediately retrigger scans.
-    auto err = ErrorContext::warning(ErrorCode::MediaDirectoryNotFound,
-                                     "Media directory does not exist",
-                                     "QueryManager::scanAndSaveItemsToDatabase")
-                   .withDetails(collection.mediaDirectory);
+    auto err =
+        ErrorContext::warning(ErrorCode::MediaDirectoryNotFound, "Media directory does not exist",
+                              "QueryManager::scanAndSaveItemsToDatabase")
+            .withDetails(collection.mediaDirectory);
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return false;
   }
 
   // Include includeContentSubfolders in the signature to match needsRescan
-  QString extSignature = collection.extensions.isEmpty()
-                             ? QString()
-                             : collection.extensions.join('|');
+  QString extSignature =
+      collection.extensions.isEmpty() ? QString() : collection.extensions.join('|');
   extSignature += collection.includeContentSubfolders ? "|subfolders" : "";
 
-  const QString uuid = CollectionUtils::computeCollectionUuid(
-      collection.name, collection.mediaDirectory);
+  const QString uuid =
+      CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
 
   // Temporarily disable synchronous writes for bulk insert performance
   QSqlQuery pragmaOff(m_db);
   if (!pragmaOff.exec("PRAGMA synchronous = OFF")) {
-    ErrorUtils::logError(
-        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                              "Failed to set synchronous=OFF for bulk insert",
-                              "QueryManager::scanAndSaveItemsToDatabase")
-            .withDetails(pragmaOff.lastError().text()));
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to set synchronous=OFF for bulk insert",
+                                               "QueryManager::scanAndSaveItemsToDatabase")
+                             .withDetails(pragmaOff.lastError().text()));
   }
   const SynchronousPragmaGuard restoreSynchronous(m_db);
 
@@ -126,19 +123,16 @@ bool QueryManager::scanAndSaveItemsToDatabase(
   // Throttle scan progress emissions to avoid spamming the UI event loop.
   QElapsedTimer progressTimer;
   progressTimer.start();
-  qint64 lastProgressEmitMs =
-      -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
+  qint64 lastProgressEmitMs = -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
 
-  auto maybeEmitScanProgress = [&](int processed, int total,
-                                   bool force = false) {
+  auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
     if (force) {
       emit scanItemsProgress(processed, total);
       lastProgressEmitMs = progressTimer.elapsed();
       return;
     }
     const qint64 nowMs = progressTimer.elapsed();
-    if (nowMs - lastProgressEmitMs <
-        UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
+    if (nowMs - lastProgressEmitMs < UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
       return;
     }
     emit scanItemsProgress(processed, total);
@@ -172,10 +166,9 @@ bool QueryManager::scanAndSaveItemsToDatabase(
 
     if (!inTransaction) {
       if (!m_db.transaction()) {
-        auto err = ErrorContext::critical(
-                       ErrorCode::DatabaseTransactionFailed,
-                       "Failed to start transaction for streaming insert",
-                       "QueryManager::scanAndSaveItemsToDatabase")
+        auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                          "Failed to start transaction for streaming insert",
+                                          "QueryManager::scanAndSaveItemsToDatabase")
                        .withDetails(m_db.lastError().text());
         ErrorUtils::logError(err);
         emit errorOccurred(err);
@@ -194,10 +187,9 @@ bool QueryManager::scanAndSaveItemsToDatabase(
 
     if (batchesSinceCommit >= COMMIT_INTERVAL_BATCHES) {
       if (!m_db.commit()) {
-        auto err = ErrorContext::critical(
-                       ErrorCode::DatabaseTransactionFailed,
-                       "Failed to commit streaming insert transaction",
-                       "QueryManager::scanAndSaveItemsToDatabase")
+        auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                          "Failed to commit streaming insert transaction",
+                                          "QueryManager::scanAndSaveItemsToDatabase")
                        .withDetails(m_db.lastError().text());
         ErrorUtils::logError(err);
         emit errorOccurred(err);
@@ -259,8 +251,7 @@ bool QueryManager::scanAndSaveItemsToDatabase(
     }
     const std::atomic<bool> &cancelFlag = *cancelToken;
 
-    const int maxThreads =
-        m_scanThreadPool ? std::max(1, m_scanThreadPool->maxThreadCount()) : 1;
+    const int maxThreads = m_scanThreadPool ? std::max(1, m_scanThreadPool->maxThreadCount()) : 1;
     const int maxInFlight = std::max(1, maxThreads * 2);
 
     ScanCompletionQueue queue;
@@ -271,8 +262,7 @@ bool QueryManager::scanAndSaveItemsToDatabase(
       QFileInfo rootInfo(rootPath);
       addDirSignatureSample(
           signatureSamples,
-          DirSignatureSample{QString(),
-                             rootInfo.lastModified().toSecsSinceEpoch()},
+          DirSignatureSample{QString(), rootInfo.lastModified().toSecsSinceEpoch()},
           UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
     }
 
@@ -287,8 +277,8 @@ bool QueryManager::scanAndSaveItemsToDatabase(
         QMutexLocker locker(&queue.mutex);
         ++queue.inFlight;
       }
-      m_scanThreadPool->start(new DirectoryScanTask(
-          dirPath, rootPath, nameFilters, cancelToken, &queue));
+      m_scanThreadPool->start(
+          new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, &queue));
     };
 
     // Always scan the root directory.
@@ -304,8 +294,7 @@ bool QueryManager::scanAndSaveItemsToDatabase(
 
     while (!cancelFlag.load(std::memory_order_acquire)) {
       // Keep the number of outstanding tasks bounded.
-      while (dirIterator.hasNext() &&
-             !cancelFlag.load(std::memory_order_acquire)) {
+      while (dirIterator.hasNext() && !cancelFlag.load(std::memory_order_acquire)) {
         int inFlight = 0;
         {
           QMutexLocker locker(&queue.mutex);
@@ -319,11 +308,9 @@ bool QueryManager::scanAndSaveItemsToDatabase(
         enqueue(dirPath);
         {
           const QString relPath = QDir(rootPath).relativeFilePath(dirPath);
-          const qint64 mtimeSec =
-              QFileInfo(dirPath).lastModified().toSecsSinceEpoch();
-          addDirSignatureSample(
-              signatureSamples, DirSignatureSample{relPath, mtimeSec},
-              UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
+          const qint64 mtimeSec = QFileInfo(dirPath).lastModified().toSecsSinceEpoch();
+          addDirSignatureSample(signatureSamples, DirSignatureSample{relPath, mtimeSec},
+                                UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
         }
         ++directoriesEnqueued;
       }
@@ -388,14 +375,13 @@ bool QueryManager::scanAndSaveItemsToDatabase(
     }
 
     if (lcQueryManager().isDebugEnabled()) {
-      qCDebug(lcQueryManager)
-          << "Recursive scan+stream done"
-          << "collectionIndex=" << collectionIndex << "cancelled="
-          << (cancelFlag.load(std::memory_order_acquire) ? "yes" : "no")
-          << "dirsEnqueued=" << directoriesEnqueued
-          << "dirResults=" << directoryResultsConsumed
-          << "filesFound=" << totalItemsScanned
-          << "elapsedMs=" << scanTimer.elapsed();
+      qCDebug(lcQueryManager) << "Recursive scan+stream done"
+                              << "collectionIndex=" << collectionIndex << "cancelled="
+                              << (cancelFlag.load(std::memory_order_acquire) ? "yes" : "no")
+                              << "dirsEnqueued=" << directoriesEnqueued
+                              << "dirResults=" << directoryResultsConsumed
+                              << "filesFound=" << totalItemsScanned
+                              << "elapsedMs=" << scanTimer.elapsed();
     }
 
     dirSignature = buildDirSignatureJson(true, signatureSamples);
@@ -406,10 +392,9 @@ bool QueryManager::scanAndSaveItemsToDatabase(
   // Final commit for any remaining items
   if (inTransaction) {
     if (!m_db.commit()) {
-      auto err = ErrorContext::critical(
-                     ErrorCode::DatabaseTransactionFailed,
-                     "Failed to commit final streaming insert transaction",
-                     "QueryManager::scanAndSaveItemsToDatabase")
+      auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                        "Failed to commit final streaming insert transaction",
+                                        "QueryManager::scanAndSaveItemsToDatabase")
                      .withDetails(m_db.lastError().text());
       ErrorUtils::logError(err);
       emit errorOccurred(err);
@@ -427,17 +412,15 @@ bool QueryManager::scanAndSaveItemsToDatabase(
   }
 
   int legacyId = -1;
-  if (!prepareCollectionForItemsInsert(collection, uuid, extSignature,
-                                       legacyId)) {
+  if (!prepareCollectionForItemsInsert(collection, uuid, extSignature, legacyId)) {
     return false;
   }
 
   // Apply staged scan results to persistent DB in one transaction.
   if (!m_db.transaction()) {
-    auto err = ErrorContext::critical(
-                   ErrorCode::DatabaseTransactionFailed,
-                   "Failed to start transaction to apply scan results",
-                   "QueryManager::scanAndSaveItemsToDatabase")
+    auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                      "Failed to start transaction to apply scan results",
+                                      "QueryManager::scanAndSaveItemsToDatabase")
                    .withDetails(m_db.lastError().text());
     ErrorUtils::logError(err);
     emit errorOccurred(err);
@@ -453,11 +436,10 @@ bool QueryManager::scanAndSaveItemsToDatabase(
     if (count.exec("SELECT COUNT(*) FROM scanned_items") && count.next()) {
       totalToApply = count.value(0).toLongLong();
     } else {
-      auto err =
-          ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                "Failed to count staged scan results",
-                                "QueryManager::scanAndSaveItemsToDatabase")
-              .withDetails(count.lastError().text());
+      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                       "Failed to count staged scan results",
+                                       "QueryManager::scanAndSaveItemsToDatabase")
+                     .withDetails(count.lastError().text());
       ErrorUtils::logError(err);
       emit errorOccurred(err);
       m_db.rollback();
@@ -466,15 +448,12 @@ bool QueryManager::scanAndSaveItemsToDatabase(
   }
 
   // Force the overlay into "Indexing" mode (total known) immediately.
-  maybeEmitScanProgress(0,
-                        static_cast<int>(std::min<qint64>(
-                            totalToApply, std::numeric_limits<int>::max())),
-                        true);
+  maybeEmitScanProgress(
+      0, static_cast<int>(std::min<qint64>(totalToApply, std::numeric_limits<int>::max())), true);
 
   bool upsertOk = true;
   if (totalToApply > 0) {
-    constexpr int APPLY_BATCH_SIZE =
-        199; // 5 cols/row -> stays under SQLite 999 bind limit
+    constexpr int APPLY_BATCH_SIZE = 199; // 5 cols/row -> stays under SQLite 999 bind limit
     qint64 applied = 0;
     qint64 lastRowId = 0;
 
@@ -490,11 +469,10 @@ bool QueryManager::scanAndSaveItemsToDatabase(
       sel.addBindValue(lastRowId);
       sel.addBindValue(APPLY_BATCH_SIZE);
       if (!sel.exec()) {
-        auto err =
-            ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                  "Failed to read staged scan results",
-                                  "QueryManager::scanAndSaveItemsToDatabase")
-                .withDetails(sel.lastError().text());
+        auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                         "Failed to read staged scan results",
+                                         "QueryManager::scanAndSaveItemsToDatabase")
+                       .withDetails(sel.lastError().text());
         ErrorUtils::logError(err);
         emit errorOccurred(err);
         upsertOk = false;
@@ -544,11 +522,10 @@ bool QueryManager::scanAndSaveItemsToDatabase(
         ins.addBindValue(lastModified[i]);
       }
       if (!ins.exec()) {
-        auto err =
-            ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                  "Failed to apply staged scan results",
-                                  "QueryManager::scanAndSaveItemsToDatabase")
-                .withDetails(ins.lastError().text());
+        auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                         "Failed to apply staged scan results",
+                                         "QueryManager::scanAndSaveItemsToDatabase")
+                       .withDetails(ins.lastError().text());
         ErrorUtils::logError(err);
         emit errorOccurred(err);
         upsertOk = false;
@@ -558,24 +535,23 @@ bool QueryManager::scanAndSaveItemsToDatabase(
       lastRowId = batchMaxRowId;
       applied += paths.size();
 
-      const int clampedApplied = static_cast<int>(
-          std::min<qint64>(applied, std::numeric_limits<int>::max()));
-      const int clampedTotal = static_cast<int>(
-          std::min<qint64>(totalToApply, std::numeric_limits<int>::max()));
+      const int clampedApplied =
+          static_cast<int>(std::min<qint64>(applied, std::numeric_limits<int>::max()));
+      const int clampedTotal =
+          static_cast<int>(std::min<qint64>(totalToApply, std::numeric_limits<int>::max()));
       maybeEmitScanProgress(clampedApplied, clampedTotal);
     }
 
     // Force a final progress update so the overlay reaches 100% for indexing.
-    const int clampedTotal = static_cast<int>(
-        std::min<qint64>(totalToApply, std::numeric_limits<int>::max()));
+    const int clampedTotal =
+        static_cast<int>(std::min<qint64>(totalToApply, std::numeric_limits<int>::max()));
     maybeEmitScanProgress(clampedTotal, clampedTotal, true);
   }
 
   const bool deleteOk = deleteMissingItemsByUuidUsingScannedItems(uuid);
 
-  QSqlQuery &meta =
-      getPreparedStatement("UPDATE collections SET last_scanned = ?, "
-                           "dir_signature = ? WHERE uuid = ?");
+  QSqlQuery &meta = getPreparedStatement("UPDATE collections SET last_scanned = ?, "
+                                         "dir_signature = ? WHERE uuid = ?");
   meta.bindValue(0, QDateTime::currentDateTime().toString(Qt::ISODate));
   meta.bindValue(1, dirSignature);
   meta.bindValue(2, uuid);
@@ -585,11 +561,10 @@ bool QueryManager::scanAndSaveItemsToDatabase(
   if (upsertOk && deleteOk && metaOk) {
     committed = m_db.commit();
     if (!committed) {
-      auto err =
-          ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                 "Failed to commit scan results",
-                                 "QueryManager::scanAndSaveItemsToDatabase")
-              .withDetails(m_db.lastError().text());
+      auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                        "Failed to commit scan results",
+                                        "QueryManager::scanAndSaveItemsToDatabase")
+                     .withDetails(m_db.lastError().text());
       ErrorUtils::logError(err);
       emit errorOccurred(err);
       m_db.rollback();
@@ -600,4 +575,3 @@ bool QueryManager::scanAndSaveItemsToDatabase(
 
   return upsertOk && deleteOk && metaOk && committed;
 }
-

@@ -41,9 +41,7 @@ public:
 
   void beginBindingCapture();
   void endBindingCapture();
-  [[nodiscard]] bool isBindingCaptureActive() const {
-    return m_bindingCaptureActive;
-  }
+  [[nodiscard]] bool isBindingCaptureActive() const { return m_bindingCaptureActive; }
 
 signals:
   void requestSelectionMove(int direction, bool vertical);

@@ -4,6 +4,7 @@
 #include "collectionutils.h"
 #include "gridlayoutcalculator.h"
 #include "setuputils.h"
+#include <memory>
 #include <QDateTime>
 #include <QHash>
 #include <QObject>
@@ -11,7 +12,6 @@
 #include <QRect>
 #include <QSet>
 #include <QTimer>
-#include <memory>
 
 class QWidget;
 class QScrollArea;
@@ -148,19 +148,16 @@ public:
   void recalculateContainerMetrics();
   void forceVirtualViewUpdate();
   void preCalculateLayout();
-  [[nodiscard]] const QHash<int, ItemWidget *> &getActiveWidgets() const {
-    return m_activeWidgets;
-  }
+  [[nodiscard]] const QHash<int, ItemWidget *> &getActiveWidgets() const { return m_activeWidgets; }
   // Injects cached items for instant startup display (bypasses database fetch)
   void injectCachedItems(int startIndex, const QStringList &filePaths,
                          const QHash<QString, QString> &fileNames,
                          const QHash<QString, QString> &artworkPaths = {});
   // Gets current viewport data for session caching (returns true if valid data)
-  [[nodiscard]] bool
-  getCurrentViewportForCache(int &startIndex, int &totalItems,
-                             QStringList &filePaths,
-                             QHash<QString, QString> &fileNames,
-                             QHash<QString, QString> &artworkPaths) const;
+  [[nodiscard]] bool getCurrentViewportForCache(int &startIndex, int &totalItems,
+                                                QStringList &filePaths,
+                                                QHash<QString, QString> &fileNames,
+                                                QHash<QString, QString> &artworkPaths) const;
   // Data accessors - delegate to ScrollDataManager
   [[nodiscard]] const QStringList &getFilePaths() const;
   [[nodiscard]] const QHash<QString, QString> &getFileNames() const;
@@ -177,14 +174,12 @@ signals:
   void requestItemsRange(int offset, int limit);
   void virtualScrollSetupComplete();
   void filterChanged(int visibleItems, int totalOriginal);
-  void sortModeChangeRequested(
-      SortMode sortMode); // Request sort mode change from list header click
-  void selectItemByIndex(
-      int index); // Request selection of item at index (for post-sort restore)
-  void listColumnWidthChanged(
-      int width); // Emitted when list column width is resized
-  void listArtworkColumnWidthChanged(
-      int width); // Emitted when list artwork column width is resized
+  void
+  sortModeChangeRequested(SortMode sortMode); // Request sort mode change from list header click
+  void selectItemByIndex(int index); // Request selection of item at index (for post-sort restore)
+  void listColumnWidthChanged(int width); // Emitted when list column width is resized
+  void
+  listArtworkColumnWidthChanged(int width); // Emitted when list artwork column width is resized
 
 public slots:
   /// Receives the visual index for a file path from database query
@@ -198,8 +193,7 @@ private slots:
   void onArrowKeyViewUpdate();
   void onSliderMoved(int position);
   void reconfigureArtworkForActiveWidgets();
-  void onArtworkPreviewRequested(const QString &filePath,
-                                 const QString &artworkDir);
+  void onArtworkPreviewRequested(const QString &filePath, const QString &artworkDir);
 
 private:
   void createVirtualContainer();
@@ -269,12 +263,8 @@ private:
   // owned by m_selectionDisplay (Kartend-3u5).
 
 public:
-  [[nodiscard]] const WidgetPoolManager *getWidgetPool() const {
-    return m_widgetPool.get();
-  }
-  [[nodiscard]] const FilterManager *getFilterManager() const {
-    return m_filterManager;
-  }
+  [[nodiscard]] const WidgetPoolManager *getWidgetPool() const { return m_widgetPool.get(); }
+  [[nodiscard]] const FilterManager *getFilterManager() const { return m_filterManager; }
   [[nodiscard]] const SelectionOverlayManager *getOverlayManager() const {
     return m_overlayManager;
   }
@@ -287,15 +277,11 @@ public:
   [[nodiscard]] const ScrollEventHandler *getScrollEventHandler() const {
     return m_scrollEventHandler.get();
   }
-  [[nodiscard]] const ScrollDataManager *getDataManager() const {
-    return m_dataManager;
-  }
+  [[nodiscard]] const ScrollDataManager *getDataManager() const { return m_dataManager; }
   [[nodiscard]] const PreSearchStateManager *getPreSearchStateManager() const {
     return m_preSearchStateManager;
   }
-  [[nodiscard]] const SelectionStateTracker *getSelectionState() const {
-    return m_selectionState;
-  }
+  [[nodiscard]] const SelectionStateTracker *getSelectionState() const { return m_selectionState; }
 
 private:
   const GeneralSettings *m_generalSettings = nullptr;

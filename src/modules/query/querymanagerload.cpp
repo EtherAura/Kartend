@@ -7,6 +7,7 @@
 // Members of QueryManager; access existing class state.
 #include "querymanager.h"
 
+#include <atomic>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -18,7 +19,6 @@
 #include <QString>
 #include <QStringList>
 #include <QtGlobal>
-#include <atomic>
 #include <stdexcept>
 
 #include "collectionutils.h"
@@ -38,8 +38,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 
 using QueryManagerInternal::buildFtsPrefixQuery;
 
-void QueryManager::loadAllCollections(
-    const QList<CollectionConfig> &allCollections) {
+void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollections) {
   if (!ensureDatabaseAvailable("QueryManager::loadAllCollections")) {
     // Emit safe default so listeners (UI item count, etc.) don't hang.
     emit itemsLoaded({}, {}, {}, {}, {});
@@ -54,14 +53,13 @@ void QueryManager::loadAllCollections(
 
   const int totalCollections = allCollections.size();
 
-  for (int collectionIndex = 0; collectionIndex < allCollections.size();
-       ++collectionIndex) {
+  for (int collectionIndex = 0; collectionIndex < allCollections.size(); ++collectionIndex) {
     CollectionConfig collection = allCollections[collectionIndex];
 
-    collection.mediaDirectory = PathUtils::validateAndExpandPath(
-        collection.mediaDirectory, collection.name);
-    collection.artworkDirectory = PathUtils::validateAndExpandPath(
-        collection.artworkDirectory, collection.name);
+    collection.mediaDirectory =
+        PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
+    collection.artworkDirectory =
+        PathUtils::validateAndExpandPath(collection.artworkDirectory, collection.name);
 
     if (collection.mediaDirectory.trimmed().isEmpty()) {
       continue;
@@ -74,15 +72,12 @@ void QueryManager::loadAllCollections(
     }
 
     QHash<QString, QDateTime> timestamps;
-    QStringList filePaths =
-        loadOrScanCollection(collectionIndex, collection, timestamps);
+    QStringList filePaths = loadOrScanCollection(collectionIndex, collection, timestamps);
 
-    appendFileMapsAndListCanonical(collectionIndex, collection,
-                                   CollectionUtils::resolveArtworkDirectory(
-                                       collectionIndex, allCollections),
-                                   filePaths, allFilePaths, allFileNames,
-                                   fileToArtworkDir, fileToMediaDir,
-                                   fileToCollectionIndex, false);
+    appendFileMapsAndListCanonical(
+        collectionIndex, collection,
+        CollectionUtils::resolveArtworkDirectory(collectionIndex, allCollections), filePaths,
+        allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex, false);
   }
 
   sortFiles(allFilePaths);
@@ -101,29 +96,26 @@ void QueryManager::loadItems(const CollectionContext &context,
 
   if (!context.isValid()) {
     auto err = ErrorContext::error(ErrorCode::InvalidCollectionContext,
-                                   "Invalid collection context",
-                                   "QueryManager::loadItems");
+                                   "Invalid collection context", "QueryManager::loadItems");
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return;
   }
 
   CollectionContext ctx = context;
-  ctx.config.mediaDirectory = PathUtils::validateAndExpandPath(
-      ctx.config.mediaDirectory, ctx.config.name);
-  ctx.config.artworkDirectory = PathUtils::validateAndExpandPath(
-      ctx.config.artworkDirectory, ctx.config.name);
+  ctx.config.mediaDirectory =
+      PathUtils::validateAndExpandPath(ctx.config.mediaDirectory, ctx.config.name);
+  ctx.config.artworkDirectory =
+      PathUtils::validateAndExpandPath(ctx.config.artworkDirectory, ctx.config.name);
 
   if (ctx.config.mediaDirectory.trimmed().isEmpty()) {
-    emit itemsLoaded(QStringList(), QHash<QString, QString>(),
-                     QHash<QString, QString>(), QHash<QString, QString>(),
-                     QHash<QString, int>());
+    emit itemsLoaded(QStringList(), QHash<QString, QString>(), QHash<QString, QString>(),
+                     QHash<QString, QString>(), QHash<QString, int>());
     return;
   }
 
   QHash<QString, QDateTime> timestamps;
-  QStringList filePaths =
-      loadOrScanCollection(ctx.currentIndex, ctx.config, timestamps);
+  QStringList filePaths = loadOrScanCollection(ctx.currentIndex, ctx.config, timestamps);
 
   // Apply subfolder filtering
   const QString &subfolder = ctx.config.currentSubfolder;
@@ -137,8 +129,7 @@ void QueryManager::loadItems(const CollectionContext &context,
       }
     }
     filePaths = filtered;
-  } else if (ctx.config.includeContentSubfolders &&
-             !ctx.config.showAllSubfolderItems) {
+  } else if (ctx.config.includeContentSubfolders && !ctx.config.showAllSubfolderItems) {
     // At root with subfolders enabled but NOT showing all items - exclude items
     // in subfolders
     QStringList filtered;
@@ -159,12 +150,11 @@ void QueryManager::loadItems(const CollectionContext &context,
   QHash<QString, int> fileToCollectionIndex;
 
   // Resolve artwork directory with parent fallback for subcollections
-  QString resolvedArtworkDir = CollectionUtils::resolveArtworkDirectory(
-      ctx.currentIndex, allCollections);
+  QString resolvedArtworkDir =
+      CollectionUtils::resolveArtworkDirectory(ctx.currentIndex, allCollections);
 
-  appendFileMapsAndListCanonical(ctx.currentIndex, ctx.config,
-                                 resolvedArtworkDir, filePaths, allFilePaths,
-                                 allFileNames, fileToArtworkDir, fileToMediaDir,
+  appendFileMapsAndListCanonical(ctx.currentIndex, ctx.config, resolvedArtworkDir, filePaths,
+                                 allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
                                  fileToCollectionIndex, false);
 
   sortFiles(allFilePaths, ctx.sortMode);
@@ -173,9 +163,8 @@ void QueryManager::loadItems(const CollectionContext &context,
                    fileToCollectionIndex);
 }
 
-void QueryManager::loadItemsWithSubcollections(
-    const CollectionContext &context,
-    const QList<CollectionConfig> &allCollections) {
+void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
+                                               const QList<CollectionConfig> &allCollections) {
   if (!ensureDatabaseAvailable("QueryManager::loadItemsWithSubcollections")) {
     // Emit safe default so listeners don't hang awaiting itemsLoaded.
     emit itemsLoaded({}, {}, {}, {}, {});
@@ -183,19 +172,19 @@ void QueryManager::loadItemsWithSubcollections(
   }
 
   if (!context.isValid()) {
-    auto err = ErrorContext::error(ErrorCode::InvalidCollectionContext,
-                                   "Invalid collection context",
-                                   "QueryManager::loadItemsWithSubcollections");
+    auto err =
+        ErrorContext::error(ErrorCode::InvalidCollectionContext, "Invalid collection context",
+                            "QueryManager::loadItemsWithSubcollections");
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return;
   }
 
   CollectionContext mainCtx = context;
-  mainCtx.config.mediaDirectory = PathUtils::validateAndExpandPath(
-      mainCtx.config.mediaDirectory, mainCtx.config.name);
-  mainCtx.config.artworkDirectory = PathUtils::validateAndExpandPath(
-      mainCtx.config.artworkDirectory, mainCtx.config.name);
+  mainCtx.config.mediaDirectory =
+      PathUtils::validateAndExpandPath(mainCtx.config.mediaDirectory, mainCtx.config.name);
+  mainCtx.config.artworkDirectory =
+      PathUtils::validateAndExpandPath(mainCtx.config.artworkDirectory, mainCtx.config.name);
 
   QStringList allFilePaths;
   QHash<QString, QString> allFileNames;
@@ -206,8 +195,7 @@ void QueryManager::loadItemsWithSubcollections(
   QSet<QString> seenCanonicalPaths;
   QHash<QString, QString> canonicalPathCache;
 
-  bool hasMainMediaDirectory =
-      !mainCtx.config.mediaDirectory.trimmed().isEmpty();
+  bool hasMainMediaDirectory = !mainCtx.config.mediaDirectory.trimmed().isEmpty();
   if (hasMainMediaDirectory) {
     QHash<QString, QDateTime> timestamps;
     QStringList mainFilePaths =
@@ -225,8 +213,7 @@ void QueryManager::loadItemsWithSubcollections(
         }
       }
       mainFilePaths = filtered;
-    } else if (mainCtx.config.includeContentSubfolders &&
-               !mainCtx.config.showAllSubfolderItems) {
+    } else if (mainCtx.config.includeContentSubfolders && !mainCtx.config.showAllSubfolderItems) {
       // At root with subfolders enabled but NOT showing all items - exclude
       // items in subfolders
       QStringList filtered;
@@ -241,21 +228,18 @@ void QueryManager::loadItemsWithSubcollections(
     seenCanonicalPaths.reserve(mainFilePaths.size());
     canonicalPathCache.reserve(mainFilePaths.size());
 
-    appendFileMapsAndListCanonical(mainCtx.currentIndex, mainCtx.config,
-                                   CollectionUtils::resolveArtworkDirectory(
-                                       mainCtx.currentIndex, allCollections),
-                                   mainFilePaths, allFilePaths, allFileNames,
-                                   fileToArtworkDir, fileToMediaDir,
-                                   fileToCollectionIndex, true,
-                                   &seenCanonicalPaths, &canonicalPathCache);
+    appendFileMapsAndListCanonical(
+        mainCtx.currentIndex, mainCtx.config,
+        CollectionUtils::resolveArtworkDirectory(mainCtx.currentIndex, allCollections),
+        mainFilePaths, allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
+        fileToCollectionIndex, true, &seenCanonicalPaths, &canonicalPathCache);
   }
 
   // Use pre-computed descendants if available (O(1) from cache), otherwise
   // fall back to O(n²) tree traversal for backward compatibility
   const QList<int> &rawDescendants =
       mainCtx.precomputedDescendants.isEmpty()
-          ? CollectionUtils::collectDescendantIndices(mainCtx.currentIndex,
-                                                      allCollections)
+          ? CollectionUtils::collectDescendantIndices(mainCtx.currentIndex, allCollections)
           : mainCtx.precomputedDescendants;
   QSet<int> seenDesc;
   QList<int> descendants;
@@ -275,26 +259,23 @@ void QueryManager::loadItemsWithSubcollections(
 
   for (int collectionIndex : descendants) {
     CollectionConfig collection = allCollections[collectionIndex];
-    collection.mediaDirectory = PathUtils::validateAndExpandPath(
-        collection.mediaDirectory, collection.name);
-    collection.artworkDirectory = PathUtils::validateAndExpandPath(
-        collection.artworkDirectory, collection.name);
+    collection.mediaDirectory =
+        PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
+    collection.artworkDirectory =
+        PathUtils::validateAndExpandPath(collection.artworkDirectory, collection.name);
 
     if (collection.mediaDirectory.trimmed().isEmpty()) {
       continue;
     }
 
     QHash<QString, QDateTime> subTimestamps;
-    QStringList subFilePaths =
-        loadOrScanCollection(collectionIndex, collection, subTimestamps);
+    QStringList subFilePaths = loadOrScanCollection(collectionIndex, collection, subTimestamps);
 
-    appendFileMapsAndListCanonical(collectionIndex, collection,
-                                   CollectionUtils::resolveArtworkDirectory(
-                                       collectionIndex, allCollections),
-                                   subFilePaths, allFilePaths, allFileNames,
-                                   fileToArtworkDir, fileToMediaDir,
-                                   fileToCollectionIndex, true,
-                                   &seenCanonicalPaths, &canonicalPathCache);
+    appendFileMapsAndListCanonical(
+        collectionIndex, collection,
+        CollectionUtils::resolveArtworkDirectory(collectionIndex, allCollections), subFilePaths,
+        allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex, true,
+        &seenCanonicalPaths, &canonicalPathCache);
   }
 
   sortFiles(allFilePaths, context.sortMode);
@@ -302,8 +283,7 @@ void QueryManager::loadItemsWithSubcollections(
                    fileToCollectionIndex);
 }
 
-void QueryManager::updateCachedCounts(quint64 generation,
-                                      const QStringList &collectionUuids) {
+void QueryManager::updateCachedCounts(quint64 generation, const QStringList &collectionUuids) {
   if (!ensureDatabaseAvailable("QueryManager::updateCachedCounts")) {
     emit cachedCountsComputed(generation, 0, {});
     return;
@@ -354,8 +334,7 @@ void QueryManager::updateCachedCounts(quint64 generation,
 
     if (query.exec()) {
       while (query.next()) {
-        directCountsByUuid.insert(query.value(0).toString(),
-                                  query.value(1).toLongLong());
+        directCountsByUuid.insert(query.value(0).toString(), query.value(1).toLongLong());
       }
     }
   }
@@ -364,8 +343,8 @@ void QueryManager::updateCachedCounts(quint64 generation,
 }
 
 // Collects UUIDs for a collection and optionally its descendants
-auto QueryManager::collectCollectionUuids(
-    const CollectionContext &ctx, const QList<CollectionConfig> &allCollections)
+auto QueryManager::collectCollectionUuids(const CollectionContext &ctx,
+                                          const QList<CollectionConfig> &allCollections)
     -> QStringList {
   QStringList uuids;
 
@@ -374,13 +353,11 @@ auto QueryManager::collectCollectionUuids(
     uuids.reserve(allCollections.size());
     for (int i = 0; i < allCollections.size(); ++i) {
       CollectionConfig c = allCollections[i];
-      c.mediaDirectory =
-          PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+      c.mediaDirectory = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
       if (c.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
-      const QString uuid =
-          CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
+      const QString uuid = CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
       if (!uuid.isEmpty() && !seen.contains(uuid)) {
         seen.insert(uuid);
         uuids.append(uuid);
@@ -390,8 +367,7 @@ auto QueryManager::collectCollectionUuids(
   }
 
   // Check if we need descendants (for subcollection search modes)
-  const bool needsDescendants =
-      ctx.config.showAllSubcollectionItems || ctx.queryIncludeDescendants;
+  const bool needsDescendants = ctx.config.showAllSubcollectionItems || ctx.queryIncludeDescendants;
 
   // Use pre-computed UUIDs if available and we need descendants
   // This provides major performance improvement for large hierarchies (3000+
@@ -401,16 +377,14 @@ auto QueryManager::collectCollectionUuids(
     return ctx.precomputedDescendantUuids;
   }
 
-  uuids << CollectionUtils::computeCollectionUuid(ctx.config.name,
-                                                  ctx.config.mediaDirectory);
+  uuids << CollectionUtils::computeCollectionUuid(ctx.config.name, ctx.config.mediaDirectory);
 
   if (needsDescendants) {
     // Use pre-computed descendants if available (O(1) from cache), otherwise
     // fall back to O(n²) tree traversal for backward compatibility
     const QList<int> &descendants =
         ctx.precomputedDescendants.isEmpty()
-            ? CollectionUtils::collectDescendantIndices(ctx.currentIndex,
-                                                        allCollections)
+            ? CollectionUtils::collectDescendantIndices(ctx.currentIndex, allCollections)
             : ctx.precomputedDescendants;
     uuids.reserve(uuids.size() + descendants.size());
     for (int descendantIndex : descendants) {
@@ -419,27 +393,24 @@ auto QueryManager::collectCollectionUuids(
         continue;
       }
       CollectionConfig subCol = allCollections[descendantIndex];
-      subCol.mediaDirectory =
-          PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
+      subCol.mediaDirectory = PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
       if (subCol.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
-      uuids << CollectionUtils::computeCollectionUuid(subCol.name,
-                                                      subCol.mediaDirectory);
+      uuids << CollectionUtils::computeCollectionUuid(subCol.name, subCol.mediaDirectory);
     }
   }
   return uuids;
 }
 
 // Builds UUID-to-directory mappings for resolving paths from query results
-auto QueryManager::buildDirectoryMaps(
-    const CollectionContext &ctx, const QList<CollectionConfig> &allCollections)
+auto QueryManager::buildDirectoryMaps(const CollectionContext &ctx,
+                                      const QList<CollectionConfig> &allCollections)
     -> CollectionDirMaps {
   CollectionDirMaps maps;
 
   // Check if we need descendants (for subcollection search modes)
-  const bool needsDescendants =
-      ctx.config.showAllSubcollectionItems || ctx.queryIncludeDescendants;
+  const bool needsDescendants = ctx.config.showAllSubcollectionItems || ctx.queryIncludeDescendants;
 
   // Use pre-computed directory maps if available and we need descendants
   // This provides major performance improvement for large hierarchies (3000+
@@ -455,8 +426,7 @@ auto QueryManager::buildDirectoryMaps(
   // Helper to add mapping for a collection at a given index, resolving artwork
   // directory from parent chain if not set on the collection itself
   auto addMapping = [&](int collectionIndex, const CollectionConfig &c) {
-    const QString uuid =
-        CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
+    const QString uuid = CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
     if (uuid.isEmpty()) {
       return;
     }
@@ -466,8 +436,8 @@ auto QueryManager::buildDirectoryMaps(
     if (!maps.uuidToArtworkDir.contains(uuid)) {
       // Resolve artwork directory with parent fallback - if this collection
       // has no artwork directory, walk up the parent chain to find one
-      QString resolvedArtwork = CollectionUtils::resolveArtworkDirectory(
-          collectionIndex, allCollections);
+      QString resolvedArtwork =
+          CollectionUtils::resolveArtworkDirectory(collectionIndex, allCollections);
       maps.uuidToArtworkDir[uuid] = resolvedArtwork;
     }
     if (!maps.uuidToCollectionIndex.contains(uuid)) {
@@ -481,10 +451,8 @@ auto QueryManager::buildDirectoryMaps(
     maps.uuidToCollectionIndex.reserve(allCollections.size());
     for (int i = 0; i < allCollections.size(); ++i) {
       CollectionConfig c = allCollections[i];
-      c.mediaDirectory =
-          PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
-      c.artworkDirectory =
-          PathUtils::validateAndExpandPath(c.artworkDirectory, c.name);
+      c.mediaDirectory = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+      c.artworkDirectory = PathUtils::validateAndExpandPath(c.artworkDirectory, c.name);
       if (c.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
@@ -499,8 +467,7 @@ auto QueryManager::buildDirectoryMaps(
     // Use pre-computed descendants if available (O(1) from cache), otherwise
     // fall back to O(n²) tree traversal for backward compatibility
     descendants = ctx.precomputedDescendants.isEmpty()
-                      ? CollectionUtils::collectDescendantIndices(
-                            ctx.currentIndex, allCollections)
+                      ? CollectionUtils::collectDescendantIndices(ctx.currentIndex, allCollections)
                       : ctx.precomputedDescendants;
     expectedMappings += descendants.size();
   }
@@ -518,10 +485,9 @@ auto QueryManager::buildDirectoryMaps(
         continue;
       }
       CollectionConfig subCol = allCollections[descendantIndex];
-      subCol.mediaDirectory =
-          PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
-      subCol.artworkDirectory = PathUtils::validateAndExpandPath(
-          subCol.artworkDirectory, subCol.name);
+      subCol.mediaDirectory = PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
+      subCol.artworkDirectory =
+          PathUtils::validateAndExpandPath(subCol.artworkDirectory, subCol.name);
       if (subCol.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
@@ -540,5 +506,3 @@ auto QueryManager::buildUuidInClause(int uuidCount) -> QString {
   clause += ")";
   return clause;
 }
-
-

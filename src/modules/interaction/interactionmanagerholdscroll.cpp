@@ -6,9 +6,9 @@
 // All three remain InteractionManager members and access existing class state.
 #include "interactionmanager.h"
 
+#include <algorithm>
 #include <QApplication>
 #include <QTimer>
-#include <algorithm>
 
 #include "animationmanager.h"
 #include "keyboardmanager.h"
@@ -82,22 +82,21 @@ void InteractionManager::stopRepeat(bool suppressRecentering) {
   }
 
   if (m_viewportManager && !m_viewportManager->physicalKeyDown()) {
-    m_viewportManager->setContinuousScrollActive(
-        m_animationManager && m_animationManager->isVerticalAnimRunning());
+    m_viewportManager->setContinuousScrollActive(m_animationManager &&
+                                                 m_animationManager->isVerticalAnimRunning());
   }
 
   const int selected = currentSelectedIndex();
   if (!QApplication::closingDown() && selected >= 0 && !suppressRecentering) {
     // Delay re-centering to allow scroll animations to settle after key repeat
     // stops
-    QTimer::singleShot(
-        UIConstants::Mouse::STOP_REPEAT_RECENTER_DELAY_MS, this, [this]() {
-          const int sel = currentSelectedIndex();
-          if (!QApplication::closingDown() && sel >= 0 && m_viewportManager &&
-              !m_viewportManager->continuousScrollActive()) {
-            centerItemVertically(sel, false);
-          }
-        });
+    QTimer::singleShot(UIConstants::Mouse::STOP_REPEAT_RECENTER_DELAY_MS, this, [this]() {
+      const int sel = currentSelectedIndex();
+      if (!QApplication::closingDown() && sel >= 0 && m_viewportManager &&
+          !m_viewportManager->continuousScrollActive()) {
+        centerItemVertically(sel, false);
+      }
+    });
   }
 }
 
@@ -107,8 +106,7 @@ auto InteractionManager::isWheelScrolling() const -> bool {
 
 // Advances selection during mouse-hold scrolling (called via MouseManager
 // signal)
-void InteractionManager::onMouseHoldScrollStep(int direction,
-                                               bool isHorizontal) {
+void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal) {
   if (!m_scrollManager || !m_collections || !m_currentCollectionIndex) {
     if (m_mouseManager) {
       m_mouseManager->stopMouseHoldScrolling();
@@ -136,8 +134,8 @@ void InteractionManager::onMouseHoldScrollStep(int direction,
     int currentIndex = std::max(0, currentSelectedIndex());
     bool wrap = m_generalSettings ? m_generalSettings->wrapNavigation : false;
     bool didWrap = false;
-    int nextIndex = KeyboardManager::calculateHorizontalSelection(
-        totalItems, currentIndex, direction, wrap, didWrap);
+    int nextIndex = KeyboardManager::calculateHorizontalSelection(totalItems, currentIndex,
+                                                                  direction, wrap, didWrap);
 
     if (nextIndex == currentIndex) {
       return;
@@ -157,8 +155,7 @@ void InteractionManager::onMouseHoldScrollStep(int direction,
       }
     }
 
-    bool rowChanged =
-        KeyboardManager::hasRowChanged(gridWidth, currentIndex, nextIndex);
+    bool rowChanged = KeyboardManager::hasRowChanged(gridWidth, currentIndex, nextIndex);
     // Only suppress selection for row changes if NOT wrapping
     // Wraps should immediately finalize at the target position
     if (rowChanged && !didWrap) {
@@ -199,8 +196,7 @@ void InteractionManager::onMouseHoldScrollStep(int direction,
   // In list mode, move by 1 item per step instead of gridWidth
   bool isListMode = false;
   if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-    isListMode =
-        (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
+    isListMode = (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
   }
   int stepSize = isListMode ? 1 : gridWidth;
   int nextIndex = currentIndex + (direction * stepSize);
@@ -237,8 +233,8 @@ void InteractionManager::onMouseHoldScrollStep(int direction,
     }
   }
 
-  if (*m_currentCollectionIndex >= 0 &&
-      *m_currentCollectionIndex < m_collections->size() && gridWidth > 0) {
+  if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < m_collections->size() &&
+      gridWidth > 0) {
     int currentRow = (gridWidth > 0 ? currentIndex / gridWidth : -1);
     int targetRow = nextIndex / gridWidth;
     if (currentRow != targetRow) {

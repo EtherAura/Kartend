@@ -6,6 +6,7 @@
 #include "itemwidget.h"
 #include "propertyutils.h"
 #include "uiconstants.h"
+#include <algorithm>
 #include <QFont>
 #include <QFontMetrics>
 #include <QLabel>
@@ -19,7 +20,6 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QTimer>
-#include <algorithm>
 
 Q_DECLARE_LOGGING_CATEGORY(lcItemWidget)
 
@@ -34,12 +34,10 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
 
   bool glideActive = false;
   QWidget *parentWidgetPtr = parentWidget();
-  if ((parentWidgetPtr) &&
-      parentWidgetPtr->property(PropertyKeys::GlideAnimating).toBool()) {
+  if ((parentWidgetPtr) && parentWidgetPtr->property(PropertyKeys::GlideAnimating).toBool()) {
     glideActive = true;
   }
-  QWidget *grandparentWidgetPtr =
-      (parentWidgetPtr) ? parentWidgetPtr->parentWidget() : nullptr;
+  QWidget *grandparentWidgetPtr = (parentWidgetPtr) ? parentWidgetPtr->parentWidget() : nullptr;
   if ((grandparentWidgetPtr) &&
       grandparentWidgetPtr->property(PropertyKeys::GlideAnimating).toBool()) {
     glideActive = true;
@@ -55,16 +53,14 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
     QColor rowColor;
     if (m_rowIndex % 2 == 1) {
       // Odd rows - use custom alt color if set, otherwise system AlternateBase
-      if (!s_listAltRowColor.isEmpty() &&
-          QColor::isValidColorName(s_listAltRowColor)) {
+      if (!s_listAltRowColor.isEmpty() && QColor::isValidColorName(s_listAltRowColor)) {
         rowColor = QColor(s_listAltRowColor);
       } else {
         rowColor = palette().color(QPalette::AlternateBase);
       }
     } else {
       // Even rows - use custom color if set, otherwise system Base
-      if (!s_listRowColor.isEmpty() &&
-          QColor::isValidColorName(s_listRowColor)) {
+      if (!s_listRowColor.isEmpty() && QColor::isValidColorName(s_listRowColor)) {
         rowColor = QColor(s_listRowColor);
       } else {
         rowColor = palette().color(QPalette::Base);
@@ -79,14 +75,13 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
   if (isSelectedState && canPaintSelection && !glideActive) {
     painter.setRenderHint(QPainter::Antialiasing);
 
-    double alpha = qBound(UIConstants::Animation::PULSE_OPACITY_LOW,
-                          static_cast<double>(m_pulseOpacity),
-                          UIConstants::Animation::PULSE_OPACITY_HIGH);
+    double alpha =
+        qBound(UIConstants::Animation::PULSE_OPACITY_LOW, static_cast<double>(m_pulseOpacity),
+               UIConstants::Animation::PULSE_OPACITY_HIGH);
 
     // Use per-collection selection color if set, otherwise system highlight
     QColor borderColor;
-    if (!s_selectionColor.isEmpty() &&
-        QColor::isValidColorName(s_selectionColor)) {
+    if (!s_selectionColor.isEmpty() && QColor::isValidColorName(s_selectionColor)) {
       borderColor = QColor(s_selectionColor);
     } else {
       borderColor = palette().color(QPalette::Highlight);
@@ -130,19 +125,16 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
       // Offset for folder icon in subcollections/virtual folders
       // The nameLabel is layout-managed so move() doesn't work - offset the
       // paint rect instead
-      bool hasFolderIcon =
-          (m_isSubcollection || m_isVirtualFolder) && m_folderIconLabel;
+      bool hasFolderIcon = (m_isSubcollection || m_isVirtualFolder) && m_folderIconLabel;
       if (m_isListMode) {
         if (hasFolderIcon) {
-          textRect.setLeft(textRect.left() +
-                           UIConstants::ListView::FOLDER_ICON_COLUMN_WIDTH);
+          textRect.setLeft(textRect.left() + UIConstants::ListView::FOLDER_ICON_COLUMN_WIDTH);
         }
         // List mode: elide text only if it exceeds available width
         QFontMetrics fm(titleFont);
         int textWidth = fm.horizontalAdvance(itemName);
         if (textWidth > textRect.width()) {
-          QString elidedText =
-              fm.elidedText(itemName, Qt::ElideRight, textRect.width());
+          QString elidedText = fm.elidedText(itemName, Qt::ElideRight, textRect.width());
           painter.drawText(textRect, nameLabel->alignment(), elidedText);
         } else {
           painter.drawText(textRect, nameLabel->alignment(), itemName);
@@ -166,14 +158,12 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
 
           // Center the combined icon+text block, clamping to available width
           int blockStartX =
-              textRect.left() +
-              (availableWidth - qMin(totalWidth, availableWidth)) / 2;
+              textRect.left() + (availableWidth - qMin(totalWidth, availableWidth)) / 2;
 
           // Draw folder icon vertically centered with the first line of text
           if (!iconPix.isNull()) {
             int iconY = textRect.top() + (lineHeight - gridFolderIconSize) / 2;
-            painter.drawPixmap(blockStartX, iconY, gridFolderIconSize,
-                               gridFolderIconSize, iconPix);
+            painter.drawPixmap(blockStartX, iconY, gridFolderIconSize, gridFolderIconSize, iconPix);
           }
 
           // Draw text immediately after the icon (left-aligned from that point)
@@ -212,8 +202,7 @@ void ItemWidget::applyDimensions() {
     // Remove layout margins in list mode for proper vertical centering
     if (layout()) {
       layout()->setContentsMargins(UIConstants::ListView::TEXT_LEFT_PADDING, 0,
-                                   UIConstants::ListView::TEXT_RIGHT_PADDING,
-                                   0);
+                                   UIConstants::ListView::TEXT_RIGHT_PADDING, 0);
       layout()->setSpacing(0);
     }
 
@@ -229,8 +218,7 @@ void ItemWidget::applyDimensions() {
     // Calculate column widths for list mode
     // Layout: [name.....................] [collection] [artwork_icon]
     constexpr int columnSpacing = 8;
-    constexpr int folderIconWidth =
-        UIConstants::ListView::FOLDER_ICON_COLUMN_WIDTH;
+    constexpr int folderIconWidth = UIConstants::ListView::FOLDER_ICON_COLUMN_WIDTH;
 
     int leftPadding = UIConstants::ListView::TEXT_LEFT_PADDING;
     int rightPadding = UIConstants::ListView::TEXT_RIGHT_PADDING;
@@ -238,8 +226,7 @@ void ItemWidget::applyDimensions() {
     int xOffset = leftPadding;
 
     // Position folder icon for subcollections/virtual folders
-    bool hasFolderIcon =
-        (m_isSubcollection || m_isVirtualFolder) && m_folderIconLabel;
+    bool hasFolderIcon = (m_isSubcollection || m_isVirtualFolder) && m_folderIconLabel;
     if (hasFolderIcon) {
       m_folderIconLabel->setFixedSize(folderIconWidth, m_itemHeight);
       m_folderIconLabel->move(xOffset, 0);
@@ -251,21 +238,18 @@ void ItemWidget::applyDimensions() {
 
     // Calculate name width (remaining space minus collection and artwork
     // columns)
-    int nameWidth = m_itemWidth - xOffset - rightPadding -
-                    m_collectionColumnWidth - m_artworkColumnWidth -
-                    (columnSpacing * 2);
+    int nameWidth = m_itemWidth - xOffset - rightPadding - m_collectionColumnWidth -
+                    m_artworkColumnWidth - (columnSpacing * 2);
 
     if (nameLabel) {
       nameLabel->setVisible(true);
       nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-      nameLabel->setWordWrap(
-          false); // No word wrap in list mode - use elided text
+      nameLabel->setWordWrap(false); // No word wrap in list mode - use elided text
       // Clear min/max constraints from .ui file to allow proper sizing in list
       // mode
       nameLabel->setMinimumSize(0, 0);
       nameLabel->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
-      nameLabel->setFixedSize(
-          nameWidth, m_itemHeight); // Use fixed size for both dimensions
+      nameLabel->setFixedSize(nameWidth, m_itemHeight); // Use fixed size for both dimensions
       nameLabel->move(xOffset, 0);
       nameLabel->setText(currentName);
 
@@ -277,8 +261,7 @@ void ItemWidget::applyDimensions() {
 
     // Position collection label after name
     if (m_collectionLabel) {
-      m_collectionLabel->setGeometry(xOffset, 0, m_collectionColumnWidth,
-                                     m_itemHeight);
+      m_collectionLabel->setGeometry(xOffset, 0, m_collectionColumnWidth, m_itemHeight);
 
       QFont font = this->font();
       font.setPointSize(m_fontSize);
@@ -287,8 +270,7 @@ void ItemWidget::applyDimensions() {
       if (!m_collectionName.isEmpty()) {
         m_collectionLabel->show();
         qCDebug(lcItemWidget) << "applyDimensions: collection label at x=" << xOffset
-                              << "width=" << m_collectionColumnWidth
-                              << "text=" << m_collectionName;
+                              << "width=" << m_collectionColumnWidth << "text=" << m_collectionName;
       }
     }
     xOffset += m_collectionColumnWidth + columnSpacing;
@@ -320,9 +302,8 @@ void ItemWidget::applyDimensions() {
 
   // Grid mode: restore standard margins
   if (layout()) {
-    layout()->setContentsMargins(
-        UIConstants::Widget::MARGIN, UIConstants::Widget::MARGIN,
-        UIConstants::Widget::MARGIN, UIConstants::Widget::MARGIN);
+    layout()->setContentsMargins(UIConstants::Widget::MARGIN, UIConstants::Widget::MARGIN,
+                                 UIConstants::Widget::MARGIN, UIConstants::Widget::MARGIN);
     layout()->setSpacing(UIConstants::Widget::SPACING);
   }
   // Use the current font size for layout calculations to ensure titles don't
@@ -336,8 +317,8 @@ void ItemWidget::applyDimensions() {
   int singleLineHeight = referenceFm.ascent() + referenceFm.descent();
   int reservedTextHeight = singleLineHeight * textLines;
 
-  int availableHeight = m_itemHeight - UIConstants::Widget::PADDING -
-                        UIConstants::Widget::SPACING - reservedTextHeight;
+  int availableHeight = m_itemHeight - UIConstants::Widget::PADDING - UIConstants::Widget::SPACING -
+                        reservedTextHeight;
   int availableWidth = m_itemWidth - UIConstants::Widget::PADDING;
   int artworkSize = qMin(availableWidth, availableHeight);
   m_artworkSize = artworkSize;
@@ -370,9 +351,8 @@ void ItemWidget::applyDimensions() {
 
   if (nameLabel) {
     nameLabel->setVisible(true);
-    nameLabel->setAlignment(Qt::AlignHCenter |
-                            Qt::AlignTop); // Reset alignment for grid mode
-    nameLabel->setWordWrap(true);          // Re-enable word wrap for grid mode
+    nameLabel->setAlignment(Qt::AlignHCenter | Qt::AlignTop); // Reset alignment for grid mode
+    nameLabel->setWordWrap(true);                             // Re-enable word wrap for grid mode
     // Reset min/max constraints that may have been set in list mode
     nameLabel->setMinimumSize(0, 0);
     nameLabel->setMaximumSize(artworkSize, reservedTextHeight);

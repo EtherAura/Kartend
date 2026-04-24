@@ -14,8 +14,7 @@ namespace SelectionHelpers {
 // - When lastSelectedRow is negative (no row tracked yet), returns true
 //   so the first click is always treated as a row change.
 // - When gridWidth is <= 0, returns false (defensive).
-[[nodiscard]] auto shouldTreatAsNewRow(int targetIndex, int lastSelectedRow,
-                                       int gridWidth) -> bool;
+[[nodiscard]] auto shouldTreatAsNewRow(int targetIndex, int lastSelectedRow, int gridWidth) -> bool;
 
 // Returns true if a click should run the horizontal-hop selection animation.
 //
@@ -28,16 +27,14 @@ namespace SelectionHelpers {
 // - gridWidth <= 0 (defensive)
 // - Different row
 // - Adjacent click (|to - from| == 1) — the animation only applies to skips
-[[nodiscard]] auto shouldAnimateHorizontalHop(int fromIndex, int toIndex,
-                                              int gridWidth) -> bool;
+[[nodiscard]] auto shouldAnimateHorizontalHop(int fromIndex, int toIndex, int gridWidth) -> bool;
 
 // Returns true if newSelection is on a different row than currentSelection.
 //
 // - When currentSelection < 0, treats current row as -1 so any non-negative
 //   newSelection is reported as a row change.
 // - When gridWidth <= 0, returns false (defensive).
-[[nodiscard]] auto isNewRow(int currentSelection, int newSelection,
-                            int gridWidth) -> bool;
+[[nodiscard]] auto isNewRow(int currentSelection, int newSelection, int gridWidth) -> bool;
 
 } // namespace SelectionHelpers
 

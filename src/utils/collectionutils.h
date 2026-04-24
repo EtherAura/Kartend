@@ -40,10 +40,8 @@ namespace CollectionUtils {
 
 [[nodiscard]] inline HorizontalAlignment stringToAlignment(const QString &str) {
   QString lower = str.toLower();
-  if (lower == "left")
-    return HorizontalAlignment::Left;
-  if (lower == "right")
-    return HorizontalAlignment::Right;
+  if (lower == "left") return HorizontalAlignment::Left;
+  if (lower == "right") return HorizontalAlignment::Right;
   return HorizontalAlignment::Center;
 }
 
@@ -59,8 +57,7 @@ namespace CollectionUtils {
 
 [[nodiscard]] inline ViewType stringToViewType(const QString &str) {
   QString lower = str.toLower();
-  if (lower == "list")
-    return ViewType::List;
+  if (lower == "list") return ViewType::List;
   return ViewType::Grid;
 }
 
@@ -100,18 +97,15 @@ struct CollectionConfig {
   QString backgroundColor; // Background color (hex like #1a1a2e)
   QString backgroundImage; // Background image path
   QString primaryColor;    // Primary UI color for toolbar, menubar, search bar
-  QString
-      tileColor; // Color for item tiles/placeholders (if blank, uses default)
-  QString
-      selectionColor; // Color for selection rectangle and glide overlay border
+  QString tileColor;       // Color for item tiles/placeholders (if blank, uses default)
+  QString selectionColor;  // Color for selection rectangle and glide overlay border
 
   // Archive extraction for cores that don't support zipped content
   bool extractArchives = false; // Extract archives to temp dir before launch
-  QString extractedExtension; // File extension to launch from extracted archive
+  QString extractedExtension;   // File extension to launch from extracted archive
 
   // Folder browsing options
-  bool includeContentSubfolders =
-      false; // Show subfolders as virtual navigable folders
+  bool includeContentSubfolders = false; // Show subfolders as virtual navigable folders
   bool includeArtworkSubfolders = false; // Match artwork from subfolders
   bool showAllSubfolderItems =
       false; // Mix subfolder items with parent (like showAllSubcollectionItems)
@@ -123,10 +117,8 @@ struct CollectionConfig {
                             // mediaDirectory)
 
   // List mode settings
-  int listFontSize =
-      UIConstants::Item::DEFAULT_FONT_SIZE; // Font size for list view text
-  int listRowHeight =
-      UIConstants::ListView::DEFAULT_ROW_HEIGHT; // Row height in list view
+  int listFontSize = UIConstants::Item::DEFAULT_FONT_SIZE;       // Font size for list view text
+  int listRowHeight = UIConstants::ListView::DEFAULT_ROW_HEIGHT; // Row height in list view
   QString listRowColor;    // Primary row color (if blank, uses system Base)
   QString listAltRowColor; // Alternate row color (if blank, uses system
                            // AlternateBase)
@@ -135,16 +127,12 @@ struct CollectionConfig {
   QString customFontFamily; // Custom font family (empty = system default)
 
   CollectionConfig()
-      : gridWidth(4), sidebarVisible(false),
-        horizontalAlignment(HorizontalAlignment::Center) {}
+      : gridWidth(4), sidebarVisible(false), horizontalAlignment(HorizontalAlignment::Center) {}
 
   bool operator==(const CollectionConfig &other) const {
-    return name == other.name && launcherPath == other.launcherPath &&
-           corePath == other.corePath &&
-           launchParameters == other.launchParameters &&
-           mediaDirectory == other.mediaDirectory &&
-           artworkDirectory == other.artworkDirectory &&
-           collectionIcon == other.collectionIcon &&
+    return name == other.name && launcherPath == other.launcherPath && corePath == other.corePath &&
+           launchParameters == other.launchParameters && mediaDirectory == other.mediaDirectory &&
+           artworkDirectory == other.artworkDirectory && collectionIcon == other.collectionIcon &&
            extensions == other.extensions && gridWidth == other.gridWidth &&
            sidebarVisible == other.sidebarVisible &&
            parentCollectionIndex == other.parentCollectionIndex &&
@@ -152,66 +140,51 @@ struct CollectionConfig {
            showAllSubcollectionItems == other.showAllSubcollectionItems &&
            hideTitles == other.hideTitles &&
            hideSubcollectionTitles == other.hideSubcollectionTitles &&
-           horizontalAlignment == other.horizontalAlignment &&
-           sidebarMode == other.sidebarMode && viewType == other.viewType &&
-           horizontalSpacing == other.horizontalSpacing &&
+           horizontalAlignment == other.horizontalAlignment && sidebarMode == other.sidebarMode &&
+           viewType == other.viewType && horizontalSpacing == other.horizontalSpacing &&
            verticalSpacing == other.verticalSpacing &&
            hideHorizontalScrollbar == other.hideHorizontalScrollbar &&
-           hideVerticalScrollbar == other.hideVerticalScrollbar &&
-           itemWidth == other.itemWidth && itemHeight == other.itemHeight &&
-           fontSize == other.fontSize && cornerRadius == other.cornerRadius &&
-           backgroundType == other.backgroundType &&
-           backgroundColor == other.backgroundColor &&
-           backgroundImage == other.backgroundImage &&
+           hideVerticalScrollbar == other.hideVerticalScrollbar && itemWidth == other.itemWidth &&
+           itemHeight == other.itemHeight && fontSize == other.fontSize &&
+           cornerRadius == other.cornerRadius && backgroundType == other.backgroundType &&
+           backgroundColor == other.backgroundColor && backgroundImage == other.backgroundImage &&
            primaryColor == other.primaryColor && tileColor == other.tileColor &&
-           selectionColor == other.selectionColor &&
-           extractArchives == other.extractArchives &&
+           selectionColor == other.selectionColor && extractArchives == other.extractArchives &&
            extractedExtension == other.extractedExtension &&
            includeContentSubfolders == other.includeContentSubfolders &&
            includeArtworkSubfolders == other.includeArtworkSubfolders &&
            showAllSubfolderItems == other.showAllSubfolderItems &&
            hideSubfolderTitles == other.hideSubfolderTitles &&
-           showHiddenFolders == other.showHiddenFolders &&
-           listFontSize == other.listFontSize &&
-           listRowHeight == other.listRowHeight &&
-           listRowColor == other.listRowColor &&
-           listAltRowColor == other.listAltRowColor &&
-           customFontFamily == other.customFontFamily;
+           showHiddenFolders == other.showHiddenFolders && listFontSize == other.listFontSize &&
+           listRowHeight == other.listRowHeight && listRowColor == other.listRowColor &&
+           listAltRowColor == other.listAltRowColor && customFontFamily == other.customFontFamily;
   }
 
   // Validation methods
   [[nodiscard]] bool isValid() const { return !name.isEmpty(); }
 
-  [[nodiscard]] bool hasMediaDirectory() const {
-    return !mediaDirectory.isEmpty();
-  }
+  [[nodiscard]] bool hasMediaDirectory() const { return !mediaDirectory.isEmpty(); }
 
-  [[nodiscard]] bool hasArtworkDirectory() const {
-    return !artworkDirectory.isEmpty();
-  }
+  [[nodiscard]] bool hasArtworkDirectory() const { return !artworkDirectory.isEmpty(); }
 
   // Validates numeric fields are within acceptable ranges
   void clampValues() {
-    gridWidth = std::clamp(gridWidth, UIConstants::Grid::MIN_WIDTH,
-                           UIConstants::Grid::MAX_WIDTH);
-    itemWidth = std::clamp(itemWidth, UIConstants::Item::MIN_WIDTH,
-                           UIConstants::Item::MAX_WIDTH);
-    itemHeight = std::clamp(itemHeight, UIConstants::Item::MIN_HEIGHT,
-                            UIConstants::Item::MAX_HEIGHT);
-    fontSize = std::clamp(fontSize, UIConstants::Item::MIN_FONT_SIZE,
-                          UIConstants::Item::MAX_FONT_SIZE);
-    cornerRadius =
-        std::clamp(cornerRadius, UIConstants::Item::MIN_CORNER_RADIUS,
-                   UIConstants::Item::MAX_CORNER_RADIUS);
+    gridWidth = std::clamp(gridWidth, UIConstants::Grid::MIN_WIDTH, UIConstants::Grid::MAX_WIDTH);
+    itemWidth = std::clamp(itemWidth, UIConstants::Item::MIN_WIDTH, UIConstants::Item::MAX_WIDTH);
+    itemHeight =
+        std::clamp(itemHeight, UIConstants::Item::MIN_HEIGHT, UIConstants::Item::MAX_HEIGHT);
+    fontSize =
+        std::clamp(fontSize, UIConstants::Item::MIN_FONT_SIZE, UIConstants::Item::MAX_FONT_SIZE);
+    cornerRadius = std::clamp(cornerRadius, UIConstants::Item::MIN_CORNER_RADIUS,
+                              UIConstants::Item::MAX_CORNER_RADIUS);
     // Spacing can be negative for overlap effects
     horizontalSpacing = std::clamp(horizontalSpacing, -100, 200);
     verticalSpacing = std::clamp(verticalSpacing, -100, 200);
     // List mode settings
     listFontSize = std::clamp(listFontSize, UIConstants::Item::MIN_FONT_SIZE,
                               UIConstants::Item::MAX_FONT_SIZE);
-    listRowHeight =
-        std::clamp(listRowHeight, UIConstants::ListView::MIN_ROW_HEIGHT,
-                   UIConstants::ListView::MAX_ROW_HEIGHT);
+    listRowHeight = std::clamp(listRowHeight, UIConstants::ListView::MIN_ROW_HEIGHT,
+                               UIConstants::ListView::MAX_ROW_HEIGHT);
   }
 };
 
@@ -224,20 +197,18 @@ namespace CollectionUtils {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Validates index against collection pointer (null-safe)
-[[nodiscard]] inline bool
-isValidIndex(int index, const QList<CollectionConfig> *collections) {
+[[nodiscard]] inline bool isValidIndex(int index, const QList<CollectionConfig> *collections) {
   return collections && index >= 0 && index < collections->size();
 }
 
 /// Validates index pointer against collection pointer (null-safe for both)
-[[nodiscard]] inline bool
-isValidIndex(const int *indexPtr, const QList<CollectionConfig> *collections) {
+[[nodiscard]] inline bool isValidIndex(const int *indexPtr,
+                                       const QList<CollectionConfig> *collections) {
   return indexPtr && isValidIndex(*indexPtr, collections);
 }
 
 /// Validates index against collection reference (no null check needed)
-[[nodiscard]] inline bool
-isValidIndex(int index, const QList<CollectionConfig> &collections) {
+[[nodiscard]] inline bool isValidIndex(int index, const QList<CollectionConfig> &collections) {
   return index >= 0 && index < collections.size();
 }
 
@@ -247,8 +218,8 @@ isValidIndex(int index, const QList<CollectionConfig> &collections) {
 
 /// Get grid width with fallback to default - reduces duplication across
 /// managers
-[[nodiscard]] inline int
-getGridWidth(const int *indexPtr, const QList<CollectionConfig> *collections) {
+[[nodiscard]] inline int getGridWidth(const int *indexPtr,
+                                      const QList<CollectionConfig> *collections) {
   if (!isValidIndex(indexPtr, collections)) {
     return UIConstants::Grid::DEFAULT_WIDTH;
   }
@@ -308,8 +279,7 @@ struct CollectionContext {
   QStringList filePaths;
   QHash<QString, QString> fileNames;
   SortMode sortMode = SortMode::NameAscending; // Sort mode for this view
-  bool excludeSubfoldersFromSort =
-      false; // Exclude subfolders/subcollections from sorting
+  bool excludeSubfoldersFromSort = false;      // Exclude subfolders/subcollections from sorting
 
   // Query-only scope controls (do not change UI behavior):
   // - queryIncludeDescendants: include descendants even if the collection's
@@ -349,24 +319,19 @@ struct CollectionContext {
 struct GeneralSettings {
   bool rememberSelection = false;
   bool wrapNavigation = false;
-  int pixmapCacheSizeMB = 50; // Default 50MB, user configurable
-  int keyboardRepeatIntervalMs =
-      260; // Grid view keyboard repeat interval in ms
-  int keyboardRepeatDelayMs =
-      260;                    // Initial delay before keyboard repeat starts
-  int clickHoldDelayMs = 500; // Click-hold activation delay in ms
-  int clickHoldRepeatIntervalMs =
-      320; // Grid view interval between click-hold repeat steps
-  int listKeyboardRepeatIntervalMs =
-      50; // List view keyboard repeat interval in ms
-  int listClickHoldRepeatIntervalMs =
-      80;                 // List view interval between click-hold repeat steps
-  int mouseWheelRows = 1; // Rows to scroll per wheel step
-  int scrollAnimationDurationMs = 1500; // Scroll animation duration in ms
+  int pixmapCacheSizeMB = 50;             // Default 50MB, user configurable
+  int keyboardRepeatIntervalMs = 260;     // Grid view keyboard repeat interval in ms
+  int keyboardRepeatDelayMs = 260;        // Initial delay before keyboard repeat starts
+  int clickHoldDelayMs = 500;             // Click-hold activation delay in ms
+  int clickHoldRepeatIntervalMs = 320;    // Grid view interval between click-hold repeat steps
+  int listKeyboardRepeatIntervalMs = 50;  // List view keyboard repeat interval in ms
+  int listClickHoldRepeatIntervalMs = 80; // List view interval between click-hold repeat steps
+  int mouseWheelRows = 1;                 // Rows to scroll per wheel step
+  int scrollAnimationDurationMs = 1500;   // Scroll animation duration in ms
   // Text appearance settings
   int titleTintSaturation = 180; // Title text saturation (0-255)
   int titleTintLightness = 60;   // Title text lightness (0-255)
-  QString titleBaseColor; // Base color for title text (empty = use highlight)
+  QString titleBaseColor;        // Base color for title text (empty = use highlight)
 
   // ─────────────────────────────────────────────────────────────────────────
   // Controls: Keyboard bindings (single-key, no modifier semantics)
@@ -394,10 +359,9 @@ struct GeneralSettings {
   QString gamepadBackButton = "B";
   QString gamepadToggleSidebarButton = "Y";
   SortMode sortMode = SortMode::NameAscending; // Current sort mode
-  bool excludeSubfoldersFromSort =
-      false; // Exclude subfolders/subcollections from sorting
-  int listCollectionColumnWidth = 150; // Collection column width in list view
-  int listArtworkColumnWidth = 32;     // Artwork column width in list view
+  bool excludeSubfoldersFromSort = false;      // Exclude subfolders/subcollections from sorting
+  int listCollectionColumnWidth = 150;         // Collection column width in list view
+  int listArtworkColumnWidth = 32;             // Artwork column width in list view
   // Name of the collection to open on startup. When empty (default), the first
   // root-level collection is opened. When set, takes priority over the default
   // root-collection selection. If the named collection no longer exists, falls
@@ -425,9 +389,7 @@ public:
   }
 
   // UUID accessors - O(1) lookup of pre-computed values
-  [[nodiscard]] QString collectionUuid(int index) const {
-    return m_collectionUuids.value(index);
-  }
+  [[nodiscard]] QString collectionUuid(int index) const { return m_collectionUuids.value(index); }
 
   [[nodiscard]] QString expandedMediaDir(int index) const {
     return m_expandedMediaDirs.value(index);
@@ -508,22 +470,20 @@ private:
   QHash<int, QList<int>> m_allDescendants;
 
   // Pre-computed UUIDs and directory mappings (eliminates SHA1 on each startup)
-  QHash<int, QString> m_collectionUuids;       // index -> UUID
-  QHash<int, QString> m_expandedMediaDirs;     // index -> expanded media dir
-  QHash<int, QString> m_expandedArtworkDirs;   // index -> expanded artwork dir
-  QHash<QString, QString> m_uuidToMediaDir;    // UUID -> expanded media dir
-  QHash<QString, QString> m_uuidToArtworkDir;  // UUID -> expanded artwork dir
-  QHash<QString, int> m_uuidToCollectionIndex; // UUID -> collection index
-  QHash<QString, QString>
-      m_mediaDirToArtworkDir; // media dir -> artwork dir (for file lookups)
+  QHash<int, QString> m_collectionUuids;          // index -> UUID
+  QHash<int, QString> m_expandedMediaDirs;        // index -> expanded media dir
+  QHash<int, QString> m_expandedArtworkDirs;      // index -> expanded artwork dir
+  QHash<QString, QString> m_uuidToMediaDir;       // UUID -> expanded media dir
+  QHash<QString, QString> m_uuidToArtworkDir;     // UUID -> expanded artwork dir
+  QHash<QString, int> m_uuidToCollectionIndex;    // UUID -> collection index
+  QHash<QString, QString> m_mediaDirToArtworkDir; // media dir -> artwork dir (for file lookups)
 };
 
 // Legacy inline functions for backward compatibility
 namespace CollectionUtils {
 
 [[nodiscard]] inline QList<int>
-collectDescendantIndices(int parentIndex,
-                         const QList<CollectionConfig> &collections) {
+collectDescendantIndices(int parentIndex, const QList<CollectionConfig> &collections) {
   QList<int> descendants;
   for (int index = 0; index < collections.size(); ++index) {
     if (collections[index].parentCollectionIndex == parentIndex) {
@@ -534,9 +494,8 @@ collectDescendantIndices(int parentIndex,
   return descendants;
 }
 
-[[nodiscard]] inline QString
-hierarchicalNameFor(const CollectionConfig &collection,
-                    const QList<CollectionConfig> &collections) {
+[[nodiscard]] inline QString hierarchicalNameFor(const CollectionConfig &collection,
+                                                 const QList<CollectionConfig> &collections) {
   if (!collection.isSubcollection || collection.parentCollectionIndex < 0) {
     return collection.name;
   }
@@ -546,8 +505,7 @@ hierarchicalNameFor(const CollectionConfig &collection,
   while (parent >= 0 && parent < collections.size()) {
     const CollectionConfig &p = collections[parent];
     parts.prepend(p.name);
-    if (!p.isSubcollection)
-      break;
+    if (!p.isSubcollection) break;
     parent = p.parentCollectionIndex;
   }
   return parts.join('/');
@@ -564,9 +522,8 @@ hierarchicalNameFor(const CollectionConfig &collection,
  *
  * Use this to render multi-level breadcrumbs (Kartend-7pq).
  */
-[[nodiscard]] inline QList<int>
-ancestorIndexChain(const CollectionConfig &collection,
-                   const QList<CollectionConfig> &collections) {
+[[nodiscard]] inline QList<int> ancestorIndexChain(const CollectionConfig &collection,
+                                                   const QList<CollectionConfig> &collections) {
   QList<int> chain;
   if (!collection.isSubcollection || collection.parentCollectionIndex < 0) {
     return chain;
@@ -587,9 +544,8 @@ ancestorIndexChain(const CollectionConfig &collection,
   return chain;
 }
 
-[[nodiscard]] inline QString
-selectionSessionKeyFor(const CollectionConfig &collection,
-                       const QList<CollectionConfig> &collections) {
+[[nodiscard]] inline QString selectionSessionKeyFor(const CollectionConfig &collection,
+                                                    const QList<CollectionConfig> &collections) {
   const QString base = hierarchicalNameFor(collection, collections);
   QString subfolder = QDir::cleanPath(collection.currentSubfolder.trimmed());
   if (subfolder.isEmpty() || subfolder == ".") {
@@ -598,8 +554,8 @@ selectionSessionKeyFor(const CollectionConfig &collection,
   return base + "|subfolder=" + subfolder;
 }
 
-[[nodiscard]] inline QList<int>
-directChildrenOf(int parentIndex, const QList<CollectionConfig> &collections) {
+[[nodiscard]] inline QList<int> directChildrenOf(int parentIndex,
+                                                 const QList<CollectionConfig> &collections) {
   QList<int> children;
   for (int i = 0; i < collections.size(); ++i) {
     if (collections[i].parentCollectionIndex == parentIndex) {
@@ -620,9 +576,8 @@ directChildrenOf(int parentIndex, const QList<CollectionConfig> &collections) {
  * Walks up the parent chain until a non-empty artworkDirectory is found.
  * Returns empty string if no ancestor has an artwork directory.
  */
-[[nodiscard]] inline QString
-resolveArtworkDirectory(int collectionIndex,
-                        const QList<CollectionConfig> &collections) {
+[[nodiscard]] inline QString resolveArtworkDirectory(int collectionIndex,
+                                                     const QList<CollectionConfig> &collections) {
   if (collectionIndex < 0 || collectionIndex >= collections.size()) {
     return {};
   }
@@ -648,8 +603,7 @@ resolveArtworkDirectory(int collectionIndex,
  * @param mediaDir Media directory path.
  * @return SHA1 hash as hex string.
  */
-[[nodiscard]] QString computeCollectionUuid(const QString &name,
-                                            const QString &mediaDir);
+[[nodiscard]] QString computeCollectionUuid(const QString &name, const QString &mediaDir);
 
 } // namespace CollectionUtils
 

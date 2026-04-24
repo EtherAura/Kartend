@@ -68,12 +68,10 @@ void TimerUtils::DebouncedTimer::setInterval(int intervalMs) {
 
 // Creates a coordinator for coalesced layout and viewport updates
 TimerUtils::Coordinator::Coordinator(QObject *parent)
-    : QObject(parent), m_layoutTimer(new QTimer(this)),
-      m_viewportTimer(new QTimer(this)) {
+    : QObject(parent), m_layoutTimer(new QTimer(this)), m_viewportTimer(new QTimer(this)) {
   m_layoutTimer->setSingleShot(true);
   m_layoutTimer->setInterval(UIConstants::Timing::LAYOUT_UPDATE_DELAY_MS);
-  connect(m_layoutTimer, &QTimer::timeout, this,
-          &TimerUtils::Coordinator::onLayoutTimerTimeout);
+  connect(m_layoutTimer, &QTimer::timeout, this, &TimerUtils::Coordinator::onLayoutTimerTimeout);
 
   m_viewportTimer->setSingleShot(true);
   m_viewportTimer->setInterval(UIConstants::Timing::VIEWPORT_UPDATE_DELAY_MS);

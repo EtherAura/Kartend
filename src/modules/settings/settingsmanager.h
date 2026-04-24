@@ -25,10 +25,8 @@ struct SettingsDialogContext {
 class SettingsManager : public QObject {
   Q_OBJECT
 public:
-  explicit SettingsManager(SessionManager *sessionManager,
-                           ArtworkManager *artworkManager,
-                           CacheManager *cacheManager,
-                           QObject *parent = nullptr);
+  explicit SettingsManager(SessionManager *sessionManager, ArtworkManager *artworkManager,
+                           CacheManager *cacheManager, QObject *parent = nullptr);
   ~SettingsManager();
 
   void loadCollections(QList<CollectionConfig> &collections) const;
@@ -47,23 +45,19 @@ public:
   auto handleReloadRequired(const QList<CollectionConfig> &collections,
                             const QList<CollectionConfig> &newCollections,
                             const QList<CollectionConfig> &originalCollections,
-                            int viewingCollectionIndex,
-                            SidebarManager *sidebarManager,
-                            ScrollManager *scrollManager,
-                            NavigationManager *navigationManager,
-                            ArtworkManager *artworkManager,
-                            CacheManager *cacheManager,
+                            int viewingCollectionIndex, SidebarManager *sidebarManager,
+                            ScrollManager *scrollManager, NavigationManager *navigationManager,
+                            ArtworkManager *artworkManager, CacheManager *cacheManager,
                             int currentCollectionIndex) -> void;
 
-  auto handleLayoutChanges(
-      QWidget *parent, const QList<CollectionConfig> &collections,
-      int viewingCollectionIndex, bool titleChangedForView,
-      bool scrollbarChangedForView, bool sidebarModeChangedForView,
-      bool gridWidthChangedForView, bool spacingChangedForView,
-      bool alignmentChangedForView, bool fontSizeChangedForView,
-      bool hideTitlesChangedForView, SidebarManager *sidebarManager,
-      ScrollManager *scrollManager, ArtworkManager *artworkManager,
-      int currentCollectionIndex) -> void;
+  auto handleLayoutChanges(QWidget *parent, const QList<CollectionConfig> &collections,
+                           int viewingCollectionIndex, bool titleChangedForView,
+                           bool scrollbarChangedForView, bool sidebarModeChangedForView,
+                           bool gridWidthChangedForView, bool spacingChangedForView,
+                           bool alignmentChangedForView, bool fontSizeChangedForView,
+                           bool hideTitlesChangedForView, SidebarManager *sidebarManager,
+                           ScrollManager *scrollManager, ArtworkManager *artworkManager,
+                           int currentCollectionIndex) -> void;
 
 private:
   SessionManager *m_sessionManager = nullptr;
@@ -71,10 +65,8 @@ private:
   CacheManager *m_cacheManager = nullptr;
   GeneralSettings m_generalSettings;
 
-  void
-  finalizeCollections(const QHash<QString, CollectionConfig> &tempCollections,
-                      QList<CollectionConfig> &collections,
-                      const bool &needsRewrite) const;
+  void finalizeCollections(const QHash<QString, CollectionConfig> &tempCollections,
+                           QList<CollectionConfig> &collections, const bool &needsRewrite) const;
 };
 
 #endif // SETTINGSMANAGER_H

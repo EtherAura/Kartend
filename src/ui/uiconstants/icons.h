@@ -1,9 +1,9 @@
 #ifndef UICONSTANTS_ICONS_H
 #define UICONSTANTS_ICONS_H
 
+#include <initializer_list>
 #include <QIcon>
 #include <QString>
-#include <initializer_list>
 
 namespace UIConstants {
 

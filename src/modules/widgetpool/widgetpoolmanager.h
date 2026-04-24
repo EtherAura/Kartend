@@ -95,8 +95,7 @@ private:
   [[nodiscard]] int calculateOptimalSize() const;
 
   QList<QPointer<ItemWidget>> m_pool;
-  QList<QPointer<ItemWidget>>
-      m_stalePool; // Widgets marked stale but still available
+  QList<QPointer<ItemWidget>> m_stalePool; // Widgets marked stale but still available
   QWidget *m_widgetParent = nullptr;
   WidgetPoolMetrics m_metrics;
 

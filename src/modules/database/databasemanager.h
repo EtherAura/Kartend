@@ -34,25 +34,21 @@ class SessionManager;
 class DatabaseManager : public QObject {
   Q_OBJECT
 public:
-  explicit DatabaseManager(SessionManager *sessionManager,
-                           QObject *parent = nullptr);
+  explicit DatabaseManager(SessionManager *sessionManager, QObject *parent = nullptr);
   ~DatabaseManager() override;
 
   void initDatabase();
   void loadAllCollections(const QList<CollectionConfig> &allCollections);
-  void loadItems(const CollectionContext &context,
-                 const QList<CollectionConfig> &allCollections);
-  void
-  loadItemsWithSubcollections(const CollectionContext &context,
-                              const QList<CollectionConfig> &allCollections);
+  void loadItems(const CollectionContext &context, const QList<CollectionConfig> &allCollections);
+  void loadItemsWithSubcollections(const CollectionContext &context,
+                                   const QList<CollectionConfig> &allCollections);
   void updateCachedCounts(const QList<CollectionConfig> &allCollections);
 
   void fetchItemCount(const CollectionContext &context,
                       const QList<CollectionConfig> &allCollections,
                       const QString &filter = QString(), int requestToken = 0);
   void fetchItemsRange(const CollectionContext &context,
-                       const QList<CollectionConfig> &allCollections,
-                       int offset, int limit,
+                       const QList<CollectionConfig> &allCollections, int offset, int limit,
                        const QString &filter = QString());
 
   /// Finds the visual index of a specific file path in the current sorted
@@ -65,22 +61,19 @@ public:
   void invalidateCollectionCache(const QString &collectionUuid);
 
   [[nodiscard]] int getCollectionIndexForFile(const QString &filePath) const;
-  [[nodiscard]] QString
-  findArtworkDirectoryForFile(const QString &filePath) const;
+  [[nodiscard]] QString findArtworkDirectoryForFile(const QString &filePath) const;
 
   // File path resolution for relative paths in showAllSubcollectionItems mode
   [[nodiscard]] QString resolveFilePath(const QString &rawEntry,
                                         const CollectionContext &context) const;
-  [[nodiscard]] QString
-  resolveRelativeFilePath(const QString &rawFileName,
-                          const QHash<QString, QString> &fileNames) const;
+  [[nodiscard]] QString resolveRelativeFilePath(const QString &rawFileName,
+                                                const QHash<QString, QString> &fileNames) const;
   [[nodiscard]] qint64
   countCollectionRecursive(int collectionIndex,
                            const QList<CollectionConfig> &allCollections) const;
 
 signals:
-  void itemsLoaded(const QStringList &filePaths,
-                   const QHash<QString, QString> &fileNames);
+  void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void itemCountLoaded(int count);
   void itemCountLoadedWithToken(int count, int requestToken);
   void itemsRangeLoaded(int offset, const QStringList &filePaths,
@@ -118,27 +111,23 @@ signals:
   void requestLoadAllCollections(const QList<CollectionConfig> &allCollections);
   void requestLoadItems(const CollectionContext &context,
                         const QList<CollectionConfig> &allCollections);
-  void requestLoadItemsWithSubcollections(
-      const CollectionContext &context,
-      const QList<CollectionConfig> &allCollections);
-  void requestUpdateCachedCounts(quint64 generation,
-                                 const QStringList &collectionUuids);
+  void requestLoadItemsWithSubcollections(const CollectionContext &context,
+                                          const QList<CollectionConfig> &allCollections);
+  void requestUpdateCachedCounts(quint64 generation, const QStringList &collectionUuids);
   void requestFetchItemCount(const CollectionContext &context,
-                             const QList<CollectionConfig> &allCollections,
-                             const QString &filter, int requestToken);
+                             const QList<CollectionConfig> &allCollections, const QString &filter,
+                             int requestToken);
   void requestFetchItemsRange(const CollectionContext &context,
-                              const QList<CollectionConfig> &allCollections,
-                              int offset, int limit, const QString &filter);
-  void
-  requestFetchVisualIndexForPath(const CollectionContext &context,
-                                 const QList<CollectionConfig> &allCollections,
-                                 const QString &filePath);
+                              const QList<CollectionConfig> &allCollections, int offset, int limit,
+                              const QString &filter);
+  void requestFetchVisualIndexForPath(const CollectionContext &context,
+                                      const QList<CollectionConfig> &allCollections,
+                                      const QString &filePath);
   void requestInvalidateCache(const QString &collectionUuid);
 
   // Internal signal to trigger background scan on dedicated scan worker.
-  void
-  requestEnsureScannedForContext(const CollectionContext &context,
-                                 const QList<CollectionConfig> &allCollections);
+  void requestEnsureScannedForContext(const CollectionContext &context,
+                                      const QList<CollectionConfig> &allCollections);
 
   // Internal signal to trigger lazy background FTS backfill on scan worker.
   void requestEnsureItemsFtsReady();
@@ -148,22 +137,19 @@ public slots:
   void cancelScan();
 
 private slots:
-  void onWorkerItemsLoaded(const QStringList &filePaths,
-                           const QHash<QString, QString> &fileNames,
+  void onWorkerItemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames,
                            const QHash<QString, QString> &fileToArtworkDir,
                            const QHash<QString, QString> &fileToMediaDir,
                            const QHash<QString, int> &fileToCollectionIndex);
   void onWorkerItemCountLoaded(int count);
   void onWorkerItemCountLoadedWithToken(int count, int requestToken);
-  void
-  onWorkerItemsRangeLoaded(int offset, const QStringList &filePaths,
-                           const QHash<QString, QString> &fileNames,
-                           const QHash<QString, QString> &fileToArtworkDir,
-                           const QHash<QString, QString> &fileToMediaDir,
-                           const QHash<QString, int> &fileToCollectionIndex);
-  void onWorkerCachedCountsComputed(
-      quint64 generation, qint64 globalCount,
-      const QHash<QString, qint64> &directCountsByUuid);
+  void onWorkerItemsRangeLoaded(int offset, const QStringList &filePaths,
+                                const QHash<QString, QString> &fileNames,
+                                const QHash<QString, QString> &fileToArtworkDir,
+                                const QHash<QString, QString> &fileToMediaDir,
+                                const QHash<QString, int> &fileToCollectionIndex);
+  void onWorkerCachedCountsComputed(quint64 generation, qint64 globalCount,
+                                    const QHash<QString, qint64> &directCountsByUuid);
   void dispatchCachedCountsUpdate();
 
 private:
@@ -177,8 +163,7 @@ private:
   static QStringList scanMediaDirectory(const CollectionConfig &collection,
                                         QHash<QString, QDateTime> &timestamps);
   QStringList loadItemsFromDatabaseByUuid(const QString &collectionUuid);
-  QStringList loadOrScanCollection(int collectionIndex,
-                                   const CollectionConfig &collection,
+  QStringList loadOrScanCollection(int collectionIndex, const CollectionConfig &collection,
                                    QHash<QString, QDateTime> &timestamps);
   void saveItemsToDatabase(int collectionIndex, const QStringList &filePaths,
                            const QHash<QString, QDateTime> &timestamps,
@@ -186,8 +171,7 @@ private:
   static int getCharacterSortPriority(const QString &text);
   static void sortFiles(QStringList &allFilePaths);
   [[nodiscard]] qint64 countCollectionByUuid(const QString &collectionUuid) const;
-  [[nodiscard]] qint64
-  countGlobal(const QList<CollectionConfig> &allCollections);
+  [[nodiscard]] qint64 countGlobal(const QList<CollectionConfig> &allCollections);
   void clearCollectionFromDatabaseByUuid(const QString &collectionUuid);
 
   QSqlDatabase m_db;
@@ -206,21 +190,20 @@ private:
                               // m_fileToCollectionIndex, m_fileToMediaDir
   QHash<QString, QString> m_fileToArtworkDir;
   QHash<QString, int> m_fileToCollectionIndex;
-  QHash<QString, QString>
-      m_fileToMediaDir; // Maps file paths to their media directories
+  QHash<QString, QString> m_fileToMediaDir; // Maps file paths to their media directories
 
   // Cache for resolving relative entries (e.g. "subdir/game.rom" or "game.rom")
   // to a known absolute path without repeatedly scanning the full fileNames
   // map. Built from the latest onWorkerItemsLoaded() payload.
   QHash<QString, QString> m_relativeToFullPath;
 
-  static void appendFileMapsAndListCanonical(
-      int collectionIndex, const CollectionConfig &expandedCollection,
-      const QString &mappingArtworkDir, const QStringList &filePaths,
-      QStringList &allFilePaths, QHash<QString, QString> &allFileNames,
-      QHash<QString, QString> &fileToArtworkDir,
-      QHash<QString, QString> &fileToMediaDir,
-      QHash<QString, int> &fileToCollectionIndex, bool dedup);
+  static void
+  appendFileMapsAndListCanonical(int collectionIndex, const CollectionConfig &expandedCollection,
+                                 const QString &mappingArtworkDir, const QStringList &filePaths,
+                                 QStringList &allFilePaths, QHash<QString, QString> &allFileNames,
+                                 QHash<QString, QString> &fileToArtworkDir,
+                                 QHash<QString, QString> &fileToMediaDir,
+                                 QHash<QString, int> &fileToCollectionIndex, bool dedup);
 };
 
 #endif

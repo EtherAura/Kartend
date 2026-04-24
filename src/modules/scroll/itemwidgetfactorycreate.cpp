@@ -2,11 +2,11 @@
 // split out from itemwidgetfactory.cpp.
 #include "itemwidgetfactory.h"
 
-#include "loggingcategories.h"
 #include "artworkmanager.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
 #include "itemwidget.h"
+#include "loggingcategories.h"
 #include "uiconstants.h"
 #include "widgetpoolmanager.h"
 
@@ -14,8 +14,7 @@
 #include <QFileInfo>
 #include <QtGlobal>
 
-ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex,
-                                                 int &collectionIndex) {
+ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex, int &collectionIndex) {
   if (!m_filePaths || mediaIndex < 0 || mediaIndex >= m_filePaths->size()) {
     return nullptr;
   }
@@ -28,9 +27,8 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex,
     // Only emit request if this chunk isn't already pending
     if (!m_pendingRangeRequests.contains(chunkStart)) {
       m_pendingRangeRequests.insert(chunkStart);
-        qCDebug(lcSearchDiag) << "[ItemWidgetFactory] requestItemsRange: mediaIndex="
-            << mediaIndex << "chunkStart=" << chunkStart
-            << "chunkSize=" << chunkSize;
+      qCDebug(lcSearchDiag) << "[ItemWidgetFactory] requestItemsRange: mediaIndex=" << mediaIndex
+                            << "chunkStart=" << chunkStart << "chunkSize=" << chunkSize;
       emit requestItemsRange(chunkStart, chunkSize);
 
       // Prefetch adjacent chunks to reduce perceived latency during scrolling
@@ -57,8 +55,8 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex,
   widget->setItemName(displayName);
 
   // Set collection name for list mode display
-  if (m_context.config.viewType == ViewType::List && m_collections &&
-      collectionIndex >= 0 && collectionIndex < m_collections->size()) {
+  if (m_context.config.viewType == ViewType::List && m_collections && collectionIndex >= 0 &&
+      collectionIndex < m_collections->size()) {
     widget->setCollectionName(m_collections->at(collectionIndex).name);
   }
 
@@ -71,8 +69,7 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex,
     // Need to look up artwork from the item's collection, not the current
     // collection
     QString artworkDir;
-    if (m_collections && collectionIndex >= 0 &&
-        collectionIndex < m_collections->size()) {
+    if (m_collections && collectionIndex >= 0 && collectionIndex < m_collections->size()) {
       artworkDir = m_collections->at(collectionIndex).artworkDirectory;
     }
     if (artworkDir.isEmpty()) {
@@ -82,8 +79,7 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex,
     widget->setArtworkDirectory(artworkDir);
     if (!artworkDir.isEmpty()) {
       QString fileName = QFileInfo(fullPath).fileName();
-      QString artworkPath =
-          ArtworkUtils::findArtworkForFileCached(fileName, artworkDir);
+      QString artworkPath = ArtworkUtils::findArtworkForFileCached(fileName, artworkDir);
       // Cold-cache fallback: findArtworkForFileCached returns empty on the
       // first lookup for an uncached directory (it queues a background scan).
       // For list mode we can't rely on the post-prewarm reconfigure alone --
@@ -111,10 +107,8 @@ ItemWidget *ItemWidgetFactory::createPlaceholderWidget() {
   return widget;
 }
 
-void ItemWidgetFactory::resolveMediaItemPaths(const QString &rawFileName,
-                                              QString &fullPath,
-                                              QString &displayName,
-                                              int &collectionIndex) {
+void ItemWidgetFactory::resolveMediaItemPaths(const QString &rawFileName, QString &fullPath,
+                                              QString &displayName, int &collectionIndex) {
   if (!m_databaseManager) {
     return;
   }
@@ -124,20 +118,15 @@ void ItemWidgetFactory::resolveMediaItemPaths(const QString &rawFileName,
 
   if (!fullPath.isEmpty()) {
     if (m_context.config.showAllSubcollectionItems) {
-      displayName = m_fileNames
-                        ? m_fileNames->value(fullPath, QFileInfo(fullPath)
-                                                           .completeBaseName()
-                                                           .replace('_', ' ')
-                                                           .simplified())
-                        : QFileInfo(fullPath)
-                              .completeBaseName()
-                              .replace('_', ' ')
-                              .simplified();
-    } else {
       displayName =
-          m_fileNames ? m_fileNames->value(
-                            fullPath, QFileInfo(rawFileName).completeBaseName())
-                      : QFileInfo(rawFileName).completeBaseName();
+          m_fileNames
+              ? m_fileNames->value(
+                    fullPath, QFileInfo(fullPath).completeBaseName().replace('_', ' ').simplified())
+              : QFileInfo(fullPath).completeBaseName().replace('_', ' ').simplified();
+    } else {
+      displayName = m_fileNames
+                        ? m_fileNames->value(fullPath, QFileInfo(rawFileName).completeBaseName())
+                        : QFileInfo(rawFileName).completeBaseName();
     }
 
     // When searching with virtual folders, prepend the subfolder path to help
@@ -145,8 +134,7 @@ void ItemWidgetFactory::resolveMediaItemPaths(const QString &rawFileName,
     // - Collection uses virtual folders (includeContentSubfolders &&
     // !showAllSubfolderItems)
     // - Search is active (suppressVirtualFolders is set during search)
-    if (m_context.suppressVirtualFolders &&
-        m_context.config.includeContentSubfolders &&
+    if (m_context.suppressVirtualFolders && m_context.config.includeContentSubfolders &&
         !m_context.config.showAllSubfolderItems) {
       const QString &mediaDir = m_context.config.mediaDirectory;
       if (!mediaDir.isEmpty()) {
@@ -163,19 +151,17 @@ void ItemWidgetFactory::resolveMediaItemPaths(const QString &rawFileName,
   }
 }
 
-void ItemWidgetFactory::updateCollectionIndexFromDatabase(
-    const QString &fullPath, int &collectionIndex) {
+void ItemWidgetFactory::updateCollectionIndexFromDatabase(const QString &fullPath,
+                                                          int &collectionIndex) {
   if (m_databaseManager) {
-    int detectedCollectionIndex =
-        m_databaseManager->getCollectionIndexForFile(fullPath);
+    int detectedCollectionIndex = m_databaseManager->getCollectionIndexForFile(fullPath);
     if (detectedCollectionIndex >= 0) {
       collectionIndex = detectedCollectionIndex;
     }
   }
 }
 
-void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget,
-                                                  const QString &fullPath,
+void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QString &fullPath,
                                                   bool forceDirectLookup) {
   QElapsedTimer perfTimer;
   if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
@@ -186,11 +172,9 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget,
   if (!m_cachedArtworkPaths.isEmpty()) {
     QString cachedPath = m_cachedArtworkPaths.value(fullPath);
     if (qEnvironmentVariableIsSet("KARTEND_ARTWORK_DIAG")) {
-      qCDebug(lcSearchDiag) << "[ArtworkDiag] configureArtworkForWidget: fullPath="
-                 << fullPath
-                 << "cachedArtworkPaths.size=" << m_cachedArtworkPaths.size()
-                 << "cachedPath="
-                 << (cachedPath.isEmpty() ? "(not found)" : cachedPath);
+      qCDebug(lcSearchDiag) << "[ArtworkDiag] configureArtworkForWidget: fullPath=" << fullPath
+                            << "cachedArtworkPaths.size=" << m_cachedArtworkPaths.size()
+                            << "cachedPath=" << (cachedPath.isEmpty() ? "(not found)" : cachedPath);
     }
     if (!cachedPath.isEmpty() && m_artworkManager) {
       m_artworkManager->addPendingArtwork(widget, cachedPath);
@@ -204,15 +188,13 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget,
   QString artworkDir = m_context.config.artworkDirectory;
 
   if (m_databaseManager && m_context.config.showAllSubcollectionItems) {
-    QString foundArtworkDir =
-        m_databaseManager->findArtworkDirectoryForFile(fullPath);
+    QString foundArtworkDir = m_databaseManager->findArtworkDirectoryForFile(fullPath);
     if (!foundArtworkDir.isEmpty()) {
       artworkDir = foundArtworkDir;
     }
   }
 
-  qint64 afterDirLookup =
-      qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
+  qint64 afterDirLookup = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
 
   // Mirror the subfolder structure from media directory to artwork directory
   // when:
@@ -220,9 +202,8 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget,
   // 2. artworkDirectory equals mediaDirectory (artwork is co-located with
   // media)
   const QString &mediaDir = m_context.config.mediaDirectory;
-  bool shouldMirrorSubfolders =
-      m_context.config.includeArtworkSubfolders ||
-      (QDir(artworkDir).absolutePath() == QDir(mediaDir).absolutePath());
+  bool shouldMirrorSubfolders = m_context.config.includeArtworkSubfolders ||
+                                (QDir(artworkDir).absolutePath() == QDir(mediaDir).absolutePath());
 
   if (shouldMirrorSubfolders && !mediaDir.isEmpty()) {
     QDir mediaDirObj(mediaDir);
@@ -243,28 +224,25 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget,
   QString artworkPath;
   if (forceDirectLookup) {
     // Called from reconfigure after prewarm - OS cache should be warm
-    artworkPath = ArtworkUtils::findArtworkForFile(
-        QFileInfo(fullPath).fileName(), artworkDir);
-  } else if (m_context.config.showAllSubcollectionItems &&
-             m_totalItemCount > 1000) {
+    artworkPath = ArtworkUtils::findArtworkForFile(QFileInfo(fullPath).fileName(), artworkDir);
+  } else if (m_context.config.showAllSubcollectionItems && m_totalItemCount > 1000) {
     // Only use cached lookup - don't block UI with filesystem calls
-    artworkPath = ArtworkUtils::findArtworkForFileCached(
-        QFileInfo(fullPath).fileName(), artworkDir);
+    artworkPath =
+        ArtworkUtils::findArtworkForFileCached(QFileInfo(fullPath).fileName(), artworkDir);
     // Don't fall back to direct lookup - let prewarm handle it
   } else {
-    artworkPath = ArtworkUtils::findArtworkForFile(
-        QFileInfo(fullPath).fileName(), artworkDir);
+    artworkPath = ArtworkUtils::findArtworkForFile(QFileInfo(fullPath).fileName(), artworkDir);
   }
 
   qint64 afterArtworkFind =
       qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
 
   if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && afterArtworkFind > 5) {
-    qCDebug(lcPerfTrace) << "configureArtworkForWidget: totalMs="
-               << afterArtworkFind << "cacheCheck=" << afterCacheCheck
-               << "dirLookup=" << (afterDirLookup - afterCacheCheck)
-               << "artworkFind=" << (afterArtworkFind - afterDirLookup)
-               << "artworkDir=" << artworkDir;
+    qCDebug(lcPerfTrace) << "configureArtworkForWidget: totalMs=" << afterArtworkFind
+                         << "cacheCheck=" << afterCacheCheck
+                         << "dirLookup=" << (afterDirLookup - afterCacheCheck)
+                         << "artworkFind=" << (afterArtworkFind - afterDirLookup)
+                         << "artworkDir=" << artworkDir;
   }
 
   // List mode displays an artwork preview button (not the pixmap), so update
@@ -280,13 +258,11 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget,
 
   if (!artworkPath.isEmpty() && m_artworkManager) {
     m_artworkManager->addPendingArtwork(widget, artworkPath);
-  } else if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") &&
-             artworkPath.isEmpty()) {
+  } else if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && artworkPath.isEmpty()) {
     static int emptyCount = 0;
     if (++emptyCount <= 5) { // Only log first 5 to avoid spam
-      qCDebug(lcPerfTrace) << "configureArtworkForWidget: NO ARTWORK artworkDir="
-          << artworkDir << "fileName=" << QFileInfo(fullPath).fileName();
+      qCDebug(lcPerfTrace) << "configureArtworkForWidget: NO ARTWORK artworkDir=" << artworkDir
+                           << "fileName=" << QFileInfo(fullPath).fileName();
     }
   }
 }
-

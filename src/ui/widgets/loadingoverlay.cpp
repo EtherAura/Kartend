@@ -15,8 +15,7 @@ constexpr int CONTENT_PADDING = 24;
 constexpr int FADE_DURATION_MS = 150;
 constexpr int SPINNER_DURATION_MS = 1000;
 constexpr QColor OVERLAY_COLOR = QColor(0, 0, 0, 160);
-constexpr QColor SPINNER_BG_COLOR =
-    QColor(45, 45, 45); // Match overlay background
+constexpr QColor SPINNER_BG_COLOR = QColor(45, 45, 45); // Match overlay background
 } // namespace
 
 // Custom spinner widget that draws the animated arc
@@ -24,8 +23,7 @@ class SpinnerWidget : public QWidget {
 public:
   explicit SpinnerWidget(QWidget *parent = nullptr) : QWidget(parent) {
     setAttribute(Qt::WA_TranslucentBackground);
-    setFixedSize(SPINNER_SIZE + SPINNER_THICKNESS * 2,
-                 SPINNER_SIZE + SPINNER_THICKNESS * 2);
+    setFixedSize(SPINNER_SIZE + SPINNER_THICKNESS * 2, SPINNER_SIZE + SPINNER_THICKNESS * 2);
   }
 
   void setAngle(int angle) {
@@ -51,8 +49,7 @@ protected:
     painter.translate(-width() / 2, -height() / 2);
 
     // Draw background arc
-    QPen bgPen(SPINNER_BG_COLOR, SPINNER_THICKNESS, Qt::SolidLine,
-               Qt::RoundCap);
+    QPen bgPen(SPINNER_BG_COLOR, SPINNER_THICKNESS, Qt::SolidLine, Qt::RoundCap);
     painter.setPen(bgPen);
     painter.drawArc(spinnerRect, 0, 360 * 16);
 
@@ -98,9 +95,8 @@ void LoadingOverlay::setupUI() {
   auto *layout = new QVBoxLayout(m_contentWidget);
   layout->setAlignment(Qt::AlignCenter);
   layout->setSpacing(16);
-  layout->setContentsMargins(CONTENT_PADDING,
-                             CONTENT_PADDING + SPINNER_SIZE + 8,
-                             CONTENT_PADDING, CONTENT_PADDING);
+  layout->setContentsMargins(CONTENT_PADDING, CONTENT_PADDING + SPINNER_SIZE + 8, CONTENT_PADDING,
+                             CONTENT_PADDING);
 
   // Message label
   m_messageLabel = new QLabel("Loading...", m_contentWidget);
@@ -165,12 +161,10 @@ void LoadingOverlay::show(const QString &message) {
 
   QWidget::show();
   raise();
-  if (m_spinnerWidget)
-    m_spinnerWidget->raise();
+  if (m_spinnerWidget) m_spinnerWidget->raise();
 }
 
-void LoadingOverlay::showWithProgress(const QString &message, int current,
-                                      int total) {
+void LoadingOverlay::showWithProgress(const QString &message, int current, int total) {
   m_active = true;
   m_showProgress = true;
 
@@ -193,13 +187,11 @@ void LoadingOverlay::showWithProgress(const QString &message, int current,
 
   QWidget::show();
   raise();
-  if (m_spinnerWidget)
-    m_spinnerWidget->raise();
+  if (m_spinnerWidget) m_spinnerWidget->raise();
 }
 
 void LoadingOverlay::setProgress(int current, int total) {
-  if (!m_active)
-    return;
+  if (!m_active) return;
 
   m_progressBar->setRange(0, total);
   m_progressBar->setValue(current);
@@ -216,8 +208,7 @@ void LoadingOverlay::setMessage(const QString &message) {
 }
 
 void LoadingOverlay::hide(bool animated) {
-  if (!m_active)
-    return;
+  if (!m_active) return;
 
   m_active = false;
   stopSpinnerAnimation();
@@ -229,8 +220,7 @@ void LoadingOverlay::hide(bool animated) {
         m_fadeAnimation, &QPropertyAnimation::finished, this,
         [this]() {
           QWidget::hide();
-          disconnect(m_fadeAnimation, &QPropertyAnimation::finished, nullptr,
-                     nullptr);
+          disconnect(m_fadeAnimation, &QPropertyAnimation::finished, nullptr, nullptr);
         },
         Qt::SingleShotConnection);
     m_fadeAnimation->start();
@@ -274,11 +264,12 @@ void LoadingOverlay::startSpinnerAnimation() {
   }
 }
 
-void LoadingOverlay::stopSpinnerAnimation() { m_spinnerAnimation->stop(); }
+void LoadingOverlay::stopSpinnerAnimation() {
+  m_spinnerAnimation->stop();
+}
 
 void LoadingOverlay::updatePosition() {
-  if (!parentWidget())
-    return;
+  if (!parentWidget()) return;
 
   // Fill parent widget
   setGeometry(parentWidget()->rect());
@@ -293,16 +284,14 @@ void LoadingOverlay::updatePosition() {
     contentSize.setHeight(contentSize.height() + SPINNER_SIZE + 16);
     int x = (width() - contentSize.width()) / 2;
     int y = (height() - contentSize.height()) / 2;
-    m_contentWidget->setGeometry(x, y, contentSize.width(),
-                                 contentSize.height());
+    m_contentWidget->setGeometry(x, y, contentSize.width(), contentSize.height());
 
     // Position spinner widget at top center of content box
     // The spinner draws on top of the content widget with proper z-order
     if (m_spinnerWidget) {
       int spinnerX = x + (contentSize.width() - SPINNER_SIZE) / 2;
       int spinnerY = y + 12; // 12px from top of content box
-      m_spinnerWidget->setGeometry(spinnerX, spinnerY, SPINNER_SIZE,
-                                   SPINNER_SIZE);
+      m_spinnerWidget->setGeometry(spinnerX, spinnerY, SPINNER_SIZE, SPINNER_SIZE);
       m_spinnerWidget->raise(); // Ensure spinner is on top
     }
   }
@@ -317,8 +306,7 @@ void LoadingOverlay::updateAccentColor() {
     static_cast<SpinnerWidget *>(m_spinnerWidget)->setColor(m_accentColor);
   }
 
-  if (!m_progressBar)
-    return;
+  if (!m_progressBar) return;
 
   // Apply accent color to progress bar (flat color, no gradient, to match
   // spinner)

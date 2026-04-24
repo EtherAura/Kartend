@@ -78,38 +78,26 @@ public:
   // Search state
   [[nodiscard]] bool isSearchActive() const { return m_searchActive; }
   void setSearchActive(bool active) { m_searchActive = active; }
-  [[nodiscard]] const QString &currentSearchText() const {
-    return m_currentSearchText;
-  }
+  [[nodiscard]] const QString &currentSearchText() const { return m_currentSearchText; }
   void setCurrentSearchText(const QString &text) { m_currentSearchText = text; }
 
   // Pre-search state preservation
   [[nodiscard]] int preSearchCollectionIndex() const { return m_preSearchCollectionIndex; }
-  void setPreSearchCollectionIndex(int idx) {
-    m_preSearchCollectionIndex = idx;
-  }
+  void setPreSearchCollectionIndex(int idx) { m_preSearchCollectionIndex = idx; }
   [[nodiscard]] SearchMode preSearchMode() const { return m_preSearchMode; }
   void setPreSearchMode(SearchMode mode) { m_preSearchMode = mode; }
-  [[nodiscard]] int preSearchSelectedIndex() const {
-    return m_preSearchSelectedIndex;
-  }
+  [[nodiscard]] int preSearchSelectedIndex() const { return m_preSearchSelectedIndex; }
   void setPreSearchSelectedIndex(int idx) { m_preSearchSelectedIndex = idx; }
 
   // Timer access for InteractionManager
-  [[nodiscard]] TimerUtils::DebouncedTimer *debounceTimer() const {
-    return m_searchDebounceTimer;
-  }
-  QMetaObject::Connection &itemsLoadedConnection() {
-    return m_searchItemsLoadedConn;
-  }
+  [[nodiscard]] TimerUtils::DebouncedTimer *debounceTimer() const { return m_searchDebounceTimer; }
+  QMetaObject::Connection &itemsLoadedConnection() { return m_searchItemsLoadedConn; }
 
   // Helpers
   [[nodiscard]] SearchContext computeSearchContext() const;
-  [[nodiscard]] QVector<SearchMode>
-  buildSearchModeCycle(const SearchContext &ctx) const;
+  [[nodiscard]] QVector<SearchMode> buildSearchModeCycle(const SearchContext &ctx) const;
   [[nodiscard]] bool hasDirectItemsForIndex(int idx) const;
-  [[nodiscard]] bool allowAllFor(const CollectionConfig &cfg, int collIndex,
-                                 bool hasSubs) const;
+  [[nodiscard]] bool allowAllFor(const CollectionConfig &cfg, int collIndex, bool hasSubs) const;
 
 signals:
   void searchModeChanged(SearchMode mode);

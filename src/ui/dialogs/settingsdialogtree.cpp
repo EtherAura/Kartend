@@ -1,13 +1,13 @@
 // Sibling translation unit for SettingsDialog: tree population, add/remove,
 // parent rebuild, circular-reference checks.
+#include <algorithm>
+#include <functional>
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QSet>
 #include <QSignalBlocker>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
-#include <algorithm>
-#include <functional>
 #include <set>
 
 #include "mainwindow.h"
@@ -93,11 +93,10 @@ void SettingsDialog::populateTreeWidget() {
   }
 }
 
-auto SettingsDialog::createTreeItem(int collectionIndex,
-                                    QTreeWidgetItem *parent)
+auto SettingsDialog::createTreeItem(int collectionIndex, QTreeWidgetItem *parent)
     -> QTreeWidgetItem * {
-  QTreeWidgetItem *item = (parent) ? new QTreeWidgetItem(parent)
-                                   : new QTreeWidgetItem(collectionTreeWidget);
+  QTreeWidgetItem *item =
+      (parent) ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(collectionTreeWidget);
   item->setText(0, collections[collectionIndex].name);
   item->setFlags(item->flags() | Qt::ItemIsEditable);
   itemToCollectionIndex[item] = collectionIndex;
@@ -107,8 +106,7 @@ auto SettingsDialog::createTreeItem(int collectionIndex,
 
 // Handles selection changes; supports deselection state
 void SettingsDialog::onTreeItemSelectionChanged() {
-  QList<QTreeWidgetItem *> selectedItems =
-      collectionTreeWidget->selectedItems();
+  QList<QTreeWidgetItem *> selectedItems = collectionTreeWidget->selectedItems();
   if (selectedItems.isEmpty()) {
     currentTreeItem = nullptr;
     currentCollectionIndex = -1;
@@ -179,8 +177,8 @@ void SettingsDialog::onTreeItemChanged(QTreeWidgetItem *item, int column) {
     collections[collectionIndex].name = newName;
     m_workingCollections[collectionIndex].name = newName;
 
-    bool revertedToOriginal = (collectionIndex == currentCollectionIndex &&
-                               newName == originalCollection.name);
+    bool revertedToOriginal =
+        (collectionIndex == currentCollectionIndex && newName == originalCollection.name);
     m_collectionSaved = revertedToOriginal && !hasUnsavedChanges();
     if (!revertedToOriginal) {
       m_collectionSaved = false;
@@ -192,15 +190,13 @@ void SettingsDialog::onTreeItemChanged(QTreeWidgetItem *item, int column) {
 
 void SettingsDialog::addCollection() {
   bool parseOk;
-  QString name = QInputDialog::getText(
-      this, "Add Collection", "Enter collection name:", QLineEdit::Normal, "",
-      &parseOk);
+  QString name = QInputDialog::getText(this, "Add Collection",
+                                       "Enter collection name:", QLineEdit::Normal, "", &parseOk);
   if (!parseOk || name.isEmpty()) {
     return;
   }
 
-  if (currentCollectionIndex >= 0 &&
-      currentCollectionIndex < collections.size()) {
+  if (currentCollectionIndex >= 0 && currentCollectionIndex < collections.size()) {
     saveCollectionFromUI(currentCollectionIndex);
   }
 
@@ -222,10 +218,10 @@ void SettingsDialog::addCollection() {
   newCollection.hideTitles = false;
   newCollection.hideSubcollectionTitles = false;
 
-  int parentIdx = (currentCollectionIndex >= 0 &&
-                   currentCollectionIndex < m_workingCollections.size())
-                      ? currentCollectionIndex
-                      : -1;
+  int parentIdx =
+      (currentCollectionIndex >= 0 && currentCollectionIndex < m_workingCollections.size())
+          ? currentCollectionIndex
+          : -1;
   if (parentIdx >= 0) {
     const CollectionConfig &parent = m_workingCollections[parentIdx];
     newCollection.parentCollectionIndex = parentIdx;
@@ -290,10 +286,10 @@ void SettingsDialog::ensureRootCollectionExists() {
   // No root collection exists - prompt user to create one
   while (true) {
     bool ok = false;
-    QString name = QInputDialog::getText(
-        this, tr("Create Collection"),
-        tr("No collections found. Enter a name for your first collection:"),
-        QLineEdit::Normal, "", &ok);
+    QString name =
+        QInputDialog::getText(this, tr("Create Collection"),
+                              tr("No collections found. Enter a name for your first collection:"),
+                              QLineEdit::Normal, "", &ok);
 
     if (!ok) {
       // User cancelled - they must create a collection to use settings
@@ -304,9 +300,8 @@ void SettingsDialog::ensureRootCollectionExists() {
     }
 
     if (name.trimmed().isEmpty()) {
-      QMessageBox::warning(
-          this, tr("Invalid Name"),
-          tr("Collection name cannot be empty. Please enter a valid name."));
+      QMessageBox::warning(this, tr("Invalid Name"),
+                           tr("Collection name cannot be empty. Please enter a valid name."));
       continue;
     }
 
@@ -348,22 +343,20 @@ void SettingsDialog::updateParentCollectionComboBox(int currentIndex) {
     m_parentCollectionMapping.append(i);
   }
 
-  int desiredParentIndex =
-      (currentIndex >= 0 && currentIndex < collections.size())
-          ? collections[currentIndex].parentCollectionIndex
-          : -1;
-  int targetDropdownIndex =
-      m_parentCollectionMapping.indexOf(desiredParentIndex);
+  int desiredParentIndex = (currentIndex >= 0 && currentIndex < collections.size())
+                               ? collections[currentIndex].parentCollectionIndex
+                               : -1;
+  int targetDropdownIndex = m_parentCollectionMapping.indexOf(desiredParentIndex);
   if (targetDropdownIndex < 0) {
     targetDropdownIndex = 0;
   }
   ui->parentCollectionComboBox->setCurrentIndex(targetDropdownIndex);
 }
 
-auto SettingsDialog::wouldCreateCircularReference(
-    int childIndex, int potentialParentIndex) const -> bool {
-  if (childIndex < 0 || childIndex >= collections.size() ||
-      potentialParentIndex < 0 || potentialParentIndex >= collections.size()) {
+auto SettingsDialog::wouldCreateCircularReference(int childIndex, int potentialParentIndex) const
+    -> bool {
+  if (childIndex < 0 || childIndex >= collections.size() || potentialParentIndex < 0 ||
+      potentialParentIndex >= collections.size()) {
     return true;
   }
   if (potentialParentIndex == childIndex) {
@@ -384,4 +377,3 @@ auto SettingsDialog::wouldCreateCircularReference(
   }
   return false;
 }
-

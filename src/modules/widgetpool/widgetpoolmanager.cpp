@@ -2,9 +2,9 @@
 #include "widgetpoolmanager.h"
 #include "itemwidget.h"
 #include "uiconstants.h"
+#include <algorithm>
 #include <QLoggingCategory>
 #include <QTimer>
-#include <algorithm>
 
 Q_LOGGING_CATEGORY(lcWidgetPoolManager, "kartend.widgetpoolmanager")
 
@@ -32,7 +32,9 @@ auto takeLastValid(QList<QPointer<ItemWidget>> &list) -> ItemWidget * {
 
 WidgetPoolManager::WidgetPoolManager(QObject *parent) : QObject(parent) {}
 
-WidgetPoolManager::~WidgetPoolManager() { clearAndDelete(); }
+WidgetPoolManager::~WidgetPoolManager() {
+  clearAndDelete();
+}
 
 void WidgetPoolManager::setWidgetParent(QWidget *parent) {
   m_widgetParent = parent;
@@ -65,8 +67,7 @@ auto WidgetPoolManager::acquire() -> ItemWidget * {
 void WidgetPoolManager::disconnectAll(ItemWidget *widget) {
   // Only disconnect subcollectionDoubleClicked - other signals were removed
   // as EventManager intercepts all clicks before they reach ItemWidget
-  QObject::disconnect(widget, &ItemWidget::subcollectionDoubleClicked, nullptr,
-                      nullptr);
+  QObject::disconnect(widget, &ItemWidget::subcollectionDoubleClicked, nullptr, nullptr);
 }
 
 void WidgetPoolManager::release(ItemWidget *widget) {
@@ -263,8 +264,7 @@ auto WidgetPoolManager::calculateOptimalSize() const -> int {
 
   int bufferedRows = m_visibleRows + UIConstants::Grid::BUFFER_ROWS;
   int visibleWidgets = bufferedRows * m_itemsPerRow;
-  int calculatedPoolSize =
-      visibleWidgets * UIConstants::Widget::Pool::BUFFER_MULTIPLIER;
+  int calculatedPoolSize = visibleWidgets * UIConstants::Widget::Pool::BUFFER_MULTIPLIER;
 
   return std::clamp(calculatedPoolSize, UIConstants::Widget::Pool::MIN_SIZE,
                     UIConstants::Widget::Pool::MAX_SIZE);
@@ -274,11 +274,13 @@ void WidgetPoolManager::logMetrics() const {
   if (!lcWidgetPoolManager().isDebugEnabled()) {
     return;
   }
-  qCDebug(lcWidgetPoolManager)
-      << "WidgetPool metrics:"
-      << "hits=" << m_metrics.hits << "misses=" << m_metrics.misses
-      << "releases=" << m_metrics.releases << "discards=" << m_metrics.discards
-      << "staleReused=" << m_metrics.staleReused
-      << "hitRate=" << QString::number(m_metrics.hitRate() * 100, 'f', 1) << "%"
-      << "poolSize=" << m_pool.size() << "stalePoolSize=" << m_stalePool.size();
+  qCDebug(lcWidgetPoolManager) << "WidgetPool metrics:"
+                               << "hits=" << m_metrics.hits << "misses=" << m_metrics.misses
+                               << "releases=" << m_metrics.releases
+                               << "discards=" << m_metrics.discards
+                               << "staleReused=" << m_metrics.staleReused
+                               << "hitRate=" << QString::number(m_metrics.hitRate() * 100, 'f', 1)
+                               << "%"
+                               << "poolSize=" << m_pool.size()
+                               << "stalePoolSize=" << m_stalePool.size();
 }

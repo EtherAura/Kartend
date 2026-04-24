@@ -1,7 +1,6 @@
 // Manages collection switching, navigation stack, and subcollection hierarchy
 // traversal.
 #include "navigationmanager.h"
-#include "loggingcategories.h"
 #include "artworkmanager.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
@@ -10,6 +9,7 @@
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "loadingoverlay.h"
+#include "loggingcategories.h"
 #include "metadatasidebar.h"
 #include "navigationstackmanager.h"
 #include "pathutils.h"
@@ -22,6 +22,7 @@
 #include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
+#include <algorithm>
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
@@ -29,24 +30,21 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
-#include <QTimer>
 #include <QtGlobal>
-#include <algorithm>
+#include <QTimer>
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcNavigationManager, "kartend.navigationmanager")
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcNavigationManager().isDebugEnabled()) {                              \
-      qCDebug(lcNavigationManager) << msg;                                     \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcNavigationManager().isDebugEnabled()) {                                                  \
+      qCDebug(lcNavigationManager) << msg;                                                         \
+    }                                                                                              \
   } while (0)
 
 NavigationManager::NavigationManager(QObject *parent)
-    : QObject(parent),
-      m_stackManager(std::make_unique<NavigationStackManager>(this)),
-      m_selectionRestoreManager(
-          std::make_unique<SelectionRestoreManager>(this)) {}
+    : QObject(parent), m_stackManager(std::make_unique<NavigationStackManager>(this)),
+      m_selectionRestoreManager(std::make_unique<SelectionRestoreManager>(this)) {}
 
 NavigationManager::~NavigationManager() = default;
 
@@ -98,7 +96,9 @@ bool NavigationManager::isNavigationInProgress() const {
   return m_stackManager && m_stackManager->isInProgress();
 }
 
-void NavigationManager::prepareForShutdown() { persistCurrentSelection(); }
+void NavigationManager::prepareForShutdown() {
+  persistCurrentSelection();
+}
 
 // Navigates to a subcollection using the shared parent view
 void NavigationManager::navigateWithSharedItems(int collectionIndex) {
@@ -130,8 +130,7 @@ void NavigationManager::navigateWithSharedItems(int collectionIndex) {
   updateItemsPageTitle(collectionIndex);
 
   bool isNavigatingToSubcollection =
-      ((*m_collections)[collectionIndex].parentCollectionIndex ==
-       previousIndex);
+      ((*m_collections)[collectionIndex].parentCollectionIndex == previousIndex);
 
   if (isNavigatingToSubcollection) {
     handleSubcollectionNavigation(collectionIndex, previousIndex);
@@ -143,8 +142,7 @@ void NavigationManager::navigateWithSharedItems(int collectionIndex) {
 }
 
 auto NavigationManager::initializeNavigationState() -> void {
-  const bool isStartupNavigation =
-      (m_currentCollectionIndex && (*m_currentCollectionIndex) < 0);
+  const bool isStartupNavigation = (m_currentCollectionIndex && (*m_currentCollectionIndex) < 0);
 
   // Show loading overlay during navigation (will be updated with collection
   // name later). On startup, keep the UI immediately navigable while background
@@ -216,31 +214,27 @@ auto NavigationManager::showCollectionItems(int collectionIndex) -> bool {
 
   prepareNonSharedNavigation(collectionIndex);
   loadCollectionData(collectionIndex);
-  if (m_refreshTitleCounts)
-    m_refreshTitleCounts();
+  if (m_refreshTitleCounts) m_refreshTitleCounts();
   return true;
 }
 
 // Temporarily suppresses arrow-key centering for a scroll area using
 // InteractionStateHolder and time window
-auto NavigationManager::setSuppressArrowCenter(QScrollArea *scrollArea,
-                                               int settleMs) -> void {
+auto NavigationManager::setSuppressArrowCenter(QScrollArea *scrollArea, int settleMs) -> void {
   if (!scrollArea || !m_state) {
     return;
   }
   m_state->suppressArrowCenterFor(settleMs);
   // Clear arrow center suppression after settle period expires -
   // allows navigation animations to complete before centering resumes
-  QTimer::singleShot(UIConstants::Keyboard::ARROW_CENTER_CLEAR_AFTER_SET_MS,
-                     this, [this]() {
-                       if (m_state) {
-                         m_state->clearArrowCenterSuppression();
-                       }
-                     });
+  QTimer::singleShot(UIConstants::Keyboard::ARROW_CENTER_CLEAR_AFTER_SET_MS, this, [this]() {
+    if (m_state) {
+      m_state->clearArrowCenterSuppression();
+    }
+  });
 }
 
-auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const
-    -> bool {
+auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const -> bool {
   if (fromIndex < 0 || toIndex < 0 || fromIndex >= (*m_collections).size() ||
       toIndex >= (*m_collections).size()) {
     return false;
@@ -270,11 +264,10 @@ auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const
   return false;
 }
 
-
 // Performs common navigation cleanup operations
 void NavigationManager::onViewportChanged() {
-  if ((m_interactionManager) && m_interactionManager->isWheelScrolling() &&
-      m_stackedWidget && m_stackedWidget->currentWidget() == m_itemsPage) {
+  if ((m_interactionManager) && m_interactionManager->isWheelScrolling() && m_stackedWidget &&
+      m_stackedWidget->currentWidget() == m_itemsPage) {
     // Delay viewport update during wheel scrolling to batch rapid events -
     // reduces CPU load from frequent artwork updates during fast scrolling
     QTimer::singleShot(UIConstants::Timing::SHORT_DELAY_MS, this, [this]() {
@@ -296,12 +289,11 @@ void NavigationManager::onViewportChanged() {
 
 // Returns whether the collection has direct items or any subcollections and
 // outputs both flags
-auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub,
-                                          bool &hasItems) const -> bool {
+auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub, bool &hasItems) const
+    -> bool {
   hasSub = false;
   hasItems = false;
-  if ((!parent()) || collectionIndex < 0 ||
-      collectionIndex >= (*m_collections).size()) {
+  if ((!parent()) || collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     return false;
   }
 
@@ -314,26 +306,22 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub,
     }
   }
 
-  QString mediaDir = (m_settingsManager)
-                         ? SettingsUtils::expandConfigVariables(
-                               collection.mediaDirectory, collection.name)
-                         : collection.mediaDirectory;
+  QString mediaDir =
+      (m_settingsManager)
+          ? SettingsUtils::expandConfigVariables(collection.mediaDirectory, collection.name)
+          : collection.mediaDirectory;
   if (!mediaDir.trimmed().isEmpty()) {
     QDir dir(mediaDir);
     if (dir.exists()) {
-      QStringList filters = collection.extensions.isEmpty()
-                                ? QStringList()
-                                : collection.extensions;
-      QStringList files = filters.isEmpty()
-                              ? dir.entryList(QDir::Files)
-                              : dir.entryList(filters, QDir::Files);
+      QStringList filters = collection.extensions.isEmpty() ? QStringList() : collection.extensions;
+      QStringList files =
+          filters.isEmpty() ? dir.entryList(QDir::Files) : dir.entryList(filters, QDir::Files);
       hasItems = !files.isEmpty();
 
       // When showAllSubfolderItems is true, also check subdirectories for files
       // This handles cases where the root mediaDirectory has no files but
       // subdirs do
-      if (!hasItems && collection.includeContentSubfolders &&
-          collection.showAllSubfolderItems) {
+      if (!hasItems && collection.includeContentSubfolders && collection.showAllSubfolderItems) {
         QDir::Filters dirFilters = QDir::Dirs | QDir::NoDotAndDotDot;
         if (collection.showHiddenFolders) {
           dirFilters |= QDir::Hidden;
@@ -341,9 +329,8 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub,
         QStringList subdirs = dir.entryList(dirFilters);
         for (const QString &subdir : subdirs) {
           QDir subDir(dir.filePath(subdir));
-          QStringList subFiles = filters.isEmpty()
-                                     ? subDir.entryList(QDir::Files)
-                                     : subDir.entryList(filters, QDir::Files);
+          QStringList subFiles = filters.isEmpty() ? subDir.entryList(QDir::Files)
+                                                   : subDir.entryList(filters, QDir::Files);
           if (!subFiles.isEmpty()) {
             hasItems = true;
             break;
@@ -354,8 +341,7 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub,
       // Also check for virtual folders (subdirectories as navigable content)
       // when includeContentSubfolders is enabled and showAllSubfolderItems is
       // false
-      if (!hasItems && collection.includeContentSubfolders &&
-          !collection.showAllSubfolderItems) {
+      if (!hasItems && collection.includeContentSubfolders && !collection.showAllSubfolderItems) {
         QDir::Filters dirFilters = QDir::Dirs | QDir::NoDotAndDotDot;
         if (collection.showHiddenFolders) {
           dirFilters |= QDir::Hidden;
@@ -382,21 +368,18 @@ auto NavigationManager::getSubcollections(int parentIndex) const -> QList<int> {
 }
 
 // Sets the collections pointer used for subcollection queries
-auto NavigationManager::getAllDescendantCollections(int parentIndex) const
-    -> QList<int> {
+auto NavigationManager::getAllDescendantCollections(int parentIndex) const -> QList<int> {
   // Use cache for O(1) lookup if available
   if (m_hierarchyCache && m_hierarchyCache->isValid()) {
     return m_hierarchyCache->allDescendants(parentIndex);
   }
   // Fallback to O(n) recursive scan
   QList<int> result;
-  if ((!m_collections) || parentIndex < 0 ||
-      parentIndex >= m_collections->size()) {
+  if ((!m_collections) || parentIndex < 0 || parentIndex >= m_collections->size()) {
     return result;
   }
 
-  QList<int> stack =
-      CollectionUtils::directChildrenOf(parentIndex, *m_collections);
+  QList<int> stack = CollectionUtils::directChildrenOf(parentIndex, *m_collections);
   QSet<int> seen;
   while (!stack.isEmpty()) {
     int idx = stack.takeLast();
@@ -409,8 +392,7 @@ auto NavigationManager::getAllDescendantCollections(int parentIndex) const
     seen.insert(idx);
     result.append(idx);
 
-    const QList<int> children =
-        CollectionUtils::directChildrenOf(idx, *m_collections);
+    const QList<int> children = CollectionUtils::directChildrenOf(idx, *m_collections);
     for (int childIdx : children) {
       if (!seen.contains(childIdx)) {
         stack.append(childIdx);
@@ -461,5 +443,3 @@ void NavigationManager::resumeItemsPageRendering() {
     m_state->artwork().suppressArtwork = false;
   }
 }
-
-

@@ -61,14 +61,12 @@ void ErrorDialog::setupUI() {
 
   m_detailsButton = new QPushButton(tr("Show Details"), this);
   m_detailsButton->setCheckable(true);
-  connect(m_detailsButton, &QPushButton::clicked, this,
-          &ErrorDialog::toggleDetails);
+  connect(m_detailsButton, &QPushButton::clicked, this, &ErrorDialog::toggleDetails);
   buttonLayout->addWidget(m_detailsButton);
 
   m_copyButton = new QPushButton(tr("Copy"), this);
   m_copyButton->setToolTip(tr("Copy error details to clipboard"));
-  connect(m_copyButton, &QPushButton::clicked, this,
-          &ErrorDialog::copyToClipboard);
+  connect(m_copyButton, &QPushButton::clicked, this, &ErrorDialog::copyToClipboard);
   buttonLayout->addWidget(m_copyButton);
 
   buttonLayout->addStretch();
@@ -145,16 +143,14 @@ void ErrorDialog::updateIcon(ErrorUtils::Severity severity) {
   m_iconLabel->setPixmap(icon.pixmap(ICON_SIZE, ICON_SIZE));
 }
 
-auto ErrorDialog::formatUserMessage(
-    const ErrorUtils::ErrorContext &context) const -> QString {
+auto ErrorDialog::formatUserMessage(const ErrorUtils::ErrorContext &context) const -> QString {
   QString message = context.message;
 
   // Add user-friendly suggestions based on error code
   switch (context.code) {
   case ErrorUtils::ErrorCode::DatabaseConnectionFailed:
   case ErrorUtils::ErrorCode::DatabaseNotOpen:
-    message +=
-        tr("\n\nPlease check that the database file exists and is accessible.");
+    message += tr("\n\nPlease check that the database file exists and is accessible.");
     break;
   case ErrorUtils::ErrorCode::MediaDirectoryNotFound:
     message += tr("\n\nPlease verify the media directory path in settings.");
@@ -164,8 +160,7 @@ auto ErrorDialog::formatUserMessage(
     break;
   case ErrorUtils::ErrorCode::ConfigLoadFailed:
   case ErrorUtils::ErrorCode::ConfigSaveFailed:
-    message +=
-        tr("\n\nPlease check file permissions for the configuration file.");
+    message += tr("\n\nPlease check file permissions for the configuration file.");
     break;
   case ErrorUtils::ErrorCode::InvalidFilePath:
     message += tr("\n\nPlease check that the file path is valid.");
@@ -177,8 +172,7 @@ auto ErrorDialog::formatUserMessage(
   return message;
 }
 
-auto ErrorDialog::formatTechnicalDetails(
-    const ErrorUtils::ErrorContext &context) const -> QString {
+auto ErrorDialog::formatTechnicalDetails(const ErrorUtils::ErrorContext &context) const -> QString {
   QStringList lines;
 
   lines << tr("Error Code: %1 (%2)")
@@ -199,8 +193,7 @@ auto ErrorDialog::formatTechnicalDetails(
 void ErrorDialog::toggleDetails() {
   m_detailsVisible = !m_detailsVisible;
   m_detailsEdit->setVisible(m_detailsVisible);
-  m_detailsButton->setText(m_detailsVisible ? tr("Hide Details")
-                                            : tr("Show Details"));
+  m_detailsButton->setText(m_detailsVisible ? tr("Hide Details") : tr("Show Details"));
   adjustSize();
 }
 
@@ -217,15 +210,13 @@ void ErrorDialog::copyToClipboard() {
   QApplication::clipboard()->setText(text);
 }
 
-void ErrorDialog::showError(QWidget *parent,
-                            const ErrorUtils::ErrorContext &context) {
+void ErrorDialog::showError(QWidget *parent, const ErrorUtils::ErrorContext &context) {
   ErrorDialog dialog(parent);
   dialog.setError(context);
   dialog.exec();
 }
 
-auto ErrorDialog::showCriticalError(QWidget *parent,
-                                    const ErrorUtils::ErrorContext &context,
+auto ErrorDialog::showCriticalError(QWidget *parent, const ErrorUtils::ErrorContext &context,
                                     bool allowContinue) -> bool {
   ErrorDialog dialog(parent);
   dialog.setError(context);
