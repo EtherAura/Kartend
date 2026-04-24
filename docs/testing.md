@@ -7,7 +7,7 @@ Unit tests use the Qt Test framework with CTest integration.
 Fast path using the build script:
 
 ```bash
-./.scripts/build.sh --tests --run-tests --fast
+./.scripts/build.sh --tests --run-tests
 ```
 
 Manual CMake build:
@@ -38,7 +38,7 @@ UB) during development.
 
 ```bash
 # Build Debug + ASan/UBSan
-./.scripts/build.sh --sanitize --keep-builds --fast
+./.scripts/build.sh --sanitize --keep-builds
 
 # Configure and build tests
 cmake -S . -B build/ninja-sanitize -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DENABLE_SANITIZERS=ON
