@@ -411,6 +411,7 @@ tests/
 ├── test_cachemanager.cpp                # Pixmap cache, LRU, disk persistence
 ├── test_collectionutils.cpp             # CollectionConfig + hierarchy helpers
 ├── test_dbmigrations.cpp                # SQLite schema migrations
+├── test_databasemanager.cpp             # DB worker shutdown + path resolution
 ├── test_filterhelpers.cpp               # Filter predicate helpers
 ├── test_gridlayoutcalculator.cpp        # Grid layout math
 ├── test_gridutils.cpp                   # Grid math utilities
@@ -491,6 +492,7 @@ add_test(NAME test_classname COMMAND test_classname)
 | `test_cachemanager` | 15 | Pixmap cache, LRU eviction, disk persistence |
 | `test_collectionutils` | 30 | CollectionConfig, hierarchy cache, validation helpers |
 | `test_dbmigrations` | 10 | SQLite schema migration steps |
+| `test_databasemanager` | 6 | Worker-thread shutdown, SQL connection cleanup, path resolution |
 | `test_filterhelpers` | 15 | Filter predicate helpers |
 | `test_gridlayoutcalculator` | 17 | Grid metrics, item positioning, row ranges |
 | `test_gridutils` | 22 | Row/column math, centering, grid metrics calculation |
@@ -511,7 +513,7 @@ add_test(NAME test_classname COMMAND test_classname)
 | `test_stringutils` | 10 | String formatting |
 | `test_widgetpoolmanager` | 17 | Widget acquisition, release, soft/hard clear, stale limits |
 
-**Total: 392 unit test methods across 23 test suites**
+**Total: 398 unit test methods across 24 test suites**
 
 ## Code Conventions
 
