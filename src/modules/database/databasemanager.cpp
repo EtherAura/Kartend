@@ -103,6 +103,8 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
           &DatabaseManager::scanItemsProgress);
   connect(m_scanWorker, &QueryManager::collectionScanCompleted, this,
           &DatabaseManager::collectionScanCompleted);
+  connect(m_scanWorker, &QueryManager::collectionScanSummary, this,
+          &DatabaseManager::collectionScanSummary);
 
   m_cachedCountsUpdateTimer = new QTimer(this);
   m_cachedCountsUpdateTimer->setSingleShot(true);

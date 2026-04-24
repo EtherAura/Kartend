@@ -106,6 +106,17 @@ signals:
   /// Allows the UI to refresh counts without blocking on the scan.
   void collectionScanCompleted(const QString &collectionUuid);
 
+  /// Emitted alongside collectionScanCompleted with per-scan item totals.
+  /// Used by the settings dialog to display an "X of Y items added" summary
+  /// after a newly-added collection finishes its first scan.
+  /// @param itemsScanned  Files discovered on disk that matched the collection
+  ///                       extension filter (i.e. the staged count).
+  /// @param itemsApplied  Items successfully upserted into the items table.
+  /// @param success       True if the scan committed cleanly (no
+  ///                       errors/cancellation).
+  void collectionScanSummary(const QString &collectionUuid, int itemsScanned, int itemsApplied,
+                             bool success);
+
   /// Emitted when collection cache has been invalidated
   void cacheInvalidated(const QString &collectionUuid);
 
@@ -171,7 +182,9 @@ private:
   [[nodiscard]] bool ensureCollectionScanned(int collectionIndex,
                                              const CollectionConfig &collection);
   [[nodiscard]] bool scanAndSaveItemsToDatabase(int collectionIndex,
-                                                const CollectionConfig &collection);
+                                                const CollectionConfig &collection,
+                                                int *outItemsScanned = nullptr,
+                                                int *outItemsApplied = nullptr);
   bool needsRescan(int collectionIndex, const CollectionConfig &collection);
   QStringList scanMediaDirectory(const CollectionConfig &collection,
                                  QHash<QString, QDateTime> &timestamps, QString *dirSignatureOut);

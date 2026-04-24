@@ -77,13 +77,19 @@ bool QueryManager::ensureCollectionScanned(int collectionIndex,
   emit scanStarting(collection.name, -1);
 
   // Stream scan results directly into DB inserts to reduce peak memory.
-  const bool success = scanAndSaveItemsToDatabase(collectionIndex, collection);
+  // Kartend-tvg: capture scan stats so we can emit the summary signal used
+  // by the settings dialog's "X of Y items added" confirmation.
+  int itemsScanned = 0;
+  int itemsApplied = 0;
+  const bool success =
+      scanAndSaveItemsToDatabase(collectionIndex, collection, &itemsScanned, &itemsApplied);
 
   // Always emit collectionScanCompleted when we emitted scanStarting, even if
   // the scan failed. This ensures MainWindow's m_activeScanCount is decremented
   // properly and the overlay is hidden. The caller can still check the return
   // value to know if the scan was successful.
   emit collectionScanCompleted(uuid);
+  emit collectionScanSummary(uuid, itemsScanned, itemsApplied, success);
 
   return success;
 }

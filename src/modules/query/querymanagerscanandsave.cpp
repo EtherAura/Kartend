@@ -49,8 +49,18 @@ using namespace QueryManagerInternal;
 Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 #define debugLog(msg) qCDebug(lcQueryManager) << msg
 bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
-                                              const CollectionConfig &collection) {
+                                              const CollectionConfig &collection,
+                                              int *outItemsScanned, int *outItemsApplied) {
   Q_UNUSED(collectionIndex)
+  // Kartend-tvg: populate summary counters for the caller even on early-return
+  // error paths so the UI gets a consistent "0 of 0" report instead of stale
+  // garbage when a scan can't run.
+  if (outItemsScanned) {
+    *outItemsScanned = 0;
+  }
+  if (outItemsApplied) {
+    *outItemsApplied = 0;
+  }
 
   if (!m_db.isOpen()) {
     auto err = ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database is not open",
@@ -573,5 +583,20 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
     m_db.rollback();
   }
 
-  return upsertOk && deleteOk && metaOk && committed;
+  const bool success = upsertOk && deleteOk && metaOk && committed;
+  // Kartend-tvg: surface scan stats to the caller. `itemsInserted` is the
+  // number of files staged (== discovered on disk matching the filter) and
+  // `totalToApply` is what the apply phase attempted to upsert. When the
+  // commit succeeds they equal each other; when it fails we still report what
+  // was staged so the user can see whether the filesystem walk hit anything.
+  if (outItemsScanned) {
+    *outItemsScanned = itemsInserted;
+  }
+  if (outItemsApplied) {
+    *outItemsApplied = success
+                           ? static_cast<int>(std::min<qint64>(
+                                 totalToApply, std::numeric_limits<int>::max()))
+                           : 0;
+  }
+  return success;
 }

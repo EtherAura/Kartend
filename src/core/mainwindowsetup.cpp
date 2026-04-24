@@ -219,6 +219,7 @@ void MainWindow::createMenuBar() {
       context.sidebarManager = getSidebarManager();
       context.scrollManager = getScrollManager();
       context.navigationManager = getNavigationManager();
+      context.databaseManager = getDatabaseManager();
       getSettingsManager()->openSettingsDialog(context);
     }
   };

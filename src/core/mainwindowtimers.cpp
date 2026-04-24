@@ -87,6 +87,7 @@ void MainWindow::setupInitialTimersEmptyCollections() {
       context.sidebarManager = getSidebarManager();
       context.scrollManager = getScrollManager();
       context.navigationManager = getNavigationManager();
+      context.databaseManager = getDatabaseManager();
       getSettingsManager()->openSettingsDialog(context);
 
       if (!m_collections.isEmpty()) {

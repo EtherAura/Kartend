@@ -2,7 +2,10 @@
 #define SETTINGSMANAGER_H
 
 #include "collectionutils.h"
+#include <QHash>
 #include <QObject>
+#include <QPointer>
+#include <QString>
 
 class QWidget;
 class QFile;
@@ -12,6 +15,7 @@ class NavigationManager;
 class SessionManager;
 class ArtworkManager;
 class CacheManager;
+class DatabaseManager;
 
 struct SettingsDialogContext {
   QWidget *parent = nullptr;
@@ -20,6 +24,10 @@ struct SettingsDialogContext {
   SidebarManager *sidebarManager = nullptr;
   ScrollManager *scrollManager = nullptr;
   NavigationManager *navigationManager = nullptr;
+  // Kartend-tvg: needed so the dialog controller can subscribe to post-scan
+  // summary signals and display the "X of Y items added" confirmation box
+  // when a newly-added collection finishes its first scan.
+  DatabaseManager *databaseManager = nullptr;
 };
 
 class SettingsManager : public QObject {
@@ -59,11 +67,27 @@ public:
                            ScrollManager *scrollManager, ArtworkManager *artworkManager,
                            int currentCollectionIndex) -> void;
 
+private slots:
+  /// Handles QueryManager's post-scan summary (forwarded via DatabaseManager).
+  /// If the scan's UUID matches a collection the user just added through the
+  /// settings dialog, pops a "Collection Added — X of Y items" message box.
+  /// Kartend-tvg.
+  void onCollectionScanSummary(const QString &collectionUuid, int itemsScanned, int itemsApplied,
+                               bool success);
+
 private:
   SessionManager *m_sessionManager = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
   CacheManager *m_cacheManager = nullptr;
   GeneralSettings m_generalSettings;
+
+  // Kartend-tvg: UUIDs of collections the user just added through the settings
+  // dialog that are still waiting for their first scan-summary signal. Value is
+  // the collection's display name so the message box can reference it.
+  QHash<QString, QString> m_pendingAddSummaries;
+  // Parent widget for the confirmation message box. QPointer so we don't
+  // outlive it if the dialog is destroyed before the async scan finishes.
+  QPointer<QWidget> m_pendingAddSummaryParent;
 
   void finalizeCollections(const QHash<QString, CollectionConfig> &tempCollections,
                            QList<CollectionConfig> &collections, const bool &needsRewrite) const;
