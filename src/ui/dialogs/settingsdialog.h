@@ -17,6 +17,8 @@ class SettingsDialog;
 class QTreeWidget;
 class QShowEvent;
 class QResizeEvent;
+class QGraphicsDropShadowEffect;
+class QPropertyAnimation;
 QT_END_NAMESPACE
 
 class SidebarManager;
@@ -176,6 +178,13 @@ private:
 
   GamepadCaptureTarget m_gamepadCaptureTarget = GamepadCaptureTarget::None;
   QMetaObject::Connection m_gamepadCaptureConnection;
+
+  // Unsaved-changes indicator (Kartend-9f6): a pulsing drop-shadow glow
+  // applied to the save button while hasUnsavedChanges() is true. Owned by
+  // the button once attached (Qt manages lifetime via QWidget::setGraphicsEffect).
+  QGraphicsDropShadowEffect *m_saveButtonGlow = nullptr;
+  QPropertyAnimation *m_saveButtonGlowAnim = nullptr;
+
   bool eventFilter(QObject *obj, QEvent *event) override;
 };
 
