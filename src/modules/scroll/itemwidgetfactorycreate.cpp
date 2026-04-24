@@ -258,6 +258,17 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget,
                << "artworkDir=" << artworkDir;
   }
 
+  // List mode displays an artwork preview button (not the pixmap), so update
+  // the per-widget hasArtwork flag rather than queueing a pixmap load. This is
+  // also reached from reconfigureArtworkForActiveWidgets() after the directory
+  // cache is warmed, which is the only chance list-mode widgets get to learn
+  // their artwork exists when the cache was cold during initial creation
+  // (Kartend-cbd).
+  if (widget && widget->isListMode()) {
+    widget->setHasArtwork(!artworkPath.isEmpty());
+    return;
+  }
+
   if (!artworkPath.isEmpty() && m_artworkManager) {
     m_artworkManager->addPendingArtwork(widget, artworkPath);
   } else if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") &&
