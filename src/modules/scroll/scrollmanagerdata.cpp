@@ -224,7 +224,7 @@ void ScrollManager::injectCachedItems(
   } else if (qEnvironmentVariableIsSet("KARTEND_ARTWORK_DIAG")) {
     qCDebug(lcSearchDiag) << "[ArtworkDiag] injectCachedItems: artworkPaths.isEmpty="
                << artworkPaths.isEmpty()
-               << "m_widgetFactory=" << (m_widgetFactory != nullptr);
+               << "m_widgetFactory=" << static_cast<bool>(m_widgetFactory);
   }
 
   qCDebug(lcSearchDiag) << QString("injectCachedItems: updatedVisualIndices=%1 artworkPaths=%2")
@@ -337,7 +337,7 @@ bool ScrollManager::getCurrentViewportForCache(
     qCDebug(lcSearchDiag) << "[ArtworkDiag] getCurrentViewportForCache: "
                   "showAllSubcollectionItems="
                << showAllSubcollectionItems
-               << "hierarchyCache=" << (m_hierarchyCache != nullptr)
+               << "hierarchyCache=" << static_cast<bool>(m_hierarchyCache)
                << "hits=" << artworkHits << "misses=" << artworkMisses
                << "artworkPaths=" << artworkPaths.size();
   }

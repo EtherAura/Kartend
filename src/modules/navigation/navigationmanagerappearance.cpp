@@ -202,10 +202,10 @@ void NavigationManager::persistCurrentSelection() {
     if (diagEnabled) {
       qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: "
                     "missing deps"
-                 << "interaction=" << (m_interactionManager != nullptr)
-                 << "settings=" << (m_settingsManager != nullptr)
-                 << "collIndex=" << (m_currentCollectionIndex != nullptr)
-                 << "collections=" << (m_collections != nullptr);
+                 << "interaction=" << static_cast<bool>(m_interactionManager)
+                 << "settings=" << static_cast<bool>(m_settingsManager)
+                 << "collIndex=" << static_cast<bool>(m_currentCollectionIndex)
+                 << "collections=" << static_cast<bool>(m_collections);
     }
     return;
   }
@@ -259,9 +259,9 @@ void NavigationManager::persistCurrentSelection() {
   } else if (diagEnabled) {
     qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: "
                   "cannot cache viewport"
-               << "scrollManager=" << (m_scrollManager != nullptr)
-               << "sessionManager=" << (m_sessionManager != nullptr)
-               << "generalSettings=" << (m_generalSettings != nullptr)
+               << "scrollManager=" << static_cast<bool>(m_scrollManager)
+               << "sessionManager=" << static_cast<bool>(m_sessionManager)
+               << "generalSettings=" << static_cast<bool>(m_generalSettings)
                << "rememberSelection="
                << (m_generalSettings ? m_generalSettings->rememberSelection
                                      : false);
