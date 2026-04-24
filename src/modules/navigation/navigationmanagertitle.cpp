@@ -77,28 +77,32 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
   bool inSubfolder = !config.currentSubfolder.isEmpty();
 
   if (config.isSubcollection) {
-    int parentIdx = config.parentCollectionIndex;
-    if (parentIdx >= 0 && parentIdx < (*m_collections).size()) {
-      // Parent is clickable - navigates back to parent collection
-      QString parentName = (*m_collections)[parentIdx].name.toHtmlEscaped();
-      if (inSubfolder) {
-        // Both parent and current collection are clickable when in subfolder
-        titleHtml = QString("<a href=\"collection:%1\" style=\"color:%2; "
-                            "text-decoration:none;\">%3</a> › "
-                            "<a href=\"root:\" style=\"color:%2; "
-                            "text-decoration:none;\">%4</a>")
-                        .arg(parentIdx)
-                        .arg(linkColorHex)
-                        .arg(parentName)
-                        .arg(config.name.toHtmlEscaped());
-      } else {
-        titleHtml = QString("<a href=\"collection:%1\" style=\"color:%2; "
-                            "text-decoration:none;\">%3</a> › %4")
-                        .arg(parentIdx)
-                        .arg(linkColorHex)
-                        .arg(parentName)
-                        .arg(config.name.toHtmlEscaped());
+    const QList<int> ancestors =
+        CollectionUtils::ancestorIndexChain(config, *m_collections);
+    if (!ancestors.isEmpty()) {
+      // Build clickable breadcrumb from root-most ancestor down to direct
+      // parent. Each ancestor segment navigates back to that collection via
+      // the `collection:<index>` link scheme handled in
+      // onBreadcrumbLinkClicked (navigationmanagersubcollection.cpp:143).
+      const QString linkTemplate = QStringLiteral(
+          "<a href=\"collection:%1\" style=\"color:%2; "
+          "text-decoration:none;\">%3</a>");
+      QStringList segments;
+      segments.reserve(ancestors.size() + 1);
+      for (int idx : ancestors) {
+        const QString name = (*m_collections)[idx].name.toHtmlEscaped();
+        segments << linkTemplate.arg(QString::number(idx), linkColorHex, name);
       }
+      if (inSubfolder) {
+        // Current collection is clickable (returns to its root via `root:`)
+        // only when we've navigated into a virtual subfolder below it.
+        segments << QString("<a href=\"root:\" style=\"color:%1; "
+                            "text-decoration:none;\">%2</a>")
+                        .arg(linkColorHex, config.name.toHtmlEscaped());
+      } else {
+        segments << config.name.toHtmlEscaped();
+      }
+      titleHtml = segments.join(QStringLiteral(" › "));
     } else {
       titleHtml = config.name.toHtmlEscaped();
     }

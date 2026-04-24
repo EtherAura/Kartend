@@ -137,15 +137,17 @@ void updateWindowTitle(QWidget *parent, int viewingIndex,
   }
   auto *titleLabel = parent->findChild<QLabel *>("itemsTitleLabel");
   if (titleLabel) {
-    QString title = collections[viewingIndex].name;
-    if (collections[viewingIndex].isSubcollection &&
-        collections[viewingIndex].parentCollectionIndex >= 0 &&
-        collections[viewingIndex].parentCollectionIndex < collections.size()) {
-      const QString parentName =
-          collections[collections[viewingIndex].parentCollectionIndex].name;
-      title = parentName + " > " + title;
+    // Show full ancestor chain (Kartend-7pq) so the post-save refresh matches
+    // the breadcrumb rendered by NavigationManager::updateItemsPageTitle.
+    // This path is a plain-text fallback (no clickable links); the real
+    // breadcrumb is rebuilt by the navigation code shortly after.
+    const CollectionConfig &viewing = collections[viewingIndex];
+    QStringList segments;
+    for (int idx : CollectionUtils::ancestorIndexChain(viewing, collections)) {
+      segments << collections[idx].name;
     }
-    titleLabel->setText(title);
+    segments << viewing.name;
+    titleLabel->setText(segments.join(QStringLiteral(" › ")));
   }
 }
 

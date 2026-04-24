@@ -553,6 +553,40 @@ hierarchicalNameFor(const CollectionConfig &collection,
   return parts.join('/');
 }
 
+/**
+ * @brief Returns the ancestor index chain for a collection, root-first.
+ *
+ * Walks up `parentCollectionIndex` from `collection`'s direct parent until the
+ * first non-subcollection ancestor (inclusive). The returned list is ordered
+ * from the outermost (root-most) ancestor to the direct parent and does NOT
+ * include `collection` itself. Returns an empty list for non-subcollections or
+ * collections whose `parentCollectionIndex` is out of range.
+ *
+ * Use this to render multi-level breadcrumbs (Kartend-7pq).
+ */
+[[nodiscard]] inline QList<int>
+ancestorIndexChain(const CollectionConfig &collection,
+                   const QList<CollectionConfig> &collections) {
+  QList<int> chain;
+  if (!collection.isSubcollection || collection.parentCollectionIndex < 0) {
+    return chain;
+  }
+  int parent = collection.parentCollectionIndex;
+  // Guard against cycles by bounding the walk length.
+  const int maxDepth = collections.size();
+  int steps = 0;
+  while (parent >= 0 && parent < collections.size() && steps < maxDepth) {
+    chain.prepend(parent);
+    const CollectionConfig &p = collections[parent];
+    if (!p.isSubcollection) {
+      break;
+    }
+    parent = p.parentCollectionIndex;
+    ++steps;
+  }
+  return chain;
+}
+
 [[nodiscard]] inline QString
 selectionSessionKeyFor(const CollectionConfig &collection,
                        const QList<CollectionConfig> &collections) {
