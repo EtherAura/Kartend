@@ -103,6 +103,11 @@ signals:
   /// Consumers can refresh counts without blocking the UI.
   void collectionScanCompleted(const QString &collectionUuid);
 
+  /// Forwarded from QueryManager; carries per-scan item totals so callers can
+  /// display an "X of Y items added" summary after a scan completes.
+  void collectionScanSummary(const QString &collectionUuid, int itemsScanned, int itemsApplied,
+                             bool success);
+
   /// Emitted when collection cache has been invalidated (async operation
   /// complete)
   void cacheInvalidated(const QString &collectionUuid);

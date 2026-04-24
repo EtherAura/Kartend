@@ -9,6 +9,7 @@
 #include "artworkmanager.h"
 #include "cachemanager.h"
 #include "collectionutils.h"
+#include "databasemanager.h"
 #include "mainwindow.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
@@ -21,7 +22,9 @@
 #include <QDialog>
 #include <QLabel>
 #include <QList>
+#include <QMessageBox>
 #include <QScrollArea>
+#include <QSet>
 #include <QTimer>
 #include <QWidget>
 
@@ -257,6 +260,7 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   SidebarManager *sidebarManager = context.sidebarManager;
   ScrollManager *scrollManager = context.scrollManager;
   NavigationManager *navigationManager = context.navigationManager;
+  DatabaseManager *databaseManager = context.databaseManager;
 
   int viewingCollectionIndex = currentCollectionIndex;
   QList<CollectionConfig> originalCollections = collections;
@@ -319,6 +323,44 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   collections = newCollections;
   saveCollections(collections);
   emit collectionsModified();
+
+  // Kartend-tvg: detect collections that were freshly added during this
+  // dialog session (UUID present in newCollections but not in the snapshot
+  // captured at dialog open time) and stage a confirmation message box to
+  // fire once their first scan completes. We only stage collections that
+  // actually have a mediaDirectory — an empty-path stub won't trigger a
+  // scan so there's nothing meaningful to confirm.
+  {
+    QSet<QString> previousUuids;
+    previousUuids.reserve(originalCollections.size());
+    for (const CollectionConfig &c : originalCollections) {
+      if (!c.mediaDirectory.trimmed().isEmpty()) {
+        previousUuids.insert(CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory));
+      }
+    }
+    bool stagedAny = false;
+    for (const CollectionConfig &c : newCollections) {
+      if (c.mediaDirectory.trimmed().isEmpty()) {
+        continue;
+      }
+      const QString uuid = CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
+      if (previousUuids.contains(uuid)) {
+        continue;
+      }
+      m_pendingAddSummaries.insert(uuid, c.name);
+      stagedAny = true;
+    }
+    if (stagedAny) {
+      m_pendingAddSummaryParent = parent;
+      // Connect once (UniqueConnection) to the database manager's forwarded
+      // signal so the user sees a single message box per newly added
+      // collection even across repeated openSettingsDialog invocations.
+      if (databaseManager) {
+        connect(databaseManager, &DatabaseManager::collectionScanSummary, this,
+                &SettingsManager::onCollectionScanSummary, Qt::UniqueConnection);
+      }
+    }
+  }
   auto normalizeCollectionIndex = [](const QList<CollectionConfig> &list, int desiredIndex) -> int {
     if (list.isEmpty()) {
       return -1;
@@ -439,4 +481,39 @@ auto SettingsManager::handleLayoutChanges(
   handleScrollBranch(scrollManager, artworkManager, collections, viewingCollectionIndex,
                      spacingChangedForView, sidebarModeChangedForView, gridWidthChangedForView,
                      alignmentChangedForView, fontSizeChangedForView, hideTitlesChangedForView);
+}
+
+// Kartend-tvg: show "Collection Added — X of Y items" confirmation once the
+// first scan for a newly-added collection completes. Tracked UUIDs come from
+// openSettingsDialog's diff of the collection list at dialog open vs on
+// accept.
+void SettingsManager::onCollectionScanSummary(const QString &collectionUuid, int itemsScanned,
+                                              int itemsApplied, bool success) {
+  if (!m_pendingAddSummaries.contains(collectionUuid)) {
+    return;
+  }
+  const QString name = m_pendingAddSummaries.take(collectionUuid);
+
+  // Use the last-known dialog parent if still alive; fall back to nullptr so
+  // the message box is still shown as a top-level window.
+  QWidget *parent = m_pendingAddSummaryParent.data();
+
+  if (success) {
+    QMessageBox::information(
+        parent, tr("Collection Added"),
+        tr("Collection \"%1\" added.\n\n%2 of %3 items added from the media directory.")
+            .arg(name)
+            .arg(itemsApplied)
+            .arg(itemsScanned));
+  } else {
+    QMessageBox::warning(
+        parent, tr("Collection Added"),
+        tr("Collection \"%1\" added, but the initial scan did not complete "
+           "cleanly.\n\n%2 of %3 items were added before the scan stopped. "
+           "Check the media directory path and file extensions, then try "
+           "again.")
+            .arg(name)
+            .arg(itemsApplied)
+            .arg(itemsScanned));
+  }
 }
