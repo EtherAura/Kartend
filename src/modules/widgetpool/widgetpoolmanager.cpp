@@ -152,22 +152,25 @@ void WidgetPoolManager::pruneStaleWidgets() {
 
 void WidgetPoolManager::clearAndDelete() {
   logMetrics(); // Log final metrics before clearing
-  // Explicitly delete all pooled widgets - use this during cleanup
-  // when widgets need to be destroyed before their parent container
+  // Schedule deletion of all pooled widgets via the event loop. Using
+  // deleteLater() (rather than direct delete) is safer during shutdown
+  // because pooled widgets may still be referenced by in-flight scroll /
+  // animation callbacks. The event loop drains those callbacks before the
+  // widgets are actually destroyed.
   pruneNullEntries(m_pool);
   pruneNullEntries(m_stalePool);
 
   for (const QPointer<ItemWidget> &widget : m_pool) {
     if (widget) {
-      delete widget;
+      widget->deleteLater();
     }
   }
   m_pool.clear();
 
-  // Also delete stale widgets
+  // Also schedule deletion of stale widgets
   for (const QPointer<ItemWidget> &widget : m_stalePool) {
     if (widget) {
-      delete widget;
+      widget->deleteLater();
     }
   }
   m_stalePool.clear();
