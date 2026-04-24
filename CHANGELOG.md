@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.3] - 2026-04-24
+
+### Added
+
+- DatabaseManager lifecycle and path-resolution unit tests
+
+### Changed
+
+- Settings dialog UI polish (approved compact-layout tweaks)
+- `build.sh`: `.backups` archive and reports are now opt-in; dropped
+  redundant `--no-archive` / `--no-reports` / `--fast` flags
+- Documentation sync: architecture, testing, and copilot instructions
+  updated to match current module layout
+- Readme build-script section expanded with a workflow table
+- Ebuild `HOMEPAGE`/`SRC_URI` pointed at `EtherAura/Kartend`
+- `SearchManager::currentMode` marked `[[nodiscard]]`; implicit-bool
+  nullptr checks and `qCWarning` adoption in `configvalidation`
+
+### Fixed
+
+- Crash on shutdown: widget pool now uses `QPointer` for raw captures
+  and `deleteLater` so queued callbacks cannot outlive their targets
+- Scroll/artwork: synchronous artwork lookup fallback for list-mode
+  rows and correct `hasArtwork` flag update from the prewarm
+  reconfigure path
+
 ## [0.0.2] - 2026-04-21
 
 ### Added
