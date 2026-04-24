@@ -24,9 +24,11 @@ Build options:
   --make            Force Unix Makefiles generator
   --incremental     Reuse existing build directory (don't rm -rf it) (default)
   --clean           Remove build directory before configuring
-  --no-archive      Skip creating the source archive (.backups/*.tar.gz)
-  --no-reports      Skip assembling source/UI reports into .backups/reports
-  --fast            Shorthand for --no-archive --no-reports
+  --archive         Create a source archive (.backups/*.tar.gz)
+  --reports         Assemble source/UI reports into .backups/reports
+  --no-archive      Skip creating the source archive (default)
+  --no-reports      Skip assembling source/UI reports (default)
+  --fast            Shorthand for --no-archive --no-reports (default behavior)
   --keep-builds     Don't prune other build directories
   --no-ccache       Disable ccache launcher even if installed
 
@@ -58,8 +60,8 @@ run_tests=false
 install_after_build=false
 generator_preference="auto"  # auto|ninja|make
 incremental_build=true
-make_archive=true
-make_reports=true
+make_archive=false
+make_reports=false
 for arg in "${@:-}"; do
   case "$arg" in
     -h|--help) usage; exit 0 ;;
@@ -77,6 +79,8 @@ for arg in "${@:-}"; do
     --make)        generator_preference="make" ;;
     --incremental) incremental_build=true ;;
     --clean)       incremental_build=false ;;
+    --archive)     make_archive=true ;;
+    --reports)     make_reports=true ;;
     --no-archive)  make_archive=false ;;
     --no-reports)  make_reports=false ;;
     --fast)        make_archive=false; make_reports=false ;;
