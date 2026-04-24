@@ -10,7 +10,10 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QLoggingCategory>
 #include <QtGlobal>
+
+Q_DECLARE_LOGGING_CATEGORY(lcScrollManager)
 
 ItemWidgetFactory::ItemWidgetFactory(QObject *parent) : QObject(parent) {}
 
@@ -33,8 +36,9 @@ void ItemWidgetFactory::setCachedArtworkPaths(
 ItemWidget *ItemWidgetFactory::acquireWidget() {
   // Cannot create widgets without a valid parent
   if (!m_parentWidget) {
-    qWarning() << "ItemWidgetFactory::acquireWidget: m_parentWidget is null, "
-                  "cannot acquire widget";
+    qCWarning(lcScrollManager)
+        << "ItemWidgetFactory::acquireWidget: m_parentWidget is null, "
+           "cannot acquire widget";
     return nullptr;
   }
   if (!m_widgetPool) {

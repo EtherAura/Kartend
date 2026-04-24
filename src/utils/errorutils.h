@@ -2,8 +2,23 @@
 #define ERRORUTILS_H
 
 #include <QDebug>
+#include <QLoggingCategory>
 #include <QString>
 #include <optional>
+
+namespace ErrorUtils {
+
+// Cross-cutting error logging channel (Kartend-v3v). Defined inline so
+// any translation unit that includes errorutils.h — including small test
+// targets that don't link loggingcategories.cpp — picks up the definition.
+// Always-on at info level so centralized error reports surface in release
+// logs without per-module category routing.
+inline const QLoggingCategory &lcErrors() {
+  static const QLoggingCategory cat("kartend.errors", QtInfoMsg);
+  return cat;
+}
+
+} // namespace ErrorUtils
 
 namespace ErrorUtils {
 
@@ -163,16 +178,16 @@ inline void logError(const ErrorContext &ctx) {
 
   switch (ctx.severity) {
   case Severity::Info:
-    qInfo() << msg;
+    qCInfo(lcErrors) << msg;
     break;
   case Severity::Warning:
-    qWarning() << msg;
+    qCWarning(lcErrors) << msg;
     break;
   case Severity::Error:
-    qWarning() << "ERROR:" << msg;
+    qCWarning(lcErrors) << "ERROR:" << msg;
     break;
   case Severity::Critical:
-    qCritical() << msg;
+    qCCritical(lcErrors) << msg;
     break;
   }
 }

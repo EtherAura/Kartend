@@ -29,6 +29,8 @@ using QueryManagerInternal::buildFtsPrefixQuery;
 using QueryManagerInternal::canonicalKeyPath;
 using QueryManagerInternal::displayNameForBase;
 
+Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
+
 void QueryManager::fetchItemsRange(
     const CollectionContext &context,
     const QList<CollectionConfig> &allCollections, int offset, int limit,
@@ -319,8 +321,9 @@ void QueryManager::fetchItemsRange(
   case SortMode::Random:
     // This shouldn't happen - Random mode forces cache creation above.
     // Fall back to alphabetical for consistent pagination.
-    qWarning() << "[QueryManager] fetchItemsRange: Random sort reached slow "
-                  "path unexpectedly";
+    qCWarning(lcQueryManager)
+        << "[QueryManager] fetchItemsRange: Random sort reached slow "
+           "path unexpectedly";
     sql += " ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?";
     break;
   default:
