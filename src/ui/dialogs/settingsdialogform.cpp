@@ -155,7 +155,7 @@ void SettingsDialog::updateSaveButtonStyle() {
 void SettingsDialog::updateDeleteButtonState() {
   if (ui->removeCollectionButton) {
     // Enable delete when there's a valid collection selected
-    bool hasSelection = currentTreeItem != nullptr &&
+    bool hasSelection = currentTreeItem &&
                         itemToCollectionIndex.contains(currentTreeItem);
     ui->removeCollectionButton->setEnabled(hasSelection &&
                                            !collections.isEmpty());

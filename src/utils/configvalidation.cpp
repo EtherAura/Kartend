@@ -5,8 +5,15 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
+#include <QLoggingCategory>
 #include <QSet>
 #include <QStandardPaths>
+
+// Per-module logging category. Defaults to warning level so config issues
+// remain visible in release logs while letting users silence with
+// QT_LOGGING_RULES="kartend.configvalidation=false".
+Q_LOGGING_CATEGORY(lcConfigValidation, "kartend.configvalidation",
+                   QtWarningMsg)
 
 namespace ConfigValidation {
 
@@ -239,10 +246,10 @@ void logValidationResult(const ValidationResult &result,
   QString prefix = context.isEmpty() ? "Config validation" : context;
 
   for (const QString &error : result.errors) {
-    qWarning() << prefix << "ERROR:" << error;
+    qCWarning(lcConfigValidation) << prefix << "ERROR:" << error;
   }
   for (const QString &warning : result.warnings) {
-    qWarning() << prefix << "WARNING:" << warning;
+    qCWarning(lcConfigValidation) << prefix << "WARNING:" << warning;
   }
 }
 

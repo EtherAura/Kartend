@@ -65,8 +65,9 @@ void ScrollManager::updateVirtualView() {
       --m_emptyViewDebugBudget;
       debugLog("updateVirtualView: early return - missing container/scrollArea "
                "(virtualContainer="
-               << (m_virtualContainer != nullptr)
-               << " scrollArea=" << (m_mediaScrollArea != nullptr) << ")");
+               << static_cast<bool>(m_virtualContainer)
+               << " scrollArea=" << static_cast<bool>(m_mediaScrollArea)
+               << ")");
     }
     return;
   }
@@ -103,8 +104,8 @@ void ScrollManager::updateVirtualView() {
              << "lastRow=" << getLastVisibleRow() << "totalItems="
              << m_totalItems << "itemsPerRow=" << m_metrics.itemsPerRow
              << "itemWxH=" << m_metrics.itemWidth << "x" << m_metrics.itemHeight
-             << "virtualContainer=" << (m_virtualContainer != nullptr)
-             << "scrollArea=" << (m_mediaScrollArea != nullptr) << ")");
+             << "virtualContainer=" << static_cast<bool>(m_virtualContainer)
+             << "scrollArea=" << static_cast<bool>(m_mediaScrollArea) << ")");
   }
 
   removeUnneededWidgets(needed);

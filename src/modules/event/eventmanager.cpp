@@ -190,7 +190,7 @@ bool EventManager::handleActivityEvent(QEvent *event) {
 
 bool EventManager::handleMouseButtonPress(QObject *obj, QEvent *event) {
   if ((obj && qobject_cast<QScrollBar *>(obj)) ||
-      qobject_cast<QScrollBar *>(obj ? obj->parent() : nullptr) != nullptr) {
+      qobject_cast<QScrollBar *>(obj ? obj->parent() : nullptr)) {
     if (m_viewportManager) {
       m_viewportManager->setContinuousScrollActive(true);
     }

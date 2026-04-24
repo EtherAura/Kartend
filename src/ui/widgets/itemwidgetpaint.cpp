@@ -75,7 +75,7 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
 
   // Paint selection border when selected (grid mode needs imageLabel, list mode
   // uses full widget)
-  bool canPaintSelection = m_isListMode || (imageLabel != nullptr);
+  bool canPaintSelection = m_isListMode || imageLabel;
   if (isSelectedState && canPaintSelection && !glideActive) {
     painter.setRenderHint(QPainter::Antialiasing);
 
