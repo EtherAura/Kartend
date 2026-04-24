@@ -6,13 +6,13 @@ EAPI=8
 inherit cmake desktop xdg
 
 DESCRIPTION="Qt6 KDE frontend for organizing and launching multimedia collections"
-HOMEPAGE="https://github.com/carl/kartend"
+HOMEPAGE="https://github.com/EtherAura/Kartend"
 
 if [[ ${PV} == 9999 ]]; then
 	inherit git-r3
-	EGIT_REPO_URI="https://github.com/carl/kartend.git"
+	EGIT_REPO_URI="https://github.com/EtherAura/Kartend.git"
 else
-	SRC_URI="https://github.com/carl/kartend/archive/v${PV}.tar.gz -> ${P}.tar.gz"
+	SRC_URI="https://github.com/EtherAura/Kartend/archive/v${PV}.tar.gz -> ${P}.tar.gz"
 	KEYWORDS="~amd64 ~x86"
 fi
 
