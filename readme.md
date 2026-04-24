@@ -48,7 +48,7 @@ By default this produces an optimized release build at `build/ninja-release/kart
 For a faster inner loop during development (no reports/archive):
 
 ```bash
-.scripts/build.sh --debug --tests --run-tests --fast
+.scripts/build.sh --debug --tests --run-tests
 ```
 
 For build script options, manual CMake builds, and advanced configuration, see [docs/building.md](docs/building.md).

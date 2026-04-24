@@ -385,7 +385,6 @@ Build script flags:
 - `--maintenance` - Warnings as errors, enables `--apply-fixes` and `--format-apply`
 - `--pgo` - Profile-guided optimization (two-pass build)
 - `--tests --run-tests` - Build and run unit tests
-- `--fast` - Skip reports/archive for faster iteration
 
 **Debug builds:** Use `--debug` flag when you need to see debug/warning output:
 ```bash
