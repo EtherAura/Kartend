@@ -172,6 +172,50 @@ target_link_libraries(test_querymanager_cancel_scan
 )
 add_test(NAME QueryManagerCancelScan COMMAND test_querymanager_cancel_scan)
 
+# DatabaseManager lifecycle / threading tests
+# Reuses the same query-stack source list as QueryManagerCancelScan and adds
+# the databasemanager TUs. Validates worker-thread shutdown, SQL connection
+# cleanup, and thread-safe path-resolution helpers.
+add_executable(test_databasemanager
+  test_databasemanager.cpp
+  ${SRC_DIR}/modules/database/databasemanager.cpp
+  ${SRC_DIR}/modules/database/databasemanagerpaths.cpp
+  ${SRC_DIR}/modules/database/databasemanagerworker.cpp
+  ${SRC_DIR}/modules/query/querymanager.cpp
+  ${SRC_DIR}/modules/query/querymanagerstatichelpers.cpp
+  ${SRC_DIR}/modules/query/querymanagerlifecycle.cpp
+  ${SRC_DIR}/modules/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/modules/query/querymanagerscan.cpp
+  ${SRC_DIR}/modules/query/querymanagerpersist.cpp
+  ${SRC_DIR}/modules/query/querymanagerscanandsave.cpp
+  ${SRC_DIR}/modules/query/querymanagerconnection.cpp
+  ${SRC_DIR}/modules/query/querymanagercache.cpp
+  ${SRC_DIR}/modules/query/querymanagerload.cpp
+  ${SRC_DIR}/modules/query/querymanagerfetch.cpp
+  ${SRC_DIR}/modules/query/queryhelpers.cpp
+  ${SRC_DIR}/modules/session/sessionmanager.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/loggingcategories.cpp
+)
+target_include_directories(test_databasemanager PRIVATE
+  ${SRC_DIR}/modules/database
+  ${SRC_DIR}/modules/query
+  ${SRC_DIR}/modules/session
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_databasemanager
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Concurrent
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME DatabaseManager COMMAND test_databasemanager)
+
 # ArtworkManager tests (cancellation, dedup, QPointer race)
 add_executable(test_artworkmanager
   test_artworkmanager.cpp

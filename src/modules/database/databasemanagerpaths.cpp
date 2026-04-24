@@ -12,7 +12,6 @@
 #include <functional>
 #include <stdexcept>
 
-#include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "dbmigrations.h"

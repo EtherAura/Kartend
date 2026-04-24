@@ -28,7 +28,7 @@ cd build/ninja-release
 ./tests/test_gridlayoutcalculator
 ./tests/test_sessionmanager
 ./tests/test_artworkmanager
-# ... one binary per suite under tests/ (23 suites total)
+# ... one binary per suite under tests/ (24 suites total)
 ```
 
 ## Sanitizers (optional)
@@ -55,6 +55,7 @@ ctest --test-dir build/ninja-sanitize --output-on-failure
 | `test_artworkmanager` | 15 | Artwork path resolution, batch loading, suppression |
 | `test_cachemanager` | 15 | Pixmap cache, LRU eviction, disk persistence |
 | `test_collectionutils` | 30 | CollectionConfig, hierarchy cache, validation helpers |
+| `test_databasemanager` | 6 | Worker-thread shutdown, SQL connection cleanup, path resolution |
 | `test_dbmigrations` | 10 | SQLite schema migration steps |
 | `test_filterhelpers` | 15 | Filter predicate helpers |
 | `test_gridlayoutcalculator` | 17 | Grid metrics, item positioning, row ranges |
@@ -76,7 +77,7 @@ ctest --test-dir build/ninja-sanitize --output-on-failure
 | `test_stringutils` | 10 | String formatting |
 | `test_widgetpoolmanager` | 17 | Widget acquisition, release, soft/hard clear, stale limits |
 
-**Total: 392 unit test methods across 23 test suites.**
+**Total: 398 unit test methods across 24 test suites.**
 
 ## Adding New Tests
 

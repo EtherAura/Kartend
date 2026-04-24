@@ -3,7 +3,6 @@
 #include <QSqlQuery>
 #include <QtGlobal>
 
-#include "artworkmanager.h"
 #include "loggingcategories.h"
 #include "databasemanager.h"
 #include "errorutils.h"
