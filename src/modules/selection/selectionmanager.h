@@ -166,6 +166,10 @@ public:
 
   // Select item by index with full update
   void selectItemByIndex(int index, bool allowHorizontalScroll);
+  // Select the item currently under the mouse cursor without recentering the
+  // viewport; hover selection should not move content out from under the
+  // pointer.
+  void selectItemByHover(int index);
 
   // Persistence helpers
   void persistSuppressedSelectionAndMaybeCenter(int index, const QList<int> &subcollections,

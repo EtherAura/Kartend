@@ -342,6 +342,34 @@ void SelectionManager::selectItemByIndex(int index, bool allowHorizontalScroll) 
   }
 }
 
+void SelectionManager::selectItemByHover(int index) {
+  if (!m_scrollManager || !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+    return;
+  }
+
+  const int totalItems = m_scrollManager->getTotalItems();
+  if (index < 0 || index >= totalItems || index == m_selectedItemIndex) {
+    return;
+  }
+
+  m_selectedItemIndex = index;
+  const int gridWidth = getCurrentGridWidth();
+  if (gridWidth > 0) {
+    m_lastSelectedRow = index / gridWidth;
+  }
+  if (m_state) {
+    m_state->scroll().userFreeScroll = false;
+  }
+
+  const QList<int> subcollections = getSubcollections(*m_currentCollectionIndex);
+  m_selectedMediaItem = widgetForIndex(index);
+  updateFilePathForSelection(index, subcollections);
+  persistSelectionForIndex(*m_currentCollectionIndex, index);
+
+  m_scrollManager->updateSelectionForIndex(index);
+  emit selectionChanged(index);
+}
+
 void SelectionManager::persistSuppressedSelectionAndMaybeCenter(int index,
                                                                 const QList<int> &subcollections,
                                                                 bool skipCenter) {

@@ -321,6 +321,11 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->wrapNavigationCheckBox->setChecked(m_generalSettings.wrapNavigation);
     ui->wrapNavigationCheckBox->blockSignals(false);
   }
+  if (ui->selectItemOnHoverCheckBox) {
+    ui->selectItemOnHoverCheckBox->blockSignals(true);
+    ui->selectItemOnHoverCheckBox->setChecked(m_generalSettings.selectItemOnHover);
+    ui->selectItemOnHoverCheckBox->blockSignals(false);
+  }
   if (ui->pixmapCacheSpinBox) {
     ui->pixmapCacheSpinBox->blockSignals(true);
     ui->pixmapCacheSpinBox->setValue(m_generalSettings.pixmapCacheSizeMB);
@@ -458,6 +463,10 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     }
     if (ui->wrapNavigationCheckBox) {
       mainWindow->m_generalSettings.wrapNavigation = ui->wrapNavigationCheckBox->isChecked();
+    }
+    if (ui->selectItemOnHoverCheckBox) {
+      mainWindow->m_generalSettings.selectItemOnHover =
+          ui->selectItemOnHoverCheckBox->isChecked();
     }
     if (ui->pixmapCacheSpinBox) {
       int newCacheSize = ui->pixmapCacheSpinBox->value();

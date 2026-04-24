@@ -113,6 +113,9 @@ bool EventManager::filterEvent(QObject *obj, QEvent *event) {
   (void)handleActivityEvent(event);
 
   switch (event->type()) {
+  case QEvent::Enter:
+  case QEvent::MouseMove:
+    return handleHoverSelection(obj, event);
   case QEvent::MouseButtonPress:
     return handleMouseButtonPress(obj, event);
   case QEvent::MouseButtonRelease:

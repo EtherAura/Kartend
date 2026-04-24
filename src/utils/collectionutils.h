@@ -319,6 +319,10 @@ struct CollectionContext {
 struct GeneralSettings {
   bool rememberSelection = false;
   bool wrapNavigation = false;
+  // When enabled, moving the pointer over a visible item updates the current
+  // selection without requiring a click. Kept as a global interaction preference
+  // because it changes input semantics application-wide.
+  bool selectItemOnHover = false;
   int pixmapCacheSizeMB = 50;             // Default 50MB, user configurable
   int keyboardRepeatIntervalMs = 260;     // Grid view keyboard repeat interval in ms
   int keyboardRepeatDelayMs = 260;        // Initial delay before keyboard repeat starts
