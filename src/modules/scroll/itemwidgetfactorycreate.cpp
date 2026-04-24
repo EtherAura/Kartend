@@ -81,8 +81,17 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex,
     // Store artwork directory for preview overlay to use
     widget->setArtworkDirectory(artworkDir);
     if (!artworkDir.isEmpty()) {
-      QString artworkPath = ArtworkUtils::findArtworkForFileCached(
-          QFileInfo(fullPath).fileName(), artworkDir);
+      QString fileName = QFileInfo(fullPath).fileName();
+      QString artworkPath =
+          ArtworkUtils::findArtworkForFileCached(fileName, artworkDir);
+      // Cold-cache fallback: findArtworkForFileCached returns empty on the
+      // first lookup for an uncached directory (it queues a background scan).
+      // For list mode we can't rely on the post-prewarm reconfigure alone --
+      // do a direct synchronous lookup so the artwork preview button
+      // ('view-preview' icon) appears on first paint (Kartend-cbd).
+      if (artworkPath.isEmpty()) {
+        artworkPath = ArtworkUtils::findArtworkForFile(fileName, artworkDir);
+      }
       widget->setHasArtwork(!artworkPath.isEmpty());
     }
   }
