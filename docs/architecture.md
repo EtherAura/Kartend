@@ -20,7 +20,7 @@ src/
 │   ├── event/      # Event filtering, gesture detection
 │   ├── filter/     # Search and subcollection filtering
 │   ├── interaction/# Input handling, selection state
-│   ├── keyboard/   # Arrow key navigation, key repeat
+│   ├── keyboard/   # Arrow key navigation, key repeat, alphabetic jumping
 │   ├── launch/     # Item launching, process spawning
 │   ├── mouse/      # Click hold scrolling, wheel events
 │   ├── navigation/ # Collection switching, navigation stack
@@ -36,8 +36,8 @@ src/
 │   ├── viewport/   # Centering, viewport positioning
 │   └── widgetpool/ # Widget recycling pool
 ├── ui/             # UI components and constants
-│   ├── dialogs/    # Settings dialog, error dialog
-│   └── widgets/    # Item widget, metadata sidebar
+│   ├── dialogs/    # Settings dialog, error dialog, shortcuts dialog
+│   └── widgets/    # Item widget, metadata sidebar, list header, overlays
 └── utils/          # Shared utilities and data structures
 ```
 
@@ -74,6 +74,8 @@ src/
 | `sidebarmanager` | Controls metadata sidebar visibility, positioning, and content updates. |
 | `filtermanager` | Applies search and subcollection filters to the active item set (helper owned by ScrollManager). |
 | `widgetpoolmanager` | Recycles ItemWidget instances for virtual scrolling (helper owned by ScrollManager). |
+| `datasourcemanager` | Owns FilterManager, ScrollDataManager, PreSearchStateManager, and SearchLoadingOverlay (helper extracted from ScrollManager). |
+| `selectiondisplaymanager` | Owns SelectionOverlayManager, SelectionStateTracker, and ArtworkPreviewOverlay (helper extracted from ScrollManager). |
 | `overlay` | SelectionOverlayManager / SearchLoadingOverlay rendering helpers for glide and loading visuals. |
 | `restore` | SelectionRestoreManager coordinating selection restoration during navigation transitions. |
 
