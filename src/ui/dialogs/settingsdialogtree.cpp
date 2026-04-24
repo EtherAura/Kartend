@@ -377,3 +377,169 @@ auto SettingsDialog::wouldCreateCircularReference(int childIndex, int potentialP
   }
   return false;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Kartend-63o: propagate appearance/layout settings to other collections
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// These helpers copy a curated subset of the currently-edited collection's
+// configuration onto a target set of collections. The copied fields are
+// strictly the "how it looks and lays out" knobs — grid/item dimensions,
+// spacing, fonts, colors, background, list-mode styling, view type,
+// alignment, scrollbar/sidebar visibility. We deliberately do NOT touch:
+//   * Identity fields (name, parentCollectionIndex, isSubcollection,
+//     collectionIcon).
+//   * Path/content fields (mediaDirectory, artworkDirectory, extensions,
+//     launcher/core/launch params, extract* flags).
+//   * Scan-affecting flags (includeContent/ArtworkSubfolders,
+//     show*SubcollectionItems, hideSubfolderTitles, showHiddenFolders,
+//     showAllSubfolderItems) — propagating these would silently trigger
+//     rescans on unrelated collections, which the user almost certainly
+//     doesn't want from a "copy my look to everything" action.
+
+namespace {
+
+// Copy the appearance/layout subset from @p src onto @p dst. Leaves all
+// non-listed fields on @p dst untouched so identity and scan settings
+// survive.
+void copyAppearanceAndLayoutFields(const CollectionConfig &src, CollectionConfig &dst) {
+  // Grid/layout
+  dst.gridWidth = src.gridWidth;
+  dst.horizontalSpacing = src.horizontalSpacing;
+  dst.verticalSpacing = src.verticalSpacing;
+  dst.itemWidth = src.itemWidth;
+  dst.itemHeight = src.itemHeight;
+  dst.fontSize = src.fontSize;
+  dst.cornerRadius = src.cornerRadius;
+  dst.horizontalAlignment = src.horizontalAlignment;
+  dst.viewType = src.viewType;
+
+  // Visibility/chrome
+  dst.hideTitles = src.hideTitles;
+  dst.hideSubcollectionTitles = src.hideSubcollectionTitles;
+  dst.hideHorizontalScrollbar = src.hideHorizontalScrollbar;
+  dst.hideVerticalScrollbar = src.hideVerticalScrollbar;
+  dst.sidebarMode = src.sidebarMode;
+
+  // Colors/background
+  dst.backgroundType = src.backgroundType;
+  dst.backgroundColor = src.backgroundColor;
+  dst.backgroundImage = src.backgroundImage;
+  dst.primaryColor = src.primaryColor;
+  dst.tileColor = src.tileColor;
+  dst.selectionColor = src.selectionColor;
+
+  // List-mode styling
+  dst.listFontSize = src.listFontSize;
+  dst.listRowHeight = src.listRowHeight;
+  dst.listRowColor = src.listRowColor;
+  dst.listAltRowColor = src.listAltRowColor;
+
+  // Text appearance
+  dst.customFontFamily = src.customFontFamily;
+
+  dst.clampValues();
+}
+
+} // namespace
+
+void SettingsDialog::applyCurrentSettingsToIndices(const QList<int> &targetIndices,
+                                                   const QString &scopeLabel) {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
+    QMessageBox::information(this, tr("Apply Settings"),
+                             tr("Select a collection first, then use Apply to "
+                                "copy its appearance and layout to %1.")
+                                 .arg(scopeLabel));
+    return;
+  }
+  if (targetIndices.isEmpty()) {
+    QMessageBox::information(
+        this, tr("Apply Settings"),
+        tr("There are no collections in the scope \"%1\" to apply to.").arg(scopeLabel));
+    return;
+  }
+
+  // Snapshot the form first so we copy what the user currently sees, not the
+  // last-saved state. saveCollectionFromUI updates m_workingCollections and
+  // collections in place.
+  saveCollectionFromUI(currentCollectionIndex);
+
+  const QString sourceName = collections[currentCollectionIndex].name;
+  const QMessageBox::StandardButton reply = QMessageBox::question(
+      this, tr("Apply Settings"),
+      tr("Copy the appearance and layout settings from \"%1\" to %2 (%3 "
+         "collection(s))?\n\n"
+         "This overwrites grid/spacing, item dimensions, fonts, colors, "
+         "background, list-mode styling, view type, alignment, and "
+         "scrollbar/sidebar visibility. Paths, extensions, and scan-related "
+         "flags are left alone.")
+          .arg(sourceName)
+          .arg(scopeLabel)
+          .arg(targetIndices.size()),
+      QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+  if (reply != QMessageBox::Yes) {
+    return;
+  }
+
+  const CollectionConfig source = collections[currentCollectionIndex];
+  int applied = 0;
+  for (int idx : targetIndices) {
+    if (idx < 0 || idx >= collections.size()) {
+      continue;
+    }
+    if (idx == currentCollectionIndex) {
+      continue;
+    }
+    copyAppearanceAndLayoutFields(source, collections[idx]);
+    if (idx < m_workingCollections.size()) {
+      copyAppearanceAndLayoutFields(source, m_workingCollections[idx]);
+    }
+    ++applied;
+  }
+
+  if (applied == 0) {
+    return;
+  }
+
+  // Persist immediately so the user's click has a durable effect even if
+  // they later close the dialog with Cancel (matching how addCollection()
+  // emits collectionSaved).
+  emit collectionSaved(collections);
+
+  // Refresh the tree + reload current UI so any visible differences show
+  // up in the selected collection's form if the user jumps between nodes.
+  updateCollectionTreeWidget();
+  if (currentCollectionIndex >= 0 && currentCollectionIndex < collections.size()) {
+    loadCollectionToUI(currentCollectionIndex);
+    originalCollection = m_workingCollections[currentCollectionIndex];
+  }
+  m_collectionSaved = true;
+  updateSaveButtonStyle();
+
+  QMessageBox::information(
+      this, tr("Apply Settings"),
+      tr("Copied settings from \"%1\" to %2 collection(s).").arg(sourceName).arg(applied));
+}
+
+void SettingsDialog::applyCurrentSettingsToAllCollections() {
+  QList<int> targets;
+  targets.reserve(collections.size());
+  for (int i = 0; i < collections.size(); ++i) {
+    if (i != currentCollectionIndex) {
+      targets.append(i);
+    }
+  }
+  applyCurrentSettingsToIndices(targets, tr("all other collections"));
+}
+
+void SettingsDialog::applyCurrentSettingsToSubcollections() {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
+    QMessageBox::information(this, tr("Apply Settings"),
+                             tr("Select a collection first to apply its "
+                                "settings to its subcollections."));
+    return;
+  }
+  const QList<int> descendants =
+      CollectionUtils::collectDescendantIndices(currentCollectionIndex, collections);
+  applyCurrentSettingsToIndices(descendants, tr("its subcollections"));
+}

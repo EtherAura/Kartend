@@ -7,8 +7,10 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFontDialog>
+#include <QAction>
 #include <QInputDialog>
 #include <QKeySequence>
+#include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPixmapCache>
@@ -182,6 +184,20 @@ void SettingsDialog::setupButtonConnections() {
   connect(ui->addCollectionButton, &QPushButton::clicked, this, &SettingsDialog::addCollection);
   connect(ui->removeCollectionButton, &QPushButton::clicked, this,
           &SettingsDialog::removeCollection);
+  // Kartend-63o: populate the "apply to..." tool button's dropdown menu so
+  // users can propagate the current collection's appearance/layout settings
+  // to all collections or to subcollections only. Menu is owned by the
+  // button so Qt cleans it up with the dialog.
+  if (ui->applyToButton) {
+    auto *menu = new QMenu(ui->applyToButton);
+    QAction *allAction = menu->addAction(tr("Apply to All Collections..."));
+    QAction *subAction = menu->addAction(tr("Apply to Subcollections Only..."));
+    connect(allAction, &QAction::triggered, this,
+            &SettingsDialog::applyCurrentSettingsToAllCollections);
+    connect(subAction, &QAction::triggered, this,
+            &SettingsDialog::applyCurrentSettingsToSubcollections);
+    ui->applyToButton->setMenu(menu);
+  }
   connect(ui->browseLauncherButton, &QPushButton::clicked, this, &SettingsDialog::browseLauncher);
   connect(ui->browseCoreButton, &QPushButton::clicked, this, &SettingsDialog::browseCore);
   connect(ui->browseMediaDirButton, &QPushButton::clicked, this, &SettingsDialog::browseMediaDir);
