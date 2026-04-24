@@ -328,6 +328,11 @@ struct GeneralSettings {
   int listClickHoldRepeatIntervalMs = 80; // List view interval between click-hold repeat steps
   int mouseWheelRows = 1;                 // Rows to scroll per wheel step
   int scrollAnimationDurationMs = 1500;   // Scroll animation duration in ms
+  // Global scroll-velocity multiplier applied to both mouse-wheel steps and
+  // held-arrow key-repeat cadence. 1.0 = unchanged; >1 faster; <1 slower.
+  // Clamped at load/save time to [0.25, 5.0] so the user can't pick values
+  // that would stall or saturate the animation pipeline.
+  double scrollVelocityMultiplier = 1.0;
   // Text appearance settings
   int titleTintSaturation = 180; // Title text saturation (0-255)
   int titleTintLightness = 60;   // Title text lightness (0-255)

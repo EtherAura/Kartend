@@ -1372,6 +1372,41 @@
               </property>
              </widget>
             </item>
+            <item row="12" column="0">
+             <widget class="QLabel" name="scrollVelocityMultiplierLabel">
+              <property name="text">
+               <string>Scroll Velocity Multiplier:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="12" column="1">
+             <widget class="QDoubleSpinBox" name="scrollVelocityMultiplierSpinBox">
+              <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+              <property name="minimumWidth"><number>80</number></property>
+              <property name="maximumWidth"><number>80</number></property>
+              <property name="toolTip">
+               <string>Multiplier applied to mouse wheel rows and held-arrow key-repeat cadence. 1.0× = unchanged.</string>
+              </property>
+              <property name="suffix">
+               <string>×</string>
+              </property>
+              <property name="decimals">
+               <number>2</number>
+              </property>
+              <property name="singleStep">
+               <double>0.25</double>
+              </property>
+              <property name="minimum">
+               <double>0.25</double>
+              </property>
+              <property name="maximum">
+               <double>5.00</double>
+              </property>
+              <property name="value">
+               <double>1.00</double>
+              </property>
+             </widget>
+            </item>
                </layout>
               </item>
               <item>

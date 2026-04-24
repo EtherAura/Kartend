@@ -366,7 +366,22 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
 
   // Get row multiplier from settings
   int rowMultiplier = m_generalSettings ? m_generalSettings->mouseWheelRows : 1;
+  // Kartend-9cl: scale wheel step by the global scroll-velocity multiplier.
+  // Done on the (row * wheelSteps) product so single-notch motion at 1.5×
+  // yields a perceivable 1.5-row step rather than rounding down to 1.
+  const double velocityMult =
+      m_generalSettings ? m_generalSettings->scrollVelocityMultiplier : 1.0;
   int rowDelta = -wheelSteps * rowMultiplier;
+  if (velocityMult != 1.0) {
+    // Round toward the direction of travel so tiny multipliers still move at
+    // least 1 row per notch in the intended direction.
+    const double scaled = static_cast<double>(rowDelta) * velocityMult;
+    rowDelta = scaled >= 0 ? static_cast<int>(scaled + 0.5)
+                           : -static_cast<int>(-scaled + 0.5);
+    if (rowDelta == 0 && wheelSteps != 0) {
+      rowDelta = (-wheelSteps > 0) ? 1 : -1;
+    }
+  }
 
   // In list mode, move by 1 item per step instead of gridWidth
   bool isListMode = (collection.viewType == ViewType::List);

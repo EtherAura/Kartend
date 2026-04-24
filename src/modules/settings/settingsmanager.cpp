@@ -66,6 +66,10 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.listClickHoldRepeatIntervalMs = s.value("listClickHoldRepeatIntervalMs", 80).toInt();
   settings.mouseWheelRows = s.value("mouseWheelRows", 1).toInt();
   settings.scrollAnimationDurationMs = s.value("scrollAnimationDurationMs", 1500).toInt();
+  settings.scrollVelocityMultiplier = s.value("scrollVelocityMultiplier", 1.0).toDouble();
+  // Clamp to a safe range: 0.25× - 5.0× so the multiplier can't stall or
+  // saturate the animation pipeline.
+  settings.scrollVelocityMultiplier = qBound(0.25, settings.scrollVelocityMultiplier, 5.0);
   // Load text appearance settings
   settings.titleTintSaturation = s.value("titleTintSaturation", 180).toInt();
   settings.titleTintLightness = s.value("titleTintLightness", 60).toInt();
@@ -125,6 +129,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.listClickHoldRepeatIntervalMs = settings.listClickHoldRepeatIntervalMs;
   m_generalSettings.mouseWheelRows = settings.mouseWheelRows;
   m_generalSettings.scrollAnimationDurationMs = settings.scrollAnimationDurationMs;
+  m_generalSettings.scrollVelocityMultiplier =
+      qBound(0.25, settings.scrollVelocityMultiplier, 5.0);
   m_generalSettings.titleTintSaturation = settings.titleTintSaturation;
   m_generalSettings.titleTintLightness = settings.titleTintLightness;
   m_generalSettings.titleBaseColor = settings.titleBaseColor;
@@ -166,6 +172,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("listClickHoldRepeatIntervalMs", m_generalSettings.listClickHoldRepeatIntervalMs);
   s.setValue("mouseWheelRows", m_generalSettings.mouseWheelRows);
   s.setValue("scrollAnimationDurationMs", m_generalSettings.scrollAnimationDurationMs);
+  s.setValue("scrollVelocityMultiplier", m_generalSettings.scrollVelocityMultiplier);
   s.setValue("titleTintSaturation", m_generalSettings.titleTintSaturation);
   s.setValue("titleTintLightness", m_generalSettings.titleTintLightness);
   s.setValue("titleBaseColor", m_generalSettings.titleBaseColor);
