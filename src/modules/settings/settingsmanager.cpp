@@ -54,6 +54,7 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   s.beginGroup("General");
   settings.rememberSelection = s.value("rememberSelection", true).toBool();
   settings.wrapNavigation = s.value("wrapNavigation", false).toBool();
+  settings.selectItemOnHover = s.value("selectItemOnHover", false).toBool();
   settings.pixmapCacheSizeMB = s.value("pixmapCacheSizeMB", 50).toInt();
   // Clamp to reasonable range: 10MB - 500MB
   settings.pixmapCacheSizeMB = qBound(10, settings.pixmapCacheSizeMB, 500);
@@ -120,6 +121,7 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
 void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.rememberSelection = settings.rememberSelection;
   m_generalSettings.wrapNavigation = settings.wrapNavigation;
+  m_generalSettings.selectItemOnHover = settings.selectItemOnHover;
   m_generalSettings.pixmapCacheSizeMB = qBound(10, settings.pixmapCacheSizeMB, 500);
   m_generalSettings.keyboardRepeatIntervalMs = settings.keyboardRepeatIntervalMs;
   m_generalSettings.keyboardRepeatDelayMs = settings.keyboardRepeatDelayMs;
@@ -163,6 +165,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.beginGroup("General");
   s.setValue("rememberSelection", m_generalSettings.rememberSelection);
   s.setValue("wrapNavigation", m_generalSettings.wrapNavigation);
+  s.setValue("selectItemOnHover", m_generalSettings.selectItemOnHover);
   s.setValue("pixmapCacheSizeMB", m_generalSettings.pixmapCacheSizeMB);
   s.setValue("keyboardRepeatIntervalMs", m_generalSettings.keyboardRepeatIntervalMs);
   s.setValue("keyboardRepeatDelayMs", m_generalSettings.keyboardRepeatDelayMs);

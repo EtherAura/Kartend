@@ -6,6 +6,7 @@
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QMouseEvent>
+#include <QPointer>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
@@ -217,7 +218,7 @@ bool EventManager::handleMouseDoubleClick(QObject *obj, QEvent *event) {
     return false;
   }
 
-  auto *widget = qobject_cast<ItemWidget *>(obj);
+  auto *widget = itemWidgetForObject(obj);
   if (!widget) {
     return false;
   }
@@ -267,6 +268,72 @@ bool EventManager::handleMouseDoubleClick(QObject *obj, QEvent *event) {
   return true;
 }
 
+ItemWidget *EventManager::itemWidgetForObject(QObject *obj) const {
+  for (QObject *candidate = obj; candidate; candidate = candidate->parent()) {
+    if (auto *widget = qobject_cast<ItemWidget *>(candidate)) {
+      return widget;
+    }
+  }
+  return nullptr;
+}
+
+int EventManager::visualIndexForWidget(ItemWidget *widget) const {
+  if (!widget || !m_scrollManager) {
+    return -1;
+  }
+
+  const auto &active = m_scrollManager->getActiveWidgets();
+  for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
+    if (it.value() == widget) {
+      return it.key();
+    }
+  }
+  return -1;
+}
+
+bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {
+  if (!m_generalSettings || !m_generalSettings->selectItemOnHover || isRestoringSelection()) {
+    return false;
+  }
+  if (QApplication::activeModalWidget() || !m_stackedWidget || !m_itemsPage ||
+      m_stackedWidget->currentWidget() != m_itemsPage) {
+    return false;
+  }
+  if (!m_scrollManager || !m_selectionManager || !m_itemScrollArea || !m_gridContainer) {
+    return false;
+  }
+  if (!CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+    return false;
+  }
+
+  if (event && event->type() == QEvent::MouseMove) {
+    auto *mouseEvent = static_cast<QMouseEvent *>(event);
+    if (mouseEvent && mouseEvent->buttons() != Qt::NoButton) {
+      return false;
+    }
+  }
+
+  ItemWidget *widget = itemWidgetForObject(obj);
+  if (!widget || !widget->isVisible()) {
+    return false;
+  }
+
+  const int visualIndex = visualIndexForWidget(widget);
+  if (visualIndex < 0 || visualIndex == m_selectionManager->currentSelectedIndex()) {
+    return false;
+  }
+
+  QPointer<ItemWidget> guard(widget);
+  m_selectionManager->selectItemByHover(visualIndex);
+  if (m_scrollManager) {
+    m_scrollManager->updateSelectionForIndex(visualIndex);
+  }
+  if (m_sidebarManager && m_sidebarManager->isSidebarVisible() && guard) {
+    m_sidebarManager->updateSidebarMetadata(guard);
+  }
+  return false;
+}
+
 bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
   if (isRestoringSelection()) {
     event->accept();
@@ -312,7 +379,7 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
   }
 
   bool target = (obj == m_itemScrollArea || obj == m_itemScrollArea->viewport() ||
-                 obj == m_gridContainer || obj == m_itemsPage || qobject_cast<ItemWidget *>(obj));
+                 obj == m_gridContainer || obj == m_itemsPage || itemWidgetForObject(obj));
   if (!target) {
     return false;
   }

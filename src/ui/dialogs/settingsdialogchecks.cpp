@@ -334,6 +334,68 @@ auto SettingsDialog::checkBackgroundChanges() const -> bool {
 }
 
 auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
+  if (ui->rememberSelectionCheckBox &&
+      ui->rememberSelectionCheckBox->isChecked() != m_originalGeneralSettings.rememberSelection) {
+    return true;
+  }
+  if (ui->wrapNavigationCheckBox &&
+      ui->wrapNavigationCheckBox->isChecked() != m_originalGeneralSettings.wrapNavigation) {
+    return true;
+  }
+  if (ui->selectItemOnHoverCheckBox &&
+      ui->selectItemOnHoverCheckBox->isChecked() != m_originalGeneralSettings.selectItemOnHover) {
+    return true;
+  }
+  if (ui->startupCollectionComboBox &&
+      ui->startupCollectionComboBox->currentData().toString() !=
+          m_originalGeneralSettings.startupCollection) {
+    return true;
+  }
+  if (ui->pixmapCacheSpinBox &&
+      ui->pixmapCacheSpinBox->value() != m_originalGeneralSettings.pixmapCacheSizeMB) {
+    return true;
+  }
+  if (ui->keyboardSpeedSpinBox &&
+      ui->keyboardSpeedSpinBox->value() != m_originalGeneralSettings.keyboardRepeatIntervalMs) {
+    return true;
+  }
+  if (ui->keyboardRepeatDelaySpinBox &&
+      ui->keyboardRepeatDelaySpinBox->value() != m_originalGeneralSettings.keyboardRepeatDelayMs) {
+    return true;
+  }
+  if (ui->mouseWheelSpeedSpinBox &&
+      ui->mouseWheelSpeedSpinBox->value() != m_originalGeneralSettings.mouseWheelRows) {
+    return true;
+  }
+  if (ui->scrollAnimationSpeedSpinBox &&
+      ui->scrollAnimationSpeedSpinBox->value() !=
+          m_originalGeneralSettings.scrollAnimationDurationMs) {
+    return true;
+  }
+  if (ui->scrollVelocityMultiplierSpinBox &&
+      ui->scrollVelocityMultiplierSpinBox->value() !=
+          m_originalGeneralSettings.scrollVelocityMultiplier) {
+    return true;
+  }
+  if (ui->clickHoldDelaySpinBox &&
+      ui->clickHoldDelaySpinBox->value() != m_originalGeneralSettings.clickHoldDelayMs) {
+    return true;
+  }
+  if (ui->clickHoldRepeatIntervalSpinBox &&
+      ui->clickHoldRepeatIntervalSpinBox->value() !=
+          m_originalGeneralSettings.clickHoldRepeatIntervalMs) {
+    return true;
+  }
+  if (ui->listKeyboardRepeatSpinBox &&
+      ui->listKeyboardRepeatSpinBox->value() !=
+          m_originalGeneralSettings.listKeyboardRepeatIntervalMs) {
+    return true;
+  }
+  if (ui->listClickHoldRepeatSpinBox &&
+      ui->listClickHoldRepeatSpinBox->value() !=
+          m_originalGeneralSettings.listClickHoldRepeatIntervalMs) {
+    return true;
+  }
   // Check text appearance settings (saturation, lightness, base color)
   if (ui->titleSaturationSpinBox &&
       ui->titleSaturationSpinBox->value() != m_originalGeneralSettings.titleTintSaturation) {

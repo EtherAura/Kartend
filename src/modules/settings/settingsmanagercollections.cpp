@@ -252,6 +252,7 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
   settings.beginGroup("General");
   settings.setValue("rememberSelection", m_generalSettings.rememberSelection);
   settings.setValue("wrapNavigation", m_generalSettings.wrapNavigation);
+  settings.setValue("selectItemOnHover", m_generalSettings.selectItemOnHover);
   settings.endGroup();
 
   for (const QString &sectionName : sectionNames) {

@@ -525,7 +525,7 @@
                   </item>
                 </layout>
                </item>
-               <item><spacer name="appearanceLayoutVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+                <item><spacer name="appearanceLayoutVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
               </layout>
              </widget>
              <!-- Sub-tab: Titles -->
@@ -589,7 +589,7 @@
                  </item>
                 </layout>
                </item>
-               <item><spacer name="appearanceTitlesVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+                <item><spacer name="appearanceTitlesVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
               </layout>
              </widget>
              <!-- Sub-tab: Colors -->
@@ -794,7 +794,7 @@
                  </item>
                 </layout>
                </item>
-               <item><spacer name="appearanceColorsVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+                <item><spacer name="appearanceColorsVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
               </layout>
              </widget>
              <!-- Sub-tab: List Mode -->
@@ -841,7 +841,7 @@
                   </item>
                 </layout>
                </item>
-               <item><spacer name="appearanceListVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+                <item><spacer name="appearanceListVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
               </layout>
              </widget>
             </widget>
@@ -1429,8 +1429,22 @@
               </property>
              </widget>
             </item>
-               </layout>
-              </item>
+            <item row="13" column="0">
+             <widget class="QLabel" name="selectItemOnHoverLabel">
+              <property name="text">
+               <string>Select on Hover:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="13" column="1">
+             <widget class="QCheckBox" name="selectItemOnHoverCheckBox">
+              <property name="toolTip">
+               <string>Move selection to the visible item under the mouse pointer without clicking</string>
+              </property>
+             </widget>
+            </item>
+                </layout>
+               </item>
               <item>
                <spacer name="generalVerticalSpacer">
                 <property name="orientation">

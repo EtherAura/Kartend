@@ -125,6 +125,7 @@ private:
   [[nodiscard]] bool handleActivityEvent(QEvent *event);
   [[nodiscard]] bool handleMouseButtonPress(QObject *obj, QEvent *event);
   [[nodiscard]] bool handleMouseButtonRelease(QObject *obj, QEvent *event);
+  [[nodiscard]] bool handleHoverSelection(QObject *obj, QEvent *event);
   [[nodiscard]] bool handleWheelEvent(QObject *obj, QEvent *event);
   [[nodiscard]] bool handleKeyPressEvent(QObject *obj, QEvent *event);
   [[nodiscard]] bool handleKeyReleaseEvent(QObject *obj, QEvent *event);
@@ -135,6 +136,8 @@ private:
   [[nodiscard]] int getCurrentGridWidth() const;
   [[nodiscard]] QList<int> getSubcollections(int parentIndex) const;
   [[nodiscard]] bool applyWheelSelectionDelta(int wheelSteps);
+  [[nodiscard]] ItemWidget *itemWidgetForObject(QObject *obj) const;
+  [[nodiscard]] int visualIndexForWidget(ItemWidget *widget) const;
 
   // Manager references
   ScrollManager *m_scrollManager = nullptr;

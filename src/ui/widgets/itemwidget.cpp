@@ -86,6 +86,11 @@ ItemWidget::ItemWidget(QWidget *parent)
       m_pulseDelayTimer(nullptr) {
   Ui::ItemWidget itemUi;
   itemUi.setupUi(this);
+  setMouseTracking(true);
+  const QList<QWidget *> childWidgets = findChildren<QWidget *>();
+  for (QWidget *child : childWidgets) {
+    child->setMouseTracking(true);
+  }
   imageLabel = itemUi.imageLabel;
   nameLabel = itemUi.nameLabel;
   triangleIndicator = itemUi.triangleIndicator;
