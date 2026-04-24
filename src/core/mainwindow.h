@@ -117,6 +117,9 @@ private:
 
   void setupManagerConnections();
   void updateWindowTitleWithFilter(int visible, int total);
+  /// Refreshes the itemPositionLabel in the top bar with the current
+  /// selection position and total item count (Kartend-tof).
+  void updateItemPositionLabel();
 
   void connectDatabaseManager();
   void connectScrollManager();
