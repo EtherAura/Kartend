@@ -13,7 +13,6 @@
 #include <functional>
 #include <stdexcept>
 
-#include "artworkmanager.h"
 #include "loggingcategories.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
