@@ -42,22 +42,18 @@ void ApplicationManager::initialize() {
   // destroying m_cacheManager (avoids use-after-free if the app exits
   // before this task finishes).
   CacheManager *cachePtr = m_cacheManager.get();
-  m_cacheInitFuture =
-      QtConcurrent::run([cachePtr]() { cachePtr->initialize(); });
+  m_cacheInitFuture = QtConcurrent::run([cachePtr]() { cachePtr->initialize(); });
 
   // 4. ArtworkManager (needs CacheManager - but can work without timestamps
   // loaded)
-  m_artworkManager =
-      std::make_unique<ArtworkManager>(m_cacheManager.get(), this);
+  m_artworkManager = std::make_unique<ArtworkManager>(m_cacheManager.get(), this);
 
   // 5. SettingsManager (needs SessionManager, ArtworkManager, CacheManager)
   m_settingsManager = std::make_unique<SettingsManager>(
-      m_sessionManager.get(), m_artworkManager.get(), m_cacheManager.get(),
-      this);
+      m_sessionManager.get(), m_artworkManager.get(), m_cacheManager.get(), this);
 
   // 6. DatabaseManager (needs SessionManager)
-  m_databaseManager =
-      std::make_unique<DatabaseManager>(m_sessionManager.get(), this);
+  m_databaseManager = std::make_unique<DatabaseManager>(m_sessionManager.get(), this);
 
   // 7. ScrollManager
   m_scrollManager = std::make_unique<ScrollManager>(this);
@@ -125,9 +121,8 @@ void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
     CacheManager::saveTimestampsSnapshotToDiskForShutdown(cacheTimestamps);
   });
 
-  (void)QtConcurrent::run([sessionSnapshot]() {
-    SessionManager::saveSessionBytesToDiskForShutdown(sessionSnapshot);
-  });
+  (void)QtConcurrent::run(
+      [sessionSnapshot]() { SessionManager::saveSessionBytesToDiskForShutdown(sessionSnapshot); });
 
   // DON'T wait for saves - they complete quickly and we need fast shutdown.
   // The global thread pool will finish these before process exit.

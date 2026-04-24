@@ -15,29 +15,24 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSidebarManager, "kartend.sidebarmanager")
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcSidebarManager().isDebugEnabled()) {                                 \
-      qCDebug(lcSidebarManager) << msg;                                        \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcSidebarManager().isDebugEnabled()) {                                                     \
+      qCDebug(lcSidebarManager) << msg;                                                            \
+    }                                                                                              \
   } while (0)
 
 // SidebarManagerSetup getter definitions
 SETUP_GETTER_DEF_SAME(SidebarManagerSetup, MetadataSidebar *, Sidebar, sidebar)
 SETUP_GETTER_DEF_SAME(SidebarManagerSetup, QWidget *, ItemsPage, itemsPage)
-SETUP_GETTER_DEF(SidebarManagerSetup, QScrollArea *, ScrollArea, scrollArea,
-                 itemScrollArea)
-SETUP_GETTER_DEF_SAME(SidebarManagerSetup, SettingsManager *, SettingsManager,
-                      settingsManager)
-SETUP_GETTER_DEF_SAME(SidebarManagerSetup, ArtworkManager *, ArtworkManager,
-                      artworkManager)
-SETUP_GETTER_DEF_SAME(SidebarManagerSetup, QList<CollectionConfig> *,
-                      Collections, collections)
+SETUP_GETTER_DEF(SidebarManagerSetup, QScrollArea *, ScrollArea, scrollArea, itemScrollArea)
+SETUP_GETTER_DEF_SAME(SidebarManagerSetup, SettingsManager *, SettingsManager, settingsManager)
+SETUP_GETTER_DEF_SAME(SidebarManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_SAME(SidebarManagerSetup, QList<CollectionConfig> *, Collections, collections)
 
 SidebarManager::SidebarManager(QObject *parent)
     : QObject(parent), m_MetadataSidebar(nullptr), m_itemsPage(nullptr),
-      m_mainHorizontalLayout(nullptr), m_itemScrollArea(nullptr),
-      m_currentCollectionIndex(-1) {}
+      m_mainHorizontalLayout(nullptr), m_itemScrollArea(nullptr), m_currentCollectionIndex(-1) {}
 
 void SidebarManager::setupReferences(const SidebarManagerSetup &setup) {
   m_MetadataSidebar = setup.getSidebar();
@@ -74,16 +69,14 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
   QString artworkDirectory;
   if (m_collections && m_currentCollectionIndex >= 0 &&
       m_currentCollectionIndex < m_collections->size()) {
-    artworkDirectory =
-        (*m_collections)[m_currentCollectionIndex].artworkDirectory;
+    artworkDirectory = (*m_collections)[m_currentCollectionIndex].artworkDirectory;
   }
 
   m_MetadataSidebar->setMetadata(filePath, itemName, artworkDirectory);
 }
 
 void SidebarManager::applySidebarStateForCollection(int collectionIndex) {
-  if (!m_collections || collectionIndex < 0 ||
-      collectionIndex >= m_collections->size()) {
+  if (!m_collections || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
     return;
   }
 
@@ -103,7 +96,9 @@ void SidebarManager::applySidebarStateForCollection(int collectionIndex) {
   }
 }
 
-void SidebarManager::setupSidebar() { m_sidebarVisible = false; }
+void SidebarManager::setupSidebar() {
+  m_sidebarVisible = false;
+}
 
 void SidebarManager::positionSidebarOverlay() {
   if (!m_MetadataSidebar || !m_itemsPage) {
@@ -111,15 +106,13 @@ void SidebarManager::positionSidebarOverlay() {
   }
 
   const int sidebarMargin = UIConstants::Sidebar::MARGIN;
-  int sidebarWidth = m_MetadataSidebar->width() > 0
-                         ? m_MetadataSidebar->width()
-                         : UIConstants::Sidebar::MAX_WIDTH;
+  int sidebarWidth =
+      m_MetadataSidebar->width() > 0 ? m_MetadataSidebar->width() : UIConstants::Sidebar::MAX_WIDTH;
 
   QRect viewportRectInItems;
   int scrollbarWidth = 0;
   if (m_itemScrollArea && m_itemScrollArea->viewport()) {
-    const QPoint topLeft =
-        m_itemScrollArea->viewport()->mapTo(m_itemsPage, QPoint(0, 0));
+    const QPoint topLeft = m_itemScrollArea->viewport()->mapTo(m_itemsPage, QPoint(0, 0));
     viewportRectInItems = QRect(topLeft, m_itemScrollArea->viewport()->size());
 
     // Account for scrollbar width - the overlay scrollbar appears over the
@@ -134,12 +127,10 @@ void SidebarManager::positionSidebarOverlay() {
     viewportRectInItems = m_itemsPage->rect();
   }
 
-  const int sidebarX = viewportRectInItems.left() +
-                       viewportRectInItems.width() - sidebarWidth -
+  const int sidebarX = viewportRectInItems.left() + viewportRectInItems.width() - sidebarWidth -
                        sidebarMargin - scrollbarWidth;
   const int sidebarY = viewportRectInItems.top() + sidebarMargin;
-  const int height =
-      qMax(0, viewportRectInItems.height() - (sidebarMargin * 2));
+  const int height = qMax(0, viewportRectInItems.height() - (sidebarMargin * 2));
 
   m_MetadataSidebar->setGeometry(sidebarX, sidebarY, sidebarWidth, height);
   m_MetadataSidebar->raise();
@@ -153,8 +144,7 @@ void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
   bool isFixedMode = false;
   if (m_collections && currentCollectionIndex >= 0 &&
       currentCollectionIndex < m_collections->size()) {
-    const CollectionConfig &collection =
-        (*m_collections)[currentCollectionIndex];
+    const CollectionConfig &collection = (*m_collections)[currentCollectionIndex];
     isFixedMode = (collection.sidebarMode == SidebarMode::Expand);
   }
 
@@ -178,11 +168,10 @@ void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
     } else {
       int viewportWidth = m_itemScrollArea->viewport()->width();
       int desired = viewportWidth / 4;
-      int sidebarWidth = qMax(UIConstants::Sidebar::MIN_WIDTH,
-                              qMin(UIConstants::Sidebar::MAX_WIDTH, desired));
-      sidebarWidth =
-          qMax(UIConstants::Sidebar::MIN_WIDTH,
-               sidebarWidth - UIConstants::Sidebar::SCROLLBAR_OFFSET);
+      int sidebarWidth =
+          qMax(UIConstants::Sidebar::MIN_WIDTH, qMin(UIConstants::Sidebar::MAX_WIDTH, desired));
+      sidebarWidth = qMax(UIConstants::Sidebar::MIN_WIDTH,
+                          sidebarWidth - UIConstants::Sidebar::SCROLLBAR_OFFSET);
       m_MetadataSidebar->setParent(m_itemsPage);
       if (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1) {
         m_mainHorizontalLayout->removeWidget(m_MetadataSidebar);
@@ -198,8 +187,7 @@ void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
     }
   }
 
-  bool isNowInLayout =
-      (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1);
+  bool isNowInLayout = (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1);
   if (wasInLayout != isNowInLayout) {
     emit sidebarVisibilityChanged(m_sidebarVisible);
   }
@@ -226,10 +214,8 @@ auto SidebarManager::isSidebarVisible() const -> bool {
 
 // Persists the sidebar visibility state for a collection index and writes
 // settings
-void SidebarManager::saveSidebarStateForCollection(int collectionIndex,
-                                                   bool visible) {
-  if (!m_collections || collectionIndex < 0 ||
-      collectionIndex >= m_collections->size()) {
+void SidebarManager::saveSidebarStateForCollection(int collectionIndex, bool visible) {
+  if (!m_collections || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
     return;
   }
   (*m_collections)[collectionIndex].sidebarVisible = visible;
@@ -240,8 +226,7 @@ void SidebarManager::saveSidebarStateForCollection(int collectionIndex,
 
 // Persists the sidebar visibility state by collection name, forwarding to
 // index-based save
-void SidebarManager::saveSidebarStateForCollection(
-    const QString &collectionName, bool visible) {
+void SidebarManager::saveSidebarStateForCollection(const QString &collectionName, bool visible) {
   if (!m_collections) {
     return;
   }

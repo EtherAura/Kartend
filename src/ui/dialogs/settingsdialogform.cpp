@@ -1,5 +1,7 @@
 // Sibling translation unit for SettingsDialog: form/spacing connections,
 // field extraction, change detection, browse helpers, load/save.
+#include <algorithm>
+#include <functional>
 #include <QAbstractItemView>
 #include <QColorDialog>
 #include <QDir>
@@ -22,8 +24,6 @@
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QVariant>
-#include <algorithm>
-#include <functional>
 #include <set>
 
 #include "extensionutils.h"
@@ -37,16 +37,13 @@
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
-
 void SettingsDialog::revertCurrentCollectionEdits() {
-  if (currentCollectionIndex < 0 ||
-      currentCollectionIndex >= m_workingCollections.size()) {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_workingCollections.size()) {
     return;
   }
 
   m_workingCollections[currentCollectionIndex] = originalCollection;
-  if (currentCollectionIndex >= 0 &&
-      currentCollectionIndex < collections.size()) {
+  if (currentCollectionIndex >= 0 && currentCollectionIndex < collections.size()) {
     collections[currentCollectionIndex] = originalCollection;
   }
 
@@ -68,14 +65,12 @@ auto SettingsDialog::resolveUnsavedChanges(const QString &actionDescription,
     return true;
   }
 
-  const QMessageBox::StandardButton decision =
-      promptUnsavedChanges(actionDescription);
+  const QMessageBox::StandardButton decision = promptUnsavedChanges(actionDescription);
   if (decision == QMessageBox::Cancel) {
     return false;
   }
   if (decision == QMessageBox::Save) {
-    if (currentCollectionIndex >= 0 &&
-        currentCollectionIndex < m_workingCollections.size()) {
+    if (currentCollectionIndex >= 0 && currentCollectionIndex < m_workingCollections.size()) {
       handleSaveCollection(currentCollectionIndex, refreshTreeAfterSave);
     }
     return true;
@@ -94,19 +89,17 @@ void SettingsDialog::saveCollectionFromUI(int index) {
 
   // Validate paths for security before saving
   // Check each path that could be used for file operations
-  auto validatePath = [this](const QString &path,
-                             const QString &fieldName) -> bool {
+  auto validatePath = [this](const QString &path, const QString &fieldName) -> bool {
     if (path.isEmpty()) {
       return true; // Empty paths are allowed (optional fields)
     }
     auto result = PathUtils::validatePathSecurity(path);
     if (result.isError()) {
-      QMessageBox::warning(
-          this, tr("Invalid Path"),
-          tr("The %1 contains invalid characters:\n\n%2\n\n"
-             "Please remove shell metacharacters, backslashes, "
-             "or other special characters.")
-              .arg(fieldName, result.error().message));
+      QMessageBox::warning(this, tr("Invalid Path"),
+                           tr("The %1 contains invalid characters:\n\n%2\n\n"
+                              "Please remove shell metacharacters, backslashes, "
+                              "or other special characters.")
+                               .arg(fieldName, result.error().message));
       return false;
     }
     return true;
@@ -143,14 +136,12 @@ auto SettingsDialog::hasUnsavedChanges() const -> bool {
     return true;
   }
 
-  if (currentCollectionIndex < 0 ||
-      currentCollectionIndex >= collections.size()) {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
     return false;
   }
 
-  return checkBasicFieldChanges() || checkExtensionChanges() ||
-         checkTreeNameChanges() || checkParentCollectionChanges() ||
-         checkDimensionChanges() || checkColorChanges() ||
+  return checkBasicFieldChanges() || checkExtensionChanges() || checkTreeNameChanges() ||
+         checkParentCollectionChanges() || checkDimensionChanges() || checkColorChanges() ||
          checkListModeChanges() || checkBackgroundChanges();
 }
 
@@ -178,31 +169,27 @@ void SettingsDialog::updateSaveButtonStyle() {
       btn->setGraphicsEffect(m_saveButtonGlow);
     }
     if (!m_saveButtonGlowAnim) {
-      m_saveButtonGlowAnim =
-          new QPropertyAnimation(m_saveButtonGlow, "blurRadius", this);
+      m_saveButtonGlowAnim = new QPropertyAnimation(m_saveButtonGlow, "blurRadius", this);
       m_saveButtonGlowAnim->setDuration(1200);
       m_saveButtonGlowAnim->setStartValue(6.0);
       m_saveButtonGlowAnim->setEndValue(22.0);
       m_saveButtonGlowAnim->setEasingCurve(QEasingCurve::InOutSine);
       m_saveButtonGlowAnim->setLoopCount(-1);
       // Ping-pong between start/end by alternating direction on each loop.
-      QObject::connect(
-          m_saveButtonGlowAnim, &QPropertyAnimation::currentLoopChanged, this,
-          [this](int) {
-            m_saveButtonGlowAnim->setDirection(
-                m_saveButtonGlowAnim->direction() ==
-                        QAbstractAnimation::Forward
-                    ? QAbstractAnimation::Backward
-                    : QAbstractAnimation::Forward);
-          });
+      QObject::connect(m_saveButtonGlowAnim, &QPropertyAnimation::currentLoopChanged, this,
+                       [this](int) {
+                         m_saveButtonGlowAnim->setDirection(m_saveButtonGlowAnim->direction() ==
+                                                                    QAbstractAnimation::Forward
+                                                                ? QAbstractAnimation::Backward
+                                                                : QAbstractAnimation::Forward);
+                       });
     }
     m_saveButtonGlow->setEnabled(true);
     if (m_saveButtonGlowAnim->state() != QAbstractAnimation::Running) {
       m_saveButtonGlowAnim->start();
     }
   } else {
-    if (m_saveButtonGlowAnim &&
-        m_saveButtonGlowAnim->state() == QAbstractAnimation::Running) {
+    if (m_saveButtonGlowAnim && m_saveButtonGlowAnim->state() == QAbstractAnimation::Running) {
       m_saveButtonGlowAnim->stop();
     }
     if (m_saveButtonGlow) {
@@ -216,10 +203,8 @@ void SettingsDialog::updateSaveButtonStyle() {
 void SettingsDialog::updateDeleteButtonState() {
   if (ui->removeCollectionButton) {
     // Enable delete when there's a valid collection selected
-    bool hasSelection = currentTreeItem &&
-                        itemToCollectionIndex.contains(currentTreeItem);
-    ui->removeCollectionButton->setEnabled(hasSelection &&
-                                           !collections.isEmpty());
+    bool hasSelection = currentTreeItem && itemToCollectionIndex.contains(currentTreeItem);
+    ui->removeCollectionButton->setEnabled(hasSelection && !collections.isEmpty());
   }
 }
 
@@ -231,12 +216,10 @@ void SettingsDialog::updateUIForLauncherType(const QString &launcherPath) {
   ui->browseCoreButton->setVisible(showCore);
   ui->label_core->setVisible(showCore);
   if (isRetroArch) {
-    ui->coreLineEdit->setToolTip(
-        "Path to RetroArch core file (.so/.dll/.dylib)");
+    ui->coreLineEdit->setToolTip("Path to RetroArch core file (.so/.dll/.dylib)");
     ui->launchParamsLineEdit->setToolTip("Additional RetroArch parameters");
   } else {
-    ui->launchParamsLineEdit->setToolTip(
-        "Additional command-line parameters for the launcher");
+    ui->launchParamsLineEdit->setToolTip("Additional command-line parameters for the launcher");
   }
 
   // Update extract archives visibility based on launcher type
@@ -283,8 +266,7 @@ void SettingsDialog::updateFieldVisibility() {
 }
 
 void SettingsDialog::updateExtractArchivesVisibility() {
-  bool isRetroArch =
-      ui->launcherLineEdit->text().contains("retroarch", Qt::CaseInsensitive);
+  bool isRetroArch = ui->launcherLineEdit->text().contains("retroarch", Qt::CaseInsensitive);
   bool extractEnabled = ui->extractArchivesCheckBox->isChecked();
 
   // Show extract archives option only for RetroArch launchers
@@ -318,10 +300,8 @@ void SettingsDialog::updateGridWidthLimits() {
 void SettingsDialog::onGridWidthChanged(int value) {
   Q_UNUSED(value)
   checkForChanges();
-  if (!m_isLoading &&
-      currentCollectionIndex == originalCurrentCollectionIndex &&
-      originalCurrentCollectionIndex >= 0 &&
-      originalCurrentCollectionIndex < collections.size()) {
+  if (!m_isLoading && currentCollectionIndex == originalCurrentCollectionIndex &&
+      originalCurrentCollectionIndex >= 0 && originalCurrentCollectionIndex < collections.size()) {
     emit gridWidthChanged(currentCollectionIndex, value);
   }
 }
@@ -333,8 +313,7 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   }
   if (ui->rememberSelectionCheckBox) {
     ui->rememberSelectionCheckBox->blockSignals(true);
-    ui->rememberSelectionCheckBox->setChecked(
-        m_generalSettings.rememberSelection);
+    ui->rememberSelectionCheckBox->setChecked(m_generalSettings.rememberSelection);
     ui->rememberSelectionCheckBox->blockSignals(false);
   }
   if (ui->wrapNavigationCheckBox) {
@@ -349,14 +328,12 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   }
   if (ui->keyboardSpeedSpinBox) {
     ui->keyboardSpeedSpinBox->blockSignals(true);
-    ui->keyboardSpeedSpinBox->setValue(
-        m_generalSettings.keyboardRepeatIntervalMs);
+    ui->keyboardSpeedSpinBox->setValue(m_generalSettings.keyboardRepeatIntervalMs);
     ui->keyboardSpeedSpinBox->blockSignals(false);
   }
   if (ui->keyboardRepeatDelaySpinBox) {
     ui->keyboardRepeatDelaySpinBox->blockSignals(true);
-    ui->keyboardRepeatDelaySpinBox->setValue(
-        m_generalSettings.keyboardRepeatDelayMs);
+    ui->keyboardRepeatDelaySpinBox->setValue(m_generalSettings.keyboardRepeatDelayMs);
     ui->keyboardRepeatDelaySpinBox->blockSignals(false);
   }
   if (ui->clickHoldDelaySpinBox) {
@@ -366,20 +343,17 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   }
   if (ui->clickHoldRepeatIntervalSpinBox) {
     ui->clickHoldRepeatIntervalSpinBox->blockSignals(true);
-    ui->clickHoldRepeatIntervalSpinBox->setValue(
-        m_generalSettings.clickHoldRepeatIntervalMs);
+    ui->clickHoldRepeatIntervalSpinBox->setValue(m_generalSettings.clickHoldRepeatIntervalMs);
     ui->clickHoldRepeatIntervalSpinBox->blockSignals(false);
   }
   if (ui->listKeyboardRepeatSpinBox) {
     ui->listKeyboardRepeatSpinBox->blockSignals(true);
-    ui->listKeyboardRepeatSpinBox->setValue(
-        m_generalSettings.listKeyboardRepeatIntervalMs);
+    ui->listKeyboardRepeatSpinBox->setValue(m_generalSettings.listKeyboardRepeatIntervalMs);
     ui->listKeyboardRepeatSpinBox->blockSignals(false);
   }
   if (ui->listClickHoldRepeatSpinBox) {
     ui->listClickHoldRepeatSpinBox->blockSignals(true);
-    ui->listClickHoldRepeatSpinBox->setValue(
-        m_generalSettings.listClickHoldRepeatIntervalMs);
+    ui->listClickHoldRepeatSpinBox->setValue(m_generalSettings.listClickHoldRepeatIntervalMs);
     ui->listClickHoldRepeatSpinBox->blockSignals(false);
   }
   if (ui->mouseWheelSpeedSpinBox) {
@@ -389,8 +363,7 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   }
   if (ui->scrollAnimationSpeedSpinBox) {
     ui->scrollAnimationSpeedSpinBox->blockSignals(true);
-    ui->scrollAnimationSpeedSpinBox->setValue(
-        m_generalSettings.scrollAnimationDurationMs);
+    ui->scrollAnimationSpeedSpinBox->setValue(m_generalSettings.scrollAnimationDurationMs);
     ui->scrollAnimationSpeedSpinBox->blockSignals(false);
   }
   if (ui->titleSaturationSpinBox) {
@@ -417,8 +390,7 @@ void SettingsDialog::loadGeneralSettingsToUI() {
         ui->startupCollectionComboBox->addItem(cfg.name, cfg.name);
       }
     }
-    int idx = ui->startupCollectionComboBox->findData(
-        m_generalSettings.startupCollection);
+    int idx = ui->startupCollectionComboBox->findData(m_generalSettings.startupCollection);
     ui->startupCollectionComboBox->setCurrentIndex(idx >= 0 ? idx : 0);
     ui->startupCollectionComboBox->blockSignals(false);
   }
@@ -448,14 +420,12 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   }
   if (ui->gamepadUseLeftStickCheckBox) {
     ui->gamepadUseLeftStickCheckBox->blockSignals(true);
-    ui->gamepadUseLeftStickCheckBox->setChecked(
-        m_generalSettings.gamepadUseLeftStick);
+    ui->gamepadUseLeftStickCheckBox->setChecked(m_generalSettings.gamepadUseLeftStick);
     ui->gamepadUseLeftStickCheckBox->blockSignals(false);
   }
   if (ui->gamepadConfirmButtonLineEdit) {
     ui->gamepadConfirmButtonLineEdit->blockSignals(true);
-    ui->gamepadConfirmButtonLineEdit->setText(
-        m_generalSettings.gamepadConfirmButton);
+    ui->gamepadConfirmButtonLineEdit->setText(m_generalSettings.gamepadConfirmButton);
     ui->gamepadConfirmButtonLineEdit->blockSignals(false);
   }
   if (ui->gamepadBackButtonLineEdit) {
@@ -465,8 +435,7 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   }
   if (ui->gamepadToggleSidebarButtonLineEdit) {
     ui->gamepadToggleSidebarButtonLineEdit->blockSignals(true);
-    ui->gamepadToggleSidebarButtonLineEdit->setText(
-        m_generalSettings.gamepadToggleSidebarButton);
+    ui->gamepadToggleSidebarButtonLineEdit->setText(m_generalSettings.gamepadToggleSidebarButton);
     ui->gamepadToggleSidebarButtonLineEdit->blockSignals(false);
   }
 
@@ -480,12 +449,10 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
   auto *mainWindow = qobject_cast<MainWindow *>(parent());
   if ((mainWindow) && (mainWindow->getSettingsManager())) {
     if (ui->rememberSelectionCheckBox) {
-      mainWindow->m_generalSettings.rememberSelection =
-          ui->rememberSelectionCheckBox->isChecked();
+      mainWindow->m_generalSettings.rememberSelection = ui->rememberSelectionCheckBox->isChecked();
     }
     if (ui->wrapNavigationCheckBox) {
-      mainWindow->m_generalSettings.wrapNavigation =
-          ui->wrapNavigationCheckBox->isChecked();
+      mainWindow->m_generalSettings.wrapNavigation = ui->wrapNavigationCheckBox->isChecked();
     }
     if (ui->pixmapCacheSpinBox) {
       int newCacheSize = ui->pixmapCacheSpinBox->value();
@@ -494,16 +461,13 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
       QPixmapCache::setCacheLimit(newCacheSize * 1024);
     }
     if (ui->keyboardSpeedSpinBox) {
-      mainWindow->m_generalSettings.keyboardRepeatIntervalMs =
-          ui->keyboardSpeedSpinBox->value();
+      mainWindow->m_generalSettings.keyboardRepeatIntervalMs = ui->keyboardSpeedSpinBox->value();
     }
     if (ui->keyboardRepeatDelaySpinBox) {
-      mainWindow->m_generalSettings.keyboardRepeatDelayMs =
-          ui->keyboardRepeatDelaySpinBox->value();
+      mainWindow->m_generalSettings.keyboardRepeatDelayMs = ui->keyboardRepeatDelaySpinBox->value();
     }
     if (ui->clickHoldDelaySpinBox) {
-      mainWindow->m_generalSettings.clickHoldDelayMs =
-          ui->clickHoldDelaySpinBox->value();
+      mainWindow->m_generalSettings.clickHoldDelayMs = ui->clickHoldDelaySpinBox->value();
     }
     if (ui->clickHoldRepeatIntervalSpinBox) {
       mainWindow->m_generalSettings.clickHoldRepeatIntervalMs =
@@ -518,28 +482,24 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
           ui->listClickHoldRepeatSpinBox->value();
     }
     if (ui->mouseWheelSpeedSpinBox) {
-      mainWindow->m_generalSettings.mouseWheelRows =
-          ui->mouseWheelSpeedSpinBox->value();
+      mainWindow->m_generalSettings.mouseWheelRows = ui->mouseWheelSpeedSpinBox->value();
     }
     if (ui->scrollAnimationSpeedSpinBox) {
       mainWindow->m_generalSettings.scrollAnimationDurationMs =
           ui->scrollAnimationSpeedSpinBox->value();
     }
     if (ui->titleSaturationSpinBox) {
-      mainWindow->m_generalSettings.titleTintSaturation =
-          ui->titleSaturationSpinBox->value();
+      mainWindow->m_generalSettings.titleTintSaturation = ui->titleSaturationSpinBox->value();
       // Apply to ItemWidget static settings
       ItemWidget::setTitleTintSaturation(ui->titleSaturationSpinBox->value());
     }
     if (ui->titleLightnessSpinBox) {
-      mainWindow->m_generalSettings.titleTintLightness =
-          ui->titleLightnessSpinBox->value();
+      mainWindow->m_generalSettings.titleTintLightness = ui->titleLightnessSpinBox->value();
       // Apply to ItemWidget static settings
       ItemWidget::setTitleTintLightness(ui->titleLightnessSpinBox->value());
     }
     if (ui->baseColorEdit) {
-      mainWindow->m_generalSettings.titleBaseColor =
-          ui->baseColorEdit->text().trimmed();
+      mainWindow->m_generalSettings.titleBaseColor = ui->baseColorEdit->text().trimmed();
       // Apply to ItemWidget static settings
       ItemWidget::setTitleBaseColor(ui->baseColorEdit->text().trimmed());
     }
@@ -550,8 +510,7 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     // Note: customFontFamily is now saved per-collection, not in general
     // settings
 
-    auto singleKeyFromEdit = [](QKeySequenceEdit *edit,
-                                int fallbackKey) -> int {
+    auto singleKeyFromEdit = [](QKeySequenceEdit *edit, int fallbackKey) -> int {
       if (!edit) {
         return fallbackKey;
       }
@@ -564,24 +523,23 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
       return (keyOnly != 0) ? keyOnly : fallbackKey;
     };
 
-    mainWindow->m_generalSettings.keyNavUp = singleKeyFromEdit(
-        ui->keyNavUpEdit, mainWindow->m_generalSettings.keyNavUp);
-    mainWindow->m_generalSettings.keyNavDown = singleKeyFromEdit(
-        ui->keyNavDownEdit, mainWindow->m_generalSettings.keyNavDown);
-    mainWindow->m_generalSettings.keyNavLeft = singleKeyFromEdit(
-        ui->keyNavLeftEdit, mainWindow->m_generalSettings.keyNavLeft);
-    mainWindow->m_generalSettings.keyNavRight = singleKeyFromEdit(
-        ui->keyNavRightEdit, mainWindow->m_generalSettings.keyNavRight);
-    mainWindow->m_generalSettings.keyConfirm = singleKeyFromEdit(
-        ui->keyConfirmEdit, mainWindow->m_generalSettings.keyConfirm);
-    mainWindow->m_generalSettings.keyBack = singleKeyFromEdit(
-        ui->keyBackEdit, mainWindow->m_generalSettings.keyBack);
-    mainWindow->m_generalSettings.keySearch = singleKeyFromEdit(
-        ui->keySearchEdit, mainWindow->m_generalSettings.keySearch);
+    mainWindow->m_generalSettings.keyNavUp =
+        singleKeyFromEdit(ui->keyNavUpEdit, mainWindow->m_generalSettings.keyNavUp);
+    mainWindow->m_generalSettings.keyNavDown =
+        singleKeyFromEdit(ui->keyNavDownEdit, mainWindow->m_generalSettings.keyNavDown);
+    mainWindow->m_generalSettings.keyNavLeft =
+        singleKeyFromEdit(ui->keyNavLeftEdit, mainWindow->m_generalSettings.keyNavLeft);
+    mainWindow->m_generalSettings.keyNavRight =
+        singleKeyFromEdit(ui->keyNavRightEdit, mainWindow->m_generalSettings.keyNavRight);
+    mainWindow->m_generalSettings.keyConfirm =
+        singleKeyFromEdit(ui->keyConfirmEdit, mainWindow->m_generalSettings.keyConfirm);
+    mainWindow->m_generalSettings.keyBack =
+        singleKeyFromEdit(ui->keyBackEdit, mainWindow->m_generalSettings.keyBack);
+    mainWindow->m_generalSettings.keySearch =
+        singleKeyFromEdit(ui->keySearchEdit, mainWindow->m_generalSettings.keySearch);
 
     if (ui->gamepadUseDpadCheckBox) {
-      mainWindow->m_generalSettings.gamepadUseDpad =
-          ui->gamepadUseDpadCheckBox->isChecked();
+      mainWindow->m_generalSettings.gamepadUseDpad = ui->gamepadUseDpadCheckBox->isChecked();
     }
     if (ui->gamepadUseLeftStickCheckBox) {
       mainWindow->m_generalSettings.gamepadUseLeftStick =
@@ -600,22 +558,19 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
       }
     }
     if (ui->gamepadToggleSidebarButtonLineEdit) {
-      const QString v =
-          ui->gamepadToggleSidebarButtonLineEdit->text().trimmed();
+      const QString v = ui->gamepadToggleSidebarButtonLineEdit->text().trimmed();
       if (!v.isEmpty()) {
         mainWindow->m_generalSettings.gamepadToggleSidebarButton = v;
       }
     }
-    mainWindow->getSettingsManager()->saveGeneralSettings(
-        mainWindow->m_generalSettings);
+    mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
     m_generalSettings = mainWindow->m_generalSettings;
 
     // Refresh all visible widgets to apply text appearance changes immediately
     ScrollManager *scrollManager = mainWindow->getScrollManager();
     if (scrollManager) {
       const auto &activeWidgets = scrollManager->getActiveWidgets();
-      for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd();
-           ++it) {
+      for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd(); ++it) {
         ItemWidget *widget = it.value();
         if (widget) {
           widget->applyTitleTint();
@@ -624,4 +579,3 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     }
   }
 }
-

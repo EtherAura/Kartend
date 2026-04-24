@@ -58,10 +58,10 @@ void MainWindow::setupUI() {
   // Debounced persistence + refresh for menu-driven grid width changes.
   // This avoids writing settings repeatedly while the user holds +/-.
   if (!m_gridWidthSaveDebouncer) {
-    m_gridWidthSaveDebouncer = new TimerUtils::DebouncedTimer(
-        UIConstants::Timing::LONG_DELAY_MS, this);
-    QObject::connect(m_gridWidthSaveDebouncer,
-                     &TimerUtils::DebouncedTimer::triggered, this, [this]() {
+    m_gridWidthSaveDebouncer =
+        new TimerUtils::DebouncedTimer(UIConstants::Timing::LONG_DELAY_MS, this);
+    QObject::connect(m_gridWidthSaveDebouncer, &TimerUtils::DebouncedTimer::triggered, this,
+                     [this]() {
                        if (m_isShuttingDown || QApplication::closingDown()) {
                          return;
                        }
@@ -72,10 +72,10 @@ void MainWindow::setupUI() {
   }
 
   if (!m_gridWidthPrecalcDebouncer) {
-    m_gridWidthPrecalcDebouncer = new TimerUtils::DebouncedTimer(
-        UIConstants::Timing::LONG_DELAY_MS, this);
-    QObject::connect(m_gridWidthPrecalcDebouncer,
-                     &TimerUtils::DebouncedTimer::triggered, this, [this]() {
+    m_gridWidthPrecalcDebouncer =
+        new TimerUtils::DebouncedTimer(UIConstants::Timing::LONG_DELAY_MS, this);
+    QObject::connect(m_gridWidthPrecalcDebouncer, &TimerUtils::DebouncedTimer::triggered, this,
+                     [this]() {
                        if (m_isShuttingDown || QApplication::closingDown()) {
                          return;
                        }
@@ -85,8 +85,7 @@ void MainWindow::setupUI() {
 
                        // Mark this generation as the active one for the final
                        // stage.
-                       m_gridWidthActiveGeneration =
-                           m_gridWidthPendingGeneration;
+                       m_gridWidthActiveGeneration = m_gridWidthPendingGeneration;
 
                        getScrollManager()->preCalculateLayout();
                        getScrollManager()->forceVirtualViewUpdate();
@@ -98,11 +97,10 @@ void MainWindow::setupUI() {
   }
 
   if (!m_gridWidthFinalizeDebouncer) {
-    m_gridWidthFinalizeDebouncer = new TimerUtils::DebouncedTimer(
-        UIConstants::Timing::MEDIUM_DELAY_MS, this);
+    m_gridWidthFinalizeDebouncer =
+        new TimerUtils::DebouncedTimer(UIConstants::Timing::MEDIUM_DELAY_MS, this);
     QObject::connect(
-        m_gridWidthFinalizeDebouncer, &TimerUtils::DebouncedTimer::triggered,
-        this, [this]() {
+        m_gridWidthFinalizeDebouncer, &TimerUtils::DebouncedTimer::triggered, this, [this]() {
           if (m_isShuttingDown || QApplication::closingDown()) {
             return;
           }
@@ -117,8 +115,7 @@ void MainWindow::setupUI() {
           if (getArtworkManager()) {
             getArtworkManager()->updateViewportArtwork();
           }
-          getScrollManager()->centerHorizontalScrollbar(currentCollectionIndex,
-                                                        m_collections);
+          getScrollManager()->centerHorizontalScrollbar(currentCollectionIndex, m_collections);
         });
   }
 
@@ -233,8 +230,7 @@ void MainWindow::createMenuBar() {
 }
 
 void MainWindow::adjustGridWidth(int delta) {
-  if (currentCollectionIndex < 0 ||
-      currentCollectionIndex >= m_collections.size()) {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
     return;
   }
 
@@ -242,8 +238,7 @@ void MainWindow::adjustGridWidth(int delta) {
   int newWidth = config.gridWidth + delta;
 
   // Clamp to valid range
-  newWidth = qBound(UIConstants::Grid::MIN_WIDTH, newWidth,
-                    UIConstants::Grid::MAX_WIDTH);
+  newWidth = qBound(UIConstants::Grid::MIN_WIDTH, newWidth, UIConstants::Grid::MAX_WIDTH);
 
   if (newWidth == config.gridWidth) {
     return; // No change needed
@@ -273,8 +268,7 @@ void MainWindow::adjustGridWidth(int delta) {
 }
 
 void MainWindow::setViewType(ViewType viewType) {
-  if (currentCollectionIndex < 0 ||
-      currentCollectionIndex >= m_collections.size()) {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
     return;
   }
 
@@ -318,8 +312,7 @@ void MainWindow::setupSidebar() {
 
     getSidebarManager()->setupReferences(setup);
 
-    QObject::connect(getSidebarManager(),
-                     &SidebarManager::sidebarVisibilityChanged, this,
+    QObject::connect(getSidebarManager(), &SidebarManager::sidebarVisibilityChanged, this,
                      [this](bool visible) {
                        if (ui->actionShowSidebar) {
                          ui->actionShowSidebar->blockSignals(true);
@@ -353,8 +346,7 @@ void MainWindow::showAbout() {
   msgBox.setText(aboutText);
   msgBox.setTextFormat(Qt::RichText);
   msgBox.setStandardButtons(QMessageBox::Ok);
-  msgBox.resize(UIConstants::Dialog::ABOUT_WIDTH,
-                UIConstants::Dialog::ABOUT_HEIGHT);
+  msgBox.resize(UIConstants::Dialog::ABOUT_WIDTH, UIConstants::Dialog::ABOUT_HEIGHT);
   msgBox.exec();
 }
 
@@ -371,14 +363,12 @@ void MainWindow::setupArtworkManager() {
 }
 
 void MainWindow::setupLastSelectedIndices() {
-  if (!getSessionManager())
-    return;
+  if (!getSessionManager()) return;
 
   for (int i = 0; i < m_collections.size(); ++i) {
     int sel = getSessionManager()->getLastSelectedIndex(m_collections[i].name);
     if (sel < 0) {
-      QString hierarchical =
-          CollectionUtils::hierarchicalNameFor(m_collections[i], m_collections);
+      QString hierarchical = CollectionUtils::hierarchicalNameFor(m_collections[i], m_collections);
       if (!hierarchical.isEmpty() && hierarchical != m_collections[i].name) {
         int hSel = getSessionManager()->getLastSelectedIndex(hierarchical);
         if (hSel >= 0) {
@@ -406,12 +396,10 @@ void MainWindow::setupEventFilters() {
   if (ui->itemScrollArea) {
     ui->itemScrollArea->installEventFilter(getInteractionManager());
     if (ui->itemScrollArea->viewport()) {
-      ui->itemScrollArea->viewport()->installEventFilter(
-          getInteractionManager());
+      ui->itemScrollArea->viewport()->installEventFilter(getInteractionManager());
     }
   }
   if (gridContainer) {
     gridContainer->installEventFilter(getInteractionManager());
   }
 }
-

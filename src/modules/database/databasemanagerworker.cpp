@@ -3,9 +3,9 @@
 #include <QSqlQuery>
 #include <QtGlobal>
 
-#include "loggingcategories.h"
 #include "databasemanager.h"
 #include "errorutils.h"
+#include "loggingcategories.h"
 #include "querymanager.h"
 
 #include <QLoggingCategory>
@@ -15,11 +15,11 @@ Q_DECLARE_LOGGING_CATEGORY(lcDatabaseManager)
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
-void DatabaseManager::onWorkerItemsLoaded(
-    const QStringList &filePaths, const QHash<QString, QString> &fileNames,
-    const QHash<QString, QString> &fileToArtworkDir,
-    const QHash<QString, QString> &fileToMediaDir,
-    const QHash<QString, int> &fileToCollectionIndex) {
+void DatabaseManager::onWorkerItemsLoaded(const QStringList &filePaths,
+                                          const QHash<QString, QString> &fileNames,
+                                          const QHash<QString, QString> &fileToArtworkDir,
+                                          const QHash<QString, QString> &fileToMediaDir,
+                                          const QHash<QString, int> &fileToCollectionIndex) {
   QHash<QString, QString> relativeToFullPath;
   relativeToFullPath.reserve(fileNames.size() * 2);
 
@@ -44,8 +44,7 @@ void DatabaseManager::onWorkerItemsLoaded(
     const QString mediaDir = fileToMediaDir.value(fullPath);
     if (!mediaDir.trimmed().isEmpty()) {
       const QString relativePath = QDir(mediaDir).relativeFilePath(fullPath);
-      if (!relativePath.isEmpty() &&
-          !relativeToFullPath.contains(relativePath)) {
+      if (!relativePath.isEmpty() && !relativeToFullPath.contains(relativePath)) {
         relativeToFullPath.insert(relativePath, fullPath);
       }
     }
@@ -62,51 +61,46 @@ void DatabaseManager::onWorkerItemsLoaded(
 }
 
 void DatabaseManager::onWorkerItemCountLoaded(int count) {
-    qCDebug(lcSearchDiag) << "[DatabaseManager] onWorkerItemCountLoaded:"
-               << count;
+  qCDebug(lcSearchDiag) << "[DatabaseManager] onWorkerItemCountLoaded:" << count;
   emit itemCountLoaded(count);
 }
 
-void DatabaseManager::onWorkerItemCountLoadedWithToken(int count,
-                                                       int requestToken) {
-    qCDebug(lcSearchDiag) << "[DatabaseManager] onWorkerItemCountLoadedWithToken:"
-        << count << "token=" << requestToken;
+void DatabaseManager::onWorkerItemCountLoadedWithToken(int count, int requestToken) {
+  qCDebug(lcSearchDiag) << "[DatabaseManager] onWorkerItemCountLoadedWithToken:" << count
+                        << "token=" << requestToken;
   emit itemCountLoadedWithToken(count, requestToken);
 
   // Keep legacy listeners working (e.g., MainWindow overlay suppression).
   emit itemCountLoaded(count);
 }
 
-void DatabaseManager::onWorkerItemsRangeLoaded(
-    int offset, const QStringList &filePaths,
-    const QHash<QString, QString> &fileNames,
-    const QHash<QString, QString> &fileToArtworkDir,
-    const QHash<QString, QString> &fileToMediaDir,
-    const QHash<QString, int> &fileToCollectionIndex) {
-    qCDebug(lcSearchDiag) << "[DatabaseManager] onWorkerItemsRangeLoaded: offset="
-        << offset << "paths=" << filePaths.size();
+void DatabaseManager::onWorkerItemsRangeLoaded(int offset, const QStringList &filePaths,
+                                               const QHash<QString, QString> &fileNames,
+                                               const QHash<QString, QString> &fileToArtworkDir,
+                                               const QHash<QString, QString> &fileToMediaDir,
+                                               const QHash<QString, int> &fileToCollectionIndex) {
+  qCDebug(lcSearchDiag) << "[DatabaseManager] onWorkerItemsRangeLoaded: offset=" << offset
+                        << "paths=" << filePaths.size();
   // Merge the directory and collection index mappings from range query into our
   // cache This enables findArtworkDirectoryForFile() and
   // getCollectionIndexForFile() to work for range-loaded items
   if (!fileToArtworkDir.isEmpty() || !fileToMediaDir.isEmpty() ||
       !fileToCollectionIndex.isEmpty()) {
     QMutexLocker locker(&m_dataMutex);
-    for (auto it = fileToArtworkDir.constBegin();
-         it != fileToArtworkDir.constEnd(); ++it) {
+    for (auto it = fileToArtworkDir.constBegin(); it != fileToArtworkDir.constEnd(); ++it) {
       m_fileToArtworkDir.insert(it.key(), it.value());
     }
-    for (auto it = fileToMediaDir.constBegin(); it != fileToMediaDir.constEnd();
-         ++it) {
+    for (auto it = fileToMediaDir.constBegin(); it != fileToMediaDir.constEnd(); ++it) {
       m_fileToMediaDir.insert(it.key(), it.value());
     }
-    for (auto it = fileToCollectionIndex.constBegin();
-         it != fileToCollectionIndex.constEnd(); ++it) {
+    for (auto it = fileToCollectionIndex.constBegin(); it != fileToCollectionIndex.constEnd();
+         ++it) {
       m_fileToCollectionIndex.insert(it.key(), it.value());
     }
   }
 
-  emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir,
-                        fileToMediaDir, fileToCollectionIndex);
+  emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir, fileToMediaDir,
+                        fileToCollectionIndex);
 }
 
 void DatabaseManager::cancelScan() {

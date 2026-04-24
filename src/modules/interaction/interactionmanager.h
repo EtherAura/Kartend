@@ -5,10 +5,10 @@
 #include "collectionutils.h"
 #include "interactionstateholder.h" // Required: m_state is a value member
 #include "setuputils.h"
+#include <memory>
 #include <QObject>
 #include <QPointer>
 #include <QScrollArea>
-#include <memory>
 
 QT_BEGIN_NAMESPACE
 class QKeyEvent;
@@ -82,8 +82,7 @@ struct InteractionManagerSetup {
   SETUP_GETTER_INLINE_SAME(SidebarManager *, SidebarManager, sidebarManager)
   SETUP_GETTER_INLINE_SAME(SettingsManager *, SettingsManager, settingsManager)
   SETUP_GETTER_INLINE_SAME(DatabaseManager *, DatabaseManager, databaseManager)
-  SETUP_GETTER_INLINE_SAME(NavigationManager *, NavigationManager,
-                           navigationManager)
+  SETUP_GETTER_INLINE_SAME(NavigationManager *, NavigationManager, navigationManager)
   SETUP_GETTER_INLINE_SAME(SessionManager *, SessionManager, sessionManager)
   SETUP_GETTER_INLINE_SAME(ArtworkManager *, ArtworkManager, artworkManager)
 
@@ -96,10 +95,8 @@ struct InteractionManagerSetup {
   SETUP_GETTER_INLINE_SAME(QLineEdit *, SearchBar, searchBar)
   SETUP_GETTER_INLINE_SAME(QPushButton *, SearchModeButton, searchModeButton)
   SETUP_GETTER_INLINE_SAME(QList<CollectionConfig> *, Collections, collections)
-  SETUP_GETTER_INLINE_SAME(int *, CurrentCollectionIndex,
-                           currentCollectionIndex)
-  SETUP_GETTER_INLINE_SAME(const CollectionHierarchyCache *, HierarchyCache,
-                           hierarchyCache)
+  SETUP_GETTER_INLINE_SAME(int *, CurrentCollectionIndex, currentCollectionIndex)
+  SETUP_GETTER_INLINE_SAME(const CollectionHierarchyCache *, HierarchyCache, hierarchyCache)
   SETUP_GETTER_INLINE_SAME(GeneralSettings *, GeneralSettings, generalSettings)
   SETUP_GETTER_INLINE_SAME(const bool *, IsShuttingDown, isShuttingDown)
 };
@@ -131,41 +128,22 @@ public:
   // ─────────────────────────────────────────────────────────────────────────
   // Owned sub-manager accessors - allows ApplicationContext to register them
   // ─────────────────────────────────────────────────────────────────────────
-  [[nodiscard]] AnimationManager *animationManager() const {
-    return m_animationManager.get();
-  }
-  [[nodiscard]] SelectionManager *selectionManager() const {
-    return m_selectionManager.get();
-  }
-  [[nodiscard]] ViewportManager *viewportManager() const {
-    return m_viewportManager.get();
-  }
-  [[nodiscard]] MouseManager *mouseManager() const {
-    return m_mouseManager.get();
-  }
-  [[nodiscard]] KeyboardManager *keyboardManager() const {
-    return m_keyboardManager.get();
-  }
-  [[nodiscard]] GamepadManager *gamepadManager() const {
-    return m_gamepadManager.get();
-  }
-  [[nodiscard]] EventManager *eventManager() const {
-    return m_eventManager.get();
-  }
-  [[nodiscard]] SearchManager *searchManager() const {
-    return m_searchManager.get();
-  }
-  [[nodiscard]] LaunchManager *launchManager() const {
-    return m_launchManager.get();
-  }
+  [[nodiscard]] AnimationManager *animationManager() const { return m_animationManager.get(); }
+  [[nodiscard]] SelectionManager *selectionManager() const { return m_selectionManager.get(); }
+  [[nodiscard]] ViewportManager *viewportManager() const { return m_viewportManager.get(); }
+  [[nodiscard]] MouseManager *mouseManager() const { return m_mouseManager.get(); }
+  [[nodiscard]] KeyboardManager *keyboardManager() const { return m_keyboardManager.get(); }
+  [[nodiscard]] GamepadManager *gamepadManager() const { return m_gamepadManager.get(); }
+  [[nodiscard]] EventManager *eventManager() const { return m_eventManager.get(); }
+  [[nodiscard]] SearchManager *searchManager() const { return m_searchManager.get(); }
+  [[nodiscard]] LaunchManager *launchManager() const { return m_launchManager.get(); }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Public API
   // ─────────────────────────────────────────────────────────────────────────
 
   // Widget double-click handling (used by EventManager)
-  void handleWidgetDoubleClickedWithCollection(const QString &filePath,
-                                               int collectionIndex);
+  void handleWidgetDoubleClickedWithCollection(const QString &filePath, int collectionIndex);
   void selectItemByIndex(int index, bool allowHorizontalScroll);
   void clearSelection();
   void clearSelectionAndFocus();
@@ -199,12 +177,8 @@ public:
 
   // Navigation progress state - set by NavigationManager during collection
   // switches
-  [[nodiscard]] bool isNavigationInProgress() const {
-    return m_navigationInProgress;
-  }
-  void setNavigationInProgress(bool inProgress) {
-    m_navigationInProgress = inProgress;
-  }
+  [[nodiscard]] bool isNavigationInProgress() const { return m_navigationInProgress; }
+  void setNavigationInProgress(bool inProgress) { m_navigationInProgress = inProgress; }
 
   // Centralized interaction state holder - provides typed access to state
   // that was previously stored as Qt dynamic properties
@@ -241,8 +215,7 @@ private slots:
 private:
   [[nodiscard]] QList<int> getSubcollections(int parentIndex) const;
   void updateFilePathForSelection(int index, const QList<int> &subcollections);
-  void trySelectWidget(int index, const QList<int> &subcollections,
-                       int attempt);
+  void trySelectWidget(int index, const QList<int> &subcollections, int attempt);
   void handleSuccessfulSelection(int index);
   void centerItemVertically(int index, bool immediate);
   void ensureHorizontallyVisible(int index);
@@ -324,8 +297,7 @@ private:
 
   void applySelectionStateForIndex(int idx);
   void finalizeRestoreFlagsAndFocus();
-  void scheduleSidebarMetadataUpdateIfVisible(int targetIndex,
-                                              int initialDelayMs,
+  void scheduleSidebarMetadataUpdateIfVisible(int targetIndex, int initialDelayMs,
                                               int secondaryDelayMs);
   [[nodiscard]] QString titleForIndexInColl(int coll, int idx) const;
   void persistSelectionForIndex(int coll, int idx);
@@ -335,15 +307,13 @@ private:
   auto processEnterOrReturnKey(int totalItems) -> bool;
   auto handleEnterOnSubcollection(int subActualIndex, int subCollIdx) -> bool;
   auto handleEnterOnVirtualFolder(const QString &folderPath) -> bool;
-  [[nodiscard]] auto handleEnterOnItem(int currentSelection, int totalItems)
-      -> bool;
-  [[nodiscard]] auto isItemOffscreen(int selection, int gridWidth) const
-      -> bool;
+  [[nodiscard]] auto handleEnterOnItem(int currentSelection, int totalItems) -> bool;
+  [[nodiscard]] auto isItemOffscreen(int selection, int gridWidth) const -> bool;
   void applyMinorHorizontalSuppress();
 
   // Selection helpers
-  void persistSuppressedSelectionAndMaybeCenter(
-      int index, const QList<int> &subcollections, bool skipCenter);
+  void persistSuppressedSelectionAndMaybeCenter(int index, const QList<int> &subcollections,
+                                                bool skipCenter);
 };
 
 #endif

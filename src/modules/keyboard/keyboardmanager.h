@@ -75,35 +75,24 @@ public:
   [[nodiscard]] Qt::Key repeatKey() const { return m_repeatKey; }
 
   // Wrap navigation state
-  [[nodiscard]] bool isWrapSequenceActive() const {
-    return m_wrapSequenceActive;
-  }
+  [[nodiscard]] bool isWrapSequenceActive() const { return m_wrapSequenceActive; }
   void setWrapSequenceActive(bool active) { m_wrapSequenceActive = active; }
 
   // Continuous scroll state
-  [[nodiscard]] bool isContinuousScrollActive() const {
-    return m_continuousScrollActive;
-  }
-  void setContinuousScrollActive(bool active) {
-    m_continuousScrollActive = active;
-  }
+  [[nodiscard]] bool isContinuousScrollActive() const { return m_continuousScrollActive; }
+  void setContinuousScrollActive(bool active) { m_continuousScrollActive = active; }
 
   // Selection calculation helpers
-  static int calculateNewSelection(int totalItems, int currentSelection,
-                                   int direction, bool wrapEnabled,
-                                   bool vertical, int gridWidth, bool &didWrap);
-  static int calculateHorizontalSelection(int totalItems, int currentSelection,
-                                          int direction, bool wrapEnabled,
-                                          bool &didWrap);
-  static int calculateVerticalSelection(int totalItems, int currentSelection,
-                                        int direction, bool wrapEnabled,
-                                        int gridWidth, bool &didWrap);
-  static bool hasRowChanged(int gridWidth, int currentSelection,
-                            int newSelection);
+  static int calculateNewSelection(int totalItems, int currentSelection, int direction,
+                                   bool wrapEnabled, bool vertical, int gridWidth, bool &didWrap);
+  static int calculateHorizontalSelection(int totalItems, int currentSelection, int direction,
+                                          bool wrapEnabled, bool &didWrap);
+  static int calculateVerticalSelection(int totalItems, int currentSelection, int direction,
+                                        bool wrapEnabled, int gridWidth, bool &didWrap);
+  static bool hasRowChanged(int gridWidth, int currentSelection, int newSelection);
 
   // Key direction derivation
-  static bool deriveDirectionForKey(int key, int gridWidth, int &direction,
-                                    bool &vertical);
+  static bool deriveDirectionForKey(int key, int gridWidth, int &direction, bool &vertical);
 
   // Prepare for key navigation step
   void prepareKeyNavigationState();

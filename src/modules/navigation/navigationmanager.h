@@ -5,13 +5,13 @@
 #include "collectionutils.h"
 #include "errorutils.h"
 #include "setuputils.h"
+#include <functional>
+#include <memory>
 #include <QHash>
 #include <QList>
 #include <QObject>
 #include <QStringList>
 #include <QTimer>
-#include <functional>
-#include <memory>
 
 QT_BEGIN_NAMESPACE
 class QLabel;
@@ -74,8 +74,7 @@ struct NavigationManagerSetup {
   std::function<void()> refreshTitleCounts;
 
   // Manager accessors that check ctx fallback
-  SETUP_GETTER_INLINE_SAME(InteractionManager *, InteractionManager,
-                           interactionManager)
+  SETUP_GETTER_INLINE_SAME(InteractionManager *, InteractionManager, interactionManager)
   SETUP_GETTER_INLINE_SAME(SettingsManager *, SettingsManager, settingsManager)
   SETUP_GETTER_INLINE_SAME(SidebarManager *, SidebarManager, sidebarManager)
   SETUP_GETTER_INLINE_SAME(ScrollManager *, ScrollManager, scrollManager)
@@ -95,13 +94,10 @@ struct NavigationManagerSetup {
   SETUP_GETTER_INLINE_SAME(LoadingOverlay *, LoadingOverlay, loadingOverlay)
   SETUP_GETTER_INLINE_SAME(MetadataSidebar *, Sidebar, sidebar)
   SETUP_GETTER_INLINE_SAME(QList<CollectionConfig> *, Collections, collections)
-  SETUP_GETTER_INLINE_SAME(int *, CurrentCollectionIndex,
-                           currentCollectionIndex)
-  SETUP_GETTER_INLINE_SAME(const CollectionHierarchyCache *, HierarchyCache,
-                           hierarchyCache)
+  SETUP_GETTER_INLINE_SAME(int *, CurrentCollectionIndex, currentCollectionIndex)
+  SETUP_GETTER_INLINE_SAME(const CollectionHierarchyCache *, HierarchyCache, hierarchyCache)
   SETUP_GETTER_INLINE_SAME(GeneralSettings *, GeneralSettings, generalSettings)
-  SETUP_GETTER_INLINE_CTX_ONLY(InteractionStateHolder *, InteractionState,
-                               interactionState)
+  SETUP_GETTER_INLINE_CTX_ONLY(InteractionStateHolder *, InteractionState, interactionState)
 };
 
 class NavigationManager : public QObject {
@@ -116,9 +112,7 @@ public:
   void prepareForShutdown();
 
   // Navigation stack manager for hierarchy traversal
-  [[nodiscard]] NavigationStackManager *stackManager() const {
-    return m_stackManager.get();
-  }
+  [[nodiscard]] NavigationStackManager *stackManager() const { return m_stackManager.get(); }
 
 private:
   std::unique_ptr<NavigationStackManager> m_stackManager;
@@ -142,11 +136,9 @@ public slots:
   void filterItems(const QString &searchText);
   void filterItemsCurrentAndSubcollections(const QString &searchText);
   void filterItemsAllCollections(const QString &searchText);
-  auto scheduleSelectionRestore(int desiredIndex, int maxAttempts,
-                                int attemptDelayMs, int finalEnsureDelayMs)
-      -> void;
-  void onItemsLoaded(const QStringList &filePaths,
-                     const QHash<QString, QString> &fileNames);
+  auto scheduleSelectionRestore(int desiredIndex, int maxAttempts, int attemptDelayMs,
+                                int finalEnsureDelayMs) -> void;
+  void onItemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void onItemCountLoaded(int count, int requestToken);
   void onBackgroundCollectionScanCompleted(const QString &collectionUuid);
   void onItemsRangeLoaded(int offset, const QStringList &filePaths,
@@ -168,16 +160,14 @@ private:
   // Helper methods for navigateWithSharedItems
   auto initializeNavigationState() -> void;
   [[nodiscard]] auto validateAndPrepareNavigation(int collectionIndex) -> bool;
-  auto handleSubcollectionNavigation(int collectionIndex, int previousIndex)
-      -> void;
+  auto handleSubcollectionNavigation(int collectionIndex, int previousIndex) -> void;
   auto handleRegularNavigation(int collectionIndex) -> void;
   auto finalizeNavigation(int collectionIndex) -> void;
 
   [[nodiscard]] auto areItemsShared(int fromIndex, int toIndex) const -> bool;
   auto applyCollectionSettingsOnly(int collectionIndex) -> void;
   [[nodiscard]] auto getSubcollections(int parentIndex) const -> QList<int>;
-  [[nodiscard]] auto getAllDescendantCollections(int parentIndex) const
-      -> QList<int>;
+  [[nodiscard]] auto getAllDescendantCollections(int parentIndex) const -> QList<int>;
 
   InteractionManager *m_interactionManager = nullptr;
   InteractionStateHolder *m_state = nullptr;
@@ -217,35 +207,29 @@ private:
   std::unique_ptr<SelectionRestoreManager> m_selectionRestoreManager;
 
   bool m_virtualScrollConnected = false;
-  [[nodiscard]] auto collectionHasDescendantWithMedia(int parentIndex) const
-      -> bool;
+  [[nodiscard]] auto collectionHasDescendantWithMedia(int parentIndex) const -> bool;
   bool m_allCollectionsActive = false;
   auto setSuppressArrowCenter(QScrollArea *scrollArea, int settleMs) -> void;
-  [[nodiscard]] auto getHasSubAndItems(int collectionIndex, bool &hasSub,
-                                       bool &hasItems) const -> bool;
+  [[nodiscard]] auto getHasSubAndItems(int collectionIndex, bool &hasSub, bool &hasItems) const
+      -> bool;
   auto updateItemsPageTitle(int collectionIndex) -> void;
   // Helper methods for goBackToCollections refactoring
   auto performNavigationStackCleanup() -> void;
   auto handleNavigationStackPop() -> void;
   auto handleNavigationFallback() -> void;
   [[nodiscard]] auto findSubcollectionVisualIndex(int targetCollectionIndex,
-                                                  int previousIndex) const
-      -> int;
-  auto scheduleNavigationReturn(int targetCollectionIndex,
-                                int subcollectionVisualIndex) -> void;
+                                                  int previousIndex) const -> int;
+  auto scheduleNavigationReturn(int targetCollectionIndex, int subcollectionVisualIndex) -> void;
   // Helper methods for onItemsLoaded refactoring
   [[nodiscard]] auto validateItemsLoadedContext() const -> bool;
   auto cleanupExistingNoItemsWidgets() -> void;
-  [[nodiscard]] auto
-  determineContentAvailability(const QStringList &filePaths,
-                               const QList<int> &subcollections) const -> bool;
+  [[nodiscard]] auto determineContentAvailability(const QStringList &filePaths,
+                                                  const QList<int> &subcollections) const -> bool;
   auto handleEmptyContent() -> void;
-  [[nodiscard]] auto
-  setupCollectionContext(const QStringList &filePaths,
-                         const QHash<QString, QString> &fileNames) const
+  [[nodiscard]] auto setupCollectionContext(const QStringList &filePaths,
+                                            const QHash<QString, QString> &fileNames) const
       -> CollectionContext;
-  [[nodiscard]] auto lookupRememberedSelectionIndex(int totalItems) const
-      -> int;
+  [[nodiscard]] auto lookupRememberedSelectionIndex(int totalItems) const -> int;
   [[nodiscard]] auto calculateSelectionIndex(int totalItems) const -> int;
   [[nodiscard]] auto computeCollectionDepth(int collectionIndex) const -> int;
   auto schedulePostLoadOperations() -> void;
@@ -257,15 +241,11 @@ private:
 
   // Attempts fast startup using cached counts to render immediately.
   // Returns true if cached count was used for immediate rendering.
-  [[nodiscard]] auto
-  tryUseCachedCountForStartup(const CollectionContext &context) -> bool;
+  [[nodiscard]] auto tryUseCachedCountForStartup(const CollectionContext &context) -> bool;
 
-  [[nodiscard]] CollectionContext
-  buildExpandedContextForIndex(int collectionIndex) const;
-  [[nodiscard]] CollectionContext
-  getOrBuildExpandedContext(int collectionIndex);
-  void requestItemCountForContext(const CollectionContext &context,
-                                  const QString &filter);
+  [[nodiscard]] CollectionContext buildExpandedContextForIndex(int collectionIndex) const;
+  [[nodiscard]] CollectionContext getOrBuildExpandedContext(int collectionIndex);
+  void requestItemCountForContext(const CollectionContext &context, const QString &filter);
 
   void persistCurrentSelection();
   void prepareForNonSharedNavigationHelper();
@@ -274,12 +254,10 @@ private:
   void applyUiPoliciesForCollection(int collectionIndex);
 
   QList<CollectionConfig> *m_collections = nullptr;
-  bool m_isRescanInProgress = false; // Track when force rescan is active
-  int m_pendingRescanCollectionIndex =
-      -1; // Collection to reload after cache invalidation
-  QMetaObject::Connection
-      m_cacheInvalidatedConnection; // One-shot connection for cache
-                                    // invalidation
+  bool m_isRescanInProgress = false;       // Track when force rescan is active
+  int m_pendingRescanCollectionIndex = -1; // Collection to reload after cache invalidation
+  QMetaObject::Connection m_cacheInvalidatedConnection; // One-shot connection for cache
+                                                        // invalidation
 
   bool m_backgroundCountRefreshInProgress = false;
   int m_backgroundCountRefreshCollectionIndex = -1;

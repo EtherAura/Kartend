@@ -1,9 +1,9 @@
 #ifndef SELECTIONRESTOREMANAGER_H
 #define SELECTIONRESTOREMANAGER_H
 
+#include <functional>
 #include <QObject>
 #include <QPointer>
-#include <functional>
 
 #include "setuputils.h"
 
@@ -73,8 +73,8 @@ public:
    * compatibility).
    * @param finalEnsureDelayMs Final verification delay.
    */
-  void scheduleSelectionRestore(int desiredIndex, int maxAttempts,
-                                int attemptDelayMs, int finalEnsureDelayMs);
+  void scheduleSelectionRestore(int desiredIndex, int maxAttempts, int attemptDelayMs,
+                                int finalEnsureDelayMs);
 
   /**
    * @brief Checks if selection should be restored based on settings and search
@@ -102,8 +102,7 @@ public:
    * @param selIdx Selection index to verify.
    * @param token Restore token for cancellation.
    */
-  void scheduleSelectionRestoreVerification(int collectionIndex, int selIdx,
-                                            int token);
+  void scheduleSelectionRestoreVerification(int collectionIndex, int selIdx, int token);
 
   /**
    * @brief Initializes and returns the next selection restore token.
@@ -124,8 +123,8 @@ private:
    * @param token Restore token for validation.
    * @return Lambda that validates restore should proceed.
    */
-  [[nodiscard]] std::function<bool()>
-  createRestoreValidationLambda(int scheduledCollectionIndex, int token) const;
+  [[nodiscard]] std::function<bool()> createRestoreValidationLambda(int scheduledCollectionIndex,
+                                                                    int token) const;
 
   /**
    * @brief Executes the selection restore with delayed validation.
@@ -133,8 +132,7 @@ private:
    * @param scheduledCollectionIndex Collection index at schedule time.
    * @param token Restore token for validation.
    */
-  void executeSelectionRestore(int desiredIndex, int scheduledCollectionIndex,
-                               int token) const;
+  void executeSelectionRestore(int desiredIndex, int scheduledCollectionIndex, int token) const;
 
   /**
    * @brief Creates a lambda for restoring selection with validation.
@@ -143,8 +141,8 @@ private:
    * @param token Restore token for cancellation check.
    * @return Lambda that performs the restore.
    */
-  [[nodiscard]] std::function<void()>
-  createSelectionRestoreLambda(int collectionIndex, int selIdx, int token);
+  [[nodiscard]] std::function<void()> createSelectionRestoreLambda(int collectionIndex, int selIdx,
+                                                                   int token);
 
   // Manager references
   InteractionManager *m_interactionManager = nullptr;

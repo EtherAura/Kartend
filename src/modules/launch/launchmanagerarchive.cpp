@@ -1,6 +1,6 @@
 // Archive extraction helpers split out from launchmanager.cpp.
-#include "launchmanager.h"
 #include "errorutils.h"
+#include "launchmanager.h"
 #include "pathutils.h"
 #include "uiconstants.h"
 
@@ -9,16 +9,16 @@
 #include <QFileInfo>
 #include <QProcess>
 #include <QStandardPaths>
-#include <QTemporaryDir>
 #include <QString>
+#include <QTemporaryDir>
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcLaunchManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcLaunchManager().isDebugEnabled()) {                                  \
-      qCDebug(lcLaunchManager) << msg;                                         \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcLaunchManager().isDebugEnabled()) {                                                      \
+      qCDebug(lcLaunchManager) << msg;                                                             \
+    }                                                                                              \
   } while (0)
 
 using ErrorUtils::ErrorCode;
@@ -37,19 +37,16 @@ bool LaunchManager::isArchiveFile(const QString &filePath) {
   return false;
 }
 
-auto LaunchManager::extractArchiveToTemp(const QString &archivePath,
-                                         const QString &targetExtension)
+auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QString &targetExtension)
     -> ErrorUtils::Result<QString> {
   // Create a persistent temp directory for extractions
   // Using a subdirectory in the standard temp location that won't auto-delete
-  QString tempBasePath =
-      QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+  QString tempBasePath = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
   QString extractDir = tempBasePath + "/kartend_extract";
 
   QDir baseDir(extractDir);
   if (!baseDir.exists() && !baseDir.mkpath(".")) {
-    return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Failed to create extraction directory",
+    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to create extraction directory",
                                "LaunchManager::extractArchiveToTemp")
         .withDetails(extractDir);
   }
@@ -91,8 +88,7 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath,
   }
 
   if (extractor.isEmpty()) {
-    return ErrorContext::error(ErrorCode::FileNotFound,
-                               "No archive extraction tool found",
+    return ErrorContext::error(ErrorCode::FileNotFound, "No archive extraction tool found",
                                "LaunchManager::extractArchiveToTemp")
         .withDetails("Install 7z, unzip, or bsdtar to extract archives");
   }
@@ -113,20 +109,17 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath,
 
   process.start(extractor, args);
   if (!process.waitForFinished(30000)) { // 30 second timeout
-    return ErrorContext::error(ErrorCode::OperationCancelled,
-                               "Archive extraction timed out",
+    return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction timed out",
                                "LaunchManager::extractArchiveToTemp")
         .withDetails(archivePath);
   }
 
   if (process.exitCode() != 0) {
     QString errorOutput = QString::fromUtf8(process.readAllStandardError());
-    return ErrorContext::error(ErrorCode::InvalidArgument,
-                               "Archive extraction failed",
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Archive extraction failed",
                                "LaunchManager::extractArchiveToTemp")
-        .withDetails(QString("Exit code: %1, Error: %2")
-                         .arg(process.exitCode())
-                         .arg(errorOutput.left(200)));
+        .withDetails(
+            QString("Exit code: %1, Error: %2").arg(process.exitCode()).arg(errorOutput.left(200)));
   }
 
   // Find the file with the target extension
@@ -135,16 +128,14 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath,
     return ErrorContext::error(ErrorCode::FileNotFound,
                                "Target file not found in extracted archive",
                                "LaunchManager::extractArchiveToTemp")
-        .withDetails(
-            QString("Looking for *%1 in %2").arg(targetExtension, uniqueDir));
+        .withDetails(QString("Looking for *%1 in %2").arg(targetExtension, uniqueDir));
   }
 
   qCDebug(lcLaunchManager) << "Extracted target file:" << targetFile;
   return targetFile;
 }
 
-QString LaunchManager::findFileWithExtension(const QString &directory,
-                                             const QString &extension) {
+QString LaunchManager::findFileWithExtension(const QString &directory, const QString &extension) {
   QString normalizedExt = extension.toLower();
   if (!normalizedExt.startsWith('.')) {
     normalizedExt = "." + normalizedExt;
@@ -159,23 +150,20 @@ QString LaunchManager::findFileWithExtension(const QString &directory,
     return {};
   }
   const QString rootPrefix = rootCanonical + QLatin1Char('/');
-  const int rootDepth =
-      rootCanonical.count(QLatin1Char('/'));
+  const int rootDepth = rootCanonical.count(QLatin1Char('/'));
 
   // QDir::NoSymLinks makes the iterator skip symlinked entries entirely so
   // that a malicious archive containing symlinks cannot escape the temp dir.
-  QDirIterator it(directory,
-                  QDir::Files | QDir::NoSymLinks | QDir::NoDotAndDotDot,
+  QDirIterator it(directory, QDir::Files | QDir::NoSymLinks | QDir::NoDotAndDotDot,
                   QDirIterator::Subdirectories);
 
   int inspected = 0;
   while (it.hasNext()) {
     const QString filePath = it.next();
     if (++inspected > UIConstants::Launch::MAX_EXTRACTION_FILES_INSPECTED) {
-      qCWarning(lcLaunchManager)
-          << "Aborting extraction scan after"
-          << UIConstants::Launch::MAX_EXTRACTION_FILES_INSPECTED
-          << "files inspected; directory may be malicious:" << directory;
+      qCWarning(lcLaunchManager) << "Aborting extraction scan after"
+                                 << UIConstants::Launch::MAX_EXTRACTION_FILES_INSPECTED
+                                 << "files inspected; directory may be malicious:" << directory;
       return {};
     }
 
@@ -200,9 +188,8 @@ QString LaunchManager::findFileWithExtension(const QString &directory,
       continue;
     }
     if (canonical != rootCanonical && !canonical.startsWith(rootPrefix)) {
-      qCWarning(lcLaunchManager)
-          << "Rejecting extraction candidate outside root:" << canonical
-          << "root:" << rootCanonical;
+      qCWarning(lcLaunchManager) << "Rejecting extraction candidate outside root:" << canonical
+                                 << "root:" << rootCanonical;
       continue;
     }
 

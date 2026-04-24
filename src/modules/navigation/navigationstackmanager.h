@@ -19,8 +19,7 @@ class NavigationStackManager : public QObject {
   Q_OBJECT
 
 public:
-  explicit NavigationStackManager(QObject *parent = nullptr)
-      : QObject(parent) {}
+  explicit NavigationStackManager(QObject *parent = nullptr) : QObject(parent) {}
 
   // --- Stack Operations ---
 
@@ -41,9 +40,7 @@ public:
   }
 
   /// Peek at the top collection index without removing, or -1 if empty
-  [[nodiscard]] int top() const {
-    return m_stack.isEmpty() ? -1 : m_stack.last();
-  }
+  [[nodiscard]] int top() const { return m_stack.isEmpty() ? -1 : m_stack.last(); }
 
   /// Clear the entire navigation stack
   void clear() {

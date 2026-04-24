@@ -25,10 +25,8 @@ void ListHeaderWidget::setupUI() {
   // Header spans full width including grid margins, so add grid margins to text
   // padding to align with item columns which are positioned at (grid margin +
   // text padding)
-  int leftMargin =
-      UIConstants::Grid::MARGINS + UIConstants::ListView::TEXT_LEFT_PADDING;
-  int rightMargin =
-      UIConstants::Grid::MARGINS + UIConstants::ListView::TEXT_RIGHT_PADDING;
+  int leftMargin = UIConstants::Grid::MARGINS + UIConstants::ListView::TEXT_LEFT_PADDING;
+  int rightMargin = UIConstants::Grid::MARGINS + UIConstants::ListView::TEXT_RIGHT_PADDING;
   m_layout->setContentsMargins(leftMargin, 4, rightMargin, 4);
   m_layout->setSpacing(8);
 
@@ -61,7 +59,7 @@ void ListHeaderWidget::setupUI() {
 
   m_layout->addWidget(m_nameLabel, 1); // Stretch
   m_layout->addWidget(m_collectionLabel,
-                      0); // Fixed width (but resizable via drag)
+                      0);                 // Fixed width (but resizable via drag)
   m_layout->addWidget(m_artworkLabel, 0); // Fixed width, rightmost
 
   setLayout(m_layout);
@@ -75,8 +73,7 @@ void ListHeaderWidget::setSortColumn(ListSortColumn column, bool ascending) {
 }
 
 void ListHeaderWidget::setCollectionColumnWidth(int width) {
-  m_collectionColumnWidth =
-      qBound(MIN_COLLECTION_WIDTH, width, MAX_COLLECTION_WIDTH);
+  m_collectionColumnWidth = qBound(MIN_COLLECTION_WIDTH, width, MAX_COLLECTION_WIDTH);
   if (m_collectionLabel) {
     m_collectionLabel->setFixedWidth(m_collectionColumnWidth);
   }
@@ -141,8 +138,7 @@ bool ListHeaderWidget::isOverResizeHandle(int x) const {
   }
   // The resize handle is at the left edge of the collection column
   int separatorX = m_collectionLabel->x();
-  return x >= separatorX - RESIZE_HANDLE_WIDTH &&
-         x <= separatorX + RESIZE_HANDLE_WIDTH;
+  return x >= separatorX - RESIZE_HANDLE_WIDTH && x <= separatorX + RESIZE_HANDLE_WIDTH;
 }
 
 bool ListHeaderWidget::isOverArtworkResizeHandle(int x) const {
@@ -151,8 +147,7 @@ bool ListHeaderWidget::isOverArtworkResizeHandle(int x) const {
   }
   // The resize handle is at the left edge of the artwork column
   int separatorX = m_artworkLabel->x();
-  return x >= separatorX - RESIZE_HANDLE_WIDTH &&
-         x <= separatorX + RESIZE_HANDLE_WIDTH;
+  return x >= separatorX - RESIZE_HANDLE_WIDTH && x <= separatorX + RESIZE_HANDLE_WIDTH;
 }
 
 void ListHeaderWidget::paintEvent(QPaintEvent *event) {
@@ -244,8 +239,7 @@ void ListHeaderWidget::mouseReleaseEvent(QMouseEvent *event) {
       int pressX = m_pressPos.x();
 
       // Get column boundaries from labels (left edge of collection column)
-      int collectionLeft =
-          m_collectionLabel ? m_collectionLabel->x() : (width() - 150 - 32);
+      int collectionLeft = m_collectionLabel ? m_collectionLabel->x() : (width() - 150 - 32);
       int artworkLeft = m_artworkLabel ? m_artworkLabel->x() : (width() - 32);
 
       qCDebug(lcListHeaderWidget) << "Header click: x=" << x << "pressX=" << pressX

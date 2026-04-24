@@ -20,13 +20,12 @@
 #include <QTimer>
 
 Q_DECLARE_LOGGING_CATEGORY(lcScrollManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcScrollManager().isDebugEnabled()) {                                  \
-      qCDebug(lcScrollManager) << msg;                                         \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcScrollManager().isDebugEnabled()) {                                                      \
+      qCDebug(lcScrollManager) << msg;                                                             \
+    }                                                                                              \
   } while (0)
-
 
 // Handles scroll changes throttling artwork updates and arrow-centering
 // suppression
@@ -93,44 +92,40 @@ void ScrollManager::setupScrollSuppression() {
   }
 
   m_state->arrow().suppressArrowCenter = true;
-  qint64 until = QDateTime::currentMSecsSinceEpoch() +
-                 UIConstants::Mouse::WHEEL_SUPPRESS_ARROW_CENTER_MS;
+  qint64 until =
+      QDateTime::currentMSecsSinceEpoch() + UIConstants::Mouse::WHEEL_SUPPRESS_ARROW_CENTER_MS;
   m_state->arrow().suppressArrowCenterUntilMs = until;
 
   InteractionStateHolder *statePtr = m_state;
   // Clear arrow center suppression after the suppression window expires -
   // checks timestamp to avoid clearing if another suppress was scheduled
-  QTimer::singleShot(
-      UIConstants::Keyboard::ARROW_CENTER_CLEAR_CHECK_DELAY_MS, this,
-      [statePtr]() {
-        if (!statePtr) {
-          return;
-        }
-        qint64 suppressUntilMs = statePtr->arrow().suppressArrowCenterUntilMs;
-        if (suppressUntilMs > 0 &&
-            QDateTime::currentMSecsSinceEpoch() < suppressUntilMs) {
-          return;
-        }
-        statePtr->arrow().suppressArrowCenter = false;
-      });
+  QTimer::singleShot(UIConstants::Keyboard::ARROW_CENTER_CLEAR_CHECK_DELAY_MS, this, [statePtr]() {
+    if (!statePtr) {
+      return;
+    }
+    qint64 suppressUntilMs = statePtr->arrow().suppressArrowCenterUntilMs;
+    if (suppressUntilMs > 0 && QDateTime::currentMSecsSinceEpoch() < suppressUntilMs) {
+      return;
+    }
+    statePtr->arrow().suppressArrowCenter = false;
+  });
 }
 
 void ScrollManager::finalizeScrollChanges() {
   // Delay clearing UserScrollActive to allow any pending scroll events
   // to be processed with the flag still set. After clearing, trigger
   // artwork update since it was deferred during scrolling.
-  QTimer::singleShot(UIConstants::Mouse::USER_SCROLL_ACTIVE_CLEAR_DELAY_MS,
-                     this, [this]() {
-                       if (m_state) {
-                         m_state->scroll().userScrollActive = false;
-                       }
-                       // Trigger artwork update now that user scroll is
-                       // complete - artwork loading was deferred while
-                       // userScrollActive was true
-                       if (m_artworkManager) {
-                         m_artworkManager->updateViewportArtwork();
-                       }
-                     });
+  QTimer::singleShot(UIConstants::Mouse::USER_SCROLL_ACTIVE_CLEAR_DELAY_MS, this, [this]() {
+    if (m_state) {
+      m_state->scroll().userScrollActive = false;
+    }
+    // Trigger artwork update now that user scroll is
+    // complete - artwork loading was deferred while
+    // userScrollActive was true
+    if (m_artworkManager) {
+      m_artworkManager->updateViewportArtwork();
+    }
+  });
 
   notifyUserActivity();
   if (!m_scrollTimer->isActive()) {
@@ -138,8 +133,9 @@ void ScrollManager::finalizeScrollChanges() {
   }
 }
 
-void ScrollManager::onThrottledUpdate() { updateVirtualView(); }
-
+void ScrollManager::onThrottledUpdate() {
+  updateVirtualView();
+}
 
 void ScrollManager::onSliderMoved(int position) {
   // Prefetch data for the scroll target position during scrollbar drag.
@@ -155,19 +151,16 @@ void ScrollManager::onSliderMoved(int position) {
 
   // Calculate the media index offset (accounting for subcollections/virtual
   // folders)
-  int subcollectionCount =
-      m_dataManager ? m_dataManager->subcollectionCount() : 0;
-  int virtualFolderCount =
-      m_dataManager ? m_dataManager->virtualFolderCount() : 0;
+  int subcollectionCount = m_dataManager ? m_dataManager->subcollectionCount() : 0;
+  int virtualFolderCount = m_dataManager ? m_dataManager->virtualFolderCount() : 0;
   int prefixCount = subcollectionCount + virtualFolderCount;
   int mediaIndex = qMax(0, targetIndex - prefixCount);
 
   // Align to chunk boundary for efficient database queries
-  int chunkSize =
-      m_context.config.showAllSubcollectionItems &&
-              m_totalItems > UIConstants::Database::RANGE_CHUNK_LARGE_THRESHOLD
-          ? UIConstants::Database::RANGE_CHUNK_SIZE_LARGE
-          : UIConstants::Database::RANGE_CHUNK_SIZE_DEFAULT;
+  int chunkSize = m_context.config.showAllSubcollectionItems &&
+                          m_totalItems > UIConstants::Database::RANGE_CHUNK_LARGE_THRESHOLD
+                      ? UIConstants::Database::RANGE_CHUNK_SIZE_LARGE
+                      : UIConstants::Database::RANGE_CHUNK_SIZE_DEFAULT;
   int chunkStart = (mediaIndex / chunkSize) * chunkSize;
 
   // Request the chunk at the target position to prefetch data
@@ -183,4 +176,3 @@ void ScrollManager::onSubcollectionDoubleClicked(int subcollectionIndex) {
 void ScrollManager::onVirtualFolderDoubleClicked(const QString &folderPath) {
   emit virtualFolderEntered(folderPath);
 }
-

@@ -35,10 +35,8 @@ namespace MouseHelpers {
 // 3. If item is above viewport center -> -1.
 // 4. If item is below viewport center -> +1.
 // 5. Exactly at center -> 0.
-[[nodiscard]] auto verticalScrollDirection(int selectedItemCenterY,
-                                           int viewportTopY,
-                                           int viewportBottomY,
-                                           int viewportCenterY, int rowHeight)
+[[nodiscard]] auto verticalScrollDirection(int selectedItemCenterY, int viewportTopY,
+                                           int viewportBottomY, int viewportCenterY, int rowHeight)
     -> int;
 
 } // namespace MouseHelpers

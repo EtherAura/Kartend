@@ -1,11 +1,11 @@
 #ifndef ALPHABETICNAVIGATIONHANDLER_H
 #define ALPHABETICNAVIGATIONHANDLER_H
 
+#include <functional>
 #include <QHash>
 #include <QObject>
 #include <QString>
 #include <QStringList>
-#include <functional>
 
 class ScrollManager;
 class SelectionManager;
@@ -30,9 +30,7 @@ public:
 
   // Dependencies
   void setScrollManager(ScrollManager *manager) { m_scrollManager = manager; }
-  void setSelectionManager(SelectionManager *manager) {
-    m_selectionManager = manager;
-  }
+  void setSelectionManager(SelectionManager *manager) { m_selectionManager = manager; }
 
   /**
    * @brief Navigate to the next letter (PageDown) or previous letter (PageUp).
@@ -71,8 +69,7 @@ private:
    * @param totalItems Total number of items in the view.
    * @return The index of the found item, or -1 if none found.
    */
-  [[nodiscard]] int findNextLetterIndex(int currentIndex, bool forward,
-                                        int totalItems) const;
+  [[nodiscard]] int findNextLetterIndex(int currentIndex, bool forward, int totalItems) const;
 
   /**
    * @brief Get the next letter in alphabetic order.

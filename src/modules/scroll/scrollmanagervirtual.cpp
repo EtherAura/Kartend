@@ -1,8 +1,6 @@
 // Sibling translation unit for ScrollManager.
 // Extracted from scrollmanager.cpp during LOC-reduction refactor.
 // These remain ScrollManager members; this is a translation-unit split.
-#include "scrollmanager.h"
-#include "loggingcategories.h"
 #include "applicationcontext.h"
 #include "arrowkeyscrollhelper.h"
 #include "artworkmanager.h"
@@ -17,9 +15,11 @@
 #include "itemwidget.h"
 #include "itemwidgetfactory.h"
 #include "listheaderwidget.h"
+#include "loggingcategories.h"
 #include "presearchstatemanager.h"
 #include "scrolldatamanager.h"
 #include "scrolleventhandler.h"
+#include "scrollmanager.h"
 #include "searchloadingoverlay.h"
 #include "selectioncoordinator.h"
 #include "selectiondisplaymanager.h"
@@ -30,6 +30,7 @@
 #include "virtualcontainermanager.h"
 #include "widgetpoolmanager.h"
 
+#include <algorithm>
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
@@ -41,19 +42,18 @@
 #include <QScrollBar>
 #include <QSet>
 #include <QTextStream>
+#include <QtGlobal>
 #include <QThreadPool>
 #include <QTimer>
 #include <QWidget>
-#include <QtGlobal>
-#include <algorithm>
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcScrollManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcScrollManager().isDebugEnabled()) {                                  \
-      qCDebug(lcScrollManager) << msg;                                         \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcScrollManager().isDebugEnabled()) {                                                      \
+      qCDebug(lcScrollManager) << msg;                                                             \
+    }                                                                                              \
   } while (0)
 
 void ScrollManager::updateVirtualView() {
@@ -66,8 +66,7 @@ void ScrollManager::updateVirtualView() {
       debugLog("updateVirtualView: early return - missing container/scrollArea "
                "(virtualContainer="
                << static_cast<bool>(m_virtualContainer)
-               << " scrollArea=" << static_cast<bool>(m_mediaScrollArea)
-               << ")");
+               << " scrollArea=" << static_cast<bool>(m_mediaScrollArea) << ")");
     }
     return;
   }
@@ -87,8 +86,7 @@ void ScrollManager::updateVirtualView() {
       --m_emptyViewDebugBudget;
       debugLog("updateVirtualView: needed is EMPTY (totalItems="
                << m_totalItems << "itemsPerRow=" << m_metrics.itemsPerRow
-               << "itemWxH=" << m_metrics.itemWidth << "x"
-               << m_metrics.itemHeight << ")");
+               << "itemWxH=" << m_metrics.itemWidth << "x" << m_metrics.itemHeight << ")");
     }
     return;
   }
@@ -101,10 +99,9 @@ void ScrollManager::updateVirtualView() {
     --m_emptyViewDebugBudget;
     debugLog("updateVirtualView: NO widgets materialized (needed="
              << needed.size() << "firstRow=" << getFirstVisibleRow()
-             << "lastRow=" << getLastVisibleRow() << "totalItems="
-             << m_totalItems << "itemsPerRow=" << m_metrics.itemsPerRow
-             << "itemWxH=" << m_metrics.itemWidth << "x" << m_metrics.itemHeight
-             << "virtualContainer=" << static_cast<bool>(m_virtualContainer)
+             << "lastRow=" << getLastVisibleRow() << "totalItems=" << m_totalItems
+             << "itemsPerRow=" << m_metrics.itemsPerRow << "itemWxH=" << m_metrics.itemWidth << "x"
+             << m_metrics.itemHeight << "virtualContainer=" << static_cast<bool>(m_virtualContainer)
              << "scrollArea=" << static_cast<bool>(m_mediaScrollArea) << ")");
   }
 
@@ -112,8 +109,7 @@ void ScrollManager::updateVirtualView() {
   updateArtworkIfAllowed();
 
   if (m_overlayManager) {
-    if (m_overlayManager->isForceVisible() &&
-        m_selectionState->hasSelection()) {
+    if (m_overlayManager->isForceVisible() && m_selectionState->hasSelection()) {
       refreshSelectionOverlayState();
     }
     m_overlayManager->raise();
@@ -126,8 +122,7 @@ auto ScrollManager::calculateNeededIndices() const -> QSet<int> {
   int startRow = qMax(0, firstVisible - 1);
   int endRow = lastVisible + 1;
 
-  int maxRow =
-      ((m_totalItems + m_metrics.itemsPerRow - 1) / m_metrics.itemsPerRow) - 1;
+  int maxRow = ((m_totalItems + m_metrics.itemsPerRow - 1) / m_metrics.itemsPerRow) - 1;
   if (maxRow < 0) {
     return {};
   }
@@ -135,8 +130,7 @@ auto ScrollManager::calculateNeededIndices() const -> QSet<int> {
 
   QSet<int> needed;
   for (int rowIndex = startRow; rowIndex <= endRow; ++rowIndex) {
-    for (int columnIndex = 0; columnIndex < m_metrics.itemsPerRow;
-         ++columnIndex) {
+    for (int columnIndex = 0; columnIndex < m_metrics.itemsPerRow; ++columnIndex) {
       int visualIndex = (rowIndex * m_metrics.itemsPerRow) + columnIndex;
       if (visualIndex < m_totalItems) {
         needed.insert(visualIndex);
@@ -161,8 +155,7 @@ void ScrollManager::removeUnneededWidgets(const QSet<int> &needed) {
 void ScrollManager::updateArtworkIfAllowed() {
   if (!QApplication::closingDown() && m_artworkManager) {
     const bool suppressArtwork = m_state && m_state->artwork().suppressArtwork;
-    const bool allowDuringSelection =
-        m_state && m_state->artwork().allowDuringSelection;
+    const bool allowDuringSelection = m_state && m_state->artwork().allowDuringSelection;
     if (!suppressArtwork || allowDuringSelection) {
       m_artworkManager->updateViewportArtwork();
     }
@@ -181,36 +174,31 @@ void ScrollManager::enforceScrollContentConstraints() {
 }
 
 void ScrollManager::recreateLayout() {
-  if (m_dataManager->filePaths().isEmpty() &&
-      m_dataManager->subcollections().isEmpty()) {
+  if (m_dataManager->filePaths().isEmpty() && m_dataManager->subcollections().isEmpty()) {
     return;
   }
   calculateVirtualMetrics();
   positionVirtualContainer();
   bool isListMode = (m_context.config.viewType == ViewType::List);
-  int fontSize =
-      isListMode ? m_context.config.listFontSize : m_context.config.fontSize;
+  int fontSize = isListMode ? m_context.config.listFontSize : m_context.config.fontSize;
   for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
     ItemWidget *widget = it.value();
     if (!widget) {
       continue;
     }
     widget->setHideTitles(m_context.config.hideTitles);
-    widget->setHideSubcollectionTitles(
-        m_context.config.hideSubcollectionTitles);
+    widget->setHideSubcollectionTitles(m_context.config.hideSubcollectionTitles);
     widget->setFontSize(fontSize);
     widget->setCornerRadius(m_context.config.cornerRadius);
     widget->setItemDimensions(m_metrics.itemWidth, m_metrics.itemHeight);
     QPoint position = getItemPosition(it.key());
-    widget->setGeometry(position.x(), position.y(), m_metrics.itemWidth,
-                        m_metrics.itemHeight);
+    widget->setGeometry(position.x(), position.y(), m_metrics.itemWidth, m_metrics.itemHeight);
   }
   updateVirtualView();
 }
 
-void ScrollManager::centerHorizontalScrollbar(
-    int /*currentCollectionIndex*/,
-    const QList<CollectionConfig> & /*collections*/) {
+void ScrollManager::centerHorizontalScrollbar(int /*currentCollectionIndex*/,
+                                              const QList<CollectionConfig> & /*collections*/) {
   positionVirtualContainer();
 }
 
@@ -347,8 +335,7 @@ void ScrollManager::cleanupVirtualContainer() {
 
 void ScrollManager::calculateVirtualMetrics() {
   // Use GridLayoutCalculator for metrics calculation
-  m_metrics =
-      GridLayoutCalculator::calculateMetrics(m_context.config, m_totalItems);
+  m_metrics = GridLayoutCalculator::calculateMetrics(m_context.config, m_totalItems);
 
   // List mode: set item width to fill available viewport (minus scrollbar and
   // margins)
@@ -356,8 +343,7 @@ void ScrollManager::calculateVirtualMetrics() {
     int viewportWidth = m_mediaScrollArea->viewport()->width();
     int scrollbarWidth = getScrollbarWidth();
     // Full width minus margins and scrollbar
-    m_metrics.itemWidth =
-        viewportWidth - (m_metrics.margins * 2) - scrollbarWidth;
+    m_metrics.itemWidth = viewportWidth - (m_metrics.margins * 2) - scrollbarWidth;
     m_metrics.totalWidth = viewportWidth - scrollbarWidth;
     m_metrics.actualGridWidth = m_metrics.itemWidth + (m_metrics.margins * 2);
   }
@@ -408,17 +394,14 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
       existing->show();
     }
     bool isListMode = (m_context.config.viewType == ViewType::List);
-    int fontSize =
-        isListMode ? m_context.config.listFontSize : m_context.config.fontSize;
+    int fontSize = isListMode ? m_context.config.listFontSize : m_context.config.fontSize;
     existing->setHideTitles(m_context.config.hideTitles);
-    existing->setHideSubcollectionTitles(
-        m_context.config.hideSubcollectionTitles);
+    existing->setHideSubcollectionTitles(m_context.config.hideSubcollectionTitles);
     existing->setFontSize(fontSize);
     existing->setCornerRadius(m_context.config.cornerRadius);
     existing->setItemDimensions(m_metrics.itemWidth, m_metrics.itemHeight);
     QPoint position = getItemPosition(visualIndex);
-    existing->setGeometry(position.x(), position.y(), m_metrics.itemWidth,
-                          m_metrics.itemHeight);
+    existing->setGeometry(position.x(), position.y(), m_metrics.itemWidth, m_metrics.itemHeight);
     return;
   }
 
@@ -434,10 +417,8 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
   if (m_widgetFactory) {
     if (actualIndex < subCount) {
       // Subcollection item
-      int subcollectionIndex =
-          m_dataManager->subcollectionIndexFromActual(actualIndex);
-      itemWidget =
-          m_widgetFactory->createSubcollectionWidget(subcollectionIndex);
+      int subcollectionIndex = m_dataManager->subcollectionIndexFromActual(actualIndex);
+      itemWidget = m_widgetFactory->createSubcollectionWidget(subcollectionIndex);
     } else if (actualIndex < subCount + folderCount) {
       // Virtual folder item
       QString folderPath = m_dataManager->virtualFolderFromActual(actualIndex);
@@ -446,18 +427,15 @@ void ScrollManager::ensureWidgetForIndex(int visualIndex) {
       // Media item
       int mediaIndex = m_dataManager->mediaIndexFromActual(actualIndex);
       int collectionIndex = m_context.currentIndex;
-      itemWidget =
-          m_widgetFactory->createMediaWidget(mediaIndex, collectionIndex);
+      itemWidget = m_widgetFactory->createMediaWidget(mediaIndex, collectionIndex);
     }
   }
 
   if (itemWidget) {
     QPoint position = getItemPosition(visualIndex);
-    itemWidget->setGeometry(position.x(), position.y(), m_metrics.itemWidth,
-                            m_metrics.itemHeight);
+    itemWidget->setGeometry(position.x(), position.y(), m_metrics.itemWidth, m_metrics.itemHeight);
     // Set row index for alternating background colors in list mode
-    int rowIndex =
-        GridUtils::computeItemRow(visualIndex, m_metrics.itemsPerRow);
+    int rowIndex = GridUtils::computeItemRow(visualIndex, m_metrics.itemsPerRow);
     itemWidget->setRowIndex(rowIndex);
     itemWidget->show();
 
@@ -507,15 +485,14 @@ void ScrollManager::reconfigureArtworkForActiveWidgets() {
     ++reconfigured;
   }
 
-    qCDebug(lcPerfTrace) << "reconfigureArtworkForActiveWidgets: reconfigured="
-        << reconfigured << "skipped=" << skipped;
+  qCDebug(lcPerfTrace) << "reconfigureArtworkForActiveWidgets: reconfigured=" << reconfigured
+                       << "skipped=" << skipped;
   // Trigger viewport update to load the newly-configured artwork
   m_artworkManager->scheduleViewportUpdate();
 }
 // Returns the virtual folder path for a visual index, or empty string if not a
 // virtual folder
-auto ScrollManager::virtualFolderPathForVisualIndex(int visualIndex) const
-    -> QString {
+auto ScrollManager::virtualFolderPathForVisualIndex(int visualIndex) const -> QString {
   int actualIndex = getFilteredIndex(visualIndex);
   return m_dataManager->virtualFolderFromActual(actualIndex);
 }
@@ -539,4 +516,3 @@ auto ScrollManager::filePathForVisualIndex(int visualIndex) const -> QString {
   }
   return m_databaseManager->resolveFilePath(rawEntry, m_context);
 }
-

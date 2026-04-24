@@ -10,18 +10,15 @@
 
 namespace {
 // Overlay styling
-constexpr int FADE_DURATION_MS =
-    UIConstants::Overlay::SEARCH_LOADING_FADE_DURATION_MS;
-constexpr int PULSE_INTERVAL_MS =
-    UIConstants::Overlay::SEARCH_LOADING_PULSE_INTERVAL_MS;
+constexpr int FADE_DURATION_MS = UIConstants::Overlay::SEARCH_LOADING_FADE_DURATION_MS;
+constexpr int PULSE_INTERVAL_MS = UIConstants::Overlay::SEARCH_LOADING_PULSE_INTERVAL_MS;
 constexpr double OVERLAY_OPACITY_MAX = 0.95;
 constexpr double LABEL_OPACITY_MIN = 0.4;
 constexpr double LABEL_OPACITY_MAX = 0.7;
 
 // Use a color that matches the typical dark theme background
-const QString OVERLAY_STYLE =
-    QStringLiteral("background-color: rgba(30, 30, 30, 230);"
-                   "border: none;");
+const QString OVERLAY_STYLE = QStringLiteral("background-color: rgba(30, 30, 30, 230);"
+                                             "border: none;");
 
 const QString LABEL_STYLE = QStringLiteral("color: rgba(180, 180, 180, 180);"
                                            "font-size: 13px;"
@@ -34,11 +31,9 @@ SearchLoadingOverlay::SearchLoadingOverlay(QObject *parent) : QObject(parent) {
   m_pulseTimer->setInterval(PULSE_INTERVAL_MS);
   connect(m_pulseTimer, &QTimer::timeout, this, [this]() {
     if (m_label && m_label->graphicsEffect()) {
-      auto *effect =
-          qobject_cast<QGraphicsOpacityEffect *>(m_label->graphicsEffect());
+      auto *effect = qobject_cast<QGraphicsOpacityEffect *>(m_label->graphicsEffect());
       if (effect) {
-        double targetOpacity =
-            m_pulseDimming ? LABEL_OPACITY_MIN : LABEL_OPACITY_MAX;
+        double targetOpacity = m_pulseDimming ? LABEL_OPACITY_MIN : LABEL_OPACITY_MAX;
 
         // Animate opacity change
         if (m_pulseAnimation) {
@@ -57,7 +52,9 @@ SearchLoadingOverlay::SearchLoadingOverlay(QObject *parent) : QObject(parent) {
   });
 }
 
-SearchLoadingOverlay::~SearchLoadingOverlay() { hideImmediate(); }
+SearchLoadingOverlay::~SearchLoadingOverlay() {
+  hideImmediate();
+}
 
 void SearchLoadingOverlay::setParentWidget(QWidget *parent) {
   if (m_parentWidget != parent) {
@@ -110,8 +107,7 @@ void SearchLoadingOverlay::show() {
   m_overlay->show();
 
   // Fade in
-  auto *effect =
-      qobject_cast<QGraphicsOpacityEffect *>(m_overlay->graphicsEffect());
+  auto *effect = qobject_cast<QGraphicsOpacityEffect *>(m_overlay->graphicsEffect());
   if (effect) {
     if (m_fadeAnimation) {
       m_fadeAnimation->stop();
@@ -135,8 +131,7 @@ void SearchLoadingOverlay::hide() {
   stopPulseAnimation();
 
   // Fade out
-  auto *effect =
-      qobject_cast<QGraphicsOpacityEffect *>(m_overlay->graphicsEffect());
+  auto *effect = qobject_cast<QGraphicsOpacityEffect *>(m_overlay->graphicsEffect());
   if (effect) {
     if (m_fadeAnimation) {
       m_fadeAnimation->stop();

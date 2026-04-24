@@ -10,7 +10,9 @@
 
 ScrollEventHandler::ScrollEventHandler(QObject *parent) : QObject(parent) {}
 
-ScrollEventHandler::~ScrollEventHandler() { disconnectEvents(); }
+ScrollEventHandler::~ScrollEventHandler() {
+  disconnectEvents();
+}
 
 void ScrollEventHandler::setScrollArea(QScrollArea *scrollArea) {
   disconnectEvents();
@@ -43,32 +45,29 @@ void ScrollEventHandler::disconnectEvents() {
 }
 
 void ScrollEventHandler::connectVerticalEvents(QScrollBar *scrollBar) {
-  m_vScrollConn = connect(scrollBar, &QScrollBar::valueChanged, this,
-                          &ScrollEventHandler::scrollChanged);
+  m_vScrollConn =
+      connect(scrollBar, &QScrollBar::valueChanged, this, &ScrollEventHandler::scrollChanged);
 
   connect(scrollBar, &QScrollBar::sliderPressed, this,
           [this, scrollBar]() { onSliderPressed(scrollBar); });
 
-  connect(scrollBar, &QScrollBar::sliderReleased, this,
-          [this]() { onSliderReleased(); });
+  connect(scrollBar, &QScrollBar::sliderReleased, this, [this]() { onSliderReleased(); });
 
   connect(scrollBar, &QAbstractSlider::actionTriggered, this,
           [this, scrollBar](int) { onActionTriggered(scrollBar); });
 
   // Emit sliderMoved during drag for prefetch optimization
-  connect(scrollBar, &QScrollBar::sliderMoved, this,
-          &ScrollEventHandler::sliderMoved);
+  connect(scrollBar, &QScrollBar::sliderMoved, this, &ScrollEventHandler::sliderMoved);
 }
 
 void ScrollEventHandler::connectHorizontalEvents(QScrollBar *scrollBar) {
-  m_hScrollConn = connect(scrollBar, &QScrollBar::valueChanged, this,
-                          &ScrollEventHandler::scrollChanged);
+  m_hScrollConn =
+      connect(scrollBar, &QScrollBar::valueChanged, this, &ScrollEventHandler::scrollChanged);
 
   connect(scrollBar, &QScrollBar::sliderPressed, this,
           [this, scrollBar]() { onSliderPressed(scrollBar); });
 
-  connect(scrollBar, &QScrollBar::sliderReleased, this,
-          [this]() { onSliderReleased(); });
+  connect(scrollBar, &QScrollBar::sliderReleased, this, [this]() { onSliderReleased(); });
 
   connect(scrollBar, &QAbstractSlider::actionTriggered, this,
           [this, scrollBar](int) { onActionTriggered(scrollBar); });
@@ -107,12 +106,11 @@ void ScrollEventHandler::onSliderReleased() {
 
   // Delay clearing UserScrollActive to allow any pending scroll events
   // to be processed with the flag still set
-  QTimer::singleShot(UIConstants::Mouse::USER_SCROLL_ACTIVE_CLEAR_DELAY_MS,
-                     this, [this]() {
-                       if (m_state) {
-                         m_state->scroll().userScrollActive = false;
-                       }
-                     });
+  QTimer::singleShot(UIConstants::Mouse::USER_SCROLL_ACTIVE_CLEAR_DELAY_MS, this, [this]() {
+    if (m_state) {
+      m_state->scroll().userScrollActive = false;
+    }
+  });
 
   emit userScrollEnded();
 }

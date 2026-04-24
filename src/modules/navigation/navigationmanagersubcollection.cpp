@@ -27,13 +27,11 @@ void NavigationManager::onSubcollectionEntered(int subcollectionIndex) {
     if ((*m_currentCollectionIndex) >= 0 && (m_interactionManager)) {
       int currentSelection = m_interactionManager->currentSelectedIndex();
       if (currentSelection >= 0) {
-        m_settingsManager->setLastSelectedItem((*m_currentCollectionIndex),
-                                               currentSelection);
+        m_settingsManager->setLastSelectedItem((*m_currentCollectionIndex), currentSelection);
       }
     }
 
-    if ((*m_currentCollectionIndex) >= 0 &&
-        (*m_currentCollectionIndex) < (*m_collections).size()) {
+    if ((*m_currentCollectionIndex) >= 0 && (*m_currentCollectionIndex) < (*m_collections).size()) {
       m_stackManager->push(*m_currentCollectionIndex);
     }
 
@@ -48,20 +46,17 @@ void NavigationManager::onSubcollectionEntered(int subcollectionIndex) {
 
     // Delay horizontal centering until subcollection layout stabilizes
     QTimer::singleShot(
-        UIConstants::Navigation::SUBCOLLECTION_SCROLL_CENTER_DELAY_MS, this,
-        [this]() {
-          m_scrollManager->centerHorizontalScrollbar(
-              (*m_currentCollectionIndex), (*m_collections));
+        UIConstants::Navigation::SUBCOLLECTION_SCROLL_CENTER_DELAY_MS, this, [this]() {
+          m_scrollManager->centerHorizontalScrollbar((*m_currentCollectionIndex), (*m_collections));
         });
 
     // Clear double-click suppression after navigation animation completes
-    QTimer::singleShot(
-        UIConstants::Selection::DOUBLE_CLICK_SUPPRESS_CLEAR_DELAY_MS, this,
-        [this]() {
-          if (m_state) {
-            m_state->click().suppressDoubleClickUntilMs = 0;
-          }
-        });
+    QTimer::singleShot(UIConstants::Selection::DOUBLE_CLICK_SUPPRESS_CLEAR_DELAY_MS, this,
+                       [this]() {
+                         if (m_state) {
+                           m_state->click().suppressDoubleClickUntilMs = 0;
+                         }
+                       });
   }
 }
 
@@ -147,8 +142,7 @@ void NavigationManager::onBreadcrumbLinkClicked(const QString &link) {
     int targetIndex = link.mid(11).toInt(&ok); // Skip "collection:" prefix
     if (ok && targetIndex >= 0 && targetIndex < (*m_collections).size()) {
       // Clear current subfolder before navigating to parent
-      if (*m_currentCollectionIndex >= 0 &&
-          *m_currentCollectionIndex < (*m_collections).size()) {
+      if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < (*m_collections).size()) {
         (*m_collections)[*m_currentCollectionIndex].currentSubfolder.clear();
       }
       goBackToCollections();
@@ -156,8 +150,7 @@ void NavigationManager::onBreadcrumbLinkClicked(const QString &link) {
   } else if (link.startsWith("subfolder:")) {
     // Navigate to a specific subfolder level
     QString targetPath = link.mid(10); // Skip "subfolder:" prefix
-    if (*m_currentCollectionIndex >= 0 &&
-        *m_currentCollectionIndex < (*m_collections).size()) {
+    if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < (*m_collections).size()) {
       CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
       if (config.currentSubfolder != targetPath) {
         if (m_interactionManager) {
@@ -176,8 +169,7 @@ void NavigationManager::onBreadcrumbLinkClicked(const QString &link) {
     }
   } else if (link == "root:") {
     // Navigate back to root of current collection (clear subfolder)
-    if (*m_currentCollectionIndex >= 0 &&
-        *m_currentCollectionIndex < (*m_collections).size()) {
+    if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < (*m_collections).size()) {
       CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
       if (!config.currentSubfolder.isEmpty()) {
         if (m_interactionManager) {
@@ -208,15 +200,14 @@ void NavigationManager::loadCurrentAndSubcollections() {
   CollectionContext context;
   context.currentIndex = idx;
   context.config = (*m_collections)[idx];
-  context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
-      context.config.mediaDirectory, context.config.name);
-  context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
-      context.config.artworkDirectory, context.config.name);
+  context.config.mediaDirectory =
+      SettingsUtils::expandConfigVariables(context.config.mediaDirectory, context.config.name);
+  context.config.artworkDirectory =
+      SettingsUtils::expandConfigVariables(context.config.artworkDirectory, context.config.name);
   context.artworkDirectory = context.config.artworkDirectory;
   if (m_generalSettings) {
     context.sortMode = m_generalSettings->sortMode;
-    context.excludeSubfoldersFromSort =
-        m_generalSettings->excludeSubfoldersFromSort;
+    context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
   }
 
   context.queryIncludeDescendants = true;
@@ -224,14 +215,12 @@ void NavigationManager::loadCurrentAndSubcollections() {
 
   // Delay filter reapplication until item count query completes -
   // ensures filter operates on the updated item list
-  QTimer::singleShot(
-      UIConstants::Artwork::FILTER_REAPPLY_DELAY_MS, this, [this]() {
-        if (m_searchBar && !m_searchBar->text().trimmed().isEmpty() &&
-            m_scrollManager) {
-          const QString currentSearchText = m_searchBar->text().trimmed();
-          m_scrollManager->applyFilter(currentSearchText);
-        }
-      });
+  QTimer::singleShot(UIConstants::Artwork::FILTER_REAPPLY_DELAY_MS, this, [this]() {
+    if (m_searchBar && !m_searchBar->text().trimmed().isEmpty() && m_scrollManager) {
+      const QString currentSearchText = m_searchBar->text().trimmed();
+      m_scrollManager->applyFilter(currentSearchText);
+    }
+  });
 }
 
 // Loads the aggregated view across all collections and reapplies any active
@@ -250,7 +239,6 @@ void NavigationManager::loadAllCollectionsView() {
   context.subcollectionOverride = {};
   context.suppressVirtualFolders = true;
 
-  const QString currentFilter =
-      (m_searchBar) ? m_searchBar->text().trimmed() : QString();
+  const QString currentFilter = (m_searchBar) ? m_searchBar->text().trimmed() : QString();
   requestItemCountForContext(context, currentFilter);
 }

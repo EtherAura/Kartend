@@ -15,8 +15,7 @@ auto buildFtsPrefixQuery(const QString &raw) -> QString {
   // Sanitize into simple terms to avoid FTS query parser edge-cases.
   // Keep letters/numbers/underscore; replace everything else with spaces.
   QString cleaned = trimmed;
-  cleaned.replace(QRegularExpression(QStringLiteral("[^\\p{L}\\p{N}_]+")),
-                  QStringLiteral(" "));
+  cleaned.replace(QRegularExpression(QStringLiteral("[^\\p{L}\\p{N}_]+")), QStringLiteral(" "));
   const QStringList terms = cleaned.split(QLatin1Char(' '), Qt::SkipEmptyParts);
   if (terms.isEmpty()) {
     return {};
@@ -37,9 +36,7 @@ auto buildFtsPrefixQuery(const QString &raw) -> QString {
 }
 
 auto displayNameForBase(const QString &baseName) -> QString {
-  return QString(baseName)
-      .replace(QLatin1Char('_'), QLatin1Char(' '))
-      .simplified();
+  return QString(baseName).replace(QLatin1Char('_'), QLatin1Char(' ')).simplified();
 }
 
 auto characterSortPriority(const QString &text) -> int {

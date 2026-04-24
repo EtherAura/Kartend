@@ -4,8 +4,7 @@
 
 namespace NavigationHelpers {
 
-auto computeCollectionDepth(int collectionIndex,
-                            const QList<CollectionConfig> &collections)
+auto computeCollectionDepth(int collectionIndex, const QList<CollectionConfig> &collections)
     -> int {
   if (collectionIndex < 0 || collectionIndex >= collections.size()) {
     return 0;
@@ -26,17 +25,14 @@ auto computeCollectionDepth(int collectionIndex,
   return depth;
 }
 
-auto isValidCollectionIndex(int collectionIndex,
-                            const QList<CollectionConfig> &collections)
+auto isValidCollectionIndex(int collectionIndex, const QList<CollectionConfig> &collections)
     -> bool {
   return collectionIndex >= 0 && collectionIndex < collections.size();
 }
 
-auto lookupRememberedSelectionIndex(
-    int collectionIndex, const QList<CollectionConfig> &collections,
-    int totalItems, const SessionLookup &lookup) -> int {
-  if (!isValidCollectionIndex(collectionIndex, collections) || totalItems <= 0
-      || !lookup) {
+auto lookupRememberedSelectionIndex(int collectionIndex, const QList<CollectionConfig> &collections,
+                                    int totalItems, const SessionLookup &lookup) -> int {
+  if (!isValidCollectionIndex(collectionIndex, collections) || totalItems <= 0 || !lookup) {
     return -1;
   }
 
@@ -45,8 +41,7 @@ auto lookupRememberedSelectionIndex(
 
   int selIdx = -1;
   if (subfolderActive) {
-    selIdx =
-        lookup(CollectionUtils::selectionSessionKeyFor(cfg, collections));
+    selIdx = lookup(CollectionUtils::selectionSessionKeyFor(cfg, collections));
   } else {
     selIdx = lookup(CollectionUtils::hierarchicalNameFor(cfg, collections));
     if (selIdx < 0) {
@@ -63,16 +58,14 @@ auto lookupRememberedSelectionIndex(
   return std::max(selIdx, 0);
 }
 
-auto calculateSelectionIndex(int collectionIndex,
-                             const QList<CollectionConfig> &collections,
-                             int totalItems, bool searchActive,
-                             bool rememberSelectionEnabled,
+auto calculateSelectionIndex(int collectionIndex, const QList<CollectionConfig> &collections,
+                             int totalItems, bool searchActive, bool rememberSelectionEnabled,
                              const SessionLookup &lookup) -> int {
   if (searchActive || !rememberSelectionEnabled || totalItems <= 0) {
     return -1;
   }
-  const int selIdx = lookupRememberedSelectionIndex(
-      collectionIndex, collections, totalItems, lookup);
+  const int selIdx =
+      lookupRememberedSelectionIndex(collectionIndex, collections, totalItems, lookup);
   if (selIdx < 0) {
     return 0;
   }

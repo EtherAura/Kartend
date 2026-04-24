@@ -1,11 +1,7 @@
 #ifndef SEARCHTYPES_H
 #define SEARCHTYPES_H
 
-enum class SearchMode {
-  CurrentCollection,
-  CurrentAndSubcollections,
-  AllCollections
-};
+enum class SearchMode { CurrentCollection, CurrentAndSubcollections, AllCollections };
 
 struct SearchContext {
   bool hasSubs = false;

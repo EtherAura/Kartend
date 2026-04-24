@@ -75,16 +75,10 @@ public:
 
   // --- State Accessors/Mutators ---
   void setForceImmediateCenter(bool force) { m_forceImmediateCenter = force; }
-  [[nodiscard]] bool forceImmediateCenter() const {
-    return m_forceImmediateCenter;
-  }
+  [[nodiscard]] bool forceImmediateCenter() const { return m_forceImmediateCenter; }
 
-  void setIsWrappingNavigation(bool wrapping) {
-    m_isWrappingNavigation = wrapping;
-  }
-  [[nodiscard]] bool isWrappingNavigation() const {
-    return m_isWrappingNavigation;
-  }
+  void setIsWrappingNavigation(bool wrapping) { m_isWrappingNavigation = wrapping; }
+  [[nodiscard]] bool isWrappingNavigation() const { return m_isWrappingNavigation; }
 
   void setRestoringSelection(bool restoring);
   [[nodiscard]] bool isRestoringSelection() const;
@@ -98,12 +92,8 @@ public:
   void setWrapSequenceActive(bool active) { m_wrapSequenceActive = active; }
   [[nodiscard]] bool wrapSequenceActive() const { return m_wrapSequenceActive; }
 
-  void setContinuousScrollActive(bool active) {
-    m_continuousScrollActive = active;
-  }
-  [[nodiscard]] bool continuousScrollActive() const {
-    return m_continuousScrollActive;
-  }
+  void setContinuousScrollActive(bool active) { m_continuousScrollActive = active; }
+  [[nodiscard]] bool continuousScrollActive() const { return m_continuousScrollActive; }
 
   void setRepeating(bool repeating) { m_repeating = repeating; }
   [[nodiscard]] bool isRepeating() const { return m_repeating; }
@@ -133,36 +123,29 @@ private:
   [[nodiscard]] int computeSmallThreshold(int currentRow) const;
   [[nodiscard]] bool shouldDeferCenterNow(bool immediate, int index) const;
   [[nodiscard]] bool shouldEarlyReturnUserScroll(bool forceImmediate) const;
-  [[nodiscard]] bool
-  handlePendingInitialCenterIfNeeded(QScrollBar *verticalScrollBar, int index,
-                                     int targetYUnbounded, bool immediate);
-  bool handleSmallMovementEarlyReturn(int distance, bool clickScroll, int index,
-                                      int currentRow);
-  void adjustForForceClickZeroDistance(QScrollBar *verticalScrollBar,
-                                       int targetY, int &curY, int &distance,
-                                       int &duration, bool forceClickAnim);
-  [[nodiscard]] bool
-  maybeHandleImmediateCenter(bool distanceSmall, bool useSmooth,
-                             bool forceImmediate, bool forceClickAnim,
-                             QScrollBar *verticalScrollBar, int targetY,
-                             int index, int currentRow);
-  bool handleImmediateCenterPath(QScrollBar *verticalScrollBar, int targetY,
-                                 int index, int currentRow);
+  [[nodiscard]] bool handlePendingInitialCenterIfNeeded(QScrollBar *verticalScrollBar, int index,
+                                                        int targetYUnbounded, bool immediate);
+  bool handleSmallMovementEarlyReturn(int distance, bool clickScroll, int index, int currentRow);
+  void adjustForForceClickZeroDistance(QScrollBar *verticalScrollBar, int targetY, int &curY,
+                                       int &distance, int &duration, bool forceClickAnim);
+  [[nodiscard]] bool maybeHandleImmediateCenter(bool distanceSmall, bool useSmooth,
+                                                bool forceImmediate, bool forceClickAnim,
+                                                QScrollBar *verticalScrollBar, int targetY,
+                                                int index, int currentRow);
+  bool handleImmediateCenterPath(QScrollBar *verticalScrollBar, int targetY, int index,
+                                 int currentRow);
   void finalizeImmediateCenteringState(int index, int currentRow);
 
   // --- Visibility Helpers ---
   [[nodiscard]] bool shouldExitEnsureItemVisible(int index) const;
   [[nodiscard]] bool handleImmediateCenterForEnsureVisible(int index);
   void updateViewAndRowAfterVisibility(int index, int gridWidth);
-  void startEnsureVisibleVAnim(QScrollBar *vScrollBar, int startVal, int endVal,
-                               bool isRepeating);
+  void startEnsureVisibleVAnim(QScrollBar *vScrollBar, int startVal, int endVal, bool isRepeating);
 
   // --- Scroll State Helpers ---
   void setProgrammaticScrollGuarded(bool enable);
-  void setScrollValueAndUpdateSelection(QScrollBar *verticalScrollBar,
-                                        int targetY, int index);
-  [[nodiscard]] int computeVerticalCenterDuration(int distance,
-                                                  bool repeatActive) const;
+  void setScrollValueAndUpdateSelection(QScrollBar *verticalScrollBar, int targetY, int index);
+  [[nodiscard]] int computeVerticalCenterDuration(int distance, bool repeatActive) const;
   [[nodiscard]] int getCurrentGridWidth() const;
 
   // State flags

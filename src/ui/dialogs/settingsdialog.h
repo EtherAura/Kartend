@@ -29,19 +29,14 @@ class SettingsDialog : public QDialog {
   Q_OBJECT
 
 public:
-  explicit SettingsDialog(QWidget *parent,
-                          const QList<CollectionConfig> &initialCollections,
+  explicit SettingsDialog(QWidget *parent, const QList<CollectionConfig> &initialCollections,
                           int initialIndex = -1);
   ~SettingsDialog() override;
 
-  [[nodiscard]] const QList<CollectionConfig> &getCollections() const {
-    return collections;
-  }
+  [[nodiscard]] const QList<CollectionConfig> &getCollections() const { return collections; }
 
   /// Returns the index of the collection currently selected in the tree.
-  [[nodiscard]] int getSelectedCollectionIndex() const {
-    return currentCollectionIndex;
-  }
+  [[nodiscard]] int getSelectedCollectionIndex() const { return currentCollectionIndex; }
 
   /// Handles dialog acceptance while guarding against unsaved changes.
   void accept() override;
@@ -52,8 +47,7 @@ public:
 signals:
   void collectionSaved(const QList<CollectionConfig> &collections);
   void gridWidthChanged(int collectionIndex, int newGridWidth);
-  void spacingChanged(int collectionIndex, int horizontalSpacing,
-                      int verticalSpacing);
+  void spacingChanged(int collectionIndex, int horizontalSpacing, int verticalSpacing);
   /// Emitted when changes requiring a database rescan have been saved
   void rescanRequired(int collectionIndex);
 
@@ -88,8 +82,7 @@ private:
   void updateCollectionTreeWidget();
   void expandPathToCollection(int collectionIndex);
   void populateTreeWidget();
-  QTreeWidgetItem *createTreeItem(int collectionIndex,
-                                  QTreeWidgetItem *parent = nullptr);
+  QTreeWidgetItem *createTreeItem(int collectionIndex, QTreeWidgetItem *parent = nullptr);
   void setupConnections();
   void setupButtonConnections();
   void setupBasicUIConnections();
@@ -111,8 +104,7 @@ private:
   /// Populates and selects the parent collection combo box for the active
   /// collection.
   void updateParentCollectionComboBox(int currentIndex);
-  [[nodiscard]] bool
-  wouldCreateCircularReference(int childIndex, int potentialParentIndex) const;
+  [[nodiscard]] bool wouldCreateCircularReference(int childIndex, int potentialParentIndex) const;
   void emitGridWidthChanged();
   void updateFieldVisibility();
   void updateExtractArchivesVisibility();
@@ -129,13 +121,11 @@ private:
   auto performCollectionRemoval(int index) -> void;
   auto updateParentReferences(int removedIndex) -> void;
   auto rebuildParentIndices() -> void;
-  auto restoreExpandedStates(const QList<int> &expandedBefore, int removedIndex)
-      -> void;
+  auto restoreExpandedStates(const QList<int> &expandedBefore, int removedIndex) -> void;
   auto selectTargetAfterRemoval(int parentIdx, int removedIndex) -> void;
   // Helper methods for saveCollectionFromUI refactoring
   auto extractUIFieldValues() -> CollectionConfig;
-  auto updateParentCollectionFromUI(CollectionConfig &collection, int index)
-      -> void;
+  auto updateParentCollectionFromUI(CollectionConfig &collection, int index) -> void;
   // Helper methods for hasUnsavedChanges refactoring
   auto checkBasicFieldChanges() const -> bool;
   auto checkExtensionChanges() const -> bool;
@@ -147,13 +137,11 @@ private:
   auto checkBackgroundChanges() const -> bool;
   auto checkGeneralSettingsChanges() const -> bool;
   /// Prompts the user to resolve unsaved changes for the specified action.
-  auto promptUnsavedChanges(const QString &actionDescription)
-      -> QMessageBox::StandardButton;
+  auto promptUnsavedChanges(const QString &actionDescription) -> QMessageBox::StandardButton;
   /// Restores the current collection to its last saved state.
   void revertCurrentCollectionEdits();
   /// Resolves unsaved changes prior to executing an action.
-  auto resolveUnsavedChanges(const QString &actionDescription,
-                             bool refreshTreeAfterSave) -> bool;
+  auto resolveUnsavedChanges(const QString &actionDescription, bool refreshTreeAfterSave) -> bool;
 
   Ui::SettingsDialog *ui;
   QTreeWidget *collectionTreeWidget;

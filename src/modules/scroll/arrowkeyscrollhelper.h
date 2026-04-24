@@ -28,12 +28,8 @@ public:
   // Dependencies
   void setScrollArea(QScrollArea *scrollArea) { m_scrollArea = scrollArea; }
   void setInteractionState(InteractionStateHolder *state) { m_state = state; }
-  void setScrollEventHandler(ScrollEventHandler *handler) {
-    m_scrollEventHandler = handler;
-  }
-  void setGeneralSettings(const GeneralSettings *settings) {
-    m_generalSettings = settings;
-  }
+  void setScrollEventHandler(ScrollEventHandler *handler) { m_scrollEventHandler = handler; }
+  void setGeneralSettings(const GeneralSettings *settings) { m_generalSettings = settings; }
 
   // Metrics needed for centering calculation
   void setItemMetrics(int itemHeight, int verticalSpacing, int margins);

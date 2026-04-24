@@ -28,17 +28,15 @@ void ItemWidgetFactory::setFileData(const QStringList *filePaths,
   m_fileNames = fileNames;
 }
 
-void ItemWidgetFactory::setCachedArtworkPaths(
-    const QHash<QString, QString> &artworkPaths) {
+void ItemWidgetFactory::setCachedArtworkPaths(const QHash<QString, QString> &artworkPaths) {
   m_cachedArtworkPaths = artworkPaths;
 }
 
 ItemWidget *ItemWidgetFactory::acquireWidget() {
   // Cannot create widgets without a valid parent
   if (!m_parentWidget) {
-    qCWarning(lcScrollManager)
-        << "ItemWidgetFactory::acquireWidget: m_parentWidget is null, "
-           "cannot acquire widget";
+    qCWarning(lcScrollManager) << "ItemWidgetFactory::acquireWidget: m_parentWidget is null, "
+                                  "cannot acquire widget";
     return nullptr;
   }
   if (!m_widgetPool) {
@@ -72,8 +70,7 @@ void ItemWidgetFactory::configureBaseWidget(ItemWidget *widget) {
   }
 
   // Use list-specific font size in list mode, grid font size otherwise
-  int fontSize =
-      isListMode ? m_context.config.listFontSize : m_context.config.fontSize;
+  int fontSize = isListMode ? m_context.config.listFontSize : m_context.config.fontSize;
   widget->setFontSize(fontSize);
 
   widget->setCornerRadius(m_context.config.cornerRadius);
@@ -86,8 +83,7 @@ void ItemWidgetFactory::configureBaseWidget(ItemWidget *widget) {
   }
 }
 
-void ItemWidgetFactory::releaseWidget(ItemWidget *widget, int visibleRows,
-                                      int itemsPerRow) {
+void ItemWidgetFactory::releaseWidget(ItemWidget *widget, int visibleRows, int itemsPerRow) {
   if (!widget) {
     return;
   }
@@ -99,8 +95,7 @@ void ItemWidgetFactory::releaseWidget(ItemWidget *widget, int visibleRows,
   }
 }
 
-ItemWidget *
-ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex) {
+ItemWidget *ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex) {
   auto *widget = acquireWidget();
   if (!widget) {
     return nullptr;
@@ -114,8 +109,7 @@ ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex) {
   widget->setAsSubcollection(subcollectionIndex, subcollectionName);
 
   // Set current collection name for list mode display
-  if (m_context.config.viewType == ViewType::List && m_collections &&
-      m_context.currentIndex >= 0 &&
+  if (m_context.config.viewType == ViewType::List && m_collections && m_context.currentIndex >= 0 &&
       m_context.currentIndex < m_collections->size()) {
     widget->setCollectionName(m_collections->at(m_context.currentIndex).name);
   }
@@ -125,8 +119,7 @@ ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex) {
   if (!subcollectionName.isEmpty() && m_artworkManager) {
     QString artworkDir = m_context.config.artworkDirectory;
     if (!artworkDir.isEmpty()) {
-      QString artworkPath =
-          ArtworkUtils::findArtworkForFile(subcollectionName, artworkDir);
+      QString artworkPath = ArtworkUtils::findArtworkForFile(subcollectionName, artworkDir);
       if (!artworkPath.isEmpty()) {
         m_artworkManager->addPendingArtwork(widget, artworkPath);
         // Set hasArtwork for list mode button
@@ -144,8 +137,7 @@ ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex) {
   return widget;
 }
 
-ItemWidget *
-ItemWidgetFactory::createVirtualFolderWidget(const QString &folderPath) {
+ItemWidget *ItemWidgetFactory::createVirtualFolderWidget(const QString &folderPath) {
   auto *widget = acquireWidget();
   if (!widget) {
     return nullptr;
@@ -159,16 +151,14 @@ ItemWidgetFactory::createVirtualFolderWidget(const QString &folderPath) {
     displayName = folderPath.mid(lastSlash + 1);
   }
 
-  widget->setAsVirtualFolder(folderPath, displayName,
-                             m_context.config.hideSubfolderTitles);
+  widget->setAsVirtualFolder(folderPath, displayName, m_context.config.hideSubfolderTitles);
 
   // Try to find artwork for the virtual folder using the folder name
   // Artwork is searched in the current collection's artwork directory
   if (!displayName.isEmpty() && m_artworkManager) {
     QString artworkDir = m_context.config.artworkDirectory;
     if (!artworkDir.isEmpty()) {
-      QString artworkPath =
-          ArtworkUtils::findArtworkForFile(displayName, artworkDir);
+      QString artworkPath = ArtworkUtils::findArtworkForFile(displayName, artworkDir);
       if (!artworkPath.isEmpty()) {
         m_artworkManager->addPendingArtwork(widget, artworkPath);
       }
@@ -192,8 +182,7 @@ int ItemWidgetFactory::computeChunkSize() const {
   return UIConstants::Database::RANGE_CHUNK_SIZE_DEFAULT;
 }
 
-void ItemWidgetFactory::prefetchAdjacentChunks(int currentMediaIndex,
-                                               int chunkSize) {
+void ItemWidgetFactory::prefetchAdjacentChunks(int currentMediaIndex, int chunkSize) {
   if (!m_filePaths) {
     return;
   }
@@ -209,11 +198,9 @@ void ItemWidgetFactory::prefetchAdjacentChunks(int currentMediaIndex,
     // Prefetch ahead
     int aheadChunk = currentChunk + i;
     int aheadStart = aheadChunk * chunkSize;
-    if (aheadStart < fileCount &&
-        !m_pendingRangeRequests.contains(aheadStart)) {
+    if (aheadStart < fileCount && !m_pendingRangeRequests.contains(aheadStart)) {
       // Check if this chunk has unloaded items
-      if (aheadStart < m_filePaths->size() &&
-          m_filePaths->at(aheadStart).isEmpty()) {
+      if (aheadStart < m_filePaths->size() && m_filePaths->at(aheadStart).isEmpty()) {
         m_pendingRangeRequests.insert(aheadStart);
         emit requestItemsRange(aheadStart, chunkSize);
       }
@@ -225,8 +212,7 @@ void ItemWidgetFactory::prefetchAdjacentChunks(int currentMediaIndex,
       int behindStart = behindChunk * chunkSize;
       if (!m_pendingRangeRequests.contains(behindStart)) {
         // Check if this chunk has unloaded items
-        if (behindStart < m_filePaths->size() &&
-            m_filePaths->at(behindStart).isEmpty()) {
+        if (behindStart < m_filePaths->size() && m_filePaths->at(behindStart).isEmpty()) {
           m_pendingRangeRequests.insert(behindStart);
           emit requestItemsRange(behindStart, chunkSize);
         }

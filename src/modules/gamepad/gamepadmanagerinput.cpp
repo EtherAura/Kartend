@@ -16,8 +16,7 @@ void GamepadManager::updateDirectionFromInputs() {
   }
 
   const bool useDpad = !m_generalSettings || m_generalSettings->gamepadUseDpad;
-  const bool useStick =
-      !m_generalSettings || m_generalSettings->gamepadUseLeftStick;
+  const bool useStick = !m_generalSettings || m_generalSettings->gamepadUseLeftStick;
 
   // Convert left stick axes to digital directions with hysteresis.
   constexpr double kOn = UIConstants::Gamepad::AXIS_DEADZONE_ON;
@@ -141,14 +140,12 @@ void GamepadManager::handleMappedButtonPress(const QString &buttonName) {
     return;
   }
 
-  const QString confirm = m_generalSettings
-                              ? m_generalSettings->gamepadConfirmButton
-                              : QStringLiteral("A");
-  const QString back = m_generalSettings ? m_generalSettings->gamepadBackButton
-                                         : QStringLiteral("B");
+  const QString confirm =
+      m_generalSettings ? m_generalSettings->gamepadConfirmButton : QStringLiteral("A");
+  const QString back =
+      m_generalSettings ? m_generalSettings->gamepadBackButton : QStringLiteral("B");
   const QString toggleSidebar =
-      m_generalSettings ? m_generalSettings->gamepadToggleSidebarButton
-                        : QStringLiteral("Y");
+      m_generalSettings ? m_generalSettings->gamepadToggleSidebarButton : QStringLiteral("Y");
 
   auto matches = [&normalized](const QString &configured) -> bool {
     const QString c = configured.trimmed();
@@ -169,5 +166,3 @@ void GamepadManager::handleMappedButtonPress(const QString &buttonName) {
     emit requestToggleSidebarAction();
   }
 }
-
-

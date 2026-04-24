@@ -4,8 +4,7 @@
 
 namespace ScrollHelpers {
 
-auto movementDirection(int selectedIndex, int prevIndex, int itemsPerRow)
-    -> bool {
+auto movementDirection(int selectedIndex, int prevIndex, int itemsPerRow) -> bool {
   if (prevIndex < 0) {
     return false;
   }
@@ -41,16 +40,13 @@ auto movementDirection(int selectedIndex, int prevIndex, int itemsPerRow)
     currCol += itemsPerRow;
   }
 
-  const bool wrappedForward =
-      (prevCol == itemsPerRow - 1) && (currCol == 0);
-  const bool wrappedBackward =
-      (prevCol == 0) && (currCol == itemsPerRow - 1);
+  const bool wrappedForward = (prevCol == itemsPerRow - 1) && (currCol == 0);
+  const bool wrappedBackward = (prevCol == 0) && (currCol == itemsPerRow - 1);
   return wrappedForward || wrappedBackward;
 }
 
-auto effectiveAlignment(HorizontalAlignment requested, bool isFiltered,
-                        int totalItems, int itemsPerRow)
-    -> HorizontalAlignment {
+auto effectiveAlignment(HorizontalAlignment requested, bool isFiltered, int totalItems,
+                        int itemsPerRow) -> HorizontalAlignment {
   if (isFiltered && totalItems > 0 && itemsPerRow > 0) {
     if (totalItems < (itemsPerRow - 2)) {
       return HorizontalAlignment::Center;

@@ -3,6 +3,7 @@
 // These remain InteractionManager members; this is a translation-unit split.
 #include "interactionmanager.h"
 
+#include <algorithm>
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
@@ -16,7 +17,6 @@
 #include <QScrollBar>
 #include <QTimer>
 #include <QWheelEvent>
-#include <algorithm>
 
 #include "alphabeticnavigationhandler.h"
 #include "animationmanager.h"
@@ -49,11 +49,11 @@
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcInteractionManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcInteractionManager().isDebugEnabled()) {                             \
-      qCDebug(lcInteractionManager) << msg;                                    \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcInteractionManager().isDebugEnabled()) {                                                 \
+      qCDebug(lcInteractionManager) << msg;                                                        \
+    }                                                                                              \
   } while (0)
 
 auto InteractionManager::processEnterOrReturnKey(int totalItems) -> bool {
@@ -68,15 +68,12 @@ auto InteractionManager::processEnterOrReturnKey(int totalItems) -> bool {
   // misclassified as subcollections, navigating into the wrong child and
   // "clearing the search and breaking the view."
   const int actualIndex =
-      m_scrollManager ? m_scrollManager->getFilteredIndex(currentSelection)
-                      : currentSelection;
-  const int renderedSubCount =
-      m_scrollManager ? m_scrollManager->getSubcollectionCount() : 0;
+      m_scrollManager ? m_scrollManager->getFilteredIndex(currentSelection) : currentSelection;
+  const int renderedSubCount = m_scrollManager ? m_scrollManager->getSubcollectionCount() : 0;
   if (actualIndex >= 0 && actualIndex < renderedSubCount) {
     const int subCollIdx =
         m_scrollManager && m_scrollManager->getDataManager()
-            ? m_scrollManager->getDataManager()->subcollectionIndexFromActual(
-                  actualIndex)
+            ? m_scrollManager->getDataManager()->subcollectionIndexFromActual(actualIndex)
             : -1;
     if (subCollIdx >= 0) {
       return handleEnterOnSubcollection(actualIndex, subCollIdx);
@@ -85,8 +82,7 @@ auto InteractionManager::processEnterOrReturnKey(int totalItems) -> bool {
 
   // Check if this is a virtual folder
   if (m_scrollManager) {
-    QString folderPath =
-        m_scrollManager->virtualFolderPathForVisualIndex(currentSelection);
+    QString folderPath = m_scrollManager->virtualFolderPathForVisualIndex(currentSelection);
     if (!folderPath.isEmpty()) {
       return handleEnterOnVirtualFolder(folderPath);
     }
@@ -95,13 +91,11 @@ auto InteractionManager::processEnterOrReturnKey(int totalItems) -> bool {
   return handleEnterOnItem(currentSelection, totalItems);
 }
 
-auto InteractionManager::handleEnterOnSubcollection(int subActualIndex,
-                                                    int subCollIdx) -> bool {
+auto InteractionManager::handleEnterOnSubcollection(int subActualIndex, int subCollIdx) -> bool {
   saveCurrentSelection();
   const int subIdx = subCollIdx;
   if (m_navigationManager) {
-    if (*m_currentCollectionIndex >= 0 &&
-        *m_currentCollectionIndex < m_collections->size()) {
+    if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < m_collections->size()) {
       m_navigationManager->stackManager()->push(*m_currentCollectionIndex);
     }
     clearSelectionAndFocus();
@@ -122,8 +116,7 @@ auto InteractionManager::handleEnterOnSubcollection(int subActualIndex,
       constexpr int kHorizontalCenterDelayMs = 600;
       QTimer::singleShot(kHorizontalCenterDelayMs, this, [this]() {
         if (!QApplication::closingDown() && m_scrollManager) {
-          m_scrollManager->centerHorizontalScrollbar(*m_currentCollectionIndex,
-                                                     *m_collections);
+          m_scrollManager->centerHorizontalScrollbar(*m_currentCollectionIndex, *m_collections);
         }
       });
     }
@@ -131,40 +124,34 @@ auto InteractionManager::handleEnterOnSubcollection(int subActualIndex,
   return true;
 }
 
-auto InteractionManager::handleEnterOnVirtualFolder(const QString &folderPath)
-    -> bool {
+auto InteractionManager::handleEnterOnVirtualFolder(const QString &folderPath) -> bool {
   if (m_navigationManager) {
     m_navigationManager->onVirtualFolderEntered(folderPath);
   }
   return true;
 }
 
-auto InteractionManager::handleEnterOnItem(int currentSelection,
-                                           int /*totalItems*/) -> bool {
-  QString path =
-      m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+auto InteractionManager::handleEnterOnItem(int currentSelection, int /*totalItems*/) -> bool {
+  QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
   if (path.isEmpty() && (m_scrollManager)) {
     path = m_scrollManager->filePathForVisualIndex(currentSelection);
   }
   if (!path.isEmpty()) {
     saveCurrentSelection();
-    const int cIdx = ((m_databaseManager)
-                          ? m_databaseManager->getCollectionIndexForFile(path)
-                          : -1);
+    const int cIdx =
+        ((m_databaseManager) ? m_databaseManager->getCollectionIndexForFile(path) : -1);
     const int ownerIdx = (cIdx >= 0 ? cIdx : *m_currentCollectionIndex);
     launchItemWithCollection(path, ownerIdx);
   }
   return true;
 }
 
-auto InteractionManager::isItemOffscreen(int selection, int gridWidth) const
-    -> bool {
+auto InteractionManager::isItemOffscreen(int selection, int gridWidth) const -> bool {
   if (!m_itemScrollArea || selection < 0 || gridWidth <= 0 ||
       !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     return false;
   }
-  const CollectionConfig &collection =
-      (*m_collections)[*m_currentCollectionIndex];
+  const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
   QScrollBar *vbar = m_itemScrollArea->verticalScrollBar();
   if (!vbar) {
     return false;
@@ -173,9 +160,9 @@ auto InteractionManager::isItemOffscreen(int selection, int gridWidth) const
   if (viewportH <= 0) {
     return false;
   }
-  int logicalItemY = GridUtils::computeItemY(
-      selection, gridWidth, collection.itemHeight, collection.verticalSpacing,
-      UIConstants::Grid::MARGINS);
+  int logicalItemY =
+      GridUtils::computeItemY(selection, gridWidth, collection.itemHeight,
+                              collection.verticalSpacing, UIConstants::Grid::MARGINS);
 
   // Convert widget scroll position to logical for visibility check in clipped
   // grids

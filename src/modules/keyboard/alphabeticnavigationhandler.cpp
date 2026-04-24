@@ -6,8 +6,7 @@
 
 #include <QFileInfo>
 
-AlphabeticNavigationHandler::AlphabeticNavigationHandler(QObject *parent)
-    : QObject(parent) {}
+AlphabeticNavigationHandler::AlphabeticNavigationHandler(QObject *parent) : QObject(parent) {}
 
 auto AlphabeticNavigationHandler::navigateToNextLetter(bool forward) -> int {
   if (!m_scrollManager || !m_selectionManager) {
@@ -36,8 +35,7 @@ auto AlphabeticNavigationHandler::navigateToNextLetter(bool forward) -> int {
   return -1;
 }
 
-auto AlphabeticNavigationHandler::getFirstCharForIndex(int visualIndex) const
-    -> QChar {
+auto AlphabeticNavigationHandler::getFirstCharForIndex(int visualIndex) const -> QChar {
   const QString displayName = getDisplayNameForIndex(visualIndex);
   if (displayName.isEmpty()) {
     return QChar();
@@ -47,8 +45,7 @@ auto AlphabeticNavigationHandler::getFirstCharForIndex(int visualIndex) const
   return displayName.at(0).toUpper();
 }
 
-auto AlphabeticNavigationHandler::getDisplayNameForIndex(int visualIndex) const
-    -> QString {
+auto AlphabeticNavigationHandler::getDisplayNameForIndex(int visualIndex) const -> QString {
   if (!m_scrollManager) {
     return QString();
   }
@@ -68,8 +65,7 @@ auto AlphabeticNavigationHandler::getDisplayNameForIndex(int visualIndex) const
     return m_scrollManager->getSubcollectionName(visualIndex);
   } else if (visualIndex < prefixCount) {
     // This is a virtual folder
-    const QString folderPath =
-        m_scrollManager->virtualFolderPathForVisualIndex(visualIndex);
+    const QString folderPath = m_scrollManager->virtualFolderPathForVisualIndex(visualIndex);
     return QFileInfo(folderPath).fileName();
   }
 
@@ -90,10 +86,8 @@ auto AlphabeticNavigationHandler::getDisplayNameForIndex(int visualIndex) const
   return QFileInfo(filePath).completeBaseName();
 }
 
-auto AlphabeticNavigationHandler::findNextLetterIndex(int currentIndex,
-                                                      bool forward,
-                                                      int totalItems) const
-    -> int {
+auto AlphabeticNavigationHandler::findNextLetterIndex(int currentIndex, bool forward,
+                                                      int totalItems) const -> int {
   const QChar currentChar = getFirstCharForIndex(currentIndex);
   if (currentChar.isNull()) {
     return -1;
@@ -165,8 +159,7 @@ auto AlphabeticNavigationHandler::findNextLetterIndex(int currentIndex,
   return -1;
 }
 
-auto AlphabeticNavigationHandler::getAdjacentLetter(QChar current, bool forward)
-    -> QChar {
+auto AlphabeticNavigationHandler::getAdjacentLetter(QChar current, bool forward) -> QChar {
   // This function is no longer used but kept for potential future use
   if (!current.isLetter()) {
     return forward ? QChar('A') : QChar('Z');

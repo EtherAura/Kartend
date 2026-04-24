@@ -3,9 +3,9 @@
 
 #include "collectionutils.h"
 #include "searchutils.h"
+#include <functional>
 #include <QList>
 #include <QVector>
-#include <functional>
 
 // Pure helpers extracted from SearchManager so the search-mode cycling /
 // "allow all" decisions can be unit-tested without instantiating SearchManager
@@ -47,10 +47,9 @@ namespace SearchHelpers {
 // - the collection is root AND there exists at least one OTHER root
 //   collection with direct items (allows discovery of sibling roots).
 using HasDirectItemsLookup = std::function<bool(int)>;
-[[nodiscard]] auto
-allowAllFor(const CollectionConfig &cfg, int collIndex, bool hasSubs,
-            const QList<CollectionConfig> &collections,
-            const HasDirectItemsLookup &hasDirectItemsLookup) -> bool;
+[[nodiscard]] auto allowAllFor(const CollectionConfig &cfg, int collIndex, bool hasSubs,
+                               const QList<CollectionConfig> &collections,
+                               const HasDirectItemsLookup &hasDirectItemsLookup) -> bool;
 
 } // namespace SearchHelpers
 

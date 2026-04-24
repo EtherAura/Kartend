@@ -32,11 +32,11 @@
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcEventManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcEventManager().isDebugEnabled()) {                                   \
-      qCDebug(lcEventManager) << msg;                                          \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcEventManager().isDebugEnabled()) {                                                       \
+      qCDebug(lcEventManager) << msg;                                                              \
+    }                                                                                              \
   } while (0)
 
 bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
@@ -73,8 +73,7 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   // animations will be chained smoothly in startWheelScrollAnimation
   AnimationManager::stopArrowKeyAnimationIfRunning(vScrollBar);
 
-  const CollectionConfig &collection =
-      (*m_collections)[*m_currentCollectionIndex];
+  const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
 
   const int wheelSteps = MouseManager::computeWheelSteps(wheelEvent);
   if (wheelSteps == 0) {
@@ -88,8 +87,7 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   if (m_state) {
     m_state->scroll().userScrollActive = true;
     m_state->scroll().programmaticScroll = true;
-    m_state->suppressArrowCenterFor(
-        UIConstants::Mouse::WHEEL_SUPPRESS_ARROW_CENTER_MS);
+    m_state->suppressArrowCenterFor(UIConstants::Mouse::WHEEL_SUPPRESS_ARROW_CENTER_MS);
     // Skip refreshSelectionOverlayState here - too frequent during rapid
     // wheel events; animation completion will refresh the state
   }
@@ -114,8 +112,7 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
 
   // Calculate target scroll position based on new selection position
   // This ensures the selection always stays visible during wheel scrolling
-  int selectedIndex =
-      m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
+  int selectedIndex = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
   if (selectedIndex < 0) {
     event->accept();
     return true;
@@ -137,8 +134,7 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   }
 
   int margins = UIConstants::Grid::MARGINS;
-  int itemY = GridUtils::computeItemY(selectedIndex, gridWidth, itemHeight,
-                                      vSpacing, margins);
+  int itemY = GridUtils::computeItemY(selectedIndex, gridWidth, itemHeight, vSpacing, margins);
   // Add header offset for list view mode
   itemY += headerOffset;
 
@@ -171,35 +167,32 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   }
 
   if (m_animationManager) {
-    m_animationManager->startWheelScrollAnimation(
-        vScrollBar, currentPos, targetPos, [this]() {
-          if (m_mouseManager) {
-            m_mouseManager->setWheelScrolling(false);
-          }
-          if (m_viewportManager) {
-            m_viewportManager->setContinuousScrollActive(false);
-          }
-          if (m_state) {
-            m_state->scroll().userScrollActive = false;
-            m_state->scroll().programmaticScroll = false;
-            m_state->clearArrowCenterSuppression();
-            if (m_scrollManager) {
-              m_scrollManager->refreshSelectionOverlayState();
-            }
-          }
-          int selectedIndex = m_selectionManager
-                                  ? m_selectionManager->currentSelectedIndex()
-                                  : -1;
-          if (m_scrollManager && selectedIndex >= 0) {
-            m_scrollManager->updateSelectionForIndex(selectedIndex);
-          }
-          // Ensure selected item is visible after wheel scroll completes -
-          // prevents selection from being scrolled outside the viewport
-          if (m_viewportManager && selectedIndex >= 0) {
-            m_viewportManager->ensureItemVisible(selectedIndex, false);
-          }
-          emit wheelScrollEnded();
-        });
+    m_animationManager->startWheelScrollAnimation(vScrollBar, currentPos, targetPos, [this]() {
+      if (m_mouseManager) {
+        m_mouseManager->setWheelScrolling(false);
+      }
+      if (m_viewportManager) {
+        m_viewportManager->setContinuousScrollActive(false);
+      }
+      if (m_state) {
+        m_state->scroll().userScrollActive = false;
+        m_state->scroll().programmaticScroll = false;
+        m_state->clearArrowCenterSuppression();
+        if (m_scrollManager) {
+          m_scrollManager->refreshSelectionOverlayState();
+        }
+      }
+      int selectedIndex = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
+      if (m_scrollManager && selectedIndex >= 0) {
+        m_scrollManager->updateSelectionForIndex(selectedIndex);
+      }
+      // Ensure selected item is visible after wheel scroll completes -
+      // prevents selection from being scrolled outside the viewport
+      if (m_viewportManager && selectedIndex >= 0) {
+        m_viewportManager->ensureItemVisible(selectedIndex, false);
+      }
+      emit wheelScrollEnded();
+    });
   }
 
   // Defer virtual view update to next event loop iteration - allows
@@ -231,8 +224,7 @@ bool EventManager::handleMouseDoubleClick(QObject *obj, QEvent *event) {
 
   // If the double-clicked widget represents a subcollection or virtual folder,
   // allow the widget to handle the event so its signal is emitted.
-  if (m_scrollManager && m_currentCollectionIndex &&
-      *m_currentCollectionIndex >= 0) {
+  if (m_scrollManager && m_currentCollectionIndex && *m_currentCollectionIndex >= 0) {
     int visualIndex = -1;
     const auto &active = m_scrollManager->getActiveWidgets();
     for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
@@ -285,8 +277,7 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
     return false;
   }
 
-  if (!m_itemScrollArea || (!m_gridContainer) || (!m_stackedWidget) ||
-      (!m_itemsPage)) {
+  if (!m_itemScrollArea || (!m_gridContainer) || (!m_stackedWidget) || (!m_itemsPage)) {
     return false;
   }
   if (m_stackedWidget->currentWidget() != m_itemsPage) {
@@ -307,8 +298,7 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
       // Check if click position falls within the toolbar geometry
       QPoint globalPos = mouseEvent->globalPosition().toPoint();
       QRect toolbarRect = m_itemsTopBar->geometry();
-      QPoint toolbarTopLeft =
-          m_itemsTopBar->parentWidget()->mapToGlobal(toolbarRect.topLeft());
+      QPoint toolbarTopLeft = m_itemsTopBar->parentWidget()->mapToGlobal(toolbarRect.topLeft());
       QRect globalToolbarRect(toolbarTopLeft, toolbarRect.size());
       if (globalToolbarRect.contains(globalPos)) {
         return false; // Click is over the toolbar, ignore
@@ -321,10 +311,8 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
     m_mouseManager->clearHorizontalCandidate();
   }
 
-  bool target =
-      (obj == m_itemScrollArea || obj == m_itemScrollArea->viewport() ||
-       obj == m_gridContainer || obj == m_itemsPage ||
-       qobject_cast<ItemWidget *>(obj));
+  bool target = (obj == m_itemScrollArea || obj == m_itemScrollArea->viewport() ||
+                 obj == m_gridContainer || obj == m_itemsPage || qobject_cast<ItemWidget *>(obj));
   if (!target) {
     return false;
   }
@@ -342,8 +330,8 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
     return true;
   }
 
-  auto [chosen, visualIndex] = MouseManager::findBestWidgetForClick(
-      clickPos, m_scrollManager, m_gridContainer);
+  auto [chosen, visualIndex] =
+      MouseManager::findBestWidgetForClick(clickPos, m_scrollManager, m_gridContainer);
   if (chosen && visualIndex >= 0) {
     emit widgetClicked(chosen, visualIndex, clickPos, mouseEvent);
     event->accept();
@@ -360,8 +348,7 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
     return false;
   }
 
-  const CollectionConfig &collection =
-      (*m_collections)[*m_currentCollectionIndex];
+  const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
   int gridWidth = collection.gridWidth;
   if (gridWidth <= 0) {
     return false;
@@ -372,8 +359,7 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
     return false;
   }
 
-  int currentSelection =
-      m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
+  int currentSelection = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
   if (currentSelection < 0) {
     currentSelection = 0;
   }
@@ -426,8 +412,7 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
   }
 
   if (wrapTriggered && m_viewportManager) {
-    m_viewportManager->applyImmediateViewportPositioningForSelection(
-        newSelection);
+    m_viewportManager->applyImmediateViewportPositioningForSelection(newSelection);
     if (m_scrollManager) {
       m_scrollManager->updateVirtualView();
     }

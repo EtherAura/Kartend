@@ -3,13 +3,12 @@
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "uiconstants.h"
+#include <cmath>
 #include <QColor>
 #include <QPropertyAnimation>
 #include <QWidget>
-#include <cmath>
 
-SelectionOverlayManager::SelectionOverlayManager(QObject *parent)
-    : QObject(parent) {}
+SelectionOverlayManager::SelectionOverlayManager(QObject *parent) : QObject(parent) {}
 
 SelectionOverlayManager::~SelectionOverlayManager() {
   if (m_animation) {
@@ -29,8 +28,7 @@ void SelectionOverlayManager::setGridContainer(QWidget *gridContainer) {
   m_gridContainer = gridContainer;
 }
 
-void SelectionOverlayManager::setInteractionState(
-    InteractionStateHolder *state) {
+void SelectionOverlayManager::setInteractionState(InteractionStateHolder *state) {
   m_state = state;
 }
 
@@ -68,8 +66,7 @@ void SelectionOverlayManager::updateOverlayStyle() {
   }
 
   m_overlay->setStyleSheet(
-      QString(
-          "background: transparent; border:%1px solid %2; border-radius:%3px;")
+      QString("background: transparent; border:%1px solid %2; border-radius:%3px;")
           .arg(UIConstants::Widget::BORDER_WIDTH_SELECTION)
           .arg(borderColor)
           .arg(UIConstants::Widget::BORDER_RADIUS));
@@ -153,8 +150,7 @@ auto SelectionOverlayManager::isVisible() const -> bool {
   return m_overlay && m_overlay->isVisible();
 }
 
-void SelectionOverlayManager::animateTo(const QRect &targetRect,
-                                        const QRect &startRect) {
+void SelectionOverlayManager::animateTo(const QRect &targetRect, const QRect &startRect) {
   ensureOverlay();
   ensureAnimation();
 
@@ -194,17 +190,14 @@ void SelectionOverlayManager::animateTo(const QRect &targetRect,
   // Calculate animation duration based on distance
   int deltaX = std::abs(currentRect.center().x() - targetRect.center().x());
   int deltaY = std::abs(currentRect.center().y() - targetRect.center().y());
-  double distance =
-      std::sqrt(static_cast<double>(deltaX * deltaX + deltaY * deltaY));
+  double distance = std::sqrt(static_cast<double>(deltaX * deltaX + deltaY * deltaY));
 
   static constexpr double PIXELS_PER_SECOND =
       UIConstants::Selection::OVERLAY_GLIDE_PIXELS_PER_SECOND;
   static constexpr int MIN_DURATION = 50;
-  static constexpr int MAX_DURATION =
-      UIConstants::Selection::OVERLAY_GLIDE_MAX_DURATION_MS;
+  static constexpr int MAX_DURATION = UIConstants::Selection::OVERLAY_GLIDE_MAX_DURATION_MS;
 
-  int duration =
-      static_cast<int>(std::round((distance / PIXELS_PER_SECOND) * 1000.0));
+  int duration = static_cast<int>(std::round((distance / PIXELS_PER_SECOND) * 1000.0));
   duration = std::clamp(duration, MIN_DURATION, MAX_DURATION);
 
   // Start the glide animation
@@ -238,8 +231,7 @@ void SelectionOverlayManager::setGeometry(const QRect &rect) {
   }
 }
 
-auto SelectionOverlayManager::overlayRectForWidget(ItemWidget *widget)
-    -> QRect {
+auto SelectionOverlayManager::overlayRectForWidget(ItemWidget *widget) -> QRect {
   if (!widget) {
     return {};
   }
@@ -257,10 +249,8 @@ auto SelectionOverlayManager::overlayRectForWidget(ItemWidget *widget)
   return widgetRect.adjusted(-inset, -inset, inset, inset);
 }
 
-auto SelectionOverlayManager::overlayRectForPosition(const QPoint &pos,
-                                                     int itemWidth,
+auto SelectionOverlayManager::overlayRectForPosition(const QPoint &pos, int itemWidth,
                                                      int itemHeight) -> QRect {
   const int inset = UIConstants::CollectionIcon::ITEM_SPACING;
-  return QRect(pos.x() - inset, pos.y() - inset, itemWidth + 2 * inset,
-               itemHeight + 2 * inset);
+  return QRect(pos.x() - inset, pos.y() - inset, itemWidth + 2 * inset, itemHeight + 2 * inset);
 }

@@ -3,7 +3,6 @@
 // access existing class state (m_dataManager, m_filterManager,
 // m_widgetFactory, m_widgetPool, m_artworkManager, m_metrics, etc.).
 #include "applicationcontext.h"
-#include "loggingcategories.h"
 #include "arrowkeyscrollhelper.h"
 #include "artworkmanager.h"
 #include "artworkutils.h"
@@ -12,6 +11,7 @@
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "itemwidgetfactory.h"
+#include "loggingcategories.h"
 #include "presearchstatemanager.h"
 #include "scrolldatamanager.h"
 #include "scrolleventhandler.h"
@@ -31,11 +31,11 @@
 #include <QTimer>
 
 Q_DECLARE_LOGGING_CATEGORY(lcScrollManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcScrollManager().isDebugEnabled()) {                                  \
-      qCDebug(lcScrollManager) << msg;                                         \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcScrollManager().isDebugEnabled()) {                                                      \
+      qCDebug(lcScrollManager) << msg;                                                             \
+    }                                                                                              \
   } while (0)
 
 void ScrollManager::updateMediaItemCount(int mediaItemCount) {
@@ -60,28 +60,25 @@ void ScrollManager::updateMediaItemCount(int mediaItemCount) {
   updateVirtualView();
 }
 
-void ScrollManager::receiveItemsRange(
-    int offset, const QStringList &filePaths,
-    const QHash<QString, QString> &fileNames,
-    const QHash<QString, QString> &fileToArtworkDir) {
+void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths,
+                                      const QHash<QString, QString> &fileNames,
+                                      const QHash<QString, QString> &fileToArtworkDir) {
   if (m_rangeReceiveDebugBudget > 0) {
     --m_rangeReceiveDebugBudget;
-    debugLog("receiveItemsRange: offset="
-             << offset << "incomingPaths=" << filePaths.size()
-             << "storageFileCount="
-             << (m_dataManager ? m_dataManager->fileCount() : -1)
-             << "fileNames=" << fileNames.size());
+    debugLog("receiveItemsRange: offset=" << offset << "incomingPaths=" << filePaths.size()
+                                          << "storageFileCount="
+                                          << (m_dataManager ? m_dataManager->fileCount() : -1)
+                                          << "fileNames=" << fileNames.size());
     if (!filePaths.isEmpty()) {
       debugLog("receiveItemsRange: firstPath=" << filePaths.first());
     }
   }
 
-  qCDebug(lcSearchDiag) << 
-      QString(
-          "receiveItemsRange: offset=%1 incomingPaths=%2 storageFileCount=%3")
-          .arg(offset)
-          .arg(filePaths.size())
-          .arg(m_dataManager ? m_dataManager->fileCount() : -1);
+  qCDebug(lcSearchDiag) << QString(
+                               "receiveItemsRange: offset=%1 incomingPaths=%2 storageFileCount=%3")
+                               .arg(offset)
+                               .arg(filePaths.size())
+                               .arg(m_dataManager ? m_dataManager->fileCount() : -1);
 
   if (offset < 0 || offset >= m_dataManager->fileCount()) {
     qCDebug(lcSearchDiag) << "receiveItemsRange: IGNORED (offset out of bounds)";
@@ -95,12 +92,10 @@ void ScrollManager::receiveItemsRange(
   // OPTIMIZATION: Only prewarm directories for visible items (first ~100),
   // not the entire chunk. The prewarm also warms the OS dentry cache,
   // making subsequent accesses fast.
-    qCDebug(lcPerfTrace) << "receiveItemsRange: fileToArtworkDir.size="
-               << fileToArtworkDir.size() << "showAllSubcollectionItems="
-               << m_context.config.showAllSubcollectionItems
-               << "offset=" << offset << "filePathsSize=" << filePaths.size();
-  if (!fileToArtworkDir.isEmpty() &&
-      m_context.config.showAllSubcollectionItems) {
+  qCDebug(lcPerfTrace) << "receiveItemsRange: fileToArtworkDir.size=" << fileToArtworkDir.size()
+                       << "showAllSubcollectionItems=" << m_context.config.showAllSubcollectionItems
+                       << "offset=" << offset << "filePathsSize=" << filePaths.size();
+  if (!fileToArtworkDir.isEmpty() && m_context.config.showAllSubcollectionItems) {
     // Build artwork directory list in filePaths ORDER so visible items
     // (which are at the start of filePaths) get their directories scanned
     // first. Limit to first ~100 items to avoid scanning hundreds of
@@ -122,16 +117,14 @@ void ScrollManager::receiveItemsRange(
       ++itemCount;
     }
 
-      qCDebug(lcPerfTrace) << "receiveItemsRange: PREWARM artworkDirs.size="
-                 << artworkDirs.size();
+    qCDebug(lcPerfTrace) << "receiveItemsRange: PREWARM artworkDirs.size=" << artworkDirs.size();
     // Debounce artwork prewarm - skip if one was triggered recently (within
     // 200ms). Multiple chunks arrive in quick succession and we don't need to
     // prewarm each.
     qint64 now = QDateTime::currentMSecsSinceEpoch();
-    constexpr qint64 prewarmDebounceMs =
-        UIConstants::Scroll::ARTWORK_PREWARM_DEBOUNCE_MS;
+    constexpr qint64 prewarmDebounceMs = UIConstants::Scroll::ARTWORK_PREWARM_DEBOUNCE_MS;
     if (now - m_lastArtworkPrewarmTime < prewarmDebounceMs) {
-        qCDebug(lcPerfTrace) << "receiveItemsRange: SKIPPING PREWARM (debounced)";
+      qCDebug(lcPerfTrace) << "receiveItemsRange: SKIPPING PREWARM (debounced)";
     } else {
       m_lastArtworkPrewarmTime = now;
 
@@ -163,11 +156,10 @@ void ScrollManager::receiveItemsRange(
   }
 
   // Store data and get visual indices that were updated
-  QList<int> updatedIndices =
-      m_dataManager->receiveItemsRange(offset, filePaths, fileNames);
+  QList<int> updatedIndices = m_dataManager->receiveItemsRange(offset, filePaths, fileNames);
 
-  qCDebug(lcSearchDiag) << QString("receiveItemsRange: updatedVisualIndices=%1")
-              .arg(updatedIndices.size());
+  qCDebug(lcSearchDiag)
+      << QString("receiveItemsRange: updatedVisualIndices=%1").arg(updatedIndices.size());
 
   // Release placeholder widgets so they get re-created with actual data
   for (int visualIndex : updatedIndices) {
@@ -181,10 +173,9 @@ void ScrollManager::receiveItemsRange(
   updateVirtualView();
 }
 
-void ScrollManager::injectCachedItems(
-    int startIndex, const QStringList &filePaths,
-    const QHash<QString, QString> &fileNames,
-    const QHash<QString, QString> &artworkPaths) {
+void ScrollManager::injectCachedItems(int startIndex, const QStringList &filePaths,
+                                      const QHash<QString, QString> &fileNames,
+                                      const QHash<QString, QString> &artworkPaths) {
   if (!m_dataManager || filePaths.isEmpty()) {
     return;
   }
@@ -195,50 +186,48 @@ void ScrollManager::injectCachedItems(
   int prefixCount = subcollectionCount + virtualFolderCount;
 
   // Convert visual startIndex to media offset
-  int mediaOffset =
-      (startIndex >= prefixCount) ? (startIndex - prefixCount) : 0;
+  int mediaOffset = (startIndex >= prefixCount) ? (startIndex - prefixCount) : 0;
 
   qCDebug(lcSearchDiag) << QString("injectCachedItems: startIndex=%1 mediaOffset=%2 "
-                  "pathCount=%3 prefixCount=%4")
-              .arg(startIndex)
-              .arg(mediaOffset)
-              .arg(filePaths.size())
-              .arg(prefixCount);
+                                   "pathCount=%3 prefixCount=%4")
+                               .arg(startIndex)
+                               .arg(mediaOffset)
+                               .arg(filePaths.size())
+                               .arg(prefixCount);
 
   // Store cached data directly into the data manager
-  QList<int> updatedIndices =
-      m_dataManager->receiveItemsRange(mediaOffset, filePaths, fileNames);
+  QList<int> updatedIndices = m_dataManager->receiveItemsRange(mediaOffset, filePaths, fileNames);
 
   // Set cached artwork paths on the widget factory for instant artwork lookup
   if (!artworkPaths.isEmpty() && m_widgetFactory) {
     m_widgetFactory->setCachedArtworkPaths(artworkPaths);
     if (qEnvironmentVariableIsSet("KARTEND_ARTWORK_DIAG")) {
-      qCDebug(lcSearchDiag) << "[ArtworkDiag] injectCachedItems: setting"
-                 << artworkPaths.size() << "cached artwork paths";
+      qCDebug(lcSearchDiag) << "[ArtworkDiag] injectCachedItems: setting" << artworkPaths.size()
+                            << "cached artwork paths";
       if (!artworkPaths.isEmpty()) {
         auto it = artworkPaths.constBegin();
         qCDebug(lcSearchDiag) << "[ArtworkDiag] first cached entry: key=" << it.key()
-                   << "value=" << it.value();
+                              << "value=" << it.value();
       }
     }
   } else if (qEnvironmentVariableIsSet("KARTEND_ARTWORK_DIAG")) {
     qCDebug(lcSearchDiag) << "[ArtworkDiag] injectCachedItems: artworkPaths.isEmpty="
-               << artworkPaths.isEmpty()
-               << "m_widgetFactory=" << static_cast<bool>(m_widgetFactory);
+                          << artworkPaths.isEmpty()
+                          << "m_widgetFactory=" << static_cast<bool>(m_widgetFactory);
   }
 
   qCDebug(lcSearchDiag) << QString("injectCachedItems: updatedVisualIndices=%1 artworkPaths=%2")
-              .arg(updatedIndices.size())
-              .arg(artworkPaths.size());
+                               .arg(updatedIndices.size())
+                               .arg(artworkPaths.size());
 
   // Trigger immediate update of visible widgets
   updateVirtualView();
 }
 
-bool ScrollManager::getCurrentViewportForCache(
-    int &startIndex, int &totalItems, QStringList &filePaths,
-    QHash<QString, QString> &fileNames,
-    QHash<QString, QString> &artworkPaths) const {
+bool ScrollManager::getCurrentViewportForCache(int &startIndex, int &totalItems,
+                                               QStringList &filePaths,
+                                               QHash<QString, QString> &fileNames,
+                                               QHash<QString, QString> &artworkPaths) const {
   if (!m_dataManager || !m_mediaScrollArea) {
     return false;
   }
@@ -252,8 +241,7 @@ bool ScrollManager::getCurrentViewportForCache(
   int firstVisibleRow = getFirstVisibleRow();
   int lastVisibleRow = getLastVisibleRow();
   int gridWidth = getCurrentGridWidth();
-  if (gridWidth <= 0)
-    gridWidth = 1;
+  if (gridWidth <= 0) gridWidth = 1;
 
   // Calculate visible range with buffer (cache 2 extra rows on each side)
   int bufferRows = 2;
@@ -264,8 +252,7 @@ bool ScrollManager::getCurrentViewportForCache(
   int endIndex = std::min((endRow + 1) * gridWidth, totalItems);
 
   // Get the prefix count (subcollections + virtual folders)
-  int prefixCount =
-      m_dataManager->subcollectionCount() + m_dataManager->virtualFolderCount();
+  int prefixCount = m_dataManager->subcollectionCount() + m_dataManager->virtualFolderCount();
 
   // We only cache media items (not subcollection tiles)
   int mediaStartIndex = std::max(0, startIndex - prefixCount);
@@ -283,11 +270,9 @@ bool ScrollManager::getCurrentViewportForCache(
   const QStringList &allPaths = m_dataManager->filePaths();
   const QHash<QString, QString> &allNames = m_dataManager->fileNames();
   const QString &defaultArtworkDir = m_context.artworkDirectory;
-  const bool showAllSubcollectionItems =
-      m_context.config.showAllSubcollectionItems;
+  const bool showAllSubcollectionItems = m_context.config.showAllSubcollectionItems;
 
-  static const bool diagEnabled =
-      qEnvironmentVariableIntValue("KARTEND_ARTWORK_DIAG");
+  static const bool diagEnabled = qEnvironmentVariableIntValue("KARTEND_ARTWORK_DIAG");
   int artworkMisses = 0;
   int artworkHits = 0;
 
@@ -306,8 +291,7 @@ bool ScrollManager::getCurrentViewportForCache(
       // m_fileToArtworkDir which may be empty.
       QString artworkDir = defaultArtworkDir;
       if (showAllSubcollectionItems && m_hierarchyCache) {
-        QString cachedArtworkDir =
-            m_hierarchyCache->artworkDirForFilePath(path);
+        QString cachedArtworkDir = m_hierarchyCache->artworkDirForFilePath(path);
         if (!cachedArtworkDir.isEmpty()) {
           artworkDir = cachedArtworkDir;
           ++artworkHits;
@@ -316,15 +300,14 @@ bool ScrollManager::getCurrentViewportForCache(
           if (diagEnabled && artworkMisses <= 3) {
             QFileInfo fi(path);
             qCDebug(lcSearchDiag) << "[ArtworkDiag] getCurrentViewportForCache: MISS for path"
-                << path << "parentDir=" << fi.absolutePath();
+                                  << path << "parentDir=" << fi.absolutePath();
           }
         }
       }
 
       if (!artworkDir.isEmpty()) {
         QString fileName = QFileInfo(path).completeBaseName();
-        QString artPath =
-            ArtworkUtils::findArtworkForFile(fileName, artworkDir);
+        QString artPath = ArtworkUtils::findArtworkForFile(fileName, artworkDir);
         if (!artPath.isEmpty()) {
           artworkPaths[path] = artPath;
         }
@@ -335,11 +318,11 @@ bool ScrollManager::getCurrentViewportForCache(
 
   if (diagEnabled) {
     qCDebug(lcSearchDiag) << "[ArtworkDiag] getCurrentViewportForCache: "
-                  "showAllSubcollectionItems="
-               << showAllSubcollectionItems
-               << "hierarchyCache=" << static_cast<bool>(m_hierarchyCache)
-               << "hits=" << artworkHits << "misses=" << artworkMisses
-               << "artworkPaths=" << artworkPaths.size();
+                             "showAllSubcollectionItems="
+                          << showAllSubcollectionItems
+                          << "hierarchyCache=" << static_cast<bool>(m_hierarchyCache)
+                          << "hits=" << artworkHits << "misses=" << artworkMisses
+                          << "artworkPaths=" << artworkPaths.size();
   }
 
   // Need at least some valid paths
@@ -354,8 +337,7 @@ bool ScrollManager::getCurrentViewportForCache(
 }
 
 void ScrollManager::initializeSubcollections() {
-  m_dataManager->initializeSubcollections(m_context, m_collections,
-                                          m_hierarchyCache);
+  m_dataManager->initializeSubcollections(m_context, m_collections, m_hierarchyCache);
 }
 
 void ScrollManager::initializeVirtualFolders() {
@@ -384,9 +366,8 @@ void ScrollManager::setupNormalVirtualScrolling() {
 
   // Bail early if container creation failed (null gridContainer)
   if (!m_virtualContainer) {
-    qCWarning(lcScrollManager)
-        << "ScrollManager::setupNormalVirtualScrolling: Failed to "
-           "create virtual container";
+    qCWarning(lcScrollManager) << "ScrollManager::setupNormalVirtualScrolling: Failed to "
+                                  "create virtual container";
     return;
   }
 
@@ -396,8 +377,7 @@ void ScrollManager::setupNormalVirtualScrolling() {
     m_widgetFactory->setParentWidget(m_virtualContainer);
     m_widgetFactory->setCollectionContext(m_context);
     m_widgetFactory->setMetrics(m_metrics.itemWidth, m_metrics.itemHeight);
-    m_widgetFactory->setFileData(&m_dataManager->filePaths(),
-                                 &m_dataManager->fileNames());
+    m_widgetFactory->setFileData(&m_dataManager->filePaths(), &m_dataManager->fileNames());
     m_widgetFactory->setTotalItemCount(m_dataManager->fileCount());
     m_widgetFactory->setSubcollectionNameResolver(
         [this](int idx) { return getSubcollectionName(idx); });
@@ -410,12 +390,11 @@ void ScrollManager::setupNormalVirtualScrolling() {
       int viewportHeight = m_mediaScrollArea->viewport()->height();
       // Use clamped totalHeight for scrollbar range
       int scrollMax = qMax(0, m_metrics.totalHeight - viewportHeight);
-      int itemY = GridUtils::computeItemY(
-          m_initialScrollIndex, m_metrics.itemsPerRow, m_metrics.itemHeight,
-          m_metrics.verticalSpacing, UIConstants::Grid::MARGINS);
+      int itemY =
+          GridUtils::computeItemY(m_initialScrollIndex, m_metrics.itemsPerRow, m_metrics.itemHeight,
+                                  m_metrics.verticalSpacing, UIConstants::Grid::MARGINS);
       // Calculate target logical scroll Y (to center the item)
-      int logicalTargetY =
-          itemY + (m_metrics.itemHeight / 2) - (viewportHeight / 2);
+      int logicalTargetY = itemY + (m_metrics.itemHeight / 2) - (viewportHeight / 2);
       // Ensure max >= min for qBound (content may be smaller than viewport)
       int logicalMax = qMax(0, m_metrics.logicalHeight - viewportHeight);
       logicalTargetY = qBound(0, logicalTargetY, logicalMax);
@@ -450,10 +429,8 @@ void ScrollManager::cleanup() {
   if (m_destroying) {
     return;
   }
-  bool hasPreSearch =
-      m_preSearchStateManager && m_preSearchStateManager->hasSavedState();
-  if (m_activeWidgets.isEmpty() && (!m_virtualContainer) &&
-      m_dataManager->filePaths().isEmpty() &&
+  bool hasPreSearch = m_preSearchStateManager && m_preSearchStateManager->hasSavedState();
+  if (m_activeWidgets.isEmpty() && (!m_virtualContainer) && m_dataManager->filePaths().isEmpty() &&
       m_dataManager->subcollections().isEmpty() && !hasPreSearch) {
     return;
   }

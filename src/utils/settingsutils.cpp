@@ -3,13 +3,13 @@
 #include "errorutils.h"
 #include "pathutils.h"
 #include "uiconstants.h"
+#include <algorithm>
 #include <QDir>
 #include <QFile>
 #include <QScrollArea>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTextStream>
-#include <algorithm>
 
 namespace {
 bool readIniFile(QIODevice &device, QSettings::SettingsMap &map) {
@@ -17,8 +17,7 @@ bool readIniFile(QIODevice &device, QSettings::SettingsMap &map) {
   QString currentSection;
   while (!in.atEnd()) {
     QString line = in.readLine().trimmed();
-    if (line.isEmpty() || line.startsWith(';') || line.startsWith('#'))
-      continue;
+    if (line.isEmpty() || line.startsWith(';') || line.startsWith('#')) continue;
     if (line.startsWith('[') && line.endsWith(']')) {
       currentSection = line.mid(1, line.length() - 2);
     } else {
@@ -57,8 +56,7 @@ bool writeIniFile(QIODevice &device, const QSettings::SettingsMap &map) {
   for (auto it = rootKeys.begin(); it != rootKeys.end(); ++it) {
     out << it.key() << "=" << it.value().toString() << "\n";
   }
-  if (!rootKeys.isEmpty() && !sections.isEmpty())
-    out << "\n";
+  if (!rootKeys.isEmpty() && !sections.isEmpty()) out << "\n";
 
   QStringList sectionNames = sections.keys();
   // QMap keys are already sorted, but we can ensure specific order if needed.
@@ -86,34 +84,30 @@ auto SettingsUtils::getFormat() -> QSettings::Format {
 }
 
 auto SettingsUtils::getConfigPath() -> QString {
-  QString configRoot =
-      QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+  QString configRoot = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
   QDir configDir(configRoot);
   QString appConfigPath = configDir.filePath("kartend");
 
   QDir appConfigDir(appConfigPath);
   if (!appConfigDir.exists() && !appConfigDir.mkpath(".")) {
     ErrorUtils::logError(
-        ErrorUtils::ErrorContext::warning(
-            ErrorUtils::ErrorCode::ConfigSaveFailed,
-            "Failed to create application config directory",
-            "SettingsUtils::getConfigPath")
+        ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::ConfigSaveFailed,
+                                          "Failed to create application config directory",
+                                          "SettingsUtils::getConfigPath")
             .withDetails(QString("Path: %1").arg(appConfigPath)));
   }
   return appConfigDir.absoluteFilePath("kartend.cfg");
 }
 
-auto SettingsUtils::expandConfigVariables(const QString &input,
-                                          const QString &collectionName)
+auto SettingsUtils::expandConfigVariables(const QString &input, const QString &collectionName)
     -> QString {
   return PathUtils::validateAndExpandPath(input, collectionName);
 }
 
-void SettingsUtils::applyHorizontalScrollbarSetting(
-    QScrollArea *itemScrollArea, int collectionIndex,
-    const QList<CollectionConfig> &collections) {
-  if ((!itemScrollArea) || collectionIndex < 0 ||
-      collectionIndex >= collections.size()) {
+void SettingsUtils::applyHorizontalScrollbarSetting(QScrollArea *itemScrollArea,
+                                                    int collectionIndex,
+                                                    const QList<CollectionConfig> &collections) {
+  if ((!itemScrollArea) || collectionIndex < 0 || collectionIndex >= collections.size()) {
     return;
   }
   const CollectionConfig &collection = collections[collectionIndex];
@@ -124,11 +118,9 @@ void SettingsUtils::applyHorizontalScrollbarSetting(
   }
 }
 
-void SettingsUtils::applyVerticalScrollbarSetting(
-    QScrollArea *itemScrollArea, int collectionIndex,
-    const QList<CollectionConfig> &collections) {
-  if ((!itemScrollArea) || collectionIndex < 0 ||
-      collectionIndex >= collections.size()) {
+void SettingsUtils::applyVerticalScrollbarSetting(QScrollArea *itemScrollArea, int collectionIndex,
+                                                  const QList<CollectionConfig> &collections) {
+  if ((!itemScrollArea) || collectionIndex < 0 || collectionIndex >= collections.size()) {
     return;
   }
   const CollectionConfig &collection = collections[collectionIndex];

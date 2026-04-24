@@ -19,10 +19,10 @@ void FilterManager::setHierarchyCache(const CollectionHierarchyCache *cache) {
   m_hierarchyCache = cache;
 }
 
-void FilterManager::setSourceData(
-    const QStringList &filePaths, const QHash<QString, QString> &fileNames,
-    const QHash<QString, QString> &filePathToDisplayName,
-    const QList<int> &subcollections) {
+void FilterManager::setSourceData(const QStringList &filePaths,
+                                  const QHash<QString, QString> &fileNames,
+                                  const QHash<QString, QString> &filePathToDisplayName,
+                                  const QList<int> &subcollections) {
   m_filePaths = &filePaths;
   m_fileNames = &fileNames;
   m_filePathToDisplayName = &filePathToDisplayName;
@@ -61,8 +61,7 @@ void FilterManager::applyFilter(const QString &searchText) {
 }
 
 void FilterManager::applySubcollectionFilter(int subcollectionIndex) {
-  if (!m_collections || subcollectionIndex < 0 ||
-      subcollectionIndex >= m_collections->size()) {
+  if (!m_collections || subcollectionIndex < 0 || subcollectionIndex >= m_collections->size()) {
     return;
   }
   if (!m_filePaths || !m_subcollections) {
@@ -94,8 +93,7 @@ void FilterManager::applySubcollectionFilter(int subcollectionIndex) {
     }
   }
 
-  emit filterChanged(m_filteredIndices.size(),
-                     m_subcollections->size() + m_filePaths->size());
+  emit filterChanged(m_filteredIndices.size(), m_subcollections->size() + m_filePaths->size());
 }
 
 void FilterManager::clearFilter() {
@@ -115,8 +113,7 @@ void FilterManager::clearFilter() {
 }
 
 auto FilterManager::getActualIndex(int visualIndex) const -> int {
-  return FilterHelpers::mapVisualToActualIndex(visualIndex, m_isFiltered,
-                                               m_filteredIndices);
+  return FilterHelpers::mapVisualToActualIndex(visualIndex, m_isFiltered, m_filteredIndices);
 }
 
 void FilterManager::rebuildFilteredIndices() {
@@ -146,24 +143,20 @@ void FilterManager::rebuildFilteredIndices() {
   }
 }
 
-auto FilterManager::matchesSubcollectionFilter(int subcollectionIndex,
-                                               const QString &needle) const
+auto FilterManager::matchesSubcollectionFilter(int subcollectionIndex, const QString &needle) const
     -> bool {
   if (!m_subcollections || !m_collections) {
     return false;
   }
   int actualSubcollectionIndex = (*m_subcollections)[subcollectionIndex];
-  if (actualSubcollectionIndex < 0 ||
-      actualSubcollectionIndex >= m_collections->size()) {
+  if (actualSubcollectionIndex < 0 || actualSubcollectionIndex >= m_collections->size()) {
     return false;
   }
-  return FilterHelpers::subcollectionNameMatches(
-      (*m_collections)[actualSubcollectionIndex].name, needle);
+  return FilterHelpers::subcollectionNameMatches((*m_collections)[actualSubcollectionIndex].name,
+                                                 needle);
 }
 
-auto FilterManager::matchesMediaItemFilter(int mediaIndex,
-                                           const QString &needle) const
-    -> bool {
+auto FilterManager::matchesMediaItemFilter(int mediaIndex, const QString &needle) const -> bool {
   if (!m_filePaths) {
     return false;
   }
@@ -172,11 +165,10 @@ auto FilterManager::matchesMediaItemFilter(int mediaIndex,
   return display.toLower().contains(needle);
 }
 
-auto FilterManager::getDisplayNameForMediaItem(const QString &rawEntry) const
-    -> QString {
+auto FilterManager::getDisplayNameForMediaItem(const QString &rawEntry) const -> QString {
   return FilterHelpers::displayNameForMediaEntry(
-      rawEntry, m_context.config.showAllSubcollectionItems,
-      m_context.config.mediaDirectory, m_filePathToDisplayName, m_fileNames);
+      rawEntry, m_context.config.showAllSubcollectionItems, m_context.config.mediaDirectory,
+      m_filePathToDisplayName, m_fileNames);
 }
 
 void FilterManager::determineTargetCollections(int subcollectionIndex,
@@ -189,8 +181,7 @@ void FilterManager::determineTargetCollections(int subcollectionIndex,
     descendants = m_hierarchyCache->allDescendants(subcollectionIndex);
   } else if (m_collections) {
     // Fallback to O(n) recursive scan
-    descendants = CollectionUtils::collectDescendantIndices(subcollectionIndex,
-                                                            *m_collections);
+    descendants = CollectionUtils::collectDescendantIndices(subcollectionIndex, *m_collections);
   }
 
   for (int descendant : descendants) {
@@ -198,27 +189,22 @@ void FilterManager::determineTargetCollections(int subcollectionIndex,
   }
 }
 
-auto FilterManager::itemBelongsToTargetCollections(
-    const QString &entry, const QSet<int> &targetCollections) const -> bool {
+auto FilterManager::itemBelongsToTargetCollections(const QString &entry,
+                                                   const QSet<int> &targetCollections) const
+    -> bool {
   if (m_databaseManager) {
-    int collectionIndexForEntry =
-        m_databaseManager->getCollectionIndexForFile(entry);
-    if (collectionIndexForEntry >= 0 &&
-        targetCollections.contains(collectionIndexForEntry)) {
+    int collectionIndexForEntry = m_databaseManager->getCollectionIndexForFile(entry);
+    if (collectionIndexForEntry >= 0 && targetCollections.contains(collectionIndexForEntry)) {
       return true;
     }
 
     // Try alternate path resolution
     if (collectionIndexForEntry < 0 && m_fileNames) {
-      for (auto it = m_fileNames->constBegin(); it != m_fileNames->constEnd();
-           ++it) {
+      for (auto it = m_fileNames->constBegin(); it != m_fileNames->constEnd(); ++it) {
         const QString &key = it.key();
-        if (key.endsWith("/" + entry) ||
-            key.endsWith(QDir::separator() + entry) || key == entry) {
-          int altCollectionIndex =
-              m_databaseManager->getCollectionIndexForFile(it.key());
-          if (altCollectionIndex >= 0 &&
-              targetCollections.contains(altCollectionIndex)) {
+        if (key.endsWith("/" + entry) || key.endsWith(QDir::separator() + entry) || key == entry) {
+          int altCollectionIndex = m_databaseManager->getCollectionIndexForFile(it.key());
+          if (altCollectionIndex >= 0 && targetCollections.contains(altCollectionIndex)) {
             return true;
           }
           break;

@@ -33,45 +33,32 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcEventManager, "kartend.eventmanager")
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcEventManager().isDebugEnabled()) {                                   \
-      qCDebug(lcEventManager) << msg;                                          \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcEventManager().isDebugEnabled()) {                                                       \
+      qCDebug(lcEventManager) << msg;                                                              \
+    }                                                                                              \
   } while (0)
 
 // EventManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(EventManagerSetup, ScrollManager *, ScrollManager,
-                      scrollManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, AnimationManager *, AnimationManager,
-                      animationManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, ViewportManager *, ViewportManager,
-                      viewportManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, SelectionManager *, SelectionManager,
-                      selectionManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, ArtworkManager *, ArtworkManager,
-                      artworkManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, DatabaseManager *, DatabaseManager,
-                      databaseManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, SidebarManager *, SidebarManager,
-                      sidebarManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QScrollArea *, ItemScrollArea,
-                      itemScrollArea)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget *, GridContainer,
-                      gridContainer)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QStackedWidget *, StackedWidget,
-                      stackedWidget)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, AnimationManager *, AnimationManager, animationManager)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, ViewportManager *, ViewportManager, viewportManager)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, SelectionManager *, SelectionManager, selectionManager)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, DatabaseManager *, DatabaseManager, databaseManager)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, SidebarManager *, SidebarManager, sidebarManager)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)
 SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget *, ItemsPage, itemsPage)
 SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget *, ItemsTopBar, itemsTopBar)
 SETUP_GETTER_DEF_SAME(EventManagerSetup, QLineEdit *, SearchBar, searchBar)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QList<CollectionConfig> *, Collections,
-                      collections)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, int *, CurrentCollectionIndex,
-                      currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, GeneralSettings *, GeneralSettings,
-                      generalSettings)
-SETUP_GETTER_DEF_CTX_ONLY(EventManagerSetup, InteractionStateHolder *,
-                          InteractionState, interactionState)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, QList<CollectionConfig> *, Collections, collections)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
+SETUP_GETTER_DEF_SAME(EventManagerSetup, GeneralSettings *, GeneralSettings, generalSettings)
+SETUP_GETTER_DEF_CTX_ONLY(EventManagerSetup, InteractionStateHolder *, InteractionState,
+                          interactionState)
 
 EventManager::EventManager(QObject *parent) : QObject(parent) {}
 
@@ -173,8 +160,7 @@ bool EventManager::handleActivityEvent(QEvent *event) {
   if (activityEvent) {
     qint64 now = QDateTime::currentMSecsSinceEpoch();
     qint64 last = m_state ? m_state->lastUiActivityMs() : 0;
-    if (last > 0 &&
-        (now - last) >= UIConstants::Timing::USER_IDLE_THRESHOLD_MS) {
+    if (last > 0 && (now - last) >= UIConstants::Timing::USER_IDLE_THRESHOLD_MS) {
       if (m_state) {
         m_state->click().armFirstClickDelay = true;
       }
@@ -197,12 +183,11 @@ bool EventManager::handleMouseButtonPress(QObject *obj, QEvent *event) {
     // Clear continuous scroll state after user finishes scrollbar interaction -
     // allows time for the drag/click to complete before re-enabling
     // auto-centering
-    QTimer::singleShot(UIConstants::Mouse::CONTINUOUS_SCROLL_IDLE_MS, this,
-                       [this]() {
-                         if (m_viewportManager) {
-                           m_viewportManager->setContinuousScrollActive(false);
-                         }
-                       });
+    QTimer::singleShot(UIConstants::Mouse::CONTINUOUS_SCROLL_IDLE_MS, this, [this]() {
+      if (m_viewportManager) {
+        m_viewportManager->setContinuousScrollActive(false);
+      }
+    });
     emit requestStopRepeat(true);
     emit scrollbarClicked();
     return false;
@@ -243,8 +228,7 @@ bool EventManager::handleKeyPressEvent(QObject *obj, QEvent *event) {
   // Delegate to KeyboardManager for key handling
   if (m_keyboardManager) {
     const bool searchBarFocused = (m_searchBar) && m_searchBar->hasFocus();
-    const bool handled =
-        m_keyboardManager->handleKeyPress(keyEvent, searchBarFocused);
+    const bool handled = m_keyboardManager->handleKeyPress(keyEvent, searchBarFocused);
     if (handled) {
       event->accept();
       return true;
@@ -300,4 +284,3 @@ QList<int> EventManager::getSubcollections(int parentIndex) const {
   }
   return CollectionUtils::directChildrenOf(parentIndex, *m_collections);
 }
-

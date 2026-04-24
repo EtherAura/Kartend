@@ -26,9 +26,7 @@ public:
   void setSortColumn(ListSortColumn column, bool ascending);
 
   /// Get/set the collection column width (resizable)
-  [[nodiscard]] int collectionColumnWidth() const {
-    return m_collectionColumnWidth;
-  }
+  [[nodiscard]] int collectionColumnWidth() const { return m_collectionColumnWidth; }
   void setCollectionColumnWidth(int width);
 
   /// Get/set the artwork column width (resizable)
@@ -60,20 +58,17 @@ private:
 
   ListSortColumn m_sortColumn = ListSortColumn::Name;
   bool m_sortAscending = true;
-  int m_collectionColumnWidth =
-      150;                       // Default collection column width (resizable)
-  int m_artworkColumnWidth = 32; // Default artwork column width (resizable)
+  int m_collectionColumnWidth = 150; // Default collection column width (resizable)
+  int m_artworkColumnWidth = 32;     // Default artwork column width (resizable)
 
   // Column resize drag state
   bool m_draggingColumn = false;
-  bool m_draggingArtworkColumn =
-      false; // Distinguishes which column being dragged
+  bool m_draggingArtworkColumn = false; // Distinguishes which column being dragged
   int m_dragStartX = 0;
   int m_dragStartWidth = 0;
   QPoint m_pressPos; // Track press position for click detection
 
-  static constexpr int RESIZE_HANDLE_WIDTH =
-      6; // Pixels on each side of separator
+  static constexpr int RESIZE_HANDLE_WIDTH = 6; // Pixels on each side of separator
   static constexpr int MIN_COLLECTION_WIDTH = 80;
   static constexpr int MAX_COLLECTION_WIDTH = 400;
   static constexpr int MIN_ARTWORK_WIDTH = 24;

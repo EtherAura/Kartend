@@ -1,4 +1,5 @@
 // Sibling TU: path resolution + cached counts for DatabaseManager.
+#include <functional>
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
@@ -6,10 +7,9 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
+#include <QtGlobal>
 #include <QThread>
 #include <QTimer>
-#include <QtGlobal>
-#include <functional>
 #include <stdexcept>
 
 #include "collectionutils.h"
@@ -28,24 +28,22 @@ Q_DECLARE_LOGGING_CATEGORY(lcDatabaseManager)
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
-auto DatabaseManager::countCollectionRecursive(
-    int collectionIndex, const QList<CollectionConfig> &allCollections) const
+auto DatabaseManager::countCollectionRecursive(int collectionIndex,
+                                               const QList<CollectionConfig> &allCollections) const
     -> qint64 {
   if (!CollectionUtils::isValidIndex(collectionIndex, &allCollections)) {
     return 0;
   }
   QString expandedMediaDir = PathUtils::validateAndExpandPath(
-      allCollections[collectionIndex].mediaDirectory,
-      allCollections[collectionIndex].name);
-  const QString uuid = CollectionUtils::computeCollectionUuid(
-      allCollections[collectionIndex].name, expandedMediaDir);
+      allCollections[collectionIndex].mediaDirectory, allCollections[collectionIndex].name);
+  const QString uuid = CollectionUtils::computeCollectionUuid(allCollections[collectionIndex].name,
+                                                              expandedMediaDir);
   qint64 total = countCollectionByUuid(uuid);
-  QList<int> descendants = CollectionUtils::collectDescendantIndices(
-      collectionIndex, allCollections);
+  QList<int> descendants =
+      CollectionUtils::collectDescendantIndices(collectionIndex, allCollections);
   for (int descendantIndex : descendants) {
     QString descExpandedMediaDir = PathUtils::validateAndExpandPath(
-        allCollections[descendantIndex].mediaDirectory,
-        allCollections[descendantIndex].name);
+        allCollections[descendantIndex].mediaDirectory, allCollections[descendantIndex].name);
     const QString descendantUuid = CollectionUtils::computeCollectionUuid(
         allCollections[descendantIndex].name, descExpandedMediaDir);
     total += countCollectionByUuid(descendantUuid);
@@ -54,8 +52,7 @@ auto DatabaseManager::countCollectionRecursive(
 }
 
 // Count items globally across all collections
-auto DatabaseManager::countGlobal(const QList<CollectionConfig> &allCollections)
-    -> qint64 {
+auto DatabaseManager::countGlobal(const QList<CollectionConfig> &allCollections) -> qint64 {
   Q_UNUSED(allCollections)
   if (!m_db.isOpen()) {
     return 0;
@@ -68,8 +65,7 @@ auto DatabaseManager::countGlobal(const QList<CollectionConfig> &allCollections)
 }
 
 // Recomputes and persists direct and recursive item counts for all collections
-void DatabaseManager::updateCachedCounts(
-    const QList<CollectionConfig> &allCollections) {
+void DatabaseManager::updateCachedCounts(const QList<CollectionConfig> &allCollections) {
   if (!m_db.isOpen() || !m_sessionManager) {
     return;
   }
@@ -83,10 +79,9 @@ void DatabaseManager::updateCachedCounts(
   uuids.resize(collectionCount);
 
   for (int i = 0; i < collectionCount; ++i) {
-    expandedMediaDirs[i] = PathUtils::validateAndExpandPath(
-        allCollections[i].mediaDirectory, allCollections[i].name);
-    uuids[i] = CollectionUtils::computeCollectionUuid(allCollections[i].name,
-                                                      expandedMediaDirs[i]);
+    expandedMediaDirs[i] =
+        PathUtils::validateAndExpandPath(allCollections[i].mediaDirectory, allCollections[i].name);
+    uuids[i] = CollectionUtils::computeCollectionUuid(allCollections[i].name, expandedMediaDirs[i]);
 
     if (expandedMediaDirs[i].trimmed().isEmpty()) {
       clearCollectionFromDatabaseByUuid(uuids[i]);
@@ -117,13 +112,11 @@ void DatabaseManager::dispatchCachedCountsUpdate() {
   m_inFlightCountsCollections = m_pendingCountsCollections;
   m_inFlightCountsUuids = m_pendingCountsUuids;
 
-  emit requestUpdateCachedCounts(m_inFlightCachedCountsGeneration,
-                                 m_inFlightCountsUuids);
+  emit requestUpdateCachedCounts(m_inFlightCachedCountsGeneration, m_inFlightCountsUuids);
 }
 
 void DatabaseManager::onWorkerCachedCountsComputed(
-    quint64 generation, qint64 globalCount,
-    const QHash<QString, qint64> &directCountsByUuid) {
+    quint64 generation, qint64 globalCount, const QHash<QString, qint64> &directCountsByUuid) {
   if (!m_sessionManager) {
     return;
   }
@@ -140,9 +133,7 @@ void DatabaseManager::onWorkerCachedCountsComputed(
   recursiveCounts.resize(collectionCount);
 
   for (int i = 0; i < collectionCount; ++i) {
-    const QString uuid = (i < m_inFlightCountsUuids.size())
-                             ? m_inFlightCountsUuids[i]
-                             : QString();
+    const QString uuid = (i < m_inFlightCountsUuids.size()) ? m_inFlightCountsUuids[i] : QString();
     directCounts[i] = uuid.isEmpty() ? 0 : directCountsByUuid.value(uuid, 0);
   }
 
@@ -187,14 +178,13 @@ void DatabaseManager::onWorkerCachedCountsComputed(
 
   m_sessionManager->setGlobalItemCount(globalCount);
   for (int i = 0; i < collectionCount; ++i) {
-    m_sessionManager->setCollectionCounts(collections[i], collections,
-                                          directCounts[i], recursiveCounts[i]);
+    m_sessionManager->setCollectionCounts(collections[i], collections, directCounts[i],
+                                          recursiveCounts[i]);
   }
   m_sessionManager->saveToDisk();
   emit cachedCountsUpdated();
 }
-auto DatabaseManager::getCollectionIndexForFile(const QString &filePath) const
-    -> int {
+auto DatabaseManager::getCollectionIndexForFile(const QString &filePath) const -> int {
   QMutexLocker locker(&m_dataMutex);
   return m_fileToCollectionIndex.value(filePath, -1);
 }
@@ -203,8 +193,7 @@ auto DatabaseManager::getCollectionIndexForFile(const QString &filePath) const
 // Handles both absolute paths and relative paths that need resolution via
 // collection mappings when showAllSubcollectionItems is enabled.
 auto DatabaseManager::resolveFilePath(const QString &rawEntry,
-                                      const CollectionContext &context) const
-    -> QString {
+                                      const CollectionContext &context) const -> QString {
   // DB-backed paginated queries (search) can return fully-qualified absolute
   // paths. Those should always pass through unchanged, even when the current
   // view's mediaDirectory is empty (e.g., container collections).
@@ -220,10 +209,9 @@ auto DatabaseManager::resolveFilePath(const QString &rawEntry,
   // Simple case: prepend media directory
   const QString mediaDir = context.config.mediaDirectory.trimmed();
   if (mediaDir.isEmpty()) {
-    qCDebug(lcDatabaseManager)
-        << "resolveFilePath: cannot resolve relative entry" << rawEntry
-        << "-- collection" << context.config.name
-        << "has empty mediaDirectory and showAllSubcollectionItems is false";
+    qCDebug(lcDatabaseManager) << "resolveFilePath: cannot resolve relative entry" << rawEntry
+                               << "-- collection" << context.config.name
+                               << "has empty mediaDirectory and showAllSubcollectionItems is false";
     return {};
   }
   return QDir(mediaDir).absoluteFilePath(rawEntry);
@@ -231,8 +219,8 @@ auto DatabaseManager::resolveFilePath(const QString &rawEntry,
 
 // Resolve a relative file path by searching fileNames map and falling back
 // to collection index lookup for media directory resolution.
-auto DatabaseManager::resolveRelativeFilePath(
-    const QString &rawFileName, const QHash<QString, QString> &fileNames) const
+auto DatabaseManager::resolveRelativeFilePath(const QString &rawFileName,
+                                              const QHash<QString, QString> &fileNames) const
     -> QString {
   if (rawFileName.trimmed().isEmpty()) {
     return {};
@@ -255,8 +243,8 @@ auto DatabaseManager::resolveRelativeFilePath(
   // Compatibility fallback: preserve previous suffix-scan behavior.
   for (auto it = fileNames.constBegin(); it != fileNames.constEnd(); ++it) {
     const QString &key = it.key();
-    if (key.endsWith("/" + rawFileName) ||
-        key.endsWith(QDir::separator() + rawFileName) || key == rawFileName) {
+    if (key.endsWith("/" + rawFileName) || key.endsWith(QDir::separator() + rawFileName) ||
+        key == rawFileName) {
       return key;
     }
   }
@@ -271,16 +259,14 @@ auto DatabaseManager::resolveRelativeFilePath(
     }
   }
 
-  qCDebug(lcDatabaseManager)
-      << "resolveRelativeFilePath: failed to resolve" << rawFileName
-      << "-- not found in fileNames map (" << fileNames.size()
-      << "entries), m_relativeToFullPath cache, or collection-index lookup";
+  qCDebug(lcDatabaseManager) << "resolveRelativeFilePath: failed to resolve" << rawFileName
+                             << "-- not found in fileNames map (" << fileNames.size()
+                             << "entries), m_relativeToFullPath cache, or collection-index lookup";
   return {};
 }
 
 // Resolve artwork directory for a file using best-available mapping
-auto DatabaseManager::findArtworkDirectoryForFile(const QString &filePath) const
-    -> QString {
+auto DatabaseManager::findArtworkDirectoryForFile(const QString &filePath) const -> QString {
   QMutexLocker locker(&m_dataMutex);
   if (m_fileToArtworkDir.contains(filePath)) {
     return m_fileToArtworkDir.value(filePath);

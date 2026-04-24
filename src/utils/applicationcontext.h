@@ -2,8 +2,8 @@
 #define APPLICATIONCONTEXT_H
 
 #include "collectionutils.h"
-#include <QList>
 #include <functional>
+#include <QList>
 
 QT_BEGIN_NAMESPACE
 class QScrollArea;
@@ -131,22 +131,17 @@ struct ApplicationContext {
   InteractionStateHolder *interactionState = nullptr;
 
   // Convenience accessors with null-safety
-  [[nodiscard]] bool isValid() const {
-    return collections && currentCollectionIndex;
-  }
+  [[nodiscard]] bool isValid() const { return collections && currentCollectionIndex; }
 
   [[nodiscard]] int currentIndex() const {
     return currentCollectionIndex ? *currentCollectionIndex : -1;
   }
 
-  [[nodiscard]] bool shuttingDown() const {
-    return isShuttingDown ? *isShuttingDown : false;
-  }
+  [[nodiscard]] bool shuttingDown() const { return isShuttingDown ? *isShuttingDown : false; }
 
   // Collection validation helper
   [[nodiscard]] bool isValidCollectionIndex() const {
-    return collections && currentCollectionIndex &&
-           *currentCollectionIndex >= 0 &&
+    return collections && currentCollectionIndex && *currentCollectionIndex >= 0 &&
            *currentCollectionIndex < collections->size();
   }
 };

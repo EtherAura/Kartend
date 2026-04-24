@@ -43,9 +43,7 @@ public:
   /**
    * @brief Get saved scroll position.
    */
-  [[nodiscard]] int savedScrollPosition() const {
-    return m_savedScrollPosition;
-  }
+  [[nodiscard]] int savedScrollPosition() const { return m_savedScrollPosition; }
 
   /**
    * @brief Save current widget state before search.
@@ -74,11 +72,9 @@ public:
    * @param itemHeight Widget height
    * @return true if state was restored
    */
-  bool restoreState(QHash<int, ItemWidget *> &activeWidgets,
-                    QWidget *virtualContainer, WidgetPoolManager *widgetPool,
-                    ArtworkManager *artworkManager,
-                    std::function<QPoint(int)> getPositionFunc, int itemWidth,
-                    int itemHeight);
+  bool restoreState(QHash<int, ItemWidget *> &activeWidgets, QWidget *virtualContainer,
+                    WidgetPoolManager *widgetPool, ArtworkManager *artworkManager,
+                    std::function<QPoint(int)> getPositionFunc, int itemWidth, int itemHeight);
 
   /**
    * @brief Discard saved state without restoring.

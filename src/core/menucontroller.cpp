@@ -37,52 +37,45 @@ void MenuController::setupMenuBar() {
 }
 
 void MenuController::setupActionExit() {
-  if (!m_ctx.ui || !m_ctx.mainWindow)
-    return;
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
 
   if (m_ctx.ui->actionExit) {
-    connect(m_ctx.ui->actionExit, &QAction::triggered, m_ctx.mainWindow,
-            &QWidget::close);
+    connect(m_ctx.ui->actionExit, &QAction::triggered, m_ctx.mainWindow, &QWidget::close);
     m_ctx.ui->actionExit->setShortcutContext(Qt::ApplicationShortcut);
     m_ctx.mainWindow->addAction(m_ctx.ui->actionExit);
   }
 }
 
 void MenuController::setupActionShowMenuBar() {
-  if (!m_ctx.ui || !m_ctx.mainWindow)
-    return;
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
 
   if (m_ctx.ui->actionShowMenuBar) {
-    connect(m_ctx.ui->actionShowMenuBar, &QAction::triggered,
-            [this](bool checked) {
-              if (m_ctx.ui->menubar) {
-                m_ctx.ui->menubar->setVisible(checked);
-              }
-            });
+    connect(m_ctx.ui->actionShowMenuBar, &QAction::triggered, [this](bool checked) {
+      if (m_ctx.ui->menubar) {
+        m_ctx.ui->menubar->setVisible(checked);
+      }
+    });
     m_ctx.ui->actionShowMenuBar->setShortcutContext(Qt::ApplicationShortcut);
     m_ctx.mainWindow->addAction(m_ctx.ui->actionShowMenuBar);
   }
 }
 
 void MenuController::setupActionShowToolbar() {
-  if (!m_ctx.ui || !m_ctx.mainWindow)
-    return;
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
 
   if (m_ctx.ui->actionShowToolbar) {
-    connect(m_ctx.ui->actionShowToolbar, &QAction::triggered,
-            [this](bool checked) {
-              if (m_ctx.ui->itemsTopBar) {
-                m_ctx.ui->itemsTopBar->setVisible(checked);
-              }
-            });
+    connect(m_ctx.ui->actionShowToolbar, &QAction::triggered, [this](bool checked) {
+      if (m_ctx.ui->itemsTopBar) {
+        m_ctx.ui->itemsTopBar->setVisible(checked);
+      }
+    });
     m_ctx.ui->actionShowToolbar->setShortcutContext(Qt::ApplicationShortcut);
     m_ctx.mainWindow->addAction(m_ctx.ui->actionShowToolbar);
   }
 }
 
 void MenuController::setupActionShowSidebar() {
-  if (!m_ctx.ui || !m_ctx.mainWindow)
-    return;
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
 
   if (m_ctx.ui->actionShowSidebar) {
     connect(m_ctx.ui->actionShowSidebar, &QAction::triggered, [this]() {
@@ -98,8 +91,7 @@ void MenuController::setupActionShowSidebar() {
 }
 
 void MenuController::setupActionSettings() {
-  if (!m_ctx.ui || !m_ctx.mainWindow)
-    return;
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
 
   if (m_ctx.ui->actionSettings) {
     connect(m_ctx.ui->actionSettings, &QAction::triggered, [this]() {
@@ -113,8 +105,7 @@ void MenuController::setupActionSettings() {
 }
 
 void MenuController::setupActionAbout() {
-  if (!m_ctx.ui)
-    return;
+  if (!m_ctx.ui) return;
 
   if (m_ctx.ui->actionAbout) {
     connect(m_ctx.ui->actionAbout, &QAction::triggered, [this]() {
@@ -126,18 +117,15 @@ void MenuController::setupActionAbout() {
 }
 
 void MenuController::setupActionAboutQt() {
-  if (!m_ctx.ui)
-    return;
+  if (!m_ctx.ui) return;
 
   if (m_ctx.ui->actionAboutQt) {
-    connect(m_ctx.ui->actionAboutQt, &QAction::triggered, qApp,
-            &QApplication::aboutQt);
+    connect(m_ctx.ui->actionAboutQt, &QAction::triggered, qApp, &QApplication::aboutQt);
   }
 }
 
 void MenuController::setupActionRefresh() {
-  if (!m_ctx.ui || !m_ctx.mainWindow)
-    return;
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
 
   // Hard refresh (Ctrl+F5) - rescan the database
   if (m_ctx.ui->actionRefresh) {
@@ -169,8 +157,7 @@ void MenuController::setupActionRefresh() {
 }
 
 void MenuController::setupSortActions() {
-  if (!m_ctx.ui)
-    return;
+  if (!m_ctx.ui) return;
 
   // Create action group for mutually exclusive sort options
   m_sortActionGroup = new QActionGroup(this);
@@ -187,56 +174,53 @@ void MenuController::setupSortActions() {
 
   if (m_ctx.ui->actionSortNameAsc) {
     m_sortActionGroup->addAction(m_ctx.ui->actionSortNameAsc);
-    connect(m_ctx.ui->actionSortNameAsc, &QAction::triggered,
-            [this, reloadIfNeeded]() {
-              if (m_ctx.getGeneralSettings) {
-                if (auto *settings = m_ctx.getGeneralSettings()) {
-                  settings->sortMode = SortMode::NameAscending;
-                  if (m_ctx.getSettingsManager) {
-                    if (auto *mgr = m_ctx.getSettingsManager()) {
-                      mgr->saveGeneralSettings(*settings);
-                    }
-                  }
-                  reloadIfNeeded();
-                }
-              }
-            });
+    connect(m_ctx.ui->actionSortNameAsc, &QAction::triggered, [this, reloadIfNeeded]() {
+      if (m_ctx.getGeneralSettings) {
+        if (auto *settings = m_ctx.getGeneralSettings()) {
+          settings->sortMode = SortMode::NameAscending;
+          if (m_ctx.getSettingsManager) {
+            if (auto *mgr = m_ctx.getSettingsManager()) {
+              mgr->saveGeneralSettings(*settings);
+            }
+          }
+          reloadIfNeeded();
+        }
+      }
+    });
   }
 
   if (m_ctx.ui->actionSortNameDesc) {
     m_sortActionGroup->addAction(m_ctx.ui->actionSortNameDesc);
-    connect(m_ctx.ui->actionSortNameDesc, &QAction::triggered,
-            [this, reloadIfNeeded]() {
-              if (m_ctx.getGeneralSettings) {
-                if (auto *settings = m_ctx.getGeneralSettings()) {
-                  settings->sortMode = SortMode::NameDescending;
-                  if (m_ctx.getSettingsManager) {
-                    if (auto *mgr = m_ctx.getSettingsManager()) {
-                      mgr->saveGeneralSettings(*settings);
-                    }
-                  }
-                  reloadIfNeeded();
-                }
-              }
-            });
+    connect(m_ctx.ui->actionSortNameDesc, &QAction::triggered, [this, reloadIfNeeded]() {
+      if (m_ctx.getGeneralSettings) {
+        if (auto *settings = m_ctx.getGeneralSettings()) {
+          settings->sortMode = SortMode::NameDescending;
+          if (m_ctx.getSettingsManager) {
+            if (auto *mgr = m_ctx.getSettingsManager()) {
+              mgr->saveGeneralSettings(*settings);
+            }
+          }
+          reloadIfNeeded();
+        }
+      }
+    });
   }
 
   if (m_ctx.ui->actionSortRandom) {
     m_sortActionGroup->addAction(m_ctx.ui->actionSortRandom);
-    connect(m_ctx.ui->actionSortRandom, &QAction::triggered,
-            [this, reloadIfNeeded]() {
-              if (m_ctx.getGeneralSettings) {
-                if (auto *settings = m_ctx.getGeneralSettings()) {
-                  settings->sortMode = SortMode::Random;
-                  if (m_ctx.getSettingsManager) {
-                    if (auto *mgr = m_ctx.getSettingsManager()) {
-                      mgr->saveGeneralSettings(*settings);
-                    }
-                  }
-                  reloadIfNeeded();
-                }
-              }
-            });
+    connect(m_ctx.ui->actionSortRandom, &QAction::triggered, [this, reloadIfNeeded]() {
+      if (m_ctx.getGeneralSettings) {
+        if (auto *settings = m_ctx.getGeneralSettings()) {
+          settings->sortMode = SortMode::Random;
+          if (m_ctx.getSettingsManager) {
+            if (auto *mgr = m_ctx.getSettingsManager()) {
+              mgr->saveGeneralSettings(*settings);
+            }
+          }
+          reloadIfNeeded();
+        }
+      }
+    });
   }
 
   // Exclude subfolders option (not part of action group - it's a toggle)
@@ -262,21 +246,17 @@ void MenuController::setupSortActions() {
 }
 
 void MenuController::syncSortActions() {
-  if (!m_ctx.ui || !m_ctx.getGeneralSettings)
-    return;
+  if (!m_ctx.ui || !m_ctx.getGeneralSettings) return;
 
   auto *settings = m_ctx.getGeneralSettings();
-  if (!settings)
-    return;
+  if (!settings) return;
 
   switch (settings->sortMode) {
   case SortMode::NameAscending:
-    if (m_ctx.ui->actionSortNameAsc)
-      m_ctx.ui->actionSortNameAsc->setChecked(true);
+    if (m_ctx.ui->actionSortNameAsc) m_ctx.ui->actionSortNameAsc->setChecked(true);
     break;
   case SortMode::NameDescending:
-    if (m_ctx.ui->actionSortNameDesc)
-      m_ctx.ui->actionSortNameDesc->setChecked(true);
+    if (m_ctx.ui->actionSortNameDesc) m_ctx.ui->actionSortNameDesc->setChecked(true);
     break;
   case SortMode::ArtworkFirst:
   case SortMode::ArtworkLast:
@@ -285,19 +265,16 @@ void MenuController::syncSortActions() {
     // These sort modes are list-view only, no menu action to check
     break;
   case SortMode::Random:
-    if (m_ctx.ui->actionSortRandom)
-      m_ctx.ui->actionSortRandom->setChecked(true);
+    if (m_ctx.ui->actionSortRandom) m_ctx.ui->actionSortRandom->setChecked(true);
     break;
   }
   if (m_ctx.ui->actionSortSubfolders) {
-    m_ctx.ui->actionSortSubfolders->setChecked(
-        settings->excludeSubfoldersFromSort);
+    m_ctx.ui->actionSortSubfolders->setChecked(settings->excludeSubfoldersFromSort);
   }
 }
 
 void MenuController::setupFullscreenAction() {
-  if (!m_ctx.mainWindow)
-    return;
+  if (!m_ctx.mainWindow) return;
 
   m_fullscreenAction = new QAction(tr("Fullscreen"), this);
   m_fullscreenAction->setCheckable(true);
@@ -326,8 +303,7 @@ void MenuController::setupFullscreenAction() {
 }
 
 void MenuController::insertFullscreenInViewMenu(QAction *fullscreenAction) {
-  if (!m_ctx.ui || !m_ctx.ui->menuView)
-    return;
+  if (!m_ctx.ui || !m_ctx.ui->menuView) return;
 
   QList<QAction *> acts = m_ctx.ui->menuView->actions();
   QAction *insertBefore = nullptr;
@@ -345,8 +321,7 @@ void MenuController::insertFullscreenInViewMenu(QAction *fullscreenAction) {
 }
 
 void MenuController::setupShortcutsAction() {
-  if (!m_ctx.mainWindow)
-    return;
+  if (!m_ctx.mainWindow) return;
 
   m_shortcutsAction = new QAction(tr("Keyboard Shortcuts"), this);
   m_shortcutsAction->setShortcut(QKeySequence(Qt::Key_F1));
@@ -365,8 +340,7 @@ void MenuController::setupShortcutsAction() {
 }
 
 void MenuController::setupGridWidthActions() {
-  if (!m_ctx.mainWindow)
-    return;
+  if (!m_ctx.mainWindow) return;
 
   // Ctrl++ to increase grid width (more columns, smaller items)
   m_gridWidthIncreaseAction = new QAction(tr("Increase Grid Width"), this);
@@ -381,8 +355,7 @@ void MenuController::setupGridWidthActions() {
 
   // Ctrl+- to decrease grid width (fewer columns, larger items)
   m_gridWidthDecreaseAction = new QAction(tr("Decrease Grid Width"), this);
-  m_gridWidthDecreaseAction->setShortcut(
-      QKeySequence(Qt::CTRL | Qt::Key_Minus));
+  m_gridWidthDecreaseAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus));
   m_gridWidthDecreaseAction->setShortcutContext(Qt::ApplicationShortcut);
   m_ctx.mainWindow->addAction(m_gridWidthDecreaseAction);
   connect(m_gridWidthDecreaseAction, &QAction::triggered, [this]() {

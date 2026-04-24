@@ -1,6 +1,7 @@
 // Sibling TU: setup + event filter installation for InteractionManager.
 #include "interactionmanager.h"
 
+#include <algorithm>
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
@@ -14,7 +15,6 @@
 #include <QScrollBar>
 #include <QTimer>
 #include <QWheelEvent>
-#include <algorithm>
 
 #include "alphabeticnavigationhandler.h"
 #include "animationmanager.h"
@@ -47,11 +47,11 @@
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcInteractionManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcInteractionManager().isDebugEnabled()) {                             \
-      qCDebug(lcInteractionManager) << msg;                                    \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcInteractionManager().isDebugEnabled()) {                                                 \
+      qCDebug(lcInteractionManager) << msg;                                                        \
+    }                                                                                              \
   } while (0)
 
 void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
@@ -182,8 +182,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   installEventFilters();
 }
 
-void InteractionManager::setupArrowNavigationHandler(
-    const InteractionManagerSetup &setup) {
+void InteractionManager::setupArrowNavigationHandler(const InteractionManagerSetup &setup) {
   if (!m_arrowHandler) {
     return;
   }
@@ -198,33 +197,27 @@ void InteractionManager::setupArrowNavigationHandler(
   m_arrowHandler->setupReferences(arrowSetup);
 
   // Set callbacks for accessing InteractionManager state
-  m_arrowHandler->setGetCurrentSelection(
-      [this]() { return currentSelectedIndex(); });
-  m_arrowHandler->setGetCurrentGridWidth(
-      [this]() { return getCurrentGridWidth(); });
-  m_arrowHandler->setIsItemOffscreen([this](int selection, int gridWidth) {
-    return isItemOffscreen(selection, gridWidth);
-  });
+  m_arrowHandler->setGetCurrentSelection([this]() { return currentSelectedIndex(); });
+  m_arrowHandler->setGetCurrentGridWidth([this]() { return getCurrentGridWidth(); });
+  m_arrowHandler->setIsItemOffscreen(
+      [this](int selection, int gridWidth) { return isItemOffscreen(selection, gridWidth); });
 
   // Connect handler signals
-  connect(
-      m_arrowHandler.get(), &ArrowNavigationHandler::requestFullSelectionUpdate,
-      this, [this](int index) {
-        const QList<int> subs = getSubcollections(*m_currentCollectionIndex);
-        updateFilePathForSelection(index, subs);
-        selectItemByIndex(index, true);
-      });
+  connect(m_arrowHandler.get(), &ArrowNavigationHandler::requestFullSelectionUpdate, this,
+          [this](int index) {
+            const QList<int> subs = getSubcollections(*m_currentCollectionIndex);
+            updateFilePathForSelection(index, subs);
+            selectItemByIndex(index, true);
+          });
   connect(m_arrowHandler.get(), &ArrowNavigationHandler::requestRecenter, this,
           &InteractionManager::recenterCurrentSelection);
-  connect(m_arrowHandler.get(),
-          &ArrowNavigationHandler::requestMinorHorizontalSuppress, this,
+  connect(m_arrowHandler.get(), &ArrowNavigationHandler::requestMinorHorizontalSuppress, this,
           &InteractionManager::applyMinorHorizontalSuppress);
-  connect(m_arrowHandler.get(), &ArrowNavigationHandler::requestFocusItemsPage,
-          this, [this]() {
-            if (m_itemsPage) {
-              m_itemsPage->setFocus();
-            }
-          });
+  connect(m_arrowHandler.get(), &ArrowNavigationHandler::requestFocusItemsPage, this, [this]() {
+    if (m_itemsPage) {
+      m_itemsPage->setFocus();
+    }
+  });
 }
 
 void InteractionManager::setupAlphabeticNavigationHandler() {
@@ -237,8 +230,7 @@ void InteractionManager::setupAlphabeticNavigationHandler() {
 
   // Connect handler signals - scroll first, then select, since the target
   // widget may not exist until the viewport is scrolled to show it
-  connect(m_alphabeticHandler.get(),
-          &AlphabeticNavigationHandler::requestSelection, this,
+  connect(m_alphabeticHandler.get(), &AlphabeticNavigationHandler::requestSelection, this,
           [this](int index) {
             // User initiated navigation - cancel any pending automatic restore
             // to prevent it from overriding this explicit user choice

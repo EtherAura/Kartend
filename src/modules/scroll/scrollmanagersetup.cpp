@@ -1,6 +1,4 @@
 // Sibling TU: setup + grid config methods for ScrollManager.
-#include "scrollmanager.h"
-#include "loggingcategories.h"
 #include "applicationcontext.h"
 #include "arrowkeyscrollhelper.h"
 #include "artworkmanager.h"
@@ -15,9 +13,11 @@
 #include "itemwidget.h"
 #include "itemwidgetfactory.h"
 #include "listheaderwidget.h"
+#include "loggingcategories.h"
 #include "presearchstatemanager.h"
 #include "scrolldatamanager.h"
 #include "scrolleventhandler.h"
+#include "scrollmanager.h"
 #include "searchloadingoverlay.h"
 #include "selectioncoordinator.h"
 #include "selectiondisplaymanager.h"
@@ -27,6 +27,7 @@
 #include "uiconstants.h"
 #include "virtualcontainermanager.h"
 #include "widgetpoolmanager.h"
+#include <algorithm>
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
@@ -41,17 +42,16 @@
 #include <QThreadPool>
 #include <QTimer>
 #include <QWidget>
-#include <algorithm>
 
 #include <QtGlobal>
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcScrollManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcScrollManager().isDebugEnabled()) {                                  \
-      qCDebug(lcScrollManager) << msg;                                         \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcScrollManager().isDebugEnabled()) {                                                      \
+      qCDebug(lcScrollManager) << msg;                                                             \
+    }                                                                                              \
   } while (0)
 
 void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
@@ -74,10 +74,8 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
     m_selectionDisplay->setArrowKeyScrollHelper(m_arrowKeyScrollHelper.get());
     m_selectionDisplay->setInteractionState(m_state);
     m_selectionDisplay->setArrowKeyViewUpdateTimer(m_arrowKeyViewUpdateTimer);
-    m_selectionDisplay->setEnsureWidgetCallback(
-        [this](int idx) { ensureWidgetForIndex(idx); });
-    m_selectionDisplay->setItemPositionCallback(
-        [this](int idx) { return getItemPosition(idx); });
+    m_selectionDisplay->setEnsureWidgetCallback([this](int idx) { ensureWidgetForIndex(idx); });
+    m_selectionDisplay->setItemPositionCallback([this](int idx) { return getItemPosition(idx); });
     m_selectionDisplay->setTotalItemsProvider([this] { return m_totalItems; });
     m_selectionDisplay->setDestroyingProvider([this] { return m_destroying; });
   }
@@ -91,11 +89,9 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   // Configure selection coordinator with grid container and callbacks
   if (m_selectionCoordinator) {
     m_selectionCoordinator->setGridContainer(m_gridContainer);
-    m_selectionCoordinator->setPositionCallback(
-        [this](int idx) { return getItemPosition(idx); });
-    m_selectionCoordinator->setMetricsCallback([this]() {
-      return std::make_pair(m_metrics.itemWidth, m_metrics.itemHeight);
-    });
+    m_selectionCoordinator->setPositionCallback([this](int idx) { return getItemPosition(idx); });
+    m_selectionCoordinator->setMetricsCallback(
+        [this]() { return std::make_pair(m_metrics.itemWidth, m_metrics.itemHeight); });
   }
 
   // Configure scroll event handler with scroll area and idle timer
@@ -175,8 +171,7 @@ void ScrollManager::setInitialScrollIndex(int index) {
 
 // Initializes virtual scrolling and prepares virtual container; primes mappings
 // for aggregated views.
-void ScrollManager::setupVirtualScrolling(int totalCount,
-                                          const CollectionContext &context) {
+void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContext &context) {
   if ((!m_gridContainer) || (!m_mediaScrollArea)) {
     return;
   }
@@ -188,24 +183,23 @@ void ScrollManager::setupVirtualScrolling(int totalCount,
   m_context = context;
 
   qCDebug(lcSearchDiag) << QString("setupVirtualScrolling: totalCount=%1 collIndex=%2 "
-                  "mediaDir='%3' includeSubfolders=%4 showAllSubfolderItems=%5 "
-                  "suppressVirtualFolders=%6")
-              .arg(totalCount)
-              .arg(context.currentIndex)
-              .arg(context.config.mediaDirectory)
-              .arg(context.config.includeContentSubfolders)
-              .arg(context.config.showAllSubfolderItems)
-              .arg(context.suppressVirtualFolders);
+                                   "mediaDir='%3' includeSubfolders=%4 showAllSubfolderItems=%5 "
+                                   "suppressVirtualFolders=%6")
+                               .arg(totalCount)
+                               .arg(context.currentIndex)
+                               .arg(context.config.mediaDirectory)
+                               .arg(context.config.includeContentSubfolders)
+                               .arg(context.config.showAllSubfolderItems)
+                               .arg(context.suppressVirtualFolders);
 
   initializeSubcollections();
   initializeVirtualFolders();
 
   const int subcollCount = m_dataManager->subcollectionCount();
   const int vfCount = m_dataManager->virtualFolderCount();
-  qCDebug(lcSearchDiag) << 
-      QString("setupVirtualScrolling: after init subcollCount=%1 vfCount=%2")
-          .arg(subcollCount)
-          .arg(vfCount);
+  qCDebug(lcSearchDiag) << QString("setupVirtualScrolling: after init subcollCount=%1 vfCount=%2")
+                               .arg(subcollCount)
+                               .arg(vfCount);
 
   if (!m_context.filePaths.isEmpty()) {
     // Preloaded data from context - copy to data manager
@@ -214,19 +208,19 @@ void ScrollManager::setupVirtualScrolling(int totalCount,
     // Apply unified sorting if enabled (sorts subcollections, folders, and
     // files together)
     m_dataManager->applyUnifiedSort(m_context, m_collections);
-    qCDebug(lcSearchDiag) << QString("setupVirtualScrolling: preloaded filePaths=%1")
-                .arg(m_context.filePaths.size());
+    qCDebug(lcSearchDiag)
+        << QString("setupVirtualScrolling: preloaded filePaths=%1").arg(m_context.filePaths.size());
   } else {
     // On-demand loading - initialize storage with placeholder count
     // totalCount includes subcollections + virtualFolders + mediaItems
     // Storage should only hold mediaItems
     int itemCount = totalCount - subcollCount - vfCount;
     qCDebug(lcSearchDiag) << QString("setupVirtualScrolling: on-demand itemCount=%1 "
-                    "(totalCount=%2 - subcoll=%3 - vf=%4)")
-                .arg(itemCount)
-                .arg(totalCount)
-                .arg(subcollCount)
-                .arg(vfCount);
+                                     "(totalCount=%2 - subcoll=%3 - vf=%4)")
+                                 .arg(itemCount)
+                                 .arg(totalCount)
+                                 .arg(subcollCount)
+                                 .arg(vfCount);
     if (itemCount < 0) {
       itemCount = 0;
     }
@@ -234,8 +228,8 @@ void ScrollManager::setupVirtualScrolling(int totalCount,
   }
 
   m_totalItems = m_dataManager->totalItemCount();
-  qCDebug(lcSearchDiag) << QString("setupVirtualScrolling: final m_totalItems=%1")
-              .arg(m_totalItems);
+  qCDebug(lcSearchDiag)
+      << QString("setupVirtualScrolling: final m_totalItems=%1").arg(m_totalItems);
 
   if (m_totalItems == 0) {
     setupEmptyVirtualScrolling();
@@ -246,11 +240,7 @@ void ScrollManager::setupVirtualScrolling(int totalCount,
 
   // If we have a pending selection restore, query the database now that
   // the context and data are set up
-  if (!m_pendingRestoreFilePath.isEmpty() && m_databaseManager &&
-      m_collections) {
-    m_databaseManager->fetchVisualIndexForPath(m_context, *m_collections,
-                                               m_pendingRestoreFilePath);
+  if (!m_pendingRestoreFilePath.isEmpty() && m_databaseManager && m_collections) {
+    m_databaseManager->fetchVisualIndexForPath(m_context, *m_collections, m_pendingRestoreFilePath);
   }
 }
-
-

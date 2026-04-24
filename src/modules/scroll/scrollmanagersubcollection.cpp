@@ -1,25 +1,23 @@
 // Subcollection-context + filter cluster split out from scrollmanager.cpp.
-#include "scrollmanager.h"
 #include "datasourcemanager.h"
 #include "filtermanager.h"
 #include "itemwidget.h"
 #include "itemwidgetfactory.h"
 #include "presearchstatemanager.h"
 #include "scrolldatamanager.h"
+#include "scrollmanager.h"
 
 #include <QScrollArea>
 #include <QScrollBar>
 
 void ScrollManager::updateContextForSubcollection(int subcollectionIndex) {
-  if ((!m_collections) || subcollectionIndex < 0 ||
-      subcollectionIndex >= m_collections->size()) {
+  if ((!m_collections) || subcollectionIndex < 0 || subcollectionIndex >= m_collections->size()) {
     return;
   }
   m_context.currentIndex = subcollectionIndex;
   m_context.config = (*m_collections)[subcollectionIndex];
   // Reinitialize subcollections for the new context
-  m_dataManager->initializeSubcollections(m_context, m_collections,
-                                          m_hierarchyCache);
+  m_dataManager->initializeSubcollections(m_context, m_collections, m_hierarchyCache);
   m_totalItems = m_dataManager->totalItemCount();
   calculateVirtualMetrics();
   // Update factory metrics after calculation - critical for list mode where
@@ -36,12 +34,10 @@ void ScrollManager::updateContextForSubcollection(int subcollectionIndex) {
  * subcollection (and its descendants) */
 // Applies filtering to show only items belonging to specified subcollection
 void ScrollManager::applySubcollectionFilter(int subcollectionIndex) {
-  if ((!m_collections) || subcollectionIndex < 0 ||
-      subcollectionIndex >= m_collections->size()) {
+  if ((!m_collections) || subcollectionIndex < 0 || subcollectionIndex >= m_collections->size()) {
     return;
   }
-  if (m_dataManager->filePaths().isEmpty() &&
-      m_dataManager->subcollections().isEmpty()) {
+  if (m_dataManager->filePaths().isEmpty() && m_dataManager->subcollections().isEmpty()) {
     return;
   }
 
@@ -54,9 +50,9 @@ void ScrollManager::applySubcollectionFilter(int subcollectionIndex) {
   }
 
   // Update FilterManager's source data and apply subcollection filter
-  m_filterManager->setSourceData(
-      m_dataManager->filePaths(), m_dataManager->fileNames(),
-      m_dataManager->filePathToDisplayName(), m_dataManager->subcollections());
+  m_filterManager->setSourceData(m_dataManager->filePaths(), m_dataManager->fileNames(),
+                                 m_dataManager->filePathToDisplayName(),
+                                 m_dataManager->subcollections());
   m_filterManager->setContext(m_context);
   m_filterManager->applySubcollectionFilter(subcollectionIndex);
 
@@ -65,8 +61,7 @@ void ScrollManager::applySubcollectionFilter(int subcollectionIndex) {
 
 void ScrollManager::rebuildFilteredView() {
   m_totalItems = m_filterManager ? m_filterManager->filteredCount()
-                                 : m_dataManager->subcollectionCount() +
-                                       m_dataManager->fileCount();
+                                 : m_dataManager->subcollectionCount() + m_dataManager->fileCount();
   calculateVirtualMetrics();
   positionVirtualContainer();
 
@@ -86,4 +81,3 @@ void ScrollManager::rebuildFilteredView() {
   updateVirtualView();
   enforceScrollContentConstraints();
 }
-

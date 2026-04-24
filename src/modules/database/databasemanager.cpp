@@ -1,5 +1,6 @@
 // Coordinates SQLite database access via worker thread for collection metadata
 // queries.
+#include <functional>
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
@@ -7,17 +8,16 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
+#include <QtGlobal>
 #include <QThread>
 #include <QTimer>
-#include <QtGlobal>
-#include <functional>
 #include <stdexcept>
 
-#include "loggingcategories.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "dbmigrations.h"
 #include "errorutils.h"
+#include "loggingcategories.h"
 #include "pathutils.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
@@ -31,8 +31,7 @@ using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
 // Construct the database manager and initialize the database
-DatabaseManager::DatabaseManager(SessionManager *sessionManager,
-                                 QObject *parent)
+DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent)
     : QObject(parent), m_sessionManager(sessionManager),
       m_connectionName(QStringLiteral("kartend_main")) {
   qRegisterMetaType<CollectionConfig>("CollectionConfig");
@@ -47,8 +46,7 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager,
   // ~QThread qFatals when destroyed while running. The destructor handles
   // bounded shutdown explicitly.
   m_workerThread = new QThread();
-  m_worker = new QueryManager(m_sessionManager,
-                              QStringLiteral("kartend_query_worker"));
+  m_worker = new QueryManager(m_sessionManager, QStringLiteral("kartend_query_worker"));
   m_worker->moveToThread(m_workerThread);
 
   connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
@@ -56,22 +54,18 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager,
   // Dedicated scan worker (separate thread + separate DB connection) so
   // long scans don't block query operations and UI updates.
   m_scanThread = new QThread();
-  m_scanWorker =
-      new QueryManager(m_sessionManager, QStringLiteral("kartend_scan_worker"));
+  m_scanWorker = new QueryManager(m_sessionManager, QStringLiteral("kartend_scan_worker"));
   m_scanWorker->moveToThread(m_scanThread);
-  connect(m_scanThread, &QThread::finished, m_scanWorker,
-          &QObject::deleteLater);
+  connect(m_scanThread, &QThread::finished, m_scanWorker, &QObject::deleteLater);
 
   connect(this, &DatabaseManager::requestLoadAllCollections, m_worker,
           &QueryManager::loadAllCollections);
-  connect(this, &DatabaseManager::requestLoadItems, m_worker,
-          &QueryManager::loadItems);
+  connect(this, &DatabaseManager::requestLoadItems, m_worker, &QueryManager::loadItems);
   connect(this, &DatabaseManager::requestLoadItemsWithSubcollections, m_worker,
           &QueryManager::loadItemsWithSubcollections);
   connect(this, &DatabaseManager::requestFetchItemCount, m_worker,
           &QueryManager::fetchItemCountWithToken);
-  connect(this, &DatabaseManager::requestFetchItemsRange, m_worker,
-          &QueryManager::fetchItemsRange);
+  connect(this, &DatabaseManager::requestFetchItemsRange, m_worker, &QueryManager::fetchItemsRange);
   connect(this, &DatabaseManager::requestFetchVisualIndexForPath, m_worker,
           &QueryManager::fetchVisualIndexForPath);
   connect(this, &DatabaseManager::requestInvalidateCache, m_worker,
@@ -87,8 +81,7 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager,
   connect(this, &DatabaseManager::requestEnsureItemsFtsReady, m_scanWorker,
           &QueryManager::ensureItemsFtsReady);
 
-  connect(m_worker, &QueryManager::itemsLoaded, this,
-          &DatabaseManager::onWorkerItemsLoaded);
+  connect(m_worker, &QueryManager::itemsLoaded, this, &DatabaseManager::onWorkerItemsLoaded);
   connect(m_worker, &QueryManager::itemCountLoaded, this,
           &DatabaseManager::onWorkerItemCountLoaded);
   connect(m_worker, &QueryManager::itemCountLoadedWithToken, this,
@@ -99,18 +92,13 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager,
           &DatabaseManager::visualIndexForPathLoaded);
   connect(m_worker, &QueryManager::cachedCountsComputed, this,
           &DatabaseManager::onWorkerCachedCountsComputed);
-  connect(m_worker, &QueryManager::errorOccurred, this,
-          &DatabaseManager::errorOccurred);
+  connect(m_worker, &QueryManager::errorOccurred, this, &DatabaseManager::errorOccurred);
   // Query worker should remain responsive; scan signals come from scan worker.
-  connect(m_worker, &QueryManager::cacheInvalidated, this,
-          &DatabaseManager::cacheInvalidated);
+  connect(m_worker, &QueryManager::cacheInvalidated, this, &DatabaseManager::cacheInvalidated);
 
-  connect(m_scanWorker, &QueryManager::errorOccurred, this,
-          &DatabaseManager::errorOccurred);
-  connect(m_scanWorker, &QueryManager::scanProgress, this,
-          &DatabaseManager::scanProgress);
-  connect(m_scanWorker, &QueryManager::scanStarting, this,
-          &DatabaseManager::scanStarting);
+  connect(m_scanWorker, &QueryManager::errorOccurred, this, &DatabaseManager::errorOccurred);
+  connect(m_scanWorker, &QueryManager::scanProgress, this, &DatabaseManager::scanProgress);
+  connect(m_scanWorker, &QueryManager::scanStarting, this, &DatabaseManager::scanStarting);
   connect(m_scanWorker, &QueryManager::scanItemsProgress, this,
           &DatabaseManager::scanItemsProgress);
   connect(m_scanWorker, &QueryManager::collectionScanCompleted, this,
@@ -182,8 +170,7 @@ void DatabaseManager::initDatabase() {
   }
 
   m_db = QSqlDatabase::addDatabase("QSQLITE", m_connectionName);
-  QString dbPath =
-      QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+  QString dbPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
   if (!QDir().mkpath(dbPath)) {
     auto err = ErrorContext::critical(ErrorCode::DatabaseConnectionFailed,
                                       "Failed to create database directory",
@@ -196,8 +183,7 @@ void DatabaseManager::initDatabase() {
 
   if (!m_db.open()) {
     auto err = ErrorContext::critical(ErrorCode::DatabaseConnectionFailed,
-                                      "Failed to open database",
-                                      "DatabaseManager::initDatabase")
+                                      "Failed to open database", "DatabaseManager::initDatabase")
                    .withDetails(m_db.lastError().text());
     ErrorUtils::logError(err);
     return;
@@ -205,25 +191,23 @@ void DatabaseManager::initDatabase() {
 
   QSqlQuery query(m_db);
   if (!query.exec("PRAGMA foreign_keys = ON")) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to enable foreign keys",
-                                     "DatabaseManager::initDatabase")
-                   .withDetails(query.lastError().text());
+    auto err =
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to enable foreign keys",
+                              "DatabaseManager::initDatabase")
+            .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
   }
   if (!query.exec("PRAGMA journal_mode = WAL")) {
-    auto err = ErrorContext::warning(
-                   ErrorCode::DatabaseQueryFailed,
-                   "Failed to enable WAL mode, falling back to DELETE mode",
-                   "DatabaseManager::initDatabase")
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to enable WAL mode, falling back to DELETE mode",
+                                     "DatabaseManager::initDatabase")
                    .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
     // Fall back to DELETE journal mode for safer operation on systems
     // that don't support WAL (e.g., network filesystems, older SQLite)
     if (!query.exec("PRAGMA journal_mode = DELETE")) {
       auto fallbackErr =
-          ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                "Failed to set DELETE journal mode",
+          ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to set DELETE journal mode",
                                 "DatabaseManager::initDatabase")
               .withDetails(query.lastError().text());
       ErrorUtils::logError(fallbackErr);
@@ -232,11 +216,9 @@ void DatabaseManager::initDatabase() {
   // Set busy timeout to wait up to 30 seconds for locks to be released -
   // prevents "database is locked" errors during concurrent access
   const QString busyTimeoutPragma =
-      QStringLiteral("PRAGMA busy_timeout = %1")
-          .arg(UIConstants::Database::MAIN_BUSY_TIMEOUT_MS);
+      QStringLiteral("PRAGMA busy_timeout = %1").arg(UIConstants::Database::MAIN_BUSY_TIMEOUT_MS);
   if (!query.exec(busyTimeoutPragma)) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to set busy timeout",
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to set busy timeout",
                                      "DatabaseManager::initDatabase")
                    .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
@@ -250,43 +232,40 @@ void DatabaseManager::initDatabase() {
                              "uuid TEXT DEFAULT ''"
                              ")";
   if (!query.exec(collectionsTable)) {
-    auto err = ErrorContext::critical(ErrorCode::DatabaseQueryFailed,
-                                      "Failed to create collections table",
-                                      "DatabaseManager::initDatabase")
-                   .withDetails(query.lastError().text());
+    auto err =
+        ErrorContext::critical(ErrorCode::DatabaseQueryFailed, "Failed to create collections table",
+                               "DatabaseManager::initDatabase")
+            .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
   }
 
-  QString itemsTable =
-      "CREATE TABLE IF NOT EXISTS items ("
-      "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-      "collection_id INTEGER NOT NULL, "
-      "path TEXT NOT NULL, "
-      "name TEXT NOT NULL, "
-      "artwork_path TEXT, "
-      "last_modified TEXT NOT NULL, "
-      "play_count INTEGER DEFAULT 0, "
-      "last_played TEXT, "
-      "rating INTEGER DEFAULT 0, "
-      "collection_uuid TEXT DEFAULT '', "
-      "UNIQUE(collection_id, path), "
-      "FOREIGN KEY(collection_id) REFERENCES collections(id) ON DELETE CASCADE"
-      ")";
+  QString itemsTable = "CREATE TABLE IF NOT EXISTS items ("
+                       "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                       "collection_id INTEGER NOT NULL, "
+                       "path TEXT NOT NULL, "
+                       "name TEXT NOT NULL, "
+                       "artwork_path TEXT, "
+                       "last_modified TEXT NOT NULL, "
+                       "play_count INTEGER DEFAULT 0, "
+                       "last_played TEXT, "
+                       "rating INTEGER DEFAULT 0, "
+                       "collection_uuid TEXT DEFAULT '', "
+                       "UNIQUE(collection_id, path), "
+                       "FOREIGN KEY(collection_id) REFERENCES collections(id) ON DELETE CASCADE"
+                       ")";
   if (!query.exec(itemsTable)) {
-    auto err = ErrorContext::critical(ErrorCode::DatabaseQueryFailed,
-                                      "Failed to create items table",
-                                      "DatabaseManager::initDatabase")
-                   .withDetails(query.lastError().text());
+    auto err =
+        ErrorContext::critical(ErrorCode::DatabaseQueryFailed, "Failed to create items table",
+                               "DatabaseManager::initDatabase")
+            .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
   }
 
   // Ensure any schema upgrades are applied after core tables exist.
-  DbMigrations::applySchemaMigrations(
-      m_db, QStringLiteral("DatabaseManager::initDatabase"));
+  DbMigrations::applySchemaMigrations(m_db, QStringLiteral("DatabaseManager::initDatabase"));
 
   QSqlQuery idx(m_db);
-  idx.prepare(
-      "CREATE INDEX IF NOT EXISTS idx_collections_uuid ON collections(uuid)");
+  idx.prepare("CREATE INDEX IF NOT EXISTS idx_collections_uuid ON collections(uuid)");
   idx.exec();
 
   idx.prepare("CREATE INDEX IF NOT EXISTS idx_items_collection_uuid ON "
@@ -320,14 +299,12 @@ void DatabaseManager::initDatabase() {
   idx.exec();
 }
 
-void DatabaseManager::loadAllCollections(
-    const QList<CollectionConfig> &allCollections) {
+void DatabaseManager::loadAllCollections(const QList<CollectionConfig> &allCollections) {
   emit requestLoadAllCollections(allCollections);
 }
 
-void DatabaseManager::loadItemsWithSubcollections(
-    const CollectionContext &context,
-    const QList<CollectionConfig> &allCollections) {
+void DatabaseManager::loadItemsWithSubcollections(const CollectionContext &context,
+                                                  const QList<CollectionConfig> &allCollections) {
   emit requestLoadItemsWithSubcollections(context, allCollections);
 }
 
@@ -336,13 +313,12 @@ void DatabaseManager::loadItems(const CollectionContext &context,
   emit requestLoadItems(context, allCollections);
 }
 
-void DatabaseManager::fetchItemCount(
-    const CollectionContext &context,
-    const QList<CollectionConfig> &allCollections, const QString &filter,
-    int requestToken) {
-    qCDebug(lcSearchDiag) << "[DatabaseManager] fetchItemCount: collIndex="
-               << context.currentIndex << "filter='" << filter << "'"
-               << "token=" << requestToken;
+void DatabaseManager::fetchItemCount(const CollectionContext &context,
+                                     const QList<CollectionConfig> &allCollections,
+                                     const QString &filter, int requestToken) {
+  qCDebug(lcSearchDiag) << "[DatabaseManager] fetchItemCount: collIndex=" << context.currentIndex
+                        << "filter='" << filter << "'"
+                        << "token=" << requestToken;
   // Kick off a background scan if needed, but don't block count queries.
   // IMPORTANT: Avoid scheduling scans for every search keystroke.
   // Scans can be expensive and their completion triggers count refreshes that
@@ -354,19 +330,17 @@ void DatabaseManager::fetchItemCount(
   emit requestFetchItemCount(context, allCollections, filter, requestToken);
 }
 
-void DatabaseManager::fetchItemsRange(
-    const CollectionContext &context,
-    const QList<CollectionConfig> &allCollections, int offset, int limit,
-    const QString &filter) {
-    qCDebug(lcSearchDiag) << "[DatabaseManager] fetchItemsRange: collIndex="
-               << context.currentIndex << "offset=" << offset
-               << "limit=" << limit << "filter='" << filter << "'";
+void DatabaseManager::fetchItemsRange(const CollectionContext &context,
+                                      const QList<CollectionConfig> &allCollections, int offset,
+                                      int limit, const QString &filter) {
+  qCDebug(lcSearchDiag) << "[DatabaseManager] fetchItemsRange: collIndex=" << context.currentIndex
+                        << "offset=" << offset << "limit=" << limit << "filter='" << filter << "'";
   emit requestFetchItemsRange(context, allCollections, offset, limit, filter);
 }
 
-void DatabaseManager::fetchVisualIndexForPath(
-    const CollectionContext &context,
-    const QList<CollectionConfig> &allCollections, const QString &filePath) {
+void DatabaseManager::fetchVisualIndexForPath(const CollectionContext &context,
+                                              const QList<CollectionConfig> &allCollections,
+                                              const QString &filePath) {
   emit requestFetchVisualIndexForPath(context, allCollections, filePath);
 }
 
@@ -376,17 +350,15 @@ void DatabaseManager::invalidateCollectionCache(const QString &collectionUuid) {
 
 // Clear a collection's data by uuid (main thread - only used for legacy sync
 // operations)
-void DatabaseManager::clearCollectionFromDatabaseByUuid(
-    const QString &collectionUuid) {
+void DatabaseManager::clearCollectionFromDatabaseByUuid(const QString &collectionUuid) {
   if (!m_db.isOpen()) {
     return;
   }
 
   if (!m_db.transaction()) {
-    auto err = ErrorContext::critical(
-                   ErrorCode::DatabaseTransactionFailed,
-                   "Failed to start database transaction",
-                   "DatabaseManager::clearCollectionFromDatabaseByUuid")
+    auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                      "Failed to start database transaction",
+                                      "DatabaseManager::clearCollectionFromDatabaseByUuid")
                    .withDetails(m_db.lastError().text());
     ErrorUtils::logError(err);
     return;
@@ -412,24 +384,21 @@ void DatabaseManager::clearCollectionFromDatabaseByUuid(
     }
   } catch (const std::exception &e) {
     m_db.rollback();
-    auto err = ErrorContext::critical(
-                   ErrorCode::DatabaseTransactionFailed,
-                   "Failed to clear collection from database",
-                   "DatabaseManager::clearCollectionFromDatabaseByUuid")
+    auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                      "Failed to clear collection from database",
+                                      "DatabaseManager::clearCollectionFromDatabaseByUuid")
                    .withDetails(QString::fromStdString(e.what()));
     ErrorUtils::logError(err);
   }
 }
 
 // Count items in a single collection by uuid
-auto DatabaseManager::countCollectionByUuid(const QString &collectionUuid) const
-    -> qint64 {
+auto DatabaseManager::countCollectionByUuid(const QString &collectionUuid) const -> qint64 {
   if (!m_db.isOpen()) {
     return 0;
   }
   QSqlQuery countQuery(m_db);
-  countQuery.prepare(
-      "SELECT COUNT(DISTINCT path) FROM items WHERE collection_uuid=?");
+  countQuery.prepare("SELECT COUNT(DISTINCT path) FROM items WHERE collection_uuid=?");
   countQuery.addBindValue(collectionUuid);
   if (!countQuery.exec() || !countQuery.next()) {
     return 0;

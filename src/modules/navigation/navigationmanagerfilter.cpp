@@ -2,22 +2,22 @@
 // Extracted from navigationmanager.cpp during LOC-reduction refactor.
 // These remain NavigationManager members; this is a translation-unit split.
 #include "artworkmanager.h"
-#include "loggingcategories.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "interactionmanager.h"
 #include "loadingoverlay.h"
+#include "loggingcategories.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 
+#include <algorithm>
 #include <QObject>
 #include <QString>
-#include <QTimer>
 #include <QtGlobal>
-#include <algorithm>
+#include <QTimer>
 
 #include <QLoggingCategory>
 
@@ -36,21 +36,19 @@ void NavigationManager::filterItems(const QString &searchText) {
 
   CollectionContext context = getOrBuildExpandedContext(idx);
 
-  qCDebug(lcSearchDiag) << 
-      QString(
-          "filterItems: idx=%1 query='%2' mediaDir='%3' includeSubfolders=%4 "
-          "showAllSubfolderItems=%5 currentSubfolder='%6'")
-          .arg(idx)
-          .arg(searchText)
-          .arg(context.config.mediaDirectory)
-          .arg(context.config.includeContentSubfolders)
-          .arg(context.config.showAllSubfolderItems)
-          .arg(context.config.currentSubfolder);
+  qCDebug(lcSearchDiag) << QString(
+                               "filterItems: idx=%1 query='%2' mediaDir='%3' includeSubfolders=%4 "
+                               "showAllSubfolderItems=%5 currentSubfolder='%6'")
+                               .arg(idx)
+                               .arg(searchText)
+                               .arg(context.config.mediaDirectory)
+                               .arg(context.config.includeContentSubfolders)
+                               .arg(context.config.showAllSubfolderItems)
+                               .arg(context.config.currentSubfolder);
   requestItemCountForContext(context, searchText);
 }
 
-void NavigationManager::filterItemsCurrentAndSubcollections(
-    const QString &searchText) {
+void NavigationManager::filterItemsCurrentAndSubcollections(const QString &searchText) {
   if (!m_currentCollectionIndex || !m_collections) {
     return;
   }
@@ -64,10 +62,10 @@ void NavigationManager::filterItemsCurrentAndSubcollections(
   context.queryIncludeDescendants = true;
 
   qCDebug(lcSearchDiag) << QString("filterItemsCurrentAndSubcollections: idx=%1 query='%2' "
-                  "includeDesc=%3")
-              .arg(idx)
-              .arg(searchText)
-              .arg(context.queryIncludeDescendants);
+                                   "includeDesc=%3")
+                               .arg(idx)
+                               .arg(searchText)
+                               .arg(context.queryIncludeDescendants);
   requestItemCountForContext(context, searchText);
 }
 
@@ -88,15 +86,14 @@ void NavigationManager::filterItemsAllCollections(const QString &searchText) {
   context.suppressVirtualFolders = true;
 
   qCDebug(lcSearchDiag) << QString("filterItemsAllCollections: idx=%1 query='%2' includeAll=%3")
-              .arg(idx)
-              .arg(searchText)
-              .arg(context.queryIncludeAllCollections);
+                               .arg(idx)
+                               .arg(searchText)
+                               .arg(context.queryIncludeAllCollections);
   requestItemCountForContext(context, searchText);
 }
 
 // Return true if any descendant of parentIndex has a non-empty mediaDirectory
-auto NavigationManager::collectionHasDescendantWithMedia(int parentIndex) const
-    -> bool {
+auto NavigationManager::collectionHasDescendantWithMedia(int parentIndex) const -> bool {
   QList<int> childCollections = getAllDescendantCollections(parentIndex);
   return std::ranges::any_of(childCollections, [this](int childIndex) {
     if (childIndex < 0 || childIndex >= (*m_collections).size()) {
@@ -121,8 +118,7 @@ void NavigationManager::forceRescanCollection(int collectionIndex) {
 
   // Clear cached items to force a fresh scan (async operation)
   const CollectionConfig &config = (*m_collections)[collectionIndex];
-  QString mediaDir =
-      SettingsUtils::expandConfigVariables(config.mediaDirectory, config.name);
+  QString mediaDir = SettingsUtils::expandConfigVariables(config.mediaDirectory, config.name);
   QString uuid = CollectionUtils::computeCollectionUuid(config.name, mediaDir);
 
   // Mark that we're rescanning so onItemCountLoaded knows to hide the overlay
@@ -135,27 +131,27 @@ void NavigationManager::forceRescanCollection(int collectionIndex) {
   }
 
   // Connect one-shot handler to proceed after cache invalidation completes
-  m_cacheInvalidatedConnection = QObject::connect(
-      m_databaseManager, &DatabaseManager::cacheInvalidated, this,
-      [this](const QString & /*invalidatedUuid*/) {
-        // Disconnect immediately to ensure one-shot behavior
-        QObject::disconnect(m_cacheInvalidatedConnection);
-        m_cacheInvalidatedConnection = {};
+  m_cacheInvalidatedConnection =
+      QObject::connect(m_databaseManager, &DatabaseManager::cacheInvalidated, this,
+                       [this](const QString & /*invalidatedUuid*/) {
+                         // Disconnect immediately to ensure one-shot behavior
+                         QObject::disconnect(m_cacheInvalidatedConnection);
+                         m_cacheInvalidatedConnection = {};
 
-        if (m_pendingRescanCollectionIndex >= 0) {
-          // Update overlay message now that scan is starting
-          if (m_loadingOverlay) {
-            m_loadingOverlay->setMessage("Rescanning collection...");
-          }
+                         if (m_pendingRescanCollectionIndex >= 0) {
+                           // Update overlay message now that scan is starting
+                           if (m_loadingOverlay) {
+                             m_loadingOverlay->setMessage("Rescanning collection...");
+                           }
 
-          int idx = m_pendingRescanCollectionIndex;
-          m_pendingRescanCollectionIndex = -1;
+                           int idx = m_pendingRescanCollectionIndex;
+                           m_pendingRescanCollectionIndex = -1;
 
-          // Now reload - ensureCollectionScanned will scan since cache is
-          // cleared
-          safeReloadCollection(idx);
-        }
-      });
+                           // Now reload - ensureCollectionScanned will scan since cache is
+                           // cleared
+                           safeReloadCollection(idx);
+                         }
+                       });
 
   // Initiate async cache invalidation
   m_databaseManager->invalidateCollectionCache(uuid);
@@ -168,14 +164,12 @@ void NavigationManager::forceRescanCollection(int collectionIndex) {
 // firing during search clear / settings apply) can cause repeated cleanup
 // calls, leaving m_totalItems at 0 and the grid empty while reloads churn.
 void NavigationManager::safeReloadCollection(int collectionIndex) {
-  if (!m_collections || collectionIndex < 0 ||
-      collectionIndex >= (*m_collections).size()) {
+  if (!m_collections || collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     return;
   }
 
   qCDebug(lcSearchDiag) << "safeReloadCollection requested idx=" << collectionIndex;
-  qCWarning(lcScanFlow) << "safeReloadCollection requested idx="
-             << collectionIndex;
+  qCWarning(lcScanFlow) << "safeReloadCollection requested idx=" << collectionIndex;
 
   if (!m_safeReloadTimer) {
     m_safeReloadTimer = new QTimer(this);
@@ -186,11 +180,10 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
       m_pendingSafeReloadCollectionIndex = -1;
 
       qCDebug(lcSearchDiag) << "safeReloadCollection firing idx=" << pendingIndex;
-      qCWarning(lcScanFlow) << "safeReloadCollection timer FIRING idx="
-                 << pendingIndex;
+      qCWarning(lcScanFlow) << "safeReloadCollection timer FIRING idx=" << pendingIndex;
 
-      if (!m_collections || !m_databaseManager || !m_currentCollectionIndex ||
-          pendingIndex < 0 || pendingIndex >= (*m_collections).size()) {
+      if (!m_collections || !m_databaseManager || !m_currentCollectionIndex || pendingIndex < 0 ||
+          pendingIndex >= (*m_collections).size()) {
         return;
       }
 
@@ -200,10 +193,9 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
       // requested but the user has navigated to a different collection.
       int reloadIndex = pendingIndex;
       if (pendingIndex != (*m_currentCollectionIndex)) {
-        qCWarning(lcScanFlow) << "safeReloadCollection: pendingIndex"
-                   << pendingIndex << "!= currentIndex"
-                   << (*m_currentCollectionIndex)
-                   << "- reloading current instead";
+        qCWarning(lcScanFlow) << "safeReloadCollection: pendingIndex" << pendingIndex
+                              << "!= currentIndex" << (*m_currentCollectionIndex)
+                              << "- reloading current instead";
         reloadIndex = (*m_currentCollectionIndex);
 
         // Validate the current collection index
@@ -215,15 +207,14 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
       CollectionContext context;
       context.currentIndex = reloadIndex;
       context.config = (*m_collections)[reloadIndex];
-      context.config.mediaDirectory = SettingsUtils::expandConfigVariables(
-          context.config.mediaDirectory, context.config.name);
+      context.config.mediaDirectory =
+          SettingsUtils::expandConfigVariables(context.config.mediaDirectory, context.config.name);
       context.config.artworkDirectory = SettingsUtils::expandConfigVariables(
           context.config.artworkDirectory, context.config.name);
       context.artworkDirectory = context.config.artworkDirectory;
       if (m_generalSettings) {
         context.sortMode = m_generalSettings->sortMode;
-        context.excludeSubfoldersFromSort =
-            m_generalSettings->excludeSubfoldersFromSort;
+        context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
       }
 
       // Reload after cleanup has settled to avoid use-after-free and
@@ -234,13 +225,11 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
       updateItemsPageTitle(reloadIndex);
 
       // Delay centering until items are loaded and layout is calculated.
-      QTimer::singleShot(
-          UIConstants::Timing::VIEWPORT_DELAY_MS, this, [this]() {
-            if (m_scrollManager && m_currentCollectionIndex && m_collections) {
-              m_scrollManager->centerHorizontalScrollbar(
-                  (*m_currentCollectionIndex), (*m_collections));
-            }
-          });
+      QTimer::singleShot(UIConstants::Timing::VIEWPORT_DELAY_MS, this, [this]() {
+        if (m_scrollManager && m_currentCollectionIndex && m_collections) {
+          m_scrollManager->centerHorizontalScrollbar((*m_currentCollectionIndex), (*m_collections));
+        }
+      });
     });
   }
 
@@ -271,7 +260,7 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
   }
 
   qCDebug(lcSearchDiag) << "safeReloadCollection scheduled (debounced) idx="
-          << m_pendingSafeReloadCollectionIndex;
+                        << m_pendingSafeReloadCollectionIndex;
 
   // Wait for cleanup to complete and coalesce repeated reload requests.
   m_safeReloadTimer->start(UIConstants::Timing::MEDIUM_DELAY_MS);

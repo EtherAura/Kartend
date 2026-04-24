@@ -45,9 +45,8 @@ public:
   void ensureVAnimCreated(QScrollBar *vScrollBar);
 
   /// Starts vertical animation with the given parameters
-  void configureAndStartVerticalAnimation(QScrollBar *vScrollBar, int curY,
-                                          int targetY, int duration,
-                                          bool clickScroll, bool clickHoldAdv);
+  void configureAndStartVerticalAnimation(QScrollBar *vScrollBar, int curY, int targetY,
+                                          int duration, bool clickScroll, bool clickHoldAdv);
 
   /// Stops active vertical animations on the scrollbar
   void stopActiveVerticalAnims(QScrollBar *verticalScrollBar);
@@ -58,21 +57,18 @@ public:
   /// If running, updates or stops animation based on click mode.
   /// Returns true if animation was handled (caller should return early).
   /// If not click-scroll mode, updates curY and distance from scrollbar.
-  [[nodiscard]] bool handleExistingVerticalAnimIfRunning(
-      QScrollBar *verticalScrollBar, int targetY, bool clickScroll,
-      bool clickHoldAdv, int &curY, int &distance);
+  [[nodiscard]] bool handleExistingVerticalAnimIfRunning(QScrollBar *verticalScrollBar, int targetY,
+                                                         bool clickScroll, bool clickHoldAdv,
+                                                         int &curY, int &distance);
 
   /// Returns the current vertical animation (may be nullptr)
-  [[nodiscard]] QPropertyAnimation *verticalAnimation() const {
-    return m_vScrollAnim;
-  }
+  [[nodiscard]] QPropertyAnimation *verticalAnimation() const { return m_vScrollAnim; }
 
   /// Sets programmatic scroll property with guarded deferred clearing
   void setProgrammaticScrollGuarded(bool enable);
 
   /// Updates virtual view and selection during vertical animation
-  void updateVirtualViewAndSelectionDuringVAnim(bool clickScroll,
-                                                bool clickHoldAdv);
+  void updateVirtualViewAndSelectionDuringVAnim(bool clickScroll, bool clickHoldAdv);
 
   // --- Horizontal Animation ---
   /// Creates horizontal animation if not already created
@@ -88,9 +84,7 @@ public:
   [[nodiscard]] bool isHorizontalAnimRunning() const;
 
   /// Returns the current horizontal animation (may be nullptr)
-  [[nodiscard]] QPropertyAnimation *horizontalAnimation() const {
-    return m_hScrollAnim;
-  }
+  [[nodiscard]] QPropertyAnimation *horizontalAnimation() const { return m_hScrollAnim; }
 
   /// Stops any arrow key scroll animation on the given scrollbar
   static void stopArrowKeyAnimationIfRunning(QScrollBar *scrollBar);
@@ -98,10 +92,8 @@ public:
   // --- Duration Calculation ---
   /// Computes animation duration based on distance, item dimensions, repeat
   /// state, and base duration
-  [[nodiscard]] static int computeVerticalCenterDuration(int distance,
-                                                         int itemHeight,
-                                                         int verticalSpacing,
-                                                         bool repeatActive,
+  [[nodiscard]] static int computeVerticalCenterDuration(int distance, int itemHeight,
+                                                         int verticalSpacing, bool repeatActive,
                                                          int durationMs = 1500);
 
   // --- Target Calculation ---
@@ -109,29 +101,24 @@ public:
   /// @param totalHeight Clamped container height for large grids
   /// @param logicalHeight True logical height (may exceed Qt limits)
   /// @param headerOffset Offset for list header (list view mode)
-  [[nodiscard]] static int
-  computeTargetYForIndex(int index, int gridWidth, int itemHeight,
-                         int verticalSpacing, int viewportHeight,
-                         int scrollbarMax, int totalHeight = 0,
-                         int logicalHeight = 0, int headerOffset = 0);
+  [[nodiscard]] static int computeTargetYForIndex(int index, int gridWidth, int itemHeight,
+                                                  int verticalSpacing, int viewportHeight,
+                                                  int scrollbarMax, int totalHeight = 0,
+                                                  int logicalHeight = 0, int headerOffset = 0);
 
   /// Computes horizontal target X for visibility
-  [[nodiscard]] static int computeHorizontalTargetX(int itemX,
-                                                    int collectionItemWidth,
-                                                    int curX, int viewportWidth,
-                                                    int margins, int scrollMax);
+  [[nodiscard]] static int computeHorizontalTargetX(int itemX, int collectionItemWidth, int curX,
+                                                    int viewportWidth, int margins, int scrollMax);
 
   /// Computes desired Y for visibility (returns true if vertical scroll needed)
-  [[nodiscard]] static int
-  computeDesiredYForVisibility(int itemY, int itemHeight, int curY,
-                               int viewportHeight, int margins,
-                               bool &needVertical);
+  [[nodiscard]] static int computeDesiredYForVisibility(int itemY, int itemHeight, int curY,
+                                                        int viewportHeight, int margins,
+                                                        bool &needVertical);
 
   // --- Ensure Visible Animation ---
   /// Starts animation for ensuring an item is visible
-  void startEnsureVisibleVAnim(QScrollBar *vScrollBar, int startVal, int endVal,
-                               int itemHeight, int verticalSpacing,
-                               bool isRepeating);
+  void startEnsureVisibleVAnim(QScrollBar *vScrollBar, int startVal, int endVal, int itemHeight,
+                               int verticalSpacing, bool isRepeating);
 
   // --- Wheel Scroll Animation ---
   /// Gets the current end value of vertical animation (for chaining wheel
@@ -139,8 +126,8 @@ public:
   [[nodiscard]] int getVerticalAnimEndValue() const;
 
   /// Starts a wheel scroll animation with custom finish callback
-  void startWheelScrollAnimation(QScrollBar *vScrollBar, int startVal,
-                                 int endVal, std::function<void()> onFinished);
+  void startWheelScrollAnimation(QScrollBar *vScrollBar, int startVal, int endVal,
+                                 std::function<void()> onFinished);
 
 signals:
   /// Emitted when vertical scroll animation finishes

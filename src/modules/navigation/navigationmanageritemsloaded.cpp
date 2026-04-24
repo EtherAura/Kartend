@@ -1,7 +1,4 @@
 // Sibling TU: collection-selected / items-loaded flow for NavigationManager.
-#include "navigationmanager.h"
-#include "loggingcategories.h"
-#include "navigationhelpers.h"
 #include "artworkmanager.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
@@ -10,7 +7,10 @@
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "loadingoverlay.h"
+#include "loggingcategories.h"
 #include "metadatasidebar.h"
+#include "navigationhelpers.h"
+#include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
@@ -22,6 +22,7 @@
 #include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
+#include <algorithm>
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
@@ -29,17 +30,16 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
-#include <QTimer>
 #include <QtGlobal>
-#include <algorithm>
+#include <QTimer>
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcNavigationManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcNavigationManager().isDebugEnabled()) {                              \
-      qCDebug(lcNavigationManager) << msg;                                     \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcNavigationManager().isDebugEnabled()) {                                                  \
+      qCDebug(lcNavigationManager) << msg;                                                         \
+    }                                                                                              \
   } while (0)
 
 void NavigationManager::onCollectionSelected(int collectionIndex) {
@@ -64,8 +64,7 @@ auto NavigationManager::cleanupExistingNoItemsWidgets() -> void {
     m_loadingLabel->setVisible(false);
   }
 
-  QList<QWidget *> existingLabels =
-      m_gridContainer->findChildren<QWidget *>("noItemsWidget");
+  QList<QWidget *> existingLabels = m_gridContainer->findChildren<QWidget *>("noItemsWidget");
   for (QWidget *widget : existingLabels) {
     widget->deleteLater();
   }
@@ -73,24 +72,18 @@ auto NavigationManager::cleanupExistingNoItemsWidgets() -> void {
 
 // Determines if content is available considering subcollections and descendant
 // media
-auto NavigationManager::determineContentAvailability(
-    const QStringList &filePaths, const QList<int> &subcollections) const
+auto NavigationManager::determineContentAvailability(const QStringList &filePaths,
+                                                     const QList<int> &subcollections) const
     -> bool {
   bool hasContent = !filePaths.isEmpty() || !subcollections.isEmpty();
 
-  if ((*m_currentCollectionIndex) >= 0 &&
-      (*m_currentCollectionIndex) < (*m_collections).size()) {
-    const CollectionConfig &collection =
-        (*m_collections)[(*m_currentCollectionIndex)];
-    if (collection.showAllSubcollectionItems && filePaths.isEmpty() &&
-        !subcollections.isEmpty()) {
-      QList<int> allDescendants =
-          getAllDescendantCollections((*m_currentCollectionIndex));
+  if ((*m_currentCollectionIndex) >= 0 && (*m_currentCollectionIndex) < (*m_collections).size()) {
+    const CollectionConfig &collection = (*m_collections)[(*m_currentCollectionIndex)];
+    if (collection.showAllSubcollectionItems && filePaths.isEmpty() && !subcollections.isEmpty()) {
+      QList<int> allDescendants = getAllDescendantCollections((*m_currentCollectionIndex));
       for (int descendantIndex : allDescendants) {
         if (descendantIndex >= 0 && descendantIndex < (*m_collections).size()) {
-          if (!(*m_collections)[descendantIndex]
-                   .mediaDirectory.trimmed()
-                   .isEmpty()) {
+          if (!(*m_collections)[descendantIndex].mediaDirectory.trimmed().isEmpty()) {
             hasContent = true;
             break;
           }
@@ -108,8 +101,7 @@ auto NavigationManager::handleEmptyContent() -> void {
     m_loadingOverlay->hide();
   }
 
-  const bool shuttingDown =
-      QApplication::closingDown() || (m_isShuttingDown && m_isShuttingDown());
+  const bool shuttingDown = QApplication::closingDown() || (m_isShuttingDown && m_isShuttingDown());
 
   if (!shuttingDown) {
     if (m_loadingLabel) {
@@ -117,8 +109,7 @@ auto NavigationManager::handleEmptyContent() -> void {
       m_loadingLabel->setVisible(true);
     }
     resumeItemsPageRendering();
-    if (m_refreshTitleCounts)
-      m_refreshTitleCounts();
+    if (m_refreshTitleCounts) m_refreshTitleCounts();
   }
   if ((parent()) && (m_interactionManager)) {
     m_interactionManager->setNavigationInProgress(false);
@@ -126,9 +117,9 @@ auto NavigationManager::handleEmptyContent() -> void {
 }
 
 // Sets up collection context for items loaded
-auto NavigationManager::setupCollectionContext(
-    const QStringList &filePaths,
-    const QHash<QString, QString> &fileNames) const -> CollectionContext {
+auto NavigationManager::setupCollectionContext(const QStringList &filePaths,
+                                               const QHash<QString, QString> &fileNames) const
+    -> CollectionContext {
   CollectionContext context;
   context.currentIndex = (*m_currentCollectionIndex);
   context.config = (*m_collections)[(*m_currentCollectionIndex)];
@@ -137,8 +128,7 @@ auto NavigationManager::setupCollectionContext(
   context.fileNames = fileNames;
   if (m_generalSettings) {
     context.sortMode = m_generalSettings->sortMode;
-    context.excludeSubfoldersFromSort =
-        m_generalSettings->excludeSubfoldersFromSort;
+    context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
   }
   if (m_allCollectionsActive) {
     context.config.showAllSubcollectionItems = true;
@@ -146,16 +136,13 @@ auto NavigationManager::setupCollectionContext(
   return context;
 }
 
-auto NavigationManager::lookupRememberedSelectionIndex(int totalItems) const
-    -> int {
+auto NavigationManager::lookupRememberedSelectionIndex(int totalItems) const -> int {
   if (!m_sessionManager || !m_collections || !m_currentCollectionIndex) {
     return -1;
   }
   return NavigationHelpers::lookupRememberedSelectionIndex(
       *m_currentCollectionIndex, *m_collections, totalItems,
-      [this](const QString &key) {
-        return m_sessionManager->getLastSelectedIndex(key);
-      });
+      [this](const QString &key) { return m_sessionManager->getLastSelectedIndex(key); });
 }
 
 // Calculates the appropriate selection index for restoration
@@ -163,25 +150,20 @@ auto NavigationManager::calculateSelectionIndex(int totalItems) const -> int {
   if (!m_collections || !m_currentCollectionIndex || !m_generalSettings) {
     return -1;
   }
-  const bool searchActive =
-      (m_searchBar && !m_searchBar->text().trimmed().isEmpty());
+  const bool searchActive = (m_searchBar && !m_searchBar->text().trimmed().isEmpty());
   return NavigationHelpers::calculateSelectionIndex(
       *m_currentCollectionIndex, *m_collections, totalItems, searchActive,
-      m_generalSettings->rememberSelection,
-      [this](const QString &key) {
-        return m_sessionManager ? m_sessionManager->getLastSelectedIndex(key)
-                                : -1;
+      m_generalSettings->rememberSelection, [this](const QString &key) {
+        return m_sessionManager ? m_sessionManager->getLastSelectedIndex(key) : -1;
       });
 }
 
 // Computes the depth of a collection in the hierarchy
-auto NavigationManager::computeCollectionDepth(int collectionIndex) const
-    -> int {
+auto NavigationManager::computeCollectionDepth(int collectionIndex) const -> int {
   if (!m_collections) {
     return 0;
   }
-  return NavigationHelpers::computeCollectionDepth(collectionIndex,
-                                                   *m_collections);
+  return NavigationHelpers::computeCollectionDepth(collectionIndex, *m_collections);
 }
 
 // Schedules post-load operations including artwork loading and navigation
@@ -208,12 +190,10 @@ auto NavigationManager::schedulePostLoadOperations() -> void {
   // the new data committed by the worker thread (SQLite WAL read visibility)
   if (wasRescan) {
     QTimer::singleShot(100, this, [this]() {
-      if (m_refreshTitleCounts)
-        m_refreshTitleCounts();
+      if (m_refreshTitleCounts) m_refreshTitleCounts();
     });
   } else {
-    if (m_refreshTitleCounts)
-      m_refreshTitleCounts();
+    if (m_refreshTitleCounts) m_refreshTitleCounts();
   }
 
   m_allCollectionsActive = false;

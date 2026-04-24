@@ -59,14 +59,11 @@ public:
   void setArtworkColumnWidth(int width);
   [[nodiscard]] bool isListMode() const { return m_isListMode; }
   [[nodiscard]] bool hasArtwork() const { return m_hasArtwork; }
-  [[nodiscard]] int collectionColumnWidth() const {
-    return m_collectionColumnWidth;
-  }
+  [[nodiscard]] int collectionColumnWidth() const { return m_collectionColumnWidth; }
   [[nodiscard]] int artworkColumnWidth() const { return m_artworkColumnWidth; }
   int m_itemWidth;
   int m_itemHeight;
-  int m_artworkSize =
-      0; // Computed artwork size for triangle indicator positioning
+  int m_artworkSize = 0;  // Computed artwork size for triangle indicator positioning
   int m_fontSize = 12;    // Default font size
   int m_cornerRadius = 0; // Corner radius for artwork clipping
   bool m_hideTitles = false;
@@ -80,9 +77,7 @@ public:
                           bool hideTitle = false);
   [[nodiscard]] bool isSubcollection() const { return m_isSubcollection; }
   [[nodiscard]] bool isVirtualFolder() const { return m_isVirtualFolder; }
-  [[nodiscard]] const QString &virtualFolderPath() const {
-    return m_virtualFolderPath;
-  }
+  [[nodiscard]] const QString &virtualFolderPath() const { return m_virtualFolderPath; }
   void applyTitleTint();
   static QColor titleTint();
   QColor m_titleTintColor; // Cached tint color for custom painting
@@ -117,8 +112,7 @@ signals:
   void subcollectionDoubleClicked(int index);
   void virtualFolderDoubleClicked(const QString &folderPath);
   // Emitted when artwork preview button is clicked in list mode
-  void artworkPreviewRequested(const QString &filePath,
-                               const QString &artworkDir);
+  void artworkPreviewRequested(const QString &filePath, const QString &artworkDir);
 
 protected:
   void paintEvent(QPaintEvent *event) override;
@@ -141,20 +135,15 @@ private:
   bool m_isSubcollection = false;
   int m_subcollectionIndex = -1;
   bool m_isVirtualFolder = false;
-  bool m_isListMode = false; // True when displaying in list view (no artwork)
-  bool m_hasArtwork = false; // True when artwork exists for this item
-  int m_rowIndex =
-      -1; // Row index for alternating background colors in list mode
-  int m_collectionColumnWidth =
-      150; // Collection column width for list mode (resizable)
-  int m_artworkColumnWidth =
-      32; // Artwork column width for list mode (resizable)
+  bool m_isListMode = false;         // True when displaying in list view (no artwork)
+  bool m_hasArtwork = false;         // True when artwork exists for this item
+  int m_rowIndex = -1;               // Row index for alternating background colors in list mode
+  int m_collectionColumnWidth = 150; // Collection column width for list mode (resizable)
+  int m_artworkColumnWidth = 32;     // Artwork column width for list mode (resizable)
   QString m_virtualFolderPath;
-  QLabel *m_collectionLabel = nullptr; // Collection name label for list mode
-  QLabel *m_folderIconLabel =
-      nullptr; // Folder icon for subcollection/virtual folder
-  QPushButton *m_artworkButton =
-      nullptr; // Artwork preview button for list mode
+  QLabel *m_collectionLabel = nullptr;    // Collection name label for list mode
+  QLabel *m_folderIconLabel = nullptr;    // Folder icon for subcollection/virtual folder
+  QPushButton *m_artworkButton = nullptr; // Artwork preview button for list mode
   void updateTriangleIndicator();
   void paintTriangleIndicator();
   [[nodiscard]] QPixmap buildPlaceholderPattern(int width, int height) const;

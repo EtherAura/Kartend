@@ -12,8 +12,7 @@
 // Per-module logging category. Defaults to warning level so config issues
 // remain visible in release logs while letting users silence with
 // QT_LOGGING_RULES="kartend.configvalidation=false".
-Q_LOGGING_CATEGORY(lcConfigValidation, "kartend.configvalidation",
-                   QtWarningMsg)
+Q_LOGGING_CATEGORY(lcConfigValidation, "kartend.configvalidation", QtWarningMsg)
 
 namespace ConfigValidation {
 
@@ -38,8 +37,7 @@ QString ValidationResult::summary() const {
   return lines.join("\n");
 }
 
-ValidationResult validateCollection(const CollectionConfig &config, int index,
-                                    bool isContainer) {
+ValidationResult validateCollection(const CollectionConfig &config, int index, bool isContainer) {
   ValidationResult result;
   QString prefix = QString("Collection '%1' (index %2): ")
                        .arg(config.name.isEmpty() ? "<unnamed>" : config.name)
@@ -64,14 +62,11 @@ ValidationResult validateCollection(const CollectionConfig &config, int index,
     }
     QFileInfo mediaInfo(expandedPath);
     if (!mediaInfo.exists()) {
-      result.addError(
-          prefix + "media directory does not exist: " + config.mediaDirectory);
+      result.addError(prefix + "media directory does not exist: " + config.mediaDirectory);
     } else if (!mediaInfo.isDir()) {
-      result.addError(
-          prefix + "media path is not a directory: " + config.mediaDirectory);
+      result.addError(prefix + "media path is not a directory: " + config.mediaDirectory);
     } else if (!mediaInfo.isReadable()) {
-      result.addError(
-          prefix + "media directory is not readable: " + config.mediaDirectory);
+      result.addError(prefix + "media directory is not readable: " + config.mediaDirectory);
     }
   }
 
@@ -83,11 +78,9 @@ ValidationResult validateCollection(const CollectionConfig &config, int index,
     }
     QFileInfo artworkInfo(expandedPath);
     if (!artworkInfo.exists()) {
-      result.addWarning(prefix + "artwork directory does not exist: " +
-                        config.artworkDirectory);
+      result.addWarning(prefix + "artwork directory does not exist: " + config.artworkDirectory);
     } else if (!artworkInfo.isDir()) {
-      result.addWarning(prefix + "artwork path is not a directory: " +
-                        config.artworkDirectory);
+      result.addWarning(prefix + "artwork path is not a directory: " + config.artworkDirectory);
     }
   }
 
@@ -107,8 +100,7 @@ ValidationResult validateCollection(const CollectionConfig &config, int index,
         if (launcherInfo.isExecutable()) {
           launcherValid = true;
         } else {
-          result.addWarning(prefix +
-                            "launcher is not executable: " + launcherPath);
+          result.addWarning(prefix + "launcher is not executable: " + launcherPath);
         }
       }
     } else {
@@ -129,21 +121,19 @@ ValidationResult validateCollection(const CollectionConfig &config, int index,
     result.addWarning(prefix + "gridWidth less than 1, will be clamped");
   }
   if (config.itemWidth < 50 || config.itemHeight < 50) {
-    result.addWarning(prefix +
-                      "very small item dimensions may cause display issues");
+    result.addWarning(prefix + "very small item dimensions may cause display issues");
   }
 
   // Parent index validation
   if (config.parentCollectionIndex < -1) {
-    result.addError(prefix + "invalid parentCollectionIndex: " +
-                    QString::number(config.parentCollectionIndex));
+    result.addError(
+        prefix + "invalid parentCollectionIndex: " + QString::number(config.parentCollectionIndex));
   }
 
   return result;
 }
 
-ValidationResult
-validateAllCollections(const QList<CollectionConfig> &collections) {
+ValidationResult validateAllCollections(const QList<CollectionConfig> &collections) {
   ValidationResult result;
 
   if (collections.isEmpty()) {
@@ -163,8 +153,7 @@ validateAllCollections(const QList<CollectionConfig> &collections) {
   // Validate each collection
   for (int i = 0; i < collections.size(); ++i) {
     bool isContainer = containerIndices.contains(i);
-    ValidationResult collResult =
-        validateCollection(collections[i], i, isContainer);
+    ValidationResult collResult = validateCollection(collections[i], i, isContainer);
     result.warnings << collResult.warnings;
     result.errors << collResult.errors;
     if (!collResult.valid) {
@@ -176,11 +165,10 @@ validateAllCollections(const QList<CollectionConfig> &collections) {
   for (int i = 0; i < collections.size(); ++i) {
     int parentIndex = collections[i].parentCollectionIndex;
     if (parentIndex >= 0 && parentIndex >= collections.size()) {
-      result.addError(
-          QString("Collection '%1' (index %2) has invalid parent index %3")
-              .arg(collections[i].name)
-              .arg(i)
-              .arg(parentIndex));
+      result.addError(QString("Collection '%1' (index %2) has invalid parent index %3")
+                          .arg(collections[i].name)
+                          .arg(i)
+                          .arg(parentIndex));
     }
     // Detect circular parent references
     if (parentIndex == i) {
@@ -193,16 +181,14 @@ validateAllCollections(const QList<CollectionConfig> &collections) {
   // Check for duplicate names at same hierarchy level
   QHash<QString, QList<int>> nameToIndices;
   for (int i = 0; i < collections.size(); ++i) {
-    QString key = QString("%1:%2")
-                      .arg(collections[i].parentCollectionIndex)
-                      .arg(collections[i].name);
+    QString key =
+        QString("%1:%2").arg(collections[i].parentCollectionIndex).arg(collections[i].name);
     nameToIndices[key].append(i);
   }
   for (auto it = nameToIndices.begin(); it != nameToIndices.end(); ++it) {
     if (it.value().size() > 1) {
-      result.addWarning(
-          QString("Duplicate collection name '%1' at same hierarchy level")
-              .arg(it.key().split(':').last()));
+      result.addWarning(QString("Duplicate collection name '%1' at same hierarchy level")
+                            .arg(it.key().split(':').last()));
     }
   }
 
@@ -215,30 +201,26 @@ validateAllCollections(const QList<CollectionConfig> &collections) {
     if (c.mediaDirectory.isEmpty()) {
       continue;
     }
-    QString uuid =
-        CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
+    QString uuid = CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
     uuidToIndices[uuid].append(i);
   }
   for (auto it = uuidToIndices.begin(); it != uuidToIndices.end(); ++it) {
     if (it.value().size() > 1) {
       QStringList collisionNames;
       for (int idx : it.value()) {
-        collisionNames
-            << QString("'%1' (index %2)").arg(collections[idx].name).arg(idx);
+        collisionNames << QString("'%1' (index %2)").arg(collections[idx].name).arg(idx);
       }
-      result.addError(
-          QString("UUID collision detected: collections %1 have identical "
-                  "name+mediaDirectory combination. This will cause data "
-                  "corruption. Please rename one of the collections.")
-              .arg(collisionNames.join(", ")));
+      result.addError(QString("UUID collision detected: collections %1 have identical "
+                              "name+mediaDirectory combination. This will cause data "
+                              "corruption. Please rename one of the collections.")
+                          .arg(collisionNames.join(", ")));
     }
   }
 
   return result;
 }
 
-void logValidationResult(const ValidationResult &result,
-                         const QString &context) {
+void logValidationResult(const ValidationResult &result, const QString &context) {
   if (!result.hasIssues()) {
     return;
   }

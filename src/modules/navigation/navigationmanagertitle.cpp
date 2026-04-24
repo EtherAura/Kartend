@@ -4,13 +4,13 @@
 //   - onItemCountLoaded (~215 LOC)
 // Both remain NavigationManager members and access existing class state.
 #include "applicationcontext.h"
-#include "loggingcategories.h"
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "loadingoverlay.h"
+#include "loggingcategories.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
 #include "searchloadingoverlay.h"
@@ -46,8 +46,7 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
 
   if (collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     titleLabel->clear();
-    if (subfolderLabel)
-      subfolderLabel->setVisible(false);
+    if (subfolderLabel) subfolderLabel->setVisible(false);
     return;
   }
 
@@ -69,24 +68,21 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
   QColor highlightColor = pal.color(QPalette::Highlight);
   int h, s, l;
   highlightColor.getHsl(&h, &s, &l);
-  QColor linkColor =
-      QColor::fromHsl(h, s / 2, 170); // Tinted, slightly saturated
+  QColor linkColor = QColor::fromHsl(h, s / 2, 170); // Tinted, slightly saturated
   QString linkColorHex = linkColor.name();
 
   // Check if we're in a subfolder - if so, make the collection name clickable
   bool inSubfolder = !config.currentSubfolder.isEmpty();
 
   if (config.isSubcollection) {
-    const QList<int> ancestors =
-        CollectionUtils::ancestorIndexChain(config, *m_collections);
+    const QList<int> ancestors = CollectionUtils::ancestorIndexChain(config, *m_collections);
     if (!ancestors.isEmpty()) {
       // Build clickable breadcrumb from root-most ancestor down to direct
       // parent. Each ancestor segment navigates back to that collection via
       // the `collection:<index>` link scheme handled in
       // onBreadcrumbLinkClicked (navigationmanagersubcollection.cpp:143).
-      const QString linkTemplate = QStringLiteral(
-          "<a href=\"collection:%1\" style=\"color:%2; "
-          "text-decoration:none;\">%3</a>");
+      const QString linkTemplate = QStringLiteral("<a href=\"collection:%1\" style=\"color:%2; "
+                                                  "text-decoration:none;\">%3</a>");
       QStringList segments;
       segments.reserve(ancestors.size() + 1);
       for (int idx : ancestors) {
@@ -172,15 +168,14 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
 }
 
 void NavigationManager::onItemCountLoaded(int count, int requestToken) {
-  qCWarning(lcScanFlow) << "onItemCountLoaded ENTRY: count=" << count
-             << "token=" << requestToken
-             << "expected=" << m_itemCountRequestToken;
+  qCWarning(lcScanFlow) << "onItemCountLoaded ENTRY: count=" << count << "token=" << requestToken
+                        << "expected=" << m_itemCountRequestToken;
   if (requestToken != m_itemCountRequestToken) {
     qCDebug(lcSearchDiag) << QString("onItemCountLoaded: ignoring stale result count=%1 "
-                    "token=%2 expected=%3")
-                .arg(count)
-                .arg(requestToken)
-                .arg(m_itemCountRequestToken);
+                                     "token=%2 expected=%3")
+                                 .arg(count)
+                                 .arg(requestToken)
+                                 .arg(m_itemCountRequestToken);
     qCWarning(lcScanFlow) << "STALE token - ignoring";
     return;
   }
@@ -193,30 +188,28 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   // Use the filter that produced this count. This prevents a mismatch where
   // count is computed with an explicit filter, but subsequent range loads use
   // a different/empty searchBar value (common during debounced search updates).
-  const QString searchText =
-      !m_itemsQueryFilter.isEmpty()
-          ? m_itemsQueryFilter
-          : ((m_searchBar) ? m_searchBar->text().trimmed() : QString());
+  const QString searchText = !m_itemsQueryFilter.isEmpty()
+                                 ? m_itemsQueryFilter
+                                 : ((m_searchBar) ? m_searchBar->text().trimmed() : QString());
   const bool searchActive = !searchText.isEmpty();
 
   qCDebug(lcSearchDiag) << QString("onItemCountLoaded: count=%1 searchActive=%2 searchText='%3' "
-                  "itemsViewGen(before)=%4 token=%5")
-              .arg(count)
-              .arg(searchActive)
-              .arg(searchText)
-              .arg(m_itemsViewGeneration)
-              .arg(requestToken);
+                                   "itemsViewGen(before)=%4 token=%5")
+                               .arg(count)
+                               .arg(searchActive)
+                               .arg(searchText)
+                               .arg(m_itemsViewGeneration)
+                               .arg(requestToken);
 
   qCWarning(lcScanFlow) << "onItemCountLoaded: count=" << count
-             << "bgRefresh=" << m_backgroundCountRefreshInProgress
-             << "bgIdx=" << m_backgroundCountRefreshCollectionIndex
-             << "curIdx=" << idx;
+                        << "bgRefresh=" << m_backgroundCountRefreshInProgress
+                        << "bgIdx=" << m_backgroundCountRefreshCollectionIndex << "curIdx=" << idx;
 
-  if (m_backgroundCountRefreshInProgress &&
-      m_backgroundCountRefreshCollectionIndex == idx && m_scrollManager) {
+  if (m_backgroundCountRefreshInProgress && m_backgroundCountRefreshCollectionIndex == idx &&
+      m_scrollManager) {
     const int currentViewItems = m_scrollManager->getTotalItems();
-    qCWarning(lcScanFlow) << "bgRefresh path: currentViewItems="
-               << currentViewItems << "count=" << count;
+    qCWarning(lcScanFlow) << "bgRefresh path: currentViewItems=" << currentViewItems
+                          << "count=" << count;
     // Background scan completed. If the view already has items and count is the
     // same or lower, just update without resetting scroll/selection state.
     // If count INCREASED (new items from scan), do a full rebuild to load them.
@@ -239,7 +232,7 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
     // View is empty OR count increased - clear the refresh flags and fall
     // through to full rebuild so the newly-scanned items are displayed.
     qCWarning(lcScanFlow) << "Count changed or view empty, falling through to "
-                  "full rebuild";
+                             "full rebuild";
     m_backgroundCountRefreshInProgress = false;
     m_backgroundCountRefreshCollectionIndex = -1;
   }
@@ -251,15 +244,14 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   ++m_itemsViewGeneration;
   m_pendingRangeGenerations.clear();
 
-  qCDebug(lcSearchDiag) << QString("onItemCountLoaded: itemsViewGen(after)=%1")
-              .arg(m_itemsViewGeneration);
+  qCDebug(lcSearchDiag)
+      << QString("onItemCountLoaded: itemsViewGen(after)=%1").arg(m_itemsViewGeneration);
 
   // Clean up existing "no items" widgets
   cleanupExistingNoItemsWidgets();
 
-  CollectionContext context = m_hasItemsQueryContext
-                                  ? m_itemsQueryContext
-                                  : buildExpandedContextForIndex(idx);
+  CollectionContext context =
+      m_hasItemsQueryContext ? m_itemsQueryContext : buildExpandedContextForIndex(idx);
 
   // Get subcollections for this view (shown as folder tiles)
   QList<int> subcollections;
@@ -284,21 +276,18 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   }
 
   // Count virtual folders (subdirectories shown as navigable tiles)
-  const bool suppressVirtualFolders =
-      context.suppressVirtualFolders || searchActive;
+  const bool suppressVirtualFolders = context.suppressVirtualFolders || searchActive;
   int virtualFolderCount =
-      suppressVirtualFolders
-          ? 0
-          : CollectionUtils::countVirtualFolders(context.config);
+      suppressVirtualFolders ? 0 : CollectionUtils::countVirtualFolders(context.config);
 
   int totalItems = subcollections.size() + virtualFolderCount + count;
 
   qCDebug(lcSearchDiag) << QString("onItemCountLoaded: subcollections=%1 virtualFolders=%2 "
-                  "dbCount=%3 totalItems=%4")
-              .arg(subcollections.size())
-              .arg(virtualFolderCount)
-              .arg(count)
-              .arg(totalItems);
+                                   "dbCount=%3 totalItems=%4")
+                               .arg(subcollections.size())
+                               .arg(virtualFolderCount)
+                               .arg(count)
+                               .arg(totalItems);
 
   // Check if collection has any content
   if (totalItems == 0) {
@@ -314,9 +303,8 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   // Update loading overlay to show item count found
   if (m_loadingOverlay && m_loadingOverlay->isActive()) {
     const QString &collectionName = (*m_collections)[idx].name;
-    m_loadingOverlay->setMessage(QString("Loading %1 (%2 items)...")
-                                     .arg(collectionName)
-                                     .arg(totalItems));
+    m_loadingOverlay->setMessage(
+        QString("Loading %1 (%2 items)...").arg(collectionName).arg(totalItems));
   }
 
   if (searchActive) {
@@ -327,8 +315,7 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
 
   // Calculate selection index for initial scroll position
   int rememberedSelIdx = -1;
-  if (!searchActive && m_generalSettings &&
-      m_generalSettings->rememberSelection) {
+  if (!searchActive && m_generalSettings && m_generalSettings->rememberSelection) {
     rememberedSelIdx = lookupRememberedSelectionIndex(totalItems);
   }
 
@@ -345,8 +332,7 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
     } else if (selIdx >= 0) {
       m_scrollManager->setInitialScrollIndex(selIdx);
     }
-    qCWarning(lcScanFlow) << "Calling setupVirtualScrolling: totalItems="
-               << totalItems;
+    qCWarning(lcScanFlow) << "Calling setupVirtualScrolling: totalItems=" << totalItems;
     m_scrollManager->setupVirtualScrolling(totalItems, context);
 
     // Hide search loading overlay once filtered results are ready
@@ -372,13 +358,10 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   }
 
   // Restore selection if needed
-  bool pendingRestore =
-      m_state ? m_state->selectionRestore().restorePending : false;
+  bool pendingRestore = m_state ? m_state->selectionRestore().restorePending : false;
   // Also skip if there's a pending path-based restore (from sort change)
-  bool pendingPathRestore =
-      m_scrollManager && m_scrollManager->hasPendingSelectionRestoreByPath();
-  if (selIdx >= 0 && m_interactionManager && !pendingRestore &&
-      !pendingPathRestore) {
+  bool pendingPathRestore = m_scrollManager && m_scrollManager->hasPendingSelectionRestoreByPath();
+  if (selIdx >= 0 && m_interactionManager && !pendingRestore && !pendingPathRestore) {
     scheduleSelectionRestore(selIdx, UIConstants::Selection::RESTORE_STEPS,
                              UIConstants::Selection::RESTORE_STEP_DELAY_MS,
                              UIConstants::Selection::RESTORE_MAX_DELAY_MS);

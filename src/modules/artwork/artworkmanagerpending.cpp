@@ -1,8 +1,8 @@
 // Sibling translation unit for ArtworkManager.
 // Extracted from artworkmanager.cpp during LOC-reduction refactor.
 // These remain ArtworkManager members; this is a translation-unit split.
-#include "artworkmanager.h"
 #include "applicationcontext.h"
+#include "artworkmanager.h"
 #include "artworkutils.h"
 #include "cachemanager.h"
 #include "collectionutils.h"
@@ -14,6 +14,8 @@
 #include "ui/widgets/itemwidget.h"
 #include "uiconstants.h"
 
+#include <algorithm>
+#include <functional>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDir>
@@ -31,12 +33,10 @@
 #include <QScrollBar>
 #include <QStackedWidget>
 #include <QStandardPaths>
+#include <QtConcurrent>
 #include <QTextStream>
 #include <QThread>
 #include <QTimer>
-#include <QtConcurrent>
-#include <algorithm>
-#include <functional>
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcArtworkManager)
@@ -45,22 +45,19 @@ Q_DECLARE_LOGGING_CATEGORY(lcArtworkManager)
 // Scales an image to fit within a square box.
 // Accounts for device pixel ratio for crisp HiDPI rendering.
 // Does NOT center on a square canvas - the caller handles centering.
-static auto scaleCenterToBox(const QImage &img, int targetSize, qreal dpr = 1.0)
-    -> QImage {
+static auto scaleCenterToBox(const QImage &img, int targetSize, qreal dpr = 1.0) -> QImage {
   if (img.isNull()) {
     return {};
   }
   // Scale to fit within actual pixel size (targetSize * dpr) for HiDPI
   // crispness
   const int actualSize = qRound(targetSize * dpr);
-  QImage scaled = img.scaled(actualSize, actualSize, Qt::KeepAspectRatio,
-                             Qt::SmoothTransformation);
+  QImage scaled = img.scaled(actualSize, actualSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
   scaled.setDevicePixelRatio(dpr);
   return scaled;
 }
 
-void ArtworkManager::addPendingArtwork(ItemWidget *widget,
-                                       const QString &artworkPath) {
+void ArtworkManager::addPendingArtwork(ItemWidget *widget, const QString &artworkPath) {
   if (!widget || artworkPath.isEmpty()) {
     return;
   }
@@ -110,8 +107,7 @@ void ArtworkManager::addPendingArtwork(ItemWidget *widget,
     const bool arrowScrolling = m_state->arrow().arrowKeyScrolling;
     const bool userScrolling = m_state->scroll().userScrollActive;
     const bool allowDuringSelection = m_state->artwork().allowDuringSelection;
-    shouldDefer = (deferAll || gliding || arrowScrolling || userScrolling) &&
-                  !allowDuringSelection;
+    shouldDefer = (deferAll || gliding || arrowScrolling || userScrolling) && !allowDuringSelection;
   }
 
   // Always check cache first - even when deferring, cached artwork should be
@@ -131,16 +127,14 @@ void ArtworkManager::addPendingArtwork(ItemWidget *widget,
 
   if (shouldDefer) {
     QMutexLocker locker(&m_dataMutex);
-    ArtworkInfo info = {.mediaItem = QPointer<ItemWidget>(widget),
-                        .artworkPath = artworkPath};
+    ArtworkInfo info = {.mediaItem = QPointer<ItemWidget>(widget), .artworkPath = artworkPath};
     pendingArtwork.append(info);
     return;
   }
 
   {
     QMutexLocker locker(&m_dataMutex);
-    ArtworkInfo info = {.mediaItem = QPointer<ItemWidget>(widget),
-                        .artworkPath = artworkPath};
+    ArtworkInfo info = {.mediaItem = QPointer<ItemWidget>(widget), .artworkPath = artworkPath};
     pendingArtwork.append(info);
   }
 
@@ -170,8 +164,7 @@ void ArtworkManager::clearPendingArtworkForWidget(ItemWidget *widget) {
 
 // Creates a centered, scaled artwork pixmap from an input pixmap
 // Uses system DPR for HiDPI support
-auto ArtworkManager::createProcessedArtwork(const QPixmap &originalPixmap)
-    -> QPixmap {
+auto ArtworkManager::createProcessedArtwork(const QPixmap &originalPixmap) -> QPixmap {
   if (originalPixmap.isNull()) {
     return {};
   }
@@ -180,8 +173,7 @@ auto ArtworkManager::createProcessedArtwork(const QPixmap &originalPixmap)
   if (QGuiApplication::primaryScreen()) {
     dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
   }
-  QImage centered = scaleCenterToBox(originalPixmap.toImage(),
-                                     UIConstants::Artwork::BOX_SIZE, dpr);
+  QImage centered = scaleCenterToBox(originalPixmap.toImage(), UIConstants::Artwork::BOX_SIZE, dpr);
   if (centered.isNull()) {
     return {};
   }

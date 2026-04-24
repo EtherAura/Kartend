@@ -60,9 +60,7 @@ struct EventManagerSetup {
 
   // Accessors with ctx fallback
   SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
-  [[nodiscard]] KeyboardManager *getKeyboardManager() const {
-    return keyboardManager;
-  }
+  [[nodiscard]] KeyboardManager *getKeyboardManager() const { return keyboardManager; }
   [[nodiscard]] MouseManager *getMouseManager() const { return mouseManager; }
   SETUP_GETTER_DECL(AnimationManager *, AnimationManager)
   SETUP_GETTER_DECL(ViewportManager *, ViewportManager)
@@ -111,8 +109,8 @@ public:
 signals:
   // Event signals for InteractionManager to handle
   void widgetDoubleClicked(const QString &filePath, int collectionIndex);
-  void widgetClicked(ItemWidget *widget, int visualIndex,
-                     const QPoint &clickPos, QMouseEvent *event);
+  void widgetClicked(ItemWidget *widget, int visualIndex, const QPoint &clickPos,
+                     QMouseEvent *event);
   void clearSelectionRequested();
   void slashKeyPressed();
   void escapeKeyPressed();

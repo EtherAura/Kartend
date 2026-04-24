@@ -30,13 +30,11 @@ Q_DECLARE_LOGGING_CATEGORY(lcMainWindow)
 void MainWindow::setupInitialTimers() {
   // Defer initial horizontal centering until after the first show event so
   // the scroll area has accurate viewport metrics to center against.
-  QTimer::singleShot(UIConstants::Sidebar::INITIAL_CENTER_SCROLL_DELAY_MS, this,
-                     [this]() {
-                       if (getScrollManager()) {
-                         getScrollManager()->centerHorizontalScrollbar(
-                             currentCollectionIndex, m_collections);
-                       }
-                     });
+  QTimer::singleShot(UIConstants::Sidebar::INITIAL_CENTER_SCROLL_DELAY_MS, this, [this]() {
+    if (getScrollManager()) {
+      getScrollManager()->centerHorizontalScrollbar(currentCollectionIndex, m_collections);
+    }
+  });
 
   if (m_collections.isEmpty()) {
     setupInitialTimersEmptyCollections();
@@ -51,17 +49,15 @@ void MainWindow::setupInitialTimersEmptyCollections() {
   QTimer::singleShot(0, this, [this]() {
     // Prompt user to create their first collection
     bool ok = false;
-    QString name =
-        QInputDialog::getText(this, tr("Create First Collection"),
-                              tr("Enter a name for your first collection:"),
-                              QLineEdit::Normal, "", &ok);
+    QString name = QInputDialog::getText(this, tr("Create First Collection"),
+                                         tr("Enter a name for your first collection:"),
+                                         QLineEdit::Normal, "", &ok);
 
     if (!ok || name.trimmed().isEmpty()) {
       // User cancelled - show message and close
-      QMessageBox::information(
-          this, tr("No Collection Created"),
-          tr("Kartend requires at least one collection to function. "
-             "Please restart the application to try again."));
+      QMessageBox::information(this, tr("No Collection Created"),
+                               tr("Kartend requires at least one collection to function. "
+                                  "Please restart the application to try again."));
       return;
     }
 
@@ -139,4 +135,3 @@ void MainWindow::setupInitialTimersWithCollections() {
     }
   });
 }
-
