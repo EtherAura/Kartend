@@ -389,6 +389,9 @@
                   </item>
                   <item row="0" column="1">
                    <widget class="QComboBox" name="viewTypeComboBox">
+                    <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                    <property name="minimumWidth"><number>80</number></property>
+                    <property name="maximumWidth"><number>80</number></property>
                     <property name="toolTip"><string>Display items as a grid with artwork or as a simple list</string></property>
                     <item><property name="text"><string>Grid</string></property></item>
                     <item><property name="text"><string>List</string></property></item>
@@ -401,6 +404,9 @@
                   </item>
                   <item row="1" column="1">
                    <widget class="QComboBox" name="horizontalAlignmentComboBox">
+                    <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                    <property name="minimumWidth"><number>80</number></property>
+                    <property name="maximumWidth"><number>80</number></property>
                     <property name="toolTip"><string>Horizontal alignment of collection grid (Left, Center, Right)</string></property>
                     <item><property name="text"><string>Left</string></property></item>
                     <item><property name="text"><string>Center</string></property></item>
@@ -414,6 +420,9 @@
                   </item>
                   <item row="2" column="1">
                    <widget class="QSpinBox" name="gridWidthSpinBox">
+                    <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                    <property name="minimumWidth"><number>80</number></property>
+                    <property name="maximumWidth"><number>80</number></property>
                     <property name="toolTip"><string>Number of artwork items per row (1-10)</string></property>
                     <property name="minimum"><number>1</number></property>
                     <property name="maximum"><number>10</number></property>
@@ -425,6 +434,9 @@
                   </item>
                   <item row="3" column="1">
                    <widget class="QSpinBox" name="horizontalSpacingSpinBox">
+                    <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                    <property name="minimumWidth"><number>80</number></property>
+                    <property name="maximumWidth"><number>80</number></property>
                     <property name="toolTip"><string>Horizontal spacing between items in pixels</string></property>
                     <property name="minimum"><number>-20</number></property>
                     <property name="maximum"><number>50</number></property>
@@ -436,6 +448,9 @@
                   </item>
                   <item row="4" column="1">
                    <widget class="QSpinBox" name="verticalSpacingSpinBox">
+                    <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                    <property name="minimumWidth"><number>80</number></property>
+                    <property name="maximumWidth"><number>80</number></property>
                     <property name="toolTip"><string>Vertical spacing between items in pixels</string></property>
                     <property name="minimum"><number>-20</number></property>
                     <property name="maximum"><number>50</number></property>
@@ -449,6 +464,9 @@
                   </item>
                   <item row="5" column="1">
                    <widget class="QSpinBox" name="itemWidthSpinBox">
+                    <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                    <property name="minimumWidth"><number>80</number></property>
+                    <property name="maximumWidth"><number>80</number></property>
                     <property name="toolTip"><string>Width of collection items in pixels</string></property>
                     <property name="minimum"><number>100</number></property>
                     <property name="maximum"><number>400</number></property>
@@ -460,6 +478,9 @@
                   </item>
                   <item row="6" column="1">
                    <widget class="QSpinBox" name="itemHeightSpinBox">
+                    <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                    <property name="minimumWidth"><number>80</number></property>
+                    <property name="maximumWidth"><number>80</number></property>
                     <property name="toolTip"><string>Height of collection items in pixels</string></property>
                     <property name="minimum"><number>100</number></property>
                     <property name="maximum"><number>400</number></property>
@@ -471,6 +492,9 @@
                   </item>
                   <item row="7" column="1">
                    <widget class="QSpinBox" name="cornerRadiusSpinBox">
+                    <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                    <property name="minimumWidth"><number>80</number></property>
+                    <property name="maximumWidth"><number>80</number></property>
                     <property name="toolTip"><string>Corner radius for item artwork in pixels (0 = square)</string></property>
                     <property name="minimum"><number>0</number></property>
                     <property name="maximum"><number>100</number></property>
@@ -499,6 +523,9 @@
                   </item>
                   <item row="0" column="1">
                    <widget class="QSpinBox" name="fontSizeSpinBox">
+                    <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                    <property name="minimumWidth"><number>80</number></property>
+                    <property name="maximumWidth"><number>80</number></property>
                     <property name="toolTip"><string>Font size for item titles</string></property>
                     <property name="minimum"><number>8</number></property>
                     <property name="maximum"><number>72</number></property>
@@ -676,6 +703,9 @@
                   </item>
                   <item row="5" column="1">
                    <widget class="QSpinBox" name="titleSaturationSpinBox">
+                    <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                    <property name="minimumWidth"><number>80</number></property>
+                    <property name="maximumWidth"><number>80</number></property>
                     <property name="toolTip"><string>Title text color saturation (0-255)</string></property>
                     <property name="minimum"><number>0</number></property>
                     <property name="maximum"><number>255</number></property>
@@ -689,6 +719,9 @@
                   </item>
                   <item row="6" column="1">
                    <widget class="QSpinBox" name="titleLightnessSpinBox">
+                    <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                    <property name="minimumWidth"><number>80</number></property>
+                    <property name="maximumWidth"><number>80</number></property>
                     <property name="toolTip"><string>Title text color lightness (0-255, lower is darker)</string></property>
                     <property name="minimum"><number>0</number></property>
                     <property name="maximum"><number>255</number></property>
@@ -759,6 +792,9 @@
                   </item>
                   <item row="0" column="1">
                    <widget class="QSpinBox" name="listFontSizeSpinBox">
+                    <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                    <property name="minimumWidth"><number>80</number></property>
+                    <property name="maximumWidth"><number>80</number></property>
                     <property name="toolTip"><string>Font size for list view text (6-48 pt)</string></property>
                     <property name="minimum"><number>6</number></property>
                     <property name="maximum"><number>48</number></property>
@@ -772,6 +808,9 @@
                   </item>
                   <item row="1" column="1">
                    <widget class="QSpinBox" name="listRowHeightSpinBox">
+                    <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                    <property name="minimumWidth"><number>80</number></property>
+                    <property name="maximumWidth"><number>80</number></property>
                     <property name="toolTip"><string>Height of each row in list view (20-100 px)</string></property>
                     <property name="minimum"><number>20</number></property>
                     <property name="maximum"><number>100</number></property>
@@ -1064,6 +1103,9 @@
             </item>
             <item row="2" column="1">
              <widget class="QSpinBox" name="pixmapCacheSpinBox">
+              <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+              <property name="minimumWidth"><number>80</number></property>
+              <property name="maximumWidth"><number>80</number></property>
               <property name="toolTip">
                <string>Memory allocated for caching artwork images (10-500 MB). Larger values improve scrolling performance.</string>
               </property>
@@ -1093,6 +1135,9 @@
             </item>
             <item row="3" column="1">
              <widget class="QSpinBox" name="keyboardSpeedSpinBox">
+              <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+              <property name="minimumWidth"><number>80</number></property>
+              <property name="maximumWidth"><number>80</number></property>
               <property name="toolTip">
                <string>Interval between arrow key repeats when holding keys in grid view (milliseconds)</string>
               </property>
@@ -1119,6 +1164,9 @@
             </item>
             <item row="4" column="1">
              <widget class="QSpinBox" name="keyboardRepeatDelaySpinBox">
+              <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+              <property name="minimumWidth"><number>80</number></property>
+              <property name="maximumWidth"><number>80</number></property>
               <property name="toolTip">
                <string>Initial delay before keyboard repeat starts (milliseconds)</string>
               </property>
@@ -1145,6 +1193,9 @@
             </item>
             <item row="5" column="1">
              <widget class="QSpinBox" name="mouseWheelSpeedSpinBox">
+              <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+              <property name="minimumWidth"><number>80</number></property>
+              <property name="maximumWidth"><number>80</number></property>
               <property name="toolTip">
                <string>Number of rows to scroll per mouse wheel step</string>
               </property>
@@ -1168,6 +1219,9 @@
             </item>
             <item row="6" column="1">
              <widget class="QSpinBox" name="scrollAnimationSpeedSpinBox">
+              <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+              <property name="minimumWidth"><number>80</number></property>
+              <property name="maximumWidth"><number>80</number></property>
               <property name="toolTip">
                <string>Duration of smooth scroll animations when centering selection (milliseconds)</string>
               </property>
@@ -1194,6 +1248,9 @@
             </item>
             <item row="7" column="1">
              <widget class="QSpinBox" name="clickHoldDelaySpinBox">
+              <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+              <property name="minimumWidth"><number>80</number></property>
+              <property name="maximumWidth"><number>80</number></property>
               <property name="toolTip">
                <string>Delay before click-hold scroll mode activates (milliseconds)</string>
               </property>
@@ -1220,6 +1277,9 @@
             </item>
             <item row="8" column="1">
              <widget class="QSpinBox" name="clickHoldRepeatIntervalSpinBox">
+              <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+              <property name="minimumWidth"><number>80</number></property>
+              <property name="maximumWidth"><number>80</number></property>
               <property name="toolTip">
                <string>Interval between steps during click-hold scrolling in grid view (milliseconds)</string>
               </property>
@@ -1246,6 +1306,9 @@
             </item>
             <item row="9" column="1">
              <widget class="QSpinBox" name="listKeyboardRepeatSpinBox">
+              <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+              <property name="minimumWidth"><number>80</number></property>
+              <property name="maximumWidth"><number>80</number></property>
               <property name="toolTip">
                <string>Interval between arrow key repeats when holding keys in list view (milliseconds)</string>
               </property>
@@ -1272,6 +1335,9 @@
             </item>
             <item row="10" column="1">
              <widget class="QSpinBox" name="listClickHoldRepeatSpinBox">
+              <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+              <property name="minimumWidth"><number>80</number></property>
+              <property name="maximumWidth"><number>80</number></property>
               <property name="toolTip">
                <string>Interval between steps during click-hold scrolling in list view (milliseconds)</string>
               </property>
@@ -1298,6 +1364,9 @@
             </item>
             <item row="11" column="1">
              <widget class="QComboBox" name="startupCollectionComboBox">
+              <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+              <property name="minimumWidth"><number>80</number></property>
+              <property name="maximumWidth"><number>80</number></property>
               <property name="toolTip">
                <string>Collection to open on startup. &quot;(Default)&quot; opens the first root collection.</string>
               </property>
