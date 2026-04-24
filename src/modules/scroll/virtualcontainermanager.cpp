@@ -3,9 +3,12 @@
 #include "scrollhelpers.h"
 #include "selectionoverlaymanager.h"
 #include "uiconstants.h"
+#include <QLoggingCategory>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QWidget>
+
+Q_DECLARE_LOGGING_CATEGORY(lcScrollManager)
 
 VirtualContainerManager::VirtualContainerManager(QObject *parent)
     : QObject(parent) {}
@@ -16,8 +19,9 @@ void VirtualContainerManager::createContainer() {
   cleanupContainer();
 
   if (!m_gridContainer) {
-    qWarning() << "VirtualContainerManager::createContainer: m_gridContainer "
-                  "is null, cannot create container";
+    qCWarning(lcScrollManager)
+        << "VirtualContainerManager::createContainer: m_gridContainer "
+           "is null, cannot create container";
     return;
   }
 

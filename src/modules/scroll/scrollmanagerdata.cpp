@@ -384,8 +384,9 @@ void ScrollManager::setupNormalVirtualScrolling() {
 
   // Bail early if container creation failed (null gridContainer)
   if (!m_virtualContainer) {
-    qWarning() << "ScrollManager::setupNormalVirtualScrolling: Failed to "
-                  "create virtual container";
+    qCWarning(lcScrollManager)
+        << "ScrollManager::setupNormalVirtualScrolling: Failed to "
+           "create virtual container";
     return;
   }
 

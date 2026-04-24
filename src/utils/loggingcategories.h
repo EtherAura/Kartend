@@ -21,4 +21,8 @@ Q_DECLARE_LOGGING_CATEGORY(lcPerfTrace)
 Q_DECLARE_LOGGING_CATEGORY(lcSearchDiag)
 Q_DECLARE_LOGGING_CATEGORY(lcScanFlow)
 
+// Note: the lcErrors category used by ErrorUtils::logError is defined inline
+// in errorutils.h so header-only consumers (and small test targets) don't need
+// to link loggingcategories.cpp.
+
 #endif // KARTEND_LOGGING_CATEGORIES_H
