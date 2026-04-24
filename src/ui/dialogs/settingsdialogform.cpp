@@ -3,11 +3,16 @@
 #include <QAbstractItemView>
 #include <QColorDialog>
 #include <QDir>
+#include <QEasingCurve>
 #include <QFileDialog>
 #include <QFontDialog>
+#include <QGraphicsDropShadowEffect>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QPalette>
 #include <QPixmapCache>
+#include <QPropertyAnimation>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSet>
@@ -16,6 +21,7 @@
 #include <QToolTip>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
+#include <QVariant>
 #include <algorithm>
 #include <functional>
 #include <set>
@@ -149,7 +155,62 @@ auto SettingsDialog::hasUnsavedChanges() const -> bool {
 }
 
 void SettingsDialog::updateSaveButtonStyle() {
-  ui->saveCollectionButton->setEnabled(hasUnsavedChanges());
+  // Kartend-9f6: illuminate the save icon while there are unsaved changes.
+  // The button also stays enabled so the user can click Save; when there are
+  // no changes we detach the glow and disable the button.
+  const bool dirty = hasUnsavedChanges();
+  QPushButton *btn = ui->saveCollectionButton;
+  btn->setEnabled(dirty);
+
+  if (dirty) {
+    // Lazy-init the glow effect and its pulse animation on first transition
+    // to the dirty state. Qt takes ownership of the effect via
+    // QWidget::setGraphicsEffect, and the animation is parented to `this`.
+    if (!m_saveButtonGlow) {
+      m_saveButtonGlow = new QGraphicsDropShadowEffect(btn);
+      m_saveButtonGlow->setOffset(0, 0);
+      // Use the palette's Highlight color so the glow respects the active
+      // theme (light/dark) instead of a hard-coded accent.
+      QColor glowColor = btn->palette().color(QPalette::Highlight);
+      glowColor.setAlpha(220);
+      m_saveButtonGlow->setColor(glowColor);
+      m_saveButtonGlow->setBlurRadius(8.0);
+      btn->setGraphicsEffect(m_saveButtonGlow);
+    }
+    if (!m_saveButtonGlowAnim) {
+      m_saveButtonGlowAnim =
+          new QPropertyAnimation(m_saveButtonGlow, "blurRadius", this);
+      m_saveButtonGlowAnim->setDuration(1200);
+      m_saveButtonGlowAnim->setStartValue(6.0);
+      m_saveButtonGlowAnim->setEndValue(22.0);
+      m_saveButtonGlowAnim->setEasingCurve(QEasingCurve::InOutSine);
+      m_saveButtonGlowAnim->setLoopCount(-1);
+      // Ping-pong between start/end by alternating direction on each loop.
+      QObject::connect(
+          m_saveButtonGlowAnim, &QPropertyAnimation::currentLoopChanged, this,
+          [this](int) {
+            m_saveButtonGlowAnim->setDirection(
+                m_saveButtonGlowAnim->direction() ==
+                        QAbstractAnimation::Forward
+                    ? QAbstractAnimation::Backward
+                    : QAbstractAnimation::Forward);
+          });
+    }
+    m_saveButtonGlow->setEnabled(true);
+    if (m_saveButtonGlowAnim->state() != QAbstractAnimation::Running) {
+      m_saveButtonGlowAnim->start();
+    }
+  } else {
+    if (m_saveButtonGlowAnim &&
+        m_saveButtonGlowAnim->state() == QAbstractAnimation::Running) {
+      m_saveButtonGlowAnim->stop();
+    }
+    if (m_saveButtonGlow) {
+      // Disabling (rather than removing) the effect keeps Qt's effect-owner
+      // wiring stable across dirty/clean transitions.
+      m_saveButtonGlow->setEnabled(false);
+    }
+  }
 }
 
 void SettingsDialog::updateDeleteButtonState() {
