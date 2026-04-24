@@ -81,8 +81,17 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex,
     // Store artwork directory for preview overlay to use
     widget->setArtworkDirectory(artworkDir);
     if (!artworkDir.isEmpty()) {
-      QString artworkPath = ArtworkUtils::findArtworkForFileCached(
-          QFileInfo(fullPath).fileName(), artworkDir);
+      QString fileName = QFileInfo(fullPath).fileName();
+      QString artworkPath =
+          ArtworkUtils::findArtworkForFileCached(fileName, artworkDir);
+      // Cold-cache fallback: findArtworkForFileCached returns empty on the
+      // first lookup for an uncached directory (it queues a background scan).
+      // For list mode we can't rely on the post-prewarm reconfigure alone --
+      // do a direct synchronous lookup so the artwork preview button
+      // ('view-preview' icon) appears on first paint (Kartend-cbd).
+      if (artworkPath.isEmpty()) {
+        artworkPath = ArtworkUtils::findArtworkForFile(fileName, artworkDir);
+      }
       widget->setHasArtwork(!artworkPath.isEmpty());
     }
   }
@@ -256,6 +265,17 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget,
                << "dirLookup=" << (afterDirLookup - afterCacheCheck)
                << "artworkFind=" << (afterArtworkFind - afterDirLookup)
                << "artworkDir=" << artworkDir;
+  }
+
+  // List mode displays an artwork preview button (not the pixmap), so update
+  // the per-widget hasArtwork flag rather than queueing a pixmap load. This is
+  // also reached from reconfigureArtworkForActiveWidgets() after the directory
+  // cache is warmed, which is the only chance list-mode widgets get to learn
+  // their artwork exists when the cache was cold during initial creation
+  // (Kartend-cbd).
+  if (widget && widget->isListMode()) {
+    widget->setHasArtwork(!artworkPath.isEmpty());
+    return;
   }
 
   if (!artworkPath.isEmpty() && m_artworkManager) {
