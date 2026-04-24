@@ -43,6 +43,15 @@ void KeyboardManager::beginHoldRepeat() {
   } else {
     baseInterval = m_generalSettings ? m_generalSettings->keyboardRepeatIntervalMs : 260;
   }
+  // Kartend-9cl: scale the key-repeat cadence by the global scroll-velocity
+  // multiplier. Higher multiplier → shorter interval → more items/second
+  // while the arrow key is held. Guard against zero-division and clamp the
+  // effective interval to at least 10ms to avoid saturating the event loop.
+  const double velocityMult =
+      m_generalSettings ? m_generalSettings->scrollVelocityMultiplier : 1.0;
+  if (velocityMult > 0.0 && velocityMult != 1.0) {
+    baseInterval = qMax(10, static_cast<int>(baseInterval / velocityMult + 0.5));
+  }
   int verticalInterval = baseInterval;
   int horizontalInterval = baseInterval / 2;
   constexpr qint64 kSuppressArrowCenterHoldMs = 60000; // 60s safeguard window

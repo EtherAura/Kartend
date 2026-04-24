@@ -366,6 +366,11 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->scrollAnimationSpeedSpinBox->setValue(m_generalSettings.scrollAnimationDurationMs);
     ui->scrollAnimationSpeedSpinBox->blockSignals(false);
   }
+  if (ui->scrollVelocityMultiplierSpinBox) {
+    ui->scrollVelocityMultiplierSpinBox->blockSignals(true);
+    ui->scrollVelocityMultiplierSpinBox->setValue(m_generalSettings.scrollVelocityMultiplier);
+    ui->scrollVelocityMultiplierSpinBox->blockSignals(false);
+  }
   if (ui->titleSaturationSpinBox) {
     ui->titleSaturationSpinBox->blockSignals(true);
     ui->titleSaturationSpinBox->setValue(m_generalSettings.titleTintSaturation);
@@ -487,6 +492,10 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     if (ui->scrollAnimationSpeedSpinBox) {
       mainWindow->m_generalSettings.scrollAnimationDurationMs =
           ui->scrollAnimationSpeedSpinBox->value();
+    }
+    if (ui->scrollVelocityMultiplierSpinBox) {
+      mainWindow->m_generalSettings.scrollVelocityMultiplier =
+          ui->scrollVelocityMultiplierSpinBox->value();
     }
     if (ui->titleSaturationSpinBox) {
       mainWindow->m_generalSettings.titleTintSaturation = ui->titleSaturationSpinBox->value();

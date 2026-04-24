@@ -11,6 +11,7 @@
 #include <QPushButton>
 #include <QSet>
 #include <QSignalBlocker>
+#include <QDoubleSpinBox>
 #include <QSpinBox>
 #include <QtGlobal>
 
@@ -312,6 +313,11 @@ void SettingsDialog::setupGeneralSettingsConnections() {
   }
   if (ui->scrollAnimationSpeedSpinBox) {
     connect(ui->scrollAnimationSpeedSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->scrollVelocityMultiplierSpinBox) {
+    connect(ui->scrollVelocityMultiplierSpinBox,
+            QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
   }
   if (ui->titleSaturationSpinBox) {
