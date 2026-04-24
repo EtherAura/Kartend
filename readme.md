@@ -43,15 +43,71 @@ https://github.com/user-attachments/assets/e31ba6f6-f523-4fe5-a647-2af05299e389
 sudo apt install clang cmake lld ninja-build ccache qt6-base-dev libqt6sql6-sqlite
 ```
 
-By default this produces an optimized release build at `build/ninja-release/kartend` (or `build/make-release/kartend` if Ninja is not available).
+## Building
 
-For a faster inner loop during development (no reports/archive):
+The repository ships with a build script at `.scripts/build.sh` that
+configures CMake, picks the best available generator (Ninja → Make), wires
+up `ccache` and `lld` if they are installed, and prunes stale build trees.
+Use it for everyday builds — direct `cmake` invocations are also supported
+and documented in [docs/building.md](docs/building.md).
+
+### Quick start
 
 ```bash
-.scripts/build.sh --debug --tests --run-tests --fast
+.scripts/build.sh
 ```
 
-For build script options, manual CMake builds, and advanced configuration, see [docs/building.md](docs/building.md).
+With no flags this produces an optimized release binary at
+`build/ninja-release/kartend` (or `build/make-release/kartend` when Ninja
+is not available). Subsequent runs are incremental.
+
+### Common workflows
+
+| Goal | Command |
+|------|---------|
+| Optimized release build (default) | `.scripts/build.sh` |
+| Debug build (keeps `qDebug`/`qWarning` output) | `.scripts/build.sh --debug` |
+| Build + run unit tests | `.scripts/build.sh --tests --run-tests` |
+| Fast dev iteration (no reports/archive) | `.scripts/build.sh --debug --tests --run-tests --fast` |
+| Profile-guided optimization (two passes) | `.scripts/build.sh --pgo` |
+| Sanitizers (ASan/UBSan) | `.scripts/build.sh --sanitize` |
+| Strict checks: warnings-as-errors, clang-tidy, clang-format | `.scripts/build.sh --maintenance` |
+| Apply safe clang-tidy + format fixes | `.scripts/build.sh --maintenance --apply-fixes --format-apply` |
+| Build then install (auto-elevates with sudo/doas if needed) | `.scripts/build.sh --install` |
+| Force a clean reconfigure | `.scripts/build.sh --clean` |
+| Force Make instead of Ninja | `.scripts/build.sh --make` |
+
+Run `.scripts/build.sh --help` for the full option list.
+
+### What the script does
+
+- Detects `ninja`, `lld`, and `ccache` and enables them automatically (use
+  `--make` or `--no-ccache` to opt out).
+- Creates a build directory named after the generator and mode
+  (e.g. `build/ninja-release`, `build/ninja-debug`, `build/sanitize`),
+  so multiple build flavors can coexist without clobbering each other.
+- Reuses the existing build directory for incremental rebuilds; pass
+  `--clean` to start from scratch.
+- After a successful release build, writes a source archive to
+  `.backups/*.tar.gz` and assembles source/UI reports under
+  `.backups/reports/` — disable with `--no-archive`, `--no-reports`, or
+  the combined `--fast` shorthand.
+- With `--install`, runs `cmake --install` against the build directory,
+  honoring `DESTDIR` and re-invoking under `sudo`/`doas` when the
+  configured prefix isn't writable by the current user.
+
+### Manual CMake build
+
+If you'd rather not use the script:
+
+```bash
+cmake -S . -B build/ninja-release -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build/ninja-release --parallel "$(nproc)"
+```
+
+For more advanced configuration (PGO details, sanitizer flags, custom
+toolchains, CI parity), see [docs/building.md](docs/building.md).
+
 
 ## Installation
 
