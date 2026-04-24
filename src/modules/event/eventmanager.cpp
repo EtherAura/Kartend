@@ -60,7 +60,11 @@ SETUP_GETTER_DEF_SAME(EventManagerSetup, GeneralSettings *, GeneralSettings, gen
 SETUP_GETTER_DEF_CTX_ONLY(EventManagerSetup, InteractionStateHolder *, InteractionState,
                           interactionState)
 
-EventManager::EventManager(QObject *parent) : QObject(parent) {}
+EventManager::EventManager(QObject *parent) : QObject(parent) {
+  m_hoverSelectTimer.setSingleShot(true);
+  connect(&m_hoverSelectTimer, &QTimer::timeout, this,
+          &EventManager::commitPendingHoverSelection);
+}
 
 EventManager::~EventManager() = default;
 

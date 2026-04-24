@@ -2,6 +2,7 @@
 #include "eventmanager.h"
 
 #include <QApplication>
+#include <QCursor>
 #include <QDateTime>
 #include <QKeyEvent>
 #include <QLineEdit>
@@ -320,18 +321,47 @@ bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {
 
   const int visualIndex = visualIndexForWidget(widget);
   if (visualIndex < 0 || visualIndex == m_selectionManager->currentSelectedIndex()) {
+    m_hoverSelectTimer.stop();
+    m_pendingHoverWidget.clear();
+    m_pendingHoverIndex = -1;
     return false;
   }
 
-  QPointer<ItemWidget> guard(widget);
-  m_selectionManager->selectItemByHover(visualIndex);
-  if (m_scrollManager) {
-    m_scrollManager->updateSelectionForIndex(visualIndex);
+  if (m_pendingHoverWidget == widget && m_pendingHoverIndex == visualIndex &&
+      m_hoverSelectTimer.isActive()) {
+    return false;
   }
-  if (m_sidebarManager && m_sidebarManager->isSidebarVisible() && guard) {
-    m_sidebarManager->updateSidebarMetadata(guard);
-  }
+
+  m_pendingHoverWidget = widget;
+  m_pendingHoverIndex = visualIndex;
+  m_hoverSelectTimer.start(UIConstants::Mouse::HOVER_SELECT_DWELL_MS);
   return false;
+}
+
+void EventManager::commitPendingHoverSelection() {
+  ItemWidget *widget = m_pendingHoverWidget.data();
+  const int visualIndex = m_pendingHoverIndex;
+  m_pendingHoverWidget.clear();
+  m_pendingHoverIndex = -1;
+
+  if (!widget || visualIndex < 0 || !m_generalSettings || !m_generalSettings->selectItemOnHover ||
+      !m_selectionManager || !m_scrollManager || !widget->isVisible()) {
+    return;
+  }
+  if (visualIndexForWidget(widget) != visualIndex ||
+      visualIndex == m_selectionManager->currentSelectedIndex()) {
+    return;
+  }
+  const QPoint cursorPos = widget->mapFromGlobal(QCursor::pos());
+  if (!widget->rect().contains(cursorPos)) {
+    return;
+  }
+
+  m_selectionManager->selectItemByHover(visualIndex);
+  m_scrollManager->updateSelectionForIndex(visualIndex);
+  if (m_sidebarManager && m_sidebarManager->isSidebarVisible()) {
+    m_sidebarManager->updateSidebarMetadata(widget);
+  }
 }
 
 bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
