@@ -60,6 +60,13 @@ private slots:
   void onTreeItemChanged(QTreeWidgetItem *item, int column);
   void addCollection();
   void removeCollection();
+  /// Kartend-63o: propagate the currently-edited collection's appearance and
+  /// layout settings to every other collection in the list. Prompts for
+  /// confirmation first.
+  void applyCurrentSettingsToAllCollections();
+  /// Kartend-63o: propagate the currently-edited collection's appearance and
+  /// layout settings to its (recursive) descendants only.
+  void applyCurrentSettingsToSubcollections();
   void browseLauncher();
   void browseCore();
   void browseMediaDir();
@@ -142,6 +149,14 @@ private:
   void revertCurrentCollectionEdits();
   /// Resolves unsaved changes prior to executing an action.
   auto resolveUnsavedChanges(const QString &actionDescription, bool refreshTreeAfterSave) -> bool;
+
+  /// Kartend-63o: propagate the current collection's appearance & layout
+  /// settings (grid/spacing/colors/fonts/view type, etc. — never
+  /// paths/extensions/behavior flags that would require a rescan) to every
+  /// index in @p targetIndices. Shows a confirmation QMessageBox first,
+  /// persists the modified collections, and refreshes the tree so the user
+  /// sees the change immediately.
+  void applyCurrentSettingsToIndices(const QList<int> &targetIndices, const QString &scopeLabel);
 
   Ui::SettingsDialog *ui;
   QTreeWidget *collectionTreeWidget;
