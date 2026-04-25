@@ -9,11 +9,13 @@ target_sources(kartend PRIVATE
   listheaderwidget.cpp
   loadingoverlay.cpp
   metadatasidebar.cpp
+  splashoverlay.cpp
   artworkpreviewoverlay.h
   itemwidget.h
   listheaderwidget.h
   loadingoverlay.h
   metadatasidebar.h
+  splashoverlay.h
   itemwidget.ui
   metadatasidebar.ui
 )

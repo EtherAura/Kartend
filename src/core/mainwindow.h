@@ -40,6 +40,7 @@ class ScrollManager;
 class ItemWidget;
 class MetadataSidebar;
 class LoadingOverlay;
+class SplashOverlay;
 class MenuController;
 
 class MainWindow : public QMainWindow {
@@ -93,8 +94,10 @@ public:
   [[nodiscard]] SessionManager *getSessionManager() const;
   [[nodiscard]] ArtworkManager *getArtworkManager() const;
   [[nodiscard]] CacheManager *getCacheManager() const;
+  void showStartupSplash();
 
 protected:
+  bool event(QEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
   void keyPressEvent(QKeyEvent *event) override;
   auto eventFilter(QObject *watched, QEvent *event) -> bool override;
@@ -103,6 +106,9 @@ protected:
 private:
   bool m_isShuttingDown = false;
   std::unique_ptr<MenuController> m_menuController;
+  SplashOverlay *m_splashOverlay = nullptr;
+  bool m_startupSplashShown = false;
+  bool m_windowWasInactive = false;
 
   // Coalesce rapid grid-width adjustments (menu shortcuts) into a single
   // settings save + layout/artwork refresh chain.
@@ -156,6 +162,7 @@ private:
   int m_activeScanCount = 0;
   void initializeAppContext();
   void showAbout();
+  void showFocusReturnSplash();
 };
 
 #endif
