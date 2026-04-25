@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.4] - 2026-04-25
+
+### Added
+
+- Attract mode settings UI under General → Attract Mode (enable toggle,
+  idle timeout, scroll speed)
+
+### Changed
+
+- Attract mode timeout reset behavior now reacts to item selection changes
+  instead of generic mouse movement/activity
+
+### Fixed
+
+- Attract idle timer interval synchronization when attract mode is toggled
+  from disabled to enabled
+- Attract scrolling stop behavior when mode is disabled mid-scroll
+
 ## [0.0.3] - 2026-04-24
 
 ### Added
