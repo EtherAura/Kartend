@@ -369,6 +369,9 @@ bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {
   m_pendingHoverScrollWidget = widget;
   m_pendingHoverScrollGlobalPos = currentGlobalPos;
   m_pendingHoverScrollIndex = visualIndex;
+  if (m_state) {
+    m_state->scroll().hoverScrollPending = true;
+  }
   m_hoverScrollTimer.start(UIConstants::Mouse::HOVER_SCROLL_DELAY_MS);
   return false;
 }
@@ -378,6 +381,9 @@ void EventManager::clearPendingHoverScroll() {
   m_pendingHoverScrollWidget.clear();
   m_pendingHoverScrollGlobalPos = {};
   m_pendingHoverScrollIndex = -1;
+  if (m_state) {
+    m_state->scroll().hoverScrollPending = false;
+  }
 }
 
 void EventManager::commitPendingHoverScroll() {
