@@ -294,16 +294,20 @@ int EventManager::visualIndexForWidget(ItemWidget *widget) const {
 
 bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {
   if (!m_generalSettings || !m_generalSettings->selectItemOnHover || isRestoringSelection()) {
+    clearPendingHoverScroll();
     return false;
   }
   if (QApplication::activeModalWidget() || !m_stackedWidget || !m_itemsPage ||
       m_stackedWidget->currentWidget() != m_itemsPage) {
+    clearPendingHoverScroll();
     return false;
   }
   if (!m_scrollManager || !m_selectionManager || !m_itemScrollArea || !m_gridContainer) {
+    clearPendingHoverScroll();
     return false;
   }
   if (!CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+    clearPendingHoverScroll();
     return false;
   }
 
@@ -321,64 +325,103 @@ bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {
 
   ItemWidget *widget = itemWidgetForObject(obj);
   if (!widget || !widget->isVisible()) {
+    clearPendingHoverScroll();
     return false;
   }
 
   const int visualIndex = visualIndexForWidget(widget);
-  if (visualIndex < 0 || visualIndex == m_selectionManager->currentSelectedIndex()) {
-    m_hoverSelectTimer.stop();
-    m_pendingHoverWidget.clear();
-    m_pendingHoverGlobalPos = {};
-    m_pendingHoverIndex = -1;
+  if (visualIndex < 0) {
+    clearPendingHoverScroll();
     return false;
   }
 
-  if (m_pendingHoverWidget == widget && m_pendingHoverIndex == visualIndex) {
-    const QPoint delta = currentGlobalPos - m_pendingHoverGlobalPos;
-    if (delta.manhattanLength() > UIConstants::Mouse::HOVER_SELECT_STABILITY_RADIUS_PX) {
-      m_pendingHoverGlobalPos = currentGlobalPos;
-      m_hoverSelectTimer.start(UIConstants::Mouse::HOVER_SELECT_DWELL_MS);
+  const bool samePendingHover =
+      m_pendingHoverScrollWidget == widget && m_pendingHoverScrollIndex == visualIndex;
+  const bool alreadySelected = visualIndex == m_selectionManager->currentSelectedIndex();
+  if (alreadySelected && !samePendingHover) {
+    clearPendingHoverScroll();
+    return false;
+  }
+
+  if (!alreadySelected) {
+    if (m_state) {
+      const qint64 hoverScrollSuppressedUntil =
+          QDateTime::currentMSecsSinceEpoch() + UIConstants::Mouse::HOVER_SCROLL_DELAY_MS;
+      m_state->arrow().suppressArrowCenterUntilMs =
+          qMax(m_state->arrow().suppressArrowCenterUntilMs, hoverScrollSuppressedUntil);
+    }
+
+    m_selectionManager->selectItemByHover(visualIndex);
+    if (m_sidebarManager && m_sidebarManager->isSidebarVisible()) {
+      m_sidebarManager->updateSidebarMetadata(widget);
+    }
+  }
+
+  if (samePendingHover) {
+    const QPoint delta = currentGlobalPos - m_pendingHoverScrollGlobalPos;
+    if (delta.manhattanLength() > UIConstants::Mouse::HOVER_SCROLL_STABILITY_RADIUS_PX) {
+      m_pendingHoverScrollGlobalPos = currentGlobalPos;
+      m_hoverScrollTimer.start(UIConstants::Mouse::HOVER_SCROLL_DELAY_MS);
     }
     return false;
   }
 
-  m_pendingHoverWidget = widget;
-  m_pendingHoverGlobalPos = currentGlobalPos;
-  m_pendingHoverIndex = visualIndex;
-  m_hoverSelectTimer.start(UIConstants::Mouse::HOVER_SELECT_DWELL_MS);
+  m_pendingHoverScrollWidget = widget;
+  m_pendingHoverScrollGlobalPos = currentGlobalPos;
+  m_pendingHoverScrollIndex = visualIndex;
+  m_hoverScrollTimer.start(UIConstants::Mouse::HOVER_SCROLL_DELAY_MS);
   return false;
 }
 
-void EventManager::commitPendingHoverSelection() {
-  ItemWidget *widget = m_pendingHoverWidget.data();
-  const int visualIndex = m_pendingHoverIndex;
-  const QPoint stagedGlobalPos = m_pendingHoverGlobalPos;
-  m_pendingHoverWidget.clear();
-  m_pendingHoverGlobalPos = {};
-  m_pendingHoverIndex = -1;
+void EventManager::clearPendingHoverScroll() {
+  m_hoverScrollTimer.stop();
+  m_pendingHoverScrollWidget.clear();
+  m_pendingHoverScrollGlobalPos = {};
+  m_pendingHoverScrollIndex = -1;
+}
+
+void EventManager::commitPendingHoverScroll() {
+  ItemWidget *widget = m_pendingHoverScrollWidget.data();
+  const int visualIndex = m_pendingHoverScrollIndex;
+  const QPoint stagedGlobalPos = m_pendingHoverScrollGlobalPos;
 
   if (!widget || visualIndex < 0 || !m_generalSettings || !m_generalSettings->selectItemOnHover ||
       !m_selectionManager || !m_scrollManager || !widget->isVisible()) {
+    clearPendingHoverScroll();
     return;
   }
   if (visualIndexForWidget(widget) != visualIndex ||
-      visualIndex == m_selectionManager->currentSelectedIndex()) {
+      visualIndex != m_selectionManager->currentSelectedIndex()) {
+    clearPendingHoverScroll();
     return;
   }
   const QPoint currentGlobalPos = QCursor::pos();
   if ((currentGlobalPos - stagedGlobalPos).manhattanLength() >
-      UIConstants::Mouse::HOVER_SELECT_STABILITY_RADIUS_PX) {
+      UIConstants::Mouse::HOVER_SCROLL_STABILITY_RADIUS_PX) {
+    clearPendingHoverScroll();
     return;
   }
   const QPoint cursorPos = widget->mapFromGlobal(currentGlobalPos);
   if (!widget->rect().contains(cursorPos)) {
+    clearPendingHoverScroll();
     return;
   }
 
-  m_selectionManager->selectItemByHover(visualIndex);
-  m_scrollManager->updateSelectionForIndex(visualIndex);
-  if (m_sidebarManager && m_sidebarManager->isSidebarVisible()) {
-    m_sidebarManager->updateSidebarMetadata(widget);
+  if (m_state) {
+    const qint64 remainingSuppressionMs =
+        m_state->arrow().suppressArrowCenterUntilMs - QDateTime::currentMSecsSinceEpoch();
+    if (remainingSuppressionMs > 0) {
+      const int retryDelayMs = qMax(
+          1, static_cast<int>(qMin<qint64>(remainingSuppressionMs + 1,
+                                          UIConstants::Mouse::HOVER_SCROLL_DELAY_MS)));
+      m_hoverScrollTimer.start(retryDelayMs);
+      return;
+    }
+  }
+
+  clearPendingHoverScroll();
+  if (m_scrollManager) {
+    m_scrollManager->updateSelectionForIndex(visualIndex);
   }
 }
 

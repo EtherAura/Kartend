@@ -140,7 +140,8 @@ private:
   [[nodiscard]] bool applyWheelSelectionDelta(int wheelSteps);
   [[nodiscard]] ItemWidget *itemWidgetForObject(QObject *obj) const;
   [[nodiscard]] int visualIndexForWidget(ItemWidget *widget) const;
-  void commitPendingHoverSelection();
+  void commitPendingHoverScroll();
+  void clearPendingHoverScroll();
 
   // Manager references
   ScrollManager *m_scrollManager = nullptr;
@@ -167,10 +168,10 @@ private:
 
   // Reentrancy guard for wheel event handling
   bool m_processingWheelEvent = false;
-  QPointer<ItemWidget> m_pendingHoverWidget;
-  QPoint m_pendingHoverGlobalPos;
-  int m_pendingHoverIndex = -1;
-  QTimer m_hoverSelectTimer;
+  QPointer<ItemWidget> m_pendingHoverScrollWidget;
+  QPoint m_pendingHoverScrollGlobalPos;
+  int m_pendingHoverScrollIndex = -1;
+  QTimer m_hoverScrollTimer;
 };
 
 #endif // EVENTMANAGER_H
