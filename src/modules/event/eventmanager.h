@@ -142,6 +142,7 @@ private:
   [[nodiscard]] int visualIndexForWidget(ItemWidget *widget) const;
   void commitPendingHoverScroll();
   void clearPendingHoverScroll();
+  void pollCursorForContinuousHoverScroll();
 
   // Manager references
   ScrollManager *m_scrollManager = nullptr;
