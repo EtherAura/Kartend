@@ -102,7 +102,7 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   // Sort preferences
   const int sortModeRaw = s.value("sortMode", static_cast<int>(SortMode::NameAscending)).toInt();
   if (sortModeRaw >= static_cast<int>(SortMode::NameAscending) &&
-      sortModeRaw <= static_cast<int>(SortMode::Random)) {
+      sortModeRaw <= static_cast<int>(SortMode::SizeAscending)) {
     settings.sortMode = static_cast<SortMode>(sortModeRaw);
   } else {
     settings.sortMode = SortMode::NameAscending;

@@ -263,13 +263,17 @@ namespace CollectionUtils {
 
 /// Sort mode for collection items
 enum class SortMode {
-  NameAscending,        // A → Z (default)
-  NameDescending,       // Z → A
-  CollectionAscending,  // Collection name A → Z
-  CollectionDescending, // Collection name Z → A
-  ArtworkFirst,         // Items with artwork first
-  ArtworkLast,          // Items with artwork last
-  Random                // Shuffle
+  NameAscending = 0,        // A → Z (default)
+  NameDescending = 1,       // Z → A
+  CollectionAscending = 2,  // Collection name A → Z
+  CollectionDescending = 3, // Collection name Z → A
+  ArtworkFirst = 4,         // Items with artwork first
+  ArtworkLast = 5,          // Items with artwork last
+  Random = 6,               // Shuffle
+  DateDescending = 7,       // Newest modified first
+  DateAscending = 8,        // Oldest modified first
+  SizeDescending = 9,       // Largest file first
+  SizeAscending = 10        // Smallest file first
 };
 
 struct CollectionContext {

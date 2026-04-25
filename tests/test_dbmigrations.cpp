@@ -96,6 +96,7 @@ private slots:
   void v1DeduplicatesBeforeUniqueIndex();
   void v2AddsPerformanceIndexes();
   void v3AddsMetaTable();
+  void v4AddsFileSizeColumnAndIndex();
   void preservesExistingDataAcrossUpgrade();
 };
 
@@ -115,8 +116,8 @@ void TestDbMigrations::appliesToCurrentVersion() {
 
   QCOMPARE(getUserVersion(db), 0);
   DbMigrations::applySchemaMigrations(db, "test");
-  // Current schema version is 3 (per dbmigrations.cpp).
-  QCOMPARE(getUserVersion(db), 3);
+  // Current schema version is 4 (per dbmigrations.cpp).
+  QCOMPARE(getUserVersion(db), 4);
 
   closeAndRemove(db, conn);
 }
@@ -242,12 +243,25 @@ void TestDbMigrations::v3AddsMetaTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 3);
+  QCOMPARE(getUserVersion(db), 4);
 
   // If FTS5 is available, the meta table should also exist.
   if (tableExists(db, "items_fts")) {
     QVERIFY(tableExists(db, "meta"));
   }
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::v4AddsFileSizeColumnAndIndex() {
+  const QString conn = "test_v4_file_size";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QCOMPARE(getUserVersion(db), 4);
+  QVERIFY(tableHasColumn(db, "items", "file_size"));
+  QVERIFY(indexExists(db, "idx_items_uuid_file_size"));
 
   closeAndRemove(db, conn);
 }

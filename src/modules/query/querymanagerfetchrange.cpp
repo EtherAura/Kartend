@@ -231,17 +231,22 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
 
   QString sql;
   if (useFts) {
-    // Query FTS table directly - the FTS table contains name,
-    // path, and collection_uuid so we can filter and sort directly.
+    // Query items through items_fts rowids so date/size metadata remains
+    // available while filtering with FTS.
     // Use GROUP BY path to deduplicate paths that appear in multiple
     // collections.
     if (useTempTable) {
-      sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM items_fts "
-            "WHERE items_fts MATCH ? AND EXISTS " +
+      sql = "SELECT path, MIN(collection_uuid) as collection_uuid, "
+            "MIN(name) as sort_name, MAX(last_modified) as sort_last_modified, "
+            "MIN(file_size) as sort_file_size FROM items "
+            "WHERE id IN (SELECT rowid FROM items_fts WHERE items_fts MATCH ?) AND EXISTS " +
             uuidClause;
     } else {
-      sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM items_fts "
-            "WHERE items_fts MATCH ? AND collection_uuid IN " +
+      sql = "SELECT path, MIN(collection_uuid) as collection_uuid, "
+            "MIN(name) as sort_name, MAX(last_modified) as sort_last_modified, "
+            "MIN(file_size) as sort_file_size FROM items "
+            "WHERE id IN (SELECT rowid FROM items_fts WHERE items_fts MATCH ?) AND "
+            "collection_uuid IN " +
             uuidClause;
     }
   } else {
@@ -250,11 +255,15 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
     // MIN(collection_uuid) picks one arbitrarily. This ensures the result count
     // matches COUNT(DISTINCT path).
     if (useTempTable) {
-      sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM items "
+      sql = "SELECT path, MIN(collection_uuid) as collection_uuid, "
+            "MIN(name) as sort_name, MAX(last_modified) as sort_last_modified, "
+            "MIN(file_size) as sort_file_size FROM items "
             "WHERE EXISTS " +
             uuidClause;
     } else {
-      sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM items "
+      sql = "SELECT path, MIN(collection_uuid) as collection_uuid, "
+            "MIN(name) as sort_name, MAX(last_modified) as sort_last_modified, "
+            "MIN(file_size) as sort_file_size FROM items "
             "WHERE collection_uuid IN " +
             uuidClause;
     }
@@ -294,25 +303,37 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   // pagination will be consistent).
   switch (ctx.sortMode) {
   case SortMode::NameDescending:
-    sql += " ORDER BY name COLLATE NOCASE DESC LIMIT ? OFFSET ?";
+    sql += " ORDER BY sort_name COLLATE NOCASE DESC LIMIT ? OFFSET ?";
+    break;
+  case SortMode::DateDescending:
+    sql += " ORDER BY sort_last_modified DESC, sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
+    break;
+  case SortMode::DateAscending:
+    sql += " ORDER BY sort_last_modified ASC, sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
+    break;
+  case SortMode::SizeDescending:
+    sql += " ORDER BY sort_file_size DESC, sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
+    break;
+  case SortMode::SizeAscending:
+    sql += " ORDER BY sort_file_size ASC, sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
     break;
   case SortMode::CollectionAscending:
     // For collection sorting in slow path, we can't easily join, so fall back
     // to name sort The cache path handles this correctly with proper joins
-    sql += " ORDER BY collection_uuid, name COLLATE NOCASE LIMIT ? OFFSET ?";
+    sql += " ORDER BY collection_uuid, sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
     break;
   case SortMode::CollectionDescending:
-    sql += " ORDER BY collection_uuid DESC, name COLLATE NOCASE LIMIT ? OFFSET ?";
+    sql += " ORDER BY collection_uuid DESC, sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
     break;
   case SortMode::Random:
     // This shouldn't happen - Random mode forces cache creation above.
     // Fall back to alphabetical for consistent pagination.
     qCWarning(lcQueryManager) << "[QueryManager] fetchItemsRange: Random sort reached slow "
                                  "path unexpectedly";
-    sql += " ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?";
+    sql += " ORDER BY sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
     break;
   default:
-    sql += " ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?";
+    sql += " ORDER BY sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
     break;
   }
 

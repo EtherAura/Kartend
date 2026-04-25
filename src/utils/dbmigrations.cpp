@@ -101,7 +101,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
     return;
   }
 
-  constexpr int CURRENT_SCHEMA_VERSION = 3;
+  constexpr int CURRENT_SCHEMA_VERSION = 4;
   const int version = getUserVersion(db);
   if (version >= CURRENT_SCHEMA_VERSION) {
     return;
@@ -230,7 +230,24 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
     }
 
     setUserVersion(db, 3);
-    // mutableVersion would be 3 here but function ends
+    mutableVersion = 3;
+  }
+
+  if (mutableVersion < 4) {
+    // v4: Add file_size so item lists can sort by size without touching the
+    // filesystem at query time. Existing rows backfill to 0 until the next
+    // collection rescan refreshes metadata from disk.
+    ensureColumn(db, "items", "file_size", "INTEGER DEFAULT 0", origin);
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_items_uuid_last_modified ON "
+                "items(collection_uuid, last_modified)",
+                origin, "idx_items_uuid_last_modified");
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_items_uuid_file_size ON "
+                "items(collection_uuid, file_size)",
+                origin, "idx_items_uuid_file_size");
+
+    setUserVersion(db, 4);
   }
 }
 

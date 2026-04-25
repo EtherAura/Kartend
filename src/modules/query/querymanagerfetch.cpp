@@ -379,6 +379,18 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
   case SortMode::NameDescending:
     orderClause = "ORDER BY name COLLATE NOCASE DESC";
     break;
+  case SortMode::DateDescending:
+    orderClause = "ORDER BY last_modified DESC, name COLLATE NOCASE";
+    break;
+  case SortMode::DateAscending:
+    orderClause = "ORDER BY last_modified ASC, name COLLATE NOCASE";
+    break;
+  case SortMode::SizeDescending:
+    orderClause = "ORDER BY file_size DESC, name COLLATE NOCASE";
+    break;
+  case SortMode::SizeAscending:
+    orderClause = "ORDER BY file_size ASC, name COLLATE NOCASE";
+    break;
   case SortMode::CollectionAscending:
     orderClause = "ORDER BY collection_uuid, name COLLATE NOCASE";
     break;
@@ -409,7 +421,7 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
   // path, matching COUNT(DISTINCT path) used by fetchItemCount.
   QString sql = QString("SELECT rn FROM ("
                         "  SELECT path, ROW_NUMBER() OVER (%1) - 1 as rn "
-                        "  FROM (SELECT path, name FROM items WHERE "
+                        "  FROM (SELECT path, name, last_modified, file_size FROM items WHERE "
                         "collection_uuid IN (%2) GROUP BY path)"
                         ") WHERE path = ?")
                     .arg(orderClause, uuidPlaceholders);

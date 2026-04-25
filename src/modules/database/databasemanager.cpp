@@ -248,6 +248,7 @@ void DatabaseManager::initDatabase() {
                        "name TEXT NOT NULL, "
                        "artwork_path TEXT, "
                        "last_modified TEXT NOT NULL, "
+                       "file_size INTEGER DEFAULT 0, "
                        "play_count INTEGER DEFAULT 0, "
                        "last_played TEXT, "
                        "rating INTEGER DEFAULT 0, "
