@@ -170,6 +170,8 @@ public:
   // Stops any running scroll animations (wheel/arrow key) to prevent stale
   // animations from applying after a view rebuild (e.g., entering a subfolder).
   void stopScrollAnimations();
+  // Shows a right-click context menu for the item at the given visual index.
+  void showContextMenu(ItemWidget *widget, int visualIndex, const QPoint &globalPos);
   [[nodiscard]] bool isRestoringSelection() const;
   [[nodiscard]] int targetRestoreIndex() const;
   [[nodiscard]] bool forceImmediateCenter() const;

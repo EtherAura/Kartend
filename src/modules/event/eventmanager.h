@@ -113,6 +113,7 @@ signals:
   void widgetDoubleClicked(const QString &filePath, int collectionIndex);
   void widgetClicked(ItemWidget *widget, int visualIndex, const QPoint &clickPos,
                      QMouseEvent *event);
+  void contextMenuRequested(ItemWidget *widget, int visualIndex, const QPoint &globalPos);
   void clearSelectionRequested();
   void slashKeyPressed();
   void escapeKeyPressed();

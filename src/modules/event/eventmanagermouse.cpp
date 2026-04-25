@@ -551,7 +551,25 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
     return true;
   }
   auto *mouseEvent = static_cast<QMouseEvent *>(event);
-  if ((!mouseEvent) || mouseEvent->button() != Qt::LeftButton) {
+  if (!mouseEvent) {
+    return false;
+  }
+
+  // Right-click context menu handling
+  if (mouseEvent->button() == Qt::RightButton) {
+    auto *widget = itemWidgetForObject(obj);
+    if (widget) {
+      int visualIndex = visualIndexForWidget(widget);
+      if (visualIndex >= 0) {
+        emit contextMenuRequested(widget, visualIndex, mouseEvent->globalPosition().toPoint());
+        event->accept();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (mouseEvent->button() != Qt::LeftButton) {
     return false;
   }
 
