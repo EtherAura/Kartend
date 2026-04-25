@@ -1,9 +1,9 @@
 #ifndef APPLICATIONMANAGER_H
 #define APPLICATIONMANAGER_H
 
+#include <memory>
 #include <QFuture>
 #include <QObject>
-#include <memory>
 
 class ArtworkManager;
 class CacheManager;

@@ -14,11 +14,13 @@
 #include <QPushButton>
 #include <QString>
 #include <QStringList>
-#include <QTimer>
 #include <Qt>
+#include <QTimer>
 
 // Set file path
-void ItemWidget::setFilePath(const QString &path) { filePath = path; }
+void ItemWidget::setFilePath(const QString &path) {
+  filePath = path;
+}
 
 // Reset widget state for reuse from pool
 void ItemWidget::resetForReuse() {
@@ -26,8 +28,7 @@ void ItemWidget::resetForReuse() {
   // This prevents stale selection rectangles when widgets are recycled
   if (isSelectedState) {
     isSelectedState = false;
-    if (pulseAnimation &&
-        pulseAnimation->state() == QAbstractAnimation::Running) {
+    if (pulseAnimation && pulseAnimation->state() == QAbstractAnimation::Running) {
       pulseAnimation->stop();
     }
     m_pulseOpacity = UIConstants::Animation::PULSE_OPACITY_LOW;
@@ -76,8 +77,7 @@ void ItemWidget::setAsSubcollection(int index, const QString &name) {
     m_folderIconLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     m_folderIconLabel->setAlignment(Qt::AlignCenter);
   }
-  QIcon folderIcon =
-      UIConstants::Icons::fromTheme(UIConstants::Icons::SUBCOLLECTION);
+  QIcon folderIcon = UIConstants::Icons::fromTheme(UIConstants::Icons::SUBCOLLECTION);
   m_folderIconLabel->setPixmap(folderIcon.pixmap(16, 16));
   m_folderIconLabel->setVisible(true);
 
@@ -86,8 +86,7 @@ void ItemWidget::setAsSubcollection(int index, const QString &name) {
 }
 
 // Set as virtual folder (subfolder navigation without subcollection)
-void ItemWidget::setAsVirtualFolder(const QString &folderPath,
-                                    const QString &displayName,
+void ItemWidget::setAsVirtualFolder(const QString &folderPath, const QString &displayName,
                                     bool hideTitle) {
   m_isVirtualFolder = true;
   m_virtualFolderPath = folderPath;
@@ -100,8 +99,7 @@ void ItemWidget::setAsVirtualFolder(const QString &folderPath,
     m_folderIconLabel->setAlignment(Qt::AlignCenter);
   }
   // Use documents folder icon to distinguish from subcollection icon
-  QIcon folderIcon =
-      UIConstants::Icons::fromTheme(UIConstants::Icons::VIRTUAL_FOLDER);
+  QIcon folderIcon = UIConstants::Icons::fromTheme(UIConstants::Icons::VIRTUAL_FOLDER);
   m_folderIconLabel->setPixmap(folderIcon.pixmap(16, 16));
   m_folderIconLabel->setVisible(true);
 

@@ -23,8 +23,7 @@ public:
   ~ArtworkPreviewOverlay() override = default;
 
   /// Show the overlay with artwork for the given file path
-  void showArtworkForFile(const QString &filePath,
-                          const QString &artworkDirectory);
+  void showArtworkForFile(const QString &filePath, const QString &artworkDirectory);
 
   /// Hide the overlay
   void hideOverlay();

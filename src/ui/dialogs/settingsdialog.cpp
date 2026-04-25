@@ -1,12 +1,16 @@
 // Collection configuration dialog with tree-based hierarchy editing and live
 // preview.
+#include <algorithm>
+#include <functional>
 #include <QAbstractItemView>
 #include <QColorDialog>
 #include <QDir>
 #include <QFileDialog>
 #include <QFontDialog>
+#include <QAction>
 #include <QInputDialog>
 #include <QKeySequence>
+#include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPixmapCache>
@@ -18,8 +22,6 @@
 #include <QToolTip>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
-#include <algorithm>
-#include <functional>
 #include <set>
 
 #include "extensionutils.h"
@@ -34,18 +36,13 @@
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
-SettingsDialog::SettingsDialog(
-    QWidget *parent, const QList<CollectionConfig> &initialCollections,
-    int initialIndex)
-    : QDialog(parent), ui(new Ui::SettingsDialog),
-      collectionTreeWidget(nullptr), currentTreeItem(nullptr),
-      collections(initialCollections),
-      originalCurrentCollectionIndex(initialIndex),
-      currentCollectionIndex(initialIndex),
-      m_workingCollections(initialCollections),
-      m_gridWidthChangedForActiveCollection(false),
-      m_newGridWidthForActiveCollection(0), m_collectionSaved(true),
-      m_isLoading(false) {
+SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &initialCollections,
+                               int initialIndex)
+    : QDialog(parent), ui(new Ui::SettingsDialog), collectionTreeWidget(nullptr),
+      currentTreeItem(nullptr), collections(initialCollections),
+      originalCurrentCollectionIndex(initialIndex), currentCollectionIndex(initialIndex),
+      m_workingCollections(initialCollections), m_gridWidthChangedForActiveCollection(false),
+      m_newGridWidthForActiveCollection(0), m_collectionSaved(true), m_isLoading(false) {
   ui->setupUi(this);
   setWindowTitle(tr("Settings"));
   setModal(true);
@@ -65,22 +62,18 @@ SettingsDialog::SettingsDialog(
   setupConnections();
   updateCollectionTreeWidget();
 
-  if (currentCollectionIndex >= 0 &&
-      currentCollectionIndex < m_workingCollections.size()) {
+  if (currentCollectionIndex >= 0 && currentCollectionIndex < m_workingCollections.size()) {
     expandPathToCollection(currentCollectionIndex);
   }
 
-  if (currentCollectionIndex < 0 ||
-      currentCollectionIndex >= m_workingCollections.size()) {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_workingCollections.size()) {
     currentCollectionIndex = m_workingCollections.isEmpty() ? -1 : 0;
   }
-  if (currentCollectionIndex >= 0 &&
-      currentCollectionIndex < m_workingCollections.size()) {
+  if (currentCollectionIndex >= 0 && currentCollectionIndex < m_workingCollections.size()) {
     loadCollectionToUI(currentCollectionIndex);
     originalCollection = m_workingCollections[currentCollectionIndex];
     if (collectionIndexToItem.contains(currentCollectionIndex)) {
-      collectionTreeWidget->setCurrentItem(
-          collectionIndexToItem[currentCollectionIndex]);
+      collectionTreeWidget->setCurrentItem(collectionIndexToItem[currentCollectionIndex]);
       currentTreeItem = collectionIndexToItem[currentCollectionIndex];
     }
   }
@@ -105,11 +98,10 @@ auto SettingsDialog::eventFilter(QObject *obj, QEvent *event) -> bool {
 
     if ((collectionTreeWidget) && collectionTreeWidget->underMouse()) {
       QWheelEvent forwardedEvent(
-          collectionTreeWidget->mapFromGlobal(
-              wheelEvent->globalPosition().toPoint()),
+          collectionTreeWidget->mapFromGlobal(wheelEvent->globalPosition().toPoint()),
           wheelEvent->globalPosition().toPoint(), wheelEvent->pixelDelta(),
-          wheelEvent->angleDelta(), wheelEvent->buttons(),
-          wheelEvent->modifiers(), wheelEvent->phase(), wheelEvent->inverted());
+          wheelEvent->angleDelta(), wheelEvent->buttons(), wheelEvent->modifiers(),
+          wheelEvent->phase(), wheelEvent->inverted());
       QApplication::sendEvent(collectionTreeWidget, &forwardedEvent);
       event->accept();
       return true;
@@ -120,13 +112,11 @@ auto SettingsDialog::eventFilter(QObject *obj, QEvent *event) -> bool {
   }
 
   if ((collectionTreeWidget) &&
-      (obj == collectionTreeWidget ||
-       obj == collectionTreeWidget->viewport()) &&
+      (obj == collectionTreeWidget || obj == collectionTreeWidget->viewport()) &&
       event->type() == QEvent::MouseButtonPress) {
     auto *mouseEvent = static_cast<QMouseEvent *>(event);
     auto *src = static_cast<QWidget *>(obj);
-    QPoint vpPos =
-        collectionTreeWidget->viewport()->mapFrom(src, mouseEvent->pos());
+    QPoint vpPos = collectionTreeWidget->viewport()->mapFrom(src, mouseEvent->pos());
     const QTreeWidgetItem *hit = collectionTreeWidget->itemAt(vpPos);
     if (!hit) {
       collectionTreeWidget->clearSelection();
@@ -141,7 +131,9 @@ auto SettingsDialog::eventFilter(QObject *obj, QEvent *event) -> bool {
   return QDialog::eventFilter(obj, event);
 }
 
-SettingsDialog::~SettingsDialog() { delete ui; }
+SettingsDialog::~SettingsDialog() {
+  delete ui;
+}
 
 void SettingsDialog::accept() {
   stopGamepadButtonCapture();
@@ -152,12 +144,12 @@ void SettingsDialog::accept() {
 
   // Prompt user to rescan if database-affecting changes were saved
   if (!m_rescanRequired.isEmpty()) {
-    QMessageBox::StandardButton reply = QMessageBox::question(
-        this, tr("Rescan Required"),
-        tr("Some changes affect the database and require a rescan to take "
-           "effect.\n\n"
-           "Would you like to rescan now?"),
-        QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+    QMessageBox::StandardButton reply =
+        QMessageBox::question(this, tr("Rescan Required"),
+                              tr("Some changes affect the database and require a rescan to take "
+                                 "effect.\n\n"
+                                 "Would you like to rescan now?"),
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
 
     if (reply == QMessageBox::Yes) {
       // Only rescan the currently viewed collection to avoid concurrent
@@ -185,22 +177,30 @@ void SettingsDialog::reject() {
 }
 
 void SettingsDialog::setupButtonConnections() {
-  connect(ui->buttonBox, &QDialogButtonBox::accepted, this,
-          &SettingsDialog::accept);
+  connect(ui->buttonBox, &QDialogButtonBox::accepted, this, &SettingsDialog::accept);
 
-  connect(ui->buttonBox, &QDialogButtonBox::rejected, this,
-          &SettingsDialog::reject);
+  connect(ui->buttonBox, &QDialogButtonBox::rejected, this, &SettingsDialog::reject);
 
-  connect(ui->addCollectionButton, &QPushButton::clicked, this,
-          &SettingsDialog::addCollection);
+  connect(ui->addCollectionButton, &QPushButton::clicked, this, &SettingsDialog::addCollection);
   connect(ui->removeCollectionButton, &QPushButton::clicked, this,
           &SettingsDialog::removeCollection);
-  connect(ui->browseLauncherButton, &QPushButton::clicked, this,
-          &SettingsDialog::browseLauncher);
-  connect(ui->browseCoreButton, &QPushButton::clicked, this,
-          &SettingsDialog::browseCore);
-  connect(ui->browseMediaDirButton, &QPushButton::clicked, this,
-          &SettingsDialog::browseMediaDir);
+  // Kartend-63o: populate the "apply to..." tool button's dropdown menu so
+  // users can propagate the current collection's appearance/layout settings
+  // to all collections or to subcollections only. Menu is owned by the
+  // button so Qt cleans it up with the dialog.
+  if (ui->applyToButton) {
+    auto *menu = new QMenu(ui->applyToButton);
+    QAction *allAction = menu->addAction(tr("Apply to All Collections..."));
+    QAction *subAction = menu->addAction(tr("Apply to Subcollections Only..."));
+    connect(allAction, &QAction::triggered, this,
+            &SettingsDialog::applyCurrentSettingsToAllCollections);
+    connect(subAction, &QAction::triggered, this,
+            &SettingsDialog::applyCurrentSettingsToSubcollections);
+    ui->applyToButton->setMenu(menu);
+  }
+  connect(ui->browseLauncherButton, &QPushButton::clicked, this, &SettingsDialog::browseLauncher);
+  connect(ui->browseCoreButton, &QPushButton::clicked, this, &SettingsDialog::browseCore);
+  connect(ui->browseMediaDirButton, &QPushButton::clicked, this, &SettingsDialog::browseMediaDir);
   connect(ui->browseArtworkDirButton, &QPushButton::clicked, this,
           &SettingsDialog::browseArtworkDir);
   if (ui->recursiveImportContentButton) {
@@ -219,6 +219,14 @@ void SettingsDialog::setupConnections() {
   setupGeneralSettingsConnections();
 }
 
+auto SettingsDialog::spacingInternalToUi(int spacing) -> int {
+  return spacing - UIConstants::Viewport::SPACING_MIN;
+}
+
+auto SettingsDialog::spacingUiToInternal(int spacing) -> int {
+  return spacing + UIConstants::Viewport::SPACING_MIN;
+}
+
 // Add a new collection, optionally inheriting from current selection;
 // initialize defaults.
 auto SettingsDialog::promptUnsavedChanges(const QString &actionDescription)
@@ -226,20 +234,16 @@ auto SettingsDialog::promptUnsavedChanges(const QString &actionDescription)
   QMessageBox messageBox(this);
   messageBox.setIcon(QMessageBox::Warning);
   messageBox.setWindowTitle(tr("Unsaved Changes"));
-  messageBox.setText(
-      tr("Save changes before %1?").arg(actionDescription.trimmed()));
-  messageBox.setStandardButtons(QMessageBox::Save | QMessageBox::Discard |
-                                QMessageBox::Cancel);
+  messageBox.setText(tr("Save changes before %1?").arg(actionDescription.trimmed()));
+  messageBox.setStandardButtons(QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
   messageBox.setDefaultButton(QMessageBox::Save);
   return static_cast<QMessageBox::StandardButton>(messageBox.exec());
 }
 
 void SettingsDialog::emitGridWidthChanged() {
-  if (m_gridWidthChangedForActiveCollection &&
-      originalCurrentCollectionIndex >= 0 &&
+  if (m_gridWidthChangedForActiveCollection && originalCurrentCollectionIndex >= 0 &&
       originalCurrentCollectionIndex < collections.size()) {
-    emit gridWidthChanged(originalCurrentCollectionIndex,
-                          m_newGridWidthForActiveCollection);
+    emit gridWidthChanged(originalCurrentCollectionIndex, m_newGridWidthForActiveCollection);
     m_gridWidthChangedForActiveCollection = false;
   }
 }
@@ -257,4 +261,3 @@ void SettingsDialog::resizeEvent(QResizeEvent *event) {
   QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this,
                      &SettingsDialog::updateGridWidthLimits);
 }
-

@@ -57,8 +57,7 @@ public:
    * @param filePathToDisplayName Map for subcollection item display names.
    * @param subcollections List of subcollection indices.
    */
-  void setSourceData(const QStringList &filePaths,
-                     const QHash<QString, QString> &fileNames,
+  void setSourceData(const QStringList &filePaths, const QHash<QString, QString> &fileNames,
                      const QHash<QString, QString> &filePathToDisplayName,
                      const QList<int> &subcollections);
 
@@ -95,9 +94,7 @@ public:
 
   [[nodiscard]] bool isFiltered() const { return m_isFiltered; }
   [[nodiscard]] const QString &currentFilter() const { return m_currentFilter; }
-  [[nodiscard]] const QList<int> &filteredIndices() const {
-    return m_filteredIndices;
-  }
+  [[nodiscard]] const QList<int> &filteredIndices() const { return m_filteredIndices; }
 
   /**
    * @brief Map visual index to actual item index.
@@ -123,16 +120,12 @@ private:
   void rebuildFilteredIndices();
   [[nodiscard]] bool matchesSubcollectionFilter(int subcollectionIndex,
                                                 const QString &needle) const;
-  [[nodiscard]] bool matchesMediaItemFilter(int mediaIndex,
-                                            const QString &needle) const;
-  [[nodiscard]] QString
-  getDisplayNameForMediaItem(const QString &rawEntry) const;
+  [[nodiscard]] bool matchesMediaItemFilter(int mediaIndex, const QString &needle) const;
+  [[nodiscard]] QString getDisplayNameForMediaItem(const QString &rawEntry) const;
 
-  void determineTargetCollections(int subcollectionIndex,
-                                  QSet<int> &targetCollections);
-  [[nodiscard]] bool
-  itemBelongsToTargetCollections(const QString &entry,
-                                 const QSet<int> &targetCollections) const;
+  void determineTargetCollections(int subcollectionIndex, QSet<int> &targetCollections);
+  [[nodiscard]] bool itemBelongsToTargetCollections(const QString &entry,
+                                                    const QSet<int> &targetCollections) const;
 
   // Dependencies
   DatabaseManager *m_databaseManager = nullptr;

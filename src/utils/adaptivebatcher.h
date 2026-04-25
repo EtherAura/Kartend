@@ -1,9 +1,9 @@
 #ifndef ADAPTIVEBATCHER_H
 #define ADAPTIVEBATCHER_H
 
+#include <deque>
 #include <QMutex>
 #include <QMutexLocker>
-#include <deque>
 
 /**
  * @brief Adaptive batch sizing based on measured performance.
@@ -29,8 +29,7 @@ public:
   };
 
   explicit AdaptiveBatcher(const Config &config)
-      : m_config(config), m_currentBatchSize(config.initialBatchSize),
-        m_avgTimePerItem(0.0) {}
+      : m_config(config), m_currentBatchSize(config.initialBatchSize), m_avgTimePerItem(0.0) {}
 
   // Default constructor uses default config
   AdaptiveBatcher() : AdaptiveBatcher(Config::defaults()) {}
@@ -76,8 +75,7 @@ public:
       }
 
       // Clamp to configured bounds
-      m_currentBatchSize =
-          qBound(m_config.minBatchSize, newSize, m_config.maxBatchSize);
+      m_currentBatchSize = qBound(m_config.minBatchSize, newSize, m_config.maxBatchSize);
     }
 
     return m_currentBatchSize;
@@ -113,8 +111,8 @@ public:
 
   [[nodiscard]] Stats stats() const {
     QMutexLocker lock(&m_mutex);
-    return {m_currentBatchSize, m_avgTimePerItem,
-            static_cast<int>(m_history.size()), m_config.targetTimeMs};
+    return {m_currentBatchSize, m_avgTimePerItem, static_cast<int>(m_history.size()),
+            m_config.targetTimeMs};
   }
 
 private:

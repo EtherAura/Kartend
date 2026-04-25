@@ -47,6 +47,14 @@ private slots:
   void computeCollectionUuid_differentInputs();
   void computeCollectionUuid_emptyInputs();
   void computeCollectionUuid_isHex40();
+
+  // ancestorIndexChain (Kartend-7pq)
+  void ancestorIndexChain_topLevelReturnsEmpty();
+  void ancestorIndexChain_oneDeep();
+  void ancestorIndexChain_multiDeepRootFirst();
+  void ancestorIndexChain_stopsAtNonSubcollection();
+  void ancestorIndexChain_invalidParentReturnsEmpty();
+  void ancestorIndexChain_cycleIsBounded();
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -260,6 +268,73 @@ void TestCollectionUtils::computeCollectionUuid_isHex40() {
   for (QChar c : uuid) {
     QVERIFY((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'));
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ancestorIndexChain (Kartend-7pq full-path breadcrumb)
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+// Build a minimal CollectionConfig with just the fields ancestorIndexChain
+// consults (name, isSubcollection, parentCollectionIndex).
+CollectionConfig makeCollection(const QString &name, bool isSub,
+                                int parentIdx) {
+  CollectionConfig c;
+  c.name = name;
+  c.isSubcollection = isSub;
+  c.parentCollectionIndex = parentIdx;
+  return c;
+}
+} // namespace
+
+void TestCollectionUtils::ancestorIndexChain_topLevelReturnsEmpty() {
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Root", /*isSub=*/false, -1);
+  QCOMPARE(CollectionUtils::ancestorIndexChain(cs[0], cs), QList<int>{});
+}
+
+void TestCollectionUtils::ancestorIndexChain_oneDeep() {
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Games", /*isSub=*/false, -1);
+  cs << makeCollection("SNES", /*isSub=*/true, 0);
+  QCOMPARE(CollectionUtils::ancestorIndexChain(cs[1], cs), (QList<int>{0}));
+}
+
+void TestCollectionUtils::ancestorIndexChain_multiDeepRootFirst() {
+  // Root → Games → Nintendo → SNES. Expect ancestors for SNES == [0,1,2].
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Root", /*isSub=*/false, -1);
+  cs << makeCollection("Games", /*isSub=*/true, 0);
+  cs << makeCollection("Nintendo", /*isSub=*/true, 1);
+  cs << makeCollection("SNES", /*isSub=*/true, 2);
+  QCOMPARE(CollectionUtils::ancestorIndexChain(cs[3], cs),
+           (QList<int>{0, 1, 2}));
+}
+
+void TestCollectionUtils::ancestorIndexChain_stopsAtNonSubcollection() {
+  // A non-subcollection in the middle terminates the walk (inclusive): it's
+  // the root-most ancestor we render in the breadcrumb.
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Detached", /*isSub=*/false, -1);
+  cs << makeCollection("TopLikeRoot", /*isSub=*/false, 0); // not a subcoll
+  cs << makeCollection("Child", /*isSub=*/true, 1);
+  QCOMPARE(CollectionUtils::ancestorIndexChain(cs[2], cs), (QList<int>{1}));
+}
+
+void TestCollectionUtils::ancestorIndexChain_invalidParentReturnsEmpty() {
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Orphan", /*isSub=*/true, -1);
+  QCOMPARE(CollectionUtils::ancestorIndexChain(cs[0], cs), QList<int>{});
+}
+
+void TestCollectionUtils::ancestorIndexChain_cycleIsBounded() {
+  // Degenerate cycle: A → B → A. The walk must terminate by bounded-depth
+  // guard rather than looping forever.
+  QList<CollectionConfig> cs;
+  cs << makeCollection("A", /*isSub=*/true, 1);
+  cs << makeCollection("B", /*isSub=*/true, 0);
+  const QList<int> chain = CollectionUtils::ancestorIndexChain(cs[0], cs);
+  QVERIFY(chain.size() <= cs.size());
 }
 
 QTEST_APPLESS_MAIN(TestCollectionUtils)

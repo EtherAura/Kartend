@@ -126,6 +126,27 @@
             </spacer>
            </item>
            <item>
+            <widget class="QLabel" name="itemPositionLabel">
+             <property name="font">
+              <font>
+               <pointsize>11</pointsize>
+              </font>
+             </property>
+             <property name="toolTip">
+              <string>Current item position within the collection</string>
+             </property>
+             <property name="text">
+              <string></string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+             <property name="visible">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QPushButton" name="gridViewButton">
              <property name="maximumSize">
               <size>

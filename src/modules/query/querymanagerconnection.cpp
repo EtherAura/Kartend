@@ -14,9 +14,9 @@
 #include <QStandardPaths>
 #include <QString>
 #include <QStringList>
+#include <QtGlobal>
 #include <QThread>
 #include <QTimer>
-#include <QtGlobal>
 
 #include "dbmigrations.h"
 #include "errorutils.h"
@@ -65,7 +65,9 @@ auto QueryManager::getPreparedStatement(const QString &sql) -> QSqlQuery & {
 }
 
 // Clears statement cache - call when database connection changes
-void QueryManager::clearStatementCache() { m_statementCache.clear(); }
+void QueryManager::clearStatementCache() {
+  m_statementCache.clear();
+}
 
 // Attempts to reconnect to the database if connection was lost
 // Used to handle transient SQLite errors (disk full, I/O errors, etc.)
@@ -73,10 +75,8 @@ void QueryManager::clearStatementCache() { m_statementCache.clear(); }
 // NOTE: Only attempts reconnection if database was previously initialized
 //       (has valid driver). Returns false for uninitialized databases.
 auto QueryManager::ensureDatabaseConnection() -> bool {
-  static constexpr int MAX_RECONNECT_ATTEMPTS =
-      UIConstants::Database::WORKER_RECONNECT_ATTEMPTS;
-  static constexpr int RECONNECT_DELAY_MS =
-      UIConstants::Database::WORKER_RECONNECT_DELAY_MS;
+  static constexpr int MAX_RECONNECT_ATTEMPTS = UIConstants::Database::WORKER_RECONNECT_ATTEMPTS;
+  static constexpr int RECONNECT_DELAY_MS = UIConstants::Database::WORKER_RECONNECT_DELAY_MS;
 
   if (m_db.isOpen()) {
     return true;
@@ -89,12 +89,12 @@ auto QueryManager::ensureDatabaseConnection() -> bool {
   }
 
   auto logReconnectAttempt = [this](int attempt) {
-    auto info = ErrorContext::info(
-        ErrorCode::DatabaseConnectionLost,
-        QString("Database connection lost, attempting reconnection (%1/%2)")
-            .arg(attempt)
-            .arg(MAX_RECONNECT_ATTEMPTS),
-        "QueryManager::ensureDatabaseConnection");
+    auto info =
+        ErrorContext::info(ErrorCode::DatabaseConnectionLost,
+                           QString("Database connection lost, attempting reconnection (%1/%2)")
+                               .arg(attempt)
+                               .arg(MAX_RECONNECT_ATTEMPTS),
+                           "QueryManager::ensureDatabaseConnection");
     ErrorUtils::logError(info);
   };
 
@@ -107,11 +107,10 @@ auto QueryManager::ensureDatabaseConnection() -> bool {
 
     // Try to reopen
     if (m_db.open()) {
-      auto success = ErrorContext::info(
-          ErrorCode::DatabaseConnectionRestored,
-          QString("Database reconnection successful on attempt %1")
-              .arg(attempt),
-          "QueryManager::ensureDatabaseConnection");
+      auto success =
+          ErrorContext::info(ErrorCode::DatabaseConnectionRestored,
+                             QString("Database reconnection successful on attempt %1").arg(attempt),
+                             "QueryManager::ensureDatabaseConnection");
       ErrorUtils::logError(success);
 
       // Re-initialize PRAGMAs after reconnection
@@ -132,12 +131,12 @@ auto QueryManager::ensureDatabaseConnection() -> bool {
   }
 
   // All attempts failed
-  auto err = ErrorContext::critical(
-                 ErrorCode::DatabaseConnectionFailed,
-                 QString("Failed to reconnect to database after %1 attempts")
-                     .arg(MAX_RECONNECT_ATTEMPTS),
-                 "QueryManager::ensureDatabaseConnection")
-                 .withDetails(m_db.lastError().text());
+  auto err =
+      ErrorContext::critical(
+          ErrorCode::DatabaseConnectionFailed,
+          QString("Failed to reconnect to database after %1 attempts").arg(MAX_RECONNECT_ATTEMPTS),
+          "QueryManager::ensureDatabaseConnection")
+          .withDetails(m_db.lastError().text());
   ErrorUtils::logError(err);
   emit errorOccurred(err);
 
@@ -158,10 +157,9 @@ auto QueryManager::ensureDatabaseAvailable(const char *callerContext) -> bool {
 
   // All recovery paths exhausted - notify the main thread so callers don't
   // hang waiting on a result signal that will never come.
-  auto err = ErrorContext::critical(
-                 ErrorCode::DatabaseConnectionFailed,
-                 QStringLiteral("Database unavailable after reconnect + init"),
-                 callerContext)
+  auto err = ErrorContext::critical(ErrorCode::DatabaseConnectionFailed,
+                                    QStringLiteral("Database unavailable after reconnect + init"),
+                                    callerContext)
                  .withDetails(m_db.lastError().text());
   ErrorUtils::logError(err);
   emit errorOccurred(err);
@@ -175,13 +173,12 @@ void QueryManager::initDatabase() {
     m_db = QSqlDatabase::addDatabase("QSQLITE", m_connectionName);
   }
 
-  QString dbPath =
-      QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+  QString dbPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
   if (!QDir().mkpath(dbPath)) {
-    auto err = ErrorContext::critical(ErrorCode::DatabaseConnectionFailed,
-                                      "Failed to create database directory",
-                                      "QueryManager::initDatabase")
-                   .withDetails(QString("Path: %1").arg(dbPath));
+    auto err =
+        ErrorContext::critical(ErrorCode::DatabaseConnectionFailed,
+                               "Failed to create database directory", "QueryManager::initDatabase")
+            .withDetails(QString("Path: %1").arg(dbPath));
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return;
@@ -190,8 +187,7 @@ void QueryManager::initDatabase() {
 
   if (!m_db.open()) {
     auto err = ErrorContext::critical(ErrorCode::DatabaseConnectionFailed,
-                                      "Failed to open database",
-                                      "QueryManager::initDatabase")
+                                      "Failed to open database", "QueryManager::initDatabase")
                    .withDetails(m_db.lastError().text());
     ErrorUtils::logError(err);
     emit errorOccurred(err);
@@ -201,14 +197,12 @@ void QueryManager::initDatabase() {
   QSqlQuery query(m_db);
   if (!query.exec("PRAGMA foreign_keys = ON")) {
     auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to enable foreign keys",
-                                     "QueryManager::initDatabase")
+                                     "Failed to enable foreign keys", "QueryManager::initDatabase")
                    .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
   }
   if (!query.exec("PRAGMA journal_mode = WAL")) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to enable WAL mode",
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to enable WAL mode",
                                      "QueryManager::initDatabase")
                    .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
@@ -217,11 +211,9 @@ void QueryManager::initDatabase() {
   // holds a lock (e.g., FTS backfill on scan worker). Queries will fail with
   // SQLITE_BUSY after the timeout, allowing graceful fallback.
   const QString busyTimeoutPragma =
-      QStringLiteral("PRAGMA busy_timeout = %1")
-          .arg(UIConstants::Database::WORKER_BUSY_TIMEOUT_MS);
+      QStringLiteral("PRAGMA busy_timeout = %1").arg(UIConstants::Database::WORKER_BUSY_TIMEOUT_MS);
   if (!query.exec(busyTimeoutPragma)) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to set busy timeout",
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to set busy timeout",
                                      "QueryManager::initDatabase")
                    .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
@@ -230,8 +222,7 @@ void QueryManager::initDatabase() {
   // data safety - WAL mode already provides crash recovery guarantees
   if (!query.exec("PRAGMA synchronous = NORMAL")) {
     auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to set synchronous mode",
-                                     "QueryManager::initDatabase")
+                                     "Failed to set synchronous mode", "QueryManager::initDatabase")
                    .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
   }
@@ -245,25 +236,23 @@ void QueryManager::initDatabase() {
              "uuid TEXT DEFAULT ''"
              ")");
 
-  query.exec(
-      "CREATE TABLE IF NOT EXISTS items ("
-      "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-      "collection_id INTEGER NOT NULL, "
-      "path TEXT NOT NULL, "
-      "name TEXT NOT NULL, "
-      "artwork_path TEXT, "
-      "last_modified TEXT NOT NULL, "
-      "play_count INTEGER DEFAULT 0, "
-      "last_played TEXT, "
-      "rating INTEGER DEFAULT 0, "
-      "collection_uuid TEXT DEFAULT '', "
-      "UNIQUE(collection_id, path), "
-      "FOREIGN KEY(collection_id) REFERENCES collections(id) ON DELETE CASCADE"
-      ")");
+  query.exec("CREATE TABLE IF NOT EXISTS items ("
+             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+             "collection_id INTEGER NOT NULL, "
+             "path TEXT NOT NULL, "
+             "name TEXT NOT NULL, "
+             "artwork_path TEXT, "
+             "last_modified TEXT NOT NULL, "
+             "play_count INTEGER DEFAULT 0, "
+             "last_played TEXT, "
+             "rating INTEGER DEFAULT 0, "
+             "collection_uuid TEXT DEFAULT '', "
+             "UNIQUE(collection_id, path), "
+             "FOREIGN KEY(collection_id) REFERENCES collections(id) ON DELETE CASCADE"
+             ")");
 
   // Keep core indexes available even in worker-only initialization.
-  query.exec(
-      "CREATE INDEX IF NOT EXISTS idx_collections_uuid ON collections(uuid)");
+  query.exec("CREATE INDEX IF NOT EXISTS idx_collections_uuid ON collections(uuid)");
   query.exec("CREATE INDEX IF NOT EXISTS idx_items_collection_uuid ON "
              "items(collection_uuid)");
   // Composite index for sorted range queries - enables efficient ORDER BY name
@@ -272,8 +261,7 @@ void QueryManager::initDatabase() {
   query.exec("CREATE INDEX IF NOT EXISTS idx_items_uuid_name ON "
              "items(collection_uuid, name COLLATE NOCASE)");
 
-  DbMigrations::applySchemaMigrations(
-      m_db, QStringLiteral("QueryManager::initDatabase"));
+  DbMigrations::applySchemaMigrations(m_db, QStringLiteral("QueryManager::initDatabase"));
 
   refreshSearchCapabilities();
 }
@@ -308,8 +296,7 @@ static auto ensureMetaTable(QSqlDatabase &db) -> void {
          "NOT NULL)");
 }
 
-static auto tryReadMetaValue(QSqlDatabase &db, const QString &key,
-                             QString &valueOut) -> bool {
+static auto tryReadMetaValue(QSqlDatabase &db, const QString &key, QString &valueOut) -> bool {
   QSqlQuery q(db);
   q.prepare("SELECT value FROM meta WHERE key = ?");
   q.addBindValue(key);
@@ -320,8 +307,7 @@ static auto tryReadMetaValue(QSqlDatabase &db, const QString &key,
   return true;
 }
 
-static auto writeMetaValue(QSqlDatabase &db, const QString &key,
-                           const QString &value) -> void {
+static auto writeMetaValue(QSqlDatabase &db, const QString &key, const QString &value) -> void {
   QSqlQuery q(db);
   q.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)");
   q.addBindValue(key);
@@ -329,8 +315,7 @@ static auto writeMetaValue(QSqlDatabase &db, const QString &key,
   q.exec();
 }
 
-static auto tryReadMetaInt(QSqlDatabase &db, const QString &key,
-                           qint64 &valueOut) -> bool {
+static auto tryReadMetaInt(QSqlDatabase &db, const QString &key, qint64 &valueOut) -> bool {
   QString value;
   if (!tryReadMetaValue(db, key, value)) {
     return false;
@@ -384,8 +369,7 @@ void QueryManager::ensureItemsFtsReady() {
   slice.start();
 
   qint64 indexedUpToId = 0;
-  (void)tryReadMetaInt(m_db, QStringLiteral("items_fts_indexed_up_to_id"),
-                       indexedUpToId);
+  (void)tryReadMetaInt(m_db, QStringLiteral("items_fts_indexed_up_to_id"), indexedUpToId);
 
   while (slice.elapsed() < UIConstants::Database::FTS_BACKFILL_TIME_BUDGET_MS) {
     // Determine the current max id in the content table.
@@ -405,18 +389,16 @@ void QueryManager::ensureItemsFtsReady() {
     }
 
     if (maxId <= indexedUpToId) {
-      writeMetaValue(m_db, QStringLiteral("items_fts_ready"),
-                     QStringLiteral("1"));
+      writeMetaValue(m_db, QStringLiteral("items_fts_ready"), QStringLiteral("1"));
       m_itemsFtsReady = true;
       return;
     }
 
     if (!m_db.transaction()) {
-      auto err =
-          ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
-                                "Failed to start transaction for FTS backfill",
-                                "QueryManager::ensureItemsFtsReady")
-              .withDetails(m_db.lastError().text());
+      auto err = ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
+                                       "Failed to start transaction for FTS backfill",
+                                       "QueryManager::ensureItemsFtsReady")
+                     .withDetails(m_db.lastError().text());
       ErrorUtils::logError(err);
       emit errorOccurred(err);
       return;
@@ -434,10 +416,9 @@ void QueryManager::ensureItemsFtsReady() {
 
     if (!insertQ.exec()) {
       m_db.rollback();
-      auto err = ErrorContext::warning(
-                     ErrorCode::DatabaseQueryFailed,
-                     "FTS backfill insert failed (search will use LIKE)",
-                     "QueryManager::ensureItemsFtsReady")
+      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                       "FTS backfill insert failed (search will use LIKE)",
+                                       "QueryManager::ensureItemsFtsReady")
                      .withDetails(insertQ.lastError().text());
       ErrorUtils::logError(err);
       emit errorOccurred(err);
@@ -480,4 +461,3 @@ void QueryManager::ensureItemsFtsReady() {
   QTimer::singleShot(UIConstants::Database::FTS_BACKFILL_SLICE_DELAY_MS, this,
                      &QueryManager::ensureItemsFtsReady);
 }
-

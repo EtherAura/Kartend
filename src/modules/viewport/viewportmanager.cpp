@@ -22,34 +22,26 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcViewportManager, "kartend.viewportmanager")
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcViewportManager().isDebugEnabled()) {                                \
-      qCDebug(lcViewportManager) << msg;                                       \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcViewportManager().isDebugEnabled()) {                                                    \
+      qCDebug(lcViewportManager) << msg;                                                           \
+    }                                                                                              \
   } while (0)
 
 // ViewportManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(ViewportManagerSetup, QScrollArea *, ItemScrollArea,
-                      itemScrollArea)
-SETUP_GETTER_DEF_SAME(ViewportManagerSetup, ScrollManager *, ScrollManager,
-                      scrollManager)
-SETUP_GETTER_DEF_SAME(ViewportManagerSetup, SelectionManager *,
-                      SelectionManager, selectionManager)
-SETUP_GETTER_DEF_SAME(ViewportManagerSetup, AnimationManager *,
-                      AnimationManager, animationManager)
-SETUP_GETTER_DEF_SAME(ViewportManagerSetup, ArtworkManager *, ArtworkManager,
-                      artworkManager)
-SETUP_GETTER_DEF_SAME(ViewportManagerSetup, InteractionStateHolder *,
-                      InteractionState, interactionState)
-SETUP_GETTER_DEF_SAME(ViewportManagerSetup, QList<CollectionConfig> *,
-                      Collections, collections)
-SETUP_GETTER_DEF_SAME(ViewportManagerSetup, int *, CurrentCollectionIndex,
-                      currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(ViewportManagerSetup, const bool *, IsShuttingDown,
-                      isShuttingDown)
-SETUP_GETTER_DEF_SAME(ViewportManagerSetup, const GeneralSettings *,
-                      GeneralSettings, generalSettings)
+SETUP_GETTER_DEF_SAME(ViewportManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_SAME(ViewportManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_SAME(ViewportManagerSetup, SelectionManager *, SelectionManager, selectionManager)
+SETUP_GETTER_DEF_SAME(ViewportManagerSetup, AnimationManager *, AnimationManager, animationManager)
+SETUP_GETTER_DEF_SAME(ViewportManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_SAME(ViewportManagerSetup, InteractionStateHolder *, InteractionState,
+                      interactionState)
+SETUP_GETTER_DEF_SAME(ViewportManagerSetup, QList<CollectionConfig> *, Collections, collections)
+SETUP_GETTER_DEF_SAME(ViewportManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
+SETUP_GETTER_DEF_SAME(ViewportManagerSetup, const bool *, IsShuttingDown, isShuttingDown)
+SETUP_GETTER_DEF_SAME(ViewportManagerSetup, const GeneralSettings *, GeneralSettings,
+                      generalSettings)
 
 ViewportManager::ViewportManager(QObject *parent) : QObject(parent) {}
 
@@ -69,8 +61,8 @@ void ViewportManager::setupReferences(const ViewportManagerSetup &setup) {
 
   // Connect to AnimationManager's finished signal
   if (m_animationManager) {
-    connect(m_animationManager, &AnimationManager::verticalAnimationFinished,
-            this, &ViewportManager::onVScrollAnimationFinished);
+    connect(m_animationManager, &AnimationManager::verticalAnimationFinished, this,
+            &ViewportManager::onVScrollAnimationFinished);
   }
 }
 
@@ -82,8 +74,7 @@ void ViewportManager::setRestoringSelection(bool restoring) {
 }
 
 bool ViewportManager::isRestoringSelection() const {
-  return m_selectionManager ? m_selectionManager->isRestoringSelection()
-                            : false;
+  return m_selectionManager ? m_selectionManager->isRestoringSelection() : false;
 }
 
 void ViewportManager::setTargetRestoreIndex(int index) {
@@ -123,18 +114,16 @@ int ViewportManager::getCurrentGridWidth() const {
   return CollectionUtils::getGridWidth(m_currentCollectionIndex, m_collections);
 }
 
-int ViewportManager::computeVerticalCenterDuration(int distance,
-                                                   bool repeatActive) const {
+int ViewportManager::computeVerticalCenterDuration(int distance, bool repeatActive) const {
   int itemHeight = 0;
   int vSpacing = 0;
   if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     itemHeight = (*m_collections)[*m_currentCollectionIndex].itemHeight;
     vSpacing = (*m_collections)[*m_currentCollectionIndex].verticalSpacing;
   }
-  int speedLevel =
-      m_generalSettings ? m_generalSettings->scrollAnimationDurationMs : 1500;
-  return AnimationManager::computeVerticalCenterDuration(
-      distance, itemHeight, vSpacing, repeatActive, speedLevel);
+  int speedLevel = m_generalSettings ? m_generalSettings->scrollAnimationDurationMs : 1500;
+  return AnimationManager::computeVerticalCenterDuration(distance, itemHeight, vSpacing,
+                                                         repeatActive, speedLevel);
 }
 
 void ViewportManager::setProgrammaticScrollGuarded(bool enable) {
@@ -164,8 +153,8 @@ void ViewportManager::setProgrammaticScrollGuarded(bool enable) {
   }
 }
 
-void ViewportManager::setScrollValueAndUpdateSelection(
-    QScrollBar *verticalScrollBar, int targetY, int index) {
+void ViewportManager::setScrollValueAndUpdateSelection(QScrollBar *verticalScrollBar, int targetY,
+                                                       int index) {
   verticalScrollBar->setValue(targetY);
   if (m_scrollManager) {
     // When wrapping, clear all widgets to prevent stale artwork from showing
@@ -174,9 +163,8 @@ void ViewportManager::setScrollValueAndUpdateSelection(
       m_scrollManager->cleanupActiveWidgets();
     }
     m_scrollManager->updateVirtualView();
-    int idxDyn = (m_state && m_state->isSelectionSuppressed())
-                     ? m_state->pendingSelectionIndex()
-                     : index;
+    int idxDyn =
+        (m_state && m_state->isSelectionSuppressed()) ? m_state->pendingSelectionIndex() : index;
     if (idxDyn >= 0) {
       m_scrollManager->updateSelectionForIndex(idxDyn);
     }
@@ -208,20 +196,18 @@ void ViewportManager::clearArrowCenterSuppressionWhenDue() {
     constexpr qint64 kMaxArrowCenterSuppressClearMs = 1000;
     // Clear arrow center suppression after calculated delay expires -
     // caps at max to prevent indefinite suppression on clock issues
-    QTimer::singleShot(
-        static_cast<int>(qMin<qint64>(delay, kMaxArrowCenterSuppressClearMs)),
-        this, [statePtr]() {
-          if (statePtr) {
-            statePtr->arrow().suppressArrowCenter = false;
-          }
-        });
+    QTimer::singleShot(static_cast<int>(qMin<qint64>(delay, kMaxArrowCenterSuppressClearMs)), this,
+                       [statePtr]() {
+                         if (statePtr) {
+                           statePtr->arrow().suppressArrowCenter = false;
+                         }
+                       });
   } else {
     m_state->arrow().suppressArrowCenter = false;
   }
 }
 
-void ViewportManager::finalizeImmediateCenteringState(int index,
-                                                      int currentRow) {
+void ViewportManager::finalizeImmediateCenteringState(int index, int currentRow) {
   // Check and finalize restore via SelectionManager (single source of truth)
   if (m_selectionManager) {
     m_selectionManager->checkAndFinalizeRestore(index);
@@ -235,8 +221,8 @@ void ViewportManager::finalizeImmediateCenteringState(int index,
   if (m_state && m_state->scroll().clickScroll) {
     m_state->scroll().clickScroll = false;
   }
-  if (!m_repeating && !m_physicalKeyDown && m_state &&
-      !m_state->scroll().clickContinuous && !m_state->scroll().keyContinuous) {
+  if (!m_repeating && !m_physicalKeyDown && m_state && !m_state->scroll().clickContinuous &&
+      !m_state->scroll().keyContinuous) {
     m_continuousScrollActive = false;
   }
   m_instantPositioning = false;
@@ -252,14 +238,13 @@ void ViewportManager::onVScrollAnimationFinished() {
   }
   if (m_scrollManager) {
     m_scrollManager->updateVirtualView();
-    int idxDyn = (m_state && m_state->isSelectionSuppressed())
-                     ? m_state->pendingSelectionIndex()
-                     : -1;
+    int idxDyn =
+        (m_state && m_state->isSelectionSuppressed()) ? m_state->pendingSelectionIndex() : -1;
     // Signal that we need a selection update (InteractionManager will handle)
     emit requestSelectionUpdate(idxDyn);
   }
-  if (!m_repeating && !m_physicalKeyDown && m_state &&
-      !m_state->scroll().clickContinuous && !m_state->scroll().keyContinuous) {
+  if (!m_repeating && !m_physicalKeyDown && m_state && !m_state->scroll().clickContinuous &&
+      !m_state->scroll().keyContinuous) {
     m_continuousScrollActive = false;
   }
   if (m_state) {
@@ -283,9 +268,8 @@ void ViewportManager::onVScrollAnimationFinished() {
   }
   m_instantPositioning = false;
   int gridWidthLocal = getCurrentGridWidth();
-  int idxDyn = (m_state && m_state->isSelectionSuppressed())
-                   ? m_state->pendingSelectionIndex()
-                   : -1;
+  int idxDyn =
+      (m_state && m_state->isSelectionSuppressed()) ? m_state->pendingSelectionIndex() : -1;
   if (gridWidthLocal > 0 && idxDyn >= 0) {
     m_lastSelectedRow = idxDyn / gridWidthLocal;
     if (m_selectionManager) {
@@ -293,4 +277,3 @@ void ViewportManager::onVScrollAnimationFinished() {
     }
   }
 }
-

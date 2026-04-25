@@ -4,8 +4,10 @@
 #include "collectionutils.h"
 #include "setuputils.h"
 #include <QObject>
+#include <QPoint>
 #include <QPointer>
 #include <QScrollArea>
+#include <QTimer>
 
 QT_BEGIN_NAMESPACE
 class QEvent;
@@ -60,9 +62,7 @@ struct EventManagerSetup {
 
   // Accessors with ctx fallback
   SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
-  [[nodiscard]] KeyboardManager *getKeyboardManager() const {
-    return keyboardManager;
-  }
+  [[nodiscard]] KeyboardManager *getKeyboardManager() const { return keyboardManager; }
   [[nodiscard]] MouseManager *getMouseManager() const { return mouseManager; }
   SETUP_GETTER_DECL(AnimationManager *, AnimationManager)
   SETUP_GETTER_DECL(ViewportManager *, ViewportManager)
@@ -111,8 +111,9 @@ public:
 signals:
   // Event signals for InteractionManager to handle
   void widgetDoubleClicked(const QString &filePath, int collectionIndex);
-  void widgetClicked(ItemWidget *widget, int visualIndex,
-                     const QPoint &clickPos, QMouseEvent *event);
+  void widgetClicked(ItemWidget *widget, int visualIndex, const QPoint &clickPos,
+                     QMouseEvent *event);
+  void contextMenuRequested(ItemWidget *widget, int visualIndex, const QPoint &globalPos);
   void clearSelectionRequested();
   void slashKeyPressed();
   void escapeKeyPressed();
@@ -127,6 +128,7 @@ private:
   [[nodiscard]] bool handleActivityEvent(QEvent *event);
   [[nodiscard]] bool handleMouseButtonPress(QObject *obj, QEvent *event);
   [[nodiscard]] bool handleMouseButtonRelease(QObject *obj, QEvent *event);
+  [[nodiscard]] bool handleHoverSelection(QObject *obj, QEvent *event);
   [[nodiscard]] bool handleWheelEvent(QObject *obj, QEvent *event);
   [[nodiscard]] bool handleKeyPressEvent(QObject *obj, QEvent *event);
   [[nodiscard]] bool handleKeyReleaseEvent(QObject *obj, QEvent *event);
@@ -137,6 +139,11 @@ private:
   [[nodiscard]] int getCurrentGridWidth() const;
   [[nodiscard]] QList<int> getSubcollections(int parentIndex) const;
   [[nodiscard]] bool applyWheelSelectionDelta(int wheelSteps);
+  [[nodiscard]] ItemWidget *itemWidgetForObject(QObject *obj) const;
+  [[nodiscard]] int visualIndexForWidget(ItemWidget *widget) const;
+  void commitPendingHoverScroll();
+  void clearPendingHoverScroll();
+  void pollCursorForContinuousHoverScroll();
 
   // Manager references
   ScrollManager *m_scrollManager = nullptr;
@@ -163,6 +170,10 @@ private:
 
   // Reentrancy guard for wheel event handling
   bool m_processingWheelEvent = false;
+  QPointer<ItemWidget> m_pendingHoverScrollWidget;
+  QPoint m_pendingHoverScrollGlobalPos;
+  int m_pendingHoverScrollIndex = -1;
+  QTimer m_hoverScrollTimer;
 };
 
 #endif // EVENTMANAGER_H

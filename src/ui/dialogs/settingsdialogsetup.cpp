@@ -1,6 +1,8 @@
 // Sibling translation unit for SettingsDialog.
 // Extracted from settingsdialogform.cpp during LOC-reduction refactor.
 // These remain SettingsDialog members; this is a translation-unit split.
+#include <algorithm>
+#include <functional>
 #include <QAbstractItemView>
 #include <QColorDialog>
 #include <QDir>
@@ -18,8 +20,6 @@
 #include <QToolTip>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
-#include <algorithm>
-#include <functional>
 #include <set>
 
 #include "extensionutils.h"
@@ -35,8 +35,7 @@
 
 void SettingsDialog::setupBasicUIConnections() {
   connect(ui->saveCollectionButton, &QPushButton::clicked, this, [this]() {
-    if (currentCollectionIndex < 0 ||
-        currentCollectionIndex >= collections.size()) {
+    if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
       return;
     }
     if (!ui->gridWidthSpinBox) {
@@ -50,9 +49,9 @@ void SettingsDialog::setupBasicUIConnections() {
 
 void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
   int newGridWidth = ui->gridWidthSpinBox->value();
-  bool isActive = (editedIndex == originalCurrentCollectionIndex &&
-                   originalCurrentCollectionIndex >= 0 &&
-                   originalCurrentCollectionIndex < collections.size());
+  bool isActive =
+      (editedIndex == originalCurrentCollectionIndex && originalCurrentCollectionIndex >= 0 &&
+       originalCurrentCollectionIndex < collections.size());
   bool gridWidthChangedFlag = (newGridWidth != originalCollection.gridWidth);
   if (isActive && gridWidthChangedFlag) {
     m_gridWidthChangedForActiveCollection = true;
@@ -62,24 +61,19 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
   // Check if database-affecting fields changed before saving
   // These fields affect the UUID or database content and require a rescan
   QString newName = originalCollection.name;
-  if (collectionIndexToItem.contains(editedIndex) &&
-      collectionIndexToItem[editedIndex]) {
+  if (collectionIndexToItem.contains(editedIndex) && collectionIndexToItem[editedIndex]) {
     newName = collectionIndexToItem[editedIndex]->text(0);
   }
-  QString newMediaDir = ui->mediaDirLineEdit
-                            ? ui->mediaDirLineEdit->text().trimmed()
-                            : originalCollection.mediaDirectory;
-  QString newExtensions = ui->fileExtensionsLineEdit
-                              ? ui->fileExtensionsLineEdit->text().trimmed()
-                              : originalCollection.extensions.join(", ");
-  bool newIncludeSubfolders =
-      ui->includeContentSubfoldersCheckBox
-          ? ui->includeContentSubfoldersCheckBox->isChecked()
-          : originalCollection.includeContentSubfolders;
+  QString newMediaDir = ui->mediaDirLineEdit ? ui->mediaDirLineEdit->text().trimmed()
+                                             : originalCollection.mediaDirectory;
+  QString newExtensions = ui->fileExtensionsLineEdit ? ui->fileExtensionsLineEdit->text().trimmed()
+                                                     : originalCollection.extensions.join(", ");
+  bool newIncludeSubfolders = ui->includeContentSubfoldersCheckBox
+                                  ? ui->includeContentSubfoldersCheckBox->isChecked()
+                                  : originalCollection.includeContentSubfolders;
 
   bool databaseFieldsChanged =
-      (newName != originalCollection.name) ||
-      (newMediaDir != originalCollection.mediaDirectory) ||
+      (newName != originalCollection.name) || (newMediaDir != originalCollection.mediaDirectory) ||
       (newExtensions != originalCollection.extensions.join(", ")) ||
       (newIncludeSubfolders != originalCollection.includeContentSubfolders);
 
@@ -122,14 +116,12 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
 
 void SettingsDialog::setupFormFieldConnections() {
   if (ui->launcherLineEdit) {
-    connect(ui->launcherLineEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
+    connect(ui->launcherLineEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
     connect(ui->launcherLineEdit, &QLineEdit::textChanged, this,
             [this](const QString &text) { updateUIForLauncherType(text); });
   }
   if (ui->coreLineEdit) {
-    connect(ui->coreLineEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
+    connect(ui->coreLineEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
   }
   if (ui->launchParamsLineEdit) {
     connect(ui->launchParamsLineEdit, &QLineEdit::textChanged, this,
@@ -146,8 +138,7 @@ void SettingsDialog::setupFormFieldConnections() {
             &SettingsDialog::checkForChanges);
   }
   if (ui->mediaDirLineEdit) {
-    connect(ui->mediaDirLineEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
+    connect(ui->mediaDirLineEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
     connect(ui->mediaDirLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::onContentDirectoryChanged);
   }
@@ -182,31 +173,27 @@ void SettingsDialog::setupFormFieldConnections() {
             &SettingsDialog::checkForChanges);
   }
   if (ui->gridWidthSpinBox) {
-    connect(ui->gridWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &SettingsDialog::onGridWidthChanged);
+    connect(ui->gridWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::onGridWidthChanged);
   }
   if (ui->showAllSubcollectionItemsCheckBox) {
     connect(ui->showAllSubcollectionItemsCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
   }
   if (ui->horizontalAlignmentComboBox) {
-    connect(ui->horizontalAlignmentComboBox,
-            QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            &SettingsDialog::checkForChanges);
+    connect(ui->horizontalAlignmentComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &SettingsDialog::checkForChanges);
   }
   if (ui->viewTypeComboBox) {
-    connect(ui->viewTypeComboBox,
-            QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+    connect(ui->viewTypeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::checkForChanges);
   }
   if (ui->parentCollectionComboBox) {
-    connect(ui->parentCollectionComboBox,
-            QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+    connect(ui->parentCollectionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::checkForChanges);
   }
   if (ui->sidebarModeComboBox) {
-    connect(ui->sidebarModeComboBox,
-            QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+    connect(ui->sidebarModeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::checkForChanges);
   }
   if (ui->hideHorizontalScrollbarCheckBox) {
@@ -218,38 +205,34 @@ void SettingsDialog::setupFormFieldConnections() {
             &SettingsDialog::checkForChanges);
   }
   if (ui->hideTitlesCheckBox) {
-    connect(ui->hideTitlesCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
+    connect(ui->hideTitlesCheckBox, &QCheckBox::toggled, this, &SettingsDialog::checkForChanges);
   }
   if (ui->hideSubcollectionTitlesCheckBox) {
     connect(ui->hideSubcollectionTitlesCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
   }
   if (ui->itemWidthSpinBox) {
-    connect(ui->itemWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &SettingsDialog::checkForChanges);
+    connect(ui->itemWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
   }
   if (ui->itemHeightSpinBox) {
-    connect(ui->itemHeightSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &SettingsDialog::checkForChanges);
+    connect(ui->itemHeightSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
   }
   if (ui->fontSizeSpinBox) {
-    connect(ui->fontSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &SettingsDialog::checkForChanges);
+    connect(ui->fontSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
   }
   if (ui->cornerRadiusSpinBox) {
-    connect(ui->cornerRadiusSpinBox,
-            QOverload<int>::of(&QSpinBox::valueChanged), this,
+    connect(ui->cornerRadiusSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
   }
   // Color field connections
   if (ui->primaryColorEdit) {
-    connect(ui->primaryColorEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
+    connect(ui->primaryColorEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
   }
   if (ui->tileColorEdit) {
-    connect(ui->tileColorEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
+    connect(ui->tileColorEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
   }
   if (ui->selectionColorEdit) {
     connect(ui->selectionColorEdit, &QLineEdit::textChanged, this,
@@ -257,18 +240,15 @@ void SettingsDialog::setupFormFieldConnections() {
   }
   // List mode field connections
   if (ui->listFontSizeSpinBox) {
-    connect(ui->listFontSizeSpinBox,
-            QOverload<int>::of(&QSpinBox::valueChanged), this,
+    connect(ui->listFontSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
   }
   if (ui->listRowHeightSpinBox) {
-    connect(ui->listRowHeightSpinBox,
-            QOverload<int>::of(&QSpinBox::valueChanged), this,
+    connect(ui->listRowHeightSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
   }
   if (ui->listRowColorEdit) {
-    connect(ui->listRowColorEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
+    connect(ui->listRowColorEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
   }
   if (ui->listAltRowColorEdit) {
     connect(ui->listAltRowColorEdit, &QLineEdit::textChanged, this,
@@ -291,19 +271,15 @@ void SettingsDialog::setupFormFieldConnections() {
 
 void SettingsDialog::setupSpacingConnections() {
   if (ui->horizontalSpacingSpinBox) {
-    connect(ui->horizontalSpacingSpinBox,
-            QOverload<int>::of(&QSpinBox::valueChanged), this,
+    connect(ui->horizontalSpacingSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
-    connect(ui->horizontalSpacingSpinBox,
-            QOverload<int>::of(&QSpinBox::valueChanged), this,
+    connect(ui->horizontalSpacingSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             [this]() { handleSpacingChanged(); });
   }
   if (ui->verticalSpacingSpinBox) {
-    connect(ui->verticalSpacingSpinBox,
-            QOverload<int>::of(&QSpinBox::valueChanged), this,
+    connect(ui->verticalSpacingSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
-    connect(ui->verticalSpacingSpinBox,
-            QOverload<int>::of(&QSpinBox::valueChanged), this,
+    connect(ui->verticalSpacingSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             [this]() { handleSpacingChanged(); });
   }
 }
@@ -312,20 +288,16 @@ void SettingsDialog::handleSpacingChanged() {
   if (!ui->horizontalSpacingSpinBox || !ui->verticalSpacingSpinBox) {
     return;
   }
-  if (currentCollectionIndex < 0 ||
-      currentCollectionIndex >= collections.size()) {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
     return;
   }
-  if (originalCurrentCollectionIndex < 0 ||
-      originalCurrentCollectionIndex >= collections.size()) {
+  if (originalCurrentCollectionIndex < 0 || originalCurrentCollectionIndex >= collections.size()) {
     return;
   }
   if (currentCollectionIndex == originalCurrentCollectionIndex) {
-    // Rebase horizontal spacing: UI value 20 corresponds to internal -50
-    // Internal = UI - 70
-    int internalHorizontalSpacing = ui->horizontalSpacingSpinBox->value() - 70;
-    emit spacingChanged(currentCollectionIndex, internalHorizontalSpacing,
-                        ui->verticalSpacingSpinBox->value());
+    emit spacingChanged(currentCollectionIndex,
+                        spacingUiToInternal(ui->horizontalSpacingSpinBox->value()),
+                        spacingUiToInternal(ui->verticalSpacingSpinBox->value()));
   }
 }
 
@@ -342,20 +314,17 @@ void SettingsDialog::setupTreeWidgetConnections() {
 
 void SettingsDialog::setupUIConstraints() {
   if (ui->horizontalSpacingSpinBox) {
-    // Rebase horizontal spacing: UI range 0 to 150 maps to internal -100 to 50
-    // Internal = UI - 70.
-    // Min UI = -100 + 70 = -30? No.
-    // User wants "20" to be "-50".
-    // UI = Internal + 70.
-    // Min Internal = -100. Min UI = -30.
-    // Max Internal = 50. Max UI = 120.
-    ui->horizontalSpacingSpinBox->setMinimum(-30);
-    ui->horizontalSpacingSpinBox->setMaximum(120);
+    ui->horizontalSpacingSpinBox->setMinimum(
+        spacingInternalToUi(UIConstants::Viewport::SPACING_MIN));
+    ui->horizontalSpacingSpinBox->setMaximum(
+        spacingInternalToUi(UIConstants::Viewport::SPACING_MAX));
     ui->horizontalSpacingSpinBox->setSingleStep(1);
   }
   if (ui->verticalSpacingSpinBox) {
-    ui->verticalSpacingSpinBox->setMinimum(UIConstants::Viewport::SPACING_MIN);
-    ui->verticalSpacingSpinBox->setMaximum(UIConstants::Viewport::SPACING_MAX);
+    ui->verticalSpacingSpinBox->setMinimum(
+        spacingInternalToUi(UIConstants::Viewport::SPACING_MIN));
+    ui->verticalSpacingSpinBox->setMaximum(
+        spacingInternalToUi(UIConstants::Viewport::SPACING_MAX));
     ui->verticalSpacingSpinBox->setSingleStep(1);
   }
   if (ui->gridWidthSpinBox) {
@@ -374,4 +343,3 @@ void SettingsDialog::setupUIConstraints() {
     ui->cornerRadiusSpinBox->setSingleStep(1);
   }
 }
-

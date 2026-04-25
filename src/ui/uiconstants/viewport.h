@@ -12,9 +12,9 @@ namespace Viewport {
 inline constexpr int MIN_WIDTH = 600;
 /// Default viewport width in pixels
 inline constexpr int DEFAULT_WIDTH = 1200;
-/// Minimum spacing adjustment (negative = tighter)
+/// Minimum stored spacing adjustment (negative = tighter/overlap)
 inline constexpr int SPACING_MIN = -100;
-/// Maximum spacing adjustment (positive = looser)
+/// Maximum stored spacing adjustment (positive = looser)
 inline constexpr int SPACING_MAX = 50;
 } // namespace Viewport
 } // namespace UIConstants

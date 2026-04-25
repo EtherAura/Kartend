@@ -3,11 +3,11 @@
 
 #include "applicationcontext.h"
 #include "collectionutils.h"
+#include <memory>
 #include <QHash>
 #include <QList>
 #include <QMainWindow>
 #include <QTimer>
-#include <memory>
 
 namespace TimerUtils {
 class DebouncedTimer;
@@ -76,18 +76,12 @@ public:
   [[nodiscard]] const CollectionHierarchyCache &getHierarchyCache() const {
     return m_hierarchyCache;
   }
-  [[nodiscard]] const ApplicationContext &getAppContext() const {
-    return m_appContext;
-  }
+  [[nodiscard]] const ApplicationContext &getAppContext() const { return m_appContext; }
   [[nodiscard]] bool isShuttingDown() const { return m_isShuttingDown; }
 
   // Getters for Managers
-  [[nodiscard]] ApplicationManager *getApplicationManager() const {
-    return m_appManager.get();
-  }
-  [[nodiscard]] MetadataSidebar *getMetadataSidebar() const {
-    return m_MetadataSidebar;
-  }
+  [[nodiscard]] ApplicationManager *getApplicationManager() const { return m_appManager.get(); }
+  [[nodiscard]] MetadataSidebar *getMetadataSidebar() const { return m_MetadataSidebar; }
 
   // Delegated Getters
   [[nodiscard]] SidebarManager *getSidebarManager() const;
@@ -123,6 +117,9 @@ private:
 
   void setupManagerConnections();
   void updateWindowTitleWithFilter(int visible, int total);
+  /// Refreshes the itemPositionLabel in the top bar with the current
+  /// selection position and total item count (Kartend-tof).
+  void updateItemPositionLabel();
 
   void connectDatabaseManager();
   void connectScrollManager();

@@ -67,8 +67,8 @@ public:
   [[nodiscard]] static QRect overlayRectForWidget(ItemWidget *widget);
 
   // Calculate overlay rect for grid position
-  [[nodiscard]] static QRect
-  overlayRectForPosition(const QPoint &pos, int itemWidth, int itemHeight);
+  [[nodiscard]] static QRect overlayRectForPosition(const QPoint &pos, int itemWidth,
+                                                    int itemHeight);
 
 signals:
   // Emitted when glide animation finishes

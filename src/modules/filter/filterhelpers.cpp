@@ -5,8 +5,8 @@
 
 namespace FilterHelpers {
 
-auto mapVisualToActualIndex(int visualIndex, bool isFiltered,
-                            const QList<int> &filteredIndices) -> int {
+auto mapVisualToActualIndex(int visualIndex, bool isFiltered, const QList<int> &filteredIndices)
+    -> int {
   if (!isFiltered) {
     return visualIndex;
   }
@@ -16,16 +16,15 @@ auto mapVisualToActualIndex(int visualIndex, bool isFiltered,
   return filteredIndices[visualIndex];
 }
 
-auto subcollectionNameMatches(const QString &subcollectionName,
-                              const QString &needleLower) -> bool {
+auto subcollectionNameMatches(const QString &subcollectionName, const QString &needleLower)
+    -> bool {
   return subcollectionName.toLower().contains(needleLower);
 }
 
-auto displayNameForMediaEntry(
-    const QString &rawEntry, bool showAllSubcollectionItems,
-    const QString &mediaDirectory,
-    const QHash<QString, QString> *filePathToDisplayName,
-    const QHash<QString, QString> *fileNames) -> QString {
+auto displayNameForMediaEntry(const QString &rawEntry, bool showAllSubcollectionItems,
+                              const QString &mediaDirectory,
+                              const QHash<QString, QString> *filePathToDisplayName,
+                              const QHash<QString, QString> *fileNames) -> QString {
   if (showAllSubcollectionItems) {
     if (filePathToDisplayName) {
       const QString display = filePathToDisplayName->value(rawEntry);

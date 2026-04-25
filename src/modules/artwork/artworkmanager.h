@@ -1,6 +1,8 @@
 #ifndef ARTWORKMANAGER_H
 #define ARTWORKMANAGER_H
 
+#include <atomic>
+#include <memory>
 #include <QFuture>
 #include <QHash>
 #include <QImage>
@@ -11,8 +13,6 @@
 #include <QPointer>
 #include <QSet>
 #include <QThreadPool>
-#include <atomic>
-#include <memory>
 
 #include "adaptivebatcher.h"
 #include "itemwidget.h"
@@ -99,8 +99,7 @@ class ArtworkManager : public QObject {
   Q_OBJECT
 
 public:
-  explicit ArtworkManager(CacheManager *cacheManager,
-                          QObject *parent = nullptr);
+  explicit ArtworkManager(CacheManager *cacheManager, QObject *parent = nullptr);
 
   void setupReferences(const ArtworkManagerSetup &setup);
   void loadArtworkParallel(const QList<ArtworkInfo> &items, bool highPriority,
@@ -109,8 +108,7 @@ public:
   void addPendingArtwork(ItemWidget *widget, const QString &artworkPath);
   void clearPendingArtworkForWidget(ItemWidget *widget);
   void clearWidgetReferences();
-  static QString findArtworkForFile(const QString &fileName,
-                                    const QString &artworkDirectory);
+  static QString findArtworkForFile(const QString &fileName, const QString &artworkDirectory);
   void scheduleViewportUpdate();
   void startSilentLoading();
   void startEarlyDentryPrewarm(int collectionIndex);
@@ -120,21 +118,16 @@ public:
   void processContinuousSilentLoad();
   void updateUserActivity();
   [[nodiscard]] bool isUserIdle() const;
-  [[nodiscard]] bool isSilentLoadingActive() const {
-    return m_silentLoadingActive;
-  }
+  [[nodiscard]] bool isSilentLoadingActive() const { return m_silentLoadingActive; }
   [[nodiscard]] bool hasArtworkForWidget(ItemWidget *widget) const;
   void updateViewportArtwork();
   void buildArtworkPathsList();
-  void
-  addSubcollectionArtworkPathsWithDedup(int parentIndex,
-                                        QSet<QString> &processedDirectories);
+  void addSubcollectionArtworkPathsWithDedup(int parentIndex, QSet<QString> &processedDirectories);
   void initializeCache();
   void clearLoadedArtworkState();
   [[nodiscard]] TimerUtils::Coordinator *getTimerCoordinator() const;
 
-  [[nodiscard]] static QPixmap
-  createProcessedArtwork(const QPixmap &originalPixmap);
+  [[nodiscard]] static QPixmap createProcessedArtwork(const QPixmap &originalPixmap);
   [[nodiscard]] QPixmap getCachedPixmap(const QString &artworkPath);
   [[nodiscard]] QPixmap loadArtworkFromFile(const QString &artworkPath);
 
@@ -144,12 +137,10 @@ private:
   CacheManager *m_cacheManager;
   void trackWidget(ItemWidget *widget);
   /// Applies processed artwork results to UI widgets on the GUI thread.
-  void applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults,
-                        bool highPriority);
+  void applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults, bool highPriority);
   void collectUncachedAndApplyCached(const QList<ArtworkInfo> &items,
                                      QList<ArtworkInfo> &uncachedItems);
-  void dispatchAndTrackBatch(const QList<ArtworkInfo> &batch,
-                             bool highPriority);
+  void dispatchAndTrackBatch(const QList<ArtworkInfo> &batch, bool highPriority);
   void dispatchAndTrackPrecacheBatch(const QStringList &artworkPaths);
   void pruneFinishedFutures();
 
@@ -179,9 +170,8 @@ private:
   bool m_silentLoadingActive;
   int m_silentLoadBatchSize;
   std::atomic<qint64> m_lastUserActivity;
-  std::atomic<qint64> m_lastBatchCompletionTime; // For silent load cooldown
-  std::shared_ptr<std::atomic<bool>>
-      m_cancellationRequested; // For cooperative cancellation
+  std::atomic<qint64> m_lastBatchCompletionTime;              // For silent load cooldown
+  std::shared_ptr<std::atomic<bool>> m_cancellationRequested; // For cooperative cancellation
   bool m_continuousSilentLoad;
   int m_silentLoadIndex;
   bool m_persistentSilentLoad;
@@ -197,8 +187,7 @@ private:
   QMutex m_dataMutex;
   QMutex m_futureMutex;
   QList<QFuture<void>> m_futures;
-  void appendArtworkFromDir(const QString &dirPath,
-                            QSet<QString> &processedDirectories);
+  void appendArtworkFromDir(const QString &dirPath, QSet<QString> &processedDirectories);
   /// Checks if artwork loading should be skipped due to shutdown or invalid
   /// state.
   [[nodiscard]] bool shouldSkipArtworkLoading();

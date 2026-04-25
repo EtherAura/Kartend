@@ -23,8 +23,7 @@ namespace ScrollHelpers {
 //
 // itemsPerRow <= 0 is treated as "no horizontal move" (defensive); the wrap
 // detection requires itemsPerRow > 1 to avoid degenerate single-column grids.
-[[nodiscard]] auto movementDirection(int selectedIndex, int prevIndex,
-                                     int itemsPerRow) -> bool;
+[[nodiscard]] auto movementDirection(int selectedIndex, int prevIndex, int itemsPerRow) -> bool;
 
 // Resolves the effective horizontal alignment for the virtual container.
 //
@@ -32,9 +31,8 @@ namespace ScrollHelpers {
 // the row would not fill the grid (totalItems < itemsPerRow - 2), forces
 // Center alignment so the few visible items aren't stranded on one side.
 // Otherwise returns the requested alignment unchanged.
-[[nodiscard]] auto effectiveAlignment(HorizontalAlignment requested,
-                                      bool isFiltered, int totalItems,
-                                      int itemsPerRow) -> HorizontalAlignment;
+[[nodiscard]] auto effectiveAlignment(HorizontalAlignment requested, bool isFiltered,
+                                      int totalItems, int itemsPerRow) -> HorizontalAlignment;
 
 } // namespace ScrollHelpers
 

@@ -3,13 +3,13 @@
 
 #include "collectionutils.h"
 #include "gridlayoutcalculator.h"
+#include <functional>
+#include <memory>
 #include <QHash>
 #include <QObject>
 #include <QPoint>
 #include <QRect>
 #include <QString>
-#include <functional>
-#include <memory>
 
 class QWidget;
 class QScrollArea;
@@ -60,41 +60,19 @@ public:
   // ─────────────────────────────────────────────────────────────────────
 
   void setMediaScrollArea(QScrollArea *area) { m_mediaScrollArea = area; }
-  void setVirtualContainer(QWidget *container) {
-    m_virtualContainer = container;
-  }
-  void setWidgetFactory(ItemWidgetFactory *factory) {
-    m_widgetFactory = factory;
-  }
-  void setActiveWidgets(const QHash<int, ItemWidget *> *widgets) {
-    m_activeWidgets = widgets;
-  }
+  void setVirtualContainer(QWidget *container) { m_virtualContainer = container; }
+  void setWidgetFactory(ItemWidgetFactory *factory) { m_widgetFactory = factory; }
+  void setActiveWidgets(const QHash<int, ItemWidget *> *widgets) { m_activeWidgets = widgets; }
   void setMetrics(const GridMetrics *metrics) { m_metrics = metrics; }
-  void setCollectionContext(const CollectionContext *context) {
-    m_context = context;
-  }
-  void setSelectionCoordinator(SelectionCoordinator *coord) {
-    m_selectionCoordinator = coord;
-  }
-  void setArrowKeyScrollHelper(ArrowKeyScrollHelper *helper) {
-    m_arrowKeyScrollHelper = helper;
-  }
+  void setCollectionContext(const CollectionContext *context) { m_context = context; }
+  void setSelectionCoordinator(SelectionCoordinator *coord) { m_selectionCoordinator = coord; }
+  void setArrowKeyScrollHelper(ArrowKeyScrollHelper *helper) { m_arrowKeyScrollHelper = helper; }
   void setInteractionState(InteractionStateHolder *state) { m_state = state; }
-  void setArrowKeyViewUpdateTimer(QTimer *timer) {
-    m_arrowKeyViewUpdateTimer = timer;
-  }
-  void setEnsureWidgetCallback(std::function<void(int)> cb) {
-    m_ensureWidget = std::move(cb);
-  }
-  void setItemPositionCallback(std::function<QPoint(int)> cb) {
-    m_itemPosition = std::move(cb);
-  }
-  void setTotalItemsProvider(std::function<int()> cb) {
-    m_totalItemsProvider = std::move(cb);
-  }
-  void setDestroyingProvider(std::function<bool()> cb) {
-    m_destroyingProvider = std::move(cb);
-  }
+  void setArrowKeyViewUpdateTimer(QTimer *timer) { m_arrowKeyViewUpdateTimer = timer; }
+  void setEnsureWidgetCallback(std::function<void(int)> cb) { m_ensureWidget = std::move(cb); }
+  void setItemPositionCallback(std::function<QPoint(int)> cb) { m_itemPosition = std::move(cb); }
+  void setTotalItemsProvider(std::function<int()> cb) { m_totalItemsProvider = std::move(cb); }
+  void setDestroyingProvider(std::function<bool()> cb) { m_destroyingProvider = std::move(cb); }
   /// Applies persisted column widths from settings, if any.
   void applyGeneralSettings(const GeneralSettings *settings);
 
@@ -102,17 +80,11 @@ public:
   // Sub-object access (kept stable for ScrollManager's selection logic)
   // ─────────────────────────────────────────────────────────────────────
 
-  [[nodiscard]] SelectionOverlayManager *overlay() const {
-    return m_overlay.get();
-  }
-  [[nodiscard]] SelectionStateTracker *state() const {
-    return m_stateTracker.get();
-  }
+  [[nodiscard]] SelectionOverlayManager *overlay() const { return m_overlay.get(); }
+  [[nodiscard]] SelectionStateTracker *state() const { return m_stateTracker.get(); }
   [[nodiscard]] ListHeaderWidget *listHeader() const { return m_listHeader; }
 
-  [[nodiscard]] int collectionColumnWidth() const {
-    return m_collectionColumnWidth;
-  }
+  [[nodiscard]] int collectionColumnWidth() const { return m_collectionColumnWidth; }
   [[nodiscard]] int artworkColumnWidth() const { return m_artworkColumnWidth; }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -172,15 +144,12 @@ private:
   void prewarmSurroundingWidgets(int selectedIndex);
   void scheduleArrowKeyUpdate(int selectedIndex);
   void updateSelectionDirection(int selectedIndex, int prevIndex);
-  void handleSameSelectionUpdate(int selectedIndex, ItemWidget *currentWidget,
-                                 bool keepOverlay);
-  void handleNewSelectionUpdate(int selectedIndex, int prevIndex,
-                                ItemWidget *currentWidget);
+  void handleSameSelectionUpdate(int selectedIndex, ItemWidget *currentWidget, bool keepOverlay);
+  void handleNewSelectionUpdate(int selectedIndex, int prevIndex, ItemWidget *currentWidget);
   void handleMissingWidgetSelection(int selectedIndex, bool keepOverlay);
   void handleHorizontalMoveAnimation(int selectedIndex, int prevIndex);
   void handleDirectSelectionUpdate(int selectedIndex);
-  static void calculateMovementDirection(int selectedIndex, int prevIndex,
-                                         int itemsPerRow,
+  static void calculateMovementDirection(int selectedIndex, int prevIndex, int itemsPerRow,
                                          bool &isHorizontalMove);
 
   // Owned sub-objects

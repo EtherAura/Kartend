@@ -3,12 +3,12 @@
 #include "interactionstateholder.h"
 #include "scrolleventhandler.h"
 #include "uiconstants.h"
+#include <cmath>
 #include <QDateTime>
 #include <QPropertyAnimation>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QTimer>
-#include <cmath>
 
 ArrowKeyScrollHelper::ArrowKeyScrollHelper(QObject *parent) : QObject(parent) {
   m_updateTimer = new QTimer(this);
@@ -21,15 +21,13 @@ ArrowKeyScrollHelper::~ArrowKeyScrollHelper() {
   }
 }
 
-void ArrowKeyScrollHelper::setItemMetrics(int itemHeight, int verticalSpacing,
-                                          int margins) {
+void ArrowKeyScrollHelper::setItemMetrics(int itemHeight, int verticalSpacing, int margins) {
   m_itemHeight = itemHeight;
   m_verticalSpacing = verticalSpacing;
   m_margins = margins;
 }
 
-void ArrowKeyScrollHelper::scheduleUpdate(int selectedIndex,
-                                          bool extendedHold) {
+void ArrowKeyScrollHelper::scheduleUpdate(int selectedIndex, bool extendedHold) {
   if (!m_updateTimer) {
     return;
   }
@@ -53,8 +51,8 @@ void ArrowKeyScrollHelper::scheduleUpdate(int selectedIndex,
       !userScrollActiveFromHandler && !programmatic) {
     static constexpr int ARROW_KEY_UPDATE_DELAY_EXTENDED_MS = 16;
     static constexpr int ARROW_KEY_UPDATE_DELAY_NORMAL_MS = 8;
-    const int delayMs = extendedHold ? ARROW_KEY_UPDATE_DELAY_EXTENDED_MS
-                                     : ARROW_KEY_UPDATE_DELAY_NORMAL_MS;
+    const int delayMs =
+        extendedHold ? ARROW_KEY_UPDATE_DELAY_EXTENDED_MS : ARROW_KEY_UPDATE_DELAY_NORMAL_MS;
     m_updateTimer->start(delayMs);
   }
 
@@ -72,9 +70,8 @@ auto ArrowKeyScrollHelper::shouldSkipUpdate() const -> bool {
   return (until > 0 && QDateTime::currentMSecsSinceEpoch() < until);
 }
 
-void ArrowKeyScrollHelper::performUpdate(
-    int selectedIndex, int totalItems, int itemsPerRow,
-    std::function<int(int)> getItemPositionY) {
+void ArrowKeyScrollHelper::performUpdate(int selectedIndex, int totalItems, int itemsPerRow,
+                                         std::function<int(int)> getItemPositionY) {
   if (!m_scrollArea || selectedIndex < 0 || selectedIndex >= totalItems) {
     return;
   }
@@ -89,8 +86,7 @@ void ArrowKeyScrollHelper::performUpdate(
     return;
   }
 
-  int viewportHeight =
-      m_scrollArea->viewport() ? m_scrollArea->viewport()->height() : 0;
+  int viewportHeight = m_scrollArea->viewport() ? m_scrollArea->viewport()->height() : 0;
   if (viewportHeight <= 0) {
     return;
   }
@@ -109,11 +105,8 @@ void ArrowKeyScrollHelper::performUpdate(
   Q_UNUSED(itemsPerRow)
 }
 
-auto ArrowKeyScrollHelper::calculateCenterTarget(int itemY,
-                                                 int viewportHeight) const
-    -> int {
-  int itemHeight =
-      m_itemHeight > 0 ? m_itemHeight : UIConstants::Item::DEFAULT_HEIGHT;
+auto ArrowKeyScrollHelper::calculateCenterTarget(int itemY, int viewportHeight) const -> int {
+  int itemHeight = m_itemHeight > 0 ? m_itemHeight : UIConstants::Item::DEFAULT_HEIGHT;
   int margins = m_margins > 0 ? m_margins : UIConstants::Grid::MARGINS;
 
   int target = (margins + itemY) + (itemHeight / 2) - (viewportHeight / 2);
@@ -130,25 +123,21 @@ auto ArrowKeyScrollHelper::calculateCenterTarget(int itemY,
   return qBound(0, target, verticalScrollBar->maximum());
 }
 
-void ArrowKeyScrollHelper::setupAndStartAnimation(QScrollBar *scrollBar,
-                                                  int current, int target) {
+void ArrowKeyScrollHelper::setupAndStartAnimation(QScrollBar *scrollBar, int current, int target) {
   // Get base duration from settings
-  int baseDuration =
-      m_generalSettings ? m_generalSettings->scrollAnimationDurationMs : 1500;
+  int baseDuration = m_generalSettings ? m_generalSettings->scrollAnimationDurationMs : 1500;
 
   int rowStride = m_itemHeight + m_verticalSpacing;
   int singleRowDuration = baseDuration + baseDuration;
-  singleRowDuration =
-      std::max(baseDuration, std::min(singleRowDuration, baseDuration));
+  singleRowDuration = std::max(baseDuration, std::min(singleRowDuration, baseDuration));
 
   static constexpr double DEFAULT_PIXELS_PER_MILLISECOND = 0.5;
-  double pixelsPerMillisecond = (rowStride > 0 && singleRowDuration > 0)
-                                    ? static_cast<double>(rowStride) /
-                                          static_cast<double>(singleRowDuration)
-                                    : DEFAULT_PIXELS_PER_MILLISECOND;
+  double pixelsPerMillisecond =
+      (rowStride > 0 && singleRowDuration > 0)
+          ? static_cast<double>(rowStride) / static_cast<double>(singleRowDuration)
+          : DEFAULT_PIXELS_PER_MILLISECOND;
 
-  auto *animation =
-      scrollBar->findChild<QPropertyAnimation *>("arrowKeyScrollAnim");
+  auto *animation = scrollBar->findChild<QPropertyAnimation *>("arrowKeyScrollAnim");
   if (!animation) {
     animation = new QPropertyAnimation(scrollBar, "value", scrollBar);
     animation->setObjectName("arrowKeyScrollAnim");
@@ -166,11 +155,10 @@ void ArrowKeyScrollHelper::setupAndStartAnimation(QScrollBar *scrollBar,
     // This creates smooth continuous scrolling instead of stuttering restarts
     if (movingDown == newTargetDown) {
       int newDistance = std::abs(target - current);
-      int newDuration =
-          (pixelsPerMillisecond > 0.0)
-              ? static_cast<int>(std::round(static_cast<double>(newDistance) /
-                                            pixelsPerMillisecond))
-              : singleRowDuration;
+      int newDuration = (pixelsPerMillisecond > 0.0)
+                            ? static_cast<int>(std::round(static_cast<double>(newDistance) /
+                                                          pixelsPerMillisecond))
+                            : singleRowDuration;
       newDuration = std::max(baseDuration, std::min(newDuration, baseDuration));
 
       // Update end value and duration without stopping - smooth extension
@@ -186,8 +174,7 @@ void ArrowKeyScrollHelper::setupAndStartAnimation(QScrollBar *scrollBar,
   int distance = std::abs(current - target);
   int duration =
       (pixelsPerMillisecond > 0.0)
-          ? static_cast<int>(std::round(static_cast<double>(distance) /
-                                        pixelsPerMillisecond))
+          ? static_cast<int>(std::round(static_cast<double>(distance) / pixelsPerMillisecond))
           : singleRowDuration;
   duration = std::max(baseDuration, std::min(duration, baseDuration));
 
@@ -222,8 +209,7 @@ void ArrowKeyScrollHelper::stopAnimation() {
   }
 
   if (auto *arrowKeyAnimation =
-          verticalScrollBar->findChild<QPropertyAnimation *>(
-              "arrowKeyScrollAnim")) {
+          verticalScrollBar->findChild<QPropertyAnimation *>("arrowKeyScrollAnim")) {
     if (arrowKeyAnimation->state() == QAbstractAnimation::Running) {
       arrowKeyAnimation->stop();
     }

@@ -8,28 +8,25 @@
 #include "scrollmanager.h"
 #include "uiconstants.h"
 
+#include <cmath>
 #include <QApplication>
 #include <QTimer>
-#include <cmath>
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcAnimationManager, "kartend.animationmanager")
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcAnimationManager().isDebugEnabled()) {                               \
-      qCDebug(lcAnimationManager) << msg;                                      \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcAnimationManager().isDebugEnabled()) {                                                   \
+      qCDebug(lcAnimationManager) << msg;                                                          \
+    }                                                                                              \
   } while (0)
 
 // AnimationManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(AnimationManagerSetup, QScrollArea *, ItemScrollArea,
-                      itemScrollArea)
-SETUP_GETTER_DEF_SAME(AnimationManagerSetup, ScrollManager *, ScrollManager,
-                      scrollManager)
-SETUP_GETTER_DEF_SAME(AnimationManagerSetup, ArtworkManager *, ArtworkManager,
-                      artworkManager)
-SETUP_GETTER_DEF_CTX_ONLY(AnimationManagerSetup, InteractionStateHolder *,
-                          InteractionState, interactionState)
+SETUP_GETTER_DEF_SAME(AnimationManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_SAME(AnimationManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_SAME(AnimationManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_CTX_ONLY(AnimationManagerSetup, InteractionStateHolder *, InteractionState,
+                          interactionState)
 
 AnimationManager::AnimationManager(QObject *parent) : QObject(parent) {}
 
@@ -58,9 +55,9 @@ void AnimationManager::ensureVAnimCreated(QScrollBar *vScrollBar) {
   }
 }
 
-void AnimationManager::configureAndStartVerticalAnimation(
-    QScrollBar *vScrollBar, int curY, int targetY, int duration,
-    bool clickScroll, bool clickHoldAdv) {
+void AnimationManager::configureAndStartVerticalAnimation(QScrollBar *vScrollBar, int curY,
+                                                          int targetY, int duration,
+                                                          bool clickScroll, bool clickHoldAdv) {
   ensureVAnimCreated(vScrollBar);
 
   m_vScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
@@ -69,19 +66,18 @@ void AnimationManager::configureAndStartVerticalAnimation(
   m_vScrollAnim->setDuration(duration);
 
   QObject::disconnect(m_vScrollAnim, nullptr, this, nullptr);
-  connect(m_vScrollAnim, &QPropertyAnimation::valueChanged, this,
-          [this, clickScroll, clickHoldAdv]() {
-            // Emit signals for external handling
-            emit requestVirtualViewUpdate();
-            emit requestSelectionOverlayRefresh();
+  connect(
+      m_vScrollAnim, &QPropertyAnimation::valueChanged, this, [this, clickScroll, clickHoldAdv]() {
+        // Emit signals for external handling
+        emit requestVirtualViewUpdate();
+        emit requestSelectionOverlayRefresh();
 
-            // Check for near-completion of click scroll
-            if (clickScroll && !clickHoldAdv &&
-                qAbs(m_vScrollAnim->currentValue().toInt() -
-                     m_vScrollAnim->endValue().toInt()) < 3) {
-              // Signal handled externally via properties
-            }
-          });
+        // Check for near-completion of click scroll
+        if (clickScroll && !clickHoldAdv &&
+            qAbs(m_vScrollAnim->currentValue().toInt() - m_vScrollAnim->endValue().toInt()) < 3) {
+          // Signal handled externally via properties
+        }
+      });
   connect(m_vScrollAnim, &QPropertyAnimation::finished, this,
           &AnimationManager::onVScrollAnimationFinished);
 
@@ -93,12 +89,11 @@ void AnimationManager::configureAndStartVerticalAnimation(
 }
 
 void AnimationManager::stopActiveVerticalAnims(QScrollBar *verticalScrollBar) {
-  if ((m_vScrollAnim) &&
-      m_vScrollAnim->state() == QAbstractAnimation::Running) {
+  if ((m_vScrollAnim) && m_vScrollAnim->state() == QAbstractAnimation::Running) {
     m_vScrollAnim->stop();
   }
-  if (auto *arrowKeyAnim = verticalScrollBar->findChild<QPropertyAnimation *>(
-          "arrowKeyScrollAnim")) {
+  if (auto *arrowKeyAnim =
+          verticalScrollBar->findChild<QPropertyAnimation *>("arrowKeyScrollAnim")) {
     if (arrowKeyAnim->state() == QAbstractAnimation::Running) {
       arrowKeyAnim->stop();
     }
@@ -106,13 +101,13 @@ void AnimationManager::stopActiveVerticalAnims(QScrollBar *verticalScrollBar) {
 }
 
 bool AnimationManager::isVerticalAnimRunning() const {
-  return (m_vScrollAnim) &&
-         m_vScrollAnim->state() == QAbstractAnimation::Running;
+  return (m_vScrollAnim) && m_vScrollAnim->state() == QAbstractAnimation::Running;
 }
 
-bool AnimationManager::handleExistingVerticalAnimIfRunning(
-    QScrollBar *verticalScrollBar, int targetY, bool clickScroll,
-    bool clickHoldAdv, int &curY, int &distance) {
+bool AnimationManager::handleExistingVerticalAnimIfRunning(QScrollBar *verticalScrollBar,
+                                                           int targetY, bool clickScroll,
+                                                           bool clickHoldAdv, int &curY,
+                                                           int &distance) {
   if (!isVerticalAnimRunning()) {
     return false;
   }
@@ -145,14 +140,13 @@ void AnimationManager::setProgrammaticScrollGuarded(bool enable) {
   }
 }
 
-void AnimationManager::updateVirtualViewAndSelectionDuringVAnim(
-    bool clickScroll, bool clickHoldAdv) {
+void AnimationManager::updateVirtualViewAndSelectionDuringVAnim(bool clickScroll,
+                                                                bool clickHoldAdv) {
   emit requestVirtualViewUpdate();
   emit requestSelectionUpdate();
 
   if (clickScroll && !clickHoldAdv && (m_vScrollAnim) &&
-      qAbs(m_vScrollAnim->currentValue().toInt() -
-           m_vScrollAnim->endValue().toInt()) < 3) {
+      qAbs(m_vScrollAnim->currentValue().toInt() - m_vScrollAnim->endValue().toInt()) < 3) {
     // Signal that click scroll is completing - handled externally
   }
 }
@@ -174,16 +168,15 @@ void AnimationManager::initHorizontalAnimIfNeeded(QScrollBar *hScrollBar) {
   }
 }
 
-void AnimationManager::animateHorizontalHold(QScrollBar *hScrollBar, int startX,
-                                             int targetX) {
+void AnimationManager::animateHorizontalHold(QScrollBar *hScrollBar, int startX, int targetX) {
   initHorizontalAnimIfNeeded(hScrollBar);
 
   int distance = qAbs(targetX - startX);
   constexpr double kPixelsPerSecond = 700.0;
   constexpr double kMillisecondsPerSecond = 1000.0;
   constexpr int kMinHoldDurationMs = 30;
-  int duration = static_cast<int>(
-      std::round((distance / kPixelsPerSecond) * kMillisecondsPerSecond));
+  int duration =
+      static_cast<int>(std::round((distance / kPixelsPerSecond) * kMillisecondsPerSecond));
   duration = std::max(duration, kMinHoldDurationMs);
 
   m_hScrollAnim->setEasingCurve(QEasingCurve::Linear);
@@ -215,8 +208,7 @@ void AnimationManager::animateHorizontalHold(QScrollBar *hScrollBar, int startX,
   });
 }
 
-void AnimationManager::animateHorizontalSmooth(QScrollBar *hScrollBar,
-                                               int startX, int targetX) {
+void AnimationManager::animateHorizontalSmooth(QScrollBar *hScrollBar, int startX, int targetX) {
   initHorizontalAnimIfNeeded(hScrollBar);
 
   if (m_hScrollAnim->state() == QAbstractAnimation::Running) {
@@ -241,16 +233,14 @@ void AnimationManager::animateHorizontalSmooth(QScrollBar *hScrollBar,
 }
 
 bool AnimationManager::isHorizontalAnimRunning() const {
-  return (m_hScrollAnim) &&
-         m_hScrollAnim->state() == QAbstractAnimation::Running;
+  return (m_hScrollAnim) && m_hScrollAnim->state() == QAbstractAnimation::Running;
 }
 
 void AnimationManager::stopArrowKeyAnimationIfRunning(QScrollBar *scrollBar) {
   if (!scrollBar) {
     return;
   }
-  if (auto *anim =
-          scrollBar->findChild<QPropertyAnimation *>("arrowKeyScrollAnim")) {
+  if (auto *anim = scrollBar->findChild<QPropertyAnimation *>("arrowKeyScrollAnim")) {
     if (anim->state() == QAbstractAnimation::Running) {
       anim->stop();
     }
@@ -264,10 +254,8 @@ void AnimationManager::onHScrollAnimationFinished() {
 
 // --- Duration Calculation ---
 
-int AnimationManager::computeVerticalCenterDuration(int distance,
-                                                    int itemHeight,
-                                                    int verticalSpacing,
-                                                    bool repeatActive,
+int AnimationManager::computeVerticalCenterDuration(int distance, int itemHeight,
+                                                    int verticalSpacing, bool repeatActive,
                                                     int durationMs) {
   int stepSpan = qMax(1, itemHeight + verticalSpacing);
   double rows = static_cast<double>(distance) / static_cast<double>(stepSpan);
@@ -284,13 +272,12 @@ int AnimationManager::computeVerticalCenterDuration(int distance,
 
 // --- Target Calculation ---
 
-int AnimationManager::computeTargetYForIndex(
-    int index, int gridWidth, int itemHeight, int verticalSpacing,
-    int viewportHeight, int scrollbarMax, int totalHeight, int logicalHeight,
-    int headerOffset) {
-  int itemY =
-      GridUtils::computeItemY(index, gridWidth, itemHeight, verticalSpacing,
-                              UIConstants::Grid::MARGINS);
+int AnimationManager::computeTargetYForIndex(int index, int gridWidth, int itemHeight,
+                                             int verticalSpacing, int viewportHeight,
+                                             int scrollbarMax, int totalHeight, int logicalHeight,
+                                             int headerOffset) {
+  int itemY = GridUtils::computeItemY(index, gridWidth, itemHeight, verticalSpacing,
+                                      UIConstants::Grid::MARGINS);
   // Add header offset for list view mode
   itemY += headerOffset;
   // Calculate target in logical space first (center the item)
@@ -306,18 +293,15 @@ int AnimationManager::computeTargetYForIndex(
       // Clamp logical target to valid range before conversion
       logicalTargetY = qBound(0, logicalTargetY, logicalMax);
       // Convert: widgetScrollY = logicalScrollY * widgetMax / logicalMax
-      targetY = static_cast<int>(static_cast<double>(logicalTargetY) *
-                                 widgetMax / logicalMax);
+      targetY = static_cast<int>(static_cast<double>(logicalTargetY) * widgetMax / logicalMax);
     }
   }
 
   return qBound(0, targetY, scrollbarMax);
 }
 
-int AnimationManager::computeHorizontalTargetX(int itemX,
-                                               int collectionItemWidth,
-                                               int curX, int viewportWidth,
-                                               int margins, int scrollMax) {
+int AnimationManager::computeHorizontalTargetX(int itemX, int collectionItemWidth, int curX,
+                                               int viewportWidth, int margins, int scrollMax) {
   int itemLeft = itemX;
   int itemRight = itemX + collectionItemWidth;
   int visibleLeft = curX;
@@ -337,9 +321,8 @@ int AnimationManager::computeHorizontalTargetX(int itemX,
   return qBound(0, targetX, scrollMax);
 }
 
-int AnimationManager::computeDesiredYForVisibility(int itemY, int itemHeight,
-                                                   int curY, int viewportHeight,
-                                                   int margins,
+int AnimationManager::computeDesiredYForVisibility(int itemY, int itemHeight, int curY,
+                                                   int viewportHeight, int margins,
                                                    bool &needVertical) {
   int itemTop = itemY;
   int itemBottom = itemY + itemHeight;
@@ -365,10 +348,8 @@ int AnimationManager::computeDesiredYForVisibility(int itemY, int itemHeight,
 
 // --- Ensure Visible Animation ---
 
-void AnimationManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar,
-                                               int startVal, int endVal,
-                                               int itemHeight,
-                                               int verticalSpacing,
+void AnimationManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar, int startVal, int endVal,
+                                               int itemHeight, int verticalSpacing,
                                                bool isRepeating) {
   ensureVAnimCreated(vScrollBar);
 
@@ -377,10 +358,9 @@ void AnimationManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar,
   }
 
   int distance = qAbs(endVal - startVal);
-  int durationMs =
-      m_generalSettings ? m_generalSettings->scrollAnimationDurationMs : 1500;
-  int duration = computeVerticalCenterDuration(
-      distance, itemHeight, verticalSpacing, isRepeating, durationMs);
+  int durationMs = m_generalSettings ? m_generalSettings->scrollAnimationDurationMs : 1500;
+  int duration =
+      computeVerticalCenterDuration(distance, itemHeight, verticalSpacing, isRepeating, durationMs);
 
   m_vScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
   m_vScrollAnim->setStartValue(startVal);
@@ -408,9 +388,8 @@ int AnimationManager::getVerticalAnimEndValue() const {
   return 0;
 }
 
-void AnimationManager::startWheelScrollAnimation(
-    QScrollBar *vScrollBar, int startVal, int endVal,
-    std::function<void()> onFinished) {
+void AnimationManager::startWheelScrollAnimation(QScrollBar *vScrollBar, int startVal, int endVal,
+                                                 std::function<void()> onFinished) {
   ensureVAnimCreated(vScrollBar);
 
   // Chain from current animation position for smooth blending when wheel
@@ -427,9 +406,8 @@ void AnimationManager::startWheelScrollAnimation(
   // Use configured scroll animation duration for consistent glide feel.
   // The chaining from current position prevents stuttering while preserving
   // the smooth deceleration over the full duration.
-  int duration = m_generalSettings
-                     ? m_generalSettings->scrollAnimationDurationMs
-                     : UIConstants::Animation::SMOOTH_SCROLL_WHEEL_DURATION_MS;
+  int duration = m_generalSettings ? m_generalSettings->scrollAnimationDurationMs
+                                   : UIConstants::Animation::SMOOTH_SCROLL_WHEEL_DURATION_MS;
 
   m_vScrollAnim->setDuration(duration);
 

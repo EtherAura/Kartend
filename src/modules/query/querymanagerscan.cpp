@@ -9,6 +9,8 @@
 // symbols of the main TU.
 #include "querymanager.h"
 
+#include <atomic>
+#include <memory>
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
@@ -28,8 +30,6 @@
 #include <QThreadPool>
 #include <QVector>
 #include <QWaitCondition>
-#include <atomic>
-#include <memory>
 
 #include "collectionutils.h"
 #include "querymanagerhelpers.h"
@@ -40,15 +40,13 @@ Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 
 using namespace QueryManagerInternal;
 
-
-bool QueryManager::needsRescan(int collectionIndex,
-                               const CollectionConfig &collection) {
+bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &collection) {
   Q_UNUSED(collectionIndex)
 
   if (collection.mediaDirectory.trimmed().isEmpty()) {
     if (m_db.isOpen()) {
-      const QString uuid = CollectionUtils::computeCollectionUuid(
-          collection.name, collection.mediaDirectory);
+      const QString uuid =
+          CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
       clearCollectionFromDatabaseByUuid(uuid);
     }
     return false;
@@ -56,13 +54,12 @@ bool QueryManager::needsRescan(int collectionIndex,
 
   // Include includeContentSubfolders in the signature - changing it requires
   // rescan
-  QString currentSignature = collection.extensions.isEmpty()
-                                 ? QString()
-                                 : collection.extensions.join('|');
+  QString currentSignature =
+      collection.extensions.isEmpty() ? QString() : collection.extensions.join('|');
   currentSignature += collection.includeContentSubfolders ? "|subfolders" : "";
 
-  const QString uuid = CollectionUtils::computeCollectionUuid(
-      collection.name, collection.mediaDirectory);
+  const QString uuid =
+      CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
 
   // Use cached prepared statement for collection info lookup
   QSqlQuery &query = getPreparedStatement(QuerySQL::COLLECTION_INFO);
@@ -79,8 +76,7 @@ bool QueryManager::needsRescan(int collectionIndex,
 
   // Capture lastScanned before any early returns that might invalidate query
   // state
-  QDateTime lastScanned =
-      QDateTime::fromString(query.value(0).toString(), Qt::ISODate);
+  QDateTime lastScanned = QDateTime::fromString(query.value(0).toString(), Qt::ISODate);
 
   if (storedName != collection.name) {
     return true;
@@ -91,8 +87,8 @@ bool QueryManager::needsRescan(int collectionIndex,
   if (storedSignature != currentSignature) {
     QSqlQuery &countQuery = getPreparedStatement(QuerySQL::ITEMS_COUNT_BY_UUID);
     countQuery.bindValue(0, uuid);
-    const bool hasItems = (countQuery.exec() && countQuery.next() &&
-                           countQuery.value(0).toInt() > 0);
+    const bool hasItems =
+        (countQuery.exec() && countQuery.next() && countQuery.value(0).toInt() > 0);
     if (hasItems && storedSignature.trimmed().isEmpty()) {
       QSqlQuery update(m_db);
       update.prepare("UPDATE collections SET ext_signature = ? WHERE uuid = ?");
@@ -110,8 +106,7 @@ bool QueryManager::needsRescan(int collectionIndex,
 
   if (pathQuery.exec() && pathQuery.next()) {
     QString storedPath = pathQuery.value(0).toString();
-    QString storedFullPath =
-        QDir(collection.mediaDirectory).absoluteFilePath(storedPath);
+    QString storedFullPath = QDir(collection.mediaDirectory).absoluteFilePath(storedPath);
     if (!QFile::exists(storedFullPath)) {
       return true;
     }
@@ -134,33 +129,29 @@ bool QueryManager::needsRescan(int collectionIndex,
     // scans).
     QSqlQuery &countQuery = getPreparedStatement(QuerySQL::ITEMS_COUNT_BY_UUID);
     countQuery.bindValue(0, uuid);
-    const bool hasItems = (countQuery.exec() && countQuery.next() &&
-                           countQuery.value(0).toInt() > 0);
+    const bool hasItems =
+        (countQuery.exec() && countQuery.next() && countQuery.value(0).toInt() > 0);
     if (!hasItems) {
       return true;
     }
 
     if (!storedDirSignature.trimmed().isEmpty()) {
-      if (!dirSignatureStillValid(collection.mediaDirectory, true,
-                                  storedDirSignature)) {
+      if (!dirSignatureStillValid(collection.mediaDirectory, true, storedDirSignature)) {
         return true;
       }
     } else {
       // Older DBs may have no dir_signature. Avoid forcing a full rescan when
       // items already exist; seed a bounded signature from the filesystem.
-      const QString seeded =
-          seedDirSignatureFromFilesystem(collection.mediaDirectory, true);
+      const QString seeded = seedDirSignatureFromFilesystem(collection.mediaDirectory, true);
       if (seeded.trimmed().isEmpty()) {
         return true;
       }
 
       // Preserve the existing last_scanned value while recording the signature.
-      QSqlQuery &meta =
-          getPreparedStatement(QuerySQL::UPDATE_COLLECTION_SCAN_METADATA);
-      const QString lastScannedIso =
-          lastScanned.isValid()
-              ? lastScanned.toString(Qt::ISODate)
-              : QDateTime::currentDateTime().toString(Qt::ISODate);
+      QSqlQuery &meta = getPreparedStatement(QuerySQL::UPDATE_COLLECTION_SCAN_METADATA);
+      const QString lastScannedIso = lastScanned.isValid()
+                                         ? lastScanned.toString(Qt::ISODate)
+                                         : QDateTime::currentDateTime().toString(Qt::ISODate);
       meta.bindValue(0, lastScannedIso);
       meta.bindValue(1, seeded);
       meta.bindValue(2, uuid);
@@ -183,10 +174,9 @@ bool QueryManager::needsRescan(int collectionIndex,
   return newer.next() && newer.value(0).toInt() > 0;
 }
 
-QStringList
-QueryManager::scanMediaDirectory(const CollectionConfig &collection,
-                                 QHash<QString, QDateTime> &timestamps,
-                                 QString *dirSignatureOut) {
+QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
+                                             QHash<QString, QDateTime> &timestamps,
+                                             QString *dirSignatureOut) {
   QStringList filePaths;
   QDir dir(collection.mediaDirectory);
 
@@ -209,25 +199,21 @@ QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   // Parallel scanning has overhead that only pays off with multiple directories
   if (!collection.includeContentSubfolders) {
     if (dirSignatureOut) {
-      *dirSignatureOut =
-          seedDirSignatureFromFilesystem(dir.absolutePath(), false);
+      *dirSignatureOut = seedDirSignatureFromFilesystem(dir.absolutePath(), false);
     }
 
     // Throttle scan progress emissions to avoid spamming the UI event loop.
     QElapsedTimer progressTimer;
     progressTimer.start();
-    qint64 lastProgressEmitMs =
-        -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
-    auto maybeEmitScanProgress = [&](int processed, int total,
-                                     bool force = false) {
+    qint64 lastProgressEmitMs = -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
+    auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
       if (force) {
         emit scanItemsProgress(processed, total);
         lastProgressEmitMs = progressTimer.elapsed();
         return;
       }
       const qint64 nowMs = progressTimer.elapsed();
-      if (nowMs - lastProgressEmitMs <
-          UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
+      if (nowMs - lastProgressEmitMs < UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
         return;
       }
       emit scanItemsProgress(processed, total);
@@ -279,8 +265,7 @@ QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   }
   const std::atomic<bool> &cancelFlag = *cancelToken;
 
-  const int maxThreads =
-      m_scanThreadPool ? std::max(1, m_scanThreadPool->maxThreadCount()) : 1;
+  const int maxThreads = m_scanThreadPool ? std::max(1, m_scanThreadPool->maxThreadCount()) : 1;
   const int maxInFlight = std::max(1, maxThreads * 2);
   ScanCompletionQueue queue;
 
@@ -288,11 +273,9 @@ QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   signatureSamples.reserve(UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
   {
     QFileInfo rootInfo(rootPath);
-    addDirSignatureSample(
-        signatureSamples,
-        DirSignatureSample{QString(),
-                           rootInfo.lastModified().toSecsSinceEpoch()},
-        UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
+    addDirSignatureSample(signatureSamples,
+                          DirSignatureSample{QString(), rootInfo.lastModified().toSecsSinceEpoch()},
+                          UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
   }
 
   auto enqueue = [&](const QString &dirPath) {
@@ -306,8 +289,8 @@ QueryManager::scanMediaDirectory(const CollectionConfig &collection,
       QMutexLocker locker(&queue.mutex);
       ++queue.inFlight;
     }
-    m_scanThreadPool->start(new DirectoryScanTask(
-        dirPath, rootPath, nameFilters, cancelToken, &queue));
+    m_scanThreadPool->start(
+        new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, &queue));
   };
 
   // Always scan root.
@@ -325,18 +308,15 @@ QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   // Throttle scan progress emissions to avoid spamming the UI event loop.
   QElapsedTimer progressTimer;
   progressTimer.start();
-  qint64 lastProgressEmitMs =
-      -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
-  auto maybeEmitScanProgress = [&](int processed, int total,
-                                   bool force = false) {
+  qint64 lastProgressEmitMs = -UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS;
+  auto maybeEmitScanProgress = [&](int processed, int total, bool force = false) {
     if (force) {
       emit scanItemsProgress(processed, total);
       lastProgressEmitMs = progressTimer.elapsed();
       return;
     }
     const qint64 nowMs = progressTimer.elapsed();
-    if (nowMs - lastProgressEmitMs <
-        UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
+    if (nowMs - lastProgressEmitMs < UIConstants::Database::SCAN_PROGRESS_MIN_INTERVAL_MS) {
       return;
     }
     emit scanItemsProgress(processed, total);
@@ -345,8 +325,7 @@ QueryManager::scanMediaDirectory(const CollectionConfig &collection,
 
   while (!cancelFlag.load(std::memory_order_acquire)) {
     // Fill in-flight queue.
-    while (dirIterator.hasNext() &&
-           !cancelFlag.load(std::memory_order_acquire)) {
+    while (dirIterator.hasNext() && !cancelFlag.load(std::memory_order_acquire)) {
       int inFlight = 0;
       {
         QMutexLocker locker(&queue.mutex);
@@ -362,9 +341,8 @@ QueryManager::scanMediaDirectory(const CollectionConfig &collection,
       {
         const QString relPath = rootDir.relativeFilePath(dirPath);
         const qint64 mtimeSec = dirInfo.lastModified().toSecsSinceEpoch();
-        addDirSignatureSample(
-            signatureSamples, DirSignatureSample{relPath, mtimeSec},
-            UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
+        addDirSignatureSample(signatureSamples, DirSignatureSample{relPath, mtimeSec},
+                              UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
       }
       ++directoriesEnqueued;
     }
@@ -407,8 +385,7 @@ QueryManager::scanMediaDirectory(const CollectionConfig &collection,
     filePaths.append(result.relativePaths);
 
     timestamps.reserve(timestamps.size() + result.timestamps.size());
-    for (auto it = result.timestamps.constBegin();
-         it != result.timestamps.constEnd(); ++it) {
+    for (auto it = result.timestamps.constBegin(); it != result.timestamps.constEnd(); ++it) {
       timestamps.insert(it.key(), it.value());
     }
 
@@ -430,14 +407,13 @@ QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   }
 
   if (lcQueryManager().isDebugEnabled()) {
-    qCDebug(lcQueryManager)
-        << "Recursive scan done"
-        << "collection=" << collection.name << "cancelled="
-        << (cancelFlag.load(std::memory_order_acquire) ? "yes" : "no")
-        << "dirsEnqueued=" << directoriesEnqueued
-        << "dirResults=" << directoryResultsConsumed
-        << "filesFound=" << totalItemsScanned
-        << "elapsedMs=" << scanTimer.elapsed();
+    qCDebug(lcQueryManager) << "Recursive scan done"
+                            << "collection=" << collection.name << "cancelled="
+                            << (cancelFlag.load(std::memory_order_acquire) ? "yes" : "no")
+                            << "dirsEnqueued=" << directoriesEnqueued
+                            << "dirResults=" << directoryResultsConsumed
+                            << "filesFound=" << totalItemsScanned
+                            << "elapsedMs=" << scanTimer.elapsed();
   }
 
   // Check if cancelled during parallel scan
@@ -459,10 +435,9 @@ QueryManager::scanMediaDirectory(const CollectionConfig &collection,
   return filePaths;
 }
 
-QStringList
-QueryManager::loadOrScanCollection(int collectionIndex,
-                                   const CollectionConfig &collection,
-                                   QHash<QString, QDateTime> &timestamps) {
+QStringList QueryManager::loadOrScanCollection(int collectionIndex,
+                                               const CollectionConfig &collection,
+                                               QHash<QString, QDateTime> &timestamps) {
   QStringList filePaths;
   if (collection.mediaDirectory.trimmed().isEmpty()) {
     return filePaths;
@@ -472,15 +447,13 @@ QueryManager::loadOrScanCollection(int collectionIndex,
     QString dirSignature;
     filePaths = scanMediaDirectory(collection, timestamps, &dirSignature);
     if (!filePaths.isEmpty()) {
-      saveItemsToDatabase(collectionIndex, filePaths, timestamps, collection,
-                          dirSignature);
+      saveItemsToDatabase(collectionIndex, filePaths, timestamps, collection, dirSignature);
     }
   } else {
-    const QString uuid = CollectionUtils::computeCollectionUuid(
-        collection.name, collection.mediaDirectory);
+    const QString uuid =
+        CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
     filePaths = loadItemsFromDatabaseByUuid(uuid);
   }
 
   return filePaths;
 }
-

@@ -4,6 +4,8 @@
 #ifndef QUERYMANAGERHELPERS_H
 #define QUERYMANAGERHELPERS_H
 
+#include <atomic>
+#include <memory>
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
@@ -24,8 +26,6 @@
 #include <QStringList>
 #include <QVector>
 #include <QWaitCondition>
-#include <atomic>
-#include <memory>
 
 #include "queryhelpers.h"
 #include "uiconstants.h"
@@ -37,8 +37,7 @@ inline auto buildFtsPrefixQuery(const QString &raw) -> QString {
 }
 
 inline auto canonicalKeyPath(const QString &absPath, bool dedup,
-                             QHash<QString, QString> *canonicalPathCache)
-    -> QString {
+                             QHash<QString, QString> *canonicalPathCache) -> QString {
   if (!dedup) {
     return absPath;
   }
@@ -90,8 +89,7 @@ struct DirSignatureSample {
 };
 
 inline auto addDirSignatureSample(QVector<DirSignatureSample> &samples,
-                                  const DirSignatureSample &candidate,
-                                  int maxSamples) -> void {
+                                  const DirSignatureSample &candidate, int maxSamples) -> void {
   if (maxSamples <= 0) {
     return;
   }
@@ -118,8 +116,7 @@ inline auto addDirSignatureSample(QVector<DirSignatureSample> &samples,
 }
 
 inline auto buildDirSignatureJson(bool includeSubfolders,
-                                  const QVector<DirSignatureSample> &samples)
-    -> QString {
+                                  const QVector<DirSignatureSample> &samples) -> QString {
   QJsonObject root;
   root.insert(QStringLiteral("v"), 1);
   root.insert(QStringLiteral("sub"), includeSubfolders);
@@ -135,10 +132,8 @@ inline auto buildDirSignatureJson(bool includeSubfolders,
   return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
 }
 
-inline auto parseDirSignatureJson(const QString &json,
-                                  bool &includeSubfoldersOut,
-                                  QVector<DirSignatureSample> &samplesOut)
-    -> bool {
+inline auto parseDirSignatureJson(const QString &json, bool &includeSubfoldersOut,
+                                  QVector<DirSignatureSample> &samplesOut) -> bool {
   includeSubfoldersOut = false;
   samplesOut.clear();
 
@@ -172,15 +167,14 @@ inline auto parseDirSignatureJson(const QString &json,
     const QJsonObject o = v.toObject();
     DirSignatureSample s;
     s.relPath = o.value(QStringLiteral("p")).toString();
-    s.mtimeSec =
-        static_cast<qint64>(o.value(QStringLiteral("t")).toDouble(0.0));
+    s.mtimeSec = static_cast<qint64>(o.value(QStringLiteral("t")).toDouble(0.0));
     samplesOut.append(std::move(s));
   }
   return !samplesOut.isEmpty();
 }
 
-inline auto seedDirSignatureFromFilesystem(const QString &rootPath,
-                                           bool includeSubfolders) -> QString {
+inline auto seedDirSignatureFromFilesystem(const QString &rootPath, bool includeSubfolders)
+    -> QString {
   QVector<DirSignatureSample> samples;
   samples.reserve(UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
 
@@ -188,22 +182,18 @@ inline auto seedDirSignatureFromFilesystem(const QString &rootPath,
   if (!rootInfo.exists()) {
     return QString();
   }
-  addDirSignatureSample(
-      samples,
-      DirSignatureSample{QString(), rootInfo.lastModified().toSecsSinceEpoch()},
-      UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
+  addDirSignatureSample(samples,
+                        DirSignatureSample{QString(), rootInfo.lastModified().toSecsSinceEpoch()},
+                        UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
 
   if (includeSubfolders) {
-    QDirIterator it(rootPath, QDir::Dirs | QDir::NoDotAndDotDot,
-                    QDirIterator::Subdirectories);
+    QDirIterator it(rootPath, QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
     int inspected = 0;
-    while (it.hasNext() &&
-           inspected < UIConstants::Database::DIR_SIGNATURE_SEED_MAX_DIRS) {
+    while (it.hasNext() && inspected < UIConstants::Database::DIR_SIGNATURE_SEED_MAX_DIRS) {
       it.next();
       const QString absPath = it.filePath();
       const QString relPath = QDir(rootPath).relativeFilePath(absPath);
-      const qint64 mtimeSec =
-          QFileInfo(absPath).lastModified().toSecsSinceEpoch();
+      const qint64 mtimeSec = QFileInfo(absPath).lastModified().toSecsSinceEpoch();
       addDirSignatureSample(samples, DirSignatureSample{relPath, mtimeSec},
                             UIConstants::Database::DIR_SIGNATURE_SAMPLE_COUNT);
       ++inspected;
@@ -213,8 +203,7 @@ inline auto seedDirSignatureFromFilesystem(const QString &rootPath,
   return buildDirSignatureJson(includeSubfolders, samples);
 }
 
-inline auto dirSignatureStillValid(const QString &rootPath,
-                                   bool includeSubfolders,
+inline auto dirSignatureStillValid(const QString &rootPath, bool includeSubfolders,
                                    const QString &storedSignature) -> bool {
   bool storedSub = false;
   QVector<DirSignatureSample> samples;
@@ -230,8 +219,7 @@ inline auto dirSignatureStillValid(const QString &rootPath,
 
   QDir root(rootPath);
   for (const auto &s : samples) {
-    const QString absPath =
-        s.relPath.isEmpty() ? rootPath : root.absoluteFilePath(s.relPath);
+    const QString absPath = s.relPath.isEmpty() ? rootPath : root.absoluteFilePath(s.relPath);
     QFileInfo info(absPath);
     if (!info.exists()) {
       return false;
@@ -256,11 +244,10 @@ struct ScanCompletionQueue {
 class DirectoryScanTask final : public QRunnable {
 public:
   DirectoryScanTask(QString dirPath, QString rootPath, QStringList nameFilters,
-                    std::shared_ptr<std::atomic_bool> cancelToken,
-                    ScanCompletionQueue *queue)
+                    std::shared_ptr<std::atomic_bool> cancelToken, ScanCompletionQueue *queue)
       : m_dirPath(std::move(dirPath)), m_rootPath(std::move(rootPath)),
-        m_nameFilters(std::move(nameFilters)),
-        m_cancelToken(std::move(cancelToken)), m_queue(queue) {
+        m_nameFilters(std::move(nameFilters)), m_cancelToken(std::move(cancelToken)),
+        m_queue(queue) {
     setAutoDelete(true);
   }
 
@@ -272,8 +259,7 @@ public:
     // Scan this directory (non-recursively) but emit bounded chunks so a single
     // huge folder cannot allocate an unbounded QStringList/QHash in memory.
     QDir rootDir(m_rootPath);
-    QDirIterator iterator(m_dirPath, m_nameFilters, QDir::Files,
-                          QDirIterator::NoIteratorFlags);
+    QDirIterator iterator(m_dirPath, m_nameFilters, QDir::Files, QDirIterator::NoIteratorFlags);
 
     auto pushChunk = [&](DirectoryScanResult &&chunk) {
       if (!m_queue) {
@@ -283,8 +269,7 @@ public:
       // Backpressure: block (with timeout) if the queue is full, so memory
       // stays bounded even when directory scans outpace the consumer.
       QMutexLocker locker(&m_queue->mutex);
-      while (m_queue->ready.size() >=
-                 UIConstants::Database::SCAN_READY_MAX_RESULTS &&
+      while (m_queue->ready.size() >= UIConstants::Database::SCAN_READY_MAX_RESULTS &&
              !m_cancelToken->load(std::memory_order_acquire)) {
         m_queue->hasSpace.wait(&m_queue->mutex, 50);
       }
@@ -298,10 +283,8 @@ public:
     };
 
     DirectoryScanResult chunk;
-    chunk.relativePaths.reserve(
-        UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE);
-    chunk.timestamps.reserve(UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE *
-                             2);
+    chunk.relativePaths.reserve(UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE);
+    chunk.timestamps.reserve(UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE * 2);
 
     while (iterator.hasNext()) {
       if (m_cancelToken->load(std::memory_order_acquire)) {
@@ -316,19 +299,15 @@ public:
       chunk.relativePaths.append(relativePath);
       chunk.timestamps.insert(relativePath, info.lastModified());
 
-      if (chunk.relativePaths.size() >=
-          UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE) {
+      if (chunk.relativePaths.size() >= UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE) {
         pushChunk(std::move(chunk));
         chunk = DirectoryScanResult{};
-        chunk.relativePaths.reserve(
-            UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE);
-        chunk.timestamps.reserve(
-            UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE * 2);
+        chunk.relativePaths.reserve(UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE);
+        chunk.timestamps.reserve(UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE * 2);
       }
     }
 
-    if (!m_cancelToken->load(std::memory_order_acquire) &&
-        !chunk.relativePaths.isEmpty()) {
+    if (!m_cancelToken->load(std::memory_order_acquire) && !chunk.relativePaths.isEmpty()) {
       pushChunk(std::move(chunk));
     }
 
@@ -353,12 +332,10 @@ public:
   explicit SynchronousPragmaGuard(QSqlDatabase &db) : m_db(db) {}
 
   SynchronousPragmaGuard(const SynchronousPragmaGuard &) = delete;
-  auto operator=(const SynchronousPragmaGuard &)
-      -> SynchronousPragmaGuard & = delete;
+  auto operator=(const SynchronousPragmaGuard &) -> SynchronousPragmaGuard & = delete;
 
   SynchronousPragmaGuard(SynchronousPragmaGuard &&) = delete;
-  auto operator=(SynchronousPragmaGuard &&)
-      -> SynchronousPragmaGuard & = delete;
+  auto operator=(SynchronousPragmaGuard &&) -> SynchronousPragmaGuard & = delete;
 
   ~SynchronousPragmaGuard() {
     if (!m_db.isOpen()) {

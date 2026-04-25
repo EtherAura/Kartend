@@ -48,11 +48,8 @@ public:
   void positionSidebarOverlay();
   [[nodiscard]] bool isSidebarVisible() const;
   void saveSidebarStateForCollection(int collectionIndex, bool visible);
-  void saveSidebarStateForCollection(const QString &collectionName,
-                                     bool visible);
-  [[nodiscard]] int currentCollectionIndex() const {
-    return m_currentCollectionIndex;
-  }
+  void saveSidebarStateForCollection(const QString &collectionName, bool visible);
+  [[nodiscard]] int currentCollectionIndex() const { return m_currentCollectionIndex; }
 
 signals:
   void sidebarVisibilityChanged(bool visible);

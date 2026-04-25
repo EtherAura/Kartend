@@ -41,11 +41,10 @@
 Q_LOGGING_CATEGORY(lcMainWindow, "kartend.mainwindow")
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), ui(new Ui::MainWindow), stackedWidget(nullptr),
-      itemsPage(nullptr), gridContainer(nullptr), m_mainContentWidget(nullptr),
-      itemGrid(nullptr), m_mainHorizontalLayout(nullptr), searchBar(nullptr),
-      m_searchModeButton(nullptr), loadingLabel(nullptr),
-      currentCollectionIndex(-1), m_MetadataSidebar(nullptr) {
+    : QMainWindow(parent), ui(new Ui::MainWindow), stackedWidget(nullptr), itemsPage(nullptr),
+      gridContainer(nullptr), m_mainContentWidget(nullptr), itemGrid(nullptr),
+      m_mainHorizontalLayout(nullptr), searchBar(nullptr), m_searchModeButton(nullptr),
+      loadingLabel(nullptr), currentCollectionIndex(-1), m_MetadataSidebar(nullptr) {
   m_appManager = std::make_unique<ApplicationManager>(this);
   m_appManager->initialize();
 
@@ -53,10 +52,11 @@ MainWindow::MainWindow(QWidget *parent)
   setupUI();
 }
 
-MainWindow::~MainWindow() { delete ui; }
+MainWindow::~MainWindow() {
+  delete ui;
+}
 void MainWindow::keyPressEvent(QKeyEvent *event) {
-  if ((getInteractionManager()) &&
-      getInteractionManager()->handleGlobalKeyPress(event)) {
+  if ((getInteractionManager()) && getInteractionManager()->handleGlobalKeyPress(event)) {
     return;
   }
   QMainWindow::keyPressEvent(event);
@@ -78,18 +78,16 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
   // Re-center on current selection after resize completes
   // Defer re-centering until after resize animation completes -
   // prevents visual jump during resize drag
-  QTimer::singleShot(
-      UIConstants::Timing::RESIZE_RECENTER_DELAY_MS, this, [this]() {
-        if (!QApplication::closingDown() && getInteractionManager()) {
-          getInteractionManager()->recenterCurrentSelection();
-        }
-      });
+  QTimer::singleShot(UIConstants::Timing::RESIZE_RECENTER_DELAY_MS, this, [this]() {
+    if (!QApplication::closingDown() && getInteractionManager()) {
+      getInteractionManager()->recenterCurrentSelection();
+    }
+  });
 }
 
 auto MainWindow::eventFilter(QObject *watched, QEvent *event) -> bool {
-  return (getInteractionManager())
-             ? getInteractionManager()->eventFilter(watched, event)
-             : QMainWindow::eventFilter(watched, event);
+  return (getInteractionManager()) ? getInteractionManager()->eventFilter(watched, event)
+                                   : QMainWindow::eventFilter(watched, event);
 }
 
 void MainWindow::refreshTitleCounts() {
@@ -118,8 +116,8 @@ void MainWindow::refreshTitleCounts() {
     }
     qint64 direct = -1;
     qint64 recursive = -1;
-    if (!getSessionManager()->getCollectionCounts(
-            m_collections[collectionIndex], m_collections, direct, recursive)) {
+    if (!getSessionManager()->getCollectionCounts(m_collections[collectionIndex], m_collections,
+                                                  direct, recursive)) {
       return -1;
     }
     return recursive;
@@ -145,14 +143,11 @@ void MainWindow::refreshTitleCounts() {
                    .arg(StringUtils::formatCountNumber(subfolderItemCount))
                    .arg(StringUtils::formatCountNumber(collectionCount));
     } else {
-      counts = QString("(%1 Items)")
-                   .arg(StringUtils::formatCountNumber(subfolderItemCount));
+      counts = QString("(%1 Items)").arg(StringUtils::formatCountNumber(subfolderItemCount));
     }
 
-    int directSubfolderCount =
-        CollectionUtils::countVirtualFolders(m_collections[cur]);
-    int directSubcollectionCount =
-        CollectionUtils::directChildrenOf(cur, m_collections).size();
+    int directSubfolderCount = CollectionUtils::countVirtualFolders(m_collections[cur]);
+    int directSubcollectionCount = CollectionUtils::directChildrenOf(cur, m_collections).size();
 
     QString title = QString("%1 %2").arg(subfolderName, counts);
     QStringList childParts;
@@ -186,8 +181,7 @@ void MainWindow::refreshTitleCounts() {
   // rather than the cached recursive count (which may not include flattened
   // items).
   const bool showAllItems = m_collections[cur].showAllSubcollectionItems;
-  const int viewTotalItems =
-      getScrollManager() ? getScrollManager()->getTotalItems() : -1;
+  const int viewTotalItems = getScrollManager() ? getScrollManager()->getTotalItems() : -1;
 
   QStringList parts;
   bool anyKnown = false;
@@ -222,10 +216,8 @@ void MainWindow::refreshTitleCounts() {
     }
   }
 
-  int directSubfolderCount =
-      CollectionUtils::countVirtualFolders(m_collections[cur]);
-  int directSubcollectionCount =
-      CollectionUtils::directChildrenOf(cur, m_collections).size();
+  int directSubfolderCount = CollectionUtils::countVirtualFolders(m_collections[cur]);
+  int directSubcollectionCount = CollectionUtils::directChildrenOf(cur, m_collections).size();
 
   QString title = counts.isEmpty() ? base : QString("%1 %2").arg(base, counts);
   QStringList childParts;
@@ -285,18 +277,43 @@ void MainWindow::setupManagerConnections() {
   connectScrollBars();
 }
 
-
 void MainWindow::updateWindowTitleWithFilter(int visible, int total) {
-  if (currentCollectionIndex >= 0 &&
-      currentCollectionIndex < m_collections.size()) {
+  if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
     QString base = m_collections[currentCollectionIndex].name;
     if (visible < total) {
-      setWindowTitle(
-          QString("%1 (%2/%3 items)").arg(base).arg(visible).arg(total));
+      setWindowTitle(QString("%1 (%2/%3 items)").arg(base).arg(visible).arg(total));
     } else {
       setWindowTitle(QString("%1 (%2 items)").arg(base).arg(total));
     }
   }
+  // Keep the top-bar position label in sync with the denominator.
+  updateItemPositionLabel();
+}
+
+void MainWindow::updateItemPositionLabel() {
+  // Kartend-tof: show "<pos> / <total>" next to the view-mode buttons.
+  // Hidden until we have a concrete total. `currentSelectedIndex()` is a
+  // visual index (includes subcollection tiles + virtual folders + media
+  // files), which matches ScrollManager::getTotalItems() — so presenting
+  // them as a fraction is coherent without further translation.
+  if (!ui->itemPositionLabel) {
+    return;
+  }
+  const int total = getScrollManager() ? getScrollManager()->getTotalItems() : 0;
+  if (total <= 0) {
+    ui->itemPositionLabel->clear();
+    ui->itemPositionLabel->setVisible(false);
+    return;
+  }
+  const int sel =
+      getInteractionManager() ? getInteractionManager()->currentSelectedIndex() : -1;
+  if (sel < 0) {
+    ui->itemPositionLabel->setText(QString("%1").arg(total));
+  } else {
+    // User-facing positions are 1-based.
+    ui->itemPositionLabel->setText(QString("%1 / %2").arg(sel + 1).arg(total));
+  }
+  ui->itemPositionLabel->setVisible(true);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
@@ -307,8 +324,7 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 
   // Flush any pending grid-width persistence before shutdown so the final
   // user-adjusted width is not lost when closing immediately after changes.
-  if (m_gridWidthSaveDebouncer && m_gridWidthSaveDebouncer->isPending() &&
-      getSettingsManager()) {
+  if (m_gridWidthSaveDebouncer && m_gridWidthSaveDebouncer->isPending() && getSettingsManager()) {
     m_gridWidthSaveDebouncer->triggerImmediate();
   }
 
@@ -321,8 +337,7 @@ void MainWindow::closeEvent(QCloseEvent *event) {
   if (ui->itemScrollArea) {
     ui->itemScrollArea->removeEventFilter(getInteractionManager());
     if (ui->itemScrollArea->viewport()) {
-      ui->itemScrollArea->viewport()->removeEventFilter(
-          getInteractionManager());
+      ui->itemScrollArea->viewport()->removeEventFilter(getInteractionManager());
     }
   }
   if (gridContainer) {

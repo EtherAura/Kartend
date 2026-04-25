@@ -63,12 +63,8 @@ public:
   // State struct accessors (non-const for read/write access)
   // ─────────────────────────────────────────────────────────────────────────
 
-  [[nodiscard]] SelectionRestoreState &selectionRestore() {
-    return m_selectionRestore;
-  }
-  [[nodiscard]] const SelectionRestoreState &selectionRestore() const {
-    return m_selectionRestore;
-  }
+  [[nodiscard]] SelectionRestoreState &selectionRestore() { return m_selectionRestore; }
+  [[nodiscard]] const SelectionRestoreState &selectionRestore() const { return m_selectionRestore; }
 
   [[nodiscard]] ScrollState &scroll() { return m_scroll; }
   [[nodiscard]] const ScrollState &scroll() const { return m_scroll; }
@@ -83,9 +79,7 @@ public:
   [[nodiscard]] const ClickState &click() const { return m_click; }
 
   [[nodiscard]] StreamScrollState &streamScroll() { return m_streamScroll; }
-  [[nodiscard]] const StreamScrollState &streamScroll() const {
-    return m_streamScroll;
-  }
+  [[nodiscard]] const StreamScrollState &streamScroll() const { return m_streamScroll; }
 
   [[nodiscard]] SearchState &search() { return m_search; }
   [[nodiscard]] const SearchState &search() const { return m_search; }
@@ -106,15 +100,11 @@ public:
 
   [[nodiscard]] qint64 clickSeriesLastMs() const { return m_clickSeriesLastMs; }
   void setClickSeriesLastMs(qint64 ms) { m_clickSeriesLastMs = ms; }
-  void updateClickSeriesLastMs() {
-    m_clickSeriesLastMs = QDateTime::currentMSecsSinceEpoch();
-  }
+  void updateClickSeriesLastMs() { m_clickSeriesLastMs = QDateTime::currentMSecsSinceEpoch(); }
 
   [[nodiscard]] qint64 lastUiActivityMs() const { return m_lastUiActivityMs; }
   void setLastUiActivityMs(qint64 ms) { m_lastUiActivityMs = ms; }
-  void updateLastUiActivity() {
-    m_lastUiActivityMs = QDateTime::currentMSecsSinceEpoch();
-  }
+  void updateLastUiActivity() { m_lastUiActivityMs = QDateTime::currentMSecsSinceEpoch(); }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Convenience methods for common state transitions
@@ -145,8 +135,7 @@ public:
   void suppressArrowCenterFor(qint64 durationMs) {
     assertOwnerThread();
     m_arrow.suppressArrowCenter = true;
-    m_arrow.suppressArrowCenterUntilMs =
-        QDateTime::currentMSecsSinceEpoch() + durationMs;
+    m_arrow.suppressArrowCenterUntilMs = QDateTime::currentMSecsSinceEpoch() + durationMs;
   }
 
   /**
@@ -190,16 +179,12 @@ public:
   /**
    * @brief Check if selection is currently suppressed.
    */
-  [[nodiscard]] bool isSelectionSuppressed() const {
-    return m_click.selectionSuppressed;
-  }
+  [[nodiscard]] bool isSelectionSuppressed() const { return m_click.selectionSuppressed; }
 
   /**
    * @brief Get the pending selection index.
    */
-  [[nodiscard]] int pendingSelectionIndex() const {
-    return m_click.pendingSelectionIndex;
-  }
+  [[nodiscard]] int pendingSelectionIndex() const { return m_click.pendingSelectionIndex; }
 
   /**
    * @brief Reset all state to defaults.
@@ -242,8 +227,7 @@ private:
   // release builds. See the THREAD-SAFETY CONTRACT block at the top of this
   // header.
   void assertOwnerThread() const {
-    Q_ASSERT_X(thread() == QThread::currentThread(),
-               "InteractionStateHolder",
+    Q_ASSERT_X(thread() == QThread::currentThread(), "InteractionStateHolder",
                "InteractionStateHolder accessed from a non-owner thread; "
                "see header THREAD-SAFETY CONTRACT.");
   }

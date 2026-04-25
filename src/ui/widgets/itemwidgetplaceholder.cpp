@@ -12,8 +12,7 @@
 #include <Qt>
 
 // Build placeholder pattern
-auto ItemWidget::buildPlaceholderPattern(int width, int height) const
-    -> QPixmap {
+auto ItemWidget::buildPlaceholderPattern(int width, int height) const -> QPixmap {
   if (width <= 0 || height <= 0) {
     return {};
   }
@@ -28,8 +27,8 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   quint64 key = (static_cast<quint64>(width) << kKeyWidthShiftBits) |
                 (static_cast<quint64>(height) << kKeyHeightShiftBits) |
                 (static_cast<quint64>(base.rgba()) & kRgbaMask32);
-  if (!cache.isNull() && cacheKey == key &&
-      cachedCornerRadius == m_cornerRadius && cachedTileColor == s_tileColor) {
+  if (!cache.isNull() && cacheKey == key && cachedCornerRadius == m_cornerRadius &&
+      cachedTileColor == s_tileColor) {
     return cache;
   }
 
@@ -51,10 +50,8 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   int hAlpha = 0;
   QColor primary = base;
   primary.getHsl(&hHue, &hSat, &hLight, &hAlpha);
-  primary.setHsl(
-      hHue, hSat / 2,
-      qBound(0, hLight + primaryDelta, UIConstants::Color::CHANNEL_MAX),
-      UIConstants::Color::CHANNEL_MAX);
+  primary.setHsl(hHue, hSat / 2, qBound(0, hLight + primaryDelta, UIConstants::Color::CHANNEL_MAX),
+                 UIConstants::Color::CHANNEL_MAX);
   // Use per-collection tile color if set, otherwise use title tint
   QColor accentColor;
   if (!s_tileColor.isEmpty() && QColor::isValidColorName(s_tileColor)) {
@@ -62,49 +59,41 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   } else {
     accentColor = titleTint();
   }
-  primary.setRed(
-      (primary.red() * UIConstants::Placeholder::PRIMARY_TINT_NUM +
-       accentColor.red() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
-                            UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
-      UIConstants::Placeholder::PRIMARY_TINT_DEN);
-  primary.setGreen(
-      (primary.green() * UIConstants::Placeholder::PRIMARY_TINT_NUM +
-       accentColor.green() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
-                              UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
-      UIConstants::Placeholder::PRIMARY_TINT_DEN);
-  primary.setBlue(
-      (primary.blue() * UIConstants::Placeholder::PRIMARY_TINT_NUM +
-       accentColor.blue() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
-                             UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
-      UIConstants::Placeholder::PRIMARY_TINT_DEN);
+  primary.setRed((primary.red() * UIConstants::Placeholder::PRIMARY_TINT_NUM +
+                  accentColor.red() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
+                                       UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
+                 UIConstants::Placeholder::PRIMARY_TINT_DEN);
+  primary.setGreen((primary.green() * UIConstants::Placeholder::PRIMARY_TINT_NUM +
+                    accentColor.green() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
+                                           UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
+                   UIConstants::Placeholder::PRIMARY_TINT_DEN);
+  primary.setBlue((primary.blue() * UIConstants::Placeholder::PRIMARY_TINT_NUM +
+                   accentColor.blue() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
+                                         UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
+                  UIConstants::Placeholder::PRIMARY_TINT_DEN);
   primary.setAlpha(UIConstants::Placeholder::PRIMARY_ALPHA);
 
   QColor secondary = base;
-  secondary.setHsl(
-      hHue, hSat / 3,
-      qBound(0, hLight + secondaryDelta, UIConstants::Color::CHANNEL_MAX),
-      UIConstants::Color::CHANNEL_MAX);
-  secondary.setRed(
-      (secondary.red() * UIConstants::Placeholder::SECONDARY_TINT_NUM +
-       accentColor.red() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
-                            UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
-      UIConstants::Placeholder::SECONDARY_TINT_DEN);
-  secondary.setGreen(
-      (secondary.green() * UIConstants::Placeholder::SECONDARY_TINT_NUM +
-       accentColor.green() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
-                              UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
-      UIConstants::Placeholder::SECONDARY_TINT_DEN);
-  secondary.setBlue(
-      (secondary.blue() * UIConstants::Placeholder::SECONDARY_TINT_NUM +
-       accentColor.blue() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
-                             UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
-      UIConstants::Placeholder::SECONDARY_TINT_DEN);
+  secondary.setHsl(hHue, hSat / 3,
+                   qBound(0, hLight + secondaryDelta, UIConstants::Color::CHANNEL_MAX),
+                   UIConstants::Color::CHANNEL_MAX);
+  secondary.setRed((secondary.red() * UIConstants::Placeholder::SECONDARY_TINT_NUM +
+                    accentColor.red() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
+                                         UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
+                   UIConstants::Placeholder::SECONDARY_TINT_DEN);
+  secondary.setGreen((secondary.green() * UIConstants::Placeholder::SECONDARY_TINT_NUM +
+                      accentColor.green() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
+                                             UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
+                     UIConstants::Placeholder::SECONDARY_TINT_DEN);
+  secondary.setBlue((secondary.blue() * UIConstants::Placeholder::SECONDARY_TINT_NUM +
+                     accentColor.blue() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
+                                           UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
+                    UIConstants::Placeholder::SECONDARY_TINT_DEN);
   secondary.setAlpha(UIConstants::Placeholder::SECONDARY_ALPHA);
 
-  int step =
-      qBound(UIConstants::Placeholder::STEP_MIN,
-             qMin(width, height) / UIConstants::Placeholder::STEP_DIVISOR,
-             UIConstants::Placeholder::STEP_MAX);
+  int step = qBound(UIConstants::Placeholder::STEP_MIN,
+                    qMin(width, height) / UIConstants::Placeholder::STEP_DIVISOR,
+                    UIConstants::Placeholder::STEP_MAX);
 
   // Determine background color - use tileColor if set, otherwise use palette
   QColor bgColor = base;
@@ -133,8 +122,7 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
   }
 
   QImage img = pixmap.toImage();
-  QRandomGenerator generator(
-      static_cast<quint32>(key ^ UIConstants::Placeholder::NOISE_SEED));
+  QRandomGenerator generator(static_cast<quint32>(key ^ UIConstants::Placeholder::NOISE_SEED));
   const int noiseAmp = UIConstants::Placeholder::NOISE_AMPLITUDE;
   const int stride = UIConstants::Placeholder::NOISE_STRIDE;
   if (noiseAmp > 0 && stride > 0) {
@@ -146,8 +134,7 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
         int green = qGreen(pixel);
         int blue = qBlue(pixel);
         int noiseDelta =
-            static_cast<int>(generator.generate() &
-                             UIConstants::Placeholder::NOISE_MASK) -
+            static_cast<int>(generator.generate() & UIConstants::Placeholder::NOISE_MASK) -
             UIConstants::Placeholder::NOISE_BIAS;
         noiseDelta = std::min(noiseDelta, noiseAmp);
         noiseDelta = std::max(noiseDelta, -noiseAmp);
@@ -181,8 +168,7 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const
     maskPainter.setRenderHint(QPainter::Antialiasing, true);
 
     QPainterPath clipPath;
-    clipPath.addRoundedRect(QRectF(0, 0, width, height), m_cornerRadius,
-                            m_cornerRadius);
+    clipPath.addRoundedRect(QRectF(0, 0, width, height), m_cornerRadius, m_cornerRadius);
     maskPainter.setClipPath(clipPath);
     maskPainter.drawPixmap(0, 0, pixmap);
     maskPainter.end();

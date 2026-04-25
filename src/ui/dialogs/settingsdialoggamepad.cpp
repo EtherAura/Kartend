@@ -11,9 +11,8 @@ void SettingsDialog::startGamepadButtonCapture(GamepadCaptureTarget target) {
   auto *mainWindow = qobject_cast<MainWindow *>(parent());
   if (!mainWindow || !mainWindow->getInteractionManager() ||
       !mainWindow->getInteractionManager()->gamepadManager()) {
-    QMessageBox::information(
-        this, tr("Gamepad"),
-        tr("Gamepad input is not available on this build/configuration."));
+    QMessageBox::information(this, tr("Gamepad"),
+                             tr("Gamepad input is not available on this build/configuration."));
     return;
   }
 
@@ -30,18 +29,15 @@ void SettingsDialog::startGamepadButtonCapture(GamepadCaptureTarget target) {
   auto *gamepadManager = mainWindow->getInteractionManager()->gamepadManager();
   gamepadManager->beginBindingCapture();
   m_gamepadCaptureConnection =
-      connect(gamepadManager, &GamepadManager::bindingCaptureButtonPressed,
-              this, [this](const QString &buttonName) {
-                onGamepadCaptureButtonPressed(buttonName);
-              });
+      connect(gamepadManager, &GamepadManager::bindingCaptureButtonPressed, this,
+              [this](const QString &buttonName) { onGamepadCaptureButtonPressed(buttonName); });
 }
 
 void SettingsDialog::stopGamepadButtonCapture() {
   auto *mainWindow = qobject_cast<MainWindow *>(parent());
   if (mainWindow && mainWindow->getInteractionManager() &&
       mainWindow->getInteractionManager()->gamepadManager()) {
-    auto *gamepadManager =
-        mainWindow->getInteractionManager()->gamepadManager();
+    auto *gamepadManager = mainWindow->getInteractionManager()->gamepadManager();
     gamepadManager->endBindingCapture();
     QObject::disconnect(m_gamepadCaptureConnection);
     m_gamepadCaptureConnection = QMetaObject::Connection();
@@ -71,41 +67,35 @@ void SettingsDialog::onGamepadCaptureButtonPressed(const QString &buttonName) {
 }
 
 void SettingsDialog::updateGamepadCaptureUi() {
-  const bool capturingConfirm =
-      (m_gamepadCaptureTarget == GamepadCaptureTarget::Confirm);
-  const bool capturingBack =
-      (m_gamepadCaptureTarget == GamepadCaptureTarget::Back);
+  const bool capturingConfirm = (m_gamepadCaptureTarget == GamepadCaptureTarget::Confirm);
+  const bool capturingBack = (m_gamepadCaptureTarget == GamepadCaptureTarget::Back);
   const bool capturingToggleSidebar =
       (m_gamepadCaptureTarget == GamepadCaptureTarget::ToggleSidebar);
-  const bool capturingAny =
-      capturingConfirm || capturingBack || capturingToggleSidebar;
+  const bool capturingAny = capturingConfirm || capturingBack || capturingToggleSidebar;
 
   if (ui->detectGamepadConfirmButtonButton) {
-    ui->detectGamepadConfirmButtonButton->setText(
-        capturingConfirm ? tr("Press button...") : tr("Detect..."));
-    ui->detectGamepadConfirmButtonButton->setEnabled(!capturingBack &&
-                                                     !capturingToggleSidebar);
+    ui->detectGamepadConfirmButtonButton->setText(capturingConfirm ? tr("Press button...")
+                                                                   : tr("Detect..."));
+    ui->detectGamepadConfirmButtonButton->setEnabled(!capturingBack && !capturingToggleSidebar);
   }
   if (ui->detectGamepadBackButtonButton) {
-    ui->detectGamepadBackButtonButton->setText(
-        capturingBack ? tr("Press button...") : tr("Detect..."));
-    ui->detectGamepadBackButtonButton->setEnabled(!capturingConfirm &&
-                                                  !capturingToggleSidebar);
+    ui->detectGamepadBackButtonButton->setText(capturingBack ? tr("Press button...")
+                                                             : tr("Detect..."));
+    ui->detectGamepadBackButtonButton->setEnabled(!capturingConfirm && !capturingToggleSidebar);
   }
   if (ui->detectGamepadToggleSidebarButtonButton) {
     ui->detectGamepadToggleSidebarButtonButton->setText(
         capturingToggleSidebar ? tr("Press button...") : tr("Detect..."));
-    ui->detectGamepadToggleSidebarButtonButton->setEnabled(!capturingConfirm &&
-                                                           !capturingBack);
+    ui->detectGamepadToggleSidebarButtonButton->setEnabled(!capturingConfirm && !capturingBack);
   }
 
   if (ui->gamepadConfirmButtonLineEdit) {
-    ui->gamepadConfirmButtonLineEdit->setPlaceholderText(
-        capturingConfirm ? tr("Press any button") : QString());
+    ui->gamepadConfirmButtonLineEdit->setPlaceholderText(capturingConfirm ? tr("Press any button")
+                                                                          : QString());
   }
   if (ui->gamepadBackButtonLineEdit) {
-    ui->gamepadBackButtonLineEdit->setPlaceholderText(
-        capturingBack ? tr("Press any button") : QString());
+    ui->gamepadBackButtonLineEdit->setPlaceholderText(capturingBack ? tr("Press any button")
+                                                                    : QString());
   }
   if (ui->gamepadToggleSidebarButtonLineEdit) {
     ui->gamepadToggleSidebarButtonLineEdit->setPlaceholderText(

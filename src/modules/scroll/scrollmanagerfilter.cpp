@@ -16,17 +16,16 @@ void ScrollManager::applyFilter(const QString &searchText) {
   }
 
   // Update FilterManager's source data before applying filter
-  m_filterManager->setSourceData(
-      m_dataManager->filePaths(), m_dataManager->fileNames(),
-      m_dataManager->filePathToDisplayName(), m_dataManager->subcollections());
+  m_filterManager->setSourceData(m_dataManager->filePaths(), m_dataManager->fileNames(),
+                                 m_dataManager->filePathToDisplayName(),
+                                 m_dataManager->subcollections());
   m_filterManager->setContext(m_context);
   m_filterManager->applyFilter(searchText);
 
   // Update local state from FilterManager
-  m_totalItems =
-      m_filterManager->isFiltered()
-          ? m_filterManager->filteredCount()
-          : m_dataManager->subcollectionCount() + m_dataManager->fileCount();
+  m_totalItems = m_filterManager->isFiltered()
+                     ? m_filterManager->filteredCount()
+                     : m_dataManager->subcollectionCount() + m_dataManager->fileCount();
 
   calculateVirtualMetrics();
   positionVirtualContainer();
@@ -67,13 +66,11 @@ void ScrollManager::restorePreSearchState() {
   }
 
   // Create position callback for widget repositioning
-  auto getPositionFunc = [this](int index) -> QPoint {
-    return getItemPosition(index);
-  };
+  auto getPositionFunc = [this](int index) -> QPoint { return getItemPosition(index); };
 
-  m_preSearchStateManager->restoreState(
-      m_activeWidgets, m_virtualContainer, m_widgetPool.get(), m_artworkManager,
-      getPositionFunc, m_metrics.itemWidth, m_metrics.itemHeight);
+  m_preSearchStateManager->restoreState(m_activeWidgets, m_virtualContainer, m_widgetPool.get(),
+                                        m_artworkManager, getPositionFunc, m_metrics.itemWidth,
+                                        m_metrics.itemHeight);
 }
 
 auto ScrollManager::hasPreSearchState() const -> bool {
@@ -145,6 +142,5 @@ void ScrollManager::clearFilter() {
 }
 
 auto ScrollManager::getFilteredIndex(int visualIndex) const -> int {
-  return m_dataSource ? m_dataSource->getFilteredIndex(visualIndex)
-                      : visualIndex;
+  return m_dataSource ? m_dataSource->getFilteredIndex(visualIndex) : visualIndex;
 }

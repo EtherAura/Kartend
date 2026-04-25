@@ -14,16 +14,11 @@ public:
   [[nodiscard]] static auto getConfigPath() -> QString;
   [[nodiscard]] static auto getFormat() -> QSettings::Format;
   [[nodiscard]] static auto expandConfigVariables(const QString &input,
-                                                  const QString &collectionName)
-      -> QString;
-  static auto
-  applyHorizontalScrollbarSetting(QScrollArea *scrollArea, int collectionIndex,
-                                  const QList<CollectionConfig> &collections)
-      -> void;
-  static auto
-  applyVerticalScrollbarSetting(QScrollArea *scrollArea, int collectionIndex,
-                                const QList<CollectionConfig> &collections)
-      -> void;
+                                                  const QString &collectionName) -> QString;
+  static auto applyHorizontalScrollbarSetting(QScrollArea *scrollArea, int collectionIndex,
+                                              const QList<CollectionConfig> &collections) -> void;
+  static auto applyVerticalScrollbarSetting(QScrollArea *scrollArea, int collectionIndex,
+                                            const QList<CollectionConfig> &collections) -> void;
 };
 
 #endif // SETTINGSUTILS_H

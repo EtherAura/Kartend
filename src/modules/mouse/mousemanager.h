@@ -55,14 +55,10 @@ public:
   void setupReferences(const MouseManagerSetup &setup);
 
   // --- State Queries ---
-  [[nodiscard]] bool isMouseHoldScrolling() const {
-    return m_mouseHoldScrolling;
-  }
+  [[nodiscard]] bool isMouseHoldScrolling() const { return m_mouseHoldScrolling; }
   [[nodiscard]] bool isHorizontalMode() const { return m_mouseHoldHorizontal; }
   [[nodiscard]] int holdDirection() const { return m_mouseHoldDirection; }
-  [[nodiscard]] int horizontalDirection() const {
-    return m_mouseHoldHorizontalDirection;
-  }
+  [[nodiscard]] int horizontalDirection() const { return m_mouseHoldHorizontalDirection; }
   [[nodiscard]] bool isLeftMouseDown() const { return m_leftMouseDown; }
   [[nodiscard]] bool isWheelScrolling() const { return m_wheelScrolling; }
 
@@ -78,8 +74,8 @@ public:
 
   // --- Click Hold Timer ---
   /// Starts the click hold timer that triggers hold scrolling after delay
-  void startClickHoldTimer(const QPoint &clickPos, int selectedItemIndex,
-                           int gridWidth, int totalItems);
+  void startClickHoldTimer(const QPoint &clickPos, int selectedItemIndex, int gridWidth,
+                           int totalItems);
 
   /// Stops the click hold timer if active
   void stopClickHoldTimer();
@@ -89,21 +85,20 @@ public:
 
   // --- Click Hold Horizontal Candidate ---
   /// Updates horizontal hold candidate based on click selection change
-  void updateClickHoldHorizontalCandidate(int previousSelection,
-                                          int targetSelection, int gridWidth);
+  void updateClickHoldHorizontalCandidate(int previousSelection, int targetSelection,
+                                          int gridWidth);
 
   /// Clears the horizontal hold candidate state
   void clearHorizontalCandidate();
 
   // --- Hold Scrolling Control ---
   /// Starts mouse hold scrolling from a click position
-  void startMouseHoldScrolling(const QPoint &clickPos, int selectedItemIndex,
-                               int gridWidth, int totalItems);
+  void startMouseHoldScrolling(const QPoint &clickPos, int selectedItemIndex, int gridWidth,
+                               int totalItems);
 
   /// Attempts to start horizontal click hold mode
   /// Returns true if horizontal hold was started
-  [[nodiscard]] bool tryStartHorizontalClickHold(int totalItems,
-                                                 int selectedItemIndex);
+  [[nodiscard]] bool tryStartHorizontalClickHold(int totalItems, int selectedItemIndex);
 
   /// Stops mouse hold scrolling
   void stopMouseHoldScrolling();
@@ -111,9 +106,9 @@ public:
   // --- Widget Finding Utilities (static) ---
   /// Finds the best widget at the given click position and returns its visual
   /// index Returns {widget, visualIndex} pair; visualIndex is -1 if not found
-  static std::pair<ItemWidget *, int>
-  findBestWidgetForClick(const QPoint &clickPos, ScrollManager *scrollManager,
-                         QWidget *gridContainer);
+  static std::pair<ItemWidget *, int> findBestWidgetForClick(const QPoint &clickPos,
+                                                             ScrollManager *scrollManager,
+                                                             QWidget *gridContainer);
 
   /// Finds the closest widget to the click position from candidates
   static ItemWidget *findClosestWidget(const QVector<ItemWidget *> &candidates,
@@ -149,8 +144,7 @@ private slots:
 
 private:
   /// Computes vertical scroll direction based on selected item position
-  [[nodiscard]] int computeVerticalDirection(int selectedItemIndex,
-                                             int gridWidth) const;
+  [[nodiscard]] int computeVerticalDirection(int selectedItemIndex, int gridWidth) const;
 
   // References (not owned)
   ScrollManager *m_scrollManager = nullptr;

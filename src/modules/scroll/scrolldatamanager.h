@@ -97,36 +97,25 @@ public:
   [[nodiscard]] const QStringList &filePaths() const { return m_filePaths; }
   [[nodiscard]] QStringList &filePaths() { return m_filePaths; }
 
-  [[nodiscard]] const QHash<QString, QString> &fileNames() const {
-    return m_fileNames;
-  }
+  [[nodiscard]] const QHash<QString, QString> &fileNames() const { return m_fileNames; }
   [[nodiscard]] QHash<QString, QString> &fileNames() { return m_fileNames; }
 
-  [[nodiscard]] const QList<int> &subcollections() const {
-    return m_subcollections;
-  }
-  [[nodiscard]] const QStringList &virtualFolders() const {
-    return m_virtualFolders;
-  }
+  [[nodiscard]] const QList<int> &subcollections() const { return m_subcollections; }
+  [[nodiscard]] const QStringList &virtualFolders() const { return m_virtualFolders; }
 
   [[nodiscard]] const QHash<QString, QString> &filePathToDisplayName() const {
     return m_filePathToDisplayName;
   }
 
-  [[nodiscard]] int subcollectionCount() const {
-    return m_subcollections.size();
-  }
-  [[nodiscard]] int virtualFolderCount() const {
-    return m_virtualFolders.size();
-  }
+  [[nodiscard]] int subcollectionCount() const { return m_subcollections.size(); }
+  [[nodiscard]] int virtualFolderCount() const { return m_virtualFolders.size(); }
   [[nodiscard]] int fileCount() const { return m_filePaths.size(); }
 
   /**
    * @brief Get total item count (subcollections + virtual folders + files).
    */
   [[nodiscard]] int totalItemCount() const {
-    return m_subcollections.size() + m_virtualFolders.size() +
-           m_filePaths.size();
+    return m_subcollections.size() + m_virtualFolders.size() + m_filePaths.size();
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -139,10 +128,8 @@ public:
    */
   [[nodiscard]] bool isSubcollectionIndex(int actualIndex) const {
     if (m_unifiedSortActive) {
-      if (actualIndex < 0 || actualIndex >= m_unifiedItems.size())
-        return false;
-      return m_unifiedItems[actualIndex].type ==
-             UnifiedItem::Type::Subcollection;
+      if (actualIndex < 0 || actualIndex >= m_unifiedItems.size()) return false;
+      return m_unifiedItems[actualIndex].type == UnifiedItem::Type::Subcollection;
     }
     return actualIndex >= 0 && actualIndex < m_subcollections.size();
   }
@@ -153,14 +140,11 @@ public:
    */
   [[nodiscard]] bool isVirtualFolderIndex(int actualIndex) const {
     if (m_unifiedSortActive) {
-      if (actualIndex < 0 || actualIndex >= m_unifiedItems.size())
-        return false;
-      return m_unifiedItems[actualIndex].type ==
-             UnifiedItem::Type::VirtualFolder;
+      if (actualIndex < 0 || actualIndex >= m_unifiedItems.size()) return false;
+      return m_unifiedItems[actualIndex].type == UnifiedItem::Type::VirtualFolder;
     }
     int subCount = m_subcollections.size();
-    return actualIndex >= subCount &&
-           actualIndex < subCount + m_virtualFolders.size();
+    return actualIndex >= subCount && actualIndex < subCount + m_virtualFolders.size();
   }
 
   /**
@@ -169,13 +153,11 @@ public:
    */
   [[nodiscard]] bool isMediaIndex(int actualIndex) const {
     if (m_unifiedSortActive) {
-      if (actualIndex < 0 || actualIndex >= m_unifiedItems.size())
-        return false;
+      if (actualIndex < 0 || actualIndex >= m_unifiedItems.size()) return false;
       return m_unifiedItems[actualIndex].type == UnifiedItem::Type::MediaFile;
     }
     int prefixCount = m_subcollections.size() + m_virtualFolders.size();
-    return actualIndex >= prefixCount &&
-           actualIndex < prefixCount + m_filePaths.size();
+    return actualIndex >= prefixCount && actualIndex < prefixCount + m_filePaths.size();
   }
 
   /**
@@ -185,12 +167,10 @@ public:
    */
   [[nodiscard]] int subcollectionIndexFromActual(int actualIndex) const {
     if (m_unifiedSortActive) {
-      if (!isSubcollectionIndex(actualIndex))
-        return -1;
+      if (!isSubcollectionIndex(actualIndex)) return -1;
       return m_subcollections[m_unifiedItems[actualIndex].originalIndex];
     }
-    if (!isSubcollectionIndex(actualIndex))
-      return -1;
+    if (!isSubcollectionIndex(actualIndex)) return -1;
     return m_subcollections[actualIndex];
   }
 
@@ -201,12 +181,10 @@ public:
    */
   [[nodiscard]] QString virtualFolderFromActual(int actualIndex) const {
     if (m_unifiedSortActive) {
-      if (!isVirtualFolderIndex(actualIndex))
-        return {};
+      if (!isVirtualFolderIndex(actualIndex)) return {};
       return m_virtualFolders[m_unifiedItems[actualIndex].originalIndex];
     }
-    if (!isVirtualFolderIndex(actualIndex))
-      return {};
+    if (!isVirtualFolderIndex(actualIndex)) return {};
     int folderIndex = actualIndex - m_subcollections.size();
     return m_virtualFolders[folderIndex];
   }
@@ -218,16 +196,13 @@ public:
    */
   [[nodiscard]] int mediaIndexFromActual(int actualIndex) const {
     if (m_unifiedSortActive) {
-      if (!isMediaIndex(actualIndex))
-        return -1;
+      if (!isMediaIndex(actualIndex)) return -1;
       return m_unifiedItems[actualIndex].originalIndex;
     }
     int prefixCount = m_subcollections.size() + m_virtualFolders.size();
-    if (actualIndex < prefixCount)
-      return -1;
+    if (actualIndex < prefixCount) return -1;
     int mediaIndex = actualIndex - prefixCount;
-    if (mediaIndex >= m_filePaths.size())
-      return -1;
+    if (mediaIndex >= m_filePaths.size()) return -1;
     return mediaIndex;
   }
 
@@ -236,8 +211,7 @@ public:
    * @param mediaIndex Index into m_filePaths
    */
   [[nodiscard]] QString rawFilePath(int mediaIndex) const {
-    if (mediaIndex < 0 || mediaIndex >= m_filePaths.size())
-      return {};
+    if (mediaIndex < 0 || mediaIndex >= m_filePaths.size()) return {};
     return m_filePaths[mediaIndex];
   }
 

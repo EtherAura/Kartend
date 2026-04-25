@@ -136,6 +136,7 @@ target_include_directories(kartend PRIVATE
   ${SRC_DIR}/modules/animation
   ${SRC_DIR}/modules/application
   ${SRC_DIR}/modules/artwork
+  ${SRC_DIR}/modules/attract
   ${SRC_DIR}/modules/cache
   ${SRC_DIR}/modules/database
   ${SRC_DIR}/modules/event

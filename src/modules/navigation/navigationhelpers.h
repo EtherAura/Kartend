@@ -2,9 +2,9 @@
 #define NAVIGATIONHELPERS_H
 
 #include "collectionutils.h"
+#include <functional>
 #include <QList>
 #include <QString>
-#include <functional>
 
 // Pure helpers extracted from NavigationManager so they can be unit-tested
 // without instantiating the full UI/manager graph.
@@ -21,8 +21,8 @@ namespace NavigationHelpers {
 // - Returns 0 for an out-of-range or negative collectionIndex.
 // - Cycles in the parent chain are bounded by the size of the collection
 //   list (worst case: every collection is one link in a chain).
-[[nodiscard]] auto computeCollectionDepth(
-    int collectionIndex, const QList<CollectionConfig> &collections) -> int;
+[[nodiscard]] auto computeCollectionDepth(int collectionIndex,
+                                          const QList<CollectionConfig> &collections) -> int;
 
 // Validates that an index refers to a real entry in the collections list.
 //
@@ -30,8 +30,8 @@ namespace NavigationHelpers {
 // is empty. This is a thin pure wrapper around the existing
 // CollectionUtils::isValidIndex(int, list) overload — it exists here so the
 // helper namespace can be a single discoverable surface.
-[[nodiscard]] auto isValidCollectionIndex(
-    int collectionIndex, const QList<CollectionConfig> &collections) -> bool;
+[[nodiscard]] auto isValidCollectionIndex(int collectionIndex,
+                                          const QList<CollectionConfig> &collections) -> bool;
 
 // Looks up the index of the remembered selection for a collection.
 //
@@ -49,9 +49,10 @@ namespace NavigationHelpers {
 // - Clamps the result into [0, totalItems-1]; returns -1 if no remembered
 //   index exists or totalItems <= 0 or the collectionIndex is invalid.
 using SessionLookup = std::function<int(const QString &)>;
-[[nodiscard]] auto lookupRememberedSelectionIndex(
-    int collectionIndex, const QList<CollectionConfig> &collections,
-    int totalItems, const SessionLookup &lookup) -> int;
+[[nodiscard]] auto lookupRememberedSelectionIndex(int collectionIndex,
+                                                  const QList<CollectionConfig> &collections,
+                                                  int totalItems, const SessionLookup &lookup)
+    -> int;
 
 // Calculates the selection index to restore after items load.
 //
@@ -61,10 +62,11 @@ using SessionLookup = std::function<int(const QString &)>;
 //   totalItems <= 0 (signals "no restore, leave selection as is").
 // - Returns 0 when remember is enabled but no remembered index is found.
 // - Otherwise returns the clamped remembered index from `lookup`.
-[[nodiscard]] auto calculateSelectionIndex(
-    int collectionIndex, const QList<CollectionConfig> &collections,
-    int totalItems, bool searchActive, bool rememberSelectionEnabled,
-    const SessionLookup &lookup) -> int;
+[[nodiscard]] auto calculateSelectionIndex(int collectionIndex,
+                                           const QList<CollectionConfig> &collections,
+                                           int totalItems, bool searchActive,
+                                           bool rememberSelectionEnabled,
+                                           const SessionLookup &lookup) -> int;
 
 } // namespace NavigationHelpers
 

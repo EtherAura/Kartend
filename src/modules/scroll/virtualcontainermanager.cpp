@@ -3,21 +3,25 @@
 #include "scrollhelpers.h"
 #include "selectionoverlaymanager.h"
 #include "uiconstants.h"
+#include <QLoggingCategory>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QWidget>
 
-VirtualContainerManager::VirtualContainerManager(QObject *parent)
-    : QObject(parent) {}
+Q_DECLARE_LOGGING_CATEGORY(lcScrollManager)
 
-VirtualContainerManager::~VirtualContainerManager() { cleanupContainer(); }
+VirtualContainerManager::VirtualContainerManager(QObject *parent) : QObject(parent) {}
+
+VirtualContainerManager::~VirtualContainerManager() {
+  cleanupContainer();
+}
 
 void VirtualContainerManager::createContainer() {
   cleanupContainer();
 
   if (!m_gridContainer) {
-    qWarning() << "VirtualContainerManager::createContainer: m_gridContainer "
-                  "is null, cannot create container";
+    qCWarning(lcScrollManager) << "VirtualContainerManager::createContainer: m_gridContainer "
+                                  "is null, cannot create container";
     return;
   }
 
@@ -73,8 +77,7 @@ bool VirtualContainerManager::willNeedVerticalScrollbar(int totalHeight) const {
   return totalHeight > m_scrollArea->viewport()->height();
 }
 
-void VirtualContainerManager::positionContainer(
-    const ContainerPositionParams &params) {
+void VirtualContainerManager::positionContainer(const ContainerPositionParams &params) {
   if (!m_virtualContainer || !m_scrollArea) {
     return;
   }
@@ -82,8 +85,8 @@ void VirtualContainerManager::positionContainer(
   int viewportWidth = getEffectiveViewportWidth();
   int scrollbarWidth = getScrollbarWidth();
 
-  bool scrollbarVisible = m_scrollArea->verticalScrollBar() &&
-                          m_scrollArea->verticalScrollBar()->isVisible();
+  bool scrollbarVisible =
+      m_scrollArea->verticalScrollBar() && m_scrollArea->verticalScrollBar()->isVisible();
   int availableWidth = viewportWidth;
   if (!scrollbarVisible) {
     availableWidth -= scrollbarWidth;
@@ -96,32 +99,27 @@ void VirtualContainerManager::positionContainer(
   int contentWidth = params.totalWidth;
   bool overflow = contentWidth > availableWidth;
 
-  setupContainerSizes(availableWidth, contentWidth, params.totalHeight,
-                      overflow);
+  setupContainerSizes(availableWidth, contentWidth, params.totalHeight, overflow);
 
   HorizontalAlignment align = getEffectiveAlignment(params);
 
-  bool verticalBarHidden = m_scrollArea->verticalScrollBar() &&
-                           !m_scrollArea->verticalScrollBar()->isVisible();
+  bool verticalBarHidden =
+      m_scrollArea->verticalScrollBar() && !m_scrollArea->verticalScrollBar()->isVisible();
   int leftOffset = 0;
   int rightOffset = 0;
   int centerOffset = 0;
-  calculateScrollbarOffsets(verticalBarHidden, leftOffset, rightOffset,
-                            centerOffset);
+  calculateScrollbarOffsets(verticalBarHidden, leftOffset, rightOffset, centerOffset);
 
-  int containerX =
-      calculateContainerPosition(availableWidth, contentWidth, overflow, align,
-                                 leftOffset, rightOffset, centerOffset);
+  int containerX = calculateContainerPosition(availableWidth, contentWidth, overflow, align,
+                                              leftOffset, rightOffset, centerOffset);
 
   configureHorizontalScrollbar(overflow);
   m_virtualContainer->move(containerX, 0);
   m_virtualContainer->resize(params.totalWidth, params.totalHeight);
 }
 
-void VirtualContainerManager::setupContainerSizes(int availableWidth,
-                                                  int contentWidth,
-                                                  int totalHeight,
-                                                  bool overflow) {
+void VirtualContainerManager::setupContainerSizes(int availableWidth, int contentWidth,
+                                                  int totalHeight, bool overflow) {
   if (!m_gridContainer || !m_virtualContainer) {
     return;
   }
@@ -130,24 +128,21 @@ void VirtualContainerManager::setupContainerSizes(int availableWidth,
     m_gridContainer->setMinimumSize(availableWidth, totalHeight);
     m_gridContainer->setMaximumWidth(availableWidth);
   } else {
-    m_gridContainer->setMinimumSize(qMax(availableWidth, contentWidth),
-                                    totalHeight);
+    m_gridContainer->setMinimumSize(qMax(availableWidth, contentWidth), totalHeight);
     m_gridContainer->setMaximumWidth(QWIDGETSIZE_MAX);
   }
   m_gridContainer->setMaximumHeight(totalHeight);
   m_virtualContainer->setFixedSize(contentWidth, totalHeight);
 }
 
-HorizontalAlignment VirtualContainerManager::getEffectiveAlignment(
-    const ContainerPositionParams &params) const {
-  return ScrollHelpers::effectiveAlignment(params.alignment, params.isFiltered,
-                                           params.totalItems,
+HorizontalAlignment
+VirtualContainerManager::getEffectiveAlignment(const ContainerPositionParams &params) const {
+  return ScrollHelpers::effectiveAlignment(params.alignment, params.isFiltered, params.totalItems,
                                            params.itemsPerRow);
 }
 
-void VirtualContainerManager::calculateScrollbarOffsets(
-    bool verticalBarHidden, int &leftOffset, int &rightOffset,
-    int &centerOffset) const {
+void VirtualContainerManager::calculateScrollbarOffsets(bool verticalBarHidden, int &leftOffset,
+                                                        int &rightOffset, int &centerOffset) const {
   static constexpr int HIDDEN_SCROLLBAR_LEFT_OFFSET = -5;
   static constexpr int HIDDEN_SCROLLBAR_RIGHT_OFFSET = -20;
   static constexpr int HIDDEN_SCROLLBAR_CENTER_OFFSET = -10;
@@ -157,10 +152,10 @@ void VirtualContainerManager::calculateScrollbarOffsets(
   centerOffset = verticalBarHidden ? HIDDEN_SCROLLBAR_CENTER_OFFSET : 0;
 }
 
-int VirtualContainerManager::calculateContainerPosition(
-    int availableWidth, int contentWidth, bool overflow,
-    HorizontalAlignment align, int leftOffset, int rightOffset,
-    int centerOffset) const {
+int VirtualContainerManager::calculateContainerPosition(int availableWidth, int contentWidth,
+                                                        bool overflow, HorizontalAlignment align,
+                                                        int leftOffset, int rightOffset,
+                                                        int centerOffset) const {
   static constexpr int CONTAINER_EXTRA_SHIFT = 20;
   int extraShift = CONTAINER_EXTRA_SHIFT;
   int containerX = 0;
@@ -175,29 +170,27 @@ int VirtualContainerManager::calculateContainerPosition(
   } else if (contentWidth <= availableWidth) {
     switch (align) {
     case HorizontalAlignment::Left:
-      containerX = -UIConstants::Grid::CONTAINER_OFFSET -
-                   UIConstants::Grid::CONTAINER_LEFT_OFFSET + leftOffset;
+      containerX = -UIConstants::Grid::CONTAINER_OFFSET - UIConstants::Grid::CONTAINER_LEFT_OFFSET +
+                   leftOffset;
       break;
     case HorizontalAlignment::Right:
-      containerX = availableWidth - contentWidth +
-                   UIConstants::Grid::CONTAINER_RIGHT_OFFSET + rightOffset + 10;
+      containerX = availableWidth - contentWidth + UIConstants::Grid::CONTAINER_RIGHT_OFFSET +
+                   rightOffset + 10;
       break;
     case HorizontalAlignment::Center:
     default:
-      containerX =
-          ((availableWidth - contentWidth) / 2) + centerOffset + extraShift;
+      containerX = ((availableWidth - contentWidth) / 2) + centerOffset + extraShift;
       break;
     }
   } else {
     int overflowAmount = contentWidth - availableWidth;
     switch (align) {
     case HorizontalAlignment::Left:
-      containerX = -UIConstants::Grid::CONTAINER_OFFSET -
-                   UIConstants::Grid::CONTAINER_LEFT_OFFSET + leftOffset;
+      containerX = -UIConstants::Grid::CONTAINER_OFFSET - UIConstants::Grid::CONTAINER_LEFT_OFFSET +
+                   leftOffset;
       break;
     case HorizontalAlignment::Right:
-      containerX = -overflowAmount + UIConstants::Grid::CONTAINER_RIGHT_OFFSET +
-                   rightOffset;
+      containerX = -overflowAmount + UIConstants::Grid::CONTAINER_RIGHT_OFFSET + rightOffset;
       break;
     case HorizontalAlignment::Center:
     default:

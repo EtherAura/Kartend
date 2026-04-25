@@ -2,15 +2,15 @@
 // These remain ItemWidget members; this is a translation-unit split.
 #include "itemwidget.h"
 #include "uiconstants.h"
+#include <algorithm>
 #include <QColor>
 #include <QLabel>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
-#include <QPolygonF>
 #include <QPointF>
+#include <QPolygonF>
 #include <Qt>
-#include <algorithm>
 
 // Set pulse opacity
 void ItemWidget::updateTriangleIndicator() {
@@ -26,8 +26,7 @@ void ItemWidget::updateTriangleIndicator() {
     // Use imageLabel geometry if valid, otherwise calculate from known
     // dimensions
     QRect imageRect = imageLabel ? imageLabel->geometry() : QRect();
-    if (imageRect.width() != m_artworkSize ||
-        imageRect.height() != m_artworkSize) {
+    if (imageRect.width() != m_artworkSize || imageRect.height() != m_artworkSize) {
       // Geometry not yet updated - calculate expected position
       // Layout has 10px margins, imageLabel is centered horizontally
       int leftMargin = (m_itemWidth - m_artworkSize) / 2;
@@ -37,12 +36,9 @@ void ItemWidget::updateTriangleIndicator() {
 
     int borderSpacing = UIConstants::CollectionIcon::ITEM_SPACING;
     int indicatorX = imageRect.right() + borderSpacing -
-                     (UIConstants::Widget::TRIANGLE_SIZE +
-                      UIConstants::Metadata::VALUE_PADDING);
-    int indicatorY =
-        imageRect.top() - borderSpacing + UIConstants::Metadata::VALUE_PADDING;
-    triangleIndicator->setGeometry(indicatorX, indicatorY,
-                                   UIConstants::Widget::TRIANGLE_SIZE,
+                     (UIConstants::Widget::TRIANGLE_SIZE + UIConstants::Metadata::VALUE_PADDING);
+    int indicatorY = imageRect.top() - borderSpacing + UIConstants::Metadata::VALUE_PADDING;
+    triangleIndicator->setGeometry(indicatorX, indicatorY, UIConstants::Widget::TRIANGLE_SIZE,
                                    UIConstants::Widget::TRIANGLE_SIZE);
     triangleIndicator->show();
     triangleIndicator->raise();
@@ -57,8 +53,7 @@ void ItemWidget::paintTriangleIndicator() {
   if ((!triangleIndicator) || !triangleIndicator->isVisible()) {
     return;
   }
-  QPixmap pixmap(UIConstants::Widget::TRIANGLE_SIZE,
-                 UIConstants::Widget::TRIANGLE_SIZE);
+  QPixmap pixmap(UIConstants::Widget::TRIANGLE_SIZE, UIConstants::Widget::TRIANGLE_SIZE);
   pixmap.fill(Qt::transparent);
   QPainter painter(&pixmap);
   painter.setRenderHint(QPainter::Antialiasing);
@@ -71,18 +66,13 @@ void ItemWidget::paintTriangleIndicator() {
     badgeColor = palette().color(QPalette::Highlight);
   }
   painter.setBrush(badgeColor);
-  painter.setPen(
-      QPen(badgeColor.darker(UIConstants::Widget::HIGHLIGHT_DARKEN_FACTOR), 1));
+  painter.setPen(QPen(badgeColor.darker(UIConstants::Widget::HIGHLIGHT_DARKEN_FACTOR), 1));
   QPolygon triangle;
-  triangle << QPoint(UIConstants::Metadata::VALUE_PADDING,
+  triangle << QPoint(UIConstants::Metadata::VALUE_PADDING, UIConstants::Metadata::VALUE_PADDING)
+           << QPoint(UIConstants::Widget::TRIANGLE_SIZE - UIConstants::Metadata::VALUE_PADDING,
                      UIConstants::Metadata::VALUE_PADDING)
-           << QPoint(UIConstants::Widget::TRIANGLE_SIZE -
-                         UIConstants::Metadata::VALUE_PADDING,
-                     UIConstants::Metadata::VALUE_PADDING)
-           << QPoint(UIConstants::Widget::TRIANGLE_SIZE -
-                         UIConstants::Metadata::VALUE_PADDING,
-                     UIConstants::Widget::TRIANGLE_SIZE -
-                         UIConstants::Metadata::VALUE_PADDING);
+           << QPoint(UIConstants::Widget::TRIANGLE_SIZE - UIConstants::Metadata::VALUE_PADDING,
+                     UIConstants::Widget::TRIANGLE_SIZE - UIConstants::Metadata::VALUE_PADDING);
   painter.drawPolygon(triangle);
   auto *indicatorLabel = qobject_cast<QLabel *>(triangleIndicator);
   if (!indicatorLabel) {

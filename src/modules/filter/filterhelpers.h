@@ -18,8 +18,7 @@ namespace FilterHelpers {
 // - When isFiltered is true, returns filteredIndices[visualIndex] or -1 if
 //   the index is out of range.
 [[nodiscard]] auto mapVisualToActualIndex(int visualIndex, bool isFiltered,
-                                          const QList<int> &filteredIndices)
-    -> int;
+                                          const QList<int> &filteredIndices) -> int;
 
 // Case-insensitive substring search for a subcollection name.
 //
@@ -43,11 +42,10 @@ namespace FilterHelpers {
 //       up in fileNames; if absent, fall back to basename.
 //
 // Either map pointer may be null; basename is the safe fallback.
-[[nodiscard]] auto displayNameForMediaEntry(
-    const QString &rawEntry, bool showAllSubcollectionItems,
-    const QString &mediaDirectory,
-    const QHash<QString, QString> *filePathToDisplayName,
-    const QHash<QString, QString> *fileNames) -> QString;
+[[nodiscard]] auto displayNameForMediaEntry(const QString &rawEntry, bool showAllSubcollectionItems,
+                                            const QString &mediaDirectory,
+                                            const QHash<QString, QString> *filePathToDisplayName,
+                                            const QHash<QString, QString> *fileNames) -> QString;
 
 } // namespace FilterHelpers
 

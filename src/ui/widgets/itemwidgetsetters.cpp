@@ -77,8 +77,7 @@ void ItemWidget::setListMode(bool listMode) {
 void ItemWidget::setCollectionName(const QString &name) {
   m_collectionName = name;
 
-  qCDebug(lcItemWidget) << "setCollectionName:" << name
-                        << "isListMode=" << m_isListMode;
+  qCDebug(lcItemWidget) << "setCollectionName:" << name << "isListMode=" << m_isListMode;
 
   // Create collection label lazily if needed
   if (m_isListMode && !m_collectionName.isEmpty()) {
@@ -99,15 +98,13 @@ void ItemWidget::setCollectionName(const QString &name) {
 void ItemWidget::setHasArtwork(bool hasArtwork) {
   m_hasArtwork = hasArtwork;
 
-  qCDebug(lcItemWidget) << "setHasArtwork:" << hasArtwork
-                        << "isListMode=" << m_isListMode;
+  qCDebug(lcItemWidget) << "setHasArtwork:" << hasArtwork << "isListMode=" << m_isListMode;
 
   // Create artwork button lazily if needed
   if (m_isListMode && m_hasArtwork) {
     if (!m_artworkButton) {
       m_artworkButton = new QPushButton(this);
-      m_artworkButton->setIcon(
-          UIConstants::Icons::fromTheme(UIConstants::Icons::IMAGE));
+      m_artworkButton->setIcon(UIConstants::Icons::fromTheme(UIConstants::Icons::IMAGE));
       m_artworkButton->setFlat(true);
       m_artworkButton->setCursor(Qt::PointingHandCursor);
       // Click emits signal for artwork preview

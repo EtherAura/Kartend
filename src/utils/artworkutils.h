@@ -42,8 +42,7 @@ public:
    * @param artworkDirectory The directory to search in.
    * @return Full path to artwork file if found, empty string otherwise.
    */
-  [[nodiscard]] QString findInDirectory(const QString &baseName,
-                                        const QString &artworkDirectory);
+  [[nodiscard]] QString findInDirectory(const QString &baseName, const QString &artworkDirectory);
 
   /**
    * @brief Pre-warm cache for multiple directories (call from background
@@ -102,8 +101,7 @@ private:
  * @param artworkDirectory The directory to search in.
  * @return The full path to the artwork file if found, empty string otherwise.
  */
-[[nodiscard]] QString findArtworkForFile(const QString &fileName,
-                                         const QString &artworkDirectory);
+[[nodiscard]] QString findArtworkForFile(const QString &fileName, const QString &artworkDirectory);
 
 /**
  * @brief Find artwork using cached directory listing (fast path).
@@ -134,8 +132,8 @@ private:
  * @return Result containing artwork path on success, or ErrorContext on
  * failure.
  */
-[[nodiscard]] ErrorUtils::Result<QString>
-tryFindArtworkForFile(const QString &fileName, const QString &artworkDirectory);
+[[nodiscard]] ErrorUtils::Result<QString> tryFindArtworkForFile(const QString &fileName,
+                                                                const QString &artworkDirectory);
 
 /**
  * @brief Clear the artwork directory cache.
