@@ -325,13 +325,20 @@ bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {
 
   ItemWidget *widget = itemWidgetForObject(obj);
   if (!widget || !widget->isVisible()) {
-    clearPendingHoverScroll();
+    // Don't cancel an in-flight hover scroll for events from non-ItemWidget
+    // objects (overlay, viewport, virtual container, etc.). The commit
+    // handler already validates cursor-over-widget before scrolling.
+    if (!m_pendingHoverScrollWidget) {
+      clearPendingHoverScroll();
+    }
     return false;
   }
 
   const int visualIndex = visualIndexForWidget(widget);
   if (visualIndex < 0) {
-    clearPendingHoverScroll();
+    if (!m_pendingHoverScrollWidget) {
+      clearPendingHoverScroll();
+    }
     return false;
   }
 
