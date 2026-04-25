@@ -1,6 +1,7 @@
 add_subdirectory(animation)
 add_subdirectory(application)
 add_subdirectory(artwork)
+add_subdirectory(attract)
 add_subdirectory(cache)
 add_subdirectory(database)
 add_subdirectory(event)

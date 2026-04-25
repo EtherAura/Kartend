@@ -14,6 +14,7 @@
 #include "alphabeticnavigationhandler.h"
 #include "animationmanager.h"
 #include "arrownavigationhandler.h"
+#include "attractmanager.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
 #include "keyboardmanager.h"
@@ -255,6 +256,13 @@ void InteractionManager::connectViewportManagerSignals() {
               }
             }
           });
+}
+
+void InteractionManager::connectAttractManagerSignals() {
+  // When EventManager detects any user activity, reset the attract idle timer
+  // and stop active attract mode scrolling.
+  connect(m_eventManager.get(), &EventManager::activityDetected, m_attractManager.get(),
+          &AttractManager::onActivityDetected);
 }
 
 void InteractionManager::connectEventManagerSignals() {

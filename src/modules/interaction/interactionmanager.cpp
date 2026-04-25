@@ -21,6 +21,7 @@
 #include "alphabeticnavigationhandler.h"
 #include "animationmanager.h"
 #include "arrownavigationhandler.h"
+#include "attractmanager.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
 #include "keyboardmanager.h"
@@ -68,6 +69,7 @@ InteractionManager::InteractionManager(QObject *parent) : QObject(parent) {
   m_launchManager = std::make_unique<LaunchManager>(this);
   m_viewportManager = std::make_unique<ViewportManager>(this);
   m_eventManager = std::make_unique<EventManager>(this);
+  m_attractManager = std::make_unique<AttractManager>(this);
 
   m_viewportManager->setContinuousScrollActive(true);
 }
