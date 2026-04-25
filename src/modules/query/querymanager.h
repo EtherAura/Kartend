@@ -182,9 +182,27 @@ private:
   [[nodiscard]] bool ensureCollectionScanned(int collectionIndex,
                                              const CollectionConfig &collection);
   [[nodiscard]] bool scanAndSaveItemsToDatabase(int collectionIndex,
-                                                const CollectionConfig &collection,
-                                                int *outItemsScanned = nullptr,
-                                                int *outItemsApplied = nullptr);
+                                                 const CollectionConfig &collection,
+                                                 int *outItemsScanned = nullptr,
+                                                 int *outItemsApplied = nullptr);
+
+  // Phase 1: Walk the filesystem (flat or recursive) and stream discovered
+  // files into the scanned_items temp table. Returns the number of files
+  // staged and the computed directory signature. On cancellation the temp
+  // table may be partially populated; the caller decides whether to proceed.
+  [[nodiscard]] bool stageFilesystemScan(const CollectionConfig &collection,
+                                         const QStringList &nameFilters, int &itemsStaged,
+                                         QString &dirSignatureOut);
+
+  // Phase 2: Upsert rows from the scanned_items temp table into the
+  // persistent items table, delete items no longer on disk, and update
+  // collection metadata. Must be called inside a valid staging window
+  // (i.e. after stageFilesystemScan succeeded and before the temp table is
+  // cleared). Returns the number of items applied.
+  [[nodiscard]] bool commitStagedScanResults(const CollectionConfig &collection,
+                                             const QString &uuid, const QString &extSignature,
+                                             const QString &dirSignature, int &itemsApplied);
+
   bool needsRescan(int collectionIndex, const CollectionConfig &collection);
   QStringList scanMediaDirectory(const CollectionConfig &collection,
                                  QHash<QString, QDateTime> &timestamps, QString *dirSignatureOut);
