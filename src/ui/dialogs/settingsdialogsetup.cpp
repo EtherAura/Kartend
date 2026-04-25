@@ -295,11 +295,9 @@ void SettingsDialog::handleSpacingChanged() {
     return;
   }
   if (currentCollectionIndex == originalCurrentCollectionIndex) {
-    // Rebase horizontal spacing: UI value 20 corresponds to internal -50
-    // Internal = UI - 70
-    int internalHorizontalSpacing = ui->horizontalSpacingSpinBox->value() - 70;
-    emit spacingChanged(currentCollectionIndex, internalHorizontalSpacing,
-                        ui->verticalSpacingSpinBox->value());
+    emit spacingChanged(currentCollectionIndex,
+                        spacingUiToInternal(ui->horizontalSpacingSpinBox->value()),
+                        spacingUiToInternal(ui->verticalSpacingSpinBox->value()));
   }
 }
 
@@ -316,20 +314,17 @@ void SettingsDialog::setupTreeWidgetConnections() {
 
 void SettingsDialog::setupUIConstraints() {
   if (ui->horizontalSpacingSpinBox) {
-    // Rebase horizontal spacing: UI range 0 to 150 maps to internal -100 to 50
-    // Internal = UI - 70.
-    // Min UI = -100 + 70 = -30? No.
-    // User wants "20" to be "-50".
-    // UI = Internal + 70.
-    // Min Internal = -100. Min UI = -30.
-    // Max Internal = 50. Max UI = 120.
-    ui->horizontalSpacingSpinBox->setMinimum(-30);
-    ui->horizontalSpacingSpinBox->setMaximum(120);
+    ui->horizontalSpacingSpinBox->setMinimum(
+        spacingInternalToUi(UIConstants::Viewport::SPACING_MIN));
+    ui->horizontalSpacingSpinBox->setMaximum(
+        spacingInternalToUi(UIConstants::Viewport::SPACING_MAX));
     ui->horizontalSpacingSpinBox->setSingleStep(1);
   }
   if (ui->verticalSpacingSpinBox) {
-    ui->verticalSpacingSpinBox->setMinimum(UIConstants::Viewport::SPACING_MIN);
-    ui->verticalSpacingSpinBox->setMaximum(UIConstants::Viewport::SPACING_MAX);
+    ui->verticalSpacingSpinBox->setMinimum(
+        spacingInternalToUi(UIConstants::Viewport::SPACING_MIN));
+    ui->verticalSpacingSpinBox->setMaximum(
+        spacingInternalToUi(UIConstants::Viewport::SPACING_MAX));
     ui->verticalSpacingSpinBox->setSingleStep(1);
   }
   if (ui->gridWidthSpinBox) {

@@ -98,12 +98,12 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.viewType = (ui->viewTypeComboBox)
                         ? static_cast<ViewType>(ui->viewTypeComboBox->currentIndex())
                         : config.viewType;
-  // Rebase horizontal spacing: Internal = UI - 70
   config.horizontalSpacing = (ui->horizontalSpacingSpinBox)
-                                 ? ui->horizontalSpacingSpinBox->value() - 70
+                                 ? spacingUiToInternal(ui->horizontalSpacingSpinBox->value())
                                  : config.horizontalSpacing;
   config.verticalSpacing =
-      (ui->verticalSpacingSpinBox) ? ui->verticalSpacingSpinBox->value() : config.verticalSpacing;
+      (ui->verticalSpacingSpinBox) ? spacingUiToInternal(ui->verticalSpacingSpinBox->value())
+                                   : config.verticalSpacing;
   config.hideHorizontalScrollbar = (ui->hideHorizontalScrollbarCheckBox)
                                        ? ui->hideHorizontalScrollbarCheckBox->isChecked()
                                        : config.hideHorizontalScrollbar;
@@ -211,9 +211,10 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ((ui->viewTypeComboBox) &&
        ui->viewTypeComboBox->currentIndex() != static_cast<int>(originalConfig.viewType)) ||
       ((ui->horizontalSpacingSpinBox) &&
-       (ui->horizontalSpacingSpinBox->value() - 70) != originalConfig.horizontalSpacing) ||
+       spacingUiToInternal(ui->horizontalSpacingSpinBox->value()) !=
+           originalConfig.horizontalSpacing) ||
       ((ui->verticalSpacingSpinBox) &&
-       ui->verticalSpacingSpinBox->value() != originalConfig.verticalSpacing) ||
+       spacingUiToInternal(ui->verticalSpacingSpinBox->value()) != originalConfig.verticalSpacing) ||
       ((ui->hideHorizontalScrollbarCheckBox) && ui->hideHorizontalScrollbarCheckBox->isChecked() !=
                                                     originalConfig.hideHorizontalScrollbar) ||
       ((ui->hideVerticalScrollbarCheckBox) &&

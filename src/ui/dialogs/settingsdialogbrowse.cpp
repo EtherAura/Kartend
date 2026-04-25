@@ -281,11 +281,10 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->viewTypeComboBox->setCurrentIndex(static_cast<int>(config.viewType));
   }
   if (ui->horizontalSpacingSpinBox) {
-    // Rebase horizontal spacing: UI = Internal + 70
-    ui->horizontalSpacingSpinBox->setValue(config.horizontalSpacing + 70);
+    ui->horizontalSpacingSpinBox->setValue(spacingInternalToUi(config.horizontalSpacing));
   }
   if (ui->verticalSpacingSpinBox) {
-    ui->verticalSpacingSpinBox->setValue(config.verticalSpacing);
+    ui->verticalSpacingSpinBox->setValue(spacingInternalToUi(config.verticalSpacing));
   }
   if (ui->hideHorizontalScrollbarCheckBox) {
     ui->hideHorizontalScrollbarCheckBox->setChecked(config.hideHorizontalScrollbar);
@@ -398,8 +397,10 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->hideSubcollectionTitlesCheckBox) ui->hideSubcollectionTitlesCheckBox->setChecked(false);
 
   if (ui->gridWidthSpinBox) ui->gridWidthSpinBox->setValue(UIConstants::Grid::DEFAULT_WIDTH);
-  if (ui->horizontalSpacingSpinBox) ui->horizontalSpacingSpinBox->setValue(70);
-  if (ui->verticalSpacingSpinBox) ui->verticalSpacingSpinBox->setValue(0);
+  if (ui->horizontalSpacingSpinBox)
+    ui->horizontalSpacingSpinBox->setValue(spacingInternalToUi(UIConstants::Grid::SPACING));
+  if (ui->verticalSpacingSpinBox)
+    ui->verticalSpacingSpinBox->setValue(spacingInternalToUi(UIConstants::Grid::SPACING));
   if (ui->itemWidthSpinBox) ui->itemWidthSpinBox->setValue(200);
   if (ui->itemHeightSpinBox) ui->itemHeightSpinBox->setValue(300);
   if (ui->fontSizeSpinBox) ui->fontSizeSpinBox->setValue(12);
