@@ -455,6 +455,94 @@ void EventManager::commitPendingHoverScroll() {
     // exposes/recycles widgets at the new selection's row.
     m_scrollManager->updateSelectionForIndex(visualIndex);
   }
+
+  // After centering, schedule a deferred poll to check whether the viewport
+  // scroll exposed a new item under the cursor. If so, we start a new
+  // hover-scroll cycle for continuous scrolling without requiring mouse
+  // movement.
+  QTimer::singleShot(UIConstants::Mouse::HOVER_SCROLL_CONTINUE_DELAY_MS, this,
+                     &EventManager::pollCursorForContinuousHoverScroll);
+}
+
+void EventManager::pollCursorForContinuousHoverScroll() {
+  if (!m_generalSettings || !m_generalSettings->selectItemOnHover || !m_selectionManager ||
+      !m_scrollManager || !m_itemScrollArea || !m_gridContainer) {
+    return;
+  }
+  if (QApplication::activeModalWidget() || !m_stackedWidget || !m_itemsPage ||
+      m_stackedWidget->currentWidget() != m_itemsPage) {
+    return;
+  }
+  if (!CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+    return;
+  }
+  // Don't re-arm if a new hover scroll was already staged (e.g. by mouse move)
+  if (m_pendingHoverScrollWidget) {
+    return;
+  }
+
+  const QPoint globalPos = QCursor::pos();
+
+  // Ensure cursor is still within the scroll area viewport
+  QWidget *viewport = m_itemScrollArea->viewport();
+  if (!viewport) {
+    return;
+  }
+  const QPoint viewportPos = viewport->mapFromGlobal(globalPos);
+  if (!viewport->rect().contains(viewportPos)) {
+    return;
+  }
+
+  // Find the widget under the cursor
+  QWidget *widgetAtPos = QApplication::widgetAt(globalPos);
+  if (!widgetAtPos) {
+    return;
+  }
+
+  // Walk up to find the ItemWidget (mirrors itemWidgetForObject)
+  ItemWidget *widget = nullptr;
+  for (QObject *candidate = widgetAtPos; candidate; candidate = candidate->parent()) {
+    if (auto *iw = qobject_cast<ItemWidget *>(candidate)) {
+      widget = iw;
+      break;
+    }
+  }
+  if (!widget || !widget->isVisible()) {
+    return;
+  }
+
+  const int visualIndex = visualIndexForWidget(widget);
+  if (visualIndex < 0) {
+    return;
+  }
+
+  // Only continue if this is a different item from current selection -
+  // if the viewport didn't expose a new row, stop continuous scrolling.
+  const int currentSelection = m_selectionManager->currentSelectedIndex();
+  if (visualIndex == currentSelection) {
+    return;
+  }
+
+  // Select the new item immediately (same as handleHoverSelection)
+  if (m_state) {
+    const qint64 hoverScrollSuppressedUntil =
+        QDateTime::currentMSecsSinceEpoch() + UIConstants::Mouse::HOVER_SCROLL_CONTINUE_DELAY_MS;
+    m_state->arrow().suppressArrowCenterUntilMs =
+        qMax(m_state->arrow().suppressArrowCenterUntilMs, hoverScrollSuppressedUntil);
+  }
+  m_selectionManager->selectItemByHover(visualIndex);
+  if (m_sidebarManager && m_sidebarManager->isSidebarVisible()) {
+    m_sidebarManager->updateSidebarMetadata(widget);
+  }
+
+  // Stage a new hover-scroll cycle with the shorter continue delay
+  m_pendingHoverScrollWidget = widget;
+  m_pendingHoverScrollGlobalPos = globalPos;
+  m_pendingHoverScrollIndex = visualIndex;
+  if (m_state) {
+    m_state->scroll().hoverScrollPending = true;
+  }
+  m_hoverScrollTimer.start(UIConstants::Mouse::HOVER_SCROLL_CONTINUE_DELAY_MS);
 }
 
 bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
