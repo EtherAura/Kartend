@@ -423,10 +423,29 @@ void EventManager::commitPendingHoverScroll() {
       m_hoverScrollTimer.start(retryDelayMs);
       return;
     }
+    // Hover-scroll's own arrow-center suppression has expired; force-clear so
+    // the centering call below is not blocked by a stale flag (the bool half
+    // of the suppression state can outlive its timestamp via earlier paths).
+    m_state->clearArrowCenterSuppression();
   }
 
   clearPendingHoverScroll();
+
+  // Drive the viewport centering directly via ViewportManager. The earlier
+  // path through ScrollManager::updateSelectionForIndex routes a same-index
+  // update through SelectionDisplayManager::handleSameSelectionUpdate, which
+  // early-returns whenever the selection overlay is still animating from the
+  // immediate hover-selection that ran HOVER_SCROLL_DELAY_MS ago. That race
+  // (overlay anim outlasting the hover-scroll dwell) was why hover-induced
+  // scrolling silently did nothing (Kartend-xtj). Calling centerItemVertically
+  // is the same canonical centering API arrow-key navigation uses, so it is
+  // not gated on overlay animation state.
+  if (m_viewportManager) {
+    m_viewportManager->centerItemVertically(visualIndex, false);
+  }
   if (m_scrollManager) {
+    // Refresh selection overlay/widget state in case the viewport scroll
+    // exposes/recycles widgets at the new selection's row.
     m_scrollManager->updateSelectionForIndex(visualIndex);
   }
 }
