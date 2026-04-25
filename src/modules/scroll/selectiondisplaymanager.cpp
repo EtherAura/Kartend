@@ -470,6 +470,10 @@ void SelectionDisplayManager::scheduleArrowKeyUpdate(int selectedIndex) {
     return;
   }
 
+  if (m_state && m_state->scroll().hoverScrollPending) {
+    return;
+  }
+
   // Check if update should be skipped due to suppression
   if (m_arrowKeyScrollHelper->shouldSkipUpdate()) {
     return;

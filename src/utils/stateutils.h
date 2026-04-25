@@ -73,6 +73,7 @@ struct ScrollState {
   bool keyContinuous = false;
   bool horizHoldActive = false;
   bool clickHoldAdvancing = false;
+  bool hoverScrollPending = false;
 
   void resetScrollFlags() {
     programmaticScroll = false;
@@ -83,10 +84,11 @@ struct ScrollState {
     keyContinuous = false;
     horizHoldActive = false;
     clickHoldAdvancing = false;
+    hoverScrollPending = false;
   }
 
   [[nodiscard]] bool isAnyContinuousActive() const {
-    return clickContinuous || keyContinuous || clickHoldAdvancing;
+    return clickContinuous || keyContinuous || clickHoldAdvancing || hoverScrollPending;
   }
 };
 
