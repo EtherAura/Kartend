@@ -260,6 +260,8 @@ void InteractionManager::connectViewportManagerSignals() {
 void InteractionManager::connectEventManagerSignals() {
   connect(m_eventManager.get(), &EventManager::widgetDoubleClicked, this,
           &InteractionManager::handleWidgetDoubleClickedWithCollection);
+  connect(m_eventManager.get(), &EventManager::contextMenuRequested, this,
+          &InteractionManager::showContextMenu);
   connect(m_eventManager.get(), &EventManager::widgetClicked, this,
           [this](ItemWidget *widget, int visualIndex, const QPoint &clickPos, QMouseEvent *event) {
             Q_UNUSED(widget);
