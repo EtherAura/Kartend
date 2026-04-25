@@ -376,6 +376,14 @@ struct GeneralSettings {
   // root-collection selection. If the named collection no longer exists, falls
   // back to the default behavior.
   QString startupCollection;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Attract mode / autoscroll (Kartend-1pp)
+  // ─────────────────────────────────────────────────────────────────────────
+  bool attractModeEnabled = false;
+  int attractModeIdleTimeoutSec = 120; // Seconds of idle before activation
+  int attractModeScrollSpeed = 1;      // Pixels per tick (1-10)
+
   QHash<int, int> lastSelectedItems;
   GeneralSettings() = default;
 };

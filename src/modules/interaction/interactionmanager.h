@@ -20,6 +20,7 @@ QT_END_NAMESPACE
 
 // Forward declarations for owned sub-managers (only pointers used in header)
 class AnimationManager;
+class AttractManager;
 class EventManager;
 class GamepadManager;
 class KeyboardManager;
@@ -129,6 +130,7 @@ public:
   // Owned sub-manager accessors - allows ApplicationContext to register them
   // ─────────────────────────────────────────────────────────────────────────
   [[nodiscard]] AnimationManager *animationManager() const { return m_animationManager.get(); }
+  [[nodiscard]] AttractManager *attractManager() const { return m_attractManager.get(); }
   [[nodiscard]] SelectionManager *selectionManager() const { return m_selectionManager.get(); }
   [[nodiscard]] ViewportManager *viewportManager() const { return m_viewportManager.get(); }
   [[nodiscard]] MouseManager *mouseManager() const { return m_mouseManager.get(); }
@@ -262,6 +264,9 @@ private:
   // Event handling delegation (owned helper)
   std::unique_ptr<EventManager> m_eventManager;
 
+  // Attract mode delegation (owned helper)
+  std::unique_ptr<AttractManager> m_attractManager;
+
   ScrollManager *m_scrollManager = nullptr;
   SidebarManager *m_sidebarManager = nullptr;
   SettingsManager *m_settingsManager = nullptr;
@@ -291,6 +296,7 @@ private:
   void connectMouseManagerSignals();
   void connectViewportManagerSignals();
   void connectEventManagerSignals();
+  void connectAttractManagerSignals();
 
   // Setup helpers (split from setupReferences)
   void setupArrowNavigationHandler(const InteractionManagerSetup &setup);

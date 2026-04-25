@@ -111,6 +111,19 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.listCollectionColumnWidth = s.value("listCollectionColumnWidth", 150).toInt();
   settings.listArtworkColumnWidth = s.value("listArtworkColumnWidth", 32).toInt();
   settings.startupCollection = s.value("startupCollection", QString()).toString();
+
+  // Attract mode (Kartend-1pp)
+  settings.attractModeEnabled = s.value("attractModeEnabled", false).toBool();
+  settings.attractModeIdleTimeoutSec =
+      qBound(UIConstants::Attract::MIN_IDLE_TIMEOUT_SEC,
+             s.value("attractModeIdleTimeoutSec", UIConstants::Attract::DEFAULT_IDLE_TIMEOUT_SEC)
+                 .toInt(),
+             UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
+  settings.attractModeScrollSpeed =
+      qBound(UIConstants::Attract::MIN_SCROLL_SPEED_PX,
+             s.value("attractModeScrollSpeed", UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX)
+                 .toInt(),
+             UIConstants::Attract::MAX_SCROLL_SPEED_PX);
   s.endGroup();
 
   settings.lastSelectedItems.clear();
@@ -160,6 +173,11 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.listArtworkColumnWidth = settings.listArtworkColumnWidth;
   m_generalSettings.startupCollection = settings.startupCollection;
 
+  // Attract mode
+  m_generalSettings.attractModeEnabled = settings.attractModeEnabled;
+  m_generalSettings.attractModeIdleTimeoutSec = settings.attractModeIdleTimeoutSec;
+  m_generalSettings.attractModeScrollSpeed = settings.attractModeScrollSpeed;
+
   QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   s.setAtomicSyncRequired(true);
   s.beginGroup("General");
@@ -200,6 +218,9 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("listCollectionColumnWidth", m_generalSettings.listCollectionColumnWidth);
   s.setValue("listArtworkColumnWidth", m_generalSettings.listArtworkColumnWidth);
   s.setValue("startupCollection", m_generalSettings.startupCollection);
+  s.setValue("attractModeEnabled", m_generalSettings.attractModeEnabled);
+  s.setValue("attractModeIdleTimeoutSec", m_generalSettings.attractModeIdleTimeoutSec);
+  s.setValue("attractModeScrollSpeed", m_generalSettings.attractModeScrollSpeed);
   s.endGroup();
   s.sync();
 

@@ -19,6 +19,7 @@
 #include "alphabeticnavigationhandler.h"
 #include "animationmanager.h"
 #include "arrownavigationhandler.h"
+#include "attractmanager.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
 #include "keyboardmanager.h"
@@ -169,6 +170,18 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     eventSetup.selectionManager = m_selectionManager.get();
     m_eventManager->setupReferences(eventSetup);
     connectEventManagerSignals();
+  }
+
+  // Setup AttractManager with its dependencies
+  if (m_attractManager) {
+    AttractManagerSetup attractSetup;
+    attractSetup.ctx = setup.ctx;
+    attractSetup.itemScrollArea = m_itemScrollArea;
+    attractSetup.scrollManager = m_scrollManager;
+    attractSetup.generalSettings = m_generalSettings;
+    attractSetup.isShuttingDown = m_isShuttingDown;
+    m_attractManager->setupReferences(attractSetup);
+    connectAttractManagerSignals();
   }
 
   updateSearchModeButton();

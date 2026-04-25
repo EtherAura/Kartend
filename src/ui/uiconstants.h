@@ -6,6 +6,7 @@
 
 #include "uiconstants/animation.h"
 #include "uiconstants/artwork.h"
+#include "uiconstants/attract.h"
 #include "uiconstants/cache.h"
 #include "uiconstants/collectionicon.h"
 #include "uiconstants/color.h"
