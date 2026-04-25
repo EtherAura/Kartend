@@ -459,10 +459,10 @@
                     <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
                     <property name="minimumWidth"><number>80</number></property>
                     <property name="maximumWidth"><number>80</number></property>
-                    <property name="toolTip"><string>Horizontal spacing between items in pixels</string></property>
-                    <property name="minimum"><number>-20</number></property>
-                    <property name="maximum"><number>50</number></property>
-                    <property name="value"><number>20</number></property>
+                    <property name="toolTip"><string>Horizontal spacing adjustment (0 = tightest, 150 = loosest)</string></property>
+                    <property name="minimum"><number>0</number></property>
+                    <property name="maximum"><number>150</number></property>
+                    <property name="value"><number>120</number></property>
                    </widget>
                   </item>
                   <item row="4" column="0">
@@ -473,10 +473,10 @@
                     <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
                     <property name="minimumWidth"><number>80</number></property>
                     <property name="maximumWidth"><number>80</number></property>
-                    <property name="toolTip"><string>Vertical spacing between items in pixels</string></property>
-                    <property name="minimum"><number>-20</number></property>
-                    <property name="maximum"><number>50</number></property>
-                    <property name="value"><number>20</number></property>
+                    <property name="toolTip"><string>Vertical spacing adjustment (0 = tightest, 150 = loosest)</string></property>
+                    <property name="minimum"><number>0</number></property>
+                    <property name="maximum"><number>150</number></property>
+                    <property name="value"><number>120</number></property>
                    </widget>
                   </item>
                   <item row="5" column="0">

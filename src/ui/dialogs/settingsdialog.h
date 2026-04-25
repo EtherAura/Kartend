@@ -100,6 +100,8 @@ private:
   void handleSpacingChanged();
   void setupTreeWidgetConnections();
   void setupUIConstraints();
+  [[nodiscard]] static auto spacingInternalToUi(int spacing) -> int;
+  [[nodiscard]] static auto spacingUiToInternal(int spacing) -> int;
   void setupGeneralSettingsConnections();
   void loadCollectionToUI(int index);
   void clearCollectionUI();
