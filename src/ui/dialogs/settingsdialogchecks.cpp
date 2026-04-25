@@ -410,5 +410,19 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
       ui->baseColorEdit->text().trimmed() != m_originalGeneralSettings.titleBaseColor) {
     return true;
   }
+  // Check attract mode settings
+  if (ui->attractModeCheckBox &&
+      ui->attractModeCheckBox->isChecked() != m_originalGeneralSettings.attractModeEnabled) {
+    return true;
+  }
+  if (ui->attractIdleTimeoutSpinBox &&
+      ui->attractIdleTimeoutSpinBox->value() !=
+          m_originalGeneralSettings.attractModeIdleTimeoutSec) {
+    return true;
+  }
+  if (ui->attractScrollSpeedSpinBox &&
+      ui->attractScrollSpeedSpinBox->value() != m_originalGeneralSettings.attractModeScrollSpeed) {
+    return true;
+  }
   return false;
 }

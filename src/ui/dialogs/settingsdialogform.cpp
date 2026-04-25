@@ -391,6 +391,21 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->baseColorEdit->setText(m_generalSettings.titleBaseColor);
     ui->baseColorEdit->blockSignals(false);
   }
+  if (ui->attractModeCheckBox) {
+    ui->attractModeCheckBox->blockSignals(true);
+    ui->attractModeCheckBox->setChecked(m_generalSettings.attractModeEnabled);
+    ui->attractModeCheckBox->blockSignals(false);
+  }
+  if (ui->attractIdleTimeoutSpinBox) {
+    ui->attractIdleTimeoutSpinBox->blockSignals(true);
+    ui->attractIdleTimeoutSpinBox->setValue(m_generalSettings.attractModeIdleTimeoutSec);
+    ui->attractIdleTimeoutSpinBox->blockSignals(false);
+  }
+  if (ui->attractScrollSpeedSpinBox) {
+    ui->attractScrollSpeedSpinBox->blockSignals(true);
+    ui->attractScrollSpeedSpinBox->setValue(m_generalSettings.attractModeScrollSpeed);
+    ui->attractScrollSpeedSpinBox->blockSignals(false);
+  }
   if (ui->startupCollectionComboBox) {
     ui->startupCollectionComboBox->blockSignals(true);
     ui->startupCollectionComboBox->clear();
@@ -505,6 +520,17 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     if (ui->scrollVelocityMultiplierSpinBox) {
       mainWindow->m_generalSettings.scrollVelocityMultiplier =
           ui->scrollVelocityMultiplierSpinBox->value();
+    }
+    if (ui->attractModeCheckBox) {
+      mainWindow->m_generalSettings.attractModeEnabled = ui->attractModeCheckBox->isChecked();
+    }
+    if (ui->attractIdleTimeoutSpinBox) {
+      mainWindow->m_generalSettings.attractModeIdleTimeoutSec =
+          ui->attractIdleTimeoutSpinBox->value();
+    }
+    if (ui->attractScrollSpeedSpinBox) {
+      mainWindow->m_generalSettings.attractModeScrollSpeed =
+          ui->attractScrollSpeedSpinBox->value();
     }
     if (ui->titleSaturationSpinBox) {
       mainWindow->m_generalSettings.titleTintSaturation = ui->titleSaturationSpinBox->value();
