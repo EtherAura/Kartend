@@ -222,7 +222,8 @@ private:
   [[nodiscard]] bool ensureScannedItemsTempTable();
   void clearScannedItemsTempTable();
   void insertScannedItemsBatch(const QStringList &paths,
-                               const QHash<QString, QDateTime> &timestamps);
+                               const QHash<QString, QDateTime> &timestamps,
+                               const QString &mediaRoot);
   [[nodiscard]] bool applyScannedItemsToDatabase(int legacyId, const QString &collectionUuid);
   [[nodiscard]] bool deleteMissingItemsByUuidUsingScannedItems(const QString &collectionUuid);
 

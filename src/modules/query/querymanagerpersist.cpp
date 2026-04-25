@@ -105,26 +105,29 @@ void QueryManager::insertItemsBatch(int legacyId, const QString &uuid, const QSt
   // (play_count/last_played/rating/artwork_path). We only update name +
   // last_modified (and collection_id) when a row already exists.
   QString sql = "INSERT INTO items (collection_id, collection_uuid, "
-                "path, name, last_modified) VALUES ";
+                "path, name, last_modified, file_size) VALUES ";
   QStringList valueSets;
   valueSets.reserve(paths.size());
   for (int i = 0; i < paths.size(); ++i) {
-    valueSets.append("(?, ?, ?, ?, ?)");
+    valueSets.append("(?, ?, ?, ?, ?, ?)");
   }
   sql += valueSets.join(", ");
   sql += " ON CONFLICT(collection_uuid, path) DO UPDATE SET "
          "collection_id=excluded.collection_id, "
          "name=excluded.name, "
-         "last_modified=excluded.last_modified";
+         "last_modified=excluded.last_modified, "
+         "file_size=excluded.file_size";
 
   QSqlQuery ins(m_db);
   ins.prepare(sql);
   for (const QString &filePath : paths) {
+    const QFileInfo info(filePath);
     ins.addBindValue(legacyId);
     ins.addBindValue(uuid);
     ins.addBindValue(filePath);
     ins.addBindValue(QFileInfo(filePath).completeBaseName());
     ins.addBindValue(timestamps.value(filePath).toString(Qt::ISODate));
+    ins.addBindValue(info.exists() ? info.size() : 0);
   }
 
   if (!ins.exec()) {
@@ -143,7 +146,8 @@ bool QueryManager::ensureScannedItemsTempTable() {
   if (!q.exec("CREATE TEMP TABLE IF NOT EXISTS scanned_items ("
               "path TEXT PRIMARY KEY, "
               "name TEXT, "
-              "last_modified TEXT"
+              "last_modified TEXT, "
+              "file_size INTEGER DEFAULT 0"
               ")")) {
     ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
                                                "Failed to create scanned_items temp table",
@@ -167,27 +171,32 @@ void QueryManager::clearScannedItemsTempTable() {
 // ============================================================================
 
 void QueryManager::insertScannedItemsBatch(const QStringList &paths,
-                                           const QHash<QString, QDateTime> &timestamps) {
+                                           const QHash<QString, QDateTime> &timestamps,
+                                           const QString &mediaRoot) {
   if (!m_db.isOpen() || paths.isEmpty()) {
     return;
   }
 
-  // 3 columns per row -> keep under SQLite 999 variable limit.
+  // 4 columns per row -> keep under SQLite 999 variable limit.
   QString sql = "INSERT OR REPLACE INTO scanned_items (path, name, "
-                "last_modified) VALUES ";
+                "last_modified, file_size) VALUES ";
   QStringList valueSets;
   valueSets.reserve(paths.size());
   for (int i = 0; i < paths.size(); ++i) {
-    valueSets.append("(?, ?, ?)");
+    valueSets.append("(?, ?, ?, ?)");
   }
   sql += valueSets.join(", ");
 
   QSqlQuery ins(m_db);
   ins.prepare(sql);
+  const QDir mediaDir(mediaRoot);
   for (const QString &p : paths) {
+    const QString absolutePath = QDir::isAbsolutePath(p) ? p : mediaDir.absoluteFilePath(p);
+    const QFileInfo absoluteInfo(absolutePath);
     ins.addBindValue(p);
     ins.addBindValue(QFileInfo(p).completeBaseName());
     ins.addBindValue(timestamps.value(p).toString(Qt::ISODate));
+    ins.addBindValue(absoluteInfo.exists() ? absoluteInfo.size() : 0);
   }
   if (!ins.exec()) {
     ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
@@ -204,12 +213,13 @@ bool QueryManager::applyScannedItemsToDatabase(int legacyId, const QString &coll
 
   QSqlQuery upsert(m_db);
   upsert.prepare("INSERT INTO items (collection_id, collection_uuid, path, "
-                 "name, last_modified) "
-                 "SELECT ?, ?, path, name, last_modified FROM scanned_items "
+                 "name, last_modified, file_size) "
+                 "SELECT ?, ?, path, name, last_modified, file_size FROM scanned_items "
                  "ON CONFLICT(collection_uuid, path) DO UPDATE SET "
                  "collection_id=excluded.collection_id, "
                  "name=excluded.name, "
-                 "last_modified=excluded.last_modified");
+                 "last_modified=excluded.last_modified, "
+                 "file_size=excluded.file_size");
   upsert.addBindValue(legacyId);
   upsert.addBindValue(collectionUuid);
   if (!upsert.exec()) {

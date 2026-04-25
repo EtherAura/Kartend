@@ -418,6 +418,12 @@
     <addaction name="actionSortNameAsc"/>
     <addaction name="actionSortNameDesc"/>
     <addaction name="separator"/>
+    <addaction name="actionSortDateDesc"/>
+    <addaction name="actionSortDateAsc"/>
+    <addaction name="separator"/>
+    <addaction name="actionSortSizeDesc"/>
+    <addaction name="actionSortSizeAsc"/>
+    <addaction name="separator"/>
     <addaction name="actionSortRandom"/>
     <addaction name="separator"/>
     <addaction name="actionSortSubfolders"/>
@@ -544,6 +550,38 @@
   <action name="actionSortRandom">
    <property name="text">
     <string>Random</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionSortDateDesc">
+   <property name="text">
+    <string>Date (Newest First)</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionSortDateAsc">
+   <property name="text">
+    <string>Date (Oldest First)</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionSortSizeDesc">
+   <property name="text">
+    <string>Size (Largest First)</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionSortSizeAsc">
+   <property name="text">
+    <string>Size (Smallest First)</string>
    </property>
    <property name="checkable">
     <bool>true</bool>

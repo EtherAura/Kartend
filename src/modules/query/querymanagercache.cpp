@@ -313,8 +313,12 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
     return false;
   }
 
-  // For collection sorting, we need to join with collections table
-  bool needsCollectionJoin =
+  // Some sort modes need columns that are only available on the items table.
+  const bool needsItemsTable =
+      (sortMode == SortMode::DateAscending || sortMode == SortMode::DateDescending ||
+       sortMode == SortMode::SizeAscending || sortMode == SortMode::SizeDescending);
+  // For collection sorting, we need to join with collections table.
+  const bool needsCollectionJoin =
       (sortMode == SortMode::CollectionAscending || sortMode == SortMode::CollectionDescending);
 
   // When filtering, use FTS to match the semantics of fetchItemCount and the
@@ -329,14 +333,14 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   QString sql;
   QString filterClause;
   if (!trimmedFilter.isEmpty() && !useFts) {
-    filterClause = needsCollectionJoin ? " AND i.name LIKE ?" : " AND name LIKE ?";
+    filterClause = (needsCollectionJoin || needsItemsTable) ? " AND i.name LIKE ?" : " AND name LIKE ?";
   }
 
   if (useFts) {
     // FTS-backed select: filter rowids via items_fts MATCH then resolve to
     // items rows for collection joining / dedup. Mirrors the slow path's
     // FTS branch in fetchItemsRange so cache size matches count.
-    if (needsCollectionJoin) {
+    if (needsCollectionJoin || needsItemsTable) {
       if (useTempTable) {
         sql = "SELECT i.path, MIN(i.collection_uuid) as collection_uuid FROM "
               "items i "
@@ -367,7 +371,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
               buildUuidInClause(uuids.size()) + " GROUP BY path";
       }
     }
-  } else if (needsCollectionJoin) {
+  } else if (needsCollectionJoin || needsItemsTable) {
     // Join with collections to get collection name for sorting.
     // Use GROUP BY path to deduplicate paths that appear in multiple
     // collections (e.g., when showAllSubcollectionItems=true).
@@ -411,6 +415,18 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
     switch (sortMode) {
     case SortMode::NameDescending:
       sql += " ORDER BY path COLLATE NOCASE DESC";
+      break;
+    case SortMode::DateDescending:
+      sql += " ORDER BY MAX(i.last_modified) DESC, path COLLATE NOCASE";
+      break;
+    case SortMode::DateAscending:
+      sql += " ORDER BY MIN(i.last_modified) ASC, path COLLATE NOCASE";
+      break;
+    case SortMode::SizeDescending:
+      sql += " ORDER BY MAX(i.file_size) DESC, path COLLATE NOCASE";
+      break;
+    case SortMode::SizeAscending:
+      sql += " ORDER BY MIN(i.file_size) ASC, path COLLATE NOCASE";
       break;
     case SortMode::CollectionAscending:
       sql += " ORDER BY MIN(c.name) COLLATE NOCASE, path COLLATE NOCASE";

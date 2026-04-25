@@ -137,7 +137,7 @@ bool QueryManager::stageFilesystemScan(const CollectionConfig &collection,
       batchesSinceCommit = 0;
     }
 
-    insertScannedItemsBatch(batchPaths, batchTimestamps);
+    insertScannedItemsBatch(batchPaths, batchTimestamps, collection.mediaDirectory);
     itemsStaged += batchPaths.size();
     ++batchesSinceCommit;
 

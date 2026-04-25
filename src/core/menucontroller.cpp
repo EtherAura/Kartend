@@ -206,6 +206,74 @@ void MenuController::setupSortActions() {
     });
   }
 
+  if (m_ctx.ui->actionSortDateDesc) {
+    m_sortActionGroup->addAction(m_ctx.ui->actionSortDateDesc);
+    connect(m_ctx.ui->actionSortDateDesc, &QAction::triggered, [this, reloadIfNeeded]() {
+      if (m_ctx.getGeneralSettings) {
+        if (auto *settings = m_ctx.getGeneralSettings()) {
+          settings->sortMode = SortMode::DateDescending;
+          if (m_ctx.getSettingsManager) {
+            if (auto *mgr = m_ctx.getSettingsManager()) {
+              mgr->saveGeneralSettings(*settings);
+            }
+          }
+          reloadIfNeeded();
+        }
+      }
+    });
+  }
+
+  if (m_ctx.ui->actionSortDateAsc) {
+    m_sortActionGroup->addAction(m_ctx.ui->actionSortDateAsc);
+    connect(m_ctx.ui->actionSortDateAsc, &QAction::triggered, [this, reloadIfNeeded]() {
+      if (m_ctx.getGeneralSettings) {
+        if (auto *settings = m_ctx.getGeneralSettings()) {
+          settings->sortMode = SortMode::DateAscending;
+          if (m_ctx.getSettingsManager) {
+            if (auto *mgr = m_ctx.getSettingsManager()) {
+              mgr->saveGeneralSettings(*settings);
+            }
+          }
+          reloadIfNeeded();
+        }
+      }
+    });
+  }
+
+  if (m_ctx.ui->actionSortSizeDesc) {
+    m_sortActionGroup->addAction(m_ctx.ui->actionSortSizeDesc);
+    connect(m_ctx.ui->actionSortSizeDesc, &QAction::triggered, [this, reloadIfNeeded]() {
+      if (m_ctx.getGeneralSettings) {
+        if (auto *settings = m_ctx.getGeneralSettings()) {
+          settings->sortMode = SortMode::SizeDescending;
+          if (m_ctx.getSettingsManager) {
+            if (auto *mgr = m_ctx.getSettingsManager()) {
+              mgr->saveGeneralSettings(*settings);
+            }
+          }
+          reloadIfNeeded();
+        }
+      }
+    });
+  }
+
+  if (m_ctx.ui->actionSortSizeAsc) {
+    m_sortActionGroup->addAction(m_ctx.ui->actionSortSizeAsc);
+    connect(m_ctx.ui->actionSortSizeAsc, &QAction::triggered, [this, reloadIfNeeded]() {
+      if (m_ctx.getGeneralSettings) {
+        if (auto *settings = m_ctx.getGeneralSettings()) {
+          settings->sortMode = SortMode::SizeAscending;
+          if (m_ctx.getSettingsManager) {
+            if (auto *mgr = m_ctx.getSettingsManager()) {
+              mgr->saveGeneralSettings(*settings);
+            }
+          }
+          reloadIfNeeded();
+        }
+      }
+    });
+  }
+
   if (m_ctx.ui->actionSortRandom) {
     m_sortActionGroup->addAction(m_ctx.ui->actionSortRandom);
     connect(m_ctx.ui->actionSortRandom, &QAction::triggered, [this, reloadIfNeeded]() {
@@ -263,6 +331,18 @@ void MenuController::syncSortActions() {
   case SortMode::CollectionAscending:
   case SortMode::CollectionDescending:
     // These sort modes are list-view only, no menu action to check
+    break;
+  case SortMode::DateDescending:
+    if (m_ctx.ui->actionSortDateDesc) m_ctx.ui->actionSortDateDesc->setChecked(true);
+    break;
+  case SortMode::DateAscending:
+    if (m_ctx.ui->actionSortDateAsc) m_ctx.ui->actionSortDateAsc->setChecked(true);
+    break;
+  case SortMode::SizeDescending:
+    if (m_ctx.ui->actionSortSizeDesc) m_ctx.ui->actionSortSizeDesc->setChecked(true);
+    break;
+  case SortMode::SizeAscending:
+    if (m_ctx.ui->actionSortSizeAsc) m_ctx.ui->actionSortSizeAsc->setChecked(true);
     break;
   case SortMode::Random:
     if (m_ctx.ui->actionSortRandom) m_ctx.ui->actionSortRandom->setChecked(true);
