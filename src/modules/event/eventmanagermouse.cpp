@@ -307,8 +307,13 @@ bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {
     return false;
   }
 
-  if (event && event->type() == QEvent::MouseMove) {
+  QPoint currentGlobalPos = QCursor::pos();
+  const bool isMouseMove = event && event->type() == QEvent::MouseMove;
+  if (isMouseMove) {
     auto *mouseEvent = static_cast<QMouseEvent *>(event);
+    if (mouseEvent) {
+      currentGlobalPos = mouseEvent->globalPosition().toPoint();
+    }
     if (mouseEvent && mouseEvent->buttons() != Qt::NoButton) {
       return false;
     }
@@ -323,16 +328,22 @@ bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {
   if (visualIndex < 0 || visualIndex == m_selectionManager->currentSelectedIndex()) {
     m_hoverSelectTimer.stop();
     m_pendingHoverWidget.clear();
+    m_pendingHoverGlobalPos = {};
     m_pendingHoverIndex = -1;
     return false;
   }
 
-  if (m_pendingHoverWidget == widget && m_pendingHoverIndex == visualIndex &&
-      m_hoverSelectTimer.isActive()) {
+  if (m_pendingHoverWidget == widget && m_pendingHoverIndex == visualIndex) {
+    const QPoint delta = currentGlobalPos - m_pendingHoverGlobalPos;
+    if (delta.manhattanLength() > UIConstants::Mouse::HOVER_SELECT_STABILITY_RADIUS_PX) {
+      m_pendingHoverGlobalPos = currentGlobalPos;
+      m_hoverSelectTimer.start(UIConstants::Mouse::HOVER_SELECT_DWELL_MS);
+    }
     return false;
   }
 
   m_pendingHoverWidget = widget;
+  m_pendingHoverGlobalPos = currentGlobalPos;
   m_pendingHoverIndex = visualIndex;
   m_hoverSelectTimer.start(UIConstants::Mouse::HOVER_SELECT_DWELL_MS);
   return false;
@@ -341,7 +352,9 @@ bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {
 void EventManager::commitPendingHoverSelection() {
   ItemWidget *widget = m_pendingHoverWidget.data();
   const int visualIndex = m_pendingHoverIndex;
+  const QPoint stagedGlobalPos = m_pendingHoverGlobalPos;
   m_pendingHoverWidget.clear();
+  m_pendingHoverGlobalPos = {};
   m_pendingHoverIndex = -1;
 
   if (!widget || visualIndex < 0 || !m_generalSettings || !m_generalSettings->selectItemOnHover ||
@@ -352,7 +365,12 @@ void EventManager::commitPendingHoverSelection() {
       visualIndex == m_selectionManager->currentSelectedIndex()) {
     return;
   }
-  const QPoint cursorPos = widget->mapFromGlobal(QCursor::pos());
+  const QPoint currentGlobalPos = QCursor::pos();
+  if ((currentGlobalPos - stagedGlobalPos).manhattanLength() >
+      UIConstants::Mouse::HOVER_SELECT_STABILITY_RADIUS_PX) {
+    return;
+  }
+  const QPoint cursorPos = widget->mapFromGlobal(currentGlobalPos);
   if (!widget->rect().contains(cursorPos)) {
     return;
   }
