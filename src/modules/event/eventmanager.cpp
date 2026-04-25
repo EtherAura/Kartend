@@ -61,9 +61,9 @@ SETUP_GETTER_DEF_CTX_ONLY(EventManagerSetup, InteractionStateHolder *, Interacti
                           interactionState)
 
 EventManager::EventManager(QObject *parent) : QObject(parent) {
-  m_hoverSelectTimer.setSingleShot(true);
-  connect(&m_hoverSelectTimer, &QTimer::timeout, this,
-          &EventManager::commitPendingHoverSelection);
+  m_hoverScrollTimer.setSingleShot(true);
+  connect(&m_hoverScrollTimer, &QTimer::timeout, this,
+          &EventManager::commitPendingHoverScroll);
 }
 
 EventManager::~EventManager() = default;
