@@ -287,6 +287,20 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     connect(ui->gamepadUseLeftStickCheckBox, &QCheckBox::toggled, this, markChanged);
   }
 
+  // Attract mode connections for change detection
+  if (ui->attractModeCheckBox) {
+    connect(ui->attractModeCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->attractIdleTimeoutSpinBox) {
+    connect(ui->attractIdleTimeoutSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->attractScrollSpeedSpinBox) {
+    connect(ui->attractScrollSpeedSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+
   // General settings spinbox connections for change detection
   if (ui->pixmapCacheSpinBox) {
     connect(ui->pixmapCacheSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
