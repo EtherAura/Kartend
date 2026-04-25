@@ -259,10 +259,14 @@ void InteractionManager::connectViewportManagerSignals() {
 }
 
 void InteractionManager::connectAttractManagerSignals() {
-  // When EventManager detects any user activity, reset the attract idle timer
-  // and stop active attract mode scrolling.
-  connect(m_eventManager.get(), &EventManager::activityDetected, m_attractManager.get(),
-          &AttractManager::onActivityDetected);
+  // Only item selection changes should reset attract timeout / stop active
+  // attract scrolling. Mouse movement/focus churn must not count as activity
+  // for attract mode.
+  connect(m_selectionManager.get(), &SelectionManager::selectionChanged, m_attractManager.get(),
+          [this](int index) {
+            Q_UNUSED(index);
+            m_attractManager->onActivityDetected();
+          });
 }
 
 void InteractionManager::connectEventManagerSignals() {
