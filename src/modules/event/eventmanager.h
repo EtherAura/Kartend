@@ -4,6 +4,7 @@
 #include "collectionutils.h"
 #include "setuputils.h"
 #include <QObject>
+#include <QPoint>
 #include <QPointer>
 #include <QScrollArea>
 #include <QTimer>
@@ -167,6 +168,7 @@ private:
   // Reentrancy guard for wheel event handling
   bool m_processingWheelEvent = false;
   QPointer<ItemWidget> m_pendingHoverWidget;
+  QPoint m_pendingHoverGlobalPos;
   int m_pendingHoverIndex = -1;
   QTimer m_hoverSelectTimer;
 };
