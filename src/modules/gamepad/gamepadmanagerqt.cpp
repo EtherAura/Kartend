@@ -32,45 +32,28 @@ void GamepadManager::attachToGamepad(int deviceId) {
   m_deviceId = deviceId;
   m_gamepad = new QGamepad(deviceId, this);
 
-  connect(m_gamepad, &QGamepad::buttonUpChanged, this,
-          &GamepadManager::onDpadUpChanged);
-  connect(m_gamepad, &QGamepad::buttonDownChanged, this,
-          &GamepadManager::onDpadDownChanged);
-  connect(m_gamepad, &QGamepad::buttonLeftChanged, this,
-          &GamepadManager::onDpadLeftChanged);
-  connect(m_gamepad, &QGamepad::buttonRightChanged, this,
-          &GamepadManager::onDpadRightChanged);
+  connect(m_gamepad, &QGamepad::buttonUpChanged, this, &GamepadManager::onDpadUpChanged);
+  connect(m_gamepad, &QGamepad::buttonDownChanged, this, &GamepadManager::onDpadDownChanged);
+  connect(m_gamepad, &QGamepad::buttonLeftChanged, this, &GamepadManager::onDpadLeftChanged);
+  connect(m_gamepad, &QGamepad::buttonRightChanged, this, &GamepadManager::onDpadRightChanged);
 
-  connect(m_gamepad, &QGamepad::axisLeftXChanged, this,
-          &GamepadManager::onAxisLeftXChanged);
-  connect(m_gamepad, &QGamepad::axisLeftYChanged, this,
-          &GamepadManager::onAxisLeftYChanged);
+  connect(m_gamepad, &QGamepad::axisLeftXChanged, this, &GamepadManager::onAxisLeftXChanged);
+  connect(m_gamepad, &QGamepad::axisLeftYChanged, this, &GamepadManager::onAxisLeftYChanged);
 
-  connect(m_gamepad, &QGamepad::buttonAChanged, this,
-          &GamepadManager::onButtonAChanged);
-  connect(m_gamepad, &QGamepad::buttonBChanged, this,
-          &GamepadManager::onButtonBChanged);
+  connect(m_gamepad, &QGamepad::buttonAChanged, this, &GamepadManager::onButtonAChanged);
+  connect(m_gamepad, &QGamepad::buttonBChanged, this, &GamepadManager::onButtonBChanged);
 
   // Additional buttons (for mapping/capture). These are widely supported in
   // Qt6.
-  connect(m_gamepad, &QGamepad::buttonXChanged, this,
-          &GamepadManager::onButtonXChanged);
-  connect(m_gamepad, &QGamepad::buttonYChanged, this,
-          &GamepadManager::onButtonYChanged);
-  connect(m_gamepad, &QGamepad::buttonL1Changed, this,
-          &GamepadManager::onButtonL1Changed);
-  connect(m_gamepad, &QGamepad::buttonR1Changed, this,
-          &GamepadManager::onButtonR1Changed);
-  connect(m_gamepad, &QGamepad::buttonSelectChanged, this,
-          &GamepadManager::onButtonSelectChanged);
-  connect(m_gamepad, &QGamepad::buttonStartChanged, this,
-          &GamepadManager::onButtonStartChanged);
-  connect(m_gamepad, &QGamepad::buttonGuideChanged, this,
-          &GamepadManager::onButtonGuideChanged);
-  connect(m_gamepad, &QGamepad::buttonL3Changed, this,
-          &GamepadManager::onButtonL3Changed);
-  connect(m_gamepad, &QGamepad::buttonR3Changed, this,
-          &GamepadManager::onButtonR3Changed);
+  connect(m_gamepad, &QGamepad::buttonXChanged, this, &GamepadManager::onButtonXChanged);
+  connect(m_gamepad, &QGamepad::buttonYChanged, this, &GamepadManager::onButtonYChanged);
+  connect(m_gamepad, &QGamepad::buttonL1Changed, this, &GamepadManager::onButtonL1Changed);
+  connect(m_gamepad, &QGamepad::buttonR1Changed, this, &GamepadManager::onButtonR1Changed);
+  connect(m_gamepad, &QGamepad::buttonSelectChanged, this, &GamepadManager::onButtonSelectChanged);
+  connect(m_gamepad, &QGamepad::buttonStartChanged, this, &GamepadManager::onButtonStartChanged);
+  connect(m_gamepad, &QGamepad::buttonGuideChanged, this, &GamepadManager::onButtonGuideChanged);
+  connect(m_gamepad, &QGamepad::buttonL3Changed, this, &GamepadManager::onButtonL3Changed);
+  connect(m_gamepad, &QGamepad::buttonR3Changed, this, &GamepadManager::onButtonR3Changed);
 }
 
 void GamepadManager::detachGamepad() {

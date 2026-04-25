@@ -29,11 +29,11 @@
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcSelectionManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcSelectionManager().isDebugEnabled()) {                               \
-      qCDebug(lcSelectionManager) << msg;                                      \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcSelectionManager().isDebugEnabled()) {                                                   \
+      qCDebug(lcSelectionManager) << msg;                                                          \
+    }                                                                                              \
   } while (0)
 
 bool SelectionManager::checkAndFinalizeRestore(int index) {
@@ -54,10 +54,9 @@ void SelectionManager::prepareForRestore(int targetIndex) {
 
   // Request InteractionManager to configure scroll area properties
   if (m_state) {
-    qint64 until =
-        QDateTime::currentMSecsSinceEpoch() +
-        UIConstants::Keyboard::ANIMATION_SETTLE_MS +
-        UIConstants::Keyboard::ARROW_CENTER_EXTRA_SUPPRESS_AFTER_RESTORE_MS;
+    qint64 until = QDateTime::currentMSecsSinceEpoch() +
+                   UIConstants::Keyboard::ANIMATION_SETTLE_MS +
+                   UIConstants::Keyboard::ARROW_CENTER_EXTRA_SUPPRESS_AFTER_RESTORE_MS;
     m_state->arrow().suppressArrowCenter = true;
     m_state->arrow().suppressArrowCenterUntilMs = until;
   }
@@ -99,8 +98,7 @@ void SelectionManager::resetSelectionRestoreState() {
   }
 }
 
-void SelectionManager::processSingleClickSelection(int visualIndex,
-                                                   const QString &filePath) {
+void SelectionManager::processSingleClickSelection(int visualIndex, const QString &filePath) {
   if ((!m_scrollManager) || (!m_collections) || (!m_currentCollectionIndex)) {
     return;
   }
@@ -134,15 +132,12 @@ void SelectionManager::processSingleClickSelection(int visualIndex,
   }
   emit requestStopRepeat();
 
-  const int pendingIndex =
-      m_state ? m_state->click().rowChangeFirstClickIndex : -1;
+  const int pendingIndex = m_state ? m_state->click().rowChangeFirstClickIndex : -1;
   const qint64 pendingMs = m_state ? m_state->click().rowChangeFirstClickMs : 0;
-  const bool pendingValid =
-      (pendingIndex >= 0 && (nowMs - pendingMs) <= dcInterval);
+  const bool pendingValid = (pendingIndex >= 0 && (nowMs - pendingMs) <= dcInterval);
 
   const int fromIndex = m_selectedItemIndex;
-  const bool canAnimateHoriz =
-      shouldAnimateHorizontalHop(fromIndex, visualIndex, gridWidth);
+  const bool canAnimateHoriz = shouldAnimateHorizontalHop(fromIndex, visualIndex, gridWidth);
 
   if (canAnimateHoriz) {
     runHorizontalHopAnimation(fromIndex, visualIndex, nowMs);
@@ -163,8 +158,7 @@ void SelectionManager::processSingleClickSelection(int visualIndex,
   emit requestFocusItemsPage();
 }
 
-void SelectionManager::runHorizontalHopAnimation(int start, int target,
-                                                 qint64 nowMs) {
+void SelectionManager::runHorizontalHopAnimation(int start, int target, qint64 nowMs) {
   if (!m_state) {
     return;
   }
@@ -179,27 +173,26 @@ void SelectionManager::runHorizontalHopAnimation(int start, int target,
   // Animate horizontal selection by stepping through intermediate indices -
   // each hop scheduled at fixed intervals creates smooth left/right movement
   for (int i = 1; i <= steps; ++i) {
-    QTimer::singleShot(i * kPerHopMs, this,
-                       [this, gen, i, step, start, target]() {
-                         if (!m_state || m_state->horizAnimGen() != gen) {
-                           return;
-                         }
-                         if (!m_scrollManager) {
-                           return;
-                         }
-                         int nextIdx = start + (i * step);
-                         if (nextIdx != target) {
-                           m_selectedItemIndex = nextIdx;
-                           m_scrollManager->updateSelectionForIndex(nextIdx);
-                         } else {
-                           if (m_state) {
-                             m_state->setHorizAnimActive(false);
-                           }
-                           m_selectedItemIndex = target;
-                           selectItemByIndex(target, true);
-                           emit requestCenterVertically(target, false);
-                         }
-                       });
+    QTimer::singleShot(i * kPerHopMs, this, [this, gen, i, step, start, target]() {
+      if (!m_state || m_state->horizAnimGen() != gen) {
+        return;
+      }
+      if (!m_scrollManager) {
+        return;
+      }
+      int nextIdx = start + (i * step);
+      if (nextIdx != target) {
+        m_selectedItemIndex = nextIdx;
+        m_scrollManager->updateSelectionForIndex(nextIdx);
+      } else {
+        if (m_state) {
+          m_state->setHorizAnimActive(false);
+        }
+        m_selectedItemIndex = target;
+        selectItemByIndex(target, true);
+        emit requestCenterVertically(target, false);
+      }
+    });
   }
   if (m_state) {
     m_state->setClickSeriesLastMs(nowMs);
@@ -209,8 +202,7 @@ void SelectionManager::runHorizontalHopAnimation(int start, int target,
   emit requestFocusItemsPage();
 }
 
-void SelectionManager::handleNewRowClickSelection(int visualIndex,
-                                                  qint64 nowMs) {
+void SelectionManager::handleNewRowClickSelection(int visualIndex, qint64 nowMs) {
   if (m_state) {
     m_state->click().selectionSuppressed = true;
     m_state->click().pendingSelectionIndex = visualIndex;
@@ -231,8 +223,7 @@ void SelectionManager::handleNewRowClickSelection(int visualIndex,
   }
 }
 
-void SelectionManager::handleSameRowClickSelection(int visualIndex,
-                                                   bool skipCenter,
+void SelectionManager::handleSameRowClickSelection(int visualIndex, bool skipCenter,
                                                    qint64 /*nowMs*/) {
   if (m_state) {
     m_state->click().deferCenterOnClick = false;
@@ -252,8 +243,7 @@ void SelectionManager::handleSameRowClickSelection(int visualIndex,
   }
 }
 
-int SelectionManager::handleWidgetSelectionByIndex(int visualIndex,
-                                                   const QPoint &clickPos,
+int SelectionManager::handleWidgetSelectionByIndex(int visualIndex, const QPoint &clickPos,
                                                    QMouseEvent *originalEvent) {
   Q_UNUSED(clickPos);
   Q_UNUSED(originalEvent);
@@ -273,8 +263,7 @@ int SelectionManager::handleWidgetSelectionByIndex(int visualIndex,
   return visualIndex;
 }
 
-int SelectionManager::handleWidgetSelection(ItemWidget *widget,
-                                            const QPoint &clickPos,
+int SelectionManager::handleWidgetSelection(ItemWidget *widget, const QPoint &clickPos,
                                             QMouseEvent *originalEvent) {
   Q_UNUSED(clickPos);
   Q_UNUSED(originalEvent);
@@ -292,8 +281,7 @@ int SelectionManager::handleWidgetSelection(ItemWidget *widget,
 
   int visualIndex = -1;
   const auto &activeWidgets = m_scrollManager->getActiveWidgets();
-  for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd();
-       ++it) {
+  for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd(); ++it) {
     if (it.value() == widget) {
       visualIndex = it.key();
       break;
@@ -320,8 +308,7 @@ void SelectionManager::beginFullSelectionRestore(int targetIndex) {
 
   applySelectionStateForIndex(targetIndex);
   if (m_viewportManager) {
-    m_viewportManager->applyImmediateViewportPositioningForSelection(
-        targetIndex);
+    m_viewportManager->applyImmediateViewportPositioningForSelection(targetIndex);
   }
   selectItemByIndex(targetIndex, false);
 
@@ -339,8 +326,7 @@ void SelectionManager::beginFullSelectionRestore(int targetIndex) {
       m_sidebarManager->updateSidebarMetadata(widget);
     }
     scheduleSidebarMetadataUpdateIfVisible(
-        targetIndex, 0,
-        UIConstants::Selection::METADATA_SIDEBAR_UPDATE_DELAY_MS);
+        targetIndex, 0, UIConstants::Selection::METADATA_SIDEBAR_UPDATE_DELAY_MS);
   }
 }
 
@@ -367,16 +353,15 @@ void SelectionManager::finalizeRestoreFlagsAndFocus() {
   }
   // Clear arrow center suppression after restore completes - ensures the
   // selection is fully visible before allowing subsequent centering operations
-  QTimer::singleShot(UIConstants::Keyboard::ARROW_CENTER_CLEAR_AFTER_RESTORE_MS,
-                     this, [this]() {
-                       if (m_state) {
-                         m_state->clearArrowCenterSuppression();
-                       }
-                     });
+  QTimer::singleShot(UIConstants::Keyboard::ARROW_CENTER_CLEAR_AFTER_RESTORE_MS, this, [this]() {
+    if (m_state) {
+      m_state->clearArrowCenterSuppression();
+    }
+  });
 }
 
-void SelectionManager::scheduleSidebarMetadataUpdateIfVisible(
-    int targetIndex, int initialDelayMs, int secondaryDelayMs) {
+void SelectionManager::scheduleSidebarMetadataUpdateIfVisible(int targetIndex, int initialDelayMs,
+                                                              int secondaryDelayMs) {
   if (!m_sidebarManager || !m_sidebarManager->isSidebarVisible()) {
     return;
   }

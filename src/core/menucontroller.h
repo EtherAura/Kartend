@@ -1,10 +1,10 @@
 #ifndef MENUCONTROLLER_H
 #define MENUCONTROLLER_H
 
+#include <functional>
 #include <QAction>
 #include <QActionGroup>
 #include <QObject>
-#include <functional>
 
 QT_BEGIN_NAMESPACE
 class QMainWindow;

@@ -3,8 +3,7 @@
 #include <QSet>
 #include <QString>
 
-auto ExtensionUtils::normalizeStoredExtensions(const QStringList &raw)
-    -> QStringList {
+auto ExtensionUtils::normalizeStoredExtensions(const QStringList &raw) -> QStringList {
   QStringList out;
   QSet<QString> seen;
   out.reserve(raw.size());
@@ -29,8 +28,7 @@ auto ExtensionUtils::normalizeStoredExtensions(const QStringList &raw)
 }
 
 // Parse a free-form extension list into normalized, deduplicated patterns
-auto ExtensionUtils::parseUserExtensionList(const QString &text)
-    -> QStringList {
+auto ExtensionUtils::parseUserExtensionList(const QString &text) -> QStringList {
   QString normalized = text;
   normalized.replace(';', ',');
   normalized.replace('\t', ',');
@@ -46,9 +44,9 @@ auto ExtensionUtils::parseUserExtensionList(const QString &text)
 // Returns a canonical list of lowercase image extensions without dots or
 // wildcards
 auto ExtensionUtils::imageBaseExtensions() -> const QStringList & {
-  static const QStringList exts = {
-      QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"),
-      QStringLiteral("bmp"), QStringLiteral("gif")};
+  static const QStringList exts = {QStringLiteral("png"), QStringLiteral("jpg"),
+                                   QStringLiteral("jpeg"), QStringLiteral("bmp"),
+                                   QStringLiteral("gif")};
   return exts;
 }
 

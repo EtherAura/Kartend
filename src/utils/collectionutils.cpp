@@ -7,15 +7,13 @@ namespace CollectionUtils {
 
 QString computeCollectionUuid(const QString &name, const QString &mediaDir) {
   QByteArray norm = (name + "|" + mediaDir).trimmed().toLower().toUtf8();
-  QByteArray digest =
-      QCryptographicHash::hash(norm, QCryptographicHash::Sha1).toHex();
+  QByteArray digest = QCryptographicHash::hash(norm, QCryptographicHash::Sha1).toHex();
   return QString::fromLatin1(digest);
 }
 
 } // namespace CollectionUtils
 
-void CollectionHierarchyCache::rebuild(
-    const QList<CollectionConfig> &collections) {
+void CollectionHierarchyCache::rebuild(const QList<CollectionConfig> &collections) {
   m_directChildren.clear();
   m_allDescendants.clear();
   m_collectionUuids.clear();
@@ -45,10 +43,8 @@ void CollectionHierarchyCache::rebuild(
   // when showAllSubcollectionItems is enabled.
   for (int i = 0; i < collections.size(); ++i) {
     const CollectionConfig &cfg = collections[i];
-    QString mediaDir =
-        SettingsUtils::expandConfigVariables(cfg.mediaDirectory, cfg.name);
-    QString artworkDir =
-        SettingsUtils::expandConfigVariables(cfg.artworkDirectory, cfg.name);
+    QString mediaDir = SettingsUtils::expandConfigVariables(cfg.mediaDirectory, cfg.name);
+    QString artworkDir = SettingsUtils::expandConfigVariables(cfg.artworkDirectory, cfg.name);
 
     // Resolve artwork directory with parent fallback for subcollections
     if (artworkDir.trimmed().isEmpty() && cfg.isSubcollection) {

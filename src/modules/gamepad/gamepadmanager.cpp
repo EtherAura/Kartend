@@ -15,29 +15,25 @@
 #endif
 
 // GamepadManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(GamepadManagerSetup, KeyboardManager *, KeyboardManager,
-                      keyboardManager)
-SETUP_GETTER_DEF_SAME(GamepadManagerSetup, const GeneralSettings *,
-                      GeneralSettings, generalSettings)
-SETUP_GETTER_DEF_SAME(GamepadManagerSetup, const bool *, IsShuttingDown,
-                      isShuttingDown)
+SETUP_GETTER_DEF_SAME(GamepadManagerSetup, KeyboardManager *, KeyboardManager, keyboardManager)
+SETUP_GETTER_DEF_SAME(GamepadManagerSetup, const GeneralSettings *, GeneralSettings,
+                      generalSettings)
+SETUP_GETTER_DEF_SAME(GamepadManagerSetup, const bool *, IsShuttingDown, isShuttingDown)
 
 GamepadManager::GamepadManager(QObject *parent) : QObject(parent) {
 #ifdef KARTEND_HAS_QT_GAMEPAD
   m_manager = QGamepadManager::instance();
   if (m_manager) {
-    connect(m_manager, &QGamepadManager::gamepadConnected, this,
-            [this](int deviceId) {
-              if (!m_gamepad) {
-                attachToGamepad(deviceId);
-              }
-            });
-    connect(m_manager, &QGamepadManager::gamepadDisconnected, this,
-            [this](int deviceId) {
-              if (deviceId == m_deviceId) {
-                detachGamepad();
-              }
-            });
+    connect(m_manager, &QGamepadManager::gamepadConnected, this, [this](int deviceId) {
+      if (!m_gamepad) {
+        attachToGamepad(deviceId);
+      }
+    });
+    connect(m_manager, &QGamepadManager::gamepadDisconnected, this, [this](int deviceId) {
+      if (deviceId == m_deviceId) {
+        detachGamepad();
+      }
+    });
   }
 #endif
 
@@ -168,27 +164,22 @@ void GamepadManager::pollSdlState() {
     attachToFirstConnectedController();
     if (!m_controller) {
       // No controller connected - use slow polling to reduce idle CPU usage
-      if (m_pollTimer && m_pollTimer->interval() !=
-                             UIConstants::Gamepad::POLL_INTERVAL_IDLE_MS) {
+      if (m_pollTimer && m_pollTimer->interval() != UIConstants::Gamepad::POLL_INTERVAL_IDLE_MS) {
         m_pollTimer->setInterval(UIConstants::Gamepad::POLL_INTERVAL_IDLE_MS);
       }
       return;
     }
     // Controller just connected - switch to fast polling
-    if (m_pollTimer &&
-        m_pollTimer->interval() != UIConstants::Gamepad::POLL_INTERVAL_MS) {
+    if (m_pollTimer && m_pollTimer->interval() != UIConstants::Gamepad::POLL_INTERVAL_MS) {
       m_pollTimer->setInterval(UIConstants::Gamepad::POLL_INTERVAL_MS);
     }
   }
 
-  SDL_GameController *controller =
-      static_cast<SDL_GameController *>(m_controller);
+  SDL_GameController *controller = static_cast<SDL_GameController *>(m_controller);
   SDL_GameControllerUpdate();
 
-  const Sint16 rawX =
-      SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX);
-  const Sint16 rawY =
-      SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY);
+  const Sint16 rawX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX);
+  const Sint16 rawY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY);
 
   // Normalize to [-1, 1].
   auto normalize = [](Sint16 v) -> double {
@@ -202,35 +193,21 @@ void GamepadManager::pollSdlState() {
   m_axisY = normalize(rawY);
 
   m_up = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP);
-  m_down =
-      SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
-  m_left =
-      SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT);
-  m_right =
-      SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+  m_down = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+  m_left = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+  m_right = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
 
-  const bool aNow =
-      SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_A);
-  const bool bNow =
-      SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_B);
-  const bool xNow =
-      SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_X);
-  const bool yNow =
-      SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_Y);
-  const bool backNow =
-      SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_BACK);
-  const bool startNow =
-      SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_START);
-  const bool guideNow =
-      SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_GUIDE);
-  const bool l1Now = SDL_GameControllerGetButton(
-      controller, SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
-  const bool r1Now = SDL_GameControllerGetButton(
-      controller, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
-  const bool l3Now =
-      SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_LEFTSTICK);
-  const bool r3Now =
-      SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_RIGHTSTICK);
+  const bool aNow = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_A);
+  const bool bNow = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_B);
+  const bool xNow = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_X);
+  const bool yNow = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_Y);
+  const bool backNow = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_BACK);
+  const bool startNow = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_START);
+  const bool guideNow = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_GUIDE);
+  const bool l1Now = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+  const bool r1Now = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+  const bool l3Now = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_LEFTSTICK);
+  const bool r3Now = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_RIGHTSTICK);
 
   const bool pressA = aNow && !m_buttonA;
   const bool pressB = bNow && !m_buttonB;

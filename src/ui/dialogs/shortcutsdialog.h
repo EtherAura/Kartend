@@ -28,8 +28,7 @@ private:
   void populateContent();
   void clearLayout(QLayout *layout);
   void addSection(QVBoxLayout *layout, const QString &title);
-  void addShortcut(QVBoxLayout *layout, const QString &keys,
-                   const QString &description);
+  void addShortcut(QVBoxLayout *layout, const QString &keys, const QString &description);
 
   QScrollArea *m_scrollArea = nullptr;
   QWidget *m_contentWidget = nullptr;

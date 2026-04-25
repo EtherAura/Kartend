@@ -1,9 +1,24 @@
 #ifndef ERRORUTILS_H
 #define ERRORUTILS_H
 
-#include <QDebug>
-#include <QString>
 #include <optional>
+#include <QDebug>
+#include <QLoggingCategory>
+#include <QString>
+
+namespace ErrorUtils {
+
+// Cross-cutting error logging channel (Kartend-v3v). Defined inline so
+// any translation unit that includes errorutils.h — including small test
+// targets that don't link loggingcategories.cpp — picks up the definition.
+// Always-on at info level so centralized error reports surface in release
+// logs without per-module category routing.
+inline const QLoggingCategory &lcErrors() {
+  static const QLoggingCategory cat("kartend.errors", QtInfoMsg);
+  return cat;
+}
+
+} // namespace ErrorUtils
 
 namespace ErrorUtils {
 
@@ -66,9 +81,7 @@ struct ErrorContext {
   QString source; // e.g., "QueryManager::fetchItemCount"
 
   [[nodiscard]] bool isError() const { return code != ErrorCode::Success; }
-  [[nodiscard]] bool isCritical() const {
-    return severity == Severity::Critical;
-  }
+  [[nodiscard]] bool isCritical() const { return severity == Severity::Critical; }
 
   // Create success context (no error)
   static ErrorContext success() { return ErrorContext{}; }
@@ -107,9 +120,7 @@ struct ErrorContext {
 // Result type combining a value with optional error context
 template <typename T> class Result {
 public:
-  Result(T value)
-      : m_value(std::move(value)), m_error() {
-  } // NOLINT(google-explicit-constructor)
+  Result(T value) : m_value(std::move(value)), m_error() {} // NOLINT(google-explicit-constructor)
   Result(ErrorContext error) // NOLINT(google-explicit-constructor)
       : m_value(std::nullopt), m_error(std::move(error)) {}
 
@@ -138,8 +149,7 @@ private:
 template <> class Result<void> {
 public:
   Result() : m_error() {}
-  Result(ErrorContext error)
-      : m_error(std::move(error)) {} // NOLINT(google-explicit-constructor)
+  Result(ErrorContext error) : m_error(std::move(error)) {} // NOLINT(google-explicit-constructor)
 
   [[nodiscard]] bool isOk() const { return !m_error.isError(); }
   [[nodiscard]] bool isError() const { return m_error.isError(); }
@@ -163,16 +173,16 @@ inline void logError(const ErrorContext &ctx) {
 
   switch (ctx.severity) {
   case Severity::Info:
-    qInfo() << msg;
+    qCInfo(lcErrors) << msg;
     break;
   case Severity::Warning:
-    qWarning() << msg;
+    qCWarning(lcErrors) << msg;
     break;
   case Severity::Error:
-    qWarning() << "ERROR:" << msg;
+    qCWarning(lcErrors) << "ERROR:" << msg;
     break;
   case Severity::Critical:
-    qCritical() << msg;
+    qCCritical(lcErrors) << msg;
     break;
   }
 }

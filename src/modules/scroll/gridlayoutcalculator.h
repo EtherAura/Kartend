@@ -32,17 +32,13 @@ struct GridMetrics {
   int overflowAmount = 0;   // logicalHeight - totalHeight when clipped
   int headerOffset = 0;     // Offset for list header in list view mode
 
-  [[nodiscard]] bool isValid() const {
-    return itemWidth > 0 && itemHeight > 0 && itemsPerRow > 0;
-  }
+  [[nodiscard]] bool isValid() const { return itemWidth > 0 && itemHeight > 0 && itemsPerRow > 0; }
 
   /// Convert widget scroll position to logical scroll position.
   /// When viewportHeight is provided, ensures scrollbar max maps exactly to
   /// (logicalHeight - viewport) for precise endpoint mapping.
-  [[nodiscard]] int toLogicalScrollY(int widgetScrollY,
-                                     int viewportHeight = 0) const {
-    if (scrollScale <= 1.0)
-      return widgetScrollY;
+  [[nodiscard]] int toLogicalScrollY(int widgetScrollY, int viewportHeight = 0) const {
+    if (scrollScale <= 1.0) return widgetScrollY;
 
     // With viewport, use proper linear interpolation for exact endpoint
     // mapping: widget 0 -> logical 0, widgetMax -> logicalMax where widgetMax =
@@ -50,12 +46,10 @@ struct GridMetrics {
     if (viewportHeight > 0) {
       int widgetMax = totalHeight - viewportHeight;
       int logicalMax = logicalHeight - viewportHeight;
-      if (widgetMax <= 0)
-        return widgetScrollY;
+      if (widgetMax <= 0) return widgetScrollY;
       // Linear interpolation: logicalScrollY = widgetScrollY * logicalMax /
       // widgetMax
-      return static_cast<int>(static_cast<double>(widgetScrollY) * logicalMax /
-                              widgetMax);
+      return static_cast<int>(static_cast<double>(widgetScrollY) * logicalMax / widgetMax);
     }
 
     // Fallback: simple scaling when viewport not available
@@ -64,21 +58,17 @@ struct GridMetrics {
 
   /// Convert logical scroll position to widget scroll position.
   /// When viewportHeight is provided, ensures exact endpoint mapping.
-  [[nodiscard]] int toWidgetScrollY(int logicalScrollY,
-                                    int viewportHeight = 0) const {
-    if (scrollScale <= 1.0)
-      return logicalScrollY;
+  [[nodiscard]] int toWidgetScrollY(int logicalScrollY, int viewportHeight = 0) const {
+    if (scrollScale <= 1.0) return logicalScrollY;
 
     // With viewport, use proper linear interpolation for exact endpoint mapping
     if (viewportHeight > 0) {
       int widgetMax = totalHeight - viewportHeight;
       int logicalMax = logicalHeight - viewportHeight;
-      if (logicalMax <= 0)
-        return logicalScrollY;
+      if (logicalMax <= 0) return logicalScrollY;
       // Linear interpolation: widgetScrollY = logicalScrollY * widgetMax /
       // logicalMax
-      return static_cast<int>(static_cast<double>(logicalScrollY) * widgetMax /
-                              logicalMax);
+      return static_cast<int>(static_cast<double>(logicalScrollY) * widgetMax / logicalMax);
     }
 
     // Fallback: simple scaling when viewport not available
@@ -105,8 +95,7 @@ public:
    */
   [[nodiscard]] static int getRowHeight(const CollectionConfig &config) {
     if (config.viewType == ViewType::List) {
-      return UIConstants::ListView::DEFAULT_ROW_HEIGHT +
-             UIConstants::ListView::ROW_SPACING;
+      return UIConstants::ListView::DEFAULT_ROW_HEIGHT + UIConstants::ListView::ROW_SPACING;
     }
     return config.itemHeight + config.verticalSpacing;
   }
@@ -130,8 +119,7 @@ public:
    * @param totalItems Total number of items to lay out.
    * @return Computed grid metrics.
    */
-  [[nodiscard]] static GridMetrics
-  calculateMetrics(const CollectionConfig &config, int totalItems);
+  [[nodiscard]] static GridMetrics calculateMetrics(const CollectionConfig &config, int totalItems);
 
   /**
    * @brief Recalculate metrics for filtered view with fewer items.
@@ -139,8 +127,8 @@ public:
    * @param filteredItemCount Number of items after filtering.
    * @return Adjusted metrics for filtered view.
    */
-  [[nodiscard]] static GridMetrics
-  adjustForFilter(const GridMetrics &baseMetrics, int filteredItemCount);
+  [[nodiscard]] static GridMetrics adjustForFilter(const GridMetrics &baseMetrics,
+                                                   int filteredItemCount);
 
   /**
    * @brief Calculate position for an item at the given visual index.
@@ -150,10 +138,8 @@ public:
    * @param filteredItemCount Number of items when filtered.
    * @return Top-left position of the item.
    */
-  [[nodiscard]] static QPoint getItemPosition(int visualIndex,
-                                              const GridMetrics &metrics,
-                                              bool isFiltered = false,
-                                              int filteredItemCount = 0);
+  [[nodiscard]] static QPoint getItemPosition(int visualIndex, const GridMetrics &metrics,
+                                              bool isFiltered = false, int filteredItemCount = 0);
 
   /**
    * @brief Calculate the bounding rectangle for an item.
@@ -163,10 +149,8 @@ public:
    * @param filteredItemCount Number of items when filtered.
    * @return Bounding rectangle of the item.
    */
-  [[nodiscard]] static QRect getItemRect(int visualIndex,
-                                         const GridMetrics &metrics,
-                                         bool isFiltered = false,
-                                         int filteredItemCount = 0);
+  [[nodiscard]] static QRect getItemRect(int visualIndex, const GridMetrics &metrics,
+                                         bool isFiltered = false, int filteredItemCount = 0);
 
   /**
    * @brief Calculate which item index is at a given position.
@@ -175,8 +159,7 @@ public:
    * @param totalItems Total number of items (for bounds checking).
    * @return Item index at position, or -1 if none.
    */
-  [[nodiscard]] static int indexAtPosition(const QPoint &pos,
-                                           const GridMetrics &metrics,
+  [[nodiscard]] static int indexAtPosition(const QPoint &pos, const GridMetrics &metrics,
                                            int totalItems);
 
   /**
@@ -188,8 +171,7 @@ public:
    * @return Pair of (firstVisibleRow, lastVisibleRow).
    */
   [[nodiscard]] static std::pair<int, int>
-  getVisibleRowRange(int scrollY, int viewportHeight,
-                     const GridMetrics &metrics,
+  getVisibleRowRange(int scrollY, int viewportHeight, const GridMetrics &metrics,
                      int bufferRows = UIConstants::Grid::BUFFER_ROWS);
 
   /**
@@ -202,8 +184,7 @@ public:
    * @return Pair of (firstVisibleIndex, lastVisibleIndex).
    */
   [[nodiscard]] static std::pair<int, int>
-  getVisibleIndexRange(int scrollY, int viewportHeight,
-                       const GridMetrics &metrics, int totalItems,
+  getVisibleIndexRange(int scrollY, int viewportHeight, const GridMetrics &metrics, int totalItems,
                        int bufferRows = UIConstants::Grid::BUFFER_ROWS);
 
   /**
@@ -214,9 +195,8 @@ public:
    * @param metrics Grid metrics to use for calculation.
    * @return Target scroll position.
    */
-  [[nodiscard]] static int
-  calculateCenterScrollTarget(int itemIndex, int viewportHeight, int maxScroll,
-                              const GridMetrics &metrics);
+  [[nodiscard]] static int calculateCenterScrollTarget(int itemIndex, int viewportHeight,
+                                                       int maxScroll, const GridMetrics &metrics);
 
   /**
    * @brief Calculate row height including spacing.

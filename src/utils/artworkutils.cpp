@@ -1,7 +1,7 @@
 // Utility functions for artwork file operations.
 #include "artworkutils.h"
-#include "loggingcategories.h"
 #include "extensionutils.h"
+#include "loggingcategories.h"
 
 #include <QDir>
 #include <QDirIterator>
@@ -38,8 +38,8 @@ void DirectoryCache::ensureDirectoryCached(const QString &directory) {
     // Cache empty hash to avoid repeated checks
     QMutexLocker locker(&m_mutex);
     m_cache.insert(directory, QHash<QString, QString>());
-      qCDebug(lcPerfTrace) << "ensureDirectoryCached: dir NOT EXISTS ms="
-                 << perfTimer.elapsed() << "dir=" << directory;
+    qCDebug(lcPerfTrace) << "ensureDirectoryCached: dir NOT EXISTS ms=" << perfTimer.elapsed()
+                         << "dir=" << directory;
     return;
   }
 
@@ -68,16 +68,13 @@ void DirectoryCache::ensureDirectoryCached(const QString &directory) {
     }
   }
 
-  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") &&
-      perfTimer.elapsed() > 1) {
-    qCDebug(lcPerfTrace) << "ensureDirectoryCached: SCAN ms="
-               << perfTimer.elapsed() << "files=" << fileCount
-               << "dir=" << directory;
+  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && perfTimer.elapsed() > 1) {
+    qCDebug(lcPerfTrace) << "ensureDirectoryCached: SCAN ms=" << perfTimer.elapsed()
+                         << "files=" << fileCount << "dir=" << directory;
   }
 }
 
-QString DirectoryCache::findInDirectory(const QString &baseName,
-                                        const QString &artworkDirectory) {
+QString DirectoryCache::findInDirectory(const QString &baseName, const QString &artworkDirectory) {
   if (baseName.isEmpty() || artworkDirectory.isEmpty()) {
     return {};
   }
@@ -89,8 +86,7 @@ QString DirectoryCache::findInDirectory(const QString &baseName,
 
   QMutexLocker locker(&m_mutex);
 
-  qint64 afterLock =
-      qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? timer.elapsed() : 0;
+  qint64 afterLock = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? timer.elapsed() : 0;
 
   // Non-blocking: if not cached, queue for background scan and return empty
   if (!m_cache.contains(artworkDirectory)) {
@@ -99,9 +95,9 @@ QString DirectoryCache::findInDirectory(const QString &baseName,
       static int queuedLogCount = 0;
       if (++queuedLogCount <= 10) {
         qCDebug(lcPerfTrace) << "findInDirectory: QUEUED lockMs=" << afterLock
-                   << "cacheSize=" << m_cache.size()
-                   << "queueSize=" << m_queuedDirectories.size()
-                   << "dir=" << artworkDirectory;
+                             << "cacheSize=" << m_cache.size()
+                             << "queueSize=" << m_queuedDirectories.size()
+                             << "dir=" << artworkDirectory;
       }
     }
     return {};
@@ -112,9 +108,8 @@ QString DirectoryCache::findInDirectory(const QString &baseName,
 
   if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && timer.elapsed() > 2) {
     qCDebug(lcPerfTrace) << "findInDirectory: CACHED lockMs=" << afterLock
-               << "totalMs=" << timer.elapsed() << "found=" << !result.isEmpty()
-               << "dirContentsSize=" << dirContents.size()
-               << "dir=" << artworkDirectory;
+                         << "totalMs=" << timer.elapsed() << "found=" << !result.isEmpty()
+                         << "dirContentsSize=" << dirContents.size() << "dir=" << artworkDirectory;
   }
 
   return result;
@@ -165,8 +160,7 @@ void DirectoryCache::processQueuedDirectories() {
     return;
   }
 
-    qCDebug(lcPerfTrace) << "processQueuedDirectories: count="
-               << toProcess.size();
+  qCDebug(lcPerfTrace) << "processQueuedDirectories: count=" << toProcess.size();
   // Process in parallel for faster warmup
   QtConcurrent::blockingMap(toProcess, [this](const QString &dir) {
     ensureDirectoryCached(dir);
@@ -200,8 +194,7 @@ namespace {
  * @brief Internal helper to search for artwork with a given base name.
  * @return Path if found, empty string otherwise.
  */
-QString searchWithName(const QDir &artworkDir, const QString &name,
-                       const QStringList &extensions) {
+QString searchWithName(const QDir &artworkDir, const QString &name, const QStringList &extensions) {
   for (const QString &ext : extensions) {
     QString path = artworkDir.absoluteFilePath(name + "." + ext);
     if (QFile::exists(path)) {
@@ -217,8 +210,7 @@ QString searchWithName(const QDir &artworkDir, const QString &name,
 
 } // namespace
 
-QString findArtworkForFile(const QString &fileName,
-                           const QString &artworkDirectory) {
+QString findArtworkForFile(const QString &fileName, const QString &artworkDirectory) {
   if (fileName.isEmpty() || artworkDirectory.isEmpty()) {
     return {};
   }
@@ -240,9 +232,8 @@ QString findArtworkForFile(const QString &fileName,
   return searchWithName(artworkDir, fullName, bases);
 }
 
-ErrorUtils::Result<QString>
-tryFindArtworkForFile(const QString &fileName,
-                      const QString &artworkDirectory) {
+ErrorUtils::Result<QString> tryFindArtworkForFile(const QString &fileName,
+                                                  const QString &artworkDirectory) {
   using ErrorUtils::ErrorCode;
   using ErrorUtils::ErrorContext;
 
@@ -251,8 +242,7 @@ tryFindArtworkForFile(const QString &fileName,
                                  "ArtworkUtils::tryFindArtworkForFile");
   }
   if (artworkDirectory.isEmpty()) {
-    return ErrorContext::warning(ErrorCode::InvalidArgument,
-                                 "Empty artwork directory",
+    return ErrorContext::warning(ErrorCode::InvalidArgument, "Empty artwork directory",
                                  "ArtworkUtils::tryFindArtworkForFile");
   }
 
@@ -278,15 +268,12 @@ tryFindArtworkForFile(const QString &fileName,
     return result;
   }
 
-  return ErrorContext::info(ErrorCode::FileNotFound,
-                            "No matching artwork found",
+  return ErrorContext::info(ErrorCode::FileNotFound, "No matching artwork found",
                             "ArtworkUtils::tryFindArtworkForFile")
-      .withDetails(
-          QString("Searched for: %1 in %2").arg(fileName, artworkDirectory));
+      .withDetails(QString("Searched for: %1 in %2").arg(fileName, artworkDirectory));
 }
 
-QString findArtworkForFileCached(const QString &fileName,
-                                 const QString &artworkDirectory) {
+QString findArtworkForFileCached(const QString &fileName, const QString &artworkDirectory) {
   if (fileName.isEmpty() || artworkDirectory.isEmpty()) {
     return {};
   }
@@ -297,13 +284,11 @@ QString findArtworkForFileCached(const QString &fileName,
   }
 
   const QString baseName = QFileInfo(fileName).completeBaseName();
-  QString result =
-      DirectoryCache::instance().findInDirectory(baseName, artworkDirectory);
+  QString result = DirectoryCache::instance().findInDirectory(baseName, artworkDirectory);
   if (!result.isEmpty()) {
-    if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") &&
-        perfTimer.elapsed() > 2) {
-      qCDebug(lcPerfTrace) << "findArtworkForFileCached: ms="
-                 << perfTimer.elapsed() << "dir=" << artworkDirectory;
+    if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && perfTimer.elapsed() > 2) {
+      qCDebug(lcPerfTrace) << "findArtworkForFileCached: ms=" << perfTimer.elapsed()
+                           << "dir=" << artworkDirectory;
     }
     return result;
   }
@@ -311,19 +296,18 @@ QString findArtworkForFileCached(const QString &fileName,
   // Try with full filename as fallback
   const QString fullName = QFileInfo(fileName).fileName();
   if (fullName != baseName) {
-    result =
-        DirectoryCache::instance().findInDirectory(fullName, artworkDirectory);
+    result = DirectoryCache::instance().findInDirectory(fullName, artworkDirectory);
   }
 
-  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") &&
-      perfTimer.elapsed() > 2) {
-    qCDebug(lcPerfTrace) << "findArtworkForFileCached: ms="
-               << perfTimer.elapsed() << "dir=" << artworkDirectory
-               << "(fallback)";
+  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && perfTimer.elapsed() > 2) {
+    qCDebug(lcPerfTrace) << "findArtworkForFileCached: ms=" << perfTimer.elapsed()
+                         << "dir=" << artworkDirectory << "(fallback)";
   }
   return result;
 }
 
-void clearDirectoryCache() { DirectoryCache::instance().clear(); }
+void clearDirectoryCache() {
+  DirectoryCache::instance().clear();
+}
 
 } // namespace ArtworkUtils

@@ -3,6 +3,7 @@
 #include "itemwidget.h"
 #include "propertyutils.h"
 #include "uiconstants.h"
+#include <algorithm>
 #include <QApplication>
 #include <QColor>
 #include <QEasingCurve>
@@ -26,13 +27,11 @@
 #include <QScreen>
 #include <QStyle>
 #include <QTimer>
-#include <algorithm>
 
 Q_LOGGING_CATEGORY(lcItemWidget, "kartend.itemwidget")
 
 // Static configuration members - initialized to UIConstants defaults
-int ItemWidget::s_titleTintSaturation =
-    UIConstants::Color::TITLE_TINT_SATURATION;
+int ItemWidget::s_titleTintSaturation = UIConstants::Color::TITLE_TINT_SATURATION;
 int ItemWidget::s_titleTintLightness = UIConstants::Color::TITLE_TINT_LIGHTNESS;
 QString ItemWidget::s_titleBaseColor;
 QString ItemWidget::s_customFontFamily;
@@ -83,10 +82,15 @@ ItemWidget::ItemWidget(QWidget *parent)
 
       ,
       m_itemWidth(UIConstants::Item::DEFAULT_WIDTH),
-      m_itemHeight(UIConstants::Item::DEFAULT_HEIGHT),
-      triangleIndicator(nullptr), m_pulseDelayTimer(nullptr) {
+      m_itemHeight(UIConstants::Item::DEFAULT_HEIGHT), triangleIndicator(nullptr),
+      m_pulseDelayTimer(nullptr) {
   Ui::ItemWidget itemUi;
   itemUi.setupUi(this);
+  setMouseTracking(true);
+  const QList<QWidget *> childWidgets = findChildren<QWidget *>();
+  for (QWidget *child : childWidgets) {
+    child->setMouseTracking(true);
+  }
   imageLabel = itemUi.imageLabel;
   nameLabel = itemUi.nameLabel;
   triangleIndicator = itemUi.triangleIndicator;
@@ -108,10 +112,8 @@ ItemWidget::ItemWidget(QWidget *parent)
 
   m_pulseDelayTimer = new QTimer(this);
   m_pulseDelayTimer->setSingleShot(true);
-  m_pulseDelayTimer->setInterval(
-      UIConstants::Animation::PULSE_INACTIVITY_DELAY_MS);
-  connect(m_pulseDelayTimer, &QTimer::timeout, this,
-          &ItemWidget::startPulseAnimation);
+  m_pulseDelayTimer->setInterval(UIConstants::Animation::PULSE_INACTIVITY_DELAY_MS);
+  connect(m_pulseDelayTimer, &QTimer::timeout, this, &ItemWidget::startPulseAnimation);
 }
 
 ItemWidget::~ItemWidget() {
@@ -134,8 +136,7 @@ auto ItemWidget::titleTint() -> QColor {
   // Title tint is NOT affected by per-collection primary color
   // Primary color only affects selection borders and placeholder patterns
   QColor baseColor;
-  if (!s_titleBaseColor.isEmpty() &&
-      QColor::isValidColorName(s_titleBaseColor)) {
+  if (!s_titleBaseColor.isEmpty() && QColor::isValidColorName(s_titleBaseColor)) {
     baseColor = QColor(s_titleBaseColor);
   } else {
     baseColor = QApplication::palette().color(QPalette::Highlight);
@@ -147,14 +148,11 @@ auto ItemWidget::titleTint() -> QColor {
   int alpha = 0;
   baseColor.getHsl(&hue, &saturation, &lightness, &alpha);
 
-  int targetLightness =
-      qBound(0, s_titleTintLightness, UIConstants::Color::CHANNEL_MAX);
-  int targetSaturation =
-      qBound(0, s_titleTintSaturation, UIConstants::Color::CHANNEL_MAX);
+  int targetLightness = qBound(0, s_titleTintLightness, UIConstants::Color::CHANNEL_MAX);
+  int targetSaturation = qBound(0, s_titleTintSaturation, UIConstants::Color::CHANNEL_MAX);
 
   QColor color;
-  color.setHsl(hue, targetSaturation, targetLightness,
-               UIConstants::Color::CHANNEL_MAX);
+  color.setHsl(hue, targetSaturation, targetLightness, UIConstants::Color::CHANNEL_MAX);
   return color;
 }
 
@@ -182,8 +180,7 @@ void ItemWidget::startPulseAnimation() {
     setupPulseAnimation();
   }
 
-  if ((pulseAnimation) &&
-      pulseAnimation->state() != QAbstractAnimation::Running) {
+  if ((pulseAnimation) && pulseAnimation->state() != QAbstractAnimation::Running) {
     pulseAnimation->start();
   }
 }
@@ -194,8 +191,8 @@ void ItemWidget::applyTitleTint() {
   m_titleTintColor = titleTint();
   if (nameLabel) {
     // Make label text transparent - we'll paint it ourselves in paintEvent
-    nameLabel->setStyleSheet(QStringLiteral(
-        "QLabel { color: transparent; background: transparent; }"));
+    nameLabel->setStyleSheet(
+        QStringLiteral("QLabel { color: transparent; background: transparent; }"));
   }
   update(); // Trigger repaint to draw tinted text
 }
@@ -262,10 +259,14 @@ void ItemWidget::enterEvent(QEvent *event)
 }
 
 // Leave event
-void ItemWidget::leaveEvent(QEvent *event) { QWidget::leaveEvent(event); }
+void ItemWidget::leaveEvent(QEvent *event) {
+  QWidget::leaveEvent(event);
+}
 
 // Show event
-void ItemWidget::showEvent(QShowEvent *event) { QWidget::showEvent(event); }
+void ItemWidget::showEvent(QShowEvent *event) {
+  QWidget::showEvent(event);
+}
 
 // Handles palette change to trigger artwork change respecting
 // DeferArtworkUpdate
@@ -317,14 +318,11 @@ void ItemWidget::setSelected(bool selected) {
 // Returns true when a glide animation is active up the parent chain
 auto ItemWidget::isGlideActive() const -> bool {
   const QWidget *parentPtr = parentWidget();
-  if ((parentPtr) &&
-      parentPtr->property(PropertyKeys::GlideAnimating).toBool()) {
+  if ((parentPtr) && parentPtr->property(PropertyKeys::GlideAnimating).toBool()) {
     return true;
   }
-  const QWidget *grandparentPtr =
-      (parentPtr) ? parentPtr->parentWidget() : nullptr;
-  return (grandparentPtr) &&
-         grandparentPtr->property(PropertyKeys::GlideAnimating).toBool();
+  const QWidget *grandparentPtr = (parentPtr) ? parentPtr->parentWidget() : nullptr;
+  return (grandparentPtr) && grandparentPtr->property(PropertyKeys::GlideAnimating).toBool();
 }
 
 // Computes the selection border rectangle - around artwork in grid mode, full
@@ -342,10 +340,8 @@ auto ItemWidget::computeSelectionBorderRect() const -> QRect {
 
   const int left = imageRect.left() - UIConstants::CollectionIcon::ITEM_SPACING;
   const int top = imageRect.top() - UIConstants::CollectionIcon::ITEM_SPACING;
-  const int right =
-      imageRect.right() + UIConstants::CollectionIcon::ITEM_SPACING;
-  const int bottom =
-      imageRect.bottom() + UIConstants::CollectionIcon::ITEM_SPACING;
+  const int right = imageRect.right() + UIConstants::CollectionIcon::ITEM_SPACING;
+  const int bottom = imageRect.bottom() + UIConstants::CollectionIcon::ITEM_SPACING;
 
   return {left, top, right - left, bottom - top};
 }
@@ -369,8 +365,7 @@ void ItemWidget::applySelectedUiEffects() {
   if (!pulseAnimation) {
     setupPulseAnimation();
   }
-  if ((pulseAnimation) &&
-      pulseAnimation->state() != QAbstractAnimation::Running) {
+  if ((pulseAnimation) && pulseAnimation->state() != QAbstractAnimation::Running) {
     pulseAnimation->start();
   }
 }
@@ -378,8 +373,7 @@ void ItemWidget::applySelectedUiEffects() {
 // Applies visual changes when deselected
 void ItemWidget::applyDeselectedUiEffects() {
   // Stop pulse animation when deselected to prevent visual artifacts
-  if (pulseAnimation &&
-      pulseAnimation->state() == QAbstractAnimation::Running) {
+  if (pulseAnimation && pulseAnimation->state() == QAbstractAnimation::Running) {
     pulseAnimation->stop();
   }
   if (m_pulseDelayTimer && m_pulseDelayTimer->isActive()) {
@@ -396,10 +390,9 @@ void ItemWidget::applyDeselectedUiEffects() {
 void ItemWidget::scheduleSelectionBorderUpdate() {
   if (imageLabel) {
     const QRect borderRect = computeSelectionBorderRect();
-    update(borderRect.adjusted(-UIConstants::Widget::BORDER_WIDTH_SELECTION,
-                               -UIConstants::Widget::BORDER_WIDTH_SELECTION,
-                               UIConstants::Widget::BORDER_WIDTH_SELECTION,
-                               UIConstants::Widget::BORDER_WIDTH_SELECTION));
+    update(borderRect.adjusted(
+        -UIConstants::Widget::BORDER_WIDTH_SELECTION, -UIConstants::Widget::BORDER_WIDTH_SELECTION,
+        UIConstants::Widget::BORDER_WIDTH_SELECTION, UIConstants::Widget::BORDER_WIDTH_SELECTION));
   } else {
     update();
   }
@@ -452,8 +445,8 @@ void ItemWidget::onArtworkChanged() {
     sourceNoDpr.setDevicePixelRatio(1.0);
 
     // Scale to fit within physical target size
-    QPixmap scaledArtwork = sourceNoDpr.scaled(
-        physicalW, physicalH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    QPixmap scaledArtwork =
+        sourceNoDpr.scaled(physicalW, physicalH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
     // Create result at physical size
     QPixmap resultPixmap(physicalW, physicalH);
@@ -462,8 +455,7 @@ void ItemWidget::onArtworkChanged() {
     // Center using physical pixel coordinates
     {
       QPainter painter(&resultPixmap);
-      painter.setRenderHints(QPainter::Antialiasing |
-                             QPainter::SmoothPixmapTransform);
+      painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
       int offsetX = (physicalW - scaledArtwork.width()) / 2;
       int offsetY = (physicalH - scaledArtwork.height()) / 2;
       painter.drawPixmap(offsetX, offsetY, scaledArtwork);
@@ -479,8 +471,7 @@ void ItemWidget::onArtworkChanged() {
       maskPainter.setRenderHint(QPainter::Antialiasing, true);
 
       QPainterPath clipPath;
-      clipPath.addRoundedRect(QRectF(0, 0, physicalW, physicalH),
-                              physicalRadius, physicalRadius);
+      clipPath.addRoundedRect(QRectF(0, 0, physicalW, physicalH), physicalRadius, physicalRadius);
       maskPainter.setClipPath(clipPath);
       maskPainter.drawPixmap(0, 0, resultPixmap);
       maskPainter.end();
@@ -498,6 +489,3 @@ void ItemWidget::onArtworkChanged() {
     nameLabel->raise();
   }
 }
-
-
-

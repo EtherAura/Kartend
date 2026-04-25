@@ -11,6 +11,8 @@
 // in via `using namespace QueryManagerInternal;` below.
 #include "querymanager.h"
 
+#include <atomic>
+#include <memory>
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
@@ -32,8 +34,6 @@
 #include <QThreadPool>
 #include <QVector>
 #include <QWaitCondition>
-#include <atomic>
-#include <memory>
 #include <stdexcept>
 
 #include "collectionutils.h"
@@ -48,7 +48,6 @@ using namespace QueryManagerInternal;
 
 Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 #define debugLog(msg) qCDebug(lcQueryManager) << msg
-
 
 bool QueryManager::ensureCollectionScanned(int collectionIndex,
                                            const CollectionConfig &collection) {
@@ -71,27 +70,32 @@ bool QueryManager::ensureCollectionScanned(int collectionIndex,
   resetScanCancellation();
 
   // Compute UUID for completion signal
-  const QString uuid = CollectionUtils::computeCollectionUuid(
-      collection.name, collection.mediaDirectory);
+  const QString uuid =
+      CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
 
   // Notify UI that a scan is starting (estimated items unknown, use -1)
   emit scanStarting(collection.name, -1);
 
   // Stream scan results directly into DB inserts to reduce peak memory.
-  const bool success = scanAndSaveItemsToDatabase(collectionIndex, collection);
+  // Kartend-tvg: capture scan stats so we can emit the summary signal used
+  // by the settings dialog's "X of Y items added" confirmation.
+  int itemsScanned = 0;
+  int itemsApplied = 0;
+  const bool success =
+      scanAndSaveItemsToDatabase(collectionIndex, collection, &itemsScanned, &itemsApplied);
 
   // Always emit collectionScanCompleted when we emitted scanStarting, even if
   // the scan failed. This ensures MainWindow's m_activeScanCount is decremented
   // properly and the overlay is hidden. The caller can still check the return
   // value to know if the scan was successful.
   emit collectionScanCompleted(uuid);
+  emit collectionScanSummary(uuid, itemsScanned, itemsApplied, success);
 
   return success;
 }
 
-void QueryManager::insertItemsBatch(
-    int legacyId, const QString &uuid, const QStringList &paths,
-    const QHash<QString, QDateTime> &timestamps) {
+void QueryManager::insertItemsBatch(int legacyId, const QString &uuid, const QStringList &paths,
+                                    const QHash<QString, QDateTime> &timestamps) {
   if (paths.isEmpty()) {
     return;
   }
@@ -124,8 +128,7 @@ void QueryManager::insertItemsBatch(
   }
 
   if (!ins.exec()) {
-    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to insert items batch",
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to insert items batch",
                                      "QueryManager::insertItemsBatch")
                    .withDetails(ins.lastError().text());
     ErrorUtils::logError(err);
@@ -142,11 +145,10 @@ bool QueryManager::ensureScannedItemsTempTable() {
               "name TEXT, "
               "last_modified TEXT"
               ")")) {
-    ErrorUtils::logError(
-        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                              "Failed to create scanned_items temp table",
-                              "QueryManager::ensureScannedItemsTempTable")
-            .withDetails(q.lastError().text()));
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to create scanned_items temp table",
+                                               "QueryManager::ensureScannedItemsTempTable")
+                             .withDetails(q.lastError().text()));
     return false;
   }
   return true;
@@ -164,9 +166,8 @@ void QueryManager::clearScannedItemsTempTable() {
 // Query UUIDs temp table - used when UUID count exceeds SQLite variable limit
 // ============================================================================
 
-
-void QueryManager::insertScannedItemsBatch(
-    const QStringList &paths, const QHash<QString, QDateTime> &timestamps) {
+void QueryManager::insertScannedItemsBatch(const QStringList &paths,
+                                           const QHash<QString, QDateTime> &timestamps) {
   if (!m_db.isOpen() || paths.isEmpty()) {
     return;
   }
@@ -189,16 +190,14 @@ void QueryManager::insertScannedItemsBatch(
     ins.addBindValue(timestamps.value(p).toString(Qt::ISODate));
   }
   if (!ins.exec()) {
-    ErrorUtils::logError(
-        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                              "Failed to insert scanned_items batch",
-                              "QueryManager::insertScannedItemsBatch")
-            .withDetails(ins.lastError().text()));
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to insert scanned_items batch",
+                                               "QueryManager::insertScannedItemsBatch")
+                             .withDetails(ins.lastError().text()));
   }
 }
 
-bool QueryManager::applyScannedItemsToDatabase(int legacyId,
-                                               const QString &collectionUuid) {
+bool QueryManager::applyScannedItemsToDatabase(int legacyId, const QString &collectionUuid) {
   if (!m_db.isOpen()) {
     return false;
   }
@@ -214,18 +213,16 @@ bool QueryManager::applyScannedItemsToDatabase(int legacyId,
   upsert.addBindValue(legacyId);
   upsert.addBindValue(collectionUuid);
   if (!upsert.exec()) {
-    ErrorUtils::logError(
-        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                              "Failed to apply scanned_items upsert",
-                              "QueryManager::applyScannedItemsToDatabase")
-            .withDetails(upsert.lastError().text()));
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to apply scanned_items upsert",
+                                               "QueryManager::applyScannedItemsToDatabase")
+                             .withDetails(upsert.lastError().text()));
     return false;
   }
   return true;
 }
 
-bool QueryManager::deleteMissingItemsByUuidUsingScannedItems(
-    const QString &collectionUuid) {
+bool QueryManager::deleteMissingItemsByUuidUsingScannedItems(const QString &collectionUuid) {
   if (!m_db.isOpen()) {
     return false;
   }
@@ -236,19 +233,18 @@ bool QueryManager::deleteMissingItemsByUuidUsingScannedItems(
   q.addBindValue(collectionUuid);
   if (!q.exec()) {
     ErrorUtils::logError(
-        ErrorContext::warning(
-            ErrorCode::DatabaseQueryFailed,
-            "Failed to delete missing items using scanned_items",
-            "QueryManager::deleteMissingItemsByUuidUsingScannedItems")
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                              "Failed to delete missing items using scanned_items",
+                              "QueryManager::deleteMissingItemsByUuidUsingScannedItems")
             .withDetails(q.lastError().text()));
     return false;
   }
   return true;
 }
 
-auto QueryManager::prepareCollectionForItemsInsert(
-    const CollectionConfig &collection, const QString &uuid,
-    const QString &extSignature, int &legacyIdOut) -> bool {
+auto QueryManager::prepareCollectionForItemsInsert(const CollectionConfig &collection,
+                                                   const QString &uuid, const QString &extSignature,
+                                                   int &legacyIdOut) -> bool {
   legacyIdOut = -1;
 
   // Retry constants for lock handling
@@ -268,8 +264,7 @@ auto QueryManager::prepareCollectionForItemsInsert(
 
     try {
       QSqlQuery update(m_db);
-      update.prepare(
-          "UPDATE collections SET name=?, ext_signature=? WHERE uuid=?");
+      update.prepare("UPDATE collections SET name=?, ext_signature=? WHERE uuid=?");
       update.addBindValue(collection.name);
       update.addBindValue(extSignature);
       update.addBindValue(uuid);
@@ -278,15 +273,13 @@ auto QueryManager::prepareCollectionForItemsInsert(
       QSqlQuery check(m_db);
       check.prepare("SELECT COUNT(*) FROM collections WHERE uuid=?");
       check.addBindValue(uuid);
-      bool exists =
-          (check.exec() && check.next() && check.value(0).toInt() > 0);
+      bool exists = (check.exec() && check.next() && check.value(0).toInt() > 0);
 
       if (!exists) {
         QSqlQuery insert(m_db);
         insert.prepare("INSERT INTO collections (name, last_scanned, "
                        "ext_signature, uuid) VALUES (?, ?, ?, ?)");
-        const QString initialLastScanned =
-            QDateTime::fromSecsSinceEpoch(0).toString(Qt::ISODate);
+        const QString initialLastScanned = QDateTime::fromSecsSinceEpoch(0).toString(Qt::ISODate);
         insert.addBindValue(collection.name);
         insert.addBindValue(initialLastScanned);
         insert.addBindValue(extSignature);
@@ -316,10 +309,9 @@ auto QueryManager::prepareCollectionForItemsInsert(
       bool isLockError = errorText.contains("locked", Qt::CaseInsensitive);
 
       if (!isLockError || attempt == MAX_RETRIES - 1) {
-        auto err = ErrorContext::critical(
-                       ErrorCode::DatabaseTransactionFailed,
-                       "Failed to prepare collection for items",
-                       "QueryManager::prepareCollectionForItemsInsert")
+        auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                          "Failed to prepare collection for items",
+                                          "QueryManager::prepareCollectionForItemsInsert")
                        .withDetails(errorText);
         ErrorUtils::logError(err);
         emit errorOccurred(err);
@@ -330,4 +322,3 @@ auto QueryManager::prepareCollectionForItemsInsert(
 
   return prepareSuccess;
 }
-

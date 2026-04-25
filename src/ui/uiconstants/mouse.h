@@ -24,6 +24,14 @@ inline constexpr int USER_SCROLL_IDLE_TIMER_MS = 240;
 inline constexpr int USER_SCROLL_ACTIVE_CLEAR_DELAY_MS = 50;
 /// Brief delay before recentering after repeat stops
 inline constexpr int STOP_REPEAT_RECENTER_DELAY_MS = 10;
+/// Delay before hover selection is allowed to recenter/scroll the viewport.
+/// Selection itself is immediate; only the hover-induced scroll is delayed.
+inline constexpr int HOVER_SCROLL_DELAY_MS = 500;
+/// Delay between consecutive hover-scroll steps during continuous scrolling.
+/// Shorter than the initial delay since user intent is already established.
+inline constexpr int HOVER_SCROLL_CONTINUE_DELAY_MS = 300;
+/// Cursor movement allowed during hover scroll delay before the delay restarts.
+inline constexpr int HOVER_SCROLL_STABILITY_RADIUS_PX = 4;
 /// Angle delta per wheel click (Qt standard: 120 = 1 step)
 inline constexpr int WHEEL_ANGLE_STEP = 120;
 /// Pixel scroll amount per wheel step

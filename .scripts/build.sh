@@ -186,6 +186,7 @@ IWYU_FAILED=false
 IWYU_SUGGESTED=false
 CPPCHECK_WARNED=false
 CLANG_FORMAT_ISSUES=false
+RAW_QLOG_WARNED=false
 
 # Collect warnings to print at the end
 COLLECTED_WARNINGS=""
@@ -725,6 +726,7 @@ if $maintenance_build; then
   plan_step "IWYU analysis"
   plan_step "cppcheck analysis"
   plan_step "Heuristic duplicate checks"
+  plan_step "Raw Qt logging guard"
   plan_step "Export symbols (nm)"
   if $make_reports; then
     plan_step "Assemble reports"
@@ -830,6 +832,13 @@ EOF
   fi
   
   run_optional "Heuristic duplicate checks" "$logs_dir/dup-heuristics.log" bash -lc "grep -R --line-number -E \"QString .* = .*replace|completeBaseName|replace\\('_',' ')\" src || true"
+
+  # Raw Qt logging guard: prefer qC* (categorized) over qDebug/qWarning/qInfo/qCritical.
+  # Kartend-v3v: keep src/ free of raw logging sites so categories remain the single control point.
+  run_quality_check "Raw Qt logging guard" "$logs_dir/raw-qlogging.log" bash -lc "grep -R --line-number -E '\\bq(Debug|Warning|Info|Critical)\\s*\\(\\s*\\)' src || true"
+  if [ -s "$logs_dir/raw-qlogging.log" ]; then
+    RAW_QLOG_WARNED=true
+  fi
   
   run_optional "Export symbols (nm)" "$logs_dir/nm.log" do_export_symbols "$build_dir/$target_name" "$build_dir/nm-list.txt"
 
@@ -886,6 +895,10 @@ EOF
   if [ "$CPPCHECK_WARNED" = true ]; then
     rel_cppcheck="${logs_dir#"$root_dir/"}/cppcheck.log"
     step_final "Notice: cppcheck reported warnings. See ${rel_cppcheck}"
+  fi
+  if [ "$RAW_QLOG_WARNED" = true ]; then
+    rel_raw_qlog="${logs_dir#"$root_dir/"}/raw-qlogging.log"
+    step_final "Notice: raw qDebug/qWarning/qInfo/qCritical sites found in src/. Convert to qC*. See ${rel_raw_qlog}"
   fi
   if [ "$CLANG_FORMAT_ISSUES" = true ]; then
     rel_clang_format="${logs_dir#"$root_dir/"}/clang-format.log"

@@ -2,10 +2,10 @@
 #define ARROWNAVIGATIONHANDLER_H
 
 #include "setuputils.h"
+#include <functional>
 #include <QObject>
 #include <QPointer>
 #include <QScrollArea>
-#include <functional>
 
 QT_BEGIN_NAMESPACE
 class QStackedWidget;

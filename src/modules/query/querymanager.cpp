@@ -8,6 +8,8 @@
 #include "querymanagerhelpers.h"
 #include "sessionmanager.h"
 #include "uiconstants.h"
+#include <algorithm>
+#include <atomic>
 #include <QCryptographicHash>
 #include <QDebug>
 #include <QDir>
@@ -23,15 +25,13 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
+#include <QtConcurrent>
+#include <QtGlobal>
 #include <QThread>
 #include <QThreadPool>
 #include <QTimer>
 #include <QVector>
 #include <QWaitCondition>
-#include <QtConcurrent>
-#include <QtGlobal>
-#include <algorithm>
-#include <atomic>
 #include <random>
 #include <stdexcept>
 
@@ -43,20 +43,16 @@ using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 using namespace QueryManagerInternal;
 
-
-QueryManager::QueryManager(SessionManager *sessionManager,
-                           const QString &connectionName, QObject *parent)
-    : QObject(parent),
-      m_scanCancellationToken(std::make_shared<std::atomic_bool>(false)),
+QueryManager::QueryManager(SessionManager *sessionManager, const QString &connectionName,
+                           QObject *parent)
+    : QObject(parent), m_scanCancellationToken(std::make_shared<std::atomic_bool>(false)),
       m_sessionManager(sessionManager), m_connectionName(connectionName) {
   // Pointer-based cache with automatic LRU eviction.
   m_statementCache.setMaxCost(MAX_STATEMENT_CACHE_SIZE);
 
   const int idealThreads = QThread::idealThreadCount();
-  const int base =
-      idealThreads > 0
-          ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
-          : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
+  const int base = idealThreads > 0 ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
+                                    : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
   m_scanThreadPool = new QThreadPool();
   m_scanThreadPool->setMaxThreadCount(
       std::clamp(base, UIConstants::Concurrency::WORKER_POOL_MIN_THREADS,
@@ -94,8 +90,7 @@ void QueryManager::requestCancelScan() {
 }
 
 bool QueryManager::isScanCancelled() const {
-  return m_scanCancellationToken &&
-         m_scanCancellationToken->load(std::memory_order_acquire);
+  return m_scanCancellationToken && m_scanCancellationToken->load(std::memory_order_acquire);
 }
 
 void QueryManager::resetScanCancellation() {
@@ -112,4 +107,3 @@ void QueryManager::resetScanCancellation() {
 // SQL constants for prepared statement caching live in a shared header so
 // sibling translation units (querymanagerlifecycle.cpp) can reuse them.
 #include "querymanagersql.h"
-

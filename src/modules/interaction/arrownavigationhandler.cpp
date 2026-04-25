@@ -16,40 +16,33 @@
 #include <QTimer>
 
 // ArrowNavigationHandlerSetup getter definitions
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, KeyboardManager *,
-                      KeyboardManager, keyboardManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, ScrollManager *,
-                      ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, AnimationManager *,
-                      AnimationManager, animationManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, ViewportManager *,
-                      ViewportManager, viewportManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, SelectionManager *,
-                      SelectionManager, selectionManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QScrollArea *,
-                      ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QWidget *, GridContainer,
-                      gridContainer)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QStackedWidget *,
-                      StackedWidget, stackedWidget)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QWidget *, ItemsPage,
-                      itemsPage)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QList<CollectionConfig> *,
-                      Collections, collections)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, int *,
-                      CurrentCollectionIndex, currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, GeneralSettings *,
-                      GeneralSettings, generalSettings)
-SETUP_GETTER_DEF_CTX_ONLY(ArrowNavigationHandlerSetup, InteractionStateHolder *,
-                          InteractionState, interactionState)
+SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, KeyboardManager *, KeyboardManager,
+                      keyboardManager)
+SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, AnimationManager *, AnimationManager,
+                      animationManager)
+SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, ViewportManager *, ViewportManager,
+                      viewportManager)
+SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, SelectionManager *, SelectionManager,
+                      selectionManager)
+SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QStackedWidget *, StackedWidget, stackedWidget)
+SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QList<CollectionConfig> *, Collections,
+                      collections)
+SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, int *, CurrentCollectionIndex,
+                      currentCollectionIndex)
+SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, GeneralSettings *, GeneralSettings,
+                      generalSettings)
+SETUP_GETTER_DEF_CTX_ONLY(ArrowNavigationHandlerSetup, InteractionStateHolder *, InteractionState,
+                          interactionState)
 
-ArrowNavigationHandler::ArrowNavigationHandler(QObject *parent)
-    : QObject(parent) {}
+ArrowNavigationHandler::ArrowNavigationHandler(QObject *parent) : QObject(parent) {}
 
 ArrowNavigationHandler::~ArrowNavigationHandler() = default;
 
-void ArrowNavigationHandler::setupReferences(
-    const ArrowNavigationHandlerSetup &setup) {
+void ArrowNavigationHandler::setupReferences(const ArrowNavigationHandlerSetup &setup) {
   m_keyboardManager = setup.getKeyboardManager();
   m_scrollManager = setup.getScrollManager();
   m_animationManager = setup.getAnimationManager();
@@ -65,10 +58,8 @@ void ArrowNavigationHandler::setupReferences(
   m_state = setup.getInteractionState();
 }
 
-void ArrowNavigationHandler::handleArrowKeyNavigation(int direction,
-                                                      bool vertical) {
-  if (!m_scrollManager ||
-      !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+void ArrowNavigationHandler::handleArrowKeyNavigation(int direction, bool vertical) {
+  if (!m_scrollManager || !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     return;
   }
 
@@ -100,8 +91,7 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction,
 
   // Check if item was offscreen before movement
   const bool offscreenBefore =
-      m_isItemOffscreen ? m_isItemOffscreen(currentSelection, gridWidth)
-                        : false;
+      m_isItemOffscreen ? m_isItemOffscreen(currentSelection, gridWidth) : false;
 
   const bool wrapEnabled = isWrapEnabled();
   if (m_viewportManager) {
@@ -113,8 +103,7 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction,
 
   bool didWrap = false;
   const int newSelection = KeyboardManager::calculateNewSelection(
-      totalItems, currentSelection, direction, wrapEnabled, vertical, gridWidth,
-      didWrap);
+      totalItems, currentSelection, direction, wrapEnabled, vertical, gridWidth, didWrap);
 
   if (didWrap) {
     if (m_viewportManager) {
@@ -125,11 +114,9 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction,
     }
   }
 
-  const bool isNewRow =
-      SelectionManager::isNewRow(currentSelection, newSelection, gridWidth);
+  const bool isNewRow = SelectionManager::isNewRow(currentSelection, newSelection, gridWidth);
 
-  const bool isWrapping =
-      m_viewportManager ? m_viewportManager->isWrappingNavigation() : false;
+  const bool isWrapping = m_viewportManager ? m_viewportManager->isWrappingNavigation() : false;
   const bool forceImmediate = offscreenBefore || isWrapping;
 
   if (forceImmediate && m_viewportManager) {
@@ -160,8 +147,7 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction,
   if (m_keyboardManager) {
     Qt::Key physicalKey = Qt::Key_unknown;
     if (m_keyboardManager->consumePendingNavigationKey(physicalKey)) {
-      m_keyboardManager->finalizeKeyRepeatForKey(physicalKey, direction,
-                                                 vertical);
+      m_keyboardManager->finalizeKeyRepeatForKey(physicalKey, direction, vertical);
     } else {
       m_keyboardManager->finalizeKeyRepeat(nullptr, direction, vertical);
     }
@@ -172,8 +158,7 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction,
 
 void ArrowNavigationHandler::handleRepeatStep() {
   if (!m_keyboardManager || !m_keyboardManager->isRepeating() ||
-      !m_keyboardManager->isPhysicalKeyDown() ||
-      m_keyboardManager->repeatDelta() == 0) {
+      !m_keyboardManager->isPhysicalKeyDown() || m_keyboardManager->repeatDelta() == 0) {
     if (m_keyboardManager) {
       m_keyboardManager->stopRepeat();
     }
@@ -187,8 +172,7 @@ void ArrowNavigationHandler::handleRepeatStep() {
     return;
   }
 
-  if (!m_stackedWidget || !m_itemsPage ||
-      m_stackedWidget->currentWidget() != m_itemsPage) {
+  if (!m_stackedWidget || !m_itemsPage || m_stackedWidget->currentWidget() != m_itemsPage) {
     if (m_keyboardManager) {
       m_keyboardManager->stopRepeat();
     }
@@ -226,8 +210,7 @@ void ArrowNavigationHandler::handleRepeatStep() {
 
   bool didWrap = false;
   const int newSelection = KeyboardManager::calculateNewSelection(
-      totalItems, currentSelection, direction, wrapEnabled, repeatVertical,
-      gridWidth, didWrap);
+      totalItems, currentSelection, direction, wrapEnabled, repeatVertical, gridWidth, didWrap);
 
   if (newSelection == currentSelection) {
     return;
@@ -244,10 +227,9 @@ void ArrowNavigationHandler::handleRepeatStep() {
   }
 
   const bool rowChanged =
-      (*m_currentCollectionIndex >= 0 &&
-       *m_currentCollectionIndex < m_collections->size() && gridWidth > 0)
-          ? KeyboardManager::hasRowChanged(gridWidth, currentSelection,
-                                           newSelection)
+      (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < m_collections->size() &&
+       gridWidth > 0)
+          ? KeyboardManager::hasRowChanged(gridWidth, currentSelection, newSelection)
           : false;
 
   // Set pending selection for suppressed updates
@@ -296,8 +278,7 @@ void ArrowNavigationHandler::handleStopRepeat(bool suppressRecentering) {
 
   // Update continuous scroll state
   if (m_keyboardManager && !m_keyboardManager->isPhysicalKeyDown()) {
-    bool animRunning =
-        (m_animationManager && m_animationManager->isVerticalAnimRunning());
+    bool animRunning = (m_animationManager && m_animationManager->isVerticalAnimRunning());
     if (m_viewportManager) {
       m_viewportManager->setContinuousScrollActive(animRunning);
     }
@@ -308,24 +289,20 @@ void ArrowNavigationHandler::handleStopRepeat(bool suppressRecentering) {
   if (!QApplication::closingDown() && selected >= 0 && !suppressRecentering) {
     // Delay re-centering to allow scroll animations to settle after key repeat
     // stops
-    QTimer::singleShot(
-        UIConstants::Mouse::STOP_REPEAT_RECENTER_DELAY_MS, this, [this]() {
-          bool stillActive =
-              m_keyboardManager
-                  ? m_keyboardManager->isContinuousScrollActive()
-                  : (m_viewportManager
-                         ? m_viewportManager->continuousScrollActive()
-                         : false);
-          const int sel = getCurrentSelection();
-          if (!QApplication::closingDown() && sel >= 0 && !stillActive) {
-            emit requestRecenter();
-          }
-        });
+    QTimer::singleShot(UIConstants::Mouse::STOP_REPEAT_RECENTER_DELAY_MS, this, [this]() {
+      bool stillActive =
+          m_keyboardManager
+              ? m_keyboardManager->isContinuousScrollActive()
+              : (m_viewportManager ? m_viewportManager->continuousScrollActive() : false);
+      const int sel = getCurrentSelection();
+      if (!QApplication::closingDown() && sel >= 0 && !stillActive) {
+        emit requestRecenter();
+      }
+    });
   }
 }
 
-void ArrowNavigationHandler::performVisibilityForKeyMove(bool isNewRow,
-                                                         int newSelection) {
+void ArrowNavigationHandler::performVisibilityForKeyMove(bool isNewRow, int newSelection) {
   if (!m_viewportManager) {
     return;
   }
@@ -333,8 +310,7 @@ void ArrowNavigationHandler::performVisibilityForKeyMove(bool isNewRow,
   // In list mode, every move is a row change since there's 1 item per row
   bool isListMode = false;
   if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-    isListMode =
-        (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
+    isListMode = (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
   }
 
   if (isListMode || isNewRow) {

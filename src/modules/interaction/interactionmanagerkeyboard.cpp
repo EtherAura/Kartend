@@ -3,6 +3,7 @@
 // These remain InteractionManager members; this is a translation-unit split.
 #include "interactionmanager.h"
 
+#include <algorithm>
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
@@ -16,7 +17,6 @@
 #include <QScrollBar>
 #include <QTimer>
 #include <QWheelEvent>
-#include <algorithm>
 
 #include "alphabeticnavigationhandler.h"
 #include "animationmanager.h"
@@ -48,17 +48,15 @@
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcInteractionManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcInteractionManager().isDebugEnabled()) {                             \
-      qCDebug(lcInteractionManager) << msg;                                    \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcInteractionManager().isDebugEnabled()) {                                                 \
+      qCDebug(lcInteractionManager) << msg;                                                        \
+    }                                                                                              \
   } while (0)
 
-void InteractionManager::handleArrowKeyNavigation(int direction,
-                                                  bool vertical) {
-  bool restoringSelection =
-      m_selectionManager && m_selectionManager->isRestoringSelection();
+void InteractionManager::handleArrowKeyNavigation(int direction, bool vertical) {
+  bool restoringSelection = m_selectionManager && m_selectionManager->isRestoringSelection();
   if (restoringSelection || m_navigationInProgress) {
     return;
   }
@@ -69,8 +67,7 @@ void InteractionManager::handleArrowKeyNavigation(int direction,
 
 // KeyboardManager callback: handles alphabetic navigation via PageUp/PageDown
 void InteractionManager::handleAlphabeticNavigation(bool forward) {
-  bool restoringSelection =
-      m_selectionManager && m_selectionManager->isRestoringSelection();
+  bool restoringSelection = m_selectionManager && m_selectionManager->isRestoringSelection();
   if (restoringSelection || m_navigationInProgress) {
     return;
   }
@@ -81,8 +78,7 @@ void InteractionManager::handleAlphabeticNavigation(bool forward) {
 
 // KeyboardManager callback: handles Home/End key to jump to first/last item
 void InteractionManager::handleJumpToEdge(bool toEnd) {
-  bool restoringSelection =
-      m_selectionManager && m_selectionManager->isRestoringSelection();
+  bool restoringSelection = m_selectionManager && m_selectionManager->isRestoringSelection();
   if (restoringSelection || m_navigationInProgress) {
     return;
   }
@@ -166,10 +162,10 @@ auto InteractionManager::handleGlobalKeyPress(QKeyEvent *event) -> bool {
     return false;
   }
 
-  const int searchKey = m_generalSettings ? m_generalSettings->keySearch
-                                          : static_cast<int>(Qt::Key_Slash);
-  const int backKey = m_generalSettings ? m_generalSettings->keyBack
-                                        : static_cast<int>(Qt::Key_Escape);
+  const int searchKey =
+      m_generalSettings ? m_generalSettings->keySearch : static_cast<int>(Qt::Key_Slash);
+  const int backKey =
+      m_generalSettings ? m_generalSettings->keyBack : static_cast<int>(Qt::Key_Escape);
 
   if (event->key() == searchKey) {
     return handleSlashKey();
@@ -207,8 +203,7 @@ auto InteractionManager::handleEscapeKey() -> bool {
     return true;
   }
 
-  const QString current =
-      (m_searchBar ? m_searchBar->text().trimmed() : QString());
+  const QString current = (m_searchBar ? m_searchBar->text().trimmed() : QString());
   const bool searchBarFocused = (m_searchBar && m_searchBar->hasFocus());
 
   if (!current.isEmpty()) {
@@ -228,8 +223,7 @@ auto InteractionManager::handleEscapeKey() -> bool {
     return true;
   }
 
-  const int collIndex =
-      (m_currentCollectionIndex ? *m_currentCollectionIndex : -1);
+  const int collIndex = (m_currentCollectionIndex ? *m_currentCollectionIndex : -1);
   if (m_collections && collIndex >= 0 && collIndex < m_collections->size()) {
     const CollectionConfig &cfg = (*m_collections)[collIndex];
 
@@ -246,10 +240,8 @@ auto InteractionManager::handleEscapeKey() -> bool {
         cfg.parentCollectionIndex < m_collections->size()) {
       if (m_navigationManager) {
         constexpr int kRestoreAttempts = UIConstants::Selection::RESTORE_STEPS;
-        constexpr int kRestoreIntervalMs =
-            UIConstants::Selection::RESTORE_STEP_DELAY_MS;
-        constexpr int kRestoreTimeoutMs =
-            UIConstants::Selection::RESTORE_MAX_DELAY_MS;
+        constexpr int kRestoreIntervalMs = UIConstants::Selection::RESTORE_STEP_DELAY_MS;
+        constexpr int kRestoreTimeoutMs = UIConstants::Selection::RESTORE_MAX_DELAY_MS;
         const int parent = cfg.parentCollectionIndex;
         m_navigationManager->showCollectionItems(parent);
         int sel = -1;
@@ -257,8 +249,8 @@ auto InteractionManager::handleEscapeKey() -> bool {
           sel = m_settingsManager->getLastSelectedItem(parent);
         }
         if (sel >= 0) {
-          m_navigationManager->scheduleSelectionRestore(
-              sel, kRestoreAttempts, kRestoreIntervalMs, kRestoreTimeoutMs);
+          m_navigationManager->scheduleSelectionRestore(sel, kRestoreAttempts, kRestoreIntervalMs,
+                                                        kRestoreTimeoutMs);
         }
       }
     } else {
@@ -275,4 +267,3 @@ void InteractionManager::handleImmediateSearchTextChanged(const QString &text) {
     m_searchManager->onSearchTextChanged(text, currentSelectedIndex());
   }
 }
-

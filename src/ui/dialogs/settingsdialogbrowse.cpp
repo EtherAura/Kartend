@@ -1,6 +1,8 @@
 // Sibling translation unit for SettingsDialog.
 // Extracted from settingsdialogform.cpp during LOC-reduction refactor.
 // These remain SettingsDialog members; this is a translation-unit split.
+#include <algorithm>
+#include <functional>
 #include <QAbstractItemView>
 #include <QColorDialog>
 #include <QDir>
@@ -18,8 +20,6 @@
 #include <QToolTip>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
-#include <algorithm>
-#include <functional>
 #include <set>
 
 #include "extensionutils.h"
@@ -44,8 +44,8 @@ void SettingsDialog::checkForChanges() {
 }
 
 void SettingsDialog::browseLauncher() {
-  QString fileName = QFileDialog::getOpenFileName(this, tr("Select Launcher"),
-                                                  "", tr("All Files (*)"));
+  QString fileName =
+      QFileDialog::getOpenFileName(this, tr("Select Launcher"), "", tr("All Files (*)"));
   if (!fileName.isEmpty() && ui->launcherLineEdit) {
     ui->launcherLineEdit->setText(fileName);
   }
@@ -53,24 +53,21 @@ void SettingsDialog::browseLauncher() {
 
 void SettingsDialog::browseCore() {
   QString fileName = QFileDialog::getOpenFileName(
-      this, tr("Select Core"), "",
-      tr("Core Files (*.so *.dll *.dylib);;All Files (*)"));
+      this, tr("Select Core"), "", tr("Core Files (*.so *.dll *.dylib);;All Files (*)"));
   if (!fileName.isEmpty() && ui->coreLineEdit) {
     ui->coreLineEdit->setText(fileName);
   }
 }
 
 void SettingsDialog::browseMediaDir() {
-  QString dirName =
-      QFileDialog::getExistingDirectory(this, tr("Select Media Directory"), "");
+  QString dirName = QFileDialog::getExistingDirectory(this, tr("Select Media Directory"), "");
   if (!dirName.isEmpty() && ui->mediaDirLineEdit) {
     ui->mediaDirLineEdit->setText(dirName);
   }
 }
 
 void SettingsDialog::browseArtworkDir() {
-  QString dirName = QFileDialog::getExistingDirectory(
-      this, tr("Select Artwork Directory"), "");
+  QString dirName = QFileDialog::getExistingDirectory(this, tr("Select Artwork Directory"), "");
   if (!dirName.isEmpty() && ui->artworkDirLineEdit) {
     ui->artworkDirLineEdit->setText(dirName);
   }
@@ -108,8 +105,7 @@ void SettingsDialog::onIncludeSubfoldersToggled(bool checked) {
   }
 }
 
-void SettingsDialog::performRecursiveImport(const QString &baseDir,
-                                            bool isContentDir) {
+void SettingsDialog::performRecursiveImport(const QString &baseDir, bool isContentDir) {
   QDir dir(baseDir);
   if (!dir.exists()) {
     QMessageBox::warning(this, tr("Recursive Import"),
@@ -118,12 +114,10 @@ void SettingsDialog::performRecursiveImport(const QString &baseDir,
   }
 
   // Get list of subdirectories
-  QStringList subdirs =
-      dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+  QStringList subdirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
   if (subdirs.isEmpty()) {
-    QMessageBox::information(
-        this, tr("Recursive Import"),
-        tr("No subdirectories found in the specified directory."));
+    QMessageBox::information(this, tr("Recursive Import"),
+                             tr("No subdirectories found in the specified directory."));
     return;
   }
 
@@ -137,25 +131,23 @@ void SettingsDialog::performRecursiveImport(const QString &baseDir,
   if (subdirs.size() > 10) {
     message += tr("  ... and %1 more\n").arg(subdirs.size() - 10);
   }
-  message += tr(
-      "\nEach subcollection will inherit the current collection's settings.\n");
+  message += tr("\nEach subcollection will inherit the current collection's settings.\n");
   if (isContentDir) {
     message += tr("Content directories will be set automatically.");
   } else {
     message += tr("Artwork directories will be set automatically.");
   }
 
-  QMessageBox::StandardButton reply = QMessageBox::question(
-      this, tr("Confirm Recursive Import"), message,
-      QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+  QMessageBox::StandardButton reply =
+      QMessageBox::question(this, tr("Confirm Recursive Import"), message,
+                            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
 
   if (reply != QMessageBox::Yes) {
     return;
   }
 
   // Get current collection as template
-  if (currentCollectionIndex < 0 ||
-      currentCollectionIndex >= m_workingCollections.size()) {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_workingCollections.size()) {
     return;
   }
 
@@ -164,8 +156,7 @@ void SettingsDialog::performRecursiveImport(const QString &baseDir,
 
   // Copy by value to avoid reference invalidation when m_workingCollections is
   // appended to
-  const CollectionConfig templateConfig =
-      m_workingCollections[currentCollectionIndex];
+  const CollectionConfig templateConfig = m_workingCollections[currentCollectionIndex];
   int parentIndex = currentCollectionIndex;
 
   // Create subcollections for each subdirectory
@@ -221,9 +212,8 @@ void SettingsDialog::performRecursiveImport(const QString &baseDir,
 
   emit collectionSaved(collections);
 
-  QMessageBox::information(
-      this, tr("Recursive Import"),
-      tr("Successfully created %1 subcollection(s).").arg(subdirs.size()));
+  QMessageBox::information(this, tr("Recursive Import"),
+                           tr("Successfully created %1 subcollection(s).").arg(subdirs.size()));
 }
 
 void SettingsDialog::loadCollectionToUI(int index) {
@@ -255,8 +245,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->artworkDirLineEdit->setText(config.artworkDirectory);
   }
   if (ui->includeContentSubfoldersCheckBox) {
-    ui->includeContentSubfoldersCheckBox->setChecked(
-        config.includeContentSubfolders);
+    ui->includeContentSubfoldersCheckBox->setChecked(config.includeContentSubfolders);
   }
   if (ui->showAllSubfolderItemsCheckBox) {
     ui->showAllSubfolderItemsCheckBox->setChecked(config.showAllSubfolderItems);
@@ -271,8 +260,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->subfolderOptionsWidget->setVisible(config.includeContentSubfolders);
   }
   if (ui->includeArtworkSubfoldersCheckBox) {
-    ui->includeArtworkSubfoldersCheckBox->setChecked(
-        config.includeArtworkSubfolders);
+    ui->includeArtworkSubfoldersCheckBox->setChecked(config.includeArtworkSubfolders);
   }
   if (ui->fileExtensionsLineEdit) {
     ui->fileExtensionsLineEdit->setText(config.extensions.join(", "));
@@ -281,30 +269,25 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->gridWidthSpinBox->setValue(config.gridWidth);
   }
   if (ui->showAllSubcollectionItemsCheckBox) {
-    ui->showAllSubcollectionItemsCheckBox->setChecked(
-        config.showAllSubcollectionItems);
+    ui->showAllSubcollectionItemsCheckBox->setChecked(config.showAllSubcollectionItems);
   }
   if (ui->horizontalAlignmentComboBox) {
-    ui->horizontalAlignmentComboBox->setCurrentIndex(
-        static_cast<int>(config.horizontalAlignment));
+    ui->horizontalAlignmentComboBox->setCurrentIndex(static_cast<int>(config.horizontalAlignment));
   }
   if (ui->sidebarModeComboBox) {
-    ui->sidebarModeComboBox->setCurrentIndex(
-        static_cast<int>(config.sidebarMode));
+    ui->sidebarModeComboBox->setCurrentIndex(static_cast<int>(config.sidebarMode));
   }
   if (ui->viewTypeComboBox) {
     ui->viewTypeComboBox->setCurrentIndex(static_cast<int>(config.viewType));
   }
   if (ui->horizontalSpacingSpinBox) {
-    // Rebase horizontal spacing: UI = Internal + 70
-    ui->horizontalSpacingSpinBox->setValue(config.horizontalSpacing + 70);
+    ui->horizontalSpacingSpinBox->setValue(spacingInternalToUi(config.horizontalSpacing));
   }
   if (ui->verticalSpacingSpinBox) {
-    ui->verticalSpacingSpinBox->setValue(config.verticalSpacing);
+    ui->verticalSpacingSpinBox->setValue(spacingInternalToUi(config.verticalSpacing));
   }
   if (ui->hideHorizontalScrollbarCheckBox) {
-    ui->hideHorizontalScrollbarCheckBox->setChecked(
-        config.hideHorizontalScrollbar);
+    ui->hideHorizontalScrollbarCheckBox->setChecked(config.hideHorizontalScrollbar);
   }
   if (ui->hideVerticalScrollbarCheckBox) {
     ui->hideVerticalScrollbarCheckBox->setChecked(config.hideVerticalScrollbar);
@@ -313,8 +296,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->hideTitlesCheckBox->setChecked(config.hideTitles);
   }
   if (ui->hideSubcollectionTitlesCheckBox) {
-    ui->hideSubcollectionTitlesCheckBox->setChecked(
-        config.hideSubcollectionTitles);
+    ui->hideSubcollectionTitlesCheckBox->setChecked(config.hideSubcollectionTitles);
   }
   if (ui->itemWidthSpinBox) {
     ui->itemWidthSpinBox->setValue(config.itemWidth);
@@ -388,82 +370,49 @@ void SettingsDialog::loadCollectionToUI(int index) {
 void SettingsDialog::clearCollectionUI() {
   m_isLoading = true;
 
-  if (ui->launcherLineEdit)
-    ui->launcherLineEdit->clear();
-  if (ui->coreLineEdit)
-    ui->coreLineEdit->clear();
-  if (ui->launchParamsLineEdit)
-    ui->launchParamsLineEdit->clear();
-  if (ui->mediaDirLineEdit)
-    ui->mediaDirLineEdit->clear();
-  if (ui->artworkDirLineEdit)
-    ui->artworkDirLineEdit->clear();
-  if (ui->fileExtensionsLineEdit)
-    ui->fileExtensionsLineEdit->clear();
-  if (ui->backgroundValueEdit)
-    ui->backgroundValueEdit->clear();
-  if (ui->primaryColorEdit)
-    ui->primaryColorEdit->clear();
-  if (ui->tileColorEdit)
-    ui->tileColorEdit->clear();
-  if (ui->selectionColorEdit)
-    ui->selectionColorEdit->clear();
-  if (ui->listRowColorEdit)
-    ui->listRowColorEdit->clear();
-  if (ui->listAltRowColorEdit)
-    ui->listAltRowColorEdit->clear();
-  if (ui->customFontEdit)
-    ui->customFontEdit->clear();
+  if (ui->launcherLineEdit) ui->launcherLineEdit->clear();
+  if (ui->coreLineEdit) ui->coreLineEdit->clear();
+  if (ui->launchParamsLineEdit) ui->launchParamsLineEdit->clear();
+  if (ui->mediaDirLineEdit) ui->mediaDirLineEdit->clear();
+  if (ui->artworkDirLineEdit) ui->artworkDirLineEdit->clear();
+  if (ui->fileExtensionsLineEdit) ui->fileExtensionsLineEdit->clear();
+  if (ui->backgroundValueEdit) ui->backgroundValueEdit->clear();
+  if (ui->primaryColorEdit) ui->primaryColorEdit->clear();
+  if (ui->tileColorEdit) ui->tileColorEdit->clear();
+  if (ui->selectionColorEdit) ui->selectionColorEdit->clear();
+  if (ui->listRowColorEdit) ui->listRowColorEdit->clear();
+  if (ui->listAltRowColorEdit) ui->listAltRowColorEdit->clear();
+  if (ui->customFontEdit) ui->customFontEdit->clear();
 
-  if (ui->includeContentSubfoldersCheckBox)
-    ui->includeContentSubfoldersCheckBox->setChecked(false);
-  if (ui->showAllSubfolderItemsCheckBox)
-    ui->showAllSubfolderItemsCheckBox->setChecked(false);
-  if (ui->hideSubfolderTitlesCheckBox)
-    ui->hideSubfolderTitlesCheckBox->setChecked(false);
-  if (ui->showHiddenFoldersCheckBox)
-    ui->showHiddenFoldersCheckBox->setChecked(false);
-  if (ui->includeArtworkSubfoldersCheckBox)
-    ui->includeArtworkSubfoldersCheckBox->setChecked(false);
+  if (ui->includeContentSubfoldersCheckBox) ui->includeContentSubfoldersCheckBox->setChecked(false);
+  if (ui->showAllSubfolderItemsCheckBox) ui->showAllSubfolderItemsCheckBox->setChecked(false);
+  if (ui->hideSubfolderTitlesCheckBox) ui->hideSubfolderTitlesCheckBox->setChecked(false);
+  if (ui->showHiddenFoldersCheckBox) ui->showHiddenFoldersCheckBox->setChecked(false);
+  if (ui->includeArtworkSubfoldersCheckBox) ui->includeArtworkSubfoldersCheckBox->setChecked(false);
   if (ui->showAllSubcollectionItemsCheckBox)
     ui->showAllSubcollectionItemsCheckBox->setChecked(false);
-  if (ui->hideHorizontalScrollbarCheckBox)
-    ui->hideHorizontalScrollbarCheckBox->setChecked(false);
-  if (ui->hideVerticalScrollbarCheckBox)
-    ui->hideVerticalScrollbarCheckBox->setChecked(false);
-  if (ui->hideTitlesCheckBox)
-    ui->hideTitlesCheckBox->setChecked(false);
-  if (ui->hideSubcollectionTitlesCheckBox)
-    ui->hideSubcollectionTitlesCheckBox->setChecked(false);
+  if (ui->hideHorizontalScrollbarCheckBox) ui->hideHorizontalScrollbarCheckBox->setChecked(false);
+  if (ui->hideVerticalScrollbarCheckBox) ui->hideVerticalScrollbarCheckBox->setChecked(false);
+  if (ui->hideTitlesCheckBox) ui->hideTitlesCheckBox->setChecked(false);
+  if (ui->hideSubcollectionTitlesCheckBox) ui->hideSubcollectionTitlesCheckBox->setChecked(false);
 
-  if (ui->gridWidthSpinBox)
-    ui->gridWidthSpinBox->setValue(UIConstants::Grid::DEFAULT_WIDTH);
+  if (ui->gridWidthSpinBox) ui->gridWidthSpinBox->setValue(UIConstants::Grid::DEFAULT_WIDTH);
   if (ui->horizontalSpacingSpinBox)
-    ui->horizontalSpacingSpinBox->setValue(70);
+    ui->horizontalSpacingSpinBox->setValue(spacingInternalToUi(UIConstants::Grid::SPACING));
   if (ui->verticalSpacingSpinBox)
-    ui->verticalSpacingSpinBox->setValue(0);
-  if (ui->itemWidthSpinBox)
-    ui->itemWidthSpinBox->setValue(200);
-  if (ui->itemHeightSpinBox)
-    ui->itemHeightSpinBox->setValue(300);
-  if (ui->fontSizeSpinBox)
-    ui->fontSizeSpinBox->setValue(12);
-  if (ui->cornerRadiusSpinBox)
-    ui->cornerRadiusSpinBox->setValue(0);
+    ui->verticalSpacingSpinBox->setValue(spacingInternalToUi(UIConstants::Grid::SPACING));
+  if (ui->itemWidthSpinBox) ui->itemWidthSpinBox->setValue(200);
+  if (ui->itemHeightSpinBox) ui->itemHeightSpinBox->setValue(300);
+  if (ui->fontSizeSpinBox) ui->fontSizeSpinBox->setValue(12);
+  if (ui->cornerRadiusSpinBox) ui->cornerRadiusSpinBox->setValue(0);
 
-  if (ui->horizontalAlignmentComboBox)
-    ui->horizontalAlignmentComboBox->setCurrentIndex(0);
-  if (ui->sidebarModeComboBox)
-    ui->sidebarModeComboBox->setCurrentIndex(0);
-  if (ui->viewTypeComboBox)
-    ui->viewTypeComboBox->setCurrentIndex(0);
-  if (ui->parentCollectionComboBox)
-    ui->parentCollectionComboBox->clear();
+  if (ui->horizontalAlignmentComboBox) ui->horizontalAlignmentComboBox->setCurrentIndex(0);
+  if (ui->sidebarModeComboBox) ui->sidebarModeComboBox->setCurrentIndex(0);
+  if (ui->viewTypeComboBox) ui->viewTypeComboBox->setCurrentIndex(0);
+  if (ui->parentCollectionComboBox) ui->parentCollectionComboBox->clear();
 
-  if (ui->backgroundColorRadio)
-    ui->backgroundColorRadio->setChecked(true);
-  if (ui->subfolderOptionsWidget)
-    ui->subfolderOptionsWidget->setVisible(false);
+  if (ui->backgroundColorRadio) ui->backgroundColorRadio->setChecked(true);
+  if (ui->subfolderOptionsWidget) ui->subfolderOptionsWidget->setVisible(false);
 
   m_isLoading = false;
 }

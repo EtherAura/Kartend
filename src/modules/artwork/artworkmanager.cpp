@@ -1,19 +1,21 @@
 // Handles async artwork loading with QtConcurrent, caching, and viewport-aware
 // prioritization.
 #include "artworkmanager.h"
-#include "loggingcategories.h"
 #include "applicationcontext.h"
 #include "artworkutils.h"
 #include "cachemanager.h"
 #include "collectionutils.h"
 #include "extensionutils.h"
 #include "interactionstateholder.h"
+#include "loggingcategories.h"
 #include "propertyutils.h"
 #include "setuputils.h"
 #include "timerutils.h"
 #include "ui/widgets/itemwidget.h"
 #include "uiconstants.h"
 
+#include <algorithm>
+#include <functional>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDir>
@@ -31,12 +33,10 @@
 #include <QScrollBar>
 #include <QStackedWidget>
 #include <QStandardPaths>
+#include <QtConcurrent>
 #include <QTextStream>
 #include <QThread>
 #include <QTimer>
-#include <QtConcurrent>
-#include <algorithm>
-#include <functional>
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcArtworkManager, "kartend.artworkmanager")
@@ -56,17 +56,15 @@ auto computeViewports(const QScrollArea *scrollArea) -> Viewports {
                             scrollArea->verticalScrollBar()->value());
   Viewports vps;
   vps.immediate = viewport.translated(scrollOffset);
-  vps.extended = viewport
-                     .adjusted(-viewport.width(), -viewport.height(),
-                               viewport.width(), viewport.height())
-                     .translated(scrollOffset);
+  vps.extended =
+      viewport.adjusted(-viewport.width(), -viewport.height(), viewport.width(), viewport.height())
+          .translated(scrollOffset);
   return vps;
 }
 
 // Partitions pending items into immediate/extended/remaining by viewport
 auto partitionByViewport(const QList<ArtworkInfo> &localPending, QWidget *grid,
-                         const Viewports &vps,
-                         const std::function<bool(ItemWidget *)> &isLoaded)
+                         const Viewports &vps, const std::function<bool(ItemWidget *)> &isLoaded)
     -> std::tuple<QList<ArtworkInfo>, QList<ArtworkInfo>, QList<ArtworkInfo>> {
   QList<ArtworkInfo> immediateItems;
   QList<ArtworkInfo> extendedItems;
@@ -91,21 +89,18 @@ auto partitionByViewport(const QList<ArtworkInfo> &localPending, QWidget *grid,
 }
 
 // Periodically triggers a deferred persistent cache save when size grows enough
-auto maybeTriggerCacheSave(ArtworkManager *self, CacheManager *cacheManager)
-    -> void {
+auto maybeTriggerCacheSave(ArtworkManager *self, CacheManager *cacheManager) -> void {
   static int updateCount = 0;
   if (++updateCount % UIConstants::Cache::CHECK_INTERVAL != 0) {
     return;
   }
-  if (!cacheManager)
-    return;
+  if (!cacheManager) return;
   const qint64 cacheSize = cacheManager->getCacheSize();
   if (cacheSize <= 0) {
     return;
   }
   static qint64 lastSaveSize = 0;
-  if (cacheSize <= static_cast<qint64>(
-                       lastSaveSize * UIConstants::Cache::SAVE_GROWTH_FACTOR)) {
+  if (cacheSize <= static_cast<qint64>(lastSaveSize * UIConstants::Cache::SAVE_GROWTH_FACTOR)) {
     return;
   }
   lastSaveSize = cacheSize;
@@ -116,21 +111,16 @@ auto maybeTriggerCacheSave(ArtworkManager *self, CacheManager *cacheManager)
 }
 } // namespace
 
-
 // Constructs the artwork manager and sets up timers
 ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
     : QObject(parent), m_cacheManager(cacheManager), collections(nullptr),
-      currentCollectionIndex(nullptr), stackedWidget(nullptr),
-      itemsPage(nullptr), gridContainer(nullptr), m_timerCoordinator(nullptr),
-      m_silentLoadTimer(nullptr), m_persistentLoadTimer(nullptr),
-      m_cacheTimer(nullptr), m_silentLoadingActive(false),
-      m_silentLoadBatchSize(
-          UIConstants::Artwork::SILENT_LOAD_BATCH_SIZE_DEFAULT),
-      m_lastUserActivity{QDateTime::currentMSecsSinceEpoch()},
-      m_lastBatchCompletionTime{0},
+      currentCollectionIndex(nullptr), stackedWidget(nullptr), itemsPage(nullptr),
+      gridContainer(nullptr), m_timerCoordinator(nullptr), m_silentLoadTimer(nullptr),
+      m_persistentLoadTimer(nullptr), m_cacheTimer(nullptr), m_silentLoadingActive(false),
+      m_silentLoadBatchSize(UIConstants::Artwork::SILENT_LOAD_BATCH_SIZE_DEFAULT),
+      m_lastUserActivity{QDateTime::currentMSecsSinceEpoch()}, m_lastBatchCompletionTime{0},
       m_cancellationRequested(std::make_shared<std::atomic<bool>>(false)),
-      m_continuousSilentLoad(false), m_silentLoadIndex(0),
-      m_persistentSilentLoad(false),
+      m_continuousSilentLoad(false), m_silentLoadIndex(0), m_persistentSilentLoad(false),
       m_adaptiveBatcher(AdaptiveBatcher::Config{
           UIConstants::Artwork::BATCH_HIGH, // initialBatchSize
           2,                                // minBatchSize
@@ -140,10 +130,8 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
           10   // historySize
       }) {
   const int idealThreads = QThread::idealThreadCount();
-  const int base =
-      idealThreads > 0
-          ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
-          : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
+  const int base = idealThreads > 0 ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
+                                    : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
   m_artworkThreadPool = new QThreadPool();
   m_artworkThreadPool->setMaxThreadCount(
       std::clamp(base, UIConstants::Concurrency::WORKER_POOL_MIN_THREADS,
@@ -154,16 +142,14 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
   m_silentLoadTimer = new QTimer(this);
   m_silentLoadTimer->setSingleShot(false);
   m_silentLoadTimer->setInterval(UIConstants::Artwork::SILENT_LOAD_INTERVAL_MS);
-  connect(m_silentLoadTimer, &QTimer::timeout, this,
-          &ArtworkManager::processContinuousSilentLoad);
+  connect(m_silentLoadTimer, &QTimer::timeout, this, &ArtworkManager::processContinuousSilentLoad);
 
   m_cacheTimer = new QTimer(this);
   m_cacheTimer->setObjectName("artCacheTimer");
   m_cacheTimer->setInterval(UIConstants::Cache::SAVE_INTERVAL_MS);
   connect(m_cacheTimer, &QTimer::timeout, this, [this]() {
     if (!QApplication::closingDown() && m_cacheManager) {
-      m_cacheManager->scheduleSaveToDisk(
-          UIConstants::Cache::QUICK_SAVE_DELAY_MS);
+      m_cacheManager->scheduleSaveToDisk(UIConstants::Cache::QUICK_SAVE_DELAY_MS);
     }
   });
   m_cacheTimer->start();
@@ -185,8 +171,7 @@ ArtworkManager::~ArtworkManager() {
     m_artworkThreadPool = nullptr;
   }
 
-  TimerUtils::stopAndDisconnectTimers(
-      {m_cacheTimer, m_silentLoadTimer, m_persistentLoadTimer});
+  TimerUtils::stopAndDisconnectTimers({m_cacheTimer, m_silentLoadTimer, m_persistentLoadTimer});
   if (m_timerCoordinator) {
     m_timerCoordinator->stopAllTimers();
     disconnect(m_timerCoordinator, nullptr, nullptr, nullptr);
@@ -286,19 +271,14 @@ void ArtworkManager::appendArtworkFromDir(const QString &dirPath,
 }
 
 // Sets references used by artwork updates and silent loading
-SETUP_GETTER_DEF_SAME(ArtworkManagerSetup, QStackedWidget *, StackedWidget,
-                      stackedWidget)
+SETUP_GETTER_DEF_SAME(ArtworkManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)
 SETUP_GETTER_DEF_SAME(ArtworkManagerSetup, QWidget *, ItemsPage, itemsPage)
-SETUP_GETTER_DEF_SAME(ArtworkManagerSetup, QWidget *, GridContainer,
-                      gridContainer)
-SETUP_GETTER_DEF_SAME(ArtworkManagerSetup, QScrollArea *, ItemScrollArea,
-                      itemScrollArea)
-SETUP_GETTER_DEF_SAME(ArtworkManagerSetup, QList<CollectionConfig> *,
-                      Collections, collections)
-SETUP_GETTER_DEF_SAME(ArtworkManagerSetup, int *, CurrentCollectionIndex,
-                      currentCollectionIndex)
-SETUP_GETTER_DEF_CTX_ONLY(ArtworkManagerSetup, InteractionStateHolder *,
-                          InteractionState, interactionState)
+SETUP_GETTER_DEF_SAME(ArtworkManagerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_SAME(ArtworkManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_SAME(ArtworkManagerSetup, QList<CollectionConfig> *, Collections, collections)
+SETUP_GETTER_DEF_SAME(ArtworkManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
+SETUP_GETTER_DEF_CTX_ONLY(ArtworkManagerSetup, InteractionStateHolder *, InteractionState,
+                          interactionState)
 
 void ArtworkManager::setupReferences(const ArtworkManagerSetup &setup) {
   stackedWidget = setup.getStackedWidget();
@@ -363,9 +343,8 @@ void ArtworkManager::cancelAllArtworkLoading() {
   // cancellation flag before resetting it for future operations.
   // This delay is chosen to be longer than typical thread scheduling
   // latency but short enough to allow quick successive cancellations.
-  QTimer::singleShot(50, this, [this]() {
-    m_cancellationRequested = std::make_shared<std::atomic<bool>>(false);
-  });
+  QTimer::singleShot(
+      50, this, [this]() { m_cancellationRequested = std::make_shared<std::atomic<bool>>(false); });
 }
 
 // Adds pending artwork request, applying deferral logic based on container
@@ -397,7 +376,7 @@ void ArtworkManager::updateViewportArtwork() {
   }
 
   if (isArtworkSuppressed()) {
-      qCDebug(lcPerfTrace) << "updateViewportArtwork: SUPPRESSED";
+    qCDebug(lcPerfTrace) << "updateViewportArtwork: SUPPRESSED";
     return;
   }
 
@@ -405,8 +384,7 @@ void ArtworkManager::updateViewportArtwork() {
   {
     QMutexLocker locker(&m_dataMutex);
     if (!ui.itemScrollArea || !gridContainer || !stackedWidget ||
-        stackedWidget->currentWidget() != itemsPage ||
-        pendingArtwork.isEmpty()) {
+        stackedWidget->currentWidget() != itemsPage || pendingArtwork.isEmpty()) {
       return;
     }
     localPending = pendingArtwork;
@@ -434,8 +412,7 @@ void ArtworkManager::updateViewportArtwork() {
     pendingArtwork = remainingItems;
   }
 
-  qint64 afterPartition =
-      qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
+  qint64 afterPartition = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
 
   if (!immediateItems.isEmpty()) {
     loadArtworkParallel(immediateItems, true);
@@ -444,11 +421,10 @@ void ArtworkManager::updateViewportArtwork() {
     loadArtworkParallel(extendedItems, true);
   }
 
-    qCDebug(lcPerfTrace) << "updateViewportArtwork: totalMs="
-               << perfTimer.elapsed() << "partitionMs=" << afterPartition
-               << "pending=" << localPending.size()
-               << "immediate=" << immediateItems.size()
-               << "extended=" << extendedItems.size();
+  qCDebug(lcPerfTrace) << "updateViewportArtwork: totalMs=" << perfTimer.elapsed()
+                       << "partitionMs=" << afterPartition << "pending=" << localPending.size()
+                       << "immediate=" << immediateItems.size()
+                       << "extended=" << extendedItems.size();
   // Background precaching disabled - only load visible viewport items
   // to minimize CPU usage when idle
 

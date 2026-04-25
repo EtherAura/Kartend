@@ -7,6 +7,7 @@
 #include "querymanager.h"
 
 #include "loggingcategories.h"
+#include <algorithm>
 #include <QCryptographicHash>
 #include <QElapsedTimer>
 #include <QLoggingCategory>
@@ -14,9 +15,8 @@
 #include <QSqlQuery>
 #include <QString>
 #include <QStringList>
-#include <QTimer>
 #include <QtGlobal>
-#include <algorithm>
+#include <QTimer>
 #include <random>
 
 #include "errorutils.h"
@@ -38,11 +38,10 @@ bool QueryManager::ensureQueryUuidsTempTable() {
   QSqlQuery q(m_db);
   if (!q.exec("CREATE TEMP TABLE IF NOT EXISTS query_uuids (uuid TEXT PRIMARY "
               "KEY)")) {
-    ErrorUtils::logError(
-        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                              "Failed to create query_uuids temp table",
-                              "QueryManager::ensureQueryUuidsTempTable")
-            .withDetails(q.lastError().text()));
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to create query_uuids temp table",
+                                               "QueryManager::ensureQueryUuidsTempTable")
+                             .withDetails(q.lastError().text()));
     return false;
   }
   return true;
@@ -73,8 +72,7 @@ bool QueryManager::populateQueryUuidsTempTable(const QStringList &uuids) {
   // Each row has 1 column, so batch size can be up to 999
   constexpr int BATCH_SIZE = 500;
 
-  for (int batchStart = 0; batchStart < uuids.size();
-       batchStart += BATCH_SIZE) {
+  for (int batchStart = 0; batchStart < uuids.size(); batchStart += BATCH_SIZE) {
     const int batchEnd = qMin(batchStart + BATCH_SIZE, uuids.size());
     const int batchCount = batchEnd - batchStart;
 
@@ -94,11 +92,10 @@ bool QueryManager::populateQueryUuidsTempTable(const QStringList &uuids) {
 
     if (!ins.exec()) {
       m_db.rollback();
-      ErrorUtils::logError(
-          ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                "Failed to populate query_uuids batch",
-                                "QueryManager::populateQueryUuidsTempTable")
-              .withDetails(ins.lastError().text()));
+      ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                                 "Failed to populate query_uuids batch",
+                                                 "QueryManager::populateQueryUuidsTempTable")
+                               .withDetails(ins.lastError().text()));
       return false;
     }
   }
@@ -107,8 +104,7 @@ bool QueryManager::populateQueryUuidsTempTable(const QStringList &uuids) {
   return true;
 }
 
-QString QueryManager::buildUuidFilterClause(const QStringList &uuids,
-                                            bool &useTempTable) {
+QString QueryManager::buildUuidFilterClause(const QStringList &uuids, bool &useTempTable) {
   if (uuids.size() <= MAX_UUIDS_FOR_IN_CLAUSE) {
     // Small enough - use standard IN clause with placeholders
     useTempTable = false;
@@ -120,8 +116,7 @@ QString QueryManager::buildUuidFilterClause(const QStringList &uuids,
   useTempTable = true;
   // For items table: collection_uuid; for items_fts: collection_uuid
   // The caller must use this in an EXISTS clause context
-  return QStringLiteral(
-      "(SELECT 1 FROM query_uuids WHERE query_uuids.uuid = collection_uuid)");
+  return QStringLiteral("(SELECT 1 FROM query_uuids WHERE query_uuids.uuid = collection_uuid)");
 }
 
 QByteArray QueryManager::computeUuidListHash(const QStringList &uuids) {
@@ -149,8 +144,7 @@ bool QueryManager::ensureQueryUuidsPopulated(const QStringList &uuids) {
   // Skip repopulation if hash matches (same UUIDs as last query)
   if (newHash == m_cachedQueryUuidsHash) {
     if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-      qCDebug(lcSearchDiag) << "[RangeDiag] UUID temp table cache HIT, uuids="
-                 << uuids.size();
+      qCDebug(lcSearchDiag) << "[RangeDiag] UUID temp table cache HIT, uuids=" << uuids.size();
     }
     return true;
   }
@@ -158,8 +152,8 @@ bool QueryManager::ensureQueryUuidsPopulated(const QStringList &uuids) {
   QElapsedTimer timer;
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     timer.start();
-    qCDebug(lcSearchDiag) << "[RangeDiag] UUID temp table cache MISS, populating"
-               << uuids.size() << "uuids...";
+    qCDebug(lcSearchDiag) << "[RangeDiag] UUID temp table cache MISS, populating" << uuids.size()
+                          << "uuids...";
   }
 
   if (!populateQueryUuidsTempTable(uuids)) {
@@ -167,8 +161,7 @@ bool QueryManager::ensureQueryUuidsPopulated(const QStringList &uuids) {
   }
 
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-    qCDebug(lcSearchDiag) << "[RangeDiag] UUID temp table populated in" << timer.elapsed()
-               << "ms";
+    qCDebug(lcSearchDiag) << "[RangeDiag] UUID temp table populated in" << timer.elapsed() << "ms";
   }
 
   m_cachedQueryUuidsHash = newHash;
@@ -193,11 +186,10 @@ bool QueryManager::ensureSortedItemsCacheTable() {
               "position INTEGER PRIMARY KEY, "
               "path TEXT NOT NULL, "
               "uuid TEXT NOT NULL)")) {
-    ErrorUtils::logError(
-        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                              "Failed to create sorted_items_cache temp table",
-                              "QueryManager::ensureSortedItemsCacheTable")
-            .withDetails(q.lastError().text()));
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to create sorted_items_cache temp table",
+                                               "QueryManager::ensureSortedItemsCacheTable")
+                             .withDetails(q.lastError().text()));
     return false;
   }
   return true;
@@ -213,8 +205,7 @@ void QueryManager::clearSortedItemsCache() {
   q.exec("DELETE FROM sorted_items_cache");
 }
 
-QByteArray QueryManager::computeSortCacheHash(const QStringList &uuids,
-                                              const QString &filter,
+QByteArray QueryManager::computeSortCacheHash(const QStringList &uuids, const QString &filter,
                                               SortMode sortMode) {
   // Hash of UUIDs + filter + sortMode to detect when cache needs rebuilding
   QByteArray data;
@@ -234,8 +225,7 @@ QByteArray QueryManager::computeSortCacheHash(const QStringList &uuids,
   return QCryptographicHash::hash(data, QCryptographicHash::Md5);
 }
 
-void QueryManager::scheduleDeferredCacheBuild(const QStringList &uuids,
-                                              const QString &filter,
+void QueryManager::scheduleDeferredCacheBuild(const QStringList &uuids, const QString &filter,
                                               SortMode sortMode) {
   // Schedule cache build to run after current event processing completes.
   // This allows the slow-path query to return immediately while the cache
@@ -250,13 +240,12 @@ void QueryManager::scheduleDeferredCacheBuild(const QStringList &uuids,
   m_pendingCacheSortMode = sortMode;
 
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-    qCDebug(lcSearchDiag) << "[RangeDiag] Deferred cache build scheduled for"
-               << uuids.size() << "uuids";
+    qCDebug(lcSearchDiag) << "[RangeDiag] Deferred cache build scheduled for" << uuids.size()
+                          << "uuids";
   }
 
   // Use queued invocation so this runs after the current function returns
-  QMetaObject::invokeMethod(this, &QueryManager::performDeferredCacheBuild,
-                            Qt::QueuedConnection);
+  QMetaObject::invokeMethod(this, &QueryManager::performDeferredCacheBuild, Qt::QueuedConnection);
 }
 
 void QueryManager::performDeferredCacheBuild() {
@@ -268,16 +257,14 @@ void QueryManager::performDeferredCacheBuild() {
     qCDebug(lcSearchDiag) << "[RangeDiag] Starting deferred cache build...";
   }
 
-  (void)populateSortedItemsCache(m_pendingCacheUuids, m_pendingCacheFilter,
-                                 m_pendingCacheSortMode);
+  (void)populateSortedItemsCache(m_pendingCacheUuids, m_pendingCacheFilter, m_pendingCacheSortMode);
 
   m_sortCacheBuildPending = false;
   m_pendingCacheUuids.clear();
   m_pendingCacheFilter.clear();
 }
 
-bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
-                                            const QString &filter,
+bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QString &filter,
                                             SortMode sortMode) {
   if (!m_db.isOpen() || uuids.isEmpty()) {
     return false;
@@ -301,8 +288,8 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     timer.start();
     qCDebug(lcSearchDiag) << "[RangeDiag] Building sorted items cache for" << uuids.size()
-               << "uuids, filter='" << filter
-               << "', sortMode=" << static_cast<int>(sortMode);
+                          << "uuids, filter='" << filter
+                          << "', sortMode=" << static_cast<int>(sortMode);
   }
 
   m_db.transaction();
@@ -327,24 +314,22 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
   }
 
   // For collection sorting, we need to join with collections table
-  bool needsCollectionJoin = (sortMode == SortMode::CollectionAscending ||
-                              sortMode == SortMode::CollectionDescending);
+  bool needsCollectionJoin =
+      (sortMode == SortMode::CollectionAscending || sortMode == SortMode::CollectionDescending);
 
   // When filtering, use FTS to match the semantics of fetchItemCount and the
   // slow-path fetchItemsRange. Mixing FTS-prefix counting with LIKE-substring
   // cache building leaves a count > cache-size mismatch, surfacing as blank
   // placeholder tiles at the tail of the result grid (bd Kartend-m9s).
-  const QString ftsQuery =
-      (m_itemsFtsAvailable && m_itemsFtsReady && !trimmedFilter.isEmpty())
-          ? buildFtsPrefixQuery(trimmedFilter)
-          : QString();
+  const QString ftsQuery = (m_itemsFtsAvailable && m_itemsFtsReady && !trimmedFilter.isEmpty())
+                               ? buildFtsPrefixQuery(trimmedFilter)
+                               : QString();
   const bool useFts = !ftsQuery.isEmpty();
 
   QString sql;
   QString filterClause;
   if (!trimmedFilter.isEmpty() && !useFts) {
-    filterClause =
-        needsCollectionJoin ? " AND i.name LIKE ?" : " AND name LIKE ?";
+    filterClause = needsCollectionJoin ? " AND i.name LIKE ?" : " AND name LIKE ?";
   }
 
   if (useFts) {
@@ -459,11 +444,10 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
 
   if (!selectQuery.exec()) {
     m_db.rollback();
-    ErrorUtils::logError(
-        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                              "Failed to fetch sorted items for cache",
-                              "QueryManager::populateSortedItemsCache")
-            .withDetails(selectQuery.lastError().text()));
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to fetch sorted items for cache",
+                                               "QueryManager::populateSortedItemsCache")
+                             .withDetails(selectQuery.lastError().text()));
     return false;
   }
 
@@ -478,8 +462,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
   if (isRandomSort) {
     // Collect all items for shuffling
     while (selectQuery.next()) {
-      allItems.append({selectQuery.value(0).toString(),
-                       selectQuery.value(1).toString()});
+      allItems.append({selectQuery.value(0).toString(), selectQuery.value(1).toString()});
     }
 
     // Fisher-Yates shuffle
@@ -492,8 +475,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
     }
 
     if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-      qCDebug(lcSearchDiag) << "[RangeDiag] Random sort: shuffled" << allItems.size()
-                 << "items";
+      qCDebug(lcSearchDiag) << "[RangeDiag] Random sort: shuffled" << allItems.size() << "items";
     }
   }
 
@@ -506,11 +488,9 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
   int position = 0;
 
   auto flushBatch = [&]() -> bool {
-    if (paths.isEmpty())
-      return true;
+    if (paths.isEmpty()) return true;
 
-    QString insertSql =
-        "INSERT INTO sorted_items_cache (position, path, uuid) VALUES ";
+    QString insertSql = "INSERT INTO sorted_items_cache (position, path, uuid) VALUES ";
     QStringList placeholders;
     placeholders.reserve(paths.size());
     for (int i = 0; i < paths.size(); ++i) {
@@ -528,11 +508,10 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
     }
 
     if (!ins.exec()) {
-      ErrorUtils::logError(
-          ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                "Failed to insert sorted items cache batch",
-                                "QueryManager::populateSortedItemsCache")
-              .withDetails(ins.lastError().text()));
+      ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                                 "Failed to insert sorted items cache batch",
+                                                 "QueryManager::populateSortedItemsCache")
+                               .withDetails(ins.lastError().text()));
       return false;
     }
 
@@ -583,10 +562,9 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids,
   m_sortedItemsCacheHash = newHash;
 
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
-    qCDebug(lcSearchDiag) << "[RangeDiag] Sorted items cache built:" << position
-               << "items in" << timer.elapsed() << "ms";
+    qCDebug(lcSearchDiag) << "[RangeDiag] Sorted items cache built:" << position << "items in"
+                          << timer.elapsed() << "ms";
   }
 
   return true;
 }
-

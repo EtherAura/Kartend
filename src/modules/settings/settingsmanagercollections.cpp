@@ -22,10 +22,8 @@
 
 namespace {
 
-auto findParentCollectionIndex(const QStringList &parts,
-                               const QString &immediateParentName,
-                               const QList<CollectionConfig> &collections)
-    -> int {
+auto findParentCollectionIndex(const QStringList &parts, const QString &immediateParentName,
+                               const QList<CollectionConfig> &collections) -> int {
   for (int i = 0; i < collections.size(); ++i) {
     if (collections[i].name == immediateParentName) {
       if (parts.size() == 2 && !collections[i].isSubcollection) {
@@ -45,8 +43,7 @@ auto findParentCollectionIndex(const QStringList &parts,
   return -1;
 }
 
-auto processSubcollection(const QString &sectionName,
-                          CollectionConfig &collection,
+auto processSubcollection(const QString &sectionName, CollectionConfig &collection,
                           QList<CollectionConfig> &collections) -> void {
   QStringList parts = sectionName.split('/', Qt::KeepEmptyParts);
   if (parts.size() < 2) {
@@ -54,8 +51,7 @@ auto processSubcollection(const QString &sectionName,
   }
 
   const QString &immediateParentName = parts[parts.size() - 2];
-  int parentIndex =
-      findParentCollectionIndex(parts, immediateParentName, collections);
+  int parentIndex = findParentCollectionIndex(parts, immediateParentName, collections);
 
   if (parentIndex >= 0) {
     collection.parentCollectionIndex = parentIndex;
@@ -66,9 +62,9 @@ auto processSubcollection(const QString &sectionName,
 
 } // namespace
 
-void SettingsManager::finalizeCollections(
-    const QHash<QString, CollectionConfig> &tempCollections,
-    QList<CollectionConfig> &collections, const bool &needsRewrite) const {
+void SettingsManager::finalizeCollections(const QHash<QString, CollectionConfig> &tempCollections,
+                                          QList<CollectionConfig> &collections,
+                                          const bool &needsRewrite) const {
   QStringList sectionNames = tempCollections.keys();
   sectionNames.sort();
 
@@ -97,19 +93,16 @@ void SettingsManager::finalizeCollections(
 
 // Loads collections from config (no automatic default collections; leaves list
 // empty if none)
-void SettingsManager::loadCollections(
-    QList<CollectionConfig> &collections) const {
+void SettingsManager::loadCollections(QList<CollectionConfig> &collections) const {
   collections.clear();
 
-  QSettings settings(SettingsUtils::getConfigPath(),
-                     SettingsUtils::getFormat());
+  QSettings settings(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   QHash<QString, CollectionConfig> tempCollections;
   bool needsRewrite = false;
 
   QStringList groups = settings.childGroups();
   for (const QString &group : groups) {
-    if (group == "General")
-      continue;
+    if (group == "General") continue;
 
     // Convert "Parent > Child" back to "Parent/Child" for internal hierarchy
     // processing
@@ -124,16 +117,11 @@ void SettingsManager::loadCollections(
     config.launchParameters = settings.value("launchParameters").toString();
     config.mediaDirectory = settings.value("mediaDirectory").toString();
     config.artworkDirectory = settings.value("artworkDirectory").toString();
-    config.includeContentSubfolders =
-        settings.value("includeContentSubfolders", false).toBool();
-    config.includeArtworkSubfolders =
-        settings.value("includeArtworkSubfolders", false).toBool();
-    config.showAllSubfolderItems =
-        settings.value("showAllSubfolderItems", false).toBool();
-    config.hideSubfolderTitles =
-        settings.value("hideSubfolderTitles", false).toBool();
-    config.showHiddenFolders =
-        settings.value("showHiddenFolders", false).toBool();
+    config.includeContentSubfolders = settings.value("includeContentSubfolders", false).toBool();
+    config.includeArtworkSubfolders = settings.value("includeArtworkSubfolders", false).toBool();
+    config.showAllSubfolderItems = settings.value("showAllSubfolderItems", false).toBool();
+    config.hideSubfolderTitles = settings.value("hideSubfolderTitles", false).toBool();
+    config.showHiddenFolders = settings.value("showHiddenFolders", false).toBool();
     config.extractArchives = settings.value("extractArchives", false).toBool();
     config.extractedExtension = settings.value("extractedExtension").toString();
     config.collectionIcon = settings.value("collectionIcon").toString();
@@ -151,42 +139,30 @@ void SettingsManager::loadCollections(
 
     config.gridWidth = settings.value("gridWidth", 4).toInt();
     config.sidebarVisible = settings.value("sidebarVisible", false).toBool();
-    config.showAllSubcollectionItems =
-        settings.value("showAllSubcollectionItems", false).toBool();
+    config.showAllSubcollectionItems = settings.value("showAllSubcollectionItems", false).toBool();
     config.horizontalAlignment = CollectionUtils::stringToAlignment(
         settings.value("horizontalAlignment", "center").toString());
-    config.sidebarMode =
-        (settings.value("sidebarMode", "overlay").toString() == "fixed")
-            ? SidebarMode::Expand
-            : SidebarMode::Overlay;
-    config.viewType = CollectionUtils::stringToViewType(
-        settings.value("viewType", "grid").toString());
-    config.hideHorizontalScrollbar =
-        settings.value("hideHorizontalScrollbar", false).toBool();
-    config.hideVerticalScrollbar =
-        settings.value("hideVerticalScrollbar", false).toBool();
+    config.sidebarMode = (settings.value("sidebarMode", "overlay").toString() == "fixed")
+                             ? SidebarMode::Expand
+                             : SidebarMode::Overlay;
+    config.viewType =
+        CollectionUtils::stringToViewType(settings.value("viewType", "grid").toString());
+    config.hideHorizontalScrollbar = settings.value("hideHorizontalScrollbar", false).toBool();
+    config.hideVerticalScrollbar = settings.value("hideVerticalScrollbar", false).toBool();
     config.hideTitles = settings.value("hideTitles", false).toBool();
-    config.hideSubcollectionTitles =
-        settings.value("hideSubcollectionTitles", false).toBool();
+    config.hideSubcollectionTitles = settings.value("hideSubcollectionTitles", false).toBool();
     config.horizontalSpacing =
         settings.value("horizontalSpacing", UIConstants::Grid::SPACING).toInt();
     config.verticalSpacing = settings.value("verticalSpacing", 20).toInt();
-    config.itemWidth =
-        settings.value("itemWidth", UIConstants::Item::DEFAULT_WIDTH).toInt();
-    config.itemHeight =
-        settings.value("itemHeight", UIConstants::Item::DEFAULT_HEIGHT).toInt();
-    config.fontSize =
-        settings.value("fontSize", UIConstants::Item::DEFAULT_FONT_SIZE)
-            .toInt();
+    config.itemWidth = settings.value("itemWidth", UIConstants::Item::DEFAULT_WIDTH).toInt();
+    config.itemHeight = settings.value("itemHeight", UIConstants::Item::DEFAULT_HEIGHT).toInt();
+    config.fontSize = settings.value("fontSize", UIConstants::Item::DEFAULT_FONT_SIZE).toInt();
     config.cornerRadius =
-        settings.value("cornerRadius", UIConstants::Item::DEFAULT_CORNER_RADIUS)
-            .toInt();
+        settings.value("cornerRadius", UIConstants::Item::DEFAULT_CORNER_RADIUS).toInt();
 
     // Background settings
-    QString bgType =
-        settings.value("backgroundType", "color").toString().toLower();
-    config.backgroundType =
-        (bgType == "image") ? BackgroundType::Image : BackgroundType::Color;
+    QString bgType = settings.value("backgroundType", "color").toString().toLower();
+    config.backgroundType = (bgType == "image") ? BackgroundType::Image : BackgroundType::Color;
     config.backgroundColor = settings.value("backgroundColor").toString();
     config.backgroundImage = settings.value("backgroundImage").toString();
     config.primaryColor = settings.value("primaryColor").toString();
@@ -195,12 +171,9 @@ void SettingsManager::loadCollections(
 
     // List mode settings
     config.listFontSize =
-        settings.value("listFontSize", UIConstants::Item::DEFAULT_FONT_SIZE)
-            .toInt();
+        settings.value("listFontSize", UIConstants::Item::DEFAULT_FONT_SIZE).toInt();
     config.listRowHeight =
-        settings
-            .value("listRowHeight", UIConstants::ListView::DEFAULT_ROW_HEIGHT)
-            .toInt();
+        settings.value("listRowHeight", UIConstants::ListView::DEFAULT_ROW_HEIGHT).toInt();
     config.listRowColor = settings.value("listRowColor").toString();
     config.listAltRowColor = settings.value("listAltRowColor").toString();
 
@@ -223,17 +196,14 @@ void SettingsManager::loadCollections(
 }
 
 // Persist collection configurations to disk (no lastSelected_* entries)
-void SettingsManager::saveCollections(
-    const QList<CollectionConfig> &collections) const {
-  QSettings settings(SettingsUtils::getConfigPath(),
-                     SettingsUtils::getFormat());
+void SettingsManager::saveCollections(const QList<CollectionConfig> &collections) const {
+  QSettings settings(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   settings.setAtomicSyncRequired(true);
 
   // Validate path-like settings before persistence to prevent storing
   // potentially dangerous shell metacharacter injections in the config.
   // Empty paths are allowed (some fields are optional).
-  auto sanitizePersistedPath = [&](const QString &value,
-                                   const QString &fieldName,
+  auto sanitizePersistedPath = [&](const QString &value, const QString &fieldName,
                                    const QString &collectionName) -> QString {
     if (value.isEmpty()) {
       return value;
@@ -245,9 +215,8 @@ void SettingsManager::saveCollections(
               ErrorUtils::ErrorCode::InvalidFilePath,
               QString("Refusing to persist insecure %1").arg(fieldName),
               "SettingsManager::saveCollections")
-              .withDetails(
-                  QString("Collection: %1, Value: %2, Reason: %3")
-                      .arg(collectionName, value, security.error().message)));
+              .withDetails(QString("Collection: %1, Value: %2, Reason: %3")
+                               .arg(collectionName, value, security.error().message)));
       return QString();
     }
     return value;
@@ -258,8 +227,7 @@ void SettingsManager::saveCollections(
   QSet<QString> newGroupNames;
 
   for (int i = 0; i < collections.size(); ++i) {
-    QString sectionName =
-        CollectionUtils::hierarchicalNameFor(collections[i], collections);
+    QString sectionName = CollectionUtils::hierarchicalNameFor(collections[i], collections);
     if (!sectionName.isEmpty()) {
       sectionNames.append(sectionName);
       sectionToIndex[sectionName] = i;
@@ -284,6 +252,7 @@ void SettingsManager::saveCollections(
   settings.beginGroup("General");
   settings.setValue("rememberSelection", m_generalSettings.rememberSelection);
   settings.setValue("wrapNavigation", m_generalSettings.wrapNavigation);
+  settings.setValue("selectItemOnHover", m_generalSettings.selectItemOnHover);
   settings.endGroup();
 
   for (const QString &sectionName : sectionNames) {
@@ -296,18 +265,14 @@ void SettingsManager::saveCollections(
 
     settings.beginGroup(iniGroupName);
     settings.setValue("name", c.name);
-    settings.setValue(
-        "launcherPath",
-        sanitizePersistedPath(c.launcherPath, "launcherPath", sectionName));
-    settings.setValue(
-        "corePath", sanitizePersistedPath(c.corePath, "corePath", sectionName));
+    settings.setValue("launcherPath",
+                      sanitizePersistedPath(c.launcherPath, "launcherPath", sectionName));
+    settings.setValue("corePath", sanitizePersistedPath(c.corePath, "corePath", sectionName));
     settings.setValue("launchParameters", c.launchParameters);
-    settings.setValue(
-        "mediaDirectory",
-        sanitizePersistedPath(c.mediaDirectory, "mediaDirectory", sectionName));
+    settings.setValue("mediaDirectory",
+                      sanitizePersistedPath(c.mediaDirectory, "mediaDirectory", sectionName));
     settings.setValue("artworkDirectory",
-                      sanitizePersistedPath(c.artworkDirectory,
-                                            "artworkDirectory", sectionName));
+                      sanitizePersistedPath(c.artworkDirectory, "artworkDirectory", sectionName));
     settings.setValue("includeContentSubfolders", c.includeContentSubfolders);
     settings.setValue("includeArtworkSubfolders", c.includeArtworkSubfolders);
     settings.setValue("showAllSubfolderItems", c.showAllSubfolderItems);
@@ -320,13 +285,10 @@ void SettingsManager::saveCollections(
     settings.setValue("gridWidth", c.gridWidth);
     settings.setValue("sidebarVisible", c.sidebarVisible);
     settings.setValue("showAllSubcollectionItems", c.showAllSubcollectionItems);
-    settings.setValue("horizontalAlignment", CollectionUtils::alignmentToString(
-                                                 c.horizontalAlignment));
-    settings.setValue("sidebarMode", (c.sidebarMode == SidebarMode::Expand)
-                                         ? "fixed"
-                                         : "overlay");
-    settings.setValue("viewType",
-                      CollectionUtils::viewTypeToString(c.viewType));
+    settings.setValue("horizontalAlignment",
+                      CollectionUtils::alignmentToString(c.horizontalAlignment));
+    settings.setValue("sidebarMode", (c.sidebarMode == SidebarMode::Expand) ? "fixed" : "overlay");
+    settings.setValue("viewType", CollectionUtils::viewTypeToString(c.viewType));
     settings.setValue("hideHorizontalScrollbar", c.hideHorizontalScrollbar);
     settings.setValue("hideVerticalScrollbar", c.hideVerticalScrollbar);
     settings.setValue("hideTitles", c.hideTitles);
@@ -338,12 +300,10 @@ void SettingsManager::saveCollections(
     settings.setValue("fontSize", c.fontSize);
     settings.setValue("cornerRadius", c.cornerRadius);
     settings.setValue("backgroundType",
-                      (c.backgroundType == BackgroundType::Image) ? "image"
-                                                                  : "color");
+                      (c.backgroundType == BackgroundType::Image) ? "image" : "color");
     settings.setValue("backgroundColor", c.backgroundColor);
     settings.setValue("backgroundImage",
-                      sanitizePersistedPath(c.backgroundImage,
-                                            "backgroundImage", sectionName));
+                      sanitizePersistedPath(c.backgroundImage, "backgroundImage", sectionName));
     settings.setValue("primaryColor", c.primaryColor);
     settings.setValue("tileColor", c.tileColor);
     settings.setValue("selectionColor", c.selectionColor);
@@ -361,12 +321,11 @@ void SettingsManager::saveCollections(
   settings.sync();
 
   if (settings.status() != QSettings::NoError) {
-    ErrorUtils::logError(
-        ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
-                                          "Failed to persist settings",
-                                          "SettingsManager::saveCollections")
-            .withDetails(QString("Path: %1, Status: %2")
-                             .arg(SettingsUtils::getConfigPath())
-                             .arg(static_cast<int>(settings.status()))));
+    ErrorUtils::logError(ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                                           "Failed to persist settings",
+                                                           "SettingsManager::saveCollections")
+                             .withDetails(QString("Path: %1, Status: %2")
+                                              .arg(SettingsUtils::getConfigPath())
+                                              .arg(static_cast<int>(settings.status()))));
   }
 }

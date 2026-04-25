@@ -5,11 +5,9 @@
 #include <QScrollArea>
 #include <QScrollBar>
 
-PreSearchStateManager::PreSearchStateManager(QObject *parent)
-    : QObject(parent) {}
+PreSearchStateManager::PreSearchStateManager(QObject *parent) : QObject(parent) {}
 
-void PreSearchStateManager::setReferences(QScrollArea *scrollArea,
-                                          QWidget *gridContainer) {
+void PreSearchStateManager::setReferences(QScrollArea *scrollArea, QWidget *gridContainer) {
   m_scrollArea = scrollArea;
   m_gridContainer = gridContainer;
 }
@@ -39,10 +37,11 @@ bool PreSearchStateManager::saveState(QHash<int, ItemWidget *> &activeWidgets) {
   return true;
 }
 
-bool PreSearchStateManager::restoreState(
-    QHash<int, ItemWidget *> &activeWidgets, QWidget *virtualContainer,
-    WidgetPoolManager *widgetPool, ArtworkManager *artworkManager,
-    std::function<QPoint(int)> getPositionFunc, int itemWidth, int itemHeight) {
+bool PreSearchStateManager::restoreState(QHash<int, ItemWidget *> &activeWidgets,
+                                         QWidget *virtualContainer, WidgetPoolManager *widgetPool,
+                                         ArtworkManager *artworkManager,
+                                         std::function<QPoint(int)> getPositionFunc, int itemWidth,
+                                         int itemHeight) {
 
   if (m_savedWidgets.isEmpty()) {
     return false;
@@ -66,8 +65,7 @@ bool PreSearchStateManager::restoreState(
   for (auto it = activeWidgets.begin(); it != activeWidgets.end(); ++it) {
     if (ItemWidget *widget = it.value()) {
       widget->hide();
-      widget->setParent(
-          nullptr); // Orphan before delete to ensure immediate removal
+      widget->setParent(nullptr); // Orphan before delete to ensure immediate removal
       delete widget;
     }
   }
@@ -76,8 +74,7 @@ bool PreSearchStateManager::restoreState(
   // Also delete any ItemWidget children of the virtual container that might
   // not be tracked in activeWidgets (e.g., orphaned widgets from pool)
   if (virtualContainer) {
-    QList<ItemWidget *> orphanedWidgets =
-        virtualContainer->findChildren<ItemWidget *>();
+    QList<ItemWidget *> orphanedWidgets = virtualContainer->findChildren<ItemWidget *>();
     for (ItemWidget *widget : orphanedWidgets) {
       widget->hide();
       widget->setParent(nullptr);

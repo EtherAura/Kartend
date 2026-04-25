@@ -1,8 +1,8 @@
 #ifndef DATASOURCEMANAGER_H
 #define DATASOURCEMANAGER_H
 
-#include <QObject>
 #include <memory>
+#include <QObject>
 
 class FilterManager;
 class ScrollDataManager;
@@ -38,12 +38,8 @@ public:
   // Sub-object access (raw, non-owning pointers)
   // ─────────────────────────────────────────────────────────────────────
 
-  [[nodiscard]] FilterManager *filterManager() const {
-    return m_filterManager.get();
-  }
-  [[nodiscard]] ScrollDataManager *dataManager() const {
-    return m_dataManager.get();
-  }
+  [[nodiscard]] FilterManager *filterManager() const { return m_filterManager.get(); }
+  [[nodiscard]] ScrollDataManager *dataManager() const { return m_dataManager.get(); }
   [[nodiscard]] PreSearchStateManager *preSearchStateManager() const {
     return m_preSearchStateManager.get();
   }

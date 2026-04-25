@@ -1,10 +1,10 @@
 // Handles search bar logic, search modes, and query debouncing for item
 // filtering.
 #include "searchmanager.h"
-#include "loggingcategories.h"
 #include "applicationcontext.h"
 #include "databasemanager.h"
 #include "interactionstateholder.h"
+#include "loggingcategories.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
 #include "searchhelpers.h"
@@ -23,42 +23,33 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSearchManager, "kartend.searchmanager")
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcSearchManager().isDebugEnabled()) {                                  \
-      qCDebug(lcSearchManager) << msg;                                         \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcSearchManager().isDebugEnabled()) {                                                      \
+      qCDebug(lcSearchManager) << msg;                                                             \
+    }                                                                                              \
   } while (0)
 
 // SearchManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, DatabaseManager *, DatabaseManager,
-                      databaseManager)
-SETUP_GETTER_DEF_CTX_ONLY(SearchManagerSetup, InteractionStateHolder *,
-                          InteractionState, interactionState)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, NavigationManager *,
-                      NavigationManager, navigationManager)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, ScrollManager *, ScrollManager,
-                      scrollManager)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, SettingsManager *, SettingsManager,
-                      settingsManager)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, DatabaseManager *, DatabaseManager, databaseManager)
+SETUP_GETTER_DEF_CTX_ONLY(SearchManagerSetup, InteractionStateHolder *, InteractionState,
+                          interactionState)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, NavigationManager *, NavigationManager, navigationManager)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, SettingsManager *, SettingsManager, settingsManager)
 SETUP_GETTER_DEF_SAME(SearchManagerSetup, QLineEdit *, SearchBar, searchBar)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QPushButton *, SearchModeButton,
-                      searchModeButton)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QScrollArea *, ItemScrollArea,
-                      itemScrollArea)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QStackedWidget *, StackedWidget,
-                      stackedWidget)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, QPushButton *, SearchModeButton, searchModeButton)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)
 SETUP_GETTER_DEF_SAME(SearchManagerSetup, QWidget *, ItemsPage, itemsPage)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QList<CollectionConfig> *,
-                      Collections, collections)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, int *, CurrentCollectionIndex,
-                      currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, const CollectionHierarchyCache *,
-                      HierarchyCache, hierarchyCache)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, QList<CollectionConfig> *, Collections, collections)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
+SETUP_GETTER_DEF_SAME(SearchManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
+                      hierarchyCache)
 
 SearchManager::SearchManager(QObject *parent) : QObject(parent) {
-  m_searchDebounceTimer = new TimerUtils::DebouncedTimer(
-      UIConstants::Search::DEBOUNCE_DELAY_MS, this);
+  m_searchDebounceTimer =
+      new TimerUtils::DebouncedTimer(UIConstants::Search::DEBOUNCE_DELAY_MS, this);
   connect(m_searchDebounceTimer, &TimerUtils::DebouncedTimer::triggered, this,
           &SearchManager::performDebouncedSearch);
 }
@@ -124,8 +115,7 @@ void SearchManager::updateSearchModeButton() {
     tip = "Search: Current collection";
     break;
   case SearchMode::CurrentAndSubcollections:
-    icon = UIConstants::Icons::fromTheme(
-        UIConstants::Icons::SEARCH_SUBCOLLECTIONS);
+    icon = UIConstants::Icons::fromTheme(UIConstants::Icons::SEARCH_SUBCOLLECTIONS);
     tip = "Search: Current + subcollections";
     break;
   case SearchMode::AllCollections:
@@ -137,8 +127,7 @@ void SearchManager::updateSearchModeButton() {
   m_searchModeButton->setText(QString());
   if (!icon.isNull()) {
     m_searchModeButton->setIcon(icon);
-    m_searchModeButton->setIconSize(
-        QSize(kSearchIconSizePx, kSearchIconSizePx));
+    m_searchModeButton->setIconSize(QSize(kSearchIconSizePx, kSearchIconSizePx));
   } else {
     m_searchModeButton->setIcon(QIcon());
   }
@@ -169,8 +158,7 @@ void SearchManager::updateSearchBarPlaceholder() {
   m_searchBar->setFont(searchFont);
 
   QPalette pal = m_searchBar->palette();
-  QColor placeholderColor =
-      QApplication::palette(m_searchBar).color(QPalette::PlaceholderText);
+  QColor placeholderColor = QApplication::palette(m_searchBar).color(QPalette::PlaceholderText);
   constexpr qreal kPlaceholderAlpha = 0.6;
   placeholderColor.setAlphaF(kPlaceholderAlpha);
   pal.setColor(QPalette::PlaceholderText, placeholderColor);
@@ -189,8 +177,7 @@ void SearchManager::initializeSearchModeForCurrentCollection() {
   bool mustReset = (m_currentSearchMode == SearchMode::AllCollections);
   bool invalid = !allowed.contains(m_currentSearchMode);
 
-  SearchMode desired =
-      (mustReset || invalid) ? defaultMode : m_currentSearchMode;
+  SearchMode desired = (mustReset || invalid) ? defaultMode : m_currentSearchMode;
 
   if (desired != m_currentSearchMode) {
     m_currentSearchMode = desired;
@@ -204,8 +191,7 @@ void SearchManager::initializeSearchModeForCurrentCollection() {
 SearchContext SearchManager::computeSearchContext() const {
   SearchContext ctx{};
 
-  const int collIndex =
-      (m_currentCollectionIndex) ? *m_currentCollectionIndex : -1;
+  const int collIndex = (m_currentCollectionIndex) ? *m_currentCollectionIndex : -1;
   if (!m_collections || collIndex < 0 || collIndex >= m_collections->size()) {
     return ctx;
   }
@@ -229,15 +215,10 @@ SearchContext SearchManager::computeSearchContext() const {
   return ctx;
 }
 
-QVector<SearchMode>
-SearchManager::buildSearchModeCycle(const SearchContext &ctx) const {
-  const int collIndex =
-      ((m_currentCollectionIndex) ? *m_currentCollectionIndex : -1);
-  const bool valid =
-      ((m_collections) && collIndex >= 0 && collIndex < m_collections->size());
-  const bool isRoot =
-      valid ? ((*m_collections)[collIndex].parentCollectionIndex == -1)
-            : false;
+QVector<SearchMode> SearchManager::buildSearchModeCycle(const SearchContext &ctx) const {
+  const int collIndex = ((m_currentCollectionIndex) ? *m_currentCollectionIndex : -1);
+  const bool valid = ((m_collections) && collIndex >= 0 && collIndex < m_collections->size());
+  const bool isRoot = valid ? ((*m_collections)[collIndex].parentCollectionIndex == -1) : false;
   return SearchHelpers::buildSearchModeCycle(ctx, isRoot);
 }
 
@@ -253,8 +234,7 @@ bool SearchManager::hasDirectItemsForIndex(int idx) const {
     // For now, use filesystem check as fallback
   }
 
-  QString mediaDir = SettingsUtils::expandConfigVariables(
-      collCfg.mediaDirectory, collCfg.name);
+  QString mediaDir = SettingsUtils::expandConfigVariables(collCfg.mediaDirectory, collCfg.name);
   if (mediaDir.trimmed().isEmpty()) {
     return false;
   }
@@ -262,21 +242,16 @@ bool SearchManager::hasDirectItemsForIndex(int idx) const {
   if (!dir.exists()) {
     return false;
   }
-  const QStringList filters =
-      collCfg.extensions.isEmpty() ? QStringList() : collCfg.extensions;
-  const QStringList files = filters.isEmpty()
-                                ? dir.entryList(QDir::Files)
-                                : dir.entryList(filters, QDir::Files);
+  const QStringList filters = collCfg.extensions.isEmpty() ? QStringList() : collCfg.extensions;
+  const QStringList files =
+      filters.isEmpty() ? dir.entryList(QDir::Files) : dir.entryList(filters, QDir::Files);
   return !files.isEmpty();
 }
 
-bool SearchManager::allowAllFor(const CollectionConfig &cfg, int collIndex,
-                                bool hasSubs) const {
+bool SearchManager::allowAllFor(const CollectionConfig &cfg, int collIndex, bool hasSubs) const {
   if (!m_collections) {
     return false;
   }
-  return SearchHelpers::allowAllFor(
-      cfg, collIndex, hasSubs, *m_collections,
-      [this](int i) { return hasDirectItemsForIndex(i); });
+  return SearchHelpers::allowAllFor(cfg, collIndex, hasSubs, *m_collections,
+                                    [this](int i) { return hasDirectItemsForIndex(i); });
 }
-

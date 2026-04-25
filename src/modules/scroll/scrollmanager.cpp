@@ -1,7 +1,6 @@
 // Manages virtual scrolling, widget pooling, and grid layout for large item
 // collections.
 #include "scrollmanager.h"
-#include "loggingcategories.h"
 #include "applicationcontext.h"
 #include "arrowkeyscrollhelper.h"
 #include "artworkmanager.h"
@@ -16,6 +15,7 @@
 #include "itemwidget.h"
 #include "itemwidgetfactory.h"
 #include "listheaderwidget.h"
+#include "loggingcategories.h"
 #include "presearchstatemanager.h"
 #include "scrolldatamanager.h"
 #include "scrolleventhandler.h"
@@ -28,6 +28,7 @@
 #include "uiconstants.h"
 #include "virtualcontainermanager.h"
 #include "widgetpoolmanager.h"
+#include <algorithm>
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
@@ -42,17 +43,16 @@
 #include <QThreadPool>
 #include <QTimer>
 #include <QWidget>
-#include <algorithm>
 
 #include <QtGlobal>
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcScrollManager, "kartend.scrollmanager")
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcScrollManager().isDebugEnabled()) {                                  \
-      qCDebug(lcScrollManager) << msg;                                         \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcScrollManager().isDebugEnabled()) {                                                      \
+      qCDebug(lcScrollManager) << msg;                                                             \
+    }                                                                                              \
   } while (0)
 
 // Initializes timers for throttle, arrow-key updates, and a short idle window
@@ -78,41 +78,34 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   m_selectionState = m_selectionDisplay->state();
 
   // Forward list-mode signals from display manager out through ScrollManager.
-  connect(m_selectionDisplay.get(),
-          &SelectionDisplayManager::sortModeChangeRequested, this,
+  connect(m_selectionDisplay.get(), &SelectionDisplayManager::sortModeChangeRequested, this,
           &ScrollManager::sortModeChangeRequested);
-  connect(m_selectionDisplay.get(),
-          &SelectionDisplayManager::listColumnWidthChanged, this,
+  connect(m_selectionDisplay.get(), &SelectionDisplayManager::listColumnWidthChanged, this,
           &ScrollManager::listColumnWidthChanged);
-  connect(m_selectionDisplay.get(),
-          &SelectionDisplayManager::listArtworkColumnWidthChanged, this,
+  connect(m_selectionDisplay.get(), &SelectionDisplayManager::listArtworkColumnWidthChanged, this,
           &ScrollManager::listArtworkColumnWidthChanged);
 
-  connect(m_overlayManager, &SelectionOverlayManager::animationFinished, this,
-          [this]() {
-            // Update widget selection states when animation finishes
-            if (m_selectionState->needsCommitUpdate(
-                    m_selectionState->lastSelectedIndex())) {
-              if (auto *prevSel = m_activeWidgets.value(
-                      m_selectionState->committedSelectedIndex(), nullptr)) {
-                prevSel->setSelected(false);
-              }
-            }
-            if (auto *newSel = m_activeWidgets.value(
-                    m_selectionState->lastSelectedIndex(), nullptr)) {
-              newSel->setSelected(true);
-            }
-            m_selectionState->commitSelection(
-                m_selectionState->lastSelectedIndex());
+  connect(m_overlayManager, &SelectionOverlayManager::animationFinished, this, [this]() {
+    // Update widget selection states when animation finishes
+    if (m_selectionState->needsCommitUpdate(m_selectionState->lastSelectedIndex())) {
+      if (auto *prevSel =
+              m_activeWidgets.value(m_selectionState->committedSelectedIndex(), nullptr)) {
+        prevSel->setSelected(false);
+      }
+    }
+    if (auto *newSel = m_activeWidgets.value(m_selectionState->lastSelectedIndex(), nullptr)) {
+      newSel->setSelected(true);
+    }
+    m_selectionState->commitSelection(m_selectionState->lastSelectedIndex());
 
-            // Hide overlay if not in force-visible mode
-            if (!m_overlayManager->shouldKeepVisible()) {
-              m_overlayManager->hide();
-            } else {
-              m_overlayManager->raise();
-            }
-            updateVirtualView();
-          });
+    // Hide overlay if not in force-visible mode
+    if (!m_overlayManager->shouldKeepVisible()) {
+      m_overlayManager->hide();
+    } else {
+      m_overlayManager->raise();
+    }
+    updateVirtualView();
+  });
 
   // SearchLoadingOverlay is now owned by m_dataSource (Kartend-gg2).
 
@@ -128,31 +121,29 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   m_scrollEventHandler = std::make_unique<ScrollEventHandler>(this);
   connect(m_scrollEventHandler.get(), &ScrollEventHandler::scrollChanged, this,
           &ScrollManager::onScrollChanged);
-  connect(m_scrollEventHandler.get(), &ScrollEventHandler::userScrollEnded,
-          this, &ScrollManager::updateVirtualView);
+  connect(m_scrollEventHandler.get(), &ScrollEventHandler::userScrollEnded, this,
+          &ScrollManager::updateVirtualView);
   connect(m_scrollEventHandler.get(), &ScrollEventHandler::sliderMoved, this,
           &ScrollManager::onSliderMoved);
 
   // Item widget factory for creating and configuring widgets
   m_widgetFactory = std::make_unique<ItemWidgetFactory>(this);
   m_widgetFactory->setWidgetPool(m_widgetPool.get());
-  connect(m_widgetFactory.get(), &ItemWidgetFactory::subcollectionDoubleClicked,
-          this, &ScrollManager::onSubcollectionDoubleClicked);
-  connect(m_widgetFactory.get(), &ItemWidgetFactory::virtualFolderDoubleClicked,
-          this, &ScrollManager::onVirtualFolderDoubleClicked);
+  connect(m_widgetFactory.get(), &ItemWidgetFactory::subcollectionDoubleClicked, this,
+          &ScrollManager::onSubcollectionDoubleClicked);
+  connect(m_widgetFactory.get(), &ItemWidgetFactory::virtualFolderDoubleClicked, this,
+          &ScrollManager::onVirtualFolderDoubleClicked);
   connect(m_widgetFactory.get(), &ItemWidgetFactory::requestItemsRange, this,
           [this](int offset, int limit) {
             debugLog("requestItemsRange: offset="
-                     << offset << "limit=" << limit
-                     << "totalItems=" << m_totalItems << "mediaFileCount="
-                     << (m_dataManager ? m_dataManager->fileCount() : -1));
+                     << offset << "limit=" << limit << "totalItems=" << m_totalItems
+                     << "mediaFileCount=" << (m_dataManager ? m_dataManager->fileCount() : -1));
             emit requestItemsRange(offset, limit);
           });
 
   // Arrow key scroll helper for centering animation
   m_arrowKeyScrollHelper = std::make_unique<ArrowKeyScrollHelper>(this);
-  connect(m_arrowKeyScrollHelper.get(),
-          &ArrowKeyScrollHelper::requestViewUpdate, this,
+  connect(m_arrowKeyScrollHelper.get(), &ArrowKeyScrollHelper::requestViewUpdate, this,
           &ScrollManager::updateVirtualView);
 
   // ScrollDataManager and PreSearchStateManager are now owned by m_dataSource
@@ -166,44 +157,38 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   m_scrollTimer = new QTimer(this);
   m_scrollTimer->setSingleShot(true);
   m_scrollTimer->setInterval(UIConstants::Timing::SCROLL_THROTTLE_DELAY_MS);
-  connect(m_scrollTimer, &QTimer::timeout, this,
-          &ScrollManager::onThrottledUpdate);
+  connect(m_scrollTimer, &QTimer::timeout, this, &ScrollManager::onThrottledUpdate);
 
   // Arrow key view update timer - delegates to helper
   m_arrowKeyViewUpdateTimer = new QTimer(this);
   m_arrowKeyViewUpdateTimer->setSingleShot(true);
-  m_arrowKeyViewUpdateTimer->setInterval(
-      UIConstants::Keyboard::VIEW_UPDATE_INTERVAL_MS);
-  connect(m_arrowKeyViewUpdateTimer, &QTimer::timeout, this,
-          &ScrollManager::onArrowKeyViewUpdate);
+  m_arrowKeyViewUpdateTimer->setInterval(UIConstants::Keyboard::VIEW_UPDATE_INTERVAL_MS);
+  connect(m_arrowKeyViewUpdateTimer, &QTimer::timeout, this, &ScrollManager::onArrowKeyViewUpdate);
 
   // Debounce timer - restarts on each trigger, fires after inactivity
-  m_userScrollIdleTimer = new TimerUtils::DebouncedTimer(
-      UIConstants::Mouse::USER_SCROLL_IDLE_TIMER_MS, this);
-  connect(m_userScrollIdleTimer, &TimerUtils::DebouncedTimer::triggered, this,
-          [this]() {
-            if (m_scrollEventHandler) {
-              m_scrollEventHandler->setUserScrollActive(false);
-            }
-          });
+  m_userScrollIdleTimer =
+      new TimerUtils::DebouncedTimer(UIConstants::Mouse::USER_SCROLL_IDLE_TIMER_MS, this);
+  connect(m_userScrollIdleTimer, &TimerUtils::DebouncedTimer::triggered, this, [this]() {
+    if (m_scrollEventHandler) {
+      m_scrollEventHandler->setUserScrollActive(false);
+    }
+  });
 
   // Prewarm timer - replenishes widget pool after scroll activity settles
-  m_prewarmIdleTimer = new TimerUtils::DebouncedTimer(
-      UIConstants::Widget::Pool::PREWARM_IDLE_MS, this);
-  connect(
-      m_prewarmIdleTimer, &TimerUtils::DebouncedTimer::triggered, this,
-      [this]() {
-        if (m_widgetPool) {
-          // Prune stale widgets that weren't reused during collection switch
-          // This reclaims memory from the soft-cleared pool
-          m_widgetPool->pruneStaleWidgets();
+  m_prewarmIdleTimer =
+      new TimerUtils::DebouncedTimer(UIConstants::Widget::Pool::PREWARM_IDLE_MS, this);
+  connect(m_prewarmIdleTimer, &TimerUtils::DebouncedTimer::triggered, this, [this]() {
+    if (m_widgetPool) {
+      // Prune stale widgets that weren't reused during collection switch
+      // This reclaims memory from the soft-cleared pool
+      m_widgetPool->pruneStaleWidgets();
 
-          int visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1;
-          m_widgetPool->setVisibleMetrics(visibleRows, m_metrics.itemsPerRow);
-          // Use async prewarm to avoid blocking UI during idle replenishment
-          m_widgetPool->prewarmAsync();
-        }
-      });
+      int visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1;
+      m_widgetPool->setVisibleMetrics(visibleRows, m_metrics.itemsPerRow);
+      // Use async prewarm to avoid blocking UI during idle replenishment
+      m_widgetPool->prewarmAsync();
+    }
+  });
 }
 
 // Destructor disconnects scroll events, clears timers, deletes widgets and
@@ -212,8 +197,7 @@ ScrollManager::~ScrollManager() {
   m_destroying = true;
   disconnectScrollEvents();
 
-  TimerUtils::stopAndDisconnectTimers(
-      {m_scrollTimer, m_arrowKeyViewUpdateTimer});
+  TimerUtils::stopAndDisconnectTimers({m_scrollTimer, m_arrowKeyViewUpdateTimer});
 
   for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
     if (ItemWidget *widget = it.value()) {
@@ -271,21 +255,17 @@ void ScrollManager::releaseWidget(ItemWidget *widget) {
 }
 
 // ScrollManagerSetup getter definitions (all resolve through ApplicationContext)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, QWidget *, GridContainer,
-                          gridContainer)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, QScrollArea *, MediaScrollArea,
-                          itemScrollArea)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, ArtworkManager *, ArtworkManager,
-                          artworkManager)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, const QList<CollectionConfig> *,
-                          Collections, collections)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup,
-                          const CollectionHierarchyCache *, HierarchyCache,
+SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, QScrollArea *, MediaScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, const QList<CollectionConfig> *, Collections,
+                          collections)
+SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
                           hierarchyCache)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, InteractionStateHolder *,
-                          InteractionState, interactionState)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, const GeneralSettings *,
-                          GeneralSettings, generalSettings)
+SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, InteractionStateHolder *, InteractionState,
+                          interactionState)
+SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, const GeneralSettings *, GeneralSettings,
+                          generalSettings)
 
 void ScrollManager::updateViewType(ViewType viewType) {
   if (m_context.config.viewType == viewType) {
@@ -323,8 +303,7 @@ void ScrollManager::updateGridWidth(int newGridWidth) {
       continue;
     }
     QPoint position = getItemPosition(it.key());
-    widget->setGeometry(position.x(), position.y(), m_metrics.itemWidth,
-                        m_metrics.itemHeight);
+    widget->setGeometry(position.x(), position.y(), m_metrics.itemWidth, m_metrics.itemHeight);
   }
   updateVirtualView();
 }
@@ -341,8 +320,8 @@ auto ScrollManager::getFirstVisibleRow() const -> int {
   }
   int scrollY = m_mediaScrollArea->verticalScrollBar()->value();
   int viewportHeight = m_mediaScrollArea->viewport()->height();
-  auto [firstRow, lastRow] = GridLayoutCalculator::getVisibleRowRange(
-      scrollY, viewportHeight, m_metrics, 0);
+  auto [firstRow, lastRow] =
+      GridLayoutCalculator::getVisibleRowRange(scrollY, viewportHeight, m_metrics, 0);
   return firstRow;
 }
 
@@ -352,15 +331,13 @@ auto ScrollManager::getLastVisibleRow() const -> int {
   }
   int scrollY = m_mediaScrollArea->verticalScrollBar()->value();
   int viewportHeight = m_mediaScrollArea->viewport()->height();
-  auto [firstRow, lastRow] = GridLayoutCalculator::getVisibleRowRange(
-      scrollY, viewportHeight, m_metrics, 0);
+  auto [firstRow, lastRow] =
+      GridLayoutCalculator::getVisibleRowRange(scrollY, viewportHeight, m_metrics, 0);
   return lastRow;
 }
 
-auto ScrollManager::getSubcollectionName(int subcollectionIndex) const
-    -> QString {
-  if ((!m_collections) || subcollectionIndex < 0 ||
-      subcollectionIndex >= m_collections->size()) {
+auto ScrollManager::getSubcollectionName(int subcollectionIndex) const -> QString {
+  if ((!m_collections) || subcollectionIndex < 0 || subcollectionIndex >= m_collections->size()) {
     return {};
   }
   return (*m_collections)[subcollectionIndex].name;
@@ -379,8 +356,7 @@ void ScrollManager::setPendingSelectionRestoreByPath(const QString &filePath) {
   m_pendingRestoreFilePath = filePath;
 }
 
-void ScrollManager::onVisualIndexForPathLoaded(int visualIndex,
-                                               const QString &filePath) {
+void ScrollManager::onVisualIndexForPathLoaded(int visualIndex, const QString &filePath) {
   // Only process if this is the path we're waiting for
   if (filePath != m_pendingRestoreFilePath) {
     return;
@@ -392,9 +368,9 @@ void ScrollManager::onVisualIndexForPathLoaded(int visualIndex,
     // The database returns position among media items only. In the UI,
     // subcollections and virtual folders appear before media items,
     // so we need to offset the index accordingly.
-    int prefixCount = m_dataManager ? (m_dataManager->subcollectionCount() +
-                                       m_dataManager->virtualFolderCount())
-                                    : 0;
+    int prefixCount =
+        m_dataManager ? (m_dataManager->subcollectionCount() + m_dataManager->virtualFolderCount())
+                      : 0;
     int adjustedIndex = visualIndex + prefixCount;
     emit selectItemByIndex(adjustedIndex);
   }
@@ -408,7 +384,9 @@ bool ScrollManager::hideArtworkPreview() {
   return m_selectionDisplay && m_selectionDisplay->hideArtworkPreview();
 }
 
-void ScrollManager::recenterVirtualContainer() { positionVirtualContainer(); }
+void ScrollManager::recenterVirtualContainer() {
+  positionVirtualContainer();
+}
 
 auto ScrollManager::getCurrentAlignment() const -> HorizontalAlignment {
   if ((!m_collections) || m_context.currentIndex < 0 ||
@@ -417,7 +395,6 @@ auto ScrollManager::getCurrentAlignment() const -> HorizontalAlignment {
   }
   return (*m_collections)[m_context.currentIndex].horizontalAlignment;
 }
-
 
 auto ScrollManager::getScrollbarWidth() const -> int {
   if (!m_mediaScrollArea) {
@@ -445,7 +422,9 @@ auto ScrollManager::willNeedVerticalScrollbar() const -> bool {
   return m_metrics.totalHeight > m_mediaScrollArea->viewport()->height();
 }
 
-auto ScrollManager::getTotalItems() const -> int { return m_totalItems; }
+auto ScrollManager::getTotalItems() const -> int {
+  return m_totalItems;
+}
 
 void ScrollManager::notifyUserActivity() {
   if (m_artworkManager) {
@@ -462,8 +441,7 @@ auto ScrollManager::getEffectiveViewportWidth() const -> int {
     return 0;
   }
   int viewportWidth = m_mediaScrollArea->viewport()->width();
-  return qMax(UIConstants::Scroll::MIN_EFFECTIVE_VIEWPORT_WIDTH,
-              viewportWidth);
+  return qMax(UIConstants::Scroll::MIN_EFFECTIVE_VIEWPORT_WIDTH, viewportWidth);
 }
 
 void ScrollManager::updateListHeader() {
@@ -475,8 +453,7 @@ void ScrollManager::updateListHeader() {
 }
 
 // Forwarder: artwork preview overlay lives on SelectionDisplayManager.
-void ScrollManager::onArtworkPreviewRequested(const QString &filePath,
-                                              const QString &artworkDir) {
+void ScrollManager::onArtworkPreviewRequested(const QString &filePath, const QString &artworkDir) {
   if (m_selectionDisplay) {
     m_selectionDisplay->showArtworkPreview(filePath, artworkDir);
   }
@@ -486,8 +463,8 @@ void ScrollManager::onArtworkPreviewRequested(const QString &filePath,
 // Creates and positions widget for given visual index, handling both
 auto ScrollManager::getItemPosition(int visualIndex) const -> QPoint {
   bool isFiltered = m_filterManager && m_filterManager->isFiltered();
-  QPoint pos = GridLayoutCalculator::getItemPosition(visualIndex, m_metrics,
-                                                     isFiltered, m_totalItems);
+  QPoint pos =
+      GridLayoutCalculator::getItemPosition(visualIndex, m_metrics, isFiltered, m_totalItems);
 
   // For very large grids that exceed Qt's size limit, position widgets
   // relative to the viewport. The scrollbar is in clamped (widget) space,
@@ -498,8 +475,7 @@ auto ScrollManager::getItemPosition(int visualIndex) const -> QPoint {
     int viewportHeight = m_mediaScrollArea->viewport()->height();
     // Convert clamped scroll position to logical scroll position with viewport
     // for precise endpoint mapping (scrollbar max reaches end of collection)
-    int logicalScrollY =
-        m_metrics.toLogicalScrollY(widgetScrollY, viewportHeight);
+    int logicalScrollY = m_metrics.toLogicalScrollY(widgetScrollY, viewportHeight);
     // Widget appears at (logicalY - logicalScrollY) pixels from viewport top,
     // which means placing it at widgetScrollY + (logicalY - logicalScrollY)
     // in container coordinates
@@ -509,4 +485,3 @@ auto ScrollManager::getItemPosition(int visualIndex) const -> QPoint {
 
   return pos;
 }
-

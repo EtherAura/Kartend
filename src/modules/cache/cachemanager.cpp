@@ -4,6 +4,7 @@
 #include "errorutils.h"
 #include "uiconstants.h"
 
+#include <limits>
 #include <QApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -17,7 +18,6 @@
 #include <QSaveFile>
 #include <QScreen>
 #include <QStandardPaths>
-#include <limits>
 
 namespace {
 
@@ -25,10 +25,9 @@ namespace {
   constexpr int DEFAULT_BITS_PER_PIXEL = 32;
   constexpr quint64 BITS_PER_BYTE = 8;
 
-  const int bitsPerPixel =
-      pixmap.depth() > 0 ? pixmap.depth() : DEFAULT_BITS_PER_PIXEL;
-  const quint64 pixels = static_cast<quint64>(pixmap.width()) *
-                         static_cast<quint64>(pixmap.height());
+  const int bitsPerPixel = pixmap.depth() > 0 ? pixmap.depth() : DEFAULT_BITS_PER_PIXEL;
+  const quint64 pixels =
+      static_cast<quint64>(pixmap.width()) * static_cast<quint64>(pixmap.height());
   const quint64 bpp = static_cast<quint64>(bitsPerPixel);
 
   quint64 bits = 0;
@@ -49,17 +48,16 @@ namespace {
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcCacheManager, "kartend.cachemanager")
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcCacheManager().isDebugEnabled()) {                                   \
-      qCDebug(lcCacheManager) << msg;                                          \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcCacheManager().isDebugEnabled()) {                                                       \
+      qCDebug(lcCacheManager) << msg;                                                              \
+    }                                                                                              \
   } while (0)
 
 CacheManager::CacheManager() {
   constexpr qint64 BYTES_PER_KB = 1024;
-  const qint64 maxBytes =
-      static_cast<qint64>(UIConstants::Cache::PIXMAP_CACHE_KB) * BYTES_PER_KB;
+  const qint64 maxBytes = static_cast<qint64>(UIConstants::Cache::PIXMAP_CACHE_KB) * BYTES_PER_KB;
   const qint64 maxInt = static_cast<qint64>(std::numeric_limits<int>::max());
   artworkCache.setMaxCost(maxBytes > maxInt ? std::numeric_limits<int>::max()
                                             : static_cast<int>(maxBytes));
@@ -73,16 +71,15 @@ CacheManager::CacheManager() {
   m_timerContext = new QObject();
   m_debouncedSaveTimer = new QTimer(m_timerContext);
   m_debouncedSaveTimer->setSingleShot(true);
-  QObject::connect(m_debouncedSaveTimer, &QTimer::timeout, m_timerContext,
-                   [this]() {
-                     if (QApplication::closingDown()) {
-                       return;
-                     }
-                     if (m_cancelIo->load(std::memory_order_acquire)) {
-                       return;
-                     }
-                     saveToDisk();
-                   });
+  QObject::connect(m_debouncedSaveTimer, &QTimer::timeout, m_timerContext, [this]() {
+    if (QApplication::closingDown()) {
+      return;
+    }
+    if (m_cancelIo->load(std::memory_order_acquire)) {
+      return;
+    }
+    saveToDisk();
+  });
 }
 
 CacheManager::~CacheManager() {
@@ -105,8 +102,7 @@ CacheManager::~CacheManager() {
   m_debouncedSaveTimer = nullptr;
 }
 
-auto CacheManager::snapshotTimestampsForShutdown() const
-    -> QHash<QString, qint64> {
+auto CacheManager::snapshotTimestampsForShutdown() const -> QHash<QString, qint64> {
   QMutexLocker locker(&m_mutex);
   return fileTimestamps;
 }
@@ -148,8 +144,7 @@ void CacheManager::releaseGuiResources() {
 // Returns cache directory path, creating subdirs if needed
 auto CacheManager::getCacheDirectory() -> QString {
   QString cacheDir =
-      QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) +
-      "/kartend";
+      QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + "/kartend";
   QDir dir(cacheDir);
   const QString artworkDirPath = cacheDir + "/artwork";
   const QString metadataDirPath = cacheDir + "/metadata";
@@ -159,10 +154,9 @@ auto CacheManager::getCacheDirectory() -> QString {
     if (!loggedMkpathFailure) {
       loggedMkpathFailure = true;
       ErrorUtils::logError(
-          ErrorUtils::ErrorContext::warning(
-              ErrorUtils::ErrorCode::FileWriteError,
-              "Failed to create artwork cache directory",
-              "CacheManager::getCacheDirectory")
+          ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                            "Failed to create artwork cache directory",
+                                            "CacheManager::getCacheDirectory")
               .withDetails(QString("Path: %1").arg(artworkDirPath)));
     }
   }
@@ -170,10 +164,9 @@ auto CacheManager::getCacheDirectory() -> QString {
     if (!loggedMkpathFailure) {
       loggedMkpathFailure = true;
       ErrorUtils::logError(
-          ErrorUtils::ErrorContext::warning(
-              ErrorUtils::ErrorCode::FileWriteError,
-              "Failed to create cache metadata directory",
-              "CacheManager::getCacheDirectory")
+          ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                            "Failed to create cache metadata directory",
+                                            "CacheManager::getCacheDirectory")
               .withDetails(QString("Path: %1").arg(metadataDirPath)));
     }
   }
@@ -182,20 +175,16 @@ auto CacheManager::getCacheDirectory() -> QString {
 
 // Returns on-disk cache path for a given artwork file path
 auto CacheManager::getArtworkCachePath(const QString &artworkPath) -> QString {
-  QByteArray hash =
-      QCryptographicHash::hash(artworkPath.toUtf8(), QCryptographicHash::Md5);
-  return CacheManager::getCacheDirectory() + "/artwork/" + hash.toHex() +
-         ".png";
+  QByteArray hash = QCryptographicHash::hash(artworkPath.toUtf8(), QCryptographicHash::Md5);
+  return CacheManager::getCacheDirectory() + "/artwork/" + hash.toHex() + ".png";
 }
 
 // Processes timestamps section from JSON
 auto CacheManager::readTimestamps(const QJsonObject &root) -> void {
   QJsonObject timestamps = root["timestamps"].toObject();
   for (auto it = timestamps.begin(); it != timestamps.end(); ++it) {
-    QDateTime dateTime =
-        QDateTime::fromString(it.value().toString(), Qt::ISODate);
-    fileTimestamps[it.key()] =
-        dateTime.isValid() ? dateTime.toMSecsSinceEpoch() : 0;
+    QDateTime dateTime = QDateTime::fromString(it.value().toString(), Qt::ISODate);
+    fileTimestamps[it.key()] = dateTime.isValid() ? dateTime.toMSecsSinceEpoch() : 0;
   }
 }
 
@@ -212,8 +201,7 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
   QFileInfo fileInfo(artworkPath);
   if (QPixmap *pix = artworkCache.object(artworkPath)) {
     if (fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
-        fileTimestamps[artworkPath] !=
-            fileInfo.lastModified().toMSecsSinceEpoch()) {
+        fileTimestamps[artworkPath] != fileInfo.lastModified().toMSecsSinceEpoch()) {
       // Cache invalidation - file changed on disk
       QString cachePath = CacheManager::getArtworkCachePath(artworkPath);
       QFile::remove(cachePath);
@@ -251,8 +239,7 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
       artworkCache.insert(artworkPath, new QPixmap(cachedPixmap),
                           clampToCacheCostBytes(cachedPixmap));
       if (fileInfo.exists()) {
-        fileTimestamps[artworkPath] =
-            fileInfo.lastModified().toMSecsSinceEpoch();
+        fileTimestamps[artworkPath] = fileInfo.lastModified().toMSecsSinceEpoch();
       }
       return cachedPixmap;
     }
@@ -266,8 +253,7 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
   return {};
 }
 
-auto CacheManager::getArtworkFromMemoryOnly(const QString &artworkPath)
-    -> QPixmap {
+auto CacheManager::getArtworkFromMemoryOnly(const QString &artworkPath) -> QPixmap {
   if (artworkPath.isEmpty()) {
     return {};
   }
@@ -280,8 +266,7 @@ auto CacheManager::getArtworkFromMemoryOnly(const QString &artworkPath)
 
   if (QPixmap *pix = artworkCache.object(artworkPath)) {
     if (fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
-        fileTimestamps[artworkPath] !=
-            fileInfo.lastModified().toMSecsSinceEpoch()) {
+        fileTimestamps[artworkPath] != fileInfo.lastModified().toMSecsSinceEpoch()) {
       // Cache invalidation - file changed on disk.
       // Note: This may touch the filesystem, but avoids large image reads.
       const QString cachePath = CacheManager::getArtworkCachePath(artworkPath);
@@ -301,8 +286,7 @@ auto CacheManager::getArtworkFromMemoryOnly(const QString &artworkPath)
   return {};
 }
 
-auto CacheManager::tryLoadArtworkImageFromDiskCache(const QString &artworkPath)
-    -> QImage {
+auto CacheManager::tryLoadArtworkImageFromDiskCache(const QString &artworkPath) -> QImage {
   if (artworkPath.isEmpty()) {
     return {};
   }
@@ -362,8 +346,7 @@ auto CacheManager::tryLoadArtworkImageFromDiskCache(const QString &artworkPath)
 
 // Caches artwork pixmap if large enough and maintains O(1) running total for
 // memory accounting; evicts until under limit
-void CacheManager::cacheArtwork(const QString &artworkPath,
-                                const QPixmap &pixmap) {
+void CacheManager::cacheArtwork(const QString &artworkPath, const QPixmap &pixmap) {
   if (artworkPath.isEmpty() || pixmap.isNull()) {
     return;
   }
@@ -387,8 +370,7 @@ void CacheManager::cacheArtwork(const QString &artworkPath,
   QFileInfo fileInfo(artworkPath);
   if (fileInfo.exists()) {
     fileTimestamps[artworkPath] = fileInfo.lastModified().toMSecsSinceEpoch();
-    dirtyTimestamps.insert(
-        artworkPath); // Track which timestamps are new/changed
+    dirtyTimestamps.insert(artworkPath); // Track which timestamps are new/changed
   }
   dirtyArtwork.insert(artworkPath);
   m_metadataDirty = true;
@@ -398,8 +380,7 @@ void CacheManager::cacheArtwork(const QString &artworkPath,
   scheduleSaveToDisk();
 }
 
-void CacheManager::cacheArtworkInMemoryOnly(const QString &artworkPath,
-                                            const QPixmap &pixmap) {
+void CacheManager::cacheArtworkInMemoryOnly(const QString &artworkPath, const QPixmap &pixmap) {
   if (artworkPath.isEmpty() || pixmap.isNull()) {
     return;
   }
@@ -439,8 +420,7 @@ void CacheManager::clearCollectionCache(int collectionIndex) {
 auto CacheManager::getCacheSize() -> qint64 {
   QDir cacheDir(getCacheDirectory());
   qint64 totalSize = 0;
-  QDirIterator dirIt(cacheDir.absolutePath(), QDir::Files,
-                     QDirIterator::Subdirectories);
+  QDirIterator dirIt(cacheDir.absolutePath(), QDir::Files, QDirIterator::Subdirectories);
   while (dirIt.hasNext()) {
     dirIt.next();
     totalSize += dirIt.fileInfo().size();
@@ -464,15 +444,11 @@ void CacheManager::logMetrics() const {
   }
   CacheMetrics m = metrics();
   qCDebug(lcCacheManager) << "CacheManager metrics:"
-                          << "memHits=" << m.memoryHits
-                          << "diskHits=" << m.diskHits << "misses=" << m.misses
-                          << "inserts=" << m.inserts
-                          << "evictions=" << m.evictions
-                          << "invalidations=" << m.invalidations
-                          << "memHitRate="
-                          << QString::number(m.memoryHitRate() * 100, 'f', 1)
+                          << "memHits=" << m.memoryHits << "diskHits=" << m.diskHits
+                          << "misses=" << m.misses << "inserts=" << m.inserts
+                          << "evictions=" << m.evictions << "invalidations=" << m.invalidations
+                          << "memHitRate=" << QString::number(m.memoryHitRate() * 100, 'f', 1)
                           << "%"
-                          << "totalHitRate="
-                          << QString::number(m.totalHitRate() * 100, 'f', 1)
+                          << "totalHitRate=" << QString::number(m.totalHitRate() * 100, 'f', 1)
                           << "%";
 }

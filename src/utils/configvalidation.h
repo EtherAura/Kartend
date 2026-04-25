@@ -30,9 +30,7 @@ struct ValidationResult {
     valid = false;
   }
 
-  [[nodiscard]] bool hasIssues() const {
-    return !warnings.isEmpty() || !errors.isEmpty();
-  }
+  [[nodiscard]] bool hasIssues() const { return !warnings.isEmpty() || !errors.isEmpty(); }
 
   [[nodiscard]] QString summary() const;
 };
@@ -40,17 +38,14 @@ struct ValidationResult {
 // Validate a single collection configuration
 // isContainer: true if this collection has children (shell/container
 // collection)
-[[nodiscard]] ValidationResult
-validateCollection(const CollectionConfig &config, int index,
-                   bool isContainer = false);
+[[nodiscard]] ValidationResult validateCollection(const CollectionConfig &config, int index,
+                                                  bool isContainer = false);
 
 // Validate all collections including cross-references
-[[nodiscard]] ValidationResult
-validateAllCollections(const QList<CollectionConfig> &collections);
+[[nodiscard]] ValidationResult validateAllCollections(const QList<CollectionConfig> &collections);
 
 // Log validation results using Qt logging
-void logValidationResult(const ValidationResult &result,
-                         const QString &context = QString());
+void logValidationResult(const ValidationResult &result, const QString &context = QString());
 
 } // namespace ConfigValidation
 

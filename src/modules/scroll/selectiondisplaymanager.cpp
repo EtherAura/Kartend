@@ -8,44 +8,44 @@
 #include "artworkpreviewoverlay.h"
 #include "gridutils.h"
 #include "interactionstateholder.h"
-#include "scrollhelpers.h"
 #include "itemwidget.h"
 #include "itemwidgetfactory.h"
 #include "listheaderwidget.h"
+#include "scrollhelpers.h"
 #include "selectioncoordinator.h"
 #include "selectionoverlaymanager.h"
 #include "selectionstatetracker.h"
 #include "settingsutils.h"
 #include "uiconstants.h"
 
+#include <algorithm>
 #include <QHash>
 #include <QLoggingCategory>
 #include <QScrollArea>
 #include <QString>
 #include <QTimer>
 #include <QWidget>
-#include <algorithm>
 
 namespace {
 Q_LOGGING_CATEGORY(lcSelectionDisplay, "kartend.selectiondisplay")
 }
 
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcSelectionDisplay().isDebugEnabled()) {                               \
-      qCDebug(lcSelectionDisplay) << msg;                                      \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcSelectionDisplay().isDebugEnabled()) {                                                   \
+      qCDebug(lcSelectionDisplay) << msg;                                                          \
+    }                                                                                              \
   } while (0)
 
 SelectionDisplayManager::SelectionDisplayManager(QObject *parent)
-    : QObject(parent),
-      m_overlay(std::make_unique<SelectionOverlayManager>(this)),
+    : QObject(parent), m_overlay(std::make_unique<SelectionOverlayManager>(this)),
       m_stateTracker(std::make_unique<SelectionStateTracker>()) {}
 
-SelectionDisplayManager::~SelectionDisplayManager() { destroyListHeader(); }
+SelectionDisplayManager::~SelectionDisplayManager() {
+  destroyListHeader();
+}
 
-void SelectionDisplayManager::applyGeneralSettings(
-    const GeneralSettings *settings) {
+void SelectionDisplayManager::applyGeneralSettings(const GeneralSettings *settings) {
   if (!settings) {
     return;
   }
@@ -99,15 +99,13 @@ void SelectionDisplayManager::updateListHeader() {
     // container position
     int headerWidth = m_metrics->itemWidth + (m_metrics->margins * 2);
     int containerX = m_virtualContainer ? m_virtualContainer->x() : 0;
-    m_listHeader->setGeometry(containerX, 0, headerWidth,
-                              UIConstants::ListView::HEADER_HEIGHT);
+    m_listHeader->setGeometry(containerX, 0, headerWidth, UIConstants::ListView::HEADER_HEIGHT);
     m_listHeader->show();
     m_listHeader->raise(); // Keep above scrolling content
     m_listHeader->setAttribute(Qt::WA_TransparentForMouseEvents,
                                false); // Ensure header receives clicks
-    qCDebug(lcSelectionDisplay)
-        << "updateListHeader: header geometry=" << m_listHeader->geometry()
-        << "raised, accepts mouse events";
+    qCDebug(lcSelectionDisplay) << "updateListHeader: header geometry=" << m_listHeader->geometry()
+                                << "raised, accepts mouse events";
   } else if (m_listHeader) {
     // Hide header in grid mode
     m_listHeader->hide();
@@ -134,25 +132,20 @@ void SelectionDisplayManager::onListColumnClicked(ListSortColumn column) {
 
   // Determine sort mode based on column and direction and emit signal
   if (column == ListSortColumn::Name) {
-    SortMode newSortMode =
-        ascending ? SortMode::NameAscending : SortMode::NameDescending;
-    qCDebug(lcSelectionDisplay)
-        << "onListColumnClicked: Name column, ascending=" << ascending
-        << "sortMode=" << static_cast<int>(newSortMode);
+    SortMode newSortMode = ascending ? SortMode::NameAscending : SortMode::NameDescending;
+    qCDebug(lcSelectionDisplay) << "onListColumnClicked: Name column, ascending=" << ascending
+                                << "sortMode=" << static_cast<int>(newSortMode);
     emit sortModeChangeRequested(newSortMode);
   } else if (column == ListSortColumn::Collection) {
-    SortMode newSortMode = ascending ? SortMode::CollectionAscending
-                                     : SortMode::CollectionDescending;
-    qCDebug(lcSelectionDisplay)
-        << "onListColumnClicked: Collection column, ascending=" << ascending
-        << "sortMode=" << static_cast<int>(newSortMode);
+    SortMode newSortMode =
+        ascending ? SortMode::CollectionAscending : SortMode::CollectionDescending;
+    qCDebug(lcSelectionDisplay) << "onListColumnClicked: Collection column, ascending=" << ascending
+                                << "sortMode=" << static_cast<int>(newSortMode);
     emit sortModeChangeRequested(newSortMode);
   } else if (column == ListSortColumn::Artwork) {
-    SortMode newSortMode =
-        ascending ? SortMode::ArtworkFirst : SortMode::ArtworkLast;
-    qCDebug(lcSelectionDisplay)
-        << "onListColumnClicked: Artwork column, ascending=" << ascending
-        << "sortMode=" << static_cast<int>(newSortMode);
+    SortMode newSortMode = ascending ? SortMode::ArtworkFirst : SortMode::ArtworkLast;
+    qCDebug(lcSelectionDisplay) << "onListColumnClicked: Artwork column, ascending=" << ascending
+                                << "sortMode=" << static_cast<int>(newSortMode);
     emit sortModeChangeRequested(newSortMode);
   }
 }
@@ -167,8 +160,7 @@ void SelectionDisplayManager::onListColumnWidthChanged(int collectionWidth) {
 
   // Update all visible widgets with the new column width
   if (m_activeWidgets) {
-    for (auto it = m_activeWidgets->begin(); it != m_activeWidgets->end();
-         ++it) {
+    for (auto it = m_activeWidgets->begin(); it != m_activeWidgets->end(); ++it) {
       ItemWidget *widget = it.value();
       if (widget && widget->isListMode()) {
         widget->setCollectionColumnWidth(collectionWidth);
@@ -190,8 +182,7 @@ void SelectionDisplayManager::onListArtworkColumnWidthChanged(int artworkWidth) 
 
   // Update all visible widgets with the new column width
   if (m_activeWidgets) {
-    for (auto it = m_activeWidgets->begin(); it != m_activeWidgets->end();
-         ++it) {
+    for (auto it = m_activeWidgets->begin(); it != m_activeWidgets->end(); ++it) {
       ItemWidget *widget = it.value();
       if (widget && widget->isListMode()) {
         widget->setArtworkColumnWidth(artworkWidth);
@@ -227,8 +218,7 @@ void SelectionDisplayManager::showArtworkPreview(const QString &filePath,
 
   // Create overlay lazily on first use
   if (!m_artworkPreviewOverlay) {
-    m_artworkPreviewOverlay =
-        std::make_unique<ArtworkPreviewOverlay>(m_mediaScrollArea);
+    m_artworkPreviewOverlay = std::make_unique<ArtworkPreviewOverlay>(m_mediaScrollArea);
   }
 
   // Show artwork preview using the item's collection artwork directory
@@ -242,24 +232,22 @@ void SelectionDisplayManager::showArtworkPreview(const QString &filePath,
 void SelectionDisplayManager::onArrowKeyViewUpdate() {
   const int totalItems = m_totalItemsProvider ? m_totalItemsProvider() : 0;
   if (!m_arrowKeyScrollHelper || !m_virtualContainer || !m_stateTracker ||
-      !m_stateTracker->hasSelection() ||
-      m_stateTracker->lastSelectedIndex() >= totalItems || !m_metrics ||
-      !m_itemPosition) {
+      !m_stateTracker->hasSelection() || m_stateTracker->lastSelectedIndex() >= totalItems ||
+      !m_metrics || !m_itemPosition) {
     return;
   }
 
   // Update metrics for the helper
-  m_arrowKeyScrollHelper->setItemMetrics(
-      m_metrics->itemHeight, m_metrics->verticalSpacing, m_metrics->margins);
+  m_arrowKeyScrollHelper->setItemMetrics(m_metrics->itemHeight, m_metrics->verticalSpacing,
+                                         m_metrics->margins);
 
   // Delegate to helper with position callback
-  m_arrowKeyScrollHelper->performUpdate(
-      m_stateTracker->lastSelectedIndex(), totalItems, m_metrics->itemsPerRow,
-      [this](int idx) { return m_itemPosition(idx).y(); });
+  m_arrowKeyScrollHelper->performUpdate(m_stateTracker->lastSelectedIndex(), totalItems,
+                                        m_metrics->itemsPerRow,
+                                        [this](int idx) { return m_itemPosition(idx).y(); });
 }
 
-auto SelectionDisplayManager::selectionOverlayRectForIndex(int visualIndex) const
-    -> QRect {
+auto SelectionDisplayManager::selectionOverlayRectForIndex(int visualIndex) const -> QRect {
   const int totalItems = m_totalItemsProvider ? m_totalItemsProvider() : 0;
 
   // Delegate to coordinator if available (shares the same calculation)
@@ -268,13 +256,12 @@ auto SelectionDisplayManager::selectionOverlayRectForIndex(int visualIndex) cons
   }
 
   // Fallback for when coordinator is not configured
-  if (visualIndex < 0 || visualIndex >= totalItems || !m_metrics ||
-      !m_itemPosition) {
+  if (visualIndex < 0 || visualIndex >= totalItems || !m_metrics || !m_itemPosition) {
     return {};
   }
   QPoint pos = m_itemPosition(visualIndex);
-  return SelectionOverlayManager::overlayRectForPosition(
-      pos, m_metrics->itemWidth, m_metrics->itemHeight);
+  return SelectionOverlayManager::overlayRectForPosition(pos, m_metrics->itemWidth,
+                                                         m_metrics->itemHeight);
 }
 
 void SelectionDisplayManager::refreshSelectionOverlayState() {
@@ -282,11 +269,9 @@ void SelectionDisplayManager::refreshSelectionOverlayState() {
     return;
   }
 
-  debugLog(
-      QString(
-          "refreshSelectionOverlayState: lastSelectedIndex=%1 forceVisible=%2")
-          .arg(m_stateTracker->lastSelectedIndex())
-          .arg(m_overlay->isForceVisible()));
+  debugLog(QString("refreshSelectionOverlayState: lastSelectedIndex=%1 forceVisible=%2")
+               .arg(m_stateTracker->lastSelectedIndex())
+               .arg(m_overlay->isForceVisible()));
 
   if (!m_overlay->shouldKeepVisible()) {
     debugLog("  HIDING overlay (not force visible)");
@@ -297,11 +282,10 @@ void SelectionDisplayManager::refreshSelectionOverlayState() {
       m_state->setGlideAnimating(false);
     }
 
-    if (glideWasActive && m_stateTracker->hasSelection() && m_ensureWidget &&
-        m_activeWidgets) {
+    if (glideWasActive && m_stateTracker->hasSelection() && m_ensureWidget && m_activeWidgets) {
       m_ensureWidget(m_stateTracker->lastSelectedIndex());
-      if (auto *selectedWidget = m_activeWidgets->value(
-              m_stateTracker->lastSelectedIndex(), nullptr)) {
+      if (auto *selectedWidget =
+              m_activeWidgets->value(m_stateTracker->lastSelectedIndex(), nullptr)) {
         debugLog("  requesting widget repaint for selection border");
         selectedWidget->update();
       }
@@ -334,8 +318,7 @@ void SelectionDisplayManager::refreshSelectionOverlayState() {
   }
 
   // Position overlay directly (non-click-hold case or initial positioning)
-  QRect rect =
-      selectionOverlayRectForIndex(m_stateTracker->lastSelectedIndex());
+  QRect rect = selectionOverlayRectForIndex(m_stateTracker->lastSelectedIndex());
   debugLog(QString("  setting geometry to rect: x=%1 y=%2 w=%3 h=%4")
                .arg(rect.x())
                .arg(rect.y())
@@ -358,17 +341,15 @@ void SelectionDisplayManager::setForceSelectionOverlayVisible(bool force) {
   refreshSelectionOverlayState();
 }
 
-void SelectionDisplayManager::handleHorizontalMoveAnimation(int selectedIndex,
-                                                            int prevIndex) {
+void SelectionDisplayManager::handleHorizontalMoveAnimation(int selectedIndex, int prevIndex) {
   if (!m_overlay || !m_stateTracker || !m_activeWidgets) {
     return;
   }
 
-  debugLog(
-      QString("handleHorizontalMoveAnimation: prev=%1 sel=%2 forceVisible=%3")
-          .arg(prevIndex)
-          .arg(selectedIndex)
-          .arg(m_overlay->isForceVisible()));
+  debugLog(QString("handleHorizontalMoveAnimation: prev=%1 sel=%2 forceVisible=%3")
+               .arg(prevIndex)
+               .arg(selectedIndex)
+               .arg(m_overlay->isForceVisible()));
 
   // Calculate target rect for the new selection
   QRect targetRect = selectionOverlayRectForIndex(selectedIndex);
@@ -385,9 +366,7 @@ void SelectionDisplayManager::handleHorizontalMoveAnimation(int selectedIndex,
     return;
   }
 
-  debugLog(QString("  targetRect: x=%1 y=%2")
-               .arg(targetRect.x())
-               .arg(targetRect.y()));
+  debugLog(QString("  targetRect: x=%1 y=%2").arg(targetRect.x()).arg(targetRect.y()));
 
   // Get start rect from previous selection if overlay not visible
   QRect startRect;
@@ -422,9 +401,7 @@ void SelectionDisplayManager::handleHorizontalMoveAnimation(int selectedIndex,
   // Animate to target
   m_overlay->animateTo(targetRect, startRect);
 
-  debugLog(QString("  animation started to (%1,%2)")
-               .arg(targetRect.x())
-               .arg(targetRect.y()));
+  debugLog(QString("  animation started to (%1,%2)").arg(targetRect.x()).arg(targetRect.y()));
 }
 
 void SelectionDisplayManager::handleDirectSelectionUpdate(int selectedIndex) {
@@ -444,8 +421,7 @@ void SelectionDisplayManager::handleDirectSelectionUpdate(int selectedIndex) {
   }
 
   if (m_stateTracker->needsCommitUpdate(selectedIndex)) {
-    if (auto *prevSel = m_activeWidgets->value(
-            m_stateTracker->committedSelectedIndex(), nullptr)) {
+    if (auto *prevSel = m_activeWidgets->value(m_stateTracker->committedSelectedIndex(), nullptr)) {
       prevSel->setSelected(false);
     }
   }
@@ -468,8 +444,7 @@ void SelectionDisplayManager::handleDirectSelectionUpdate(int selectedIndex) {
     }
     if (m_overlay) {
       m_overlay->hide();
-      debugLog(
-          "  handleDirectSelectionUpdate: hiding overlay, using widget border");
+      debugLog("  handleDirectSelectionUpdate: hiding overlay, using widget border");
     }
   }
   m_stateTracker->commitSelection(selectedIndex);
@@ -480,8 +455,7 @@ void SelectionDisplayManager::prewarmSurroundingWidgets(int selectedIndex) {
     return;
   }
   const int totalItems = m_totalItemsProvider();
-  const int itemsPerRow =
-      (m_metrics->itemsPerRow > 0 ? m_metrics->itemsPerRow : 1);
+  const int itemsPerRow = (m_metrics->itemsPerRow > 0 ? m_metrics->itemsPerRow : 1);
   const int prewarmRows = UIConstants::Grid::BUFFER_ROWS;
   const int halfWindow = prewarmRows * itemsPerRow;
   int start = std::max(0, selectedIndex - halfWindow);
@@ -496,6 +470,10 @@ void SelectionDisplayManager::scheduleArrowKeyUpdate(int selectedIndex) {
     return;
   }
 
+  if (m_state && m_state->scroll().hoverScrollPending) {
+    return;
+  }
+
   // Check if update should be skipped due to suppression
   if (m_arrowKeyScrollHelper->shouldSkipUpdate()) {
     return;
@@ -504,16 +482,15 @@ void SelectionDisplayManager::scheduleArrowKeyUpdate(int selectedIndex) {
   bool extendedHold = m_state && m_state->arrow().arrowKeyScrolling;
   static constexpr int ARROW_KEY_UPDATE_DELAY_EXTENDED_MS = 16;
   static constexpr int ARROW_KEY_UPDATE_DELAY_NORMAL_MS = 8;
-  const int delayMs = extendedHold ? ARROW_KEY_UPDATE_DELAY_EXTENDED_MS
-                                   : ARROW_KEY_UPDATE_DELAY_NORMAL_MS;
+  const int delayMs =
+      extendedHold ? ARROW_KEY_UPDATE_DELAY_EXTENDED_MS : ARROW_KEY_UPDATE_DELAY_NORMAL_MS;
   m_arrowKeyViewUpdateTimer->start(delayMs);
 
   Q_UNUSED(selectedIndex)
 }
 
 void SelectionDisplayManager::updateSelectionForIndex(int selectedIndex) {
-  if (!m_stateTracker || !m_metrics || !m_activeWidgets ||
-      !m_totalItemsProvider) {
+  if (!m_stateTracker || !m_metrics || !m_activeWidgets || !m_totalItemsProvider) {
     return;
   }
   const int totalItems = m_totalItemsProvider();
@@ -521,15 +498,13 @@ void SelectionDisplayManager::updateSelectionForIndex(int selectedIndex) {
 
   if (lcSelectionDisplay().isDebugEnabled()) {
     bool forceVisible = m_overlay && m_overlay->isForceVisible();
-    debugLog(
-        QString("updateSelectionForIndex: sel=%1 lastSel=%2 forceVisible=%3")
-            .arg(selectedIndex)
-            .arg(m_stateTracker->lastSelectedIndex())
-            .arg(forceVisible));
+    debugLog(QString("updateSelectionForIndex: sel=%1 lastSel=%2 forceVisible=%3")
+                 .arg(selectedIndex)
+                 .arg(m_stateTracker->lastSelectedIndex())
+                 .arg(forceVisible));
   }
 
-  if (destroying || (!m_mediaScrollArea) || selectedIndex < 0 ||
-      selectedIndex >= totalItems) {
+  if (destroying || (!m_mediaScrollArea) || selectedIndex < 0 || selectedIndex >= totalItems) {
     debugLog("  early return due to invalid state");
     return;
   }
@@ -565,18 +540,15 @@ void SelectionDisplayManager::updateSelectionForIndex(int selectedIndex) {
   scheduleArrowKeyUpdate(selectedIndex);
 }
 
-void SelectionDisplayManager::updateSelectionDirection(int selectedIndex,
-                                                       int prevIndex) {
+void SelectionDisplayManager::updateSelectionDirection(int selectedIndex, int prevIndex) {
   if (!m_stateTracker || !m_metrics) {
     return;
   }
-  m_stateTracker->updateForNewSelection(selectedIndex, prevIndex,
-                                        m_metrics->itemsPerRow);
+  m_stateTracker->updateForNewSelection(selectedIndex, prevIndex, m_metrics->itemsPerRow);
   debugLog(QString("  updated lastSelectedIndex to %1").arg(selectedIndex));
 }
 
-void SelectionDisplayManager::handleMissingWidgetSelection(int selectedIndex,
-                                                           bool keepOverlay) {
+void SelectionDisplayManager::handleMissingWidgetSelection(int selectedIndex, bool keepOverlay) {
   debugLog(QString("  currentWidget is null for index %1").arg(selectedIndex));
   // Widget not available, but during click-hold we still update overlay
   // position
@@ -584,15 +556,14 @@ void SelectionDisplayManager::handleMissingWidgetSelection(int selectedIndex,
     QRect rect = selectionOverlayRectForIndex(selectedIndex);
     if (rect.isValid()) {
       m_overlay->showAtRect(rect);
-      debugLog(QString("  positioned overlay directly at (%1,%2)")
-                   .arg(rect.x())
-                   .arg(rect.y()));
+      debugLog(QString("  positioned overlay directly at (%1,%2)").arg(rect.x()).arg(rect.y()));
     }
   }
 }
 
-void SelectionDisplayManager::handleSameSelectionUpdate(
-    int selectedIndex, ItemWidget *currentWidget, bool keepOverlay) {
+void SelectionDisplayManager::handleSameSelectionUpdate(int selectedIndex,
+                                                        ItemWidget *currentWidget,
+                                                        bool keepOverlay) {
   if (!m_stateTracker || !m_activeWidgets) {
     return;
   }
@@ -625,8 +596,7 @@ void SelectionDisplayManager::handleSameSelectionUpdate(
   }
 
   if (m_stateTracker->needsCommitUpdate(selectedIndex)) {
-    if (auto *prevSel = m_activeWidgets->value(
-            m_stateTracker->committedSelectedIndex(), nullptr)) {
+    if (auto *prevSel = m_activeWidgets->value(m_stateTracker->committedSelectedIndex(), nullptr)) {
       prevSel->setSelected(false);
     }
   }
@@ -639,20 +609,19 @@ void SelectionDisplayManager::handleSameSelectionUpdate(
   scheduleArrowKeyUpdate(selectedIndex);
 }
 
-void SelectionDisplayManager::handleNewSelectionUpdate(
-    int selectedIndex, int prevIndex, ItemWidget *currentWidget) {
+void SelectionDisplayManager::handleNewSelectionUpdate(int selectedIndex, int prevIndex,
+                                                       ItemWidget *currentWidget) {
   if (!m_metrics) {
     return;
   }
   // Use coordinator for movement analysis
   bool isHorizontalMove = false;
   if (m_selectionCoordinator) {
-    auto movement = m_selectionCoordinator->analyzeMovement(
-        selectedIndex, prevIndex, m_metrics->itemsPerRow);
+    auto movement =
+        m_selectionCoordinator->analyzeMovement(selectedIndex, prevIndex, m_metrics->itemsPerRow);
     isHorizontalMove = movement.isHorizontal;
   } else {
-    calculateMovementDirection(selectedIndex, prevIndex, m_metrics->itemsPerRow,
-                               isHorizontalMove);
+    calculateMovementDirection(selectedIndex, prevIndex, m_metrics->itemsPerRow, isHorizontalMove);
   }
 
   debugLog(QString("  isHorizontalMove=%1").arg(isHorizontalMove));
@@ -666,8 +635,7 @@ void SelectionDisplayManager::handleNewSelectionUpdate(
   Q_UNUSED(currentWidget)
 }
 
-void SelectionDisplayManager::calculateMovementDirection(
-    int selectedIndex, int prevIndex, int itemsPerRow, bool &isHorizontalMove) {
-  isHorizontalMove =
-      ScrollHelpers::movementDirection(selectedIndex, prevIndex, itemsPerRow);
+void SelectionDisplayManager::calculateMovementDirection(int selectedIndex, int prevIndex,
+                                                         int itemsPerRow, bool &isHorizontalMove) {
+  isHorizontalMove = ScrollHelpers::movementDirection(selectedIndex, prevIndex, itemsPerRow);
 }

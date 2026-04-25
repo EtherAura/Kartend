@@ -1,6 +1,8 @@
 // Sibling translation unit for SettingsDialog.
 // Extracted from settingsdialogform.cpp during LOC-reduction refactor.
 // These remain SettingsDialog members; this is a translation-unit split.
+#include <algorithm>
+#include <functional>
 #include <QAbstractItemView>
 #include <QColorDialog>
 #include <QDir>
@@ -18,8 +20,6 @@
 #include <QToolTip>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
-#include <algorithm>
-#include <functional>
 #include <set>
 
 #include "extensionutils.h"
@@ -35,8 +35,7 @@
 
 auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   CollectionConfig config;
-  if (currentCollectionIndex >= 0 &&
-      currentCollectionIndex < m_workingCollections.size()) {
+  if (currentCollectionIndex >= 0 && currentCollectionIndex < m_workingCollections.size()) {
     config = m_workingCollections[currentCollectionIndex];
   }
 
@@ -48,103 +47,79 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
     }
   }
 
-  config.launcherPath = (ui->launcherLineEdit) ? ui->launcherLineEdit->text()
-                                               : config.launcherPath;
-  config.corePath =
-      (ui->coreLineEdit) ? ui->coreLineEdit->text() : config.corePath;
-  config.launchParameters = (ui->launchParamsLineEdit)
-                                ? ui->launchParamsLineEdit->text()
-                                : config.launchParameters;
-  config.extractArchives = (ui->extractArchivesCheckBox)
-                               ? ui->extractArchivesCheckBox->isChecked()
-                               : config.extractArchives;
+  config.launcherPath = (ui->launcherLineEdit) ? ui->launcherLineEdit->text() : config.launcherPath;
+  config.corePath = (ui->coreLineEdit) ? ui->coreLineEdit->text() : config.corePath;
+  config.launchParameters =
+      (ui->launchParamsLineEdit) ? ui->launchParamsLineEdit->text() : config.launchParameters;
+  config.extractArchives = (ui->extractArchivesCheckBox) ? ui->extractArchivesCheckBox->isChecked()
+                                                         : config.extractArchives;
   config.extractedExtension = (ui->extractedExtensionLineEdit)
                                   ? ui->extractedExtensionLineEdit->text()
                                   : config.extractedExtension;
-  config.mediaDirectory = (ui->mediaDirLineEdit) ? ui->mediaDirLineEdit->text()
-                                                 : config.mediaDirectory;
-  config.artworkDirectory = (ui->artworkDirLineEdit)
-                                ? ui->artworkDirLineEdit->text()
-                                : config.artworkDirectory;
-  config.includeContentSubfolders =
-      (ui->includeContentSubfoldersCheckBox)
-          ? ui->includeContentSubfoldersCheckBox->isChecked()
-          : config.includeContentSubfolders;
-  config.showAllSubfolderItems =
-      (ui->showAllSubfolderItemsCheckBox)
-          ? ui->showAllSubfolderItemsCheckBox->isChecked()
-          : config.showAllSubfolderItems;
-  config.hideSubfolderTitles =
-      (ui->hideSubfolderTitlesCheckBox)
-          ? ui->hideSubfolderTitlesCheckBox->isChecked()
-          : config.hideSubfolderTitles;
+  config.mediaDirectory =
+      (ui->mediaDirLineEdit) ? ui->mediaDirLineEdit->text() : config.mediaDirectory;
+  config.artworkDirectory =
+      (ui->artworkDirLineEdit) ? ui->artworkDirLineEdit->text() : config.artworkDirectory;
+  config.includeContentSubfolders = (ui->includeContentSubfoldersCheckBox)
+                                        ? ui->includeContentSubfoldersCheckBox->isChecked()
+                                        : config.includeContentSubfolders;
+  config.showAllSubfolderItems = (ui->showAllSubfolderItemsCheckBox)
+                                     ? ui->showAllSubfolderItemsCheckBox->isChecked()
+                                     : config.showAllSubfolderItems;
+  config.hideSubfolderTitles = (ui->hideSubfolderTitlesCheckBox)
+                                   ? ui->hideSubfolderTitlesCheckBox->isChecked()
+                                   : config.hideSubfolderTitles;
   config.showHiddenFolders = (ui->showHiddenFoldersCheckBox)
                                  ? ui->showHiddenFoldersCheckBox->isChecked()
                                  : config.showHiddenFolders;
-  config.includeArtworkSubfolders =
-      (ui->includeArtworkSubfoldersCheckBox)
-          ? ui->includeArtworkSubfoldersCheckBox->isChecked()
-          : config.includeArtworkSubfolders;
-  config.itemWidth =
-      (ui->itemWidthSpinBox) ? ui->itemWidthSpinBox->value() : config.itemWidth;
-  config.itemHeight = (ui->itemHeightSpinBox) ? ui->itemHeightSpinBox->value()
-                                              : config.itemHeight;
-  config.fontSize =
-      (ui->fontSizeSpinBox) ? ui->fontSizeSpinBox->value() : config.fontSize;
-  config.cornerRadius = (ui->cornerRadiusSpinBox)
-                            ? ui->cornerRadiusSpinBox->value()
-                            : config.cornerRadius;
-  config.extensions = (ui->fileExtensionsLineEdit)
-                          ? ExtensionUtils::parseUserExtensionList(
-                                ui->fileExtensionsLineEdit->text())
-                          : config.extensions;
-  config.gridWidth =
-      (ui->gridWidthSpinBox) ? ui->gridWidthSpinBox->value() : config.gridWidth;
-  config.showAllSubcollectionItems =
-      (ui->showAllSubcollectionItemsCheckBox)
-          ? ui->showAllSubcollectionItemsCheckBox->isChecked()
-          : config.showAllSubcollectionItems;
+  config.includeArtworkSubfolders = (ui->includeArtworkSubfoldersCheckBox)
+                                        ? ui->includeArtworkSubfoldersCheckBox->isChecked()
+                                        : config.includeArtworkSubfolders;
+  config.itemWidth = (ui->itemWidthSpinBox) ? ui->itemWidthSpinBox->value() : config.itemWidth;
+  config.itemHeight = (ui->itemHeightSpinBox) ? ui->itemHeightSpinBox->value() : config.itemHeight;
+  config.fontSize = (ui->fontSizeSpinBox) ? ui->fontSizeSpinBox->value() : config.fontSize;
+  config.cornerRadius =
+      (ui->cornerRadiusSpinBox) ? ui->cornerRadiusSpinBox->value() : config.cornerRadius;
+  config.extensions =
+      (ui->fileExtensionsLineEdit)
+          ? ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text())
+          : config.extensions;
+  config.gridWidth = (ui->gridWidthSpinBox) ? ui->gridWidthSpinBox->value() : config.gridWidth;
+  config.showAllSubcollectionItems = (ui->showAllSubcollectionItemsCheckBox)
+                                         ? ui->showAllSubcollectionItemsCheckBox->isChecked()
+                                         : config.showAllSubcollectionItems;
   config.horizontalAlignment =
       (ui->horizontalAlignmentComboBox)
-          ? static_cast<HorizontalAlignment>(
-                ui->horizontalAlignmentComboBox->currentIndex())
+          ? static_cast<HorizontalAlignment>(ui->horizontalAlignmentComboBox->currentIndex())
           : config.horizontalAlignment;
-  config.sidebarMode =
-      (ui->sidebarModeComboBox)
-          ? static_cast<SidebarMode>(ui->sidebarModeComboBox->currentIndex())
-          : config.sidebarMode;
-  config.viewType =
-      (ui->viewTypeComboBox)
-          ? static_cast<ViewType>(ui->viewTypeComboBox->currentIndex())
-          : config.viewType;
-  // Rebase horizontal spacing: Internal = UI - 70
+  config.sidebarMode = (ui->sidebarModeComboBox)
+                           ? static_cast<SidebarMode>(ui->sidebarModeComboBox->currentIndex())
+                           : config.sidebarMode;
+  config.viewType = (ui->viewTypeComboBox)
+                        ? static_cast<ViewType>(ui->viewTypeComboBox->currentIndex())
+                        : config.viewType;
   config.horizontalSpacing = (ui->horizontalSpacingSpinBox)
-                                 ? ui->horizontalSpacingSpinBox->value() - 70
+                                 ? spacingUiToInternal(ui->horizontalSpacingSpinBox->value())
                                  : config.horizontalSpacing;
-  config.verticalSpacing = (ui->verticalSpacingSpinBox)
-                               ? ui->verticalSpacingSpinBox->value()
-                               : config.verticalSpacing;
-  config.hideHorizontalScrollbar =
-      (ui->hideHorizontalScrollbarCheckBox)
-          ? ui->hideHorizontalScrollbarCheckBox->isChecked()
-          : config.hideHorizontalScrollbar;
-  config.hideVerticalScrollbar =
-      (ui->hideVerticalScrollbarCheckBox)
-          ? ui->hideVerticalScrollbarCheckBox->isChecked()
-          : config.hideVerticalScrollbar;
-  config.hideTitles = (ui->hideTitlesCheckBox)
-                          ? ui->hideTitlesCheckBox->isChecked()
-                          : config.hideTitles;
-  config.hideSubcollectionTitles =
-      (ui->hideSubcollectionTitlesCheckBox)
-          ? ui->hideSubcollectionTitlesCheckBox->isChecked()
-          : config.hideSubcollectionTitles;
+  config.verticalSpacing =
+      (ui->verticalSpacingSpinBox) ? spacingUiToInternal(ui->verticalSpacingSpinBox->value())
+                                   : config.verticalSpacing;
+  config.hideHorizontalScrollbar = (ui->hideHorizontalScrollbarCheckBox)
+                                       ? ui->hideHorizontalScrollbarCheckBox->isChecked()
+                                       : config.hideHorizontalScrollbar;
+  config.hideVerticalScrollbar = (ui->hideVerticalScrollbarCheckBox)
+                                     ? ui->hideVerticalScrollbarCheckBox->isChecked()
+                                     : config.hideVerticalScrollbar;
+  config.hideTitles =
+      (ui->hideTitlesCheckBox) ? ui->hideTitlesCheckBox->isChecked() : config.hideTitles;
+  config.hideSubcollectionTitles = (ui->hideSubcollectionTitlesCheckBox)
+                                       ? ui->hideSubcollectionTitlesCheckBox->isChecked()
+                                       : config.hideSubcollectionTitles;
 
   // Background settings
   if (ui->backgroundImageRadio && ui->backgroundColorRadio) {
-    config.backgroundType = ui->backgroundImageRadio->isChecked()
-                                ? BackgroundType::Image
-                                : BackgroundType::Color;
+    config.backgroundType =
+        ui->backgroundImageRadio->isChecked() ? BackgroundType::Image : BackgroundType::Color;
   }
   if (ui->backgroundValueEdit) {
     QString value = ui->backgroundValueEdit->text().trimmed();
@@ -160,48 +135,38 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   }
 
   // Primary color setting
-  config.primaryColor = (ui->primaryColorEdit)
-                            ? ui->primaryColorEdit->text().trimmed()
-                            : config.primaryColor;
+  config.primaryColor =
+      (ui->primaryColorEdit) ? ui->primaryColorEdit->text().trimmed() : config.primaryColor;
 
   // Tile color setting
-  config.tileColor = (ui->tileColorEdit) ? ui->tileColorEdit->text().trimmed()
-                                         : config.tileColor;
+  config.tileColor = (ui->tileColorEdit) ? ui->tileColorEdit->text().trimmed() : config.tileColor;
 
   // Selection color setting
-  config.selectionColor = (ui->selectionColorEdit)
-                              ? ui->selectionColorEdit->text().trimmed()
-                              : config.selectionColor;
+  config.selectionColor =
+      (ui->selectionColorEdit) ? ui->selectionColorEdit->text().trimmed() : config.selectionColor;
 
   // List mode settings
-  config.listFontSize = (ui->listFontSizeSpinBox)
-                            ? ui->listFontSizeSpinBox->value()
-                            : config.listFontSize;
-  config.listRowHeight = (ui->listRowHeightSpinBox)
-                             ? ui->listRowHeightSpinBox->value()
-                             : config.listRowHeight;
-  config.listRowColor = (ui->listRowColorEdit)
-                            ? ui->listRowColorEdit->text().trimmed()
-                            : config.listRowColor;
-  config.listAltRowColor = (ui->listAltRowColorEdit)
-                               ? ui->listAltRowColorEdit->text().trimmed()
-                               : config.listAltRowColor;
+  config.listFontSize =
+      (ui->listFontSizeSpinBox) ? ui->listFontSizeSpinBox->value() : config.listFontSize;
+  config.listRowHeight =
+      (ui->listRowHeightSpinBox) ? ui->listRowHeightSpinBox->value() : config.listRowHeight;
+  config.listRowColor =
+      (ui->listRowColorEdit) ? ui->listRowColorEdit->text().trimmed() : config.listRowColor;
+  config.listAltRowColor = (ui->listAltRowColorEdit) ? ui->listAltRowColorEdit->text().trimmed()
+                                                     : config.listAltRowColor;
 
   // Custom font family (per-collection)
-  config.customFontFamily = (ui->customFontEdit)
-                                ? ui->customFontEdit->text().trimmed()
-                                : config.customFontFamily;
+  config.customFontFamily =
+      (ui->customFontEdit) ? ui->customFontEdit->text().trimmed() : config.customFontFamily;
 
   return config;
 }
 
 // Updates parent collection settings from UI
-auto SettingsDialog::updateParentCollectionFromUI(CollectionConfig &collection,
-                                                  int index) -> void {
+auto SettingsDialog::updateParentCollectionFromUI(CollectionConfig &collection, int index) -> void {
   if (ui->parentCollectionComboBox) {
     int dropdownIndex = ui->parentCollectionComboBox->currentIndex();
-    if (dropdownIndex >= 0 &&
-        dropdownIndex < m_parentCollectionMapping.size()) {
+    if (dropdownIndex >= 0 && dropdownIndex < m_parentCollectionMapping.size()) {
       int newParentIndex = m_parentCollectionMapping[dropdownIndex];
       if (newParentIndex >= 0 && newParentIndex < m_workingCollections.size() &&
           newParentIndex != index) {
@@ -223,24 +188,18 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
   const CollectionConfig &originalConfig = originalCollection;
 
   return (
-      ((ui->launcherLineEdit) &&
-       ui->launcherLineEdit->text() != originalConfig.launcherPath) ||
-      ((ui->coreLineEdit) &&
-       ui->coreLineEdit->text() != originalConfig.corePath) ||
+      ((ui->launcherLineEdit) && ui->launcherLineEdit->text() != originalConfig.launcherPath) ||
+      ((ui->coreLineEdit) && ui->coreLineEdit->text() != originalConfig.corePath) ||
       ((ui->launchParamsLineEdit) &&
        ui->launchParamsLineEdit->text() != originalConfig.launchParameters) ||
       ((ui->extractArchivesCheckBox) &&
-       ui->extractArchivesCheckBox->isChecked() !=
-           originalConfig.extractArchives) ||
+       ui->extractArchivesCheckBox->isChecked() != originalConfig.extractArchives) ||
       ((ui->extractedExtensionLineEdit) &&
-       ui->extractedExtensionLineEdit->text() !=
-           originalConfig.extractedExtension) ||
-      ((ui->mediaDirLineEdit) &&
-       ui->mediaDirLineEdit->text() != originalConfig.mediaDirectory) ||
+       ui->extractedExtensionLineEdit->text() != originalConfig.extractedExtension) ||
+      ((ui->mediaDirLineEdit) && ui->mediaDirLineEdit->text() != originalConfig.mediaDirectory) ||
       ((ui->artworkDirLineEdit) &&
        ui->artworkDirLineEdit->text() != originalConfig.artworkDirectory) ||
-      ((ui->gridWidthSpinBox) &&
-       ui->gridWidthSpinBox->value() != originalConfig.gridWidth) ||
+      ((ui->gridWidthSpinBox) && ui->gridWidthSpinBox->value() != originalConfig.gridWidth) ||
       ((ui->showAllSubcollectionItemsCheckBox) &&
        ui->showAllSubcollectionItemsCheckBox->isChecked() !=
            originalConfig.showAllSubcollectionItems) ||
@@ -248,54 +207,45 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
        ui->horizontalAlignmentComboBox->currentIndex() !=
            static_cast<int>(originalConfig.horizontalAlignment)) ||
       ((ui->sidebarModeComboBox) &&
-       ui->sidebarModeComboBox->currentIndex() !=
-           static_cast<int>(originalConfig.sidebarMode)) ||
+       ui->sidebarModeComboBox->currentIndex() != static_cast<int>(originalConfig.sidebarMode)) ||
       ((ui->viewTypeComboBox) &&
-       ui->viewTypeComboBox->currentIndex() !=
-           static_cast<int>(originalConfig.viewType)) ||
+       ui->viewTypeComboBox->currentIndex() != static_cast<int>(originalConfig.viewType)) ||
       ((ui->horizontalSpacingSpinBox) &&
-       (ui->horizontalSpacingSpinBox->value() - 70) !=
+       spacingUiToInternal(ui->horizontalSpacingSpinBox->value()) !=
            originalConfig.horizontalSpacing) ||
       ((ui->verticalSpacingSpinBox) &&
-       ui->verticalSpacingSpinBox->value() != originalConfig.verticalSpacing) ||
-      ((ui->hideHorizontalScrollbarCheckBox) &&
-       ui->hideHorizontalScrollbarCheckBox->isChecked() !=
-           originalConfig.hideHorizontalScrollbar) ||
+       spacingUiToInternal(ui->verticalSpacingSpinBox->value()) != originalConfig.verticalSpacing) ||
+      ((ui->hideHorizontalScrollbarCheckBox) && ui->hideHorizontalScrollbarCheckBox->isChecked() !=
+                                                    originalConfig.hideHorizontalScrollbar) ||
       ((ui->hideVerticalScrollbarCheckBox) &&
-       ui->hideVerticalScrollbarCheckBox->isChecked() !=
-           originalConfig.hideVerticalScrollbar) ||
+       ui->hideVerticalScrollbarCheckBox->isChecked() != originalConfig.hideVerticalScrollbar) ||
       ((ui->hideTitlesCheckBox) &&
        ui->hideTitlesCheckBox->isChecked() != originalConfig.hideTitles) ||
-      ((ui->hideSubcollectionTitlesCheckBox) &&
-       ui->hideSubcollectionTitlesCheckBox->isChecked() !=
-           originalConfig.hideSubcollectionTitles) ||
+      ((ui->hideSubcollectionTitlesCheckBox) && ui->hideSubcollectionTitlesCheckBox->isChecked() !=
+                                                    originalConfig.hideSubcollectionTitles) ||
       ((ui->includeContentSubfoldersCheckBox) &&
        ui->includeContentSubfoldersCheckBox->isChecked() !=
            originalConfig.includeContentSubfolders) ||
       ((ui->showAllSubfolderItemsCheckBox) &&
-       ui->showAllSubfolderItemsCheckBox->isChecked() !=
-           originalConfig.showAllSubfolderItems) ||
+       ui->showAllSubfolderItemsCheckBox->isChecked() != originalConfig.showAllSubfolderItems) ||
       ((ui->hideSubfolderTitlesCheckBox) &&
-       ui->hideSubfolderTitlesCheckBox->isChecked() !=
-           originalConfig.hideSubfolderTitles) ||
+       ui->hideSubfolderTitlesCheckBox->isChecked() != originalConfig.hideSubfolderTitles) ||
       ((ui->showHiddenFoldersCheckBox) &&
-       ui->showHiddenFoldersCheckBox->isChecked() !=
-           originalConfig.showHiddenFolders) ||
+       ui->showHiddenFoldersCheckBox->isChecked() != originalConfig.showHiddenFolders) ||
       ((ui->includeArtworkSubfoldersCheckBox) &&
        ui->includeArtworkSubfoldersCheckBox->isChecked() !=
            originalConfig.includeArtworkSubfolders) ||
-      ((ui->fontSizeSpinBox) &&
-       ui->fontSizeSpinBox->value() != originalConfig.fontSize) ||
+      ((ui->fontSizeSpinBox) && ui->fontSizeSpinBox->value() != originalConfig.fontSize) ||
       ((ui->cornerRadiusSpinBox) &&
        ui->cornerRadiusSpinBox->value() != originalConfig.cornerRadius));
 }
 
 // Checks extension list changes
 auto SettingsDialog::checkExtensionChanges() const -> bool {
-  QStringList currentExtensions = (ui->fileExtensionsLineEdit)
-                                      ? ExtensionUtils::parseUserExtensionList(
-                                            ui->fileExtensionsLineEdit->text())
-                                      : originalCollection.extensions;
+  QStringList currentExtensions =
+      (ui->fileExtensionsLineEdit)
+          ? ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text())
+          : originalCollection.extensions;
   return currentExtensions != originalCollection.extensions;
 }
 
@@ -313,9 +263,8 @@ auto SettingsDialog::checkTreeNameChanges() const -> bool {
 
 // Checks parent collection changes
 auto SettingsDialog::checkParentCollectionChanges() const -> bool {
-  int dropdownIndex = (ui->parentCollectionComboBox)
-                          ? ui->parentCollectionComboBox->currentIndex()
-                          : -1;
+  int dropdownIndex =
+      (ui->parentCollectionComboBox) ? ui->parentCollectionComboBox->currentIndex() : -1;
   int currentParentIndex = -1;
   if (dropdownIndex >= 0 && dropdownIndex < m_parentCollectionMapping.size()) {
     currentParentIndex = m_parentCollectionMapping[dropdownIndex];
@@ -327,8 +276,8 @@ auto SettingsDialog::checkParentCollectionChanges() const -> bool {
 auto SettingsDialog::checkDimensionChanges() const -> bool {
   return (ui->itemWidthSpinBox->value() != originalCollection.itemWidth ||
           ui->itemHeightSpinBox->value() != originalCollection.itemHeight ||
-          (ui->cornerRadiusSpinBox && ui->cornerRadiusSpinBox->value() !=
-                                          originalCollection.cornerRadius));
+          (ui->cornerRadiusSpinBox &&
+           ui->cornerRadiusSpinBox->value() != originalCollection.cornerRadius));
 }
 
 // Checks color field changes
@@ -337,26 +286,24 @@ auto SettingsDialog::checkColorChanges() const -> bool {
   return (
       ((ui->primaryColorEdit) &&
        ui->primaryColorEdit->text().trimmed() != originalConfig.primaryColor) ||
-      ((ui->tileColorEdit) &&
-       ui->tileColorEdit->text().trimmed() != originalConfig.tileColor) ||
-      ((ui->selectionColorEdit) && ui->selectionColorEdit->text().trimmed() !=
-                                       originalConfig.selectionColor));
+      ((ui->tileColorEdit) && ui->tileColorEdit->text().trimmed() != originalConfig.tileColor) ||
+      ((ui->selectionColorEdit) &&
+       ui->selectionColorEdit->text().trimmed() != originalConfig.selectionColor));
 }
 
 // Checks list mode field changes
 auto SettingsDialog::checkListModeChanges() const -> bool {
   const CollectionConfig &originalConfig = originalCollection;
-  return (
-      ((ui->listFontSizeSpinBox) &&
-       ui->listFontSizeSpinBox->value() != originalConfig.listFontSize) ||
-      ((ui->listRowHeightSpinBox) &&
-       ui->listRowHeightSpinBox->value() != originalConfig.listRowHeight) ||
-      ((ui->listRowColorEdit) &&
-       ui->listRowColorEdit->text().trimmed() != originalConfig.listRowColor) ||
-      ((ui->listAltRowColorEdit) && ui->listAltRowColorEdit->text().trimmed() !=
-                                        originalConfig.listAltRowColor) ||
-      ((ui->customFontEdit) && ui->customFontEdit->text().trimmed() !=
-                                   originalConfig.customFontFamily));
+  return (((ui->listFontSizeSpinBox) &&
+           ui->listFontSizeSpinBox->value() != originalConfig.listFontSize) ||
+          ((ui->listRowHeightSpinBox) &&
+           ui->listRowHeightSpinBox->value() != originalConfig.listRowHeight) ||
+          ((ui->listRowColorEdit) &&
+           ui->listRowColorEdit->text().trimmed() != originalConfig.listRowColor) ||
+          ((ui->listAltRowColorEdit) &&
+           ui->listAltRowColorEdit->text().trimmed() != originalConfig.listAltRowColor) ||
+          ((ui->customFontEdit) &&
+           ui->customFontEdit->text().trimmed() != originalConfig.customFontFamily));
 }
 
 // Checks background field changes
@@ -364,9 +311,8 @@ auto SettingsDialog::checkBackgroundChanges() const -> bool {
   const CollectionConfig &originalConfig = originalCollection;
   // Check background type
   if (ui->backgroundImageRadio && ui->backgroundColorRadio) {
-    BackgroundType currentType = ui->backgroundImageRadio->isChecked()
-                                     ? BackgroundType::Image
-                                     : BackgroundType::Color;
+    BackgroundType currentType =
+        ui->backgroundImageRadio->isChecked() ? BackgroundType::Image : BackgroundType::Color;
     if (currentType != originalConfig.backgroundType) {
       return true;
     }
@@ -389,19 +335,93 @@ auto SettingsDialog::checkBackgroundChanges() const -> bool {
 }
 
 auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
+  if (ui->rememberSelectionCheckBox &&
+      ui->rememberSelectionCheckBox->isChecked() != m_originalGeneralSettings.rememberSelection) {
+    return true;
+  }
+  if (ui->wrapNavigationCheckBox &&
+      ui->wrapNavigationCheckBox->isChecked() != m_originalGeneralSettings.wrapNavigation) {
+    return true;
+  }
+  if (ui->selectItemOnHoverCheckBox &&
+      ui->selectItemOnHoverCheckBox->isChecked() != m_originalGeneralSettings.selectItemOnHover) {
+    return true;
+  }
+  if (ui->startupCollectionComboBox &&
+      ui->startupCollectionComboBox->currentData().toString() !=
+          m_originalGeneralSettings.startupCollection) {
+    return true;
+  }
+  if (ui->pixmapCacheSpinBox &&
+      ui->pixmapCacheSpinBox->value() != m_originalGeneralSettings.pixmapCacheSizeMB) {
+    return true;
+  }
+  if (ui->keyboardSpeedSpinBox &&
+      ui->keyboardSpeedSpinBox->value() != m_originalGeneralSettings.keyboardRepeatIntervalMs) {
+    return true;
+  }
+  if (ui->keyboardRepeatDelaySpinBox &&
+      ui->keyboardRepeatDelaySpinBox->value() != m_originalGeneralSettings.keyboardRepeatDelayMs) {
+    return true;
+  }
+  if (ui->mouseWheelSpeedSpinBox &&
+      ui->mouseWheelSpeedSpinBox->value() != m_originalGeneralSettings.mouseWheelRows) {
+    return true;
+  }
+  if (ui->scrollAnimationSpeedSpinBox &&
+      ui->scrollAnimationSpeedSpinBox->value() !=
+          m_originalGeneralSettings.scrollAnimationDurationMs) {
+    return true;
+  }
+  if (ui->scrollVelocityMultiplierSpinBox &&
+      ui->scrollVelocityMultiplierSpinBox->value() !=
+          m_originalGeneralSettings.scrollVelocityMultiplier) {
+    return true;
+  }
+  if (ui->clickHoldDelaySpinBox &&
+      ui->clickHoldDelaySpinBox->value() != m_originalGeneralSettings.clickHoldDelayMs) {
+    return true;
+  }
+  if (ui->clickHoldRepeatIntervalSpinBox &&
+      ui->clickHoldRepeatIntervalSpinBox->value() !=
+          m_originalGeneralSettings.clickHoldRepeatIntervalMs) {
+    return true;
+  }
+  if (ui->listKeyboardRepeatSpinBox &&
+      ui->listKeyboardRepeatSpinBox->value() !=
+          m_originalGeneralSettings.listKeyboardRepeatIntervalMs) {
+    return true;
+  }
+  if (ui->listClickHoldRepeatSpinBox &&
+      ui->listClickHoldRepeatSpinBox->value() !=
+          m_originalGeneralSettings.listClickHoldRepeatIntervalMs) {
+    return true;
+  }
   // Check text appearance settings (saturation, lightness, base color)
   if (ui->titleSaturationSpinBox &&
-      ui->titleSaturationSpinBox->value() !=
-          m_originalGeneralSettings.titleTintSaturation) {
+      ui->titleSaturationSpinBox->value() != m_originalGeneralSettings.titleTintSaturation) {
     return true;
   }
   if (ui->titleLightnessSpinBox &&
-      ui->titleLightnessSpinBox->value() !=
-          m_originalGeneralSettings.titleTintLightness) {
+      ui->titleLightnessSpinBox->value() != m_originalGeneralSettings.titleTintLightness) {
     return true;
   }
-  if (ui->baseColorEdit && ui->baseColorEdit->text().trimmed() !=
-                               m_originalGeneralSettings.titleBaseColor) {
+  if (ui->baseColorEdit &&
+      ui->baseColorEdit->text().trimmed() != m_originalGeneralSettings.titleBaseColor) {
+    return true;
+  }
+  // Check attract mode settings
+  if (ui->attractModeCheckBox &&
+      ui->attractModeCheckBox->isChecked() != m_originalGeneralSettings.attractModeEnabled) {
+    return true;
+  }
+  if (ui->attractIdleTimeoutSpinBox &&
+      ui->attractIdleTimeoutSpinBox->value() !=
+          m_originalGeneralSettings.attractModeIdleTimeoutSec) {
+    return true;
+  }
+  if (ui->attractScrollSpeedSpinBox &&
+      ui->attractScrollSpeedSpinBox->value() != m_originalGeneralSettings.attractModeScrollSpeed) {
     return true;
   }
   return false;

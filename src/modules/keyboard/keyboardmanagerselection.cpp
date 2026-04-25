@@ -5,28 +5,24 @@
 // InteractionStateHolder, ApplicationContext, etc.).
 #include "keyboardmanager.h"
 
-#include <QtGlobal>
-#include <Qt>
 #include <algorithm>
+#include <Qt>
+#include <QtGlobal>
 
-int KeyboardManager::calculateNewSelection(int totalItems, int currentSelection,
-                                           int direction, bool wrapEnabled,
-                                           bool vertical, int gridWidth,
+int KeyboardManager::calculateNewSelection(int totalItems, int currentSelection, int direction,
+                                           bool wrapEnabled, bool vertical, int gridWidth,
                                            bool &didWrap) {
   didWrap = false;
   if (vertical) {
-    return calculateVerticalSelection(totalItems, currentSelection, direction,
-                                      wrapEnabled, gridWidth, didWrap);
+    return calculateVerticalSelection(totalItems, currentSelection, direction, wrapEnabled,
+                                      gridWidth, didWrap);
   }
-  return calculateHorizontalSelection(totalItems, currentSelection, direction,
-                                      wrapEnabled, didWrap);
+  return calculateHorizontalSelection(totalItems, currentSelection, direction, wrapEnabled,
+                                      didWrap);
 }
 
-int KeyboardManager::calculateHorizontalSelection(int totalItems,
-                                                  int currentSelection,
-                                                  int direction,
-                                                  bool wrapEnabled,
-                                                  bool &didWrap) {
+int KeyboardManager::calculateHorizontalSelection(int totalItems, int currentSelection,
+                                                  int direction, bool wrapEnabled, bool &didWrap) {
   didWrap = false;
   int newSelection = currentSelection + direction;
   if (wrapEnabled) {
@@ -47,10 +43,8 @@ int KeyboardManager::calculateHorizontalSelection(int totalItems,
   return newSelection;
 }
 
-int KeyboardManager::calculateVerticalSelection(int totalItems,
-                                                int currentSelection,
-                                                int direction, bool wrapEnabled,
-                                                int gridWidth, bool &didWrap) {
+int KeyboardManager::calculateVerticalSelection(int totalItems, int currentSelection, int direction,
+                                                bool wrapEnabled, int gridWidth, bool &didWrap) {
   didWrap = false;
   int newSelection = currentSelection + direction;
   if (wrapEnabled && gridWidth > 0) {
@@ -60,8 +54,7 @@ int KeyboardManager::calculateVerticalSelection(int totalItems,
       const int candidate = lastRowFirst + targetColumn;
       newSelection = qMin(candidate, totalItems - 1);
       didWrap = true;
-    } else if (direction == gridWidth &&
-               currentSelection + gridWidth >= totalItems) {
+    } else if (direction == gridWidth && currentSelection + gridWidth >= totalItems) {
       newSelection = currentSelection % gridWidth;
       if (newSelection >= totalItems) {
         newSelection = totalItems - 1;
@@ -78,16 +71,15 @@ int KeyboardManager::calculateVerticalSelection(int totalItems,
   return newSelection;
 }
 
-bool KeyboardManager::hasRowChanged(int gridWidth, int currentSelection,
-                                    int newSelection) {
+bool KeyboardManager::hasRowChanged(int gridWidth, int currentSelection, int newSelection) {
   if (gridWidth <= 0) {
     return false;
   }
   return (currentSelection / gridWidth) != (newSelection / gridWidth);
 }
 
-bool KeyboardManager::deriveDirectionForKey(int key, int gridWidth,
-                                            int &direction, bool &vertical) {
+bool KeyboardManager::deriveDirectionForKey(int key, int gridWidth, int &direction,
+                                            bool &vertical) {
   direction = 0;
   vertical = false;
 

@@ -28,38 +28,34 @@ using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 using QueryManagerInternal::SynchronousPragmaGuard;
 
-
-void QueryManager::saveItemsToDatabase(
-    int collectionIndex, const QStringList &filePaths,
-    const QHash<QString, QDateTime> &timestamps,
-    const CollectionConfig &collection, const QString &dirSignature) {
+void QueryManager::saveItemsToDatabase(int collectionIndex, const QStringList &filePaths,
+                                       const QHash<QString, QDateTime> &timestamps,
+                                       const CollectionConfig &collection,
+                                       const QString &dirSignature) {
   Q_UNUSED(collectionIndex)
 
   if (!m_db.isOpen()) {
-    auto err =
-        ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database is not open",
-                            "QueryManager::saveItemsToDatabase");
+    auto err = ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database is not open",
+                                   "QueryManager::saveItemsToDatabase");
     ErrorUtils::logError(err);
     return;
   }
 
   // Include includeContentSubfolders in the signature to match needsRescan
-  QString extSignature = collection.extensions.isEmpty()
-                             ? QString()
-                             : collection.extensions.join('|');
+  QString extSignature =
+      collection.extensions.isEmpty() ? QString() : collection.extensions.join('|');
   extSignature += collection.includeContentSubfolders ? "|subfolders" : "";
 
-  const QString uuid = CollectionUtils::computeCollectionUuid(
-      collection.name, collection.mediaDirectory);
+  const QString uuid =
+      CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
 
   // Temporarily disable synchronous writes for bulk insert performance
   QSqlQuery pragmaOff(m_db);
   if (!pragmaOff.exec("PRAGMA synchronous = OFF")) {
-    ErrorUtils::logError(
-        ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                              "Failed to set synchronous=OFF for bulk insert",
-                              "QueryManager::saveItemsToDatabase")
-            .withDetails(pragmaOff.lastError().text()));
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to set synchronous=OFF for bulk insert",
+                                               "QueryManager::saveItemsToDatabase")
+                             .withDetails(pragmaOff.lastError().text()));
   }
   const SynchronousPragmaGuard restoreSynchronous(m_db);
 
@@ -95,7 +91,7 @@ void QueryManager::saveItemsToDatabase(
   // Second phase: insert items in batches with periodic commits
   int batchesSinceCommit = 0;
   bool inTransaction = false;
-  int itemsInserted = 0;  // cppcheck-suppress unreadVariable - used for progress reporting
+  int itemsInserted = 0; // cppcheck-suppress unreadVariable - used for progress reporting
 
   for (int batchStart = 0; batchStart < totalItems; batchStart += BATCH_SIZE) {
     // Check for cancellation between batches
@@ -110,10 +106,9 @@ void QueryManager::saveItemsToDatabase(
     // Start new transaction if needed
     if (!inTransaction) {
       if (!m_db.transaction()) {
-        auto err = ErrorContext::critical(
-                       ErrorCode::DatabaseTransactionFailed,
-                       "Failed to start transaction for bulk insert",
-                       "QueryManager::saveItemsToDatabase")
+        auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                          "Failed to start transaction for bulk insert",
+                                          "QueryManager::saveItemsToDatabase")
                        .withDetails(m_db.lastError().text());
         ErrorUtils::logError(err);
         emit errorOccurred(err);
@@ -140,11 +135,10 @@ void QueryManager::saveItemsToDatabase(
     // Commit periodically to save incremental progress
     if (batchesSinceCommit >= COMMIT_INTERVAL_BATCHES) {
       if (!m_db.commit()) {
-        auto err =
-            ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
-                                   "Failed to commit bulk insert transaction",
-                                   "QueryManager::saveItemsToDatabase")
-                .withDetails(m_db.lastError().text());
+        auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                          "Failed to commit bulk insert transaction",
+                                          "QueryManager::saveItemsToDatabase")
+                       .withDetails(m_db.lastError().text());
         ErrorUtils::logError(err);
         emit errorOccurred(err);
         m_db.rollback();
@@ -165,10 +159,9 @@ void QueryManager::saveItemsToDatabase(
   // Final commit for any remaining items
   if (inTransaction) {
     if (!m_db.commit()) {
-      auto err = ErrorContext::critical(
-                     ErrorCode::DatabaseTransactionFailed,
-                     "Failed to commit final bulk insert transaction",
-                     "QueryManager::saveItemsToDatabase")
+      auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                        "Failed to commit final bulk insert transaction",
+                                        "QueryManager::saveItemsToDatabase")
                      .withDetails(m_db.lastError().text());
       ErrorUtils::logError(err);
       emit errorOccurred(err);
@@ -182,17 +175,15 @@ void QueryManager::saveItemsToDatabase(
     emit scanItemsProgress(totalItems, totalItems);
 
     int legacyId = -1;
-    if (!prepareCollectionForItemsInsert(collection, uuid, extSignature,
-                                         legacyId)) {
+    if (!prepareCollectionForItemsInsert(collection, uuid, extSignature, legacyId)) {
       return;
     }
 
     // Apply staged results atomically.
     if (!m_db.transaction()) {
-      auto err = ErrorContext::critical(
-                     ErrorCode::DatabaseTransactionFailed,
-                     "Failed to start transaction to apply staged scan results",
-                     "QueryManager::saveItemsToDatabase")
+      auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                        "Failed to start transaction to apply staged scan results",
+                                        "QueryManager::saveItemsToDatabase")
                      .withDetails(m_db.lastError().text());
       ErrorUtils::logError(err);
       emit errorOccurred(err);
@@ -202,8 +193,7 @@ void QueryManager::saveItemsToDatabase(
     const bool upsertOk = applyScannedItemsToDatabase(legacyId, uuid);
     const bool deleteOk = deleteMissingItemsByUuidUsingScannedItems(uuid);
 
-    QSqlQuery &meta =
-        getPreparedStatement(QuerySQL::UPDATE_COLLECTION_SCAN_METADATA);
+    QSqlQuery &meta = getPreparedStatement(QuerySQL::UPDATE_COLLECTION_SCAN_METADATA);
     meta.bindValue(0, QDateTime::currentDateTime().toString(Qt::ISODate));
     meta.bindValue(1, dirSignature);
     meta.bindValue(2, uuid);
@@ -217,14 +207,13 @@ void QueryManager::saveItemsToDatabase(
   }
 }
 
-QStringList
-QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionUuid) {
+QStringList QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionUuid) {
   QStringList filePaths;
 
   if (!m_db.isOpen()) {
-    auto err = ErrorContext::error(ErrorCode::DatabaseNotOpen,
-                                   "Database is not open, cannot load items",
-                                   "QueryManager::loadItemsFromDatabaseByUuid");
+    auto err =
+        ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database is not open, cannot load items",
+                            "QueryManager::loadItemsFromDatabaseByUuid");
     ErrorUtils::logError(err);
     return filePaths;
   }
@@ -234,10 +223,10 @@ QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionUuid) {
   query.bindValue(0, collectionUuid);
 
   if (!query.exec()) {
-    auto err = ErrorContext::error(ErrorCode::DatabaseQueryFailed,
-                                   "Failed to load items from database",
-                                   "QueryManager::loadItemsFromDatabaseByUuid")
-                   .withDetails(query.lastError().text());
+    auto err =
+        ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to load items from database",
+                            "QueryManager::loadItemsFromDatabaseByUuid")
+            .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
     return filePaths;
   }
@@ -263,8 +252,7 @@ void QueryManager::invalidateCollectionCache(const QString &collectionUuid) {
   emit cacheInvalidated(collectionUuid);
 }
 
-void QueryManager::clearCollectionFromDatabaseByUuid(
-    const QString &collectionUuid) {
+void QueryManager::clearCollectionFromDatabaseByUuid(const QString &collectionUuid) {
   if (!m_db.isOpen()) {
     return;
   }
@@ -292,8 +280,7 @@ void QueryManager::clearCollectionFromDatabaseByUuid(
       }
 
       // Use cached prepared statement for deleting collection
-      QSqlQuery &delc =
-          getPreparedStatement(QuerySQL::DELETE_COLLECTION_BY_UUID);
+      QSqlQuery &delc = getPreparedStatement(QuerySQL::DELETE_COLLECTION_BY_UUID);
       delc.bindValue(0, collectionUuid);
       delc.exec();
 
@@ -307,10 +294,9 @@ void QueryManager::clearCollectionFromDatabaseByUuid(
 
       if (!isLockError || attempt == MAX_RETRIES - 1) {
         // Non-lock error or final attempt - log and give up
-        auto err = ErrorContext::critical(
-                       ErrorCode::DatabaseTransactionFailed,
-                       "Failed to clear collection from database",
-                       "QueryManager::clearCollectionFromDatabaseByUuid")
+        auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                          "Failed to clear collection from database",
+                                          "QueryManager::clearCollectionFromDatabaseByUuid")
                        .withDetails(errorText);
         ErrorUtils::logError(err);
         return;

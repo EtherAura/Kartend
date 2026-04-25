@@ -19,30 +19,25 @@
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcMouseManager, "kartend.mousemanager")
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcMouseManager().isDebugEnabled()) {                                   \
-      qCDebug(lcMouseManager) << msg;                                          \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcMouseManager().isDebugEnabled()) {                                                       \
+      qCDebug(lcMouseManager) << msg;                                                              \
+    }                                                                                              \
   } while (0)
 
 // MouseManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(MouseManagerSetup, ScrollManager *, ScrollManager,
-                      scrollManager)
-SETUP_GETTER_DEF_SAME(MouseManagerSetup, SelectionManager *, SelectionManager,
-                      selectionManager)
-SETUP_GETTER_DEF_SAME(MouseManagerSetup, QScrollArea *, ItemScrollArea,
-                      itemScrollArea)
-SETUP_GETTER_DEF_SAME(MouseManagerSetup, QWidget *, GridContainer,
-                      gridContainer)
-SETUP_GETTER_DEF_SAME(MouseManagerSetup, const QVector<CollectionConfig> *,
-                      Collections, collections)
+SETUP_GETTER_DEF_SAME(MouseManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_SAME(MouseManagerSetup, SelectionManager *, SelectionManager, selectionManager)
+SETUP_GETTER_DEF_SAME(MouseManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_SAME(MouseManagerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_SAME(MouseManagerSetup, const QVector<CollectionConfig> *, Collections,
+                      collections)
 SETUP_GETTER_DEF_SAME(MouseManagerSetup, const int *, CurrentCollectionIndex,
                       currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(MouseManagerSetup, GeneralSettings *, GeneralSettings,
-                      generalSettings)
-SETUP_GETTER_DEF_CTX_ONLY(MouseManagerSetup, InteractionStateHolder *,
-                          InteractionState, interactionState)
+SETUP_GETTER_DEF_SAME(MouseManagerSetup, GeneralSettings *, GeneralSettings, generalSettings)
+SETUP_GETTER_DEF_CTX_ONLY(MouseManagerSetup, InteractionStateHolder *, InteractionState,
+                          interactionState)
 
 MouseManager::MouseManager(QObject *parent) : QObject(parent) {}
 
@@ -68,7 +63,9 @@ void MouseManager::setupReferences(const MouseManagerSetup &setup) {
 
 // --- Left Mouse Button Tracking ---
 
-void MouseManager::setLeftMouseDown(bool down) { m_leftMouseDown = down; }
+void MouseManager::setLeftMouseDown(bool down) {
+  m_leftMouseDown = down;
+}
 
 // --- Wheel Scrolling State ---
 
@@ -84,18 +81,15 @@ int MouseManager::computeWheelSteps(const QWheelEvent *wheelEvent) {
   }
   const int wheelAngle = wheelEvent->angleDelta().y();
   if (wheelAngle != 0) {
-    return MouseHelpers::wheelStepsFromAngle(
-        wheelAngle, UIConstants::Mouse::WHEEL_ANGLE_STEP);
+    return MouseHelpers::wheelStepsFromAngle(wheelAngle, UIConstants::Mouse::WHEEL_ANGLE_STEP);
   }
   const QPoint pixelDelta = wheelEvent->pixelDelta();
-  return MouseHelpers::wheelStepsFromPixel(
-      pixelDelta.y(), UIConstants::Mouse::WHEEL_PIXEL_STEP);
+  return MouseHelpers::wheelStepsFromPixel(pixelDelta.y(), UIConstants::Mouse::WHEEL_PIXEL_STEP);
 }
 
 // --- Click Hold Timer ---
 
-void MouseManager::startClickHoldTimer(const QPoint &clickPos,
-                                       int selectedItemIndex, int gridWidth,
+void MouseManager::startClickHoldTimer(const QPoint &clickPos, int selectedItemIndex, int gridWidth,
                                        int totalItems) {
   m_clickHoldPos = clickPos;
   m_clickHoldSelectedIndex = selectedItemIndex;
@@ -105,8 +99,7 @@ void MouseManager::startClickHoldTimer(const QPoint &clickPos,
   if (!m_clickHoldTimer) {
     m_clickHoldTimer = new QTimer(this);
     m_clickHoldTimer->setSingleShot(true);
-    connect(m_clickHoldTimer, &QTimer::timeout, this,
-            &MouseManager::onClickHoldTimerTimeout);
+    connect(m_clickHoldTimer, &QTimer::timeout, this, &MouseManager::onClickHoldTimerTimeout);
   }
   int delay = m_generalSettings ? m_generalSettings->clickHoldDelayMs : 500;
   m_clickHoldTimer->start(delay);
@@ -124,22 +117,20 @@ bool MouseManager::isClickHoldTimerActive() const {
 
 void MouseManager::onClickHoldTimerTimeout() {
   if (m_leftMouseDown) {
-    startMouseHoldScrolling(m_clickHoldPos, m_clickHoldSelectedIndex,
-                            m_clickHoldGridWidth, m_clickHoldTotalItems);
+    startMouseHoldScrolling(m_clickHoldPos, m_clickHoldSelectedIndex, m_clickHoldGridWidth,
+                            m_clickHoldTotalItems);
   }
 }
 
 // --- Click Hold Horizontal Candidate ---
 
-void MouseManager::updateClickHoldHorizontalCandidate(int previousSelection,
-                                                      int targetSelection,
+void MouseManager::updateClickHoldHorizontalCandidate(int previousSelection, int targetSelection,
                                                       int gridWidth) {
   m_clickHoldHorizontalEligible = false;
   m_mouseHoldHorizontalDirection = 0;
   m_mouseHoldHorizontalStartIndex = -1;
 
-  if (previousSelection < 0 || targetSelection < 0 ||
-      previousSelection == targetSelection) {
+  if (previousSelection < 0 || targetSelection < 0 || previousSelection == targetSelection) {
     return;
   }
   if (gridWidth <= 0) {
@@ -152,8 +143,7 @@ void MouseManager::updateClickHoldHorizontalCandidate(int previousSelection,
     return;
   }
 
-  m_mouseHoldHorizontalDirection =
-      (targetSelection > previousSelection) ? 1 : -1;
+  m_mouseHoldHorizontalDirection = (targetSelection > previousSelection) ? 1 : -1;
   m_mouseHoldHorizontalStartIndex = targetSelection;
   m_clickHoldHorizontalEligible = true;
 }
@@ -166,13 +156,11 @@ void MouseManager::clearHorizontalCandidate() {
 
 // --- Hold Scrolling Control ---
 
-void MouseManager::startMouseHoldScrolling(const QPoint &clickPos,
-                                           int selectedItemIndex, int gridWidth,
-                                           int totalItems) {
+void MouseManager::startMouseHoldScrolling(const QPoint &clickPos, int selectedItemIndex,
+                                           int gridWidth, int totalItems) {
   Q_UNUSED(clickPos);
 
-  if (!m_scrollManager ||
-      !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+  if (!m_scrollManager || !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     return;
   }
   if (totalItems <= 0 || gridWidth <= 0 || selectedItemIndex < 0) {
@@ -185,8 +173,7 @@ void MouseManager::startMouseHoldScrolling(const QPoint &clickPos,
 
   if (!m_mouseHoldTimer) {
     m_mouseHoldTimer = new QTimer(this);
-    connect(m_mouseHoldTimer, &QTimer::timeout, this,
-            &MouseManager::onMouseHoldScrollStep);
+    connect(m_mouseHoldTimer, &QTimer::timeout, this, &MouseManager::onMouseHoldScrollStep);
   }
 
   // Try horizontal hold first
@@ -215,18 +202,14 @@ void MouseManager::startMouseHoldScrolling(const QPoint &clickPos,
   // Check if we're in list mode for faster repeat intervals
   bool isListMode = false;
   if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-    isListMode =
-        (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
+    isListMode = (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
   }
 
   int interval;
   if (isListMode) {
-    interval = m_generalSettings
-                   ? m_generalSettings->listClickHoldRepeatIntervalMs
-                   : 80;
+    interval = m_generalSettings ? m_generalSettings->listClickHoldRepeatIntervalMs : 80;
   } else {
-    interval =
-        m_generalSettings ? m_generalSettings->clickHoldRepeatIntervalMs : 320;
+    interval = m_generalSettings ? m_generalSettings->clickHoldRepeatIntervalMs : 320;
   }
   m_mouseHoldTimer->start(interval);
 
@@ -241,10 +224,8 @@ void MouseManager::startMouseHoldScrolling(const QPoint &clickPos,
   emit holdScrollingStarted(false);
 }
 
-bool MouseManager::tryStartHorizontalClickHold(int totalItems,
-                                               int selectedItemIndex) {
-  if (!m_clickHoldHorizontalEligible || m_mouseHoldHorizontalDirection == 0 ||
-      !m_mouseHoldTimer) {
+bool MouseManager::tryStartHorizontalClickHold(int totalItems, int selectedItemIndex) {
+  if (!m_clickHoldHorizontalEligible || m_mouseHoldHorizontalDirection == 0 || !m_mouseHoldTimer) {
     return false;
   }
   if (!CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
@@ -262,8 +243,7 @@ bool MouseManager::tryStartHorizontalClickHold(int totalItems,
   }
 
   // If we need to restore to the start index
-  if (startIndex != selectedItemIndex && startIndex >= 0 &&
-      startIndex < totalItems) {
+  if (startIndex != selectedItemIndex && startIndex >= 0 && startIndex < totalItems) {
     m_cachedSelectedIndex = startIndex;
     emit requestSelectionUpdate(startIndex);
   }
@@ -276,18 +256,14 @@ bool MouseManager::tryStartHorizontalClickHold(int totalItems,
   // Check if we're in list mode for faster repeat intervals
   bool isListMode = false;
   if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-    isListMode =
-        (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
+    isListMode = (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
   }
 
   int interval;
   if (isListMode) {
-    interval = m_generalSettings
-                   ? m_generalSettings->listClickHoldRepeatIntervalMs
-                   : 80;
+    interval = m_generalSettings ? m_generalSettings->listClickHoldRepeatIntervalMs : 80;
   } else {
-    interval =
-        m_generalSettings ? m_generalSettings->clickHoldRepeatIntervalMs : 320;
+    interval = m_generalSettings ? m_generalSettings->clickHoldRepeatIntervalMs : 320;
   }
   m_mouseHoldTimer->start(interval);
 
@@ -334,8 +310,7 @@ void MouseManager::stopMouseHoldScrolling() {
 
 // --- Private ---
 
-int MouseManager::computeVerticalDirection(int selectedItemIndex,
-                                           int gridWidth) const {
+int MouseManager::computeVerticalDirection(int selectedItemIndex, int gridWidth) const {
   if (!m_itemScrollArea ||
       !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     return 0;
@@ -349,15 +324,15 @@ int MouseManager::computeVerticalDirection(int selectedItemIndex,
 
   int selectedRow = selectedItemIndex / gridWidth;
   int rowHeight = GridLayoutCalculator::getRowHeight(config);
-  int selectedItemY = UIConstants::Grid::MARGINS + (selectedRow * rowHeight) +
-                      (config.itemHeight / 2);
+  int selectedItemY =
+      UIConstants::Grid::MARGINS + (selectedRow * rowHeight) + (config.itemHeight / 2);
 
   int scrollTop = vBar->value();
   int viewportHeight = m_itemScrollArea->viewport()->height();
-  return MouseHelpers::verticalScrollDirection(
-      selectedItemY, /*viewportTopY=*/scrollTop,
-      /*viewportBottomY=*/scrollTop + viewportHeight,
-      /*viewportCenterY=*/scrollTop + (viewportHeight / 2), rowHeight);
+  return MouseHelpers::verticalScrollDirection(selectedItemY, /*viewportTopY=*/scrollTop,
+                                               /*viewportBottomY=*/scrollTop + viewportHeight,
+                                               /*viewportCenterY=*/scrollTop + (viewportHeight / 2),
+                                               rowHeight);
 }
 
 void MouseManager::onMouseHoldScrollStep() {
@@ -381,10 +356,9 @@ void MouseManager::onMouseHoldScrollStep() {
 
 // --- Widget Finding Utilities (static) ---
 
-std::pair<ItemWidget *, int>
-MouseManager::findBestWidgetForClick(const QPoint &clickPos,
-                                     ScrollManager *scrollManager,
-                                     QWidget *gridContainer) {
+std::pair<ItemWidget *, int> MouseManager::findBestWidgetForClick(const QPoint &clickPos,
+                                                                  ScrollManager *scrollManager,
+                                                                  QWidget *gridContainer) {
   if (!scrollManager || !gridContainer) {
     return {nullptr, -1};
   }
@@ -403,9 +377,8 @@ MouseManager::findBestWidgetForClick(const QPoint &clickPos,
   }
 
   QPoint virtualContainerOffset(0, 0);
-  QWidget *virtualContainer = candidates.first().first
-                                  ? candidates.first().first->parentWidget()
-                                  : nullptr;
+  QWidget *virtualContainer =
+      candidates.first().first ? candidates.first().first->parentWidget() : nullptr;
   if (virtualContainer && virtualContainer->parentWidget() == gridContainer) {
     virtualContainerOffset = virtualContainer->pos();
   }
@@ -435,10 +408,8 @@ MouseManager::findBestWidgetForClick(const QPoint &clickPos,
     }
     const QRect geometry = widget->geometry();
     const QPoint centerPoint = geometry.center();
-    const qint64 deltaX =
-        static_cast<qint64>(centerPoint.x()) - static_cast<qint64>(posInVC.x());
-    const qint64 deltaY =
-        static_cast<qint64>(centerPoint.y()) - static_cast<qint64>(posInVC.y());
+    const qint64 deltaX = static_cast<qint64>(centerPoint.x()) - static_cast<qint64>(posInVC.x());
+    const qint64 deltaY = static_cast<qint64>(centerPoint.y()) - static_cast<qint64>(posInVC.y());
     const qint64 dist2 = (deltaX * deltaX) + (deltaY * deltaY);
     if (bestDist2 < 0 || dist2 < bestDist2) {
       bestDist2 = dist2;
@@ -450,9 +421,8 @@ MouseManager::findBestWidgetForClick(const QPoint &clickPos,
   return {best, bestIdx};
 }
 
-ItemWidget *
-MouseManager::findClosestWidget(const QVector<ItemWidget *> &candidates,
-                                const QPoint &clickPos) {
+ItemWidget *MouseManager::findClosestWidget(const QVector<ItemWidget *> &candidates,
+                                            const QPoint &clickPos) {
   ItemWidget *best = nullptr;
   qint64 bestDist2 = -1;
   for (ItemWidget *widget : candidates) {
@@ -461,10 +431,8 @@ MouseManager::findClosestWidget(const QVector<ItemWidget *> &candidates,
     }
     const QRect geometry = widget->geometry();
     const QPoint centerPoint = geometry.center();
-    const qint64 deltaX = static_cast<qint64>(centerPoint.x()) -
-                          static_cast<qint64>(clickPos.x());
-    const qint64 deltaY = static_cast<qint64>(centerPoint.y()) -
-                          static_cast<qint64>(clickPos.y());
+    const qint64 deltaX = static_cast<qint64>(centerPoint.x()) - static_cast<qint64>(clickPos.x());
+    const qint64 deltaY = static_cast<qint64>(centerPoint.y()) - static_cast<qint64>(clickPos.y());
     const qint64 dist2 = (deltaX * deltaX) + (deltaY * deltaY);
     if (bestDist2 < 0 || dist2 < bestDist2) {
       bestDist2 = dist2;

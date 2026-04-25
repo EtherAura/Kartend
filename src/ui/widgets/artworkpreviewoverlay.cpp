@@ -11,8 +11,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-ArtworkPreviewOverlay::ArtworkPreviewOverlay(QWidget *parent)
-    : QWidget(parent) {
+ArtworkPreviewOverlay::ArtworkPreviewOverlay(QWidget *parent) : QWidget(parent) {
   setupUI();
   hide();
 }
@@ -34,23 +33,21 @@ void ArtworkPreviewOverlay::setupUI() {
   m_closeButton = new QPushButton(tr("✕"), this);
   m_closeButton->setFixedSize(32, 32);
   m_closeButton->setCursor(Qt::PointingHandCursor);
-  m_closeButton->setStyleSheet(
-      "QPushButton { background-color: palette(window); border: 1px solid "
-      "palette(mid); "
-      "border-radius: 16px; font-weight: bold; font-size: 16px; } "
-      "QPushButton:hover { background-color: palette(highlight); color: "
-      "palette(highlighted-text); }");
-  connect(m_closeButton, &QPushButton::clicked, this,
-          &ArtworkPreviewOverlay::hideOverlay);
+  m_closeButton->setStyleSheet("QPushButton { background-color: palette(window); border: 1px solid "
+                               "palette(mid); "
+                               "border-radius: 16px; font-weight: bold; font-size: 16px; } "
+                               "QPushButton:hover { background-color: palette(highlight); color: "
+                               "palette(highlighted-text); }");
+  connect(m_closeButton, &QPushButton::clicked, this, &ArtworkPreviewOverlay::hideOverlay);
 }
 
-void ArtworkPreviewOverlay::showArtworkForFile(
-    const QString &filePath, const QString &artworkDirectory) {
+void ArtworkPreviewOverlay::showArtworkForFile(const QString &filePath,
+                                               const QString &artworkDirectory) {
   m_currentFilePath = filePath;
 
   // Find artwork for this file
-  QString artworkPath = ArtworkUtils::findArtworkForFile(
-      QFileInfo(filePath).fileName(), artworkDirectory);
+  QString artworkPath =
+      ArtworkUtils::findArtworkForFile(QFileInfo(filePath).fileName(), artworkDirectory);
 
   if (artworkPath.isEmpty()) {
     // No artwork found - don't show overlay
@@ -73,8 +70,8 @@ void ArtworkPreviewOverlay::showArtworkForFile(
   int maxWidth = parentWidget->width() * 0.8;
   int maxHeight = parentWidget->height() * 0.8;
 
-  QPixmap scaled = artwork.scaled(maxWidth, maxHeight, Qt::KeepAspectRatio,
-                                  Qt::SmoothTransformation);
+  QPixmap scaled =
+      artwork.scaled(maxWidth, maxHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
   m_artworkLabel->setPixmap(scaled);
   m_artworkLabel->setFixedSize(scaled.size());
 

@@ -55,7 +55,7 @@ auto main(int argc, char *argv[]) -> int {
   // Bridge legacy diagnostic env vars to logging-category rules so existing
   // KARTEND_PERF_TRACE=1 / KARTEND_SEARCH_DIAG=1 / KARTEND_SCAN_DIAG=1
   // invocations continue to work after diag prints were converted from
-  // raw qWarning() to qCDebug(<category>).
+  // raw Qt logging macros to qCDebug(<category>).
   QStringList bridgedRules;
   if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
     bridgedRules << QStringLiteral("kartend.perftrace.debug=true");

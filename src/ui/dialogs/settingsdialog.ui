@@ -75,6 +75,28 @@
              </spacer>
             </item>
             <item>
+             <widget class="QToolButton" name="applyToButton">
+              <property name="maximumSize">
+               <size>
+                <width>30</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="toolTip">
+               <string>Apply the current collection's appearance and layout settings to other collections (Kartend-63o)</string>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+              <property name="icon">
+               <iconset theme="QIcon::ThemeIcon::DocumentSaveAs"/>
+              </property>
+              <property name="popupMode">
+               <enum>QToolButton::ToolButtonPopupMode::InstantPopup</enum>
+              </property>
+             </widget>
+            </item>
+            <item>
              <widget class="QPushButton" name="saveCollectionButton">
               <property name="maximumSize">
                <size>
@@ -437,10 +459,10 @@
                     <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
                     <property name="minimumWidth"><number>80</number></property>
                     <property name="maximumWidth"><number>80</number></property>
-                    <property name="toolTip"><string>Horizontal spacing between items in pixels</string></property>
-                    <property name="minimum"><number>-20</number></property>
-                    <property name="maximum"><number>50</number></property>
-                    <property name="value"><number>20</number></property>
+                    <property name="toolTip"><string>Horizontal spacing adjustment (0 = tightest, 150 = loosest)</string></property>
+                    <property name="minimum"><number>0</number></property>
+                    <property name="maximum"><number>150</number></property>
+                    <property name="value"><number>120</number></property>
                    </widget>
                   </item>
                   <item row="4" column="0">
@@ -451,10 +473,10 @@
                     <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
                     <property name="minimumWidth"><number>80</number></property>
                     <property name="maximumWidth"><number>80</number></property>
-                    <property name="toolTip"><string>Vertical spacing between items in pixels</string></property>
-                    <property name="minimum"><number>-20</number></property>
-                    <property name="maximum"><number>50</number></property>
-                    <property name="value"><number>20</number></property>
+                    <property name="toolTip"><string>Vertical spacing adjustment (0 = tightest, 150 = loosest)</string></property>
+                    <property name="minimum"><number>0</number></property>
+                    <property name="maximum"><number>150</number></property>
+                    <property name="value"><number>120</number></property>
                    </widget>
                   </item>
                   <item row="5" column="0">
@@ -503,7 +525,7 @@
                   </item>
                 </layout>
                </item>
-               <item><spacer name="appearanceLayoutVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+                <item><spacer name="appearanceLayoutVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
               </layout>
              </widget>
              <!-- Sub-tab: Titles -->
@@ -567,7 +589,7 @@
                  </item>
                 </layout>
                </item>
-               <item><spacer name="appearanceTitlesVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+                <item><spacer name="appearanceTitlesVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
               </layout>
              </widget>
              <!-- Sub-tab: Colors -->
@@ -772,7 +794,7 @@
                  </item>
                 </layout>
                </item>
-               <item><spacer name="appearanceColorsVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+                <item><spacer name="appearanceColorsVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
               </layout>
              </widget>
              <!-- Sub-tab: List Mode -->
@@ -819,7 +841,7 @@
                   </item>
                 </layout>
                </item>
-               <item><spacer name="appearanceListVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+                <item><spacer name="appearanceListVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
               </layout>
              </widget>
             </widget>
@@ -1372,10 +1394,164 @@
               </property>
              </widget>
             </item>
+            <item row="12" column="0">
+             <widget class="QLabel" name="scrollVelocityMultiplierLabel">
+              <property name="text">
+               <string>Scroll Velocity Multiplier:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="12" column="1">
+             <widget class="QDoubleSpinBox" name="scrollVelocityMultiplierSpinBox">
+              <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+              <property name="minimumWidth"><number>80</number></property>
+              <property name="maximumWidth"><number>80</number></property>
+              <property name="toolTip">
+               <string>Multiplier applied to mouse wheel rows and held-arrow key-repeat cadence. 1.0× = unchanged.</string>
+              </property>
+              <property name="suffix">
+               <string>×</string>
+              </property>
+              <property name="decimals">
+               <number>2</number>
+              </property>
+              <property name="singleStep">
+               <double>0.25</double>
+              </property>
+              <property name="minimum">
+               <double>0.25</double>
+              </property>
+              <property name="maximum">
+               <double>5.00</double>
+              </property>
+              <property name="value">
+               <double>1.00</double>
+              </property>
+             </widget>
+            </item>
+            <item row="13" column="0">
+             <widget class="QLabel" name="selectItemOnHoverLabel">
+              <property name="text">
+               <string>Select on Hover:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="13" column="1">
+             <widget class="QCheckBox" name="selectItemOnHoverCheckBox">
+              <property name="toolTip">
+               <string>Move selection to the visible item under the mouse pointer without clicking</string>
+              </property>
+             </widget>
+            </item>
+                </layout>
+               </item>
+              <item>
+               <spacer name="generalVerticalSpacer">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Vertical</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>40</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="attractSubTab">
+          <attribute name="title">
+           <string>Attract Mode</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="attractSubTabLayout">
+           <item>
+            <widget class="QGroupBox" name="attractGroupBox">
+             <property name="title">
+              <string>Attract Mode Settings</string>
+             </property>
+             <layout class="QVBoxLayout" name="attractContentLayout">
+              <item>
+               <layout class="QFormLayout" name="attractFormLayout">
+                <item row="0" column="0">
+                 <widget class="QLabel" name="attractModeLabel">
+                  <property name="text">
+                   <string>Enabled:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QCheckBox" name="attractModeCheckBox">
+                  <property name="toolTip">
+                   <string>Automatically scroll through items after an idle timeout</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="attractIdleTimeoutLabel">
+                  <property name="text">
+                   <string>Idle Timeout:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QSpinBox" name="attractIdleTimeoutSpinBox">
+                  <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                  <property name="minimumWidth"><number>80</number></property>
+                  <property name="maximumWidth"><number>80</number></property>
+                  <property name="toolTip">
+                   <string>Seconds of inactivity before attract mode activates (10-3600)</string>
+                  </property>
+                  <property name="suffix">
+                   <string> s</string>
+                  </property>
+                  <property name="minimum">
+                   <number>10</number>
+                  </property>
+                  <property name="maximum">
+                   <number>3600</number>
+                  </property>
+                  <property name="value">
+                   <number>120</number>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="0">
+                 <widget class="QLabel" name="attractScrollSpeedLabel">
+                  <property name="text">
+                   <string>Scroll Speed:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="1">
+                 <widget class="QSpinBox" name="attractScrollSpeedSpinBox">
+                  <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                  <property name="minimumWidth"><number>80</number></property>
+                  <property name="maximumWidth"><number>80</number></property>
+                  <property name="toolTip">
+                   <string>Scroll speed in pixels per frame during attract mode (1-10)</string>
+                  </property>
+                  <property name="suffix">
+                   <string> px</string>
+                  </property>
+                  <property name="minimum">
+                   <number>1</number>
+                  </property>
+                  <property name="maximum">
+                   <number>10</number>
+                  </property>
+                  <property name="value">
+                   <number>1</number>
+                  </property>
+                 </widget>
+                </item>
                </layout>
               </item>
               <item>
-               <spacer name="generalVerticalSpacer">
+               <spacer name="attractVerticalSpacer">
                 <property name="orientation">
                  <enum>Qt::Orientation::Vertical</enum>
                 </property>

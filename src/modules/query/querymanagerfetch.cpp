@@ -2,6 +2,7 @@
 #include "querymanager.h"
 
 #include "loggingcategories.h"
+#include <atomic>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -13,7 +14,6 @@
 #include <QString>
 #include <QStringList>
 #include <QtGlobal>
-#include <atomic>
 #include <stdexcept>
 
 #include "collectionutils.h"
@@ -33,9 +33,9 @@ Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 
 using QueryManagerInternal::buildFtsPrefixQuery;
 
-int QueryManager::fetchItemCountImpl(
-    const CollectionContext &context,
-    const QList<CollectionConfig> &allCollections, const QString &filter) {
+int QueryManager::fetchItemCountImpl(const CollectionContext &context,
+                                     const QList<CollectionConfig> &allCollections,
+                                     const QString &filter) {
   if (!ensureDatabaseAvailable("QueryManager::fetchItemCountImpl")) {
     return 0;
   }
@@ -47,16 +47,15 @@ int QueryManager::fetchItemCountImpl(
 
   if (!context.isValid()) {
     auto err = ErrorContext::error(ErrorCode::InvalidCollectionContext,
-                                   "Invalid collection context",
-                                   "QueryManager::fetchItemCount");
+                                   "Invalid collection context", "QueryManager::fetchItemCount");
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return 0;
   }
 
   CollectionContext ctx = context;
-  ctx.config.mediaDirectory = PathUtils::validateAndExpandPath(
-      ctx.config.mediaDirectory, ctx.config.name);
+  ctx.config.mediaDirectory =
+      PathUtils::validateAndExpandPath(ctx.config.mediaDirectory, ctx.config.name);
 
   // IMPORTANT: Do not scan synchronously here.
   // Scans are dispatched to a dedicated scan worker so this query worker can
@@ -64,38 +63,32 @@ int QueryManager::fetchItemCountImpl(
 
   QStringList uuids = collectCollectionUuids(ctx, allCollections);
   if (uuids.isEmpty()) {
-    auto err =
-        ErrorContext::warning(ErrorCode::InvalidArgument,
-                              "No valid collection UUIDs for item count query",
-                              "QueryManager::fetchItemCount");
+    auto err = ErrorContext::warning(ErrorCode::InvalidArgument,
+                                     "No valid collection UUIDs for item count query",
+                                     "QueryManager::fetchItemCount");
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return 0;
   }
   const QString trimmedFilter = filter.trimmed();
 
-    qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: uuidCount="
-               << uuids.size() << "showAllSubcollectionItems="
-               << ctx.config.showAllSubcollectionItems
-               << "queryIncludeDescendants=" << ctx.queryIncludeDescendants;
-    qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: collIndex="
-               << context.currentIndex << "filter='" << trimmedFilter
-               << "' includeSubfolders="
-               << context.config.includeContentSubfolders
-               << " showAllSubfolderItems="
-               << context.config.showAllSubfolderItems << " currentSubfolder='"
-               << context.config.currentSubfolder << "'";
+  qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: uuidCount=" << uuids.size()
+                        << "showAllSubcollectionItems=" << ctx.config.showAllSubcollectionItems
+                        << "queryIncludeDescendants=" << ctx.queryIncludeDescendants;
+  qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: collIndex=" << context.currentIndex
+                        << "filter='" << trimmedFilter
+                        << "' includeSubfolders=" << context.config.includeContentSubfolders
+                        << " showAllSubfolderItems=" << context.config.showAllSubfolderItems
+                        << " currentSubfolder='" << context.config.currentSubfolder << "'";
   if (m_itemsFtsAvailable && !m_itemsFtsReady) {
-      qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: checking FTS "
-                    "readiness from DB...";
+    qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: checking FTS "
+                             "readiness from DB...";
     m_itemsFtsReady = isItemsFtsReadyFromDb();
-      qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: FTS ready ="
-                 << m_itemsFtsReady;
+    qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: FTS ready =" << m_itemsFtsReady;
   }
-  const QString ftsQuery =
-      (m_itemsFtsAvailable && m_itemsFtsReady && !trimmedFilter.isEmpty())
-          ? buildFtsPrefixQuery(trimmedFilter)
-          : QString();
+  const QString ftsQuery = (m_itemsFtsAvailable && m_itemsFtsReady && !trimmedFilter.isEmpty())
+                               ? buildFtsPrefixQuery(trimmedFilter)
+                               : QString();
   const bool useFts = !ftsQuery.isEmpty();
 
   // Check if we need to use temp table for large UUID lists
@@ -105,10 +98,9 @@ int QueryManager::fetchItemCountImpl(
 
   if (useTempTable) {
     if (!ensureQueryUuidsPopulated(uuids)) {
-      auto err = ErrorContext::warning(
-          ErrorCode::DatabaseQueryFailed,
-          "Failed to populate UUID temp table for item count query",
-          "QueryManager::fetchItemCount");
+      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                       "Failed to populate UUID temp table for item count query",
+                                       "QueryManager::fetchItemCount");
       ErrorUtils::logError(err);
       emit errorOccurred(err);
       return 0;
@@ -137,8 +129,7 @@ int QueryManager::fetchItemCountImpl(
     if (useTempTable) {
       sql = "SELECT COUNT(DISTINCT path) FROM items WHERE EXISTS " + uuidClause;
     } else {
-      sql = "SELECT COUNT(DISTINCT path) FROM items WHERE collection_uuid IN " +
-            uuidClause;
+      sql = "SELECT COUNT(DISTINCT path) FROM items WHERE collection_uuid IN " + uuidClause;
     }
   }
 
@@ -147,8 +138,8 @@ int QueryManager::fetchItemCountImpl(
   if (!subfolder.isEmpty()) {
     // In a subfolder - show only items whose path starts with subfolder/
     sql += " AND path LIKE ?";
-  } else if (ctx.config.includeContentSubfolders &&
-             !ctx.config.showAllSubfolderItems && trimmedFilter.isEmpty()) {
+  } else if (ctx.config.includeContentSubfolders && !ctx.config.showAllSubfolderItems &&
+             trimmedFilter.isEmpty()) {
     // At root with subfolders enabled but NOT showing all items, we normally
     // exclude items in subfolders so the UI can present folder tiles.
     //
@@ -186,13 +177,11 @@ int QueryManager::fetchItemCountImpl(
     query.bindValue(bindPos++, "%" + trimmedFilter + "%");
   }
 
-    qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: executing SQL, useFts="
-        << useFts << "useTempTable=" << useTempTable
-        << "uuidCount=" << uuids.size();
+  qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: executing SQL, useFts=" << useFts
+                        << "useTempTable=" << useTempTable << "uuidCount=" << uuids.size();
   if (query.exec() && query.next()) {
     const int count = query.value(0).toInt();
-      qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: result="
-                 << count;
+    qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: result=" << count;
     // For large collections, schedule deferred cache build for O(1) range
     // lookups. This avoids expensive ORDER BY + OFFSET on every fetchItemsRange
     // call. We don't block here - the cache builds after this function returns,
@@ -201,13 +190,12 @@ int QueryManager::fetchItemCountImpl(
     // Random sort mode ALWAYS requires a cache because SQL ORDER BY RANDOM()
     // with OFFSET cannot provide consistent results across paginated requests.
     const bool isRandomSort = (ctx.sortMode == SortMode::Random);
-    if (isRandomSort ||
-        count >= UIConstants::Database::PRECOMPUTE_SORT_THRESHOLD) {
+    if (isRandomSort || count >= UIConstants::Database::PRECOMPUTE_SORT_THRESHOLD) {
       if (!hasSortedItemsCache() && !m_sortCacheBuildPending) {
         if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
           qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemCount: count=" << count
-                     << (isRandomSort ? " (random mode)" : " >= threshold")
-                     << ", scheduling deferred cache build...";
+                                << (isRandomSort ? " (random mode)" : " >= threshold")
+                                << ", scheduling deferred cache build...";
         }
         scheduleDeferredCacheBuild(uuids, trimmedFilter, ctx.sortMode);
       }
@@ -222,10 +210,9 @@ int QueryManager::fetchItemCountImpl(
     return count;
   }
 
-    qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: query FAILED"
-               << query.lastError().text();
-  auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                   "Fetch item count failed",
+  qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: query FAILED"
+                        << query.lastError().text();
+  auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Fetch item count failed",
                                    "QueryManager::fetchItemCount")
                  .withDetails(query.lastError().text());
   ErrorUtils::logError(err);
@@ -239,21 +226,19 @@ void QueryManager::fetchItemCount(const CollectionContext &context,
   emit itemCountLoaded(fetchItemCountImpl(context, allCollections, filter));
 }
 
-void QueryManager::fetchItemCountWithToken(
-    const CollectionContext &context,
-    const QList<CollectionConfig> &allCollections, const QString &filter,
-    int requestToken) {
-    qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCountWithToken: ENTRY token="
-        << requestToken << "filter='" << filter << "'";
+void QueryManager::fetchItemCountWithToken(const CollectionContext &context,
+                                           const QList<CollectionConfig> &allCollections,
+                                           const QString &filter, int requestToken) {
+  qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCountWithToken: ENTRY token=" << requestToken
+                        << "filter='" << filter << "'";
   const int count = fetchItemCountImpl(context, allCollections, filter);
-    qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCountWithToken: EMIT token="
-        << requestToken << "count=" << count;
+  qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCountWithToken: EMIT token=" << requestToken
+                        << "count=" << count;
   emit itemCountLoadedWithToken(count, requestToken);
 }
 
-void QueryManager::ensureScannedForContext(
-    const CollectionContext &context,
-    const QList<CollectionConfig> &allCollections) {
+void QueryManager::ensureScannedForContext(const CollectionContext &context,
+                                           const QList<CollectionConfig> &allCollections) {
   if (!ensureDatabaseAvailable("QueryManager::ensureScannedForContext")) {
     return;
   }
@@ -265,17 +250,17 @@ void QueryManager::ensureScannedForContext(
   refreshWalView();
 
   if (!context.isValid()) {
-    auto err = ErrorContext::error(ErrorCode::InvalidCollectionContext,
-                                   "Invalid collection context",
-                                   "QueryManager::ensureScannedForContext");
+    auto err =
+        ErrorContext::error(ErrorCode::InvalidCollectionContext, "Invalid collection context",
+                            "QueryManager::ensureScannedForContext");
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return;
   }
 
   CollectionContext ctx = context;
-  ctx.config.mediaDirectory = PathUtils::validateAndExpandPath(
-      ctx.config.mediaDirectory, ctx.config.name);
+  ctx.config.mediaDirectory =
+      PathUtils::validateAndExpandPath(ctx.config.mediaDirectory, ctx.config.name);
 
   // Scan current collection if needed. ensureCollectionScanned now handles
   // emitting both scanStarting and collectionScanCompleted signals internally,
@@ -288,8 +273,7 @@ void QueryManager::ensureScannedForContext(
   if (ctx.queryIncludeAllCollections) {
     for (int i = 0; i < allCollections.size(); ++i) {
       CollectionConfig col = allCollections[i];
-      col.mediaDirectory =
-          PathUtils::validateAndExpandPath(col.mediaDirectory, col.name);
+      col.mediaDirectory = PathUtils::validateAndExpandPath(col.mediaDirectory, col.name);
       if (col.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
@@ -304,8 +288,7 @@ void QueryManager::ensureScannedForContext(
     // fall back to O(n²) tree traversal for backward compatibility
     const QList<int> &rawDescendants =
         ctx.precomputedDescendants.isEmpty()
-            ? CollectionUtils::collectDescendantIndices(ctx.currentIndex,
-                                                        allCollections)
+            ? CollectionUtils::collectDescendantIndices(ctx.currentIndex, allCollections)
             : ctx.precomputedDescendants;
     for (int descendantIndex : rawDescendants) {
       if (descendantIndex == ctx.currentIndex || descendantIndex < 0 ||
@@ -314,8 +297,7 @@ void QueryManager::ensureScannedForContext(
       }
 
       CollectionConfig subCol = allCollections[descendantIndex];
-      subCol.mediaDirectory =
-          PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
+      subCol.mediaDirectory = PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
       if (subCol.mediaDirectory.trimmed().isEmpty()) {
         continue;
       }
@@ -325,10 +307,9 @@ void QueryManager::ensureScannedForContext(
   }
 }
 
-
-void QueryManager::fetchVisualIndexForPath(
-    const CollectionContext &context,
-    const QList<CollectionConfig> &allCollections, const QString &filePath) {
+void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
+                                           const QList<CollectionConfig> &allCollections,
+                                           const QString &filePath) {
   if (filePath.isEmpty()) {
     emit visualIndexForPathLoaded(-1, filePath);
     return;
@@ -347,28 +328,25 @@ void QueryManager::fetchVisualIndexForPath(
   }
 
   CollectionContext ctx = context;
-  ctx.config.mediaDirectory = PathUtils::validateAndExpandPath(
-      ctx.config.mediaDirectory, ctx.config.name);
-  ctx.config.artworkDirectory = PathUtils::validateAndExpandPath(
-      ctx.config.artworkDirectory, ctx.config.name);
+  ctx.config.mediaDirectory =
+      PathUtils::validateAndExpandPath(ctx.config.mediaDirectory, ctx.config.name);
+  ctx.config.artworkDirectory =
+      PathUtils::validateAndExpandPath(ctx.config.artworkDirectory, ctx.config.name);
 
   QStringList uuids = collectCollectionUuids(ctx, allCollections);
   CollectionDirMaps dirMaps = buildDirectoryMaps(ctx, allCollections);
 
   // Try sorted cache first (fast path)
   if (hasSortedItemsCache()) {
-    const QByteArray currentHash =
-        computeSortCacheHash(uuids, QString(), ctx.sortMode);
+    const QByteArray currentHash = computeSortCacheHash(uuids, QString(), ctx.sortMode);
     if (currentHash == m_sortedItemsCacheHash) {
       // Query sorted cache for this path
       // The cache stores relative paths, so we need to check both
       QSqlQuery cacheQuery(m_db);
-      cacheQuery.prepare(
-          "SELECT position FROM sorted_items_cache WHERE path = ?");
+      cacheQuery.prepare("SELECT position FROM sorted_items_cache WHERE path = ?");
 
       // Convert to relative path if it's absolute
-      for (auto it = dirMaps.uuidToMediaDir.begin();
-           it != dirMaps.uuidToMediaDir.end(); ++it) {
+      for (auto it = dirMaps.uuidToMediaDir.begin(); it != dirMaps.uuidToMediaDir.end(); ++it) {
         if (filePath.startsWith(it.value())) {
           QString candidate = filePath.mid(it.value().length());
           if (candidate.startsWith('/')) {
@@ -419,8 +397,7 @@ void QueryManager::fetchVisualIndexForPath(
   // Build WHERE clause for UUIDs
   QString uuidPlaceholders;
   for (int i = 0; i < uuids.size(); ++i) {
-    if (i > 0)
-      uuidPlaceholders += ", ";
+    if (i > 0) uuidPlaceholders += ", ";
     uuidPlaceholders += "?";
   }
 
@@ -447,8 +424,7 @@ void QueryManager::fetchVisualIndexForPath(
 
   // Convert full path to relative for database lookup
   QString relPath;
-  for (auto it = dirMaps.uuidToMediaDir.begin();
-       it != dirMaps.uuidToMediaDir.end(); ++it) {
+  for (auto it = dirMaps.uuidToMediaDir.begin(); it != dirMaps.uuidToMediaDir.end(); ++it) {
     if (filePath.startsWith(it.value())) {
       relPath = filePath.mid(it.value().length());
       if (relPath.startsWith('/')) {
@@ -483,9 +459,9 @@ void QueryManager::fetchVisualIndexForPath(
 
   QString boundPath = relPath.isEmpty() ? filePath : relPath;
   qCDebug(lcSearchDiag) << "[SelectionRestore] fetchVisualIndexForPath:"
-             << "rowCount in subquery:" << rowCount << "uuids:" << uuids.size()
-             << "filePath:" << filePath << "relPath:" << relPath
-             << "boundPath:" << boundPath;
+                        << "rowCount in subquery:" << rowCount << "uuids:" << uuids.size()
+                        << "filePath:" << filePath << "relPath:" << relPath
+                        << "boundPath:" << boundPath;
 
   if (query.exec() && query.next()) {
     int position = query.value(0).toInt();
@@ -493,7 +469,7 @@ void QueryManager::fetchVisualIndexForPath(
     emit visualIndexForPathLoaded(position, filePath);
   } else {
     qCDebug(lcSearchDiag) << "[SelectionRestore] Query returned NO MATCH, lastError:"
-               << query.lastError().text();
+                          << query.lastError().text();
     emit visualIndexForPathLoaded(-1, filePath);
   }
 }

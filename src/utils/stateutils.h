@@ -21,8 +21,7 @@ struct SelectionRestoreState {
   bool forceImmediateCenter = false;
   int restoreToken = 0;
   bool restorePending = false;
-  bool userSelectionMade =
-      false; // Set when user makes explicit selection, blocks auto-restore
+  bool userSelectionMade = false; // Set when user makes explicit selection, blocks auto-restore
 
   void reset() {
     restoring = false;
@@ -36,9 +35,7 @@ struct SelectionRestoreState {
 
   [[nodiscard]] bool isActive() const { return restoring && targetIndex >= 0; }
 
-  [[nodiscard]] bool matchesTarget(int index) const {
-    return restoring && index == targetIndex;
-  }
+  [[nodiscard]] bool matchesTarget(int index) const { return restoring && index == targetIndex; }
 
   void beginRestore(int index) {
     restoring = true;
@@ -76,6 +73,7 @@ struct ScrollState {
   bool keyContinuous = false;
   bool horizHoldActive = false;
   bool clickHoldAdvancing = false;
+  bool hoverScrollPending = false;
 
   void resetScrollFlags() {
     programmaticScroll = false;
@@ -86,10 +84,11 @@ struct ScrollState {
     keyContinuous = false;
     horizHoldActive = false;
     clickHoldAdvancing = false;
+    hoverScrollPending = false;
   }
 
   [[nodiscard]] bool isAnyContinuousActive() const {
-    return clickContinuous || keyContinuous || clickHoldAdvancing;
+    return clickContinuous || keyContinuous || clickHoldAdvancing || hoverScrollPending;
   }
 };
 

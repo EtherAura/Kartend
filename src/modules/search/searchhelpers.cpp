@@ -2,14 +2,12 @@
 
 namespace SearchHelpers {
 
-auto buildSearchModeCycle(const SearchContext &ctx, bool isRoot)
-    -> QVector<SearchMode> {
+auto buildSearchModeCycle(const SearchContext &ctx, bool isRoot) -> QVector<SearchMode> {
   QVector<SearchMode> cycle;
   cycle.reserve(3);
 
   if (isRoot) {
-    cycle << (ctx.hasSubs ? SearchMode::CurrentAndSubcollections
-                          : SearchMode::CurrentCollection);
+    cycle << (ctx.hasSubs ? SearchMode::CurrentAndSubcollections : SearchMode::CurrentCollection);
     if (ctx.allowAll) {
       cycle << SearchMode::AllCollections;
     }
@@ -50,8 +48,7 @@ auto allowAllFor(const CollectionConfig &cfg, int collIndex, bool hasSubs,
         continue;
       }
       const CollectionConfig &candidate = collections[i];
-      if (candidate.parentCollectionIndex == -1
-          && hasDirectItemsLookup(i)) {
+      if (candidate.parentCollectionIndex == -1 && hasDirectItemsLookup(i)) {
         return true;
       }
     }

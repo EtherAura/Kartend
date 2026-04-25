@@ -1,6 +1,4 @@
 // Sibling TU: appearance/styling application for NavigationManager.
-#include "navigationmanager.h"
-#include "loggingcategories.h"
 #include "artworkmanager.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
@@ -9,7 +7,9 @@
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "loadingoverlay.h"
+#include "loggingcategories.h"
 #include "metadatasidebar.h"
+#include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
@@ -21,6 +21,7 @@
 #include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
+#include <algorithm>
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
@@ -28,21 +29,19 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
-#include <QTimer>
 #include <QtGlobal>
-#include <algorithm>
+#include <QTimer>
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcNavigationManager)
-#define debugLog(msg)                                                          \
-  do {                                                                         \
-    if (lcNavigationManager().isDebugEnabled()) {                              \
-      qCDebug(lcNavigationManager) << msg;                                     \
-    }                                                                          \
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcNavigationManager().isDebugEnabled()) {                                                  \
+      qCDebug(lcNavigationManager) << msg;                                                         \
+    }                                                                                              \
   } while (0)
 
-auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex)
-    -> void {
+auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex) -> void {
   if (collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     return;
   }
@@ -53,10 +52,9 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex)
     m_scrollManager->updateGridWidth(collection.gridWidth);
   }
 
-  SettingsUtils::applyHorizontalScrollbarSetting(
-      m_itemScrollArea, collectionIndex, (*m_collections));
-  SettingsUtils::applyVerticalScrollbarSetting(
-      m_itemScrollArea, collectionIndex, (*m_collections));
+  SettingsUtils::applyHorizontalScrollbarSetting(m_itemScrollArea, collectionIndex,
+                                                 (*m_collections));
+  SettingsUtils::applyVerticalScrollbarSetting(m_itemScrollArea, collectionIndex, (*m_collections));
 
   applyBackgroundForCollection(collectionIndex);
   applyPrimaryColorForCollection(collectionIndex);
@@ -67,8 +65,7 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex)
 }
 
 void NavigationManager::applyBackgroundForCollection(int collectionIndex) {
-  if (!m_itemScrollArea || collectionIndex < 0 ||
-      collectionIndex >= (*m_collections).size()) {
+  if (!m_itemScrollArea || collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     return;
   }
 
@@ -79,8 +76,7 @@ void NavigationManager::applyBackgroundForCollection(int collectionIndex) {
   }
 
   QString styleSheet;
-  if (collection.backgroundType == BackgroundType::Image &&
-      !collection.backgroundImage.isEmpty()) {
+  if (collection.backgroundType == BackgroundType::Image && !collection.backgroundImage.isEmpty()) {
     // Background image mode
     QString imagePath = collection.backgroundImage;
     // Escape backslashes for CSS
@@ -94,8 +90,7 @@ void NavigationManager::applyBackgroundForCollection(int collectionIndex) {
                      .arg(imagePath);
   } else if (!collection.backgroundColor.isEmpty()) {
     // Background color mode
-    styleSheet = QString("QWidget { background-color: %1; }")
-                     .arg(collection.backgroundColor);
+    styleSheet = QString("QWidget { background-color: %1; }").arg(collection.backgroundColor);
   } else {
     // Clear any custom background (use system default)
     styleSheet.clear();
@@ -117,15 +112,15 @@ void NavigationManager::applyPrimaryColorForCollection(int collectionIndex) {
   ItemWidget::setListAltRowColor(collection.listAltRowColor);
   ItemWidget::setCustomFontFamily(collection.customFontFamily);
 
-  bool hasPrimaryColor = !collection.primaryColor.isEmpty() &&
-                         QColor::isValidColorName(collection.primaryColor);
+  bool hasPrimaryColor =
+      !collection.primaryColor.isEmpty() && QColor::isValidColorName(collection.primaryColor);
 
   // Apply primary color to toolbar/top bar (exact color, not tinted)
   if (m_itemsTopBar) {
     QString toolbarStyle;
     if (hasPrimaryColor) {
-      toolbarStyle = QString("QWidget#itemsTopBar { background-color: %1; }")
-                         .arg(collection.primaryColor);
+      toolbarStyle =
+          QString("QWidget#itemsTopBar { background-color: %1; }").arg(collection.primaryColor);
     }
     m_itemsTopBar->setStyleSheet(toolbarStyle);
   }
@@ -192,20 +187,19 @@ void NavigationManager::restoreSelectionForCurrentCollection() {
                            UIConstants::Selection::RESTORE_MAX_DELAY_MS);
 }
 void NavigationManager::persistCurrentSelection() {
-  static const bool diagEnabled =
-      qEnvironmentVariableIntValue("KARTEND_SEARCH_DIAG");
+  static const bool diagEnabled = qEnvironmentVariableIntValue("KARTEND_SEARCH_DIAG");
   if (diagEnabled) {
     qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: ENTRY";
   }
-  if ((!m_interactionManager) || (!m_settingsManager) ||
-      (!m_currentCollectionIndex) || (!m_collections)) {
+  if ((!m_interactionManager) || (!m_settingsManager) || (!m_currentCollectionIndex) ||
+      (!m_collections)) {
     if (diagEnabled) {
       qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: "
-                    "missing deps"
-                 << "interaction=" << static_cast<bool>(m_interactionManager)
-                 << "settings=" << static_cast<bool>(m_settingsManager)
-                 << "collIndex=" << static_cast<bool>(m_currentCollectionIndex)
-                 << "collections=" << static_cast<bool>(m_collections);
+                               "missing deps"
+                            << "interaction=" << static_cast<bool>(m_interactionManager)
+                            << "settings=" << static_cast<bool>(m_settingsManager)
+                            << "collIndex=" << static_cast<bool>(m_currentCollectionIndex)
+                            << "collections=" << static_cast<bool>(m_collections);
     }
     return;
   }
@@ -213,8 +207,8 @@ void NavigationManager::persistCurrentSelection() {
   if (!CollectionUtils::isValidIndex(coll, m_collections)) {
     if (diagEnabled) {
       qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: "
-                    "invalid collection index"
-                 << coll;
+                               "invalid collection index"
+                            << coll;
     }
     return;
   }
@@ -222,7 +216,7 @@ void NavigationManager::persistCurrentSelection() {
   if (sel < 0) {
     if (diagEnabled) {
       qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: "
-                    "no selection, caching viewport anyway";
+                               "no selection, caching viewport anyway";
     }
     // Still try to cache viewport even without selection for fast startup
   } else {
@@ -238,33 +232,30 @@ void NavigationManager::persistCurrentSelection() {
     QHash<QString, QString> fileNames;
     QHash<QString, QString> artworkPaths;
 
-    if (m_scrollManager->getCurrentViewportForCache(
-            startIndex, totalItems, filePaths, fileNames, artworkPaths)) {
+    if (m_scrollManager->getCurrentViewportForCache(startIndex, totalItems, filePaths, fileNames,
+                                                    artworkPaths)) {
       const CollectionConfig &cfg = (*m_collections)[coll];
-      const QString collectionKey =
-          CollectionUtils::hierarchicalNameFor(cfg, *m_collections);
+      const QString collectionKey = CollectionUtils::hierarchicalNameFor(cfg, *m_collections);
       if (diagEnabled) {
         qCDebug(lcSearchDiag) << "[NavigationManager] "
-                      "persistCurrentSelection: caching viewport for"
-                   << collectionKey << "startIndex=" << startIndex
-                   << "totalItems=" << totalItems
-                   << "filePaths=" << filePaths.size();
+                                 "persistCurrentSelection: caching viewport for"
+                              << collectionKey << "startIndex=" << startIndex
+                              << "totalItems=" << totalItems << "filePaths=" << filePaths.size();
       }
-      m_sessionManager->setCachedViewport(collectionKey, startIndex, totalItems,
-                                          filePaths, fileNames, artworkPaths);
+      m_sessionManager->setCachedViewport(collectionKey, startIndex, totalItems, filePaths,
+                                          fileNames, artworkPaths);
     } else if (diagEnabled) {
       qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: "
-                    "getCurrentViewportForCache returned false";
+                               "getCurrentViewportForCache returned false";
     }
   } else if (diagEnabled) {
     qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: "
-                  "cannot cache viewport"
-               << "scrollManager=" << static_cast<bool>(m_scrollManager)
-               << "sessionManager=" << static_cast<bool>(m_sessionManager)
-               << "generalSettings=" << static_cast<bool>(m_generalSettings)
-               << "rememberSelection="
-               << (m_generalSettings ? m_generalSettings->rememberSelection
-                                     : false);
+                             "cannot cache viewport"
+                          << "scrollManager=" << static_cast<bool>(m_scrollManager)
+                          << "sessionManager=" << static_cast<bool>(m_sessionManager)
+                          << "generalSettings=" << static_cast<bool>(m_generalSettings)
+                          << "rememberSelection="
+                          << (m_generalSettings ? m_generalSettings->rememberSelection : false);
   }
 }
 
@@ -273,10 +264,8 @@ void NavigationManager::applyUiPoliciesForCollection(int collectionIndex) {
     m_sidebarManager->applySidebarStateForCollection(collectionIndex);
   }
   if (m_settingsManager && m_itemScrollArea && m_collections) {
-    SettingsUtils::applyHorizontalScrollbarSetting(
-        m_itemScrollArea, collectionIndex, *m_collections);
-    SettingsUtils::applyVerticalScrollbarSetting(
-        m_itemScrollArea, collectionIndex, *m_collections);
+    SettingsUtils::applyHorizontalScrollbarSetting(m_itemScrollArea, collectionIndex,
+                                                   *m_collections);
+    SettingsUtils::applyVerticalScrollbarSetting(m_itemScrollArea, collectionIndex, *m_collections);
   }
 }
-

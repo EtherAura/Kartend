@@ -27,12 +27,10 @@ public:
   void setError(const ErrorUtils::ErrorContext &context);
 
   // Convenience static method to show error dialog
-  static void showError(QWidget *parent,
-                        const ErrorUtils::ErrorContext &context);
+  static void showError(QWidget *parent, const ErrorUtils::ErrorContext &context);
 
   // Show critical error with option to quit or continue
-  static bool showCriticalError(QWidget *parent,
-                                const ErrorUtils::ErrorContext &context,
+  static bool showCriticalError(QWidget *parent, const ErrorUtils::ErrorContext &context,
                                 bool allowContinue = true);
 
 private slots:
@@ -42,10 +40,8 @@ private slots:
 private:
   void setupUI();
   void updateIcon(ErrorUtils::Severity severity);
-  [[nodiscard]] QString
-  formatUserMessage(const ErrorUtils::ErrorContext &context) const;
-  [[nodiscard]] QString
-  formatTechnicalDetails(const ErrorUtils::ErrorContext &context) const;
+  [[nodiscard]] QString formatUserMessage(const ErrorUtils::ErrorContext &context) const;
+  [[nodiscard]] QString formatTechnicalDetails(const ErrorUtils::ErrorContext &context) const;
 
   QLabel *m_iconLabel = nullptr;
   QLabel *m_messageLabel = nullptr;

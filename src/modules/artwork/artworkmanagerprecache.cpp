@@ -7,12 +7,14 @@
 // Extracted from artworkmanager.cpp during the Tier 4 LOC sweep
 // (Kartend-7ii) to bring artworkmanager.cpp under 500 LOC.
 #include "artworkmanager.h"
-#include "loggingcategories.h"
 #include "artworkmanagerinternal.h"
 #include "cachemanager.h"
+#include "loggingcategories.h"
 #include "ui/widgets/itemwidget.h"
 #include "uiconstants.h"
 
+#include <atomic>
+#include <memory>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -30,8 +32,6 @@
 #include <QString>
 #include <QStringList>
 #include <QtConcurrent>
-#include <atomic>
-#include <memory>
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcArtworkManager)
@@ -82,8 +82,8 @@ namespace {
 // Determines the appropriate batch size for artwork loading.
 // Uses adaptive batching when no custom size specified, with high-priority
 // using current adaptive size and low-priority using a reduced adaptive size.
-auto determineBatchSize(bool highPriority, int customBatchSize,
-                        const AdaptiveBatcher &batcher) -> int {
+auto determineBatchSize(bool highPriority, int customBatchSize, const AdaptiveBatcher &batcher)
+    -> int {
   if (customBatchSize > 0) {
     return customBatchSize;
   }
@@ -98,16 +98,13 @@ struct PrecacheResult {
   bool loadedFromDiskCache = false;
 };
 
-auto processPrecacheBatch(const QStringList &paths,
-                          const std::atomic<bool> &cancelled,
-                          CacheManager *cacheManager)
-    -> QList<PrecacheResult> {
+auto processPrecacheBatch(const QStringList &paths, const std::atomic<bool> &cancelled,
+                          CacheManager *cacheManager) -> QList<PrecacheResult> {
   QList<PrecacheResult> results;
   results.reserve(paths.size());
 
   for (const QString &artworkPath : paths) {
-    if (QApplication::closingDown() ||
-        cancelled.load(std::memory_order_relaxed)) {
+    if (QApplication::closingDown() || cancelled.load(std::memory_order_relaxed)) {
       break;
     }
 
@@ -121,17 +118,15 @@ auto processPrecacheBatch(const QStringList &paths,
       img = loadAndProcessImage(artworkPath);
     }
 
-    if (QApplication::closingDown() ||
-        cancelled.load(std::memory_order_relaxed)) {
+    if (QApplication::closingDown() || cancelled.load(std::memory_order_relaxed)) {
       break;
     }
     if (img.isNull()) {
       continue;
     }
 
-    results.append(PrecacheResult{.artworkPath = artworkPath,
-                                  .image = img,
-                                  .loadedFromDiskCache = loadedFromDiskCache});
+    results.append(PrecacheResult{
+        .artworkPath = artworkPath, .image = img, .loadedFromDiskCache = loadedFromDiskCache});
   }
 
   return results;
@@ -143,8 +138,7 @@ auto processPrecacheBatch(const QStringList &paths,
 // ArtworkManager precache members
 // ─────────────────────────────────────────────────────────────────────────────
 
-void ArtworkManager::dispatchAndTrackPrecacheBatch(
-    const QStringList &artworkPaths) {
+void ArtworkManager::dispatchAndTrackPrecacheBatch(const QStringList &artworkPaths) {
   if (artworkPaths.isEmpty()) {
     return;
   }
@@ -158,90 +152,84 @@ void ArtworkManager::dispatchAndTrackPrecacheBatch(
   if (!m_artworkThreadPool) {
     return;
   }
-  QFuture<void> future = QtConcurrent::run(
-      m_artworkThreadPool, [self, artworkPaths, cancelFlag, appReceiver,
-                            cacheManager, batchItemCount]() {
-        if (QApplication::closingDown() || !cancelFlag ||
-            cancelFlag->load(std::memory_order_relaxed)) {
-          return;
-        }
+  QFuture<void> future = QtConcurrent::run(m_artworkThreadPool, [self, artworkPaths, cancelFlag,
+                                                                 appReceiver, cacheManager,
+                                                                 batchItemCount]() {
+    if (QApplication::closingDown() || !cancelFlag || cancelFlag->load(std::memory_order_relaxed)) {
+      return;
+    }
 
-        QElapsedTimer timer;
-        timer.start();
-        const QList<PrecacheResult> results =
-            processPrecacheBatch(artworkPaths, *cancelFlag, cacheManager);
-        const qint64 elapsedMs = timer.elapsed();
+    QElapsedTimer timer;
+    timer.start();
+    const QList<PrecacheResult> results =
+        processPrecacheBatch(artworkPaths, *cancelFlag, cacheManager);
+    const qint64 elapsedMs = timer.elapsed();
 
-        if (QApplication::closingDown() || !cancelFlag ||
-            cancelFlag->load(std::memory_order_relaxed)) {
-          return;
-        }
-        if (!appReceiver) {
-          return;
-        }
+    if (QApplication::closingDown() || !cancelFlag || cancelFlag->load(std::memory_order_relaxed)) {
+      return;
+    }
+    if (!appReceiver) {
+      return;
+    }
 
-        QMetaObject::invokeMethod(
-            appReceiver,
-            [self, artworkPaths, results, cancelFlag, batchItemCount,
-             elapsedMs]() {
-              if (QApplication::closingDown() || !self || !cancelFlag ||
-                  cancelFlag->load(std::memory_order_relaxed)) {
-                return;
+    QMetaObject::invokeMethod(
+        appReceiver,
+        [self, artworkPaths, results, cancelFlag, batchItemCount, elapsedMs]() {
+          if (QApplication::closingDown() || !self || !cancelFlag ||
+              cancelFlag->load(std::memory_order_relaxed)) {
+            return;
+          }
+
+          if (lcArtworkManager().isDebugEnabled()) {
+            int diskHits = 0;
+            for (const auto &r : results) {
+              if (r.loadedFromDiskCache) {
+                ++diskHits;
               }
+            }
+            qCDebug(lcArtworkManager)
+                << "Artwork precache batch done"
+                << "requested=" << batchItemCount << "produced=" << results.size()
+                << "diskHits=" << diskHits << "elapsedMs=" << elapsedMs;
+          }
 
-              if (lcArtworkManager().isDebugEnabled()) {
-                int diskHits = 0;
-                for (const auto &r : results) {
-                  if (r.loadedFromDiskCache) {
-                    ++diskHits;
-                  }
-                }
-                qCDebug(lcArtworkManager)
-                    << "Artwork precache batch done"
-                    << "requested=" << batchItemCount
-                    << "produced=" << results.size() << "diskHits=" << diskHits
-                    << "elapsedMs=" << elapsedMs;
+          // Always clear pending entries, even if decode failed, so future
+          // silent load passes can retry.
+          {
+            QMutexLocker locker(&self->m_dataMutex);
+            for (const QString &p : artworkPaths) {
+              self->m_silentPendingPaths.remove(p);
+            }
+          }
+
+          for (const auto &r : results) {
+            if (r.image.isNull() || r.artworkPath.isEmpty()) {
+              continue;
+            }
+            QPixmap pixmap = QPixmap::fromImage(r.image);
+            if (pixmap.isNull()) {
+              continue;
+            }
+            pixmap.setDevicePixelRatio(r.image.devicePixelRatio());
+
+            if (self->m_cacheManager) {
+              if (r.loadedFromDiskCache) {
+                self->m_cacheManager->cacheArtworkInMemoryOnly(r.artworkPath, pixmap);
+              } else {
+                self->m_cacheManager->cacheArtwork(r.artworkPath, pixmap);
               }
+            }
+            {
+              QMutexLocker locker(&self->m_dataMutex);
+              self->m_silentlyCachedPaths.insert(r.artworkPath);
+            }
+          }
 
-              // Always clear pending entries, even if decode failed, so future
-              // silent load passes can retry.
-              {
-                QMutexLocker locker(&self->m_dataMutex);
-                for (const QString &p : artworkPaths) {
-                  self->m_silentPendingPaths.remove(p);
-                }
-              }
-
-              for (const auto &r : results) {
-                if (r.image.isNull() || r.artworkPath.isEmpty()) {
-                  continue;
-                }
-                QPixmap pixmap = QPixmap::fromImage(r.image);
-                if (pixmap.isNull()) {
-                  continue;
-                }
-                pixmap.setDevicePixelRatio(r.image.devicePixelRatio());
-
-                if (self->m_cacheManager) {
-                  if (r.loadedFromDiskCache) {
-                    self->m_cacheManager->cacheArtworkInMemoryOnly(
-                        r.artworkPath, pixmap);
-                  } else {
-                    self->m_cacheManager->cacheArtwork(r.artworkPath, pixmap);
-                  }
-                }
-                {
-                  QMutexLocker locker(&self->m_dataMutex);
-                  self->m_silentlyCachedPaths.insert(r.artworkPath);
-                }
-              }
-
-              // Record batch completion for cooldown enforcement
-              self->m_lastBatchCompletionTime.store(
-                  QDateTime::currentMSecsSinceEpoch());
-            },
-            Qt::QueuedConnection);
-      });
+          // Record batch completion for cooldown enforcement
+          self->m_lastBatchCompletionTime.store(QDateTime::currentMSecsSinceEpoch());
+        },
+        Qt::QueuedConnection);
+  });
 
   {
     QMutexLocker futureLock(&m_futureMutex);
@@ -251,8 +239,8 @@ void ArtworkManager::dispatchAndTrackPrecacheBatch(
 }
 
 // Applies processed artwork results to UI widgets on the GUI thread.
-void ArtworkManager::applyResultsToUi(
-    const QList<ArtworkInfo::Result> &batchResults, bool highPriority) {
+void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults,
+                                      bool highPriority) {
   for (const auto &result : batchResults) {
     if (result.widget.isNull() || result.image.isNull()) {
       continue;
@@ -293,8 +281,7 @@ void ArtworkManager::applyResultsToUi(
       // Widget identity not yet established - skip stale artwork
       continue;
     }
-    const QString artworkBaseName =
-        QFileInfo(result.artworkPath).completeBaseName();
+    const QString artworkBaseName = QFileInfo(result.artworkPath).completeBaseName();
     if (widgetBaseName != artworkBaseName) {
       // Widget has been recycled to a different identity, skip stale artwork
       continue;
@@ -329,8 +316,7 @@ void ArtworkManager::applyResultsToUi(
 // Parallel artwork loading: avoid QPixmapCache insertions and cache only via
 // CacheManager. For small uncached item counts, loads synchronously on main
 // thread to avoid thread dispatch overhead.
-void ArtworkManager::loadArtworkParallel(const QList<ArtworkInfo> &items,
-                                         bool highPriority,
+void ArtworkManager::loadArtworkParallel(const QList<ArtworkInfo> &items, bool highPriority,
                                          int customBatchSize) {
   if (QApplication::closingDown()) {
     return;
@@ -344,8 +330,7 @@ void ArtworkManager::loadArtworkParallel(const QList<ArtworkInfo> &items,
     perfTimer.start();
   }
 
-  const int batchSize =
-      determineBatchSize(highPriority, customBatchSize, m_adaptiveBatcher);
+  const int batchSize = determineBatchSize(highPriority, customBatchSize, m_adaptiveBatcher);
   QList<ArtworkInfo> uncachedItems;
   uncachedItems.reserve(items.size());
   collectUncachedAndApplyCached(items, uncachedItems);
@@ -353,8 +338,7 @@ void ArtworkManager::loadArtworkParallel(const QList<ArtworkInfo> &items,
     return;
   }
 
-  qint64 afterCollect =
-      qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
+  qint64 afterCollect = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
   int batchCount = 0;
 
   for (int i = 0; i < uncachedItems.size(); i += batchSize) {
@@ -367,12 +351,9 @@ void ArtworkManager::loadArtworkParallel(const QList<ArtworkInfo> &items,
     ++batchCount;
   }
 
-  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") &&
-      perfTimer.elapsed() > 5) {
-    qCDebug(lcPerfTrace) << "loadArtworkParallel: totalMs="
-               << perfTimer.elapsed() << "collectMs=" << afterCollect
-               << "items=" << items.size()
-               << "uncached=" << uncachedItems.size()
-               << "batches=" << batchCount;
+  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && perfTimer.elapsed() > 5) {
+    qCDebug(lcPerfTrace) << "loadArtworkParallel: totalMs=" << perfTimer.elapsed()
+                         << "collectMs=" << afterCollect << "items=" << items.size()
+                         << "uncached=" << uncachedItems.size() << "batches=" << batchCount;
   }
 }
