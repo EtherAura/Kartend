@@ -94,6 +94,7 @@ auto main(int argc, char *argv[]) -> int {
   {
     MainWindow window;
     window.show();
+    window.showStartupSplash();
     (void)QApplication::exec();
   }
   // MainWindow is now destroyed - all our cleanup (saves, etc.) is done.

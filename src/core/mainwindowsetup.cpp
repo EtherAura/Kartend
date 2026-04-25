@@ -31,6 +31,7 @@
 #include "settingsutils.h"
 #include "shortcutsdialog.h"
 #include "sidebarmanager.h"
+#include "splashoverlay.h"
 #include "stringutils.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
@@ -162,6 +163,10 @@ void MainWindow::setupUIReferences() {
   // Create loading overlay (parented to central widget so it's above all
   // content)
   m_loadingOverlay = new LoadingOverlay(ui->centralwidget);
+
+  // Create transient splash overlay above the same central content. It stays
+  // independent from scan/loading progress overlays and manages its own timers.
+  m_splashOverlay = new SplashOverlay(ui->centralwidget);
 }
 
 void MainWindow::initializeAppContext() {

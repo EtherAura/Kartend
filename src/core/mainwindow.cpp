@@ -32,6 +32,7 @@
 #include "settingsutils.h"
 #include "shortcutsdialog.h"
 #include "sidebarmanager.h"
+#include "splashoverlay.h"
 #include "stringutils.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
@@ -55,11 +56,50 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow() {
   delete ui;
 }
+
+bool MainWindow::event(QEvent *event) {
+  if (event && !m_isShuttingDown && !QApplication::closingDown()) {
+    switch (event->type()) {
+    case QEvent::WindowDeactivate:
+      if (!QApplication::activeModalWidget() && !QApplication::activePopupWidget()) {
+        m_windowWasInactive = true;
+      }
+      break;
+    case QEvent::WindowActivate:
+      if (m_windowWasInactive) {
+        m_windowWasInactive = false;
+        if (m_startupSplashShown && !QApplication::activeModalWidget() &&
+            !QApplication::activePopupWidget()) {
+          showFocusReturnSplash();
+        }
+      }
+      break;
+    default:
+      break;
+    }
+  }
+
+  return QMainWindow::event(event);
+}
+
 void MainWindow::keyPressEvent(QKeyEvent *event) {
   if ((getInteractionManager()) && getInteractionManager()->handleGlobalKeyPress(event)) {
     return;
   }
   QMainWindow::keyPressEvent(event);
+}
+
+void MainWindow::showStartupSplash() {
+  m_startupSplashShown = true;
+  if (m_splashOverlay) {
+    m_splashOverlay->showSplash(SplashOverlay::Reason::Startup);
+  }
+}
+
+void MainWindow::showFocusReturnSplash() {
+  if (m_splashOverlay) {
+    m_splashOverlay->showSplash(SplashOverlay::Reason::FocusReturn);
+  }
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event) {
