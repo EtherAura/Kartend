@@ -229,28 +229,53 @@
                </item>
               </layout>
              </item>
-             <item row="3" column="0">
+              <item row="3" column="0">
+              <widget class="QLabel" name="label_placeholderArtwork">
+               <property name="text">
+                <string>Placeholder Artwork:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <layout class="QHBoxLayout" name="placeholderArtworkLayout">
+               <item>
+                <widget class="QLineEdit" name="placeholderArtworkLineEdit">
+                 <property name="toolTip">
+                  <string>Image shown for collection items when no matching artwork is found</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="browsePlaceholderArtworkButton">
+                 <property name="text">
+                  <string>Browse</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item row="4" column="0">
               <widget class="QLabel" name="label_fileExtensions">
                <property name="text">
                 <string>File Extensions:</string>
                </property>
               </widget>
              </item>
-             <item row="3" column="1">
+             <item row="4" column="1">
               <widget class="QLineEdit" name="fileExtensionsLineEdit">
                <property name="toolTip">
                 <string>Comma-separated list of file extensions to include</string>
                </property>
               </widget>
              </item>
-             <item row="4" column="0">
+             <item row="5" column="0">
               <widget class="QLabel" name="label_launcher">
                <property name="text">
                 <string>Launcher:</string>
                </property>
               </widget>
              </item>
-             <item row="4" column="1">
+             <item row="5" column="1">
               <layout class="QHBoxLayout" name="launcherLayout">
                <item>
                 <widget class="QLineEdit" name="launcherLineEdit"/>
@@ -264,14 +289,14 @@
                </item>
               </layout>
              </item>
-             <item row="5" column="0">
+             <item row="6" column="0">
               <widget class="QLabel" name="label_core">
                <property name="text">
                 <string>Core Path:</string>
                </property>
               </widget>
              </item>
-             <item row="5" column="1">
+             <item row="6" column="1">
               <layout class="QHBoxLayout" name="coreLayout">
                <item>
                 <widget class="QLineEdit" name="coreLineEdit">
@@ -289,14 +314,14 @@
                </item>
               </layout>
              </item>
-             <item row="6" column="0">
+             <item row="7" column="0">
               <widget class="QLabel" name="label_launchParams">
                <property name="text">
                 <string>Launch Parameters:</string>
                </property>
               </widget>
              </item>
-             <item row="6" column="1">
+             <item row="7" column="1">
               <widget class="QLineEdit" name="launchParamsLineEdit">
                <property name="toolTip">
                 <string>Additional command-line parameters for the launcher</string>
@@ -306,14 +331,14 @@
                </property>
               </widget>
              </item>
-             <item row="7" column="0">
+             <item row="8" column="0">
               <widget class="QLabel" name="label_extractArchives">
                <property name="text">
                 <string>Extract Archives:</string>
                </property>
               </widget>
              </item>
-             <item row="7" column="1">
+             <item row="8" column="1">
               <widget class="QCheckBox" name="extractArchivesCheckBox">
                <property name="toolTip">
                 <string>Extract archived content to a temporary directory before launching (for cores that don't support zipped content)</string>
@@ -326,14 +351,14 @@
                </property>
               </widget>
              </item>
-             <item row="8" column="0">
+             <item row="9" column="0">
               <widget class="QLabel" name="label_extractedExtension">
                <property name="text">
                 <string>Launch Extension:</string>
                </property>
               </widget>
              </item>
-             <item row="8" column="1">
+             <item row="9" column="1">
               <widget class="QLineEdit" name="extractedExtensionLineEdit">
                <property name="toolTip">
                 <string>File extension to launch from extracted archive (e.g., .cue, .bin, .iso)</string>
@@ -343,14 +368,14 @@
                </property>
               </widget>
              </item>
-             <item row="9" column="0">
+             <item row="10" column="0">
               <widget class="QLabel" name="label_showAllSubcollectionItems">
                <property name="text">
                 <string>Show All Subcollection Items:</string>
                </property>
               </widget>
              </item>
-             <item row="9" column="1">
+             <item row="10" column="1">
               <widget class="QCheckBox" name="showAllSubcollectionItemsCheckBox">
                <property name="toolTip">
                 <string>Mix items from subcollections with parent collection items, sorted alphabetically</string>

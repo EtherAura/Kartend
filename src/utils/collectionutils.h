@@ -70,6 +70,7 @@ struct CollectionConfig {
   QString launchParameters;
   QString mediaDirectory;
   QString artworkDirectory;
+  QString placeholderArtwork;
   QString collectionIcon;
   QStringList extensions;
   int gridWidth;
@@ -132,8 +133,10 @@ struct CollectionConfig {
   bool operator==(const CollectionConfig &other) const {
     return name == other.name && launcherPath == other.launcherPath && corePath == other.corePath &&
            launchParameters == other.launchParameters && mediaDirectory == other.mediaDirectory &&
-           artworkDirectory == other.artworkDirectory && collectionIcon == other.collectionIcon &&
-           extensions == other.extensions && gridWidth == other.gridWidth &&
+           artworkDirectory == other.artworkDirectory &&
+           placeholderArtwork == other.placeholderArtwork &&
+           collectionIcon == other.collectionIcon && extensions == other.extensions &&
+           gridWidth == other.gridWidth &&
            sidebarVisible == other.sidebarVisible &&
            parentCollectionIndex == other.parentCollectionIndex &&
            isSubcollection == other.isSubcollection &&
@@ -166,6 +169,8 @@ struct CollectionConfig {
   [[nodiscard]] bool hasMediaDirectory() const { return !mediaDirectory.isEmpty(); }
 
   [[nodiscard]] bool hasArtworkDirectory() const { return !artworkDirectory.isEmpty(); }
+
+  [[nodiscard]] bool hasPlaceholderArtwork() const { return !placeholderArtwork.isEmpty(); }
 
   // Validates numeric fields are within acceptable ranges
   void clampValues() {
@@ -608,6 +613,26 @@ collectDescendantIndices(int parentIndex, const QList<CollectionConfig> &collect
     const CollectionConfig &c = collections[current];
     if (!c.artworkDirectory.trimmed().isEmpty()) {
       return c.artworkDirectory;
+    }
+    if (!c.isSubcollection || c.parentCollectionIndex < 0) {
+      break;
+    }
+    current = c.parentCollectionIndex;
+  }
+  return {};
+}
+
+[[nodiscard]] inline QString resolvePlaceholderArtwork(int collectionIndex,
+                                                       const QList<CollectionConfig> &collections) {
+  if (collectionIndex < 0 || collectionIndex >= collections.size()) {
+    return {};
+  }
+
+  int current = collectionIndex;
+  while (current >= 0 && current < collections.size()) {
+    const CollectionConfig &c = collections[current];
+    if (!c.placeholderArtwork.trimmed().isEmpty()) {
+      return c.placeholderArtwork;
     }
     if (!c.isSubcollection || c.parentCollectionIndex < 0) {
       break;

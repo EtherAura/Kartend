@@ -146,6 +146,10 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->artworkDirLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
   }
+  if (ui->placeholderArtworkLineEdit) {
+    connect(ui->placeholderArtworkLineEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
   if (ui->includeContentSubfoldersCheckBox) {
     connect(ui->includeContentSubfoldersCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);

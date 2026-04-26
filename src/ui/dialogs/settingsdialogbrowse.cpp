@@ -73,6 +73,15 @@ void SettingsDialog::browseArtworkDir() {
   }
 }
 
+void SettingsDialog::browsePlaceholderArtwork() {
+  QString fileName = QFileDialog::getOpenFileName(
+      this, tr("Select Placeholder Artwork"), "",
+      tr("Image Files (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;All Files (*)"));
+  if (!fileName.isEmpty() && ui->placeholderArtworkLineEdit) {
+    ui->placeholderArtworkLineEdit->setText(fileName);
+  }
+}
+
 void SettingsDialog::onRecursiveImportContent() {
   if (!ui->mediaDirLineEdit) {
     return;
@@ -244,6 +253,9 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->artworkDirLineEdit) {
     ui->artworkDirLineEdit->setText(config.artworkDirectory);
   }
+  if (ui->placeholderArtworkLineEdit) {
+    ui->placeholderArtworkLineEdit->setText(config.placeholderArtwork);
+  }
   if (ui->includeContentSubfoldersCheckBox) {
     ui->includeContentSubfoldersCheckBox->setChecked(config.includeContentSubfolders);
   }
@@ -375,6 +387,7 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->launchParamsLineEdit) ui->launchParamsLineEdit->clear();
   if (ui->mediaDirLineEdit) ui->mediaDirLineEdit->clear();
   if (ui->artworkDirLineEdit) ui->artworkDirLineEdit->clear();
+  if (ui->placeholderArtworkLineEdit) ui->placeholderArtworkLineEdit->clear();
   if (ui->fileExtensionsLineEdit) ui->fileExtensionsLineEdit->clear();
   if (ui->backgroundValueEdit) ui->backgroundValueEdit->clear();
   if (ui->primaryColorEdit) ui->primaryColorEdit->clear();

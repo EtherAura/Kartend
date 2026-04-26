@@ -247,6 +247,9 @@ void SettingsDialog::updateFieldVisibility() {
   ui->label_artworkDir->setVisible(true);
   ui->artworkDirLineEdit->setVisible(true);
   ui->browseArtworkDirButton->setVisible(true);
+  ui->label_placeholderArtwork->setVisible(true);
+  ui->placeholderArtworkLineEdit->setVisible(true);
+  ui->browsePlaceholderArtworkButton->setVisible(true);
 
   if (hasContentDir) {
     updateUIForLauncherType(ui->launcherLineEdit->text());

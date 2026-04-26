@@ -49,6 +49,7 @@ void ItemWidget::resetForReuse() {
   filePath.clear();
   itemName.clear();
   storedPixmap = QPixmap(); // Clear stored artwork
+  m_placeholderArtworkPixmap = QPixmap();
   // Don't generate placeholder here - onArtworkChanged() will be called after
   // configuration and will generate the placeholder with correct dimensions
   if (triangleIndicator) {
@@ -162,5 +163,12 @@ void ItemWidget::setArtworkPixmap(const QPixmap &pixmap) {
   });
   if (nameLabel) {
     nameLabel->raise();
+  }
+}
+
+void ItemWidget::setPlaceholderArtworkPixmap(const QPixmap &pixmap) {
+  m_placeholderArtworkPixmap = pixmap;
+  if (storedPixmap.isNull()) {
+    onArtworkChanged();
   }
 }

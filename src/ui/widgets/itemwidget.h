@@ -34,6 +34,7 @@ public:
   void setItemName(const QString &name);
   void setFilePath(const QString &path);
   void setArtworkPixmap(const QPixmap &pixmap);
+  void setPlaceholderArtworkPixmap(const QPixmap &pixmap);
   virtual void setSelected(bool selected);
   void resetForReuse();
 
@@ -132,6 +133,7 @@ private:
   QString filePath;
   QString m_collectionName;   // Parent collection name for list mode display
   QString m_artworkDirectory; // Artwork directory for this item's collection
+  QPixmap m_placeholderArtworkPixmap;
   bool m_isSubcollection = false;
   int m_subcollectionIndex = -1;
   bool m_isVirtualFolder = false;
