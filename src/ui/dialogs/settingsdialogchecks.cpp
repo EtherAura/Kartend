@@ -352,6 +352,14 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
       ui->selectItemOnHoverCheckBox->isChecked() != m_originalGeneralSettings.selectItemOnHover) {
     return true;
   }
+  if (ui->bootSplashCheckBox &&
+      ui->bootSplashCheckBox->isChecked() != m_originalGeneralSettings.bootSplashEnabled) {
+    return true;
+  }
+  if (ui->resumeFocusSplashCheckBox && ui->resumeFocusSplashCheckBox->isChecked() !=
+                                           m_originalGeneralSettings.resumeFocusSplashEnabled) {
+    return true;
+  }
   if (ui->startupCollectionComboBox &&
       ui->startupCollectionComboBox->currentData().toString() !=
           m_originalGeneralSettings.startupCollection) {

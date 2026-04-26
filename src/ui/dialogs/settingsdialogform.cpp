@@ -329,6 +329,16 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->selectItemOnHoverCheckBox->setChecked(m_generalSettings.selectItemOnHover);
     ui->selectItemOnHoverCheckBox->blockSignals(false);
   }
+  if (ui->bootSplashCheckBox) {
+    ui->bootSplashCheckBox->blockSignals(true);
+    ui->bootSplashCheckBox->setChecked(m_generalSettings.bootSplashEnabled);
+    ui->bootSplashCheckBox->blockSignals(false);
+  }
+  if (ui->resumeFocusSplashCheckBox) {
+    ui->resumeFocusSplashCheckBox->blockSignals(true);
+    ui->resumeFocusSplashCheckBox->setChecked(m_generalSettings.resumeFocusSplashEnabled);
+    ui->resumeFocusSplashCheckBox->blockSignals(false);
+  }
   if (ui->pixmapCacheSpinBox) {
     ui->pixmapCacheSpinBox->blockSignals(true);
     ui->pixmapCacheSpinBox->setValue(m_generalSettings.pixmapCacheSizeMB);
@@ -485,6 +495,13 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     if (ui->selectItemOnHoverCheckBox) {
       mainWindow->m_generalSettings.selectItemOnHover =
           ui->selectItemOnHoverCheckBox->isChecked();
+    }
+    if (ui->bootSplashCheckBox) {
+      mainWindow->m_generalSettings.bootSplashEnabled = ui->bootSplashCheckBox->isChecked();
+    }
+    if (ui->resumeFocusSplashCheckBox) {
+      mainWindow->m_generalSettings.resumeFocusSplashEnabled =
+          ui->resumeFocusSplashCheckBox->isChecked();
     }
     if (ui->pixmapCacheSpinBox) {
       int newCacheSize = ui->pixmapCacheSpinBox->value();

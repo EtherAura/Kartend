@@ -124,6 +124,10 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
              s.value("attractModeScrollSpeed", UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX)
                  .toInt(),
              UIConstants::Attract::MAX_SCROLL_SPEED_PX);
+
+  // Splash screens
+  settings.bootSplashEnabled = s.value("bootSplashEnabled", true).toBool();
+  settings.resumeFocusSplashEnabled = s.value("resumeFocusSplashEnabled", true).toBool();
   s.endGroup();
 
   settings.lastSelectedItems.clear();
@@ -178,6 +182,10 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.attractModeIdleTimeoutSec = settings.attractModeIdleTimeoutSec;
   m_generalSettings.attractModeScrollSpeed = settings.attractModeScrollSpeed;
 
+  // Splash screens
+  m_generalSettings.bootSplashEnabled = settings.bootSplashEnabled;
+  m_generalSettings.resumeFocusSplashEnabled = settings.resumeFocusSplashEnabled;
+
   QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   s.setAtomicSyncRequired(true);
   s.beginGroup("General");
@@ -221,6 +229,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("attractModeEnabled", m_generalSettings.attractModeEnabled);
   s.setValue("attractModeIdleTimeoutSec", m_generalSettings.attractModeIdleTimeoutSec);
   s.setValue("attractModeScrollSpeed", m_generalSettings.attractModeScrollSpeed);
+  s.setValue("bootSplashEnabled", m_generalSettings.bootSplashEnabled);
+  s.setValue("resumeFocusSplashEnabled", m_generalSettings.resumeFocusSplashEnabled);
   s.endGroup();
   s.sync();
 

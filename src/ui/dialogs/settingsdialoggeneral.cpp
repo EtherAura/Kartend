@@ -53,6 +53,28 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     }
   });
 
+  if (ui->bootSplashCheckBox) {
+    connect(ui->bootSplashCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+      auto *mainWindow = qobject_cast<MainWindow *>(parent());
+      if ((mainWindow) && (mainWindow->getSettingsManager())) {
+        mainWindow->m_generalSettings.bootSplashEnabled = checked;
+        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
+        m_generalSettings = mainWindow->m_generalSettings;
+      }
+    });
+  }
+
+  if (ui->resumeFocusSplashCheckBox) {
+    connect(ui->resumeFocusSplashCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+      auto *mainWindow = qobject_cast<MainWindow *>(parent());
+      if ((mainWindow) && (mainWindow->getSettingsManager())) {
+        mainWindow->m_generalSettings.resumeFocusSplashEnabled = checked;
+        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
+        m_generalSettings = mainWindow->m_generalSettings;
+      }
+    });
+  }
+
   if (ui->startupCollectionComboBox) {
     connect(ui->startupCollectionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int /*index*/) {

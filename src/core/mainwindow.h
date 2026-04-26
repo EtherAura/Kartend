@@ -107,7 +107,7 @@ private:
   bool m_isShuttingDown = false;
   std::unique_ptr<MenuController> m_menuController;
   SplashOverlay *m_splashOverlay = nullptr;
-  bool m_startupSplashShown = false;
+  bool m_startupSplashHandled = false;
   bool m_windowWasInactive = false;
 
   // Coalesce rapid grid-width adjustments (menu shortcuts) into a single

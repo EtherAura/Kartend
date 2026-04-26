@@ -1461,10 +1461,38 @@
               </property>
              </widget>
             </item>
-            <item row="13" column="1">
-             <widget class="QCheckBox" name="selectItemOnHoverCheckBox">
+             <item row="13" column="1">
+              <widget class="QCheckBox" name="selectItemOnHoverCheckBox">
+               <property name="toolTip">
+                <string>Move selection to the visible item under the mouse pointer without clicking</string>
+               </property>
+              </widget>
+             </item>
+            <item row="14" column="0">
+             <widget class="QLabel" name="bootSplashLabel">
+              <property name="text">
+               <string>Boot Splash Screen:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="14" column="1">
+             <widget class="QCheckBox" name="bootSplashCheckBox">
               <property name="toolTip">
-               <string>Move selection to the visible item under the mouse pointer without clicking</string>
+               <string>Show the splash screen when Kartend starts</string>
+              </property>
+             </widget>
+            </item>
+            <item row="15" column="0">
+             <widget class="QLabel" name="resumeFocusSplashLabel">
+              <property name="text">
+               <string>Resume Focus Splash Screen:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="15" column="1">
+             <widget class="QCheckBox" name="resumeFocusSplashCheckBox">
+              <property name="toolTip">
+               <string>Show the splash screen when Kartend regains focus after being inactive</string>
               </property>
              </widget>
             </item>
