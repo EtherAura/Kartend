@@ -393,6 +393,10 @@ struct GeneralSettings {
   int attractModeIdleTimeoutSec = 120; // Seconds of idle before activation
   int attractModeScrollSpeed = 1;      // Pixels per tick (1-10)
 
+  // Splash screens
+  bool bootSplashEnabled = true;
+  bool resumeFocusSplashEnabled = true;
+
   QHash<int, int> lastSelectedItems;
   GeneralSettings() = default;
 };

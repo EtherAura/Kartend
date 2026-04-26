@@ -68,7 +68,7 @@ bool MainWindow::event(QEvent *event) {
     case QEvent::WindowActivate:
       if (m_windowWasInactive) {
         m_windowWasInactive = false;
-        if (m_startupSplashShown && !QApplication::activeModalWidget() &&
+        if (m_startupSplashHandled && !QApplication::activeModalWidget() &&
             !QApplication::activePopupWidget()) {
           showFocusReturnSplash();
         }
@@ -90,14 +90,14 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
 }
 
 void MainWindow::showStartupSplash() {
-  m_startupSplashShown = true;
-  if (m_splashOverlay) {
+  m_startupSplashHandled = true;
+  if (m_generalSettings.bootSplashEnabled && m_splashOverlay) {
     m_splashOverlay->showSplash(SplashOverlay::Reason::Startup);
   }
 }
 
 void MainWindow::showFocusReturnSplash() {
-  if (m_splashOverlay) {
+  if (m_generalSettings.resumeFocusSplashEnabled && m_splashOverlay) {
     m_splashOverlay->showSplash(SplashOverlay::Reason::FocusReturn);
   }
 }
