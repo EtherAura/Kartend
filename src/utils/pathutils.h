@@ -21,8 +21,10 @@ tryValidateAndExpandPath(const QString &path, const QString &collectionName = QS
 [[nodiscard]] QString truncatePathForDisplay(const QString &path, int maxLength = 50);
 [[nodiscard]] QString normalizeDisplayName(const QString &input);
 
-/// Validates that a path doesn't contain shell metacharacters, null bytes,
-/// newlines, or other characters that could enable command injection.
+/// Validates that a path doesn't contain unsupported shell metacharacters, null
+/// bytes, newlines, or other characters that could enable command injection.
+/// Ampersands are allowed because they are common in filenames and safe when
+/// paths are passed as process arguments without shell interpretation.
 /// Returns success if path is safe, or an error context describing the issue.
 [[nodiscard]] ErrorUtils::Result<void> validatePathSecurity(const QString &path);
 

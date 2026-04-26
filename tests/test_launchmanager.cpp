@@ -49,6 +49,7 @@ private slots:
   // buildLaunchCommand tests
   void testBuildLaunchCommand_nonRetroArch_usesLaunchParameters();
   void testBuildLaunchCommand_retroArch_usesCorePath();
+  void testBuildLaunchCommand_allowsAmpersandMediaPath();
 
   // findFileWithExtension hardening tests
   void testFindFileWithExtension_findsFlatFile();
@@ -119,7 +120,8 @@ void TestLaunchManager::testValidatePathSecurity_shellMetacharacters_data() {
 
   QTest::newRow("semicolon") << "/path/to;command" << "semicolon injection" << true;
   QTest::newRow("pipe") << "/path/to|command" << "pipe injection" << true;
-  QTest::newRow("ampersand") << "/path/to&command" << "background injection" << true;
+  QTest::newRow("ampersand") << "/path/to/Sonic & Knuckles.zip" << "ampersand in filename"
+                             << false;
   QTest::newRow("backtick") << "/path/to`command`" << "command substitution" << true;
   QTest::newRow("dollar") << "/path/to$HOME" << "variable expansion" << true;
   QTest::newRow("parens") << "/path/to$(command)" << "subshell" << true;
@@ -380,6 +382,22 @@ void TestLaunchManager::testBuildLaunchCommand_retroArch_usesCorePath() {
   QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
   QCOMPARE(result.value().program, QString("retroarch"));
   QCOMPARE(result.value().arguments, (QStringList{"-L", "/tmp/core.so", filePath}));
+}
+
+void TestLaunchManager::testBuildLaunchCommand_allowsAmpersandMediaPath() {
+  CollectionConfig config;
+  config.name = "Sega - Mega Drive - Genesis";
+  config.launcherPath = "retroarch";
+  config.corePath = "/tmp/genesis_plus_gx_libretro.so";
+
+  const QString filePath =
+      "/mnt/Games/Arcade/Collections/Sega - Mega Drive - Genesis/ROMs/"
+      "Sonic & Knuckles (World) (Beta) (1994-06-10).zip";
+  auto result = LaunchManager::buildLaunchCommand(config, filePath);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().program, QString("retroarch"));
+  QCOMPARE(result.value().arguments,
+           (QStringList{"-L", "/tmp/genesis_plus_gx_libretro.so", filePath}));
 }
 
 // ---------------------------------------------------------------------------
