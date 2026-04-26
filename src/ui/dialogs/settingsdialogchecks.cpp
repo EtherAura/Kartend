@@ -60,6 +60,9 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
       (ui->mediaDirLineEdit) ? ui->mediaDirLineEdit->text() : config.mediaDirectory;
   config.artworkDirectory =
       (ui->artworkDirLineEdit) ? ui->artworkDirLineEdit->text() : config.artworkDirectory;
+  config.placeholderArtwork = (ui->placeholderArtworkLineEdit)
+                                  ? ui->placeholderArtworkLineEdit->text()
+                                  : config.placeholderArtwork;
   config.includeContentSubfolders = (ui->includeContentSubfoldersCheckBox)
                                         ? ui->includeContentSubfoldersCheckBox->isChecked()
                                         : config.includeContentSubfolders;
@@ -199,6 +202,8 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ((ui->mediaDirLineEdit) && ui->mediaDirLineEdit->text() != originalConfig.mediaDirectory) ||
       ((ui->artworkDirLineEdit) &&
        ui->artworkDirLineEdit->text() != originalConfig.artworkDirectory) ||
+      ((ui->placeholderArtworkLineEdit) &&
+       ui->placeholderArtworkLineEdit->text() != originalConfig.placeholderArtwork) ||
       ((ui->gridWidthSpinBox) && ui->gridWidthSpinBox->value() != originalConfig.gridWidth) ||
       ((ui->showAllSubcollectionItemsCheckBox) &&
        ui->showAllSubcollectionItemsCheckBox->isChecked() !=

@@ -203,6 +203,10 @@ void SettingsDialog::setupButtonConnections() {
   connect(ui->browseMediaDirButton, &QPushButton::clicked, this, &SettingsDialog::browseMediaDir);
   connect(ui->browseArtworkDirButton, &QPushButton::clicked, this,
           &SettingsDialog::browseArtworkDir);
+  if (ui->browsePlaceholderArtworkButton) {
+    connect(ui->browsePlaceholderArtworkButton, &QPushButton::clicked, this,
+            &SettingsDialog::browsePlaceholderArtwork);
+  }
   if (ui->recursiveImportContentButton) {
     connect(ui->recursiveImportContentButton, &QPushButton::clicked, this,
             &SettingsDialog::onRecursiveImportContent);

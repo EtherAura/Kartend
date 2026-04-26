@@ -426,7 +426,9 @@ void ItemWidget::onArtworkChanged() {
     return;
   }
 
-  if (storedPixmap.isNull()) {
+  const QPixmap displayPixmap = storedPixmap.isNull() ? m_placeholderArtworkPixmap : storedPixmap;
+
+  if (displayPixmap.isNull()) {
     imageLabel->setPixmap(buildPlaceholderPattern(width, height));
     imageLabel->setStyleSheet(QString());
   } else {
@@ -441,7 +443,7 @@ void ItemWidget::onArtworkChanged() {
     int physicalH = qRound(height * dpr);
 
     // Create a copy of source with DPR=1 so we work in raw physical pixels
-    QPixmap sourceNoDpr = storedPixmap;
+    QPixmap sourceNoDpr = displayPixmap;
     sourceNoDpr.setDevicePixelRatio(1.0);
 
     // Scale to fit within physical target size

@@ -7,11 +7,13 @@
 #include "databasemanager.h"
 #include "itemwidget.h"
 #include "loggingcategories.h"
+#include "settingsutils.h"
 #include "uiconstants.h"
 #include "widgetpoolmanager.h"
 
 #include <QDir>
 #include <QFileInfo>
+#include <QPixmap>
 #include <QtGlobal>
 
 ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex, int &collectionIndex) {
@@ -62,6 +64,7 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex, int &collection
 
   // Skip artwork loading in list mode - but check if artwork exists for the
   // icon
+  const QString placeholderArtwork = resolvePlaceholderArtworkForCollection(collectionIndex);
   if (m_context.config.viewType != ViewType::List) {
     configureArtworkForWidget(widget, fullPath);
   } else {
@@ -91,6 +94,7 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex, int &collection
       widget->setHasArtwork(!artworkPath.isEmpty());
     }
   }
+  applyPlaceholderArtwork(widget, placeholderArtwork);
 
   return widget;
 }
@@ -158,6 +162,37 @@ void ItemWidgetFactory::updateCollectionIndexFromDatabase(const QString &fullPat
     if (detectedCollectionIndex >= 0) {
       collectionIndex = detectedCollectionIndex;
     }
+  }
+}
+
+QString ItemWidgetFactory::resolvePlaceholderArtworkForCollection(int collectionIndex) const {
+  QString placeholderArtwork;
+  if (m_collections && collectionIndex >= 0 && collectionIndex < m_collections->size()) {
+    placeholderArtwork =
+        CollectionUtils::resolvePlaceholderArtwork(collectionIndex, *m_collections).trimmed();
+  }
+  if (placeholderArtwork.isEmpty()) {
+    placeholderArtwork = m_context.config.placeholderArtwork.trimmed();
+  }
+  if (!placeholderArtwork.isEmpty()) {
+    const QString collectionName =
+        (m_collections && collectionIndex >= 0 && collectionIndex < m_collections->size())
+            ? m_collections->at(collectionIndex).name
+            : m_context.config.name;
+    placeholderArtwork = SettingsUtils::expandConfigVariables(placeholderArtwork, collectionName);
+  }
+  return placeholderArtwork;
+}
+
+void ItemWidgetFactory::applyPlaceholderArtwork(ItemWidget *widget,
+                                                const QString &placeholderArtwork) const {
+  if (!widget || placeholderArtwork.isEmpty() || widget->isListMode()) {
+    return;
+  }
+
+  QPixmap pixmap(placeholderArtwork);
+  if (!pixmap.isNull()) {
+    widget->setPlaceholderArtworkPixmap(pixmap);
   }
 }
 

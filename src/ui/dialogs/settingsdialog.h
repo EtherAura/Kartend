@@ -71,6 +71,7 @@ private slots:
   void browseCore();
   void browseMediaDir();
   void browseArtworkDir();
+  void browsePlaceholderArtwork();
   void checkForChanges();
   void onContentDirectoryChanged();
   void onGridWidthChanged(int value);

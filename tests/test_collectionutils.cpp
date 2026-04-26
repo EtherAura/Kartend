@@ -55,6 +55,11 @@ private slots:
   void ancestorIndexChain_stopsAtNonSubcollection();
   void ancestorIndexChain_invalidParentReturnsEmpty();
   void ancestorIndexChain_cycleIsBounded();
+
+  // placeholder artwork inheritance (Kartend-so1)
+  void resolvePlaceholderArtwork_usesOwnValue();
+  void resolvePlaceholderArtwork_inheritsFromParent();
+  void resolvePlaceholderArtwork_returnsEmptyWhenUnset();
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -335,6 +340,35 @@ void TestCollectionUtils::ancestorIndexChain_cycleIsBounded() {
   cs << makeCollection("B", /*isSub=*/true, 0);
   const QList<int> chain = CollectionUtils::ancestorIndexChain(cs[0], cs);
   QVERIFY(chain.size() <= cs.size());
+}
+
+void TestCollectionUtils::resolvePlaceholderArtwork_usesOwnValue() {
+  QList<CollectionConfig> cs;
+  CollectionConfig root = makeCollection("Root", /*isSub=*/false, -1);
+  root.placeholderArtwork = QStringLiteral("/art/root.png");
+  CollectionConfig child = makeCollection("Child", /*isSub=*/true, 0);
+  child.placeholderArtwork = QStringLiteral("/art/child.png");
+  cs << root << child;
+
+  QCOMPARE(CollectionUtils::resolvePlaceholderArtwork(1, cs), QStringLiteral("/art/child.png"));
+}
+
+void TestCollectionUtils::resolvePlaceholderArtwork_inheritsFromParent() {
+  QList<CollectionConfig> cs;
+  CollectionConfig root = makeCollection("Root", /*isSub=*/false, -1);
+  root.placeholderArtwork = QStringLiteral("/art/root.png");
+  CollectionConfig child = makeCollection("Child", /*isSub=*/true, 0);
+  cs << root << child;
+
+  QCOMPARE(CollectionUtils::resolvePlaceholderArtwork(1, cs), QStringLiteral("/art/root.png"));
+}
+
+void TestCollectionUtils::resolvePlaceholderArtwork_returnsEmptyWhenUnset() {
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Root", /*isSub=*/false, -1);
+  cs << makeCollection("Child", /*isSub=*/true, 0);
+
+  QVERIFY(CollectionUtils::resolvePlaceholderArtwork(1, cs).isEmpty());
 }
 
 QTEST_APPLESS_MAIN(TestCollectionUtils)
