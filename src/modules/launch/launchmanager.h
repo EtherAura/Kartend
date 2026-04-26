@@ -56,7 +56,7 @@ public:
   /// resolved via PATH.
   [[nodiscard]] static ErrorUtils::Result<QString> validateLauncherPath(const QString &path);
 
-  /// Validates that a path doesn't contain shell metacharacters or traversal
+  /// Validates that a path doesn't contain unsupported characters
   [[nodiscard]] static ErrorUtils::Result<void> validatePathSecurity(const QString &path);
 
   /// Checks if launch is allowed (debounce guard)

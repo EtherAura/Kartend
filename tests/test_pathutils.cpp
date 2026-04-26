@@ -230,24 +230,32 @@ void TestPathUtils::testValidatePathSecurity_emptyPath() {
 void TestPathUtils::testValidatePathSecurity_shellMetacharacters_data() {
   QTest::addColumn<QString>("path");
   QTest::addColumn<QString>("description");
+  QTest::addColumn<bool>("shouldFail");
   
-  QTest::newRow("semicolon") << "/path/with;command" << "semicolon";
-  QTest::newRow("pipe") << "/path/with|pipe" << "pipe";
-  QTest::newRow("ampersand") << "/path/with&background" << "ampersand";
-  QTest::newRow("backtick") << "/path/with`command`" << "backtick";
-  QTest::newRow("dollar") << "/path/with$VAR" << "dollar sign";
-  QTest::newRow("redirect-in") << "/path/with<input" << "input redirect";
-  QTest::newRow("redirect-out") << "/path/with>output" << "output redirect";
+  QTest::newRow("semicolon") << "/path/with;command" << "semicolon" << true;
+  QTest::newRow("pipe") << "/path/with|pipe" << "pipe" << true;
+  QTest::newRow("ampersand") << "/path/with/Sonic & Knuckles.zip" << "ampersand"
+                             << false;
+  QTest::newRow("backtick") << "/path/with`command`" << "backtick" << true;
+  QTest::newRow("dollar") << "/path/with$VAR" << "dollar sign" << true;
+  QTest::newRow("redirect-in") << "/path/with<input" << "input redirect" << true;
+  QTest::newRow("redirect-out") << "/path/with>output" << "output redirect" << true;
 }
 
 void TestPathUtils::testValidatePathSecurity_shellMetacharacters() {
   QFETCH(QString, path);
   QFETCH(QString, description);
+  QFETCH(bool, shouldFail);
   
   auto result = PathUtils::validatePathSecurity(path);
-  QVERIFY2(result.isError(), 
-           qPrintable(QString("Path with %1 should fail").arg(description)));
-  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidFilePath);
+  if (shouldFail) {
+    QVERIFY2(result.isError(),
+             qPrintable(QString("Path with %1 should fail").arg(description)));
+    QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidFilePath);
+  } else {
+    QVERIFY2(result.isOk(),
+             qPrintable(QString("Path with %1 should be allowed").arg(description)));
+  }
 }
 
 void TestPathUtils::testValidatePathSecurity_nullBytes() {
