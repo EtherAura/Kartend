@@ -16,7 +16,7 @@ auto main(int argc, char *argv[]) -> int {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
   // Set desktop file name for proper app identification on Wayland
   // (enables taskbar grouping, app icons, etc.)
-  QGuiApplication::setDesktopFileName("kartend");
+  QGuiApplication::setDesktopFileName(APP_ID);
 
   // Prefer fractional scaling with pixel-perfect rounding for crisp artwork
   QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
