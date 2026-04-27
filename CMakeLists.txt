@@ -5,6 +5,8 @@ project(kartend
   LANGUAGES CXX
 )
 
+set(KARTEND_APP_ID "io.github.EtherAura.Kartend")
+
 option(MAINTENANCE "Maintenance build mode (-Werror on)" OFF)
 option(USE_PGO "Enable Profile-Guided Optimization" OFF)
 option(PGO_GENERATE "Generate PGO profile data" OFF)
@@ -122,6 +124,7 @@ endif()
 
 target_compile_definitions(kartend
   PRIVATE
+    APP_ID="${KARTEND_APP_ID}"
     APP_NAME="kartend"
     APP_DISPLAY_NAME="Kartend"
     APP_VERSION="${PROJECT_VERSION}"
@@ -227,8 +230,13 @@ endif()
 if (UNIX AND NOT APPLE)
   include(GNUInstallDirs)
   install(TARGETS kartend RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-  install(FILES src/assets/kartend.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
-  install(FILES src/assets/icon.svg DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps RENAME kartend.svg)
+  install(FILES src/assets/${KARTEND_APP_ID}.desktop
+          DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
+  install(FILES src/assets/icon.svg
+          DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps
+          RENAME ${KARTEND_APP_ID}.svg)
+  install(FILES src/assets/${KARTEND_APP_ID}.metainfo.xml
+          DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/metainfo)
 endif()
 
 # MAINTENANCE adds -Werror

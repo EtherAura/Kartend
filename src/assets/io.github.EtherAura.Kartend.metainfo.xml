@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.EtherAura.Kartend</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <name>Kartend</name>
+  <summary>Organize and launch multimedia collections</summary>
+  <developer id="io.github.etheraura">
+    <name>EtherAura</name>
+  </developer>
+  <description>
+    <p>
+      Kartend is a KDE-friendly Qt frontend for organizing, browsing, and launching
+      multimedia collections with custom launchers.
+    </p>
+    <p>
+      It supports large libraries through virtual scrolling, asynchronous artwork
+      loading, collection hierarchies, persistent sessions, keyboard navigation,
+      metadata sidebars, and configurable launch commands for media, emulators,
+      RetroArch cores, or native applications.
+    </p>
+  </description>
+  <url type="homepage">https://github.com/EtherAura/Kartend</url>
+  <url type="bugtracker">https://github.com/EtherAura/Kartend/issues</url>
+  <url type="vcs-browser">https://github.com/EtherAura/Kartend</url>
+  <categories>
+    <category>Utility</category>
+  </categories>
+  <keywords>
+    <keyword>launcher</keyword>
+    <keyword>collection</keyword>
+    <keyword>media</keyword>
+    <keyword>games</keyword>
+  </keywords>
+  <launchable type="desktop-id">io.github.EtherAura.Kartend.desktop</launchable>
+  <provides>
+    <binary>kartend</binary>
+  </provides>
+  <releases>
+    <release version="0.0.4" date="2026-04-25" />
+    <release version="0.0.3" date="2026-04-24" />
+    <release version="0.0.2" date="2026-04-21" />
+    <release version="0.0.1" date="2026-04-18" />
+  </releases>
+  <content_rating type="oars-1.1" />
+</component>
