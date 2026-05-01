@@ -19,6 +19,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   selectioncoordinator.cpp
   selectiondisplaymanager.cpp
   virtualcontainermanager.cpp
+  virtualscrollengine.cpp
   arrowkeyscrollhelper.h
   datasourcemanager.h
   gridlayoutcalculator.h
@@ -31,4 +32,5 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   selectiondisplaymanager.h
   selectionstatetracker.h
   virtualcontainermanager.h
+  virtualscrollengine.h
 )

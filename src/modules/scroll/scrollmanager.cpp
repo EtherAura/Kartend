@@ -27,6 +27,7 @@
 #include "timerutils.h"
 #include "uiconstants.h"
 #include "virtualcontainermanager.h"
+#include "virtualscrollengine.h"
 #include "widgetpoolmanager.h"
 #include <algorithm>
 #include <QApplication>
@@ -60,6 +61,10 @@ Q_LOGGING_CATEGORY(lcScrollManager, "kartend.scrollmanager")
 ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   // Widget pool for recycling ItemWidgets
   m_widgetPool = std::make_unique<WidgetPoolManager>(this);
+
+  // Virtual scrolling engine: owns layout / container / materialization
+  // algorithms (Kartend-158). Borrows ScrollManager state via friendship.
+  m_engine = std::make_unique<VirtualScrollEngine>(this);
 
   // Data source manager: owns FilterManager + ScrollDataManager +
   // PreSearchStateManager + SearchLoadingOverlay (Kartend-gg2).
