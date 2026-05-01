@@ -136,6 +136,9 @@ public:
   /// Hide the artwork preview overlay if visible (returns true if it was
   /// visible)
   bool hideArtworkPreview();
+  /// Show the artwork preview overlay for the given file path. Used by
+  /// expand-mode two-stage activation in InteractionManager.
+  void showArtworkPreview(const QString &filePath, const QString &artworkDir);
 
   void centerHorizontalScrollbar(int currentCollectionIndex,
                                  const QList<CollectionConfig> &collections);
@@ -180,6 +183,9 @@ signals:
   void listColumnWidthChanged(int width); // Emitted when list column width is resized
   void
   listArtworkColumnWidthChanged(int width); // Emitted when list artwork column width is resized
+  /// Forwarded from SelectionDisplayManager: user activated (Enter /
+  /// double-click) while the artwork preview overlay was visible.
+  void artworkPreviewLaunchRequested();
 
 public slots:
   /// Receives the visual index for a file path from database query

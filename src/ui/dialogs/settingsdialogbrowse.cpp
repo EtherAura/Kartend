@@ -247,6 +247,9 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->extractedExtensionLineEdit) {
     ui->extractedExtensionLineEdit->setText(config.extractedExtension);
   }
+  if (ui->expandModeCheckBox) {
+    ui->expandModeCheckBox->setChecked(config.expandMode);
+  }
   if (ui->mediaDirLineEdit) {
     ui->mediaDirLineEdit->setText(config.mediaDirectory);
   }

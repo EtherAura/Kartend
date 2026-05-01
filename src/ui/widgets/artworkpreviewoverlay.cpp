@@ -130,11 +130,29 @@ void ArtworkPreviewOverlay::mousePressEvent(QMouseEvent *event) {
   QWidget::mousePressEvent(event);
 }
 
+void ArtworkPreviewOverlay::mouseDoubleClickEvent(QMouseEvent *event) {
+  // Double-click on the artwork itself = second activation = launch.
+  // Double-click outside the artwork falls through to the press handler
+  // which closes the overlay.
+  if (m_artworkLabel && m_artworkLabel->geometry().contains(event->pos())) {
+    event->accept();
+    emit launchRequested();
+    return;
+  }
+  QWidget::mouseDoubleClickEvent(event);
+}
+
 void ArtworkPreviewOverlay::keyPressEvent(QKeyEvent *event) {
   // Escape closes the overlay
   if (event->key() == Qt::Key_Escape) {
     hideOverlay();
     event->accept();
+    return;
+  }
+  // Enter / Return = second activation = launch the previewed item
+  if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+    event->accept();
+    emit launchRequested();
     return;
   }
   QWidget::keyPressEvent(event);

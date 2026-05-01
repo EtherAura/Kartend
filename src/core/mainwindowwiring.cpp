@@ -178,6 +178,12 @@ void MainWindow::connectScrollManager() {
                    &NavigationManager::onVirtualFolderEntered);
   QObject::connect(getScrollManager(), &ScrollManager::requestItemsRange, getNavigationManager(),
                    &NavigationManager::fetchItemsRange);
+  // Expand-mode: second activation in artwork preview overlay launches.
+  if (getInteractionManager()) {
+    QObject::connect(getScrollManager(), &ScrollManager::artworkPreviewLaunchRequested,
+                     getInteractionManager(),
+                     &InteractionManager::onArtworkPreviewLaunchRequested);
+  }
   // List view header column click triggers sort mode change
   QObject::connect(getScrollManager(), &ScrollManager::sortModeChangeRequested, this,
                    [this](SortMode sortMode) {

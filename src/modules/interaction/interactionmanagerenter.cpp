@@ -137,10 +137,15 @@ auto InteractionManager::handleEnterOnItem(int currentSelection, int /*totalItem
     path = m_scrollManager->filePathForVisualIndex(currentSelection);
   }
   if (!path.isEmpty()) {
-    saveCurrentSelection();
     const int cIdx =
         ((m_databaseManager) ? m_databaseManager->getCollectionIndexForFile(path) : -1);
     const int ownerIdx = (cIdx >= 0 ? cIdx : *m_currentCollectionIndex);
+    // Expand-mode: first activation expands the artwork preview; only the
+    // second activation on the same selection launches.
+    if (maybeExpandInsteadOfLaunch(path, ownerIdx, currentSelection)) {
+      return true;
+    }
+    saveCurrentSelection();
     launchItemWithCollection(path, ownerIdx);
   }
   return true;
@@ -176,4 +181,93 @@ auto InteractionManager::isItemOffscreen(int selection, int gridWidth) const -> 
   const int logicalVisibleBottom = logicalVisibleTop + viewportH;
   return (logicalItemY + collection.itemHeight) <= logicalVisibleTop ||
          logicalItemY >= logicalVisibleBottom;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Expand-mode (two-stage activation)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// When a collection has CollectionConfig::expandMode enabled, the first
+// activation (Enter or double-click) on a selected item shows the artwork
+// preview overlay instead of launching the item. A second activation on the
+// same item (no selection change in between) falls through to launch.
+//
+// State is tracked in InteractionStateHolder::expandedItemIndex(); the value
+// is cleared whenever selection changes (see connectSelectionManagerSignals)
+// or when the overlay is dismissed via Escape (see handleEscapeKey).
+auto InteractionManager::maybeExpandInsteadOfLaunch(const QString &filePath, int collectionIndex,
+                                                    int activationIndex) -> bool {
+  if (filePath.isEmpty() || !m_collections) {
+    return false;
+  }
+  // Expand-mode is a property of the *viewing* collection (what the user is
+  // currently browsing), not the file's owning collection. When a parent
+  // collection aggregates subcollection items via showAllSubcollectionItems,
+  // the activated file's owner is the subcollection, but the setting the
+  // user toggled lives on the parent they're viewing. Prefer the current
+  // view; fall back to the resolved owner if no view is set.
+  int effectiveIdx = (m_currentCollectionIndex && *m_currentCollectionIndex >= 0)
+                         ? *m_currentCollectionIndex
+                         : collectionIndex;
+  if (effectiveIdx < 0 || effectiveIdx >= m_collections->size()) {
+    return false;
+  }
+  const CollectionConfig &collection = (*m_collections)[effectiveIdx];
+  if (!collection.expandMode) {
+    return false;
+  }
+  // Use the owning collection's artwork directory so the preview matches
+  // the actual file (fall back to the viewing collection if the owner is
+  // unknown).
+  int artworkOwnerIdx = (collectionIndex >= 0 && collectionIndex < m_collections->size())
+                            ? collectionIndex
+                            : effectiveIdx;
+  const CollectionConfig &artworkOwner = (*m_collections)[artworkOwnerIdx];
+  // Already expanded for this exact item AND the overlay is still visible
+  // → fall through to launch and clear. If the user dismissed the overlay
+  // by clicking outside (without changing selection), treat the next
+  // activation as a fresh first-stage expand.
+  if (m_state.expandedItemIndex() == activationIndex && activationIndex >= 0 && m_scrollManager &&
+      m_scrollManager->isArtworkPreviewVisible()) {
+    m_state.clearExpandedItem();
+    m_scrollManager->hideArtworkPreview();
+    return false;
+  }
+  // First activation: expand the artwork preview using the owning
+  // collection's artwork directory (expanded against config variables).
+  if (!m_scrollManager) {
+    return false;
+  }
+  const QString artworkDir =
+      SettingsUtils::expandConfigVariables(artworkOwner.artworkDirectory, artworkOwner.name);
+  m_scrollManager->showArtworkPreview(filePath, artworkDir);
+  m_state.setExpandedItemIndex(activationIndex);
+  return true;
+}
+
+void InteractionManager::onArtworkPreviewLaunchRequested() {
+  // Second-stage expand-mode activation: overlay is visible and the user
+  // pressed Enter or double-clicked the artwork. Hide the overlay, clear
+  // expand state, and launch the currently selected item.
+  QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+  if (path.isEmpty() && m_scrollManager) {
+    path = m_scrollManager->filePathForVisualIndex(currentSelectedIndex());
+  }
+  if (m_scrollManager) {
+    m_scrollManager->hideArtworkPreview();
+  }
+  m_state.clearExpandedItem();
+  if (path.isEmpty()) {
+    return;
+  }
+  const int cIdx = (m_databaseManager ? m_databaseManager->getCollectionIndexForFile(path) : -1);
+  int ownerIdx = cIdx;
+  if (ownerIdx < 0 && m_currentCollectionIndex) {
+    ownerIdx = *m_currentCollectionIndex;
+  }
+  if (ownerIdx < 0) {
+    return;
+  }
+  saveCurrentSelection();
+  launchItemWithCollection(path, ownerIdx);
 }

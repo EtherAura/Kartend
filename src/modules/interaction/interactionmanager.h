@@ -204,6 +204,10 @@ signals:
 public slots:
   void saveCurrentSelection();
   void handleImmediateSearchTextChanged(const QString &text);
+  /// Triggered when the user activates (Enter / double-click) while the
+  /// artwork preview overlay is visible. Hides the overlay, clears expand
+  /// state, and launches the currently selected item.
+  void onArtworkPreviewLaunchRequested();
 
 private slots:
   // KeyboardManager callbacks
@@ -230,6 +234,12 @@ private:
   [[nodiscard]] QString derivePathFromIndex(int idx) const;
   [[nodiscard]] int resolveOwnerForPath(const QString &path) const;
   [[nodiscard]] int getFallbackCollectionIndex() const;
+
+  // Expand-mode helper: returns true when the activation was consumed by the
+  // expand path (artwork preview shown) and the caller must NOT launch.
+  // Returns false when the caller should proceed with launch.
+  [[nodiscard]] bool maybeExpandInsteadOfLaunch(const QString &filePath, int collectionIndex,
+                                                int activationIndex);
 
   // Search delegation (owned helper)
   std::unique_ptr<SearchManager> m_searchManager;

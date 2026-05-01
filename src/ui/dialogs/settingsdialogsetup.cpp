@@ -137,6 +137,9 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->extractedExtensionLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
   }
+  if (ui->expandModeCheckBox) {
+    connect(ui->expandModeCheckBox, &QCheckBox::toggled, this, &SettingsDialog::checkForChanges);
+  }
   if (ui->mediaDirLineEdit) {
     connect(ui->mediaDirLineEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
     connect(ui->mediaDirLineEdit, &QLineEdit::textChanged, this,

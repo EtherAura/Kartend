@@ -200,6 +200,8 @@ auto InteractionManager::handleSlashKey() -> bool {
 auto InteractionManager::handleEscapeKey() -> bool {
   // First check if artwork preview overlay is open - close it and return
   if (m_scrollManager && m_scrollManager->hideArtworkPreview()) {
+    // Also clear expand-mode state so the next activation expands again.
+    m_state.clearExpandedItem();
     return true;
   }
 

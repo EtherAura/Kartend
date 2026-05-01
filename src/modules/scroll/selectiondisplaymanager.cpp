@@ -219,6 +219,8 @@ void SelectionDisplayManager::showArtworkPreview(const QString &filePath,
   // Create overlay lazily on first use
   if (!m_artworkPreviewOverlay) {
     m_artworkPreviewOverlay = std::make_unique<ArtworkPreviewOverlay>(m_mediaScrollArea);
+    connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::launchRequested, this,
+            &SelectionDisplayManager::artworkPreviewLaunchRequested);
   }
 
   // Show artwork preview using the item's collection artwork directory

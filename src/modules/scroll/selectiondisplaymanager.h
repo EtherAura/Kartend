@@ -133,6 +133,10 @@ signals:
   void listColumnWidthChanged(int width);
   /// Emitted when the user resizes the artwork column.
   void listArtworkColumnWidthChanged(int width);
+  /// Emitted when the user activates (Enter / double-click) while the
+  /// artwork preview overlay is visible. Used by expand-mode to launch
+  /// the previewed item on the second activation.
+  void artworkPreviewLaunchRequested();
 
 private slots:
   void onListColumnClicked(ListSortColumn column);

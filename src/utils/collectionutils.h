@@ -105,6 +105,12 @@ struct CollectionConfig {
   bool extractArchives = false; // Extract archives to temp dir before launch
   QString extractedExtension;   // File extension to launch from extracted archive
 
+  // Expand mode: two-stage activation. When enabled, the first activation
+  // (double-click or Enter) on a selected item shows the artwork preview
+  // overlay instead of launching; a second activation on the same item
+  // launches it. Selection change resets the expanded state.
+  bool expandMode = false;
+
   // Folder browsing options
   bool includeContentSubfolders = false; // Show subfolders as virtual navigable folders
   bool includeArtworkSubfolders = false; // Match artwork from subfolders
@@ -153,7 +159,7 @@ struct CollectionConfig {
            backgroundColor == other.backgroundColor && backgroundImage == other.backgroundImage &&
            primaryColor == other.primaryColor && tileColor == other.tileColor &&
            selectionColor == other.selectionColor && extractArchives == other.extractArchives &&
-           extractedExtension == other.extractedExtension &&
+           extractedExtension == other.extractedExtension && expandMode == other.expandMode &&
            includeContentSubfolders == other.includeContentSubfolders &&
            includeArtworkSubfolders == other.includeArtworkSubfolders &&
            showAllSubfolderItems == other.showAllSubfolderItems &&
