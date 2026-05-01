@@ -1,4 +1,4 @@
-target_sources(kartend PRIVATE
+target_sources(${KARTEND_LIB_TARGET} PRIVATE
   searchloadingoverlay.cpp
   selectionoverlaymanager.cpp
   searchloadingoverlay.h

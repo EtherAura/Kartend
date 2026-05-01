@@ -445,3 +445,11 @@ target_link_libraries(test_filterhelpers
   Qt6::Test
 )
 add_test(NAME FilterHelpers COMMAND test_filterhelpers)
+
+# Integration test harness for UI-coordinator managers (Kartend-785).
+# Only built when the kartend_lib OBJECT library is available (i.e. when
+# tests/CMakeLists.txt is added from the top-level CMakeLists.txt rather than
+# configured stand-alone).
+if (TARGET ${KARTEND_LIB_TARGET})
+  add_subdirectory(integration)
+endif()

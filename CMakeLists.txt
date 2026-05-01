@@ -99,31 +99,43 @@ endif()
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-add_executable(kartend)
+# All compilation of Kartend's source tree happens through this OBJECT library
+# so it can be reused by both the main executable and the integration-test
+# harness (see tests/integration/CMakeLists.txt). All `target_sources(...)`
+# calls under src/*/CMakeLists.txt reference ${KARTEND_LIB_TARGET}.
+set(KARTEND_LIB_TARGET kartend_lib)
+add_library(${KARTEND_LIB_TARGET} OBJECT)
+# OBJECT lib is consumed by both the PIE executable and the test harness, so
+# its objects must be position-independent.
+set_target_properties(${KARTEND_LIB_TARGET} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 add_subdirectory(src)
 
-target_link_libraries(kartend
-  PRIVATE
+add_executable(kartend ${SRC_DIR}/core/main.cpp)
+
+target_link_libraries(${KARTEND_LIB_TARGET}
+  PUBLIC
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
     Qt6::Sql
     Qt6::Concurrent
 )
+target_link_libraries(kartend PRIVATE ${KARTEND_LIB_TARGET})
 
 if (Qt6Gamepad_FOUND)
-  target_link_libraries(kartend PRIVATE Qt6::Gamepad)
-  target_compile_definitions(kartend PRIVATE KARTEND_HAS_QT_GAMEPAD=1)
+  target_link_libraries(${KARTEND_LIB_TARGET} PUBLIC Qt6::Gamepad)
+  target_compile_definitions(${KARTEND_LIB_TARGET} PUBLIC KARTEND_HAS_QT_GAMEPAD=1)
 elseif(TARGET PkgConfig::SDL2)
-  target_link_libraries(kartend PRIVATE PkgConfig::SDL2)
-  target_compile_definitions(kartend PRIVATE KARTEND_HAS_SDL2_GAMEPAD=1)
+  target_link_libraries(${KARTEND_LIB_TARGET} PUBLIC PkgConfig::SDL2)
+  target_compile_definitions(${KARTEND_LIB_TARGET} PUBLIC KARTEND_HAS_SDL2_GAMEPAD=1)
   message(STATUS "Qt6::Gamepad not found; using SDL2 gamepad backend")
 else()
   message(STATUS "No gamepad backend found (Qt6::Gamepad or SDL2); building without gamepad support")
 endif()
 
-target_compile_definitions(kartend
-  PRIVATE
+target_compile_definitions(${KARTEND_LIB_TARGET}
+  PUBLIC
     APP_ID="${KARTEND_APP_ID}"
     APP_NAME="kartend"
     APP_DISPLAY_NAME="Kartend"
@@ -132,7 +144,7 @@ target_compile_definitions(kartend
     BUILD_DATE="${BUILD_DATE}"
 )
 
-target_include_directories(kartend PRIVATE
+target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
   ${SRC_DIR}
   ${SRC_DIR}/core
@@ -167,14 +179,14 @@ target_include_directories(kartend PRIVATE
   ${SRC_DIR}/utils
 )
 
-target_compile_options(kartend PRIVATE -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-lambda-capture -Wno-unused-lambda-capture)
+target_compile_options(${KARTEND_LIB_TARGET} PRIVATE -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-lambda-capture -Wno-unused-lambda-capture)
 
 # Keep GCC-only intent with Clang analogue on RISC-V
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "[Rr][Ii][Ss][Cc][Vv]")
   if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(kartend PRIVATE -mno-direct-extern-access)
+    target_compile_options(${KARTEND_LIB_TARGET} PRIVATE -mno-direct-extern-access)
   elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(kartend PRIVATE -fno-direct-access-external-data)
+    target_compile_options(${KARTEND_LIB_TARGET} PRIVATE -fno-direct-access-external-data)
   endif()
 endif()
 
@@ -192,8 +204,23 @@ set(RELEASE_LINK_OPTS -flto=auto -Wl,-O3 -Wl,--gc-sections -Wl,--as-needed -Wl,-
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   list(PREPEND RELEASE_LINK_OPTS -fuse-ld=lld)
 endif()
-target_compile_options(kartend PRIVATE $<$<CONFIG:Release>:${RELEASE_COMPILE_OPTS}>)
+target_compile_options(${KARTEND_LIB_TARGET} PRIVATE $<$<CONFIG:Release>:${RELEASE_COMPILE_OPTS}>)
 target_link_options(kartend PRIVATE $<$<CONFIG:Release>:${RELEASE_LINK_OPTS}>)
+
+# LTO objects in the OBJECT library are unreadable to a non-LTO link step, so
+# every consumer of kartend_lib (the main exe AND the integration test binary)
+# must link with the matching LTO and linker flags. Surface the minimum set as
+# INTERFACE link options so they propagate automatically.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  target_link_options(${KARTEND_LIB_TARGET} INTERFACE
+    $<$<CONFIG:Release>:-flto=auto>
+    $<$<CONFIG:Release>:-fuse-ld=lld>
+  )
+else()
+  target_link_options(${KARTEND_LIB_TARGET} INTERFACE
+    $<$<CONFIG:Release>:-flto=auto>
+  )
+endif()
 
 # PGO configuration
 if(USE_PGO)
@@ -213,7 +240,7 @@ if (NOT MAINTENANCE)
   target_link_options(kartend PRIVATE $<$<CONFIG:Release>:-s>)
 endif()
 
-target_compile_definitions(kartend PRIVATE $<$<CONFIG:Release>:NDEBUG>)
+target_compile_definitions(${KARTEND_LIB_TARGET} PRIVATE $<$<CONFIG:Release>:NDEBUG>)
 
 # Debug-only linker map file output (fixed name)
 # Only emit when the target directory exists (local dev builds create it via
@@ -241,7 +268,7 @@ endif()
 
 # MAINTENANCE adds -Werror
 if (MAINTENANCE)
-  target_compile_options(kartend PRIVATE -Werror)
+  target_compile_options(${KARTEND_LIB_TARGET} PRIVATE -Werror)
 endif()
 
 # Tests (optional)
