@@ -37,6 +37,7 @@ class SelectionStateTracker;
 class SelectionDisplayManager;
 class ListHeaderWidget;
 class ArtworkPreviewOverlay;
+class VirtualScrollEngine;
 enum class ListSortColumn;
 
 namespace TimerUtils {
@@ -79,6 +80,11 @@ struct ScrollManagerSetup {
  */
 class ScrollManager : public QObject {
   Q_OBJECT
+  // Engine is a sibling helper that drives virtual-scrolling layout and
+  // widget materialization (Kartend-158). It accesses ScrollManager's state
+  // directly via friendship; canonical state ownership remains here.
+  friend class VirtualScrollEngine;
+
 public:
   ScrollManager(QObject *parent = nullptr);
   ~ScrollManager() override;
@@ -325,10 +331,11 @@ private:
   // Rate-limited debug aid for range delivery.
   int m_rangeReceiveDebugBudget = 10;
 
-  // Helper methods to reduce cognitive complexity
-  [[nodiscard]] QSet<int> calculateNeededIndices() const;
-  void removeUnneededWidgets(const QSet<int> &needed);
-  void updateArtworkIfAllowed();
+  // Virtual scrolling engine: owns the algorithms for layout, container
+  // lifecycle, and widget materialization (Kartend-158). Constructed in the
+  // ScrollManager constructor; destroyed last among helper managers so it
+  // can safely touch ScrollManager state during teardown.
+  std::unique_ptr<VirtualScrollEngine> m_engine;
 
   void initializeSubcollections();
   void initializeVirtualFolders();
