@@ -1,4 +1,4 @@
-target_sources(kartend PRIVATE
+target_sources(${KARTEND_LIB_TARGET} PRIVATE
   databasemanager.cpp
   databasemanagerpaths.cpp
   databasemanagerworker.cpp
