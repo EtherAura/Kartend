@@ -369,13 +369,33 @@
               </widget>
              </item>
              <item row="10" column="0">
+              <widget class="QLabel" name="label_expandMode">
+               <property name="text">
+                <string>Expand Mode:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="10" column="1">
+              <widget class="QCheckBox" name="expandModeCheckBox">
+               <property name="toolTip">
+                <string>Two-stage activation: first double-click or Enter expands the artwork preview; a second activation on the same item launches it.</string>
+               </property>
+               <property name="text">
+                <string/>
+               </property>
+               <property name="checked">
+                <bool>false</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="11" column="0">
               <widget class="QLabel" name="label_showAllSubcollectionItems">
                <property name="text">
                 <string>Show All Subcollection Items:</string>
                </property>
               </widget>
              </item>
-             <item row="10" column="1">
+             <item row="11" column="1">
               <widget class="QCheckBox" name="showAllSubcollectionItemsCheckBox">
                <property name="toolTip">
                 <string>Mix items from subcollections with parent collection items, sorted alphabetically</string>

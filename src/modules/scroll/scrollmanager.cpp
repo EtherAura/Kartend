@@ -84,6 +84,8 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
           &ScrollManager::listColumnWidthChanged);
   connect(m_selectionDisplay.get(), &SelectionDisplayManager::listArtworkColumnWidthChanged, this,
           &ScrollManager::listArtworkColumnWidthChanged);
+  connect(m_selectionDisplay.get(), &SelectionDisplayManager::artworkPreviewLaunchRequested, this,
+          &ScrollManager::artworkPreviewLaunchRequested);
 
   connect(m_overlayManager, &SelectionOverlayManager::animationFinished, this, [this]() {
     // Update widget selection states when animation finishes
@@ -454,6 +456,15 @@ void ScrollManager::updateListHeader() {
 
 // Forwarder: artwork preview overlay lives on SelectionDisplayManager.
 void ScrollManager::onArtworkPreviewRequested(const QString &filePath, const QString &artworkDir) {
+  if (m_selectionDisplay) {
+    m_selectionDisplay->showArtworkPreview(filePath, artworkDir);
+  }
+}
+
+// Public entry point used by InteractionManager for expand-mode activation.
+// Identical behavior to onArtworkPreviewRequested but exposed as a public
+// API for callers that don't go through the widget signal chain.
+void ScrollManager::showArtworkPreview(const QString &filePath, const QString &artworkDir) {
   if (m_selectionDisplay) {
     m_selectionDisplay->showArtworkPreview(filePath, artworkDir);
   }

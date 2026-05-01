@@ -37,6 +37,7 @@ auto compareNonReloadFields(const CollectionConfig &configA, const CollectionCon
       configA.launchParameters != configB.launchParameters ||
       configA.extractArchives != configB.extractArchives ||
       configA.extractedExtension != configB.extractedExtension ||
+      configA.expandMode != configB.expandMode ||
       configA.parentCollectionIndex != configB.parentCollectionIndex ||
       configA.isSubcollection != configB.isSubcollection) {
     hasChanges = true;

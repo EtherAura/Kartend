@@ -107,6 +107,22 @@ public:
   void updateLastUiActivity() { m_lastUiActivityMs = QDateTime::currentMSecsSinceEpoch(); }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Expand-mode (two-stage activation): tracks the visual index of the item
+  // currently shown in the artwork-preview overlay so a second activation on
+  // the same item proceeds to launch instead of expanding again.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  [[nodiscard]] int expandedItemIndex() const { return m_expandedItemIndex; }
+  void setExpandedItemIndex(int index) {
+    assertOwnerThread();
+    m_expandedItemIndex = index;
+  }
+  void clearExpandedItem() {
+    assertOwnerThread();
+    m_expandedItemIndex = -1;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Convenience methods for common state transitions
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -203,6 +219,7 @@ public:
     m_horizAnimGen = 0;
     m_clickSeriesLastMs = 0;
     m_lastUiActivityMs = 0;
+    m_expandedItemIndex = -1;
   }
 
 signals:
@@ -247,6 +264,7 @@ private:
   int m_horizAnimGen = 0;
   qint64 m_clickSeriesLastMs = 0;
   qint64 m_lastUiActivityMs = 0;
+  int m_expandedItemIndex = -1;
 };
 
 #endif // INTERACTIONSTATEHOLDER_H

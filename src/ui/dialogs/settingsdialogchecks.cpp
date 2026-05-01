@@ -56,6 +56,8 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.extractedExtension = (ui->extractedExtensionLineEdit)
                                   ? ui->extractedExtensionLineEdit->text()
                                   : config.extractedExtension;
+  config.expandMode =
+      (ui->expandModeCheckBox) ? ui->expandModeCheckBox->isChecked() : config.expandMode;
   config.mediaDirectory =
       (ui->mediaDirLineEdit) ? ui->mediaDirLineEdit->text() : config.mediaDirectory;
   config.artworkDirectory =
@@ -199,6 +201,8 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
        ui->extractArchivesCheckBox->isChecked() != originalConfig.extractArchives) ||
       ((ui->extractedExtensionLineEdit) &&
        ui->extractedExtensionLineEdit->text() != originalConfig.extractedExtension) ||
+      ((ui->expandModeCheckBox) &&
+       ui->expandModeCheckBox->isChecked() != originalConfig.expandMode) ||
       ((ui->mediaDirLineEdit) && ui->mediaDirLineEdit->text() != originalConfig.mediaDirectory) ||
       ((ui->artworkDirLineEdit) &&
        ui->artworkDirLineEdit->text() != originalConfig.artworkDirectory) ||

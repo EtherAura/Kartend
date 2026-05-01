@@ -125,6 +125,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
     config.showHiddenFolders = settings.value("showHiddenFolders", false).toBool();
     config.extractArchives = settings.value("extractArchives", false).toBool();
     config.extractedExtension = settings.value("extractedExtension").toString();
+    config.expandMode = settings.value("expandMode", false).toBool();
     config.collectionIcon = settings.value("collectionIcon").toString();
 
     QString extStr = settings.value("extensions").toString();
@@ -284,6 +285,7 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue("showHiddenFolders", c.showHiddenFolders);
     settings.setValue("extractArchives", c.extractArchives);
     settings.setValue("extractedExtension", c.extractedExtension);
+    settings.setValue("expandMode", c.expandMode);
     settings.setValue("collectionIcon", c.collectionIcon);
     settings.setValue("extensions", c.extensions.join(", "));
     settings.setValue("gridWidth", c.gridWidth);

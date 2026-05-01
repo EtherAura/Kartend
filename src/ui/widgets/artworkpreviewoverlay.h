@@ -28,9 +28,16 @@ public:
   /// Hide the overlay
   void hideOverlay();
 
+signals:
+  /// Emitted when the user activates (Enter / double-click) while the
+  /// overlay is visible. Used by expand-mode to launch the previewed item
+  /// on the second activation.
+  void launchRequested();
+
 protected:
   void paintEvent(QPaintEvent *event) override;
   void mousePressEvent(QMouseEvent *event) override;
+  void mouseDoubleClickEvent(QMouseEvent *event) override;
   void keyPressEvent(QKeyEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
 
