@@ -13,6 +13,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   nowplayingoverlay.cpp
   splashoverlay.cpp
   videopreviewwidget.cpp
+  videothumbnailextractor.cpp
   artworkpreviewoverlay.h
   emptystatewidget.h
   itemwidget.h
@@ -22,6 +23,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   nowplayingoverlay.h
   splashoverlay.h
   videopreviewwidget.h
+  videothumbnailextractor.h
   itemwidget.ui
   metadatasidebar.ui
 )

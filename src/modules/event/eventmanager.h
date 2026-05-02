@@ -114,6 +114,9 @@ signals:
   void widgetClicked(ItemWidget *widget, int visualIndex, const QPoint &clickPos,
                      QMouseEvent *event);
   void contextMenuRequested(ItemWidget *widget, int visualIndex, const QPoint &globalPos);
+  /// Emitted when the user middle-clicks an item (Kartend-ljey). Used to
+  /// open a video-first media preview overlay without launching.
+  void mediaPreviewRequested(ItemWidget *widget, int visualIndex);
   void clearSelectionRequested();
   void slashKeyPressed();
   void escapeKeyPressed();

@@ -475,6 +475,15 @@ void ScrollManager::showArtworkPreview(const QString &filePath, const QString &a
   }
 }
 
+// Video-first preview entry point (Kartend-ljey). Used by expand-mode and
+// middle-click; falls back to artwork when no video matches.
+void ScrollManager::showMediaPreview(const QString &filePath, const QString &artworkDir,
+                                     const QString &videoDir) {
+  if (m_selectionDisplay) {
+    m_selectionDisplay->showMediaPreview(filePath, artworkDir, videoDir);
+  }
+}
+
 // Prime the container with target collection metrics before items are loaded
 // Creates and positions widget for given visual index, handling both
 auto ScrollManager::getItemPosition(int visualIndex) const -> QPoint {

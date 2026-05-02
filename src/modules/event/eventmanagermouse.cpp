@@ -569,6 +569,21 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
     return false;
   }
 
+  // Middle-click media preview (Kartend-ljey). Opens a video-first preview
+  // overlay for the clicked item without changing selection or launching.
+  if (mouseEvent->button() == Qt::MiddleButton) {
+    auto *widget = itemWidgetForObject(obj);
+    if (widget) {
+      int visualIndex = visualIndexForWidget(widget);
+      if (visualIndex >= 0) {
+        emit mediaPreviewRequested(widget, visualIndex);
+        event->accept();
+        return true;
+      }
+    }
+    return false;
+  }
+
   if (mouseEvent->button() != Qt::LeftButton) {
     return false;
   }

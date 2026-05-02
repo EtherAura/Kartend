@@ -233,23 +233,34 @@ auto InteractionManager::maybeExpandInsteadOfLaunch(const QString &filePath, int
     m_scrollManager->hideArtworkPreview();
     return false;
   }
-  // First activation: expand the artwork preview using the owning
-  // collection's artwork directory (expanded against config variables).
+  // First activation: expand into a video-first preview (Kartend-ljey).
+  // The overlay falls back to artwork when no video is found, preserving
+  // the original expand-mode behavior for collections without
+  // videoDirectory configured.
   if (!m_scrollManager) {
     return false;
   }
   const QString artworkDir =
       SettingsUtils::expandConfigVariables(artworkOwner.artworkDirectory, artworkOwner.name);
-  m_scrollManager->showArtworkPreview(filePath, artworkDir);
+  const QString videoDir =
+      SettingsUtils::expandConfigVariables(artworkOwner.videoDirectory, artworkOwner.name);
+  m_scrollManager->showMediaPreview(filePath, artworkDir, videoDir);
   m_state.setExpandedItemIndex(activationIndex);
   return true;
 }
 
-void InteractionManager::onArtworkPreviewLaunchRequested() {
-  // Second-stage expand-mode activation: overlay is visible and the user
-  // pressed Enter or double-clicked the artwork. Hide the overlay, clear
-  // expand state, and launch the currently selected item.
-  QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
+void InteractionManager::onArtworkPreviewLaunchRequested(const QString &filePath) {
+  // Second-stage expand-mode activation OR Enter/double-click on a
+  // middle-click peek overlay: hide the overlay, clear expand state, and
+  // launch the previewed item. Prefers the path the overlay was showing
+  // (so a middle-click peek on a non-selected item launches the *clicked*
+  // item, not whatever happens to be selected) and falls back to the
+  // current selection for gallery thumbnail previews that don't carry a
+  // media path.
+  QString path = filePath;
+  if (path.isEmpty() && m_selectionManager) {
+    path = m_selectionManager->selectedFilePath();
+  }
   if (path.isEmpty() && m_scrollManager) {
     path = m_scrollManager->filePathForVisualIndex(currentSelectedIndex());
   }
@@ -270,4 +281,42 @@ void InteractionManager::onArtworkPreviewLaunchRequested() {
   }
   saveCurrentSelection();
   launchItemWithCollection(path, ownerIdx);
+}
+
+void InteractionManager::onMediaPreviewRequested(ItemWidget *widget, int visualIndex) {
+  // Middle-click peek (Kartend-ljey). Resolves the clicked item's path and
+  // its owning collection, then opens a video-first preview overlay. Does
+  // *not* set m_state.expandedItemIndex — middle-click is a peek that
+  // dismisses on Escape / click-outside, not a first-stage launch.
+  if (!widget || !m_collections || !m_scrollManager) {
+    return;
+  }
+
+  QString filePath = widget->getFilePath();
+  if (filePath.isEmpty()) {
+    filePath = m_scrollManager->filePathForVisualIndex(visualIndex);
+  }
+  if (filePath.isEmpty()) {
+    return;
+  }
+
+  const int cIdx = m_databaseManager ? m_databaseManager->getCollectionIndexForFile(filePath) : -1;
+  int ownerIdx = cIdx;
+  if (ownerIdx < 0 && m_currentCollectionIndex) {
+    ownerIdx = *m_currentCollectionIndex;
+  }
+  if (ownerIdx < 0 || ownerIdx >= m_collections->size()) {
+    return;
+  }
+
+  const CollectionConfig &owner = (*m_collections)[ownerIdx];
+  // Resolve directories from the owning collection so a subcollection's
+  // configured paths win over the viewing parent in
+  // showAllSubcollectionItems mode (mirrors expand-mode's behavior).
+  const QString artworkDir =
+      SettingsUtils::expandConfigVariables(owner.artworkDirectory, owner.name);
+  const QString videoDir =
+      SettingsUtils::expandConfigVariables(owner.videoDirectory, owner.name);
+
+  m_scrollManager->showMediaPreview(filePath, artworkDir, videoDir);
 }
