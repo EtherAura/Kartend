@@ -17,26 +17,28 @@
 
 // ArrowNavigationHandlerSetup getter definitions
 SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, KeyboardManager *, KeyboardManager,
-                      keyboardManager)
-SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, ScrollManager *, ScrollManager, scrollManager)
+                          keyboardManager)
+SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, ScrollManager *, ScrollManager,
+                          scrollManager)
 SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, AnimationManager *, AnimationManager,
-                      animationManager)
+                          animationManager)
 SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, ViewportManager *, ViewportManager,
-                      viewportManager)
+                          viewportManager)
 SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, SelectionManager *, SelectionManager,
-                      selectionManager)
+                          selectionManager)
 SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
 SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QWidget *, GridContainer, gridContainer)
-SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QStackedWidget *, StackedWidget, stackedWidget)
+SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QStackedWidget *, StackedWidget,
+                         stackedWidget)
 SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QWidget *, ItemsPage, itemsPage)
 SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, QList<CollectionConfig> *, Collections,
-                      collections)
+                          collections)
 SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, int *, CurrentCollectionIndex,
-                      currentCollectionIndex)
+                          currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, GeneralSettings *, GeneralSettings,
-                      generalSettings)
-SETUP_GETTER_DEF_MGR_CTX_ONLY(ArrowNavigationHandlerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
+                          generalSettings)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(ArrowNavigationHandlerSetup, InteractionStateHolder *,
+                              InteractionState, interactionState)
 
 ArrowNavigationHandler::ArrowNavigationHandler(QObject *parent) : QObject(parent) {}
 

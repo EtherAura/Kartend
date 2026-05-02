@@ -94,7 +94,9 @@
   }
 
 #define SETUP_GETTER_DEF_SECTION_CTX_ONLY(STRUCT, TYPE, NAME, SECTION, CTX_FIELD)                  \
-  auto STRUCT::get##NAME() const->TYPE { return ctx ? ctx->SECTION.CTX_FIELD : nullptr; }
+  auto STRUCT::get##NAME() const->TYPE {                                                           \
+    return ctx ? ctx->SECTION.CTX_FIELD : nullptr;                                                 \
+  }
 
 // Collection section
 #define SETUP_GETTER_DEF_COL(STRUCT, TYPE, NAME, FIELD, CTX_FIELD)                                 \

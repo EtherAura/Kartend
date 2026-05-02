@@ -507,8 +507,7 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
       mainWindow->m_generalSettings.wrapNavigation = ui->wrapNavigationCheckBox->isChecked();
     }
     if (ui->selectItemOnHoverCheckBox) {
-      mainWindow->m_generalSettings.selectItemOnHover =
-          ui->selectItemOnHoverCheckBox->isChecked();
+      mainWindow->m_generalSettings.selectItemOnHover = ui->selectItemOnHoverCheckBox->isChecked();
     }
     if (ui->bootSplashCheckBox) {
       mainWindow->m_generalSettings.bootSplashEnabled = ui->bootSplashCheckBox->isChecked();
@@ -563,8 +562,7 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
           ui->attractIdleTimeoutSpinBox->value();
     }
     if (ui->attractScrollSpeedSpinBox) {
-      mainWindow->m_generalSettings.attractModeScrollSpeed =
-          ui->attractScrollSpeedSpinBox->value();
+      mainWindow->m_generalSettings.attractModeScrollSpeed = ui->attractScrollSpeedSpinBox->value();
     }
     if (ui->titleSaturationSpinBox) {
       mainWindow->m_generalSettings.titleTintSaturation = ui->titleSaturationSpinBox->value();

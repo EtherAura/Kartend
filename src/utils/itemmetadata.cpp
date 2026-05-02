@@ -81,8 +81,7 @@ ErrorUtils::Result<ItemMetadata> load(QSqlDatabase &db, const QString &collectio
   QSqlQuery q(db);
   if (!q.prepare(SELECT_SQL)) {
     return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
-                               "Failed to prepare item_metadata select",
-                               "ItemMetadataStore::load")
+                               "Failed to prepare item_metadata select", "ItemMetadataStore::load")
         .withDetails(q.lastError().text());
   }
   q.addBindValue(collectionUuid);
@@ -128,8 +127,7 @@ ErrorUtils::Result<bool> save(QSqlDatabase &db, const ItemMetadata &metadata) {
   QSqlQuery q(db);
   if (!q.prepare(UPSERT_SQL)) {
     return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
-                               "Failed to prepare item_metadata upsert",
-                               "ItemMetadataStore::save")
+                               "Failed to prepare item_metadata upsert", "ItemMetadataStore::save")
         .withDetails(q.lastError().text());
   }
 
@@ -212,12 +210,10 @@ const QStringList &manualExtensions() {
   // this set is uncommon enough that the user can attach it explicitly via
   // the per-item override (Set manual file...).
   static const QStringList exts = {
-      QStringLiteral("pdf"),  QStringLiteral("epub"), QStringLiteral("cbr"),
-      QStringLiteral("cbz"),  QStringLiteral("djvu"), QStringLiteral("txt"),
-      QStringLiteral("md"),   QStringLiteral("html"), QStringLiteral("htm"),
-      QStringLiteral("rtf"),  QStringLiteral("doc"),  QStringLiteral("docx"),
-      QStringLiteral("odt"),  QStringLiteral("png"),  QStringLiteral("jpg"),
-      QStringLiteral("jpeg"),
+      QStringLiteral("pdf"),  QStringLiteral("epub"), QStringLiteral("cbr"), QStringLiteral("cbz"),
+      QStringLiteral("djvu"), QStringLiteral("txt"),  QStringLiteral("md"),  QStringLiteral("html"),
+      QStringLiteral("htm"),  QStringLiteral("rtf"),  QStringLiteral("doc"), QStringLiteral("docx"),
+      QStringLiteral("odt"),  QStringLiteral("png"),  QStringLiteral("jpg"), QStringLiteral("jpeg"),
   };
   return exts;
 }

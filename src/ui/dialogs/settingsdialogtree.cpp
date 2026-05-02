@@ -468,18 +468,18 @@ void SettingsDialog::applyCurrentSettingsToIndices(const QList<int> &targetIndic
   saveCollectionFromUI(currentCollectionIndex);
 
   const QString sourceName = collections[currentCollectionIndex].name;
-  const QMessageBox::StandardButton reply = QMessageBox::question(
-      this, tr("Apply Settings"),
-      tr("Copy the appearance and layout settings from \"%1\" to %2 (%3 "
-         "collection(s))?\n\n"
-         "This overwrites grid/spacing, item dimensions, fonts, colors, "
-         "background, list-mode styling, view type, alignment, and "
-         "scrollbar/sidebar visibility. Paths, extensions, and scan-related "
-         "flags are left alone.")
-          .arg(sourceName)
-          .arg(scopeLabel)
-          .arg(targetIndices.size()),
-      QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+  const QMessageBox::StandardButton reply =
+      QMessageBox::question(this, tr("Apply Settings"),
+                            tr("Copy the appearance and layout settings from \"%1\" to %2 (%3 "
+                               "collection(s))?\n\n"
+                               "This overwrites grid/spacing, item dimensions, fonts, colors, "
+                               "background, list-mode styling, view type, alignment, and "
+                               "scrollbar/sidebar visibility. Paths, extensions, and scan-related "
+                               "flags are left alone.")
+                                .arg(sourceName)
+                                .arg(scopeLabel)
+                                .arg(targetIndices.size()),
+                            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
   if (reply != QMessageBox::Yes) {
     return;
   }

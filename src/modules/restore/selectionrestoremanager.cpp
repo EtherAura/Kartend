@@ -25,21 +25,22 @@ Q_LOGGING_CATEGORY(lcSelectionRestoreManager, "kartend.selectionrestoremanager")
   } while (0)
 
 SETUP_GETTER_DEF_MGR_SAME(SelectionRestoreManagerSetup, InteractionManager *, InteractionManager,
-                      interactionManager)
-SETUP_GETTER_DEF_MGR_SAME(SelectionRestoreManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+                          interactionManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionRestoreManagerSetup, ScrollManager *, ScrollManager,
+                          scrollManager)
 SETUP_GETTER_DEF_MGR_SAME(SelectionRestoreManagerSetup, SessionManager *, SessionManager,
-                      sessionManager)
+                          sessionManager)
 SETUP_GETTER_DEF_MGR_SAME(SelectionRestoreManagerSetup, SettingsManager *, SettingsManager,
-                      settingsManager)
+                          settingsManager)
 SETUP_GETTER_DEF_UI_SAME(SelectionRestoreManagerSetup, QLineEdit *, SearchBar, searchBar)
 SETUP_GETTER_DEF_COL_SAME(SelectionRestoreManagerSetup, int *, CurrentCollectionIndex,
-                      currentCollectionIndex)
+                          currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(SelectionRestoreManagerSetup, QList<CollectionConfig> *, Collections,
-                      collections)
+                          collections)
 SETUP_GETTER_DEF_COL_SAME(SelectionRestoreManagerSetup, GeneralSettings *, GeneralSettings,
-                      generalSettings)
-SETUP_GETTER_DEF_MGR_CTX_ONLY(SelectionRestoreManagerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
+                          generalSettings)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(SelectionRestoreManagerSetup, InteractionStateHolder *,
+                              InteractionState, interactionState)
 
 SelectionRestoreManager::SelectionRestoreManager(QObject *parent) : QObject(parent) {}
 

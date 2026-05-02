@@ -47,8 +47,7 @@ void KeyboardManager::beginHoldRepeat() {
   // multiplier. Higher multiplier → shorter interval → more items/second
   // while the arrow key is held. Guard against zero-division and clamp the
   // effective interval to at least 10ms to avoid saturating the event loop.
-  const double velocityMult =
-      m_generalSettings ? m_generalSettings->scrollVelocityMultiplier : 1.0;
+  const double velocityMult = m_generalSettings ? m_generalSettings->scrollVelocityMultiplier : 1.0;
   if (velocityMult > 0.0 && velocityMult != 1.0) {
     baseInterval = qMax(10, static_cast<int>(baseInterval / velocityMult + 0.5));
   }

@@ -58,12 +58,11 @@ SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, QList<CollectionConfig> *, Collecti
 SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, GeneralSettings *, GeneralSettings, generalSettings)
 SETUP_GETTER_DEF_MGR_CTX_ONLY(EventManagerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
+                              interactionState)
 
 EventManager::EventManager(QObject *parent) : QObject(parent) {
   m_hoverScrollTimer.setSingleShot(true);
-  connect(&m_hoverScrollTimer, &QTimer::timeout, this,
-          &EventManager::commitPendingHoverScroll);
+  connect(&m_hoverScrollTimer, &QTimer::timeout, this, &EventManager::commitPendingHoverScroll);
 }
 
 EventManager::~EventManager() = default;

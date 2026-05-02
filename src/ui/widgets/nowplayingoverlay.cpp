@@ -56,13 +56,12 @@ void NowPlayingOverlay::setupUI() {
   m_cardWidget->setObjectName(QStringLiteral("nowPlayingCard"));
   m_cardWidget->setMinimumWidth(kCardMinimumWidth);
   m_cardWidget->setMaximumWidth(kCardMaximumWidth);
-  m_cardWidget->setStyleSheet(QStringLiteral(
-      "#nowPlayingCard {"
-      "  background-color: rgba(20, 23, 30, 245);"
-      "  border: 1px solid rgba(255, 255, 255, 50);"
-      "  border-radius: 20px;"
-      "}"
-      "QLabel { color: white; }"));
+  m_cardWidget->setStyleSheet(QStringLiteral("#nowPlayingCard {"
+                                             "  background-color: rgba(20, 23, 30, 245);"
+                                             "  border: 1px solid rgba(255, 255, 255, 50);"
+                                             "  border-radius: 20px;"
+                                             "}"
+                                             "QLabel { color: white; }"));
 
   auto *rootLayout = new QHBoxLayout(m_cardWidget);
   rootLayout->setContentsMargins(kCardPaddingH, kCardPaddingV, kCardPaddingH, kCardPaddingV);
@@ -91,14 +90,14 @@ void NowPlayingOverlay::setupUI() {
   m_subtitleLabel = new QLabel(m_cardWidget);
   m_subtitleLabel->setObjectName(QStringLiteral("nowPlayingSubtitle"));
   m_subtitleLabel->setWordWrap(true);
-  m_subtitleLabel->setStyleSheet(QStringLiteral(
-      "#nowPlayingSubtitle { color: rgba(255, 255, 255, 220); font-size: 18px; }"));
+  m_subtitleLabel->setStyleSheet(
+      QStringLiteral("#nowPlayingSubtitle { color: rgba(255, 255, 255, 220); font-size: 18px; }"));
   textLayout->addWidget(m_subtitleLabel);
 
   m_hintLabel = new QLabel(m_cardWidget);
   m_hintLabel->setObjectName(QStringLiteral("nowPlayingHint"));
-  m_hintLabel->setStyleSheet(QStringLiteral(
-      "#nowPlayingHint { color: rgba(255, 255, 255, 140); font-size: 12px; }"));
+  m_hintLabel->setStyleSheet(
+      QStringLiteral("#nowPlayingHint { color: rgba(255, 255, 255, 140); font-size: 12px; }"));
   m_hintLabel->setText(tr("Kartend will return when the program closes."));
   textLayout->addWidget(m_hintLabel);
 }

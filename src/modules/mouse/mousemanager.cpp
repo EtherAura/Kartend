@@ -32,12 +32,12 @@ SETUP_GETTER_DEF_MGR_SAME(MouseManagerSetup, SelectionManager *, SelectionManage
 SETUP_GETTER_DEF_UI_SAME(MouseManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
 SETUP_GETTER_DEF_UI_SAME(MouseManagerSetup, QWidget *, GridContainer, gridContainer)
 SETUP_GETTER_DEF_COL_SAME(MouseManagerSetup, const QVector<CollectionConfig> *, Collections,
-                      collections)
+                          collections)
 SETUP_GETTER_DEF_COL_SAME(MouseManagerSetup, const int *, CurrentCollectionIndex,
-                      currentCollectionIndex)
+                          currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(MouseManagerSetup, GeneralSettings *, GeneralSettings, generalSettings)
 SETUP_GETTER_DEF_MGR_CTX_ONLY(MouseManagerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
+                              interactionState)
 
 MouseManager::MouseManager(QObject *parent) : QObject(parent) {}
 

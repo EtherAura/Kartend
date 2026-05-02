@@ -372,9 +372,9 @@ bool QueryManager::stageFilesystemScan(const CollectionConfig &collection,
 // ============================================================================
 // Phase 2 – commitStagedScanResults
 // ============================================================================
-bool QueryManager::commitStagedScanResults(const CollectionConfig &collection,
-                                           const QString &uuid, const QString &extSignature,
-                                           const QString &dirSignature, int &itemsApplied) {
+bool QueryManager::commitStagedScanResults(const CollectionConfig &collection, const QString &uuid,
+                                           const QString &extSignature, const QString &dirSignature,
+                                           int &itemsApplied) {
   itemsApplied = 0;
 
   // Throttle progress emissions during the apply phase.

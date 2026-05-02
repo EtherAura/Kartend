@@ -348,10 +348,8 @@ void SettingsDialog::setupUIConstraints() {
     ui->horizontalSpacingSpinBox->setSingleStep(1);
   }
   if (ui->verticalSpacingSpinBox) {
-    ui->verticalSpacingSpinBox->setMinimum(
-        spacingInternalToUi(UIConstants::Viewport::SPACING_MIN));
-    ui->verticalSpacingSpinBox->setMaximum(
-        spacingInternalToUi(UIConstants::Viewport::SPACING_MAX));
+    ui->verticalSpacingSpinBox->setMinimum(spacingInternalToUi(UIConstants::Viewport::SPACING_MIN));
+    ui->verticalSpacingSpinBox->setMaximum(spacingInternalToUi(UIConstants::Viewport::SPACING_MAX));
     ui->verticalSpacingSpinBox->setSingleStep(1);
   }
   if (ui->gridWidthSpinBox) {

@@ -33,8 +33,9 @@ Q_LOGGING_CATEGORY(lcSearchManager, "kartend.searchmanager")
 // SearchManagerSetup getter definitions
 SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, DatabaseManager *, DatabaseManager, databaseManager)
 SETUP_GETTER_DEF_MGR_CTX_ONLY(SearchManagerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
-SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, NavigationManager *, NavigationManager, navigationManager)
+                              interactionState)
+SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, NavigationManager *, NavigationManager,
+                          navigationManager)
 SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, ScrollManager *, ScrollManager, scrollManager)
 SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, SettingsManager *, SettingsManager, settingsManager)
 SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QLineEdit *, SearchBar, searchBar)
@@ -45,7 +46,7 @@ SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QWidget *, ItemsPage, itemsPage)
 SETUP_GETTER_DEF_COL_SAME(SearchManagerSetup, QList<CollectionConfig> *, Collections, collections)
 SETUP_GETTER_DEF_COL_SAME(SearchManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(SearchManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
-                      hierarchyCache)
+                          hierarchyCache)
 
 SearchManager::SearchManager(QObject *parent) : QObject(parent) {
   m_searchDebounceTimer =

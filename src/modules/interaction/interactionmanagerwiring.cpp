@@ -46,13 +46,12 @@ void InteractionManager::connectSearchManagerSignals() {
 }
 
 void InteractionManager::connectSelectionManagerSignals() {
-  connect(m_selectionManager.get(), &SelectionManager::selectionChanged, this,
-          [this](int index) {
-            // Selection moved → reset expand-mode state so the next
-            // activation expands first, not launches.
-            m_state.clearExpandedItem();
-            emit selectionChanged(index);
-          });
+  connect(m_selectionManager.get(), &SelectionManager::selectionChanged, this, [this](int index) {
+    // Selection moved → reset expand-mode state so the next
+    // activation expands first, not launches.
+    m_state.clearExpandedItem();
+    emit selectionChanged(index);
+  });
   connect(m_selectionManager.get(), &SelectionManager::requestFocusItemsPage, this, [this]() {
     if (m_itemsPage) {
       m_itemsPage->setFocus();

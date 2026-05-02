@@ -82,8 +82,7 @@ MetadataSidebar::~MetadataSidebar() {
 // Sets metadata fields and loads centered artwork from the configured
 // artwork directory or a sibling "artwork" directory if present
 void MetadataSidebar::setMetadata(const QString &filePath, const QString &itemName,
-                                  const QString &artworkDirectory,
-                                  const QString &videoDirectory) {
+                                  const QString &artworkDirectory, const QString &videoDirectory) {
   if (filePath.isEmpty()) {
     clearMetadata();
     return;
@@ -114,9 +113,8 @@ void MetadataSidebar::setMetadata(const QString &filePath, const QString &itemNa
   // pane back to the artwork display first; the timer will swap to the video
   // widget once the debounce elapses if a video was found.
   showArtworkOnly();
-  const QString videoPath = videoDirectory.isEmpty()
-                                ? QString()
-                                : VideoUtils::findVideoForFile(filePath, videoDirectory);
+  const QString videoPath =
+      videoDirectory.isEmpty() ? QString() : VideoUtils::findVideoForFile(filePath, videoDirectory);
   schedulePreviewVideo(videoPath);
 
   ui->titleLabel->show();

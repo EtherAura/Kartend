@@ -26,7 +26,7 @@ SETUP_GETTER_DEF_UI_SAME(AnimationManagerSetup, QScrollArea *, ItemScrollArea, i
 SETUP_GETTER_DEF_MGR_SAME(AnimationManagerSetup, ScrollManager *, ScrollManager, scrollManager)
 SETUP_GETTER_DEF_MGR_SAME(AnimationManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
 SETUP_GETTER_DEF_MGR_CTX_ONLY(AnimationManagerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
+                              interactionState)
 
 AnimationManager::AnimationManager(QObject *parent) : QObject(parent) {}
 

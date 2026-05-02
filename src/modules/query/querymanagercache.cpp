@@ -333,7 +333,8 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   QString sql;
   QString filterClause;
   if (!trimmedFilter.isEmpty() && !useFts) {
-    filterClause = (needsCollectionJoin || needsItemsTable) ? " AND i.name LIKE ?" : " AND name LIKE ?";
+    filterClause =
+        (needsCollectionJoin || needsItemsTable) ? " AND i.name LIKE ?" : " AND name LIKE ?";
   }
 
   if (useFts) {

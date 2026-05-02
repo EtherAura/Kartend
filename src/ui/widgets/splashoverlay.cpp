@@ -80,13 +80,12 @@ void SplashOverlay::setupUI() {
   m_cardWidget->setObjectName(QStringLiteral("splashCard"));
   m_cardWidget->setMinimumWidth(kCardMinimumWidth);
   m_cardWidget->setMaximumWidth(kCardMaximumWidth);
-  m_cardWidget->setStyleSheet(QStringLiteral(
-      "#splashCard {"
-      "  background-color: rgba(24, 27, 34, 242);"
-      "  border: 1px solid rgba(255, 255, 255, 38);"
-      "  border-radius: 18px;"
-      "}"
-      "QLabel { color: white; }"));
+  m_cardWidget->setStyleSheet(QStringLiteral("#splashCard {"
+                                             "  background-color: rgba(24, 27, 34, 242);"
+                                             "  border: 1px solid rgba(255, 255, 255, 38);"
+                                             "  border-radius: 18px;"
+                                             "}"
+                                             "QLabel { color: white; }"));
 
   auto *rootLayout = new QHBoxLayout(m_cardWidget);
   rootLayout->setContentsMargins(kCardPaddingH, kCardPaddingV, kCardPaddingH, kCardPaddingV);
@@ -107,21 +106,21 @@ void SplashOverlay::setupUI() {
 
   m_titleLabel = new QLabel(m_cardWidget);
   m_titleLabel->setObjectName(QStringLiteral("splashTitle"));
-  m_titleLabel->setStyleSheet(QStringLiteral(
-      "#splashTitle { font-size: 32px; font-weight: 700; letter-spacing: 0.4px; }"));
+  m_titleLabel->setStyleSheet(
+      QStringLiteral("#splashTitle { font-size: 32px; font-weight: 700; letter-spacing: 0.4px; }"));
   textLayout->addWidget(m_titleLabel);
 
   m_subtitleLabel = new QLabel(m_cardWidget);
   m_subtitleLabel->setObjectName(QStringLiteral("splashSubtitle"));
   m_subtitleLabel->setWordWrap(true);
-  m_subtitleLabel->setStyleSheet(QStringLiteral(
-      "#splashSubtitle { color: rgba(255, 255, 255, 210); font-size: 15px; }"));
+  m_subtitleLabel->setStyleSheet(
+      QStringLiteral("#splashSubtitle { color: rgba(255, 255, 255, 210); font-size: 15px; }"));
   textLayout->addWidget(m_subtitleLabel);
 
   m_versionLabel = new QLabel(m_cardWidget);
   m_versionLabel->setObjectName(QStringLiteral("splashVersion"));
-  m_versionLabel->setStyleSheet(QStringLiteral(
-      "#splashVersion { color: rgba(255, 255, 255, 145); font-size: 12px; }"));
+  m_versionLabel->setStyleSheet(
+      QStringLiteral("#splashVersion { color: rgba(255, 255, 255, 145); font-size: 12px; }"));
   textLayout->addWidget(m_versionLabel);
 }
 
@@ -188,9 +187,8 @@ void SplashOverlay::updateContent(Reason reason) {
     m_titleLabel->setText(reason == Reason::Startup ? displayName : tr("Welcome back"));
   }
   if (m_subtitleLabel) {
-    m_subtitleLabel->setText(reason == Reason::Startup
-                                 ? tr("Preparing your media collections")
-                                 : tr("%1 is ready").arg(displayName));
+    m_subtitleLabel->setText(reason == Reason::Startup ? tr("Preparing your media collections")
+                                                       : tr("%1 is ready").arg(displayName));
   }
   if (m_versionLabel) {
     const QString version = appVersion();

@@ -20,7 +20,8 @@ Q_LOGGING_CATEGORY(lcAttractManager, "kartend.attractmanager")
 SETUP_GETTER_DEF_UI_SAME(AttractManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
 SETUP_GETTER_DEF_MGR_SAME(AttractManagerSetup, ScrollManager *, ScrollManager, scrollManager)
 SETUP_GETTER_DEF_COL_SAME(AttractManagerSetup, const bool *, IsShuttingDown, isShuttingDown)
-SETUP_GETTER_DEF_COL_SAME(AttractManagerSetup, const GeneralSettings *, GeneralSettings, generalSettings)
+SETUP_GETTER_DEF_COL_SAME(AttractManagerSetup, const GeneralSettings *, GeneralSettings,
+                          generalSettings)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lifecycle
@@ -65,8 +66,8 @@ void AttractManager::reloadSettings() {
   // Always keep the interval in sync so that enabling attract mode later
   // doesn't fire with a stale / zero interval.
   const int timeoutSec = qBound(UIConstants::Attract::MIN_IDLE_TIMEOUT_SEC,
-                                 m_generalSettings->attractModeIdleTimeoutSec,
-                                 UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
+                                m_generalSettings->attractModeIdleTimeoutSec,
+                                UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
   m_idleTimer->setInterval(timeoutSec * 1000);
 
   if (!m_generalSettings->attractModeEnabled) {
@@ -103,8 +104,8 @@ void AttractManager::resetIdleTimer() {
   // explicit reloadSettings() call.
   if (m_generalSettings) {
     const int timeoutSec = qBound(UIConstants::Attract::MIN_IDLE_TIMEOUT_SEC,
-                                   m_generalSettings->attractModeIdleTimeoutSec,
-                                   UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
+                                  m_generalSettings->attractModeIdleTimeoutSec,
+                                  UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
     m_idleTimer->setInterval(timeoutSec * 1000);
   }
   m_idleTimer->start();
@@ -185,11 +186,10 @@ void AttractManager::onScrollTick() {
     return;
   }
 
-  const int speed = m_generalSettings
-                        ? qBound(UIConstants::Attract::MIN_SCROLL_SPEED_PX,
-                                 m_generalSettings->attractModeScrollSpeed,
-                                 UIConstants::Attract::MAX_SCROLL_SPEED_PX)
-                        : UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX;
+  const int speed = m_generalSettings ? qBound(UIConstants::Attract::MIN_SCROLL_SPEED_PX,
+                                               m_generalSettings->attractModeScrollSpeed,
+                                               UIConstants::Attract::MAX_SCROLL_SPEED_PX)
+                                      : UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX;
 
   const int current = vBar->value();
   const int next = current + (speed * m_scrollDirection);

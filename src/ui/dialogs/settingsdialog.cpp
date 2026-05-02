@@ -3,12 +3,12 @@
 #include <algorithm>
 #include <functional>
 #include <QAbstractItemView>
+#include <QAction>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QFontDialog>
-#include <QAction>
 #include <QInputDialog>
 #include <QKeySequence>
 #include <QMenu>
@@ -203,8 +203,7 @@ void SettingsDialog::setupButtonConnections() {
   // preserve legacy single-collection save behavior.
   if (ui->settingsScopeComboBox) {
     ui->settingsScopeComboBox->setCurrentIndex(static_cast<int>(m_settingsScope));
-    connect(ui->settingsScopeComboBox,
-            QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+    connect(ui->settingsScopeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::onSettingsScopeChanged);
   }
   connect(ui->browseLauncherButton, &QPushButton::clicked, this, &SettingsDialog::browseLauncher);
@@ -213,8 +212,7 @@ void SettingsDialog::setupButtonConnections() {
   connect(ui->browseArtworkDirButton, &QPushButton::clicked, this,
           &SettingsDialog::browseArtworkDir);
   if (ui->browseVideoDirButton) {
-    connect(ui->browseVideoDirButton, &QPushButton::clicked, this,
-            &SettingsDialog::browseVideoDir);
+    connect(ui->browseVideoDirButton, &QPushButton::clicked, this, &SettingsDialog::browseVideoDir);
   }
   if (ui->browseManualDirButton) {
     connect(ui->browseManualDirButton, &QPushButton::clicked, this,

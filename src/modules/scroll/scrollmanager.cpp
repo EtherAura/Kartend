@@ -266,13 +266,13 @@ SETUP_GETTER_DEF_UI_CTX_ONLY(ScrollManagerSetup, QWidget *, GridContainer, gridC
 SETUP_GETTER_DEF_UI_CTX_ONLY(ScrollManagerSetup, QScrollArea *, MediaScrollArea, itemScrollArea)
 SETUP_GETTER_DEF_MGR_CTX_ONLY(ScrollManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
 SETUP_GETTER_DEF_COL_CTX_ONLY(ScrollManagerSetup, const QList<CollectionConfig> *, Collections,
-                          collections)
+                              collections)
 SETUP_GETTER_DEF_COL_CTX_ONLY(ScrollManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
-                          hierarchyCache)
+                              hierarchyCache)
 SETUP_GETTER_DEF_MGR_CTX_ONLY(ScrollManagerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
+                              interactionState)
 SETUP_GETTER_DEF_COL_CTX_ONLY(ScrollManagerSetup, const GeneralSettings *, GeneralSettings,
-                          generalSettings)
+                              generalSettings)
 
 void ScrollManager::updateViewType(ViewType viewType) {
   if (m_context.config.viewType == viewType) {

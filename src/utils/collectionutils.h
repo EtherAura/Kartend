@@ -145,13 +145,11 @@ struct CollectionConfig {
   bool operator==(const CollectionConfig &other) const {
     return name == other.name && launcherPath == other.launcherPath && corePath == other.corePath &&
            launchParameters == other.launchParameters && mediaDirectory == other.mediaDirectory &&
-           artworkDirectory == other.artworkDirectory &&
-           videoDirectory == other.videoDirectory &&
+           artworkDirectory == other.artworkDirectory && videoDirectory == other.videoDirectory &&
            manualDirectory == other.manualDirectory &&
            placeholderArtwork == other.placeholderArtwork &&
            collectionIcon == other.collectionIcon && extensions == other.extensions &&
-           gridWidth == other.gridWidth &&
-           sidebarVisible == other.sidebarVisible &&
+           gridWidth == other.gridWidth && sidebarVisible == other.sidebarVisible &&
            parentCollectionIndex == other.parentCollectionIndex &&
            isSubcollection == other.isSubcollection &&
            showAllSubcollectionItems == other.showAllSubcollectionItems &&

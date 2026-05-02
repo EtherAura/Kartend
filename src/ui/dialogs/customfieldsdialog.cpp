@@ -44,8 +44,7 @@ void CustomFieldsDialog::setupUi() {
   buttonRow->addStretch(1);
   layout->addLayout(buttonRow);
 
-  auto *buttons =
-      new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
+  auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
   layout->addWidget(buttons);
 
   connect(m_addButton, &QPushButton::clicked, this, &CustomFieldsDialog::onAddRow);

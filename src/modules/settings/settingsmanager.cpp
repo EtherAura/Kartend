@@ -114,16 +114,14 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
 
   // Attract mode (Kartend-1pp)
   settings.attractModeEnabled = s.value("attractModeEnabled", false).toBool();
-  settings.attractModeIdleTimeoutSec =
-      qBound(UIConstants::Attract::MIN_IDLE_TIMEOUT_SEC,
-             s.value("attractModeIdleTimeoutSec", UIConstants::Attract::DEFAULT_IDLE_TIMEOUT_SEC)
-                 .toInt(),
-             UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
-  settings.attractModeScrollSpeed =
-      qBound(UIConstants::Attract::MIN_SCROLL_SPEED_PX,
-             s.value("attractModeScrollSpeed", UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX)
-                 .toInt(),
-             UIConstants::Attract::MAX_SCROLL_SPEED_PX);
+  settings.attractModeIdleTimeoutSec = qBound(
+      UIConstants::Attract::MIN_IDLE_TIMEOUT_SEC,
+      s.value("attractModeIdleTimeoutSec", UIConstants::Attract::DEFAULT_IDLE_TIMEOUT_SEC).toInt(),
+      UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
+  settings.attractModeScrollSpeed = qBound(
+      UIConstants::Attract::MIN_SCROLL_SPEED_PX,
+      s.value("attractModeScrollSpeed", UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX).toInt(),
+      UIConstants::Attract::MAX_SCROLL_SPEED_PX);
 
   // Splash screens
   settings.bootSplashEnabled = s.value("bootSplashEnabled", true).toBool();
@@ -151,8 +149,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.listClickHoldRepeatIntervalMs = settings.listClickHoldRepeatIntervalMs;
   m_generalSettings.mouseWheelRows = settings.mouseWheelRows;
   m_generalSettings.scrollAnimationDurationMs = settings.scrollAnimationDurationMs;
-  m_generalSettings.scrollVelocityMultiplier =
-      qBound(0.25, settings.scrollVelocityMultiplier, 5.0);
+  m_generalSettings.scrollVelocityMultiplier = qBound(0.25, settings.scrollVelocityMultiplier, 5.0);
   m_generalSettings.titleTintSaturation = settings.titleTintSaturation;
   m_generalSettings.titleTintLightness = settings.titleTintLightness;
   m_generalSettings.titleBaseColor = settings.titleBaseColor;
@@ -184,7 +181,6 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.attractModeEnabled = settings.attractModeEnabled;
   m_generalSettings.attractModeIdleTimeoutSec = settings.attractModeIdleTimeoutSec;
   m_generalSettings.attractModeScrollSpeed = settings.attractModeScrollSpeed;
-
 
   // Runtime detection (Kartend-qxv)
   m_generalSettings.runtimeDetectionEnabled = settings.runtimeDetectionEnabled;

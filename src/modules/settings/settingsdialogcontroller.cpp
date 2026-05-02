@@ -507,14 +507,13 @@ void SettingsManager::onCollectionScanSummary(const QString &collectionUuid, int
             .arg(itemsApplied)
             .arg(itemsScanned));
   } else {
-    QMessageBox::warning(
-        parent, tr("Collection Added"),
-        tr("Collection \"%1\" added, but the initial scan did not complete "
-           "cleanly.\n\n%2 of %3 items were added before the scan stopped. "
-           "Check the media directory path and file extensions, then try "
-           "again.")
-            .arg(name)
-            .arg(itemsApplied)
-            .arg(itemsScanned));
+    QMessageBox::warning(parent, tr("Collection Added"),
+                         tr("Collection \"%1\" added, but the initial scan did not complete "
+                            "cleanly.\n\n%2 of %3 items were added before the scan stopped. "
+                            "Check the media directory path and file extensions, then try "
+                            "again.")
+                             .arg(name)
+                             .arg(itemsApplied)
+                             .arg(itemsScanned));
   }
 }

@@ -312,16 +312,15 @@ void MainWindow::setupManagerConnections() {
                 m_nowPlayingOverlay->showOverlay(displayName);
               }
             });
-    connect(launch, &LaunchManager::runtimeFinished, this,
-            [this](const QString & /*filePath*/) {
-              if (m_nowPlayingOverlay) {
-                m_nowPlayingOverlay->hideOverlay();
-              }
-              // Bring Kartend back to the foreground when the tracked child
-              // exits — the user expects "return on close" behavior.
-              raise();
-              activateWindow();
-            });
+    connect(launch, &LaunchManager::runtimeFinished, this, [this](const QString & /*filePath*/) {
+      if (m_nowPlayingOverlay) {
+        m_nowPlayingOverlay->hideOverlay();
+      }
+      // Bring Kartend back to the foreground when the tracked child
+      // exits — the user expects "return on close" behavior.
+      raise();
+      activateWindow();
+    });
   }
 
   // Now set up NavigationManager with fully populated context
@@ -369,8 +368,7 @@ void MainWindow::updateItemPositionLabel() {
     ui->itemPositionLabel->setVisible(false);
     return;
   }
-  const int sel =
-      getInteractionManager() ? getInteractionManager()->currentSelectedIndex() : -1;
+  const int sel = getInteractionManager() ? getInteractionManager()->currentSelectedIndex() : -1;
   if (sel < 0) {
     ui->itemPositionLabel->setText(QString("%1").arg(total));
   } else {
