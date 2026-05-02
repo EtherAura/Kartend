@@ -21,7 +21,11 @@
 #include "pathutils.h"
 #include "uiconstants.h"
 #include "videopreviewwidget.h"
+#include "videothumbnailextractor.h"
 #include "videoutils.h"
+
+#include <QPolygon>
+#include <QPointer>
 
 // Creates metadata sidebar with scrollable layout for displaying item
 // information and artwork
@@ -476,7 +480,7 @@ void MetadataSidebar::ensureGallerySection() {
                             UIConstants::Metadata::LABEL_SPACING);
   outer->setSpacing(UIConstants::Metadata::LABEL_SPACING);
 
-  auto *title = new QLabel(tr("Artwork gallery"), m_galleryContainer);
+  auto *title = new QLabel(tr("Media gallery"), m_galleryContainer);
   QFont titleFont = title->font();
   titleFont.setBold(true);
   title->setFont(titleFont);
@@ -548,30 +552,66 @@ void MetadataSidebar::setArtworkGallery(const QList<GalleryEntry> &entries) {
   const int padding = UIConstants::Metadata::GALLERY_THUMB_PADDING;
   const int iconSize = thumbSize - (padding * 2);
   for (const GalleryEntry &entry : entries) {
-    const QString &label = entry.first;
-    const QString &path = entry.second;
-    QPixmap pixmap(path);
-    if (pixmap.isNull()) {
-      // Skip rows whose file vanished between load and render. Don't add a
-      // broken-image placeholder — the user gets a tighter gallery and can
-      // still launch the file from the main viewport.
-      continue;
+    QPixmap pixmap;
+    if (entry.isVideo) {
+      // Prefer a cached extracted frame; otherwise show a placeholder and
+      // request async extraction. Cached *null* pixmaps mean a prior
+      // extraction failed — keep the placeholder rather than thrashing.
+      auto *extractor = VideoThumbnailExtractor::instance();
+      if (extractor->hasCacheEntry(entry.path)) {
+        pixmap = extractor->cached(entry.path);
+      }
+      if (pixmap.isNull()) {
+        pixmap = makeVideoPlaceholder(iconSize);
+      }
+    } else {
+      pixmap = QPixmap(entry.path);
+      if (pixmap.isNull()) {
+        // Skip rows whose file vanished between load and render. Don't add
+        // a broken-image placeholder — the user gets a tighter gallery and
+        // can still launch the file from the main viewport.
+        continue;
+      }
     }
+
     auto *button = new QToolButton(m_galleryContainer);
     button->setAutoRaise(true);
     button->setCursor(Qt::PointingHandCursor);
     button->setFixedSize(thumbSize, thumbSize);
     button->setIconSize(QSize(iconSize, iconSize));
     button->setIcon(QIcon(pixmap));
-    button->setToolTip(label);
-    button->setAccessibleName(label);
+    button->setToolTip(entry.label);
+    button->setAccessibleName(entry.label);
+
+    // Capture entry by value so the click handler keeps working after the
+    // caller's list goes out of scope.
+    const GalleryEntry capturedEntry = entry;
     connect(button, &QToolButton::clicked, this,
-            [this, path]() { openGalleryArtworkPreview(path); });
+            [this, capturedEntry]() { openGalleryPreview(capturedEntry); });
+
+    if (entry.isVideo) {
+      // Request async frame extraction. Receiver is the button itself so
+      // the connection auto-disconnects when the button is destroyed on
+      // the next gallery rebuild — no manual cleanup needed.
+      const QString videoPath = entry.path;
+      const int targetIconSize = iconSize;
+      connect(VideoThumbnailExtractor::instance(), &VideoThumbnailExtractor::frameReady, button,
+              [button, videoPath, targetIconSize](const QString &p, const QPixmap &pix) {
+                if (p != videoPath || pix.isNull()) {
+                  return;
+                }
+                const QPixmap scaled = pix.scaled(targetIconSize, targetIconSize,
+                                                  Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                button->setIcon(QIcon(scaled));
+              });
+      VideoThumbnailExtractor::instance()->requestFrame(videoPath);
+    }
+
     m_galleryLayout->addWidget(button);
   }
 
-  // If every entry failed to load we end up with an empty gallery; hide the
-  // section instead of leaving a bare title.
+  // If every entry failed to load we end up with an empty gallery; hide
+  // the section instead of leaving a bare title.
   if (m_galleryLayout->count() == 0) {
     m_galleryContainer->hide();
     return;
@@ -579,8 +619,29 @@ void MetadataSidebar::setArtworkGallery(const QList<GalleryEntry> &entries) {
   m_galleryContainer->show();
 }
 
-void MetadataSidebar::openGalleryArtworkPreview(const QString &absoluteArtworkPath) {
-  if (absoluteArtworkPath.isEmpty()) {
+QPixmap MetadataSidebar::makeVideoPlaceholder(int iconSize) const {
+  // Simple play triangle on a muted-tile background — visible at thumb
+  // size without needing a separate image asset. Not themeable beyond
+  // palette colors, which is fine for an initial-extraction placeholder.
+  if (iconSize <= 0) {
+    return {};
+  }
+  QPixmap pix(iconSize, iconSize);
+  pix.fill(palette().color(QPalette::Mid));
+  QPainter painter(&pix);
+  painter.setRenderHint(QPainter::Antialiasing);
+  painter.setBrush(palette().color(QPalette::Window));
+  painter.setPen(Qt::NoPen);
+  const int margin = iconSize / 4;
+  QPolygon triangle;
+  triangle << QPoint(margin, margin) << QPoint(margin, iconSize - margin)
+           << QPoint(iconSize - margin, iconSize / 2);
+  painter.drawPolygon(triangle);
+  return pix;
+}
+
+void MetadataSidebar::openGalleryPreview(const GalleryEntry &entry) {
+  if (entry.path.isEmpty()) {
     return;
   }
   if (!m_galleryOverlay) {
@@ -594,7 +655,11 @@ void MetadataSidebar::openGalleryArtworkPreview(const QString &absoluteArtworkPa
     }
     m_galleryOverlay = new ArtworkPreviewOverlay(overlayParent);
   }
-  m_galleryOverlay->showArtworkAtPath(absoluteArtworkPath);
+  if (entry.isVideo) {
+    m_galleryOverlay->showVideoAtPath(entry.path);
+  } else {
+    m_galleryOverlay->showArtworkAtPath(entry.path);
+  }
 }
 
 QString MetadataSidebar::formatTags(const QString &raw) {

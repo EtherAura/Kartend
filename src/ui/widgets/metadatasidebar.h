@@ -4,7 +4,6 @@
 #include <QFrame>
 #include <QLabel>
 #include <QList>
-#include <QPair>
 #include <QScrollArea>
 #include <QString>
 #include <QVBoxLayout>
@@ -38,12 +37,17 @@ public:
   /// empty path to hide the button. Independent from `setExtendedMetadata`
   /// so callers can show a manual button on items with no other metadata.
   void setManualFile(const QString &manualPath);
-  /// Renders the artwork gallery for the current selection (Kartend-un3l).
-  /// Each entry is a (display label, absolute artwork path) pair; the label
-  /// becomes the thumbnail's tooltip and accessibility name. Pass an empty
-  /// list to hide the section. Clicking a thumbnail opens the lazily-built
-  /// preview overlay (no launch behavior).
-  using GalleryEntry = QPair<QString, QString>;
+  /// Renders the media gallery for the current selection (Kartend-un3l +
+  /// Kartend-ljey). Each entry carries a display label, absolute file path,
+  /// and an `isVideo` flag; videos use an async-extracted frame as the
+  /// thumbnail (with a placeholder play icon while extraction runs) and
+  /// open the video preview overlay on click. Pass an empty list to hide
+  /// the section.
+  struct GalleryEntry {
+    QString label;
+    QString path;
+    bool isVideo = false;
+  };
   void setArtworkGallery(const QList<GalleryEntry> &entries);
   void clearMetadata();
   void setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy);
@@ -92,7 +96,12 @@ private:
   ArtworkPreviewOverlay *m_galleryOverlay = nullptr;
   void ensureGallerySection();
   void clearGallerySection();
-  void openGalleryArtworkPreview(const QString &absoluteArtworkPath);
+  void openGalleryPreview(const GalleryEntry &entry);
+  /// Builds the small placeholder shown for video tiles while their frame
+  /// is being extracted (and as a permanent fallback when extraction
+  /// fails). Renders a play triangle on a muted-tile background sized to
+  /// `iconSize`.
+  [[nodiscard]] QPixmap makeVideoPlaceholder(int iconSize) const;
 };
 
 #endif

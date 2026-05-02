@@ -145,6 +145,11 @@ public:
   /// Show the artwork preview overlay for the given file path. Used by
   /// expand-mode two-stage activation in InteractionManager.
   void showArtworkPreview(const QString &filePath, const QString &artworkDir);
+  /// Show a video-first preview overlay (Kartend-ljey). Falls back to
+  /// artwork when no video is found in @p videoDir. Used by expand-mode
+  /// (first-stage) and middle-click peek.
+  void showMediaPreview(const QString &filePath, const QString &artworkDir,
+                        const QString &videoDir);
 
   void centerHorizontalScrollbar(int currentCollectionIndex,
                                  const QList<CollectionConfig> &collections);
@@ -191,7 +196,10 @@ signals:
   listArtworkColumnWidthChanged(int width); // Emitted when list artwork column width is resized
   /// Forwarded from SelectionDisplayManager: user activated (Enter /
   /// double-click) while the artwork preview overlay was visible.
-  void artworkPreviewLaunchRequested();
+  /// @p filePath is the path of the previewed item, or empty for
+  /// gallery-style previews — listeners should fall back to the current
+  /// selection when empty.
+  void artworkPreviewLaunchRequested(const QString &filePath);
 
 public slots:
   /// Receives the visual index for a file path from database query

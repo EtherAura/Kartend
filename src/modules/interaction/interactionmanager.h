@@ -215,8 +215,14 @@ public slots:
   void handleImmediateSearchTextChanged(const QString &text);
   /// Triggered when the user activates (Enter / double-click) while the
   /// artwork preview overlay is visible. Hides the overlay, clears expand
-  /// state, and launches the currently selected item.
-  void onArtworkPreviewLaunchRequested();
+  /// state, and launches the previewed item (falling back to the current
+  /// selection when @p filePath is empty, e.g. for sidebar gallery
+  /// previews that don't carry a media path).
+  void onArtworkPreviewLaunchRequested(const QString &filePath = QString());
+  /// Triggered when the user middle-clicks a grid/list item (Kartend-ljey).
+  /// Opens a video-first preview overlay for the clicked item without
+  /// changing selection or starting the expand-mode launch sequence.
+  void onMediaPreviewRequested(ItemWidget *widget, int visualIndex);
 
 private slots:
   // KeyboardManager callbacks

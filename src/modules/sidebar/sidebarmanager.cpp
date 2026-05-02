@@ -12,6 +12,7 @@
 #include "settingsmanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
+#include "videoutils.h"
 #include <QApplication>
 #include <QFileInfo>
 #include <QHash>
@@ -163,7 +164,7 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
       const QString resolved = ItemArtworkStore::resolveArtworkPath(
           overridesByType.value(type), baseName, artworkDirectory, type);
       if (!resolved.isEmpty()) {
-        galleryEntries.append({label, resolved});
+        galleryEntries.append({label, resolved, /*isVideo=*/false});
       }
     };
 
@@ -176,6 +177,18 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
       pushEntry(type, type);
     }
   }
+
+  // Prepend the video tile so the gallery follows the video-first ordering
+  // the rest of the preview flow uses (Kartend-ljey). Auto-discovered via
+  // VideoUtils against the owning collection's videoDirectory; per-item
+  // overrides can be added later alongside the artwork override system.
+  if (!videoDirectory.trimmed().isEmpty()) {
+    const QString videoPath = VideoUtils::findVideoForFile(filePath, videoDirectory);
+    if (!videoPath.isEmpty()) {
+      galleryEntries.prepend({tr("Video"), videoPath, /*isVideo=*/true});
+    }
+  }
+
   m_MetadataSidebar->setArtworkGallery(galleryEntries);
 }
 
