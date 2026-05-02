@@ -1,5 +1,6 @@
 target_sources(${KARTEND_LIB_TARGET} PRIVATE
   artworkpreviewoverlay.cpp
+  emptystatewidget.cpp
   itemwidget.cpp
   itemwidgetindicator.cpp
   itemwidgetlifecycle.cpp
@@ -11,6 +12,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   metadatasidebar.cpp
   splashoverlay.cpp
   artworkpreviewoverlay.h
+  emptystatewidget.h
   itemwidget.h
   listheaderwidget.h
   loadingoverlay.h

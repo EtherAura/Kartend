@@ -40,6 +40,7 @@ class ScrollManager;
 class ItemWidget;
 class MetadataSidebar;
 class LoadingOverlay;
+class EmptyStateWidget;
 class SplashOverlay;
 class MenuController;
 
@@ -63,7 +64,7 @@ public:
   QPushButton *m_searchModeButton;
   QPushButton *m_gridViewButton;
   QPushButton *m_listViewButton;
-  QLabel *loadingLabel;
+  EmptyStateWidget *loadingLabel;
   LoadingOverlay *m_loadingOverlay = nullptr;
 
   int currentCollectionIndex;

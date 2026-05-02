@@ -8,6 +8,7 @@
 #include "artworkutils.h"
 #include "databasemanager.h"
 #include "errordialog.h"
+#include "emptystatewidget.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
@@ -391,8 +392,7 @@ void NavigationManager::onItemsLoaded(const QStringList &filePaths,
 
 void NavigationManager::onMediaLibraryError(const ErrorUtils::ErrorContext &error) {
   if (m_loadingLabel) {
-    m_loadingLabel->deleteLater();
-    m_loadingLabel = nullptr;
+    m_loadingLabel->hide();
   }
 
   // Hide loading overlay if visible

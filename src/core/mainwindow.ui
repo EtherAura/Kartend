@@ -335,16 +335,7 @@
                 </widget>
                </item>
                <item>
-                <widget class="QLabel" name="loadingLabel">
-                 <property name="alignment">
-                  <set>Qt::AlignCenter</set>
-                 </property>
-                 <property name="styleSheet">
-                  <string>QLabel { color: palette(text); font-size: 14px; }</string>
-                 </property>
-                 <property name="text">
-                  <string>Loading...</string>
-                 </property>
+                <widget class="EmptyStateWidget" name="loadingLabel">
                  <property name="visible">
                   <bool>false</bool>
                  </property>
@@ -605,6 +596,11 @@
    <class>MetadataSidebar</class>
    <extends>QWidget</extends>
    <header>metadatasidebar.h</header>
+  </customwidget>
+  <customwidget>
+   <class>EmptyStateWidget</class>
+   <extends>QWidget</extends>
+   <header>emptystatewidget.h</header>
   </customwidget>
  </customwidgets>
 
