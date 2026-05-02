@@ -1,11 +1,14 @@
 // Displays file metadata, artwork preview, and item details in the sidebar
 // panel.
 #include <QApplication>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QPainter>
 #include <QPixmap>
+#include <QPushButton>
 #include <QTimer>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include "extensionutils.h"
@@ -143,6 +146,7 @@ void MetadataSidebar::clearMetadata() {
   ui->artworkDisplay->setPixmap(emptyPixmap);
   schedulePreviewVideo(QString());
   showArtworkOnly();
+  setManualFile(QString());
   if (m_detailsContainer) {
     clearDetailsSection();
     m_detailsContainer->hide();
@@ -299,6 +303,16 @@ void MetadataSidebar::ensureDetailsSection() {
   m_detailsTitle->setStyleSheet("color: palette(highlight); padding: 4px 0px;");
   outer->addWidget(m_detailsTitle);
 
+  // Manual button is owned by the outer Details layout (above the per-row
+  // sub-layout) so clearDetailsSection() — called on every selection change
+  // before rows are rebuilt — does not destroy and recreate it. Visibility
+  // is driven by setManualFile().
+  m_manualButton = new QPushButton(tr("Open Manual"), m_detailsContainer);
+  m_manualButton->setCursor(Qt::PointingHandCursor);
+  m_manualButton->hide();
+  connect(m_manualButton, &QPushButton::clicked, this, &MetadataSidebar::openCurrentManual);
+  outer->addWidget(m_manualButton);
+
   m_detailsLayout = new QVBoxLayout();
   m_detailsLayout->setSpacing(UIConstants::Metadata::LABEL_SPACING);
   outer->addLayout(m_detailsLayout);
@@ -342,7 +356,11 @@ void MetadataSidebar::setExtendedMetadata(const ItemMetadataStore::ItemMetadata 
   if (metadata.isEmpty()) {
     if (m_detailsContainer) {
       clearDetailsSection();
-      m_detailsContainer->hide();
+      // Keep the container visible only if a manual button is active;
+      // otherwise hide it so the bottom of the sidebar stays clean.
+      if (!m_manualButton || !m_manualButton->isVisible()) {
+        m_detailsContainer->hide();
+      }
     }
     return;
   }
@@ -395,6 +413,48 @@ QString MetadataSidebar::formatRuntime(int seconds) {
     return QStringLiteral("%1m %2s").arg(minutes).arg(secs, 2, 10, QChar('0'));
   }
   return QStringLiteral("%1s").arg(secs);
+}
+
+void MetadataSidebar::ensureManualButton() {
+  // Manual button lives inside the Details container's outer layout. Build
+  // the container on-demand so an item with only a manual (no extended
+  // metadata) still gets a visible button.
+  ensureDetailsSection();
+}
+
+void MetadataSidebar::setManualFile(const QString &manualPath) {
+  m_manualPath = manualPath;
+  const bool hasManual = !manualPath.isEmpty();
+  if (hasManual) {
+    ensureManualButton();
+  }
+  if (!m_manualButton) {
+    return;
+  }
+  m_manualButton->setVisible(hasManual);
+  if (hasManual) {
+    m_manualButton->setToolTip(manualPath);
+    if (m_detailsContainer) {
+      m_detailsContainer->show();
+    }
+  } else {
+    m_manualButton->setToolTip(QString());
+    // Only hide the container when there are also no detail rows; a
+    // populated row layout means setExtendedMetadata wants it visible.
+    if (m_detailsContainer && m_detailsLayout && m_detailsLayout->count() == 0) {
+      m_detailsContainer->hide();
+    }
+  }
+}
+
+void MetadataSidebar::openCurrentManual() {
+  if (m_manualPath.isEmpty()) {
+    return;
+  }
+  // QDesktopServices::openUrl wraps xdg-open on Linux / open on macOS /
+  // ShellExecute on Windows, so the user's default handler for the file
+  // type takes over (Okular for PDF, web browser for HTML, etc.).
+  QDesktopServices::openUrl(QUrl::fromLocalFile(m_manualPath));
 }
 
 QString MetadataSidebar::formatTags(const QString &raw) {

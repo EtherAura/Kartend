@@ -12,6 +12,7 @@
 
 class VideoPreviewWidget;
 QT_BEGIN_NAMESPACE
+class QPushButton;
 class QTimer;
 QT_END_NAMESPACE
 
@@ -26,6 +27,12 @@ public:
   /// Renders extended metadata in a Details section. Hides the section
   /// entirely when `metadata.isEmpty()` so empty rows do not clutter the UI.
   void setExtendedMetadata(const ItemMetadataStore::ItemMetadata &metadata);
+  /// Sets the resolved manual file path for the current selection. When
+  /// non-empty, a "Manual" button appears in the Details section that opens
+  /// the file via QDesktopServices::openUrl (xdg-open on Linux). Pass an
+  /// empty path to hide the button. Independent from `setExtendedMetadata`
+  /// so callers can show a manual button on items with no other metadata.
+  void setManualFile(const QString &manualPath);
   void clearMetadata();
   void setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy);
 
@@ -52,6 +59,14 @@ private:
   QWidget *m_detailsContainer = nullptr;
   QVBoxLayout *m_detailsLayout = nullptr;
   QLabel *m_detailsTitle = nullptr;
+
+  // Manual button (Kartend-9jdv). Persisted across selection changes so the
+  // button doesn't appear in the middle of the Details list — it's always
+  // pinned at the top of the section when a manual is available.
+  QPushButton *m_manualButton = nullptr;
+  QString m_manualPath;
+  void ensureManualButton();
+  void openCurrentManual();
 };
 
 #endif

@@ -1,8 +1,10 @@
 // Tests for ItemMetadataStore::load / save / remove against an in-memory
 // SQLite database with the v5 schema applied via DbMigrations.
+#include <QFile>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include "dbmigrations.h"
@@ -54,6 +56,13 @@ private slots:
   void parseCustomFieldsPreservesOrderAndCoercesValues();
   void serializeCustomFieldsPrunesEmptyKeys();
   void customFieldsRoundTripThroughDb();
+  void manualExtensionsAreNonEmpty();
+  void findManualReturnsEmptyForMissingDirectory();
+  void findManualMatchesExtensionsCaseInsensitively();
+  void findManualPicksFirstExtensionInOrder();
+  void resolveManualFilePrefersValidOverride();
+  void resolveManualFileFallsBackToAutoDiscovery();
+  void resolveManualFileMissingOverrideReturnsEmpty();
 };
 
 void TestItemMetadata::isEmptyOnDefaultConstructed() {
@@ -347,6 +356,98 @@ void TestItemMetadata::customFieldsRoundTripThroughDb() {
   QVERIFY(ItemMetadataStore::load(db, "uuid-1", "/p").value().customFields.isEmpty());
 
   closeAndRemove(db, conn);
+}
+
+void TestItemMetadata::manualExtensionsAreNonEmpty() {
+  // Sanity: the canonical list must include at least the headline formats so
+  // findManualForBaseName has something to match against.
+  const auto &exts = ItemMetadataStore::manualExtensions();
+  QVERIFY(!exts.isEmpty());
+  QVERIFY(exts.contains(QStringLiteral("pdf")));
+  QVERIFY(exts.contains(QStringLiteral("epub")));
+}
+
+void TestItemMetadata::findManualReturnsEmptyForMissingDirectory() {
+  // No tilde expansion or filesystem call should fail loudly when the inputs
+  // are unusable; the resolver just returns empty so the sidebar hides the
+  // Manual button.
+  QVERIFY(ItemMetadataStore::findManualForBaseName(QString(), "/tmp").isEmpty());
+  QVERIFY(ItemMetadataStore::findManualForBaseName("foo", QString()).isEmpty());
+  QVERIFY(ItemMetadataStore::findManualForBaseName("foo", "/this/path/does/not/exist").isEmpty());
+}
+
+void TestItemMetadata::findManualMatchesExtensionsCaseInsensitively() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  // Drop a manual with an uppercase extension so we exercise the upper-case
+  // probe in findManualForBaseName(). The lower-case probe is exercised by
+  // findManualPicksFirstExtensionInOrder().
+  const QString upperPath = dir.filePath("Game.PDF");
+  QFile f(upperPath);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.close();
+
+  QCOMPARE(ItemMetadataStore::findManualForBaseName("Game", dir.path()), upperPath);
+  // Different basename -> no match (we don't substring-match).
+  QVERIFY(ItemMetadataStore::findManualForBaseName("Other", dir.path()).isEmpty());
+}
+
+void TestItemMetadata::findManualPicksFirstExtensionInOrder() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  // Both pdf and epub exist; the order in manualExtensions() lists pdf first
+  // so the resolver must return the pdf path. This pins the precedence so a
+  // future reorder of the canonical list is a deliberate decision.
+  const QString pdf = dir.filePath("Sonic.pdf");
+  const QString epub = dir.filePath("Sonic.epub");
+  for (const QString &p : {pdf, epub}) {
+    QFile f(p);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.close();
+  }
+  QCOMPARE(ItemMetadataStore::findManualForBaseName("Sonic", dir.path()), pdf);
+}
+
+void TestItemMetadata::resolveManualFilePrefersValidOverride() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString autoPath = dir.filePath("Sonic.pdf");
+  const QString overridePath = dir.filePath("CustomManual.pdf");
+  for (const QString &p : {autoPath, overridePath}) {
+    QFile f(p);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.close();
+  }
+  // Override exists -> auto-discovery is skipped entirely.
+  QCOMPARE(ItemMetadataStore::resolveManualFile(overridePath, "Sonic", dir.path()), overridePath);
+}
+
+void TestItemMetadata::resolveManualFileFallsBackToAutoDiscovery() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString autoPath = dir.filePath("Sonic.pdf");
+  QFile f(autoPath);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.close();
+  // No override -> auto-discovery picks up the directory match.
+  QCOMPARE(ItemMetadataStore::resolveManualFile(QString(), "Sonic", dir.path()), autoPath);
+  // Whitespace-only override is treated as unset.
+  QCOMPARE(ItemMetadataStore::resolveManualFile("   ", "Sonic", dir.path()), autoPath);
+}
+
+void TestItemMetadata::resolveManualFileMissingOverrideReturnsEmpty() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  // An auto-discoverable manual exists, but the user set a stale override
+  // pointing at a non-existent file. We deliberately do NOT fall back to the
+  // auto-discovered file -- silent fallback would hide a typo'd override and
+  // make it hard to notice the override is broken.
+  const QString autoPath = dir.filePath("Sonic.pdf");
+  QFile f(autoPath);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.close();
+  const QString stale = dir.filePath("MissingManual.pdf");
+  QVERIFY(ItemMetadataStore::resolveManualFile(stale, "Sonic", dir.path()).isEmpty());
 }
 
 QTEST_MAIN(TestItemMetadata)

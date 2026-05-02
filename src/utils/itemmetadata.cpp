@@ -7,6 +7,9 @@
 #include "itemmetadata.h"
 
 #include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -202,6 +205,64 @@ CustomFieldList parseCustomFields(const QString &json) {
     result.append({key, it.value().toString()});
   }
   return result;
+}
+
+const QStringList &manualExtensions() {
+  // Common manual/document formats. Kept narrow on purpose: anything outside
+  // this set is uncommon enough that the user can attach it explicitly via
+  // the per-item override (Set manual file...).
+  static const QStringList exts = {
+      QStringLiteral("pdf"),  QStringLiteral("epub"), QStringLiteral("cbr"),
+      QStringLiteral("cbz"),  QStringLiteral("djvu"), QStringLiteral("txt"),
+      QStringLiteral("md"),   QStringLiteral("html"), QStringLiteral("htm"),
+      QStringLiteral("rtf"),  QStringLiteral("doc"),  QStringLiteral("docx"),
+      QStringLiteral("odt"),  QStringLiteral("png"),  QStringLiteral("jpg"),
+      QStringLiteral("jpeg"),
+  };
+  return exts;
+}
+
+QString findManualForBaseName(const QString &baseName, const QString &manualDirectory) {
+  if (baseName.isEmpty() || manualDirectory.isEmpty()) {
+    return {};
+  }
+  QString expanded = manualDirectory;
+  if (expanded.startsWith('~')) {
+    expanded = QDir::homePath() + expanded.mid(1);
+  }
+  QDir dir(expanded);
+  if (!dir.exists()) {
+    return {};
+  }
+  for (const QString &ext : manualExtensions()) {
+    const QString lower = dir.absoluteFilePath(baseName + "." + ext);
+    if (QFile::exists(lower)) {
+      return lower;
+    }
+    const QString upper = dir.absoluteFilePath(baseName + "." + ext.toUpper());
+    if (QFile::exists(upper)) {
+      return upper;
+    }
+  }
+  return {};
+}
+
+QString resolveManualFile(const QString &overridePath, const QString &baseName,
+                          const QString &manualDirectory) {
+  QString trimmed = overridePath.trimmed();
+  if (!trimmed.isEmpty()) {
+    if (trimmed.startsWith('~')) {
+      trimmed = QDir::homePath() + trimmed.mid(1);
+    }
+    if (QFile::exists(trimmed)) {
+      return trimmed;
+    }
+    // Override is set but missing on disk — don't silently fall back to
+    // auto-discovery, since that would mask a stale/typo'd override. The
+    // caller treats an empty return as "no manual available".
+    return {};
+  }
+  return findManualForBaseName(baseName, manualDirectory);
 }
 
 QString serializeCustomFields(const CustomFieldList &fields) {

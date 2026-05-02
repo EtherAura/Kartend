@@ -76,6 +76,27 @@ struct ItemMetadata {
 /// non-empty trimmed key, so empty payloads round-trip to NULL in the DB.
 [[nodiscard]] QString serializeCustomFields(const CustomFieldList &fields);
 
+/// Canonical list of lowercase manual-file extensions (no dot, no wildcard).
+/// Used both to auto-discover per-item manuals in `manualDirectory` and to
+/// build file-dialog filters when the user picks an override path.
+[[nodiscard]] const QStringList &manualExtensions();
+
+/// Looks up a manual file in `manualDirectory` whose stem matches `baseName`.
+/// Tries each extension from `manualExtensions()` in lower- and uppercase.
+/// Returns an empty string when the directory is missing/empty or no match
+/// is found. Does NOT recurse into subdirectories.
+[[nodiscard]] QString findManualForBaseName(const QString &baseName,
+                                            const QString &manualDirectory);
+
+/// Resolves the manual file for an item: prefers a non-empty `overridePath`
+/// (the per-item override stored in `item_metadata.manual_path`), falling
+/// back to auto-discovery in `manualDirectory`. Tilde expansion is applied
+/// to the override so paths saved as `~/manuals/foo.pdf` resolve at runtime.
+/// Returns an empty string when nothing exists on disk.
+[[nodiscard]] QString resolveManualFile(const QString &overridePath,
+                                        const QString &baseName,
+                                        const QString &manualDirectory);
+
 } // namespace ItemMetadataStore
 
 #endif

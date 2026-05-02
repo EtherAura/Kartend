@@ -178,6 +178,11 @@ public:
   // Persists changes via DatabaseManager::saveItemMetadata() and refreshes
   // the sidebar so new fields render immediately.
   void editCustomFields(const QString &filePath, const QString &itemName);
+  // Sets or clears the per-item manual override for a media item
+  // (Kartend-9jdv). Stored in `item_metadata.manual_path`; passing an empty
+  // path clears the override and re-enables auto-discovery in the
+  // collection's manualDirectory. Refreshes the sidebar afterwards.
+  void setItemManualPath(const QString &filePath, const QString &manualPath);
   [[nodiscard]] bool isRestoringSelection() const;
   [[nodiscard]] int targetRestoreIndex() const;
   [[nodiscard]] bool forceImmediateCenter() const;
