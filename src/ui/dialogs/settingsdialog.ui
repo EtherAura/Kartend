@@ -75,6 +75,38 @@
              </spacer>
             </item>
             <item>
+             <widget class="QLabel" name="settingsScopeLabel">
+              <property name="text">
+               <string>Mode:</string>
+              </property>
+              <property name="toolTip">
+               <string>Choose which collections future Save actions apply to (Kartend-enq)</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="settingsScopeComboBox">
+              <property name="toolTip">
+               <string>Settings Mode controls the scope of Save: just the selected collection, the selected collection plus its subcollections, or every collection (Kartend-enq)</string>
+              </property>
+              <item>
+               <property name="text">
+                <string>Current collection</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Current + subcollections</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>All collections</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item>
              <widget class="QToolButton" name="applyToButton">
               <property name="maximumSize">
                <size>
