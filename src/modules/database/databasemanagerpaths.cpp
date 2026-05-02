@@ -16,6 +16,7 @@
 #include "databasemanager.h"
 #include "dbmigrations.h"
 #include "errorutils.h"
+#include "itemartwork.h"
 #include "itemmetadata.h"
 #include "pathutils.h"
 #include "querymanager.h"
@@ -78,6 +79,20 @@ bool DatabaseManager::saveItemMetadata(const ItemMetadataStore::ItemMetadata &me
     return false;
   }
   return true;
+}
+
+auto DatabaseManager::loadItemArtwork(const QString &collectionUuid, const QString &path) const
+    -> QList<ItemArtworkStore::ItemArtwork> {
+  // Main-thread connection: the sidebar fetches at most a few rows per item
+  // when the selection changes, so a worker round-trip would be overhead for
+  // no real concurrency benefit.
+  auto result =
+      ItemArtworkStore::loadAllForItem(const_cast<QSqlDatabase &>(m_db), collectionUuid, path);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return {};
+  }
+  return result.value();
 }
 
 // Count items globally across all collections

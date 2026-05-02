@@ -3,15 +3,20 @@
 
 #include <QFrame>
 #include <QLabel>
+#include <QList>
+#include <QPair>
 #include <QScrollArea>
+#include <QString>
 #include <QVBoxLayout>
 #include <QWidget>
 
 #include "itemmetadata.h"
 #include "ui_metadatasidebar.h"
 
+class ArtworkPreviewOverlay;
 class VideoPreviewWidget;
 QT_BEGIN_NAMESPACE
+class QHBoxLayout;
 class QPushButton;
 class QTimer;
 QT_END_NAMESPACE
@@ -33,6 +38,13 @@ public:
   /// empty path to hide the button. Independent from `setExtendedMetadata`
   /// so callers can show a manual button on items with no other metadata.
   void setManualFile(const QString &manualPath);
+  /// Renders the artwork gallery for the current selection (Kartend-un3l).
+  /// Each entry is a (display label, absolute artwork path) pair; the label
+  /// becomes the thumbnail's tooltip and accessibility name. Pass an empty
+  /// list to hide the section. Clicking a thumbnail opens the lazily-built
+  /// preview overlay (no launch behavior).
+  using GalleryEntry = QPair<QString, QString>;
+  void setArtworkGallery(const QList<GalleryEntry> &entries);
   void clearMetadata();
   void setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy);
 
@@ -67,6 +79,20 @@ private:
   QString m_manualPath;
   void ensureManualButton();
   void openCurrentManual();
+
+  // Artwork gallery (Kartend-un3l). Lazy-built on first non-empty
+  // setArtworkGallery() call. Sits between the artwork preview pane and the
+  // file information section so all visual artwork stays clustered at the
+  // top of the sidebar.
+  QWidget *m_galleryContainer = nullptr;
+  QHBoxLayout *m_galleryLayout = nullptr;
+  // Owned-on-demand preview overlay reparented to the top-level window so it
+  // can cover the full UI rather than just the narrow sidebar. nullptr until
+  // the first thumbnail is clicked.
+  ArtworkPreviewOverlay *m_galleryOverlay = nullptr;
+  void ensureGallerySection();
+  void clearGallerySection();
+  void openGalleryArtworkPreview(const QString &absoluteArtworkPath);
 };
 
 #endif

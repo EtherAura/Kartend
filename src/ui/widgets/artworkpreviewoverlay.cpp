@@ -54,12 +54,28 @@ void ArtworkPreviewOverlay::showArtworkForFile(const QString &filePath,
     return;
   }
 
-  // Load and display the artwork
   QPixmap artwork(artworkPath);
   if (artwork.isNull()) {
     return;
   }
+  displayPixmap(artwork);
+}
 
+void ArtworkPreviewOverlay::showArtworkAtPath(const QString &absoluteArtworkPath) {
+  if (absoluteArtworkPath.isEmpty()) {
+    return;
+  }
+  // No m_currentFilePath assignment: the gallery click site doesn't have a
+  // media file path to associate, and launchRequested is opt-in via signal
+  // connection at the call site.
+  QPixmap artwork(absoluteArtworkPath);
+  if (artwork.isNull()) {
+    return;
+  }
+  displayPixmap(artwork);
+}
+
+void ArtworkPreviewOverlay::displayPixmap(const QPixmap &pixmap) {
   // Scale artwork to fit within 80% of parent size while maintaining aspect
   // ratio
   QWidget *parentWidget = this->parentWidget();
@@ -71,7 +87,7 @@ void ArtworkPreviewOverlay::showArtworkForFile(const QString &filePath,
   int maxHeight = parentWidget->height() * 0.8;
 
   QPixmap scaled =
-      artwork.scaled(maxWidth, maxHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+      pixmap.scaled(maxWidth, maxHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
   m_artworkLabel->setPixmap(scaled);
   m_artworkLabel->setFixedSize(scaled.size());
 

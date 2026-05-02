@@ -224,6 +224,8 @@ add_executable(test_databasemanager
   ${SRC_DIR}/utils/settingsutils.cpp
   ${SRC_DIR}/utils/pathutils.cpp
   ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/extensionutils.cpp
+  ${SRC_DIR}/utils/itemartwork.cpp
   ${SRC_DIR}/utils/itemmetadata.cpp
   ${SRC_DIR}/utils/loggingcategories.cpp
 )
