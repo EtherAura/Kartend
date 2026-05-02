@@ -73,6 +73,13 @@ void SettingsDialog::browseArtworkDir() {
   }
 }
 
+void SettingsDialog::browseVideoDir() {
+  QString dirName = QFileDialog::getExistingDirectory(this, tr("Select Video Directory"), "");
+  if (!dirName.isEmpty() && ui->videoDirLineEdit) {
+    ui->videoDirLineEdit->setText(dirName);
+  }
+}
+
 void SettingsDialog::browsePlaceholderArtwork() {
   QString fileName = QFileDialog::getOpenFileName(
       this, tr("Select Placeholder Artwork"), "",
@@ -255,6 +262,9 @@ void SettingsDialog::loadCollectionToUI(int index) {
   }
   if (ui->artworkDirLineEdit) {
     ui->artworkDirLineEdit->setText(config.artworkDirectory);
+  }
+  if (ui->videoDirLineEdit) {
+    ui->videoDirLineEdit->setText(config.videoDirectory);
   }
   if (ui->placeholderArtworkLineEdit) {
     ui->placeholderArtworkLineEdit->setText(config.placeholderArtwork);

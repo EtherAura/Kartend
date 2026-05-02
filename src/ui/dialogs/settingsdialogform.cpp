@@ -111,6 +111,9 @@ void SettingsDialog::saveCollectionFromUI(int index) {
   if (!validatePath(collection.artworkDirectory, tr("Artwork Directory"))) {
     return;
   }
+  if (!validatePath(collection.videoDirectory, tr("Video Directory"))) {
+    return;
+  }
   if (!validatePath(collection.launcherPath, tr("Launcher Path"))) {
     return;
   }
@@ -247,6 +250,9 @@ void SettingsDialog::updateFieldVisibility() {
   ui->label_artworkDir->setVisible(true);
   ui->artworkDirLineEdit->setVisible(true);
   ui->browseArtworkDirButton->setVisible(true);
+  ui->label_videoDir->setVisible(true);
+  ui->videoDirLineEdit->setVisible(true);
+  ui->browseVideoDirButton->setVisible(true);
   ui->label_placeholderArtwork->setVisible(true);
   ui->placeholderArtworkLineEdit->setVisible(true);
   ui->browsePlaceholderArtworkButton->setVisible(true);

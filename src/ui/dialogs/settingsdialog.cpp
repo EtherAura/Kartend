@@ -212,6 +212,10 @@ void SettingsDialog::setupButtonConnections() {
   connect(ui->browseMediaDirButton, &QPushButton::clicked, this, &SettingsDialog::browseMediaDir);
   connect(ui->browseArtworkDirButton, &QPushButton::clicked, this,
           &SettingsDialog::browseArtworkDir);
+  if (ui->browseVideoDirButton) {
+    connect(ui->browseVideoDirButton, &QPushButton::clicked, this,
+            &SettingsDialog::browseVideoDir);
+  }
   if (ui->browsePlaceholderArtworkButton) {
     connect(ui->browsePlaceholderArtworkButton, &QPushButton::clicked, this,
             &SettingsDialog::browsePlaceholderArtwork);
@@ -271,6 +275,8 @@ void SettingsDialog::applyScopeFieldGating() {
       ui->recursiveImportContentButton,
       ui->artworkDirLineEdit,
       ui->browseArtworkDirButton,
+      ui->videoDirLineEdit,
+      ui->browseVideoDirButton,
       ui->placeholderArtworkLineEdit,
       ui->browsePlaceholderArtworkButton,
       ui->fileExtensionsLineEdit,

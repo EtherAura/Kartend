@@ -70,6 +70,17 @@ target_link_libraries(test_pathutils
 )
 add_test(NAME PathUtils COMMAND test_pathutils)
 
+# VideoUtils tests
+add_executable(test_videoutils
+  test_videoutils.cpp
+  ${SRC_DIR}/utils/videoutils.cpp
+)
+target_link_libraries(test_videoutils
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME VideoUtils COMMAND test_videoutils)
+
 # WidgetPoolManager tests
 add_executable(test_widgetpoolmanager
   test_widgetpoolmanager.cpp

@@ -70,6 +70,7 @@ struct CollectionConfig {
   QString launchParameters;
   QString mediaDirectory;
   QString artworkDirectory;
+  QString videoDirectory;
   QString placeholderArtwork;
   QString collectionIcon;
   QStringList extensions;
@@ -140,6 +141,7 @@ struct CollectionConfig {
     return name == other.name && launcherPath == other.launcherPath && corePath == other.corePath &&
            launchParameters == other.launchParameters && mediaDirectory == other.mediaDirectory &&
            artworkDirectory == other.artworkDirectory &&
+           videoDirectory == other.videoDirectory &&
            placeholderArtwork == other.placeholderArtwork &&
            collectionIcon == other.collectionIcon && extensions == other.extensions &&
            gridWidth == other.gridWidth &&
@@ -175,6 +177,7 @@ struct CollectionConfig {
   [[nodiscard]] bool hasMediaDirectory() const { return !mediaDirectory.isEmpty(); }
 
   [[nodiscard]] bool hasArtworkDirectory() const { return !artworkDirectory.isEmpty(); }
+  [[nodiscard]] bool hasVideoDirectory() const { return !videoDirectory.isEmpty(); }
 
   [[nodiscard]] bool hasPlaceholderArtwork() const { return !placeholderArtwork.isEmpty(); }
 

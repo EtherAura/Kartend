@@ -8,6 +8,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   pathutils.cpp
   settingsutils.cpp
   timerutils.cpp
+  videoutils.cpp
   adaptivebatcher.h
   applicationcontext.h
   artworkutils.h
@@ -27,4 +28,5 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   stateutils.h
   stringutils.h
   timerutils.h
+  videoutils.h
 )
