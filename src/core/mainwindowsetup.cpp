@@ -26,6 +26,7 @@
 #include "propertyutils.h"
 #include "scrollmanager.h"
 
+#include "nowplayingoverlay.h"
 #include "sessionmanager.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
@@ -33,7 +34,6 @@
 #include "shortcutsdialog.h"
 #include "sidebarmanager.h"
 #include "splashoverlay.h"
-#include "nowplayingoverlay.h"
 #include "stringutils.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"

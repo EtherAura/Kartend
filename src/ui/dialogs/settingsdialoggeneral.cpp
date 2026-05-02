@@ -4,6 +4,7 @@
 #include <QColor>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFontDialog>
 #include <QInputDialog>
@@ -11,7 +12,6 @@
 #include <QPushButton>
 #include <QSet>
 #include <QSignalBlocker>
-#include <QDoubleSpinBox>
 #include <QSpinBox>
 #include <QtGlobal>
 
@@ -322,8 +322,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
 
   // Attract mode connections for change detection
   if (ui->attractModeCheckBox) {
-    connect(ui->attractModeCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
+    connect(ui->attractModeCheckBox, &QCheckBox::toggled, this, &SettingsDialog::checkForChanges);
   }
   if (ui->attractIdleTimeoutSpinBox) {
     connect(ui->attractIdleTimeoutSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,

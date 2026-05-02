@@ -182,9 +182,9 @@ private:
   [[nodiscard]] bool ensureCollectionScanned(int collectionIndex,
                                              const CollectionConfig &collection);
   [[nodiscard]] bool scanAndSaveItemsToDatabase(int collectionIndex,
-                                                 const CollectionConfig &collection,
-                                                 int *outItemsScanned = nullptr,
-                                                 int *outItemsApplied = nullptr);
+                                                const CollectionConfig &collection,
+                                                int *outItemsScanned = nullptr,
+                                                int *outItemsApplied = nullptr);
 
   // Phase 1: Walk the filesystem (flat or recursive) and stream discovered
   // files into the scanned_items temp table. Returns the number of files

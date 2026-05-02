@@ -2,12 +2,12 @@
 #include "artworkmanager.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
+#include "emptystatewidget.h"
 #include "errordialog.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "loadingoverlay.h"
-#include "emptystatewidget.h"
 #include "loggingcategories.h"
 #include "metadatasidebar.h"
 #include "navigationhelpers.h"
@@ -113,8 +113,7 @@ auto NavigationManager::handleEmptyContent() -> void {
       bool collectionConfigured = true;
       bool isSubcollectionOnly = false;
       QString collectionName;
-      if (m_collections && m_currentCollectionIndex &&
-          *m_currentCollectionIndex >= 0 &&
+      if (m_collections && m_currentCollectionIndex && *m_currentCollectionIndex >= 0 &&
           *m_currentCollectionIndex < (*m_collections).size()) {
         const CollectionConfig &cfg = (*m_collections)[*m_currentCollectionIndex];
         collectionName = cfg.name;

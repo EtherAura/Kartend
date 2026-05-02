@@ -32,16 +32,19 @@ Q_LOGGING_CATEGORY(lcViewportManager, "kartend.viewportmanager")
 // ViewportManagerSetup getter definitions
 SETUP_GETTER_DEF_UI_SAME(ViewportManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
 SETUP_GETTER_DEF_MGR_SAME(ViewportManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_MGR_SAME(ViewportManagerSetup, SelectionManager *, SelectionManager, selectionManager)
-SETUP_GETTER_DEF_MGR_SAME(ViewportManagerSetup, AnimationManager *, AnimationManager, animationManager)
+SETUP_GETTER_DEF_MGR_SAME(ViewportManagerSetup, SelectionManager *, SelectionManager,
+                          selectionManager)
+SETUP_GETTER_DEF_MGR_SAME(ViewportManagerSetup, AnimationManager *, AnimationManager,
+                          animationManager)
 SETUP_GETTER_DEF_MGR_SAME(ViewportManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
 SETUP_GETTER_DEF_MGR_SAME(ViewportManagerSetup, InteractionStateHolder *, InteractionState,
-                      interactionState)
+                          interactionState)
 SETUP_GETTER_DEF_COL_SAME(ViewportManagerSetup, QList<CollectionConfig> *, Collections, collections)
-SETUP_GETTER_DEF_COL_SAME(ViewportManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
+SETUP_GETTER_DEF_COL_SAME(ViewportManagerSetup, int *, CurrentCollectionIndex,
+                          currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(ViewportManagerSetup, const bool *, IsShuttingDown, isShuttingDown)
 SETUP_GETTER_DEF_COL_SAME(ViewportManagerSetup, const GeneralSettings *, GeneralSettings,
-                      generalSettings)
+                          generalSettings)
 
 ViewportManager::ViewportManager(QObject *parent) : QObject(parent) {}
 

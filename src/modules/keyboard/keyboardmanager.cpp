@@ -33,9 +33,10 @@ SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QScrollArea *, ItemScrollArea, it
 SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)
 SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QLineEdit *, SearchBar, searchBar)
 SETUP_GETTER_DEF_COL_SAME(KeyboardManagerSetup, QList<CollectionConfig> *, Collections, collections)
-SETUP_GETTER_DEF_COL_SAME(KeyboardManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
+SETUP_GETTER_DEF_COL_SAME(KeyboardManagerSetup, int *, CurrentCollectionIndex,
+                          currentCollectionIndex)
 SETUP_GETTER_DEF_MGR_CTX_ONLY(KeyboardManagerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
+                              interactionState)
 
 KeyboardManager::KeyboardManager(QObject *parent) : QObject(parent) {
   initTimers();

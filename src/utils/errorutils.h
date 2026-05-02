@@ -121,7 +121,7 @@ struct ErrorContext {
 template <typename T> class Result {
 public:
   Result(T value) : m_value(std::move(value)), m_error() {} // NOLINT(google-explicit-constructor)
-  Result(ErrorContext error) // NOLINT(google-explicit-constructor)
+  Result(ErrorContext error)                                // NOLINT(google-explicit-constructor)
       : m_value(std::nullopt), m_error(std::move(error)) {}
 
   [[nodiscard]] bool isOk() const { return m_value.has_value(); }

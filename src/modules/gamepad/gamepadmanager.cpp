@@ -17,7 +17,7 @@
 // GamepadManagerSetup getter definitions
 SETUP_GETTER_DEF_MGR_SAME(GamepadManagerSetup, KeyboardManager *, KeyboardManager, keyboardManager)
 SETUP_GETTER_DEF_COL_SAME(GamepadManagerSetup, const GeneralSettings *, GeneralSettings,
-                      generalSettings)
+                          generalSettings)
 SETUP_GETTER_DEF_COL_SAME(GamepadManagerSetup, const bool *, IsShuttingDown, isShuttingDown)
 
 GamepadManager::GamepadManager(QObject *parent) : QObject(parent) {

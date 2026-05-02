@@ -110,9 +110,9 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.horizontalSpacing = (ui->horizontalSpacingSpinBox)
                                  ? spacingUiToInternal(ui->horizontalSpacingSpinBox->value())
                                  : config.horizontalSpacing;
-  config.verticalSpacing =
-      (ui->verticalSpacingSpinBox) ? spacingUiToInternal(ui->verticalSpacingSpinBox->value())
-                                   : config.verticalSpacing;
+  config.verticalSpacing = (ui->verticalSpacingSpinBox)
+                               ? spacingUiToInternal(ui->verticalSpacingSpinBox->value())
+                               : config.verticalSpacing;
   config.hideHorizontalScrollbar = (ui->hideHorizontalScrollbarCheckBox)
                                        ? ui->hideHorizontalScrollbarCheckBox->isChecked()
                                        : config.hideHorizontalScrollbar;
@@ -210,8 +210,7 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ((ui->mediaDirLineEdit) && ui->mediaDirLineEdit->text() != originalConfig.mediaDirectory) ||
       ((ui->artworkDirLineEdit) &&
        ui->artworkDirLineEdit->text() != originalConfig.artworkDirectory) ||
-      ((ui->videoDirLineEdit) &&
-       ui->videoDirLineEdit->text() != originalConfig.videoDirectory) ||
+      ((ui->videoDirLineEdit) && ui->videoDirLineEdit->text() != originalConfig.videoDirectory) ||
       ((ui->manualDirLineEdit) &&
        ui->manualDirLineEdit->text() != originalConfig.manualDirectory) ||
       ((ui->placeholderArtworkLineEdit) &&
@@ -230,8 +229,8 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ((ui->horizontalSpacingSpinBox) &&
        spacingUiToInternal(ui->horizontalSpacingSpinBox->value()) !=
            originalConfig.horizontalSpacing) ||
-      ((ui->verticalSpacingSpinBox) &&
-       spacingUiToInternal(ui->verticalSpacingSpinBox->value()) != originalConfig.verticalSpacing) ||
+      ((ui->verticalSpacingSpinBox) && spacingUiToInternal(ui->verticalSpacingSpinBox->value()) !=
+                                           originalConfig.verticalSpacing) ||
       ((ui->hideHorizontalScrollbarCheckBox) && ui->hideHorizontalScrollbarCheckBox->isChecked() !=
                                                     originalConfig.hideHorizontalScrollbar) ||
       ((ui->hideVerticalScrollbarCheckBox) &&
@@ -376,9 +375,8 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
                                           m_originalGeneralSettings.runtimeDetectionEnabled) {
     return true;
   }
-  if (ui->startupCollectionComboBox &&
-      ui->startupCollectionComboBox->currentData().toString() !=
-          m_originalGeneralSettings.startupCollection) {
+  if (ui->startupCollectionComboBox && ui->startupCollectionComboBox->currentData().toString() !=
+                                           m_originalGeneralSettings.startupCollection) {
     return true;
   }
   if (ui->pixmapCacheSpinBox &&
@@ -397,9 +395,8 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
       ui->mouseWheelSpeedSpinBox->value() != m_originalGeneralSettings.mouseWheelRows) {
     return true;
   }
-  if (ui->scrollAnimationSpeedSpinBox &&
-      ui->scrollAnimationSpeedSpinBox->value() !=
-          m_originalGeneralSettings.scrollAnimationDurationMs) {
+  if (ui->scrollAnimationSpeedSpinBox && ui->scrollAnimationSpeedSpinBox->value() !=
+                                             m_originalGeneralSettings.scrollAnimationDurationMs) {
     return true;
   }
   if (ui->scrollVelocityMultiplierSpinBox &&
@@ -416,9 +413,8 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
           m_originalGeneralSettings.clickHoldRepeatIntervalMs) {
     return true;
   }
-  if (ui->listKeyboardRepeatSpinBox &&
-      ui->listKeyboardRepeatSpinBox->value() !=
-          m_originalGeneralSettings.listKeyboardRepeatIntervalMs) {
+  if (ui->listKeyboardRepeatSpinBox && ui->listKeyboardRepeatSpinBox->value() !=
+                                           m_originalGeneralSettings.listKeyboardRepeatIntervalMs) {
     return true;
   }
   if (ui->listClickHoldRepeatSpinBox &&
@@ -444,9 +440,8 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
       ui->attractModeCheckBox->isChecked() != m_originalGeneralSettings.attractModeEnabled) {
     return true;
   }
-  if (ui->attractIdleTimeoutSpinBox &&
-      ui->attractIdleTimeoutSpinBox->value() !=
-          m_originalGeneralSettings.attractModeIdleTimeoutSec) {
+  if (ui->attractIdleTimeoutSpinBox && ui->attractIdleTimeoutSpinBox->value() !=
+                                           m_originalGeneralSettings.attractModeIdleTimeoutSec) {
     return true;
   }
   if (ui->attractScrollSpeedSpinBox &&

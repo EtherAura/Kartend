@@ -85,8 +85,7 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
     videoDirectory = collection.videoDirectory;
     manualDirectory = collection.manualDirectory;
     collectionName = collection.name;
-    expandedMediaDir =
-        PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
+    expandedMediaDir = PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
   }
 
   m_MetadataSidebar->setMetadata(filePath, itemName, artworkDirectory, videoDirectory);
@@ -126,8 +125,8 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
   // Resolve manual file: per-item override (item_metadata.manual_path) wins
   // over auto-discovery in the collection's manualDirectory.
   const QString baseName = QFileInfo(filePath).completeBaseName();
-  const QString manualPath = ItemMetadataStore::resolveManualFile(
-      loadedMetadata.manualPath, baseName, manualDirectory);
+  const QString manualPath =
+      ItemMetadataStore::resolveManualFile(loadedMetadata.manualPath, baseName, manualDirectory);
   m_MetadataSidebar->setManualFile(manualPath);
 }
 

@@ -276,9 +276,10 @@ SETUP_GETTER_DEF_UI_SAME(ArtworkManagerSetup, QWidget *, ItemsPage, itemsPage)
 SETUP_GETTER_DEF_UI_SAME(ArtworkManagerSetup, QWidget *, GridContainer, gridContainer)
 SETUP_GETTER_DEF_UI_SAME(ArtworkManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
 SETUP_GETTER_DEF_COL_SAME(ArtworkManagerSetup, QList<CollectionConfig> *, Collections, collections)
-SETUP_GETTER_DEF_COL_SAME(ArtworkManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
+SETUP_GETTER_DEF_COL_SAME(ArtworkManagerSetup, int *, CurrentCollectionIndex,
+                          currentCollectionIndex)
 SETUP_GETTER_DEF_MGR_CTX_ONLY(ArtworkManagerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
+                              interactionState)
 
 void ArtworkManager::setupReferences(const ArtworkManagerSetup &setup) {
   stackedWidget = setup.getStackedWidget();
