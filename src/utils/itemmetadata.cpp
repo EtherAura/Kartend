@@ -7,6 +7,9 @@
 #include "itemmetadata.h"
 
 #include <QDateTime>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -175,6 +178,45 @@ ErrorUtils::Result<bool> remove(QSqlDatabase &db, const QString &collectionUuid,
         .withDetails(q.lastError().text());
   }
   return true;
+}
+
+CustomFieldList parseCustomFields(const QString &json) {
+  CustomFieldList result;
+  const QString trimmed = json.trimmed();
+  if (trimmed.isEmpty()) {
+    return result;
+  }
+  QJsonParseError err{};
+  const QJsonDocument doc = QJsonDocument::fromJson(trimmed.toUtf8(), &err);
+  if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+    return result;
+  }
+  const QJsonObject obj = doc.object();
+  // QJsonObject iterates in alphabetical key order, which is exactly the
+  // ordering we want to surface in the sidebar Details section.
+  for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+    const QString key = it.key().trimmed();
+    if (key.isEmpty()) {
+      continue;
+    }
+    result.append({key, it.value().toString()});
+  }
+  return result;
+}
+
+QString serializeCustomFields(const CustomFieldList &fields) {
+  QJsonObject obj;
+  for (const auto &pair : fields) {
+    const QString key = pair.first.trimmed();
+    if (key.isEmpty()) {
+      continue;
+    }
+    obj.insert(key, pair.second);
+  }
+  if (obj.isEmpty()) {
+    return {};
+  }
+  return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
 }
 
 } // namespace ItemMetadataStore

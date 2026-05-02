@@ -1,6 +1,8 @@
 #ifndef ITEMMETADATA_H
 #define ITEMMETADATA_H
 
+#include <QList>
+#include <QPair>
 #include <QString>
 
 #include "errorutils.h"
@@ -8,6 +10,12 @@
 class QSqlDatabase;
 
 namespace ItemMetadataStore {
+
+/// List of (key, value) pairs for user-defined custom fields. Returned by
+/// `parseCustomFields` in alphabetical key order (QJsonObject sorts keys
+/// alphabetically), which gives a stable, predictable rendering in the
+/// sidebar regardless of the order rows were edited.
+using CustomFieldList = QList<QPair<QString, QString>>;
 
 /// Extended per-item metadata stored in the `item_metadata` table.
 ///
@@ -56,6 +64,17 @@ struct ItemMetadata {
 /// no matching row exists.
 [[nodiscard]] ErrorUtils::Result<bool> remove(QSqlDatabase &db, const QString &collectionUuid,
                                               const QString &path);
+
+/// Parses the `custom_fields` JSON string into an ordered key/value list.
+/// Returns an empty list when the input is empty, malformed, or not a JSON
+/// object. Non-string values are coerced via `QJsonValue::toString()`. Keys
+/// that are empty after trimming are skipped.
+[[nodiscard]] CustomFieldList parseCustomFields(const QString &json);
+
+/// Serializes an ordered key/value list to a compact JSON object string.
+/// Returns an empty string when the list contains no entries with a
+/// non-empty trimmed key, so empty payloads round-trip to NULL in the DB.
+[[nodiscard]] QString serializeCustomFields(const CustomFieldList &fields);
 
 } // namespace ItemMetadataStore
 

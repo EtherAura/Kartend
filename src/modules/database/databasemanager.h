@@ -80,6 +80,11 @@ public:
   [[nodiscard]] ItemMetadataStore::ItemMetadata loadItemMetadata(const QString &collectionUuid,
                                                                  const QString &path) const;
 
+  /// Persists extended metadata via the main-thread connection. Used by
+  /// user-driven editors (e.g. custom fields dialog, Kartend-hpln). Returns
+  /// true on success; logs the structured error and returns false otherwise.
+  bool saveItemMetadata(const ItemMetadataStore::ItemMetadata &metadata);
+
 signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void itemCountLoaded(int count);

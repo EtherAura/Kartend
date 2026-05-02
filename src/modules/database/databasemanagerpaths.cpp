@@ -67,6 +67,19 @@ auto DatabaseManager::loadItemMetadata(const QString &collectionUuid, const QStr
   return result.value();
 }
 
+bool DatabaseManager::saveItemMetadata(const ItemMetadataStore::ItemMetadata &metadata) {
+  // User-driven edits are infrequent single-row upserts; running on the
+  // main-thread connection avoids needing to round-trip through QueryManager
+  // signals just to surface success/failure to the dialog.
+  auto result = ItemMetadataStore::save(m_db, metadata);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    emit errorOccurred(result.error());
+    return false;
+  }
+  return true;
+}
+
 // Count items globally across all collections
 auto DatabaseManager::countGlobal(const QList<CollectionConfig> &allCollections) -> qint64 {
   Q_UNUSED(allCollections)

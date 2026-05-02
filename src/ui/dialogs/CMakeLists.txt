@@ -1,4 +1,5 @@
 target_sources(${KARTEND_LIB_TARGET} PRIVATE
+  customfieldsdialog.cpp
   errordialog.cpp
   settingsdialog.cpp
   settingsdialogbrowse.cpp
@@ -10,6 +11,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   settingsdialogsetup.cpp
   settingsdialogtree.cpp
   shortcutsdialog.cpp
+  customfieldsdialog.h
   errordialog.h
   settingsdialog.h
   shortcutsdialog.h
