@@ -339,6 +339,11 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->resumeFocusSplashCheckBox->setChecked(m_generalSettings.resumeFocusSplashEnabled);
     ui->resumeFocusSplashCheckBox->blockSignals(false);
   }
+  if (ui->runtimeDetectionCheckBox) {
+    ui->runtimeDetectionCheckBox->blockSignals(true);
+    ui->runtimeDetectionCheckBox->setChecked(m_generalSettings.runtimeDetectionEnabled);
+    ui->runtimeDetectionCheckBox->blockSignals(false);
+  }
   if (ui->pixmapCacheSpinBox) {
     ui->pixmapCacheSpinBox->blockSignals(true);
     ui->pixmapCacheSpinBox->setValue(m_generalSettings.pixmapCacheSizeMB);

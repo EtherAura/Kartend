@@ -403,6 +403,14 @@ struct GeneralSettings {
   bool bootSplashEnabled = true;
   bool resumeFocusSplashEnabled = true;
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Runtime detection (Kartend-qxv)
+  // When enabled, launched media items are tracked via a non-detached
+  // QProcess so the UI can sleep behind a "Now Playing" overlay while the
+  // child runs and automatically restore + raise the window when it exits.
+  // ─────────────────────────────────────────────────────────────────────────
+  bool runtimeDetectionEnabled = false;
+
   QHash<int, int> lastSelectedItems;
   GeneralSettings() = default;
 };

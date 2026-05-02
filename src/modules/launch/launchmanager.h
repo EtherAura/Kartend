@@ -2,12 +2,17 @@
 #define LAUNCHMANAGER_H
 
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QStringList>
 
 #include "collectionutils.h"
 #include "errorutils.h"
 #include "setuputils.h"
+
+QT_BEGIN_NAMESPACE
+class QProcess;
+QT_END_NAMESPACE
 
 struct ApplicationContext;
 
@@ -77,12 +82,43 @@ public:
   [[nodiscard]] static QString findFileWithExtension(const QString &directory,
                                                      const QString &extension);
 
+  /// True while a runtime-tracked child process is currently running.
+  /// Always false when runtime detection is disabled. Kartend-qxv.
+  [[nodiscard]] bool isRuntimeChildRunning() const { return m_trackedChild != nullptr; }
+
+signals:
+  /// Emitted when a runtime-tracked child process starts (Kartend-qxv).
+  /// `displayName` is a human-readable label (typically the file basename)
+  /// suitable for showing in a "Now Playing" overlay.
+  void runtimeStarted(const QString &filePath, const QString &displayName);
+
+  /// Emitted when a runtime-tracked child process finishes for any reason —
+  /// normal exit, crash, or failure to start (Kartend-qxv).
+  void runtimeFinished(const QString &filePath);
+
 private:
+  const ApplicationContext *m_ctx = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
+  GeneralSettings *m_generalSettings = nullptr;
 
   /// Tracks recent launches for debounce protection
   QHash<QString, qint64> m_lastLaunchTimes;
   static constexpr qint64 kDoubleLaunchGuardMs = 500;
+
+  /// The currently-tracked child process when runtime detection is enabled.
+  /// Only one tracked child at a time — a second launch attempt while one is
+  /// already running is rejected. Kartend-qxv.
+  QPointer<QProcess> m_trackedChild;
+  QString m_trackedFilePath;
+
+  /// Returns true when the configured general settings request runtime
+  /// detection. Safe to call before settings are wired (returns false).
+  [[nodiscard]] bool runtimeDetectionEnabled() const;
+
+  /// Spawns `cmd` as a tracked child QProcess and emits runtimeStarted /
+  /// runtimeFinished. Returns true on a successful start. Kartend-qxv.
+  bool launchTracked(const QString &launcherPath, const LaunchCommand &cmd,
+                     const QString &filePath);
 };
 
 #endif // LAUNCHMANAGER_H

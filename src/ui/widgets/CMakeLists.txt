@@ -10,6 +10,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   listheaderwidget.cpp
   loadingoverlay.cpp
   metadatasidebar.cpp
+  nowplayingoverlay.cpp
   splashoverlay.cpp
   artworkpreviewoverlay.h
   emptystatewidget.h
@@ -17,6 +18,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   listheaderwidget.h
   loadingoverlay.h
   metadatasidebar.h
+  nowplayingoverlay.h
   splashoverlay.h
   itemwidget.ui
   metadatasidebar.ui

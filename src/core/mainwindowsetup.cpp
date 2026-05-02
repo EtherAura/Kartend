@@ -25,6 +25,7 @@
 #include "navigationmanager.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"
+
 #include "sessionmanager.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
@@ -32,6 +33,7 @@
 #include "shortcutsdialog.h"
 #include "sidebarmanager.h"
 #include "splashoverlay.h"
+#include "nowplayingoverlay.h"
 #include "stringutils.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
@@ -167,6 +169,10 @@ void MainWindow::setupUIReferences() {
   // Create transient splash overlay above the same central content. It stays
   // independent from scan/loading progress overlays and manages its own timers.
   m_splashOverlay = new SplashOverlay(ui->centralwidget);
+
+  // Kartend-qxv: Persistent "Now Playing" overlay used while a runtime-tracked
+  // child process is running. Stays hidden until LaunchManager signals start.
+  m_nowPlayingOverlay = new NowPlayingOverlay(ui->centralwidget);
 }
 
 void MainWindow::initializeAppContext() {
