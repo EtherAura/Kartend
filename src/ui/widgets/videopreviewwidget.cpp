@@ -20,8 +20,11 @@ VideoPreviewWidget::VideoPreviewWidget(QWidget *parent) : QWidget(parent) {
 
   m_player = new QMediaPlayer(this);
   m_audioOutput = new QAudioOutput(this);
-  m_audioOutput->setMuted(true);
-  m_audioOutput->setVolume(0.0);
+  // Audio plays at full volume — the user explicitly opted into hearing
+  // preview audio. Selection-change cadence is governed by the 500ms
+  // debounce in MetadataSidebar so the audio doesn't flap while scrolling.
+  m_audioOutput->setMuted(false);
+  m_audioOutput->setVolume(1.0);
   m_player->setAudioOutput(m_audioOutput);
   m_player->setVideoOutput(m_videoWidget);
   m_player->setLoops(QMediaPlayer::Infinite);
@@ -46,7 +49,6 @@ void VideoPreviewWidget::playVideo(const QString &filePath) {
   m_currentPath = filePath;
   m_player->stop();
   m_player->setSource(QUrl::fromLocalFile(filePath));
-  m_audioOutput->setMuted(true);
   m_player->play();
 }
 
