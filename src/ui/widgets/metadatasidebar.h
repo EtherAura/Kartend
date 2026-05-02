@@ -49,8 +49,19 @@ public:
     bool isVideo = false;
   };
   void setArtworkGallery(const QList<GalleryEntry> &entries);
+  /// Controls whether the gallery section's edit affordance is shown
+  /// (Kartend-53vk). Independent of `setArtworkGallery` so the "Edit links…"
+  /// button stays available for items with no current artwork — that is the
+  /// exact case where the user wants to add a manual link.
+  void setArtworkEditEnabled(bool enabled);
   void clearMetadata();
   void setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy);
+
+signals:
+  /// Fired when the user activates the gallery's "Edit links…" button
+  /// (Kartend-53vk). The sidebar widget itself has no item context, so the
+  /// owning manager handles persistence and refresh.
+  void editArtworkRequested();
 
 private:
   void setupUI();
@@ -90,6 +101,11 @@ private:
   // top of the sidebar.
   QWidget *m_galleryContainer = nullptr;
   QHBoxLayout *m_galleryLayout = nullptr;
+  /// Wraps the thumbnail row so the section title + edit button can stay
+  /// visible while the thumbs are hidden (Kartend-53vk).
+  QWidget *m_galleryThumbsHost = nullptr;
+  QPushButton *m_galleryEditButton = nullptr;
+  bool m_galleryEditEnabled = false;
   // Owned-on-demand preview overlay reparented to the top-level window so it
   // can cover the full UI rather than just the narrow sidebar. nullptr until
   // the first thumbnail is clicked.

@@ -58,6 +58,12 @@ signals:
   void sidebarVisibilityChanged(bool visible);
   void sidebarLayoutChanged();
 
+private slots:
+  /// Opens the per-item artwork-link editor dialog for the current
+  /// selection (Kartend-53vk). Persists the user's diff via DatabaseManager
+  /// and refreshes the gallery so newly-set overrides appear immediately.
+  void openArtworkLinksDialog();
+
 private:
   MetadataSidebar *m_MetadataSidebar;
   QWidget *m_itemsPage;
@@ -69,6 +75,15 @@ private:
   QList<CollectionConfig> *m_collections = nullptr;
   bool m_sidebarVisible = false;
   int m_currentCollectionIndex;
+
+  // Snapshot of the currently-displayed item used by the artwork link
+  // editor (Kartend-53vk). Captured in updateSidebarMetadata so the dialog
+  // doesn't have to recompute owning collection / UUID resolution.
+  QString m_currentItemFilePath;
+  QString m_currentItemName;
+  QString m_currentItemUuid;
+  int m_currentItemOwningIndex = -1;
+  QString m_currentItemArtworkDir;
 };
 
 #endif

@@ -490,6 +490,23 @@
                </property>
               </widget>
              </item>
+             <item row="14" column="0">
+              <widget class="QLabel" name="label_customArtworkTypes">
+               <property name="text">
+                <string>Custom Artwork Types:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="14" column="1">
+              <widget class="QLineEdit" name="customArtworkTypesLineEdit">
+               <property name="toolTip">
+                <string>Comma-separated list of user-defined artwork type ids beyond the standard set (box, screenshot, title, marquee, fanart, logo). Custom types only resolve via per-item manual links from the sidebar — they are NOT auto-discovered from artwork subdirectories.</string>
+               </property>
+               <property name="placeholderText">
+                <string>e.g. cabinet, flyer, character_select</string>
+               </property>
+              </widget>
+             </item>
             </layout>
            </item>
            <item>

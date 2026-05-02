@@ -79,6 +79,13 @@ struct CollectionConfig {
   QString placeholderArtwork;
   QString collectionIcon;
   QStringList extensions;
+  /// User-defined custom artwork type ids beyond the standard set
+  /// (Kartend-53vk). Each entry is a free-form string the user picks; the
+  /// sidebar uses it both as the artwork_type id stored in `item_artwork` and
+  /// as the gallery thumbnail label until a friendly-name registry is added.
+  /// Auto-discovery does NOT apply to custom types — they only resolve via a
+  /// per-item manual override.
+  QStringList customArtworkTypes;
   int gridWidth;
   bool sidebarVisible;
   int parentCollectionIndex = -1;
@@ -149,7 +156,8 @@ struct CollectionConfig {
            manualDirectory == other.manualDirectory &&
            placeholderArtwork == other.placeholderArtwork &&
            collectionIcon == other.collectionIcon && extensions == other.extensions &&
-           gridWidth == other.gridWidth && sidebarVisible == other.sidebarVisible &&
+           customArtworkTypes == other.customArtworkTypes && gridWidth == other.gridWidth &&
+           sidebarVisible == other.sidebarVisible &&
            parentCollectionIndex == other.parentCollectionIndex &&
            isSubcollection == other.isSubcollection &&
            showAllSubcollectionItems == other.showAllSubcollectionItems &&

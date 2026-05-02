@@ -300,6 +300,9 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->fileExtensionsLineEdit) {
     ui->fileExtensionsLineEdit->setText(config.extensions.join(", "));
   }
+  if (ui->customArtworkTypesLineEdit) {
+    ui->customArtworkTypesLineEdit->setText(config.customArtworkTypes.join(", "));
+  }
   if (ui->gridWidthSpinBox) {
     ui->gridWidthSpinBox->setValue(config.gridWidth);
   }
@@ -414,6 +417,7 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->manualDirLineEdit) ui->manualDirLineEdit->clear();
   if (ui->placeholderArtworkLineEdit) ui->placeholderArtworkLineEdit->clear();
   if (ui->fileExtensionsLineEdit) ui->fileExtensionsLineEdit->clear();
+  if (ui->customArtworkTypesLineEdit) ui->customArtworkTypesLineEdit->clear();
   if (ui->backgroundValueEdit) ui->backgroundValueEdit->clear();
   if (ui->primaryColorEdit) ui->primaryColorEdit->clear();
   if (ui->tileColorEdit) ui->tileColorEdit->clear();

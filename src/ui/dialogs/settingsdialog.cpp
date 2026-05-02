@@ -284,6 +284,7 @@ void SettingsDialog::applyScopeFieldGating() {
       ui->placeholderArtworkLineEdit,
       ui->browsePlaceholderArtworkButton,
       ui->fileExtensionsLineEdit,
+      ui->customArtworkTypesLineEdit,
       ui->launcherLineEdit,
       ui->browseLauncherButton,
       ui->coreLineEdit,

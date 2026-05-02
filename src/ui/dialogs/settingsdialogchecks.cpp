@@ -93,6 +93,18 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
       (ui->fileExtensionsLineEdit)
           ? ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text())
           : config.extensions;
+  if (ui->customArtworkTypesLineEdit) {
+    QStringList parsed = ui->customArtworkTypesLineEdit->text().split(',', Qt::SkipEmptyParts);
+    QStringList cleaned;
+    cleaned.reserve(parsed.size());
+    for (QString &type : parsed) {
+      type = type.trimmed();
+      if (!type.isEmpty() && !cleaned.contains(type)) {
+        cleaned.append(type);
+      }
+    }
+    config.customArtworkTypes = cleaned;
+  }
   config.gridWidth = (ui->gridWidthSpinBox) ? ui->gridWidthSpinBox->value() : config.gridWidth;
   config.showAllSubcollectionItems = (ui->showAllSubcollectionItemsCheckBox)
                                          ? ui->showAllSubcollectionItemsCheckBox->isChecked()
@@ -262,7 +274,24 @@ auto SettingsDialog::checkExtensionChanges() const -> bool {
       (ui->fileExtensionsLineEdit)
           ? ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text())
           : originalCollection.extensions;
-  return currentExtensions != originalCollection.extensions;
+  if (currentExtensions != originalCollection.extensions) {
+    return true;
+  }
+  if (ui->customArtworkTypesLineEdit) {
+    QStringList parsed = ui->customArtworkTypesLineEdit->text().split(',', Qt::SkipEmptyParts);
+    QStringList cleaned;
+    cleaned.reserve(parsed.size());
+    for (QString &type : parsed) {
+      type = type.trimmed();
+      if (!type.isEmpty() && !cleaned.contains(type)) {
+        cleaned.append(type);
+      }
+    }
+    if (cleaned != originalCollection.customArtworkTypes) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // Checks tree name changes

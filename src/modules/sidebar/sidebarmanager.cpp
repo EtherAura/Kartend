@@ -5,6 +5,7 @@
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "itemartwork.h"
+#include "itemartworklinksdialog.h"
 #include "itemmetadata.h"
 #include "itemwidget.h"
 #include "metadatasidebar.h"
@@ -20,6 +21,7 @@
 #include <QList>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSet>
 #include <QString>
 #include <QTimer>
 
@@ -54,6 +56,13 @@ void SidebarManager::setupReferences(const SidebarManagerSetup &setup) {
   m_artworkManager = setup.getArtworkManager();
   m_databaseManager = setup.getDatabaseManager();
   m_collections = setup.getCollections();
+
+  // Wire the per-item artwork-link editor (Kartend-53vk). The sidebar
+  // widget itself has no item context, so the manager handles the dialog.
+  if (m_MetadataSidebar) {
+    connect(m_MetadataSidebar, &MetadataSidebar::editArtworkRequested, this,
+            &SidebarManager::openArtworkLinksDialog);
+  }
 }
 
 void SidebarManager::toggleSidebar() {
@@ -236,6 +245,21 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
   }
 
   m_MetadataSidebar->setArtworkGallery(galleryEntries);
+
+  // Capture the resolved owner context so the artwork-link editor dialog
+  // (Kartend-53vk) doesn't have to redo the showAllSubcollectionItems-aware
+  // lookup. Only enable the edit affordance once we have a UUID — without
+  // one we couldn't persist anything anyway.
+  m_currentItemFilePath = filePath;
+  m_currentItemName = itemName;
+  m_currentItemUuid = metaUuid;
+  m_currentItemArtworkDir = artworkDirectory;
+  if (m_databaseManager) {
+    m_currentItemOwningIndex = m_databaseManager->getCollectionIndexForFile(filePath);
+  } else {
+    m_currentItemOwningIndex = -1;
+  }
+  m_MetadataSidebar->setArtworkEditEnabled(!metaUuid.isEmpty());
 }
 
 void SidebarManager::applySidebarStateForCollection(int collectionIndex) {
@@ -384,6 +408,114 @@ void SidebarManager::saveSidebarStateForCollection(int collectionIndex, bool vis
   (*m_collections)[collectionIndex].sidebarVisible = visible;
   if (m_settingsManager) {
     m_settingsManager->saveCollections(*m_collections);
+  }
+}
+
+void SidebarManager::openArtworkLinksDialog() {
+  if (!m_MetadataSidebar || !m_databaseManager || !m_collections) {
+    return;
+  }
+  if (m_currentItemFilePath.isEmpty() || m_currentItemUuid.isEmpty()) {
+    return;
+  }
+
+  // Resolve the custom-types list from the owning collection (which can
+  // differ from the currently-displayed collection in
+  // showAllSubcollectionItems mode). Falls back to an empty list if the
+  // owning index has been invalidated mid-flight.
+  QStringList customTypes;
+  if (m_currentItemOwningIndex >= 0 && m_currentItemOwningIndex < m_collections->size()) {
+    customTypes = (*m_collections)[m_currentItemOwningIndex].customArtworkTypes;
+  }
+
+  const QString baseName = QFileInfo(m_currentItemFilePath).completeBaseName();
+
+  // Snapshot the current overrides so we can compute insert/update/delete
+  // diffs after the dialog is accepted. Also include any custom-type rows
+  // already stored in the DB but no longer listed in the collection's
+  // config — that way the user can clear stale entries instead of being
+  // unable to see them. We render those as extra "custom" rows.
+  QHash<QString, QString> originalOverrides;
+  QStringList allCustomTypes = customTypes;
+  const auto rows = m_databaseManager->loadItemArtwork(m_currentItemUuid, m_currentItemFilePath);
+  for (const auto &row : rows) {
+    originalOverrides.insert(row.artworkType, row.manualPath);
+    if (!ItemArtworkStore::isStandardType(row.artworkType) &&
+        !allCustomTypes.contains(row.artworkType)) {
+      allCustomTypes.append(row.artworkType);
+    }
+  }
+
+  ItemArtworkLinksDialog dialog(m_MetadataSidebar->window());
+  dialog.setItemTitle(m_currentItemName.isEmpty() ? baseName : m_currentItemName);
+  dialog.setTypeRows(ItemArtworkStore::standardTypes(), allCustomTypes);
+  dialog.setOverrides(originalOverrides);
+  if (!m_currentItemArtworkDir.trimmed().isEmpty()) {
+    dialog.setBrowseStartDirectory(m_currentItemArtworkDir);
+  }
+
+  if (dialog.exec() != QDialog::Accepted) {
+    return;
+  }
+
+  const QHash<QString, QString> newOverrides = dialog.overrides();
+
+  // Persist the diff: every type whose final value differs from the
+  // original gets either a save (non-empty) or a remove (cleared). We
+  // intentionally do NOT batch this in a transaction — the existing
+  // ItemArtworkStore API is single-row, and a few extra round-trips per
+  // edit session is negligible compared to the UI feedback latency.
+  QSet<QString> visitedTypes;
+  for (auto it = newOverrides.constBegin(); it != newOverrides.constEnd(); ++it) {
+    visitedTypes.insert(it.key());
+    const QString original = originalOverrides.value(it.key());
+    if (it.value() == original) {
+      continue;
+    }
+    ItemArtworkStore::ItemArtwork artwork;
+    artwork.collectionUuid = m_currentItemUuid;
+    artwork.path = m_currentItemFilePath;
+    artwork.artworkType = it.key();
+    artwork.manualPath = it.value();
+    m_databaseManager->saveItemArtwork(artwork);
+  }
+  for (auto it = originalOverrides.constBegin(); it != originalOverrides.constEnd(); ++it) {
+    if (visitedTypes.contains(it.key())) {
+      continue;
+    }
+    // Was set, now cleared.
+    m_databaseManager->removeItemArtwork(m_currentItemUuid, m_currentItemFilePath, it.key());
+  }
+
+  // Refresh the gallery inline using the cached owner context — we don't
+  // hold a pointer to the selected ItemWidget here, so we can't re-run
+  // updateSidebarMetadata. The logic mirrors that method's gallery build.
+  if (m_MetadataSidebar && !m_currentItemUuid.isEmpty()) {
+    QList<MetadataSidebar::GalleryEntry> galleryEntries;
+    QHash<QString, QString> overridesByType;
+    QStringList customOrder;
+    const auto refreshedRows =
+        m_databaseManager->loadItemArtwork(m_currentItemUuid, m_currentItemFilePath);
+    for (const auto &row : refreshedRows) {
+      overridesByType.insert(row.artworkType, row.manualPath);
+      if (!ItemArtworkStore::isStandardType(row.artworkType)) {
+        customOrder.append(row.artworkType);
+      }
+    }
+    auto pushEntry = [&](const QString &type, const QString &label) {
+      const QString resolved = ItemArtworkStore::resolveArtworkPath(
+          overridesByType.value(type), baseName, m_currentItemArtworkDir, type);
+      if (!resolved.isEmpty()) {
+        galleryEntries.append({label, resolved, /*isVideo=*/false});
+      }
+    };
+    for (const QString &type : ItemArtworkStore::standardTypes()) {
+      pushEntry(type, ItemArtworkStore::standardTypeDisplayName(type));
+    }
+    for (const QString &type : customOrder) {
+      pushEntry(type, type);
+    }
+    m_MetadataSidebar->setArtworkGallery(galleryEntries);
   }
 }
 
