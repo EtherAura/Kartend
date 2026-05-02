@@ -64,6 +64,8 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
       (ui->artworkDirLineEdit) ? ui->artworkDirLineEdit->text() : config.artworkDirectory;
   config.videoDirectory =
       (ui->videoDirLineEdit) ? ui->videoDirLineEdit->text() : config.videoDirectory;
+  config.manualDirectory =
+      (ui->manualDirLineEdit) ? ui->manualDirLineEdit->text() : config.manualDirectory;
   config.placeholderArtwork = (ui->placeholderArtworkLineEdit)
                                   ? ui->placeholderArtworkLineEdit->text()
                                   : config.placeholderArtwork;
@@ -210,6 +212,8 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
        ui->artworkDirLineEdit->text() != originalConfig.artworkDirectory) ||
       ((ui->videoDirLineEdit) &&
        ui->videoDirLineEdit->text() != originalConfig.videoDirectory) ||
+      ((ui->manualDirLineEdit) &&
+       ui->manualDirLineEdit->text() != originalConfig.manualDirectory) ||
       ((ui->placeholderArtworkLineEdit) &&
        ui->placeholderArtworkLineEdit->text() != originalConfig.placeholderArtwork) ||
       ((ui->gridWidthSpinBox) && ui->gridWidthSpinBox->value() != originalConfig.gridWidth) ||

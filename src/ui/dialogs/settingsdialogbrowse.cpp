@@ -80,6 +80,13 @@ void SettingsDialog::browseVideoDir() {
   }
 }
 
+void SettingsDialog::browseManualDir() {
+  QString dirName = QFileDialog::getExistingDirectory(this, tr("Select Manual Directory"), "");
+  if (!dirName.isEmpty() && ui->manualDirLineEdit) {
+    ui->manualDirLineEdit->setText(dirName);
+  }
+}
+
 void SettingsDialog::browsePlaceholderArtwork() {
   QString fileName = QFileDialog::getOpenFileName(
       this, tr("Select Placeholder Artwork"), "",
@@ -266,6 +273,9 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->videoDirLineEdit) {
     ui->videoDirLineEdit->setText(config.videoDirectory);
   }
+  if (ui->manualDirLineEdit) {
+    ui->manualDirLineEdit->setText(config.manualDirectory);
+  }
   if (ui->placeholderArtworkLineEdit) {
     ui->placeholderArtworkLineEdit->setText(config.placeholderArtwork);
   }
@@ -400,6 +410,8 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->launchParamsLineEdit) ui->launchParamsLineEdit->clear();
   if (ui->mediaDirLineEdit) ui->mediaDirLineEdit->clear();
   if (ui->artworkDirLineEdit) ui->artworkDirLineEdit->clear();
+  if (ui->videoDirLineEdit) ui->videoDirLineEdit->clear();
+  if (ui->manualDirLineEdit) ui->manualDirLineEdit->clear();
   if (ui->placeholderArtworkLineEdit) ui->placeholderArtworkLineEdit->clear();
   if (ui->fileExtensionsLineEdit) ui->fileExtensionsLineEdit->clear();
   if (ui->backgroundValueEdit) ui->backgroundValueEdit->clear();

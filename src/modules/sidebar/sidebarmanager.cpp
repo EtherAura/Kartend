@@ -4,6 +4,7 @@
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "itemmetadata.h"
 #include "itemwidget.h"
 #include "metadatasidebar.h"
 #include "pathutils.h"
@@ -11,6 +12,7 @@
 #include "timerutils.h"
 #include "uiconstants.h"
 #include <QApplication>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -73,6 +75,7 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
   // Get artwork + video directories from current collection config
   QString artworkDirectory;
   QString videoDirectory;
+  QString manualDirectory;
   QString collectionName;
   QString expandedMediaDir;
   if (m_collections && m_currentCollectionIndex >= 0 &&
@@ -80,6 +83,7 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
     const CollectionConfig &collection = (*m_collections)[m_currentCollectionIndex];
     artworkDirectory = collection.artworkDirectory;
     videoDirectory = collection.videoDirectory;
+    manualDirectory = collection.manualDirectory;
     collectionName = collection.name;
     expandedMediaDir =
         PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
@@ -91,6 +95,7 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
   // the file may differ from the currently-displayed collection in
   // showAllSubcollectionItems mode, so prefer the file's resolved collection
   // when the database knows about it; fall back to the current collection.
+  ItemMetadataStore::ItemMetadata loadedMetadata;
   if (m_databaseManager) {
     QString metaUuid;
     const int owningIndex = m_databaseManager->getCollectionIndexForFile(filePath);
@@ -99,16 +104,31 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
       const QString owningMediaDir =
           PathUtils::validateAndExpandPath(owning.mediaDirectory, owning.name);
       metaUuid = CollectionUtils::computeCollectionUuid(owning.name, owningMediaDir);
+      // Prefer the owning collection's manualDirectory in
+      // showAllSubcollectionItems mode so a child's directory wins over the
+      // parent's when both are set.
+      if (!owning.manualDirectory.trimmed().isEmpty()) {
+        manualDirectory = owning.manualDirectory;
+      } else if (manualDirectory.trimmed().isEmpty() && m_collections) {
+        // Fall back to the nearest ancestor with a manualDirectory (mirrors
+        // resolveArtworkDirectory's behavior so subcollections inherit).
+        manualDirectory = CollectionUtils::resolveManualDirectory(owningIndex, *m_collections);
+      }
     } else if (!collectionName.isEmpty()) {
       metaUuid = CollectionUtils::computeCollectionUuid(collectionName, expandedMediaDir);
     }
     if (!metaUuid.isEmpty()) {
-      m_MetadataSidebar->setExtendedMetadata(
-          m_databaseManager->loadItemMetadata(metaUuid, filePath));
-    } else {
-      m_MetadataSidebar->setExtendedMetadata({});
+      loadedMetadata = m_databaseManager->loadItemMetadata(metaUuid, filePath);
     }
+    m_MetadataSidebar->setExtendedMetadata(loadedMetadata);
   }
+
+  // Resolve manual file: per-item override (item_metadata.manual_path) wins
+  // over auto-discovery in the collection's manualDirectory.
+  const QString baseName = QFileInfo(filePath).completeBaseName();
+  const QString manualPath = ItemMetadataStore::resolveManualFile(
+      loadedMetadata.manualPath, baseName, manualDirectory);
+  m_MetadataSidebar->setManualFile(manualPath);
 }
 
 void SidebarManager::applySidebarStateForCollection(int collectionIndex) {

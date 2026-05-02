@@ -208,6 +208,7 @@ void SettingsDialog::addCollection() {
   newCollection.mediaDirectory = "";
   newCollection.artworkDirectory = "";
   newCollection.videoDirectory = "";
+  newCollection.manualDirectory = "";
   newCollection.extensions = QStringList();
   newCollection.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
   newCollection.sidebarVisible = false;
@@ -391,6 +392,7 @@ auto SettingsDialog::wouldCreateCircularReference(int childIndex, int potentialP
 //   * Identity fields (name, parentCollectionIndex, isSubcollection,
 //     collectionIcon).
 //   * Path/content fields (mediaDirectory, artworkDirectory, videoDirectory,
+//     manualDirectory,
 //     extensions, launcher/core/launch params, extract* flags).
 //   * Scan-affecting flags (includeContent/ArtworkSubfolders,
 //     show*SubcollectionItems, hideSubfolderTitles, showHiddenFolders,

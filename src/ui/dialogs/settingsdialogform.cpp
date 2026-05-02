@@ -114,6 +114,9 @@ void SettingsDialog::saveCollectionFromUI(int index) {
   if (!validatePath(collection.videoDirectory, tr("Video Directory"))) {
     return;
   }
+  if (!validatePath(collection.manualDirectory, tr("Manual Directory"))) {
+    return;
+  }
   if (!validatePath(collection.launcherPath, tr("Launcher Path"))) {
     return;
   }

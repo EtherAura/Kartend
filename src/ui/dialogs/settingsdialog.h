@@ -88,6 +88,7 @@ private slots:
   void browseMediaDir();
   void browseArtworkDir();
   void browseVideoDir();
+  void browseManualDir();
   void browsePlaceholderArtwork();
   void checkForChanges();
   void onContentDirectoryChanged();

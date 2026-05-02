@@ -71,6 +71,11 @@ struct CollectionConfig {
   QString mediaDirectory;
   QString artworkDirectory;
   QString videoDirectory;
+  /// Directory that holds per-item manual files (PDF, EPUB, TXT, etc.).
+  /// Files are matched by completeBaseName(), parallel to artworkDirectory
+  /// and videoDirectory. Optional; when empty no manual is auto-discovered.
+  /// Per-item overrides live in `item_metadata.manual_path` (Kartend-9jdv).
+  QString manualDirectory;
   QString placeholderArtwork;
   QString collectionIcon;
   QStringList extensions;
@@ -142,6 +147,7 @@ struct CollectionConfig {
            launchParameters == other.launchParameters && mediaDirectory == other.mediaDirectory &&
            artworkDirectory == other.artworkDirectory &&
            videoDirectory == other.videoDirectory &&
+           manualDirectory == other.manualDirectory &&
            placeholderArtwork == other.placeholderArtwork &&
            collectionIcon == other.collectionIcon && extensions == other.extensions &&
            gridWidth == other.gridWidth &&
@@ -178,6 +184,7 @@ struct CollectionConfig {
 
   [[nodiscard]] bool hasArtworkDirectory() const { return !artworkDirectory.isEmpty(); }
   [[nodiscard]] bool hasVideoDirectory() const { return !videoDirectory.isEmpty(); }
+  [[nodiscard]] bool hasManualDirectory() const { return !manualDirectory.isEmpty(); }
 
   [[nodiscard]] bool hasPlaceholderArtwork() const { return !placeholderArtwork.isEmpty(); }
 
@@ -634,6 +641,25 @@ collectDescendantIndices(int parentIndex, const QList<CollectionConfig> &collect
     const CollectionConfig &c = collections[current];
     if (!c.artworkDirectory.trimmed().isEmpty()) {
       return c.artworkDirectory;
+    }
+    if (!c.isSubcollection || c.parentCollectionIndex < 0) {
+      break;
+    }
+    current = c.parentCollectionIndex;
+  }
+  return {};
+}
+
+[[nodiscard]] inline QString resolveManualDirectory(int collectionIndex,
+                                                    const QList<CollectionConfig> &collections) {
+  if (collectionIndex < 0 || collectionIndex >= collections.size()) {
+    return {};
+  }
+  int current = collectionIndex;
+  while (current >= 0 && current < collections.size()) {
+    const CollectionConfig &c = collections[current];
+    if (!c.manualDirectory.trimmed().isEmpty()) {
+      return c.manualDirectory;
     }
     if (!c.isSubcollection || c.parentCollectionIndex < 0) {
       break;
