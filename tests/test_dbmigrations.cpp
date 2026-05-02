@@ -98,6 +98,7 @@ private slots:
   void v3AddsMetaTable();
   void v4AddsFileSizeColumnAndIndex();
   void v5AddsItemMetadataTable();
+  void v6AddsItemArtworkTable();
   void preservesExistingDataAcrossUpgrade();
 };
 
@@ -117,8 +118,8 @@ void TestDbMigrations::appliesToCurrentVersion() {
 
   QCOMPARE(getUserVersion(db), 0);
   DbMigrations::applySchemaMigrations(db, "test");
-  // Current schema version is 5 (per dbmigrations.cpp).
-  QCOMPARE(getUserVersion(db), 5);
+  // Current schema version is 6 (per dbmigrations.cpp).
+  QCOMPARE(getUserVersion(db), 6);
 
   closeAndRemove(db, conn);
 }
@@ -244,7 +245,7 @@ void TestDbMigrations::v3AddsMetaTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 5);
+  QCOMPARE(getUserVersion(db), 6);
 
   // If FTS5 is available, the meta table should also exist.
   if (tableExists(db, "items_fts")) {
@@ -260,7 +261,7 @@ void TestDbMigrations::v4AddsFileSizeColumnAndIndex() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 5);
+  QCOMPARE(getUserVersion(db), 6);
   QVERIFY(tableHasColumn(db, "items", "file_size"));
   QVERIFY(indexExists(db, "idx_items_uuid_file_size"));
 
@@ -273,7 +274,7 @@ void TestDbMigrations::v5AddsItemMetadataTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 5);
+  QCOMPARE(getUserVersion(db), 6);
   QVERIFY(tableExists(db, "item_metadata"));
   // Required scraper-facing columns and feature-reserved columns.
   QVERIFY(tableHasColumn(db, "item_metadata", "collection_uuid"));
@@ -293,6 +294,40 @@ void TestDbMigrations::v5AddsItemMetadataTable() {
       q.exec("INSERT INTO item_metadata (collection_uuid, path, updated_at) "
              "VALUES ('u1', '/m/1', '2026-01-02')");
   QVERIFY(!dupAccepted);
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::v6AddsItemArtworkTable() {
+  const QString conn = "test_v6_item_artwork";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QCOMPARE(getUserVersion(db), 6);
+  QVERIFY(tableExists(db, "item_artwork"));
+  QVERIFY(tableHasColumn(db, "item_artwork", "collection_uuid"));
+  QVERIFY(tableHasColumn(db, "item_artwork", "path"));
+  QVERIFY(tableHasColumn(db, "item_artwork", "artwork_type"));
+  QVERIFY(tableHasColumn(db, "item_artwork", "manual_path"));
+  QVERIFY(tableHasColumn(db, "item_artwork", "updated_at"));
+  QVERIFY(indexExists(db, "idx_item_artwork_uuid_path"));
+
+  // Unique (collection_uuid, path, artwork_type) constraint must reject
+  // duplicates while still allowing different types for the same item.
+  QSqlQuery q(db);
+  QVERIFY(q.exec("INSERT INTO item_artwork (collection_uuid, path, "
+                 "artwork_type, updated_at) VALUES ('u1', '/i/1', 'box', "
+                 "'2026-01-01')"));
+  // Same (uuid, path, type) -> rejected.
+  const bool dupAccepted = q.exec("INSERT INTO item_artwork (collection_uuid, path, "
+                                  "artwork_type, updated_at) VALUES ('u1', "
+                                  "'/i/1', 'box', '2026-01-02')");
+  QVERIFY(!dupAccepted);
+  // Same (uuid, path) but different type -> allowed.
+  QVERIFY(q.exec("INSERT INTO item_artwork (collection_uuid, path, "
+                 "artwork_type, updated_at) VALUES ('u1', '/i/1', "
+                 "'screenshot', '2026-01-02')"));
 
   closeAndRemove(db, conn);
 }
