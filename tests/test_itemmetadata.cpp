@@ -50,6 +50,10 @@ private slots:
   void removeDeletesRow();
   void runtimeSecondsNullableRoundTrip();
   void saveRejectsEmptyPath();
+  void parseCustomFieldsHandlesEmptyAndMalformed();
+  void parseCustomFieldsPreservesOrderAndCoercesValues();
+  void serializeCustomFieldsPrunesEmptyKeys();
+  void customFieldsRoundTripThroughDb();
 };
 
 void TestItemMetadata::isEmptyOnDefaultConstructed() {
@@ -255,6 +259,92 @@ void TestItemMetadata::saveRejectsEmptyPath() {
   auto result = ItemMetadataStore::save(db, m);
   QVERIFY(result.isError());
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
+
+  closeAndRemove(db, conn);
+}
+
+void TestItemMetadata::parseCustomFieldsHandlesEmptyAndMalformed() {
+  using ItemMetadataStore::parseCustomFields;
+  QVERIFY(parseCustomFields(QString()).isEmpty());
+  QVERIFY(parseCustomFields("   ").isEmpty());
+  QVERIFY(parseCustomFields("not json").isEmpty());
+  // JSON arrays and primitives are not objects -> no fields.
+  QVERIFY(parseCustomFields("[1,2,3]").isEmpty());
+  QVERIFY(parseCustomFields("\"hello\"").isEmpty());
+}
+
+void TestItemMetadata::parseCustomFieldsPreservesOrderAndCoercesValues() {
+  // QJsonObject sorts keys alphabetically (case-sensitive, uppercase first)
+  // so parseCustomFields surfaces rows in a stable, predictable order.
+  const QString json = R"({"alpha":"first","Beta":"second","gamma":"third"})";
+  const auto fields = ItemMetadataStore::parseCustomFields(json);
+  QCOMPARE(fields.size(), 3);
+  QCOMPARE(fields[0].first, QStringLiteral("Beta"));
+  QCOMPARE(fields[0].second, QStringLiteral("second"));
+  QCOMPARE(fields[1].first, QStringLiteral("alpha"));
+  QCOMPARE(fields[2].first, QStringLiteral("gamma"));
+
+  // Non-string values are coerced via QJsonValue::toString(), which yields
+  // an empty string for numbers/bools/null. The keys should still appear so
+  // the user can re-edit them rather than silently losing the row.
+  const auto coerced =
+      ItemMetadataStore::parseCustomFields(R"({"num":42,"flag":true,"nope":null,"":"x"})");
+  QCOMPARE(coerced.size(), 3); // empty key dropped
+  // Sorted: "flag", "nope", "num".
+  QCOMPARE(coerced[0].first, QStringLiteral("flag"));
+  QCOMPARE(coerced[1].first, QStringLiteral("nope"));
+  QCOMPARE(coerced[2].first, QStringLiteral("num"));
+  QCOMPARE(coerced[2].second, QString());
+}
+
+void TestItemMetadata::serializeCustomFieldsPrunesEmptyKeys() {
+  using ItemMetadataStore::CustomFieldList;
+  using ItemMetadataStore::serializeCustomFields;
+
+  // All-empty list -> empty string so the DB column stores NULL via the
+  // existing nullableString() bind path, instead of literal `{}`.
+  QVERIFY(serializeCustomFields({}).isEmpty());
+  QVERIFY(serializeCustomFields(CustomFieldList{{QString(), "v"}, {"   ", "v"}}).isEmpty());
+
+  const QString out = serializeCustomFields(CustomFieldList{
+      {"first", "1"}, {"second", QString()}, {"   ", "skip"}, {"third", "3"}});
+  // Round-trip back through the parser. Output ordering is alphabetical:
+  // "first", "second", "third".
+  const auto reparsed = ItemMetadataStore::parseCustomFields(out);
+  QCOMPARE(reparsed.size(), 3);
+  QCOMPARE(reparsed[0].first, QStringLiteral("first"));
+  QCOMPARE(reparsed[1].first, QStringLiteral("second"));
+  QCOMPARE(reparsed[1].second, QString());
+  QCOMPARE(reparsed[2].first, QStringLiteral("third"));
+}
+
+void TestItemMetadata::customFieldsRoundTripThroughDb() {
+  const QString conn = "im_custom_fields_db";
+  auto db = openMemoryDb(conn);
+
+  ItemMetadata m;
+  m.collectionUuid = "uuid-1";
+  m.path = "/p";
+  m.customFields = ItemMetadataStore::serializeCustomFields(
+      ItemMetadataStore::CustomFieldList{{"developer-note", "fixed crash"}, {"shelf", "A12"}});
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+
+  auto loaded = ItemMetadataStore::load(db, "uuid-1", "/p").value();
+  // isEmpty() must flip to false even when the only populated field is the
+  // custom_fields blob -- the sidebar depends on this to show Details.
+  QVERIFY(!loaded.isEmpty());
+  const auto parsed = ItemMetadataStore::parseCustomFields(loaded.customFields);
+  QCOMPARE(parsed.size(), 2);
+  // Alphabetical: "developer-note" < "shelf".
+  QCOMPARE(parsed[0].first, QStringLiteral("developer-note"));
+  QCOMPARE(parsed[0].second, QStringLiteral("fixed crash"));
+  QCOMPARE(parsed[1].first, QStringLiteral("shelf"));
+
+  // Saving an empty list clears the row's customFields back to NULL.
+  m.customFields = ItemMetadataStore::serializeCustomFields({});
+  QVERIFY(m.customFields.isEmpty());
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+  QVERIFY(ItemMetadataStore::load(db, "uuid-1", "/p").value().customFields.isEmpty());
 
   closeAndRemove(db, conn);
 }

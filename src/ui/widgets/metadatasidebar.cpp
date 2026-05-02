@@ -369,6 +369,15 @@ void MetadataSidebar::setExtendedMetadata(const ItemMetadataStore::ItemMetadata 
   appendDetailRow(tr("Runtime"), formatRuntime(metadata.runtimeSeconds));
   appendDetailRow(tr("Tags"), formatTags(metadata.tags), /*wrap=*/true);
 
+  // User-defined custom fields (Kartend-hpln). Rendered after the structured
+  // fields so they appear as a contiguous block at the bottom of Details.
+  // parseCustomFields() returns rows in alphabetical key order for stable
+  // display regardless of edit history.
+  const auto customFields = ItemMetadataStore::parseCustomFields(metadata.customFields);
+  for (const auto &pair : customFields) {
+    appendDetailRow(pair.first, pair.second, /*wrap=*/true);
+  }
+
   m_detailsContainer->show();
 }
 

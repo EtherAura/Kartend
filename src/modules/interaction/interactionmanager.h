@@ -174,6 +174,10 @@ public:
   void stopScrollAnimations();
   // Shows a right-click context menu for the item at the given visual index.
   void showContextMenu(ItemWidget *widget, int visualIndex, const QPoint &globalPos);
+  // Opens the custom-fields editor for the given media item (Kartend-hpln).
+  // Persists changes via DatabaseManager::saveItemMetadata() and refreshes
+  // the sidebar so new fields render immediately.
+  void editCustomFields(const QString &filePath, const QString &itemName);
   [[nodiscard]] bool isRestoringSelection() const;
   [[nodiscard]] int targetRestoreIndex() const;
   [[nodiscard]] bool forceImmediateCenter() const;
