@@ -1,22 +1,41 @@
-// Looping muted preview video widget for the metadata sidebar.
+// Looping preview video with audio (Kartend-ahg + Kartend-ljey).
+//
+// Renders frames into a QLabel via QVideoSink rather than using
+// QVideoWidget. QVideoWidget's native-window backend plays audio fine but
+// fails to show frames on Wayland / certain GL drivers when the top-level
+// window isn't maximized — the subsurface for the video output never gets
+// realized for the parent's current geometry. Going through QLabel keeps
+// frames in Qt's normal paint pipeline and works regardless of window
+// state.
 #include "videopreviewwidget.h"
 
 #include <QAudioOutput>
 #include <QHideEvent>
+#include <QImage>
+#include <QLabel>
 #include <QMediaPlayer>
+#include <QPixmap>
 #include <QShowEvent>
+#include <QSizePolicy>
 #include <QUrl>
 #include <QVBoxLayout>
-#include <QVideoWidget>
+#include <QVideoFrame>
+#include <QVideoSink>
 
 VideoPreviewWidget::VideoPreviewWidget(QWidget *parent) : QWidget(parent) {
   auto *layout = new QVBoxLayout(this);
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(0);
 
-  m_videoWidget = new QVideoWidget(this);
-  m_videoWidget->setAspectRatioMode(Qt::KeepAspectRatio);
-  layout->addWidget(m_videoWidget);
+  m_imageLabel = new QLabel(this);
+  m_imageLabel->setAlignment(Qt::AlignCenter);
+  // Allow the label to shrink below its sizeHint inside layouts (it will
+  // otherwise try to keep the last pixmap's natural size). Pixmap scaling
+  // happens in renderFrame so the label never owns the scaling logic.
+  m_imageLabel->setMinimumSize(1, 1);
+  m_imageLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+  m_imageLabel->setScaledContents(false);
+  layout->addWidget(m_imageLabel);
 
   m_player = new QMediaPlayer(this);
   m_audioOutput = new QAudioOutput(this);
@@ -26,8 +45,13 @@ VideoPreviewWidget::VideoPreviewWidget(QWidget *parent) : QWidget(parent) {
   m_audioOutput->setMuted(false);
   m_audioOutput->setVolume(1.0);
   m_player->setAudioOutput(m_audioOutput);
-  m_player->setVideoOutput(m_videoWidget);
+
+  m_sink = new QVideoSink(this);
+  m_player->setVideoSink(m_sink);
   m_player->setLoops(QMediaPlayer::Infinite);
+
+  connect(m_sink, &QVideoSink::videoFrameChanged, this,
+          [this](const QVideoFrame &frame) { renderFrame(frame); });
 }
 
 VideoPreviewWidget::~VideoPreviewWidget() {
@@ -35,6 +59,37 @@ VideoPreviewWidget::~VideoPreviewWidget() {
     m_player->stop();
     m_player->setSource(QUrl());
   }
+}
+
+void VideoPreviewWidget::renderFrame(const QVideoFrame &frame) {
+  if (!frame.isValid() || !m_imageLabel) {
+    return;
+  }
+  // Drop frames arriving after stop() has cleared the source. Without
+  // this, a residual frame in the sink's queue could repaint the label
+  // after the user has navigated away.
+  if (m_currentPath.isEmpty()) {
+    return;
+  }
+  QImage img = frame.toImage();
+  if (img.isNull()) {
+    return;
+  }
+  m_currentImage = img;
+  paintCurrentImageScaled();
+}
+
+void VideoPreviewWidget::paintCurrentImageScaled() {
+  if (m_currentImage.isNull() || !m_imageLabel) {
+    return;
+  }
+  const QSize target = m_imageLabel->size();
+  if (target.width() <= 0 || target.height() <= 0) {
+    return;
+  }
+  QPixmap pix = QPixmap::fromImage(m_currentImage);
+  pix = pix.scaled(target, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+  m_imageLabel->setPixmap(pix);
 }
 
 void VideoPreviewWidget::playVideo(const QString &filePath) {
@@ -59,6 +114,10 @@ void VideoPreviewWidget::stop() {
   m_player->stop();
   m_player->setSource(QUrl());
   m_currentPath.clear();
+  m_currentImage = QImage();
+  if (m_imageLabel) {
+    m_imageLabel->clear();
+  }
 }
 
 void VideoPreviewWidget::hideEvent(QHideEvent *event) {
@@ -71,11 +130,19 @@ void VideoPreviewWidget::hideEvent(QHideEvent *event) {
 }
 
 void VideoPreviewWidget::showEvent(QShowEvent *event) {
-  // Resume playback if a source is loaded and we were previously paused by
-  // hideEvent().
+  // Resume playback if a source is loaded and we were previously paused
+  // by hideEvent().
   if (m_player && !m_currentPath.isEmpty() &&
       m_player->playbackState() != QMediaPlayer::PlayingState) {
     m_player->play();
   }
   QWidget::showEvent(event);
+}
+
+void VideoPreviewWidget::resizeEvent(QResizeEvent *event) {
+  QWidget::resizeEvent(event);
+  // Re-scale the last received frame to match the new geometry so the
+  // label doesn't briefly show a wrong-aspect pixmap until the next
+  // frame arrives from the decoder.
+  paintCurrentImageScaled();
 }
