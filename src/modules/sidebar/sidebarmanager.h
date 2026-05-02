@@ -13,6 +13,7 @@ class MetadataSidebar;
 class ItemWidget;
 class SettingsManager;
 class ArtworkManager;
+class DatabaseManager;
 struct ApplicationContext;
 
 struct SidebarManagerSetup {
@@ -24,6 +25,7 @@ struct SidebarManagerSetup {
   QScrollArea *scrollArea = nullptr;
   SettingsManager *settingsManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
+  DatabaseManager *databaseManager = nullptr;
   QList<CollectionConfig> *collections = nullptr;
 
   SETUP_GETTER_DECL(MetadataSidebar *, Sidebar)
@@ -31,6 +33,7 @@ struct SidebarManagerSetup {
   SETUP_GETTER_DECL(QScrollArea *, ScrollArea)
   SETUP_GETTER_DECL(SettingsManager *, SettingsManager)
   SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
+  SETUP_GETTER_DECL(DatabaseManager *, DatabaseManager)
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
 };
 
@@ -62,6 +65,7 @@ private:
   QScrollArea *m_itemScrollArea;
   SettingsManager *m_settingsManager = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
+  DatabaseManager *m_databaseManager = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   bool m_sidebarVisible = false;
   int m_currentCollectionIndex;

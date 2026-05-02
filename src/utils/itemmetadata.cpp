@@ -1,0 +1,180 @@
+// Read/write access to the item_metadata table.
+//
+// The table stores extended per-item metadata (Kartend-rx64) plus columns
+// reserved for sibling features (manual_path for Kartend-9jdv, custom_fields
+// for Kartend-hpln). All structured fields are optional and skipped from
+// the sidebar when empty.
+#include "itemmetadata.h"
+
+#include <QDateTime>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
+
+#include "errorutils.h"
+
+using ErrorUtils::ErrorCode;
+using ErrorUtils::ErrorContext;
+
+namespace ItemMetadataStore {
+
+bool ItemMetadata::isEmpty() const {
+  return title.isEmpty() && description.isEmpty() && genre.isEmpty() && developer.isEmpty() &&
+         publisher.isEmpty() && releaseDate.isEmpty() && contentRating.isEmpty() &&
+         players.isEmpty() && runtimeSeconds < 0 && tags.isEmpty() && customFields.isEmpty() &&
+         manualPath.isEmpty();
+}
+
+namespace {
+
+constexpr const char *SELECT_SQL =
+    "SELECT title, description, genre, developer, publisher, release_date, "
+    "content_rating, players, runtime_seconds, tags, custom_fields, "
+    "manual_path, source, updated_at "
+    "FROM item_metadata WHERE collection_uuid = ? AND path = ?";
+
+constexpr const char *UPSERT_SQL =
+    "INSERT INTO item_metadata ("
+    "collection_uuid, path, title, description, genre, developer, publisher, "
+    "release_date, content_rating, players, runtime_seconds, tags, "
+    "custom_fields, manual_path, source, updated_at"
+    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+    "ON CONFLICT(collection_uuid, path) DO UPDATE SET "
+    "title=excluded.title, description=excluded.description, "
+    "genre=excluded.genre, developer=excluded.developer, "
+    "publisher=excluded.publisher, release_date=excluded.release_date, "
+    "content_rating=excluded.content_rating, players=excluded.players, "
+    "runtime_seconds=excluded.runtime_seconds, tags=excluded.tags, "
+    "custom_fields=excluded.custom_fields, manual_path=excluded.manual_path, "
+    "source=excluded.source, updated_at=excluded.updated_at";
+
+constexpr const char *DELETE_SQL =
+    "DELETE FROM item_metadata WHERE collection_uuid = ? AND path = ?";
+
+QVariant nullableString(const QString &value) {
+  return value.isEmpty() ? QVariant(QMetaType(QMetaType::QString)) : QVariant(value);
+}
+
+QVariant nullableRuntime(int seconds) {
+  return seconds < 0 ? QVariant(QMetaType(QMetaType::Int)) : QVariant(seconds);
+}
+
+} // namespace
+
+ErrorUtils::Result<ItemMetadata> load(QSqlDatabase &db, const QString &collectionUuid,
+                                      const QString &path) {
+  ItemMetadata metadata;
+  metadata.collectionUuid = collectionUuid;
+  metadata.path = path;
+
+  if (!db.isOpen()) {
+    return ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
+                                 "ItemMetadataStore::load");
+  }
+
+  QSqlQuery q(db);
+  if (!q.prepare(SELECT_SQL)) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                               "Failed to prepare item_metadata select",
+                               "ItemMetadataStore::load")
+        .withDetails(q.lastError().text());
+  }
+  q.addBindValue(collectionUuid);
+  q.addBindValue(path);
+  if (!q.exec()) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to query item_metadata",
+                               "ItemMetadataStore::load")
+        .withDetails(q.lastError().text());
+  }
+  if (!q.next()) {
+    return metadata; // No row -> empty metadata with keys preserved.
+  }
+
+  metadata.title = q.value(0).toString();
+  metadata.description = q.value(1).toString();
+  metadata.genre = q.value(2).toString();
+  metadata.developer = q.value(3).toString();
+  metadata.publisher = q.value(4).toString();
+  metadata.releaseDate = q.value(5).toString();
+  metadata.contentRating = q.value(6).toString();
+  metadata.players = q.value(7).toString();
+  const QVariant runtime = q.value(8);
+  metadata.runtimeSeconds = runtime.isNull() ? -1 : runtime.toInt();
+  metadata.tags = q.value(9).toString();
+  metadata.customFields = q.value(10).toString();
+  metadata.manualPath = q.value(11).toString();
+  metadata.source = q.value(12).toString();
+  metadata.updatedAt = q.value(13).toString();
+  return metadata;
+}
+
+ErrorUtils::Result<bool> save(QSqlDatabase &db, const ItemMetadata &metadata) {
+  if (!db.isOpen()) {
+    return ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
+                                 "ItemMetadataStore::save");
+  }
+  if (metadata.path.isEmpty()) {
+    return ErrorContext::warning(ErrorCode::InvalidArgument,
+                                 "Cannot save item metadata without a path",
+                                 "ItemMetadataStore::save");
+  }
+
+  QSqlQuery q(db);
+  if (!q.prepare(UPSERT_SQL)) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                               "Failed to prepare item_metadata upsert",
+                               "ItemMetadataStore::save")
+        .withDetails(q.lastError().text());
+  }
+
+  const QString updatedAt = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+  q.addBindValue(metadata.collectionUuid);
+  q.addBindValue(metadata.path);
+  q.addBindValue(nullableString(metadata.title));
+  q.addBindValue(nullableString(metadata.description));
+  q.addBindValue(nullableString(metadata.genre));
+  q.addBindValue(nullableString(metadata.developer));
+  q.addBindValue(nullableString(metadata.publisher));
+  q.addBindValue(nullableString(metadata.releaseDate));
+  q.addBindValue(nullableString(metadata.contentRating));
+  q.addBindValue(nullableString(metadata.players));
+  q.addBindValue(nullableRuntime(metadata.runtimeSeconds));
+  q.addBindValue(nullableString(metadata.tags));
+  q.addBindValue(nullableString(metadata.customFields));
+  q.addBindValue(nullableString(metadata.manualPath));
+  q.addBindValue(nullableString(metadata.source));
+  q.addBindValue(updatedAt);
+
+  if (!q.exec()) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to upsert item_metadata",
+                               "ItemMetadataStore::save")
+        .withDetails(q.lastError().text());
+  }
+  return true;
+}
+
+ErrorUtils::Result<bool> remove(QSqlDatabase &db, const QString &collectionUuid,
+                                const QString &path) {
+  if (!db.isOpen()) {
+    return ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
+                                 "ItemMetadataStore::remove");
+  }
+  QSqlQuery q(db);
+  if (!q.prepare(DELETE_SQL)) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                               "Failed to prepare item_metadata delete",
+                               "ItemMetadataStore::remove")
+        .withDetails(q.lastError().text());
+  }
+  q.addBindValue(collectionUuid);
+  q.addBindValue(path);
+  if (!q.exec()) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to delete item_metadata",
+                               "ItemMetadataStore::remove")
+        .withDetails(q.lastError().text());
+  }
+  return true;
+}
+
+} // namespace ItemMetadataStore

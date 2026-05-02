@@ -11,6 +11,7 @@
 
 #include "collectionutils.h"
 #include "errorutils.h"
+#include "itemmetadata.h"
 
 class SessionManager;
 
@@ -71,6 +72,13 @@ public:
   [[nodiscard]] qint64
   countCollectionRecursive(int collectionIndex,
                            const QList<CollectionConfig> &allCollections) const;
+
+  /// Loads extended metadata for the given (collectionUuid, path) using the
+  /// main-thread connection. Returns an empty `ItemMetadata` (with the keys
+  /// preserved) when no row exists. Errors are logged via ErrorUtils and an
+  /// empty struct is returned so the sidebar can degrade gracefully.
+  [[nodiscard]] ItemMetadataStore::ItemMetadata loadItemMetadata(const QString &collectionUuid,
+                                                                 const QString &path) const;
 
 signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);

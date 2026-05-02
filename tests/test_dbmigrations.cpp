@@ -97,6 +97,7 @@ private slots:
   void v2AddsPerformanceIndexes();
   void v3AddsMetaTable();
   void v4AddsFileSizeColumnAndIndex();
+  void v5AddsItemMetadataTable();
   void preservesExistingDataAcrossUpgrade();
 };
 
@@ -116,8 +117,8 @@ void TestDbMigrations::appliesToCurrentVersion() {
 
   QCOMPARE(getUserVersion(db), 0);
   DbMigrations::applySchemaMigrations(db, "test");
-  // Current schema version is 4 (per dbmigrations.cpp).
-  QCOMPARE(getUserVersion(db), 4);
+  // Current schema version is 5 (per dbmigrations.cpp).
+  QCOMPARE(getUserVersion(db), 5);
 
   closeAndRemove(db, conn);
 }
@@ -243,7 +244,7 @@ void TestDbMigrations::v3AddsMetaTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 4);
+  QCOMPARE(getUserVersion(db), 5);
 
   // If FTS5 is available, the meta table should also exist.
   if (tableExists(db, "items_fts")) {
@@ -259,9 +260,39 @@ void TestDbMigrations::v4AddsFileSizeColumnAndIndex() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 4);
+  QCOMPARE(getUserVersion(db), 5);
   QVERIFY(tableHasColumn(db, "items", "file_size"));
   QVERIFY(indexExists(db, "idx_items_uuid_file_size"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::v5AddsItemMetadataTable() {
+  const QString conn = "test_v5_item_metadata";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QCOMPARE(getUserVersion(db), 5);
+  QVERIFY(tableExists(db, "item_metadata"));
+  // Required scraper-facing columns and feature-reserved columns.
+  QVERIFY(tableHasColumn(db, "item_metadata", "collection_uuid"));
+  QVERIFY(tableHasColumn(db, "item_metadata", "path"));
+  QVERIFY(tableHasColumn(db, "item_metadata", "description"));
+  QVERIFY(tableHasColumn(db, "item_metadata", "genre"));
+  QVERIFY(tableHasColumn(db, "item_metadata", "runtime_seconds"));
+  QVERIFY(tableHasColumn(db, "item_metadata", "custom_fields"));
+  QVERIFY(tableHasColumn(db, "item_metadata", "manual_path"));
+  QVERIFY(indexExists(db, "idx_item_metadata_uuid_path"));
+
+  // Unique (collection_uuid, path) constraint must reject duplicates.
+  QSqlQuery q(db);
+  QVERIFY(q.exec("INSERT INTO item_metadata (collection_uuid, path, updated_at) "
+                 "VALUES ('u1', '/m/1', '2026-01-01')"));
+  const bool dupAccepted =
+      q.exec("INSERT INTO item_metadata (collection_uuid, path, updated_at) "
+             "VALUES ('u1', '/m/1', '2026-01-02')");
+  QVERIFY(!dupAccepted);
 
   closeAndRemove(db, conn);
 }

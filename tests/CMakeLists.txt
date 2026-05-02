@@ -224,6 +224,7 @@ add_executable(test_databasemanager
   ${SRC_DIR}/utils/settingsutils.cpp
   ${SRC_DIR}/utils/pathutils.cpp
   ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/itemmetadata.cpp
   ${SRC_DIR}/utils/loggingcategories.cpp
 )
 target_include_directories(test_databasemanager PRIVATE
@@ -353,6 +354,22 @@ target_link_libraries(test_dbmigrations
   Qt6::Test
 )
 add_test(NAME DbMigrations COMMAND test_dbmigrations)
+
+# ItemMetadata storage round-trip tests
+add_executable(test_itemmetadata
+  test_itemmetadata.cpp
+  ${SRC_DIR}/utils/itemmetadata.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+)
+target_include_directories(test_itemmetadata PRIVATE
+  ${SRC_DIR}/utils
+)
+target_link_libraries(test_itemmetadata
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME ItemMetadata COMMAND test_itemmetadata)
 
 # SearchUtils smoke tests (header-only enum/struct)
 add_executable(test_searchutils test_searchutils.cpp)

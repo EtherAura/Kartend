@@ -321,6 +321,7 @@ void MainWindow::setupSidebar() {
     setup.mainLayout = m_mainHorizontalLayout;
     setup.settingsManager = getSettingsManager();
     setup.artworkManager = getArtworkManager();
+    setup.databaseManager = getDatabaseManager();
 
     getSidebarManager()->setupReferences(setup);
 

@@ -143,6 +143,10 @@ void MetadataSidebar::clearMetadata() {
   ui->artworkDisplay->setPixmap(emptyPixmap);
   schedulePreviewVideo(QString());
   showArtworkOnly();
+  if (m_detailsContainer) {
+    clearDetailsSection();
+    m_detailsContainer->hide();
+  }
 }
 
 // Updates file information fields including size, modification date, and file
@@ -262,4 +266,142 @@ void MetadataSidebar::schedulePreviewVideo(const QString &videoPath) {
   if (!videoPath.isEmpty()) {
     m_videoStartTimer->start();
   }
+}
+
+// Lazily construct the Details section. Appended once to the bottom of the
+// content layout; subsequent calls reuse the existing widgets so we do not
+// churn the layout on every selection change.
+void MetadataSidebar::ensureDetailsSection() {
+  if (m_detailsContainer) {
+    return;
+  }
+  auto *contentLayout = qobject_cast<QVBoxLayout *>(ui->contentWidget->layout());
+  if (!contentLayout) {
+    return;
+  }
+
+  m_detailsContainer = new QWidget(ui->contentWidget);
+  auto *outer = new QVBoxLayout(m_detailsContainer);
+  outer->setContentsMargins(0, 0, 0, 0);
+  outer->setSpacing(UIConstants::Metadata::LABEL_SPACING);
+
+  auto *separator = new QFrame(m_detailsContainer);
+  separator->setFrameShape(QFrame::HLine);
+  separator->setFrameShadow(QFrame::Sunken);
+  separator->setStyleSheet("color: palette(mid);");
+  outer->addWidget(separator);
+
+  m_detailsTitle = new QLabel(tr("Details"), m_detailsContainer);
+  QFont titleFont = m_detailsTitle->font();
+  titleFont.setBold(true);
+  titleFont.setPointSize(11);
+  m_detailsTitle->setFont(titleFont);
+  m_detailsTitle->setStyleSheet("color: palette(highlight); padding: 4px 0px;");
+  outer->addWidget(m_detailsTitle);
+
+  m_detailsLayout = new QVBoxLayout();
+  m_detailsLayout->setSpacing(UIConstants::Metadata::LABEL_SPACING);
+  outer->addLayout(m_detailsLayout);
+
+  contentLayout->addWidget(m_detailsContainer);
+  m_detailsContainer->hide();
+}
+
+void MetadataSidebar::clearDetailsSection() {
+  if (!m_detailsLayout) {
+    return;
+  }
+  while (QLayoutItem *child = m_detailsLayout->takeAt(0)) {
+    if (QWidget *w = child->widget()) {
+      w->deleteLater();
+    }
+    delete child;
+  }
+}
+
+void MetadataSidebar::appendDetailRow(const QString &label, const QString &value, bool wrap) {
+  if (!m_detailsLayout || value.trimmed().isEmpty()) {
+    return;
+  }
+  auto *labelWidget = new QLabel(label + ":", m_detailsContainer);
+  QFont labelFont = labelWidget->font();
+  labelFont.setBold(true);
+  labelWidget->setFont(labelFont);
+  labelWidget->setStyleSheet("color: palette(windowtext); padding: 2px 0px;");
+
+  auto *valueWidget = new QLabel(value, m_detailsContainer);
+  valueWidget->setStyleSheet("color: palette(windowtext); padding: 2px 0px 8px 12px;");
+  valueWidget->setWordWrap(wrap);
+  valueWidget->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+  m_detailsLayout->addWidget(labelWidget);
+  m_detailsLayout->addWidget(valueWidget);
+}
+
+void MetadataSidebar::setExtendedMetadata(const ItemMetadataStore::ItemMetadata &metadata) {
+  if (metadata.isEmpty()) {
+    if (m_detailsContainer) {
+      clearDetailsSection();
+      m_detailsContainer->hide();
+    }
+    return;
+  }
+
+  ensureDetailsSection();
+  if (!m_detailsContainer) {
+    return;
+  }
+  clearDetailsSection();
+
+  // If a scraped title is present, override the file-derived itemName so the
+  // user sees the canonical title rather than the rom file stem.
+  if (!metadata.title.isEmpty()) {
+    ui->itemNameValue->setText(metadata.title);
+  }
+
+  appendDetailRow(tr("Description"), metadata.description, /*wrap=*/true);
+  appendDetailRow(tr("Genre"), metadata.genre);
+  appendDetailRow(tr("Developer"), metadata.developer);
+  appendDetailRow(tr("Publisher"), metadata.publisher);
+  appendDetailRow(tr("Release date"), metadata.releaseDate);
+  appendDetailRow(tr("Rating"), metadata.contentRating);
+  appendDetailRow(tr("Players"), metadata.players);
+  appendDetailRow(tr("Runtime"), formatRuntime(metadata.runtimeSeconds));
+  appendDetailRow(tr("Tags"), formatTags(metadata.tags), /*wrap=*/true);
+
+  m_detailsContainer->show();
+}
+
+QString MetadataSidebar::formatRuntime(int seconds) {
+  if (seconds < 0) {
+    return {};
+  }
+  const int hours = seconds / 3600;
+  const int minutes = (seconds % 3600) / 60;
+  const int secs = seconds % 60;
+  if (hours > 0) {
+    return QStringLiteral("%1h %2m").arg(hours).arg(minutes, 2, 10, QChar('0'));
+  }
+  if (minutes > 0) {
+    return QStringLiteral("%1m %2s").arg(minutes).arg(secs, 2, 10, QChar('0'));
+  }
+  return QStringLiteral("%1s").arg(secs);
+}
+
+QString MetadataSidebar::formatTags(const QString &raw) {
+  // Accept either a JSON array string or a comma-separated list. We do not
+  // pull in QJsonDocument here to keep this widget lightweight; the Details
+  // section just renders whatever the source provides with light cleanup.
+  QString trimmed = raw.trimmed();
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    trimmed.chop(1);
+    trimmed.remove(0, 1);
+    trimmed.replace('"', QString());
+  }
+  QStringList parts = trimmed.split(',', Qt::SkipEmptyParts);
+  for (QString &p : parts) {
+    p = p.trimmed();
+  }
+  parts.removeAll(QString());
+  return parts.join(", ");
 }

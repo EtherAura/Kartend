@@ -16,6 +16,7 @@
 #include "databasemanager.h"
 #include "dbmigrations.h"
 #include "errorutils.h"
+#include "itemmetadata.h"
 #include "pathutils.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
@@ -49,6 +50,21 @@ auto DatabaseManager::countCollectionRecursive(int collectionIndex,
     total += countCollectionByUuid(descendantUuid);
   }
   return total;
+}
+
+auto DatabaseManager::loadItemMetadata(const QString &collectionUuid, const QString &path) const
+    -> ItemMetadataStore::ItemMetadata {
+  // Use the main-thread connection. Reads are tiny single-row lookups; the
+  // worker thread continues to own writes for scan/persist.
+  auto result = ItemMetadataStore::load(const_cast<QSqlDatabase &>(m_db), collectionUuid, path);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    ItemMetadataStore::ItemMetadata empty;
+    empty.collectionUuid = collectionUuid;
+    empty.path = path;
+    return empty;
+  }
+  return result.value();
 }
 
 // Count items globally across all collections

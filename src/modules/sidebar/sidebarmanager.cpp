@@ -2,8 +2,11 @@
 #include "sidebarmanager.h"
 #include "applicationcontext.h"
 #include "artworkmanager.h"
+#include "collectionutils.h"
+#include "databasemanager.h"
 #include "itemwidget.h"
 #include "metadatasidebar.h"
+#include "pathutils.h"
 #include "settingsmanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
@@ -28,6 +31,7 @@ SETUP_GETTER_DEF_UI_SAME(SidebarManagerSetup, QWidget *, ItemsPage, itemsPage)
 SETUP_GETTER_DEF_UI(SidebarManagerSetup, QScrollArea *, ScrollArea, scrollArea, itemScrollArea)
 SETUP_GETTER_DEF_MGR_SAME(SidebarManagerSetup, SettingsManager *, SettingsManager, settingsManager)
 SETUP_GETTER_DEF_MGR_SAME(SidebarManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_MGR_SAME(SidebarManagerSetup, DatabaseManager *, DatabaseManager, databaseManager)
 SETUP_GETTER_DEF_COL_SAME(SidebarManagerSetup, QList<CollectionConfig> *, Collections, collections)
 
 SidebarManager::SidebarManager(QObject *parent)
@@ -41,6 +45,7 @@ void SidebarManager::setupReferences(const SidebarManagerSetup &setup) {
   m_itemScrollArea = setup.getScrollArea();
   m_settingsManager = setup.getSettingsManager();
   m_artworkManager = setup.getArtworkManager();
+  m_databaseManager = setup.getDatabaseManager();
   m_collections = setup.getCollections();
 }
 
@@ -68,13 +73,42 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
   // Get artwork + video directories from current collection config
   QString artworkDirectory;
   QString videoDirectory;
+  QString collectionName;
+  QString expandedMediaDir;
   if (m_collections && m_currentCollectionIndex >= 0 &&
       m_currentCollectionIndex < m_collections->size()) {
-    artworkDirectory = (*m_collections)[m_currentCollectionIndex].artworkDirectory;
-    videoDirectory = (*m_collections)[m_currentCollectionIndex].videoDirectory;
+    const CollectionConfig &collection = (*m_collections)[m_currentCollectionIndex];
+    artworkDirectory = collection.artworkDirectory;
+    videoDirectory = collection.videoDirectory;
+    collectionName = collection.name;
+    expandedMediaDir =
+        PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
   }
 
   m_MetadataSidebar->setMetadata(filePath, itemName, artworkDirectory, videoDirectory);
+
+  // Look up extended metadata for the selected item. The owning collection of
+  // the file may differ from the currently-displayed collection in
+  // showAllSubcollectionItems mode, so prefer the file's resolved collection
+  // when the database knows about it; fall back to the current collection.
+  if (m_databaseManager) {
+    QString metaUuid;
+    const int owningIndex = m_databaseManager->getCollectionIndexForFile(filePath);
+    if (owningIndex >= 0 && m_collections && owningIndex < m_collections->size()) {
+      const CollectionConfig &owning = (*m_collections)[owningIndex];
+      const QString owningMediaDir =
+          PathUtils::validateAndExpandPath(owning.mediaDirectory, owning.name);
+      metaUuid = CollectionUtils::computeCollectionUuid(owning.name, owningMediaDir);
+    } else if (!collectionName.isEmpty()) {
+      metaUuid = CollectionUtils::computeCollectionUuid(collectionName, expandedMediaDir);
+    }
+    if (!metaUuid.isEmpty()) {
+      m_MetadataSidebar->setExtendedMetadata(
+          m_databaseManager->loadItemMetadata(metaUuid, filePath));
+    } else {
+      m_MetadataSidebar->setExtendedMetadata({});
+    }
+  }
 }
 
 void SidebarManager::applySidebarStateForCollection(int collectionIndex) {

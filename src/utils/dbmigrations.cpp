@@ -101,7 +101,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
     return;
   }
 
-  constexpr int CURRENT_SCHEMA_VERSION = 4;
+  constexpr int CURRENT_SCHEMA_VERSION = 5;
   const int version = getUserVersion(db);
   if (version >= CURRENT_SCHEMA_VERSION) {
     return;
@@ -248,6 +248,42 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
                 origin, "idx_items_uuid_file_size");
 
     setUserVersion(db, 4);
+    mutableVersion = 4;
+  }
+
+  if (mutableVersion < 5) {
+    // v5: Add item_metadata table for extended per-item metadata
+    // (scraper-populated structured fields + user-defined custom fields +
+    // optional manual path override). Keyed by (collection_uuid, path) so
+    // entries survive item id renumbering across rescans.
+    ensureIndex(db,
+                "CREATE TABLE IF NOT EXISTS item_metadata ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "collection_uuid TEXT NOT NULL DEFAULT '', "
+                "path TEXT NOT NULL, "
+                "title TEXT, "
+                "description TEXT, "
+                "genre TEXT, "
+                "developer TEXT, "
+                "publisher TEXT, "
+                "release_date TEXT, "
+                "content_rating TEXT, "
+                "players TEXT, "
+                "runtime_seconds INTEGER, "
+                "tags TEXT, "
+                "custom_fields TEXT, "
+                "manual_path TEXT, "
+                "source TEXT, "
+                "updated_at TEXT NOT NULL DEFAULT '', "
+                "UNIQUE(collection_uuid, path)"
+                ")",
+                origin, "item_metadata");
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_item_metadata_uuid_path ON "
+                "item_metadata(collection_uuid, path)",
+                origin, "idx_item_metadata_uuid_path");
+
+    setUserVersion(db, 5);
   }
 }
 
