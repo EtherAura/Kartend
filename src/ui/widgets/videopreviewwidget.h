@@ -13,10 +13,12 @@ class QVideoWidget;
 QT_END_NAMESPACE
 
 /**
- * @brief Widget that plays a single, looping, muted preview video.
+ * @brief Widget that plays a single, looping preview video with audio.
  *
  * Owns one QMediaPlayer + QVideoWidget and reuses them across calls to
  * playVideo(). Stops playback automatically on hide and on destruction.
+ * Audio plays at full volume — selection-change debouncing in callers
+ * (MetadataSidebar uses 500ms) governs how often it kicks in.
  */
 class VideoPreviewWidget : public QWidget {
   Q_OBJECT
