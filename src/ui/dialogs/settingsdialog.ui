@@ -1548,6 +1548,20 @@
               </property>
              </widget>
             </item>
+            <item row="16" column="0">
+             <widget class="QLabel" name="runtimeDetectionLabel">
+              <property name="text">
+               <string>Runtime Detection:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="16" column="1">
+             <widget class="QCheckBox" name="runtimeDetectionCheckBox">
+              <property name="toolTip">
+               <string>Track launched items so Kartend hides behind a &quot;Now Playing&quot; overlay while running and returns automatically when the program closes</string>
+              </property>
+             </widget>
+            </item>
                 </layout>
                </item>
               <item>

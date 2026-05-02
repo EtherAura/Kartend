@@ -42,6 +42,7 @@ class MetadataSidebar;
 class LoadingOverlay;
 class EmptyStateWidget;
 class SplashOverlay;
+class NowPlayingOverlay;
 class MenuController;
 
 class MainWindow : public QMainWindow {
@@ -108,6 +109,7 @@ private:
   bool m_isShuttingDown = false;
   std::unique_ptr<MenuController> m_menuController;
   SplashOverlay *m_splashOverlay = nullptr;
+  NowPlayingOverlay *m_nowPlayingOverlay = nullptr;
   bool m_startupSplashHandled = false;
   bool m_windowWasInactive = false;
 

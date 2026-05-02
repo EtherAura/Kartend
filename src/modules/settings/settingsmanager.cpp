@@ -128,6 +128,9 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   // Splash screens
   settings.bootSplashEnabled = s.value("bootSplashEnabled", true).toBool();
   settings.resumeFocusSplashEnabled = s.value("resumeFocusSplashEnabled", true).toBool();
+
+  // Runtime detection (Kartend-qxv) — opt-in
+  settings.runtimeDetectionEnabled = s.value("runtimeDetectionEnabled", false).toBool();
   s.endGroup();
 
   settings.lastSelectedItems.clear();
@@ -182,6 +185,9 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.attractModeIdleTimeoutSec = settings.attractModeIdleTimeoutSec;
   m_generalSettings.attractModeScrollSpeed = settings.attractModeScrollSpeed;
 
+
+  // Runtime detection (Kartend-qxv)
+  m_generalSettings.runtimeDetectionEnabled = settings.runtimeDetectionEnabled;
   // Splash screens
   m_generalSettings.bootSplashEnabled = settings.bootSplashEnabled;
   m_generalSettings.resumeFocusSplashEnabled = settings.resumeFocusSplashEnabled;
@@ -228,6 +234,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("startupCollection", m_generalSettings.startupCollection);
   s.setValue("attractModeEnabled", m_generalSettings.attractModeEnabled);
   s.setValue("attractModeIdleTimeoutSec", m_generalSettings.attractModeIdleTimeoutSec);
+  s.setValue("runtimeDetectionEnabled", m_generalSettings.runtimeDetectionEnabled);
   s.setValue("attractModeScrollSpeed", m_generalSettings.attractModeScrollSpeed);
   s.setValue("bootSplashEnabled", m_generalSettings.bootSplashEnabled);
   s.setValue("resumeFocusSplashEnabled", m_generalSettings.resumeFocusSplashEnabled);

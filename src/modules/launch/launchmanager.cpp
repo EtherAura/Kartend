@@ -34,7 +34,15 @@ SETUP_GETTER_DEF_COL_SAME(LaunchManagerSetup, QList<CollectionConfig> *, Collect
 LaunchManager::LaunchManager(QObject *parent) : QObject(parent) {}
 
 void LaunchManager::setupReferences(const LaunchManagerSetup &setup) {
+  m_ctx = setup.ctx;
   m_collections = setup.getCollections();
+  if (m_ctx) {
+    m_generalSettings = m_ctx->collection.generalSettings;
+  }
+}
+
+bool LaunchManager::runtimeDetectionEnabled() const {
+  return m_generalSettings && m_generalSettings->runtimeDetectionEnabled;
 }
 
 bool LaunchManager::canLaunch(const QString &filePath) const {
@@ -282,6 +290,18 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
     return;
   }
 
+  // Kartend-qxv: when runtime detection is enabled, route through a tracked
+  // QProcess so we can emit started/finished signals and let the UI sleep
+  // behind a "Now Playing" overlay. Otherwise fall back to the historical
+  // detached launch which leaves Kartend ignorant of the child lifetime.
+  if (runtimeDetectionEnabled()) {
+    if (launchTracked(launcherPath, cmd, launchFilePath)) {
+      return;
+    }
+    // launchTracked already showed a message box on failure to start.
+    return;
+  }
+
   bool success = QProcess::startDetached(launcherPath, cmd.arguments);
 
   if (!success) {
@@ -293,6 +313,65 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
 
     QMessageBox::critical(nullptr, "Launch Error", errorMsg);
   }
+}
+
+bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchCommand &cmd,
+                                  const QString &filePath) {
+  // Only one tracked child at a time; reject overlapping launches so the
+  // overlay state stays coherent.
+  if (m_trackedChild) {
+    QMessageBox::information(
+        nullptr, "Already Running",
+        QString("Another tracked item is currently running:\n%1").arg(m_trackedFilePath));
+    return false;
+  }
+
+  auto *child = new QProcess(this);
+  m_trackedChild = child;
+  m_trackedFilePath = filePath;
+
+  // Detach the child from Kartend's stdio so a busy launcher doesn't fill
+  // our pipes (and to avoid blocking on closed channels at exit).
+  child->setProcessChannelMode(QProcess::ForwardedChannels);
+  child->setInputChannelMode(QProcess::ForwardedInputChannel);
+
+  const QString displayName = QFileInfo(filePath).completeBaseName();
+
+  connect(child, &QProcess::started, this,
+          [this, filePath, displayName]() { emit runtimeStarted(filePath, displayName); });
+
+  // QProcess emits exactly one of finished() or errorOccurred()-with-FailedToStart
+  // before the object is safe to delete. Funnel both through a single cleanup
+  // lambda so the UI always sees a balanced started/finished pair.
+  auto cleanup = [this, child, filePath]() {
+    if (m_trackedChild != child) {
+      return; // Already cleaned up.
+    }
+    m_trackedChild.clear();
+    m_trackedFilePath.clear();
+    emit runtimeFinished(filePath);
+    child->deleteLater();
+  };
+
+  connect(child, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+          [cleanup](int /*code*/, QProcess::ExitStatus /*status*/) { cleanup(); });
+
+  connect(child, &QProcess::errorOccurred, this,
+          [this, child, cleanup](QProcess::ProcessError error) {
+            // Only treat FailedToStart as terminal here — finished() will fire
+            // for crashes after start, and we want to keep the overlay up
+            // until the process is actually gone.
+            if (error == QProcess::FailedToStart) {
+              QMessageBox::critical(
+                  nullptr, "Launch Error",
+                  QString("Failed to start tracked launcher:\n%1").arg(child->errorString()));
+              cleanup();
+            }
+          });
+
+  child->start(launcherPath, cmd.arguments);
+  // start() returns void; FailedToStart is reported via errorOccurred.
+  return true;
 }
 
 auto LaunchManager::parseParameters(const QString &paramString) -> ErrorUtils::Result<QStringList> {

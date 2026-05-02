@@ -364,6 +364,10 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
                                            m_originalGeneralSettings.resumeFocusSplashEnabled) {
     return true;
   }
+  if (ui->runtimeDetectionCheckBox && ui->runtimeDetectionCheckBox->isChecked() !=
+                                          m_originalGeneralSettings.runtimeDetectionEnabled) {
+    return true;
+  }
   if (ui->startupCollectionComboBox &&
       ui->startupCollectionComboBox->currentData().toString() !=
           m_originalGeneralSettings.startupCollection) {

@@ -19,11 +19,13 @@
 #include "databasemanager.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
+#include "launchmanager.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "menucontroller.h"
 #include "metadatasidebar.h"
 #include "navigationmanager.h"
+#include "nowplayingoverlay.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
@@ -299,6 +301,28 @@ void MainWindow::setupManagerConnections() {
   m_appContext.managers.eventManager = getInteractionManager()->eventManager();
   m_appContext.managers.searchManager = getInteractionManager()->searchManager();
   m_appContext.managers.launchManager = getInteractionManager()->launchManager();
+
+  // Kartend-qxv: when runtime detection is enabled, the LaunchManager spawns
+  // a tracked QProcess and emits started/finished signals. Show a "Now
+  // Playing" overlay while the child runs and raise the window when it exits.
+  if (auto *launch = getInteractionManager()->launchManager()) {
+    connect(launch, &LaunchManager::runtimeStarted, this,
+            [this](const QString & /*filePath*/, const QString &displayName) {
+              if (m_nowPlayingOverlay) {
+                m_nowPlayingOverlay->showOverlay(displayName);
+              }
+            });
+    connect(launch, &LaunchManager::runtimeFinished, this,
+            [this](const QString & /*filePath*/) {
+              if (m_nowPlayingOverlay) {
+                m_nowPlayingOverlay->hideOverlay();
+              }
+              // Bring Kartend back to the foreground when the tracked child
+              // exits — the user expects "return on close" behavior.
+              raise();
+              activateWindow();
+            });
+  }
 
   // Now set up NavigationManager with fully populated context
   NavigationManagerSetup navSetup;

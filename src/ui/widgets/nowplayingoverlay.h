@@ -1,0 +1,48 @@
+#ifndef NOWPLAYINGOVERLAY_H
+#define NOWPLAYINGOVERLAY_H
+
+#include <QString>
+#include <QWidget>
+
+QT_BEGIN_NAMESPACE
+class QLabel;
+class QPropertyAnimation;
+QT_END_NAMESPACE
+
+/**
+ * @brief Full-window "Now Playing" overlay shown while a runtime-tracked
+ *        child process is running (Kartend-qxv).
+ *
+ * Unlike SplashOverlay this does not auto-hide — it stays visible until
+ * `hideOverlay()` is called (typically when the tracked child exits).
+ * Mouse events are not consumed; the overlay is purely cosmetic so the
+ * user can still alt-tab freely.
+ */
+class NowPlayingOverlay : public QWidget {
+public:
+  explicit NowPlayingOverlay(QWidget *parent = nullptr);
+  ~NowPlayingOverlay() override;
+
+  void showOverlay(const QString &displayName);
+  void hideOverlay();
+  [[nodiscard]] bool isActive() const { return m_active; }
+
+protected:
+  void paintEvent(QPaintEvent *event) override;
+  void resizeEvent(QResizeEvent *event) override;
+  bool eventFilter(QObject *watched, QEvent *event) override;
+
+private:
+  void setupUI();
+  void updatePosition();
+
+  QWidget *m_cardWidget = nullptr;
+  QLabel *m_iconLabel = nullptr;
+  QLabel *m_titleLabel = nullptr;
+  QLabel *m_subtitleLabel = nullptr;
+  QLabel *m_hintLabel = nullptr;
+  QPropertyAnimation *m_fadeAnimation = nullptr;
+  bool m_active = false;
+};
+
+#endif // NOWPLAYINGOVERLAY_H
