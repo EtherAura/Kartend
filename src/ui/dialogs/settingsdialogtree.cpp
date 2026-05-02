@@ -207,6 +207,7 @@ void SettingsDialog::addCollection() {
   newCollection.launchParameters = "";
   newCollection.mediaDirectory = "";
   newCollection.artworkDirectory = "";
+  newCollection.videoDirectory = "";
   newCollection.extensions = QStringList();
   newCollection.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
   newCollection.sidebarVisible = false;
@@ -389,8 +390,8 @@ auto SettingsDialog::wouldCreateCircularReference(int childIndex, int potentialP
 // alignment, scrollbar/sidebar visibility. We deliberately do NOT touch:
 //   * Identity fields (name, parentCollectionIndex, isSubcollection,
 //     collectionIcon).
-//   * Path/content fields (mediaDirectory, artworkDirectory, extensions,
-//     launcher/core/launch params, extract* flags).
+//   * Path/content fields (mediaDirectory, artworkDirectory, videoDirectory,
+//     extensions, launcher/core/launch params, extract* flags).
 //   * Scan-affecting flags (includeContent/ArtworkSubfolders,
 //     show*SubcollectionItems, hideSubfolderTitles, showHiddenFolders,
 //     showAllSubfolderItems) — propagating these would silently trigger

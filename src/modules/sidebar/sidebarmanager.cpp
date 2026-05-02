@@ -65,14 +65,16 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
   QString filePath = selectedItem->getFilePath();
   QString itemName = selectedItem->getItemName();
 
-  // Get artwork directory from current collection config
+  // Get artwork + video directories from current collection config
   QString artworkDirectory;
+  QString videoDirectory;
   if (m_collections && m_currentCollectionIndex >= 0 &&
       m_currentCollectionIndex < m_collections->size()) {
     artworkDirectory = (*m_collections)[m_currentCollectionIndex].artworkDirectory;
+    videoDirectory = (*m_collections)[m_currentCollectionIndex].videoDirectory;
   }
 
-  m_MetadataSidebar->setMetadata(filePath, itemName, artworkDirectory);
+  m_MetadataSidebar->setMetadata(filePath, itemName, artworkDirectory, videoDirectory);
 }
 
 void SidebarManager::applySidebarStateForCollection(int collectionIndex) {

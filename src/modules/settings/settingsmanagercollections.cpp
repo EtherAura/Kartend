@@ -117,6 +117,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
     config.launchParameters = settings.value("launchParameters").toString();
     config.mediaDirectory = settings.value("mediaDirectory").toString();
     config.artworkDirectory = settings.value("artworkDirectory").toString();
+    config.videoDirectory = settings.value("videoDirectory").toString();
     config.placeholderArtwork = settings.value("placeholderArtwork").toString();
     config.includeContentSubfolders = settings.value("includeContentSubfolders", false).toBool();
     config.includeArtworkSubfolders = settings.value("includeArtworkSubfolders", false).toBool();
@@ -275,6 +276,8 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
                       sanitizePersistedPath(c.mediaDirectory, "mediaDirectory", sectionName));
     settings.setValue("artworkDirectory",
                       sanitizePersistedPath(c.artworkDirectory, "artworkDirectory", sectionName));
+    settings.setValue("videoDirectory",
+                      sanitizePersistedPath(c.videoDirectory, "videoDirectory", sectionName));
     settings.setValue(
         "placeholderArtwork",
         sanitizePersistedPath(c.placeholderArtwork, "placeholderArtwork", sectionName));

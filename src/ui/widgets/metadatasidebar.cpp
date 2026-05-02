@@ -5,11 +5,15 @@
 #include <QFile>
 #include <QPainter>
 #include <QPixmap>
+#include <QTimer>
+#include <QVBoxLayout>
 
 #include "extensionutils.h"
 #include "metadatasidebar.h"
 #include "pathutils.h"
 #include "uiconstants.h"
+#include "videopreviewwidget.h"
+#include "videoutils.h"
 
 // Creates metadata sidebar with scrollable layout for displaying item
 // information and artwork
@@ -32,6 +36,39 @@ MetadataSidebar::MetadataSidebar(QWidget *parent) : QWidget(parent), ui(new Ui::
   ui->contentWidget->setPalette(contentPalette);
 
   setFixedWidth(UIConstants::Sidebar::FIXED_WIDTH);
+
+  // Insert a preview video widget into the artwork pane, sized to match the
+  // artwork display. Hidden by default; shown only when a preview video is
+  // found for the current selection.
+  m_videoPreview = new VideoPreviewWidget(this);
+  m_videoPreview->setFixedSize(UIConstants::Metadata::ARTWORK_SIZE,
+                               UIConstants::Metadata::ARTWORK_SIZE);
+  m_videoPreview->hide();
+  if (auto *artworkParentLayout =
+          qobject_cast<QVBoxLayout *>(ui->artworkDisplay->parentWidget()->layout())) {
+    int idx = artworkParentLayout->indexOf(ui->artworkDisplay);
+    if (idx >= 0) {
+      artworkParentLayout->insertWidget(idx + 1, m_videoPreview);
+    } else {
+      artworkParentLayout->addWidget(m_videoPreview);
+    }
+  }
+
+  // Debounce timer: avoid loading a video for every transient selection
+  // change while the user is scrolling. Single-shot, restarted on each new
+  // selection that has a video.
+  m_videoStartTimer = new QTimer(this);
+  m_videoStartTimer->setSingleShot(true);
+  m_videoStartTimer->setInterval(UIConstants::Sidebar::VIDEO_PREVIEW_DEBOUNCE_MS);
+  connect(m_videoStartTimer, &QTimer::timeout, this, [this]() {
+    if (m_pendingVideoPath.isEmpty() || !m_videoPreview) {
+      return;
+    }
+    ui->artworkDisplay->hide();
+    m_videoPreview->show();
+    m_videoPreview->playVideo(m_pendingVideoPath);
+  });
+
   clearMetadata();
 }
 
@@ -42,7 +79,8 @@ MetadataSidebar::~MetadataSidebar() {
 // Sets metadata fields and loads centered artwork from the configured
 // artwork directory or a sibling "artwork" directory if present
 void MetadataSidebar::setMetadata(const QString &filePath, const QString &itemName,
-                                  const QString &artworkDirectory) {
+                                  const QString &artworkDirectory,
+                                  const QString &videoDirectory) {
   if (filePath.isEmpty()) {
     clearMetadata();
     return;
@@ -69,6 +107,15 @@ void MetadataSidebar::setMetadata(const QString &filePath, const QString &itemNa
     loadArtwork(baseName, siblingArtworkDir);
   }
 
+  // Resolve and (debounced) start preview video. Always reset the artwork
+  // pane back to the artwork display first; the timer will swap to the video
+  // widget once the debounce elapses if a video was found.
+  showArtworkOnly();
+  const QString videoPath = videoDirectory.isEmpty()
+                                ? QString()
+                                : VideoUtils::findVideoForFile(filePath, videoDirectory);
+  schedulePreviewVideo(videoPath);
+
   ui->titleLabel->show();
   ui->artworkLabel->show();
   ui->artworkDisplay->show();
@@ -94,6 +141,8 @@ void MetadataSidebar::clearMetadata() {
   QPixmap emptyPixmap(UIConstants::Metadata::ARTWORK_SIZE, UIConstants::Metadata::ARTWORK_SIZE);
   emptyPixmap.fill(palette().color(QPalette::Mid));
   ui->artworkDisplay->setPixmap(emptyPixmap);
+  schedulePreviewVideo(QString());
+  showArtworkOnly();
 }
 
 // Updates file information fields including size, modification date, and file
@@ -188,5 +237,29 @@ void MetadataSidebar::setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy) {
     ui->scrollArea->setHorizontalScrollBarPolicy(policy);
     ui->scrollArea->updateGeometry();
     QApplication::processEvents();
+  }
+}
+
+// Stops any current preview video and shows the static artwork display
+// instead. Called whenever selection changes (before the debounce timer
+// resolves) and when metadata is cleared.
+void MetadataSidebar::showArtworkOnly() {
+  if (m_videoPreview) {
+    m_videoPreview->stop();
+    m_videoPreview->hide();
+  }
+  ui->artworkDisplay->show();
+}
+
+// Schedule preview video playback after the debounce interval. Passing an
+// empty path cancels any pending playback.
+void MetadataSidebar::schedulePreviewVideo(const QString &videoPath) {
+  m_pendingVideoPath = videoPath;
+  if (!m_videoStartTimer) {
+    return;
+  }
+  m_videoStartTimer->stop();
+  if (!videoPath.isEmpty()) {
+    m_videoStartTimer->start();
   }
 }

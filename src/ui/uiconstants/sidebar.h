@@ -26,6 +26,8 @@ inline constexpr int METRICS_RECALC_DELAY_MS = 200;
 inline constexpr int LAYOUT_NOTIFY_DELAY_MS = 100;
 /// Delay before initial center scroll on show
 inline constexpr int INITIAL_CENTER_SCROLL_DELAY_MS = 50;
+/// Delay after selection settles before starting preview video playback
+inline constexpr int VIDEO_PREVIEW_DEBOUNCE_MS = 500;
 } // namespace Sidebar
 } // namespace UIConstants
 

@@ -40,7 +40,7 @@ set(CMAKE_AUTOUIC_SEARCH_PATHS
 )
 
 # Qt6 required
-set(QT_REQUIRED_COMPONENTS Core Gui Widgets Sql Concurrent)
+set(QT_REQUIRED_COMPONENTS Core Gui Widgets Sql Concurrent Multimedia MultimediaWidgets)
 find_package(Qt6 COMPONENTS ${QT_REQUIRED_COMPONENTS} REQUIRED)
 
 # Optional: Qt Gamepad support
@@ -120,6 +120,8 @@ target_link_libraries(${KARTEND_LIB_TARGET}
     Qt6::Widgets
     Qt6::Sql
     Qt6::Concurrent
+    Qt6::Multimedia
+    Qt6::MultimediaWidgets
 )
 target_link_libraries(kartend PRIVATE ${KARTEND_LIB_TARGET})
 

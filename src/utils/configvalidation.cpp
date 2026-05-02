@@ -84,6 +84,20 @@ ValidationResult validateCollection(const CollectionConfig &config, int index, b
     }
   }
 
+  // Video directory validation (optional but validate if present)
+  if (!config.videoDirectory.isEmpty()) {
+    QString expandedPath = config.videoDirectory;
+    if (expandedPath.startsWith("~")) {
+      expandedPath = QDir::homePath() + expandedPath.mid(1);
+    }
+    QFileInfo videoInfo(expandedPath);
+    if (!videoInfo.exists()) {
+      result.addWarning(prefix + "video directory does not exist: " + config.videoDirectory);
+    } else if (!videoInfo.isDir()) {
+      result.addWarning(prefix + "video path is not a directory: " + config.videoDirectory);
+    }
+  }
+
   // Launcher validation (optional but validate if present)
   if (!config.launcherPath.isEmpty()) {
     QString launcherPath = config.launcherPath;
