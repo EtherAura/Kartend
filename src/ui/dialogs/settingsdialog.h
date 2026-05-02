@@ -185,6 +185,16 @@ private:
   /// Returns the number of collections actually mutated.
   int propagateAppearanceToIndicesSilently(const QList<int> &targetIndices);
 
+  /// Kartend-c06: enable/disable form fields that don't participate in
+  /// scope propagation. When the active Settings Mode is anything other
+  /// than `Current`, the curated appearance/layout subset is the only data
+  /// that gets copied to the wider scope on Save — so we gray out the
+  /// non-propagatable controls (paths, extensions, launcher, scan/extract
+  /// flags, parent linkage) to make it obvious that editing them only
+  /// affects the currently-selected collection. Controls remain visible so
+  /// the user can still inspect their values.
+  void applyScopeFieldGating();
+
   Ui::SettingsDialog *ui;
   QTreeWidget *collectionTreeWidget;
   QTreeWidgetItem *currentTreeItem;

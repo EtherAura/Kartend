@@ -252,7 +252,47 @@ void SettingsDialog::onSettingsScopeChanged(int comboIndex) {
     return;
   }
   m_settingsScope = newScope;
+  applyScopeFieldGating();
   emit settingsScopeChanged(m_settingsScope);
+}
+
+void SettingsDialog::applyScopeFieldGating() {
+  // Kartend-c06: when the user picks a wider scope, edits to fields outside
+  // the curated propagation subset only ever affect the currently-selected
+  // collection. Disable those controls so the UI matches the propagation
+  // behavior — paths, extensions, launcher/core, extract & scan flags, and
+  // parent linkage. The list mirrors copyAppearanceAndLayoutFields()'s
+  // exclusions in settingsdialogtree.cpp.
+  const bool enabled = (m_settingsScope == SettingsScope::Current);
+  QWidget *const gatedFields[] = {
+      ui->parentCollectionComboBox,
+      ui->mediaDirLineEdit,
+      ui->browseMediaDirButton,
+      ui->recursiveImportContentButton,
+      ui->artworkDirLineEdit,
+      ui->browseArtworkDirButton,
+      ui->placeholderArtworkLineEdit,
+      ui->browsePlaceholderArtworkButton,
+      ui->fileExtensionsLineEdit,
+      ui->launcherLineEdit,
+      ui->browseLauncherButton,
+      ui->coreLineEdit,
+      ui->browseCoreButton,
+      ui->launchParamsLineEdit,
+      ui->extractArchivesCheckBox,
+      ui->extractedExtensionLineEdit,
+      ui->includeContentSubfoldersCheckBox,
+      ui->includeArtworkSubfoldersCheckBox,
+      ui->showAllSubcollectionItemsCheckBox,
+      ui->showAllSubfolderItemsCheckBox,
+      ui->hideSubfolderTitlesCheckBox,
+      ui->showHiddenFoldersCheckBox,
+  };
+  for (QWidget *w : gatedFields) {
+    if (w) {
+      w->setEnabled(enabled);
+    }
+  }
 }
 
 auto SettingsDialog::spacingInternalToUi(int spacing) -> int {

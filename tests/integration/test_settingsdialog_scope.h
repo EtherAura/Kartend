@@ -20,6 +20,8 @@ private slots:
   void testDefaultScopeIsCurrent();
   void testScopeChangeEmitsSignal();
   void testScopeChangeSignalDoesNotFireForSameValue();
+  void testNonPropagatableFieldsDisabledInWiderScope();
+  void testFieldsReEnabledWhenScopeReturnsToCurrent();
 };
 
 #endif // KARTEND_TESTS_TEST_SETTINGSDIALOG_SCOPE_H
