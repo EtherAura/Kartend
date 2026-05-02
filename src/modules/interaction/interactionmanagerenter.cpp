@@ -315,8 +315,7 @@ void InteractionManager::onMediaPreviewRequested(ItemWidget *widget, int visualI
   // showAllSubcollectionItems mode (mirrors expand-mode's behavior).
   const QString artworkDir =
       SettingsUtils::expandConfigVariables(owner.artworkDirectory, owner.name);
-  const QString videoDir =
-      SettingsUtils::expandConfigVariables(owner.videoDirectory, owner.name);
+  const QString videoDir = SettingsUtils::expandConfigVariables(owner.videoDirectory, owner.name);
 
   m_scrollManager->showMediaPreview(filePath, artworkDir, videoDir);
 }

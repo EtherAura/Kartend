@@ -24,8 +24,8 @@
 #include "videothumbnailextractor.h"
 #include "videoutils.h"
 
-#include <QPolygon>
 #include <QPointer>
+#include <QPolygon>
 
 // Creates metadata sidebar with scrollable layout for displaying item
 // information and artwork
@@ -158,6 +158,7 @@ void MetadataSidebar::clearMetadata() {
     clearDetailsSection();
     m_detailsContainer->hide();
   }
+  setArtworkEditEnabled(false);
   setArtworkGallery({});
 }
 
@@ -480,23 +481,40 @@ void MetadataSidebar::ensureGallerySection() {
                             UIConstants::Metadata::LABEL_SPACING);
   outer->setSpacing(UIConstants::Metadata::LABEL_SPACING);
 
+  // Title row pairs the section heading with the per-item "Edit links…"
+  // button (Kartend-53vk). Keeping them on one row saves vertical space and
+  // makes the affordance discoverable next to the thumbnails it controls.
+  auto *titleRow = new QHBoxLayout();
+  titleRow->setContentsMargins(0, 0, 0, 0);
+  titleRow->setSpacing(UIConstants::Metadata::LABEL_SPACING);
+
   auto *title = new QLabel(tr("Media gallery"), m_galleryContainer);
   QFont titleFont = title->font();
   titleFont.setBold(true);
   title->setFont(titleFont);
   title->setStyleSheet("color: palette(windowtext); padding: 2px 0px;");
-  outer->addWidget(title);
+  titleRow->addWidget(title);
+  titleRow->addStretch(1);
+
+  m_galleryEditButton = new QPushButton(tr("Edit links…"), m_galleryContainer);
+  m_galleryEditButton->setCursor(Qt::PointingHandCursor);
+  m_galleryEditButton->setToolTip(
+      tr("Pick override files for any artwork type (standard or custom)."));
+  m_galleryEditButton->setVisible(m_galleryEditEnabled);
+  connect(m_galleryEditButton, &QPushButton::clicked, this, &MetadataSidebar::editArtworkRequested);
+  titleRow->addWidget(m_galleryEditButton);
+  outer->addLayout(titleRow);
 
   // Horizontal layout wrapped in a plain widget; if more than ~4 thumbs are
   // present they wrap onto the next row by virtue of QLayout's setAlignment.
   // A QScrollArea was considered but adds vertical chrome that fights the
   // sidebar's own scroll area.
-  auto *thumbsHost = new QWidget(m_galleryContainer);
-  m_galleryLayout = new QHBoxLayout(thumbsHost);
+  m_galleryThumbsHost = new QWidget(m_galleryContainer);
+  m_galleryLayout = new QHBoxLayout(m_galleryThumbsHost);
   m_galleryLayout->setContentsMargins(0, 0, 0, 0);
   m_galleryLayout->setSpacing(UIConstants::Metadata::GALLERY_THUMB_SPACING);
   m_galleryLayout->setAlignment(Qt::AlignLeft);
-  outer->addWidget(thumbsHost);
+  outer->addWidget(m_galleryThumbsHost);
 
   // Insert just below the artwork preview pane (and the dynamically-added
   // video preview, if any) so all visual artwork stays clustered. Falling
@@ -537,7 +555,19 @@ void MetadataSidebar::setArtworkGallery(const QList<GalleryEntry> &entries) {
   if (entries.isEmpty()) {
     if (m_galleryContainer) {
       clearGallerySection();
-      m_galleryContainer->hide();
+      if (m_galleryThumbsHost) {
+        m_galleryThumbsHost->hide();
+      }
+      // Keep the section visible when the user can still edit links so
+      // the "Edit links…" button stays available for items with no current
+      // artwork — that's the exact case where adding a manual link matters
+      // most. When edit is disabled we fall back to the legacy "hide
+      // section entirely" behaviour.
+      if (m_galleryEditEnabled) {
+        m_galleryContainer->show();
+      } else {
+        m_galleryContainer->hide();
+      }
     }
     return;
   }
@@ -610,13 +640,46 @@ void MetadataSidebar::setArtworkGallery(const QList<GalleryEntry> &entries) {
     m_galleryLayout->addWidget(button);
   }
 
-  // If every entry failed to load we end up with an empty gallery; hide
-  // the section instead of leaving a bare title.
+  // If every entry failed to load we end up with an empty gallery. When
+  // the user can edit links we keep the section visible (so the affordance
+  // remains reachable); otherwise hide it to avoid leaving a bare title.
   if (m_galleryLayout->count() == 0) {
-    m_galleryContainer->hide();
+    if (m_galleryThumbsHost) {
+      m_galleryThumbsHost->hide();
+    }
+    if (m_galleryEditEnabled) {
+      m_galleryContainer->show();
+    } else {
+      m_galleryContainer->hide();
+    }
     return;
   }
+  if (m_galleryThumbsHost) {
+    m_galleryThumbsHost->show();
+  }
   m_galleryContainer->show();
+}
+
+void MetadataSidebar::setArtworkEditEnabled(bool enabled) {
+  m_galleryEditEnabled = enabled;
+  if (enabled) {
+    ensureGallerySection();
+  }
+  if (m_galleryEditButton) {
+    m_galleryEditButton->setVisible(enabled);
+  }
+  // When the section was previously hidden (e.g. an item with no artwork
+  // and edit disabled), turning edit back on should reveal at least the
+  // title + button so the user has somewhere to click. Conversely, when we
+  // disable editing on a section that has no thumbnails, hide it again.
+  if (m_galleryContainer) {
+    const bool hasThumbs = m_galleryLayout && m_galleryLayout->count() > 0;
+    if (enabled || hasThumbs) {
+      m_galleryContainer->show();
+    } else {
+      m_galleryContainer->hide();
+    }
+  }
 }
 
 QPixmap MetadataSidebar::makeVideoPlaceholder(int iconSize) const {

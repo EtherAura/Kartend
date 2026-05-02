@@ -93,6 +93,17 @@ public:
   [[nodiscard]] QList<ItemArtworkStore::ItemArtwork> loadItemArtwork(const QString &collectionUuid,
                                                                      const QString &path) const;
 
+  /// Persists a single artwork override row via the main-thread connection
+  /// (Kartend-53vk). Used by the per-item manual-link dialog. Returns true
+  /// on success; logs the structured error and returns false otherwise.
+  bool saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwork);
+
+  /// Removes a single artwork override row via the main-thread connection
+  /// (Kartend-53vk). Used by the per-item manual-link dialog when the user
+  /// clears an override. Succeeds even when no matching row exists.
+  bool removeItemArtwork(const QString &collectionUuid, const QString &path,
+                         const QString &artworkType);
+
 signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void itemCountLoaded(int count);

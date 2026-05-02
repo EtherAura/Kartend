@@ -141,6 +141,22 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
     }
     config.extensions = normalized;
 
+    // User-defined custom artwork type ids (Kartend-53vk). Stored as
+    // comma-separated values; each token is trimmed. Empty tokens and
+    // duplicates are dropped at load time so a sloppy edit can't wedge the
+    // sidebar gallery (the type id doubles as the artwork_type DB key).
+    QString customArtTypesStr = settings.value("customArtworkTypes").toString();
+    QStringList customArtTypes = customArtTypesStr.split(',', Qt::SkipEmptyParts);
+    QStringList cleanedCustomTypes;
+    cleanedCustomTypes.reserve(customArtTypes.size());
+    for (QString &type : customArtTypes) {
+      type = type.trimmed();
+      if (!type.isEmpty() && !cleanedCustomTypes.contains(type)) {
+        cleanedCustomTypes.append(type);
+      }
+    }
+    config.customArtworkTypes = cleanedCustomTypes;
+
     config.gridWidth = settings.value("gridWidth", 4).toInt();
     config.sidebarVisible = settings.value("sidebarVisible", false).toBool();
     config.showAllSubcollectionItems = settings.value("showAllSubcollectionItems", false).toBool();
@@ -294,6 +310,7 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue("expandMode", c.expandMode);
     settings.setValue("collectionIcon", c.collectionIcon);
     settings.setValue("extensions", c.extensions.join(", "));
+    settings.setValue("customArtworkTypes", c.customArtworkTypes.join(", "));
     settings.setValue("gridWidth", c.gridWidth);
     settings.setValue("sidebarVisible", c.sidebarVisible);
     settings.setValue("showAllSubcollectionItems", c.showAllSubcollectionItems);

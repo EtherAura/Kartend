@@ -199,6 +199,10 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->fileExtensionsLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
   }
+  if (ui->customArtworkTypesLineEdit) {
+    connect(ui->customArtworkTypesLineEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
   if (ui->gridWidthSpinBox) {
     connect(ui->gridWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::onGridWidthChanged);

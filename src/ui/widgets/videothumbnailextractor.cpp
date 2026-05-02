@@ -71,8 +71,7 @@ void VideoThumbnailExtractor::requestFrame(const QString &videoPath) {
 
   if (m_cache.contains(videoPath)) {
     const QPixmap pix = m_cache.value(videoPath);
-    QTimer::singleShot(0, this,
-                       [this, videoPath, pix]() { emit frameReady(videoPath, pix); });
+    QTimer::singleShot(0, this, [this, videoPath, pix]() { emit frameReady(videoPath, pix); });
     return;
   }
 

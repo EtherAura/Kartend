@@ -95,6 +95,30 @@ auto DatabaseManager::loadItemArtwork(const QString &collectionUuid, const QStri
   return result.value();
 }
 
+bool DatabaseManager::saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwork) {
+  // Mirrors saveItemMetadata: user-driven single-row upsert on the main-thread
+  // connection so the per-item link dialog can react to success/failure
+  // without rerouting through the worker thread.
+  auto result = ItemArtworkStore::save(m_db, artwork);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    emit errorOccurred(result.error());
+    return false;
+  }
+  return true;
+}
+
+bool DatabaseManager::removeItemArtwork(const QString &collectionUuid, const QString &path,
+                                        const QString &artworkType) {
+  auto result = ItemArtworkStore::remove(m_db, collectionUuid, path, artworkType);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    emit errorOccurred(result.error());
+    return false;
+  }
+  return true;
+}
+
 // Count items globally across all collections
 auto DatabaseManager::countGlobal(const QList<CollectionConfig> &allCollections) -> qint64 {
   Q_UNUSED(allCollections)

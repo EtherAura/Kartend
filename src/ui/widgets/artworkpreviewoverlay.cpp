@@ -50,8 +50,7 @@ void ArtworkPreviewOverlay::ensureVideoPreview() {
     return;
   }
   m_videoPreview = new VideoPreviewWidget(this);
-  m_videoPreview->setStyleSheet(
-      "border: 2px solid palette(highlight); border-radius: 8px;");
+  m_videoPreview->setStyleSheet("border: 2px solid palette(highlight); border-radius: 8px;");
   m_videoPreview->hide();
 }
 
