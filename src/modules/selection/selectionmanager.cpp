@@ -40,26 +40,26 @@ Q_LOGGING_CATEGORY(lcSelectionManager, "kartend.selectionmanager")
   } while (0)
 
 // SelectionManagerSetup getter definitions
-SETUP_GETTER_DEF_CTX_ONLY(SelectionManagerSetup, InteractionStateHolder *, InteractionState,
+SETUP_GETTER_DEF_MGR_CTX_ONLY(SelectionManagerSetup, InteractionStateHolder *, InteractionState,
                           interactionState)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, SidebarManager *, SidebarManager, sidebarManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, SessionManager *, SessionManager, sessionManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, SettingsManager *, SettingsManager, settingsManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, NavigationManager *, NavigationManager,
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, SidebarManager *, SidebarManager, sidebarManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, SessionManager *, SessionManager, sessionManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, SettingsManager *, SettingsManager, settingsManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, NavigationManager *, NavigationManager,
                       navigationManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, AnimationManager *, AnimationManager, animationManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, ViewportManager *, ViewportManager, viewportManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, MetadataSidebar *, Sidebar, sidebar)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QWidget *, ItemsPage, itemsPage)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QWidget *, GridContainer, gridContainer)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QList<CollectionConfig> *, Collections, collections)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, AnimationManager *, AnimationManager, animationManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, ViewportManager *, ViewportManager, viewportManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, MetadataSidebar *, Sidebar, sidebar)
+SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_COL_SAME(SelectionManagerSetup, QList<CollectionConfig> *, Collections, collections)
+SETUP_GETTER_DEF_COL_SAME(SelectionManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
+SETUP_GETTER_DEF_COL_SAME(SelectionManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
                       hierarchyCache)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QLineEdit *, SearchBar, searchBar)
+SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QLineEdit *, SearchBar, searchBar)
 
 SelectionManager::SelectionManager(QObject *parent) : QObject(parent) {}
 

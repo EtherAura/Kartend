@@ -283,7 +283,7 @@ void MainWindow::setupManagerConnections() {
 
   // CRITICAL: Set interactionState BEFORE setupReferences so sub-managers
   // can access it via ctx during their own setupReferences calls
-  m_appContext.interactionState = &getInteractionManager()->state();
+  m_appContext.managers.interactionState = &getInteractionManager()->state();
 
   // Set up InteractionManager (its sub-managers will now get valid
   // interactionState)
@@ -291,14 +291,14 @@ void MainWindow::setupManagerConnections() {
 
   // Register InteractionManager's owned sub-managers in ApplicationContext
   // This enables sub-managers to access siblings directly via ctx
-  m_appContext.animationManager = getInteractionManager()->animationManager();
-  m_appContext.selectionManager = getInteractionManager()->selectionManager();
-  m_appContext.viewportManager = getInteractionManager()->viewportManager();
-  m_appContext.mouseManager = getInteractionManager()->mouseManager();
-  m_appContext.keyboardManager = getInteractionManager()->keyboardManager();
-  m_appContext.eventManager = getInteractionManager()->eventManager();
-  m_appContext.searchManager = getInteractionManager()->searchManager();
-  m_appContext.launchManager = getInteractionManager()->launchManager();
+  m_appContext.managers.animationManager = getInteractionManager()->animationManager();
+  m_appContext.managers.selectionManager = getInteractionManager()->selectionManager();
+  m_appContext.managers.viewportManager = getInteractionManager()->viewportManager();
+  m_appContext.managers.mouseManager = getInteractionManager()->mouseManager();
+  m_appContext.managers.keyboardManager = getInteractionManager()->keyboardManager();
+  m_appContext.managers.eventManager = getInteractionManager()->eventManager();
+  m_appContext.managers.searchManager = getInteractionManager()->searchManager();
+  m_appContext.managers.launchManager = getInteractionManager()->launchManager();
 
   // Now set up NavigationManager with fully populated context
   NavigationManagerSetup navSetup;

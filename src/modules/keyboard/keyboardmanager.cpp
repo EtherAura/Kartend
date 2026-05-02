@@ -26,15 +26,15 @@ Q_LOGGING_CATEGORY(lcKeyboardManager, "kartend.keyboardmanager")
   } while (0)
 
 // KeyboardManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QWidget *, GridContainer, gridContainer)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QWidget *, ItemsPage, itemsPage)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QLineEdit *, SearchBar, searchBar)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QList<CollectionConfig> *, Collections, collections)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
-SETUP_GETTER_DEF_CTX_ONLY(KeyboardManagerSetup, InteractionStateHolder *, InteractionState,
+SETUP_GETTER_DEF_MGR_SAME(KeyboardManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)
+SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QLineEdit *, SearchBar, searchBar)
+SETUP_GETTER_DEF_COL_SAME(KeyboardManagerSetup, QList<CollectionConfig> *, Collections, collections)
+SETUP_GETTER_DEF_COL_SAME(KeyboardManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(KeyboardManagerSetup, InteractionStateHolder *, InteractionState,
                           interactionState)
 
 KeyboardManager::KeyboardManager(QObject *parent) : QObject(parent) {

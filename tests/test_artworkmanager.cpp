@@ -82,7 +82,7 @@ void TestArtworkManager::init() {
   m_cache = std::make_unique<CacheManager>();
   m_state = std::make_unique<InteractionStateHolder>();
   m_ctx = std::make_unique<ApplicationContext>();
-  m_ctx->interactionState = m_state.get();
+  m_ctx->managers.interactionState = m_state.get();
 
   m_stacked = std::make_unique<QStackedWidget>();
   m_itemsPage = new QWidget();

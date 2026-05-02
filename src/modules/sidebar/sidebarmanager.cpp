@@ -23,12 +23,12 @@ Q_LOGGING_CATEGORY(lcSidebarManager, "kartend.sidebarmanager")
   } while (0)
 
 // SidebarManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(SidebarManagerSetup, MetadataSidebar *, Sidebar, sidebar)
-SETUP_GETTER_DEF_SAME(SidebarManagerSetup, QWidget *, ItemsPage, itemsPage)
-SETUP_GETTER_DEF(SidebarManagerSetup, QScrollArea *, ScrollArea, scrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(SidebarManagerSetup, SettingsManager *, SettingsManager, settingsManager)
-SETUP_GETTER_DEF_SAME(SidebarManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_SAME(SidebarManagerSetup, QList<CollectionConfig> *, Collections, collections)
+SETUP_GETTER_DEF_UI_SAME(SidebarManagerSetup, MetadataSidebar *, Sidebar, sidebar)
+SETUP_GETTER_DEF_UI_SAME(SidebarManagerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_UI(SidebarManagerSetup, QScrollArea *, ScrollArea, scrollArea, itemScrollArea)
+SETUP_GETTER_DEF_MGR_SAME(SidebarManagerSetup, SettingsManager *, SettingsManager, settingsManager)
+SETUP_GETTER_DEF_MGR_SAME(SidebarManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_COL_SAME(SidebarManagerSetup, QList<CollectionConfig> *, Collections, collections)
 
 SidebarManager::SidebarManager(QObject *parent)
     : QObject(parent), m_MetadataSidebar(nullptr), m_itemsPage(nullptr),

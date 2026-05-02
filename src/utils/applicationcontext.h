@@ -45,104 +45,109 @@ class CacheManager;
  * that are passed to multiple managers. Individual manager setup structs
  * can include a pointer to this context instead of duplicating all fields.
  *
- * Field Categories:
+ * Fields are grouped into three nested sub-structs for discoverability:
  *
- * REQUIRED (must be set before any manager setup):
- * - collections, currentCollectionIndex - Core collection state
- * - isShuttingDown - Shutdown coordination flag
+ *   ctx->collection.*   — Core collection state (collections, indices,
+ *                         hierarchy, general settings, shutdown flag).
+ *                         Must be set before any manager setup.
  *
- * REQUIRED FOR UI (must be set for any UI-related manager):
- * - itemScrollArea, gridContainer - Primary UI containers
- * - stackedWidget, itemsPage - Page switching
+ *   ctx->ui.*           — Qt widget references (scroll area, containers,
+ *                         menubar, search bar, sidebar, overlays).
+ *                         Must be set for any UI-related manager.
  *
- * OPTIONAL (set based on feature needs):
- * - searchBar, searchModeButton - Search functionality
- * - sidebar - Metadata display
- * - menubar - Menu integration
- * - loadingLabel, loadingOverlay - Loading feedback
- *
- * POPULATED AFTER SETUP:
- * - All manager pointers (scrollManager, artworkManager, etc.)
- * - interactionState - Set after InteractionManager created
+ *   ctx->managers.*     — Pointers to fully-constructed managers and the
+ *                         centralized InteractionStateHolder. Populated
+ *                         after each manager is created.
  *
  * Usage pattern:
- *   // In MainWindow, create once:
- *   m_appContext.collections = &m_collections;
- *   m_appContext.currentCollectionIndex = &currentCollectionIndex;
- *   ...
+ *   // In MainWindow, populate sub-structs:
+ *   m_appContext.collection.collections = &m_collections;
+ *   m_appContext.collection.currentCollectionIndex = &currentCollectionIndex;
+ *   m_appContext.ui.itemScrollArea = ui->itemScrollArea;
+ *   m_appContext.managers.scrollManager = getScrollManager();
  *
- *   // In setup structs:
+ *   // In setup structs, ctx pointer fans out via SETUP_GETTER macros:
  *   SomeManagerSetup setup;
  *   setup.ctx = &m_appContext;
- *   setup.managerSpecificField = someValue;
  */
 struct ApplicationContext {
   // ─────────────────────────────────────────────────────────────────────────
-  // Required: Core collection state (must be set before any manager setup)
+  // Collection state — required before any manager setup
   // ─────────────────────────────────────────────────────────────────────────
-  QList<CollectionConfig> *collections = nullptr;
-  int *currentCollectionIndex = nullptr;
-  const CollectionHierarchyCache *hierarchyCache = nullptr;
-  GeneralSettings *generalSettings = nullptr;
-  const bool *isShuttingDown = nullptr;
+  struct CollectionState {
+    QList<CollectionConfig> *collections = nullptr;
+    int *currentCollectionIndex = nullptr;
+    const CollectionHierarchyCache *hierarchyCache = nullptr;
+    GeneralSettings *generalSettings = nullptr;
+    const bool *isShuttingDown = nullptr;
+  } collection;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Required for UI: Common UI elements (must be set for UI managers)
+  // UI elements — required for UI managers, optional fields where noted
   // ─────────────────────────────────────────────────────────────────────────
-  QScrollArea *itemScrollArea = nullptr;
-  QStackedWidget *stackedWidget = nullptr;
-  QWidget *itemsPage = nullptr;
-  QWidget *itemsTopBar = nullptr;
-  QWidget *gridContainer = nullptr;
+  struct UIElements {
+    // Required for UI managers
+    QScrollArea *itemScrollArea = nullptr;
+    QStackedWidget *stackedWidget = nullptr;
+    QWidget *itemsPage = nullptr;
+    QWidget *itemsTopBar = nullptr;
+    QWidget *gridContainer = nullptr;
+
+    // Optional / feature-specific
+    QMenuBar *menubar = nullptr;
+    QLineEdit *searchBar = nullptr;
+    QPushButton *searchModeButton = nullptr;
+    MetadataSidebar *sidebar = nullptr;
+    QLabel *loadingLabel = nullptr;
+    LoadingOverlay *loadingOverlay = nullptr;
+  } ui;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Optional: Feature-specific UI elements
+  // Manager references — populated after each manager is created
   // ─────────────────────────────────────────────────────────────────────────
-  QMenuBar *menubar = nullptr;
-  QLineEdit *searchBar = nullptr;
-  QPushButton *searchModeButton = nullptr;
-  MetadataSidebar *sidebar = nullptr;
-  QLabel *loadingLabel = nullptr;
-  LoadingOverlay *loadingOverlay = nullptr;
+  struct ManagerRefs {
+    ScrollManager *scrollManager = nullptr;
+    ArtworkManager *artworkManager = nullptr;
+    SettingsManager *settingsManager = nullptr;
+    SessionManager *sessionManager = nullptr;
+    SidebarManager *sidebarManager = nullptr;
+    DatabaseManager *databaseManager = nullptr;
+    NavigationManager *navigationManager = nullptr;
+    AnimationManager *animationManager = nullptr;
+    SelectionManager *selectionManager = nullptr;
+    ViewportManager *viewportManager = nullptr;
+    InteractionManager *interactionManager = nullptr;
+    MouseManager *mouseManager = nullptr;
+    KeyboardManager *keyboardManager = nullptr;
+    EventManager *eventManager = nullptr;
+    SearchManager *searchManager = nullptr;
+    LaunchManager *launchManager = nullptr;
+    CacheManager *cacheManager = nullptr;
+
+    // Centralized interaction state (owned by InteractionManager)
+    InteractionStateHolder *interactionState = nullptr;
+  } managers;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Populated after setup: Manager references
-  // These are set in ApplicationManager after managers are created
-  // ─────────────────────────────────────────────────────────────────────────
-  ScrollManager *scrollManager = nullptr;
-  ArtworkManager *artworkManager = nullptr;
-  SettingsManager *settingsManager = nullptr;
-  SessionManager *sessionManager = nullptr;
-  SidebarManager *sidebarManager = nullptr;
-  DatabaseManager *databaseManager = nullptr;
-  NavigationManager *navigationManager = nullptr;
-  AnimationManager *animationManager = nullptr;
-  SelectionManager *selectionManager = nullptr;
-  ViewportManager *viewportManager = nullptr;
-  InteractionManager *interactionManager = nullptr;
-  MouseManager *mouseManager = nullptr;
-  KeyboardManager *keyboardManager = nullptr;
-  EventManager *eventManager = nullptr;
-  SearchManager *searchManager = nullptr;
-  LaunchManager *launchManager = nullptr;
-  CacheManager *cacheManager = nullptr;
-
-  // Centralized interaction state (owned by InteractionManager)
-  InteractionStateHolder *interactionState = nullptr;
-
   // Convenience accessors with null-safety
-  [[nodiscard]] bool isValid() const { return collections && currentCollectionIndex; }
-
-  [[nodiscard]] int currentIndex() const {
-    return currentCollectionIndex ? *currentCollectionIndex : -1;
+  // ─────────────────────────────────────────────────────────────────────────
+  [[nodiscard]] bool isValid() const {
+    return collection.collections && collection.currentCollectionIndex;
   }
 
-  [[nodiscard]] bool shuttingDown() const { return isShuttingDown ? *isShuttingDown : false; }
+  [[nodiscard]] int currentIndex() const {
+    return collection.currentCollectionIndex ? *collection.currentCollectionIndex : -1;
+  }
+
+  [[nodiscard]] bool shuttingDown() const {
+    return collection.isShuttingDown ? *collection.isShuttingDown : false;
+  }
 
   // Collection validation helper
   [[nodiscard]] bool isValidCollectionIndex() const {
-    return collections && currentCollectionIndex && *currentCollectionIndex >= 0 &&
-           *currentCollectionIndex < collections->size();
+    return collection.collections && collection.currentCollectionIndex &&
+           *collection.currentCollectionIndex >= 0 &&
+           *collection.currentCollectionIndex < collection.collections->size();
   }
 };
 

@@ -262,16 +262,16 @@ void ScrollManager::releaseWidget(ItemWidget *widget) {
 }
 
 // ScrollManagerSetup getter definitions (all resolve through ApplicationContext)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, QWidget *, GridContainer, gridContainer)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, QScrollArea *, MediaScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, const QList<CollectionConfig> *, Collections,
+SETUP_GETTER_DEF_UI_CTX_ONLY(ScrollManagerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_UI_CTX_ONLY(ScrollManagerSetup, QScrollArea *, MediaScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(ScrollManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_COL_CTX_ONLY(ScrollManagerSetup, const QList<CollectionConfig> *, Collections,
                           collections)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
+SETUP_GETTER_DEF_COL_CTX_ONLY(ScrollManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
                           hierarchyCache)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, InteractionStateHolder *, InteractionState,
+SETUP_GETTER_DEF_MGR_CTX_ONLY(ScrollManagerSetup, InteractionStateHolder *, InteractionState,
                           interactionState)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, const GeneralSettings *, GeneralSettings,
+SETUP_GETTER_DEF_COL_CTX_ONLY(ScrollManagerSetup, const GeneralSettings *, GeneralSettings,
                           generalSettings)
 
 void ScrollManager::updateViewType(ViewType viewType) {
