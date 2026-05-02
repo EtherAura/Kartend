@@ -101,7 +101,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
     return;
   }
 
-  constexpr int CURRENT_SCHEMA_VERSION = 5;
+  constexpr int CURRENT_SCHEMA_VERSION = 6;
   const int version = getUserVersion(db);
   if (version >= CURRENT_SCHEMA_VERSION) {
     return;
@@ -284,6 +284,34 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
                 origin, "idx_item_metadata_uuid_path");
 
     setUserVersion(db, 5);
+    mutableVersion = 5;
+  }
+
+  if (mutableVersion < 6) {
+    // v6: Add item_artwork table for multi-type per-item artwork (Kartend-yf1).
+    // Keyed by (collection_uuid, path, artwork_type) so each item can have one
+    // row per type (box, screenshot, marquee, etc., plus user-defined custom
+    // types added in a later sub-issue). manual_path is the per-item override;
+    // when NULL, callers fall back to subdirectory auto-discovery for the
+    // standard types only. Mirrors the v5 pattern so entries survive id
+    // renumbering across rescans.
+    ensureIndex(db,
+                "CREATE TABLE IF NOT EXISTS item_artwork ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "collection_uuid TEXT NOT NULL DEFAULT '', "
+                "path TEXT NOT NULL, "
+                "artwork_type TEXT NOT NULL, "
+                "manual_path TEXT, "
+                "updated_at TEXT NOT NULL DEFAULT '', "
+                "UNIQUE(collection_uuid, path, artwork_type)"
+                ")",
+                origin, "item_artwork");
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_item_artwork_uuid_path ON "
+                "item_artwork(collection_uuid, path)",
+                origin, "idx_item_artwork_uuid_path");
+
+    setUserVersion(db, 6);
   }
 }
 

@@ -4,6 +4,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   configvalidation.cpp
   dbmigrations.cpp
   extensionutils.cpp
+  itemartwork.cpp
   itemmetadata.cpp
   loggingcategories.cpp
   pathutils.cpp
@@ -30,5 +31,6 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   stringutils.h
   timerutils.h
   videoutils.h
+  itemartwork.h
   itemmetadata.h
 )

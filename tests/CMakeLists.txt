@@ -371,6 +371,23 @@ target_link_libraries(test_itemmetadata
 )
 add_test(NAME ItemMetadata COMMAND test_itemmetadata)
 
+# ItemArtwork storage + standard-type resolution tests
+add_executable(test_itemartwork
+  test_itemartwork.cpp
+  ${SRC_DIR}/utils/itemartwork.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/extensionutils.cpp
+)
+target_include_directories(test_itemartwork PRIVATE
+  ${SRC_DIR}/utils
+)
+target_link_libraries(test_itemartwork
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME ItemArtwork COMMAND test_itemartwork)
+
 # SearchUtils smoke tests (header-only enum/struct)
 add_executable(test_searchutils test_searchutils.cpp)
 target_include_directories(test_searchutils PRIVATE ${SRC_DIR}/utils)
