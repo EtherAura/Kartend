@@ -171,34 +171,34 @@ void MainWindow::setupUIReferences() {
 
 void MainWindow::initializeAppContext() {
   // Collection state
-  m_appContext.collections = &m_collections;
-  m_appContext.currentCollectionIndex = &currentCollectionIndex;
-  m_appContext.hierarchyCache = &m_hierarchyCache;
-  m_appContext.generalSettings = &m_generalSettings;
-  m_appContext.isShuttingDown = &m_isShuttingDown;
+  m_appContext.collection.collections = &m_collections;
+  m_appContext.collection.currentCollectionIndex = &currentCollectionIndex;
+  m_appContext.collection.hierarchyCache = &m_hierarchyCache;
+  m_appContext.collection.generalSettings = &m_generalSettings;
+  m_appContext.collection.isShuttingDown = &m_isShuttingDown;
 
   // Common UI elements
-  m_appContext.itemScrollArea = ui->itemScrollArea;
-  m_appContext.stackedWidget = stackedWidget;
-  m_appContext.itemsPage = itemsPage;
-  m_appContext.itemsTopBar = ui->itemsTopBar;
-  m_appContext.gridContainer = gridContainer;
-  m_appContext.menubar = ui->menubar;
-  m_appContext.searchBar = searchBar;
-  m_appContext.searchModeButton = m_searchModeButton;
-  m_appContext.sidebar = m_MetadataSidebar;
-  m_appContext.loadingLabel = ui->loadingLabel;
-  m_appContext.loadingOverlay = m_loadingOverlay;
+  m_appContext.ui.itemScrollArea = ui->itemScrollArea;
+  m_appContext.ui.stackedWidget = stackedWidget;
+  m_appContext.ui.itemsPage = itemsPage;
+  m_appContext.ui.itemsTopBar = ui->itemsTopBar;
+  m_appContext.ui.gridContainer = gridContainer;
+  m_appContext.ui.menubar = ui->menubar;
+  m_appContext.ui.searchBar = searchBar;
+  m_appContext.ui.searchModeButton = m_searchModeButton;
+  m_appContext.ui.sidebar = m_MetadataSidebar;
+  m_appContext.ui.loadingLabel = ui->loadingLabel;
+  m_appContext.ui.loadingOverlay = m_loadingOverlay;
 
   // Manager references (for setup structs to use via ctx)
-  m_appContext.scrollManager = getScrollManager();
-  m_appContext.artworkManager = getArtworkManager();
-  m_appContext.settingsManager = getSettingsManager();
-  m_appContext.sessionManager = getSessionManager();
-  m_appContext.sidebarManager = getSidebarManager();
-  m_appContext.databaseManager = getDatabaseManager();
-  m_appContext.navigationManager = getNavigationManager();
-  m_appContext.interactionManager = getInteractionManager();
+  m_appContext.managers.scrollManager = getScrollManager();
+  m_appContext.managers.artworkManager = getArtworkManager();
+  m_appContext.managers.settingsManager = getSettingsManager();
+  m_appContext.managers.sessionManager = getSessionManager();
+  m_appContext.managers.sidebarManager = getSidebarManager();
+  m_appContext.managers.databaseManager = getDatabaseManager();
+  m_appContext.managers.navigationManager = getNavigationManager();
+  m_appContext.managers.interactionManager = getInteractionManager();
 }
 
 void MainWindow::createMenuBar() {

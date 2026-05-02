@@ -31,20 +31,20 @@ Q_LOGGING_CATEGORY(lcSearchManager, "kartend.searchmanager")
   } while (0)
 
 // SearchManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, DatabaseManager *, DatabaseManager, databaseManager)
-SETUP_GETTER_DEF_CTX_ONLY(SearchManagerSetup, InteractionStateHolder *, InteractionState,
+SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, DatabaseManager *, DatabaseManager, databaseManager)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(SearchManagerSetup, InteractionStateHolder *, InteractionState,
                           interactionState)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, NavigationManager *, NavigationManager, navigationManager)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, SettingsManager *, SettingsManager, settingsManager)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QLineEdit *, SearchBar, searchBar)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QPushButton *, SearchModeButton, searchModeButton)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QWidget *, ItemsPage, itemsPage)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, QList<CollectionConfig> *, Collections, collections)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(SearchManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
+SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, NavigationManager *, NavigationManager, navigationManager)
+SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, SettingsManager *, SettingsManager, settingsManager)
+SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QLineEdit *, SearchBar, searchBar)
+SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QPushButton *, SearchModeButton, searchModeButton)
+SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)
+SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_COL_SAME(SearchManagerSetup, QList<CollectionConfig> *, Collections, collections)
+SETUP_GETTER_DEF_COL_SAME(SearchManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
+SETUP_GETTER_DEF_COL_SAME(SearchManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
                       hierarchyCache)
 
 SearchManager::SearchManager(QObject *parent) : QObject(parent) {
@@ -64,7 +64,7 @@ void SearchManager::setupReferences(const SearchManagerSetup &setup) {
   m_settingsManager = setup.getSettingsManager();
   m_hierarchyCache = setup.getHierarchyCache();
   if (setup.ctx) {
-    m_generalSettings = setup.ctx->generalSettings;
+    m_generalSettings = setup.ctx->collection.generalSettings;
   }
   m_searchBar = setup.getSearchBar();
   m_searchModeButton = setup.getSearchModeButton();

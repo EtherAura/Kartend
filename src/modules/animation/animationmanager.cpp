@@ -22,10 +22,10 @@ Q_LOGGING_CATEGORY(lcAnimationManager, "kartend.animationmanager")
   } while (0)
 
 // AnimationManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(AnimationManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(AnimationManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(AnimationManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_CTX_ONLY(AnimationManagerSetup, InteractionStateHolder *, InteractionState,
+SETUP_GETTER_DEF_UI_SAME(AnimationManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_MGR_SAME(AnimationManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_MGR_SAME(AnimationManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(AnimationManagerSetup, InteractionStateHolder *, InteractionState,
                           interactionState)
 
 AnimationManager::AnimationManager(QObject *parent) : QObject(parent) {}

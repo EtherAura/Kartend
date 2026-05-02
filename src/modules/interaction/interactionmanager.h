@@ -79,27 +79,27 @@ struct InteractionManagerSetup {
   const CollectionHierarchyCache *hierarchyCache = nullptr;
 
   // Manager accessors that check ctx fallback
-  SETUP_GETTER_INLINE_SAME(ScrollManager *, ScrollManager, scrollManager)
-  SETUP_GETTER_INLINE_SAME(SidebarManager *, SidebarManager, sidebarManager)
-  SETUP_GETTER_INLINE_SAME(SettingsManager *, SettingsManager, settingsManager)
-  SETUP_GETTER_INLINE_SAME(DatabaseManager *, DatabaseManager, databaseManager)
-  SETUP_GETTER_INLINE_SAME(NavigationManager *, NavigationManager, navigationManager)
-  SETUP_GETTER_INLINE_SAME(SessionManager *, SessionManager, sessionManager)
-  SETUP_GETTER_INLINE_SAME(ArtworkManager *, ArtworkManager, artworkManager)
+  SETUP_GETTER_INLINE_MGR_SAME(ScrollManager *, ScrollManager, scrollManager)
+  SETUP_GETTER_INLINE_MGR_SAME(SidebarManager *, SidebarManager, sidebarManager)
+  SETUP_GETTER_INLINE_MGR_SAME(SettingsManager *, SettingsManager, settingsManager)
+  SETUP_GETTER_INLINE_MGR_SAME(DatabaseManager *, DatabaseManager, databaseManager)
+  SETUP_GETTER_INLINE_MGR_SAME(NavigationManager *, NavigationManager, navigationManager)
+  SETUP_GETTER_INLINE_MGR_SAME(SessionManager *, SessionManager, sessionManager)
+  SETUP_GETTER_INLINE_MGR_SAME(ArtworkManager *, ArtworkManager, artworkManager)
 
   // UI element accessors that check ctx fallback
-  SETUP_GETTER_INLINE_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
-  SETUP_GETTER_INLINE_SAME(QWidget *, GridContainer, gridContainer)
-  SETUP_GETTER_INLINE_SAME(MetadataSidebar *, Sidebar, sidebar)
-  SETUP_GETTER_INLINE_SAME(QStackedWidget *, StackedWidget, stackedWidget)
-  SETUP_GETTER_INLINE_SAME(QWidget *, ItemsPage, itemsPage)
-  SETUP_GETTER_INLINE_SAME(QLineEdit *, SearchBar, searchBar)
-  SETUP_GETTER_INLINE_SAME(QPushButton *, SearchModeButton, searchModeButton)
-  SETUP_GETTER_INLINE_SAME(QList<CollectionConfig> *, Collections, collections)
-  SETUP_GETTER_INLINE_SAME(int *, CurrentCollectionIndex, currentCollectionIndex)
-  SETUP_GETTER_INLINE_SAME(const CollectionHierarchyCache *, HierarchyCache, hierarchyCache)
-  SETUP_GETTER_INLINE_SAME(GeneralSettings *, GeneralSettings, generalSettings)
-  SETUP_GETTER_INLINE_SAME(const bool *, IsShuttingDown, isShuttingDown)
+  SETUP_GETTER_INLINE_UI_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
+  SETUP_GETTER_INLINE_UI_SAME(QWidget *, GridContainer, gridContainer)
+  SETUP_GETTER_INLINE_UI_SAME(MetadataSidebar *, Sidebar, sidebar)
+  SETUP_GETTER_INLINE_UI_SAME(QStackedWidget *, StackedWidget, stackedWidget)
+  SETUP_GETTER_INLINE_UI_SAME(QWidget *, ItemsPage, itemsPage)
+  SETUP_GETTER_INLINE_UI_SAME(QLineEdit *, SearchBar, searchBar)
+  SETUP_GETTER_INLINE_UI_SAME(QPushButton *, SearchModeButton, searchModeButton)
+  SETUP_GETTER_INLINE_COL_SAME(QList<CollectionConfig> *, Collections, collections)
+  SETUP_GETTER_INLINE_COL_SAME(int *, CurrentCollectionIndex, currentCollectionIndex)
+  SETUP_GETTER_INLINE_COL_SAME(const CollectionHierarchyCache *, HierarchyCache, hierarchyCache)
+  SETUP_GETTER_INLINE_COL_SAME(GeneralSettings *, GeneralSettings, generalSettings)
+  SETUP_GETTER_INLINE_COL_SAME(const bool *, IsShuttingDown, isShuttingDown)
 };
 
 /**

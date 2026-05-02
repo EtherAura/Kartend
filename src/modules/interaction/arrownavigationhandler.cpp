@@ -16,26 +16,26 @@
 #include <QTimer>
 
 // ArrowNavigationHandlerSetup getter definitions
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, KeyboardManager *, KeyboardManager,
+SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, KeyboardManager *, KeyboardManager,
                       keyboardManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, AnimationManager *, AnimationManager,
+SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, AnimationManager *, AnimationManager,
                       animationManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, ViewportManager *, ViewportManager,
+SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, ViewportManager *, ViewportManager,
                       viewportManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, SelectionManager *, SelectionManager,
+SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, SelectionManager *, SelectionManager,
                       selectionManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QWidget *, GridContainer, gridContainer)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QStackedWidget *, StackedWidget, stackedWidget)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QWidget *, ItemsPage, itemsPage)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QList<CollectionConfig> *, Collections,
+SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QStackedWidget *, StackedWidget, stackedWidget)
+SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, QList<CollectionConfig> *, Collections,
                       collections)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, int *, CurrentCollectionIndex,
+SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, int *, CurrentCollectionIndex,
                       currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, GeneralSettings *, GeneralSettings,
+SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, GeneralSettings *, GeneralSettings,
                       generalSettings)
-SETUP_GETTER_DEF_CTX_ONLY(ArrowNavigationHandlerSetup, InteractionStateHolder *, InteractionState,
+SETUP_GETTER_DEF_MGR_CTX_ONLY(ArrowNavigationHandlerSetup, InteractionStateHolder *, InteractionState,
                           interactionState)
 
 ArrowNavigationHandler::ArrowNavigationHandler(QObject *parent) : QObject(parent) {}

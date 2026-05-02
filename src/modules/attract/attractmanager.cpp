@@ -17,10 +17,10 @@ Q_LOGGING_CATEGORY(lcAttractManager, "kartend.attractmanager")
 // ─────────────────────────────────────────────────────────────────────────────
 // Setup struct getters (ctx fallback pattern)
 // ─────────────────────────────────────────────────────────────────────────────
-SETUP_GETTER_DEF_SAME(AttractManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(AttractManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(AttractManagerSetup, const bool *, IsShuttingDown, isShuttingDown)
-SETUP_GETTER_DEF_SAME(AttractManagerSetup, const GeneralSettings *, GeneralSettings, generalSettings)
+SETUP_GETTER_DEF_UI_SAME(AttractManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_MGR_SAME(AttractManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_COL_SAME(AttractManagerSetup, const bool *, IsShuttingDown, isShuttingDown)
+SETUP_GETTER_DEF_COL_SAME(AttractManagerSetup, const GeneralSettings *, GeneralSettings, generalSettings)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lifecycle

@@ -29,7 +29,7 @@ Q_LOGGING_CATEGORY(lcLaunchManager, "kartend.launchmanager")
     }                                                                                              \
   } while (0)
 
-SETUP_GETTER_DEF_SAME(LaunchManagerSetup, QList<CollectionConfig> *, Collections, collections)
+SETUP_GETTER_DEF_COL_SAME(LaunchManagerSetup, QList<CollectionConfig> *, Collections, collections)
 
 LaunchManager::LaunchManager(QObject *parent) : QObject(parent) {}
 

@@ -24,21 +24,21 @@ Q_LOGGING_CATEGORY(lcSelectionRestoreManager, "kartend.selectionrestoremanager")
     }                                                                                              \
   } while (0)
 
-SETUP_GETTER_DEF_SAME(SelectionRestoreManagerSetup, InteractionManager *, InteractionManager,
+SETUP_GETTER_DEF_MGR_SAME(SelectionRestoreManagerSetup, InteractionManager *, InteractionManager,
                       interactionManager)
-SETUP_GETTER_DEF_SAME(SelectionRestoreManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(SelectionRestoreManagerSetup, SessionManager *, SessionManager,
+SETUP_GETTER_DEF_MGR_SAME(SelectionRestoreManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionRestoreManagerSetup, SessionManager *, SessionManager,
                       sessionManager)
-SETUP_GETTER_DEF_SAME(SelectionRestoreManagerSetup, SettingsManager *, SettingsManager,
+SETUP_GETTER_DEF_MGR_SAME(SelectionRestoreManagerSetup, SettingsManager *, SettingsManager,
                       settingsManager)
-SETUP_GETTER_DEF_SAME(SelectionRestoreManagerSetup, QLineEdit *, SearchBar, searchBar)
-SETUP_GETTER_DEF_SAME(SelectionRestoreManagerSetup, int *, CurrentCollectionIndex,
+SETUP_GETTER_DEF_UI_SAME(SelectionRestoreManagerSetup, QLineEdit *, SearchBar, searchBar)
+SETUP_GETTER_DEF_COL_SAME(SelectionRestoreManagerSetup, int *, CurrentCollectionIndex,
                       currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(SelectionRestoreManagerSetup, QList<CollectionConfig> *, Collections,
+SETUP_GETTER_DEF_COL_SAME(SelectionRestoreManagerSetup, QList<CollectionConfig> *, Collections,
                       collections)
-SETUP_GETTER_DEF_SAME(SelectionRestoreManagerSetup, GeneralSettings *, GeneralSettings,
+SETUP_GETTER_DEF_COL_SAME(SelectionRestoreManagerSetup, GeneralSettings *, GeneralSettings,
                       generalSettings)
-SETUP_GETTER_DEF_CTX_ONLY(SelectionRestoreManagerSetup, InteractionStateHolder *, InteractionState,
+SETUP_GETTER_DEF_MGR_CTX_ONLY(SelectionRestoreManagerSetup, InteractionStateHolder *, InteractionState,
                           interactionState)
 
 SelectionRestoreManager::SelectionRestoreManager(QObject *parent) : QObject(parent) {}
