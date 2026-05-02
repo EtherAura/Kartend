@@ -92,6 +92,21 @@ target_link_libraries(test_widgetpoolmanager
 )
 add_test(NAME WidgetPoolManager COMMAND test_widgetpoolmanager)
 
+# EmptyStateWidget tests
+add_executable(test_emptystatewidget
+  test_emptystatewidget.cpp
+  ${SRC_DIR}/ui/widgets/emptystatewidget.cpp
+)
+target_include_directories(test_emptystatewidget PRIVATE
+  ${SRC_DIR}/ui/widgets
+)
+target_link_libraries(test_emptystatewidget
+  Qt6::Core
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME EmptyStateWidget COMMAND test_emptystatewidget)
+
 # GridUtils tests
 add_executable(test_gridutils test_gridutils.cpp)
 target_link_libraries(test_gridutils Qt6::Core Qt6::Gui Qt6::Test)

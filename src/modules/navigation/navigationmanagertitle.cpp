@@ -10,6 +10,7 @@
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "loadingoverlay.h"
+#include "emptystatewidget.h"
 #include "loggingcategories.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"

@@ -18,6 +18,7 @@ QT_END_NAMESPACE
 class MetadataSidebar;
 class InteractionStateHolder;
 class LoadingOverlay;
+class EmptyStateWidget;
 
 // Forward declarations for managers
 class ScrollManager;
@@ -98,7 +99,7 @@ struct ApplicationContext {
     QLineEdit *searchBar = nullptr;
     QPushButton *searchModeButton = nullptr;
     MetadataSidebar *sidebar = nullptr;
-    QLabel *loadingLabel = nullptr;
+    EmptyStateWidget *loadingLabel = nullptr;
     LoadingOverlay *loadingOverlay = nullptr;
   } ui;
 

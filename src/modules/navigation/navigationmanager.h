@@ -32,6 +32,7 @@ class ArtworkManager;
 class MetadataSidebar;
 class SelectionRestoreManager;
 class LoadingOverlay;
+class EmptyStateWidget;
 class NavigationStackManager;
 
 /**
@@ -64,7 +65,7 @@ struct NavigationManagerSetup {
   QWidget *itemsTopBar = nullptr;
   QStackedWidget *stackedWidget = nullptr;
   QMenuBar *menubar = nullptr;
-  QLabel *loadingLabel = nullptr;
+  EmptyStateWidget *loadingLabel = nullptr;
   LoadingOverlay *loadingOverlay = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QWidget *gridContainer = nullptr;
@@ -90,7 +91,7 @@ struct NavigationManagerSetup {
   SETUP_GETTER_INLINE_UI_SAME(QStackedWidget *, StackedWidget, stackedWidget)
   SETUP_GETTER_INLINE_UI_SAME(QMenuBar *, Menubar, menubar)
   SETUP_GETTER_INLINE_UI_SAME(QLineEdit *, SearchBar, searchBar)
-  SETUP_GETTER_INLINE_UI_SAME(QLabel *, LoadingLabel, loadingLabel)
+  SETUP_GETTER_INLINE_UI_SAME(EmptyStateWidget *, LoadingLabel, loadingLabel)
   SETUP_GETTER_INLINE_UI_SAME(LoadingOverlay *, LoadingOverlay, loadingOverlay)
   SETUP_GETTER_INLINE_UI_SAME(MetadataSidebar *, Sidebar, sidebar)
   SETUP_GETTER_INLINE_COL_SAME(QList<CollectionConfig> *, Collections, collections)
@@ -196,7 +197,7 @@ private:
   QWidget *m_itemsTopBar = nullptr;
   QStackedWidget *m_stackedWidget = nullptr;
   QMenuBar *m_menubar = nullptr;
-  QLabel *m_loadingLabel = nullptr;
+  EmptyStateWidget *m_loadingLabel = nullptr;
   LoadingOverlay *m_loadingOverlay = nullptr;
   QScrollArea *m_itemScrollArea = nullptr;
   QWidget *m_gridContainer = nullptr;
