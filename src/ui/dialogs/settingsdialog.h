@@ -29,6 +29,16 @@ class SettingsDialog : public QDialog {
   Q_OBJECT
 
 public:
+  /// Kartend-enq: scope selector for Save actions in the settings dialog.
+  /// `Current` saves only the selected collection (default, legacy behavior).
+  /// `CurrentAndSubcollections` propagates appearance/layout fields from the
+  /// edited collection to its descendants on Save. `All` propagates them to
+  /// every other collection. The propagation set mirrors the curated subset
+  /// used by Kartend-63o's explicit "Apply to..." action — identity, paths,
+  /// extensions, and scan-affecting flags are never copied.
+  enum class SettingsScope { Current, CurrentAndSubcollections, All };
+  Q_ENUM(SettingsScope)
+
   explicit SettingsDialog(QWidget *parent, const QList<CollectionConfig> &initialCollections,
                           int initialIndex = -1);
   ~SettingsDialog() override;
@@ -37,6 +47,9 @@ public:
 
   /// Returns the index of the collection currently selected in the tree.
   [[nodiscard]] int getSelectedCollectionIndex() const { return currentCollectionIndex; }
+
+  /// Kartend-enq: returns the active Settings Mode scope.
+  [[nodiscard]] SettingsScope currentSettingsScope() const { return m_settingsScope; }
 
   /// Handles dialog acceptance while guarding against unsaved changes.
   void accept() override;
@@ -50,6 +63,9 @@ signals:
   void spacingChanged(int collectionIndex, int horizontalSpacing, int verticalSpacing);
   /// Emitted when changes requiring a database rescan have been saved
   void rescanRequired(int collectionIndex);
+  /// Kartend-enq: emitted when the user changes the Settings Mode scope so
+  /// dependent UI (e.g. Kartend-c06 field gating) can react.
+  void settingsScopeChanged(SettingsScope scope);
 
 protected:
   void showEvent(QShowEvent *event) override;
@@ -78,6 +94,8 @@ private slots:
   void onRecursiveImportContent();
   void onRecursiveImportArtwork();
   void onIncludeSubfoldersToggled(bool checked);
+  /// Kartend-enq: react to user changes in the Settings Mode combo box.
+  void onSettingsScopeChanged(int comboIndex);
 
 private:
   enum class GamepadCaptureTarget { None, Confirm, Back, ToggleSidebar };
@@ -161,6 +179,12 @@ private:
   /// sees the change immediately.
   void applyCurrentSettingsToIndices(const QList<int> &targetIndices, const QString &scopeLabel);
 
+  /// Kartend-enq: silent variant used by the Settings Mode auto-propagation
+  /// path. Skips the confirmation dialog and the post-apply summary message
+  /// because the user already opted in by selecting a non-`Current` mode.
+  /// Returns the number of collections actually mutated.
+  int propagateAppearanceToIndicesSilently(const QList<int> &targetIndices);
+
   Ui::SettingsDialog *ui;
   QTreeWidget *collectionTreeWidget;
   QTreeWidgetItem *currentTreeItem;
@@ -184,6 +208,11 @@ private:
 
   GamepadCaptureTarget m_gamepadCaptureTarget = GamepadCaptureTarget::None;
   QMetaObject::Connection m_gamepadCaptureConnection;
+
+  /// Kartend-enq: active scope for Save actions. Defaults to `Current` so
+  /// legacy behavior is preserved until the user explicitly opts into a
+  /// broader scope.
+  SettingsScope m_settingsScope = SettingsScope::Current;
 
   // Unsaved-changes indicator (Kartend-9f6): a pulsing drop-shadow glow
   // applied to the save button while hasUnsavedChanges() is true. Owned by

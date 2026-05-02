@@ -84,6 +84,26 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
   saveCollectionFromUI(editedIndex);
   originalCollection = collections[editedIndex];
 
+  // Kartend-enq: if the user selected a broader Settings Mode, propagate
+  // the curated appearance/layout subset (same fields as Kartend-63o's
+  // explicit Apply action) from the just-saved collection to the chosen
+  // scope. This is silent because the mode itself is the user's opt-in.
+  if (m_settingsScope != SettingsScope::Current && editedIndex >= 0 &&
+      editedIndex < collections.size()) {
+    QList<int> targets;
+    if (m_settingsScope == SettingsScope::CurrentAndSubcollections) {
+      targets = CollectionUtils::collectDescendantIndices(editedIndex, collections);
+    } else { // SettingsScope::All
+      targets.reserve(collections.size());
+      for (int i = 0; i < collections.size(); ++i) {
+        if (i != editedIndex) {
+          targets.append(i);
+        }
+      }
+    }
+    propagateAppearanceToIndicesSilently(targets);
+  }
+
   // Also save general settings (e.g., titleTintSaturation, titleTintLightness)
   saveGeneralSettingsFromUI();
   m_originalGeneralSettings = m_generalSettings;

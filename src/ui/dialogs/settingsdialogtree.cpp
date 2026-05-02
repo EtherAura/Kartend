@@ -543,3 +543,30 @@ void SettingsDialog::applyCurrentSettingsToSubcollections() {
       CollectionUtils::collectDescendantIndices(currentCollectionIndex, collections);
   applyCurrentSettingsToIndices(descendants, tr("its subcollections"));
 }
+
+int SettingsDialog::propagateAppearanceToIndicesSilently(const QList<int> &targetIndices) {
+  // Kartend-enq: silent propagation used by the Settings Mode auto-apply
+  // path. Mirrors the field subset of applyCurrentSettingsToIndices() but
+  // skips the confirmation/summary dialogs because the user already opted
+  // in by selecting a non-`Current` Settings Mode. Caller is responsible
+  // for emitting collectionSaved() and refreshing the tree once.
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
+    return 0;
+  }
+  const CollectionConfig source = collections[currentCollectionIndex];
+  int applied = 0;
+  for (int idx : targetIndices) {
+    if (idx < 0 || idx >= collections.size()) {
+      continue;
+    }
+    if (idx == currentCollectionIndex) {
+      continue;
+    }
+    copyAppearanceAndLayoutFields(source, collections[idx]);
+    if (idx < m_workingCollections.size()) {
+      copyAppearanceAndLayoutFields(source, m_workingCollections[idx]);
+    }
+    ++applied;
+  }
+  return applied;
+}

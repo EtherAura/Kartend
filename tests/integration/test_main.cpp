@@ -9,6 +9,7 @@
  */
 
 #include "test_mainwindow_smoke.h"
+#include "test_settingsdialog_scope.h"
 
 #include <QApplication>
 #include <QStandardPaths>
@@ -34,6 +35,10 @@ int main(int argc, char *argv[]) {
   {
     TestMainWindowSmoke smoke;
     status |= QTest::qExec(&smoke, argc, argv);
+  }
+  {
+    TestSettingsDialogScope scope;
+    status |= QTest::qExec(&scope, argc, argv);
   }
   return status;
 }

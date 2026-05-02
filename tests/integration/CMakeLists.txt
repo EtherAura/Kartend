@@ -16,11 +16,13 @@ set(INTEGRATION_TEST_SOURCES
   test_main.cpp
   mainwindowfixture.cpp
   test_mainwindow_smoke.cpp
+  test_settingsdialog_scope.cpp
 )
 
 set(INTEGRATION_TEST_HEADERS
   mainwindowfixture.h
   test_mainwindow_smoke.h
+  test_settingsdialog_scope.h
 )
 
 add_executable(test_integration

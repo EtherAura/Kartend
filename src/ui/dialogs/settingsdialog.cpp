@@ -4,6 +4,7 @@
 #include <functional>
 #include <QAbstractItemView>
 #include <QColorDialog>
+#include <QComboBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QFontDialog>
@@ -198,6 +199,14 @@ void SettingsDialog::setupButtonConnections() {
             &SettingsDialog::applyCurrentSettingsToSubcollections);
     ui->applyToButton->setMenu(menu);
   }
+  // Kartend-enq: wire the Settings Mode selector. Default is `Current` to
+  // preserve legacy single-collection save behavior.
+  if (ui->settingsScopeComboBox) {
+    ui->settingsScopeComboBox->setCurrentIndex(static_cast<int>(m_settingsScope));
+    connect(ui->settingsScopeComboBox,
+            QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            &SettingsDialog::onSettingsScopeChanged);
+  }
   connect(ui->browseLauncherButton, &QPushButton::clicked, this, &SettingsDialog::browseLauncher);
   connect(ui->browseCoreButton, &QPushButton::clicked, this, &SettingsDialog::browseCore);
   connect(ui->browseMediaDirButton, &QPushButton::clicked, this, &SettingsDialog::browseMediaDir);
@@ -221,6 +230,29 @@ void SettingsDialog::setupConnections() {
   setupTreeWidgetConnections();
   setupUIConstraints();
   setupGeneralSettingsConnections();
+}
+
+void SettingsDialog::onSettingsScopeChanged(int comboIndex) {
+  // Kartend-enq: clamp combo index defensively in case the .ui file is
+  // edited and adds/removes entries; only emit when the scope actually
+  // changes so dependent UI doesn't churn.
+  SettingsScope newScope = SettingsScope::Current;
+  switch (comboIndex) {
+  case 1:
+    newScope = SettingsScope::CurrentAndSubcollections;
+    break;
+  case 2:
+    newScope = SettingsScope::All;
+    break;
+  default:
+    newScope = SettingsScope::Current;
+    break;
+  }
+  if (newScope == m_settingsScope) {
+    return;
+  }
+  m_settingsScope = newScope;
+  emit settingsScopeChanged(m_settingsScope);
 }
 
 auto SettingsDialog::spacingInternalToUi(int spacing) -> int {
