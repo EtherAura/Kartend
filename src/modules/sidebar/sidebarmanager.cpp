@@ -4,6 +4,7 @@
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "itemartwork.h"
 #include "itemmetadata.h"
 #include "itemwidget.h"
 #include "metadatasidebar.h"
@@ -13,9 +14,12 @@
 #include "uiconstants.h"
 #include <QApplication>
 #include <QFileInfo>
+#include <QHash>
 #include <QHBoxLayout>
+#include <QList>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QString>
 #include <QTimer>
 
 #include <QLoggingCategory>
@@ -88,15 +92,12 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
     expandedMediaDir = PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
   }
 
-  m_MetadataSidebar->setMetadata(filePath, itemName, artworkDirectory, videoDirectory);
-
-  // Look up extended metadata for the selected item. The owning collection of
-  // the file may differ from the currently-displayed collection in
-  // showAllSubcollectionItems mode, so prefer the file's resolved collection
-  // when the database knows about it; fall back to the current collection.
-  ItemMetadataStore::ItemMetadata loadedMetadata;
+  // Resolve the owning collection (may differ from the currently-displayed
+  // collection in showAllSubcollectionItems mode) so per-item metadata,
+  // manual files, and artwork all key off the same UUID and inherit from the
+  // same directory tree.
+  QString metaUuid;
   if (m_databaseManager) {
-    QString metaUuid;
     const int owningIndex = m_databaseManager->getCollectionIndexForFile(filePath);
     if (owningIndex >= 0 && m_collections && owningIndex < m_collections->size()) {
       const CollectionConfig &owning = (*m_collections)[owningIndex];
@@ -113,21 +114,69 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
         // resolveArtworkDirectory's behavior so subcollections inherit).
         manualDirectory = CollectionUtils::resolveManualDirectory(owningIndex, *m_collections);
       }
+      // Same precedence rules for artworkDirectory so the gallery's
+      // subdirectory probe lands in the correct collection's tree.
+      if (!owning.artworkDirectory.trimmed().isEmpty()) {
+        artworkDirectory = owning.artworkDirectory;
+      } else if (artworkDirectory.trimmed().isEmpty() && m_collections) {
+        artworkDirectory = CollectionUtils::resolveArtworkDirectory(owningIndex, *m_collections);
+      }
     } else if (!collectionName.isEmpty()) {
       metaUuid = CollectionUtils::computeCollectionUuid(collectionName, expandedMediaDir);
     }
-    if (!metaUuid.isEmpty()) {
-      loadedMetadata = m_databaseManager->loadItemMetadata(metaUuid, filePath);
-    }
+  }
+
+  m_MetadataSidebar->setMetadata(filePath, itemName, artworkDirectory, videoDirectory);
+
+  // Extended metadata + manual file (Kartend-rx64 / Kartend-9jdv).
+  ItemMetadataStore::ItemMetadata loadedMetadata;
+  if (m_databaseManager && !metaUuid.isEmpty()) {
+    loadedMetadata = m_databaseManager->loadItemMetadata(metaUuid, filePath);
+  }
+  if (m_databaseManager) {
     m_MetadataSidebar->setExtendedMetadata(loadedMetadata);
   }
 
-  // Resolve manual file: per-item override (item_metadata.manual_path) wins
-  // over auto-discovery in the collection's manualDirectory.
   const QString baseName = QFileInfo(filePath).completeBaseName();
   const QString manualPath =
       ItemMetadataStore::resolveManualFile(loadedMetadata.manualPath, baseName, manualDirectory);
   m_MetadataSidebar->setManualFile(manualPath);
+
+  // Build the artwork gallery (Kartend-un3l). For every standard artwork
+  // type, prefer the per-item DB override, then fall back to the
+  // {artworkDirectory}/{type}/{baseName}.{ext} subdirectory layout. Custom
+  // (non-standard) types only resolve via a stored override. An empty list
+  // hides the gallery section.
+  QList<MetadataSidebar::GalleryEntry> galleryEntries;
+  if (m_databaseManager && !metaUuid.isEmpty()) {
+    QHash<QString, QString> overridesByType;
+    QStringList customOrder;
+    const auto rows = m_databaseManager->loadItemArtwork(metaUuid, filePath);
+    for (const auto &row : rows) {
+      overridesByType.insert(row.artworkType, row.manualPath);
+      if (!ItemArtworkStore::isStandardType(row.artworkType)) {
+        customOrder.append(row.artworkType);
+      }
+    }
+
+    auto pushEntry = [&](const QString &type, const QString &label) {
+      const QString resolved = ItemArtworkStore::resolveArtworkPath(
+          overridesByType.value(type), baseName, artworkDirectory, type);
+      if (!resolved.isEmpty()) {
+        galleryEntries.append({label, resolved});
+      }
+    };
+
+    for (const QString &type : ItemArtworkStore::standardTypes()) {
+      pushEntry(type, ItemArtworkStore::standardTypeDisplayName(type));
+    }
+    for (const QString &type : customOrder) {
+      // For custom types the user-chosen id IS the human label until (c)
+      // adds a per-collection registry of friendly names.
+      pushEntry(type, type);
+    }
+  }
+  m_MetadataSidebar->setArtworkGallery(galleryEntries);
 }
 
 void SidebarManager::applySidebarStateForCollection(int collectionIndex) {

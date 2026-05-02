@@ -11,6 +11,7 @@
 
 #include "collectionutils.h"
 #include "errorutils.h"
+#include "itemartwork.h"
 #include "itemmetadata.h"
 
 class SessionManager;
@@ -84,6 +85,13 @@ public:
   /// user-driven editors (e.g. custom fields dialog, Kartend-hpln). Returns
   /// true on success; logs the structured error and returns false otherwise.
   bool saveItemMetadata(const ItemMetadataStore::ItemMetadata &metadata);
+
+  /// Loads every artwork row stored for (collectionUuid, path) using the
+  /// main-thread connection (Kartend-un3l). Returns an empty list when the
+  /// item has no rows or on database failures (errors are logged), so
+  /// callers can degrade silently to subdirectory auto-discovery.
+  [[nodiscard]] QList<ItemArtworkStore::ItemArtwork> loadItemArtwork(const QString &collectionUuid,
+                                                                     const QString &path) const;
 
 signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);

@@ -25,6 +25,14 @@ public:
   /// Show the overlay with artwork for the given file path
   void showArtworkForFile(const QString &filePath, const QString &artworkDirectory);
 
+  /// Show the overlay with the artwork file at the given absolute path.
+  /// Used by the sidebar artwork gallery (Kartend-un3l) when the path was
+  /// resolved by ItemArtworkStore and there is no need to re-search a
+  /// directory. `launchRequested` is still emitted on Enter / double-click;
+  /// callers that only want preview behavior should leave that signal
+  /// unconnected.
+  void showArtworkAtPath(const QString &absoluteArtworkPath);
+
   /// Hide the overlay
   void hideOverlay();
 
@@ -48,6 +56,7 @@ private:
 
   void setupUI();
   void centerArtwork();
+  void displayPixmap(const QPixmap &pixmap);
 };
 
 #endif // ARTWORKPREVIEWOVERLAY_H

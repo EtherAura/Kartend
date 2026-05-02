@@ -4,13 +4,18 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
+#include <QHBoxLayout>
+#include <QIcon>
 #include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
+#include <QSize>
 #include <QTimer>
+#include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include "artworkpreviewoverlay.h"
 #include "extensionutils.h"
 #include "metadatasidebar.h"
 #include "pathutils.h"
@@ -149,6 +154,7 @@ void MetadataSidebar::clearMetadata() {
     clearDetailsSection();
     m_detailsContainer->hide();
   }
+  setArtworkGallery({});
 }
 
 // Updates file information fields including size, modification date, and file
@@ -453,6 +459,142 @@ void MetadataSidebar::openCurrentManual() {
   // ShellExecute on Windows, so the user's default handler for the file
   // type takes over (Okular for PDF, web browser for HTML, etc.).
   QDesktopServices::openUrl(QUrl::fromLocalFile(m_manualPath));
+}
+
+void MetadataSidebar::ensureGallerySection() {
+  if (m_galleryContainer) {
+    return;
+  }
+  auto *contentLayout = qobject_cast<QVBoxLayout *>(ui->contentWidget->layout());
+  if (!contentLayout) {
+    return;
+  }
+
+  m_galleryContainer = new QWidget(ui->contentWidget);
+  auto *outer = new QVBoxLayout(m_galleryContainer);
+  outer->setContentsMargins(0, UIConstants::Metadata::LABEL_SPACING, 0,
+                            UIConstants::Metadata::LABEL_SPACING);
+  outer->setSpacing(UIConstants::Metadata::LABEL_SPACING);
+
+  auto *title = new QLabel(tr("Artwork gallery"), m_galleryContainer);
+  QFont titleFont = title->font();
+  titleFont.setBold(true);
+  title->setFont(titleFont);
+  title->setStyleSheet("color: palette(windowtext); padding: 2px 0px;");
+  outer->addWidget(title);
+
+  // Horizontal layout wrapped in a plain widget; if more than ~4 thumbs are
+  // present they wrap onto the next row by virtue of QLayout's setAlignment.
+  // A QScrollArea was considered but adds vertical chrome that fights the
+  // sidebar's own scroll area.
+  auto *thumbsHost = new QWidget(m_galleryContainer);
+  m_galleryLayout = new QHBoxLayout(thumbsHost);
+  m_galleryLayout->setContentsMargins(0, 0, 0, 0);
+  m_galleryLayout->setSpacing(UIConstants::Metadata::GALLERY_THUMB_SPACING);
+  m_galleryLayout->setAlignment(Qt::AlignLeft);
+  outer->addWidget(thumbsHost);
+
+  // Insert just below the artwork preview pane (and the dynamically-added
+  // video preview, if any) so all visual artwork stays clustered. Falling
+  // back to "append" keeps the section visible if the layout shape changes.
+  int insertIndex = -1;
+  if (auto *artworkParentLayout =
+          qobject_cast<QVBoxLayout *>(ui->artworkDisplay->parentWidget()->layout())) {
+    if (artworkParentLayout == contentLayout) {
+      const int videoIdx = m_videoPreview ? contentLayout->indexOf(m_videoPreview) : -1;
+      const int artIdx = contentLayout->indexOf(ui->artworkDisplay);
+      const int anchor = videoIdx >= 0 ? videoIdx : artIdx;
+      if (anchor >= 0) {
+        insertIndex = anchor + 1;
+      }
+    }
+  }
+  if (insertIndex >= 0) {
+    contentLayout->insertWidget(insertIndex, m_galleryContainer);
+  } else {
+    contentLayout->addWidget(m_galleryContainer);
+  }
+  m_galleryContainer->hide();
+}
+
+void MetadataSidebar::clearGallerySection() {
+  if (!m_galleryLayout) {
+    return;
+  }
+  while (QLayoutItem *child = m_galleryLayout->takeAt(0)) {
+    if (QWidget *w = child->widget()) {
+      w->deleteLater();
+    }
+    delete child;
+  }
+}
+
+void MetadataSidebar::setArtworkGallery(const QList<GalleryEntry> &entries) {
+  if (entries.isEmpty()) {
+    if (m_galleryContainer) {
+      clearGallerySection();
+      m_galleryContainer->hide();
+    }
+    return;
+  }
+
+  ensureGallerySection();
+  if (!m_galleryContainer || !m_galleryLayout) {
+    return;
+  }
+  clearGallerySection();
+
+  const int thumbSize = UIConstants::Metadata::GALLERY_THUMB_SIZE;
+  const int padding = UIConstants::Metadata::GALLERY_THUMB_PADDING;
+  const int iconSize = thumbSize - (padding * 2);
+  for (const GalleryEntry &entry : entries) {
+    const QString &label = entry.first;
+    const QString &path = entry.second;
+    QPixmap pixmap(path);
+    if (pixmap.isNull()) {
+      // Skip rows whose file vanished between load and render. Don't add a
+      // broken-image placeholder — the user gets a tighter gallery and can
+      // still launch the file from the main viewport.
+      continue;
+    }
+    auto *button = new QToolButton(m_galleryContainer);
+    button->setAutoRaise(true);
+    button->setCursor(Qt::PointingHandCursor);
+    button->setFixedSize(thumbSize, thumbSize);
+    button->setIconSize(QSize(iconSize, iconSize));
+    button->setIcon(QIcon(pixmap));
+    button->setToolTip(label);
+    button->setAccessibleName(label);
+    connect(button, &QToolButton::clicked, this,
+            [this, path]() { openGalleryArtworkPreview(path); });
+    m_galleryLayout->addWidget(button);
+  }
+
+  // If every entry failed to load we end up with an empty gallery; hide the
+  // section instead of leaving a bare title.
+  if (m_galleryLayout->count() == 0) {
+    m_galleryContainer->hide();
+    return;
+  }
+  m_galleryContainer->show();
+}
+
+void MetadataSidebar::openGalleryArtworkPreview(const QString &absoluteArtworkPath) {
+  if (absoluteArtworkPath.isEmpty()) {
+    return;
+  }
+  if (!m_galleryOverlay) {
+    // Parent to the top-level window so the overlay can cover the full UI
+    // (the sidebar itself is a narrow strip). window() may be the sidebar
+    // itself in unparented test scenarios; fall back to `this` so the
+    // overlay still has a parent.
+    QWidget *overlayParent = window();
+    if (!overlayParent || overlayParent == this) {
+      overlayParent = this;
+    }
+    m_galleryOverlay = new ArtworkPreviewOverlay(overlayParent);
+  }
+  m_galleryOverlay->showArtworkAtPath(absoluteArtworkPath);
 }
 
 QString MetadataSidebar::formatTags(const QString &raw) {
