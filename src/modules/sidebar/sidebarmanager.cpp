@@ -77,11 +77,18 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
   QString filePath = selectedItem->getFilePath();
   QString itemName = selectedItem->getItemName();
 
-  // Get artwork + video directories from current collection config
+  // Get artwork + video directories from current collection config. Each
+  // directory tracks the collection *name* it should be expanded against
+  // for %collection% substitution — that name is the current view by
+  // default and gets reassigned to the owning collection's name when
+  // owner-aware refinement (below) chooses the owner's value.
   QString artworkDirectory;
   QString videoDirectory;
   QString manualDirectory;
   QString collectionName;
+  QString artworkExpansionName;
+  QString videoExpansionName;
+  QString manualExpansionName;
   QString expandedMediaDir;
   if (m_collections && m_currentCollectionIndex >= 0 &&
       m_currentCollectionIndex < m_collections->size()) {
@@ -90,13 +97,16 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
     videoDirectory = collection.videoDirectory;
     manualDirectory = collection.manualDirectory;
     collectionName = collection.name;
+    artworkExpansionName = collection.name;
+    videoExpansionName = collection.name;
+    manualExpansionName = collection.name;
     expandedMediaDir = PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
   }
 
   // Resolve the owning collection (may differ from the currently-displayed
   // collection in showAllSubcollectionItems mode) so per-item metadata,
-  // manual files, and artwork all key off the same UUID and inherit from the
-  // same directory tree.
+  // manual files, artwork, and video previews all key off the same UUID
+  // and inherit from the same directory tree.
   QString metaUuid;
   if (m_databaseManager) {
     const int owningIndex = m_databaseManager->getCollectionIndexForFile(filePath);
@@ -106,26 +116,62 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
           PathUtils::validateAndExpandPath(owning.mediaDirectory, owning.name);
       metaUuid = CollectionUtils::computeCollectionUuid(owning.name, owningMediaDir);
       // Prefer the owning collection's manualDirectory in
-      // showAllSubcollectionItems mode so a child's directory wins over the
-      // parent's when both are set.
+      // showAllSubcollectionItems mode so a child's directory wins over
+      // the parent's when both are set.
       if (!owning.manualDirectory.trimmed().isEmpty()) {
         manualDirectory = owning.manualDirectory;
+        manualExpansionName = owning.name;
       } else if (manualDirectory.trimmed().isEmpty() && m_collections) {
-        // Fall back to the nearest ancestor with a manualDirectory (mirrors
-        // resolveArtworkDirectory's behavior so subcollections inherit).
+        // Fall back to the nearest ancestor with a manualDirectory
+        // (mirrors resolveArtworkDirectory's behavior so subcollections
+        // inherit). The ancestor's name is unknown to us at this point;
+        // %collection% substitution falls back to the owner's name, which
+        // is the closest meaningful identifier.
         manualDirectory = CollectionUtils::resolveManualDirectory(owningIndex, *m_collections);
+        manualExpansionName = owning.name;
       }
       // Same precedence rules for artworkDirectory so the gallery's
       // subdirectory probe lands in the correct collection's tree.
       if (!owning.artworkDirectory.trimmed().isEmpty()) {
         artworkDirectory = owning.artworkDirectory;
+        artworkExpansionName = owning.name;
       } else if (artworkDirectory.trimmed().isEmpty() && m_collections) {
         artworkDirectory = CollectionUtils::resolveArtworkDirectory(owningIndex, *m_collections);
+        artworkExpansionName = owning.name;
+      }
+      // Same for videoDirectory — without this, sidebar video previews
+      // miss when a parent aggregates children via
+      // showAllSubcollectionItems and only the child has videoDirectory
+      // configured. Middle-click + expand-mode already do this by going
+      // through the owner's collection directly.
+      if (!owning.videoDirectory.trimmed().isEmpty()) {
+        videoDirectory = owning.videoDirectory;
+        videoExpansionName = owning.name;
+      } else if (videoDirectory.trimmed().isEmpty() && m_collections) {
+        videoDirectory = CollectionUtils::resolveVideoDirectory(owningIndex, *m_collections);
+        videoExpansionName = owning.name;
       }
     } else if (!collectionName.isEmpty()) {
       metaUuid = CollectionUtils::computeCollectionUuid(collectionName, expandedMediaDir);
     }
   }
+
+  // Expand %collection% / ~ in each directory so the lookups use real
+  // filesystem paths. validateAndExpandPath returns "" when the resolved
+  // directory doesn't exist, which is the right semantics here: the
+  // downstream resolvers all guard on emptiness anyway.
+  if (!artworkDirectory.trimmed().isEmpty()) {
+    artworkDirectory = PathUtils::validateAndExpandPath(artworkDirectory, artworkExpansionName);
+  }
+  if (!videoDirectory.trimmed().isEmpty()) {
+    videoDirectory = PathUtils::validateAndExpandPath(videoDirectory, videoExpansionName);
+  }
+  if (!manualDirectory.trimmed().isEmpty()) {
+    manualDirectory = PathUtils::validateAndExpandPath(manualDirectory, manualExpansionName);
+  }
+
+  debugLog(QString("video lookup: filePath='%1' videoDir='%2' (post-expansion)")
+               .arg(filePath, videoDirectory));
 
   m_MetadataSidebar->setMetadata(filePath, itemName, artworkDirectory, videoDirectory);
 

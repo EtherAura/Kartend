@@ -648,6 +648,30 @@ collectDescendantIndices(int parentIndex, const QList<CollectionConfig> &collect
   return {};
 }
 
+/**
+ * @brief Resolves video directory for a collection, falling back to parent if
+ * empty. Mirrors resolveArtworkDirectory; used by the sidebar so subcollections
+ * inherit a parent's videoDirectory in showAllSubcollectionItems mode.
+ */
+[[nodiscard]] inline QString resolveVideoDirectory(int collectionIndex,
+                                                   const QList<CollectionConfig> &collections) {
+  if (collectionIndex < 0 || collectionIndex >= collections.size()) {
+    return {};
+  }
+  int current = collectionIndex;
+  while (current >= 0 && current < collections.size()) {
+    const CollectionConfig &c = collections[current];
+    if (!c.videoDirectory.trimmed().isEmpty()) {
+      return c.videoDirectory;
+    }
+    if (!c.isSubcollection || c.parentCollectionIndex < 0) {
+      break;
+    }
+    current = c.parentCollectionIndex;
+  }
+  return {};
+}
+
 [[nodiscard]] inline QString resolveManualDirectory(int collectionIndex,
                                                     const QList<CollectionConfig> &collections) {
   if (collectionIndex < 0 || collectionIndex >= collections.size()) {
