@@ -100,6 +100,7 @@ private slots:
   void v5AddsItemMetadataTable();
   void v6AddsItemArtworkTable();
   void v7AddsUsageStatsColumnAndIndexes();
+  void v8AddsLauncherIndexColumn();
   void preservesExistingDataAcrossUpgrade();
 };
 
@@ -119,8 +120,8 @@ void TestDbMigrations::appliesToCurrentVersion() {
 
   QCOMPARE(getUserVersion(db), 0);
   DbMigrations::applySchemaMigrations(db, "test");
-  // Current schema version is 7 (per dbmigrations.cpp).
-  QCOMPARE(getUserVersion(db), 7);
+  // Current schema version is 8 (per dbmigrations.cpp).
+  QCOMPARE(getUserVersion(db), 8);
 
   closeAndRemove(db, conn);
 }
@@ -246,7 +247,7 @@ void TestDbMigrations::v3AddsMetaTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 7);
+  QCOMPARE(getUserVersion(db), 8);
 
   // If FTS5 is available, the meta table should also exist.
   if (tableExists(db, "items_fts")) {
@@ -262,7 +263,7 @@ void TestDbMigrations::v4AddsFileSizeColumnAndIndex() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 7);
+  QCOMPARE(getUserVersion(db), 8);
   QVERIFY(tableHasColumn(db, "items", "file_size"));
   QVERIFY(indexExists(db, "idx_items_uuid_file_size"));
 
@@ -275,7 +276,7 @@ void TestDbMigrations::v5AddsItemMetadataTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 7);
+  QCOMPARE(getUserVersion(db), 8);
   QVERIFY(tableExists(db, "item_metadata"));
   // Required scraper-facing columns and feature-reserved columns.
   QVERIFY(tableHasColumn(db, "item_metadata", "collection_uuid"));
@@ -305,7 +306,7 @@ void TestDbMigrations::v6AddsItemArtworkTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 7);
+  QCOMPARE(getUserVersion(db), 8);
   QVERIFY(tableExists(db, "item_artwork"));
   QVERIFY(tableHasColumn(db, "item_artwork", "collection_uuid"));
   QVERIFY(tableHasColumn(db, "item_artwork", "path"));
@@ -339,12 +340,25 @@ void TestDbMigrations::v7AddsUsageStatsColumnAndIndexes() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 7);
+  QCOMPARE(getUserVersion(db), 8);
   // Cumulative play-time column added in v7 (Kartend-7vi).
   QVERIFY(tableHasColumn(db, "items", "total_play_seconds"));
   // Indexes used by the Most-played / Recently-played dialog tabs.
   QVERIFY(indexExists(db, "idx_items_last_played"));
   QVERIFY(indexExists(db, "idx_items_play_count"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::v8AddsLauncherIndexColumn() {
+  const QString conn = "test_v8_launcher";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QCOMPARE(getUserVersion(db), 8);
+  // Per-item launcher override column added in v8 (Kartend-dnx4).
+  QVERIFY(tableHasColumn(db, "item_metadata", "launcher_index"));
 
   closeAndRemove(db, conn);
 }

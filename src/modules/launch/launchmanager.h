@@ -39,6 +39,15 @@ struct LaunchManagerSetup {
   std::function<void(const QString &collectionUuid, const QString &filePath, qint64 seconds)>
       onPlaySessionEnded;
 
+  /// Resolves the per-item launcher override (Kartend-dnx4). Called before
+  /// the multi-launcher chooser dialog appears. Returns the unified launcher
+  /// index (0 = primary, 1..N = additionalLaunchers[0..N-1]) when an override
+  /// is set, or a negative value to fall through to the chooser / collection
+  /// default. Indirection mirrors `onLaunched` so LaunchManager doesn't take
+  /// a hard link-time dependency on DatabaseManager.
+  std::function<int(const QString &collectionUuid, const QString &filePath)>
+      resolveLauncherOverride;
+
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
 };
 
@@ -135,6 +144,7 @@ private:
   GeneralSettings *m_generalSettings = nullptr;
   std::function<void(const QString &, const QString &)> m_onLaunched;
   std::function<void(const QString &, const QString &, qint64)> m_onPlaySessionEnded;
+  std::function<int(const QString &, const QString &)> m_resolveLauncherOverride;
 
   /// Tracks recent launches for debounce protection
   QHash<QString, qint64> m_lastLaunchTimes;

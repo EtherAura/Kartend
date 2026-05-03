@@ -42,6 +42,7 @@ void LaunchManager::setupReferences(const LaunchManagerSetup &setup) {
   }
   m_onLaunched = setup.onLaunched;
   m_onPlaySessionEnded = setup.onPlaySessionEnded;
+  m_resolveLauncherOverride = setup.resolveLauncherOverride;
 }
 
 bool LaunchManager::runtimeDetectionEnabled() const {
@@ -257,6 +258,18 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   // (>= 0) we honour it; otherwise prompt the user when there are multiple
   // launchers and fall through to the default for single-launcher collections.
   int resolvedLauncherIndex = launcherIndex;
+  // Kartend-dnx4: per-item override silently bypasses the chooser. Only consult
+  // when the caller hasn't already forced a pick — a UI-driven explicit launch
+  // (e.g. context-menu "Launch with…") wins over the persisted override.
+  if (resolvedLauncherIndex < 0 && m_resolveLauncherOverride) {
+    const QString uuid = resolveCollectionUuid(collectionIndex);
+    if (!uuid.isEmpty()) {
+      const int overrideIndex = m_resolveLauncherOverride(uuid, filePath);
+      if (overrideIndex >= 0 && overrideIndex < collection.launcherCount()) {
+        resolvedLauncherIndex = overrideIndex;
+      }
+    }
+  }
   if (resolvedLauncherIndex < 0) {
     if (collection.launcherCount() > 1) {
       QStringList launcherNames;

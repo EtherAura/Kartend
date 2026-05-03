@@ -51,6 +51,7 @@ private slots:
   void distinguishesByCollectionUuid();
   void removeDeletesRow();
   void runtimeSecondsNullableRoundTrip();
+  void launcherIndexNullableRoundTrip();
   void saveRejectsEmptyPath();
   void parseCustomFieldsHandlesEmptyAndMalformed();
   void parseCustomFieldsPreservesOrderAndCoercesValues();
@@ -96,6 +97,7 @@ void TestItemMetadata::isNotEmptyForAnyPopulatedField() {
            [](ItemMetadata &m) { m.tags = "a"; },
            [](ItemMetadata &m) { m.customFields = "{}"; },
            [](ItemMetadata &m) { m.manualPath = "/x"; },
+           [](ItemMetadata &m) { m.launcherIndex = 0; },
        }) {
     ItemMetadata m;
     mutate(m);
@@ -137,6 +139,7 @@ void TestItemMetadata::saveAndLoadRoundTrip() {
   m.tags = "[\"classic\",\"mascot\"]";
   m.customFields = "{\"shelf\":\"A1\"}";
   m.manualPath = "/manuals/sonic.pdf";
+  m.launcherIndex = 2;
   m.source = "user";
 
   auto saved = ItemMetadataStore::save(db, m);
@@ -158,6 +161,7 @@ void TestItemMetadata::saveAndLoadRoundTrip() {
   QCOMPARE(r.tags, m.tags);
   QCOMPARE(r.customFields, m.customFields);
   QCOMPARE(r.manualPath, m.manualPath);
+  QCOMPARE(r.launcherIndex, 2);
   QCOMPARE(r.source, m.source);
   QVERIFY(!r.updatedAt.isEmpty()); // save() stamps current UTC ISO time
 
@@ -255,6 +259,35 @@ void TestItemMetadata::runtimeSecondsNullableRoundTrip() {
   m.runtimeSeconds = 0;
   QVERIFY(ItemMetadataStore::save(db, m).isOk());
   QCOMPARE(ItemMetadataStore::load(db, "uuid-1", "/p").value().runtimeSeconds, 0);
+
+  closeAndRemove(db, conn);
+}
+
+void TestItemMetadata::launcherIndexNullableRoundTrip() {
+  // Mirrors the runtime-seconds NULL contract for the per-item launcher
+  // override (Kartend-dnx4): -1 in the struct means "no override" and
+  // serializes to NULL; setting a non-negative value round-trips intact;
+  // returning to -1 must clear the column back to NULL.
+  const QString conn = "im_launcher_null";
+  auto db = openMemoryDb(conn);
+
+  ItemMetadata m;
+  m.collectionUuid = "uuid-1";
+  m.path = "/p";
+  m.title = "T";
+  // launcherIndex defaults to -1 ("no override"); save() must persist NULL.
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+  QCOMPARE(ItemMetadataStore::load(db, "uuid-1", "/p").value().launcherIndex, -1);
+
+  // Pin a real index — round-trip must preserve it exactly.
+  m.launcherIndex = 3;
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+  QCOMPARE(ItemMetadataStore::load(db, "uuid-1", "/p").value().launcherIndex, 3);
+
+  // Clearing back to -1 must round-trip to NULL, not leak the previous value.
+  m.launcherIndex = -1;
+  QVERIFY(ItemMetadataStore::save(db, m).isOk());
+  QCOMPARE(ItemMetadataStore::load(db, "uuid-1", "/p").value().launcherIndex, -1);
 
   closeAndRemove(db, conn);
 }
