@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QScrollArea>
 #include <QSettings>
 #include <QStandardPaths>
@@ -129,4 +130,137 @@ void SettingsUtils::applyVerticalScrollbarSetting(QScrollArea *itemScrollArea, i
   } else {
     itemScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
   }
+}
+
+auto SettingsUtils::exportConfig(const QString &destPath) -> ErrorUtils::Result<void> {
+  if (destPath.trimmed().isEmpty()) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                           "Destination path is empty",
+                                           "SettingsUtils::exportConfig");
+  }
+
+  const QString sourcePath = getConfigPath();
+  if (!QFile::exists(sourcePath)) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileNotFound,
+                                           "No configuration file to export",
+                                           "SettingsUtils::exportConfig")
+        .withDetails(QString("Expected: %1").arg(sourcePath));
+  }
+
+  // Flush any pending QSettings writes so the on-disk file reflects current
+  // in-memory state before we copy it.
+  {
+    QSettings live(sourcePath, getFormat());
+    live.sync();
+  }
+
+  // Atomic copy: write to a sibling .tmp, then rename onto the destination.
+  const QString tempPath = destPath + ".tmp";
+  if (QFile::exists(tempPath)) {
+    QFile::remove(tempPath);
+  }
+  if (!QFile::copy(sourcePath, tempPath)) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                           "Failed to write export file",
+                                           "SettingsUtils::exportConfig")
+        .withDetails(QString("Source: %1, Temp: %2").arg(sourcePath, tempPath));
+  }
+  if (QFile::exists(destPath)) {
+    QFile::remove(destPath);
+  }
+  if (!QFile::rename(tempPath, destPath)) {
+    QFile::remove(tempPath);
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                           "Failed to finalize export file",
+                                           "SettingsUtils::exportConfig")
+        .withDetails(QString("Destination: %1").arg(destPath));
+  }
+  return ErrorUtils::Result<void>::success();
+}
+
+auto SettingsUtils::importConfig(const QString &sourcePath) -> ErrorUtils::Result<void> {
+  if (sourcePath.trimmed().isEmpty()) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                           "Source path is empty",
+                                           "SettingsUtils::importConfig");
+  }
+  if (!QFile::exists(sourcePath)) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileNotFound,
+                                           "Selected file does not exist",
+                                           "SettingsUtils::importConfig")
+        .withDetails(QString("Path: %1").arg(sourcePath));
+  }
+
+  // Validate that the file parses as a Kartend INI and contains a [General]
+  // group — guards against the user picking an unrelated text file.
+  {
+    QSettings probe(sourcePath, getFormat());
+    if (probe.status() != QSettings::NoError) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::ConfigLoadFailed,
+                                             "Selected file is not a valid Kartend config",
+                                             "SettingsUtils::importConfig")
+          .withDetails(QString("Path: %1, status: %2")
+                           .arg(sourcePath)
+                           .arg(static_cast<int>(probe.status())));
+    }
+    if (!probe.childGroups().contains("General")) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::ConfigLoadFailed,
+                                             "Selected file is missing the [General] section",
+                                             "SettingsUtils::importConfig")
+          .withDetails(QString("Path: %1").arg(sourcePath));
+    }
+  }
+
+  const QString livePath = getConfigPath();
+  // Ensure the parent directory exists (getConfigPath creates it, but be
+  // defensive in case of unusual filesystem state).
+  QDir liveDir = QFileInfo(livePath).absoluteDir();
+  if (!liveDir.exists() && !liveDir.mkpath(".")) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::ConfigSaveFailed,
+                                           "Failed to create config directory",
+                                           "SettingsUtils::importConfig")
+        .withDetails(QString("Path: %1").arg(liveDir.absolutePath()));
+  }
+
+  // Back up the existing config alongside the live file so a user can recover
+  // by hand if the imported settings turn out to be wrong.
+  if (QFile::exists(livePath)) {
+    const QString backupPath = livePath + ".bak";
+    if (QFile::exists(backupPath)) {
+      QFile::remove(backupPath);
+    }
+    if (!QFile::copy(livePath, backupPath)) {
+      ErrorUtils::logError(ErrorUtils::ErrorContext::warning(
+                               ErrorUtils::ErrorCode::FileWriteError,
+                               "Failed to back up existing config before import",
+                               "SettingsUtils::importConfig")
+                               .withDetails(QString("From: %1, To: %2").arg(livePath, backupPath)));
+      // Continue: the import is still atomic via temp+rename, and refusing to
+      // proceed would leave the user stuck if .bak is unwritable for some
+      // unrelated reason.
+    }
+  }
+
+  // Atomic replace: copy to .tmp next to the live config, then rename.
+  const QString tempPath = livePath + ".import.tmp";
+  if (QFile::exists(tempPath)) {
+    QFile::remove(tempPath);
+  }
+  if (!QFile::copy(sourcePath, tempPath)) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                           "Failed to stage imported config",
+                                           "SettingsUtils::importConfig")
+        .withDetails(QString("Source: %1, Temp: %2").arg(sourcePath, tempPath));
+  }
+  if (QFile::exists(livePath)) {
+    QFile::remove(livePath);
+  }
+  if (!QFile::rename(tempPath, livePath)) {
+    QFile::remove(tempPath);
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                           "Failed to install imported config",
+                                           "SettingsUtils::importConfig")
+        .withDetails(QString("Destination: %1").arg(livePath));
+  }
+  return ErrorUtils::Result<void>::success();
 }

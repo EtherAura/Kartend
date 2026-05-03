@@ -1897,6 +1897,86 @@
              </layout>
             </widget>
            </item>
+           <item>
+            <widget class="QGroupBox" name="backupGroupBox">
+             <property name="title">
+              <string>Configuration Backup</string>
+             </property>
+             <layout class="QVBoxLayout" name="backupContentLayout">
+              <item>
+               <widget class="QLabel" name="backupDescriptionLabel">
+                <property name="wordWrap">
+                 <bool>true</bool>
+                </property>
+                <property name="text">
+                 <string>Export your full Kartend configuration (general settings, all collections, and launcher presets) to a .cfg file in the config directory, or load a previously exported file. Loading replaces the active configuration; the previous one is preserved as kartend.cfg.bak.</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="backupExportLayout">
+                <item>
+                 <widget class="QPushButton" name="exportConfigButton">
+                  <property name="toolTip">
+                   <string>Save the current Kartend configuration to a named .cfg file in the config directory</string>
+                  </property>
+                  <property name="text">
+                   <string>Export...</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="backupExportSpacer">
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="backupImportLayout">
+                <item>
+                 <widget class="QLabel" name="importConfigLabel">
+                  <property name="text">
+                   <string>Load profile:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="importConfigComboBox">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="toolTip">
+                   <string>.cfg files found in the Kartend config directory (excluding the active kartend.cfg)</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="importConfigButton">
+                  <property name="toolTip">
+                   <string>Replace the active configuration with the selected profile (requires restart)</string>
+                  </property>
+                  <property name="text">
+                   <string>Load</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
           </layout>
          </widget>
          <widget class="QWidget" name="attractSubTab">
