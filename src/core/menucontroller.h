@@ -18,6 +18,7 @@ class SettingsManager;
 class SidebarManager;
 class ScrollManager;
 class ArtworkManager;
+class DatabaseManager;
 
 /// Context struct for menu action callbacks.
 /// Contains pointers to managers and state needed by menu actions.
@@ -31,6 +32,7 @@ struct MenuControllerContext {
   std::function<SidebarManager *()> getSidebarManager;
   std::function<ScrollManager *()> getScrollManager;
   std::function<ArtworkManager *()> getArtworkManager;
+  std::function<DatabaseManager *()> getDatabaseManager;
 
   // State accessors
   std::function<int()> getCurrentCollectionIndex;
@@ -71,6 +73,7 @@ private:
   // Owned actions (not in UI file)
   QAction *m_fullscreenAction = nullptr;
   QAction *m_shortcutsAction = nullptr;
+  QAction *m_statisticsAction = nullptr;
   QAction *m_gridWidthIncreaseAction = nullptr;
   QAction *m_gridWidthDecreaseAction = nullptr;
   QActionGroup *m_sortActionGroup = nullptr;
@@ -87,6 +90,7 @@ private:
   void setupSortActions();
   void setupFullscreenAction();
   void setupShortcutsAction();
+  void setupStatisticsAction();
   void setupGridWidthActions();
   void insertFullscreenInViewMenu(QAction *fullscreenAction);
 };

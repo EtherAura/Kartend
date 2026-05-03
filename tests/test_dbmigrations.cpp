@@ -99,6 +99,7 @@ private slots:
   void v4AddsFileSizeColumnAndIndex();
   void v5AddsItemMetadataTable();
   void v6AddsItemArtworkTable();
+  void v7AddsUsageStatsColumnAndIndexes();
   void preservesExistingDataAcrossUpgrade();
 };
 
@@ -118,8 +119,8 @@ void TestDbMigrations::appliesToCurrentVersion() {
 
   QCOMPARE(getUserVersion(db), 0);
   DbMigrations::applySchemaMigrations(db, "test");
-  // Current schema version is 6 (per dbmigrations.cpp).
-  QCOMPARE(getUserVersion(db), 6);
+  // Current schema version is 7 (per dbmigrations.cpp).
+  QCOMPARE(getUserVersion(db), 7);
 
   closeAndRemove(db, conn);
 }
@@ -245,7 +246,7 @@ void TestDbMigrations::v3AddsMetaTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 6);
+  QCOMPARE(getUserVersion(db), 7);
 
   // If FTS5 is available, the meta table should also exist.
   if (tableExists(db, "items_fts")) {
@@ -261,7 +262,7 @@ void TestDbMigrations::v4AddsFileSizeColumnAndIndex() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 6);
+  QCOMPARE(getUserVersion(db), 7);
   QVERIFY(tableHasColumn(db, "items", "file_size"));
   QVERIFY(indexExists(db, "idx_items_uuid_file_size"));
 
@@ -274,7 +275,7 @@ void TestDbMigrations::v5AddsItemMetadataTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 6);
+  QCOMPARE(getUserVersion(db), 7);
   QVERIFY(tableExists(db, "item_metadata"));
   // Required scraper-facing columns and feature-reserved columns.
   QVERIFY(tableHasColumn(db, "item_metadata", "collection_uuid"));
@@ -304,7 +305,7 @@ void TestDbMigrations::v6AddsItemArtworkTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 6);
+  QCOMPARE(getUserVersion(db), 7);
   QVERIFY(tableExists(db, "item_artwork"));
   QVERIFY(tableHasColumn(db, "item_artwork", "collection_uuid"));
   QVERIFY(tableHasColumn(db, "item_artwork", "path"));
@@ -328,6 +329,22 @@ void TestDbMigrations::v6AddsItemArtworkTable() {
   QVERIFY(q.exec("INSERT INTO item_artwork (collection_uuid, path, "
                  "artwork_type, updated_at) VALUES ('u1', '/i/1', "
                  "'screenshot', '2026-01-02')"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::v7AddsUsageStatsColumnAndIndexes() {
+  const QString conn = "test_v7_usage";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QCOMPARE(getUserVersion(db), 7);
+  // Cumulative play-time column added in v7 (Kartend-7vi).
+  QVERIFY(tableHasColumn(db, "items", "total_play_seconds"));
+  // Indexes used by the Most-played / Recently-played dialog tabs.
+  QVERIFY(indexExists(db, "idx_items_last_played"));
+  QVERIFY(indexExists(db, "idx_items_play_count"));
 
   closeAndRemove(db, conn);
 }

@@ -22,6 +22,7 @@
 #include "querymanager.h"
 #include "sessionmanager.h"
 #include "uiconstants.h"
+#include "usagestatsstore.h"
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcDatabaseManager)
@@ -111,6 +112,89 @@ bool DatabaseManager::saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwo
 bool DatabaseManager::removeItemArtwork(const QString &collectionUuid, const QString &path,
                                         const QString &artworkType) {
   auto result = ItemArtworkStore::remove(m_db, collectionUuid, path, artworkType);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    emit errorOccurred(result.error());
+    return false;
+  }
+  return true;
+}
+
+// ─── Usage stats (Kartend-7vi) ───────────────────────────────────────────────
+// All paths use the main-thread connection: writes are tiny single-row updates
+// triggered by user actions (launch, runtime exit), and reads are dialog-time
+// aggregates that don't need worker concurrency.
+
+auto DatabaseManager::loadItemUsageStats(const QString &collectionUuid, const QString &path) const
+    -> UsageStatsStore::ItemUsageStats {
+  auto result =
+      UsageStatsStore::loadForItem(const_cast<QSqlDatabase &>(m_db), collectionUuid, path);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    UsageStatsStore::ItemUsageStats empty;
+    empty.collectionUuid = collectionUuid;
+    empty.path = path;
+    return empty;
+  }
+  return result.value();
+}
+
+void DatabaseManager::recordItemLaunch(const QString &collectionUuid, const QString &path) {
+  auto result = UsageStatsStore::recordLaunch(m_db, collectionUuid, path);
+  if (result.isError()) {
+    // Tracking is best-effort — log but never block the launch path.
+    ErrorUtils::logError(result.error());
+  }
+}
+
+void DatabaseManager::recordItemPlaySession(const QString &collectionUuid, const QString &path,
+                                            qint64 seconds) {
+  auto result = UsageStatsStore::recordPlaySession(m_db, collectionUuid, path, seconds);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+  }
+}
+
+auto DatabaseManager::loadAggregateUsageStats() const -> UsageStatsStore::AggregateStats {
+  auto result = UsageStatsStore::loadAggregate(const_cast<QSqlDatabase &>(m_db));
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return {};
+  }
+  return result.value();
+}
+
+auto DatabaseManager::loadTopPlayedItems(int limit) const -> QList<UsageStatsStore::ItemUsageRow> {
+  auto result = UsageStatsStore::loadTopPlayed(const_cast<QSqlDatabase &>(m_db), limit);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return {};
+  }
+  return result.value();
+}
+
+auto DatabaseManager::loadRecentlyPlayedItems(int limit) const
+    -> QList<UsageStatsStore::ItemUsageRow> {
+  auto result = UsageStatsStore::loadRecentlyPlayed(const_cast<QSqlDatabase &>(m_db), limit);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return {};
+  }
+  return result.value();
+}
+
+auto DatabaseManager::loadUsageByCollection() const
+    -> QHash<QString, UsageStatsStore::CollectionUsage> {
+  auto result = UsageStatsStore::loadCollectionBreakdown(const_cast<QSqlDatabase &>(m_db));
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return {};
+  }
+  return result.value();
+}
+
+bool DatabaseManager::resetAllUsageStats() {
+  auto result = UsageStatsStore::resetAll(m_db);
   if (result.isError()) {
     ErrorUtils::logError(result.error());
     emit errorOccurred(result.error());

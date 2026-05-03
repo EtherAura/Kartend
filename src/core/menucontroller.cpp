@@ -1,10 +1,12 @@
 // Handles menu bar setup and action connections, extracted from MainWindow.
 #include "menucontroller.h"
 #include "collectionutils.h"
+#include "databasemanager.h"
 #include "navigationmanager.h"
 #include "settingsmanager.h"
 #include "shortcutsdialog.h"
 #include "sidebarmanager.h"
+#include "statisticsdialog.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
 
@@ -33,6 +35,7 @@ void MenuController::setupMenuBar() {
   setupActionAboutQt();
   setupFullscreenAction();
   setupShortcutsAction();
+  setupStatisticsAction();
   setupGridWidthActions();
 }
 
@@ -415,6 +418,29 @@ void MenuController::setupShortcutsAction() {
 
   connect(m_shortcutsAction, &QAction::triggered, [this]() {
     ShortcutsDialog dialog(m_ctx.mainWindow);
+    dialog.exec();
+  });
+}
+
+void MenuController::setupStatisticsAction() {
+  if (!m_ctx.mainWindow) return;
+
+  // Programmatic action (no .ui entry yet) so the menu wiring stays self-
+  // contained alongside the dialog. Lives in the Help menu next to Shortcuts.
+  m_statisticsAction = new QAction(tr("Usage Statistics…"), this);
+  m_statisticsAction->setShortcutContext(Qt::ApplicationShortcut);
+  m_ctx.mainWindow->addAction(m_statisticsAction);
+
+  if (m_ctx.ui && m_ctx.ui->menuHelp) {
+    m_ctx.ui->menuHelp->addAction(m_statisticsAction);
+  }
+
+  connect(m_statisticsAction, &QAction::triggered, [this]() {
+    DatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
+    QList<CollectionConfig> *collections = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
+    GeneralSettings *settings = m_ctx.getGeneralSettings ? m_ctx.getGeneralSettings() : nullptr;
+    const bool runtimeOn = settings && settings->runtimeDetectionEnabled;
+    StatisticsDialog dialog(db, collections, runtimeOn, m_ctx.mainWindow);
     dialog.exec();
   });
 }

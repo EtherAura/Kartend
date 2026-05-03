@@ -13,6 +13,7 @@
 #include "errorutils.h"
 #include "itemartwork.h"
 #include "itemmetadata.h"
+#include "usagestatsstore.h"
 
 class SessionManager;
 
@@ -103,6 +104,43 @@ public:
   /// clears an override. Succeeds even when no matching row exists.
   bool removeItemArtwork(const QString &collectionUuid, const QString &path,
                          const QString &artworkType);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Usage statistics (Kartend-7vi)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /// Loads play_count/last_played/total_play_seconds for a single item via the
+  /// main-thread connection. Returns a default-initialized struct on missing
+  /// row or DB error (errors logged), so the sidebar can degrade silently.
+  [[nodiscard]] UsageStatsStore::ItemUsageStats loadItemUsageStats(const QString &collectionUuid,
+                                                                   const QString &path) const;
+
+  /// Increments play_count and stamps last_played for the given item.
+  /// Best-effort: failures are logged; the launch path does not block on this.
+  void recordItemLaunch(const QString &collectionUuid, const QString &path);
+
+  /// Adds `seconds` to the item's cumulative total_play_seconds. Called when
+  /// runtime detection (Kartend-qxv) reports a tracked process exit. Negative
+  /// or zero durations are dropped.
+  void recordItemPlaySession(const QString &collectionUuid, const QString &path, qint64 seconds);
+
+  /// Whole-library aggregate counters used by the Statistics dialog header.
+  [[nodiscard]] UsageStatsStore::AggregateStats loadAggregateUsageStats() const;
+
+  /// Top items by play_count (descending). `limit` is clamped server-side to
+  /// [1, 1000] so callers can pass user-driven values without sanitizing.
+  [[nodiscard]] QList<UsageStatsStore::ItemUsageRow> loadTopPlayedItems(int limit) const;
+
+  /// Most recently launched items (descending last_played). `limit` clamped.
+  [[nodiscard]] QList<UsageStatsStore::ItemUsageRow> loadRecentlyPlayedItems(int limit) const;
+
+  /// Per-collection breakdown keyed on collection_uuid. Includes uuids whose
+  /// CollectionConfig may have been deleted, so totals match the aggregate.
+  [[nodiscard]] QHash<QString, UsageStatsStore::CollectionUsage> loadUsageByCollection() const;
+
+  /// Resets every usage column to zero/NULL across the entire library.
+  /// Returns true on success.
+  bool resetAllUsageStats();
 
 signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);

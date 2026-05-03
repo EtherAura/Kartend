@@ -18,8 +18,10 @@
 
 #include "alphabeticnavigationhandler.h"
 #include "animationmanager.h"
+#include "applicationcontext.h"
 #include "arrownavigationhandler.h"
 #include "attractmanager.h"
+#include "databasemanager.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
 #include "keyboardmanager.h"
@@ -145,6 +147,23 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   if (m_launchManager) {
     LaunchManagerSetup launchSetup;
     launchSetup.ctx = setup.ctx;
+    // Kartend-7vi: forward launch + session events into DatabaseManager via
+    // callbacks so LaunchManager itself doesn't take a hard link-time
+    // dependency on the database module (keeps the launch unit tests slim).
+    if (setup.ctx) {
+      const ApplicationContext *appCtx = setup.ctx;
+      launchSetup.onLaunched = [appCtx](const QString &uuid, const QString &filePath) {
+        if (appCtx->managers.databaseManager) {
+          appCtx->managers.databaseManager->recordItemLaunch(uuid, filePath);
+        }
+      };
+      launchSetup.onPlaySessionEnded = [appCtx](const QString &uuid, const QString &filePath,
+                                                qint64 seconds) {
+        if (appCtx->managers.databaseManager) {
+          appCtx->managers.databaseManager->recordItemPlaySession(uuid, filePath, seconds);
+        }
+      };
+    }
     m_launchManager->setupReferences(launchSetup);
   }
 

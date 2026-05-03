@@ -39,10 +39,33 @@ void LaunchManager::setupReferences(const LaunchManagerSetup &setup) {
   if (m_ctx) {
     m_generalSettings = m_ctx->collection.generalSettings;
   }
+  m_onLaunched = setup.onLaunched;
+  m_onPlaySessionEnded = setup.onPlaySessionEnded;
 }
 
 bool LaunchManager::runtimeDetectionEnabled() const {
   return m_generalSettings && m_generalSettings->runtimeDetectionEnabled;
+}
+
+QString LaunchManager::resolveCollectionUuid(int collectionIndex) const {
+  if (!m_collections || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
+    return {};
+  }
+  const CollectionConfig &collection = (*m_collections)[collectionIndex];
+  // Mirrors how SidebarManager keys per-item rows: name + expanded media dir.
+  // Uses the same helper so UUIDs stay consistent across reads/writes.
+  const QString expandedMediaDir =
+      PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
+  return CollectionUtils::computeCollectionUuid(collection.name, expandedMediaDir);
+}
+
+void LaunchManager::recordSuccessfulLaunch(const QString &filePath, const QString &collectionUuid) {
+  if (collectionUuid.isEmpty() || filePath.isEmpty()) {
+    return;
+  }
+  if (m_onLaunched) {
+    m_onLaunched(collectionUuid, filePath);
+  }
 }
 
 bool LaunchManager::canLaunch(const QString &filePath) const {
@@ -290,12 +313,21 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
     return;
   }
 
+  // Resolve UUID once: both the detached and tracked paths route stats
+  // updates through the same key. Empty UUID skips tracking silently — the
+  // launch itself still proceeds.
+  const QString collectionUuid = resolveCollectionUuid(collectionIndex);
+
   // Kartend-qxv: when runtime detection is enabled, route through a tracked
   // QProcess so we can emit started/finished signals and let the UI sleep
   // behind a "Now Playing" overlay. Otherwise fall back to the historical
   // detached launch which leaves Kartend ignorant of the child lifetime.
   if (runtimeDetectionEnabled()) {
-    if (launchTracked(launcherPath, cmd, launchFilePath)) {
+    if (launchTracked(launcherPath, cmd, launchFilePath, collectionUuid)) {
+      // Kartend-7vi: increment play_count + last_played as soon as the
+      // tracked child has been spawned. Session duration is recorded
+      // separately when runtimeFinished fires.
+      recordSuccessfulLaunch(filePath, collectionUuid);
       return;
     }
     // launchTracked already showed a message box on failure to start.
@@ -312,11 +344,17 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
                            .arg(cmd.arguments.join(" "));
 
     QMessageBox::critical(nullptr, "Launch Error", errorMsg);
+    return;
   }
+
+  // Kartend-7vi: detached launches can't measure session duration (we don't
+  // own the child PID), but we still record the launch event. Time-played
+  // remains zero until the user enables runtime detection.
+  recordSuccessfulLaunch(filePath, collectionUuid);
 }
 
 bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchCommand &cmd,
-                                  const QString &filePath) {
+                                  const QString &filePath, const QString &collectionUuid) {
   // Only one tracked child at a time; reject overlapping launches so the
   // overlay state stays coherent.
   if (m_trackedChild) {
@@ -329,6 +367,8 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
   auto *child = new QProcess(this);
   m_trackedChild = child;
   m_trackedFilePath = filePath;
+  m_trackedCollectionUuid = collectionUuid;
+  m_trackedStartTime = QDateTime();
 
   // Detach the child from Kartend's stdio so a busy launcher doesn't fill
   // our pipes (and to avoid blocking on closed channels at exit).
@@ -337,8 +377,12 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
 
   const QString displayName = QFileInfo(filePath).completeBaseName();
 
-  connect(child, &QProcess::started, this,
-          [this, filePath, displayName]() { emit runtimeStarted(filePath, displayName); });
+  connect(child, &QProcess::started, this, [this, filePath, displayName]() {
+    // Capture the start moment here rather than at child->start() so the
+    // recorded duration reflects actual run time (not queueing delay).
+    m_trackedStartTime = QDateTime::currentDateTimeUtc();
+    emit runtimeStarted(filePath, displayName);
+  });
 
   // QProcess emits exactly one of finished() or errorOccurred()-with-FailedToStart
   // before the object is safe to delete. Funnel both through a single cleanup
@@ -347,8 +391,20 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
     if (m_trackedChild != child) {
       return; // Already cleaned up.
     }
+    // Kartend-7vi: record the session duration before clearing the tracked
+    // state. Skip when the child never reached `started` (FailedToStart) —
+    // m_trackedStartTime stays default-constructed in that case.
+    if (m_trackedStartTime.isValid() && !m_trackedCollectionUuid.isEmpty() &&
+        m_onPlaySessionEnded) {
+      const qint64 elapsed = m_trackedStartTime.secsTo(QDateTime::currentDateTimeUtc());
+      if (elapsed > 0) {
+        m_onPlaySessionEnded(m_trackedCollectionUuid, filePath, elapsed);
+      }
+    }
     m_trackedChild.clear();
     m_trackedFilePath.clear();
+    m_trackedCollectionUuid.clear();
+    m_trackedStartTime = QDateTime();
     emit runtimeFinished(filePath);
     child->deleteLater();
   };

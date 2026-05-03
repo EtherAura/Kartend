@@ -218,6 +218,7 @@ void MainWindow::createMenuBar() {
   ctx.getSidebarManager = [this]() { return getSidebarManager(); };
   ctx.getScrollManager = [this]() { return getScrollManager(); };
   ctx.getArtworkManager = [this]() { return getArtworkManager(); };
+  ctx.getDatabaseManager = [this]() { return getDatabaseManager(); };
   ctx.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
   ctx.getCollections = [this]() { return &m_collections; };
   ctx.getGeneralSettings = [this]() { return &m_generalSettings; };

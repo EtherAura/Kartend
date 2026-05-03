@@ -101,7 +101,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
     return;
   }
 
-  constexpr int CURRENT_SCHEMA_VERSION = 6;
+  constexpr int CURRENT_SCHEMA_VERSION = 7;
   const int version = getUserVersion(db);
   if (version >= CURRENT_SCHEMA_VERSION) {
     return;
@@ -312,6 +312,25 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
                 origin, "idx_item_artwork_uuid_path");
 
     setUserVersion(db, 6);
+    mutableVersion = 6;
+  }
+
+  if (mutableVersion < 7) {
+    // v7: Cumulative play-time tracking (Kartend-7vi). play_count and
+    // last_played already exist from v1; add total_play_seconds for the
+    // runtime-detection (Kartend-qxv) accumulated session duration. Also
+    // index last_played so the "Recently played" view can sort cheaply.
+    ensureColumn(db, "items", "total_play_seconds", "INTEGER DEFAULT 0", origin);
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_items_last_played ON "
+                "items(last_played)",
+                origin, "idx_items_last_played");
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_items_play_count ON "
+                "items(play_count)",
+                origin, "idx_items_play_count");
+
+    setUserVersion(db, 7);
   }
 }
 
