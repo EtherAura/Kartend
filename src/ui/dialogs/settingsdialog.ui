@@ -1253,79 +1253,94 @@
            </item>
           </layout>
          </widget>
-         <!-- Sidebar Tab -->
-         <widget class="QWidget" name="sidebarTab">
-          <attribute name="title">
-           <string>Sidebar</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="sidebarTabLayout">
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <!-- Sidebar Tab (Kartend-b57): top-level category. Settings are
+          per-collection — the row below shows which collection is being
+          edited (driven by the Collections tab tree selection). -->
+     <widget class="QWidget" name="sidebarTab">
+      <attribute name="title">
+       <string>Sidebar</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="sidebarTabLayout">
+       <item>
+        <widget class="QLabel" name="sidebarActiveCollectionLabel">
+         <property name="text">
+          <string>Editing: (no collection selected)</string>
+         </property>
+         <property name="toolTip">
+          <string>These settings apply to the collection selected in the Collections tab.</string>
+         </property>
+         <property name="styleSheet">
+          <string>QLabel { font-style: italic; color: palette(mid); }</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QFormLayout" name="sidebarFormLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="label_sidebarMode">
+           <property name="text">
+            <string>Sidebar Mode:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QComboBox" name="sidebarModeComboBox">
+           <property name="toolTip">
+            <string>Choose how the sidebar is displayed</string>
+           </property>
            <item>
-            <layout class="QFormLayout" name="sidebarFormLayout">
-             <item row="0" column="0">
-              <widget class="QLabel" name="label_sidebarMode">
-               <property name="text">
-                <string>Sidebar Mode:</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="1">
-              <widget class="QComboBox" name="sidebarModeComboBox">
-               <property name="toolTip">
-                <string>Choose how the sidebar is displayed</string>
-               </property>
-               <item>
-                <property name="text">
-                 <string>Overlay</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>Fixed</string>
-                </property>
-               </item>
-              </widget>
-             </item>
-             <item row="1" column="0">
-              <widget class="QLabel" name="label_scrollbars">
-               <property name="text">
-                <string>Scrollbars:</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="1">
-              <layout class="QHBoxLayout" name="scrollbarsLayout">
-               <item>
-                <widget class="QCheckBox" name="hideHorizontalScrollbarCheckBox">
-                 <property name="toolTip"><string>Hide the horizontal scrollbar for this collection</string></property>
-                 <property name="text"><string>Hide Horizontal</string></property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QCheckBox" name="hideVerticalScrollbarCheckBox">
-                 <property name="toolTip"><string>Hide the vertical scrollbar for this collection</string></property>
-                 <property name="text"><string>Hide Vertical</string></property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-            </layout>
+            <property name="text">
+             <string>Overlay</string>
+            </property>
            </item>
            <item>
-            <spacer name="sidebarVerticalSpacer">
-             <property name="orientation">
-              <enum>Qt::Orientation::Vertical</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>40</height>
-              </size>
-             </property>
-            </spacer>
+            <property name="text">
+             <string>Fixed</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="label_scrollbars">
+           <property name="text">
+            <string>Scrollbars:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <layout class="QHBoxLayout" name="scrollbarsLayout">
+           <item>
+            <widget class="QCheckBox" name="hideHorizontalScrollbarCheckBox">
+             <property name="toolTip"><string>Hide the horizontal scrollbar for this collection</string></property>
+             <property name="text"><string>Hide Horizontal</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="hideVerticalScrollbarCheckBox">
+             <property name="toolTip"><string>Hide the vertical scrollbar for this collection</string></property>
+             <property name="text"><string>Hide Vertical</string></property>
+            </widget>
            </item>
           </layout>
-         </widget>
-        </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <spacer name="sidebarVerticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
        </item>
       </layout>
      </widget>
