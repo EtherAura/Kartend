@@ -40,6 +40,10 @@ private slots:
   void ensureFavoritesPlaylist_createsExactlyOnce();
   void ensureFavoritesPlaylist_returnsExistingRow();
   void deletePlaylist_refusesReservedRow();
+  void exportToJson_writesAllItemsAndRoundTrips();
+  void exportToM3U_writesExtendedFormatWithBasenameTitles();
+  void importFromM3U_skipsUnresolvableEntries();
+  void importFromJson_rejectsMissingVersion();
 
 private:
   QTemporaryDir m_tempDir;
@@ -312,6 +316,154 @@ void TestPlaylistManager::deletePlaylist_refusesReservedRow() {
   QVERIFY(m_pm->renamePlaylist(favId, "Bookmarks"));
   QCOMPARE(m_pm->loadAll().first().name, QString("Bookmarks"));
   QCOMPARE(m_pm->loadAll().first().reservedKind, QString("favorites"));
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Import / export tests (Kartend-5pqv)
+// ────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+// Drops the in-memory items table back to a known shape. PlaylistManager
+// doesn't create or own this table — it's normally populated by
+// DatabaseManager — but the M3U import path queries it to resolve paths to
+// (uuid, path) pairs, so we stand up a minimal version on the same
+// connection.
+void seedItemsTable(QSqlDatabase db) {
+  QSqlQuery q(db);
+  q.exec("CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY, "
+         "collection_uuid TEXT, path TEXT)");
+  q.exec("DELETE FROM items");
+}
+
+void insertItem(QSqlDatabase db, const QString &uuid, const QString &path) {
+  QSqlQuery q(db);
+  q.prepare("INSERT INTO items (collection_uuid, path) VALUES (?, ?)");
+  q.addBindValue(uuid);
+  q.addBindValue(path);
+  q.exec();
+}
+
+QSqlDatabase openSharedConnection() {
+  // PlaylistManager opens the connection name "kartend_playlists_main" on
+  // its own; we ride alongside via the same name to seed the items table.
+  return QSqlDatabase::database("kartend_playlists_main");
+}
+
+} // namespace
+
+void TestPlaylistManager::exportToJson_writesAllItemsAndRoundTrips() {
+  auto created = m_pm->createPlaylist("Round Trip");
+  QVERIFY(created.isOk());
+  const QString id = created.value();
+  m_pm->addItem(id, "uuid-a", "/games/a.rom");
+  m_pm->addItem(id, "uuid-b", "/movies/b.mkv");
+
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString jsonPath = tmp.filePath("export.json");
+  auto exported = m_pm->exportToJson(id, jsonPath);
+  QVERIFY(exported.isOk());
+  QCOMPARE(exported.value(), 2);
+
+  // Re-import the exported file and assert all items survived with their
+  // original (uuid, path) pairs preserved — this is the lossless round-trip
+  // promise of the JSON format.
+  auto reimport = m_pm->importFromJson(jsonPath, "Round Trip Copy");
+  QVERIFY(reimport.isOk());
+  const QString newId = reimport.value();
+
+  const auto items = m_pm->loadItems(newId);
+  QCOMPARE(items.size(), 2);
+  QCOMPARE(items[0].sourceCollectionUuid, QString("uuid-a"));
+  QCOMPARE(items[0].sourcePath, QString("/games/a.rom"));
+  QCOMPARE(items[1].sourceCollectionUuid, QString("uuid-b"));
+  QCOMPARE(items[1].sourcePath, QString("/movies/b.mkv"));
+
+  // The override-name beat the embedded "Round Trip", confirming the
+  // disambiguation path that lets users distinguish a re-imported copy.
+  bool sawCopyName = false;
+  for (const auto &row : m_pm->loadAll()) {
+    if (row.id == newId && row.name == "Round Trip Copy") {
+      sawCopyName = true;
+    }
+  }
+  QVERIFY(sawCopyName);
+}
+
+void TestPlaylistManager::exportToM3U_writesExtendedFormatWithBasenameTitles() {
+  auto created = m_pm->createPlaylist("Mix");
+  const QString id = created.value();
+  m_pm->addItem(id, "u", "/games/Sonic 2.gen");
+  m_pm->addItem(id, "u", "/movies/Akira.mkv");
+
+  QTemporaryDir tmp;
+  const QString m3uPath = tmp.filePath("mix.m3u");
+  auto result = m_pm->exportToM3U(id, m3uPath);
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value(), 2);
+
+  QFile f(m3uPath);
+  QVERIFY(f.open(QIODevice::ReadOnly | QIODevice::Text));
+  const QString contents = QString::fromUtf8(f.readAll());
+  // #EXTM3U on line 1 unlocks the extended-format path in most parsers; the
+  // EXTINF/path pairs must follow in insertion order so the output stays
+  // consistent with what the user sees in the grid.
+  QVERIFY(contents.startsWith("#EXTM3U\n"));
+  QVERIFY(contents.contains("#EXTINF:-1,Sonic 2"));
+  QVERIFY(contents.contains("/games/Sonic 2.gen"));
+  QVERIFY(contents.contains("#EXTINF:-1,Akira"));
+  QVERIFY(contents.contains("/movies/Akira.mkv"));
+}
+
+void TestPlaylistManager::importFromM3U_skipsUnresolvableEntries() {
+  // Seed two items in the DB; the M3U file references three. The third
+  // should be skipped and counted in outSkipped — the alternative ("store
+  // as broken ref") would silently bloat the playlist with unresolvable
+  // rows that the existence-checked fetch SQL never surfaces anyway.
+  QSqlDatabase db = openSharedConnection();
+  seedItemsTable(db);
+  insertItem(db, "uuid-x", "/games/found1.rom");
+  insertItem(db, "uuid-y", "/games/found2.rom");
+
+  QTemporaryDir tmp;
+  const QString m3uPath = tmp.filePath("input.m3u");
+  QFile f(m3uPath);
+  QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+  f.write("#EXTM3U\n");
+  f.write("/games/found1.rom\n");
+  f.write("/games/missing.rom\n");
+  f.write("#EXTINF:-1,Found Two\n");
+  f.write("/games/found2.rom\n");
+  f.close();
+
+  int skipped = -1;
+  auto created = m_pm->importFromM3U(m3uPath, "Imported", &skipped);
+  QVERIFY(created.isOk());
+  QCOMPARE(skipped, 1);
+
+  const auto items = m_pm->loadItems(created.value());
+  QCOMPARE(items.size(), 2);
+  // Resolved uuids come from the items table — confirms importFromM3U is
+  // doing the path → uuid lookup rather than blindly storing empty uuids.
+  QCOMPARE(items[0].sourceCollectionUuid, QString("uuid-x"));
+  QCOMPARE(items[1].sourceCollectionUuid, QString("uuid-y"));
+}
+
+void TestPlaylistManager::importFromJson_rejectsMissingVersion() {
+  QTemporaryDir tmp;
+  const QString jsonPath = tmp.filePath("bad.json");
+  QFile f(jsonPath);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write(R"({"name": "No Version", "items": []})");
+  f.close();
+
+  // Without kartend_playlist_version, we can't know the schema shape — bail
+  // rather than guess, so a future schema bump catches stale tooling
+  // explicitly instead of silently accepting incompatible data.
+  auto result = m_pm->importFromJson(jsonPath);
+  QVERIFY(result.isError());
+  QCOMPARE(m_pm->loadAll().size(), 0);
 }
 
 QTEST_MAIN(TestPlaylistManager)

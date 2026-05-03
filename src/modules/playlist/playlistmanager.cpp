@@ -2,9 +2,15 @@
 
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
+#include <QTextStream>
 #include <QUuid>
 
 #include "errorutils.h"
@@ -467,4 +473,240 @@ QString PlaylistManager::ensureFavoritesPlaylist(const QString &defaultName) {
   }
   m_favoritesId = created.value();
   return m_favoritesId;
+}
+
+// ============================================================================
+// Import / export (Kartend-5pqv)
+// ============================================================================
+
+namespace {
+
+PlaylistRow loadPlaylistRow(QSqlDatabase &db, const QString &id) {
+  PlaylistRow row;
+  QSqlQuery q(db);
+  q.prepare("SELECT id, name, icon, parent_collection_uuid, reserved_kind, "
+            "created_at, updated_at FROM playlists WHERE id = ?");
+  q.addBindValue(id);
+  if (q.exec() && q.next()) {
+    row.id = q.value(0).toString();
+    row.name = q.value(1).toString();
+    row.icon = q.value(2).toString();
+    row.parentCollectionUuid = q.value(3).toString();
+    row.reservedKind = q.value(4).toString();
+    row.createdAt = q.value(5).toString();
+    row.updatedAt = q.value(6).toString();
+  }
+  return row;
+}
+
+} // namespace
+
+ErrorUtils::Result<int> PlaylistManager::exportToJson(const QString &playlistId,
+                                                      const QString &outPath) const {
+  if (!m_db.isOpen()) {
+    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
+                               "PlaylistManager::exportToJson");
+  }
+  if (playlistId.isEmpty() || outPath.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "playlistId and outPath are required",
+                               "PlaylistManager::exportToJson");
+  }
+  // const_cast: loadPlaylistRow takes a non-const QSqlDatabase& because Qt's
+  // QSqlQuery constructor wants a mutable reference, but the operation is
+  // logically a read.
+  PlaylistRow row = loadPlaylistRow(const_cast<QSqlDatabase &>(m_db), playlistId);
+  if (row.id.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Playlist not found",
+                               "PlaylistManager::exportToJson");
+  }
+  const QList<PlaylistItemRef> items = loadItems(playlistId);
+
+  QJsonArray itemsArray;
+  for (const PlaylistItemRef &item : items) {
+    QJsonObject obj;
+    obj["source_collection_uuid"] = item.sourceCollectionUuid;
+    obj["source_path"] = item.sourcePath;
+    obj["added_at"] = item.addedAt;
+    itemsArray.append(obj);
+  }
+
+  QJsonObject doc;
+  // Versioned wrapper so a future schema change can branch on read without
+  // having to sniff fields. Bump on any breaking change to the item shape.
+  doc["kartend_playlist_version"] = 1;
+  doc["name"] = row.name;
+  doc["icon"] = row.icon;
+  doc["parent_collection_uuid"] = row.parentCollectionUuid;
+  // reserved_kind intentionally omitted — exporting "favorites" and re-
+  // importing would create a duplicate reserved row, which deletePlaylist
+  // refuses to clean up. Imported playlists are always plain user playlists.
+  doc["created_at"] = row.createdAt;
+  doc["updated_at"] = row.updatedAt;
+  doc["items"] = itemsArray;
+
+  QFile file(outPath);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to open output file",
+                               "PlaylistManager::exportToJson")
+        .withDetails(file.errorString());
+  }
+  const QByteArray bytes = QJsonDocument(doc).toJson(QJsonDocument::Indented);
+  if (file.write(bytes) != bytes.size()) {
+    file.close();
+    return ErrorContext::error(ErrorCode::FileWriteError, "Short write to JSON file",
+                               "PlaylistManager::exportToJson");
+  }
+  file.close();
+  return items.size();
+}
+
+ErrorUtils::Result<int> PlaylistManager::exportToM3U(const QString &playlistId,
+                                                     const QString &outPath) const {
+  if (!m_db.isOpen()) {
+    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
+                               "PlaylistManager::exportToM3U");
+  }
+  if (playlistId.isEmpty() || outPath.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "playlistId and outPath are required",
+                               "PlaylistManager::exportToM3U");
+  }
+  const QList<PlaylistItemRef> items = loadItems(playlistId);
+
+  QFile file(outPath);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to open output file",
+                               "PlaylistManager::exportToM3U")
+        .withDetails(file.errorString());
+  }
+  QTextStream out(&file);
+  // Extended-M3U marker on line 1 so parsers that look for it (most modern
+  // players) recognise the dialect. Each entry gets an EXTINF line with
+  // duration -1 (unknown) and the file's basename as the title — we don't
+  // currently track per-item titles in playlist_items, but the basename is
+  // what every other Kartend surface defaults to.
+  out << "#EXTM3U\n";
+  for (const PlaylistItemRef &item : items) {
+    const QString title = QFileInfo(item.sourcePath).completeBaseName();
+    out << "#EXTINF:-1," << title << "\n";
+    out << item.sourcePath << "\n";
+  }
+  file.close();
+  return items.size();
+}
+
+ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPath,
+                                                            const QString &nameOverride) {
+  if (!m_db.isOpen()) {
+    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
+                               "PlaylistManager::importFromJson");
+  }
+  QFile file(inPath);
+  if (!file.open(QIODevice::ReadOnly)) {
+    return ErrorContext::error(ErrorCode::FileNotFound, "Failed to open input file",
+                               "PlaylistManager::importFromJson")
+        .withDetails(file.errorString());
+  }
+  const QByteArray raw = file.readAll();
+  file.close();
+
+  QJsonParseError parseErr;
+  const QJsonDocument doc = QJsonDocument::fromJson(raw, &parseErr);
+  if (doc.isNull() || !doc.isObject()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Failed to parse JSON",
+                               "PlaylistManager::importFromJson")
+        .withDetails(parseErr.errorString());
+  }
+  const QJsonObject root = doc.object();
+  if (root.value("kartend_playlist_version").toInt(0) < 1) {
+    return ErrorContext::error(ErrorCode::InvalidArgument,
+                               "Missing or unsupported kartend_playlist_version",
+                               "PlaylistManager::importFromJson");
+  }
+
+  const QString name =
+      nameOverride.trimmed().isEmpty() ? root.value("name").toString() : nameOverride.trimmed();
+  if (name.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Playlist name is empty",
+                               "PlaylistManager::importFromJson");
+  }
+  // parent_collection_uuid is preserved on a best-effort basis. The
+  // synthesizer's resync (MainWindow::resyncPlaylistCollections) falls back
+  // to root level when the uuid no longer matches any real collection, so a
+  // stale reference is harmless.
+  const QString parentUuid = root.value("parent_collection_uuid").toString();
+  auto created = createPlaylist(name, parentUuid);
+  if (created.isError()) {
+    return created.error();
+  }
+  const QString &newId = created.value();
+
+  const QJsonArray itemsArray = root.value("items").toArray();
+  for (const auto val : itemsArray) {
+    const QJsonObject obj = val.toObject();
+    const QString uuid = obj.value("source_collection_uuid").toString();
+    const QString path = obj.value("source_path").toString();
+    if (path.isEmpty()) {
+      continue;
+    }
+    addItem(newId, uuid, path);
+  }
+  return newId;
+}
+
+ErrorUtils::Result<QString> PlaylistManager::importFromM3U(const QString &inPath,
+                                                           const QString &playlistName,
+                                                           int *outSkipped) {
+  if (outSkipped) {
+    *outSkipped = 0;
+  }
+  if (!m_db.isOpen()) {
+    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
+                               "PlaylistManager::importFromM3U");
+  }
+  QFile file(inPath);
+  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    return ErrorContext::error(ErrorCode::FileNotFound, "Failed to open input file",
+                               "PlaylistManager::importFromM3U")
+        .withDetails(file.errorString());
+  }
+
+  const QString name = playlistName.trimmed().isEmpty() ? QFileInfo(inPath).completeBaseName()
+                                                        : playlistName.trimmed();
+  auto created = createPlaylist(name);
+  if (created.isError()) {
+    file.close();
+    return created.error();
+  }
+  const QString &newId = created.value();
+
+  // Resolve each path via the live items table — playlist_items is keyed by
+  // (source_collection_uuid, source_path), so we have to know which source
+  // collection owns the path to round-trip correctly. Paths the items table
+  // doesn't recognise are skipped (counted in *outSkipped) rather than
+  // stored as broken refs; the user can re-import once collections have
+  // been rescanned and the paths become resolvable.
+  QSqlQuery resolve(m_db);
+  resolve.prepare("SELECT collection_uuid FROM items WHERE path = ? LIMIT 1");
+
+  QTextStream in(&file);
+  int skipped = 0;
+  while (!in.atEnd()) {
+    const QString line = in.readLine().trimmed();
+    if (line.isEmpty() || line.startsWith('#')) {
+      continue;
+    }
+    resolve.bindValue(0, line);
+    if (!resolve.exec() || !resolve.next()) {
+      ++skipped;
+      continue;
+    }
+    const QString uuid = resolve.value(0).toString();
+    addItem(newId, uuid, line);
+  }
+  file.close();
+
+  if (outSkipped) {
+    *outSkipped = skipped;
+  }
+  return newId;
 }
