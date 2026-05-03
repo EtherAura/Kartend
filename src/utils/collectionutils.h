@@ -63,23 +63,78 @@ namespace CollectionUtils {
 
 } // namespace CollectionUtils
 
+/// Kartend-p1jd: a globally-registered, reusable launcher configuration. A
+/// LauncherConfig that carries a non-empty `presetId` matching a preset's
+/// `id` inherits its name + path + core + parameters from the preset at
+/// resolution time (LauncherUtils::resolvePreset). Renaming a preset is
+/// safe because references key off the stable `id`, not the user-visible
+/// name. Deleting a referenced preset leaves the inline fields as the
+/// fallback — typically empty, so the launch surfaces a clear error.
+struct LauncherPreset {
+  QString id;
+  QString name;
+  QString launcherPath;
+  QString corePath;
+  QString launchParameters;
+
+  bool operator==(const LauncherPreset &other) const {
+    return id == other.id && name == other.name && launcherPath == other.launcherPath &&
+           corePath == other.corePath && launchParameters == other.launchParameters;
+  }
+};
+
 /// Kartend-bdl: one entry in a collection's launcher list. The legacy primary
 /// launcher (CollectionConfig::launcherPath/corePath/launchParameters) is
 /// always present as launcher index 0; entries in
 /// CollectionConfig::additionalLaunchers occupy indices 1..N. `name` is a
 /// user-visible label shown in the launcher chooser; empty falls back to the
 /// executable basename.
+///
+/// Kartend-p1jd: when `presetId` matches a registered LauncherPreset id, the
+/// preset's fields override the inline launcher fields at resolution time.
 struct LauncherConfig {
   QString name;
   QString launcherPath;
   QString corePath;
   QString launchParameters;
+  /// Optional reference to a globally-registered preset (Kartend-p1jd).
+  /// When set and the preset exists, all other fields are inherited from
+  /// the preset. Empty means "use the inline fields verbatim".
+  QString presetId;
 
   bool operator==(const LauncherConfig &other) const {
     return name == other.name && launcherPath == other.launcherPath && corePath == other.corePath &&
-           launchParameters == other.launchParameters;
+           launchParameters == other.launchParameters && presetId == other.presetId;
   }
 };
+
+namespace LauncherUtils {
+
+/// Returns a LauncherConfig with fields resolved against the preset list.
+/// When `lc.presetId` matches a preset, that preset's name/path/core/params
+/// replace the inline fields (the preset id stays attached for round-trip
+/// persistence). When the preset is missing or `presetId` is empty, the
+/// returned config equals `lc`. Kartend-p1jd.
+[[nodiscard]] inline LauncherConfig resolvePreset(const LauncherConfig &lc,
+                                                  const QList<LauncherPreset> &presets) {
+  if (lc.presetId.isEmpty()) {
+    return lc;
+  }
+  for (const LauncherPreset &preset : presets) {
+    if (preset.id == lc.presetId) {
+      LauncherConfig resolved;
+      resolved.name = preset.name;
+      resolved.launcherPath = preset.launcherPath;
+      resolved.corePath = preset.corePath;
+      resolved.launchParameters = preset.launchParameters;
+      resolved.presetId = lc.presetId;
+      return resolved;
+    }
+  }
+  return lc;
+}
+
+} // namespace LauncherUtils
 
 struct CollectionConfig {
   QString name;
@@ -225,8 +280,10 @@ struct CollectionConfig {
     if (index == 0) {
       // Qualify with this-> so the compiler doesn't confuse the legacy fields
       // with the same-named members on LauncherConfig during aggregate init.
+      // The trailing empty string is the (Kartend-p1jd) presetId — the
+      // primary launcher slot itself never references a preset.
       return LauncherConfig{this->launcherName, this->launcherPath, this->corePath,
-                            this->launchParameters};
+                            this->launchParameters, QString{}};
     }
     const int additionalIndex = index - 1;
     if (additionalIndex < 0 || additionalIndex >= this->additionalLaunchers.size()) {
@@ -502,6 +559,15 @@ struct GeneralSettings {
   // child runs and automatically restore + raise the window when it exits.
   // ─────────────────────────────────────────────────────────────────────────
   bool runtimeDetectionEnabled = false;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Launcher presets (Kartend-p1jd)
+  // Globally-registered, reusable launcher configurations referenced by
+  // collection-level launcher entries via LauncherConfig::presetId. Stored
+  // in the [Launchers] settings array; managed via the "Launchers" tab in
+  // the settings dialog.
+  // ─────────────────────────────────────────────────────────────────────────
+  QList<LauncherPreset> launcherPresets;
 
   QHash<int, int> lastSelectedItems;
   GeneralSettings() = default;

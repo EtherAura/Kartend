@@ -1,5 +1,6 @@
 #include "launchereditordialog.h"
 
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -9,13 +10,37 @@
 #include <QVBoxLayout>
 
 LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig &initial,
-                                           const QString &title)
-    : QDialog(parent) {
+                                           const QString &title,
+                                           const QList<LauncherPreset> &availablePresets)
+    : QDialog(parent), m_availablePresets(availablePresets) {
   setWindowTitle(title);
   setModal(true);
 
   auto *layout = new QVBoxLayout(this);
   auto *form = new QFormLayout();
+
+  // Kartend-p1jd: only render the preset combo when the caller passed a
+  // non-empty list. The preset-management UI itself reuses this dialog to
+  // edit preset entries directly — and presets can't reference other
+  // presets, so the combo is omitted in that flow.
+  if (!m_availablePresets.isEmpty()) {
+    m_presetCombo = new QComboBox(this);
+    m_presetCombo->addItem(tr("Inline (no preset)"), QString());
+    int initialPresetIndex = -1;
+    for (int i = 0; i < m_availablePresets.size(); ++i) {
+      const LauncherPreset &p = m_availablePresets[i];
+      const QString label = p.name.trimmed().isEmpty() ? p.id : p.name;
+      m_presetCombo->addItem(label, p.id);
+      if (!initial.presetId.isEmpty() && p.id == initial.presetId) {
+        initialPresetIndex = i;
+      }
+    }
+    // Combo index 0 = "Inline"; preset entries occupy indices 1..N.
+    m_presetCombo->setCurrentIndex(initialPresetIndex >= 0 ? initialPresetIndex + 1 : 0);
+    connect(m_presetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            &LauncherEditorDialog::onPresetChanged);
+    form->addRow(tr("Use preset:"), m_presetCombo);
+  }
 
   m_nameEdit = new QLineEdit(initial.name, this);
   m_nameEdit->setPlaceholderText(tr("Display name (optional)"));
@@ -50,7 +75,14 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   layout->addWidget(buttons);
 
-  resize(480, 200);
+  resize(480, 220);
+
+  // Apply the initial preset selection (if any) so the dialog opens with
+  // the fields locked to the preset values when editing a referenced
+  // launcher. Skipped when there's no combo at all.
+  if (m_presetCombo) {
+    applyPresetSelection(m_presetCombo->currentIndex() - 1);
+  }
 }
 
 LauncherConfig LauncherEditorDialog::launcher() const {
@@ -59,6 +91,7 @@ LauncherConfig LauncherEditorDialog::launcher() const {
   out.launcherPath = m_launcherEdit ? m_launcherEdit->text().trimmed() : QString();
   out.corePath = m_coreEdit ? m_coreEdit->text().trimmed() : QString();
   out.launchParameters = m_paramsEdit ? m_paramsEdit->text().trimmed() : QString();
+  out.presetId = m_presetCombo ? m_presetCombo->currentData().toString() : QString();
   return out;
 }
 
@@ -74,4 +107,28 @@ void LauncherEditorDialog::onBrowseCore() {
   if (!fileName.isEmpty() && m_coreEdit) {
     m_coreEdit->setText(fileName);
   }
+}
+
+void LauncherEditorDialog::onPresetChanged(int comboIndex) {
+  // Combo index 0 is "Inline"; preset entries start at 1, so subtract one.
+  applyPresetSelection(comboIndex - 1);
+}
+
+void LauncherEditorDialog::applyPresetSelection(int presetIndex) {
+  const bool inlineMode = presetIndex < 0 || presetIndex >= m_availablePresets.size();
+  if (!inlineMode) {
+    const LauncherPreset &preset = m_availablePresets[presetIndex];
+    if (m_nameEdit) m_nameEdit->setText(preset.name);
+    if (m_launcherEdit) m_launcherEdit->setText(preset.launcherPath);
+    if (m_coreEdit) m_coreEdit->setText(preset.corePath);
+    if (m_paramsEdit) m_paramsEdit->setText(preset.launchParameters);
+  }
+  // Lock the form fields when a preset drives the values so the user can't
+  // silently desync the inline copy from the preset. Switching back to
+  // "Inline" re-enables them with whatever was last shown.
+  const bool fieldsEditable = inlineMode;
+  if (m_nameEdit) m_nameEdit->setEnabled(fieldsEditable);
+  if (m_launcherEdit) m_launcherEdit->setEnabled(fieldsEditable);
+  if (m_coreEdit) m_coreEdit->setEnabled(fieldsEditable);
+  if (m_paramsEdit) m_paramsEdit->setEnabled(fieldsEditable);
 }

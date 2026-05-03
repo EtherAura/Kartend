@@ -128,6 +128,8 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
       launcher.launcherPath = settings.value("launcherPath").toString();
       launcher.corePath = settings.value("corePath").toString();
       launcher.launchParameters = settings.value("launchParameters").toString();
+      // Kartend-p1jd: optional reference to a global preset.
+      launcher.presetId = settings.value("presetId").toString();
       config.additionalLaunchers.append(launcher);
     }
     settings.endArray();
@@ -322,6 +324,8 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
       settings.setValue("corePath",
                         sanitizePersistedPath(launcher.corePath, coreFieldId, sectionName));
       settings.setValue("launchParameters", launcher.launchParameters);
+      // Kartend-p1jd: persist the preset reference (empty when inline).
+      settings.setValue("presetId", launcher.presetId);
     }
     settings.endArray();
     settings.setValue("defaultLauncherIndex", c.defaultLauncherIndex);

@@ -59,6 +59,11 @@ private slots:
   void testBuildLaunchCommand_explicitLauncherConfig();
   void testClampValues_clampsDefaultLauncherIndex();
 
+  // Preset resolution (Kartend-p1jd) tests
+  void testResolvePreset_returnsInputWhenNoPresetId();
+  void testResolvePreset_overridesFieldsFromMatchingPreset();
+  void testResolvePreset_fallsBackToInlineWhenPresetMissing();
+
   // findFileWithExtension hardening tests
   void testFindFileWithExtension_findsFlatFile();
   void testFindFileWithExtension_skipsSymlink();
@@ -493,6 +498,69 @@ void TestLaunchManager::testClampValues_clampsDefaultLauncherIndex() {
   config.defaultLauncherIndex = -3;
   config.clampValues();
   QCOMPARE(config.defaultLauncherIndex, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Preset resolution (Kartend-p1jd)
+// ---------------------------------------------------------------------------
+
+void TestLaunchManager::testResolvePreset_returnsInputWhenNoPresetId() {
+  // No presetId means "use inline fields verbatim" — the resolver must be a
+  // no-op even when the presets list is non-empty (since nothing matches).
+  LauncherConfig inline_;
+  inline_.name = "Inline mGBA";
+  inline_.launcherPath = "/usr/bin/mgba";
+  inline_.launchParameters = "--fullscreen";
+
+  QList<LauncherPreset> presets;
+  presets.append({"preset-1", "RetroArch", "/usr/bin/retroarch", "/cores/mgba.so", "-v"});
+
+  const LauncherConfig out = LauncherUtils::resolvePreset(inline_, presets);
+  QCOMPARE(out.name, inline_.name);
+  QCOMPARE(out.launcherPath, inline_.launcherPath);
+  QCOMPARE(out.launchParameters, inline_.launchParameters);
+  QVERIFY(out.presetId.isEmpty());
+}
+
+void TestLaunchManager::testResolvePreset_overridesFieldsFromMatchingPreset() {
+  // When presetId matches, the preset's fields replace the inline ones —
+  // this is the whole point: editing the preset propagates to all
+  // references without touching the collection's launcher entry.
+  LauncherConfig ref;
+  ref.presetId = "preset-1";
+  ref.name = "stale inline name"; // should be ignored once the preset wins
+  ref.launcherPath = "/old/path";
+  ref.launchParameters = "--stale";
+
+  QList<LauncherPreset> presets;
+  presets.append({"preset-1", "RetroArch + mGBA", "/usr/bin/retroarch", "/cores/mgba.so",
+                  "--fullscreen"});
+
+  const LauncherConfig out = LauncherUtils::resolvePreset(ref, presets);
+  QCOMPARE(out.name, QString("RetroArch + mGBA"));
+  QCOMPARE(out.launcherPath, QString("/usr/bin/retroarch"));
+  QCOMPARE(out.corePath, QString("/cores/mgba.so"));
+  QCOMPARE(out.launchParameters, QString("--fullscreen"));
+  // Preset id stays attached so the resolved config can round-trip.
+  QCOMPARE(out.presetId, QString("preset-1"));
+}
+
+void TestLaunchManager::testResolvePreset_fallsBackToInlineWhenPresetMissing() {
+  // A reference to a deleted preset must not crash or silently lose data —
+  // the resolver returns the original inline config (typically empty
+  // fields, surfaced as a clear "no launcher configured" error at launch).
+  LauncherConfig ref;
+  ref.presetId = "deleted-preset";
+  ref.name = "Fallback Inline";
+  ref.launcherPath = "/usr/bin/mgba";
+
+  QList<LauncherPreset> presets;
+  presets.append({"some-other-preset", "Different", "/x", "", ""});
+
+  const LauncherConfig out = LauncherUtils::resolvePreset(ref, presets);
+  QCOMPARE(out.name, QString("Fallback Inline"));
+  QCOMPARE(out.launcherPath, QString("/usr/bin/mgba"));
+  QCOMPARE(out.presetId, QString("deleted-preset"));
 }
 
 // ---------------------------------------------------------------------------

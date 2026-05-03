@@ -87,7 +87,8 @@ void SettingsDialog::updateAdditionalLauncherButtonsState() {
 }
 
 void SettingsDialog::onAddAdditionalLauncher() {
-  LauncherEditorDialog dialog(this, LauncherConfig{}, tr("Add Launcher"));
+  LauncherEditorDialog dialog(this, LauncherConfig{}, tr("Add Launcher"),
+                              m_generalSettings.launcherPresets);
   if (dialog.exec() != QDialog::Accepted) {
     return;
   }
@@ -114,7 +115,8 @@ void SettingsDialog::onEditAdditionalLauncher() {
   if (row < 0 || row >= m_workingAdditionalLaunchers.size()) {
     return;
   }
-  LauncherEditorDialog dialog(this, m_workingAdditionalLaunchers[row], tr("Edit Launcher"));
+  LauncherEditorDialog dialog(this, m_workingAdditionalLaunchers[row], tr("Edit Launcher"),
+                              m_generalSettings.launcherPresets);
   if (dialog.exec() != QDialog::Accepted) {
     return;
   }

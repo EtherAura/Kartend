@@ -494,6 +494,11 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   // Store original general settings for change detection
   m_originalGeneralSettings = m_generalSettings;
 
+  // Kartend-p1jd: hydrate the launcher-presets list from the loaded general
+  // settings. Done after m_originalGeneralSettings is captured so the change
+  // detector can compare the live presets against the saved baseline.
+  loadLauncherPresetsToUI();
+
   updateGamepadCaptureUi();
 }
 
@@ -639,8 +644,17 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
         mainWindow->m_generalSettings.gamepadToggleSidebarButton = v;
       }
     }
+    // Kartend-p1jd: launcher presets live on the dialog's m_generalSettings
+    // (mutated directly by the Launchers tab) — copy them onto the main
+    // window's settings before persisting so the saved snapshot includes
+    // any preset add/edit/remove the user just performed.
+    mainWindow->m_generalSettings.launcherPresets = m_generalSettings.launcherPresets;
     mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
     m_generalSettings = mainWindow->m_generalSettings;
+    // Refresh the originals so the dirty indicator clears for the presets
+    // tab too. (Other fields' baselines are reset implicitly by the assign
+    // above; this line keeps the comment local to where it matters.)
+    m_originalGeneralSettings = m_generalSettings;
 
     // Refresh all visible widgets to apply text appearance changes immediately
     ScrollManager *scrollManager = mainWindow->getScrollManager();
