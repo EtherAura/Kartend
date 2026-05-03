@@ -2,8 +2,10 @@
 // Extracted from mainwindow.cpp to keep that file focused on lifecycle and UI
 // setup. All functions here remain MainWindow members.
 #include <QApplication>
+#include <QComboBox>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QSignalBlocker>
 #include <QTimer>
 
 #include "artworkmanager.h"
@@ -310,6 +312,82 @@ void MainWindow::connectSearchComponents() {
   if (m_listViewButton) {
     QObject::connect(m_listViewButton, &QPushButton::clicked, this,
                      [this]() { setViewType(ViewType::List); });
+  }
+}
+
+void MainWindow::refreshTypeFilterToolbar() {
+  if (!m_typeFilterComboBox) {
+    return;
+  }
+  // Block the activated signal so rebuilding the dropdown doesn't trigger a
+  // redundant reload — the active filter is preserved by re-selecting it
+  // after the rebuild.
+  QSignalBlocker blocker(m_typeFilterComboBox);
+  const QString previous = m_generalSettings.collectionTypeFilter;
+  m_typeFilterComboBox->clear();
+  // Sentinel "<All types>" maps to an empty filter string. Stored as
+  // userData so the activated-handler can distinguish it from a user-typed
+  // value with the same display text.
+  m_typeFilterComboBox->addItem(tr("<All types>"), QString());
+  for (const QString &type : CollectionUtils::collectAllCollectionTypes(m_collections)) {
+    m_typeFilterComboBox->addItem(type, type);
+  }
+  // Re-apply the previously active filter. If the type the user had picked
+  // no longer exists (collection deleted/retagged), fall back to <All types>
+  // and clear the persisted filter so the toolbar reflects reality.
+  int idx = previous.isEmpty() ? 0 : m_typeFilterComboBox->findData(previous);
+  if (idx < 0) {
+    idx = 0;
+    m_generalSettings.collectionTypeFilter.clear();
+    if (getSettingsManager()) {
+      getSettingsManager()->saveGeneralSettings(m_generalSettings);
+    }
+  }
+  m_typeFilterComboBox->setCurrentIndex(idx);
+}
+
+void MainWindow::connectCollectionTypeToolbar() {
+  // Initial state mirrors the persisted GeneralSettings so a fresh launch
+  // restores the user's last filter / hide-subs choice.
+  if (m_hideSubcollectionsButton) {
+    QSignalBlocker blocker(m_hideSubcollectionsButton);
+    m_hideSubcollectionsButton->setChecked(m_generalSettings.hideSubcollectionTiles);
+  }
+  refreshTypeFilterToolbar();
+
+  if (m_hideSubcollectionsButton) {
+    QObject::connect(m_hideSubcollectionsButton, &QPushButton::toggled, this, [this](bool checked) {
+      if (m_generalSettings.hideSubcollectionTiles == checked) {
+        return;
+      }
+      m_generalSettings.hideSubcollectionTiles = checked;
+      if (getSettingsManager()) {
+        getSettingsManager()->saveGeneralSettings(m_generalSettings);
+      }
+      if (getNavigationManager() && currentCollectionIndex >= 0) {
+        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+      }
+    });
+  }
+
+  if (m_typeFilterComboBox) {
+    QObject::connect(m_typeFilterComboBox, QOverload<int>::of(&QComboBox::activated), this,
+                     [this](int index) {
+                       if (!m_typeFilterComboBox) {
+                         return;
+                       }
+                       QString chosen = m_typeFilterComboBox->itemData(index).toString();
+                       if (m_generalSettings.collectionTypeFilter == chosen) {
+                         return;
+                       }
+                       m_generalSettings.collectionTypeFilter = chosen;
+                       if (getSettingsManager()) {
+                         getSettingsManager()->saveGeneralSettings(m_generalSettings);
+                       }
+                       if (getNavigationManager() && currentCollectionIndex >= 0) {
+                         getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+                       }
+                     });
   }
 }
 

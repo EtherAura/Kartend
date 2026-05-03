@@ -63,6 +63,29 @@ void ScrollDataManager::initializeSubcollections(const CollectionContext &contex
     }
   }
 
+  // Kartend-dd8: apply toolbar-level subcollection visibility controls.
+  // hideSubcollectionTiles short-circuits past the type filter — it's a
+  // global "media items only" mode. The type filter then drops tiles whose
+  // effective type (own type, or nearest tagged ancestor) doesn't match.
+  // Search-mode overrides are honored as-is so a search hit doesn't get
+  // hidden by a stale filter the user forgot to clear.
+  if (!context.hasSubcollectionOverride && !m_subcollections.isEmpty()) {
+    if (context.hideSubcollectionTiles) {
+      m_subcollections.clear();
+    } else if (!context.collectionTypeFilter.isEmpty()) {
+      const QString filterLower = context.collectionTypeFilter.toLower();
+      QList<int> filtered;
+      filtered.reserve(m_subcollections.size());
+      for (int idx : m_subcollections) {
+        QString eff = CollectionUtils::effectiveCollectionType(idx, *collections);
+        if (eff.toLower() == filterLower) {
+          filtered.append(idx);
+        }
+      }
+      m_subcollections = filtered;
+    }
+  }
+
   // Sort subcollections: A-Z when excluded from main sort, otherwise use sort
   // mode
   if (m_subcollections.size() > 1) {

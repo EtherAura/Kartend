@@ -70,6 +70,17 @@ private slots:
   void hierarchyCache_directChildren_skipsLinkEqualToPrimary();
   void hierarchyCache_allDescendants_handlesMutualLinkCycle();
   void hierarchyCache_allDescendants_excludesSelf();
+
+  // collection categorization (Kartend-dd8)
+  void effectiveCollectionType_returnsOwnTypeWhenSet();
+  void effectiveCollectionType_inheritsFromParentWhenEmpty();
+  void effectiveCollectionType_walksMultipleLevels();
+  void effectiveCollectionType_emptyWhenNothingTagged();
+  void effectiveCollectionType_invalidIndexReturnsEmpty();
+  void effectiveCollectionType_trimsWhitespace();
+  void collectAllCollectionTypes_returnsSortedUnion();
+  void collectAllCollectionTypes_dedupesCaseInsensitive();
+  void collectAllCollectionTypes_skipsEmpty();
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,8 +88,7 @@ private slots:
 // ─────────────────────────────────────────────────────────────────────────────
 
 void TestCollectionUtils::alignmentToString_left() {
-  QCOMPARE(CollectionUtils::alignmentToString(HorizontalAlignment::Left),
-           QStringLiteral("left"));
+  QCOMPARE(CollectionUtils::alignmentToString(HorizontalAlignment::Left), QStringLiteral("left"));
 }
 
 void TestCollectionUtils::alignmentToString_center() {
@@ -87,47 +97,36 @@ void TestCollectionUtils::alignmentToString_center() {
 }
 
 void TestCollectionUtils::alignmentToString_right() {
-  QCOMPARE(CollectionUtils::alignmentToString(HorizontalAlignment::Right),
-           QStringLiteral("right"));
+  QCOMPARE(CollectionUtils::alignmentToString(HorizontalAlignment::Right), QStringLiteral("right"));
 }
 
 void TestCollectionUtils::stringToAlignment_left() {
-  QCOMPARE(CollectionUtils::stringToAlignment("left"),
-           HorizontalAlignment::Left);
+  QCOMPARE(CollectionUtils::stringToAlignment("left"), HorizontalAlignment::Left);
 }
 
 void TestCollectionUtils::stringToAlignment_center() {
-  QCOMPARE(CollectionUtils::stringToAlignment("center"),
-           HorizontalAlignment::Center);
+  QCOMPARE(CollectionUtils::stringToAlignment("center"), HorizontalAlignment::Center);
 }
 
 void TestCollectionUtils::stringToAlignment_right() {
-  QCOMPARE(CollectionUtils::stringToAlignment("right"),
-           HorizontalAlignment::Right);
+  QCOMPARE(CollectionUtils::stringToAlignment("right"), HorizontalAlignment::Right);
 }
 
 void TestCollectionUtils::stringToAlignment_caseInsensitive() {
-  QCOMPARE(CollectionUtils::stringToAlignment("LEFT"),
-           HorizontalAlignment::Left);
-  QCOMPARE(CollectionUtils::stringToAlignment("Right"),
-           HorizontalAlignment::Right);
-  QCOMPARE(CollectionUtils::stringToAlignment("CeNtEr"),
-           HorizontalAlignment::Center);
+  QCOMPARE(CollectionUtils::stringToAlignment("LEFT"), HorizontalAlignment::Left);
+  QCOMPARE(CollectionUtils::stringToAlignment("Right"), HorizontalAlignment::Right);
+  QCOMPARE(CollectionUtils::stringToAlignment("CeNtEr"), HorizontalAlignment::Center);
 }
 
 void TestCollectionUtils::stringToAlignment_unknownDefaultsToCenter() {
-  QCOMPARE(CollectionUtils::stringToAlignment(""),
-           HorizontalAlignment::Center);
-  QCOMPARE(CollectionUtils::stringToAlignment("nonsense"),
-           HorizontalAlignment::Center);
+  QCOMPARE(CollectionUtils::stringToAlignment(""), HorizontalAlignment::Center);
+  QCOMPARE(CollectionUtils::stringToAlignment("nonsense"), HorizontalAlignment::Center);
 }
 
 void TestCollectionUtils::alignmentRoundTrip() {
-  for (auto a : {HorizontalAlignment::Left, HorizontalAlignment::Center,
-                 HorizontalAlignment::Right}) {
-    QCOMPARE(CollectionUtils::stringToAlignment(
-                 CollectionUtils::alignmentToString(a)),
-             a);
+  for (auto a :
+       {HorizontalAlignment::Left, HorizontalAlignment::Center, HorizontalAlignment::Right}) {
+    QCOMPARE(CollectionUtils::stringToAlignment(CollectionUtils::alignmentToString(a)), a);
   }
 }
 
@@ -136,13 +135,11 @@ void TestCollectionUtils::alignmentRoundTrip() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void TestCollectionUtils::viewTypeToString_grid() {
-  QCOMPARE(CollectionUtils::viewTypeToString(ViewType::Grid),
-           QStringLiteral("grid"));
+  QCOMPARE(CollectionUtils::viewTypeToString(ViewType::Grid), QStringLiteral("grid"));
 }
 
 void TestCollectionUtils::viewTypeToString_list() {
-  QCOMPARE(CollectionUtils::viewTypeToString(ViewType::List),
-           QStringLiteral("list"));
+  QCOMPARE(CollectionUtils::viewTypeToString(ViewType::List), QStringLiteral("list"));
 }
 
 void TestCollectionUtils::stringToViewType_grid() {
@@ -165,9 +162,7 @@ void TestCollectionUtils::stringToViewType_unknownDefaultsToGrid() {
 
 void TestCollectionUtils::viewTypeRoundTrip() {
   for (auto v : {ViewType::Grid, ViewType::List}) {
-    QCOMPARE(
-        CollectionUtils::stringToViewType(CollectionUtils::viewTypeToString(v)),
-        v);
+    QCOMPARE(CollectionUtils::stringToViewType(CollectionUtils::viewTypeToString(v)), v);
   }
 }
 
@@ -211,16 +206,13 @@ void TestCollectionUtils::isValidIndex_validWithPointer() {
 }
 
 void TestCollectionUtils::isValidIndex_nullCollectionPointer() {
-  QVERIFY(!CollectionUtils::isValidIndex(0,
-                                         static_cast<QList<CollectionConfig> *>(
-                                             nullptr)));
+  QVERIFY(!CollectionUtils::isValidIndex(0, static_cast<QList<CollectionConfig> *>(nullptr)));
 }
 
 void TestCollectionUtils::isValidIndex_nullIndexPointer() {
   QList<CollectionConfig> list;
   list.append(CollectionConfig{});
-  QVERIFY(
-      !CollectionUtils::isValidIndex(static_cast<int *>(nullptr), &list));
+  QVERIFY(!CollectionUtils::isValidIndex(static_cast<int *>(nullptr), &list));
 }
 
 void TestCollectionUtils::isValidIndex_validIndexPointer() {
@@ -252,12 +244,10 @@ void TestCollectionUtils::computeCollectionUuid_caseInsensitive() {
 
 void TestCollectionUtils::computeCollectionUuid_trimmedWhitespace() {
   QString clean = CollectionUtils::computeCollectionUuid("Games", "/x/y");
-  QString padded =
-      CollectionUtils::computeCollectionUuid("  Games  ", "/x/y  ");
+  QString padded = CollectionUtils::computeCollectionUuid("  Games  ", "/x/y  ");
   // Implementation trims the concatenated "name|mediaDir" string before
   // hashing, so trailing whitespace on the combined value is normalized.
-  QString trailingPad =
-      CollectionUtils::computeCollectionUuid("Games", "/x/y  ");
+  QString trailingPad = CollectionUtils::computeCollectionUuid("Games", "/x/y  ");
   QCOMPARE(clean, trailingPad);
   QVERIFY(!padded.isEmpty());
 }
@@ -292,8 +282,7 @@ void TestCollectionUtils::computeCollectionUuid_isHex40() {
 namespace {
 // Build a minimal CollectionConfig with just the fields ancestorIndexChain
 // consults (name, isSubcollection, parentCollectionIndex).
-CollectionConfig makeCollection(const QString &name, bool isSub,
-                                int parentIdx) {
+CollectionConfig makeCollection(const QString &name, bool isSub, int parentIdx) {
   CollectionConfig c;
   c.name = name;
   c.isSubcollection = isSub;
@@ -322,8 +311,7 @@ void TestCollectionUtils::ancestorIndexChain_multiDeepRootFirst() {
   cs << makeCollection("Games", /*isSub=*/true, 0);
   cs << makeCollection("Nintendo", /*isSub=*/true, 1);
   cs << makeCollection("SNES", /*isSub=*/true, 2);
-  QCOMPARE(CollectionUtils::ancestorIndexChain(cs[3], cs),
-           (QList<int>{0, 1, 2}));
+  QCOMPARE(CollectionUtils::ancestorIndexChain(cs[3], cs), (QList<int>{0, 1, 2}));
 }
 
 void TestCollectionUtils::ancestorIndexChain_stopsAtNonSubcollection() {
@@ -391,11 +379,11 @@ void TestCollectionUtils::hierarchyCache_directChildren_includesLinkedParent() {
   // child list under Sega should expose Genesis even though Sega is not
   // Genesis's primary parent.
   QList<CollectionConfig> cs;
-  cs << makeCollection("Console", /*isSub=*/false, -1);    // 0
-  cs << makeCollection("Sega", /*isSub=*/false, -1);       // 1
+  cs << makeCollection("Console", /*isSub=*/false, -1); // 0
+  cs << makeCollection("Sega", /*isSub=*/false, -1);    // 1
   CollectionConfig genesis = makeCollection("Genesis", /*isSub=*/true, 0);
   genesis.additionalParentNames << QStringLiteral("Sega");
-  cs << genesis;                                            // 2
+  cs << genesis; // 2
 
   CollectionHierarchyCache cache;
   cache.rebuild(cs);
@@ -410,7 +398,7 @@ void TestCollectionUtils::hierarchyCache_linkedDirectChildren_returnsLinkedOnly(
   cs << makeCollection("Sega", /*isSub=*/false, -1);    // 1
   CollectionConfig genesis = makeCollection("Genesis", /*isSub=*/true, 0);
   genesis.additionalParentNames << QStringLiteral("Sega");
-  cs << genesis;                                         // 2
+  cs << genesis; // 2
 
   CollectionHierarchyCache cache;
   cache.rebuild(cs);
@@ -423,12 +411,12 @@ void TestCollectionUtils::hierarchyCache_linkedDirectChildren_returnsLinkedOnly(
 
 void TestCollectionUtils::hierarchyCache_directChildren_primaryFirstThenLinked() {
   QList<CollectionConfig> cs;
-  cs << makeCollection("Sega", /*isSub=*/false, -1);     // 0
-  cs << makeCollection("SMS", /*isSub=*/true, 0);        // 1 — primary child of Sega
-  cs << makeCollection("Console", /*isSub=*/false, -1);  // 2
+  cs << makeCollection("Sega", /*isSub=*/false, -1);    // 0
+  cs << makeCollection("SMS", /*isSub=*/true, 0);       // 1 — primary child of Sega
+  cs << makeCollection("Console", /*isSub=*/false, -1); // 2
   CollectionConfig genesis = makeCollection("Genesis", /*isSub=*/true, 2);
   genesis.additionalParentNames << QStringLiteral("Sega");
-  cs << genesis;                                          // 3 — linked under Sega
+  cs << genesis; // 3 — linked under Sega
 
   CollectionHierarchyCache cache;
   cache.rebuild(cs);
@@ -517,6 +505,106 @@ void TestCollectionUtils::hierarchyCache_allDescendants_excludesSelf() {
   cache.rebuild(cs);
 
   QVERIFY(cache.allDescendants(0).isEmpty());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Collection categorization (Kartend-dd8)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestCollectionUtils::effectiveCollectionType_returnsOwnTypeWhenSet() {
+  QList<CollectionConfig> cs;
+  CollectionConfig root = makeCollection("Root", /*isSub=*/false, -1);
+  root.type = QStringLiteral("Games");
+  cs << root;
+  QCOMPARE(CollectionUtils::effectiveCollectionType(0, cs), QStringLiteral("Games"));
+}
+
+void TestCollectionUtils::effectiveCollectionType_inheritsFromParentWhenEmpty() {
+  QList<CollectionConfig> cs;
+  CollectionConfig root = makeCollection("Root", /*isSub=*/false, -1);
+  root.type = QStringLiteral("Games");
+  CollectionConfig child = makeCollection("Child", /*isSub=*/true, 0);
+  // Child has no type; should inherit "Games" from root.
+  cs << root << child;
+  QCOMPARE(CollectionUtils::effectiveCollectionType(1, cs), QStringLiteral("Games"));
+}
+
+void TestCollectionUtils::effectiveCollectionType_walksMultipleLevels() {
+  QList<CollectionConfig> cs;
+  CollectionConfig root = makeCollection("Root", /*isSub=*/false, -1);
+  root.type = QStringLiteral("Music");
+  CollectionConfig mid = makeCollection("Mid", /*isSub=*/true, 0);
+  CollectionConfig leaf = makeCollection("Leaf", /*isSub=*/true, 1);
+  cs << root << mid << leaf;
+  QCOMPARE(CollectionUtils::effectiveCollectionType(2, cs), QStringLiteral("Music"));
+}
+
+void TestCollectionUtils::effectiveCollectionType_emptyWhenNothingTagged() {
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Root", /*isSub=*/false, -1);
+  cs << makeCollection("Child", /*isSub=*/true, 0);
+  QVERIFY(CollectionUtils::effectiveCollectionType(1, cs).isEmpty());
+}
+
+void TestCollectionUtils::effectiveCollectionType_invalidIndexReturnsEmpty() {
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Root", /*isSub=*/false, -1);
+  QVERIFY(CollectionUtils::effectiveCollectionType(-1, cs).isEmpty());
+  QVERIFY(CollectionUtils::effectiveCollectionType(99, cs).isEmpty());
+}
+
+void TestCollectionUtils::effectiveCollectionType_trimsWhitespace() {
+  QList<CollectionConfig> cs;
+  CollectionConfig root = makeCollection("Root", /*isSub=*/false, -1);
+  root.type = QStringLiteral("  Movies  ");
+  cs << root;
+  // Whitespace gets trimmed so the toolbar dropdown doesn't show ghost
+  // entries that look identical to a clean tag.
+  QCOMPARE(CollectionUtils::effectiveCollectionType(0, cs), QStringLiteral("Movies"));
+}
+
+void TestCollectionUtils::collectAllCollectionTypes_returnsSortedUnion() {
+  QList<CollectionConfig> cs;
+  CollectionConfig a = makeCollection("A", /*isSub=*/false, -1);
+  a.type = QStringLiteral("Music");
+  CollectionConfig b = makeCollection("B", /*isSub=*/false, -1);
+  b.type = QStringLiteral("Games");
+  CollectionConfig c = makeCollection("C", /*isSub=*/false, -1);
+  c.type = QStringLiteral("Books");
+  cs << a << b << c;
+  const QStringList result = CollectionUtils::collectAllCollectionTypes(cs);
+  QCOMPARE(result, (QStringList{QStringLiteral("Books"), QStringLiteral("Games"),
+                                QStringLiteral("Music")}));
+}
+
+void TestCollectionUtils::collectAllCollectionTypes_dedupesCaseInsensitive() {
+  QList<CollectionConfig> cs;
+  CollectionConfig a = makeCollection("A", /*isSub=*/false, -1);
+  a.type = QStringLiteral("Games");
+  CollectionConfig b = makeCollection("B", /*isSub=*/false, -1);
+  b.type = QStringLiteral("games"); // duplicate by case
+  CollectionConfig c = makeCollection("C", /*isSub=*/true, 0);
+  c.type = QStringLiteral("Movies");
+  cs << a << b << c;
+  const QStringList result = CollectionUtils::collectAllCollectionTypes(cs);
+  // First occurrence wins for casing, so "Games" survives, "games" dropped.
+  QCOMPARE(result.size(), 2);
+  QVERIFY(result.contains(QStringLiteral("Games")));
+  QVERIFY(result.contains(QStringLiteral("Movies")));
+  QVERIFY(!result.contains(QStringLiteral("games")));
+}
+
+void TestCollectionUtils::collectAllCollectionTypes_skipsEmpty() {
+  QList<CollectionConfig> cs;
+  CollectionConfig a = makeCollection("A", /*isSub=*/false, -1);
+  a.type = QStringLiteral("Games");
+  CollectionConfig b = makeCollection("B", /*isSub=*/false, -1);
+  // Empty type — should be skipped entirely.
+  CollectionConfig c = makeCollection("C", /*isSub=*/false, -1);
+  c.type = QStringLiteral("   "); // whitespace-only also skipped
+  cs << a << b << c;
+  const QStringList result = CollectionUtils::collectAllCollectionTypes(cs);
+  QCOMPARE(result, QStringList{QStringLiteral("Games")});
 }
 
 QTEST_APPLESS_MAIN(TestCollectionUtils)

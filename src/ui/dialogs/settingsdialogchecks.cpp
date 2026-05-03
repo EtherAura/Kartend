@@ -65,6 +65,12 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
                                   : config.extractedExtension;
   config.expandMode =
       (ui->expandModeCheckBox) ? ui->expandModeCheckBox->isChecked() : config.expandMode;
+  // Kartend-dd8: read free-form type label from the editable combobox. Use
+  // currentText() rather than currentIndex() so a freshly typed value (not
+  // yet committed via Enter) round-trips, and trim whitespace so accidental
+  // padding doesn't fragment the type set.
+  config.type = (ui->collectionTypeComboBox) ? ui->collectionTypeComboBox->currentText().trimmed()
+                                             : config.type;
   config.mediaDirectory =
       (ui->mediaDirLineEdit) ? ui->mediaDirLineEdit->text() : config.mediaDirectory;
   config.artworkDirectory =
@@ -236,6 +242,8 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
        ui->extractedExtensionLineEdit->text() != originalConfig.extractedExtension) ||
       ((ui->expandModeCheckBox) &&
        ui->expandModeCheckBox->isChecked() != originalConfig.expandMode) ||
+      ((ui->collectionTypeComboBox) &&
+       ui->collectionTypeComboBox->currentText().trimmed() != originalConfig.type) ||
       ((ui->mediaDirLineEdit) && ui->mediaDirLineEdit->text() != originalConfig.mediaDirectory) ||
       ((ui->artworkDirLineEdit) &&
        ui->artworkDirLineEdit->text() != originalConfig.artworkDirectory) ||

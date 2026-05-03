@@ -340,6 +340,7 @@ void MainWindow::setupManagerConnections() {
   connectSidebarManager();
   connectSearchComponents();
   connectScrollBars();
+  connectCollectionTypeToolbar();
 }
 
 void MainWindow::updateWindowTitleWithFilter(int visible, int total) {
@@ -451,6 +452,10 @@ void MainWindow::updateWindowTitleForCollection(int collectionIndex) {
 
 void MainWindow::rebuildHierarchyCache() {
   m_hierarchyCache.rebuild(m_collections);
+  // Kartend-dd8: collection list may have gained/lost type tags after
+  // settings edits — keep the toolbar dropdown in sync so retagged
+  // collections show up immediately and orphaned filters self-clear.
+  refreshTypeFilterToolbar();
 }
 
 void MainWindow::resyncPlaylistCollections() {

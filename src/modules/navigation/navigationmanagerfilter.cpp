@@ -215,6 +215,10 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
       if (m_generalSettings) {
         context.sortMode = m_generalSettings->sortMode;
         context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+        // Kartend-dd8: mirror toolbar filters so subcollection tile visibility
+        // honors the active type filter / hide-subs toggle.
+        context.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
+        context.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
       }
 
       // Reload after cleanup has settled to avoid use-after-free and

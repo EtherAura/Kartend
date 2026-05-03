@@ -161,6 +161,9 @@ void MainWindow::setupUIReferences() {
   m_searchModeButton = ui->searchModeButton;
   m_gridViewButton = ui->gridViewButton;
   m_listViewButton = ui->listViewButton;
+  // Kartend-dd8: collection categorization toolbar widgets
+  m_hideSubcollectionsButton = ui->hideSubcollectionsButton;
+  m_typeFilterComboBox = ui->typeFilterComboBox;
   m_MetadataSidebar = ui->metadataSidebarWidget;
 
   // Prevent scroll area from stealing keyboard focus - we handle

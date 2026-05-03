@@ -197,6 +197,53 @@
             </widget>
            </item>
            <item>
+            <widget class="QPushButton" name="hideSubcollectionsButton">
+             <property name="maximumSize">
+              <size>
+               <width>30</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Hide subcollection tiles (Kartend-dd8)</string>
+             </property>
+             <property name="text">
+              <string>📁</string>
+             </property>
+             <property name="flat">
+              <bool>true</bool>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="typeFilterComboBox">
+             <property name="minimumSize">
+              <size>
+               <width>120</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>180</width>
+               <height>16777215</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Filter subcollection tiles by type. Choose &lt;All types&gt; to disable. (Kartend-dd8)</string>
+             </property>
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QFrame" name="viewSearchSeparator">
              <property name="minimumSize">
               <size>
