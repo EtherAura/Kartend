@@ -185,18 +185,25 @@ void SettingsDialog::setupButtonConnections() {
   connect(ui->addCollectionButton, &QPushButton::clicked, this, &SettingsDialog::addCollection);
   connect(ui->removeCollectionButton, &QPushButton::clicked, this,
           &SettingsDialog::removeCollection);
-  // Kartend-63o: populate the "apply to..." tool button's dropdown menu so
-  // users can propagate the current collection's appearance/layout settings
-  // to all collections or to subcollections only. Menu is owned by the
-  // button so Qt cleans it up with the dialog.
+  if (ui->duplicateCollectionButton) {
+    connect(ui->duplicateCollectionButton, &QPushButton::clicked, this,
+            &SettingsDialog::duplicateCollection);
+  }
+  // Kartend-63o + Kartend-f5i9: populate the "apply to..." tool button's
+  // dropdown menu so users can propagate the current collection's
+  // appearance/layout settings to all collections, just subcollections, or a
+  // user-picked subset. Menu is owned by the button so Qt cleans it up with
+  // the dialog.
   if (ui->applyToButton) {
     auto *menu = new QMenu(ui->applyToButton);
     QAction *allAction = menu->addAction(tr("Apply to All Collections..."));
     QAction *subAction = menu->addAction(tr("Apply to Subcollections Only..."));
+    QAction *selAction = menu->addAction(tr("Apply to Selected Collections..."));
     connect(allAction, &QAction::triggered, this,
             &SettingsDialog::applyCurrentSettingsToAllCollections);
     connect(subAction, &QAction::triggered, this,
             &SettingsDialog::applyCurrentSettingsToSubcollections);
+    connect(selAction, &QAction::triggered, this, &SettingsDialog::applyCurrentSettingsToSelected);
     ui->applyToButton->setMenu(menu);
   }
   // Kartend-enq: wire the Settings Mode selector. Default is `Current` to

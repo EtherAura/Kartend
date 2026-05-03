@@ -76,6 +76,13 @@ private slots:
   void onTreeItemChanged(QTreeWidgetItem *item, int column);
   void addCollection();
   void removeCollection();
+  /// Kartend-f5i9: full-copy duplicate of the current collection. Prompts for
+  /// a unique name and a parent collection (sibling/child/root all reachable
+  /// via the parent combo). Every CollectionConfig field is copied — paths,
+  /// extensions, launcher list, appearance — except runtime-only state
+  /// (currentSubfolder) and the playlist markers (which mark virtual
+  /// collections that aren't directly duplicable).
+  void duplicateCollection();
   /// Kartend-63o: propagate the currently-edited collection's appearance and
   /// layout settings to every other collection in the list. Prompts for
   /// confirmation first.
@@ -83,6 +90,10 @@ private slots:
   /// Kartend-63o: propagate the currently-edited collection's appearance and
   /// layout settings to its (recursive) descendants only.
   void applyCurrentSettingsToSubcollections();
+  /// Kartend-f5i9: open a multi-select picker so the user can push the
+  /// curated appearance/layout subset onto an arbitrary set of collections.
+  /// Reuses the same field set as Kartend-63o's all/subs paths.
+  void applyCurrentSettingsToSelected();
   void browseLauncher();
   void browseCore();
   /// Kartend-bdl: Add/Edit/Remove handlers for the Additional Launchers list.

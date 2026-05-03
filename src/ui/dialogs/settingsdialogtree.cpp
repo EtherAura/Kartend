@@ -2,7 +2,11 @@
 // parent rebuild, circular-reference checks.
 #include <algorithm>
 #include <functional>
+#include <QComboBox>
+#include <QDialogButtonBox>
+#include <QFormLayout>
 #include <QInputDialog>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QSet>
 #include <QSignalBlocker>
@@ -10,6 +14,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "collectionpickerdialog.h"
 #include "mainwindow.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
@@ -545,6 +550,151 @@ void SettingsDialog::applyCurrentSettingsToSubcollections() {
   const QList<int> descendants =
       CollectionUtils::collectDescendantIndices(currentCollectionIndex, collections);
   applyCurrentSettingsToIndices(descendants, tr("its subcollections"));
+}
+
+void SettingsDialog::applyCurrentSettingsToSelected() {
+  // Kartend-f5i9: arbitrary-target multi-select picker. Complements the
+  // existing all/subcollections paths (Kartend-63o) for users who want to
+  // push appearance to a hand-picked subset.
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
+    QMessageBox::information(this, tr("Apply Settings"),
+                             tr("Select a source collection first, then use Apply to "
+                                "copy its appearance and layout to chosen targets."));
+    return;
+  }
+  if (collections.size() <= 1) {
+    QMessageBox::information(this, tr("Apply Settings"),
+                             tr("There are no other collections to apply settings to."));
+    return;
+  }
+
+  CollectionPickerDialog picker(collections, currentCollectionIndex, {}, this);
+  if (picker.exec() != QDialog::Accepted) {
+    return;
+  }
+  const QList<int> targets = picker.selectedIndices();
+  if (targets.isEmpty()) {
+    QMessageBox::information(this, tr("Apply Settings"),
+                             tr("No target collections were selected."));
+    return;
+  }
+  applyCurrentSettingsToIndices(targets, tr("%n selected collection(s)", "", targets.size()));
+}
+
+void SettingsDialog::duplicateCollection() {
+  // Kartend-f5i9: full copy of the currently-selected collection. The user
+  // chose 1a (full copy: paths/launchers/everything except name) and 2c (ask
+  // for parent at duplicate time) during scoping. Runtime-only state is
+  // stripped because it never belongs in a fresh copy.
+  if (!CollectionUtils::isValidIndex(currentCollectionIndex, &collections)) {
+    QMessageBox::information(this, tr("Duplicate Collection"),
+                             tr("Select a collection first to duplicate it."));
+    return;
+  }
+
+  if (collections[currentCollectionIndex].isPlaylist) {
+    QMessageBox::information(
+        this, tr("Duplicate Collection"),
+        tr("Playlists are virtual collections and cannot be duplicated here. Use the "
+           "playlist controls to create a new playlist."));
+    return;
+  }
+
+  // Snapshot the live form first so the duplicate captures what the user
+  // currently sees, not the last-saved state. This mirrors how
+  // applyCurrentSettingsToIndices works.
+  saveCollectionFromUI(currentCollectionIndex);
+
+  const CollectionConfig source = collections[currentCollectionIndex];
+
+  QDialog dlg(this);
+  dlg.setWindowTitle(tr("Duplicate Collection"));
+  auto *layout = new QFormLayout(&dlg);
+
+  auto *nameEdit = new QLineEdit(&dlg);
+  nameEdit->setText(source.name + tr(" copy"));
+  nameEdit->selectAll();
+  layout->addRow(tr("Name:"), nameEdit);
+
+  auto *parentCombo = new QComboBox(&dlg);
+  QList<int> parentMapping;
+  parentCombo->addItem(tr("None"));
+  parentMapping.append(-1);
+  for (int i = 0; i < collections.size(); ++i) {
+    if (collections[i].isPlaylist) {
+      // Playlists can't be parents — they're not real persisted collections.
+      continue;
+    }
+    parentCombo->addItem(collections[i].name);
+    parentMapping.append(i);
+  }
+  int defaultMapIndex = parentMapping.indexOf(source.parentCollectionIndex);
+  if (defaultMapIndex < 0) {
+    defaultMapIndex = 0;
+  }
+  parentCombo->setCurrentIndex(defaultMapIndex);
+  layout->addRow(tr("Parent collection:"), parentCombo);
+
+  auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+  layout->addRow(buttonBox);
+  QObject::connect(buttonBox, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(buttonBox, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted) {
+    return;
+  }
+
+  const QString name = nameEdit->text().trimmed();
+  if (name.isEmpty()) {
+    QMessageBox::warning(this, tr("Duplicate Collection"), tr("Collection name cannot be empty."));
+    return;
+  }
+  for (const auto &existing : collections) {
+    if (existing.name == name) {
+      QMessageBox::warning(
+          this, tr("Duplicate Collection"),
+          tr("A collection named \"%1\" already exists. Pick a different name.").arg(name));
+      return;
+    }
+  }
+
+  const int parentIdx = parentMapping.value(parentCombo->currentIndex(), -1);
+
+  // Full copy. Override only the fields that must differ on a fresh
+  // collection: name + parent linkage + runtime state.
+  CollectionConfig copy = source;
+  copy.name = name;
+  copy.parentCollectionIndex = parentIdx;
+  copy.isSubcollection = (parentIdx >= 0);
+  copy.currentSubfolder.clear();
+  copy.isPlaylist = false;
+  copy.playlistId.clear();
+  copy.playlistReservedKind.clear();
+  copy.clampValues();
+
+  collections.append(copy);
+  m_workingCollections.append(copy);
+  const int newIndex = collections.size() - 1;
+  currentCollectionIndex = newIndex;
+
+  updateCollectionTreeWidget();
+  expandPathToCollection(newIndex);
+  if (collectionIndexToItem.contains(newIndex)) {
+    QTreeWidgetItem *item = collectionIndexToItem[newIndex];
+    if (item) {
+      collectionTreeWidget->setCurrentItem(item);
+      item->setSelected(true);
+    }
+  }
+
+  loadCollectionToUI(newIndex);
+  originalCollection = m_workingCollections[newIndex];
+  m_collectionSaved = true;
+  updateSaveButtonStyle();
+
+  // Persist immediately so the duplicate survives a Cancel of the outer
+  // dialog, matching addCollection()'s behaviour.
+  emit collectionSaved(collections);
 }
 
 int SettingsDialog::propagateAppearanceToIndicesSilently(const QList<int> &targetIndices) {

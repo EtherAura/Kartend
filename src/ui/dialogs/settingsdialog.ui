@@ -62,6 +62,25 @@
              </widget>
             </item>
             <item>
+             <widget class="QPushButton" name="duplicateCollectionButton">
+              <property name="maximumSize">
+               <size>
+                <width>30</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="toolTip">
+               <string>Duplicate the selected collection (Kartend-f5i9)</string>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+              <property name="icon">
+               <iconset theme="QIcon::ThemeIcon::EditCopy"/>
+              </property>
+             </widget>
+            </item>
+            <item>
              <spacer name="collectionSpacer">
               <property name="orientation">
                <enum>Qt::Orientation::Horizontal</enum>
