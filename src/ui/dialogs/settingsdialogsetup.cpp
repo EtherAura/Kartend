@@ -25,6 +25,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "collectiontreewidget.h"
 #include "extensionutils.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
@@ -391,14 +392,33 @@ void SettingsDialog::handleSpacingChanged() {
 }
 
 void SettingsDialog::setupTreeWidgetConnections() {
-  if (collectionTreeWidget) {
-    connect(collectionTreeWidget, &QTreeWidget::itemSelectionChanged, this,
-            &SettingsDialog::onTreeItemSelectionChanged);
-    connect(collectionTreeWidget, &QTreeWidget::itemChanged, this,
-            &SettingsDialog::onTreeItemChanged);
-    collectionTreeWidget->setEditTriggers(QAbstractItemView::EditKeyPressed |
-                                          QAbstractItemView::DoubleClicked);
+  if (!collectionTreeWidget) {
+    return;
   }
+  connect(collectionTreeWidget, &QTreeWidget::itemSelectionChanged, this,
+          &SettingsDialog::onTreeItemSelectionChanged);
+  connect(collectionTreeWidget, &QTreeWidget::itemChanged, this,
+          &SettingsDialog::onTreeItemChanged);
+  collectionTreeWidget->setEditTriggers(QAbstractItemView::EditKeyPressed |
+                                        QAbstractItemView::DoubleClicked);
+
+  // Kartend-j613: right-click context menu surfaces Rename/Duplicate/Delete
+  // and expand/collapse helpers where the user's pointer already is.
+  collectionTreeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(collectionTreeWidget, &QWidget::customContextMenuRequested, this,
+          &SettingsDialog::onTreeContextMenuRequested);
+
+  // Kartend-j613: drag-drop reparenting. The promoted CollectionTreeWidget
+  // delegates cycle validation to wouldCreateCircularReference() and emits
+  // treeRearranged() on success so we can resync parentCollectionIndex.
+  collectionTreeWidget->setCycleCheck([this](int childIndex, int parentIndex) {
+    return wouldCreateCircularReference(childIndex, parentIndex);
+  });
+  collectionTreeWidget->setItemToIndex([this](const QTreeWidgetItem *item) {
+    return itemToCollectionIndex.value(const_cast<QTreeWidgetItem *>(item), -1);
+  });
+  connect(collectionTreeWidget, &CollectionTreeWidget::treeRearranged, this,
+          &SettingsDialog::onTreeRearranged);
 }
 
 void SettingsDialog::setupUIConstraints() {

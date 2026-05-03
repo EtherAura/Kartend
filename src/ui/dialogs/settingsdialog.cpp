@@ -25,6 +25,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "collectiontreewidget.h"
 #include "extensionutils.h"
 #include "gamepadmanager.h"
 #include "interactionmanager.h"

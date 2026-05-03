@@ -1,5 +1,6 @@
 target_sources(${KARTEND_LIB_TARGET} PRIVATE
   collectionpickerdialog.cpp
+  collectiontreewidget.cpp
   customfieldsdialog.cpp
   errordialog.cpp
   itemartworklinksdialog.cpp
@@ -19,6 +20,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   shortcutsdialog.cpp
   statisticsdialog.cpp
   collectionpickerdialog.h
+  collectiontreewidget.h
   customfieldsdialog.h
   errordialog.h
   itemartworklinksdialog.h
