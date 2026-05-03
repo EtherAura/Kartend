@@ -507,6 +507,93 @@
                </property>
               </widget>
              </item>
+             <item row="15" column="0">
+              <widget class="QLabel" name="label_launcherName">
+               <property name="text">
+                <string>Launcher Name:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="15" column="1">
+              <widget class="QLineEdit" name="launcherNameLineEdit">
+               <property name="toolTip">
+                <string>Display name for the primary launcher in the chooser dialog (optional). Defaults to the executable basename when empty.</string>
+               </property>
+               <property name="placeholderText">
+                <string>e.g. RetroArch, mGBA</string>
+               </property>
+              </widget>
+             </item>
+             <item row="16" column="0">
+              <widget class="QLabel" name="label_additionalLaunchers">
+               <property name="text">
+                <string>Additional Launchers:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="16" column="1">
+              <layout class="QHBoxLayout" name="additionalLaunchersLayout">
+               <item>
+                <widget class="QListWidget" name="additionalLaunchersList">
+                 <property name="toolTip">
+                  <string>Extra launchers beyond the primary. When more than one launcher is configured, picking an item shows a chooser dialog at launch.</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <layout class="QVBoxLayout" name="additionalLaunchersButtons">
+                 <item>
+                  <widget class="QPushButton" name="addAdditionalLauncherButton">
+                   <property name="text">
+                    <string>Add…</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="editAdditionalLauncherButton">
+                   <property name="text">
+                    <string>Edit…</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="removeAdditionalLauncherButton">
+                   <property name="text">
+                    <string>Remove</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <spacer name="additionalLaunchersButtonsSpacer">
+                   <property name="orientation">
+                    <enum>Qt::Orientation::Vertical</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>20</width>
+                     <height>40</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </item>
+             <item row="17" column="0">
+              <widget class="QLabel" name="label_defaultLauncher">
+               <property name="text">
+                <string>Default Launcher:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="17" column="1">
+              <widget class="QComboBox" name="defaultLauncherComboBox">
+               <property name="toolTip">
+                <string>Pre-selected launcher in the chooser dialog. Single-launcher collections ignore this setting.</string>
+               </property>
+              </widget>
+             </item>
             </layout>
            </item>
            <item>

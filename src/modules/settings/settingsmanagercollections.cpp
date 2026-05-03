@@ -115,6 +115,23 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
     config.launcherPath = settings.value("launcherPath").toString();
     config.corePath = settings.value("corePath").toString();
     config.launchParameters = settings.value("launchParameters").toString();
+    config.launcherName = settings.value("launcherName").toString();
+    // Kartend-bdl: additional launchers are stored as a QSettings array under
+    // "additionalLaunchers". When the key is absent (legacy configs), the
+    // collection just has the primary launcher and the array stays empty.
+    const int additionalCount = settings.beginReadArray("additionalLaunchers");
+    config.additionalLaunchers.reserve(additionalCount);
+    for (int i = 0; i < additionalCount; ++i) {
+      settings.setArrayIndex(i);
+      LauncherConfig launcher;
+      launcher.name = settings.value("name").toString();
+      launcher.launcherPath = settings.value("launcherPath").toString();
+      launcher.corePath = settings.value("corePath").toString();
+      launcher.launchParameters = settings.value("launchParameters").toString();
+      config.additionalLaunchers.append(launcher);
+    }
+    settings.endArray();
+    config.defaultLauncherIndex = settings.value("defaultLauncherIndex", 0).toInt();
     config.mediaDirectory = settings.value("mediaDirectory").toString();
     config.artworkDirectory = settings.value("artworkDirectory").toString();
     config.videoDirectory = settings.value("videoDirectory").toString();
@@ -289,6 +306,25 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
                       sanitizePersistedPath(c.launcherPath, "launcherPath", sectionName));
     settings.setValue("corePath", sanitizePersistedPath(c.corePath, "corePath", sectionName));
     settings.setValue("launchParameters", c.launchParameters);
+    settings.setValue("launcherName", c.launcherName);
+    // Kartend-bdl: persist the additional-launcher list as a QSettings array.
+    // beginWriteArray clears any existing entries with the same prefix, so
+    // launchers removed via the dialog don't linger in the INI.
+    settings.beginWriteArray("additionalLaunchers", c.additionalLaunchers.size());
+    for (int i = 0; i < c.additionalLaunchers.size(); ++i) {
+      settings.setArrayIndex(i);
+      const LauncherConfig &launcher = c.additionalLaunchers[i];
+      settings.setValue("name", launcher.name);
+      const QString launcherFieldId = QString("additionalLaunchers[%1].launcherPath").arg(i);
+      const QString coreFieldId = QString("additionalLaunchers[%1].corePath").arg(i);
+      settings.setValue("launcherPath",
+                        sanitizePersistedPath(launcher.launcherPath, launcherFieldId, sectionName));
+      settings.setValue("corePath",
+                        sanitizePersistedPath(launcher.corePath, coreFieldId, sectionName));
+      settings.setValue("launchParameters", launcher.launchParameters);
+    }
+    settings.endArray();
+    settings.setValue("defaultLauncherIndex", c.defaultLauncherIndex);
     settings.setValue("mediaDirectory",
                       sanitizePersistedPath(c.mediaDirectory, "mediaDirectory", sectionName));
     settings.setValue("artworkDirectory",

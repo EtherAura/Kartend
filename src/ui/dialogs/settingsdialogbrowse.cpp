@@ -255,6 +255,10 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->launchParamsLineEdit) {
     ui->launchParamsLineEdit->setText(config.launchParameters);
   }
+  if (ui->launcherNameLineEdit) {
+    ui->launcherNameLineEdit->setText(config.launcherName);
+  }
+  loadAdditionalLaunchersToUI(config);
   if (ui->extractArchivesCheckBox) {
     ui->extractArchivesCheckBox->setChecked(config.extractArchives);
   }
@@ -411,6 +415,8 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->launcherLineEdit) ui->launcherLineEdit->clear();
   if (ui->coreLineEdit) ui->coreLineEdit->clear();
   if (ui->launchParamsLineEdit) ui->launchParamsLineEdit->clear();
+  if (ui->launcherNameLineEdit) ui->launcherNameLineEdit->clear();
+  clearAdditionalLaunchersUI();
   if (ui->mediaDirLineEdit) ui->mediaDirLineEdit->clear();
   if (ui->artworkDirLineEdit) ui->artworkDirLineEdit->clear();
   if (ui->videoDirLineEdit) ui->videoDirLineEdit->clear();

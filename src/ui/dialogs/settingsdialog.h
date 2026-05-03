@@ -85,6 +85,13 @@ private slots:
   void applyCurrentSettingsToSubcollections();
   void browseLauncher();
   void browseCore();
+  /// Kartend-bdl: Add/Edit/Remove handlers for the Additional Launchers list.
+  void onAddAdditionalLauncher();
+  void onEditAdditionalLauncher();
+  void onRemoveAdditionalLauncher();
+  /// Kartend-bdl: Reflect the active row in the default-launcher combo so the
+  /// edit/remove buttons enable/disable in lockstep with the selection.
+  void onAdditionalLauncherSelectionChanged();
   void browseMediaDir();
   void browseArtworkDir();
   void browseVideoDir();
@@ -156,6 +163,11 @@ private:
   // Helper methods for saveCollectionFromUI refactoring
   auto extractUIFieldValues() -> CollectionConfig;
   auto updateParentCollectionFromUI(CollectionConfig &collection, int index) -> void;
+  // Kartend-bdl: load/save/refresh helpers for the multi-launcher controls.
+  void loadAdditionalLaunchersToUI(const CollectionConfig &config);
+  void clearAdditionalLaunchersUI();
+  void rebuildDefaultLauncherCombo(int preferredIndex);
+  void updateAdditionalLauncherButtonsState();
   // Helper methods for hasUnsavedChanges refactoring
   auto checkBasicFieldChanges() const -> bool;
   auto checkExtensionChanges() const -> bool;
@@ -212,6 +224,10 @@ private:
   bool m_collectionSaved;
   QList<int> m_parentCollectionMapping;
   bool m_isLoading;
+  /// Kartend-bdl: working copy of the active collection's additional
+  /// launchers — kept in sync with the QListWidget so dirty-checking and the
+  /// default-launcher combo can read structured data instead of strings.
+  QList<LauncherConfig> m_workingAdditionalLaunchers;
   GeneralSettings m_generalSettings;
   GeneralSettings m_originalGeneralSettings;
   /// Tracks collection indices that need a rescan due to database-affecting

@@ -57,16 +57,31 @@ public:
 
   void setupReferences(const LaunchManagerSetup &setup);
 
-  /// Launches a media item using the specified collection's launcher config
-  void launchItem(const QString &filePath, int collectionIndex);
+  /// Launches a media item using the specified collection's launcher config.
+  /// When the collection has more than one launcher (Kartend-bdl), a chooser
+  /// dialog is shown unless `launcherIndex` is provided. Pass `launcherIndex`
+  /// >= 0 to bypass the chooser and use a specific launcher directly (used by
+  /// callers that have already resolved the user's pick).
+  void launchItem(const QString &filePath, int collectionIndex, int launcherIndex = -1);
 
-  /// Builds the program + argument list for a collection launch.
+  /// Builds the program + argument list for a single launcher entry.
   ///
   /// This is a pure helper used by launchItem() and unit tests. It does NOT
   /// validate that the launcher exists/is executable (use validateLauncherPath
   /// for that); it only constructs and validates the argument semantics.
+  /// `collectionName` is used solely for diagnostic messages and `%collection%`
+  /// substitution. Kartend-bdl.
   [[nodiscard]] static ErrorUtils::Result<LaunchCommand>
-  buildLaunchCommand(const CollectionConfig &collection, const QString &filePath);
+  buildLaunchCommand(const LauncherConfig &launcher, const QString &collectionName,
+                     const QString &filePath);
+
+  /// Convenience overload that builds the command for the collection's
+  /// primary launcher (index 0). Retained for tests and callers that don't
+  /// participate in the multi-launcher flow.
+  [[nodiscard]] static ErrorUtils::Result<LaunchCommand>
+  buildLaunchCommand(const CollectionConfig &collection, const QString &filePath) {
+    return buildLaunchCommand(collection.launcherAt(0), collection.name, filePath);
+  }
 
   /// Parses command-line parameters handling quoted strings
   /// Returns error if quotes are unclosed (potential injection vector)
