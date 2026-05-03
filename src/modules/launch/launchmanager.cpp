@@ -275,7 +275,13 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
       QStringList launcherNames;
       launcherNames.reserve(collection.launcherCount());
       for (int i = 0; i < collection.launcherCount(); ++i) {
-        launcherNames << collection.launcherDisplayName(i);
+        // Kartend-p1jd: resolve preset references so the chooser shows the
+        // preset's current name instead of a stale inline copy.
+        const LauncherConfig effective = LauncherUtils::resolvePreset(
+            collection.launcherAt(i),
+            m_generalSettings ? m_generalSettings->launcherPresets : QList<LauncherPreset>{});
+        launcherNames << (effective.name.trimmed().isEmpty() ? collection.launcherDisplayName(i)
+                                                             : effective.name.trimmed());
       }
       const int chosen = LauncherChooserDialog::choose(
           nullptr, collection.name, launcherNames,
@@ -291,7 +297,12 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   if (resolvedLauncherIndex < 0 || resolvedLauncherIndex >= collection.launcherCount()) {
     resolvedLauncherIndex = 0;
   }
-  const LauncherConfig launcher = collection.launcherAt(resolvedLauncherIndex);
+  // Kartend-p1jd: resolve preset references at launch time. When the
+  // entry's presetId names a registered preset, its fields override the
+  // inline ones; otherwise the inline fields are used as-is.
+  const LauncherConfig launcher = LauncherUtils::resolvePreset(
+      collection.launcherAt(resolvedLauncherIndex),
+      m_generalSettings ? m_generalSettings->launcherPresets : QList<LauncherPreset>{});
 
   // Determine the actual file to launch (may be extracted from archive)
   QString launchFilePath = filePath;

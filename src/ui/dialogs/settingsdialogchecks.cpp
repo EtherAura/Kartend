@@ -396,6 +396,13 @@ auto SettingsDialog::checkBackgroundChanges() const -> bool {
 }
 
 auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
+  // Kartend-p1jd: launcher presets are mutated directly on m_generalSettings
+  // (no per-control widgets), so compare the live list against the saved
+  // baseline up front. Earlier guard so a preset edit always dirties the
+  // dialog even when no other field changed.
+  if (m_generalSettings.launcherPresets != m_originalGeneralSettings.launcherPresets) {
+    return true;
+  }
   if (ui->rememberSelectionCheckBox &&
       ui->rememberSelectionCheckBox->isChecked() != m_originalGeneralSettings.rememberSelection) {
     return true;

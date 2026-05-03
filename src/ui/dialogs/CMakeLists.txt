@@ -11,6 +11,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   settingsdialoggamepad.cpp
   settingsdialoggeneral.cpp
   settingsdialoglaunchers.cpp
+  settingsdialogpresets.cpp
   settingsdialogremove.cpp
   settingsdialogsetup.cpp
   settingsdialogtree.cpp

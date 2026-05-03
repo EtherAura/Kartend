@@ -175,6 +175,25 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->additionalLaunchersList, &QListWidget::itemDoubleClicked, this,
             [this](QListWidgetItem *) { onEditAdditionalLauncher(); });
   }
+  // Kartend-p1jd: launcher presets tab
+  if (ui->addLauncherPresetButton) {
+    connect(ui->addLauncherPresetButton, &QPushButton::clicked, this,
+            &SettingsDialog::onAddLauncherPreset);
+  }
+  if (ui->editLauncherPresetButton) {
+    connect(ui->editLauncherPresetButton, &QPushButton::clicked, this,
+            &SettingsDialog::onEditLauncherPreset);
+  }
+  if (ui->removeLauncherPresetButton) {
+    connect(ui->removeLauncherPresetButton, &QPushButton::clicked, this,
+            &SettingsDialog::onRemoveLauncherPreset);
+  }
+  if (ui->launcherPresetsList) {
+    connect(ui->launcherPresetsList, &QListWidget::currentRowChanged, this,
+            [this](int) { onLauncherPresetSelectionChanged(); });
+    connect(ui->launcherPresetsList, &QListWidget::itemDoubleClicked, this,
+            [this](QListWidgetItem *) { onEditLauncherPreset(); });
+  }
   if (ui->defaultLauncherComboBox) {
     connect(ui->defaultLauncherComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             [this](int) { checkForChanges(); });

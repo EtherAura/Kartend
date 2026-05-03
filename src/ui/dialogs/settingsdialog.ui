@@ -1296,6 +1296,64 @@
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="launchersTab">
+      <attribute name="title">
+       <string>Launchers</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="launchersTabLayout">
+       <item>
+        <widget class="QGroupBox" name="launcherPresetsGroupBox">
+         <property name="title">
+          <string>Launcher Presets</string>
+         </property>
+         <layout class="QVBoxLayout" name="launcherPresetsLayout">
+          <item>
+           <widget class="QLabel" name="launcherPresetsHelp">
+            <property name="text">
+             <string>Reusable launcher configurations referenced by collections. Renaming a preset updates every reference automatically.</string>
+            </property>
+            <property name="wordWrap"><bool>true</bool></property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="launcherPresetsRow">
+            <item>
+             <widget class="QListWidget" name="launcherPresetsList"/>
+            </item>
+            <item>
+             <layout class="QVBoxLayout" name="launcherPresetsButtons">
+              <item>
+               <widget class="QPushButton" name="addLauncherPresetButton">
+                <property name="text"><string>Add…</string></property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="editLauncherPresetButton">
+                <property name="text"><string>Edit…</string></property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="removeLauncherPresetButton">
+                <property name="text"><string>Remove</string></property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="launcherPresetsButtonsSpacer">
+                <property name="orientation"><enum>Qt::Orientation::Vertical</enum></property>
+                <property name="sizeHint" stdset="0">
+                 <size><width>20</width><height>40</height></size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
      <widget class="QWidget" name="generalTab">
       <attribute name="title">
        <string>General</string>

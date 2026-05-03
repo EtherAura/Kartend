@@ -131,6 +131,28 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.runtimeDetectionEnabled = s.value("runtimeDetectionEnabled", false).toBool();
   s.endGroup();
 
+  // Kartend-p1jd: launcher presets live at the top level (outside [General])
+  // so they remain a clear, named section the user can hand-edit. Stored as
+  // a QSettings array so size is implicit.
+  settings.launcherPresets.clear();
+  const int presetCount = s.beginReadArray("Launchers");
+  settings.launcherPresets.reserve(presetCount);
+  for (int i = 0; i < presetCount; ++i) {
+    s.setArrayIndex(i);
+    LauncherPreset preset;
+    preset.id = s.value("id").toString();
+    preset.name = s.value("name").toString();
+    preset.launcherPath = s.value("launcherPath").toString();
+    preset.corePath = s.value("corePath").toString();
+    preset.launchParameters = s.value("launchParameters").toString();
+    // Drop entries with no id — they can't be referenced and would shadow
+    // valid presets if a hand-edit accidentally cleared the field.
+    if (!preset.id.trimmed().isEmpty()) {
+      settings.launcherPresets.append(preset);
+    }
+  }
+  s.endArray();
+
   settings.lastSelectedItems.clear();
   m_generalSettings = settings;
 }
@@ -187,6 +209,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   // Splash screens
   m_generalSettings.bootSplashEnabled = settings.bootSplashEnabled;
   m_generalSettings.resumeFocusSplashEnabled = settings.resumeFocusSplashEnabled;
+  // Launcher presets (Kartend-p1jd)
+  m_generalSettings.launcherPresets = settings.launcherPresets;
 
   QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   s.setAtomicSyncRequired(true);
@@ -235,6 +259,21 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("bootSplashEnabled", m_generalSettings.bootSplashEnabled);
   s.setValue("resumeFocusSplashEnabled", m_generalSettings.resumeFocusSplashEnabled);
   s.endGroup();
+
+  // Kartend-p1jd: persist launcher presets as a top-level [Launchers] array.
+  // beginWriteArray clears any existing entries with the same prefix, so a
+  // preset removed via the dialog doesn't linger as a stale row.
+  s.beginWriteArray("Launchers", m_generalSettings.launcherPresets.size());
+  for (int i = 0; i < m_generalSettings.launcherPresets.size(); ++i) {
+    s.setArrayIndex(i);
+    const LauncherPreset &preset = m_generalSettings.launcherPresets[i];
+    s.setValue("id", preset.id);
+    s.setValue("name", preset.name);
+    s.setValue("launcherPath", preset.launcherPath);
+    s.setValue("corePath", preset.corePath);
+    s.setValue("launchParameters", preset.launchParameters);
+  }
+  s.endArray();
   s.sync();
 
   if (s.status() != QSettings::NoError) {
