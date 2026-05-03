@@ -261,6 +261,14 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   // Kartend-dnx4: per-item override silently bypasses the chooser. Only consult
   // when the caller hasn't already forced a pick — a UI-driven explicit launch
   // (e.g. context-menu "Launch with…") wins over the persisted override.
+  //
+  // Kartend-xbwa: playlist launches end up here too. The InteractionManager
+  // launch surfaces (Enter, double-click, context menu "Launch") all resolve
+  // `collectionIndex` to the *source* collection via
+  // DatabaseManager::getCollectionIndexForFile(filePath), so by the time we
+  // get here the chooser/override path is already keyed off the source — not
+  // the playlist's synthetic CollectionConfig (which has launcherCount() == 1
+  // and an empty mediaDirectory). No playlist-specific branch needed.
   if (resolvedLauncherIndex < 0 && m_resolveLauncherOverride) {
     const QString uuid = resolveCollectionUuid(collectionIndex);
     if (!uuid.isEmpty()) {

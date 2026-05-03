@@ -139,6 +139,13 @@ auto InteractionManager::handleEnterOnItem(int currentSelection, int /*totalItem
   if (!path.isEmpty()) {
     const int cIdx =
         ((m_databaseManager) ? m_databaseManager->getCollectionIndexForFile(path) : -1);
+    // Kartend-xbwa: when the user is browsing a playlist, getCollectionIndexForFile
+    // returns the *source* collection (the one whose items table row holds this
+    // path), not the playlist's synthetic index — so the launcher chooser and
+    // per-item override (Kartend-dnx4) downstream key off the source's UUID +
+    // launcher list, not the empty/single-launcher playlist config. The
+    // fallback to the current collection only matters for ordinary collections
+    // where the file→collection map hasn't been populated yet.
     const int ownerIdx = (cIdx >= 0 ? cIdx : *m_currentCollectionIndex);
     // Expand-mode: first activation expands the artwork preview; only the
     // second activation on the same selection launches.
