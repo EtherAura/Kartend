@@ -37,6 +37,9 @@ private slots:
   void loadItems_returnsItemsInPositionOrder();
   void parentCollectionUuid_isPersisted();
   void playlistsChangedSignal_firesOnEveryMutation();
+  void ensureFavoritesPlaylist_createsExactlyOnce();
+  void ensureFavoritesPlaylist_returnsExistingRow();
+  void deletePlaylist_refusesReservedRow();
 
 private:
   QTemporaryDir m_tempDir;
@@ -246,6 +249,69 @@ void TestPlaylistManager::playlistsChangedSignal_firesOnEveryMutation() {
 
   m_pm->deletePlaylist(id);
   QCOMPARE(spy.count(), 5);
+}
+
+void TestPlaylistManager::ensureFavoritesPlaylist_createsExactlyOnce() {
+  // First call creates the row; subsequent calls return the same id without
+  // inserting duplicates. The synthesizer in MainWindow relies on this
+  // idempotency so resyncPlaylistCollections() can call it on every refresh
+  // without piling up rows.
+  const QString first = m_pm->ensureFavoritesPlaylist();
+  QVERIFY(!first.isEmpty());
+
+  const QString second = m_pm->ensureFavoritesPlaylist();
+  QCOMPARE(second, first);
+
+  const auto rows = m_pm->loadAll();
+  int favCount = 0;
+  for (const auto &row : rows) {
+    if (row.reservedKind == "favorites") {
+      ++favCount;
+    }
+  }
+  QCOMPARE(favCount, 1);
+}
+
+void TestPlaylistManager::ensureFavoritesPlaylist_returnsExistingRow() {
+  // Pre-seed the row with a custom name (mimicking a user-renamed favorites
+  // slot persisted from a prior session). ensureFavoritesPlaylist must adopt
+  // the existing id rather than creating a parallel "Favorites" row.
+  auto created = m_pm->createPlaylist("My Loves", QString(), "favorites");
+  QVERIFY(created.isOk());
+  const QString preExistingId = created.value();
+
+  // Drop the cached id to force the SQL probe path (mirrors a fresh-process
+  // ensure-on-startup, where the cache is empty but a row exists).
+  delete m_pm;
+  m_pm = new PlaylistManager();
+  QVERIFY(m_pm->initialize());
+
+  const QString resolvedId = m_pm->ensureFavoritesPlaylist();
+  QCOMPARE(resolvedId, preExistingId);
+  // The custom name survives — ensureFavoritesPlaylist never overwrites the
+  // user's chosen label.
+  const auto rows = m_pm->loadAll();
+  QCOMPARE(rows.size(), 1);
+  QCOMPARE(rows.first().name, QString("My Loves"));
+}
+
+void TestPlaylistManager::deletePlaylist_refusesReservedRow() {
+  const QString favId = m_pm->ensureFavoritesPlaylist();
+  QVERIFY(!favId.isEmpty());
+
+  // Reserved rows can be added to and renamed, but never deleted — preserves
+  // the stable id callers cache, and avoids the silent-data-loss footgun of
+  // a future ensureFavoritesPlaylist() recreating it under a fresh id with
+  // every prior starred reference orphaned.
+  m_pm->addItem(favId, "u", "/g/1");
+  QVERIFY(!m_pm->deletePlaylist(favId));
+  QCOMPARE(m_pm->loadAll().size(), 1);
+  QCOMPARE(m_pm->loadItems(favId).size(), 1);
+
+  // Rename still works — users can localize the label without losing the row.
+  QVERIFY(m_pm->renamePlaylist(favId, "Bookmarks"));
+  QCOMPARE(m_pm->loadAll().first().name, QString("Bookmarks"));
+  QCOMPARE(m_pm->loadAll().first().reservedKind, QString("favorites"));
 }
 
 QTEST_MAIN(TestPlaylistManager)

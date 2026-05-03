@@ -203,6 +203,40 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       }
 
       menu.addSeparator();
+
+      // Kartend-5mg8: top-level favorites toggle. Faster than navigating into
+      // the "Add to playlist" submenu and locating the favorites entry, since
+      // starring is the most common per-item playlist action. The label flips
+      // based on current membership so a single click is always meaningful.
+      const QString favouritesId = m_playlistManager->ensureFavoritesPlaylist();
+      if (!favouritesId.isEmpty() && !srcUuid.isEmpty()) {
+        const bool alreadyFavorite =
+            m_playlistManager->containsItem(favouritesId, srcUuid, filePath);
+        QAction *favAction =
+            menu.addAction(alreadyFavorite ? tr("Remove from Favorites") : tr("Add to Favorites"));
+        QObject::connect(
+            favAction, &QAction::triggered, this,
+            [this, favouritesId, srcUuid, filePath, alreadyFavorite]() {
+              if (!m_playlistManager) {
+                return;
+              }
+              if (alreadyFavorite) {
+                m_playlistManager->removeItem(favouritesId, srcUuid, filePath);
+              } else {
+                m_playlistManager->addItem(favouritesId, srcUuid, filePath);
+              }
+              // When the user is currently inside the favorites
+              // playlist, the count just changed — reload so the
+              // grid drops/appends the affected tile right away
+              // rather than waiting for the next manual refresh.
+              if (m_navigationManager && m_currentCollectionIndex &&
+                  CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections) &&
+                  (*m_collections)[*m_currentCollectionIndex].playlistId == favouritesId) {
+                m_navigationManager->safeReloadCollection(*m_currentCollectionIndex);
+              }
+            });
+      }
+
       QMenu *addToMenu = menu.addMenu(tr("Add to playlist"));
 
       QAction *newPlaylistAction = addToMenu->addAction(tr("New playlist…"));
@@ -252,15 +286,23 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       menu.addSeparator();
       const QString playlistId = (*m_collections)[*m_currentCollectionIndex].playlistId;
       const QString currentName = (*m_collections)[*m_currentCollectionIndex].name;
+      // Kartend-5mg8: built-in playlists keep rename (so users can localize
+      // the label) but hide delete — PlaylistManager refuses the call anyway,
+      // and surfacing a button that always errors is worse UX than just
+      // omitting it.
+      const bool isReserved =
+          !(*m_collections)[*m_currentCollectionIndex].playlistReservedKind.isEmpty();
 
       QAction *renameAction = menu.addAction(tr("Rename playlist…"));
       QObject::connect(renameAction, &QAction::triggered, this, [this, playlistId, currentName]() {
         renamePlaylistDialog(playlistId, currentName);
       });
-      QAction *deleteAction = menu.addAction(tr("Delete playlist…"));
-      QObject::connect(deleteAction, &QAction::triggered, this, [this, playlistId, currentName]() {
-        deletePlaylistConfirm(playlistId, currentName);
-      });
+      if (!isReserved) {
+        QAction *deleteAction = menu.addAction(tr("Delete playlist…"));
+        QObject::connect(
+            deleteAction, &QAction::triggered, this,
+            [this, playlistId, currentName]() { deletePlaylistConfirm(playlistId, currentName); });
+      }
     }
   }
 

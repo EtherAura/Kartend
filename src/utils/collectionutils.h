@@ -239,6 +239,12 @@ struct CollectionConfig {
   // isPlaylist=true so they never round-trip into kartend.cfg.
   bool isPlaylist = false;
   QString playlistId; // UUID — matches playlists.id when isPlaylist is true.
+  /// Reserved-kind tag for built-in playlists (Kartend-5mg8). Empty for
+  /// ordinary user-created playlists; "favorites" for the auto-created
+  /// favorites slot. The UI uses this to hide the Delete action on built-ins
+  /// and to highlight the favorites toggle on items that already belong to
+  /// the favorites playlist. Runtime-only, never persisted to INI.
+  QString playlistReservedKind;
 
   CollectionConfig()
       : gridWidth(4), sidebarVisible(false), horizontalAlignment(HorizontalAlignment::Center) {}
@@ -277,7 +283,8 @@ struct CollectionConfig {
            showHiddenFolders == other.showHiddenFolders && listFontSize == other.listFontSize &&
            listRowHeight == other.listRowHeight && listRowColor == other.listRowColor &&
            listAltRowColor == other.listAltRowColor && customFontFamily == other.customFontFamily &&
-           isPlaylist == other.isPlaylist && playlistId == other.playlistId;
+           isPlaylist == other.isPlaylist && playlistId == other.playlistId &&
+           playlistReservedKind == other.playlistReservedKind;
   }
 
   // ─── Launcher list helpers (Kartend-bdl) ───────────────────────────────────
