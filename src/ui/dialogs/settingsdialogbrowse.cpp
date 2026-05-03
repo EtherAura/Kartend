@@ -320,6 +320,9 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->sidebarModeComboBox) {
     ui->sidebarModeComboBox->setCurrentIndex(static_cast<int>(config.sidebarMode));
   }
+  if (ui->sidebarActiveCollectionLabel) {
+    ui->sidebarActiveCollectionLabel->setText(tr("Editing: %1").arg(config.name));
+  }
   if (ui->viewTypeComboBox) {
     ui->viewTypeComboBox->setCurrentIndex(static_cast<int>(config.viewType));
   }
@@ -460,6 +463,9 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->sidebarModeComboBox) ui->sidebarModeComboBox->setCurrentIndex(0);
   if (ui->viewTypeComboBox) ui->viewTypeComboBox->setCurrentIndex(0);
   if (ui->parentCollectionComboBox) ui->parentCollectionComboBox->clear();
+  if (ui->sidebarActiveCollectionLabel) {
+    ui->sidebarActiveCollectionLabel->setText(tr("Editing: (no collection selected)"));
+  }
 
   if (ui->backgroundColorRadio) ui->backgroundColorRadio->setChecked(true);
   if (ui->subfolderOptionsWidget) ui->subfolderOptionsWidget->setVisible(false);
