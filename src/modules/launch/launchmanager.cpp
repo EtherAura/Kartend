@@ -4,6 +4,7 @@
 #include "applicationcontext.h"
 #include "configvalidation.h"
 #include "errorutils.h"
+#include "launcherchooserdialog.h"
 #include "pathutils.h"
 #include "setuputils.h"
 #include "uiconstants.h"
@@ -84,22 +85,23 @@ using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 using ErrorUtils::Result;
 
-auto LaunchManager::buildLaunchCommand(const CollectionConfig &collection, const QString &filePath)
+auto LaunchManager::buildLaunchCommand(const LauncherConfig &launcher,
+                                       const QString &collectionName, const QString &filePath)
     -> ErrorUtils::Result<LaunchCommand> {
   auto expandOnly = [&](const QString &text) -> QString {
     QString out = text;
-    out.replace("%collection%", collection.name, Qt::CaseInsensitive);
+    out.replace("%collection%", collectionName, Qt::CaseInsensitive);
     return out.trimmed();
   };
 
-  const QString expandedLauncherPath = expandOnly(collection.launcherPath);
-  const QString expandedCorePath = expandOnly(collection.corePath);
-  const QString expandedLaunchParameters = expandOnly(collection.launchParameters);
+  const QString expandedLauncherPath = expandOnly(launcher.launcherPath);
+  const QString expandedCorePath = expandOnly(launcher.corePath);
+  const QString expandedLaunchParameters = expandOnly(launcher.launchParameters);
 
   if (expandedLauncherPath.isEmpty()) {
     return ErrorContext::error(ErrorCode::InvalidArgument, "No launcher configured",
                                "LaunchManager::buildLaunchCommand")
-        .withDetails(QString("Collection '%1'").arg(collection.name));
+        .withDetails(QString("Collection '%1'").arg(collectionName));
   }
 
   // Validate media file path for security.
@@ -117,7 +119,7 @@ auto LaunchManager::buildLaunchCommand(const CollectionConfig &collection, const
     if (expandedCorePath.isEmpty()) {
       return ErrorContext::error(ErrorCode::InvalidArgument, "No RetroArch core configured",
                                  "LaunchManager::buildLaunchCommand")
-          .withDetails(QString("Collection '%1'").arg(collection.name));
+          .withDetails(QString("Collection '%1'").arg(collectionName));
     }
 
     // Core path should be a file path, not a flag.
@@ -243,13 +245,40 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<QString>
   return canonicalPath;
 }
 
-void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
+void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int launcherIndex) {
   if ((!m_collections) || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
     QMessageBox::warning(nullptr, "Invalid Collection", "Invalid collection specified.");
     return;
   }
 
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
+
+  // Kartend-bdl: pick which launcher to use. When the caller forced an index
+  // (>= 0) we honour it; otherwise prompt the user when there are multiple
+  // launchers and fall through to the default for single-launcher collections.
+  int resolvedLauncherIndex = launcherIndex;
+  if (resolvedLauncherIndex < 0) {
+    if (collection.launcherCount() > 1) {
+      QStringList launcherNames;
+      launcherNames.reserve(collection.launcherCount());
+      for (int i = 0; i < collection.launcherCount(); ++i) {
+        launcherNames << collection.launcherDisplayName(i);
+      }
+      const int chosen = LauncherChooserDialog::choose(
+          nullptr, collection.name, launcherNames,
+          std::clamp(collection.defaultLauncherIndex, 0, collection.launcherCount() - 1));
+      if (chosen < 0) {
+        return; // User cancelled.
+      }
+      resolvedLauncherIndex = chosen;
+    } else {
+      resolvedLauncherIndex = 0;
+    }
+  }
+  if (resolvedLauncherIndex < 0 || resolvedLauncherIndex >= collection.launcherCount()) {
+    resolvedLauncherIndex = 0;
+  }
+  const LauncherConfig launcher = collection.launcherAt(resolvedLauncherIndex);
 
   // Determine the actual file to launch (may be extracted from archive)
   QString launchFilePath = filePath;
@@ -271,7 +300,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
     qCDebug(lcLaunchManager) << "Launching extracted file:" << launchFilePath;
   }
 
-  auto commandResult = buildLaunchCommand(collection, launchFilePath);
+  auto commandResult = buildLaunchCommand(launcher, collection.name, launchFilePath);
   if (commandResult.isError()) {
     ErrorUtils::logError(commandResult.error());
     const QString msg = commandResult.error().message;

@@ -63,11 +63,40 @@ namespace CollectionUtils {
 
 } // namespace CollectionUtils
 
+/// Kartend-bdl: one entry in a collection's launcher list. The legacy primary
+/// launcher (CollectionConfig::launcherPath/corePath/launchParameters) is
+/// always present as launcher index 0; entries in
+/// CollectionConfig::additionalLaunchers occupy indices 1..N. `name` is a
+/// user-visible label shown in the launcher chooser; empty falls back to the
+/// executable basename.
+struct LauncherConfig {
+  QString name;
+  QString launcherPath;
+  QString corePath;
+  QString launchParameters;
+
+  bool operator==(const LauncherConfig &other) const {
+    return name == other.name && launcherPath == other.launcherPath &&
+           corePath == other.corePath && launchParameters == other.launchParameters;
+  }
+};
+
 struct CollectionConfig {
   QString name;
   QString launcherPath;
   QString corePath;
   QString launchParameters;
+  /// User-visible name for the primary (legacy) launcher. Empty is fine — the
+  /// chooser dialog falls back to the executable basename. Kartend-bdl.
+  QString launcherName;
+  /// Extra launchers beyond the primary, indexed at 1..N in launcher views.
+  /// Kartend-bdl.
+  QList<LauncherConfig> additionalLaunchers;
+  /// Index into the unified launcher view (0 = primary, 1..N =
+  /// additionalLaunchers[0..N-1]). The chooser dialog pre-selects this entry
+  /// when launcherCount() > 1; for single-launcher collections it is
+  /// effectively ignored. Kartend-bdl.
+  int defaultLauncherIndex = 0;
   QString mediaDirectory;
   QString artworkDirectory;
   QString videoDirectory;
@@ -151,8 +180,11 @@ struct CollectionConfig {
 
   bool operator==(const CollectionConfig &other) const {
     return name == other.name && launcherPath == other.launcherPath && corePath == other.corePath &&
-           launchParameters == other.launchParameters && mediaDirectory == other.mediaDirectory &&
-           artworkDirectory == other.artworkDirectory && videoDirectory == other.videoDirectory &&
+           launchParameters == other.launchParameters && launcherName == other.launcherName &&
+           additionalLaunchers == other.additionalLaunchers &&
+           defaultLauncherIndex == other.defaultLauncherIndex &&
+           mediaDirectory == other.mediaDirectory && artworkDirectory == other.artworkDirectory &&
+           videoDirectory == other.videoDirectory &&
            manualDirectory == other.manualDirectory &&
            placeholderArtwork == other.placeholderArtwork &&
            collectionIcon == other.collectionIcon && extensions == other.extensions &&
@@ -181,6 +213,46 @@ struct CollectionConfig {
            showHiddenFolders == other.showHiddenFolders && listFontSize == other.listFontSize &&
            listRowHeight == other.listRowHeight && listRowColor == other.listRowColor &&
            listAltRowColor == other.listAltRowColor && customFontFamily == other.customFontFamily;
+  }
+
+  // ─── Launcher list helpers (Kartend-bdl) ───────────────────────────────────
+  /// Total number of launchers visible to the user: 1 primary + N additional.
+  [[nodiscard]] int launcherCount() const { return 1 + additionalLaunchers.size(); }
+
+  /// Returns the launcher at the unified index. Index 0 is the primary
+  /// (synthesized from the legacy fields); index 1..N maps to
+  /// additionalLaunchers[0..N-1]. Out-of-range indices return an empty config.
+  [[nodiscard]] LauncherConfig launcherAt(int index) const {
+    if (index == 0) {
+      // Qualify with this-> so the compiler doesn't confuse the legacy fields
+      // with the same-named members on LauncherConfig during aggregate init.
+      return LauncherConfig{this->launcherName, this->launcherPath, this->corePath,
+                            this->launchParameters};
+    }
+    const int additionalIndex = index - 1;
+    if (additionalIndex < 0 || additionalIndex >= this->additionalLaunchers.size()) {
+      return LauncherConfig{};
+    }
+    return this->additionalLaunchers[additionalIndex];
+  }
+
+  /// Friendly display name for a launcher entry. Falls back to the executable
+  /// basename when the user-supplied name is empty, and to a numbered label
+  /// when the launcher path itself is also empty.
+  [[nodiscard]] QString launcherDisplayName(int index) const {
+    LauncherConfig launcher = launcherAt(index);
+    if (!launcher.name.trimmed().isEmpty()) {
+      return launcher.name.trimmed();
+    }
+    if (!launcher.launcherPath.trimmed().isEmpty()) {
+      QString basename = launcher.launcherPath.trimmed();
+      int slash = basename.lastIndexOf(QLatin1Char('/'));
+      if (slash >= 0) {
+        basename = basename.mid(slash + 1);
+      }
+      return basename;
+    }
+    return QString::number(index + 1);
   }
 
   // Validation methods
@@ -212,6 +284,11 @@ struct CollectionConfig {
                               UIConstants::Item::MAX_FONT_SIZE);
     listRowHeight = std::clamp(listRowHeight, UIConstants::ListView::MIN_ROW_HEIGHT,
                                UIConstants::ListView::MAX_ROW_HEIGHT);
+    // Kartend-bdl: keep the default-launcher pointer inside the visible list
+    // so a stale config (or a deletion that out-paced the index) can never
+    // refer past the end. 0 is always valid because the primary slot exists
+    // even when its launcherPath is empty.
+    defaultLauncherIndex = std::clamp(defaultLauncherIndex, 0, launcherCount() - 1);
   }
 };
 

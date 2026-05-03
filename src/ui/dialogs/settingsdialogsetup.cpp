@@ -5,13 +5,16 @@
 #include <functional>
 #include <QAbstractItemView>
 #include <QColorDialog>
+#include <QComboBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontDialog>
 #include <QInputDialog>
+#include <QListWidget>
 #include <QMessageBox>
 #include <QPixmapCache>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSet>
@@ -139,6 +142,42 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->launcherLineEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
     connect(ui->launcherLineEdit, &QLineEdit::textChanged, this,
             [this](const QString &text) { updateUIForLauncherType(text); });
+    // Kartend-bdl: keep the default-launcher combo's primary label in sync
+    // with the live launcher path / name as the user edits.
+    connect(ui->launcherLineEdit, &QLineEdit::textChanged, this, [this](const QString &) {
+      const int idx = ui->defaultLauncherComboBox ? ui->defaultLauncherComboBox->currentIndex() : 0;
+      rebuildDefaultLauncherCombo(idx);
+    });
+  }
+  if (ui->launcherNameLineEdit) {
+    connect(ui->launcherNameLineEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+    connect(ui->launcherNameLineEdit, &QLineEdit::textChanged, this, [this](const QString &) {
+      const int idx = ui->defaultLauncherComboBox ? ui->defaultLauncherComboBox->currentIndex() : 0;
+      rebuildDefaultLauncherCombo(idx);
+    });
+  }
+  if (ui->addAdditionalLauncherButton) {
+    connect(ui->addAdditionalLauncherButton, &QPushButton::clicked, this,
+            &SettingsDialog::onAddAdditionalLauncher);
+  }
+  if (ui->editAdditionalLauncherButton) {
+    connect(ui->editAdditionalLauncherButton, &QPushButton::clicked, this,
+            &SettingsDialog::onEditAdditionalLauncher);
+  }
+  if (ui->removeAdditionalLauncherButton) {
+    connect(ui->removeAdditionalLauncherButton, &QPushButton::clicked, this,
+            &SettingsDialog::onRemoveAdditionalLauncher);
+  }
+  if (ui->additionalLaunchersList) {
+    connect(ui->additionalLaunchersList, &QListWidget::currentRowChanged, this,
+            [this](int) { onAdditionalLauncherSelectionChanged(); });
+    connect(ui->additionalLaunchersList, &QListWidget::itemDoubleClicked, this,
+            [this](QListWidgetItem *) { onEditAdditionalLauncher(); });
+  }
+  if (ui->defaultLauncherComboBox) {
+    connect(ui->defaultLauncherComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int) { checkForChanges(); });
   }
   if (ui->coreLineEdit) {
     connect(ui->coreLineEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);

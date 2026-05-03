@@ -2,12 +2,15 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   customfieldsdialog.cpp
   errordialog.cpp
   itemartworklinksdialog.cpp
+  launcherchooserdialog.cpp
+  launchereditordialog.cpp
   settingsdialog.cpp
   settingsdialogbrowse.cpp
   settingsdialogchecks.cpp
   settingsdialogform.cpp
   settingsdialoggamepad.cpp
   settingsdialoggeneral.cpp
+  settingsdialoglaunchers.cpp
   settingsdialogremove.cpp
   settingsdialogsetup.cpp
   settingsdialogtree.cpp
@@ -16,6 +19,8 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   customfieldsdialog.h
   errordialog.h
   itemartworklinksdialog.h
+  launcherchooserdialog.h
+  launchereditordialog.h
   settingsdialog.h
   shortcutsdialog.h
   statisticsdialog.h

@@ -50,9 +50,13 @@ add_executable(test_launchmanager
   test_launchmanager.cpp
   ${SRC_DIR}/modules/launch/launchmanager.cpp
   ${SRC_DIR}/modules/launch/launchmanagerarchive.cpp
+  ${SRC_DIR}/ui/dialogs/launcherchooserdialog.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/pathutils.cpp
   ${SRC_DIR}/utils/settingsutils.cpp
+)
+target_include_directories(test_launchmanager PRIVATE
+  ${SRC_DIR}/ui/dialogs
 )
 target_link_libraries(test_launchmanager
   Qt6::Core

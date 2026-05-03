@@ -51,6 +51,12 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.corePath = (ui->coreLineEdit) ? ui->coreLineEdit->text() : config.corePath;
   config.launchParameters =
       (ui->launchParamsLineEdit) ? ui->launchParamsLineEdit->text() : config.launchParameters;
+  config.launcherName =
+      (ui->launcherNameLineEdit) ? ui->launcherNameLineEdit->text().trimmed() : config.launcherName;
+  config.additionalLaunchers = m_workingAdditionalLaunchers;
+  if (ui->defaultLauncherComboBox && ui->defaultLauncherComboBox->count() > 0) {
+    config.defaultLauncherIndex = ui->defaultLauncherComboBox->currentIndex();
+  }
   config.extractArchives = (ui->extractArchivesCheckBox) ? ui->extractArchivesCheckBox->isChecked()
                                                          : config.extractArchives;
   config.extractedExtension = (ui->extractedExtensionLineEdit)
@@ -208,7 +214,17 @@ auto SettingsDialog::updateParentCollectionFromUI(CollectionConfig &collection, 
 auto SettingsDialog::checkBasicFieldChanges() const -> bool {
   const CollectionConfig &originalConfig = originalCollection;
 
+  // Kartend-bdl: also flag changes when the user has edited the launcher
+  // name, the additional-launchers list, or the default-launcher pick.
+  const bool launcherNameChanged =
+      ui->launcherNameLineEdit &&
+      ui->launcherNameLineEdit->text().trimmed() != originalConfig.launcherName;
+  const bool additionalChanged = m_workingAdditionalLaunchers != originalConfig.additionalLaunchers;
+  const bool defaultLauncherChanged =
+      ui->defaultLauncherComboBox && ui->defaultLauncherComboBox->count() > 0 &&
+      ui->defaultLauncherComboBox->currentIndex() != originalConfig.defaultLauncherIndex;
   return (
+      launcherNameChanged || additionalChanged || defaultLauncherChanged ||
       ((ui->launcherLineEdit) && ui->launcherLineEdit->text() != originalConfig.launcherPath) ||
       ((ui->coreLineEdit) && ui->coreLineEdit->text() != originalConfig.corePath) ||
       ((ui->launchParamsLineEdit) &&
