@@ -5,6 +5,7 @@
 
 #include <QApplication>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QInputDialog>
 #include <QMenu>
 #include <QMessageBox>
@@ -243,6 +244,13 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       QObject::connect(newPlaylistAction, &QAction::triggered, this,
                        [this, srcUuid, filePath]() { addItemToNewPlaylist(srcUuid, filePath); });
 
+      // Kartend-5pqv: import a playlist from a JSON or M3U file. Lives next
+      // to "New playlist…" rather than under a separate top-level entry so
+      // the discovery surface for "create a playlist" is one place.
+      QAction *importAction = addToMenu->addAction(tr("Import playlist from file…"));
+      QObject::connect(importAction, &QAction::triggered, this,
+                       [this]() { importPlaylistFromFile(); });
+
       const QList<PlaylistRow> playlists = m_playlistManager->loadAll();
       if (!playlists.isEmpty()) {
         addToMenu->addSeparator();
@@ -297,6 +305,22 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       QObject::connect(renameAction, &QAction::triggered, this, [this, playlistId, currentName]() {
         renamePlaylistDialog(playlistId, currentName);
       });
+
+      // Kartend-5pqv: export the current playlist. The submenu houses both
+      // formats so the menu stays scannable; M3U for cross-app interop, JSON
+      // for lossless Kartend round-trip.
+      QMenu *exportMenu = menu.addMenu(tr("Export playlist"));
+      QAction *exportJsonAction = exportMenu->addAction(tr("As JSON…"));
+      QObject::connect(exportJsonAction, &QAction::triggered, this,
+                       [this, playlistId, currentName]() {
+                         exportPlaylistToFile(playlistId, currentName, /*asJson=*/true);
+                       });
+      QAction *exportM3uAction = exportMenu->addAction(tr("As M3U…"));
+      QObject::connect(exportM3uAction, &QAction::triggered, this,
+                       [this, playlistId, currentName]() {
+                         exportPlaylistToFile(playlistId, currentName, /*asJson=*/false);
+                       });
+
       if (!isReserved) {
         QAction *deleteAction = menu.addAction(tr("Delete playlist…"));
         QObject::connect(
@@ -500,5 +524,87 @@ void InteractionManager::setItemLauncherOverride(const QString &filePath, int la
   if (m_sidebarManager) {
     m_sidebarManager->updateSidebarMetadata(
         m_selectionManager ? m_selectionManager->selectedWidget() : nullptr);
+  }
+}
+
+void InteractionManager::exportPlaylistToFile(const QString &playlistId, const QString &currentName,
+                                              bool asJson) {
+  if (!m_playlistManager || playlistId.isEmpty()) {
+    return;
+  }
+  const QString defaultExt = asJson ? QStringLiteral(".json") : QStringLiteral(".m3u");
+  // Suggest a filename that pre-fills the save dialog with the playlist's
+  // current name + the format-appropriate extension. Sanitisation is left to
+  // the platform file dialog — Qt's QFileDialog handles platform-native
+  // illegal-character handling per OS.
+  const QString suggestion = currentName.trimmed().isEmpty()
+                                 ? QStringLiteral("playlist") + defaultExt
+                                 : currentName.trimmed() + defaultExt;
+  const QString filterJson = tr("Kartend Playlist (*.json)");
+  const QString filterM3u = tr("M3U Playlist (*.m3u)");
+  const QString chosen =
+      QFileDialog::getSaveFileName(QApplication::activeWindow(), tr("Export Playlist"), suggestion,
+                                   asJson ? filterJson : filterM3u);
+  if (chosen.isEmpty()) {
+    return; // User cancelled.
+  }
+
+  // Append the format extension when the user didn't include one — keeps the
+  // file recognisable to the format-detector in importPlaylistFromFile.
+  QString outPath = chosen;
+  if (!outPath.endsWith(defaultExt, Qt::CaseInsensitive)) {
+    outPath += defaultExt;
+  }
+
+  auto result = asJson ? m_playlistManager->exportToJson(playlistId, outPath)
+                       : m_playlistManager->exportToM3U(playlistId, outPath);
+  if (result.isError()) {
+    QMessageBox::warning(QApplication::activeWindow(), tr("Export Failed"), result.error().message);
+    return;
+  }
+  QMessageBox::information(QApplication::activeWindow(), tr("Export Complete"),
+                           tr("Wrote %1 item(s) to %2").arg(result.value()).arg(outPath));
+}
+
+void InteractionManager::importPlaylistFromFile() {
+  if (!m_playlistManager) {
+    return;
+  }
+  const QString chosen = QFileDialog::getOpenFileName(
+      QApplication::activeWindow(), tr("Import Playlist"), QString(),
+      tr("Playlist Files (*.json *.m3u);;Kartend Playlist (*.json);;M3U Playlist (*.m3u);;"
+         "All Files (*)"));
+  if (chosen.isEmpty()) {
+    return;
+  }
+
+  // Sniff format from the extension. JSON is the lossless Kartend format;
+  // anything else is assumed to be M3U so unusual extensions (e.g. .pls) at
+  // least try the path-per-line parser instead of failing out.
+  const bool isJson = chosen.endsWith(QStringLiteral(".json"), Qt::CaseInsensitive);
+  if (isJson) {
+    auto result = m_playlistManager->importFromJson(chosen);
+    if (result.isError()) {
+      QMessageBox::warning(QApplication::activeWindow(), tr("Import Failed"),
+                           result.error().message);
+    }
+    return;
+  }
+
+  int skipped = 0;
+  auto result =
+      m_playlistManager->importFromM3U(chosen, QFileInfo(chosen).completeBaseName(), &skipped);
+  if (result.isError()) {
+    QMessageBox::warning(QApplication::activeWindow(), tr("Import Failed"), result.error().message);
+    return;
+  }
+  if (skipped > 0) {
+    // Surface the skipped count in a single completion dialog so the user
+    // knows their imported playlist may be shorter than the source — without
+    // forcing them through one warning per missing entry.
+    QMessageBox::information(
+        QApplication::activeWindow(), tr("Import Complete"),
+        tr("Imported playlist; %1 entries skipped (no matching items in the library).")
+            .arg(skipped));
   }
 }

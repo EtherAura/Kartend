@@ -205,6 +205,18 @@ public:
   // Confirms (the cascade can't be undone) then deletes the playlist row plus
   // all of its items. Source items in their owning collections are untouched.
   void deletePlaylistConfirm(const QString &playlistId, const QString &currentName);
+
+  // ─── Playlist import / export (Kartend-5pqv) ──────────────────────────────
+  // Pops a save-file dialog and writes the playlist as JSON or M3U via
+  // PlaylistManager. M3U is a basic dialect (#EXTM3U + path-per-line); JSON
+  // is the lossless Kartend format that round-trips through importFromJson.
+  void exportPlaylistToFile(const QString &playlistId, const QString &currentName, bool asJson);
+  // Pops an open-file dialog and creates a new playlist from the chosen file.
+  // Format is auto-detected by extension (.json → JSON, anything else → M3U).
+  // M3U entries that don't resolve to a known item are skipped, with the
+  // count surfaced in a single completion message-box so the user knows
+  // why their imported playlist may be shorter than the source.
+  void importPlaylistFromFile();
   [[nodiscard]] bool isRestoringSelection() const;
   [[nodiscard]] int targetRestoreIndex() const;
   [[nodiscard]] bool forceImmediateCenter() const;

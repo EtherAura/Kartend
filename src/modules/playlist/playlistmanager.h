@@ -110,6 +110,40 @@ public:
   [[nodiscard]] bool containsItem(const QString &playlistId, const QString &sourceCollectionUuid,
                                   const QString &sourcePath) const;
 
+  // ─── Import / export (Kartend-5pqv) ──────────────────────────────────────
+
+  /// Writes a playlist as a JSON document at `outPath`. The format is the
+  /// canonical Kartend serialization — round-trips losslessly through
+  /// importFromJson(), preserving the (source_collection_uuid, source_path)
+  /// pairs so the imported playlist resolves to the same items even when
+  /// filesystem paths shift relative to the user's setup. Returns the count
+  /// of items written on success.
+  [[nodiscard]] ErrorUtils::Result<int> exportToJson(const QString &playlistId,
+                                                     const QString &outPath) const;
+
+  /// Writes a playlist as a basic M3U (the path-per-line dialect, with an
+  /// `#EXTM3U` header and `#EXTINF:0,<basename>` titles). Lossy compared to
+  /// JSON — collection_uuid and added_at metadata are dropped — but the file
+  /// is interchangeable with media players. Returns the count of items
+  /// written on success.
+  [[nodiscard]] ErrorUtils::Result<int> exportToM3U(const QString &playlistId,
+                                                    const QString &outPath) const;
+
+  /// Reads a JSON document produced by exportToJson() and creates a new
+  /// playlist with its contents. Returns the new playlist id; the supplied
+  /// `nameOverride` (when non-empty) wins over the name embedded in the file
+  /// so users can disambiguate when re-importing.
+  [[nodiscard]] ErrorUtils::Result<QString> importFromJson(const QString &inPath,
+                                                           const QString &nameOverride = QString());
+
+  /// Reads an M3U file and creates a new playlist from its entries. Each path
+  /// is resolved against the live `items` table; entries that don't currently
+  /// match any indexed item are skipped (the count of skipped lines is
+  /// available via `outSkipped` for caller-facing diagnostics). Returns the
+  /// new playlist id.
+  [[nodiscard]] ErrorUtils::Result<QString>
+  importFromM3U(const QString &inPath, const QString &playlistName, int *outSkipped = nullptr);
+
   // ─── Favorites built-in (Kartend-5mg8) ────────────────────────────────────
 
   /// Returns the id of the unique playlist with reserved_kind='favorites',
