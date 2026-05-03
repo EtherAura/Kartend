@@ -341,6 +341,7 @@ void MainWindow::setupManagerConnections() {
   connectSearchComponents();
   connectScrollBars();
   connectCollectionTypeToolbar();
+  connectTitleFilterToolbar();
 }
 
 void MainWindow::updateWindowTitleWithFilter(int visible, int total) {
@@ -448,6 +449,9 @@ void MainWindow::updateWindowTitleForCollection(int collectionIndex) {
       m_listViewButton->setChecked(viewType == ViewType::List);
     }
   }
+  // Kartend-5h6: sync the title-filter toolbar to the new collection's
+  // patterns/enabled flag whenever we re-enter a view.
+  refreshTitleFilterToolbar();
 }
 
 void MainWindow::rebuildHierarchyCache() {

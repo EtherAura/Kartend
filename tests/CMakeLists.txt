@@ -231,6 +231,7 @@ add_executable(test_databasemanager
   ${SRC_DIR}/modules/database/databasemanager.cpp
   ${SRC_DIR}/modules/database/databasemanagerpaths.cpp
   ${SRC_DIR}/modules/database/databasemanagerworker.cpp
+  ${SRC_DIR}/utils/titlefilter.cpp
   ${SRC_DIR}/modules/query/querymanager.cpp
   ${SRC_DIR}/modules/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/query/querymanagerlifecycle.cpp
@@ -319,6 +320,21 @@ add_test(NAME ArtworkManager COMMAND test_artworkmanager)
 add_executable(test_stringutils test_stringutils.cpp)
 target_link_libraries(test_stringutils Qt6::Core Qt6::Test)
 add_test(NAME StringUtils COMMAND test_stringutils)
+
+# TitleFilter tests (Kartend-5h6 — per-collection regex title cleanup)
+add_executable(test_titlefilter
+  test_titlefilter.cpp
+  ${SRC_DIR}/utils/titlefilter.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
+)
+target_include_directories(test_titlefilter PRIVATE
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_titlefilter Qt6::Core Qt6::Widgets Qt6::Test)
+add_test(NAME TitleFilter COMMAND test_titlefilter)
 
 # CollectionUtils tests (enum conversions, validation, UUID)
 add_executable(test_collectionutils

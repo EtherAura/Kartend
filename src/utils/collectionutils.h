@@ -186,6 +186,18 @@ struct CollectionConfig {
   bool showAllSubcollectionItems = false;
   bool hideTitles = false;
   bool hideSubcollectionTitles = false;
+  /// Per-collection regex patterns stripped from displayed item titles
+  /// (Kartend-5h6). One pattern per entry; processed in order via
+  /// QString::remove(). Common use is dropping region tags like `\s*\(USA\)`
+  /// or revision tags like `\s*\[!\]` so only the canonical title shows in
+  /// the grid/list. Patterns are stored verbatim (no escaping) — the user
+  /// types regex syntax directly in the toolbar popup. Invalid patterns are
+  /// skipped at compile time rather than aborting the whole list.
+  QStringList titleExclusionPatterns;
+  /// Master switch for the exclusion list (Kartend-5h6). When false the
+  /// patterns persist but are not applied — lets the user toggle the cleanup
+  /// from the toolbar without losing their pattern list.
+  bool titleExclusionEnabled = true;
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Center;
   SidebarMode sidebarMode = SidebarMode::Overlay;
   ViewType viewType = ViewType::Grid; // Grid (default) or List view
@@ -284,6 +296,8 @@ struct CollectionConfig {
            showAllSubcollectionItems == other.showAllSubcollectionItems &&
            hideTitles == other.hideTitles &&
            hideSubcollectionTitles == other.hideSubcollectionTitles &&
+           titleExclusionPatterns == other.titleExclusionPatterns &&
+           titleExclusionEnabled == other.titleExclusionEnabled &&
            horizontalAlignment == other.horizontalAlignment && sidebarMode == other.sidebarMode &&
            viewType == other.viewType && horizontalSpacing == other.horizontalSpacing &&
            verticalSpacing == other.verticalSpacing &&

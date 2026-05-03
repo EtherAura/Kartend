@@ -18,6 +18,7 @@
 #include "extensionutils.h"
 #include "pathutils.h"
 #include "settingsutils.h"
+#include "titlefilter.h"
 #include "uiconstants.h"
 
 namespace {
@@ -207,6 +208,21 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
     config.hideVerticalScrollbar = settings.value("hideVerticalScrollbar", false).toBool();
     config.hideTitles = settings.value("hideTitles", false).toBool();
     config.hideSubcollectionTitles = settings.value("hideSubcollectionTitles", false).toBool();
+    // Kartend-5h6: title-exclusion patterns are stored as a QSettings array so
+    // each pattern can contain commas / brackets / backslashes without
+    // delimiter escaping concerns. titleExclusionEnabled defaults to true so a
+    // user adding patterns sees them apply immediately.
+    const int titleExcludeCount = settings.beginReadArray("titleExclusionPatterns");
+    config.titleExclusionPatterns.reserve(titleExcludeCount);
+    for (int i = 0; i < titleExcludeCount; ++i) {
+      settings.setArrayIndex(i);
+      const QString pattern = settings.value("pattern").toString();
+      if (!pattern.isEmpty()) {
+        config.titleExclusionPatterns.append(pattern);
+      }
+    }
+    settings.endArray();
+    config.titleExclusionEnabled = settings.value("titleExclusionEnabled", true).toBool();
     config.horizontalSpacing =
         settings.value("horizontalSpacing", UIConstants::Grid::SPACING).toInt();
     config.verticalSpacing = settings.value("verticalSpacing", 20).toInt();
@@ -249,6 +265,11 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
   // Validate loaded collections and log any issues
   auto validation = ConfigValidation::validateAllCollections(collections);
   ConfigValidation::logValidationResult(validation, "loadCollections");
+
+  // Kartend-5h6: refresh the title-exclusion registry whenever the on-disk
+  // collection list is reloaded so QueryManager / scroll consumers see the
+  // patterns from the very first item fetched after launch.
+  TitleFilter::rebuildFromCollections(collections);
 }
 
 // Persist collection configurations to disk (no lastSelected_* entries)
@@ -397,6 +418,15 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue("hideVerticalScrollbar", c.hideVerticalScrollbar);
     settings.setValue("hideTitles", c.hideTitles);
     settings.setValue("hideSubcollectionTitles", c.hideSubcollectionTitles);
+    // Kartend-5h6: persist the title-exclusion list via beginWriteArray so
+    // patterns removed by the user disappear from the INI cleanly.
+    settings.beginWriteArray("titleExclusionPatterns", c.titleExclusionPatterns.size());
+    for (int i = 0; i < c.titleExclusionPatterns.size(); ++i) {
+      settings.setArrayIndex(i);
+      settings.setValue("pattern", c.titleExclusionPatterns[i]);
+    }
+    settings.endArray();
+    settings.setValue("titleExclusionEnabled", c.titleExclusionEnabled);
     settings.setValue("horizontalSpacing", c.horizontalSpacing);
     settings.setValue("verticalSpacing", c.verticalSpacing);
     settings.setValue("itemWidth", c.itemWidth);
@@ -432,4 +462,10 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
                                               .arg(SettingsUtils::getConfigPath())
                                               .arg(static_cast<int>(settings.status()))));
   }
+
+  // Kartend-5h6: keep the registry in sync with the just-persisted list. The
+  // toolbar popup calls saveCollections() after edits and then triggers a
+  // collection reload — refreshing here means the reload sees the new
+  // patterns even before loadCollections() runs again.
+  TitleFilter::rebuildFromCollections(collections);
 }

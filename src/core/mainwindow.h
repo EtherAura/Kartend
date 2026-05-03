@@ -21,6 +21,7 @@ class QHBoxLayout;
 class QScrollArea;
 class QLineEdit;
 class QPushButton;
+class QToolButton;
 class QComboBox;
 class QLabel;
 class QAction;
@@ -70,6 +71,8 @@ public:
   // Kartend-dd8: collection categorization toolbar widgets
   QPushButton *m_hideSubcollectionsButton = nullptr;
   QComboBox *m_typeFilterComboBox = nullptr;
+  // Kartend-5h6: title-exclusion regex toolbar (per-collection patterns)
+  QToolButton *m_titleFilterButton = nullptr;
   EmptyStateWidget *loadingLabel;
   LoadingOverlay *m_loadingOverlay = nullptr;
 
@@ -158,6 +161,19 @@ private:
   /// selection. Called on startup and after settings changes that may have
   /// added/removed type tags.
   void refreshTypeFilterToolbar();
+
+  /// Kartend-5h6: wires the title-exclusion toolbar button. Body click
+  /// toggles the per-collection enabled flag; arrow click opens a popup
+  /// containing a QPlainTextEdit (one regex per line) with Apply/Cancel.
+  void connectTitleFilterToolbar();
+  /// Kartend-5h6: refreshes the title-exclusion button's checked state from
+  /// the current collection's CollectionConfig::titleExclusionEnabled. Called
+  /// after collection switches and after the popup applies edits.
+  void refreshTitleFilterToolbar();
+  /// Kartend-5h6: opens the popup editor for the current collection's
+  /// title-exclusion patterns. Returns immediately when no collection is
+  /// active or when the user cancels.
+  void showTitleFilterEditor();
 
   // UI Setup Methods
   void setupUI();

@@ -11,6 +11,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   pathutils.cpp
   settingsutils.cpp
   timerutils.cpp
+  titlefilter.cpp
   usagestatsstore.cpp
   videoutils.cpp
   adaptivebatcher.h
@@ -33,6 +34,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   stateutils.h
   stringutils.h
   timerutils.h
+  titlefilter.h
   videoutils.h
   itemartwork.h
   itemmetadata.h
