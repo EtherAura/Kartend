@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QHash>
 #include <QMetaType>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QtCore/Qt>
@@ -239,6 +240,17 @@ struct CollectionConfig {
   // isPlaylist=true so they never round-trip into kartend.cfg.
   bool isPlaylist = false;
   QString playlistId; // UUID — matches playlists.id when isPlaylist is true.
+
+  // ─── Collection links / alias parents (Kartend-gzmk) ────────────────────────
+  // Names of additional parent collections this collection should appear
+  // under (in addition to its primary parentCollectionIndex). Stored as
+  // names rather than indices so reorder/rename of the parent list survives
+  // round-trips. Resolved to indices on demand by CollectionHierarchyCache::
+  // rebuild(). Unknown names — typo'd or referencing a deleted parent —
+  // are silently ignored at resolution time so a stale config can't wedge
+  // the tree. Self-references (a collection naming itself) are likewise
+  // dropped. Empty when the collection has no aliases.
+  QStringList additionalParentNames;
   /// Reserved-kind tag for built-in playlists (Kartend-5mg8). Empty for
   /// ordinary user-created playlists; "favorites" for the auto-created
   /// favorites slot. The UI uses this to hide the Delete action on built-ins
@@ -284,7 +296,8 @@ struct CollectionConfig {
            listRowHeight == other.listRowHeight && listRowColor == other.listRowColor &&
            listAltRowColor == other.listAltRowColor && customFontFamily == other.customFontFamily &&
            isPlaylist == other.isPlaylist && playlistId == other.playlistId &&
-           playlistReservedKind == other.playlistReservedKind;
+           playlistReservedKind == other.playlistReservedKind &&
+           additionalParentNames == other.additionalParentNames;
   }
 
   // ─── Launcher list helpers (Kartend-bdl) ───────────────────────────────────
@@ -612,10 +625,28 @@ public:
   // mappings. Implemented in collectionutils.cpp to avoid header dependencies.
   void rebuild(const QList<CollectionConfig> &collections);
 
+  /// Returns the union of primary children and linked children
+  /// (Kartend-gzmk) for @p parentIndex. Primary children come first in
+  /// insertion order; linked children are appended in insertion order with
+  /// duplicates suppressed. Most navigation/scroll/search code paths read
+  /// children through this accessor, so they pick up alias parents
+  /// automatically when the cache is rebuilt.
   [[nodiscard]] QList<int> directChildren(int parentIndex) const {
     return m_directChildren.value(parentIndex);
   }
 
+  /// Subset of directChildren(@p parentIndex) reachable only via the
+  /// CollectionConfig::additionalParentNames link list — i.e. the
+  /// "see-also" appearances. Used by the settings tree (Kartend-gzmk
+  /// stage 2) to render linked appearances in italics. Does NOT include
+  /// the primary children.
+  [[nodiscard]] QList<int> linkedDirectChildren(int parentIndex) const {
+    return m_linkedDirectChildren.value(parentIndex);
+  }
+
+  /// All descendants of @p parentIndex via the merged child graph
+  /// (primary + linked). Deduped and cycle-bounded — even mutual links
+  /// resolve to a finite set. The starting node itself is excluded.
   [[nodiscard]] QList<int> allDescendants(int parentIndex) const {
     return m_allDescendants.value(parentIndex);
   }
@@ -686,11 +717,21 @@ public:
   [[nodiscard]] bool isValid() const { return m_collections; }
 
 private:
+  /// Cycle-safe descendant walk over the merged child graph. Without the
+  /// visited set, a Kartend-gzmk link cycle (A links B, B links A) would
+  /// loop forever. Traversal order is BFS; result excludes the starting
+  /// node so a self-link doesn't make a collection its own descendant.
   QList<int> computeDescendants(int parentIndex) const {
     QList<int> result;
+    QSet<int> visited;
+    visited.insert(parentIndex);
     QList<int> stack = m_directChildren.value(parentIndex);
     while (!stack.isEmpty()) {
       int idx = stack.takeFirst();
+      if (visited.contains(idx)) {
+        continue;
+      }
+      visited.insert(idx);
       result.append(idx);
       stack.append(m_directChildren.value(idx));
     }
@@ -698,7 +739,8 @@ private:
   }
 
   const QList<CollectionConfig> *m_collections = nullptr;
-  QHash<int, QList<int>> m_directChildren;
+  QHash<int, QList<int>> m_directChildren;       // primary ∪ linked, primary first
+  QHash<int, QList<int>> m_linkedDirectChildren; // Kartend-gzmk: linked-only subset
   QHash<int, QList<int>> m_allDescendants;
 
   // Pre-computed UUIDs and directory mappings (eliminates SHA1 on each startup)

@@ -259,6 +259,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->launcherNameLineEdit->setText(config.launcherName);
   }
   loadAdditionalLaunchersToUI(config);
+  loadLinkedParentsToUI(config);
   if (ui->extractArchivesCheckBox) {
     ui->extractArchivesCheckBox->setChecked(config.extractArchives);
   }
@@ -417,6 +418,7 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->launchParamsLineEdit) ui->launchParamsLineEdit->clear();
   if (ui->launcherNameLineEdit) ui->launcherNameLineEdit->clear();
   clearAdditionalLaunchersUI();
+  clearLinkedParentsUI();
   if (ui->mediaDirLineEdit) ui->mediaDirLineEdit->clear();
   if (ui->artworkDirLineEdit) ui->artworkDirLineEdit->clear();
   if (ui->videoDirLineEdit) ui->videoDirLineEdit->clear();

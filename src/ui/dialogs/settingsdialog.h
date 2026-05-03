@@ -128,6 +128,11 @@ private slots:
   /// Kartend-j613: drag-drop reparenting completed. Walk the tree post-drop
   /// and resync parentCollectionIndex / isSubcollection on every collection.
   void onTreeRearranged();
+  /// Kartend-gzmk: open the multi-select picker pre-checked with the
+  /// current collection's additionalParentNames so the user can manage
+  /// alias parents. Excludes self + descendants from the picker (cycles
+  /// can't be expressed via the UI).
+  void onEditLinkedParents();
 
 private:
   enum class GamepadCaptureTarget { None, Confirm, Back, ToggleSidebar };
@@ -193,6 +198,11 @@ private:
   // Kartend-bdl: load/save/refresh helpers for the multi-launcher controls.
   void loadAdditionalLaunchersToUI(const CollectionConfig &config);
   void clearAdditionalLaunchersUI();
+  // Kartend-gzmk: helpers for the alias-parent ("Linked Parents") control.
+  void loadLinkedParentsToUI(const CollectionConfig &config);
+  void clearLinkedParentsUI();
+  void updateLinkedParentsButtonLabel();
+  [[nodiscard]] auto checkLinkedParentsChanges() const -> bool;
   void rebuildDefaultLauncherCombo(int preferredIndex);
   void updateAdditionalLauncherButtonsState();
   // Kartend-p1jd: launcher-presets tab helpers. Preset edits live in
@@ -261,6 +271,10 @@ private:
   /// launchers — kept in sync with the QListWidget so dirty-checking and the
   /// default-launcher combo can read structured data instead of strings.
   QList<LauncherConfig> m_workingAdditionalLaunchers;
+  /// Kartend-gzmk: working copy of the active collection's alias-parent
+  /// names. Edited via the Linked Parents picker; flushed back to the
+  /// collection on Save and reset on collection switch.
+  QStringList m_workingAdditionalParentNames;
   GeneralSettings m_generalSettings;
   GeneralSettings m_originalGeneralSettings;
   /// Tracks collection indices that need a rescan due to database-affecting
