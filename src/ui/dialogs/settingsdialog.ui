@@ -627,6 +627,23 @@
                </property>
               </widget>
              </item>
+             <item row="18" column="0">
+              <widget class="QLabel" name="label_collectionType">
+               <property name="text">
+                <string>Type / Category:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="18" column="1">
+              <widget class="QComboBox" name="collectionTypeComboBox">
+               <property name="editable">
+                <bool>true</bool>
+               </property>
+               <property name="toolTip">
+                <string>Free-form category label (e.g. Games, Movies, Music). Subcollections inherit the nearest tagged ancestor when left blank. The toolbar type filter shows only subcollection tiles whose effective type matches.</string>
+               </property>
+              </widget>
+             </item>
             </layout>
            </item>
            <item>

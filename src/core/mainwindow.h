@@ -21,6 +21,7 @@ class QHBoxLayout;
 class QScrollArea;
 class QLineEdit;
 class QPushButton;
+class QComboBox;
 class QLabel;
 class QAction;
 class QActionGroup;
@@ -51,7 +52,7 @@ class MainWindow : public QMainWindow {
 
 public:
   explicit MainWindow(QWidget *parent = nullptr);
-  ~MainWindow();
+  ~MainWindow() override;
 
   GeneralSettings m_generalSettings;
 
@@ -66,6 +67,9 @@ public:
   QPushButton *m_searchModeButton;
   QPushButton *m_gridViewButton;
   QPushButton *m_listViewButton;
+  // Kartend-dd8: collection categorization toolbar widgets
+  QPushButton *m_hideSubcollectionsButton = nullptr;
+  QComboBox *m_typeFilterComboBox = nullptr;
   EmptyStateWidget *loadingLabel;
   LoadingOverlay *m_loadingOverlay = nullptr;
 
@@ -145,6 +149,15 @@ private:
   void connectSidebarManager();
   void connectSearchComponents();
   void connectScrollBars() const;
+  /// Kartend-dd8: wires the toolbar type-filter combobox + hide-subcollections
+  /// toggle to GeneralSettings persistence and triggers a reload of the
+  /// current view when either changes.
+  void connectCollectionTypeToolbar();
+  /// Kartend-dd8: rebuilds the toolbar type-filter dropdown from the union of
+  /// types currently present in m_collections, preserving the active
+  /// selection. Called on startup and after settings changes that may have
+  /// added/removed type tags.
+  void refreshTypeFilterToolbar();
 
   // UI Setup Methods
   void setupUI();

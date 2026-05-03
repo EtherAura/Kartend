@@ -1,6 +1,7 @@
 #ifndef COLLECTIONUTILS_H
 #define COLLECTIONUTILS_H
 
+#include <algorithm>
 #include <QDir>
 #include <QHash>
 #include <QMetaType>
@@ -139,6 +140,12 @@ namespace LauncherUtils {
 
 struct CollectionConfig {
   QString name;
+  /// Free-form category/type tag (Kartend-dd8). Empty for an untagged
+  /// collection — subcollections inherit the nearest non-empty ancestor type
+  /// for filter purposes (see CollectionUtils::effectiveCollectionType). The
+  /// value is just a user-chosen label like "Games" / "Movies" / "Music"; the
+  /// app does not interpret it semantically.
+  QString type;
   QString launcherPath;
   QString corePath;
   QString launchParameters;
@@ -262,9 +269,9 @@ struct CollectionConfig {
       : gridWidth(4), sidebarVisible(false), horizontalAlignment(HorizontalAlignment::Center) {}
 
   bool operator==(const CollectionConfig &other) const {
-    return name == other.name && launcherPath == other.launcherPath && corePath == other.corePath &&
-           launchParameters == other.launchParameters && launcherName == other.launcherName &&
-           additionalLaunchers == other.additionalLaunchers &&
+    return name == other.name && type == other.type && launcherPath == other.launcherPath &&
+           corePath == other.corePath && launchParameters == other.launchParameters &&
+           launcherName == other.launcherName && additionalLaunchers == other.additionalLaunchers &&
            defaultLauncherIndex == other.defaultLauncherIndex &&
            mediaDirectory == other.mediaDirectory && artworkDirectory == other.artworkDirectory &&
            videoDirectory == other.videoDirectory && manualDirectory == other.manualDirectory &&
@@ -508,6 +515,14 @@ struct CollectionContext {
   bool hasSubcollectionOverride = false;
   QList<int> subcollectionOverride;
   bool suppressVirtualFolders = false;
+
+  // ─── Collection categorization filters (Kartend-dd8) ───────────────────────
+  // Mirrored from GeneralSettings on every navigation entry so the scroll
+  // pipeline can drop subcollection tiles whose effective type doesn't match
+  // the active filter, or hide them entirely. Empty filter == show all.
+  QString collectionTypeFilter;
+  bool hideSubcollectionTiles = false;
+
   [[nodiscard]] bool isValid() const { return currentIndex >= 0; }
 };
 
@@ -602,6 +617,18 @@ struct GeneralSettings {
   // ─────────────────────────────────────────────────────────────────────────
   bool historyEnabled = true;
   int historyMaxEntries = 500;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Collection categorization (Kartend-dd8)
+  // Toolbar-driven filters that hide subcollection tiles when navigating into
+  // a parent. `collectionTypeFilter` is a user-visible label that matches
+  // CollectionConfig::type (with parent-chain inheritance via
+  // CollectionUtils::effectiveCollectionType); empty means "show all types".
+  // `hideSubcollectionTiles` collapses every subcollection tile out of the
+  // current view regardless of type, leaving only media items.
+  // ─────────────────────────────────────────────────────────────────────────
+  QString collectionTypeFilter;
+  bool hideSubcollectionTiles = false;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Launcher presets (Kartend-p1jd)
@@ -931,6 +958,70 @@ collectDescendantIndices(int parentIndex, const QList<CollectionConfig> &collect
     current = c.parentCollectionIndex;
   }
   return {};
+}
+
+/**
+ * @brief Returns the effective category/type for a collection, walking up
+ * the parent chain when the collection's own `type` field is empty.
+ *
+ * Kartend-dd8: the per-collection type is optional. Subcollections can either
+ * declare their own type or inherit from the nearest non-empty ancestor —
+ * this matches the user's mental model of "this whole branch is Games" while
+ * still letting an oddball subcollection be tagged differently. Returns an
+ * empty string when nothing in the chain is tagged.
+ *
+ * Cycle-safe: bounds the walk by `collections.size()` so a malformed
+ * parentCollectionIndex chain can't loop forever.
+ */
+[[nodiscard]] inline QString effectiveCollectionType(int collectionIndex,
+                                                     const QList<CollectionConfig> &collections) {
+  if (collectionIndex < 0 || collectionIndex >= collections.size()) {
+    return {};
+  }
+  int current = collectionIndex;
+  const int maxDepth = collections.size();
+  for (int steps = 0; steps < maxDepth; ++steps) {
+    if (current < 0 || current >= collections.size()) {
+      break;
+    }
+    const CollectionConfig &c = collections[current];
+    if (!c.type.trimmed().isEmpty()) {
+      return c.type.trimmed();
+    }
+    if (!c.isSubcollection || c.parentCollectionIndex < 0) {
+      break;
+    }
+    current = c.parentCollectionIndex;
+  }
+  return {};
+}
+
+/**
+ * @brief Returns the set of distinct non-empty `type` labels across the full
+ * collection list (roots and subcollections), case-insensitive deduped and
+ * sorted alphabetically. Used to populate the toolbar filter dropdown and
+ * the per-collection editor's combobox completion (Kartend-dd8).
+ */
+[[nodiscard]] inline QStringList
+collectAllCollectionTypes(const QList<CollectionConfig> &collections) {
+  QStringList result;
+  QSet<QString> seenLower;
+  for (const CollectionConfig &c : collections) {
+    QString trimmed = c.type.trimmed();
+    if (trimmed.isEmpty()) {
+      continue;
+    }
+    QString lower = trimmed.toLower();
+    if (seenLower.contains(lower)) {
+      continue;
+    }
+    seenLower.insert(lower);
+    result.append(trimmed);
+  }
+  std::sort(result.begin(), result.end(), [](const QString &a, const QString &b) {
+    return QString::compare(a, b, Qt::CaseInsensitive) < 0;
+  });
+  return result;
 }
 
 /**

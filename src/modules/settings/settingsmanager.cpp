@@ -108,6 +108,11 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
     settings.sortMode = SortMode::NameAscending;
   }
   settings.excludeSubfoldersFromSort = s.value("excludeSubfoldersFromSort", false).toBool();
+  // Kartend-dd8: collection categorization filters. Defaults are "no filter"
+  // so an upgrading user sees all subcollections as before until they pick a
+  // type or toggle the hide button on the toolbar.
+  settings.collectionTypeFilter = s.value("collectionTypeFilter", QString()).toString().trimmed();
+  settings.hideSubcollectionTiles = s.value("hideSubcollectionTiles", false).toBool();
   settings.listCollectionColumnWidth = s.value("listCollectionColumnWidth", 150).toInt();
   settings.listArtworkColumnWidth = s.value("listArtworkColumnWidth", 32).toInt();
   settings.startupCollection = s.value("startupCollection", QString()).toString();
@@ -203,6 +208,9 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.gamepadToggleSidebarButton = settings.gamepadToggleSidebarButton;
   m_generalSettings.sortMode = settings.sortMode;
   m_generalSettings.excludeSubfoldersFromSort = settings.excludeSubfoldersFromSort;
+  // Kartend-dd8: collection categorization filters
+  m_generalSettings.collectionTypeFilter = settings.collectionTypeFilter.trimmed();
+  m_generalSettings.hideSubcollectionTiles = settings.hideSubcollectionTiles;
   m_generalSettings.listCollectionColumnWidth = settings.listCollectionColumnWidth;
   m_generalSettings.listArtworkColumnWidth = settings.listArtworkColumnWidth;
   m_generalSettings.startupCollection = settings.startupCollection;
@@ -260,6 +268,9 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("gamepadToggleSidebarButton", m_generalSettings.gamepadToggleSidebarButton);
   s.setValue("sortMode", static_cast<int>(m_generalSettings.sortMode));
   s.setValue("excludeSubfoldersFromSort", m_generalSettings.excludeSubfoldersFromSort);
+  // Kartend-dd8: collection categorization toolbar state
+  s.setValue("collectionTypeFilter", m_generalSettings.collectionTypeFilter);
+  s.setValue("hideSubcollectionTiles", m_generalSettings.hideSubcollectionTiles);
   s.setValue("listCollectionColumnWidth", m_generalSettings.listCollectionColumnWidth);
   s.setValue("listArtworkColumnWidth", m_generalSettings.listArtworkColumnWidth);
   s.setValue("startupCollection", m_generalSettings.startupCollection);

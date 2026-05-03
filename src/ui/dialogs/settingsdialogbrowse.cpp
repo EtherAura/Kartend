@@ -308,6 +308,20 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->customArtworkTypesLineEdit) {
     ui->customArtworkTypesLineEdit->setText(config.customArtworkTypes.join(", "));
   }
+  if (ui->collectionTypeComboBox) {
+    // Kartend-dd8: rebuild the dropdown from the union of types currently in
+    // use across the working list so the user sees everything they've already
+    // tagged. Editable=true means free-form values still survive a round-trip
+    // even if they aren't in the dropdown.
+    QSignalBlocker blocker(ui->collectionTypeComboBox);
+    ui->collectionTypeComboBox->clear();
+    QStringList types = CollectionUtils::collectAllCollectionTypes(m_workingCollections);
+    ui->collectionTypeComboBox->addItem(QString());
+    for (const QString &t : types) {
+      ui->collectionTypeComboBox->addItem(t);
+    }
+    ui->collectionTypeComboBox->setEditText(config.type);
+  }
   if (ui->gridWidthSpinBox) {
     ui->gridWidthSpinBox->setValue(config.gridWidth);
   }
@@ -429,6 +443,11 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->placeholderArtworkLineEdit) ui->placeholderArtworkLineEdit->clear();
   if (ui->fileExtensionsLineEdit) ui->fileExtensionsLineEdit->clear();
   if (ui->customArtworkTypesLineEdit) ui->customArtworkTypesLineEdit->clear();
+  if (ui->collectionTypeComboBox) {
+    QSignalBlocker blocker(ui->collectionTypeComboBox);
+    ui->collectionTypeComboBox->clear();
+    ui->collectionTypeComboBox->setEditText(QString());
+  }
   if (ui->backgroundValueEdit) ui->backgroundValueEdit->clear();
   if (ui->primaryColorEdit) ui->primaryColorEdit->clear();
   if (ui->tileColorEdit) ui->tileColorEdit->clear();

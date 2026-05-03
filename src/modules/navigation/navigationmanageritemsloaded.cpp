@@ -160,6 +160,10 @@ auto NavigationManager::setupCollectionContext(const QStringList &filePaths,
   if (m_generalSettings) {
     context.sortMode = m_generalSettings->sortMode;
     context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    // Kartend-dd8: mirror toolbar filters so subcollection tile visibility
+    // honors the active type filter / hide-subs toggle.
+    context.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
+    context.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
   }
   if (m_allCollectionsActive) {
     context.config.showAllSubcollectionItems = true;

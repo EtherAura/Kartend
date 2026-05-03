@@ -112,6 +112,10 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
     settings.beginGroup(group);
     CollectionConfig config;
     config.name = settings.value("name").toString();
+    // Kartend-dd8: free-form category label. Empty means "untagged" — the
+    // sidebar/toolbar filter resolves an empty type by walking up the parent
+    // chain via CollectionUtils::effectiveCollectionType.
+    config.type = settings.value("type").toString().trimmed();
     config.launcherPath = settings.value("launcherPath").toString();
     config.corePath = settings.value("corePath").toString();
     config.launchParameters = settings.value("launchParameters").toString();
@@ -324,6 +328,9 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
 
     settings.beginGroup(iniGroupName);
     settings.setValue("name", c.name);
+    // Kartend-dd8: persist the free-form category label. Stored verbatim
+    // (whitespace already trimmed at load) so a hand-edit round-trips.
+    settings.setValue("type", c.type);
     settings.setValue("launcherPath",
                       sanitizePersistedPath(c.launcherPath, "launcherPath", sectionName));
     settings.setValue("corePath", sanitizePersistedPath(c.corePath, "corePath", sectionName));
