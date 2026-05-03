@@ -147,8 +147,8 @@ auto SettingsDialog::hasUnsavedChanges() const -> bool {
   }
 
   return checkBasicFieldChanges() || checkExtensionChanges() || checkTreeNameChanges() ||
-         checkParentCollectionChanges() || checkDimensionChanges() || checkColorChanges() ||
-         checkListModeChanges() || checkBackgroundChanges();
+         checkParentCollectionChanges() || checkLinkedParentsChanges() || checkDimensionChanges() ||
+         checkColorChanges() || checkListModeChanges() || checkBackgroundChanges();
 }
 
 void SettingsDialog::updateSaveButtonStyle() {

@@ -133,6 +133,19 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
       config.additionalLaunchers.append(launcher);
     }
     settings.endArray();
+    // Kartend-gzmk: alias parents — names of additional collections this
+    // collection should appear under. Stored as a QSettings string array so
+    // names can contain commas/semicolons without escaping concerns.
+    const int additionalParentsCount = settings.beginReadArray("additionalParents");
+    config.additionalParentNames.reserve(additionalParentsCount);
+    for (int i = 0; i < additionalParentsCount; ++i) {
+      settings.setArrayIndex(i);
+      const QString parentName = settings.value("name").toString();
+      if (!parentName.isEmpty()) {
+        config.additionalParentNames.append(parentName);
+      }
+    }
+    settings.endArray();
     config.defaultLauncherIndex = settings.value("defaultLauncherIndex", 0).toInt();
     config.mediaDirectory = settings.value("mediaDirectory").toString();
     config.artworkDirectory = settings.value("artworkDirectory").toString();
@@ -333,6 +346,14 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
       settings.setValue("launchParameters", launcher.launchParameters);
       // Kartend-p1jd: persist the preset reference (empty when inline).
       settings.setValue("presetId", launcher.presetId);
+    }
+    settings.endArray();
+    // Kartend-gzmk: persist the alias-parent name list as a QSettings array.
+    // beginWriteArray clears prior entries so removals propagate.
+    settings.beginWriteArray("additionalParents", c.additionalParentNames.size());
+    for (int i = 0; i < c.additionalParentNames.size(); ++i) {
+      settings.setArrayIndex(i);
+      settings.setValue("name", c.additionalParentNames[i]);
     }
     settings.endArray();
     settings.setValue("defaultLauncherIndex", c.defaultLauncherIndex);

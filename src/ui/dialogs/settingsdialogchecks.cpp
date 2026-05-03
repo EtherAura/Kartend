@@ -54,6 +54,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.launcherName =
       (ui->launcherNameLineEdit) ? ui->launcherNameLineEdit->text().trimmed() : config.launcherName;
   config.additionalLaunchers = m_workingAdditionalLaunchers;
+  config.additionalParentNames = m_workingAdditionalParentNames;
   if (ui->defaultLauncherComboBox && ui->defaultLauncherComboBox->count() > 0) {
     config.defaultLauncherIndex = ui->defaultLauncherComboBox->currentIndex();
   }

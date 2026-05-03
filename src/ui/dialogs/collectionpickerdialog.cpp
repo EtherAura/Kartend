@@ -12,9 +12,10 @@
 #include <QVBoxLayout>
 
 CollectionPickerDialog::CollectionPickerDialog(const QList<CollectionConfig> &collections,
-                                               int excludeIndex, const QList<int> &initialChecked,
-                                               QWidget *parent)
-    : QDialog(parent), m_collections(collections), m_excludeIndex(excludeIndex) {
+                                               const QList<int> &excludedIndices,
+                                               const QList<int> &initialChecked, QWidget *parent)
+    : QDialog(parent), m_collections(collections),
+      m_excludedIndices(excludedIndices.begin(), excludedIndices.end()) {
   setupUi();
   populateTree(initialChecked);
 }
@@ -49,15 +50,17 @@ void CollectionPickerDialog::setupUi() {
   connect(m_tree, &QTreeWidget::itemChanged, this, &CollectionPickerDialog::onItemChanged);
 }
 
-int CollectionPickerDialog::displayedParent(int idx, int excluded,
+int CollectionPickerDialog::displayedParent(int idx, const QSet<int> &excluded,
                                             const QList<CollectionConfig> &cols) {
   if (idx < 0 || idx >= cols.size()) {
     return -1;
   }
   int p = cols[idx].parentCollectionIndex;
   // Bound the walk by the collection count so a malformed parent chain can't
-  // spin forever.
-  for (int steps = 0; steps < cols.size() && p == excluded && p >= 0 && p < cols.size(); ++steps) {
+  // spin forever, and skip past every excluded ancestor so the displayed
+  // child re-attaches at the nearest visible level.
+  for (int steps = 0; steps < cols.size() && p >= 0 && p < cols.size() && excluded.contains(p);
+       ++steps) {
     p = cols[p].parentCollectionIndex;
   }
   return p;
@@ -78,10 +81,10 @@ void CollectionPickerDialog::populateTree(const QList<int> &initialChecked) {
   m_blockItemChanged = true;
 
   for (int i = 0; i < m_collections.size(); ++i) {
-    if (i == m_excludeIndex) {
+    if (m_excludedIndices.contains(i)) {
       continue;
     }
-    if (displayedParent(i, m_excludeIndex, m_collections) == -1) {
+    if (displayedParent(i, m_excludedIndices, m_collections) == -1) {
       createItem(i, nullptr);
     }
   }
@@ -91,10 +94,10 @@ void CollectionPickerDialog::populateTree(const QList<int> &initialChecked) {
   for (int pass = 0; pass < m_collections.size(); ++pass) {
     bool inserted = false;
     for (int i = 0; i < m_collections.size(); ++i) {
-      if (i == m_excludeIndex || m_indexToItem.contains(i)) {
+      if (m_excludedIndices.contains(i) || m_indexToItem.contains(i)) {
         continue;
       }
-      int parentIdx = displayedParent(i, m_excludeIndex, m_collections);
+      int parentIdx = displayedParent(i, m_excludedIndices, m_collections);
       if (parentIdx >= 0 && m_indexToItem.contains(parentIdx)) {
         createItem(i, m_indexToItem.value(parentIdx));
         inserted = true;
@@ -108,7 +111,7 @@ void CollectionPickerDialog::populateTree(const QList<int> &initialChecked) {
   // Surface any orphans (broken parent links) at the root so the user can
   // still target them.
   for (int i = 0; i < m_collections.size(); ++i) {
-    if (i == m_excludeIndex || m_indexToItem.contains(i)) {
+    if (m_excludedIndices.contains(i) || m_indexToItem.contains(i)) {
       continue;
     }
     createItem(i, nullptr);

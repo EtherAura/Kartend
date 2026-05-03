@@ -216,17 +216,31 @@
               </widget>
              </item>
              <item row="0" column="1">
-              <widget class="QComboBox" name="parentCollectionComboBox">
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                 <horstretch>0</horstretch>
-                 <verstretch>0</verstretch>
-                </sizepolicy>
-               </property>
-               <property name="toolTip">
-                <string>Select parent collection to make this a subcollection</string>
-               </property>
-              </widget>
+              <layout class="QHBoxLayout" name="parentCollectionLayout">
+               <item>
+                <widget class="QComboBox" name="parentCollectionComboBox">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="toolTip">
+                  <string>Select parent collection to make this a subcollection</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="editLinkedParentsButton">
+                 <property name="toolTip">
+                  <string>Manage additional parents this collection appears under in the tree (Kartend-gzmk)</string>
+                 </property>
+                 <property name="text">
+                  <string>Linked Parents...</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
              </item>
              <item row="1" column="0">
               <widget class="QLabel" name="label_romDir">

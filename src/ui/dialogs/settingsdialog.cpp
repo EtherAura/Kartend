@@ -190,6 +190,10 @@ void SettingsDialog::setupButtonConnections() {
     connect(ui->duplicateCollectionButton, &QPushButton::clicked, this,
             &SettingsDialog::duplicateCollection);
   }
+  if (ui->editLinkedParentsButton) {
+    connect(ui->editLinkedParentsButton, &QPushButton::clicked, this,
+            &SettingsDialog::onEditLinkedParents);
+  }
   // Kartend-63o + Kartend-f5i9: populate the "apply to..." tool button's
   // dropdown menu so users can propagate the current collection's
   // appearance/layout settings to all collections, just subcollections, or a

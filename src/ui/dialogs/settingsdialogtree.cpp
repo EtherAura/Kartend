@@ -571,7 +571,7 @@ void SettingsDialog::applyCurrentSettingsToSelected() {
     return;
   }
 
-  CollectionPickerDialog picker(collections, currentCollectionIndex, {}, this);
+  CollectionPickerDialog picker(collections, {currentCollectionIndex}, {}, this);
   if (picker.exec() != QDialog::Accepted) {
     return;
   }

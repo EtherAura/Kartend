@@ -60,6 +60,16 @@ private slots:
   void resolvePlaceholderArtwork_usesOwnValue();
   void resolvePlaceholderArtwork_inheritsFromParent();
   void resolvePlaceholderArtwork_returnsEmptyWhenUnset();
+
+  // alias-parent links via CollectionHierarchyCache (Kartend-gzmk)
+  void hierarchyCache_directChildren_includesLinkedParent();
+  void hierarchyCache_linkedDirectChildren_returnsLinkedOnly();
+  void hierarchyCache_directChildren_primaryFirstThenLinked();
+  void hierarchyCache_directChildren_skipsSelfLink();
+  void hierarchyCache_directChildren_skipsUnknownLinkName();
+  void hierarchyCache_directChildren_skipsLinkEqualToPrimary();
+  void hierarchyCache_allDescendants_handlesMutualLinkCycle();
+  void hierarchyCache_allDescendants_excludesSelf();
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -369,6 +379,144 @@ void TestCollectionUtils::resolvePlaceholderArtwork_returnsEmptyWhenUnset() {
   cs << makeCollection("Child", /*isSub=*/true, 0);
 
   QVERIFY(CollectionUtils::resolvePlaceholderArtwork(1, cs).isEmpty());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CollectionHierarchyCache + alias parents (Kartend-gzmk)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestCollectionUtils::hierarchyCache_directChildren_includesLinkedParent() {
+  // Root, primary child Console with subcollection Genesis, plus a sibling
+  // category Sega that lists Genesis as an additional parent. The merged
+  // child list under Sega should expose Genesis even though Sega is not
+  // Genesis's primary parent.
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Console", /*isSub=*/false, -1);    // 0
+  cs << makeCollection("Sega", /*isSub=*/false, -1);       // 1
+  CollectionConfig genesis = makeCollection("Genesis", /*isSub=*/true, 0);
+  genesis.additionalParentNames << QStringLiteral("Sega");
+  cs << genesis;                                            // 2
+
+  CollectionHierarchyCache cache;
+  cache.rebuild(cs);
+
+  QCOMPARE(cache.directChildren(0), QList<int>{2});
+  QCOMPARE(cache.directChildren(1), QList<int>{2});
+}
+
+void TestCollectionUtils::hierarchyCache_linkedDirectChildren_returnsLinkedOnly() {
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Console", /*isSub=*/false, -1); // 0
+  cs << makeCollection("Sega", /*isSub=*/false, -1);    // 1
+  CollectionConfig genesis = makeCollection("Genesis", /*isSub=*/true, 0);
+  genesis.additionalParentNames << QStringLiteral("Sega");
+  cs << genesis;                                         // 2
+
+  CollectionHierarchyCache cache;
+  cache.rebuild(cs);
+
+  // Console is the primary parent — no linked entry there.
+  QVERIFY(cache.linkedDirectChildren(0).isEmpty());
+  // Sega holds the alias.
+  QCOMPARE(cache.linkedDirectChildren(1), QList<int>{2});
+}
+
+void TestCollectionUtils::hierarchyCache_directChildren_primaryFirstThenLinked() {
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Sega", /*isSub=*/false, -1);     // 0
+  cs << makeCollection("SMS", /*isSub=*/true, 0);        // 1 — primary child of Sega
+  cs << makeCollection("Console", /*isSub=*/false, -1);  // 2
+  CollectionConfig genesis = makeCollection("Genesis", /*isSub=*/true, 2);
+  genesis.additionalParentNames << QStringLiteral("Sega");
+  cs << genesis;                                          // 3 — linked under Sega
+
+  CollectionHierarchyCache cache;
+  cache.rebuild(cs);
+
+  const QList<int> children = cache.directChildren(0);
+  QCOMPARE(children.size(), 2);
+  QCOMPARE(children[0], 1); // primary first
+  QCOMPARE(children[1], 3); // linked second
+}
+
+void TestCollectionUtils::hierarchyCache_directChildren_skipsSelfLink() {
+  QList<CollectionConfig> cs;
+  CollectionConfig solo = makeCollection("Solo", /*isSub=*/false, -1);
+  solo.additionalParentNames << QStringLiteral("Solo"); // self-reference
+  cs << solo;
+
+  CollectionHierarchyCache cache;
+  cache.rebuild(cs);
+
+  QVERIFY(cache.directChildren(0).isEmpty());
+  QVERIFY(cache.linkedDirectChildren(0).isEmpty());
+}
+
+void TestCollectionUtils::hierarchyCache_directChildren_skipsUnknownLinkName() {
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Console", /*isSub=*/false, -1);
+  CollectionConfig genesis = makeCollection("Genesis", /*isSub=*/true, 0);
+  genesis.additionalParentNames << QStringLiteral("DoesNotExist");
+  cs << genesis;
+
+  CollectionHierarchyCache cache;
+  cache.rebuild(cs);
+
+  // Only the primary parent should claim Genesis.
+  QCOMPARE(cache.directChildren(0), QList<int>{1});
+}
+
+void TestCollectionUtils::hierarchyCache_directChildren_skipsLinkEqualToPrimary() {
+  // If the user lists their own primary parent in additionalParentNames,
+  // the cache should NOT push the child a second time.
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Console", /*isSub=*/false, -1);
+  CollectionConfig genesis = makeCollection("Genesis", /*isSub=*/true, 0);
+  genesis.additionalParentNames << QStringLiteral("Console"); // same as primary
+  cs << genesis;
+
+  CollectionHierarchyCache cache;
+  cache.rebuild(cs);
+
+  QCOMPARE(cache.directChildren(0), QList<int>{1});
+  QVERIFY(cache.linkedDirectChildren(0).isEmpty());
+}
+
+void TestCollectionUtils::hierarchyCache_allDescendants_handlesMutualLinkCycle() {
+  // A links to B, B links to A. Without dedup the descendant walk would
+  // never terminate.
+  QList<CollectionConfig> cs;
+  CollectionConfig a = makeCollection("A", /*isSub=*/false, -1);
+  a.additionalParentNames << QStringLiteral("B");
+  CollectionConfig b = makeCollection("B", /*isSub=*/false, -1);
+  b.additionalParentNames << QStringLiteral("A");
+  cs << a << b;
+
+  CollectionHierarchyCache cache;
+  cache.rebuild(cs);
+
+  const QList<int> aDescendants = cache.allDescendants(0);
+  // A is reachable through B, but the starting node is excluded — so
+  // descendants(A) is exactly {B} and descendants(B) is exactly {A}.
+  QCOMPARE(aDescendants.size(), 1);
+  QCOMPARE(aDescendants[0], 1);
+
+  const QList<int> bDescendants = cache.allDescendants(1);
+  QCOMPARE(bDescendants.size(), 1);
+  QCOMPARE(bDescendants[0], 0);
+}
+
+void TestCollectionUtils::hierarchyCache_allDescendants_excludesSelf() {
+  // A self-link must not make a collection its own descendant.
+  QList<CollectionConfig> cs;
+  CollectionConfig solo = makeCollection("Solo", /*isSub=*/false, -1);
+  solo.additionalParentNames << QStringLiteral("Solo");
+  cs << solo;
+
+  CollectionHierarchyCache cache;
+  cache.rebuild(cs);
+
+  QVERIFY(cache.allDescendants(0).isEmpty());
 }
 
 QTEST_APPLESS_MAIN(TestCollectionUtils)
