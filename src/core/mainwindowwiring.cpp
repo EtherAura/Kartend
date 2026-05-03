@@ -63,6 +63,16 @@ void MainWindow::connectDatabaseManager() {
     }
   });
 
+  // Kartend-5h6: refresh the per-collection filter toolbar each time a
+  // collection's items finish loading. NavigationManager updates
+  // currentCollectionIndex through a raw pointer (no Qt signal), so this is
+  // the most reliable post-switch hook available — by the time itemsLoaded
+  // fires, the index points at the collection the user is now viewing.
+  QObject::connect(getDatabaseManager(), &DatabaseManager::itemsLoaded, this,
+                   [this](const QStringList &, const QHash<QString, QString> &) {
+                     refreshTitleFilterToolbar();
+                   });
+
   // Update loading overlay with scan progress during initial collection loading
   QObject::connect(getDatabaseManager(), &DatabaseManager::scanProgress, this,
                    [this](int current, int total, const QString &name) {
@@ -405,14 +415,13 @@ void MainWindow::refreshTitleFilterToolbar() {
     return;
   }
   // Mirror the active collection's enabled flag and pattern count so the
-  // user can tell at a glance whether cleanup is on for the view they're
-  // looking at. When no collection is active, leave the toolbar disabled
-  // rather than guessing — the popup needs a target collection.
-  const bool hasCollection =
-      currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size();
-  m_titleFilterButton->setEnabled(hasCollection);
+  // user can tell at a glance whether the filter is on for the view they're
+  // looking at. The button stays enabled at all times — the click and popup
+  // handlers re-validate the index, and there is no NavigationManager signal
+  // that fires reliably on every collection switch (the type-filter combo
+  // can ignore this because its setting is global, not per-collection).
   QSignalBlocker blocker(m_titleFilterButton);
-  if (hasCollection) {
+  if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
     const CollectionConfig &c = m_collections[currentCollectionIndex];
     m_titleFilterButton->setChecked(c.titleExclusionEnabled && !c.titleExclusionPatterns.isEmpty());
   } else {
@@ -430,13 +439,14 @@ void MainWindow::showTitleFilterEditor() {
   // see and edit the full pattern list at once; QMenu-with-widget would
   // dismiss on focus loss while the user is editing a long regex.
   QDialog dialog(this);
-  dialog.setWindowTitle(tr("Title cleanup — %1").arg(c.name));
+  dialog.setWindowTitle(tr("Filter — %1").arg(c.name));
   dialog.setModal(true);
   auto *layout = new QVBoxLayout(&dialog);
 
   auto *label =
-      new QLabel(tr("Regex patterns — one per line. Each pattern is removed from item titles "
-                    "in order. Examples:\n  \\s*\\(USA\\)$\n  \\s*\\[!\\]\n  \\s*\\(Rev \\d+\\)"),
+      new QLabel(tr("Filter patterns (regex) — one per line. Each pattern is removed from item "
+                    "titles in order. Examples:\n  \\s*\\(USA\\)$\n  \\s*\\[!\\]\n  "
+                    "\\s*\\(Rev \\d+\\)"),
                  &dialog);
   label->setWordWrap(true);
   layout->addWidget(label);
@@ -520,7 +530,7 @@ void MainWindow::connectTitleFilterToolbar() {
   // instead. This keeps the visual arrow without dropping a literal QMenu
   // popup on the user.
   auto *menu = new QMenu(this);
-  menu->addAction(tr("Edit patterns…"), this, &MainWindow::showTitleFilterEditor);
+  menu->addAction(tr("Edit filter patterns…"), this, &MainWindow::showTitleFilterEditor);
   m_titleFilterButton->setMenu(menu);
 }
 
