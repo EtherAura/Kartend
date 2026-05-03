@@ -147,6 +147,24 @@ target_link_libraries(test_cachemanager
 )
 add_test(NAME CacheManager COMMAND test_cachemanager)
 
+# PlaylistManager tests (Kartend-vlm7)
+add_executable(test_playlistmanager
+  test_playlistmanager.cpp
+  ${SRC_DIR}/modules/playlist/playlistmanager.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+)
+target_include_directories(test_playlistmanager PRIVATE
+  ${SRC_DIR}/modules/playlist
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_playlistmanager
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME PlaylistManager COMMAND test_playlistmanager)
+
 # SessionManager tests
 add_executable(test_sessionmanager
   test_sessionmanager.cpp

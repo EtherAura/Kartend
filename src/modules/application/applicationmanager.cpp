@@ -8,6 +8,7 @@
 #include "databasemanager.h"
 #include "interactionmanager.h"
 #include "navigationmanager.h"
+#include "playlistmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
@@ -54,6 +55,12 @@ void ApplicationManager::initialize() {
 
   // 6. DatabaseManager (needs SessionManager)
   m_databaseManager = std::make_unique<DatabaseManager>(m_sessionManager.get(), this);
+
+  // 6b. PlaylistManager (Kartend-vlm7) — opens its own main-thread connection
+  // on the same media.db. Construction is fast; initialize() does the I/O and
+  // is called by MainWindow before loadCollections() so synthesized playlist
+  // CollectionConfigs can be appended to m_collections in the same setup pass.
+  m_playlistManager = std::make_unique<PlaylistManager>(this);
 
   // 7. ScrollManager
   m_scrollManager = std::make_unique<ScrollManager>(this);
@@ -146,6 +153,10 @@ InteractionManager *ApplicationManager::getInteractionManager() const {
 
 NavigationManager *ApplicationManager::getNavigationManager() const {
   return m_navigationManager.get();
+}
+
+PlaylistManager *ApplicationManager::getPlaylistManager() const {
+  return m_playlistManager.get();
 }
 
 ScrollManager *ApplicationManager::getScrollManager() const {

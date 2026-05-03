@@ -188,6 +188,23 @@ public:
   // 1..N = additionalLaunchers[0..N-1]) to pin a launcher; pass -1 to clear
   // the override and re-enable the multi-launcher chooser at launch.
   void setItemLauncherOverride(const QString &filePath, int launcherIndex);
+
+  // ─── Playlist context-menu handlers (Kartend-vlm7) ────────────────────────
+  // Prompts for a playlist name, creates the playlist, and adds the given
+  // (srcUuid, filePath) reference. Cancelling the prompt is a no-op; an empty
+  // reference creates an empty playlist (useful for "set up first, fill
+  // later" workflows).
+  void addItemToNewPlaylist(const QString &srcUuid, const QString &filePath);
+  // Idempotent add — duplicates are silently rejected by PlaylistManager.
+  void addItemToPlaylist(const QString &playlistId, const QString &srcUuid,
+                         const QString &filePath);
+  // Inline-rename via a single QInputDialog. No-ops on cancel or unchanged
+  // name; the rename is always reflected in the sidebar via the
+  // playlistsChanged → resyncPlaylistCollections chain.
+  void renamePlaylistDialog(const QString &playlistId, const QString &currentName);
+  // Confirms (the cascade can't be undone) then deletes the playlist row plus
+  // all of its items. Source items in their owning collections are untouched.
+  void deletePlaylistConfirm(const QString &playlistId, const QString &currentName);
   [[nodiscard]] bool isRestoringSelection() const;
   [[nodiscard]] int targetRestoreIndex() const;
   [[nodiscard]] bool forceImmediateCenter() const;
@@ -302,6 +319,10 @@ private:
   SettingsManager *m_settingsManager = nullptr;
   DatabaseManager *m_databaseManager = nullptr;
   NavigationManager *m_navigationManager = nullptr;
+  // PlaylistManager pointer is sourced from the shared ApplicationContext at
+  // setupReferences time; the context-menu code (Kartend-vlm7) is its only
+  // current consumer. Borrowed reference, owned by ApplicationManager.
+  class PlaylistManager *m_playlistManager = nullptr;
   SessionManager *m_sessionManager = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;

@@ -64,6 +64,10 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   m_settingsManager = setup.getSettingsManager();
   m_databaseManager = setup.getDatabaseManager();
   m_navigationManager = setup.getNavigationManager();
+  // Kartend-vlm7: the only consumer is the context menu, so we just read the
+  // pointer directly from the shared ApplicationContext rather than adding a
+  // dedicated setup field.
+  m_playlistManager = (setup.ctx ? setup.ctx->managers.playlistManager : nullptr);
   m_sessionManager = setup.getSessionManager();
   m_artworkManager = setup.getArtworkManager();
 

@@ -230,6 +230,16 @@ struct CollectionConfig {
   // Text appearance settings (per-collection)
   QString customFontFamily; // Custom font family (empty = system default)
 
+  // ─── Playlist support (Kartend-vlm7) ───────────────────────────────────────
+  // Runtime-only marker for synthesized "virtual collection" entries backed by
+  // the SQLite `playlists` table instead of an INI section. Synthesised at
+  // startup by PlaylistManager and appended to MainWindow::m_collections so
+  // playlists nest into the hierarchy / appear as tiles like ordinary
+  // subcollections. SettingsManager::saveCollections() MUST skip configs with
+  // isPlaylist=true so they never round-trip into kartend.cfg.
+  bool isPlaylist = false;
+  QString playlistId; // UUID — matches playlists.id when isPlaylist is true.
+
   CollectionConfig()
       : gridWidth(4), sidebarVisible(false), horizontalAlignment(HorizontalAlignment::Center) {}
 
@@ -266,7 +276,8 @@ struct CollectionConfig {
            hideSubfolderTitles == other.hideSubfolderTitles &&
            showHiddenFolders == other.showHiddenFolders && listFontSize == other.listFontSize &&
            listRowHeight == other.listRowHeight && listRowColor == other.listRowColor &&
-           listAltRowColor == other.listAltRowColor && customFontFamily == other.customFontFamily;
+           listAltRowColor == other.listAltRowColor && customFontFamily == other.customFontFamily &&
+           isPlaylist == other.isPlaylist && playlistId == other.playlistId;
   }
 
   // ─── Launcher list helpers (Kartend-bdl) ───────────────────────────────────

@@ -101,7 +101,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
     return;
   }
 
-  constexpr int CURRENT_SCHEMA_VERSION = 9;
+  constexpr int CURRENT_SCHEMA_VERSION = 10;
   const int version = getUserVersion(db);
   if (version >= CURRENT_SCHEMA_VERSION) {
     return;
@@ -375,6 +375,57 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
                 origin, "idx_launch_history_uuid_path");
 
     setUserVersion(db, 9);
+    mutableVersion = 9;
+  }
+
+  if (mutableVersion < 10) {
+    // v10: Playlists (Kartend-vlm7). A playlist is a virtual collection whose
+    // items are explicit (collection_uuid, path) references into the existing
+    // `items` table — so a single playlist can mix media from any number of
+    // source collections. `parent_collection_uuid` is optional: empty means
+    // "root-level virtual collection", otherwise the playlist nests under the
+    // collection with that uuid (mirrors CollectionConfig::parentCollectionIndex
+    // for INI-backed collections). `reserved_kind` is a slot for built-in
+    // playlists (e.g. 'favorites' in Kartend-5mg8); user-created playlists
+    // leave it empty.
+    ensureIndex(db,
+                "CREATE TABLE IF NOT EXISTS playlists ("
+                "id TEXT PRIMARY KEY, "
+                "name TEXT NOT NULL, "
+                "icon TEXT NOT NULL DEFAULT '', "
+                "parent_collection_uuid TEXT NOT NULL DEFAULT '', "
+                "reserved_kind TEXT NOT NULL DEFAULT '', "
+                "created_at TEXT NOT NULL DEFAULT '', "
+                "updated_at TEXT NOT NULL DEFAULT ''"
+                ")",
+                origin, "playlists");
+
+    // Playlist items reference rows by (collection_uuid, path) — the same key
+    // shape used by item_metadata / item_artwork — so entries survive item id
+    // renumbering across rescans. `position` is a dense 0-based ordering
+    // controlled by the playlist editor; the (playlist_id, position) PK lets
+    // ORDER BY position serve the natural list view directly.
+    ensureIndex(db,
+                "CREATE TABLE IF NOT EXISTS playlist_items ("
+                "playlist_id TEXT NOT NULL, "
+                "position INTEGER NOT NULL, "
+                "source_collection_uuid TEXT NOT NULL, "
+                "source_path TEXT NOT NULL, "
+                "added_at TEXT NOT NULL DEFAULT '', "
+                "PRIMARY KEY (playlist_id, position), "
+                "FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE"
+                ")",
+                origin, "playlist_items");
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_playlist_items_lookup "
+                "ON playlist_items(source_collection_uuid, source_path)",
+                origin, "idx_playlist_items_lookup");
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_playlist_items_playlist "
+                "ON playlist_items(playlist_id)",
+                origin, "idx_playlist_items_playlist");
+
+    setUserVersion(db, 10);
   }
 }
 

@@ -66,6 +66,27 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   QStringList uuids = collectCollectionUuids(ctx, allCollections);
   CollectionDirMaps dirMaps = buildDirectoryMaps(ctx, allCollections);
 
+  // Kartend-vlm7: empty playlist short-circuits — no UUIDs means no items to
+  // fetch. Emit an empty result so the navigation overlay clears instead of
+  // hanging on an "in flight" count.
+  if (ctx.config.isPlaylist && uuids.isEmpty()) {
+    emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(),
+                          QHash<QString, QString>(), QHash<QString, QString>(),
+                          QHash<QString, int>());
+    return;
+  }
+  if (ctx.config.isPlaylist && !ensurePlaylistScopePopulated(ctx.config.playlistId)) {
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to populate playlist scope for range query",
+                                     "QueryManager::fetchItemsRange");
+    ErrorUtils::logError(err);
+    emit errorOccurred(err);
+    emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(),
+                          QHash<QString, QString>(), QHash<QString, QString>(),
+                          QHash<QString, int>());
+    return;
+  }
+
   const QString trimmedFilter = filter.trimmed();
 
   qCDebug(lcSearchDiag) << "[QueryManager] fetchItemsRange: collIndex=" << context.currentIndex
@@ -99,8 +120,15 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   // OFFSET cannot provide consistent random order across paginated requests.
   // Each page would get different random items. So for random mode, we build
   // the cache synchronously before proceeding.
+  // EXCEPTION: Playlists (Kartend-vlm7) bypass the sorted_items_cache in v1.
+  // The cache hash keys off the uuid list + filter + sort mode, which would
+  // collide with a regular query over the same uuids — so a playlist would
+  // grab a cache built for "all items in those source collections" and show
+  // way too many items. Sub-issue Kartend-xbwa can revisit once we have a
+  // playlist-aware cache key.
+  const bool isPlaylist = ctx.config.isPlaylist;
   const bool isRandomSort = (ctx.sortMode == SortMode::Random);
-  if (!hasSortedItemsCache() && !m_sortCacheBuildPending) {
+  if (!isPlaylist && !hasSortedItemsCache() && !m_sortCacheBuildPending) {
     if (isRandomSort) {
       // Random mode: must build cache synchronously for consistent pagination
       if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
@@ -120,7 +148,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
     }
   }
 
-  if (hasSortedItemsCache()) {
+  if (!isPlaylist && hasSortedItemsCache()) {
     // Verify cache hash still matches (in case filter or sortMode changed)
     const QByteArray currentHash = computeSortCacheHash(uuids, trimmedFilter, ctx.sortMode);
     if (currentHash == m_sortedItemsCacheHash) {
@@ -290,6 +318,13 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
     if (!useFts) {
       sql += " AND name LIKE ?";
     }
+  }
+
+  // Kartend-vlm7: same playlist EXISTS clause as fetchItemCountImpl. Layered
+  // before GROUP BY so the dedup-by-path semantics still apply.
+  if (isPlaylist) {
+    sql += " AND EXISTS (SELECT 1 FROM query_playlist_scope p "
+           "WHERE p.uuid = collection_uuid AND p.path = path)";
   }
 
   // Add GROUP BY path to deduplicate paths (required since we use

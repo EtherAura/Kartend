@@ -10,6 +10,7 @@ class CacheManager;
 class DatabaseManager;
 class InteractionManager;
 class NavigationManager;
+class PlaylistManager;
 class ScrollManager;
 class SessionManager;
 class SettingsManager;
@@ -35,6 +36,7 @@ public:
   [[nodiscard]] DatabaseManager *getDatabaseManager() const;
   [[nodiscard]] InteractionManager *getInteractionManager() const;
   [[nodiscard]] NavigationManager *getNavigationManager() const;
+  [[nodiscard]] PlaylistManager *getPlaylistManager() const;
   [[nodiscard]] ScrollManager *getScrollManager() const;
   [[nodiscard]] SessionManager *getSessionManager() const;
   [[nodiscard]] SettingsManager *getSettingsManager() const;
@@ -49,6 +51,10 @@ private:
   std::unique_ptr<SessionManager> m_sessionManager;
   std::unique_ptr<ArtworkManager> m_artworkManager;
   std::unique_ptr<DatabaseManager> m_databaseManager;
+  // PlaylistManager owns its own SQLite connection on the main thread; declared
+  // after DatabaseManager so it tears down first (Qt destroys SQL connections
+  // in reverse-declaration order). Kartend-vlm7.
+  std::unique_ptr<PlaylistManager> m_playlistManager;
   std::unique_ptr<SettingsManager> m_settingsManager;
   std::unique_ptr<ScrollManager> m_scrollManager;
   std::unique_ptr<SidebarManager> m_sidebarManager;

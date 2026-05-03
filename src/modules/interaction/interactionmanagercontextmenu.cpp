@@ -5,7 +5,9 @@
 
 #include <QApplication>
 #include <QFileDialog>
+#include <QInputDialog>
 #include <QMenu>
+#include <QMessageBox>
 
 #include "collectionutils.h"
 #include "customfieldsdialog.h"
@@ -17,6 +19,7 @@
 #include "metadatasidebar.h"
 #include "navigationmanager.h"
 #include "pathutils.h"
+#include "playlistmanager.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
 #include "sidebarmanager.h"
@@ -167,7 +170,169 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
     }
   }
 
+  // ─── Playlist actions (Kartend-vlm7) ──────────────────────────────────────
+  // Two surfaces:
+  //   (a) On any media item — "Add to playlist ▶ <list> | New playlist…"
+  //       lets the user assemble playlists from anywhere in the library.
+  //   (b) Inside a playlist — "Remove from playlist" so the chooser dialog
+  //       isn't the only way out, plus rename/delete on the playlist itself.
+  // The playlist itself is identified via the synthesized CollectionConfig at
+  // m_currentCollectionIndex (isPlaylist=true) so the surrounding code keeps
+  // treating playlists as ordinary virtual collections.
+  if (m_playlistManager && m_collections && m_currentCollectionIndex && m_databaseManager) {
+    const bool insideCollection =
+        CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections);
+    const bool insidePlaylist =
+        insideCollection && (*m_collections)[*m_currentCollectionIndex].isPlaylist;
+
+    if (isMediaItem && !filePath.isEmpty()) {
+      // Resolve the source collection's uuid (using the file→collection map
+      // built during the items range fetch). Add-to-playlist needs the uuid to
+      // store a stable (uuid, path) reference that survives item id
+      // renumbering across rescans.
+      int owningIdx = m_databaseManager->getCollectionIndexForFile(filePath);
+      if (owningIdx < 0 && !insidePlaylist) {
+        owningIdx = *m_currentCollectionIndex;
+      }
+      QString srcUuid;
+      if (CollectionUtils::isValidIndex(owningIdx, m_collections)) {
+        const CollectionConfig &owning = (*m_collections)[owningIdx];
+        const QString expandedMediaDir =
+            PathUtils::validateAndExpandPath(owning.mediaDirectory, owning.name);
+        srcUuid = CollectionUtils::computeCollectionUuid(owning.name, expandedMediaDir);
+      }
+
+      menu.addSeparator();
+      QMenu *addToMenu = menu.addMenu(tr("Add to playlist"));
+
+      QAction *newPlaylistAction = addToMenu->addAction(tr("New playlist…"));
+      QObject::connect(newPlaylistAction, &QAction::triggered, this,
+                       [this, srcUuid, filePath]() { addItemToNewPlaylist(srcUuid, filePath); });
+
+      const QList<PlaylistRow> playlists = m_playlistManager->loadAll();
+      if (!playlists.isEmpty()) {
+        addToMenu->addSeparator();
+        // The chooser silently no-ops when the (uuid, path) pair is already in
+        // the playlist (containsItem inside addItem) — keeps the menu honest
+        // without requiring a separate "already added" disabled state.
+        for (const PlaylistRow &row : playlists) {
+          QString label = row.name.isEmpty() ? tr("(unnamed)") : row.name;
+          QAction *action = addToMenu->addAction(label);
+          const QString playlistId = row.id;
+          QObject::connect(action, &QAction::triggered, this,
+                           [this, playlistId, srcUuid, filePath]() {
+                             addItemToPlaylist(playlistId, srcUuid, filePath);
+                           });
+        }
+      }
+
+      // Inside a playlist, also offer the inverse action.
+      if (insidePlaylist) {
+        const QString playlistId = (*m_collections)[*m_currentCollectionIndex].playlistId;
+        QAction *removeAction = menu.addAction(tr("Remove from playlist"));
+        QObject::connect(removeAction, &QAction::triggered, this,
+                         [this, playlistId, srcUuid, filePath]() {
+                           if (m_playlistManager) {
+                             m_playlistManager->removeItem(playlistId, srcUuid, filePath);
+                             // playlistsChanged → MainWindow re-syncs the
+                             // CollectionConfigs; the safeReload below picks
+                             // up the new (smaller) item count.
+                             if (m_navigationManager && m_currentCollectionIndex) {
+                               m_navigationManager->safeReloadCollection(*m_currentCollectionIndex);
+                             }
+                           }
+                         });
+      }
+    }
+
+    // Playlist-level actions when the user is currently viewing one. Kept off
+    // the bottom of the menu so the per-item actions above remain the
+    // primary affordance.
+    if (insidePlaylist) {
+      menu.addSeparator();
+      const QString playlistId = (*m_collections)[*m_currentCollectionIndex].playlistId;
+      const QString currentName = (*m_collections)[*m_currentCollectionIndex].name;
+
+      QAction *renameAction = menu.addAction(tr("Rename playlist…"));
+      QObject::connect(renameAction, &QAction::triggered, this, [this, playlistId, currentName]() {
+        renamePlaylistDialog(playlistId, currentName);
+      });
+      QAction *deleteAction = menu.addAction(tr("Delete playlist…"));
+      QObject::connect(deleteAction, &QAction::triggered, this, [this, playlistId, currentName]() {
+        deletePlaylistConfirm(playlistId, currentName);
+      });
+    }
+  }
+
   menu.exec(globalPos);
+}
+
+void InteractionManager::addItemToNewPlaylist(const QString &srcUuid, const QString &filePath) {
+  if (!m_playlistManager) {
+    return;
+  }
+  bool ok = false;
+  const QString name =
+      QInputDialog::getText(QApplication::activeWindow(), tr("New Playlist"), tr("Playlist name:"),
+                            QLineEdit::Normal, QString(), &ok);
+  if (!ok || name.trimmed().isEmpty()) {
+    return;
+  }
+  auto created = m_playlistManager->createPlaylist(name);
+  if (created.isError()) {
+    return;
+  }
+  const QString &newId = created.value();
+  if (!filePath.isEmpty()) {
+    m_playlistManager->addItem(newId, srcUuid, filePath);
+  }
+}
+
+void InteractionManager::addItemToPlaylist(const QString &playlistId, const QString &srcUuid,
+                                           const QString &filePath) {
+  if (!m_playlistManager || playlistId.isEmpty() || filePath.isEmpty()) {
+    return;
+  }
+  m_playlistManager->addItem(playlistId, srcUuid, filePath);
+}
+
+void InteractionManager::renamePlaylistDialog(const QString &playlistId,
+                                              const QString &currentName) {
+  if (!m_playlistManager || playlistId.isEmpty()) {
+    return;
+  }
+  bool ok = false;
+  const QString newName =
+      QInputDialog::getText(QApplication::activeWindow(), tr("Rename Playlist"), tr("New name:"),
+                            QLineEdit::Normal, currentName, &ok);
+  if (!ok || newName.trimmed().isEmpty() || newName == currentName) {
+    return;
+  }
+  m_playlistManager->renamePlaylist(playlistId, newName);
+}
+
+void InteractionManager::deletePlaylistConfirm(const QString &playlistId,
+                                               const QString &currentName) {
+  if (!m_playlistManager || playlistId.isEmpty()) {
+    return;
+  }
+  // Confirm because the operation cascades to playlist_items and there's no
+  // undo for the row removal (the source items themselves are untouched).
+  const auto choice = QMessageBox::question(
+      QApplication::activeWindow(), tr("Delete Playlist"),
+      tr("Delete the playlist \"%1\"? Its items will not be removed from their source "
+         "collections.")
+          .arg(currentName),
+      QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+  if (choice != QMessageBox::Yes) {
+    return;
+  }
+  if (m_playlistManager->deletePlaylist(playlistId) && m_navigationManager) {
+    // Pop back to the parent so the now-deleted playlist isn't left visible
+    // mid-fetch. The synthesized CollectionConfig will be removed on the
+    // next resync triggered by playlistsChanged.
+    m_navigationManager->safeReloadCollection(0);
+  }
 }
 
 void InteractionManager::editCustomFields(const QString &filePath, const QString &itemName) {

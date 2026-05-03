@@ -164,6 +164,7 @@ target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
   ${SRC_DIR}/modules/mouse
   ${SRC_DIR}/modules/navigation
   ${SRC_DIR}/modules/overlay
+  ${SRC_DIR}/modules/playlist
   ${SRC_DIR}/modules/query
   ${SRC_DIR}/modules/restore
   ${SRC_DIR}/modules/filter

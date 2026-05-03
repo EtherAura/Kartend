@@ -23,6 +23,7 @@
 #include "menucontroller.h"
 #include "metadatasidebar.h"
 #include "navigationmanager.h"
+#include "playlistmanager.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"
 
@@ -48,7 +49,18 @@ void MainWindow::setupUI() {
 
   // Load settings
   getSettingsManager()->loadCollections(m_collections);
-  rebuildHierarchyCache();
+
+  // Kartend-vlm7: append synthesized playlist CollectionConfigs after INI
+  // collections so playlists nest into the hierarchy and appear as virtual
+  // collections. resyncPlaylistCollections also rebuilds the hierarchy cache,
+  // so we don't need a separate rebuild call here.
+  if (PlaylistManager *playlistManager = getPlaylistManager()) {
+    playlistManager->initialize();
+    QObject::connect(playlistManager, &PlaylistManager::playlistsChanged, this,
+                     [this]() { resyncPlaylistCollections(); });
+  }
+  resyncPlaylistCollections();
+
   getSettingsManager()->loadGeneralSettings(m_generalSettings);
 
   // Apply text appearance settings to ItemWidget statics
@@ -205,6 +217,7 @@ void MainWindow::initializeAppContext() {
   m_appContext.managers.databaseManager = getDatabaseManager();
   m_appContext.managers.navigationManager = getNavigationManager();
   m_appContext.managers.interactionManager = getInteractionManager();
+  m_appContext.managers.playlistManager = getPlaylistManager();
 }
 
 void MainWindow::createMenuBar() {

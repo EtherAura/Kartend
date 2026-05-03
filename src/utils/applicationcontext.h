@@ -38,6 +38,7 @@ class EventManager;
 class SearchManager;
 class LaunchManager;
 class CacheManager;
+class PlaylistManager;
 
 /**
  * @brief Shared application context containing common dependencies.
@@ -124,6 +125,7 @@ struct ApplicationContext {
     SearchManager *searchManager = nullptr;
     LaunchManager *launchManager = nullptr;
     CacheManager *cacheManager = nullptr;
+    PlaylistManager *playlistManager = nullptr; // Kartend-vlm7
 
     // Centralized interaction state (owned by InteractionManager)
     InteractionStateHolder *interactionState = nullptr;

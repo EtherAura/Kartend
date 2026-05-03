@@ -66,7 +66,12 @@ auto NavigationManager::loadCollectionData(int collectionIndex) -> void {
     }
 
     bool hasMediaDirectory = !context.config.mediaDirectory.trimmed().isEmpty();
-    if (hasMediaDirectory || context.config.showAllSubcollectionItems) {
+    // Kartend-vlm7: a playlist has no mediaDirectory but its items live in
+    // playlist_items rather than on disk, so it still wants the full count +
+    // range fetch path. Treat it as "has data" so we don't fall through to
+    // the empty-emit branch.
+    if (hasMediaDirectory || context.config.showAllSubcollectionItems ||
+        context.config.isPlaylist) {
       // NOTE: Don't show overlay here - it will be shown by scanStarting signal
       // if a scan is actually needed. For cached collections, no overlay
       // appears.

@@ -102,6 +102,7 @@ private slots:
   void v7AddsUsageStatsColumnAndIndexes();
   void v8AddsLauncherIndexColumn();
   void v9AddsLaunchHistoryTable();
+  void v10AddsPlaylistTables();
   void preservesExistingDataAcrossUpgrade();
 };
 
@@ -121,8 +122,8 @@ void TestDbMigrations::appliesToCurrentVersion() {
 
   QCOMPARE(getUserVersion(db), 0);
   DbMigrations::applySchemaMigrations(db, "test");
-  // Current schema version is 9 (per dbmigrations.cpp).
-  QCOMPARE(getUserVersion(db), 9);
+  // Current schema version is 10 (per dbmigrations.cpp).
+  QCOMPARE(getUserVersion(db), 10);
 
   closeAndRemove(db, conn);
 }
@@ -248,7 +249,7 @@ void TestDbMigrations::v3AddsMetaTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 9);
+  QCOMPARE(getUserVersion(db), 10);
 
   // If FTS5 is available, the meta table should also exist.
   if (tableExists(db, "items_fts")) {
@@ -264,7 +265,7 @@ void TestDbMigrations::v4AddsFileSizeColumnAndIndex() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 9);
+  QCOMPARE(getUserVersion(db), 10);
   QVERIFY(tableHasColumn(db, "items", "file_size"));
   QVERIFY(indexExists(db, "idx_items_uuid_file_size"));
 
@@ -277,7 +278,7 @@ void TestDbMigrations::v5AddsItemMetadataTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 9);
+  QCOMPARE(getUserVersion(db), 10);
   QVERIFY(tableExists(db, "item_metadata"));
   // Required scraper-facing columns and feature-reserved columns.
   QVERIFY(tableHasColumn(db, "item_metadata", "collection_uuid"));
@@ -307,7 +308,7 @@ void TestDbMigrations::v6AddsItemArtworkTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 9);
+  QCOMPARE(getUserVersion(db), 10);
   QVERIFY(tableExists(db, "item_artwork"));
   QVERIFY(tableHasColumn(db, "item_artwork", "collection_uuid"));
   QVERIFY(tableHasColumn(db, "item_artwork", "path"));
@@ -341,7 +342,7 @@ void TestDbMigrations::v7AddsUsageStatsColumnAndIndexes() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 9);
+  QCOMPARE(getUserVersion(db), 10);
   // Cumulative play-time column added in v7 (Kartend-7vi).
   QVERIFY(tableHasColumn(db, "items", "total_play_seconds"));
   // Indexes used by the Most-played / Recently-played dialog tabs.
@@ -357,7 +358,7 @@ void TestDbMigrations::v8AddsLauncherIndexColumn() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 9);
+  QCOMPARE(getUserVersion(db), 10);
   // Per-item launcher override column added in v8 (Kartend-dnx4).
   QVERIFY(tableHasColumn(db, "item_metadata", "launcher_index"));
 
@@ -370,7 +371,7 @@ void TestDbMigrations::v9AddsLaunchHistoryTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 9);
+  QCOMPARE(getUserVersion(db), 10);
   // Append-only history table added in v9 (Kartend-fse).
   QVERIFY(tableExists(db, "launch_history"));
   QVERIFY(tableHasColumn(db, "launch_history", "id"));
@@ -391,6 +392,39 @@ void TestDbMigrations::v9AddsLaunchHistoryTable() {
   QVERIFY(q.exec("INSERT INTO launch_history (collection_uuid, path, name, "
                  "launched_at) VALUES ('u1', '/g/1', 'Game', "
                  "'2026-05-02T12:01:00Z')"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::v10AddsPlaylistTables() {
+  // Kartend-vlm7: playlists + playlist_items added in v10. Both tables and
+  // their lookup indexes must exist after migration; the FK cascade on
+  // playlist_items.playlist_id is exercised end-to-end in
+  // test_playlistmanager.cpp's deletePlaylist_cascadesItems().
+  const QString conn = "test_v10_playlists";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QCOMPARE(getUserVersion(db), 10);
+  QVERIFY(tableExists(db, "playlists"));
+  QVERIFY(tableHasColumn(db, "playlists", "id"));
+  QVERIFY(tableHasColumn(db, "playlists", "name"));
+  QVERIFY(tableHasColumn(db, "playlists", "icon"));
+  QVERIFY(tableHasColumn(db, "playlists", "parent_collection_uuid"));
+  QVERIFY(tableHasColumn(db, "playlists", "reserved_kind"));
+  QVERIFY(tableHasColumn(db, "playlists", "created_at"));
+  QVERIFY(tableHasColumn(db, "playlists", "updated_at"));
+
+  QVERIFY(tableExists(db, "playlist_items"));
+  QVERIFY(tableHasColumn(db, "playlist_items", "playlist_id"));
+  QVERIFY(tableHasColumn(db, "playlist_items", "position"));
+  QVERIFY(tableHasColumn(db, "playlist_items", "source_collection_uuid"));
+  QVERIFY(tableHasColumn(db, "playlist_items", "source_path"));
+  QVERIFY(tableHasColumn(db, "playlist_items", "added_at"));
+
+  QVERIFY(indexExists(db, "idx_playlist_items_lookup"));
+  QVERIFY(indexExists(db, "idx_playlist_items_playlist"));
 
   closeAndRemove(db, conn);
 }
