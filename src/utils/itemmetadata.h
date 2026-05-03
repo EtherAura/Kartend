@@ -41,6 +41,12 @@ struct ItemMetadata {
   QString customFields;
   /// Optional override for the per-item manual file (Kartend-9jdv).
   QString manualPath;
+  /// Optional per-item launcher override (Kartend-dnx4). When >= 0, indexes
+  /// into the owning collection's unified launcher list (0 = primary, 1..N =
+  /// additionalLaunchers[0..N-1]) and bypasses the multi-launcher chooser at
+  /// launch. Negative means "no override" — fall through to the chooser /
+  /// collection default.
+  int launcherIndex = -1;
   /// Origin identifier (e.g. "user", "screenscraper", "imdb").
   QString source;
   QString updatedAt;

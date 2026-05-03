@@ -163,6 +163,17 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
           appCtx->managers.databaseManager->recordItemPlaySession(uuid, filePath, seconds);
         }
       };
+      // Kartend-dnx4: per-item launcher override pulled from item_metadata.
+      // Callback indirection keeps test_launchmanager free of the database
+      // module at link time.
+      launchSetup.resolveLauncherOverride = [appCtx](const QString &uuid,
+                                                     const QString &filePath) -> int {
+        if (!appCtx->managers.databaseManager) {
+          return -1;
+        }
+        const auto metadata = appCtx->managers.databaseManager->loadItemMetadata(uuid, filePath);
+        return metadata.launcherIndex;
+      };
     }
     m_launchManager->setupReferences(launchSetup);
   }

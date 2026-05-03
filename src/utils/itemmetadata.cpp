@@ -28,7 +28,7 @@ bool ItemMetadata::isEmpty() const {
   return title.isEmpty() && description.isEmpty() && genre.isEmpty() && developer.isEmpty() &&
          publisher.isEmpty() && releaseDate.isEmpty() && contentRating.isEmpty() &&
          players.isEmpty() && runtimeSeconds < 0 && tags.isEmpty() && customFields.isEmpty() &&
-         manualPath.isEmpty();
+         manualPath.isEmpty() && launcherIndex < 0;
 }
 
 namespace {
@@ -36,15 +36,15 @@ namespace {
 constexpr const char *SELECT_SQL =
     "SELECT title, description, genre, developer, publisher, release_date, "
     "content_rating, players, runtime_seconds, tags, custom_fields, "
-    "manual_path, source, updated_at "
+    "manual_path, launcher_index, source, updated_at "
     "FROM item_metadata WHERE collection_uuid = ? AND path = ?";
 
 constexpr const char *UPSERT_SQL =
     "INSERT INTO item_metadata ("
     "collection_uuid, path, title, description, genre, developer, publisher, "
     "release_date, content_rating, players, runtime_seconds, tags, "
-    "custom_fields, manual_path, source, updated_at"
-    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+    "custom_fields, manual_path, launcher_index, source, updated_at"
+    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
     "ON CONFLICT(collection_uuid, path) DO UPDATE SET "
     "title=excluded.title, description=excluded.description, "
     "genre=excluded.genre, developer=excluded.developer, "
@@ -52,6 +52,7 @@ constexpr const char *UPSERT_SQL =
     "content_rating=excluded.content_rating, players=excluded.players, "
     "runtime_seconds=excluded.runtime_seconds, tags=excluded.tags, "
     "custom_fields=excluded.custom_fields, manual_path=excluded.manual_path, "
+    "launcher_index=excluded.launcher_index, "
     "source=excluded.source, updated_at=excluded.updated_at";
 
 constexpr const char *DELETE_SQL =
@@ -63,6 +64,13 @@ QVariant nullableString(const QString &value) {
 
 QVariant nullableRuntime(int seconds) {
   return seconds < 0 ? QVariant(QMetaType(QMetaType::Int)) : QVariant(seconds);
+}
+
+// Same NULL-vs-int handling as nullableRuntime, but for the per-item launcher
+// override (Kartend-dnx4): -1 means "no override" and serializes to NULL so
+// the column round-trips cleanly via SELECT's isNull() check below.
+QVariant nullableLauncherIndex(int index) {
+  return index < 0 ? QVariant(QMetaType(QMetaType::Int)) : QVariant(index);
 }
 
 } // namespace
@@ -108,8 +116,10 @@ ErrorUtils::Result<ItemMetadata> load(QSqlDatabase &db, const QString &collectio
   metadata.tags = q.value(9).toString();
   metadata.customFields = q.value(10).toString();
   metadata.manualPath = q.value(11).toString();
-  metadata.source = q.value(12).toString();
-  metadata.updatedAt = q.value(13).toString();
+  const QVariant launcherIdx = q.value(12);
+  metadata.launcherIndex = launcherIdx.isNull() ? -1 : launcherIdx.toInt();
+  metadata.source = q.value(13).toString();
+  metadata.updatedAt = q.value(14).toString();
   return metadata;
 }
 
@@ -147,6 +157,7 @@ ErrorUtils::Result<bool> save(QSqlDatabase &db, const ItemMetadata &metadata) {
   q.addBindValue(nullableString(metadata.tags));
   q.addBindValue(nullableString(metadata.customFields));
   q.addBindValue(nullableString(metadata.manualPath));
+  q.addBindValue(nullableLauncherIndex(metadata.launcherIndex));
   q.addBindValue(nullableString(metadata.source));
   q.addBindValue(updatedAt);
 

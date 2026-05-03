@@ -76,8 +76,8 @@ struct LauncherConfig {
   QString launchParameters;
 
   bool operator==(const LauncherConfig &other) const {
-    return name == other.name && launcherPath == other.launcherPath &&
-           corePath == other.corePath && launchParameters == other.launchParameters;
+    return name == other.name && launcherPath == other.launcherPath && corePath == other.corePath &&
+           launchParameters == other.launchParameters;
   }
 };
 
@@ -184,8 +184,7 @@ struct CollectionConfig {
            additionalLaunchers == other.additionalLaunchers &&
            defaultLauncherIndex == other.defaultLauncherIndex &&
            mediaDirectory == other.mediaDirectory && artworkDirectory == other.artworkDirectory &&
-           videoDirectory == other.videoDirectory &&
-           manualDirectory == other.manualDirectory &&
+           videoDirectory == other.videoDirectory && manualDirectory == other.manualDirectory &&
            placeholderArtwork == other.placeholderArtwork &&
            collectionIcon == other.collectionIcon && extensions == other.extensions &&
            customArtworkTypes == other.customArtworkTypes && gridWidth == other.gridWidth &&

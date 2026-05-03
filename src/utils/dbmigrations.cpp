@@ -331,6 +331,19 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
                 origin, "idx_items_play_count");
 
     setUserVersion(db, 7);
+    mutableVersion = 7;
+  }
+
+  if (mutableVersion < 8) {
+    // v8: Per-item launcher override (Kartend-dnx4). Stores a unified
+    // launcher index (0 = primary, 1..N = additionalLaunchers[0..N-1]) so an
+    // item can pin a specific launcher and skip the multi-launcher chooser
+    // dialog. NULL means "no override" — fall through to the chooser /
+    // collection default. Lives on item_metadata to share the same
+    // (collection_uuid, path) key as manual_path / custom_fields.
+    ensureColumn(db, "item_metadata", "launcher_index", "INTEGER", origin);
+
+    setUserVersion(db, 8);
   }
 }
 

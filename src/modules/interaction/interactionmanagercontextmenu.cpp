@@ -12,6 +12,7 @@
 #include "databasemanager.h"
 #include "itemmetadata.h"
 #include "itemwidget.h"
+#include "launcherchooserdialog.h"
 #include "launchmanager.h"
 #include "metadatasidebar.h"
 #include "navigationmanager.h"
@@ -127,6 +128,42 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
                            [this, filePath]() { setItemManualPath(filePath, QString()); });
         }
       }
+
+      // --- Per-item launcher override (Kartend-dnx4) ---
+      // Only meaningful when the owning collection has more than one
+      // launcher — pinning a single-launcher collection to "launcher 0"
+      // would be a no-op masquerading as a configuration choice.
+      if (owning.launcherCount() > 1) {
+        QAction *setLauncherAction = menu.addAction(tr("Always launch with..."));
+        const int launcherCount = owning.launcherCount();
+        const QString collectionName = owning.name;
+        QStringList launcherNames;
+        launcherNames.reserve(launcherCount);
+        for (int i = 0; i < launcherCount; ++i) {
+          launcherNames << owning.launcherDisplayName(i);
+        }
+        const int currentOverride =
+            uuid.isEmpty() ? -1 : m_databaseManager->loadItemMetadata(uuid, filePath).launcherIndex;
+        const int defaultIndex =
+            currentOverride >= 0 && currentOverride < launcherCount
+                ? currentOverride
+                : std::clamp(owning.defaultLauncherIndex, 0, launcherCount - 1);
+        QObject::connect(setLauncherAction, &QAction::triggered, this,
+                         [this, filePath, collectionName, launcherNames, defaultIndex]() {
+                           const int chosen = LauncherChooserDialog::choose(
+                               QApplication::activeWindow(), collectionName, launcherNames,
+                               defaultIndex);
+                           if (chosen < 0) {
+                             return; // User cancelled.
+                           }
+                           setItemLauncherOverride(filePath, chosen);
+                         });
+        if (currentOverride >= 0) {
+          QAction *clearLauncherAction = menu.addAction(tr("Clear launcher override"));
+          QObject::connect(clearLauncherAction, &QAction::triggered, this,
+                           [this, filePath]() { setItemLauncherOverride(filePath, -1); });
+        }
+      }
     }
   }
 
@@ -210,6 +247,45 @@ void InteractionManager::setItemManualPath(const QString &filePath, const QStrin
   metadata.manualPath = manualPath;
   // User-driven edit: stamp the source so future scrapers know this row was
   // touched by the user (matches editCustomFields behavior).
+  metadata.source = QStringLiteral("user");
+  if (!m_databaseManager->saveItemMetadata(metadata)) {
+    return;
+  }
+  if (m_sidebarManager) {
+    m_sidebarManager->updateSidebarMetadata(
+        m_selectionManager ? m_selectionManager->selectedWidget() : nullptr);
+  }
+}
+
+void InteractionManager::setItemLauncherOverride(const QString &filePath, int launcherIndex) {
+  if (!m_databaseManager || !m_collections || !m_currentCollectionIndex) {
+    return;
+  }
+  // Mirror setItemManualPath's owner-resolution so the (uuid, path) key
+  // matches across showAllSubcollectionItems navigation. Negative indices
+  // mean "clear the override".
+  int owningIndex = m_databaseManager->getCollectionIndexForFile(filePath);
+  if (owningIndex < 0) {
+    owningIndex = *m_currentCollectionIndex;
+  }
+  if (!CollectionUtils::isValidIndex(owningIndex, m_collections)) {
+    return;
+  }
+  const CollectionConfig &owning = (*m_collections)[owningIndex];
+  const QString expandedMediaDir =
+      PathUtils::validateAndExpandPath(owning.mediaDirectory, owning.name);
+  const QString uuid = CollectionUtils::computeCollectionUuid(owning.name, expandedMediaDir);
+  if (uuid.isEmpty()) {
+    return;
+  }
+
+  ItemMetadataStore::ItemMetadata metadata = m_databaseManager->loadItemMetadata(uuid, filePath);
+  metadata.collectionUuid = uuid;
+  metadata.path = filePath;
+  // Clamp incoming overrides into the visible launcher range so a stale UI
+  // pick can never pin past the end. -1 stays -1 to clear.
+  metadata.launcherIndex =
+      launcherIndex < 0 ? -1 : std::clamp(launcherIndex, 0, owning.launcherCount() - 1);
   metadata.source = QStringLiteral("user");
   if (!m_databaseManager->saveItemMetadata(metadata)) {
     return;

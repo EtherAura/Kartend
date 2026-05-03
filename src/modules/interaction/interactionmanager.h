@@ -183,6 +183,11 @@ public:
   // path clears the override and re-enables auto-discovery in the
   // collection's manualDirectory. Refreshes the sidebar afterwards.
   void setItemManualPath(const QString &filePath, const QString &manualPath);
+  // Sets or clears the per-item launcher override (Kartend-dnx4). Pass an
+  // index into the owning collection's unified launcher list (0 = primary,
+  // 1..N = additionalLaunchers[0..N-1]) to pin a launcher; pass -1 to clear
+  // the override and re-enable the multi-launcher chooser at launch.
+  void setItemLauncherOverride(const QString &filePath, int launcherIndex);
   [[nodiscard]] bool isRestoringSelection() const;
   [[nodiscard]] int targetRestoreIndex() const;
   [[nodiscard]] bool forceImmediateCenter() const;
