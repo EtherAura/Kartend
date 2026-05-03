@@ -86,6 +86,32 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     });
   }
 
+  // Kartend-fse: launch-history settings save immediately, mirroring the
+  // other check/spinbox handlers above. Live save means the next launch
+  // picks up the new gate/cap without round-tripping through OK/Apply.
+  if (ui->historyEnabledCheckBox) {
+    connect(ui->historyEnabledCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+      auto *mainWindow = qobject_cast<MainWindow *>(parent());
+      if ((mainWindow) && (mainWindow->getSettingsManager())) {
+        mainWindow->m_generalSettings.historyEnabled = checked;
+        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
+        m_generalSettings = mainWindow->m_generalSettings;
+      }
+    });
+  }
+  if (ui->historyMaxEntriesSpinBox) {
+    connect(ui->historyMaxEntriesSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            [this](int value) {
+              auto *mainWindow = qobject_cast<MainWindow *>(parent());
+              if ((mainWindow) && (mainWindow->getSettingsManager())) {
+                mainWindow->m_generalSettings.historyMaxEntries = value;
+                mainWindow->getSettingsManager()->saveGeneralSettings(
+                    mainWindow->m_generalSettings);
+                m_generalSettings = mainWindow->m_generalSettings;
+              }
+            });
+  }
+
   if (ui->startupCollectionComboBox) {
     connect(ui->startupCollectionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int /*index*/) {

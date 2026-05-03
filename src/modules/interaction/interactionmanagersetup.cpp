@@ -153,8 +153,22 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     if (setup.ctx) {
       const ApplicationContext *appCtx = setup.ctx;
       launchSetup.onLaunched = [appCtx](const QString &uuid, const QString &filePath) {
-        if (appCtx->managers.databaseManager) {
-          appCtx->managers.databaseManager->recordItemLaunch(uuid, filePath);
+        if (!appCtx->managers.databaseManager) {
+          return;
+        }
+        appCtx->managers.databaseManager->recordItemLaunch(uuid, filePath);
+        // Kartend-fse: chronological history runs on the same hook so a single
+        // launch updates aggregate stats and the history log atomically.
+        // historyEnabled gates the insert; historyMaxEntries (>0) drives the
+        // post-insert trim so the table never grows unbounded.
+        const GeneralSettings *gs = appCtx->collection.generalSettings;
+        if (gs && gs->historyEnabled) {
+          // Pull the user-visible name from item_metadata.title when present
+          // so the dialog matches what the sidebar shows; HistoryStore falls
+          // back to the path basename when the title is empty.
+          const auto metadata = appCtx->managers.databaseManager->loadItemMetadata(uuid, filePath);
+          appCtx->managers.databaseManager->recordHistoryEntry(uuid, filePath, metadata.title,
+                                                               gs->historyMaxEntries);
         }
       };
       launchSetup.onPlaySessionEnded = [appCtx](const QString &uuid, const QString &filePath,

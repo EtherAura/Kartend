@@ -16,6 +16,7 @@
 #include "databasemanager.h"
 #include "dbmigrations.h"
 #include "errorutils.h"
+#include "historystore.h"
 #include "itemartwork.h"
 #include "itemmetadata.h"
 #include "pathutils.h"
@@ -195,6 +196,55 @@ auto DatabaseManager::loadUsageByCollection() const
 
 bool DatabaseManager::resetAllUsageStats() {
   auto result = UsageStatsStore::resetAll(m_db);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    emit errorOccurred(result.error());
+    return false;
+  }
+  return true;
+}
+
+// ─── Launch history (Kartend-fse) ────────────────────────────────────────────
+// Same main-thread connection rationale as the usage-stats helpers above:
+// inserts/trims are tiny and triggered by user actions, reads are dialog-time
+// scans bounded by the user-configured cap.
+
+void DatabaseManager::recordHistoryEntry(const QString &collectionUuid, const QString &path,
+                                         const QString &name, int maxEntries) {
+  auto result = HistoryStore::recordLaunch(m_db, collectionUuid, path, name);
+  if (result.isError()) {
+    // Best-effort tracking — log but never block the launch path.
+    ErrorUtils::logError(result.error());
+    return;
+  }
+  if (maxEntries > 0) {
+    auto trim = HistoryStore::trimToMaxEntries(m_db, maxEntries);
+    if (trim.isError()) {
+      ErrorUtils::logError(trim.error());
+    }
+  }
+}
+
+auto DatabaseManager::loadRecentHistory(int limit) const -> QList<HistoryStore::HistoryEntry> {
+  auto result = HistoryStore::loadRecent(const_cast<QSqlDatabase &>(m_db), limit);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return {};
+  }
+  return result.value();
+}
+
+auto DatabaseManager::historyEntryCount() const -> qint64 {
+  auto result = HistoryStore::count(const_cast<QSqlDatabase &>(m_db));
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return 0;
+  }
+  return result.value();
+}
+
+bool DatabaseManager::clearHistory() {
+  auto result = HistoryStore::clearAll(m_db);
   if (result.isError()) {
     ErrorUtils::logError(result.error());
     emit errorOccurred(result.error());

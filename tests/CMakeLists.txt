@@ -231,6 +231,7 @@ add_executable(test_databasemanager
   ${SRC_DIR}/utils/pathutils.cpp
   ${SRC_DIR}/utils/dbmigrations.cpp
   ${SRC_DIR}/utils/extensionutils.cpp
+  ${SRC_DIR}/utils/historystore.cpp
   ${SRC_DIR}/utils/itemartwork.cpp
   ${SRC_DIR}/utils/itemmetadata.cpp
   ${SRC_DIR}/utils/loggingcategories.cpp
@@ -412,6 +413,22 @@ target_link_libraries(test_usagestatsstore
   Qt6::Test
 )
 add_test(NAME UsageStatsStore COMMAND test_usagestatsstore)
+
+# HistoryStore tests (Kartend-fse)
+add_executable(test_historystore
+  test_historystore.cpp
+  ${SRC_DIR}/utils/historystore.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+)
+target_include_directories(test_historystore PRIVATE
+  ${SRC_DIR}/utils
+)
+target_link_libraries(test_historystore
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME HistoryStore COMMAND test_historystore)
 
 # SearchUtils smoke tests (header-only enum/struct)
 add_executable(test_searchutils test_searchutils.cpp)

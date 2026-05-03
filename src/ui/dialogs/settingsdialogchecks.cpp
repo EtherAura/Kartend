@@ -427,6 +427,14 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
                                           m_originalGeneralSettings.runtimeDetectionEnabled) {
     return true;
   }
+  if (ui->historyEnabledCheckBox &&
+      ui->historyEnabledCheckBox->isChecked() != m_originalGeneralSettings.historyEnabled) {
+    return true;
+  }
+  if (ui->historyMaxEntriesSpinBox &&
+      ui->historyMaxEntriesSpinBox->value() != m_originalGeneralSettings.historyMaxEntries) {
+    return true;
+  }
   if (ui->startupCollectionComboBox && ui->startupCollectionComboBox->currentData().toString() !=
                                            m_originalGeneralSettings.startupCollection) {
     return true;

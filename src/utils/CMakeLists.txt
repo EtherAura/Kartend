@@ -4,6 +4,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   configvalidation.cpp
   dbmigrations.cpp
   extensionutils.cpp
+  historystore.cpp
   itemartwork.cpp
   itemmetadata.cpp
   loggingcategories.cpp
@@ -22,6 +23,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   extensionutils.h
   forwarddecl.h
   gridutils.h
+  historystore.h
   loggingcategories.h
   pathutils.h
   propertyutils.h

@@ -561,6 +561,18 @@ struct GeneralSettings {
   bool runtimeDetectionEnabled = false;
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Launch history (Kartend-fse)
+  // Chronological log of every successful launch, persisted in the
+  // `launch_history` SQLite table and rendered by the History tab of the
+  // Statistics dialog. Disabled flips off both new-row inserts and the
+  // dialog's tab so existing rows stop changing but stay viewable until
+  // the user clicks "Clear history…". `historyMaxEntries` is the soft cap
+  // applied after every insert; values <= 0 mean "unlimited".
+  // ─────────────────────────────────────────────────────────────────────────
+  bool historyEnabled = true;
+  int historyMaxEntries = 500;
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Launcher presets (Kartend-p1jd)
   // Globally-registered, reusable launcher configurations referenced by
   // collection-level launcher entries via LauncherConfig::presetId. Stored

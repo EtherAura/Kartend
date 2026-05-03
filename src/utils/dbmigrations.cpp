@@ -101,7 +101,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
     return;
   }
 
-  constexpr int CURRENT_SCHEMA_VERSION = 7;
+  constexpr int CURRENT_SCHEMA_VERSION = 9;
   const int version = getUserVersion(db);
   if (version >= CURRENT_SCHEMA_VERSION) {
     return;
@@ -344,6 +344,37 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
     ensureColumn(db, "item_metadata", "launcher_index", "INTEGER", origin);
 
     setUserVersion(db, 8);
+    mutableVersion = 8;
+  }
+
+  if (mutableVersion < 9) {
+    // v9: Chronological launch history (Kartend-fse). Append-only log keyed
+    // by an auto-incrementing id; the same (collection_uuid, path) appears
+    // multiple times on purpose. `name` is denormalized at insert time so
+    // rows stay readable after the source item is deleted.
+    ensureIndex(db,
+                "CREATE TABLE IF NOT EXISTS launch_history ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "collection_uuid TEXT NOT NULL DEFAULT '', "
+                "path TEXT NOT NULL DEFAULT '', "
+                "name TEXT, "
+                "launched_at TEXT NOT NULL DEFAULT ''"
+                ")",
+                origin, "launch_history");
+    // Index for trim-to-N and "recent" queries — both walk the table in
+    // descending id order. SQLite already serves this from the implicit
+    // PK index, but an explicit launched_at index keeps any future
+    // launched_at-based queries cheap (e.g. "older than 30 days").
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_launch_history_launched_at "
+                "ON launch_history(launched_at)",
+                origin, "idx_launch_history_launched_at");
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_launch_history_uuid_path "
+                "ON launch_history(collection_uuid, path)",
+                origin, "idx_launch_history_uuid_path");
+
+    setUserVersion(db, 9);
   }
 }
 

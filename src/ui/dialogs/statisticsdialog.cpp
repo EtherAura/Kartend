@@ -1,8 +1,9 @@
 // Aggregate usage statistics dialog. Reads from DatabaseManager via
-// UsageStatsStore and renders three tabs (most played / recently played /
-// per-collection breakdown) plus a header with whole-library totals.
+// UsageStatsStore and renders four tabs (most played / recently played /
+// per-collection breakdown / history) plus a header with whole-library totals.
 #include "statisticsdialog.h"
 
+#include <QCheckBox>
 #include <QFileInfo>
 #include <QFont>
 #include <QFormLayout>
@@ -17,22 +18,27 @@
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QVBoxLayout>
+#include <QWidget>
 
 #include "databasemanager.h"
 #include "pathutils.h"
+#include "settingsmanager.h"
 
 namespace {
 constexpr int DIALOG_WIDTH = 720;
 constexpr int DIALOG_HEIGHT = 540;
 constexpr int TOP_LIST_LIMIT = 50;
 constexpr int RECENT_LIST_LIMIT = 50;
+constexpr int HISTORY_LIST_LIMIT = 1000;
 } // namespace
 
 StatisticsDialog::StatisticsDialog(DatabaseManager *databaseManager,
                                    const QList<CollectionConfig> *collections,
-                                   bool runtimeDetectionEnabled, QWidget *parent)
+                                   bool runtimeDetectionEnabled, GeneralSettings *generalSettings,
+                                   SettingsManager *settingsManager, QWidget *parent)
     : QDialog(parent), m_databaseManager(databaseManager), m_collections(collections),
-      m_runtimeDetectionEnabled(runtimeDetectionEnabled) {
+      m_runtimeDetectionEnabled(runtimeDetectionEnabled), m_generalSettings(generalSettings),
+      m_settingsManager(settingsManager) {
   setWindowTitle(tr("Usage Statistics"));
   setModal(true);
   resize(DIALOG_WIDTH, DIALOG_HEIGHT);
@@ -111,6 +117,67 @@ void StatisticsDialog::setupUI() {
   m_tabs->addTab(m_recentlyPlayedTree, tr("Recently played"));
   m_tabs->addTab(m_byCollectionTree, tr("By collection"));
 
+  // Kartend-fse: history tab. Sits inside a container so the tab can host
+  // its own toggle/clear controls without stuffing them into the dialog
+  // footer (which already owns the global Reset/Refresh/Close buttons).
+  auto *historyTab = new QWidget(this);
+  auto *historyLayout = new QVBoxLayout(historyTab);
+  historyLayout->setContentsMargins(0, 0, 0, 0);
+  historyLayout->setSpacing(8);
+
+  // Top row: enable toggle + entry-count label. Both stay above the tree
+  // so the user sees them without scrolling, even when the dialog is sized
+  // small.
+  auto *historyTopRow = new QHBoxLayout();
+  m_historyEnabledCheckBox = new QCheckBox(tr("Record launch history"), historyTab);
+  m_historyEnabledCheckBox->setToolTip(
+      tr("When off, new launches are not logged. Existing entries remain until "
+         "you click Clear history."));
+  connect(m_historyEnabledCheckBox, &QCheckBox::toggled, this,
+          &StatisticsDialog::onHistoryDisableToggled);
+  historyTopRow->addWidget(m_historyEnabledCheckBox);
+  historyTopRow->addStretch();
+  auto *countLabel = new QLabel(tr("Entries:"), historyTab);
+  countLabel->setStyleSheet("color: palette(mid);");
+  historyTopRow->addWidget(countLabel);
+  m_historyCountValue = new QLabel(historyTab);
+  QFont countFont = m_historyCountValue->font();
+  countFont.setBold(true);
+  m_historyCountValue->setFont(countFont);
+  m_historyCountValue->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  historyTopRow->addWidget(m_historyCountValue);
+  historyLayout->addLayout(historyTopRow);
+
+  // "History is disabled" hint stays mounted but hidden when the gate is
+  // on; toggling it doesn't reflow the layout.
+  m_historyDisabledNote = new QLabel(historyTab);
+  m_historyDisabledNote->setWordWrap(true);
+  m_historyDisabledNote->setStyleSheet("color: palette(mid); font-style: italic;");
+  m_historyDisabledNote->setText(
+      tr("History recording is currently off. Existing entries are still listed "
+         "below but no new launches will be added."));
+  historyLayout->addWidget(m_historyDisabledNote);
+
+  m_historyTree = buildTree({tr("Launched at"), tr("Item"), tr("Collection"), tr("Path")});
+  // History rows arrive newest-first from the store; let the user re-sort
+  // via the column header but keep that initial order.
+  m_historyTree->setSortingEnabled(false);
+  historyLayout->addWidget(m_historyTree, 1);
+
+  // Per-tab Clear button: scoped to history so it doesn't sit next to the
+  // global Reset (which already covers stats).
+  auto *historyButtonRow = new QHBoxLayout();
+  historyButtonRow->addStretch();
+  m_clearHistoryButton = new QPushButton(tr("Clear history…"), historyTab);
+  m_clearHistoryButton->setToolTip(
+      tr("Permanently delete every history entry. This cannot be undone."));
+  connect(m_clearHistoryButton, &QPushButton::clicked, this,
+          &StatisticsDialog::onClearHistoryClicked);
+  historyButtonRow->addWidget(m_clearHistoryButton);
+  historyLayout->addLayout(historyButtonRow);
+
+  m_tabs->addTab(historyTab, tr("History"));
+
   mainLayout->addWidget(m_tabs, 1);
 
   // Buttons: Reset (left, destructive) + Refresh + Close (right).
@@ -143,9 +210,24 @@ void StatisticsDialog::refresh() {
   populateMostPlayed(m_databaseManager->loadTopPlayedItems(TOP_LIST_LIMIT));
   populateRecentlyPlayed(m_databaseManager->loadRecentlyPlayedItems(RECENT_LIST_LIMIT));
   populateByCollection(m_databaseManager->loadUsageByCollection());
+  populateHistory(m_databaseManager->loadRecentHistory(HISTORY_LIST_LIMIT),
+                  m_databaseManager->historyEntryCount());
 
   if (m_runtimeNote) {
     m_runtimeNote->setVisible(!m_runtimeDetectionEnabled);
+  }
+
+  // Reflect the live historyEnabled gate in the toggle. Block signals so
+  // syncing it doesn't bounce through onHistoryDisableToggled and write
+  // back the same value.
+  if (m_historyEnabledCheckBox) {
+    const bool on = m_generalSettings ? m_generalSettings->historyEnabled : true;
+    m_historyEnabledCheckBox->blockSignals(true);
+    m_historyEnabledCheckBox->setChecked(on);
+    m_historyEnabledCheckBox->blockSignals(false);
+    if (m_historyDisabledNote) {
+      m_historyDisabledNote->setVisible(!on);
+    }
   }
 }
 
@@ -261,6 +343,42 @@ void StatisticsDialog::populateByCollection(
   }
 }
 
+void StatisticsDialog::populateHistory(const QList<HistoryStore::HistoryEntry> &rows,
+                                       qint64 totalCount) {
+  if (m_historyCountValue) {
+    m_historyCountValue->setText(QLocale().toString(totalCount));
+  }
+  if (!m_historyTree) {
+    return;
+  }
+  m_historyTree->clear();
+  // History rows arrive newest-first; suppress sortingEnabled while we
+  // populate so the tree doesn't reorder under us.
+  const bool wasSortingEnabled = m_historyTree->isSortingEnabled();
+  m_historyTree->setSortingEnabled(false);
+  for (const auto &row : rows) {
+    auto *item = new NumericTreeItem(m_historyTree);
+    // Column 0: launched_at — use the raw ISO string for sort, the
+    // localized rendering for display.
+    item->setText(0, UsageStatsStore::formatTimestamp(row.launchedAt));
+    item->setData(0, Qt::UserRole, row.launchedAt);
+    const QString name = row.name.isEmpty() ? QFileInfo(row.path).completeBaseName() : row.name;
+    item->setText(1, name);
+    item->setText(2, labelForCollectionUuid(row.collectionUuid));
+    item->setText(3, row.path);
+    item->setToolTip(1, row.path);
+  }
+  m_historyTree->setSortingEnabled(wasSortingEnabled);
+  // Default sort by the launched_at column, descending — the store already
+  // returns rows in this order so no shuffling actually happens on first
+  // populate, but keeping the indicator visible matches the user's
+  // expectation when they click headers later.
+  m_historyTree->sortByColumn(0, Qt::DescendingOrder);
+  for (int col = 0; col < m_historyTree->columnCount(); ++col) {
+    m_historyTree->resizeColumnToContents(col);
+  }
+}
+
 QString StatisticsDialog::labelForCollectionUuid(const QString &uuid) const {
   if (uuid.isEmpty()) {
     return tr("(unknown)");
@@ -292,5 +410,37 @@ void StatisticsDialog::onResetClicked() {
   }
   if (m_databaseManager->resetAllUsageStats()) {
     refresh();
+  }
+}
+
+void StatisticsDialog::onClearHistoryClicked() {
+  const auto reply = QMessageBox::question(
+      this, tr("Clear launch history?"),
+      tr("This will permanently delete every entry from the launch history log. "
+         "This cannot be undone.\n\nContinue?"),
+      QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+  if (reply != QMessageBox::Yes) {
+    return;
+  }
+  if (!m_databaseManager) {
+    return;
+  }
+  if (m_databaseManager->clearHistory()) {
+    refresh();
+  }
+}
+
+void StatisticsDialog::onHistoryDisableToggled(bool checked) {
+  // Flip the live setting + persist immediately. Without a SettingsManager
+  // we still toggle the in-memory value so the next launch sees it; the
+  // change just won't survive restart.
+  if (m_generalSettings) {
+    m_generalSettings->historyEnabled = checked;
+    if (m_settingsManager) {
+      m_settingsManager->saveGeneralSettings(*m_generalSettings);
+    }
+  }
+  if (m_historyDisabledNote) {
+    m_historyDisabledNote->setVisible(!checked);
   }
 }
