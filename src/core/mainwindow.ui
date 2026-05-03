@@ -244,6 +244,31 @@
             </widget>
            </item>
            <item>
+            <widget class="QToolButton" name="titleFilterButton">
+             <property name="maximumSize">
+              <size>
+               <width>50</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Per-collection title cleanup. Click body to toggle, click arrow to edit regex patterns. (Kartend-5h6)</string>
+             </property>
+             <property name="text">
+              <string>✂</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <property name="popupMode">
+              <enum>QToolButton::MenuButtonPopup</enum>
+             </property>
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QFrame" name="viewSearchSeparator">
              <property name="minimumSize">
               <size>

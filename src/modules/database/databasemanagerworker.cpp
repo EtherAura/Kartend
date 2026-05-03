@@ -7,6 +7,7 @@
 #include "errorutils.h"
 #include "loggingcategories.h"
 #include "querymanager.h"
+#include "titlefilter.h"
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcDatabaseManager)
@@ -20,13 +21,24 @@ void DatabaseManager::onWorkerItemsLoaded(const QStringList &filePaths,
                                           const QHash<QString, QString> &fileToArtworkDir,
                                           const QHash<QString, QString> &fileToMediaDir,
                                           const QHash<QString, int> &fileToCollectionIndex) {
+  // Kartend-5h6: apply per-collection title-exclusion patterns on the main
+  // thread, after the worker has produced the underscore-cleaned base names.
+  // Doing it here (rather than inside QueryManager) keeps the worker free of
+  // settings-dependent state and lets a single TitleFilter registry serve all
+  // downstream consumers (alpha jump, search, sidebar, list view).
+  QHash<QString, QString> filteredNames = fileNames;
+  for (auto it = filteredNames.begin(); it != filteredNames.end(); ++it) {
+    const int collectionIdx = fileToCollectionIndex.value(it.key(), -1);
+    it.value() = TitleFilter::apply(collectionIdx, it.value());
+  }
+
   QHash<QString, QString> relativeToFullPath;
-  relativeToFullPath.reserve(fileNames.size() * 2);
+  relativeToFullPath.reserve(filteredNames.size() * 2);
 
   // Build a fast lookup cache for resolveRelativeFilePath().
   // Keep "first seen" semantics to match the previous linear scan behavior
   // over fileNames (which returns the first match it encounters).
-  for (auto it = fileNames.constBegin(); it != fileNames.constEnd(); ++it) {
+  for (auto it = filteredNames.constBegin(); it != filteredNames.constEnd(); ++it) {
     const QString &fullPath = it.key();
     if (fullPath.isEmpty()) {
       continue;
@@ -57,7 +69,7 @@ void DatabaseManager::onWorkerItemsLoaded(const QStringList &filePaths,
     m_fileToCollectionIndex = fileToCollectionIndex;
     m_relativeToFullPath = std::move(relativeToFullPath);
   }
-  emit itemsLoaded(filePaths, fileNames);
+  emit itemsLoaded(filePaths, filteredNames);
 }
 
 void DatabaseManager::onWorkerItemCountLoaded(int count) {
@@ -81,6 +93,14 @@ void DatabaseManager::onWorkerItemsRangeLoaded(int offset, const QStringList &fi
                                                const QHash<QString, int> &fileToCollectionIndex) {
   qCDebug(lcSearchDiag) << "[DatabaseManager] onWorkerItemsRangeLoaded: offset=" << offset
                         << "paths=" << filePaths.size();
+
+  // Kartend-5h6: mirror the main-loaded path — strip per-collection title
+  // patterns before downstream consumers see the names.
+  QHash<QString, QString> filteredNames = fileNames;
+  for (auto it = filteredNames.begin(); it != filteredNames.end(); ++it) {
+    const int collectionIdx = fileToCollectionIndex.value(it.key(), -1);
+    it.value() = TitleFilter::apply(collectionIdx, it.value());
+  }
   // Merge the directory and collection index mappings from range query into our
   // cache This enables findArtworkDirectoryForFile() and
   // getCollectionIndexForFile() to work for range-loaded items
@@ -99,7 +119,7 @@ void DatabaseManager::onWorkerItemsRangeLoaded(int offset, const QStringList &fi
     }
   }
 
-  emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir, fileToMediaDir,
+  emit itemsRangeLoaded(offset, filePaths, filteredNames, fileToArtworkDir, fileToMediaDir,
                         fileToCollectionIndex);
 }
 

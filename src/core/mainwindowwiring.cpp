@@ -3,12 +3,20 @@
 // setup. All functions here remain MainWindow members.
 #include <QApplication>
 #include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QLabel>
+#include <QMenu>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QSignalBlocker>
 #include <QTimer>
+#include <QToolButton>
+#include <QVBoxLayout>
 
 #include "artworkmanager.h"
+#include "collectionutils.h"
 #include "databasemanager.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
@@ -19,6 +27,7 @@
 #include "settingsmanager.h"
 #include "sidebarmanager.h"
 #include "timerutils.h"
+#include "titlefilter.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
 
@@ -389,6 +398,130 @@ void MainWindow::connectCollectionTypeToolbar() {
                        }
                      });
   }
+}
+
+void MainWindow::refreshTitleFilterToolbar() {
+  if (!m_titleFilterButton) {
+    return;
+  }
+  // Mirror the active collection's enabled flag and pattern count so the
+  // user can tell at a glance whether cleanup is on for the view they're
+  // looking at. When no collection is active, leave the toolbar disabled
+  // rather than guessing — the popup needs a target collection.
+  const bool hasCollection =
+      currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size();
+  m_titleFilterButton->setEnabled(hasCollection);
+  QSignalBlocker blocker(m_titleFilterButton);
+  if (hasCollection) {
+    const CollectionConfig &c = m_collections[currentCollectionIndex];
+    m_titleFilterButton->setChecked(c.titleExclusionEnabled && !c.titleExclusionPatterns.isEmpty());
+  } else {
+    m_titleFilterButton->setChecked(false);
+  }
+}
+
+void MainWindow::showTitleFilterEditor() {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+    return;
+  }
+  CollectionConfig &c = m_collections[currentCollectionIndex];
+
+  // Modal popup-style dialog. A QDialog with a QPlainTextEdit lets the user
+  // see and edit the full pattern list at once; QMenu-with-widget would
+  // dismiss on focus loss while the user is editing a long regex.
+  QDialog dialog(this);
+  dialog.setWindowTitle(tr("Title cleanup — %1").arg(c.name));
+  dialog.setModal(true);
+  auto *layout = new QVBoxLayout(&dialog);
+
+  auto *label =
+      new QLabel(tr("Regex patterns — one per line. Each pattern is removed from item titles "
+                    "in order. Examples:\n  \\s*\\(USA\\)$\n  \\s*\\[!\\]\n  \\s*\\(Rev \\d+\\)"),
+                 &dialog);
+  label->setWordWrap(true);
+  layout->addWidget(label);
+
+  auto *editor = new QPlainTextEdit(&dialog);
+  editor->setPlainText(c.titleExclusionPatterns.join(QLatin1Char('\n')));
+  editor->setPlaceholderText(tr("\\s*\\(USA\\)$"));
+  layout->addWidget(editor, 1);
+
+  auto *buttons = new QDialogButtonBox(QDialogButtonBox::Apply | QDialogButtonBox::Cancel, &dialog);
+  layout->addWidget(buttons);
+  dialog.resize(420, 280);
+
+  QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+  QObject::connect(buttons->button(QDialogButtonBox::Apply), &QPushButton::clicked, &dialog,
+                   &QDialog::accept);
+
+  if (dialog.exec() != QDialog::Accepted) {
+    return;
+  }
+
+  // Split, trim, and drop empty lines so a stray newline can't smuggle a
+  // pattern that matches everything (empty regex is technically valid and
+  // would erase the whole title).
+  QStringList parsed;
+  const QStringList rawLines = editor->toPlainText().split(QLatin1Char('\n'));
+  parsed.reserve(rawLines.size());
+  for (const QString &line : rawLines) {
+    const QString trimmed = line.trimmed();
+    if (!trimmed.isEmpty()) {
+      parsed.append(trimmed);
+    }
+  }
+  if (parsed == c.titleExclusionPatterns) {
+    return; // Nothing actually changed; skip the reload.
+  }
+  c.titleExclusionPatterns = parsed;
+  // Auto-enable when the user adds the first pattern from an empty list, so
+  // applying immediately does the visible thing. Honor the existing toggle
+  // otherwise so a user who explicitly disabled cleanup keeps it off.
+  if (!parsed.isEmpty() && !c.titleExclusionEnabled) {
+    c.titleExclusionEnabled = true;
+  }
+  if (getSettingsManager()) {
+    getSettingsManager()->saveCollections(m_collections);
+  }
+  refreshTitleFilterToolbar();
+  if (getNavigationManager() && currentCollectionIndex >= 0) {
+    getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+  }
+}
+
+void MainWindow::connectTitleFilterToolbar() {
+  if (!m_titleFilterButton) {
+    return;
+  }
+  refreshTitleFilterToolbar();
+
+  // Body click toggles the per-collection enabled flag without opening the
+  // editor — patterns persist so the user can flip cleanup on/off cheaply.
+  QObject::connect(m_titleFilterButton, &QToolButton::toggled, this, [this](bool checked) {
+    if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+      return;
+    }
+    CollectionConfig &c = m_collections[currentCollectionIndex];
+    if (c.titleExclusionEnabled == checked) {
+      return;
+    }
+    c.titleExclusionEnabled = checked;
+    if (getSettingsManager()) {
+      getSettingsManager()->saveCollections(m_collections);
+    }
+    if (getNavigationManager()) {
+      getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+    }
+  });
+
+  // Arrow / dropdown opens the editor. QToolButton with MenuButtonPopup
+  // expects a QMenu, but we need a multi-line editor — use a dummy QMenu
+  // whose aboutToShow handler hides the menu and launches the dialog
+  // instead. This keeps the visual arrow without dropping a literal QMenu
+  // popup on the user.
+  auto *menu = new QMenu(this);
+  menu->addAction(tr("Edit patterns…"), this, &MainWindow::showTitleFilterEditor);
+  m_titleFilterButton->setMenu(menu);
 }
 
 void MainWindow::connectScrollBars() const {

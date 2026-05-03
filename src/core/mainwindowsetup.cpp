@@ -164,6 +164,8 @@ void MainWindow::setupUIReferences() {
   // Kartend-dd8: collection categorization toolbar widgets
   m_hideSubcollectionsButton = ui->hideSubcollectionsButton;
   m_typeFilterComboBox = ui->typeFilterComboBox;
+  // Kartend-5h6: title-exclusion regex toolbar button
+  m_titleFilterButton = ui->titleFilterButton;
   m_MetadataSidebar = ui->metadataSidebarWidget;
 
   // Prevent scroll area from stealing keyboard focus - we handle
