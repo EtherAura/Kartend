@@ -11,6 +11,7 @@
 
 #include "itemmetadata.h"
 #include "ui_metadatasidebar.h"
+#include "usagestatsstore.h"
 
 class ArtworkPreviewOverlay;
 class VideoPreviewWidget;
@@ -31,6 +32,10 @@ public:
   /// Renders extended metadata in a Details section. Hides the section
   /// entirely when `metadata.isEmpty()` so empty rows do not clutter the UI.
   void setExtendedMetadata(const ItemMetadataStore::ItemMetadata &metadata);
+  /// Renders per-item usage statistics (Kartend-7vi) appended to the Details
+  /// section: play count, last played, total time played. Empty rows are
+  /// skipped so an item that has never been launched shows nothing.
+  void setUsageStats(const UsageStatsStore::ItemUsageStats &stats);
   /// Sets the resolved manual file path for the current selection. When
   /// non-empty, a "Manual" button appears in the Details section that opens
   /// the file via QDesktopServices::openUrl (xdg-open on Linux). Pass an

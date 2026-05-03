@@ -50,7 +50,9 @@ add_executable(test_launchmanager
   test_launchmanager.cpp
   ${SRC_DIR}/modules/launch/launchmanager.cpp
   ${SRC_DIR}/modules/launch/launchmanagerarchive.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
 )
 target_link_libraries(test_launchmanager
   Qt6::Core
@@ -228,6 +230,7 @@ add_executable(test_databasemanager
   ${SRC_DIR}/utils/itemartwork.cpp
   ${SRC_DIR}/utils/itemmetadata.cpp
   ${SRC_DIR}/utils/loggingcategories.cpp
+  ${SRC_DIR}/utils/usagestatsstore.cpp
 )
 target_include_directories(test_databasemanager PRIVATE
   ${SRC_DIR}/modules/database
@@ -389,6 +392,22 @@ target_link_libraries(test_itemartwork
   Qt6::Test
 )
 add_test(NAME ItemArtwork COMMAND test_itemartwork)
+
+# UsageStatsStore tests (Kartend-7vi)
+add_executable(test_usagestatsstore
+  test_usagestatsstore.cpp
+  ${SRC_DIR}/utils/usagestatsstore.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+)
+target_include_directories(test_usagestatsstore PRIVATE
+  ${SRC_DIR}/utils
+)
+target_link_libraries(test_usagestatsstore
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME UsageStatsStore COMMAND test_usagestatsstore)
 
 # SearchUtils smoke tests (header-only enum/struct)
 add_executable(test_searchutils test_searchutils.cpp)

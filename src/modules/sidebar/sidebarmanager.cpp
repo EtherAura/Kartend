@@ -193,6 +193,14 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
     m_MetadataSidebar->setExtendedMetadata(loadedMetadata);
   }
 
+  // Usage statistics (Kartend-7vi). Append play count / last played / time
+  // played to the Details section. Loaded after setExtendedMetadata so the
+  // section's row layout is already in place; setUsageStats only appends.
+  if (m_databaseManager && !metaUuid.isEmpty()) {
+    const auto usage = m_databaseManager->loadItemUsageStats(metaUuid, filePath);
+    m_MetadataSidebar->setUsageStats(usage);
+  }
+
   const QString baseName = QFileInfo(filePath).completeBaseName();
   const QString manualPath =
       ItemMetadataStore::resolveManualFile(loadedMetadata.manualPath, baseName, manualDirectory);

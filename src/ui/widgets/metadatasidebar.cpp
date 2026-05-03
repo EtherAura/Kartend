@@ -408,6 +408,32 @@ void MetadataSidebar::setExtendedMetadata(const ItemMetadataStore::ItemMetadata 
   m_detailsContainer->show();
 }
 
+void MetadataSidebar::setUsageStats(const UsageStatsStore::ItemUsageStats &stats) {
+  // Tracking columns default to zero/empty for items that have never been
+  // launched; treat them as "no rows to add" so the Details section stays
+  // hidden on bare items.
+  if (stats.isEmpty()) {
+    return;
+  }
+  // The Details section may already be hidden if extended metadata was empty
+  // — reveal it for usage rows alone so first-launched items still surface
+  // play_count without scraper data.
+  ensureDetailsSection();
+  if (!m_detailsContainer) {
+    return;
+  }
+  if (stats.playCount > 0) {
+    appendDetailRow(tr("Play count"), QString::number(stats.playCount));
+  }
+  if (!stats.lastPlayed.isEmpty()) {
+    appendDetailRow(tr("Last played"), UsageStatsStore::formatTimestamp(stats.lastPlayed));
+  }
+  if (stats.totalPlaySeconds > 0) {
+    appendDetailRow(tr("Time played"), UsageStatsStore::formatDuration(stats.totalPlaySeconds));
+  }
+  m_detailsContainer->show();
+}
+
 QString MetadataSidebar::formatRuntime(int seconds) {
   if (seconds < 0) {
     return {};

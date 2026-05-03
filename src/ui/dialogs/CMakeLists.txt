@@ -12,10 +12,12 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   settingsdialogsetup.cpp
   settingsdialogtree.cpp
   shortcutsdialog.cpp
+  statisticsdialog.cpp
   customfieldsdialog.h
   errordialog.h
   itemartworklinksdialog.h
   settingsdialog.h
   shortcutsdialog.h
+  statisticsdialog.h
   settingsdialog.ui
 )
