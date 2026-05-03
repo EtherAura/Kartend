@@ -245,6 +245,21 @@ private:
   [[nodiscard]] bool ensureQueryUuidsPopulated(const QStringList &uuids);
 
   // ───────────────────────────────────────────────────────────────────────────
+  // Playlist scope temp table (Kartend-vlm7)
+  // ───────────────────────────────────────────────────────────────────────────
+  // For playlist-backed virtual collections, the fetch SQL needs to constrain
+  // to the exact (collection_uuid, path) pairs stored in playlist_items —
+  // this is layered on top of the existing collection_uuid filter via an
+  // EXISTS clause. The temp table is repopulated when the playlist id changes
+  // or the playlist's contents are mutated (m_cachedPlaylistScopeKey is the
+  // invalidation token: hash of playlistId + max(rowid) of its items).
+  [[nodiscard]] bool ensurePlaylistScopeTempTable();
+  [[nodiscard]] bool populatePlaylistScopeTempTable(const QString &playlistId);
+  [[nodiscard]] bool ensurePlaylistScopePopulated(const QString &playlistId);
+  [[nodiscard]] QStringList loadPlaylistSourceUuids(const QString &playlistId);
+  QString m_cachedPlaylistScopeKey;
+
+  // ───────────────────────────────────────────────────────────────────────────
   // Precomputed sorted order for O(1) range lookups on large collections
   // ───────────────────────────────────────────────────────────────────────────
   // When item count exceeds PRECOMPUTE_SORT_THRESHOLD, we create a temp table

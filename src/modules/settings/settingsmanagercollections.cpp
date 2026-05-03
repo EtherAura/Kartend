@@ -266,6 +266,13 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
   QSet<QString> newGroupNames;
 
   for (int i = 0; i < collections.size(); ++i) {
+    // Kartend-vlm7: synthesized playlist configs live in m_collections at
+    // runtime so the rest of the UI treats them like real subcollections, but
+    // they're persisted in the SQLite playlists table — never round-trip them
+    // back into kartend.cfg, otherwise an INI section would shadow the DB row.
+    if (collections[i].isPlaylist) {
+      continue;
+    }
     QString sectionName = CollectionUtils::hierarchicalNameFor(collections[i], collections);
     if (!sectionName.isEmpty()) {
       sectionNames.append(sectionName);

@@ -14,6 +14,7 @@
 #include <QHash>
 #include <QLoggingCategory>
 #include <QRegularExpression>
+#include <QSet>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QString>
@@ -348,6 +349,15 @@ auto QueryManager::collectCollectionUuids(const CollectionContext &ctx,
     -> QStringList {
   QStringList uuids;
 
+  // Kartend-vlm7: a playlist's "scope" is the union of source collection
+  // uuids across its items — there's no single owning collection. The fetch
+  // SQL still uses this list for its top-level WHERE, then layers a
+  // (uuid, path) EXISTS clause via query_playlist_scope to narrow down to
+  // playlist members.
+  if (ctx.config.isPlaylist) {
+    return loadPlaylistSourceUuids(ctx.config.playlistId);
+  }
+
   if (ctx.queryIncludeAllCollections) {
     QSet<QString> seen;
     uuids.reserve(allCollections.size());
@@ -408,6 +418,37 @@ auto QueryManager::buildDirectoryMaps(const CollectionContext &ctx,
                                       const QList<CollectionConfig> &allCollections)
     -> CollectionDirMaps {
   CollectionDirMaps maps;
+
+  // Kartend-vlm7: a playlist's items can come from any collection. Build
+  // mappings for every real (non-playlist) collection whose uuid appears in
+  // the playlist's source uuid set so the post-fetch path resolution still
+  // turns relative paths into absolutes via the right media directory.
+  if (ctx.config.isPlaylist) {
+    const QStringList sourceUuids = loadPlaylistSourceUuids(ctx.config.playlistId);
+    if (sourceUuids.isEmpty()) {
+      return maps;
+    }
+    QSet<QString> wanted(sourceUuids.begin(), sourceUuids.end());
+    maps.uuidToMediaDir.reserve(wanted.size());
+    maps.uuidToArtworkDir.reserve(wanted.size());
+    maps.uuidToCollectionIndex.reserve(wanted.size());
+    for (int i = 0; i < allCollections.size(); ++i) {
+      if (allCollections[i].isPlaylist) {
+        continue;
+      }
+      CollectionConfig c = allCollections[i];
+      c.mediaDirectory = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+      c.artworkDirectory = PathUtils::validateAndExpandPath(c.artworkDirectory, c.name);
+      const QString uuid = CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory);
+      if (uuid.isEmpty() || !wanted.contains(uuid)) {
+        continue;
+      }
+      maps.uuidToMediaDir[uuid] = c.mediaDirectory;
+      maps.uuidToArtworkDir[uuid] = CollectionUtils::resolveArtworkDirectory(i, allCollections);
+      maps.uuidToCollectionIndex[uuid] = i;
+    }
+    return maps;
+  }
 
   // Check if we need descendants (for subcollection search modes)
   const bool needsDescendants = ctx.config.showAllSubcollectionItems || ctx.queryIncludeDescendants;

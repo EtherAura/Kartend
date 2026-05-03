@@ -33,6 +33,7 @@ class CacheManager;
 class InteractionManager;
 class DatabaseManager;
 class NavigationManager;
+class PlaylistManager;
 class SessionManager;
 class SettingsManager;
 class SidebarManager;
@@ -96,6 +97,15 @@ public:
   [[nodiscard]] SessionManager *getSessionManager() const;
   [[nodiscard]] ArtworkManager *getArtworkManager() const;
   [[nodiscard]] CacheManager *getCacheManager() const;
+  [[nodiscard]] PlaylistManager *getPlaylistManager() const;
+
+  /// Re-runs the playlist synthesis pass (Kartend-vlm7): drops any prior
+  /// playlist-backed CollectionConfigs from m_collections, queries the live
+  /// playlists table, appends a synthesized config per row, and rebuilds the
+  /// hierarchy cache. Wired to PlaylistManager::playlistsChanged so adds/
+  /// renames/deletes show up in the sidebar without a restart.
+  void resyncPlaylistCollections();
+
   void showStartupSplash();
 
 protected:

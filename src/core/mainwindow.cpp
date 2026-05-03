@@ -26,6 +26,8 @@
 #include "metadatasidebar.h"
 #include "navigationmanager.h"
 #include "nowplayingoverlay.h"
+#include "pathutils.h"
+#include "playlistmanager.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
@@ -451,6 +453,58 @@ void MainWindow::rebuildHierarchyCache() {
   m_hierarchyCache.rebuild(m_collections);
 }
 
+void MainWindow::resyncPlaylistCollections() {
+  // Strip any prior playlist-backed configs so a rename/delete in PlaylistManager
+  // doesn't leave stale entries behind. INI-backed configs (isPlaylist=false)
+  // are preserved verbatim because they're the canonical state — only the
+  // synthesized rows are owned by this routine.
+  m_collections.erase(std::remove_if(m_collections.begin(), m_collections.end(),
+                                     [](const CollectionConfig &c) { return c.isPlaylist; }),
+                      m_collections.end());
+
+  PlaylistManager *playlistManager = getPlaylistManager();
+  if (!playlistManager) {
+    rebuildHierarchyCache();
+    return;
+  }
+
+  // Build a uuid → index map over the surviving (real) collections so each
+  // playlist row's parent_collection_uuid resolves to the right
+  // parentCollectionIndex. Any orphaned playlist (parent uuid no longer
+  // matches a collection) falls back to root level.
+  QHash<QString, int> uuidToIndex;
+  for (int i = 0; i < m_collections.size(); ++i) {
+    const CollectionConfig &c = m_collections[i];
+    const QString expandedMediaDir = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+    const QString uuid = CollectionUtils::computeCollectionUuid(c.name, expandedMediaDir);
+    if (!uuid.isEmpty()) {
+      uuidToIndex.insert(uuid, i);
+    }
+  }
+
+  const QList<PlaylistRow> rows = playlistManager->loadAll();
+  for (const PlaylistRow &row : rows) {
+    CollectionConfig cfg;
+    cfg.name = row.name;
+    cfg.isPlaylist = true;
+    cfg.playlistId = row.id;
+    cfg.collectionIcon = row.icon;
+    // Empty mediaDirectory keeps the scan / virtual-folder / archive paths
+    // off — the QueryManager playlist branch (Kartend-vlm7) reads items from
+    // playlist_items via source uuid+path instead.
+    if (!row.parentCollectionUuid.isEmpty()) {
+      const int parentIdx = uuidToIndex.value(row.parentCollectionUuid, -1);
+      if (parentIdx >= 0) {
+        cfg.parentCollectionIndex = parentIdx;
+        cfg.isSubcollection = true;
+      }
+    }
+    m_collections.append(cfg);
+  }
+
+  rebuildHierarchyCache();
+}
+
 // Delegated Getters
 SidebarManager *MainWindow::getSidebarManager() const {
   return m_appManager->getSidebarManager();
@@ -478,4 +532,7 @@ ArtworkManager *MainWindow::getArtworkManager() const {
 }
 CacheManager *MainWindow::getCacheManager() const {
   return m_appManager->getCacheManager();
+}
+PlaylistManager *MainWindow::getPlaylistManager() const {
+  return m_appManager->getPlaylistManager();
 }
