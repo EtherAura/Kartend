@@ -11,6 +11,7 @@
 
 #include "collectionutils.h"
 #include "errorutils.h"
+#include "historystore.h"
 #include "itemartwork.h"
 #include "itemmetadata.h"
 #include "usagestatsstore.h"
@@ -141,6 +142,26 @@ public:
   /// Resets every usage column to zero/NULL across the entire library.
   /// Returns true on success.
   bool resetAllUsageStats();
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Launch history (Kartend-fse)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /// Appends a row to launch_history and trims down to `maxEntries` (when
+  /// > 0). Best-effort: failures are logged but never block the launch path.
+  /// Pass `name` when the caller already knows the user-visible title;
+  /// HistoryStore falls back to the path's basename otherwise.
+  void recordHistoryEntry(const QString &collectionUuid, const QString &path, const QString &name,
+                          int maxEntries);
+
+  /// Most recent history entries first. `limit` is clamped to [1, 100000].
+  [[nodiscard]] QList<HistoryStore::HistoryEntry> loadRecentHistory(int limit) const;
+
+  /// Total number of rows in launch_history. Used by the dialog header.
+  [[nodiscard]] qint64 historyEntryCount() const;
+
+  /// Wipes the launch_history table. Returns true on success.
+  bool clearHistory();
 
 signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);

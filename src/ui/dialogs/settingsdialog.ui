@@ -1774,6 +1774,46 @@
               </property>
              </widget>
             </item>
+            <item row="17" column="0">
+             <widget class="QLabel" name="historyEnabledLabel">
+              <property name="text">
+               <string>Launch History:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="17" column="1">
+             <widget class="QCheckBox" name="historyEnabledCheckBox">
+              <property name="toolTip">
+               <string>Record a chronological log of every successful launch. Disabling stops new entries; existing entries remain until cleared from the Statistics dialog.</string>
+              </property>
+             </widget>
+            </item>
+            <item row="18" column="0">
+             <widget class="QLabel" name="historyMaxEntriesLabel">
+              <property name="text">
+               <string>History Max Entries:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="18" column="1">
+             <widget class="QSpinBox" name="historyMaxEntriesSpinBox">
+              <property name="toolTip">
+               <string>After each launch, oldest entries above this count are deleted. Range: 10–50000.</string>
+              </property>
+              <property name="minimum">
+               <number>10</number>
+              </property>
+              <property name="maximum">
+               <number>50000</number>
+              </property>
+              <property name="singleStep">
+               <number>50</number>
+              </property>
+              <property name="value">
+               <number>500</number>
+              </property>
+             </widget>
+            </item>
                 </layout>
                </item>
               <item>

@@ -129,6 +129,14 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
 
   // Runtime detection (Kartend-qxv) — opt-in
   settings.runtimeDetectionEnabled = s.value("runtimeDetectionEnabled", false).toBool();
+
+  // Launch history (Kartend-fse). Default is enabled with a 500-row cap so
+  // a fresh install starts logging immediately; the user disables in
+  // Settings → General. Negative caps land in the file via hand-edit only;
+  // qBound clamps them to a sane window so trim never deletes the whole
+  // table by accident.
+  settings.historyEnabled = s.value("historyEnabled", true).toBool();
+  settings.historyMaxEntries = qBound(10, s.value("historyMaxEntries", 500).toInt(), 50000);
   s.endGroup();
 
   // Kartend-p1jd: launcher presets live at the top level (outside [General])
@@ -206,6 +214,9 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
 
   // Runtime detection (Kartend-qxv)
   m_generalSettings.runtimeDetectionEnabled = settings.runtimeDetectionEnabled;
+  // Launch history (Kartend-fse)
+  m_generalSettings.historyEnabled = settings.historyEnabled;
+  m_generalSettings.historyMaxEntries = qBound(10, settings.historyMaxEntries, 50000);
   // Splash screens
   m_generalSettings.bootSplashEnabled = settings.bootSplashEnabled;
   m_generalSettings.resumeFocusSplashEnabled = settings.resumeFocusSplashEnabled;
@@ -255,6 +266,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("attractModeEnabled", m_generalSettings.attractModeEnabled);
   s.setValue("attractModeIdleTimeoutSec", m_generalSettings.attractModeIdleTimeoutSec);
   s.setValue("runtimeDetectionEnabled", m_generalSettings.runtimeDetectionEnabled);
+  s.setValue("historyEnabled", m_generalSettings.historyEnabled);
+  s.setValue("historyMaxEntries", m_generalSettings.historyMaxEntries);
   s.setValue("attractModeScrollSpeed", m_generalSettings.attractModeScrollSpeed);
   s.setValue("bootSplashEnabled", m_generalSettings.bootSplashEnabled);
   s.setValue("resumeFocusSplashEnabled", m_generalSettings.resumeFocusSplashEnabled);

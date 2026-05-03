@@ -101,6 +101,7 @@ private slots:
   void v6AddsItemArtworkTable();
   void v7AddsUsageStatsColumnAndIndexes();
   void v8AddsLauncherIndexColumn();
+  void v9AddsLaunchHistoryTable();
   void preservesExistingDataAcrossUpgrade();
 };
 
@@ -120,8 +121,8 @@ void TestDbMigrations::appliesToCurrentVersion() {
 
   QCOMPARE(getUserVersion(db), 0);
   DbMigrations::applySchemaMigrations(db, "test");
-  // Current schema version is 8 (per dbmigrations.cpp).
-  QCOMPARE(getUserVersion(db), 8);
+  // Current schema version is 9 (per dbmigrations.cpp).
+  QCOMPARE(getUserVersion(db), 9);
 
   closeAndRemove(db, conn);
 }
@@ -247,7 +248,7 @@ void TestDbMigrations::v3AddsMetaTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 8);
+  QCOMPARE(getUserVersion(db), 9);
 
   // If FTS5 is available, the meta table should also exist.
   if (tableExists(db, "items_fts")) {
@@ -263,7 +264,7 @@ void TestDbMigrations::v4AddsFileSizeColumnAndIndex() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 8);
+  QCOMPARE(getUserVersion(db), 9);
   QVERIFY(tableHasColumn(db, "items", "file_size"));
   QVERIFY(indexExists(db, "idx_items_uuid_file_size"));
 
@@ -276,7 +277,7 @@ void TestDbMigrations::v5AddsItemMetadataTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 8);
+  QCOMPARE(getUserVersion(db), 9);
   QVERIFY(tableExists(db, "item_metadata"));
   // Required scraper-facing columns and feature-reserved columns.
   QVERIFY(tableHasColumn(db, "item_metadata", "collection_uuid"));
@@ -306,7 +307,7 @@ void TestDbMigrations::v6AddsItemArtworkTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 8);
+  QCOMPARE(getUserVersion(db), 9);
   QVERIFY(tableExists(db, "item_artwork"));
   QVERIFY(tableHasColumn(db, "item_artwork", "collection_uuid"));
   QVERIFY(tableHasColumn(db, "item_artwork", "path"));
@@ -340,7 +341,7 @@ void TestDbMigrations::v7AddsUsageStatsColumnAndIndexes() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 8);
+  QCOMPARE(getUserVersion(db), 9);
   // Cumulative play-time column added in v7 (Kartend-7vi).
   QVERIFY(tableHasColumn(db, "items", "total_play_seconds"));
   // Indexes used by the Most-played / Recently-played dialog tabs.
@@ -356,9 +357,40 @@ void TestDbMigrations::v8AddsLauncherIndexColumn() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 8);
+  QCOMPARE(getUserVersion(db), 9);
   // Per-item launcher override column added in v8 (Kartend-dnx4).
   QVERIFY(tableHasColumn(db, "item_metadata", "launcher_index"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::v9AddsLaunchHistoryTable() {
+  const QString conn = "test_v9_history";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QCOMPARE(getUserVersion(db), 9);
+  // Append-only history table added in v9 (Kartend-fse).
+  QVERIFY(tableExists(db, "launch_history"));
+  QVERIFY(tableHasColumn(db, "launch_history", "id"));
+  QVERIFY(tableHasColumn(db, "launch_history", "collection_uuid"));
+  QVERIFY(tableHasColumn(db, "launch_history", "path"));
+  QVERIFY(tableHasColumn(db, "launch_history", "name"));
+  QVERIFY(tableHasColumn(db, "launch_history", "launched_at"));
+  QVERIFY(indexExists(db, "idx_launch_history_launched_at"));
+  QVERIFY(indexExists(db, "idx_launch_history_uuid_path"));
+
+  // The table is intentionally append-only: duplicate (uuid, path) rows
+  // must succeed because the dialog needs to show repeated launches as
+  // distinct entries.
+  QSqlQuery q(db);
+  QVERIFY(q.exec("INSERT INTO launch_history (collection_uuid, path, name, "
+                 "launched_at) VALUES ('u1', '/g/1', 'Game', "
+                 "'2026-05-02T12:00:00Z')"));
+  QVERIFY(q.exec("INSERT INTO launch_history (collection_uuid, path, name, "
+                 "launched_at) VALUES ('u1', '/g/1', 'Game', "
+                 "'2026-05-02T12:01:00Z')"));
 
   closeAndRemove(db, conn);
 }

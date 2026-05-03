@@ -439,8 +439,9 @@ void MenuController::setupStatisticsAction() {
     DatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
     QList<CollectionConfig> *collections = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
     GeneralSettings *settings = m_ctx.getGeneralSettings ? m_ctx.getGeneralSettings() : nullptr;
+    SettingsManager *settingsMgr = m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr;
     const bool runtimeOn = settings && settings->runtimeDetectionEnabled;
-    StatisticsDialog dialog(db, collections, runtimeOn, m_ctx.mainWindow);
+    StatisticsDialog dialog(db, collections, runtimeOn, settings, settingsMgr, m_ctx.mainWindow);
     dialog.exec();
   });
 }

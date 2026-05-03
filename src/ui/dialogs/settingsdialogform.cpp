@@ -353,6 +353,16 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->runtimeDetectionCheckBox->setChecked(m_generalSettings.runtimeDetectionEnabled);
     ui->runtimeDetectionCheckBox->blockSignals(false);
   }
+  if (ui->historyEnabledCheckBox) {
+    ui->historyEnabledCheckBox->blockSignals(true);
+    ui->historyEnabledCheckBox->setChecked(m_generalSettings.historyEnabled);
+    ui->historyEnabledCheckBox->blockSignals(false);
+  }
+  if (ui->historyMaxEntriesSpinBox) {
+    ui->historyMaxEntriesSpinBox->blockSignals(true);
+    ui->historyMaxEntriesSpinBox->setValue(m_generalSettings.historyMaxEntries);
+    ui->historyMaxEntriesSpinBox->blockSignals(false);
+  }
   if (ui->pixmapCacheSpinBox) {
     ui->pixmapCacheSpinBox->blockSignals(true);
     ui->pixmapCacheSpinBox->setValue(m_generalSettings.pixmapCacheSizeMB);
