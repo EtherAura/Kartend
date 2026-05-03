@@ -5,6 +5,7 @@
 #include <QAction>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QFont>
 #include <QFormLayout>
 #include <QInputDialog>
 #include <QLineEdit>
@@ -31,7 +32,9 @@ void SettingsDialog::updateCollectionTreeWidget() {
   collectionTreeWidget->clear();
   itemToCollectionIndex.clear();
   collectionIndexToItem.clear();
+  collectionIndexToLinkedItems.clear();
   populateTreeWidget();
+  populateLinkedAppearances();
   // Enable delete button when a collection is selected
   updateDeleteButtonState();
 }
@@ -107,9 +110,93 @@ auto SettingsDialog::createTreeItem(int collectionIndex, QTreeWidgetItem *parent
       (parent) ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(collectionTreeWidget);
   item->setText(0, collections[collectionIndex].name);
   item->setFlags(item->flags() | Qt::ItemIsEditable);
+  // Kartend-gzmk: Qt::UserRole flag distinguishes the canonical row (false)
+  // from linked-appearance mirrors (true). Most slots branch on this flag.
+  item->setData(0, Qt::UserRole, false);
   itemToCollectionIndex[item] = collectionIndex;
   collectionIndexToItem[collectionIndex] = item;
   return item;
+}
+
+void SettingsDialog::populateLinkedAppearances() {
+  // Build a name → index map once so each link resolves in O(1).
+  QHash<QString, int> nameToIndex;
+  nameToIndex.reserve(collections.size());
+  for (int i = 0; i < collections.size(); ++i) {
+    nameToIndex.insert(collections[i].name, i);
+  }
+
+  for (int i = 0; i < collections.size(); ++i) {
+    const CollectionConfig &c = collections[i];
+    if (c.additionalParentNames.isEmpty()) {
+      continue;
+    }
+    // Track parents already mirrored so a stutter in the name list (the
+    // user listed the same parent twice) doesn't render two identical
+    // appearances.
+    QSet<int> alreadyMirrored;
+    for (const QString &parentName : c.additionalParentNames) {
+      const int parentIdx = nameToIndex.value(parentName, -1);
+      if (parentIdx < 0 || parentIdx == i) {
+        continue;
+      }
+      if (parentIdx == c.parentCollectionIndex) {
+        continue;
+      }
+      if (alreadyMirrored.contains(parentIdx)) {
+        continue;
+      }
+      QTreeWidgetItem *parentItem = collectionIndexToItem.value(parentIdx);
+      if (!parentItem) {
+        continue;
+      }
+      auto *linkedItem = new QTreeWidgetItem(parentItem);
+      linkedItem->setText(0, c.name);
+      // Italic font marks the alias visually; tooltip points to the
+      // canonical home so the user always knows where the row "lives".
+      QFont font = linkedItem->font(0);
+      font.setItalic(true);
+      linkedItem->setFont(0, font);
+      const QString primaryName =
+          (c.parentCollectionIndex >= 0 && c.parentCollectionIndex < collections.size())
+              ? collections[c.parentCollectionIndex].name
+              : tr("(root)");
+      linkedItem->setToolTip(0, tr("Linked appearance — primary parent: %1").arg(primaryName));
+      // Strip edit/drag/drop — linked items are read-only mirrors.
+      Qt::ItemFlags flags = linkedItem->flags();
+      flags &= ~(Qt::ItemIsEditable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
+      linkedItem->setFlags(flags);
+      linkedItem->setData(0, Qt::UserRole, true);
+
+      itemToCollectionIndex[linkedItem] = i;
+      collectionIndexToLinkedItems[i].append(linkedItem);
+      alreadyMirrored.insert(parentIdx);
+    }
+  }
+}
+
+void SettingsDialog::propagateCollectionNameChange(const QString &oldName, const QString &newName) {
+  if (oldName == newName) {
+    return;
+  }
+  for (int i = 0; i < collections.size(); ++i) {
+    QStringList &names = collections[i].additionalParentNames;
+    if (!names.contains(oldName)) {
+      continue;
+    }
+    if (newName.isEmpty()) {
+      names.removeAll(oldName);
+    } else {
+      for (QString &n : names) {
+        if (n == oldName) {
+          n = newName;
+        }
+      }
+    }
+    if (i < m_workingCollections.size()) {
+      m_workingCollections[i].additionalParentNames = names;
+    }
+  }
 }
 
 // Handles selection changes; supports deselection state
@@ -172,6 +259,12 @@ void SettingsDialog::onTreeItemChanged(QTreeWidgetItem *item, int column) {
   if (column != 0 || !itemToCollectionIndex.contains(item)) {
     return;
   }
+  // Kartend-gzmk: rename only fires for the canonical row. Linked mirrors
+  // are flagged read-only via ItemIsEditable, but defensively skip if a
+  // signal sneaks in.
+  if (item->data(0, Qt::UserRole).toBool()) {
+    return;
+  }
   int collectionIndex = itemToCollectionIndex[item];
   if (!CollectionUtils::isValidIndex(collectionIndex, &collections) ||
       !CollectionUtils::isValidIndex(collectionIndex, &m_workingCollections)) {
@@ -184,6 +277,16 @@ void SettingsDialog::onTreeItemChanged(QTreeWidgetItem *item, int column) {
   if (newName != oldName) {
     collections[collectionIndex].name = newName;
     m_workingCollections[collectionIndex].name = newName;
+
+    // Kartend-gzmk: rename in-place propagates to linked mirrors so they
+    // don't drift, and rewrites references in other collections'
+    // additionalParentNames so links survive the rename.
+    for (QTreeWidgetItem *linked : collectionIndexToLinkedItems.value(collectionIndex)) {
+      if (linked) {
+        linked->setText(0, newName);
+      }
+    }
+    propagateCollectionNameChange(oldName, newName);
 
     bool revertedToOriginal =
         (collectionIndex == currentCollectionIndex && newName == originalCollection.name);
@@ -748,8 +851,11 @@ void SettingsDialog::onTreeContextMenuRequested(const QPoint &pos) {
   QTreeWidgetItem *target = collectionTreeWidget->itemAt(pos);
 
   QMenu menu(collectionTreeWidget);
-  // Per-row actions only make sense when the click hit an actual item.
-  if (target) {
+  // Kartend-gzmk: linked-mirror rows are read-only viewports; per-row
+  // actions (rename, duplicate, delete) belong on the canonical row.
+  const bool isLinked = target && target->data(0, Qt::UserRole).toBool();
+  // Per-row actions only make sense when the click hit a non-linked item.
+  if (target && !isLinked) {
     QAction *renameAction = menu.addAction(tr("Rename"));
     QAction *duplicateAction = menu.addAction(tr("Duplicate..."));
     QAction *deleteAction = menu.addAction(tr("Delete"));
@@ -818,12 +924,18 @@ void SettingsDialog::onTreeRearranged() {
   // Walk the post-drop tree and resync parentCollectionIndex /
   // isSubcollection on every collection. This is the only place where
   // parent linkage gets rewritten by user input outside the parent combo.
+  // Kartend-gzmk: linked mirrors aren't draggable, but a drop can still
+  // shuffle them along with their primary parent — so we skip linked
+  // items when resolving the canonical primary parent for each collection
+  // and recurse into them so their children (if any — currently none) are
+  // still visited correctly.
   std::function<void(QTreeWidgetItem *, int)> walk = [&](QTreeWidgetItem *item, int parentIdx) {
     if (!item) {
       return;
     }
+    const bool isLinked = item->data(0, Qt::UserRole).toBool();
     int idx = itemToCollectionIndex.value(item, -1);
-    if (CollectionUtils::isValidIndex(idx, &collections)) {
+    if (!isLinked && CollectionUtils::isValidIndex(idx, &collections)) {
       collections[idx].parentCollectionIndex = parentIdx;
       collections[idx].isSubcollection = (parentIdx >= 0);
       if (idx < m_workingCollections.size()) {
@@ -831,8 +943,12 @@ void SettingsDialog::onTreeRearranged() {
         m_workingCollections[idx].isSubcollection = (parentIdx >= 0);
       }
     }
+    // Children of a linked mirror inherit the same parent semantics from
+    // the mirror's position (i.e. their primary parent is whoever the
+    // mirror is under), since the mirror itself is just a viewport.
+    const int childParentIdx = isLinked ? parentIdx : idx;
     for (int i = 0; i < item->childCount(); ++i) {
-      walk(item->child(i), idx);
+      walk(item->child(i), childParentIdx);
     }
   };
   for (int i = 0; i < collectionTreeWidget->topLevelItemCount(); ++i) {
