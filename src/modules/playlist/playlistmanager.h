@@ -72,6 +72,10 @@ public:
   bool renamePlaylist(const QString &id, const QString &newName);
 
   /// Removes the playlist row and (via FK ON DELETE CASCADE) its items.
+  /// Reserved playlists (reserved_kind != '') are refused — the favorites
+  /// playlist (Kartend-5mg8) and future built-ins must outlive the user's
+  /// menu choices so we don't have to re-create them on next launch and lose
+  /// every starred item along the way.
   bool deletePlaylist(const QString &id);
 
   // ─── Playlist item CRUD ───────────────────────────────────────────────────
@@ -106,6 +110,20 @@ public:
   [[nodiscard]] bool containsItem(const QString &playlistId, const QString &sourceCollectionUuid,
                                   const QString &sourcePath) const;
 
+  // ─── Favorites built-in (Kartend-5mg8) ────────────────────────────────────
+
+  /// Returns the id of the unique playlist with reserved_kind='favorites',
+  /// creating it (with the default `defaultName`) if it does not yet exist.
+  /// Idempotent — always returns the same id within a process lifetime once a
+  /// row exists. Empty string on database error (errors logged).
+  QString ensureFavoritesPlaylist(const QString &defaultName = QStringLiteral("Favorites"));
+
+  /// Cached id of the favorites playlist (populated lazily by
+  /// ensureFavoritesPlaylist or any prior loadAll() that surfaced a row with
+  /// reserved_kind='favorites'). Empty when no favorites row has been seen
+  /// yet — call ensureFavoritesPlaylist() first if you need a guarantee.
+  [[nodiscard]] QString favoritesPlaylistId() const { return m_favoritesId; }
+
 signals:
   /// Emitted after any successful create/rename/delete/add/remove so MainWindow
   /// can re-synthesize the playlist CollectionConfigs and rebuild the
@@ -116,6 +134,7 @@ signals:
 private:
   QSqlDatabase m_db;
   QString m_connectionName;
+  QString m_favoritesId; // Cached id of the reserved favorites playlist (Kartend-5mg8).
 };
 
 #endif // PLAYLISTMANAGER_H

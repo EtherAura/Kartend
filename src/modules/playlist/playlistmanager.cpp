@@ -183,6 +183,24 @@ bool PlaylistManager::deletePlaylist(const QString &id) {
   if (!m_db.isOpen() || id.isEmpty()) {
     return false;
   }
+
+  // Kartend-5mg8: refuse to drop reserved playlists. Built-ins (favorites and
+  // any future named slot) must outlive the user's menu choices — if we let
+  // the favorites row vanish, the next ensureFavoritesPlaylist() would
+  // recreate it under a fresh id, dropping every starred reference along the
+  // way and silently breaking favorite-aware UIs that cached the previous id.
+  QSqlQuery probe(m_db);
+  probe.prepare(QStringLiteral("SELECT reserved_kind FROM playlists WHERE id = ?"));
+  probe.addBindValue(id);
+  if (probe.exec() && probe.next() && !probe.value(0).toString().isEmpty()) {
+    auto err =
+        ErrorContext::warning(ErrorCode::InvalidArgument, "Refusing to delete reserved playlist",
+                              "PlaylistManager::deletePlaylist")
+            .withDetails(QStringLiteral("Reserved kind: %1").arg(probe.value(0).toString()));
+    ErrorUtils::logError(err);
+    return false;
+  }
+
   QSqlQuery q(m_db);
   q.prepare(QStringLiteral("DELETE FROM playlists WHERE id = ?"));
   q.addBindValue(id);
@@ -412,4 +430,41 @@ bool PlaylistManager::containsItem(const QString &playlistId, const QString &sou
   q.addBindValue(sourceCollectionUuid);
   q.addBindValue(sourcePath);
   return q.exec() && q.next();
+}
+
+QString PlaylistManager::ensureFavoritesPlaylist(const QString &defaultName) {
+  if (!m_favoritesId.isEmpty()) {
+    return m_favoritesId;
+  }
+  if (!m_db.isOpen()) {
+    return QString();
+  }
+
+  // Probe for an existing reserved row. The reserved_kind column is unique-
+  // by-convention rather than by SQL constraint (a UNIQUE on reserved_kind
+  // would block the empty-string default that user playlists carry); a stray
+  // duplicate is harmless because we just take the first.
+  QSqlQuery probe(m_db);
+  if (!probe.exec("SELECT id FROM playlists WHERE reserved_kind = 'favorites' LIMIT 1")) {
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to probe for favorites playlist",
+                                     "PlaylistManager::ensureFavoritesPlaylist")
+                   .withDetails(probe.lastError().text());
+    ErrorUtils::logError(err);
+    return QString();
+  }
+  if (probe.next()) {
+    m_favoritesId = probe.value(0).toString();
+    return m_favoritesId;
+  }
+
+  // Doesn't exist yet — create it. Uses the same insert path as user-created
+  // playlists so the playlistsChanged signal propagates to the synthesizer
+  // and the row appears in the sidebar without a restart.
+  auto created = createPlaylist(defaultName, QString(), QStringLiteral("favorites"));
+  if (created.isError()) {
+    return QString();
+  }
+  m_favoritesId = created.value();
+  return m_favoritesId;
 }

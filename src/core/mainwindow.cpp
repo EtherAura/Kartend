@@ -468,6 +468,12 @@ void MainWindow::resyncPlaylistCollections() {
     return;
   }
 
+  // Kartend-5mg8: guarantee the built-in favorites playlist exists. Doing it
+  // here (rather than once at startup) means the row is restored on the next
+  // resync if the DB has been wiped between launches, without forcing a
+  // separate "first run" code path.
+  playlistManager->ensureFavoritesPlaylist();
+
   // Build a uuid → index map over the surviving (real) collections so each
   // playlist row's parent_collection_uuid resolves to the right
   // parentCollectionIndex. Any orphaned playlist (parent uuid no longer
@@ -488,6 +494,7 @@ void MainWindow::resyncPlaylistCollections() {
     cfg.name = row.name;
     cfg.isPlaylist = true;
     cfg.playlistId = row.id;
+    cfg.playlistReservedKind = row.reservedKind; // Kartend-5mg8
     cfg.collectionIcon = row.icon;
     // Empty mediaDirectory keeps the scan / virtual-folder / archive paths
     // off — the QueryManager playlist branch (Kartend-vlm7) reads items from
