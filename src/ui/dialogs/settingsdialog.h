@@ -14,13 +14,13 @@ QT_BEGIN_NAMESPACE
 namespace Ui {
 class SettingsDialog;
 }
-class QTreeWidget;
 class QShowEvent;
 class QResizeEvent;
 class QGraphicsDropShadowEffect;
 class QPropertyAnimation;
 QT_END_NAMESPACE
 
+class CollectionTreeWidget;
 class SidebarManager;
 class ScrollManager;
 class NavigationManager;
@@ -122,6 +122,12 @@ private slots:
   void onIncludeSubfoldersToggled(bool checked);
   /// Kartend-enq: react to user changes in the Settings Mode combo box.
   void onSettingsScopeChanged(int comboIndex);
+  /// Kartend-j613: builds the tree's right-click context menu (Rename /
+  /// Duplicate / Delete / expand-collapse helpers) at the requested point.
+  void onTreeContextMenuRequested(const QPoint &pos);
+  /// Kartend-j613: drag-drop reparenting completed. Walk the tree post-drop
+  /// and resync parentCollectionIndex / isSubcollection on every collection.
+  void onTreeRearranged();
 
 private:
   enum class GamepadCaptureTarget { None, Confirm, Back, ToggleSidebar };
@@ -159,6 +165,10 @@ private:
   /// collection.
   void updateParentCollectionComboBox(int currentIndex);
   [[nodiscard]] bool wouldCreateCircularReference(int childIndex, int potentialParentIndex) const;
+  /// Kartend-j613: recursively expand or collapse @p item and every
+  /// descendant under it (used by the context menu's "Expand subtree"
+  /// / "Collapse subtree" entries).
+  void setSubtreeExpanded(QTreeWidgetItem *item, bool expanded);
   void emitGridWidthChanged();
   void updateFieldVisibility();
   void updateExtractArchivesVisibility();
@@ -233,7 +243,7 @@ private:
   void applyScopeFieldGating();
 
   Ui::SettingsDialog *ui;
-  QTreeWidget *collectionTreeWidget;
+  CollectionTreeWidget *collectionTreeWidget;
   QTreeWidgetItem *currentTreeItem;
   QHash<QTreeWidgetItem *, int> itemToCollectionIndex;
   QHash<int, QTreeWidgetItem *> collectionIndexToItem;

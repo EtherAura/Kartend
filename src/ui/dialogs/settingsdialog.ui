@@ -169,7 +169,7 @@
            </layout>
           </item>
           <item>
-           <widget class="QTreeWidget" name="collectionTreeWidget">
+           <widget class="CollectionTreeWidget" name="collectionTreeWidget">
             <property name="minimumSize">
              <size>
               <width>0</width>
@@ -2246,6 +2246,13 @@
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>CollectionTreeWidget</class>
+   <extends>QTreeWidget</extends>
+   <header>collectiontreewidget.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>
