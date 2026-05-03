@@ -146,6 +146,17 @@ private:
   void expandPathToCollection(int collectionIndex);
   void populateTreeWidget();
   QTreeWidgetItem *createTreeItem(int collectionIndex, QTreeWidgetItem *parent = nullptr);
+  /// Kartend-gzmk: tree-population pass that walks every collection's
+  /// additionalParentNames and creates italicised mirror items under each
+  /// resolved parent. Called after the primary tree is fully populated so
+  /// the parent rows it attaches to are guaranteed to exist.
+  void populateLinkedAppearances();
+  /// Kartend-gzmk: keep stale link references from breaking the tree when a
+  /// collection is renamed or removed. Walks every other collection and
+  /// rewrites/removes name entries in additionalParentNames to match.
+  /// @param oldName  current name of the affected collection
+  /// @param newName  new name after rename — pass empty to remove the entry
+  void propagateCollectionNameChange(const QString &oldName, const QString &newName);
   void setupConnections();
   void setupButtonConnections();
   void setupBasicUIConnections();
@@ -256,7 +267,17 @@ private:
   CollectionTreeWidget *collectionTreeWidget;
   QTreeWidgetItem *currentTreeItem;
   QHash<QTreeWidgetItem *, int> itemToCollectionIndex;
+  /// Primary appearance per collection — the one that owns the row's name
+  /// edit, drag handle, and parent linkage. Most settings-dialog code paths
+  /// (expandPathToCollection, onTreeRearranged, removeCollection, ...) act
+  /// on the primary item only. See collectionIndexToLinkedItems for alias
+  /// (Kartend-gzmk) appearances that hang off the same QTreeWidget.
   QHash<int, QTreeWidgetItem *> collectionIndexToItem;
+  /// Kartend-gzmk: per-collection list of linked-appearance QTreeWidgetItems.
+  /// Empty for collections with no additionalParentNames. Linked items are
+  /// italicised, non-editable, non-draggable, and exist purely to mirror
+  /// the collection under additional parents in the visible tree.
+  QHash<int, QList<QTreeWidgetItem *>> collectionIndexToLinkedItems;
   QList<CollectionConfig> collections;
   int originalCurrentCollectionIndex;
   CollectionConfig originalCollection;
