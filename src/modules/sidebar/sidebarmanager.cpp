@@ -279,6 +279,10 @@ void SidebarManager::applySidebarStateForCollection(int collectionIndex) {
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
   m_sidebarVisible = collection.sidebarVisible;
 
+  // Push the new collection's summary to the sidebar so the no-selection
+  // state shows useful context (Kartend-3mn).
+  refreshCollectionSummary();
+
   updateSidebarLayout(collectionIndex);
   emit sidebarVisibilityChanged(m_sidebarVisible);
 
@@ -293,6 +297,59 @@ void SidebarManager::applySidebarStateForCollection(int collectionIndex) {
 
 void SidebarManager::setupSidebar() {
   m_sidebarVisible = false;
+}
+
+void SidebarManager::refreshCollectionSummary() {
+  if (!m_MetadataSidebar) {
+    return;
+  }
+  if (!m_collections || m_currentCollectionIndex < 0 ||
+      m_currentCollectionIndex >= m_collections->size()) {
+    m_MetadataSidebar->setCollectionSummary({});
+    return;
+  }
+
+  const CollectionConfig &collection = (*m_collections)[m_currentCollectionIndex];
+  MetadataSidebar::CollectionSummary summary;
+  summary.name = collection.name;
+  summary.type = CollectionUtils::effectiveCollectionType(m_currentCollectionIndex, *m_collections);
+  summary.extensions = collection.extensions;
+
+  // Render expanded paths (with %collection% / ~ resolved) so the user sees
+  // the real filesystem location. validateAndExpandPath returns "" when the
+  // resolved directory does not exist; fall back to the raw template in
+  // that case so the user can still see what was configured.
+  auto expandOrRaw = [&](const QString &raw) -> QString {
+    if (raw.trimmed().isEmpty()) {
+      return {};
+    }
+    const QString expanded = PathUtils::validateAndExpandPath(raw, collection.name);
+    return expanded.isEmpty() ? raw : expanded;
+  };
+  summary.mediaDirectory = expandOrRaw(collection.mediaDirectory);
+  summary.artworkDirectory = expandOrRaw(collection.artworkDirectory);
+  summary.videoDirectory = expandOrRaw(collection.videoDirectory);
+  summary.manualDirectory = expandOrRaw(collection.manualDirectory);
+
+  if (collection.isSubcollection && collection.parentCollectionIndex >= 0 &&
+      collection.parentCollectionIndex < m_collections->size()) {
+    summary.parentName = (*m_collections)[collection.parentCollectionIndex].name;
+  }
+
+  if (m_databaseManager) {
+    summary.itemCount =
+        m_databaseManager->countCollectionRecursive(m_currentCollectionIndex, *m_collections);
+    // UUID keying must match how DatabaseManager computes it elsewhere:
+    // validateAndExpandPath without a raw fallback. Mismatched casing or
+    // a missing-directory empty-string here would make last_scanned silently
+    // miss its row.
+    const QString uuidMediaDir =
+        PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
+    const QString uuid = CollectionUtils::computeCollectionUuid(collection.name, uuidMediaDir);
+    summary.lastScanned = m_databaseManager->loadCollectionLastScanned(uuid);
+  }
+
+  m_MetadataSidebar->setCollectionSummary(summary);
 }
 
 void SidebarManager::positionSidebarOverlay() {

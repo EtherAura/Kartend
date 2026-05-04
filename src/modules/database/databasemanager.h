@@ -76,6 +76,12 @@ public:
   countCollectionRecursive(int collectionIndex,
                            const QList<CollectionConfig> &allCollections) const;
 
+  /// Reads `collections.last_scanned` for the given UUID via the main-thread
+  /// connection (Kartend-3mn). Returns an invalid QDateTime when the row is
+  /// missing or the query fails — callers use that as the "never scanned"
+  /// signal.
+  [[nodiscard]] QDateTime loadCollectionLastScanned(const QString &collectionUuid) const;
+
   /// Loads extended metadata for the given (collectionUuid, path) using the
   /// main-thread connection. Returns an empty `ItemMetadata` (with the keys
   /// preserved) when no row exists. Errors are logged via ErrorUtils and an

@@ -1,11 +1,13 @@
 #ifndef METADATASIDEBAR_H
 #define METADATASIDEBAR_H
 
+#include <QDateTime>
 #include <QFrame>
 #include <QLabel>
 #include <QList>
 #include <QScrollArea>
 #include <QString>
+#include <QStringList>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -59,6 +61,26 @@ public:
   /// button stays available for items with no current artwork — that is the
   /// exact case where the user wants to add a manual link.
   void setArtworkEditEnabled(bool enabled);
+  /// Snapshot of collection-level fields rendered when no item is selected
+  /// (Kartend-3mn). Empty `name` clears the cached summary, restoring the
+  /// legacy "No item selected" placeholder layout.
+  struct CollectionSummary {
+    QString name;
+    QString type;
+    qint64 itemCount = -1; // -1 = unknown / not yet computed
+    QDateTime lastScanned;
+    QString mediaDirectory;
+    QString artworkDirectory;
+    QString videoDirectory;
+    QString manualDirectory;
+    QStringList extensions;
+    QString parentName;
+    [[nodiscard]] bool isValid() const { return !name.trimmed().isEmpty(); }
+  };
+  /// Caches the collection summary used when no item is selected. The
+  /// summary is rendered immediately if the sidebar is currently in the
+  /// no-selection state; otherwise it is held until the user deselects.
+  void setCollectionSummary(const CollectionSummary &summary);
   void clearMetadata();
   void setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy);
 
@@ -118,6 +140,18 @@ private:
   void ensureGallerySection();
   void clearGallerySection();
   void openGalleryPreview(const GalleryEntry &entry);
+
+  // Collection-summary state (Kartend-3mn). The summary is cached on the
+  // widget so every existing clearMetadata() call site can fall through to
+  // a meaningful no-selection display without each caller re-pushing it.
+  // m_hasItemDisplayed tracks whether the sidebar is currently rendering
+  // an item — refreshes that arrive mid-selection update the cache silently
+  // and apply on next deselect.
+  CollectionSummary m_collectionSummary;
+  bool m_hasItemDisplayed = false;
+  void renderCollectionSummary();
+  void applyItemViewVisibility(bool visible);
+  [[nodiscard]] static QString formatLastScanned(const QDateTime &lastScanned);
   /// Builds the small placeholder shown for video tiles while their frame
   /// is being extracted (and as a permanent fallback when extraction
   /// fails). Renders a play triangle on a muted-tile background sized to
