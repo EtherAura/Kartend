@@ -1,5 +1,6 @@
 target_sources(${KARTEND_LIB_TARGET} PRIVATE
   artworkutils.cpp
+  cliargs.cpp
   collectionutils.cpp
   configvalidation.cpp
   dbmigrations.cpp
@@ -17,6 +18,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   adaptivebatcher.h
   applicationcontext.h
   artworkutils.h
+  cliargs.h
   collectionutils.h
   configvalidation.h
   dbmigrations.h

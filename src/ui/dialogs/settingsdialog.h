@@ -1,6 +1,7 @@
 #ifndef SETTINGSDIALOG_H
 #define SETTINGSDIALOG_H
 
+#include "applysettingsdialog.h"
 #include "collectionutils.h"
 #include <QDialog>
 #include <QHash>
@@ -51,6 +52,14 @@ public:
   /// Kartend-enq: returns the active Settings Mode scope.
   [[nodiscard]] SettingsScope currentSettingsScope() const { return m_settingsScope; }
 
+  /// Kartend-iyk: low-level mask-aware copy. Public so tests can verify the
+  /// per-category subset behaviour directly. Returns the number of target
+  /// collections actually mutated (excludes invalid indices and the source
+  /// itself). Production callers go through the higher-level apply/copy
+  /// slots which open ApplySettingsDialog first.
+  int applyCategoriesToIndices(const QList<int> &targetIndices,
+                               ApplySettingsDialog::FieldCategories categories, int sourceIndex);
+
   /// Handles dialog acceptance while guarding against unsaved changes.
   void accept() override;
 
@@ -94,6 +103,11 @@ private slots:
   /// curated appearance/layout subset onto an arbitrary set of collections.
   /// Reuses the same field set as Kartend-63o's all/subs paths.
   void applyCurrentSettingsToSelected();
+  /// Kartend-iyk: pull-from-source. Opens ApplySettingsDialog in Pull mode
+  /// so the user picks a source collection AND the field categories to
+  /// copy onto the currently-edited collection. Marks the dialog dirty so
+  /// the user can review in the form before committing with Save.
+  void copySettingsFromOtherCollection();
   void browseLauncher();
   void browseCore();
   /// Kartend-bdl: Add/Edit/Remove handlers for the Additional Launchers list.
@@ -242,15 +256,16 @@ private:
   /// Kartend-63o: propagate the current collection's appearance & layout
   /// settings (grid/spacing/colors/fonts/view type, etc. — never
   /// paths/extensions/behavior flags that would require a rescan) to every
-  /// index in @p targetIndices. Shows a confirmation QMessageBox first,
-  /// persists the modified collections, and refreshes the tree so the user
-  /// sees the change immediately.
+  /// index in @p targetIndices. Opens an ApplySettingsDialog so the user
+  /// can pick which field categories to copy (Kartend-iyk), persists the
+  /// modified collections, and refreshes the tree.
   void applyCurrentSettingsToIndices(const QList<int> &targetIndices, const QString &scopeLabel);
 
   /// Kartend-enq: silent variant used by the Settings Mode auto-propagation
-  /// path. Skips the confirmation dialog and the post-apply summary message
-  /// because the user already opted in by selecting a non-`Current` mode.
-  /// Returns the number of collections actually mutated.
+  /// path. Skips the per-category dialog and the post-apply summary because
+  /// the user already opted in by selecting a non-`Current` mode — and the
+  /// mode itself is a coarse-grained switch, so the full curated subset is
+  /// always copied. Returns the number of collections actually mutated.
   int propagateAppearanceToIndicesSilently(const QList<int> &targetIndices);
 
   /// Kartend-c06: enable/disable form fields that don't participate in

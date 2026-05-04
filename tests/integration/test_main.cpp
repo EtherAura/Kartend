@@ -8,6 +8,7 @@
  * Qt does not officially support.
  */
 
+#include "test_applysettingsdialog.h"
 #include "test_mainwindow_smoke.h"
 #include "test_settingsdialog_scope.h"
 
@@ -39,6 +40,10 @@ int main(int argc, char *argv[]) {
   {
     TestSettingsDialogScope scope;
     status |= QTest::qExec(&scope, argc, argv);
+  }
+  {
+    TestApplySettingsDialog applySettings;
+    status |= QTest::qExec(&applySettings, argc, argv);
   }
   return status;
 }

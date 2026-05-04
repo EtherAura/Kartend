@@ -517,5 +517,56 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
       ui->attractScrollSpeedSpinBox->value() != m_originalGeneralSettings.attractModeScrollSpeed) {
     return true;
   }
+  // Kartend-81o: customizable toolbar fields.
+  if (ui->toolbarGridViewVisibleCheckBox &&
+      ui->toolbarGridViewVisibleCheckBox->isChecked() !=
+          m_originalGeneralSettings.toolbarShowGridViewButton) {
+    return true;
+  }
+  if (ui->toolbarListViewVisibleCheckBox &&
+      ui->toolbarListViewVisibleCheckBox->isChecked() !=
+          m_originalGeneralSettings.toolbarShowListViewButton) {
+    return true;
+  }
+  if (ui->toolbarHideSubcollectionsVisibleCheckBox &&
+      ui->toolbarHideSubcollectionsVisibleCheckBox->isChecked() !=
+          m_originalGeneralSettings.toolbarShowHideSubcollectionsButton) {
+    return true;
+  }
+  if (ui->toolbarTypeFilterVisibleCheckBox && ui->toolbarTypeFilterVisibleCheckBox->isChecked() !=
+                                                  m_originalGeneralSettings.toolbarShowTypeFilter) {
+    return true;
+  }
+  if (ui->toolbarTitleFilterVisibleCheckBox &&
+      ui->toolbarTitleFilterVisibleCheckBox->isChecked() !=
+          m_originalGeneralSettings.toolbarShowTitleFilter) {
+    return true;
+  }
+  if (ui->toolbarSearchModeVisibleCheckBox &&
+      ui->toolbarSearchModeVisibleCheckBox->isChecked() !=
+          m_originalGeneralSettings.toolbarShowSearchModeButton) {
+    return true;
+  }
+  if (ui->toolbarSearchBarVisibleCheckBox && ui->toolbarSearchBarVisibleCheckBox->isChecked() !=
+                                                 m_originalGeneralSettings.toolbarShowSearchBar) {
+    return true;
+  }
+  if (ui->toolbarGridViewTextEdit &&
+      ui->toolbarGridViewTextEdit->text() != m_originalGeneralSettings.toolbarGridViewButtonText) {
+    return true;
+  }
+  if (ui->toolbarListViewTextEdit &&
+      ui->toolbarListViewTextEdit->text() != m_originalGeneralSettings.toolbarListViewButtonText) {
+    return true;
+  }
+  if (ui->toolbarHideSubcollectionsTextEdit &&
+      ui->toolbarHideSubcollectionsTextEdit->text() !=
+          m_originalGeneralSettings.toolbarHideSubcollectionsButtonText) {
+    return true;
+  }
+  if (ui->toolbarTitleFilterTextEdit &&
+      ui->toolbarTitleFilterTextEdit->text() != m_originalGeneralSettings.toolbarTitleFilterText) {
+    return true;
+  }
   return false;
 }

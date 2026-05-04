@@ -1,4 +1,5 @@
 target_sources(${KARTEND_LIB_TARGET} PRIVATE
+  applysettingsdialog.cpp
   collectionpickerdialog.cpp
   collectiontreewidget.cpp
   customfieldsdialog.cpp
@@ -20,6 +21,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   settingsdialogtree.cpp
   shortcutsdialog.cpp
   statisticsdialog.cpp
+  applysettingsdialog.h
   collectionpickerdialog.h
   collectiontreewidget.h
   customfieldsdialog.h

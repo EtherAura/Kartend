@@ -2084,6 +2084,150 @@
            </item>
           </layout>
          </widget>
+         <widget class="QWidget" name="toolbarSubTab">
+          <attribute name="title">
+           <string>Toolbar</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="toolbarSubTabLayout">
+           <item>
+            <widget class="QGroupBox" name="toolbarGroupBox">
+             <property name="title">
+              <string>Toolbar Buttons (Kartend-81o)</string>
+             </property>
+             <layout class="QVBoxLayout" name="toolbarGroupBoxLayout">
+              <item>
+               <widget class="QLabel" name="toolbarHelpLabel">
+                <property name="wordWrap"><bool>true</bool></property>
+                <property name="text">
+                 <string>Show or hide each items-page toolbar widget. Custom text overrides replace the default label or icon for buttons that support it; leave empty to keep the default.</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <layout class="QFormLayout" name="toolbarFormLayout">
+                <item row="0" column="0">
+                 <widget class="QLabel" name="toolbarGridViewLabel">
+                  <property name="text"><string>Grid View Button:</string></property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <layout class="QHBoxLayout" name="toolbarGridViewLayout">
+                  <item>
+                   <widget class="QCheckBox" name="toolbarGridViewVisibleCheckBox">
+                    <property name="text"><string>Show</string></property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QLineEdit" name="toolbarGridViewTextEdit">
+                    <property name="placeholderText"><string>⊞ (default)</string></property>
+                    <property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="toolbarListViewLabel">
+                  <property name="text"><string>List View Button:</string></property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <layout class="QHBoxLayout" name="toolbarListViewLayout">
+                  <item>
+                   <widget class="QCheckBox" name="toolbarListViewVisibleCheckBox">
+                    <property name="text"><string>Show</string></property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QLineEdit" name="toolbarListViewTextEdit">
+                    <property name="placeholderText"><string>☰ (default)</string></property>
+                    <property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item row="2" column="0">
+                 <widget class="QLabel" name="toolbarHideSubcollectionsLabel">
+                  <property name="text"><string>Hide Subcollections Button:</string></property>
+                 </widget>
+                </item>
+                <item row="2" column="1">
+                 <layout class="QHBoxLayout" name="toolbarHideSubcollectionsLayout">
+                  <item>
+                   <widget class="QCheckBox" name="toolbarHideSubcollectionsVisibleCheckBox">
+                    <property name="text"><string>Show</string></property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QLineEdit" name="toolbarHideSubcollectionsTextEdit">
+                    <property name="placeholderText"><string>📁 (default)</string></property>
+                    <property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item row="3" column="0">
+                 <widget class="QLabel" name="toolbarTypeFilterLabel">
+                  <property name="text"><string>Type Filter Dropdown:</string></property>
+                 </widget>
+                </item>
+                <item row="3" column="1">
+                 <widget class="QCheckBox" name="toolbarTypeFilterVisibleCheckBox">
+                  <property name="text"><string>Show</string></property>
+                 </widget>
+                </item>
+                <item row="4" column="0">
+                 <widget class="QLabel" name="toolbarTitleFilterLabel">
+                  <property name="text"><string>Title Filter Button:</string></property>
+                 </widget>
+                </item>
+                <item row="4" column="1">
+                 <layout class="QHBoxLayout" name="toolbarTitleFilterLayout">
+                  <item>
+                   <widget class="QCheckBox" name="toolbarTitleFilterVisibleCheckBox">
+                    <property name="text"><string>Show</string></property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QLineEdit" name="toolbarTitleFilterTextEdit">
+                    <property name="placeholderText"><string>Filter (default)</string></property>
+                    <property name="toolTip"><string>Custom label for the title-filter button; leave blank to keep the default.</string></property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item row="5" column="0">
+                 <widget class="QLabel" name="toolbarSearchModeLabel">
+                  <property name="text"><string>Search Mode Button:</string></property>
+                 </widget>
+                </item>
+                <item row="5" column="1">
+                 <widget class="QCheckBox" name="toolbarSearchModeVisibleCheckBox">
+                  <property name="text"><string>Show</string></property>
+                 </widget>
+                </item>
+                <item row="6" column="0">
+                 <widget class="QLabel" name="toolbarSearchBarLabel">
+                  <property name="text"><string>Search Bar:</string></property>
+                 </widget>
+                </item>
+                <item row="6" column="1">
+                 <widget class="QCheckBox" name="toolbarSearchBarVisibleCheckBox">
+                  <property name="text"><string>Show</string></property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <spacer name="toolbarVerticalSpacer">
+                <property name="orientation"><enum>Qt::Orientation::Vertical</enum></property>
+                <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+               </spacer>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
          <widget class="QWidget" name="controlsSubTab">
           <attribute name="title">
            <string>Controls</string>
