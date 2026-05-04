@@ -106,6 +106,25 @@ void MainWindow::showFocusReturnSplash() {
   }
 }
 
+void MainWindow::applyGlobalUiFont(const GeneralSettings &settings) {
+  // Compose the new application font from the persisted settings, falling
+  // back to whatever Qt picked at startup (read once into s_baseline so we
+  // can still restore it after the user clears the override).
+  static const QFont s_baseline = QApplication::font();
+  QFont font = s_baseline;
+  const QString family = settings.globalUiFontFamily.trimmed();
+  if (!family.isEmpty()) {
+    font.setFamily(family);
+  }
+  if (settings.globalUiFontPointSize > 0) {
+    font.setPointSize(settings.globalUiFontPointSize);
+  }
+  // setFont propagates to every widget that hasn't had setFont() called on
+  // it explicitly, so menus, dialogs, and toolbar text all pick this up
+  // without us walking the widget tree.
+  QApplication::setFont(font);
+}
+
 void MainWindow::applyToolbarCustomization() {
   if (!ui) {
     return;

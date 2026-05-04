@@ -717,6 +717,17 @@ struct GeneralSettings {
   QString titleBaseColor;        // Base color for title text (empty = use highlight)
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Global UI font (Kartend-9v0o)
+  // Applied via QApplication::setFont() after settings load so every widget
+  // without an explicit font (menus, dialogs, toolbar, sidebar, item titles
+  // that haven't set a per-collection customFontFamily, etc.) inherits it.
+  // Empty family / 0 point size means "use the platform default" — that way
+  // an upgrading install keeps Qt's chosen UI font until the user picks one.
+  // ─────────────────────────────────────────────────────────────────────────
+  QString globalUiFontFamily;
+  int globalUiFontPointSize = 0;
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Controls: Keyboard bindings (single-key, no modifier semantics)
   // Defaults match current hard-coded behavior.
   // ─────────────────────────────────────────────────────────────────────────

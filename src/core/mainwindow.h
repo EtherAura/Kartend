@@ -123,6 +123,13 @@ public:
   /// Settings dialog.
   void applyToolbarCustomization();
 
+  /// Kartend-9v0o: pushes the global UI font (family + point size) from
+  /// @p settings to QApplication. Empty family / 0 size means "leave the
+  /// platform default in place." Idempotent — invoked on startup after
+  /// settings load and again whenever the user changes the font in the
+  /// Settings dialog.
+  static void applyGlobalUiFont(const GeneralSettings &settings);
+
 protected:
   bool event(QEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;

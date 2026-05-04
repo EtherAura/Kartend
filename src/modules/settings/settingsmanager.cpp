@@ -76,6 +76,12 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.titleTintLightness = s.value("titleTintLightness", 60).toInt();
   settings.titleBaseColor = s.value("titleBaseColor", QString()).toString();
 
+  // Kartend-9v0o: global UI font. Empty family / 0 size = platform default.
+  // No clamp on point size beyond Qt's own validation; the spinbox in the
+  // settings dialog limits user input to a sane range.
+  settings.globalUiFontFamily = s.value("globalUiFontFamily", QString()).toString();
+  settings.globalUiFontPointSize = s.value("globalUiFontPointSize", 0).toInt();
+
   // Controls: keyboard bindings
   settings.keyNavLeft = s.value("keyNavLeft", static_cast<int>(Qt::Key_Left)).toInt();
   settings.keyNavRight = s.value("keyNavRight", static_cast<int>(Qt::Key_Right)).toInt();
@@ -239,6 +245,9 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.titleTintSaturation = settings.titleTintSaturation;
   m_generalSettings.titleTintLightness = settings.titleTintLightness;
   m_generalSettings.titleBaseColor = settings.titleBaseColor;
+  // Kartend-9v0o: global UI font
+  m_generalSettings.globalUiFontFamily = settings.globalUiFontFamily.trimmed();
+  m_generalSettings.globalUiFontPointSize = settings.globalUiFontPointSize;
 
   // Controls
   m_generalSettings.keyNavLeft = settings.keyNavLeft;
@@ -324,6 +333,9 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("titleTintSaturation", m_generalSettings.titleTintSaturation);
   s.setValue("titleTintLightness", m_generalSettings.titleTintLightness);
   s.setValue("titleBaseColor", m_generalSettings.titleBaseColor);
+  // Kartend-9v0o: global UI font
+  s.setValue("globalUiFontFamily", m_generalSettings.globalUiFontFamily);
+  s.setValue("globalUiFontPointSize", m_generalSettings.globalUiFontPointSize);
   s.setValue("keyNavLeft", m_generalSettings.keyNavLeft);
   s.setValue("keyNavRight", m_generalSettings.keyNavRight);
   s.setValue("keyNavUp", m_generalSettings.keyNavUp);
