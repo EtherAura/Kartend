@@ -108,6 +108,14 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
     // View type changes require full layout update like spacing changes
     spacingChanged = true;
   }
+  if (configA.hideMissingArtwork != configB.hideMissingArtwork) {
+    hasChanges = true;
+    // Kartend-ks4n: toggling the hide-missing-artwork predicate changes the
+    // visible item count and the layout/scrollbars; ride the spacingChanged
+    // path so handleScrollBranch calls primeLayoutFor + recreateLayout, which
+    // re-runs the FilterManager baseline inside setupVirtualScrolling.
+    spacingChanged = true;
+  }
   if (configA.name != configB.name) {
     titleChanged = true;
   }

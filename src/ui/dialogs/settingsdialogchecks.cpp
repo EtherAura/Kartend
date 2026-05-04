@@ -132,6 +132,9 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.viewType = (ui->viewTypeComboBox)
                         ? static_cast<ViewType>(ui->viewTypeComboBox->currentIndex())
                         : config.viewType;
+  config.hideMissingArtwork = (ui->hideMissingArtworkCheckBox)
+                                  ? ui->hideMissingArtworkCheckBox->isChecked()
+                                  : config.hideMissingArtwork;
   config.horizontalSpacing = (ui->horizontalSpacingSpinBox)
                                  ? spacingUiToInternal(ui->horizontalSpacingSpinBox->value())
                                  : config.horizontalSpacing;
@@ -263,6 +266,8 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
        ui->sidebarModeComboBox->currentIndex() != static_cast<int>(originalConfig.sidebarMode)) ||
       ((ui->viewTypeComboBox) &&
        ui->viewTypeComboBox->currentIndex() != static_cast<int>(originalConfig.viewType)) ||
+      ((ui->hideMissingArtworkCheckBox) &&
+       ui->hideMissingArtworkCheckBox->isChecked() != originalConfig.hideMissingArtwork) ||
       ((ui->horizontalSpacingSpinBox) &&
        spacingUiToInternal(ui->horizontalSpacingSpinBox->value()) !=
            originalConfig.horizontalSpacing) ||

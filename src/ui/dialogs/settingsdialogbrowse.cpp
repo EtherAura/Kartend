@@ -340,6 +340,9 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->viewTypeComboBox) {
     ui->viewTypeComboBox->setCurrentIndex(static_cast<int>(config.viewType));
   }
+  if (ui->hideMissingArtworkCheckBox) {
+    ui->hideMissingArtworkCheckBox->setChecked(config.hideMissingArtwork);
+  }
   if (ui->horizontalSpacingSpinBox) {
     ui->horizontalSpacingSpinBox->setValue(spacingInternalToUi(config.horizontalSpacing));
   }
@@ -467,6 +470,7 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->hideVerticalScrollbarCheckBox) ui->hideVerticalScrollbarCheckBox->setChecked(false);
   if (ui->hideTitlesCheckBox) ui->hideTitlesCheckBox->setChecked(false);
   if (ui->hideSubcollectionTitlesCheckBox) ui->hideSubcollectionTitlesCheckBox->setChecked(false);
+  if (ui->hideMissingArtworkCheckBox) ui->hideMissingArtworkCheckBox->setChecked(false);
 
   if (ui->gridWidthSpinBox) ui->gridWidthSpinBox->setValue(UIConstants::Grid::DEFAULT_WIDTH);
   if (ui->horizontalSpacingSpinBox)
