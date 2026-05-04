@@ -170,10 +170,13 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
       }
     }
 
-    // Check if we're in list mode - use step of 1 for vertical navigation
-    bool isListMode = false;
+    // Step of 1 in non-grid views: List walks one item per arrow regardless
+    // of axis, and CoverFlow (Kartend-3ile) collapses all four arrows to a
+    // single-step carousel shift.
+    bool singleStep = false;
     if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-      isListMode = (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
+      const ViewType vt = (*m_collections)[*m_currentCollectionIndex].viewType;
+      singleStep = (vt == ViewType::List) || (vt == ViewType::CoverFlow);
     }
 
     int direction = 0;
@@ -185,12 +188,11 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
       direction = 1;
       vertical = false;
     } else if (key == navUpKey) {
-      // In list mode, move by 1 item; in grid mode, move by gridWidth
-      direction = isListMode ? -1 : -gridWidth;
+      // List/CoverFlow move by 1; grid moves by gridWidth.
+      direction = singleStep ? -1 : -gridWidth;
       vertical = true;
     } else if (key == navDownKey) {
-      // In list mode, move by 1 item; in grid mode, move by gridWidth
-      direction = isListMode ? 1 : gridWidth;
+      direction = singleStep ? 1 : gridWidth;
       vertical = true;
     }
 

@@ -58,6 +58,15 @@ public:
   void saveSidebarStateForCollection(const QString &collectionName, bool visible);
   [[nodiscard]] int currentCollectionIndex() const { return m_currentCollectionIndex; }
 
+  /// Kartend-3ile: external override that hides the sidebar without touching
+  /// the persisted per-collection sidebarVisible flag. Cover flow uses this
+  /// to take the full viewport while preserving the user's sidebar
+  /// preference for grid/list views. Setting back to false re-runs layout
+  /// from the persisted state. Toggling via toggleSidebar() also clears the
+  /// override so a deliberate user toggle wins.
+  void setExternallyHidden(bool hidden);
+  [[nodiscard]] bool isExternallyHidden() const { return m_externallyHidden; }
+
 signals:
   void sidebarVisibilityChanged(bool visible);
   void sidebarLayoutChanged();
@@ -78,6 +87,11 @@ private:
   DatabaseManager *m_databaseManager = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   bool m_sidebarVisible = false;
+  /// Kartend-3ile: separate from m_sidebarVisible because this flag is
+  /// driven by the active view type (cover flow auto-hides) rather than
+  /// the user's per-collection preference. Effective visibility is the
+  /// AND of (!m_externallyHidden) and m_sidebarVisible.
+  bool m_externallyHidden = false;
   int m_currentCollectionIndex;
 
   // Snapshot of the currently-displayed item used by the artwork link

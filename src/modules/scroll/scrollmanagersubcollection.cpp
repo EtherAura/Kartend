@@ -80,4 +80,12 @@ void ScrollManager::rebuildFilteredView() {
   // FilterManager emits filterChanged, no need to emit here
   updateVirtualView();
   enforceScrollContentConstraints();
+
+  // Kartend-3ile: cover-flow operates over the same filtered card list, so
+  // any filter rebuild that re-sources the grid also re-sources the
+  // carousel. Gate on coverFlowActive() so grid-mode users don't pay the
+  // per-item descriptor build for no visible result.
+  if (m_coverFlowWidget && coverFlowActive()) {
+    rebuildCoverFlowCards();
+  }
 }

@@ -1,5 +1,6 @@
 target_sources(${KARTEND_LIB_TARGET} PRIVATE
   artworkpreviewoverlay.cpp
+  coverflowwidget.cpp
   emptystatewidget.cpp
   itemwidget.cpp
   itemwidgetindicator.cpp
@@ -15,6 +16,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   videopreviewwidget.cpp
   videothumbnailextractor.cpp
   artworkpreviewoverlay.h
+  coverflowwidget.h
   emptystatewidget.h
   itemwidget.h
   listheaderwidget.h

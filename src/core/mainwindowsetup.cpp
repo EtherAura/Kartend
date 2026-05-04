@@ -164,6 +164,7 @@ void MainWindow::setupUIReferences() {
   m_searchModeButton = ui->searchModeButton;
   m_gridViewButton = ui->gridViewButton;
   m_listViewButton = ui->listViewButton;
+  m_coverFlowViewButton = ui->coverFlowViewButton;
   // Kartend-dd8: collection categorization toolbar widgets
   m_hideSubcollectionsButton = ui->hideSubcollectionsButton;
   m_typeFilterComboBox = ui->typeFilterComboBox;
@@ -325,6 +326,9 @@ void MainWindow::setViewType(ViewType viewType) {
   }
   if (m_listViewButton) {
     m_listViewButton->setChecked(viewType == ViewType::List);
+  }
+  if (m_coverFlowViewButton) {
+    m_coverFlowViewButton->setChecked(viewType == ViewType::CoverFlow);
   }
 
   // Trigger a full layout refresh - viewType affects widget dimensions and

@@ -707,9 +707,10 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
     }
   }
 
-  // In list mode, move by 1 item per step instead of gridWidth
-  bool isListMode = (collection.viewType == ViewType::List);
-  int selectionDelta = isListMode ? rowDelta : (rowDelta * gridWidth);
+  // List and CoverFlow (Kartend-3ile) move by 1 item per step instead of gridWidth.
+  const bool singleStep =
+      (collection.viewType == ViewType::List) || (collection.viewType == ViewType::CoverFlow);
+  int selectionDelta = singleStep ? rowDelta : (rowDelta * gridWidth);
   int newSelection = currentSelection + selectionDelta;
 
   bool wrap = m_generalSettings ? m_generalSettings->wrapNavigation : false;

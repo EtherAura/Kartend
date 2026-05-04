@@ -256,6 +256,19 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
 
   setupNormalVirtualScrolling();
 
+  // Kartend-3ile: refresh cover-flow card list and visibility on every
+  // navigation entry so switching into a collection that uses cover flow
+  // shows up correctly even though handleLayoutChange isn't called here.
+  // Card-list rebuild is gated on the widget actually being in use so we
+  // don't pay per-item descriptor work when navigating into a grid/list
+  // collection.
+  if (coverFlowActive()) {
+    ensureCoverFlowWidget();
+    applyCoverFlowConfig();
+    rebuildCoverFlowCards();
+  }
+  applyCoverFlowVisibility();
+
   // If we have a pending selection restore, query the database now that
   // the context and data are set up
   if (!m_pendingRestoreFilePath.isEmpty() && m_databaseManager && m_collections) {

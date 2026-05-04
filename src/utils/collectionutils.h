@@ -23,7 +23,7 @@ enum class SidebarMode { Overlay = 0, Expand = 1 };
 enum class BackgroundType { Color = 0, Image = 1 };
 
 /// View type for displaying collection items
-enum class ViewType { Grid = 0, List = 1 };
+enum class ViewType { Grid = 0, List = 1, CoverFlow = 2 };
 
 namespace CollectionUtils {
 
@@ -51,6 +51,8 @@ namespace CollectionUtils {
   switch (viewType) {
   case ViewType::List:
     return "list";
+  case ViewType::CoverFlow:
+    return "coverflow";
   case ViewType::Grid:
   default:
     return "grid";
@@ -60,6 +62,7 @@ namespace CollectionUtils {
 [[nodiscard]] inline ViewType stringToViewType(const QString &str) {
   QString lower = str.toLower();
   if (lower == "list") return ViewType::List;
+  if (lower == "coverflow") return ViewType::CoverFlow;
   return ViewType::Grid;
 }
 
@@ -674,6 +677,7 @@ struct GeneralSettings {
   // ─────────────────────────────────────────────────────────────────────────
   bool toolbarShowGridViewButton = true;
   bool toolbarShowListViewButton = true;
+  bool toolbarShowCoverFlowViewButton = true;
   bool toolbarShowHideSubcollectionsButton = true;
   bool toolbarShowTypeFilter = true;
   bool toolbarShowTitleFilter = true;
@@ -681,6 +685,7 @@ struct GeneralSettings {
   bool toolbarShowSearchBar = true;
   QString toolbarGridViewButtonText;
   QString toolbarListViewButtonText;
+  QString toolbarCoverFlowViewButtonText;
   QString toolbarHideSubcollectionsButtonText;
   QString toolbarTitleFilterText;
 
