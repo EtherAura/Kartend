@@ -597,6 +597,16 @@ struct GeneralSettings {
   QString gamepadConfirmButton = "A";
   QString gamepadBackButton = "B";
   QString gamepadToggleSidebarButton = "Y";
+  // ─────────────────────────────────────────────────────────────────────────
+  // Mouse: artwork-cycle modifier (Kartend-1v6)
+  // Stored as the integer value of a single Qt::KeyboardModifier flag
+  // (Shift / Control / Alt / Meta). Combined with middle-click to cycle the
+  // grid widget through the item's available artwork types. Default Shift
+  // chosen to leave plain middle-click on its existing media-preview action
+  // (Kartend-ljey). Loader clamps unrecognized values back to Shift so a
+  // hand-edit can't disable the gesture entirely.
+  // ─────────────────────────────────────────────────────────────────────────
+  int artworkCycleModifier = static_cast<int>(Qt::ShiftModifier);
   SortMode sortMode = SortMode::NameAscending; // Current sort mode
   bool excludeSubfoldersFromSort = false;      // Exclude subfolders/subcollections from sorting
   int listCollectionColumnWidth = 150;         // Collection column width in list view

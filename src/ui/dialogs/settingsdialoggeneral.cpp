@@ -392,6 +392,9 @@ void SettingsDialog::setupGeneralSettingsConnections() {
   if (ui->gamepadUseLeftStickCheckBox) {
     connect(ui->gamepadUseLeftStickCheckBox, &QCheckBox::toggled, this, markChanged);
   }
+  if (ui->artworkCycleModifierComboBox) {
+    connect(ui->artworkCycleModifierComboBox, &QComboBox::currentIndexChanged, this, markChanged);
+  }
 
   // Attract mode connections for change detection
   if (ui->attractModeCheckBox) {

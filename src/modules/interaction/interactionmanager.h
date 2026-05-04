@@ -257,6 +257,11 @@ public slots:
   /// Opens a video-first preview overlay for the clicked item without
   /// changing selection or starting the expand-mode launch sequence.
   void onMediaPreviewRequested(ItemWidget *widget, int visualIndex);
+  /// Triggered when the user middle-clicks with the artwork-cycle modifier
+  /// held (Kartend-1v6). Resolves the item's path and owning collection
+  /// then asks ArtworkManager to advance to the next available artwork
+  /// type for that item. No selection or launch side-effects.
+  void onArtworkTypeCycleRequested(ItemWidget *widget, int visualIndex);
 
 private slots:
   // KeyboardManager callbacks

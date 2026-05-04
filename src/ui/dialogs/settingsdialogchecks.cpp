@@ -573,5 +573,10 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
       ui->toolbarTitleFilterTextEdit->text() != m_originalGeneralSettings.toolbarTitleFilterText) {
     return true;
   }
+  // Kartend-1v6: artwork-cycle modifier dropdown.
+  if (ui->artworkCycleModifierComboBox && ui->artworkCycleModifierComboBox->currentData().toInt() !=
+                                              m_originalGeneralSettings.artworkCycleModifier) {
+    return true;
+  }
   return false;
 }

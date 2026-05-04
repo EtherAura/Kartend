@@ -117,6 +117,11 @@ signals:
   /// Emitted when the user middle-clicks an item (Kartend-ljey). Used to
   /// open a video-first media preview overlay without launching.
   void mediaPreviewRequested(ItemWidget *widget, int visualIndex);
+  /// Emitted when the user middle-clicks while holding the artwork-cycle
+  /// modifier configured in `GeneralSettings::artworkCycleModifier`
+  /// (Kartend-1v6). Cycles the displayed artwork through the item's
+  /// available types without changing selection or launching.
+  void artworkTypeCycleRequested(ItemWidget *widget, int visualIndex);
   void clearSelectionRequested();
   void slashKeyPressed();
   void escapeKeyPressed();

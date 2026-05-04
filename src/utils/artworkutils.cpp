@@ -310,4 +310,15 @@ void clearDirectoryCache() {
   DirectoryCache::instance().clear();
 }
 
+QString nextArtworkType(const QString &currentType, const QStringList &availableTypes) {
+  if (availableTypes.size() < 2) {
+    return currentType;
+  }
+  const int idx = availableTypes.indexOf(currentType);
+  if (idx < 0) {
+    return availableTypes.first();
+  }
+  return availableTypes.at((idx + 1) % availableTypes.size());
+}
+
 } // namespace ArtworkUtils

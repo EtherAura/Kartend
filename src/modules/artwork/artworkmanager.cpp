@@ -7,6 +7,7 @@
 #include "collectionutils.h"
 #include "extensionutils.h"
 #include "interactionstateholder.h"
+#include "itemartwork.h"
 #include "loggingcategories.h"
 #include "propertyutils.h"
 #include "setuputils.h"
@@ -454,12 +455,86 @@ void ArtworkManager::clearWidgetReferences() {
     pendingArtwork.clear();
     m_silentlyCachedPaths.clear();
     m_allArtworkPaths.clear();
+    // Kartend-1v6: drop any per-item artwork-type overrides when widgets are
+    // torn down — a fresh collection or post-search rebuild should start
+    // every item back on its primary artwork.
+    m_artworkTypeOverrides.clear();
 
     m_silentLoadIndex = 0;
     m_silentLoadingActive = false;
     m_continuousSilentLoad = false;
     m_persistentSilentLoad = false;
   }
+}
+
+// ─── Per-item artwork-type override (Kartend-1v6) ─────────────────────────
+
+QString ArtworkManager::artworkTypeOverrideFor(const QString &fullPath) const {
+  // No mutex: m_artworkTypeOverrides is touched only on the main thread by
+  // contract (cycle requests come from the event filter, configureArtwork
+  // happens on widget creation in the main thread). Adding a lock here would
+  // be cargo-cult — see docs at the top of artworkmanager.h.
+  return m_artworkTypeOverrides.value(fullPath);
+}
+
+void ArtworkManager::clearArtworkTypeOverrides() {
+  m_artworkTypeOverrides.clear();
+}
+
+void ArtworkManager::cycleArtworkType(ItemWidget *widget, const QString &fullPath,
+                                      int collectionIndex) {
+  if (!widget || fullPath.isEmpty() || !collections) {
+    return;
+  }
+  if (collectionIndex < 0 || collectionIndex >= collections->size()) {
+    return;
+  }
+  const QString artworkDir = (*collections)[collectionIndex].artworkDirectory;
+  if (artworkDir.isEmpty()) {
+    return;
+  }
+
+  // Build the cycle list: legacy/primary (empty-string id) + every standard
+  // type whose subdirectory has a matching file. Custom types are not
+  // included yet — they only resolve via per-item DB overrides which would
+  // require an async query and a manual link the user has already created
+  // (Kartend-yf1's sidebar gallery is the discoverability path for those).
+  const QString fileName = QFileInfo(fullPath).fileName();
+  const QString baseName = QFileInfo(fullPath).completeBaseName();
+  QStringList available;
+  if (!ArtworkUtils::findArtworkForFile(fileName, artworkDir).isEmpty()) {
+    available.append(QString());
+  }
+  for (const QString &type : ItemArtworkStore::standardTypes()) {
+    if (!ItemArtworkStore::findStandardArtwork(baseName, artworkDir, type).isEmpty()) {
+      available.append(type);
+    }
+  }
+
+  if (available.size() < 2) {
+    return;
+  }
+
+  const QString currentType = m_artworkTypeOverrides.value(fullPath);
+  const QString nextType = ArtworkUtils::nextArtworkType(currentType, available);
+
+  QString newArtworkPath;
+  if (nextType.isEmpty()) {
+    newArtworkPath = ArtworkUtils::findArtworkForFile(fileName, artworkDir);
+  } else {
+    newArtworkPath = ItemArtworkStore::findStandardArtwork(baseName, artworkDir, nextType);
+  }
+  if (newArtworkPath.isEmpty()) {
+    return;
+  }
+
+  if (nextType.isEmpty()) {
+    m_artworkTypeOverrides.remove(fullPath);
+  } else {
+    m_artworkTypeOverrides.insert(fullPath, nextType);
+  }
+
+  addPendingArtwork(widget, newArtworkPath);
 }
 
 // Checks if artwork loading should be suppressed (e.g. during fast scrolling)

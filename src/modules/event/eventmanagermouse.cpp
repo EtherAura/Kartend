@@ -571,12 +571,27 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
 
   // Middle-click media preview (Kartend-ljey). Opens a video-first preview
   // overlay for the clicked item without changing selection or launching.
+  // Kartend-1v6: when the configured artwork-cycle modifier (default Shift)
+  // is held, the same button instead cycles the displayed artwork through
+  // the item's available types. Setting this modifier to one of Ctrl/Alt/
+  // Meta lets the user pick the chord that doesn't collide with their WM.
   if (mouseEvent->button() == Qt::MiddleButton) {
     auto *widget = itemWidgetForObject(obj);
     if (widget) {
       int visualIndex = visualIndexForWidget(widget);
       if (visualIndex >= 0) {
-        emit mediaPreviewRequested(widget, visualIndex);
+        const Qt::KeyboardModifiers mods =
+            mouseEvent->modifiers() &
+            (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
+        const Qt::KeyboardModifier cycleMod =
+            m_generalSettings
+                ? static_cast<Qt::KeyboardModifier>(m_generalSettings->artworkCycleModifier)
+                : Qt::ShiftModifier;
+        if (cycleMod != Qt::NoModifier && mods == cycleMod) {
+          emit artworkTypeCycleRequested(widget, visualIndex);
+        } else {
+          emit mediaPreviewRequested(widget, visualIndex);
+        }
         event->accept();
         return true;
       }

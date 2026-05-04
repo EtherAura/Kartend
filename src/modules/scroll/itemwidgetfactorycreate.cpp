@@ -5,6 +5,7 @@
 #include "artworkmanager.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
+#include "itemartwork.h"
 #include "itemwidget.h"
 #include "loggingcategories.h"
 #include "settingsutils.h"
@@ -247,6 +248,30 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
     QString relativeDir = QFileInfo(relativePath).path();
     if (!relativeDir.isEmpty() && relativeDir != ".") {
       artworkDir = QDir(artworkDir).absoluteFilePath(relativeDir);
+    }
+  }
+
+  // Kartend-1v6: if the user previously shift+middle-clicked this item to
+  // cycle its artwork type, prefer the override over the legacy lookup so a
+  // recycled widget reproduces the chosen type. The override map is the only
+  // thing that survives widget pool churn — clearing happens in
+  // ArtworkManager::clearWidgetReferences (collection change / pre-search).
+  if (m_artworkManager) {
+    const QString overrideType = m_artworkManager->artworkTypeOverrideFor(fullPath);
+    if (!overrideType.isEmpty()) {
+      const QString baseName = QFileInfo(fullPath).completeBaseName();
+      const QString overridePath =
+          ItemArtworkStore::findStandardArtwork(baseName, artworkDir, overrideType);
+      if (!overridePath.isEmpty()) {
+        if (widget && widget->isListMode()) {
+          widget->setHasArtwork(true);
+          return;
+        }
+        m_artworkManager->addPendingArtwork(widget, overridePath);
+        return;
+      }
+      // Override file vanished from disk — fall through to the legacy lookup
+      // so the widget shows *something* instead of a blank tile.
     }
   }
 
