@@ -4,11 +4,13 @@
 #include <algorithm>
 #include <functional>
 #include <QAbstractItemView>
+#include <QApplication>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFont>
 #include <QFontDialog>
 #include <QInputDialog>
 #include <QListWidget>
@@ -340,6 +342,36 @@ void SettingsDialog::setupFormFieldConnections() {
   if (ui->sidebarSectionBgOpacitySpinBox) {
     connect(ui->sidebarSectionBgOpacitySpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
+  }
+  // Kartend-ekaa: per-collection sidebar font controls.
+  if (ui->sidebarFontFamilyEdit) {
+    connect(ui->sidebarFontFamilyEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarFontSizeSpinBox) {
+    connect(ui->sidebarFontSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarFontPickButton && ui->sidebarFontFamilyEdit) {
+    connect(ui->sidebarFontPickButton, &QPushButton::clicked, this, [this]() {
+      bool ok = false;
+      QFont currentFont = QApplication::font();
+      const QString currentFamily = ui->sidebarFontFamilyEdit->text().trimmed();
+      if (!currentFamily.isEmpty()) {
+        currentFont.setFamily(currentFamily);
+      }
+      if (ui->sidebarFontSizeSpinBox && ui->sidebarFontSizeSpinBox->value() > 0) {
+        currentFont.setPointSize(ui->sidebarFontSizeSpinBox->value());
+      }
+      const QFont chosen =
+          QFontDialog::getFont(&ok, currentFont, this, tr("Select Sidebar Font"));
+      if (ok) {
+        ui->sidebarFontFamilyEdit->setText(chosen.family());
+        if (ui->sidebarFontSizeSpinBox && chosen.pointSize() > 0) {
+          ui->sidebarFontSizeSpinBox->setValue(chosen.pointSize());
+        }
+      }
+    });
   }
   if (ui->sidebarActiveTabComboBox) {
     connect(ui->sidebarActiveTabComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,

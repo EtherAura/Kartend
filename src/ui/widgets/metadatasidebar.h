@@ -2,9 +2,11 @@
 #define METADATASIDEBAR_H
 
 #include <QDateTime>
+#include <QFont>
 #include <QFrame>
 #include <QLabel>
 #include <QList>
+#include <QPointer>
 #include <QScrollArea>
 #include <QString>
 #include <QStringList>
@@ -153,6 +155,16 @@ private:
   /// widget. Empty hex disables the corresponding bubble. Stylesheet
   /// selectors target the existing label objectNames in metadatasidebar.ui.
   void applyBubbleStyles(const QString &headerHex, const QString &sectionHex);
+  /// Kartend-ekaa: capture every label's designer-set font once so the per-
+  /// collection sidebar-font override can layer on top without losing the
+  /// baseline weight/pointSize hierarchy. Refilled lazily on first use.
+  void captureLabelFontBaselines();
+  /// Kartend-ekaa: apply the per-collection sidebar font override.
+  /// Empty @p family means "keep each label's baseline family" (i.e. fall
+  /// back to the application font); @p pointSize == 0 means "keep each
+  /// label's baseline size." Calling this with both blanks restores the
+  /// original .ui fonts, which is what makes the override revertible.
+  void applySidebarFont(const QString &family, int pointSize);
   void loadArtwork(const QString &baseName, const QString &artworkDirectory);
   void schedulePreviewVideo(const QString &videoPath);
   void showArtworkOnly();
@@ -237,6 +249,20 @@ private:
   // and apply on next deselect.
   CollectionSummary m_collectionSummary;
   bool m_hasItemDisplayed = false;
+  /// Kartend-ekaa: designer-set font baseline per label, captured once. Stored
+  /// alongside the QPointer so re-parented or deleted labels are skipped on
+  /// re-apply without the manager needing to maintain its own bookkeeping.
+  struct LabelFontBaseline {
+    QPointer<QLabel> label;
+    QFont font;
+  };
+  QList<LabelFontBaseline> m_labelFontBaselines;
+  bool m_labelFontBaselinesCaptured = false;
+  // Cached current override so dynamically-created labels (detail rows, etc.)
+  // can pick it up at construction without re-walking applyAppearance().
+  QString m_activeSidebarFontFamily;
+  int m_activeSidebarFontPointSize = 0;
+
   void renderCollectionSummary();
   void applyItemViewVisibility(bool visible);
   [[nodiscard]] static QString formatLastScanned(const QDateTime &lastScanned);

@@ -275,6 +275,10 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
     // Text appearance settings (per-collection)
     config.customFontFamily = settings.value("customFontFamily").toString();
 
+    // Kartend-ekaa: sidebar font override.
+    config.sidebarFontFamily = settings.value("sidebarFontFamily").toString();
+    config.sidebarFontPointSize = settings.value("sidebarFontPointSize", 0).toInt();
+
     // Validate and clamp numeric values to acceptable ranges
     config.clampValues();
 
@@ -494,6 +498,9 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
 
     // Text appearance settings (per-collection)
     settings.setValue("customFontFamily", c.customFontFamily);
+    // Kartend-ekaa: sidebar font override
+    settings.setValue("sidebarFontFamily", c.sidebarFontFamily);
+    settings.setValue("sidebarFontPointSize", c.sidebarFontPointSize);
     settings.endGroup();
   }
   settings.sync();
