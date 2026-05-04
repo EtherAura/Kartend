@@ -49,6 +49,10 @@ public:
   void applySidebarStateForCollection(int collectionIndex);
   void updateSidebarLayout(int currentCollectionIndex);
   void positionSidebarOverlay();
+  /// Recomputes the collection-level summary the sidebar shows when no
+  /// item is selected (Kartend-3mn). Cheap; safe to call after collection
+  /// switches, scan completions, or settings saves.
+  void refreshCollectionSummary();
   [[nodiscard]] bool isSidebarVisible() const;
   void saveSidebarStateForCollection(int collectionIndex, bool visible);
   void saveSidebarStateForCollection(const QString &collectionName, bool visible);

@@ -188,6 +188,19 @@ void MainWindow::connectDatabaseManager() {
   // Rebuild hierarchy cache when collections are modified via settings dialog
   QObject::connect(getSettingsManager(), &SettingsManager::collectionsModified, this,
                    &MainWindow::rebuildHierarchyCache);
+
+  // Keep the sidebar's no-selection collection summary fresh after scans
+  // finish or settings edits land (Kartend-3mn). cachedCountsUpdated covers
+  // item-count changes that arrive without a full scan (e.g., manual deletes).
+  if (getSidebarManager()) {
+    QObject::connect(getDatabaseManager(), &DatabaseManager::collectionScanCompleted,
+                     getSidebarManager(),
+                     [this](const QString &) { getSidebarManager()->refreshCollectionSummary(); });
+    QObject::connect(getDatabaseManager(), &DatabaseManager::cachedCountsUpdated,
+                     getSidebarManager(), &SidebarManager::refreshCollectionSummary);
+    QObject::connect(getSettingsManager(), &SettingsManager::collectionsModified,
+                     getSidebarManager(), &SidebarManager::refreshCollectionSummary);
+  }
 }
 
 void MainWindow::connectScrollManager() {

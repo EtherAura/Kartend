@@ -97,6 +97,13 @@ void MetadataSidebar::setMetadata(const QString &filePath, const QString &itemNa
     return;
   }
 
+  // Coming back from collection-summary mode (Kartend-3mn) — restore the
+  // item-view chrome that was hidden while showing collection details.
+  m_hasItemDisplayed = true;
+  applyItemViewVisibility(true);
+  ui->titleLabel->setText(tr("Item Information"));
+  ui->itemNameLabel->setText(tr("Name:"));
+
   ui->itemNameValue->setText(itemName);
   updateFileInfo(filePath);
 
@@ -141,16 +148,15 @@ void MetadataSidebar::setMetadata(const QString &filePath, const QString &itemNa
   ui->fileExtensionValue->show();
 }
 
-// Clears all metadata fields and displays default "No item selected" state
+// Clears all metadata fields. When a collection summary has been cached
+// (Kartend-3mn) the sidebar renders that instead of the legacy "No item
+// selected" placeholder; this lets every existing clearMetadata() call site
+// pick up the new no-selection display without per-caller plumbing.
 void MetadataSidebar::clearMetadata() {
-  ui->itemNameValue->setText("No item selected");
-  ui->filePathValue->setText("-");
-  ui->fileSizeValue->setText("-");
-  ui->lastModifiedValue->setText("-");
-  ui->fileExtensionValue->setText("-");
-  QPixmap emptyPixmap(UIConstants::Metadata::ARTWORK_SIZE, UIConstants::Metadata::ARTWORK_SIZE);
-  emptyPixmap.fill(palette().color(QPalette::Mid));
-  ui->artworkDisplay->setPixmap(emptyPixmap);
+  m_hasItemDisplayed = false;
+
+  // Tear down item-only chrome (artwork preview, video, gallery, details
+  // rows, manual button) regardless of which mode we land in.
   schedulePreviewVideo(QString());
   showArtworkOnly();
   setManualFile(QString());
@@ -160,6 +166,95 @@ void MetadataSidebar::clearMetadata() {
   }
   setArtworkEditEnabled(false);
   setArtworkGallery({});
+
+  if (m_collectionSummary.isValid()) {
+    renderCollectionSummary();
+    return;
+  }
+
+  applyItemViewVisibility(true);
+  ui->titleLabel->setText(tr("Item Information"));
+  ui->itemNameLabel->setText(tr("Name:"));
+  ui->itemNameValue->setText(tr("No item selected"));
+  ui->filePathValue->setText("-");
+  ui->fileSizeValue->setText("-");
+  ui->lastModifiedValue->setText("-");
+  ui->fileExtensionValue->setText("-");
+  QPixmap emptyPixmap(UIConstants::Metadata::ARTWORK_SIZE, UIConstants::Metadata::ARTWORK_SIZE);
+  emptyPixmap.fill(palette().color(QPalette::Mid));
+  ui->artworkDisplay->setPixmap(emptyPixmap);
+}
+
+void MetadataSidebar::setCollectionSummary(const CollectionSummary &summary) {
+  m_collectionSummary = summary;
+  // Re-render whenever the sidebar is currently in the no-selection state
+  // so first-time application (during applySidebarStateForCollection) and
+  // background refreshes (scan completion, settings save) both land. While
+  // an item is selected we just update the cache and apply on next clear.
+  if (!m_hasItemDisplayed) {
+    clearMetadata();
+  }
+}
+
+void MetadataSidebar::applyItemViewVisibility(bool visible) {
+  // Per-item chrome that doesn't apply to collection summaries. Artwork +
+  // file-info sections collapse together so the sidebar doesn't leave a
+  // bare "Artwork" header above a hidden image.
+  ui->artworkLabel->setVisible(visible);
+  ui->artworkDisplay->setVisible(visible);
+  if (m_videoPreview && !visible) {
+    m_videoPreview->hide();
+  }
+  ui->fileInfoTitle->setVisible(visible);
+  ui->filePathLabel->setVisible(visible);
+  ui->filePathValue->setVisible(visible);
+  ui->fileSizeLabel->setVisible(visible);
+  ui->fileSizeValue->setVisible(visible);
+  ui->lastModifiedLabel->setVisible(visible);
+  ui->lastModifiedValue->setVisible(visible);
+  ui->fileExtensionLabel->setVisible(visible);
+  ui->fileExtensionValue->setVisible(visible);
+}
+
+void MetadataSidebar::renderCollectionSummary() {
+  applyItemViewVisibility(false);
+  ui->titleLabel->setText(tr("Collection Information"));
+  ui->itemNameLabel->setText(tr("Collection:"));
+  ui->itemNameValue->setText(m_collectionSummary.name);
+
+  ensureDetailsSection();
+  if (!m_detailsContainer) {
+    return;
+  }
+  clearDetailsSection();
+
+  if (!m_collectionSummary.type.trimmed().isEmpty()) {
+    appendDetailRow(tr("Type"), m_collectionSummary.type);
+  }
+  if (m_collectionSummary.itemCount >= 0) {
+    appendDetailRow(tr("Items"), QString::number(m_collectionSummary.itemCount));
+  }
+  appendDetailRow(tr("Last scanned"), formatLastScanned(m_collectionSummary.lastScanned));
+  if (!m_collectionSummary.parentName.trimmed().isEmpty()) {
+    appendDetailRow(tr("Parent"), m_collectionSummary.parentName);
+  }
+  appendDetailRow(tr("Media"), m_collectionSummary.mediaDirectory, /*wrap=*/true);
+  appendDetailRow(tr("Artwork"), m_collectionSummary.artworkDirectory, /*wrap=*/true);
+  appendDetailRow(tr("Video"), m_collectionSummary.videoDirectory, /*wrap=*/true);
+  appendDetailRow(tr("Manuals"), m_collectionSummary.manualDirectory, /*wrap=*/true);
+  if (!m_collectionSummary.extensions.isEmpty()) {
+    appendDetailRow(tr("Extensions"), m_collectionSummary.extensions.join(QStringLiteral(", ")),
+                    /*wrap=*/true);
+  }
+
+  m_detailsContainer->show();
+}
+
+QString MetadataSidebar::formatLastScanned(const QDateTime &lastScanned) {
+  if (!lastScanned.isValid()) {
+    return tr("never");
+  }
+  return lastScanned.toLocalTime().toString(QStringLiteral("yyyy-MM-dd hh:mm"));
 }
 
 // Updates file information fields including size, modification date, and file

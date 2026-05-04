@@ -55,6 +55,19 @@ auto DatabaseManager::countCollectionRecursive(int collectionIndex,
   return total;
 }
 
+auto DatabaseManager::loadCollectionLastScanned(const QString &collectionUuid) const -> QDateTime {
+  if (collectionUuid.isEmpty() || !m_db.isValid() || !m_db.isOpen()) {
+    return {};
+  }
+  QSqlQuery query(m_db);
+  query.prepare(QStringLiteral("SELECT last_scanned FROM collections WHERE uuid = ?"));
+  query.bindValue(0, collectionUuid);
+  if (!query.exec() || !query.next()) {
+    return {};
+  }
+  return QDateTime::fromString(query.value(0).toString(), Qt::ISODate);
+}
+
 auto DatabaseManager::loadItemMetadata(const QString &collectionUuid, const QString &path) const
     -> ItemMetadataStore::ItemMetadata {
   // Use the main-thread connection. Reads are tiny single-row lookups; the
