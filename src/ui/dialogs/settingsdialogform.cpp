@@ -431,6 +431,17 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->baseColorEdit->setText(m_generalSettings.titleBaseColor);
     ui->baseColorEdit->blockSignals(false);
   }
+  // Kartend-9v0o: global UI font controls
+  if (ui->globalUiFontFamilyEdit) {
+    ui->globalUiFontFamilyEdit->blockSignals(true);
+    ui->globalUiFontFamilyEdit->setText(m_generalSettings.globalUiFontFamily);
+    ui->globalUiFontFamilyEdit->blockSignals(false);
+  }
+  if (ui->globalUiFontSizeSpinBox) {
+    ui->globalUiFontSizeSpinBox->blockSignals(true);
+    ui->globalUiFontSizeSpinBox->setValue(m_generalSettings.globalUiFontPointSize);
+    ui->globalUiFontSizeSpinBox->blockSignals(false);
+  }
   if (ui->attractModeCheckBox) {
     ui->attractModeCheckBox->blockSignals(true);
     ui->attractModeCheckBox->setChecked(m_generalSettings.attractModeEnabled);

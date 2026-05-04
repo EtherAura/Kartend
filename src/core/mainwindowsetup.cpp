@@ -63,6 +63,11 @@ void MainWindow::setupUI() {
 
   getSettingsManager()->loadGeneralSettings(m_generalSettings);
 
+  // Kartend-9v0o: push the persisted global UI font to QApplication before any
+  // widgets are constructed below, so menus/dialogs/toolbar all pick it up on
+  // their first show without a fontChange roundtrip.
+  applyGlobalUiFont(m_generalSettings);
+
   // Apply text appearance settings to ItemWidget statics
   ItemWidget::setTitleTintSaturation(m_generalSettings.titleTintSaturation);
   ItemWidget::setTitleTintLightness(m_generalSettings.titleTintLightness);
