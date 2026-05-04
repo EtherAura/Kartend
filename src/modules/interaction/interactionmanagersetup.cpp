@@ -226,6 +226,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     attractSetup.ctx = setup.ctx;
     attractSetup.itemScrollArea = m_itemScrollArea;
     attractSetup.scrollManager = m_scrollManager;
+    attractSetup.selectionManager = m_selectionManager.get();
     attractSetup.generalSettings = m_generalSettings;
     attractSetup.isShuttingDown = m_isShuttingDown;
     m_attractManager->setupReferences(attractSetup);

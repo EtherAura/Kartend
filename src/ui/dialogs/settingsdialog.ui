@@ -2042,31 +2042,111 @@
                  </widget>
                 </item>
                 <item row="2" column="0">
+                 <widget class="QLabel" name="attractAutoScrollLabel">
+                  <property name="text">
+                   <string>Auto Scroll:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="1">
+                 <widget class="QCheckBox" name="attractAutoScrollCheckBox">
+                  <property name="toolTip">
+                   <string>Smoothly scroll the viewport up and down while attract mode is active</string>
+                  </property>
+                  <property name="checked">
+                   <bool>true</bool>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="0">
                  <widget class="QLabel" name="attractScrollSpeedLabel">
                   <property name="text">
                    <string>Scroll Speed:</string>
                   </property>
                  </widget>
                 </item>
-                <item row="2" column="1">
-                 <widget class="QSpinBox" name="attractScrollSpeedSpinBox">
+                <item row="3" column="1">
+                 <widget class="QDoubleSpinBox" name="attractScrollSpeedSpinBox">
                   <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
                   <property name="minimumWidth"><number>80</number></property>
                   <property name="maximumWidth"><number>80</number></property>
                   <property name="toolTip">
-                   <string>Scroll speed in pixels per frame during attract mode (1-10)</string>
+                   <string>Scroll speed in pixels per frame during attract mode (0.1-10). Sub-pixel speeds accumulate per frame for very slow scroll (e.g. one page in 30+ seconds).</string>
                   </property>
                   <property name="suffix">
                    <string> px</string>
+                  </property>
+                  <property name="decimals">
+                   <number>1</number>
+                  </property>
+                  <property name="singleStep">
+                   <double>0.1</double>
+                  </property>
+                  <property name="minimum">
+                   <double>0.1</double>
+                  </property>
+                  <property name="maximum">
+                   <double>10.0</double>
+                  </property>
+                  <property name="value">
+                   <double>1.0</double>
+                  </property>
+                 </widget>
+                </item>
+                <item row="4" column="0">
+                 <widget class="QLabel" name="attractAdvanceSelectionLabel">
+                  <property name="text">
+                   <string>Advance Selection:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="4" column="1">
+                 <widget class="QCheckBox" name="attractAdvanceSelectionCheckBox">
+                  <property name="toolTip">
+                   <string>Also cycle through items by changing the selection on its own timer while attract mode is active</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="5" column="0">
+                 <widget class="QLabel" name="attractAdvanceIntervalLabel">
+                  <property name="text">
+                   <string>Advance Interval:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="5" column="1">
+                 <widget class="QSpinBox" name="attractAdvanceIntervalSpinBox">
+                  <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                  <property name="minimumWidth"><number>80</number></property>
+                  <property name="maximumWidth"><number>80</number></property>
+                  <property name="toolTip">
+                   <string>Seconds between selection advances during attract mode (1-600)</string>
+                  </property>
+                  <property name="suffix">
+                   <string> s</string>
                   </property>
                   <property name="minimum">
                    <number>1</number>
                   </property>
                   <property name="maximum">
-                   <number>10</number>
+                   <number>600</number>
                   </property>
                   <property name="value">
-                   <number>1</number>
+                   <number>5</number>
+                  </property>
+                 </widget>
+                </item>
+                <item row="6" column="0">
+                 <widget class="QLabel" name="attractAdvanceRandomLabel">
+                  <property name="text">
+                   <string>Random Order:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="6" column="1">
+                 <widget class="QCheckBox" name="attractAdvanceRandomCheckBox">
+                  <property name="toolTip">
+                   <string>When advancing the selection, pick a random item instead of the next sequential one</string>
                   </property>
                  </widget>
                 </item>

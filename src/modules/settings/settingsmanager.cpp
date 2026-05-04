@@ -142,10 +142,21 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
       UIConstants::Attract::MIN_IDLE_TIMEOUT_SEC,
       s.value("attractModeIdleTimeoutSec", UIConstants::Attract::DEFAULT_IDLE_TIMEOUT_SEC).toInt(),
       UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
+  settings.attractModeAutoScrollEnabled = s.value("attractModeAutoScrollEnabled", true).toBool();
   settings.attractModeScrollSpeed = qBound(
       UIConstants::Attract::MIN_SCROLL_SPEED_PX,
-      s.value("attractModeScrollSpeed", UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX).toInt(),
+      s.value("attractModeScrollSpeed", UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX).toDouble(),
       UIConstants::Attract::MAX_SCROLL_SPEED_PX);
+  settings.attractModeAdvanceSelectionEnabled =
+      s.value("attractModeAdvanceSelectionEnabled", false).toBool();
+  settings.attractModeAdvanceSelectionIntervalSec =
+      qBound(UIConstants::Attract::MIN_ADVANCE_INTERVAL_SEC,
+             s.value("attractModeAdvanceSelectionIntervalSec",
+                     UIConstants::Attract::DEFAULT_ADVANCE_INTERVAL_SEC)
+                 .toInt(),
+             UIConstants::Attract::MAX_ADVANCE_INTERVAL_SEC);
+  settings.attractModeAdvanceSelectionRandom =
+      s.value("attractModeAdvanceSelectionRandom", false).toBool();
 
   // Splash screens
   settings.bootSplashEnabled = s.value("bootSplashEnabled", true).toBool();
@@ -255,7 +266,13 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   // Attract mode
   m_generalSettings.attractModeEnabled = settings.attractModeEnabled;
   m_generalSettings.attractModeIdleTimeoutSec = settings.attractModeIdleTimeoutSec;
+  m_generalSettings.attractModeAutoScrollEnabled = settings.attractModeAutoScrollEnabled;
   m_generalSettings.attractModeScrollSpeed = settings.attractModeScrollSpeed;
+  m_generalSettings.attractModeAdvanceSelectionEnabled =
+      settings.attractModeAdvanceSelectionEnabled;
+  m_generalSettings.attractModeAdvanceSelectionIntervalSec =
+      settings.attractModeAdvanceSelectionIntervalSec;
+  m_generalSettings.attractModeAdvanceSelectionRandom = settings.attractModeAdvanceSelectionRandom;
 
   // Runtime detection (Kartend-qxv)
   m_generalSettings.runtimeDetectionEnabled = settings.runtimeDetectionEnabled;
@@ -331,7 +348,14 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("runtimeDetectionEnabled", m_generalSettings.runtimeDetectionEnabled);
   s.setValue("historyEnabled", m_generalSettings.historyEnabled);
   s.setValue("historyMaxEntries", m_generalSettings.historyMaxEntries);
+  s.setValue("attractModeAutoScrollEnabled", m_generalSettings.attractModeAutoScrollEnabled);
   s.setValue("attractModeScrollSpeed", m_generalSettings.attractModeScrollSpeed);
+  s.setValue("attractModeAdvanceSelectionEnabled",
+             m_generalSettings.attractModeAdvanceSelectionEnabled);
+  s.setValue("attractModeAdvanceSelectionIntervalSec",
+             m_generalSettings.attractModeAdvanceSelectionIntervalSec);
+  s.setValue("attractModeAdvanceSelectionRandom",
+             m_generalSettings.attractModeAdvanceSelectionRandom);
   s.setValue("bootSplashEnabled", m_generalSettings.bootSplashEnabled);
   s.setValue("resumeFocusSplashEnabled", m_generalSettings.resumeFocusSplashEnabled);
   // Customizable toolbar (Kartend-81o)

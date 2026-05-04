@@ -405,7 +405,23 @@ void SettingsDialog::setupGeneralSettingsConnections() {
             &SettingsDialog::checkForChanges);
   }
   if (ui->attractScrollSpeedSpinBox) {
-    connect(ui->attractScrollSpeedSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+    connect(ui->attractScrollSpeedSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &SettingsDialog::checkForChanges);
+  }
+  if (ui->attractAutoScrollCheckBox) {
+    connect(ui->attractAutoScrollCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->attractAdvanceSelectionCheckBox) {
+    connect(ui->attractAdvanceSelectionCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->attractAdvanceIntervalSpinBox) {
+    connect(ui->attractAdvanceIntervalSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->attractAdvanceRandomCheckBox) {
+    connect(ui->attractAdvanceRandomCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
   }
 

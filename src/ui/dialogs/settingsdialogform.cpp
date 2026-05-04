@@ -29,6 +29,7 @@
 #include <set>
 
 #include "extensionutils.h"
+#include "attractmanager.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
 #include "mainwindow.h"
@@ -440,10 +441,33 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->attractIdleTimeoutSpinBox->setValue(m_generalSettings.attractModeIdleTimeoutSec);
     ui->attractIdleTimeoutSpinBox->blockSignals(false);
   }
+  if (ui->attractAutoScrollCheckBox) {
+    ui->attractAutoScrollCheckBox->blockSignals(true);
+    ui->attractAutoScrollCheckBox->setChecked(m_generalSettings.attractModeAutoScrollEnabled);
+    ui->attractAutoScrollCheckBox->blockSignals(false);
+  }
   if (ui->attractScrollSpeedSpinBox) {
     ui->attractScrollSpeedSpinBox->blockSignals(true);
     ui->attractScrollSpeedSpinBox->setValue(m_generalSettings.attractModeScrollSpeed);
     ui->attractScrollSpeedSpinBox->blockSignals(false);
+  }
+  if (ui->attractAdvanceSelectionCheckBox) {
+    ui->attractAdvanceSelectionCheckBox->blockSignals(true);
+    ui->attractAdvanceSelectionCheckBox->setChecked(
+        m_generalSettings.attractModeAdvanceSelectionEnabled);
+    ui->attractAdvanceSelectionCheckBox->blockSignals(false);
+  }
+  if (ui->attractAdvanceIntervalSpinBox) {
+    ui->attractAdvanceIntervalSpinBox->blockSignals(true);
+    ui->attractAdvanceIntervalSpinBox->setValue(
+        m_generalSettings.attractModeAdvanceSelectionIntervalSec);
+    ui->attractAdvanceIntervalSpinBox->blockSignals(false);
+  }
+  if (ui->attractAdvanceRandomCheckBox) {
+    ui->attractAdvanceRandomCheckBox->blockSignals(true);
+    ui->attractAdvanceRandomCheckBox->setChecked(
+        m_generalSettings.attractModeAdvanceSelectionRandom);
+    ui->attractAdvanceRandomCheckBox->blockSignals(false);
   }
   if (ui->startupCollectionComboBox) {
     ui->startupCollectionComboBox->blockSignals(true);
@@ -626,8 +650,24 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
       mainWindow->m_generalSettings.attractModeIdleTimeoutSec =
           ui->attractIdleTimeoutSpinBox->value();
     }
+    if (ui->attractAutoScrollCheckBox) {
+      mainWindow->m_generalSettings.attractModeAutoScrollEnabled =
+          ui->attractAutoScrollCheckBox->isChecked();
+    }
     if (ui->attractScrollSpeedSpinBox) {
       mainWindow->m_generalSettings.attractModeScrollSpeed = ui->attractScrollSpeedSpinBox->value();
+    }
+    if (ui->attractAdvanceSelectionCheckBox) {
+      mainWindow->m_generalSettings.attractModeAdvanceSelectionEnabled =
+          ui->attractAdvanceSelectionCheckBox->isChecked();
+    }
+    if (ui->attractAdvanceIntervalSpinBox) {
+      mainWindow->m_generalSettings.attractModeAdvanceSelectionIntervalSec =
+          ui->attractAdvanceIntervalSpinBox->value();
+    }
+    if (ui->attractAdvanceRandomCheckBox) {
+      mainWindow->m_generalSettings.attractModeAdvanceSelectionRandom =
+          ui->attractAdvanceRandomCheckBox->isChecked();
     }
     if (ui->titleSaturationSpinBox) {
       mainWindow->m_generalSettings.titleTintSaturation = ui->titleSaturationSpinBox->value();
@@ -768,6 +808,15 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
 
     mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
     m_generalSettings = mainWindow->m_generalSettings;
+
+    // Push the new attract-mode tunables (idle timeout, scroll speed, advance-
+    // selection toggle/interval) into AttractManager so a runtime change applies
+    // without restarting attract mode.
+    if (auto *interaction = mainWindow->getInteractionManager()) {
+      if (auto *attract = interaction->attractManager()) {
+        attract->reloadSettings();
+      }
+    }
     // Refresh the originals so the dirty indicator clears for the presets
     // tab too. (Other fields' baselines are reset implicitly by the assign
     // above; this line keeps the comment local to where it matters.)
