@@ -288,6 +288,27 @@ void VirtualScrollEngine::primeLayoutFor(const CollectionConfig &config) {
   if (m_owner->m_widgetFactory) {
     m_owner->m_widgetFactory->setCollectionContext(m_owner->m_context);
   }
+  // Kartend-ks4n: settings save calls primeLayoutFor with the updated config.
+  // Re-push the source data + context so the FilterManager's hideMissingArtwork
+  // baseline reflects the new toggle, then either rebuild the artwork-only
+  // baseline (when no other filter is active) or re-run the active search /
+  // subcollection filter so the new predicate composes with it.
+  if (m_owner->m_filterManager && m_owner->m_dataManager) {
+    m_owner->m_filterManager->setSourceData(
+        m_owner->m_dataManager->filePaths(), m_owner->m_dataManager->fileNames(),
+        m_owner->m_dataManager->filePathToDisplayName(), m_owner->m_dataManager->subcollections());
+    m_owner->m_filterManager->setContext(m_owner->m_context);
+    if (m_owner->m_filterManager->isFiltered() &&
+        !m_owner->m_filterManager->currentFilter().isEmpty()) {
+      m_owner->m_filterManager->applyFilter(m_owner->m_filterManager->currentFilter());
+    } else {
+      m_owner->m_filterManager->clearFilter();
+    }
+    m_owner->m_totalItems =
+        m_owner->m_filterManager->isFiltered()
+            ? m_owner->m_filterManager->filteredCount()
+            : m_owner->m_dataManager->subcollectionCount() + m_owner->m_dataManager->fileCount();
+  }
   int savedTotal = m_owner->m_totalItems;
   m_owner->m_totalItems = 0;
   calculateVirtualMetrics();

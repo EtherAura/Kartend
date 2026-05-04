@@ -231,6 +231,24 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
   qCDebug(lcSearchDiag)
       << QString("setupVirtualScrolling: final m_totalItems=%1").arg(m_totalItems);
 
+  // Kartend-ks4n: when the collection has hideMissingArtwork enabled the
+  // FilterManager needs the latest source data + context so its baseline
+  // (no-search) filter excludes media items that have no artwork. Pushing
+  // unconditionally is cheap and keeps the FilterManager state consistent
+  // across collection switches.
+  if (m_filterManager) {
+    m_filterManager->setSourceData(m_dataManager->filePaths(), m_dataManager->fileNames(),
+                                   m_dataManager->filePathToDisplayName(),
+                                   m_dataManager->subcollections());
+    m_filterManager->setContext(m_context);
+    if (m_context.config.hideMissingArtwork && !m_filterManager->isFiltered()) {
+      m_filterManager->clearFilter();
+      if (m_filterManager->isFiltered()) {
+        m_totalItems = m_filterManager->filteredCount();
+      }
+    }
+  }
+
   if (m_totalItems == 0) {
     setupEmptyVirtualScrolling();
     return;

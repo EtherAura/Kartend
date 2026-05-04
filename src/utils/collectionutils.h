@@ -201,6 +201,12 @@ struct CollectionConfig {
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Center;
   SidebarMode sidebarMode = SidebarMode::Overlay;
   ViewType viewType = ViewType::Grid; // Grid (default) or List view
+  /// Kartend-ks4n: when true, media items whose artwork lookup returns no
+  /// match are hidden from the items page. Subcollections and virtual folders
+  /// are unaffected. The filter combines with the active search /
+  /// subcollection filter as an additional predicate, so search results are
+  /// also pruned to items that have artwork.
+  bool hideMissingArtwork = false;
   int horizontalSpacing = UIConstants::Grid::SPACING;
   int verticalSpacing = 20;
   bool hideHorizontalScrollbar = false;

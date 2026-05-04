@@ -204,6 +204,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
                              : SidebarMode::Overlay;
     config.viewType =
         CollectionUtils::stringToViewType(settings.value("viewType", "grid").toString());
+    config.hideMissingArtwork = settings.value("hideMissingArtwork", false).toBool();
     config.hideHorizontalScrollbar = settings.value("hideHorizontalScrollbar", false).toBool();
     config.hideVerticalScrollbar = settings.value("hideVerticalScrollbar", false).toBool();
     config.hideTitles = settings.value("hideTitles", false).toBool();
@@ -414,6 +415,7 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
                       CollectionUtils::alignmentToString(c.horizontalAlignment));
     settings.setValue("sidebarMode", (c.sidebarMode == SidebarMode::Expand) ? "fixed" : "overlay");
     settings.setValue("viewType", CollectionUtils::viewTypeToString(c.viewType));
+    settings.setValue("hideMissingArtwork", c.hideMissingArtwork);
     settings.setValue("hideHorizontalScrollbar", c.hideHorizontalScrollbar);
     settings.setValue("hideVerticalScrollbar", c.hideVerticalScrollbar);
     settings.setValue("hideTitles", c.hideTitles);

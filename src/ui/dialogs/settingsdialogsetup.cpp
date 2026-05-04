@@ -301,6 +301,10 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->hideSubcollectionTitlesCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
   }
+  if (ui->hideMissingArtworkCheckBox) {
+    connect(ui->hideMissingArtworkCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
   if (ui->itemWidthSpinBox) {
     connect(ui->itemWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);

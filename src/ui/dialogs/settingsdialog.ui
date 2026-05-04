@@ -700,6 +700,12 @@
                     <item><property name="text"><string>List</string></property></item>
                    </widget>
                   </item>
+                  <item row="0" column="2">
+                   <widget class="QCheckBox" name="hideMissingArtworkCheckBox">
+                    <property name="text"><string>Hide items without artwork</string></property>
+                    <property name="toolTip"><string>When enabled, media items whose artwork lookup returns no match are hidden from the items page. Subcollections and virtual folders are unaffected.</string></property>
+                   </widget>
+                  </item>
                   <item row="1" column="0">
                    <widget class="QLabel" name="label_horizontalAlignment">
                     <property name="text"><string>Alignment:</string></property>
