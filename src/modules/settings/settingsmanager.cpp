@@ -99,6 +99,25 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.gamepadToggleSidebarButton =
       s.value("gamepadToggleSidebarButton", QString("Y")).toString();
 
+  // Kartend-1v6: artwork-cycle modifier. Coerce hand-edited junk back to Shift
+  // so the gesture is always reachable; allow only the single-modifier flags
+  // we expose in the settings UI.
+  {
+    const int rawModifier =
+        s.value("artworkCycleModifier", static_cast<int>(Qt::ShiftModifier)).toInt();
+    switch (rawModifier) {
+    case static_cast<int>(Qt::ShiftModifier):
+    case static_cast<int>(Qt::ControlModifier):
+    case static_cast<int>(Qt::AltModifier):
+    case static_cast<int>(Qt::MetaModifier):
+      settings.artworkCycleModifier = rawModifier;
+      break;
+    default:
+      settings.artworkCycleModifier = static_cast<int>(Qt::ShiftModifier);
+      break;
+    }
+  }
+
   // Sort preferences
   const int sortModeRaw = s.value("sortMode", static_cast<int>(SortMode::NameAscending)).toInt();
   if (sortModeRaw >= static_cast<int>(SortMode::NameAscending) &&
@@ -223,6 +242,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.gamepadConfirmButton = settings.gamepadConfirmButton;
   m_generalSettings.gamepadBackButton = settings.gamepadBackButton;
   m_generalSettings.gamepadToggleSidebarButton = settings.gamepadToggleSidebarButton;
+  m_generalSettings.artworkCycleModifier = settings.artworkCycleModifier;
   m_generalSettings.sortMode = settings.sortMode;
   m_generalSettings.excludeSubfoldersFromSort = settings.excludeSubfoldersFromSort;
   // Kartend-dd8: collection categorization filters
@@ -297,6 +317,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("gamepadConfirmButton", m_generalSettings.gamepadConfirmButton);
   s.setValue("gamepadBackButton", m_generalSettings.gamepadBackButton);
   s.setValue("gamepadToggleSidebarButton", m_generalSettings.gamepadToggleSidebarButton);
+  s.setValue("artworkCycleModifier", m_generalSettings.artworkCycleModifier);
   s.setValue("sortMode", static_cast<int>(m_generalSettings.sortMode));
   s.setValue("excludeSubfoldersFromSort", m_generalSettings.excludeSubfoldersFromSort);
   // Kartend-dd8: collection categorization toolbar state

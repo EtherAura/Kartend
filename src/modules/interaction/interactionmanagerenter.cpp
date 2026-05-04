@@ -326,3 +326,34 @@ void InteractionManager::onMediaPreviewRequested(ItemWidget *widget, int visualI
 
   m_scrollManager->showMediaPreview(filePath, artworkDir, videoDir);
 }
+
+void InteractionManager::onArtworkTypeCycleRequested(ItemWidget *widget, int visualIndex) {
+  // Kartend-1v6: shift+middle-click (modifier configurable via
+  // GeneralSettings::artworkCycleModifier) cycles the clicked item's grid
+  // tile through the artwork types that exist on disk. Mirrors the path
+  // resolution pattern from onMediaPreviewRequested so a subcollection's
+  // configured artwork directory wins over the viewing parent in
+  // showAllSubcollectionItems mode.
+  if (!widget || !m_collections || !m_artworkManager || !m_scrollManager) {
+    return;
+  }
+
+  QString filePath = widget->getFilePath();
+  if (filePath.isEmpty()) {
+    filePath = m_scrollManager->filePathForVisualIndex(visualIndex);
+  }
+  if (filePath.isEmpty()) {
+    return;
+  }
+
+  const int cIdx = m_databaseManager ? m_databaseManager->getCollectionIndexForFile(filePath) : -1;
+  int ownerIdx = cIdx;
+  if (ownerIdx < 0 && m_currentCollectionIndex) {
+    ownerIdx = *m_currentCollectionIndex;
+  }
+  if (ownerIdx < 0 || ownerIdx >= m_collections->size()) {
+    return;
+  }
+
+  m_artworkManager->cycleArtworkType(widget, filePath, ownerIdx);
+}

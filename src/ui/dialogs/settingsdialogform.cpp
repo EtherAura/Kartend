@@ -503,6 +503,24 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->gamepadToggleSidebarButtonLineEdit->blockSignals(false);
   }
 
+  // Kartend-1v6: artwork-cycle modifier dropdown. Populated lazily on first
+  // load so a freshly opened dialog reflects whatever the user picked last
+  // session. Order matches the order users tend to reach for: Shift first,
+  // Meta last (Win/Cmd is the most likely to clash with a global shortcut).
+  if (ui->artworkCycleModifierComboBox) {
+    QSignalBlocker blocker(ui->artworkCycleModifierComboBox);
+    if (ui->artworkCycleModifierComboBox->count() == 0) {
+      ui->artworkCycleModifierComboBox->addItem(tr("Shift"), static_cast<int>(Qt::ShiftModifier));
+      ui->artworkCycleModifierComboBox->addItem(tr("Ctrl"), static_cast<int>(Qt::ControlModifier));
+      ui->artworkCycleModifierComboBox->addItem(tr("Alt"), static_cast<int>(Qt::AltModifier));
+      ui->artworkCycleModifierComboBox->addItem(tr("Meta (Win/Cmd)"),
+                                                static_cast<int>(Qt::MetaModifier));
+    }
+    int comboIdx =
+        ui->artworkCycleModifierComboBox->findData(m_generalSettings.artworkCycleModifier);
+    ui->artworkCycleModifierComboBox->setCurrentIndex(comboIdx >= 0 ? comboIdx : 0);
+  }
+
   // Kartend-81o: load toolbar customization controls.
   auto setToolbarCheck = [](QCheckBox *box, bool value) {
     if (!box) {
@@ -684,6 +702,19 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
       const QString v = ui->gamepadToggleSidebarButtonLineEdit->text().trimmed();
       if (!v.isEmpty()) {
         mainWindow->m_generalSettings.gamepadToggleSidebarButton = v;
+      }
+    }
+    if (ui->artworkCycleModifierComboBox) {
+      const int rawModifier = ui->artworkCycleModifierComboBox->currentData().toInt();
+      switch (rawModifier) {
+      case static_cast<int>(Qt::ShiftModifier):
+      case static_cast<int>(Qt::ControlModifier):
+      case static_cast<int>(Qt::AltModifier):
+      case static_cast<int>(Qt::MetaModifier):
+        mainWindow->m_generalSettings.artworkCycleModifier = rawModifier;
+        break;
+      default:
+        break; // leave the existing value untouched on a stale combo entry
       }
     }
     // Kartend-p1jd: launcher presets live on the dialog's m_generalSettings

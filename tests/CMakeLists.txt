@@ -293,6 +293,7 @@ add_executable(test_artworkmanager
   ${SRC_DIR}/utils/artworkutils.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/extensionutils.cpp
+  ${SRC_DIR}/utils/itemartwork.cpp
   ${SRC_DIR}/utils/settingsutils.cpp
   ${SRC_DIR}/utils/pathutils.cpp
   ${SRC_DIR}/utils/timerutils.cpp
@@ -312,6 +313,7 @@ target_link_libraries(test_artworkmanager
   Qt6::Gui
   Qt6::Widgets
   Qt6::Concurrent
+  Qt6::Sql
   Qt6::Test
 )
 add_test(NAME ArtworkManager COMMAND test_artworkmanager)

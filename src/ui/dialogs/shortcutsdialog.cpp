@@ -120,6 +120,25 @@ void ShortcutsDialog::populateContent() {
   addShortcut(m_contentLayout, buttonText(settings.gamepadToggleSidebarButton),
               tr("Toggle metadata sidebar"));
 
+  // Mouse
+  addSection(m_contentLayout, tr("Mouse"));
+  addShortcut(m_contentLayout, tr("Middle-click"), tr("Open media preview overlay"));
+  auto modifierLabel = [&]() -> QString {
+    switch (settings.artworkCycleModifier) {
+    case static_cast<int>(Qt::ControlModifier):
+      return tr("Ctrl");
+    case static_cast<int>(Qt::AltModifier):
+      return tr("Alt");
+    case static_cast<int>(Qt::MetaModifier):
+      return tr("Meta");
+    case static_cast<int>(Qt::ShiftModifier):
+    default:
+      return tr("Shift");
+    }
+  }();
+  addShortcut(m_contentLayout, tr("%1+Middle-click").arg(modifierLabel),
+              tr("Cycle item artwork to next available type"));
+
   // Window
   addSection(m_contentLayout, tr("Window"));
   addShortcut(m_contentLayout, tr("F11"), tr("Toggle fullscreen"));
