@@ -269,7 +269,23 @@ void InteractionManager::connectAttractManagerSignals() {
   connect(m_selectionManager.get(), &SelectionManager::selectionChanged, m_attractManager.get(),
           [this](int index) {
             Q_UNUSED(index);
+            // Selection changes that AttractManager itself drives via the
+            // advance-selection timer must not be treated as user activity,
+            // otherwise attract mode would immediately stop on its own tick.
+            if (m_attractManager->isDrivingSelection()) {
+              return;
+            }
             m_attractManager->onActivityDetected();
+          });
+  connect(m_attractManager.get(), &AttractManager::requestSelectIndex, this,
+          [this](int index) {
+            // Explicit viewport centering: selectItemByIndex only centers when
+            // the target widget is already materialized. With random advance
+            // mode the target is usually far outside the viewport, so without
+            // this the virtual scroll never realises the widget and the jump
+            // silently fails.
+            centerItemVertically(index, false);
+            selectItemByIndex(index, true);
           });
 }
 

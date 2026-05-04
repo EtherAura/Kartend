@@ -518,8 +518,28 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
                                            m_originalGeneralSettings.attractModeIdleTimeoutSec) {
     return true;
   }
+  if (ui->attractAutoScrollCheckBox &&
+      ui->attractAutoScrollCheckBox->isChecked() !=
+          m_originalGeneralSettings.attractModeAutoScrollEnabled) {
+    return true;
+  }
   if (ui->attractScrollSpeedSpinBox &&
       ui->attractScrollSpeedSpinBox->value() != m_originalGeneralSettings.attractModeScrollSpeed) {
+    return true;
+  }
+  if (ui->attractAdvanceSelectionCheckBox &&
+      ui->attractAdvanceSelectionCheckBox->isChecked() !=
+          m_originalGeneralSettings.attractModeAdvanceSelectionEnabled) {
+    return true;
+  }
+  if (ui->attractAdvanceIntervalSpinBox &&
+      ui->attractAdvanceIntervalSpinBox->value() !=
+          m_originalGeneralSettings.attractModeAdvanceSelectionIntervalSec) {
+    return true;
+  }
+  if (ui->attractAdvanceRandomCheckBox &&
+      ui->attractAdvanceRandomCheckBox->isChecked() !=
+          m_originalGeneralSettings.attractModeAdvanceSelectionRandom) {
     return true;
   }
   // Kartend-81o: customizable toolbar fields.

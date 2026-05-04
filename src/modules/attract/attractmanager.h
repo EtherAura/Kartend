@@ -14,6 +14,7 @@ QT_END_NAMESPACE
 struct ApplicationContext;
 struct GeneralSettings;
 class ScrollManager;
+class SelectionManager;
 
 /**
  * @brief Setup struct for AttractManager dependencies.
@@ -25,11 +26,13 @@ struct AttractManagerSetup {
 
   QScrollArea *itemScrollArea = nullptr;
   ScrollManager *scrollManager = nullptr;
+  SelectionManager *selectionManager = nullptr;
   const GeneralSettings *generalSettings = nullptr;
   const bool *isShuttingDown = nullptr;
 
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
   SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
+  SETUP_GETTER_DECL(SelectionManager *, SelectionManager)
   SETUP_GETTER_DECL(const GeneralSettings *, GeneralSettings)
   SETUP_GETTER_DECL(const bool *, IsShuttingDown)
 };
@@ -62,6 +65,10 @@ public:
   /// Returns true if attract mode is enabled in settings.
   [[nodiscard]] bool isEnabled() const;
 
+  /// True while AttractManager is itself driving a selection change (so the
+  /// resulting selectionChanged signal must not be treated as user activity).
+  [[nodiscard]] bool isDrivingSelection() const { return m_drivingSelection; }
+
 public slots:
   /// Called when user activity is detected; resets the idle timer and
   /// stops attract mode if active.
@@ -77,19 +84,27 @@ signals:
   /// Emitted when attract mode stops (user activity or disabled).
   void attractStopped();
 
+  /// Emitted when the selection-advance timer ticks. The receiver is expected
+  /// to call selectItemByIndex() on @p index. Wrapped in setDrivingSelection
+  /// so the resulting selectionChanged signal isn't treated as user activity.
+  void requestSelectIndex(int index);
+
 private slots:
   void onIdleTimeout();
   void onScrollTick();
   void onBouncePauseFinished();
+  void onAdvanceSelectionTick();
 
 private:
   void startAttract();
   void stopAttract();
   void resetIdleTimer();
+  void startAdvanceSelectionTimerIfEnabled();
 
   // Manager references (borrowed, not owned)
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
   ScrollManager *m_scrollManager = nullptr;
+  SelectionManager *m_selectionManager = nullptr;
   const GeneralSettings *m_generalSettings = nullptr;
   const bool *m_isShuttingDown = nullptr;
 
@@ -97,11 +112,14 @@ private:
   QTimer *m_idleTimer = nullptr;
   QTimer *m_scrollTimer = nullptr;
   QTimer *m_bouncePauseTimer = nullptr;
+  QTimer *m_advanceSelectionTimer = nullptr;
 
   // State
   bool m_attractActive = false;
-  int m_scrollDirection = 1; // 1 = down, -1 = up
+  int m_scrollDirection = 1;          // 1 = down, -1 = up
   bool m_bouncePaused = false;
+  bool m_drivingSelection = false;
+  double m_scrollAccumulator = 0.0;   // Fractional-pixel buffer for sub-px speeds
 };
 
 #endif // ATTRACTMANAGER_H

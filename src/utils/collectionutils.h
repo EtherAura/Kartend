@@ -622,7 +622,11 @@ struct GeneralSettings {
   // ─────────────────────────────────────────────────────────────────────────
   bool attractModeEnabled = false;
   int attractModeIdleTimeoutSec = 120; // Seconds of idle before activation
-  int attractModeScrollSpeed = 1;      // Pixels per tick (1-10)
+  bool attractModeAutoScrollEnabled = true; // Sub-toggle: viewport autoscroll
+  double attractModeScrollSpeed = 1.0;      // Pixels per tick (0.1-10, sub-pixel via accumulator)
+  bool attractModeAdvanceSelectionEnabled = false;
+  int attractModeAdvanceSelectionIntervalSec = 5; // Seconds between selection advances
+  bool attractModeAdvanceSelectionRandom = false; // Pick random vs. sequential next
 
   // Splash screens
   bool bootSplashEnabled = true;
