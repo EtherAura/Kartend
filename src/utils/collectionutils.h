@@ -645,6 +645,26 @@ struct GeneralSettings {
   bool hideSubcollectionTiles = false;
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Customizable toolbar (Kartend-81o)
+  // Per-button visibility flags and text overrides for the items-page top bar.
+  // Empty *Text strings mean "use the .ui default" so existing installs see no
+  // visual change after upgrade. The search-mode button is icon-only and the
+  // type-filter combo box has no user-editable text, so only visibility is
+  // exposed for those.
+  // ─────────────────────────────────────────────────────────────────────────
+  bool toolbarShowGridViewButton = true;
+  bool toolbarShowListViewButton = true;
+  bool toolbarShowHideSubcollectionsButton = true;
+  bool toolbarShowTypeFilter = true;
+  bool toolbarShowTitleFilter = true;
+  bool toolbarShowSearchModeButton = true;
+  bool toolbarShowSearchBar = true;
+  QString toolbarGridViewButtonText;
+  QString toolbarListViewButtonText;
+  QString toolbarHideSubcollectionsButtonText;
+  QString toolbarTitleFilterText;
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Launcher presets (Kartend-p1jd)
   // Globally-registered, reusable launcher configurations referenced by
   // collection-level launcher entries via LauncherConfig::presetId. Stored

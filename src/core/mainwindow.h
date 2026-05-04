@@ -115,6 +115,13 @@ public:
 
   void showStartupSplash();
 
+  /// Kartend-81o: applies the per-button visibility flags and custom-text
+  /// overrides from m_generalSettings to the items-page toolbar. Safe to call
+  /// before any toolbar widget is constructed (each ui pointer is null-checked)
+  /// and idempotent — invoked on startup and again after the user saves the
+  /// Settings dialog.
+  void applyToolbarCustomization();
+
 protected:
   bool event(QEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;

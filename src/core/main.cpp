@@ -1,13 +1,18 @@
 // Application entry point that initializes Qt and displays the main window.
 #include <QApplication>
+#include <QCommandLineOption>
+#include <QCommandLineParser>
+#include <QCoreApplication>
 #include <QGuiApplication>
 #include <QLoggingCategory>
+#include <QStringList>
 #include <QSurfaceFormat>
 #include <QThreadPool>
 #include <QTimer>
 
 #include <cstdlib>
 
+#include "collectionutils.h"
 #include "mainwindow.h"
 
 auto main(int argc, char *argv[]) -> int {
@@ -35,6 +40,34 @@ auto main(int argc, char *argv[]) -> int {
   QApplication::setApplicationName(APP_NAME);
   QApplication::setApplicationVersion(APP_VERSION);
   QApplication::setWindowIcon(QIcon(":/icon.svg"));
+
+  // Kartend-z3w: parse CLI options. Use process() so --help, --version, and
+  // unknown-option errors are handled with the standard Qt behavior (print
+  // to stderr/stdout and exit). The parser definition mirrors
+  // CliArgs::parseStartupArguments(); kept inline here to retain process()
+  // semantics for the real CLI while the helper stays unit-testable.
+  QString cliCollectionOverride;
+  {
+    QCommandLineParser parser;
+    parser.setApplicationDescription(
+        QApplication::translate("main", "Kartend - Qt6/KDE multimedia collection launcher."));
+    parser.addHelpOption();
+    parser.addVersionOption();
+
+    QCommandLineOption collectionOption(
+        QStringList{QStringLiteral("c"), QStringLiteral("collection")},
+        QApplication::translate("main",
+                                "Open Kartend directly into the named collection, bypassing the "
+                                "configured default. Falls back to the default if <name> is "
+                                "unknown."),
+        QApplication::translate("main", "name"));
+    parser.addOption(collectionOption);
+
+    parser.process(app);
+    if (parser.isSet(collectionOption)) {
+      cliCollectionOverride = parser.value(collectionOption).trimmed();
+    }
+  }
 
   // Ensure tooltips have solid backgrounds (fixes transparency on some themes)
   app.setStyleSheet(QStringLiteral("QToolTip { "
@@ -93,6 +126,14 @@ auto main(int argc, char *argv[]) -> int {
 
   {
     MainWindow window;
+    // Kartend-z3w: override the persisted startupCollection for this launch
+    // when --collection was supplied. setupInitialTimersWithCollections() reads
+    // m_generalSettings.startupCollection from inside a QTimer::singleShot(0)
+    // lambda that fires after exec() begins, so it's safe to mutate the field
+    // here, after MainWindow construction loaded settings from disk.
+    if (!cliCollectionOverride.isEmpty()) {
+      window.m_generalSettings.startupCollection = cliCollectionOverride;
+    }
     window.show();
     window.showStartupSplash();
     (void)QApplication::exec();

@@ -321,6 +321,15 @@ add_executable(test_stringutils test_stringutils.cpp)
 target_link_libraries(test_stringutils Qt6::Core Qt6::Test)
 add_test(NAME StringUtils COMMAND test_stringutils)
 
+# CliArgs tests (Kartend-z3w — --collection startup override)
+add_executable(test_cliargs
+  test_cliargs.cpp
+  ${SRC_DIR}/utils/cliargs.cpp
+)
+target_include_directories(test_cliargs PRIVATE ${SRC_DIR}/utils)
+target_link_libraries(test_cliargs Qt6::Core Qt6::Test)
+add_test(NAME CliArgs COMMAND test_cliargs)
+
 # TitleFilter tests (Kartend-5h6 — per-collection regex title cleanup)
 add_executable(test_titlefilter
   test_titlefilter.cpp

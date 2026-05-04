@@ -181,8 +181,7 @@ auto SettingsUtils::exportConfig(const QString &destPath) -> ErrorUtils::Result<
 auto SettingsUtils::importConfig(const QString &sourcePath) -> ErrorUtils::Result<void> {
   if (sourcePath.trimmed().isEmpty()) {
     return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
-                                           "Source path is empty",
-                                           "SettingsUtils::importConfig");
+                                           "Source path is empty", "SettingsUtils::importConfig");
   }
   if (!QFile::exists(sourcePath)) {
     return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileNotFound,
@@ -230,11 +229,11 @@ auto SettingsUtils::importConfig(const QString &sourcePath) -> ErrorUtils::Resul
       QFile::remove(backupPath);
     }
     if (!QFile::copy(livePath, backupPath)) {
-      ErrorUtils::logError(ErrorUtils::ErrorContext::warning(
-                               ErrorUtils::ErrorCode::FileWriteError,
-                               "Failed to back up existing config before import",
-                               "SettingsUtils::importConfig")
-                               .withDetails(QString("From: %1, To: %2").arg(livePath, backupPath)));
+      ErrorUtils::logError(
+          ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
+                                            "Failed to back up existing config before import",
+                                            "SettingsUtils::importConfig")
+              .withDetails(QString("From: %1, To: %2").arg(livePath, backupPath)));
       // Continue: the import is still atomic via temp+rename, and refusing to
       // proceed would leave the user stuck if .bak is unwritable for some
       // unrelated reason.

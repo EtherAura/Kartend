@@ -141,6 +141,9 @@ void MainWindow::setupUI() {
   setupArtworkManager();
   setupLastSelectedIndices();
   setupEventFilters();
+  // Kartend-81o: apply persisted toolbar visibility/text overrides to the
+  // freshly-constructed toolbar widgets before any layout settles.
+  applyToolbarCustomization();
   setupInitialTimers();
 }
 

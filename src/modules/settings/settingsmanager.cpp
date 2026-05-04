@@ -142,6 +142,23 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   // table by accident.
   settings.historyEnabled = s.value("historyEnabled", true).toBool();
   settings.historyMaxEntries = qBound(10, s.value("historyMaxEntries", 500).toInt(), 50000);
+
+  // Customizable toolbar (Kartend-81o). Default visibility is "shown" so an
+  // upgrading user sees the toolbar exactly as before; custom text strings
+  // default to empty (use the .ui label).
+  settings.toolbarShowGridViewButton = s.value("toolbarShowGridViewButton", true).toBool();
+  settings.toolbarShowListViewButton = s.value("toolbarShowListViewButton", true).toBool();
+  settings.toolbarShowHideSubcollectionsButton =
+      s.value("toolbarShowHideSubcollectionsButton", true).toBool();
+  settings.toolbarShowTypeFilter = s.value("toolbarShowTypeFilter", true).toBool();
+  settings.toolbarShowTitleFilter = s.value("toolbarShowTitleFilter", true).toBool();
+  settings.toolbarShowSearchModeButton = s.value("toolbarShowSearchModeButton", true).toBool();
+  settings.toolbarShowSearchBar = s.value("toolbarShowSearchBar", true).toBool();
+  settings.toolbarGridViewButtonText = s.value("toolbarGridViewButtonText", QString()).toString();
+  settings.toolbarListViewButtonText = s.value("toolbarListViewButtonText", QString()).toString();
+  settings.toolbarHideSubcollectionsButtonText =
+      s.value("toolbarHideSubcollectionsButtonText", QString()).toString();
+  settings.toolbarTitleFilterText = s.value("toolbarTitleFilterText", QString()).toString();
   s.endGroup();
 
   // Kartend-p1jd: launcher presets live at the top level (outside [General])
@@ -225,6 +242,20 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   // Launch history (Kartend-fse)
   m_generalSettings.historyEnabled = settings.historyEnabled;
   m_generalSettings.historyMaxEntries = qBound(10, settings.historyMaxEntries, 50000);
+  // Customizable toolbar (Kartend-81o)
+  m_generalSettings.toolbarShowGridViewButton = settings.toolbarShowGridViewButton;
+  m_generalSettings.toolbarShowListViewButton = settings.toolbarShowListViewButton;
+  m_generalSettings.toolbarShowHideSubcollectionsButton =
+      settings.toolbarShowHideSubcollectionsButton;
+  m_generalSettings.toolbarShowTypeFilter = settings.toolbarShowTypeFilter;
+  m_generalSettings.toolbarShowTitleFilter = settings.toolbarShowTitleFilter;
+  m_generalSettings.toolbarShowSearchModeButton = settings.toolbarShowSearchModeButton;
+  m_generalSettings.toolbarShowSearchBar = settings.toolbarShowSearchBar;
+  m_generalSettings.toolbarGridViewButtonText = settings.toolbarGridViewButtonText;
+  m_generalSettings.toolbarListViewButtonText = settings.toolbarListViewButtonText;
+  m_generalSettings.toolbarHideSubcollectionsButtonText =
+      settings.toolbarHideSubcollectionsButtonText;
+  m_generalSettings.toolbarTitleFilterText = settings.toolbarTitleFilterText;
   // Splash screens
   m_generalSettings.bootSplashEnabled = settings.bootSplashEnabled;
   m_generalSettings.resumeFocusSplashEnabled = settings.resumeFocusSplashEnabled;
@@ -282,6 +313,20 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("attractModeScrollSpeed", m_generalSettings.attractModeScrollSpeed);
   s.setValue("bootSplashEnabled", m_generalSettings.bootSplashEnabled);
   s.setValue("resumeFocusSplashEnabled", m_generalSettings.resumeFocusSplashEnabled);
+  // Customizable toolbar (Kartend-81o)
+  s.setValue("toolbarShowGridViewButton", m_generalSettings.toolbarShowGridViewButton);
+  s.setValue("toolbarShowListViewButton", m_generalSettings.toolbarShowListViewButton);
+  s.setValue("toolbarShowHideSubcollectionsButton",
+             m_generalSettings.toolbarShowHideSubcollectionsButton);
+  s.setValue("toolbarShowTypeFilter", m_generalSettings.toolbarShowTypeFilter);
+  s.setValue("toolbarShowTitleFilter", m_generalSettings.toolbarShowTitleFilter);
+  s.setValue("toolbarShowSearchModeButton", m_generalSettings.toolbarShowSearchModeButton);
+  s.setValue("toolbarShowSearchBar", m_generalSettings.toolbarShowSearchBar);
+  s.setValue("toolbarGridViewButtonText", m_generalSettings.toolbarGridViewButtonText);
+  s.setValue("toolbarListViewButtonText", m_generalSettings.toolbarListViewButtonText);
+  s.setValue("toolbarHideSubcollectionsButtonText",
+             m_generalSettings.toolbarHideSubcollectionsButtonText);
+  s.setValue("toolbarTitleFilterText", m_generalSettings.toolbarTitleFilterText);
   s.endGroup();
 
   // Kartend-p1jd: persist launcher presets as a top-level [Launchers] array.

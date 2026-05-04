@@ -106,6 +106,70 @@ void MainWindow::showFocusReturnSplash() {
   }
 }
 
+void MainWindow::applyToolbarCustomization() {
+  if (!ui) {
+    return;
+  }
+  const auto &gs = m_generalSettings;
+
+  // Visibility — leave the labels (collection title, subfolder path, position
+  // counter) and the search-mode/search-bar separator alone; those are managed
+  // by navigation/search code based on runtime state, not user preference.
+  if (ui->gridViewButton) {
+    ui->gridViewButton->setVisible(gs.toolbarShowGridViewButton);
+  }
+  if (ui->listViewButton) {
+    ui->listViewButton->setVisible(gs.toolbarShowListViewButton);
+  }
+  if (ui->hideSubcollectionsButton) {
+    ui->hideSubcollectionsButton->setVisible(gs.toolbarShowHideSubcollectionsButton);
+  }
+  if (ui->typeFilterComboBox) {
+    ui->typeFilterComboBox->setVisible(gs.toolbarShowTypeFilter);
+  }
+  if (ui->titleFilterButton) {
+    ui->titleFilterButton->setVisible(gs.toolbarShowTitleFilter);
+  }
+  if (ui->searchModeButton) {
+    ui->searchModeButton->setVisible(gs.toolbarShowSearchModeButton);
+  }
+  if (ui->searchBar) {
+    ui->searchBar->setVisible(gs.toolbarShowSearchBar);
+  }
+  // The view/search separator only makes sense when at least one widget on
+  // each side is showing; collapse it whenever both adjacent groups are hidden
+  // so the toolbar doesn't show a stray vertical line.
+  if (ui->viewSearchSeparator) {
+    const bool leftSideVisible = gs.toolbarShowGridViewButton || gs.toolbarShowListViewButton ||
+                                 gs.toolbarShowHideSubcollectionsButton ||
+                                 gs.toolbarShowTypeFilter || gs.toolbarShowTitleFilter;
+    const bool rightSideVisible = gs.toolbarShowSearchModeButton || gs.toolbarShowSearchBar;
+    ui->viewSearchSeparator->setVisible(leftSideVisible && rightSideVisible);
+  }
+
+  // Custom text overrides — empty string falls back to the .ui default so the
+  // user can clear an override and get the original label back.
+  if (ui->gridViewButton) {
+    ui->gridViewButton->setText(gs.toolbarGridViewButtonText.isEmpty()
+                                    ? QStringLiteral("⊞")
+                                    : gs.toolbarGridViewButtonText);
+  }
+  if (ui->listViewButton) {
+    ui->listViewButton->setText(gs.toolbarListViewButtonText.isEmpty()
+                                    ? QStringLiteral("☰")
+                                    : gs.toolbarListViewButtonText);
+  }
+  if (ui->hideSubcollectionsButton) {
+    ui->hideSubcollectionsButton->setText(gs.toolbarHideSubcollectionsButtonText.isEmpty()
+                                              ? QStringLiteral("📁")
+                                              : gs.toolbarHideSubcollectionsButtonText);
+  }
+  if (ui->titleFilterButton) {
+    ui->titleFilterButton->setText(gs.toolbarTitleFilterText.isEmpty() ? tr("Filter")
+                                                                       : gs.toolbarTitleFilterText);
+  }
+}
+
 void MainWindow::resizeEvent(QResizeEvent *event) {
   if (!updatesEnabled()) {
     return;

@@ -17,8 +17,8 @@
 #include <QSet>
 #include <QSignalBlocker>
 #include <QSpinBox>
-#include <QTimer>
 #include <QtGlobal>
+#include <QTimer>
 
 #include "errorutils.h"
 #include "extensionutils.h"
@@ -457,6 +457,23 @@ void SettingsDialog::setupGeneralSettingsConnections() {
             &SettingsDialog::checkForChanges);
   }
 
+  // Kartend-81o: customizable toolbar fields — every change marks the dialog
+  // dirty so the user gets the standard Save / Discard / Cancel prompt.
+  for (auto *box : {ui->toolbarGridViewVisibleCheckBox, ui->toolbarListViewVisibleCheckBox,
+                    ui->toolbarHideSubcollectionsVisibleCheckBox,
+                    ui->toolbarTypeFilterVisibleCheckBox, ui->toolbarTitleFilterVisibleCheckBox,
+                    ui->toolbarSearchModeVisibleCheckBox, ui->toolbarSearchBarVisibleCheckBox}) {
+    if (box) {
+      connect(box, &QCheckBox::toggled, this, &SettingsDialog::checkForChanges);
+    }
+  }
+  for (auto *edit : {ui->toolbarGridViewTextEdit, ui->toolbarListViewTextEdit,
+                     ui->toolbarHideSubcollectionsTextEdit, ui->toolbarTitleFilterTextEdit}) {
+    if (edit) {
+      connect(edit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
+    }
+  }
+
   // Kartend-88w: configuration backup — Export saves the live config to a
   // named .cfg in the Kartend config directory; the Load combo lists every
   // other .cfg in that directory and replaces kartend.cfg with the selection.
@@ -480,10 +497,10 @@ void SettingsDialog::setupGeneralSettingsConnections() {
       // Prompt for a profile name so the export lands inside the config dir
       // and shows up in the Load dropdown next to other backups.
       bool ok = false;
-      const QString rawName = QInputDialog::getText(
-          this, tr("Export Configuration"),
-          tr("Profile name (saved as <name>.cfg in the config directory):"), QLineEdit::Normal,
-          QString(), &ok);
+      const QString rawName =
+          QInputDialog::getText(this, tr("Export Configuration"),
+                                tr("Profile name (saved as <name>.cfg in the config directory):"),
+                                QLineEdit::Normal, QString(), &ok);
       if (!ok) {
         return;
       }
@@ -523,8 +540,9 @@ void SettingsDialog::setupGeneralSettingsConnections() {
       const auto result = SettingsUtils::exportConfig(destPath);
       if (result.isError()) {
         ErrorUtils::logError(result.error());
-        QMessageBox::critical(this, tr("Export Configuration"),
-                              tr("Failed to export configuration:\n%1").arg(result.error().message));
+        QMessageBox::critical(
+            this, tr("Export Configuration"),
+            tr("Failed to export configuration:\n%1").arg(result.error().message));
         return;
       }
       // Refresh the dropdown so the new file appears, then select it.

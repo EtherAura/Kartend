@@ -204,11 +204,17 @@ void SettingsDialog::setupButtonConnections() {
     QAction *allAction = menu->addAction(tr("Apply to All Collections..."));
     QAction *subAction = menu->addAction(tr("Apply to Subcollections Only..."));
     QAction *selAction = menu->addAction(tr("Apply to Selected Collections..."));
+    menu->addSeparator();
+    // Kartend-iyk: pull-from-source. Lives in the same menu so the user has
+    // one entry point for all cross-collection settings copying.
+    QAction *pullAction = menu->addAction(tr("Copy Settings From..."));
     connect(allAction, &QAction::triggered, this,
             &SettingsDialog::applyCurrentSettingsToAllCollections);
     connect(subAction, &QAction::triggered, this,
             &SettingsDialog::applyCurrentSettingsToSubcollections);
     connect(selAction, &QAction::triggered, this, &SettingsDialog::applyCurrentSettingsToSelected);
+    connect(pullAction, &QAction::triggered, this,
+            &SettingsDialog::copySettingsFromOtherCollection);
     ui->applyToButton->setMenu(menu);
   }
   // Kartend-enq: wire the Settings Mode selector. Default is `Current` to

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <functional>
 #include <QAbstractItemView>
+#include <QCheckBox>
 #include <QColorDialog>
 #include <QDir>
 #include <QEasingCurve>
@@ -10,6 +11,7 @@
 #include <QFontDialog>
 #include <QGraphicsDropShadowEffect>
 #include <QInputDialog>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QPalette>
 #include <QPixmapCache>
@@ -501,6 +503,36 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->gamepadToggleSidebarButtonLineEdit->blockSignals(false);
   }
 
+  // Kartend-81o: load toolbar customization controls.
+  auto setToolbarCheck = [](QCheckBox *box, bool value) {
+    if (!box) {
+      return;
+    }
+    QSignalBlocker blocker(box);
+    box->setChecked(value);
+  };
+  auto setToolbarText = [](QLineEdit *edit, const QString &value) {
+    if (!edit) {
+      return;
+    }
+    QSignalBlocker blocker(edit);
+    edit->setText(value);
+  };
+  setToolbarCheck(ui->toolbarGridViewVisibleCheckBox, m_generalSettings.toolbarShowGridViewButton);
+  setToolbarCheck(ui->toolbarListViewVisibleCheckBox, m_generalSettings.toolbarShowListViewButton);
+  setToolbarCheck(ui->toolbarHideSubcollectionsVisibleCheckBox,
+                  m_generalSettings.toolbarShowHideSubcollectionsButton);
+  setToolbarCheck(ui->toolbarTypeFilterVisibleCheckBox, m_generalSettings.toolbarShowTypeFilter);
+  setToolbarCheck(ui->toolbarTitleFilterVisibleCheckBox, m_generalSettings.toolbarShowTitleFilter);
+  setToolbarCheck(ui->toolbarSearchModeVisibleCheckBox,
+                  m_generalSettings.toolbarShowSearchModeButton);
+  setToolbarCheck(ui->toolbarSearchBarVisibleCheckBox, m_generalSettings.toolbarShowSearchBar);
+  setToolbarText(ui->toolbarGridViewTextEdit, m_generalSettings.toolbarGridViewButtonText);
+  setToolbarText(ui->toolbarListViewTextEdit, m_generalSettings.toolbarListViewButtonText);
+  setToolbarText(ui->toolbarHideSubcollectionsTextEdit,
+                 m_generalSettings.toolbarHideSubcollectionsButtonText);
+  setToolbarText(ui->toolbarTitleFilterTextEdit, m_generalSettings.toolbarTitleFilterText);
+
   // Store original general settings for change detection
   m_originalGeneralSettings = m_generalSettings;
 
@@ -659,12 +691,60 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     // window's settings before persisting so the saved snapshot includes
     // any preset add/edit/remove the user just performed.
     mainWindow->m_generalSettings.launcherPresets = m_generalSettings.launcherPresets;
+
+    // Kartend-81o: pull customizable-toolbar fields off the dialog controls.
+    if (ui->toolbarGridViewVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowGridViewButton =
+          ui->toolbarGridViewVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarListViewVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowListViewButton =
+          ui->toolbarListViewVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarHideSubcollectionsVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowHideSubcollectionsButton =
+          ui->toolbarHideSubcollectionsVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarTypeFilterVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowTypeFilter =
+          ui->toolbarTypeFilterVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarTitleFilterVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowTitleFilter =
+          ui->toolbarTitleFilterVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarSearchModeVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowSearchModeButton =
+          ui->toolbarSearchModeVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarSearchBarVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowSearchBar =
+          ui->toolbarSearchBarVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarGridViewTextEdit) {
+      mainWindow->m_generalSettings.toolbarGridViewButtonText = ui->toolbarGridViewTextEdit->text();
+    }
+    if (ui->toolbarListViewTextEdit) {
+      mainWindow->m_generalSettings.toolbarListViewButtonText = ui->toolbarListViewTextEdit->text();
+    }
+    if (ui->toolbarHideSubcollectionsTextEdit) {
+      mainWindow->m_generalSettings.toolbarHideSubcollectionsButtonText =
+          ui->toolbarHideSubcollectionsTextEdit->text();
+    }
+    if (ui->toolbarTitleFilterTextEdit) {
+      mainWindow->m_generalSettings.toolbarTitleFilterText = ui->toolbarTitleFilterTextEdit->text();
+    }
+
     mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
     m_generalSettings = mainWindow->m_generalSettings;
     // Refresh the originals so the dirty indicator clears for the presets
     // tab too. (Other fields' baselines are reset implicitly by the assign
     // above; this line keeps the comment local to where it matters.)
     m_originalGeneralSettings = m_generalSettings;
+
+    // Kartend-81o: push the new toolbar config onto the live UI immediately so
+    // the user sees the change without restart or extra clicks.
+    mainWindow->applyToolbarCustomization();
 
     // Refresh all visible widgets to apply text appearance changes immediately
     ScrollManager *scrollManager = mainWindow->getScrollManager();

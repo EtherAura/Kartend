@@ -17,6 +17,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "applysettingsdialog.h"
 #include "collectionpickerdialog.h"
 #include "collectiontreewidget.h"
 #include "mainwindow.h"
@@ -513,49 +514,79 @@ auto SettingsDialog::wouldCreateCircularReference(int childIndex, int potentialP
 
 namespace {
 
-// Copy the appearance/layout subset from @p src onto @p dst. Leaves all
-// non-listed fields on @p dst untouched so identity and scan settings
-// survive.
-void copyAppearanceAndLayoutFields(const CollectionConfig &src, CollectionConfig &dst) {
-  // Grid/layout
-  dst.gridWidth = src.gridWidth;
-  dst.horizontalSpacing = src.horizontalSpacing;
-  dst.verticalSpacing = src.verticalSpacing;
-  dst.itemWidth = src.itemWidth;
-  dst.itemHeight = src.itemHeight;
-  dst.fontSize = src.fontSize;
-  dst.cornerRadius = src.cornerRadius;
-  dst.horizontalAlignment = src.horizontalAlignment;
-  dst.viewType = src.viewType;
-
-  // Visibility/chrome
-  dst.hideTitles = src.hideTitles;
-  dst.hideSubcollectionTitles = src.hideSubcollectionTitles;
-  dst.hideHorizontalScrollbar = src.hideHorizontalScrollbar;
-  dst.hideVerticalScrollbar = src.hideVerticalScrollbar;
-  dst.sidebarMode = src.sidebarMode;
-
-  // Colors/background
-  dst.backgroundType = src.backgroundType;
-  dst.backgroundColor = src.backgroundColor;
-  dst.backgroundImage = src.backgroundImage;
-  dst.primaryColor = src.primaryColor;
-  dst.tileColor = src.tileColor;
-  dst.selectionColor = src.selectionColor;
-
-  // List-mode styling
-  dst.listFontSize = src.listFontSize;
-  dst.listRowHeight = src.listRowHeight;
-  dst.listRowColor = src.listRowColor;
-  dst.listAltRowColor = src.listAltRowColor;
-
-  // Text appearance
-  dst.customFontFamily = src.customFontFamily;
-
+// Kartend-iyk: copy a per-category subset from @p src onto @p dst. Each flag
+// in @p categories enables one logical group of fields. Categories not in
+// the mask leave @p dst's existing values untouched. Identity, paths,
+// launcher list, and scan-affecting flags are never copied regardless of
+// the mask — those still require an explicit per-collection edit.
+void copyAppearanceAndLayoutFields(const CollectionConfig &src, CollectionConfig &dst,
+                                   ApplySettingsDialog::FieldCategories categories) {
+  if (categories.testFlag(ApplySettingsDialog::GridLayout)) {
+    dst.gridWidth = src.gridWidth;
+    dst.horizontalSpacing = src.horizontalSpacing;
+    dst.verticalSpacing = src.verticalSpacing;
+    dst.itemWidth = src.itemWidth;
+    dst.itemHeight = src.itemHeight;
+    dst.cornerRadius = src.cornerRadius;
+    dst.horizontalAlignment = src.horizontalAlignment;
+    dst.viewType = src.viewType;
+  }
+  if (categories.testFlag(ApplySettingsDialog::ItemText)) {
+    dst.fontSize = src.fontSize;
+    dst.customFontFamily = src.customFontFamily;
+  }
+  if (categories.testFlag(ApplySettingsDialog::Visibility)) {
+    dst.hideTitles = src.hideTitles;
+    dst.hideSubcollectionTitles = src.hideSubcollectionTitles;
+    dst.hideHorizontalScrollbar = src.hideHorizontalScrollbar;
+    dst.hideVerticalScrollbar = src.hideVerticalScrollbar;
+    dst.sidebarMode = src.sidebarMode;
+  }
+  if (categories.testFlag(ApplySettingsDialog::Colors)) {
+    dst.backgroundType = src.backgroundType;
+    dst.backgroundColor = src.backgroundColor;
+    dst.backgroundImage = src.backgroundImage;
+    dst.primaryColor = src.primaryColor;
+    dst.tileColor = src.tileColor;
+    dst.selectionColor = src.selectionColor;
+  }
+  if (categories.testFlag(ApplySettingsDialog::ListView)) {
+    dst.listFontSize = src.listFontSize;
+    dst.listRowHeight = src.listRowHeight;
+    dst.listRowColor = src.listRowColor;
+    dst.listAltRowColor = src.listAltRowColor;
+  }
   dst.clampValues();
 }
 
 } // namespace
+
+int SettingsDialog::applyCategoriesToIndices(const QList<int> &targetIndices,
+                                             ApplySettingsDialog::FieldCategories categories,
+                                             int sourceIndex) {
+  if (categories == ApplySettingsDialog::None) {
+    return 0;
+  }
+  if (!CollectionUtils::isValidIndex(sourceIndex, collections)) {
+    return 0;
+  }
+  const CollectionConfig source = collections[sourceIndex];
+  int applied = 0;
+  for (int idx : targetIndices) {
+    if (idx < 0 || idx >= collections.size()) {
+      continue;
+    }
+    if (idx == sourceIndex) {
+      continue;
+    }
+    copyAppearanceAndLayoutFields(source, collections[idx], categories);
+    if (idx < m_workingCollections.size()) {
+      copyAppearanceAndLayoutFields(source, m_workingCollections[idx], categories);
+    }
+    ++applied;
+  }
+  return applied;
+}
 
 void SettingsDialog::applyCurrentSettingsToIndices(const QList<int> &targetIndices,
                                                    const QString &scopeLabel) {
@@ -579,38 +610,30 @@ void SettingsDialog::applyCurrentSettingsToIndices(const QList<int> &targetIndic
   saveCollectionFromUI(currentCollectionIndex);
 
   const QString sourceName = collections[currentCollectionIndex].name;
-  const QMessageBox::StandardButton reply =
-      QMessageBox::question(this, tr("Apply Settings"),
-                            tr("Copy the appearance and layout settings from \"%1\" to %2 (%3 "
-                               "collection(s))?\n\n"
-                               "This overwrites grid/spacing, item dimensions, fonts, colors, "
-                               "background, list-mode styling, view type, alignment, and "
-                               "scrollbar/sidebar visibility. Paths, extensions, and scan-related "
-                               "flags are left alone.")
-                                .arg(sourceName)
-                                .arg(scopeLabel)
-                                .arg(targetIndices.size()),
-                            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-  if (reply != QMessageBox::Yes) {
+
+  // Kartend-iyk: confirm + per-category opt-in via ApplySettingsDialog.
+  // Default mask is All (matches the legacy Kartend-63o bundle), so a user
+  // who just clicks OK gets the same behaviour as before.
+  ApplySettingsDialog dialog(ApplySettingsDialog::Mode::Push, collections, currentCollectionIndex,
+                             ApplySettingsDialog::All, this);
+  dialog.setHeaderText(tr("Copy appearance and layout settings from \"%1\" to %2 (%3 "
+                          "collection(s)). Tick the categories you want to overwrite — "
+                          "paths, extensions, launchers and scan-related flags are never "
+                          "copied.")
+                           .arg(sourceName)
+                           .arg(scopeLabel)
+                           .arg(targetIndices.size()));
+  if (dialog.exec() != QDialog::Accepted) {
+    return;
+  }
+  const ApplySettingsDialog::FieldCategories categories = dialog.selectedCategories();
+  if (categories == ApplySettingsDialog::None) {
+    QMessageBox::information(this, tr("Apply Settings"),
+                             tr("No categories were selected — nothing was copied."));
     return;
   }
 
-  const CollectionConfig source = collections[currentCollectionIndex];
-  int applied = 0;
-  for (int idx : targetIndices) {
-    if (idx < 0 || idx >= collections.size()) {
-      continue;
-    }
-    if (idx == currentCollectionIndex) {
-      continue;
-    }
-    copyAppearanceAndLayoutFields(source, collections[idx]);
-    if (idx < m_workingCollections.size()) {
-      copyAppearanceAndLayoutFields(source, m_workingCollections[idx]);
-    }
-    ++applied;
-  }
-
+  const int applied = applyCategoriesToIndices(targetIndices, categories, currentCollectionIndex);
   if (applied == 0) {
     return;
   }
@@ -805,29 +828,93 @@ void SettingsDialog::duplicateCollection() {
 
 int SettingsDialog::propagateAppearanceToIndicesSilently(const QList<int> &targetIndices) {
   // Kartend-enq: silent propagation used by the Settings Mode auto-apply
-  // path. Mirrors the field subset of applyCurrentSettingsToIndices() but
-  // skips the confirmation/summary dialogs because the user already opted
-  // in by selecting a non-`Current` Settings Mode. Caller is responsible
-  // for emitting collectionSaved() and refreshing the tree once.
-  if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
-    return 0;
+  // path. Skips the per-category dialog because the mode itself is the
+  // user's opt-in — the silent path always copies the full curated subset.
+  // Caller is responsible for emitting collectionSaved() and refreshing
+  // the tree once.
+  return applyCategoriesToIndices(targetIndices, ApplySettingsDialog::All, currentCollectionIndex);
+}
+
+void SettingsDialog::copySettingsFromOtherCollection() {
+  // Kartend-iyk: pull-from-source. The user picks a source collection and
+  // a category mask via ApplySettingsDialog, then we overwrite the
+  // currently-edited collection's selected fields. Unlike the push paths
+  // we don't auto-emit collectionSaved — instead we mark the form dirty so
+  // the user can review (and undo via Cancel) before committing.
+  if (!CollectionUtils::isValidIndex(currentCollectionIndex, collections)) {
+    QMessageBox::information(this, tr("Copy Settings"),
+                             tr("Select a target collection first, then use Copy Settings "
+                                "From... to pull values from another collection."));
+    return;
   }
-  const CollectionConfig source = collections[currentCollectionIndex];
-  int applied = 0;
-  for (int idx : targetIndices) {
-    if (idx < 0 || idx >= collections.size()) {
+  if (collections[currentCollectionIndex].isPlaylist) {
+    QMessageBox::information(this, tr("Copy Settings"),
+                             tr("Playlists are virtual collections and have no editable "
+                                "appearance settings to overwrite."));
+    return;
+  }
+
+  // Snapshot the form first so an in-progress edit isn't silently discarded
+  // when we reload the UI after the copy.
+  saveCollectionFromUI(currentCollectionIndex);
+
+  // Count eligible source collections (everything except current + playlists)
+  // before opening the dialog so we can give a useful empty-state message.
+  int eligible = 0;
+  for (int i = 0; i < collections.size(); ++i) {
+    if (i == currentCollectionIndex || collections[i].isPlaylist) {
       continue;
     }
-    if (idx == currentCollectionIndex) {
-      continue;
-    }
-    copyAppearanceAndLayoutFields(source, collections[idx]);
-    if (idx < m_workingCollections.size()) {
-      copyAppearanceAndLayoutFields(source, m_workingCollections[idx]);
-    }
-    ++applied;
+    ++eligible;
   }
-  return applied;
+  if (eligible == 0) {
+    QMessageBox::information(this, tr("Copy Settings"),
+                             tr("There are no other collections to copy from."));
+    return;
+  }
+
+  const QString targetName = collections[currentCollectionIndex].name;
+  ApplySettingsDialog dialog(ApplySettingsDialog::Mode::Pull, collections, currentCollectionIndex,
+                             ApplySettingsDialog::All, this);
+  dialog.setHeaderText(tr("Pick a collection to copy settings from onto \"%1\". Tick the "
+                          "categories to overwrite — paths, extensions, launchers and "
+                          "scan-related flags are never copied.")
+                           .arg(targetName));
+  if (dialog.exec() != QDialog::Accepted) {
+    return;
+  }
+  const int sourceIdx = dialog.selectedSourceIndex();
+  if (!CollectionUtils::isValidIndex(sourceIdx, collections)) {
+    return;
+  }
+  const ApplySettingsDialog::FieldCategories categories = dialog.selectedCategories();
+  if (categories == ApplySettingsDialog::None) {
+    QMessageBox::information(this, tr("Copy Settings"),
+                             tr("No categories were selected — nothing was copied."));
+    return;
+  }
+
+  // Single-target apply with the picked source. applyCategoriesToIndices
+  // skips when target == source so passing the current index is safe even
+  // though the dialog already excludes it.
+  const int applied = applyCategoriesToIndices({currentCollectionIndex}, categories, sourceIdx);
+  if (applied == 0) {
+    return;
+  }
+
+  // Reload the form so the user immediately sees the copied values and can
+  // review before saving. Don't emit collectionSaved — the user has not yet
+  // committed the change; saving from the toolbar (or accepting the dialog)
+  // is what flushes to disk.
+  loadCollectionToUI(currentCollectionIndex);
+  checkForChanges();
+  updateSaveButtonStyle();
+
+  QMessageBox::information(this, tr("Copy Settings"),
+                           tr("Copied settings from \"%1\" onto \"%2\". Review the form and "
+                              "click Save to commit, or Cancel the dialog to discard.")
+                               .arg(collections[sourceIdx].name)
+                               .arg(targetName));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
