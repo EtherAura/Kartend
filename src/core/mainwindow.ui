@@ -77,6 +77,31 @@
             <number>10</number>
            </property>
            <item>
+            <widget class="QToolButton" name="hamburgerMenuButton">
+             <property name="maximumSize">
+              <size>
+               <width>30</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Menu</string>
+             </property>
+             <property name="text">
+              <string>≡</string>
+             </property>
+             <property name="popupMode">
+              <enum>QToolButton::InstantPopup</enum>
+             </property>
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+             <property name="visible">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QLabel" name="itemsTitleLabel">
              <property name="font">
               <font>

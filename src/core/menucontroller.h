@@ -92,7 +92,12 @@ private:
   void setupShortcutsAction();
   void setupStatisticsAction();
   void setupGridWidthActions();
+  void setupHamburgerMenu();
   void insertFullscreenInViewMenu(QAction *fullscreenAction);
+
+  // Mirror menu-bar visibility onto the toolbar hamburger button so the user
+  // always has menu access whether the menu bar is hidden by F11 or F10.
+  void syncHamburgerVisibility();
 };
 
 #endif // MENUCONTROLLER_H

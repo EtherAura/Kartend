@@ -14,6 +14,7 @@
 #include <QMainWindow>
 #include <QMenu>
 #include <QMenuBar>
+#include <QToolButton>
 
 MenuController::MenuController(QObject *parent) : QObject(parent) {}
 
@@ -37,6 +38,7 @@ void MenuController::setupMenuBar() {
   setupShortcutsAction();
   setupStatisticsAction();
   setupGridWidthActions();
+  setupHamburgerMenu();
 }
 
 void MenuController::setupActionExit() {
@@ -57,6 +59,7 @@ void MenuController::setupActionShowMenuBar() {
       if (m_ctx.ui->menubar) {
         m_ctx.ui->menubar->setVisible(checked);
       }
+      syncHamburgerVisibility();
     });
     m_ctx.ui->actionShowMenuBar->setShortcutContext(Qt::ApplicationShortcut);
     m_ctx.mainWindow->addAction(m_ctx.ui->actionShowMenuBar);
@@ -382,6 +385,7 @@ void MenuController::setupFullscreenAction() {
       }
       m_fullscreenAction->setChecked(false);
     }
+    syncHamburgerVisibility();
   });
 }
 
@@ -470,4 +474,30 @@ void MenuController::setupGridWidthActions() {
       m_ctx.onAdjustGridWidth(-1);
     }
   });
+}
+
+void MenuController::setupHamburgerMenu() {
+  if (!m_ctx.ui || !m_ctx.ui->hamburgerMenuButton || !m_ctx.mainWindow) return;
+
+  // Build a popup that mirrors the menu bar by re-using each top-level QMenu's
+  // menuAction(). The QMenu objects stay shared between the menu bar and this
+  // popup, so any later additions (like setupFullscreenAction inserting itself
+  // into menuView) appear in both places automatically.
+  auto *popup = new QMenu(m_ctx.mainWindow);
+  if (m_ctx.ui->menuFile) popup->addAction(m_ctx.ui->menuFile->menuAction());
+  if (m_ctx.ui->menuView) popup->addAction(m_ctx.ui->menuView->menuAction());
+  if (m_ctx.ui->menuSort) popup->addAction(m_ctx.ui->menuSort->menuAction());
+  if (m_ctx.ui->menuSettings) popup->addAction(m_ctx.ui->menuSettings->menuAction());
+  if (m_ctx.ui->menuHelp) popup->addAction(m_ctx.ui->menuHelp->menuAction());
+
+  m_ctx.ui->hamburgerMenuButton->setMenu(popup);
+
+  syncHamburgerVisibility();
+}
+
+void MenuController::syncHamburgerVisibility() {
+  if (!m_ctx.ui || !m_ctx.ui->hamburgerMenuButton || !m_ctx.mainWindow) return;
+  QMenuBar *bar = m_ctx.mainWindow->menuBar();
+  const bool menuBarHidden = bar && !bar->isVisible();
+  m_ctx.ui->hamburgerMenuButton->setVisible(menuBarHidden);
 }
