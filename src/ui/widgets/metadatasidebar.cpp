@@ -294,6 +294,11 @@ void MetadataSidebar::renderCollectionSummary() {
                     /*wrap=*/true);
   }
 
+  // Kartend-ekaa: pull the just-built summary rows under the active sidebar-
+  // font override so the no-selection view doesn't render in a different font
+  // than the per-item view.
+  applySidebarFont(m_activeSidebarFontFamily, m_activeSidebarFontPointSize);
+
   m_detailsContainer->show();
 }
 
@@ -484,6 +489,11 @@ void MetadataSidebar::applyAppearance(const CollectionConfig &collection) {
     ui->contentWidget->setPalette(pal);
   }
 
+  // Kartend-ekaa: per-collection sidebar font override. Layered on top of the
+  // designer-set baseline so reverting (empty family + 0 size) restores the
+  // original .ui look without us walking metadatasidebar.ui at runtime.
+  applySidebarFont(collection.sidebarFontFamily, collection.sidebarFontPointSize);
+
   // Kartend-63e: bubble backgrounds for readability over patterned bg.
   // The bubble color is RGB-only; the user-controlled opacity is layered
   // on top via the matching *Opacity field. When the color is blank, fall
@@ -640,6 +650,53 @@ void MetadataSidebar::paintEvent(QPaintEvent *event) {
   }
 
   QWidget::paintEvent(event);
+}
+
+void MetadataSidebar::captureLabelFontBaselines() {
+  // Sweep every current QLabel in the subtree and record any that we haven't
+  // seen yet. Each label's *current* font is taken as its baseline — this is
+  // correct because we only call this from applySidebarFont before applying
+  // the override, so the snapshot is the un-overridden designer/code font.
+  // Dead pointers from previous item changes are dropped here so the list
+  // doesn't grow unbounded across many selection changes.
+  m_labelFontBaselines.removeIf(
+      [](const LabelFontBaseline &b) { return b.label.isNull(); });
+  QSet<QLabel *> known;
+  known.reserve(m_labelFontBaselines.size());
+  for (const auto &b : m_labelFontBaselines) {
+    if (b.label) {
+      known.insert(b.label.data());
+    }
+  }
+  const auto labels = findChildren<QLabel *>();
+  for (QLabel *lbl : labels) {
+    if (lbl && !known.contains(lbl)) {
+      m_labelFontBaselines.append({QPointer<QLabel>(lbl), lbl->font()});
+    }
+  }
+  m_labelFontBaselinesCaptured = true;
+}
+
+void MetadataSidebar::applySidebarFont(const QString &family, int pointSize) {
+  m_activeSidebarFontFamily = family.trimmed();
+  m_activeSidebarFontPointSize = pointSize;
+  captureLabelFontBaselines();
+  for (const auto &baseline : m_labelFontBaselines) {
+    QLabel *lbl = baseline.label.data();
+    if (!lbl) {
+      continue;
+    }
+    QFont f = baseline.font;
+    if (!m_activeSidebarFontFamily.isEmpty()) {
+      f.setFamily(m_activeSidebarFontFamily);
+    }
+    if (m_activeSidebarFontPointSize > 0) {
+      f.setPointSize(m_activeSidebarFontPointSize);
+    }
+    if (lbl->font() != f) {
+      lbl->setFont(f);
+    }
+  }
 }
 
 void MetadataSidebar::applyBubbleStyles(const QString &headerHex, const QString &sectionHex) {
@@ -951,6 +1008,11 @@ void MetadataSidebar::setExtendedMetadata(const ItemMetadataStore::ItemMetadata 
     appendDetailRow(pair.first, pair.second, /*wrap=*/true);
   }
 
+  // Kartend-ekaa: re-apply the active sidebar-font override so the just-
+  // appended detail rows pick up the same font as the static labels. The
+  // override falls back to a no-op when no override is in effect.
+  applySidebarFont(m_activeSidebarFontFamily, m_activeSidebarFontPointSize);
+
   m_detailsContainer->show();
 }
 
@@ -977,6 +1039,9 @@ void MetadataSidebar::setUsageStats(const UsageStatsStore::ItemUsageStats &stats
   if (stats.totalPlaySeconds > 0) {
     appendDetailRow(tr("Time played"), UsageStatsStore::formatDuration(stats.totalPlaySeconds));
   }
+  // Kartend-ekaa: same rationale as setExtendedMetadata — pull the new rows
+  // under the active sidebar font.
+  applySidebarFont(m_activeSidebarFontFamily, m_activeSidebarFontPointSize);
   m_detailsContainer->show();
 }
 

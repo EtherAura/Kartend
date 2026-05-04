@@ -383,6 +383,16 @@ struct CollectionConfig {
   // Text appearance settings (per-collection)
   QString customFontFamily; // Custom font family (empty = system default)
 
+  // ─── Sidebar font (Kartend-ekaa) ───────────────────────────────────────────
+  // Per-collection override for the metadata sidebar's text. Empty family /
+  // 0 size = inherit from the application font (which itself respects
+  // GeneralSettings::globalUiFontFamily). Stored alongside the rest of the
+  // sidebarXxx appearance fields so a collection's sidebar look is fully
+  // self-contained.
+  // ───────────────────────────────────────────────────────────────────────────
+  QString sidebarFontFamily;
+  int sidebarFontPointSize = 0;
+
   // ─── Playlist support (Kartend-vlm7) ───────────────────────────────────────
   // Runtime-only marker for synthesized "virtual collection" entries backed by
   // the SQLite `playlists` table instead of an INI section. Synthesised at
@@ -464,6 +474,8 @@ struct CollectionConfig {
            showHiddenFolders == other.showHiddenFolders && listFontSize == other.listFontSize &&
            listRowHeight == other.listRowHeight && listRowColor == other.listRowColor &&
            listAltRowColor == other.listAltRowColor && customFontFamily == other.customFontFamily &&
+           sidebarFontFamily == other.sidebarFontFamily &&
+           sidebarFontPointSize == other.sidebarFontPointSize &&
            isPlaylist == other.isPlaylist && playlistId == other.playlistId &&
            playlistReservedKind == other.playlistReservedKind &&
            additionalParentNames == other.additionalParentNames;

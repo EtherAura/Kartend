@@ -181,6 +181,13 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   if (ui->sidebarSectionBgOpacitySpinBox) {
     config.sidebarSectionBgOpacity = ui->sidebarSectionBgOpacitySpinBox->value();
   }
+  // Kartend-ekaa: per-collection sidebar font override.
+  if (ui->sidebarFontFamilyEdit) {
+    config.sidebarFontFamily = ui->sidebarFontFamilyEdit->text().trimmed();
+  }
+  if (ui->sidebarFontSizeSpinBox) {
+    config.sidebarFontPointSize = ui->sidebarFontSizeSpinBox->value();
+  }
   if (ui->sidebarActiveTabComboBox) {
     config.sidebarActiveTab = static_cast<SidebarTab>(ui->sidebarActiveTabComboBox->currentIndex());
   }
@@ -351,6 +358,10 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
        ui->sidebarHeaderBgOpacitySpinBox->value() != originalConfig.sidebarHeaderBgOpacity) ||
       ((ui->sidebarSectionBgOpacitySpinBox) &&
        ui->sidebarSectionBgOpacitySpinBox->value() != originalConfig.sidebarSectionBgOpacity) ||
+      ((ui->sidebarFontFamilyEdit) &&
+       ui->sidebarFontFamilyEdit->text().trimmed() != originalConfig.sidebarFontFamily) ||
+      ((ui->sidebarFontSizeSpinBox) &&
+       ui->sidebarFontSizeSpinBox->value() != originalConfig.sidebarFontPointSize) ||
       ((ui->sidebarActiveTabComboBox) &&
        ui->sidebarActiveTabComboBox->currentIndex() !=
            static_cast<int>(originalConfig.sidebarActiveTab)) ||

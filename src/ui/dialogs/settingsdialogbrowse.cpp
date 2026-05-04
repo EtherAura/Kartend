@@ -379,6 +379,13 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->sidebarSectionBgOpacitySpinBox) {
     ui->sidebarSectionBgOpacitySpinBox->setValue(config.sidebarSectionBgOpacity);
   }
+  // Kartend-ekaa: per-collection sidebar font override.
+  if (ui->sidebarFontFamilyEdit) {
+    ui->sidebarFontFamilyEdit->setText(config.sidebarFontFamily);
+  }
+  if (ui->sidebarFontSizeSpinBox) {
+    ui->sidebarFontSizeSpinBox->setValue(config.sidebarFontPointSize);
+  }
   if (ui->sidebarActiveTabComboBox) {
     ui->sidebarActiveTabComboBox->setCurrentIndex(static_cast<int>(config.sidebarActiveTab));
   }
@@ -547,6 +554,8 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->sidebarSectionBgEdit) ui->sidebarSectionBgEdit->clear();
   if (ui->sidebarHeaderBgOpacitySpinBox) ui->sidebarHeaderBgOpacitySpinBox->setValue(200);
   if (ui->sidebarSectionBgOpacitySpinBox) ui->sidebarSectionBgOpacitySpinBox->setValue(170);
+  if (ui->sidebarFontFamilyEdit) ui->sidebarFontFamilyEdit->clear();
+  if (ui->sidebarFontSizeSpinBox) ui->sidebarFontSizeSpinBox->setValue(0);
   if (ui->sidebarActiveTabComboBox) ui->sidebarActiveTabComboBox->setCurrentIndex(0);
   if (ui->viewTypeComboBox) ui->viewTypeComboBox->setCurrentIndex(0);
   if (ui->parentCollectionComboBox) ui->parentCollectionComboBox->clear();
