@@ -23,6 +23,7 @@
 #include "artworkpreviewoverlay.h"
 #include "extensionutils.h"
 #include "itemwidget.h"
+#include "mainwindow.h"
 #include "metadatasidebar.h"
 #include "pathutils.h"
 #include "uiconstants.h"
@@ -681,6 +682,10 @@ void MetadataSidebar::applySidebarFont(const QString &family, int pointSize) {
   m_activeSidebarFontFamily = family.trimmed();
   m_activeSidebarFontPointSize = pointSize;
   captureLabelFontBaselines();
+  // Kartend-7eff: scale the override (or each label's baseline pointSize when
+  // the user hasn't picked one) by the active text-zoom multiplier so the
+  // sidebar tracks Ctrl+= / Ctrl+- alongside the rest of the UI.
+  const int zoomedOverride = MainWindow::zoomedFontSize(m_activeSidebarFontPointSize);
   for (const auto &baseline : m_labelFontBaselines) {
     QLabel *lbl = baseline.label.data();
     if (!lbl) {
@@ -690,8 +695,12 @@ void MetadataSidebar::applySidebarFont(const QString &family, int pointSize) {
     if (!m_activeSidebarFontFamily.isEmpty()) {
       f.setFamily(m_activeSidebarFontFamily);
     }
-    if (m_activeSidebarFontPointSize > 0) {
-      f.setPointSize(m_activeSidebarFontPointSize);
+    if (zoomedOverride > 0) {
+      f.setPointSize(zoomedOverride);
+    } else if (baseline.font.pointSize() > 0) {
+      // No explicit override → scale the baseline so the title-vs-body
+      // hierarchy from the .ui file is preserved while still tracking zoom.
+      f.setPointSize(MainWindow::zoomedFontSize(baseline.font.pointSize()));
     }
     if (lbl->font() != f) {
       lbl->setFont(f);

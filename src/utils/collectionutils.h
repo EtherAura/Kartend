@@ -456,8 +456,8 @@ struct CollectionConfig {
            sidebarHeaderBgOpacity == other.sidebarHeaderBgOpacity &&
            sidebarSectionBgOpacity == other.sidebarSectionBgOpacity &&
            sidebarWidth == other.sidebarWidth && sidebarWidthLocked == other.sidebarWidthLocked &&
-           sidebarActiveTab == other.sidebarActiveTab &&
-           viewType == other.viewType && horizontalSpacing == other.horizontalSpacing &&
+           sidebarActiveTab == other.sidebarActiveTab && viewType == other.viewType &&
+           horizontalSpacing == other.horizontalSpacing &&
            verticalSpacing == other.verticalSpacing &&
            hideHorizontalScrollbar == other.hideHorizontalScrollbar &&
            hideVerticalScrollbar == other.hideVerticalScrollbar && itemWidth == other.itemWidth &&
@@ -475,9 +475,8 @@ struct CollectionConfig {
            listRowHeight == other.listRowHeight && listRowColor == other.listRowColor &&
            listAltRowColor == other.listAltRowColor && customFontFamily == other.customFontFamily &&
            sidebarFontFamily == other.sidebarFontFamily &&
-           sidebarFontPointSize == other.sidebarFontPointSize &&
-           isPlaylist == other.isPlaylist && playlistId == other.playlistId &&
-           playlistReservedKind == other.playlistReservedKind &&
+           sidebarFontPointSize == other.sidebarFontPointSize && isPlaylist == other.isPlaylist &&
+           playlistId == other.playlistId && playlistReservedKind == other.playlistReservedKind &&
            additionalParentNames == other.additionalParentNames;
   }
 
@@ -740,6 +739,16 @@ struct GeneralSettings {
   int globalUiFontPointSize = 0;
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Runtime text zoom (Kartend-7eff)
+  // Application-wide multiplier applied on top of every font size — global UI
+  // font, per-collection grid/list/coverflow item titles, and the metadata
+  // sidebar. Stored as percent (100 = unscaled). Bound at runtime to
+  // Ctrl+= / Ctrl+- / Ctrl+0 (zoom in / out / reset). Clamped at load/save
+  // so a hand-edited value can't render text at 0pt or blow it out past 3×.
+  // ─────────────────────────────────────────────────────────────────────────
+  int uiTextZoomPercent = 100;
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Controls: Keyboard bindings (single-key, no modifier semantics)
   // Defaults match current hard-coded behavior.
   // ─────────────────────────────────────────────────────────────────────────
@@ -788,7 +797,7 @@ struct GeneralSettings {
   // Attract mode / autoscroll (Kartend-1pp)
   // ─────────────────────────────────────────────────────────────────────────
   bool attractModeEnabled = false;
-  int attractModeIdleTimeoutSec = 120; // Seconds of idle before activation
+  int attractModeIdleTimeoutSec = 120;      // Seconds of idle before activation
   bool attractModeAutoScrollEnabled = true; // Sub-toggle: viewport autoscroll
   double attractModeScrollSpeed = 1.0;      // Pixels per tick (0.1-10, sub-pixel via accumulator)
   bool attractModeAdvanceSelectionEnabled = false;

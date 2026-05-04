@@ -127,8 +127,43 @@ public:
   /// @p settings to QApplication. Empty family / 0 size means "leave the
   /// platform default in place." Idempotent — invoked on startup after
   /// settings load and again whenever the user changes the font in the
-  /// Settings dialog.
+  /// Settings dialog. Honors the runtime text-zoom multiplier from
+  /// @p settings — see Kartend-7eff.
   static void applyGlobalUiFont(const GeneralSettings &settings);
+
+  /// Kartend-7eff: current runtime text-zoom multiplier, expressed as
+  /// percent (100 = unscaled). Read by every place that pushes a font size
+  /// onto a widget — global UI font, item titles, sidebar labels — so a
+  /// single Ctrl++ press scales literally every line of text in the app.
+  static int textZoomPercent();
+  /// Kartend-7eff: set @p percent (clamped to [50, 300]), persist it to
+  /// settings, and trigger a re-render of every widget that draws text:
+  ///   • QApplication font (via applyGlobalUiFont)
+  ///   • Active sidebar (re-runs applyAppearance for the current collection)
+  ///   • Items grid / list / coverflow (rebuilds the virtual scroll widgets)
+  /// Safe to call from a shortcut handler — the heavy refresh work is
+  /// debounced by the existing scroll-layout pipeline.
+  void applyTextZoom(int percent);
+
+  /// Kartend-7eff: helper that returns @p baseSize scaled by the active
+  /// text-zoom multiplier. Returns @p baseSize unchanged when zoom is 100
+  /// or @p baseSize is non-positive. Centralizes the rounding rule so
+  /// every callsite (item widgets, sidebar, coverflow) computes the same
+  /// scaled value for a given input.
+  static int zoomedFontSize(int baseSize);
+  /// Kartend-7eff: lightweight setter used during startup to publish the
+  /// persisted multiplier into the static before any widget is built. Does
+  /// NOT persist or trigger refreshes — applyTextZoom() is the runtime
+  /// path that does both. Clamps @p percent to the same [50, 300] range
+  /// applyTextZoom uses so a hand-edited config can't widen it later.
+  static void primeTextZoomFromSettings(int percent);
+
+  /// Kartend-7eff: install Ctrl+= / Ctrl+- / Ctrl+0 application shortcuts
+  /// for zoom in / out / reset. Called once from setupUI() after the
+  /// managers are wired so applyTextZoom() can refresh them. Step size is
+  /// 10 percentage points per press — enough to feel responsive without
+  /// requiring many keystrokes to traverse the [50, 300] range.
+  void setupTextZoomShortcuts();
 
 protected:
   bool event(QEvent *event) override;

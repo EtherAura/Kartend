@@ -18,6 +18,7 @@
 #include "itemwidgetfactory.h"
 #include "listheaderwidget.h"
 #include "loggingcategories.h"
+#include "mainwindow.h"
 #include "presearchstatemanager.h"
 #include "scrolldatamanager.h"
 #include "scrolleventhandler.h"
@@ -184,6 +185,8 @@ void VirtualScrollEngine::recreateLayout() {
   bool isListMode = (m_owner->m_context.config.viewType == ViewType::List);
   int fontSize =
       isListMode ? m_owner->m_context.config.listFontSize : m_owner->m_context.config.fontSize;
+  // Kartend-7eff: scale before push so item titles match the active zoom.
+  fontSize = MainWindow::zoomedFontSize(fontSize);
   for (auto it = m_owner->m_activeWidgets.begin(); it != m_owner->m_activeWidgets.end(); ++it) {
     ItemWidget *widget = it.value();
     if (!widget) {
@@ -426,6 +429,8 @@ void VirtualScrollEngine::ensureWidgetForIndex(int visualIndex) {
     bool isListMode = (m_owner->m_context.config.viewType == ViewType::List);
     int fontSize =
         isListMode ? m_owner->m_context.config.listFontSize : m_owner->m_context.config.fontSize;
+    // Kartend-7eff: same as the bulk-update branch above.
+    fontSize = MainWindow::zoomedFontSize(fontSize);
     existing->setHideTitles(m_owner->m_context.config.hideTitles);
     existing->setHideSubcollectionTitles(m_owner->m_context.config.hideSubcollectionTitles);
     existing->setFontSize(fontSize);

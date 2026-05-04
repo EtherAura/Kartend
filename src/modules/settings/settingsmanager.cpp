@@ -82,6 +82,12 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.globalUiFontFamily = s.value("globalUiFontFamily", QString()).toString();
   settings.globalUiFontPointSize = s.value("globalUiFontPointSize", 0).toInt();
 
+  // Kartend-7eff: runtime text zoom. Persisted as percent so a hand-edited
+  // value reads obviously; clamped to [50, 300] to keep typography legible
+  // and avoid absurdly tiny / huge widget sizes that the layout pipeline
+  // wasn't designed for.
+  settings.uiTextZoomPercent = qBound(50, s.value("uiTextZoomPercent", 100).toInt(), 300);
+
   // Controls: keyboard bindings
   settings.keyNavLeft = s.value("keyNavLeft", static_cast<int>(Qt::Key_Left)).toInt();
   settings.keyNavRight = s.value("keyNavRight", static_cast<int>(Qt::Key_Right)).toInt();
@@ -248,6 +254,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   // Kartend-9v0o: global UI font
   m_generalSettings.globalUiFontFamily = settings.globalUiFontFamily.trimmed();
   m_generalSettings.globalUiFontPointSize = settings.globalUiFontPointSize;
+  // Kartend-7eff: runtime text zoom
+  m_generalSettings.uiTextZoomPercent = qBound(50, settings.uiTextZoomPercent, 300);
 
   // Controls
   m_generalSettings.keyNavLeft = settings.keyNavLeft;
@@ -336,6 +344,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   // Kartend-9v0o: global UI font
   s.setValue("globalUiFontFamily", m_generalSettings.globalUiFontFamily);
   s.setValue("globalUiFontPointSize", m_generalSettings.globalUiFontPointSize);
+  // Kartend-7eff: runtime text zoom
+  s.setValue("uiTextZoomPercent", m_generalSettings.uiTextZoomPercent);
   s.setValue("keyNavLeft", m_generalSettings.keyNavLeft);
   s.setValue("keyNavRight", m_generalSettings.keyNavRight);
   s.setValue("keyNavUp", m_generalSettings.keyNavUp);
@@ -379,8 +389,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   // Customizable toolbar (Kartend-81o)
   s.setValue("toolbarShowGridViewButton", m_generalSettings.toolbarShowGridViewButton);
   s.setValue("toolbarShowListViewButton", m_generalSettings.toolbarShowListViewButton);
-  s.setValue("toolbarShowCoverFlowViewButton",
-             m_generalSettings.toolbarShowCoverFlowViewButton);
+  s.setValue("toolbarShowCoverFlowViewButton", m_generalSettings.toolbarShowCoverFlowViewButton);
   s.setValue("toolbarShowHideSubcollectionsButton",
              m_generalSettings.toolbarShowHideSubcollectionsButton);
   s.setValue("toolbarShowTypeFilter", m_generalSettings.toolbarShowTypeFilter);
@@ -389,8 +398,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("toolbarShowSearchBar", m_generalSettings.toolbarShowSearchBar);
   s.setValue("toolbarGridViewButtonText", m_generalSettings.toolbarGridViewButtonText);
   s.setValue("toolbarListViewButtonText", m_generalSettings.toolbarListViewButtonText);
-  s.setValue("toolbarCoverFlowViewButtonText",
-             m_generalSettings.toolbarCoverFlowViewButtonText);
+  s.setValue("toolbarCoverFlowViewButtonText", m_generalSettings.toolbarCoverFlowViewButtonText);
   s.setValue("toolbarHideSubcollectionsButtonText",
              m_generalSettings.toolbarHideSubcollectionsButtonText);
   s.setValue("toolbarTitleFilterText", m_generalSettings.toolbarTitleFilterText);

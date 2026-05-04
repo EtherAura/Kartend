@@ -1,10 +1,12 @@
 // Main application window that owns ApplicationManager and orchestrates UI
 // setup.
+#include <QAction>
 #include <QActionGroup>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QInputDialog>
 #include <QKeyEvent>
+#include <QKeySequence>
 #include <QMessageBox>
 #include <QPixmapCache>
 #include <QPushButton>
@@ -119,10 +121,97 @@ void MainWindow::applyGlobalUiFont(const GeneralSettings &settings) {
   if (settings.globalUiFontPointSize > 0) {
     font.setPointSize(settings.globalUiFontPointSize);
   }
+  // Kartend-7eff: layer the runtime text zoom on top so menus/dialogs/
+  // toolbar scale at the same rate as item titles. Computed against the
+  // size that was already chosen above (user override or baseline) so the
+  // override stays the authoritative "100 %" reference.
+  font.setPointSize(std::max(1, font.pointSize() * settings.uiTextZoomPercent / 100));
   // setFont propagates to every widget that hasn't had setFont() called on
   // it explicitly, so menus, dialogs, and toolbar text all pick this up
   // without us walking the widget tree.
   QApplication::setFont(font);
+}
+
+namespace {
+// Kartend-7eff: lives outside the class so the static initializer runs once
+// at first translation unit load. Defaulting to 100 (unscaled) means any
+// code that calls textZoomPercent() before MainWindow has set it from
+// settings still gets a sane value.
+int g_textZoomPercent = 100;
+} // namespace
+
+int MainWindow::textZoomPercent() {
+  return g_textZoomPercent;
+}
+
+void MainWindow::primeTextZoomFromSettings(int percent) {
+  g_textZoomPercent = std::clamp(percent, 50, 300);
+}
+
+int MainWindow::zoomedFontSize(int baseSize) {
+  if (baseSize <= 0 || g_textZoomPercent == 100) {
+    return baseSize;
+  }
+  // Floor at 1pt: a fontSize of 0 confuses Qt's font system on some
+  // platforms, and the user can always reset zoom rather than relying on
+  // an undisplayable size as a feature.
+  return std::max(1, baseSize * g_textZoomPercent / 100);
+}
+
+void MainWindow::setupTextZoomShortcuts() {
+  // Three application-context QActions: zoom in (Ctrl++ / Ctrl+=), zoom out
+  // (Ctrl+-), reset (Ctrl+0). The lambdas capture `this` so applyTextZoom
+  // can dispatch the cascade refresh — the shortcuts stay live regardless
+  // of which child widget has focus.
+  static constexpr int kStep = 10;
+  auto *zoomIn = new QAction(tr("Zoom Text In"), this);
+  // The platform-default Ctrl++ shortcut comes through as Qt::Key_Plus on
+  // some keyboards and Qt::Key_Equal on others; bind both so US/EU layouts
+  // are equally happy.
+  zoomIn->setShortcuts(
+      {QKeySequence(Qt::CTRL | Qt::Key_Plus), QKeySequence(Qt::CTRL | Qt::Key_Equal)});
+  zoomIn->setShortcutContext(Qt::ApplicationShortcut);
+  addAction(zoomIn);
+  connect(zoomIn, &QAction::triggered, this,
+          [this]() { applyTextZoom(textZoomPercent() + kStep); });
+
+  auto *zoomOut = new QAction(tr("Zoom Text Out"), this);
+  zoomOut->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus));
+  zoomOut->setShortcutContext(Qt::ApplicationShortcut);
+  addAction(zoomOut);
+  connect(zoomOut, &QAction::triggered, this,
+          [this]() { applyTextZoom(textZoomPercent() - kStep); });
+
+  auto *zoomReset = new QAction(tr("Reset Text Zoom"), this);
+  zoomReset->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
+  zoomReset->setShortcutContext(Qt::ApplicationShortcut);
+  addAction(zoomReset);
+  connect(zoomReset, &QAction::triggered, this, [this]() { applyTextZoom(100); });
+}
+
+void MainWindow::applyTextZoom(int percent) {
+  const int clamped = std::clamp(percent, 50, 300);
+  if (clamped == g_textZoomPercent && clamped == m_generalSettings.uiTextZoomPercent) {
+    return;
+  }
+  g_textZoomPercent = clamped;
+  m_generalSettings.uiTextZoomPercent = clamped;
+  if (getSettingsManager()) {
+    getSettingsManager()->saveGeneralSettings(m_generalSettings);
+  }
+  // Re-push the global font with the new multiplier baked in.
+  applyGlobalUiFont(m_generalSettings);
+  // Re-run sidebar appearance so its font baselines pick up the new zoom.
+  if (getSidebarManager()) {
+    getSidebarManager()->applySidebarStateForCollection(currentCollectionIndex);
+  }
+  // Tear down + rebuild the virtual scroll content so item widgets are
+  // re-instantiated with the new scaled fontSize. Coverflow uses the same
+  // scroll module entry point, so this covers grid, list, and 3D modes.
+  if (getScrollManager()) {
+    getScrollManager()->preCalculateLayout();
+    getScrollManager()->forceVirtualViewUpdate();
+  }
 }
 
 void MainWindow::applyToolbarCustomization() {
