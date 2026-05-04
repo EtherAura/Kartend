@@ -201,6 +201,10 @@ signals:
   /// gallery-style previews — listeners should fall back to the current
   /// selection when empty.
   void artworkPreviewLaunchRequested(const QString &filePath);
+  /// Kartend-63e bug #7: forwarded from SelectionDisplayManager. MainWindow
+  /// wires this to SidebarManager::setOverlayActive so the sidebar lowers
+  /// itself below the overlay while it's showing.
+  void artworkPreviewVisibilityChanged(bool visible);
   /// Kartend-3ile: emitted when the user activates the centered card in
   /// CoverFlow view (single click on center, double click, Enter, etc.) and
   /// the activated index is a media item. Subcollection / virtual-folder

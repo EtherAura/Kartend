@@ -67,6 +67,13 @@ public:
   void setExternallyHidden(bool hidden);
   [[nodiscard]] bool isExternallyHidden() const { return m_externallyHidden; }
 
+  /// Kartend-63e: tracks whether a fullscreen overlay (artwork preview /
+  /// expand-mode video) is currently visible. While true, the sidebar's
+  /// raise() is skipped so the overlay can stay on top — without this flag,
+  /// re-running updateSidebarLayout (e.g. after a window resize) would
+  /// re-stack the sidebar above the active overlay.
+  void setOverlayActive(bool active);
+
 signals:
   void sidebarVisibilityChanged(bool visible);
   void sidebarLayoutChanged();
@@ -92,6 +99,8 @@ private:
   /// the user's per-collection preference. Effective visibility is the
   /// AND of (!m_externallyHidden) and m_sidebarVisible.
   bool m_externallyHidden = false;
+  /// Kartend-63e: see setOverlayActive() doc above.
+  bool m_overlayActive = false;
   int m_currentCollectionIndex;
 
   // Snapshot of the currently-displayed item used by the artwork link

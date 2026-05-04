@@ -145,6 +145,10 @@ signals:
   /// thumbnail previews that don't carry an associated media path, in
   /// which case the listener should fall back to the current selection.
   void artworkPreviewLaunchRequested(const QString &filePath);
+  /// Kartend-63e bug #7: emitted from the overlay's show/hide events. Wired
+  /// up at lazy-creation time so SidebarManager can lower the sidebar while
+  /// the overlay is on top.
+  void artworkPreviewVisibilityChanged(bool visible);
 
 private slots:
   void onListColumnClicked(ListSortColumn column);

@@ -272,3 +272,13 @@ void ArtworkPreviewOverlay::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);
   centerContent();
 }
+
+void ArtworkPreviewOverlay::showEvent(QShowEvent *event) {
+  QWidget::showEvent(event);
+  emit visibilityChanged(true);
+}
+
+void ArtworkPreviewOverlay::hideEvent(QHideEvent *event) {
+  QWidget::hideEvent(event);
+  emit visibilityChanged(false);
+}

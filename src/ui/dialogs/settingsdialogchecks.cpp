@@ -129,6 +129,61 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.sidebarMode = (ui->sidebarModeComboBox)
                            ? static_cast<SidebarMode>(ui->sidebarModeComboBox->currentIndex())
                            : config.sidebarMode;
+  // Kartend-63e sidebar enhancements.
+  if (ui->sidebarPositionComboBox) {
+    config.sidebarPosition =
+        static_cast<SidebarPosition>(ui->sidebarPositionComboBox->currentIndex());
+  }
+  if (ui->sidebarWidthSpinBox) {
+    config.sidebarWidth = ui->sidebarWidthSpinBox->value();
+  }
+  if (ui->sidebarWidthLockedCheckBox) {
+    config.sidebarWidthLocked = ui->sidebarWidthLockedCheckBox->isChecked();
+  }
+  if (ui->sidebarBackgroundTypeComboBox) {
+    config.sidebarBackgroundType =
+        static_cast<SidebarBackgroundType>(ui->sidebarBackgroundTypeComboBox->currentIndex());
+  }
+  if (ui->sidebarBackgroundValueEdit) {
+    const QString value = ui->sidebarBackgroundValueEdit->text().trimmed();
+    if (config.sidebarBackgroundType == SidebarBackgroundType::Image) {
+      config.sidebarBackgroundImage = value;
+      config.sidebarBackgroundColor.clear();
+    } else {
+      // Pattern mode also stores the bg base color in sidebarBackgroundColor;
+      // the value field doubles for that. The pattern stroke color comes
+      // from sidebarPatternColorEdit below.
+      config.sidebarBackgroundColor = value;
+      config.sidebarBackgroundImage.clear();
+    }
+  }
+  if (ui->sidebarPatternIntensitySpinBox) {
+    config.sidebarPatternIntensity = ui->sidebarPatternIntensitySpinBox->value();
+  }
+  if (ui->sidebarPatternColorEdit) {
+    config.sidebarPatternColor = ui->sidebarPatternColorEdit->text().trimmed();
+  }
+  if (ui->sidebarTextColorEdit) {
+    config.sidebarTextColor = ui->sidebarTextColorEdit->text().trimmed();
+  }
+  if (ui->sidebarAccentColorEdit) {
+    config.sidebarAccentColor = ui->sidebarAccentColorEdit->text().trimmed();
+  }
+  if (ui->sidebarHeaderBgEdit) {
+    config.sidebarHeaderBgColor = ui->sidebarHeaderBgEdit->text().trimmed();
+  }
+  if (ui->sidebarSectionBgEdit) {
+    config.sidebarSectionBgColor = ui->sidebarSectionBgEdit->text().trimmed();
+  }
+  if (ui->sidebarHeaderBgOpacitySpinBox) {
+    config.sidebarHeaderBgOpacity = ui->sidebarHeaderBgOpacitySpinBox->value();
+  }
+  if (ui->sidebarSectionBgOpacitySpinBox) {
+    config.sidebarSectionBgOpacity = ui->sidebarSectionBgOpacitySpinBox->value();
+  }
+  if (ui->sidebarActiveTabComboBox) {
+    config.sidebarActiveTab = static_cast<SidebarTab>(ui->sidebarActiveTabComboBox->currentIndex());
+  }
   config.viewType = (ui->viewTypeComboBox)
                         ? static_cast<ViewType>(ui->viewTypeComboBox->currentIndex())
                         : config.viewType;
@@ -264,6 +319,41 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
            static_cast<int>(originalConfig.horizontalAlignment)) ||
       ((ui->sidebarModeComboBox) &&
        ui->sidebarModeComboBox->currentIndex() != static_cast<int>(originalConfig.sidebarMode)) ||
+      // Kartend-63e: dirty checks for the new sidebar fields.
+      ((ui->sidebarPositionComboBox) &&
+       ui->sidebarPositionComboBox->currentIndex() !=
+           static_cast<int>(originalConfig.sidebarPosition)) ||
+      ((ui->sidebarWidthSpinBox) &&
+       ui->sidebarWidthSpinBox->value() != originalConfig.sidebarWidth) ||
+      ((ui->sidebarWidthLockedCheckBox) &&
+       ui->sidebarWidthLockedCheckBox->isChecked() != originalConfig.sidebarWidthLocked) ||
+      ((ui->sidebarBackgroundTypeComboBox) &&
+       ui->sidebarBackgroundTypeComboBox->currentIndex() !=
+           static_cast<int>(originalConfig.sidebarBackgroundType)) ||
+      ((ui->sidebarBackgroundValueEdit) &&
+       ui->sidebarBackgroundValueEdit->text().trimmed() !=
+           (originalConfig.sidebarBackgroundType == SidebarBackgroundType::Image
+                ? originalConfig.sidebarBackgroundImage
+                : originalConfig.sidebarBackgroundColor)) ||
+      ((ui->sidebarPatternColorEdit) &&
+       ui->sidebarPatternColorEdit->text().trimmed() != originalConfig.sidebarPatternColor) ||
+      ((ui->sidebarPatternIntensitySpinBox) &&
+       ui->sidebarPatternIntensitySpinBox->value() != originalConfig.sidebarPatternIntensity) ||
+      ((ui->sidebarTextColorEdit) &&
+       ui->sidebarTextColorEdit->text().trimmed() != originalConfig.sidebarTextColor) ||
+      ((ui->sidebarAccentColorEdit) &&
+       ui->sidebarAccentColorEdit->text().trimmed() != originalConfig.sidebarAccentColor) ||
+      ((ui->sidebarHeaderBgEdit) &&
+       ui->sidebarHeaderBgEdit->text().trimmed() != originalConfig.sidebarHeaderBgColor) ||
+      ((ui->sidebarSectionBgEdit) &&
+       ui->sidebarSectionBgEdit->text().trimmed() != originalConfig.sidebarSectionBgColor) ||
+      ((ui->sidebarHeaderBgOpacitySpinBox) &&
+       ui->sidebarHeaderBgOpacitySpinBox->value() != originalConfig.sidebarHeaderBgOpacity) ||
+      ((ui->sidebarSectionBgOpacitySpinBox) &&
+       ui->sidebarSectionBgOpacitySpinBox->value() != originalConfig.sidebarSectionBgOpacity) ||
+      ((ui->sidebarActiveTabComboBox) &&
+       ui->sidebarActiveTabComboBox->currentIndex() !=
+           static_cast<int>(originalConfig.sidebarActiveTab)) ||
       ((ui->viewTypeComboBox) &&
        ui->viewTypeComboBox->currentIndex() != static_cast<int>(originalConfig.viewType)) ||
       ((ui->hideMissingArtworkCheckBox) &&

@@ -20,6 +20,27 @@ enum class HorizontalAlignment { Left = 0, Center = 1, Right = 2 };
 
 enum class SidebarMode { Overlay = 0, Expand = 1 };
 
+/// Kartend-63e: which side of the items viewport the sidebar lives on. Applies
+/// in both Overlay and Fixed modes — Overlay swaps the X anchor, Fixed swaps
+/// the layout insertion index.
+enum class SidebarPosition { Right = 0, Left = 1 };
+
+/// Kartend-63e: how the sidebar background is rendered. Color and Image mirror
+/// the main-view BackgroundType values. Pattern adds a procedurally-drawn
+/// pattern (currently only Crosshatch) tinted by `sidebarPatternColor`.
+enum class SidebarBackgroundType { Color = 0, Image = 1, Pattern = 2 };
+
+/// Kartend-63e: built-in sidebar background patterns. Single value today;
+/// dots/lines/etc. can be added without breaking persistence because the int
+/// representation is what's serialized.
+enum class SidebarPattern { Crosshatch = 0 };
+
+/// Kartend-63e: which built-in tab is active in the sidebar. Item is the
+/// per-item view (artwork + metadata); Collection forces the collection
+/// summary even with a selection; File is reserved for a user-customizable
+/// pane in a later iteration.
+enum class SidebarTab { Item = 0, Collection = 1, File = 2 };
+
 enum class BackgroundType { Color = 0, Image = 1 };
 
 /// View type for displaying collection items
@@ -64,6 +85,66 @@ namespace CollectionUtils {
   if (lower == "list") return ViewType::List;
   if (lower == "coverflow") return ViewType::CoverFlow;
   return ViewType::Grid;
+}
+
+[[nodiscard]] inline QString sidebarPositionToString(SidebarPosition pos) {
+  return pos == SidebarPosition::Left ? "left" : "right";
+}
+
+[[nodiscard]] inline SidebarPosition stringToSidebarPosition(const QString &str) {
+  return str.toLower() == "left" ? SidebarPosition::Left : SidebarPosition::Right;
+}
+
+[[nodiscard]] inline QString sidebarBackgroundTypeToString(SidebarBackgroundType type) {
+  switch (type) {
+  case SidebarBackgroundType::Image:
+    return "image";
+  case SidebarBackgroundType::Pattern:
+    return "pattern";
+  case SidebarBackgroundType::Color:
+  default:
+    return "color";
+  }
+}
+
+[[nodiscard]] inline SidebarBackgroundType stringToSidebarBackgroundType(const QString &str) {
+  const QString lower = str.toLower();
+  if (lower == "image") return SidebarBackgroundType::Image;
+  if (lower == "pattern") return SidebarBackgroundType::Pattern;
+  return SidebarBackgroundType::Color;
+}
+
+[[nodiscard]] inline QString sidebarPatternToString(SidebarPattern pattern) {
+  switch (pattern) {
+  case SidebarPattern::Crosshatch:
+  default:
+    return "crosshatch";
+  }
+}
+
+[[nodiscard]] inline SidebarPattern stringToSidebarPattern(const QString &str) {
+  // Single value for now; future patterns slot in here without persistence breakage.
+  Q_UNUSED(str);
+  return SidebarPattern::Crosshatch;
+}
+
+[[nodiscard]] inline QString sidebarTabToString(SidebarTab tab) {
+  switch (tab) {
+  case SidebarTab::Collection:
+    return "collection";
+  case SidebarTab::File:
+    return "file";
+  case SidebarTab::Item:
+  default:
+    return "item";
+  }
+}
+
+[[nodiscard]] inline SidebarTab stringToSidebarTab(const QString &str) {
+  const QString lower = str.toLower();
+  if (lower == "collection") return SidebarTab::Collection;
+  if (lower == "file") return SidebarTab::File;
+  return SidebarTab::Item;
 }
 
 } // namespace CollectionUtils
@@ -203,6 +284,49 @@ struct CollectionConfig {
   bool titleExclusionEnabled = true;
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Center;
   SidebarMode sidebarMode = SidebarMode::Overlay;
+  /// Kartend-63e sidebar enhancements. Position controls left/right placement;
+  /// in Fixed mode this swaps the QHBoxLayout insertion index, in Overlay mode
+  /// it swaps the X anchor in positionSidebarOverlay().
+  SidebarPosition sidebarPosition = SidebarPosition::Right;
+  /// Background rendering mode for the sidebar. Color and Image mirror the
+  /// main-view background pattern. Pattern fills with `sidebarBackgroundColor`
+  /// (or system Window when blank) and overlays the chosen procedural pattern
+  /// tinted with `sidebarPatternColor`.
+  SidebarBackgroundType sidebarBackgroundType = SidebarBackgroundType::Color;
+  QString sidebarBackgroundColor; // hex; blank falls back to palette(Window)
+  QString sidebarBackgroundImage; // path; sanitized via validatePathSecurity on save
+  SidebarPattern sidebarPattern = SidebarPattern::Crosshatch;
+  /// Kartend-63e: 0–100 % opacity multiplier applied to pattern strokes.
+  /// Lower values fade the lines into the bg without changing color; users
+  /// who add new SidebarPattern variants later get a single intensity knob
+  /// for free. 50 matches the original sidebar dimming.
+  int sidebarPatternIntensity = 50;
+  QString sidebarPatternColor; // hex tint overlay painted on top of the pattern
+  QString sidebarTextColor;    // hex; blank falls back to palette(WindowText)
+  QString sidebarAccentColor;  // hex; blank falls back to palette(highlight)
+  /// Kartend-63e: semi-opaque "bubble" backgrounds drawn behind sidebar
+  /// content for readability over patterned/image backgrounds. The color
+  /// holds RGB only; per-bubble alpha is the matching `*Opacity` field
+  /// (0–255). Blank color falls back to a sensible default derived from
+  /// `sidebarAccentColor` / `sidebarBackgroundColor`. Opacity == 0 disables
+  /// the bubble even when the color is set.
+  QString sidebarHeaderBgColor;
+  QString sidebarSectionBgColor;
+  /// 0–255 alpha applied to the corresponding bubble bg color. Defaults
+  /// chosen so out-of-the-box bubbles are clearly visible without being
+  /// fully opaque (which would hide the user's chosen pattern entirely).
+  int sidebarHeaderBgOpacity = 200;
+  int sidebarSectionBgOpacity = 170;
+  /// Preferred sidebar width in pixels. Clamped to [MIN_WIDTH, MAX_WIDTH] at
+  /// apply time. Defaults to FIXED_WIDTH so existing collections keep their
+  /// historical look. When `sidebarWidthLocked` is true the user cannot drag
+  /// the inner edge to resize.
+  int sidebarWidth = UIConstants::Sidebar::FIXED_WIDTH;
+  bool sidebarWidthLocked = true;
+  /// Which built-in sidebar tab is active. Persisted per collection so users
+  /// can keep one collection on the Collection summary tab while another
+  /// stays on the per-Item view.
+  SidebarTab sidebarActiveTab = SidebarTab::Item;
   ViewType viewType = ViewType::Grid; // Grid (default) or List view
   /// Kartend-ks4n: when true, media items whose artwork lookup returns no
   /// match are hidden from the items page. Subcollections and virtual folders
@@ -308,6 +432,21 @@ struct CollectionConfig {
            titleExclusionPatterns == other.titleExclusionPatterns &&
            titleExclusionEnabled == other.titleExclusionEnabled &&
            horizontalAlignment == other.horizontalAlignment && sidebarMode == other.sidebarMode &&
+           sidebarPosition == other.sidebarPosition &&
+           sidebarBackgroundType == other.sidebarBackgroundType &&
+           sidebarBackgroundColor == other.sidebarBackgroundColor &&
+           sidebarBackgroundImage == other.sidebarBackgroundImage &&
+           sidebarPattern == other.sidebarPattern &&
+           sidebarPatternIntensity == other.sidebarPatternIntensity &&
+           sidebarPatternColor == other.sidebarPatternColor &&
+           sidebarTextColor == other.sidebarTextColor &&
+           sidebarAccentColor == other.sidebarAccentColor &&
+           sidebarHeaderBgColor == other.sidebarHeaderBgColor &&
+           sidebarSectionBgColor == other.sidebarSectionBgColor &&
+           sidebarHeaderBgOpacity == other.sidebarHeaderBgOpacity &&
+           sidebarSectionBgOpacity == other.sidebarSectionBgOpacity &&
+           sidebarWidth == other.sidebarWidth && sidebarWidthLocked == other.sidebarWidthLocked &&
+           sidebarActiveTab == other.sidebarActiveTab &&
            viewType == other.viewType && horizontalSpacing == other.horizontalSpacing &&
            verticalSpacing == other.verticalSpacing &&
            hideHorizontalScrollbar == other.hideHorizontalScrollbar &&
@@ -401,6 +540,8 @@ struct CollectionConfig {
                               UIConstants::Item::MAX_FONT_SIZE);
     listRowHeight = std::clamp(listRowHeight, UIConstants::ListView::MIN_ROW_HEIGHT,
                                UIConstants::ListView::MAX_ROW_HEIGHT);
+    sidebarWidth =
+        std::clamp(sidebarWidth, UIConstants::Sidebar::MIN_WIDTH, UIConstants::Sidebar::MAX_WIDTH);
     // Kartend-bdl: keep the default-launcher pointer inside the visible list
     // so a stale config (or a deletion that out-paced the index) can never
     // refer past the end. 0 is always valid because the primary slot exists

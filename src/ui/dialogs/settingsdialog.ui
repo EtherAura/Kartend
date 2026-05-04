@@ -1351,6 +1351,202 @@
            </item>
           </layout>
          </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="label_sidebarPosition">
+           <property name="text"><string>Position:</string></property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QComboBox" name="sidebarPositionComboBox">
+           <property name="toolTip"><string>Which side of the items grid the sidebar lives on (Kartend-63e)</string></property>
+           <item><property name="text"><string>Right</string></property></item>
+           <item><property name="text"><string>Left</string></property></item>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="label_sidebarWidth">
+           <property name="text"><string>Width:</string></property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <layout class="QHBoxLayout" name="sidebarWidthLayout">
+           <item>
+            <widget class="QSpinBox" name="sidebarWidthSpinBox">
+             <property name="minimum"><number>150</number></property>
+             <property name="maximum"><number>350</number></property>
+             <property name="suffix"><string> px</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="sidebarWidthLockedCheckBox">
+             <property name="text"><string>Lock (disable drag-resize)</string></property>
+             <property name="toolTip"><string>When unchecked, drag the sidebar's inner edge to resize it.</string></property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="label_sidebarBackground">
+           <property name="text"><string>Background:</string></property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <layout class="QHBoxLayout" name="sidebarBackgroundLayout">
+           <item>
+            <widget class="QComboBox" name="sidebarBackgroundTypeComboBox">
+             <property name="toolTip"><string>Sidebar background mode (Kartend-63e)</string></property>
+             <item><property name="text"><string>Color</string></property></item>
+             <item><property name="text"><string>Image</string></property></item>
+             <item><property name="text"><string>Pattern</string></property></item>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLineEdit" name="sidebarBackgroundValueEdit">
+             <property name="toolTip"><string>Hex color (Color mode) or image path (Image mode); ignored in Pattern mode</string></property>
+             <property name="placeholderText"><string>Default</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="sidebarBackgroundPickButton">
+             <property name="text"><string>Pick...</string></property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="5" column="0">
+          <widget class="QLabel" name="label_sidebarPatternColor">
+           <property name="text"><string>Pattern intensity / tint:</string></property>
+          </widget>
+         </item>
+         <item row="5" column="1">
+          <layout class="QHBoxLayout" name="sidebarPatternLayout">
+           <item>
+            <widget class="QSpinBox" name="sidebarPatternIntensitySpinBox">
+             <property name="toolTip"><string>Pattern line intensity (0–100 %). Lower fades the strokes into the background; 0 hides them entirely. Applies to all sidebar patterns.</string></property>
+             <property name="minimum"><number>0</number></property>
+             <property name="maximum"><number>100</number></property>
+             <property name="suffix"><string> %</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLineEdit" name="sidebarPatternColorEdit">
+             <property name="toolTip"><string>Semi-opaque tint painted ON TOP of the pattern (#AARRGGBB). Use this to dim the hatch and improve text contrast. Empty = no overlay.</string></property>
+             <property name="placeholderText"><string>None (e.g. #80000000)</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="sidebarPatternColorPickButton">
+             <property name="text"><string>Pick...</string></property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="6" column="0">
+          <widget class="QLabel" name="label_sidebarTextColor">
+           <property name="text"><string>Text color:</string></property>
+          </widget>
+         </item>
+         <item row="6" column="1">
+          <layout class="QHBoxLayout" name="sidebarTextColorLayout">
+           <item>
+            <widget class="QLineEdit" name="sidebarTextColorEdit">
+             <property name="placeholderText"><string>palette(windowtext)</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="sidebarTextColorPickButton">
+             <property name="text"><string>Pick...</string></property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="7" column="0">
+          <widget class="QLabel" name="label_sidebarAccentColor">
+           <property name="text"><string>Accent color:</string></property>
+          </widget>
+         </item>
+         <item row="7" column="1">
+          <layout class="QHBoxLayout" name="sidebarAccentColorLayout">
+           <item>
+            <widget class="QLineEdit" name="sidebarAccentColorEdit">
+             <property name="placeholderText"><string>palette(highlight)</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="sidebarAccentColorPickButton">
+             <property name="text"><string>Pick...</string></property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="8" column="0">
+          <widget class="QLabel" name="label_sidebarActiveTab">
+           <property name="text"><string>Default tab:</string></property>
+          </widget>
+         </item>
+         <item row="8" column="1">
+          <widget class="QComboBox" name="sidebarActiveTabComboBox">
+           <item><property name="text"><string>Item</string></property></item>
+           <item><property name="text"><string>Collection</string></property></item>
+           <item><property name="text"><string>File</string></property></item>
+          </widget>
+         </item>
+         <item row="9" column="0">
+          <widget class="QLabel" name="label_sidebarHeaderBg">
+           <property name="text"><string>Header bubble:</string></property>
+          </widget>
+         </item>
+         <item row="9" column="1">
+          <layout class="QHBoxLayout" name="sidebarHeaderBgLayout">
+           <item>
+            <widget class="QLineEdit" name="sidebarHeaderBgEdit">
+             <property name="toolTip"><string>Bubble color (hex) for section titles. Opacity controlled separately.</string></property>
+             <property name="placeholderText"><string>Default (accent)</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="sidebarHeaderBgPickButton">
+             <property name="text"><string>Pick...</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSpinBox" name="sidebarHeaderBgOpacitySpinBox">
+             <property name="toolTip"><string>Header bubble opacity (0–255). 0 hides the bubble; 255 makes it fully opaque.</string></property>
+             <property name="minimum"><number>0</number></property>
+             <property name="maximum"><number>255</number></property>
+             <property name="suffix"><string> α</string></property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item row="10" column="0">
+          <widget class="QLabel" name="label_sidebarSectionBg">
+           <property name="text"><string>Section bubble:</string></property>
+          </widget>
+         </item>
+         <item row="10" column="1">
+          <layout class="QHBoxLayout" name="sidebarSectionBgLayout">
+           <item>
+            <widget class="QLineEdit" name="sidebarSectionBgEdit">
+             <property name="toolTip"><string>Bubble color (hex) for value rows. Opacity controlled separately.</string></property>
+             <property name="placeholderText"><string>Default (bg.darker)</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="sidebarSectionBgPickButton">
+             <property name="text"><string>Pick...</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSpinBox" name="sidebarSectionBgOpacitySpinBox">
+             <property name="toolTip"><string>Section bubble opacity (0–255).</string></property>
+             <property name="minimum"><number>0</number></property>
+             <property name="maximum"><number>255</number></property>
+             <property name="suffix"><string> α</string></property>
+            </widget>
+           </item>
+          </layout>
+         </item>
         </layout>
        </item>
        <item>

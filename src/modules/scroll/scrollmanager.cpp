@@ -91,6 +91,8 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
           &ScrollManager::listArtworkColumnWidthChanged);
   connect(m_selectionDisplay.get(), &SelectionDisplayManager::artworkPreviewLaunchRequested, this,
           &ScrollManager::artworkPreviewLaunchRequested);
+  connect(m_selectionDisplay.get(), &SelectionDisplayManager::artworkPreviewVisibilityChanged, this,
+          &ScrollManager::artworkPreviewVisibilityChanged);
 
   connect(m_overlayManager, &SelectionOverlayManager::animationFinished, this, [this]() {
     // Update widget selection states when animation finishes

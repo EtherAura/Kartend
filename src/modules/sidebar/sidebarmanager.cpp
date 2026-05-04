@@ -16,6 +16,7 @@
 #include "videoutils.h"
 #include <QApplication>
 #include <QFileInfo>
+#include <algorithm>
 #include <QHash>
 #include <QHBoxLayout>
 #include <QList>
@@ -62,6 +63,52 @@ void SidebarManager::setupReferences(const SidebarManagerSetup &setup) {
   if (m_MetadataSidebar) {
     connect(m_MetadataSidebar, &MetadataSidebar::editArtworkRequested, this,
             &SidebarManager::openArtworkLinksDialog);
+    // Kartend-63e bug #7: lower the sidebar while its own gallery overlay is
+    // showing so the overlay (parented to the top-level window) stays on top.
+    connect(m_MetadataSidebar, &MetadataSidebar::galleryOverlayVisibilityChanged, this,
+            &SidebarManager::setOverlayActive);
+    // Kartend-63e width drag: live resize via the inner-edge grip. Drag
+    // events apply the width without persisting; commit on release writes
+    // the final value to settings so a click without movement doesn't
+    // touch the INI on every frame.
+    connect(m_MetadataSidebar, &MetadataSidebar::widthDragged, this, [this](int width) {
+      if (!m_MetadataSidebar) return;
+      m_MetadataSidebar->setFixedWidth(width);
+      // In overlay mode the sidebar is absolutely positioned — re-anchor so
+      // the right edge stays pinned to the viewport (or the left edge in
+      // Left position). In fixed mode the layout handles re-flow so we
+      // skip the explicit position call.
+      bool isFixedMode = false;
+      if (m_collections && m_currentCollectionIndex >= 0 &&
+          m_currentCollectionIndex < m_collections->size()) {
+        isFixedMode =
+            (*m_collections)[m_currentCollectionIndex].sidebarMode == SidebarMode::Expand;
+      }
+      if (!isFixedMode) {
+        positionSidebarOverlay();
+      }
+    });
+    connect(m_MetadataSidebar, &MetadataSidebar::widthCommitted, this, [this](int width) {
+      if (!m_collections || m_currentCollectionIndex < 0 ||
+          m_currentCollectionIndex >= m_collections->size()) {
+        return;
+      }
+      (*m_collections)[m_currentCollectionIndex].sidebarWidth = width;
+      if (m_settingsManager) {
+        m_settingsManager->saveCollections(*m_collections);
+      }
+    });
+    // Kartend-63e tabs: persist the user's tab choice per collection.
+    connect(m_MetadataSidebar, &MetadataSidebar::activeTabChanged, this, [this](SidebarTab tab) {
+      if (!m_collections || m_currentCollectionIndex < 0 ||
+          m_currentCollectionIndex >= m_collections->size()) {
+        return;
+      }
+      (*m_collections)[m_currentCollectionIndex].sidebarActiveTab = tab;
+      if (m_settingsManager) {
+        m_settingsManager->saveCollections(*m_collections);
+      }
+    });
   }
 }
 
@@ -296,6 +343,11 @@ void SidebarManager::applySidebarStateForCollection(int collectionIndex) {
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
   m_sidebarVisible = collection.sidebarVisible;
 
+  // Kartend-63e: apply per-collection appearance (bg type, colors, pattern).
+  if (m_MetadataSidebar) {
+    m_MetadataSidebar->applyAppearance(collection);
+  }
+
   // Push the new collection's summary to the sidebar so the no-selection
   // state shows useful context (Kartend-3mn).
   refreshCollectionSummary();
@@ -306,8 +358,10 @@ void SidebarManager::applySidebarStateForCollection(int collectionIndex) {
   // Reposition overlay sidebar after layout is finalized - on startup, the
   // viewport geometry may not be fully set when this is first called, causing
   // the sidebar to overlap the scrollbar. Deferring ensures correct
-  // positioning.
-  if (m_sidebarVisible) {
+  // positioning. Kartend-63e: only reposition for Overlay mode — Fixed mode
+  // is now in m_mainHorizontalLayout and absolute-positioning it would
+  // wreck the layout dock.
+  if (m_sidebarVisible && collection.sidebarMode != SidebarMode::Expand) {
     QTimer::singleShot(50, this, [this]() { positionSidebarOverlay(); });
   }
 }
@@ -378,31 +432,65 @@ void SidebarManager::positionSidebarOverlay() {
   int sidebarWidth =
       m_MetadataSidebar->width() > 0 ? m_MetadataSidebar->width() : UIConstants::Sidebar::MAX_WIDTH;
 
+  // Read position from the active collection so the overlay anchors on the
+  // correct edge (Kartend-63e).
+  SidebarPosition position = SidebarPosition::Right;
+  if (m_collections && m_currentCollectionIndex >= 0 &&
+      m_currentCollectionIndex < m_collections->size()) {
+    position = (*m_collections)[m_currentCollectionIndex].sidebarPosition;
+  }
+
   QRect viewportRectInItems;
-  int scrollbarWidth = 0;
   if (m_itemScrollArea && m_itemScrollArea->viewport()) {
     const QPoint topLeft = m_itemScrollArea->viewport()->mapTo(m_itemsPage, QPoint(0, 0));
     viewportRectInItems = QRect(topLeft, m_itemScrollArea->viewport()->size());
-
-    // Account for scrollbar width - the overlay scrollbar appears over the
-    // viewport, so we need to offset the sidebar to avoid covering it.
-    // Use sizeHint for consistent positioning even before scrollbar is visible.
-    if (auto *vScrollBar = m_itemScrollArea->verticalScrollBar()) {
-      static constexpr int DEFAULT_SCROLLBAR_WIDTH = 16;
-      int barWidth = vScrollBar->sizeHint().width();
-      scrollbarWidth = barWidth > 0 ? barWidth : DEFAULT_SCROLLBAR_WIDTH;
-    }
   } else {
     viewportRectInItems = m_itemsPage->rect();
   }
 
-  const int sidebarX = viewportRectInItems.left() + viewportRectInItems.width() - sidebarWidth -
-                       sidebarMargin - scrollbarWidth;
+  // Kartend-63e: anchor flush with the viewport edge — earlier code subtracted
+  // a full scrollbar width to keep the bar visible to the right of the
+  // sidebar, but the user wants the gap minimized. The vertical scrollbar
+  // tucks behind the sidebar; mouse-wheel and keyboard scroll still work.
+  int sidebarX = 0;
+  if (position == SidebarPosition::Left) {
+    sidebarX = viewportRectInItems.left() + sidebarMargin;
+  } else {
+    sidebarX =
+        viewportRectInItems.left() + viewportRectInItems.width() - sidebarWidth - sidebarMargin;
+  }
   const int sidebarY = viewportRectInItems.top() + sidebarMargin;
   const int height = qMax(0, viewportRectInItems.height() - (sidebarMargin * 2));
 
   m_MetadataSidebar->setGeometry(sidebarX, sidebarY, sidebarWidth, height);
-  m_MetadataSidebar->raise();
+  // Skip raise() while a fullscreen overlay (artwork preview) is showing —
+  // the overlay needs to stay above the sidebar (Kartend-63e bug #7).
+  if (!m_overlayActive) {
+    m_MetadataSidebar->raise();
+  }
+}
+
+void SidebarManager::setOverlayActive(bool active) {
+  if (m_overlayActive == active) {
+    return;
+  }
+  m_overlayActive = active;
+  // When the overlay closes, re-stack the sidebar so it sits above its
+  // siblings again. When it opens, lower the sidebar so the overlay
+  // (which is reparented to the top-level window and raise()'d on show)
+  // can cover it cleanly.
+  if (m_MetadataSidebar) {
+    if (active) {
+      // Kartend-63e bug #5: silence the sidebar's looping preview video
+      // before the overlay starts its own — without this, two video tracks
+      // play simultaneously and audio from the muted-but-still-decoding
+      // sidebar player can leak under the overlay's playback.
+      m_MetadataSidebar->pausePreviewVideo();
+      m_MetadataSidebar->lower();
+    } else {
+      m_MetadataSidebar->raise();
+    }
+  }
 }
 
 void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
@@ -411,10 +499,15 @@ void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
   }
 
   bool isFixedMode = false;
+  SidebarPosition position = SidebarPosition::Right;
+  int desiredWidth = UIConstants::Sidebar::FIXED_WIDTH;
   if (m_collections && currentCollectionIndex >= 0 &&
       currentCollectionIndex < m_collections->size()) {
     const CollectionConfig &collection = (*m_collections)[currentCollectionIndex];
     isFixedMode = (collection.sidebarMode == SidebarMode::Expand);
+    position = collection.sidebarPosition;
+    desiredWidth = std::clamp(collection.sidebarWidth, UIConstants::Sidebar::MIN_WIDTH,
+                              UIConstants::Sidebar::MAX_WIDTH);
   }
 
   bool wasInLayout = (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1);
@@ -426,30 +519,29 @@ void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
   const bool effectiveVisible = m_sidebarVisible && !m_externallyHidden;
   if (effectiveVisible) {
     if (isFixedMode) {
-      m_MetadataSidebar->setParent(m_itemsPage);
-      if (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1) {
+      // Kartend-63e bug #3 fix: Fixed mode docks into the QHBoxLayout so the
+      // grid is pushed into the remaining space rather than rendering
+      // underneath an absolutely-positioned overlay. QLayout::insertWidget /
+      // addWidget reparents the sidebar to the layout's owner widget
+      // automatically, so we don't need an explicit setParent() here.
+      m_MetadataSidebar->setFixedWidth(desiredWidth);
+      if (wasInLayout) {
         m_mainHorizontalLayout->removeWidget(m_MetadataSidebar);
       }
-
-      int sidebarWidth = UIConstants::Sidebar::MAX_WIDTH;
-      m_MetadataSidebar->setFixedWidth(sidebarWidth);
-
-      // Use common positioning logic to ensure scrollbar offset is applied
-      positionSidebarOverlay();
+      if (position == SidebarPosition::Left) {
+        m_mainHorizontalLayout->insertWidget(0, m_MetadataSidebar);
+      } else {
+        m_mainHorizontalLayout->addWidget(m_MetadataSidebar);
+      }
       m_MetadataSidebar->setVisible(true);
-      m_MetadataSidebar->raise();
     } else {
-      int viewportWidth = m_itemScrollArea->viewport()->width();
-      int desired = viewportWidth / 4;
-      int sidebarWidth =
-          qMax(UIConstants::Sidebar::MIN_WIDTH, qMin(UIConstants::Sidebar::MAX_WIDTH, desired));
-      sidebarWidth = qMax(UIConstants::Sidebar::MIN_WIDTH,
-                          sidebarWidth - UIConstants::Sidebar::SCROLLBAR_OFFSET);
+      // Overlay mode: free-floating child of itemsPage so the sidebar
+      // visually overlaps the grid without consuming layout space.
       m_MetadataSidebar->setParent(m_itemsPage);
       if (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1) {
         m_mainHorizontalLayout->removeWidget(m_MetadataSidebar);
       }
-      m_MetadataSidebar->setFixedWidth(sidebarWidth);
+      m_MetadataSidebar->setFixedWidth(desiredWidth);
       positionSidebarOverlay();
       m_MetadataSidebar->setVisible(true);
     }
