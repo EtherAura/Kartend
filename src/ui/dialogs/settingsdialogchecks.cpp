@@ -553,6 +553,11 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
           m_originalGeneralSettings.toolbarShowListViewButton) {
     return true;
   }
+  if (ui->toolbarCoverFlowViewVisibleCheckBox &&
+      ui->toolbarCoverFlowViewVisibleCheckBox->isChecked() !=
+          m_originalGeneralSettings.toolbarShowCoverFlowViewButton) {
+    return true;
+  }
   if (ui->toolbarHideSubcollectionsVisibleCheckBox &&
       ui->toolbarHideSubcollectionsVisibleCheckBox->isChecked() !=
           m_originalGeneralSettings.toolbarShowHideSubcollectionsButton) {
@@ -582,6 +587,11 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
   }
   if (ui->toolbarListViewTextEdit &&
       ui->toolbarListViewTextEdit->text() != m_originalGeneralSettings.toolbarListViewButtonText) {
+    return true;
+  }
+  if (ui->toolbarCoverFlowViewTextEdit &&
+      ui->toolbarCoverFlowViewTextEdit->text() !=
+          m_originalGeneralSettings.toolbarCoverFlowViewButtonText) {
     return true;
   }
   if (ui->toolbarHideSubcollectionsTextEdit &&

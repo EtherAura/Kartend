@@ -9,6 +9,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   scrolleventhandler.cpp
   scrollhelpers.cpp
   scrollmanager.cpp
+  scrollmanagercoverflow.cpp
   scrollmanagerdata.cpp
   scrollmanagerevents.cpp
   scrollmanagerfilter.cpp

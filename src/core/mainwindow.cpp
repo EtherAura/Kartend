@@ -121,6 +121,9 @@ void MainWindow::applyToolbarCustomization() {
   if (ui->listViewButton) {
     ui->listViewButton->setVisible(gs.toolbarShowListViewButton);
   }
+  if (ui->coverFlowViewButton) {
+    ui->coverFlowViewButton->setVisible(gs.toolbarShowCoverFlowViewButton);
+  }
   if (ui->hideSubcollectionsButton) {
     ui->hideSubcollectionsButton->setVisible(gs.toolbarShowHideSubcollectionsButton);
   }
@@ -141,6 +144,7 @@ void MainWindow::applyToolbarCustomization() {
   // so the toolbar doesn't show a stray vertical line.
   if (ui->viewSearchSeparator) {
     const bool leftSideVisible = gs.toolbarShowGridViewButton || gs.toolbarShowListViewButton ||
+                                 gs.toolbarShowCoverFlowViewButton ||
                                  gs.toolbarShowHideSubcollectionsButton ||
                                  gs.toolbarShowTypeFilter || gs.toolbarShowTitleFilter;
     const bool rightSideVisible = gs.toolbarShowSearchModeButton || gs.toolbarShowSearchBar;
@@ -158,6 +162,11 @@ void MainWindow::applyToolbarCustomization() {
     ui->listViewButton->setText(gs.toolbarListViewButtonText.isEmpty()
                                     ? QStringLiteral("☰")
                                     : gs.toolbarListViewButtonText);
+  }
+  if (ui->coverFlowViewButton) {
+    ui->coverFlowViewButton->setText(gs.toolbarCoverFlowViewButtonText.isEmpty()
+                                         ? QStringLiteral("◖◉◗")
+                                         : gs.toolbarCoverFlowViewButtonText);
   }
   if (ui->hideSubcollectionsButton) {
     ui->hideSubcollectionsButton->setText(gs.toolbarHideSubcollectionsButtonText.isEmpty()
@@ -511,6 +520,9 @@ void MainWindow::updateWindowTitleForCollection(int collectionIndex) {
     }
     if (m_listViewButton) {
       m_listViewButton->setChecked(viewType == ViewType::List);
+    }
+    if (m_coverFlowViewButton) {
+      m_coverFlowViewButton->setChecked(viewType == ViewType::CoverFlow);
     }
   }
   // Kartend-5h6: sync the title-filter toolbar to the new collection's

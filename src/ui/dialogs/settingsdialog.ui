@@ -693,11 +693,12 @@
                   <item row="0" column="1">
                    <widget class="QComboBox" name="viewTypeComboBox">
                     <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
-                    <property name="minimumWidth"><number>80</number></property>
-                    <property name="maximumWidth"><number>80</number></property>
-                    <property name="toolTip"><string>Display items as a grid with artwork or as a simple list</string></property>
+                    <property name="minimumWidth"><number>110</number></property>
+                    <property name="maximumWidth"><number>110</number></property>
+                    <property name="toolTip"><string>Display items as a grid with artwork, a simple list, or a 3D cover-flow carousel</string></property>
                     <item><property name="text"><string>Grid</string></property></item>
                     <item><property name="text"><string>List</string></property></item>
+                    <item><property name="text"><string>Cover Flow</string></property></item>
                    </widget>
                   </item>
                   <item row="0" column="2">
@@ -2232,11 +2233,31 @@
                  </layout>
                 </item>
                 <item row="2" column="0">
+                 <widget class="QLabel" name="toolbarCoverFlowViewLabel">
+                  <property name="text"><string>Cover Flow View Button:</string></property>
+                 </widget>
+                </item>
+                <item row="2" column="1">
+                 <layout class="QHBoxLayout" name="toolbarCoverFlowViewLayout">
+                  <item>
+                   <widget class="QCheckBox" name="toolbarCoverFlowViewVisibleCheckBox">
+                    <property name="text"><string>Show</string></property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QLineEdit" name="toolbarCoverFlowViewTextEdit">
+                    <property name="placeholderText"><string>◖◉◗ (default)</string></property>
+                    <property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item row="3" column="0">
                  <widget class="QLabel" name="toolbarHideSubcollectionsLabel">
                   <property name="text"><string>Hide Subcollections Button:</string></property>
                  </widget>
                 </item>
-                <item row="2" column="1">
+                <item row="3" column="1">
                  <layout class="QHBoxLayout" name="toolbarHideSubcollectionsLayout">
                   <item>
                    <widget class="QCheckBox" name="toolbarHideSubcollectionsVisibleCheckBox">
@@ -2251,22 +2272,22 @@
                   </item>
                  </layout>
                 </item>
-                <item row="3" column="0">
+                <item row="4" column="0">
                  <widget class="QLabel" name="toolbarTypeFilterLabel">
                   <property name="text"><string>Type Filter Dropdown:</string></property>
                  </widget>
                 </item>
-                <item row="3" column="1">
+                <item row="4" column="1">
                  <widget class="QCheckBox" name="toolbarTypeFilterVisibleCheckBox">
                   <property name="text"><string>Show</string></property>
                  </widget>
                 </item>
-                <item row="4" column="0">
+                <item row="5" column="0">
                  <widget class="QLabel" name="toolbarTitleFilterLabel">
                   <property name="text"><string>Title Filter Button:</string></property>
                  </widget>
                 </item>
-                <item row="4" column="1">
+                <item row="5" column="1">
                  <layout class="QHBoxLayout" name="toolbarTitleFilterLayout">
                   <item>
                    <widget class="QCheckBox" name="toolbarTitleFilterVisibleCheckBox">
@@ -2281,22 +2302,22 @@
                   </item>
                  </layout>
                 </item>
-                <item row="5" column="0">
+                <item row="6" column="0">
                  <widget class="QLabel" name="toolbarSearchModeLabel">
                   <property name="text"><string>Search Mode Button:</string></property>
                  </widget>
                 </item>
-                <item row="5" column="1">
+                <item row="6" column="1">
                  <widget class="QCheckBox" name="toolbarSearchModeVisibleCheckBox">
                   <property name="text"><string>Show</string></property>
                  </widget>
                 </item>
-                <item row="6" column="0">
+                <item row="7" column="0">
                  <widget class="QLabel" name="toolbarSearchBarLabel">
                   <property name="text"><string>Search Bar:</string></property>
                  </widget>
                 </item>
-                <item row="6" column="1">
+                <item row="7" column="1">
                  <widget class="QCheckBox" name="toolbarSearchBarVisibleCheckBox">
                   <property name="text"><string>Show</string></property>
                  </widget>

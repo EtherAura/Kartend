@@ -68,6 +68,7 @@ public:
   QPushButton *m_searchModeButton;
   QPushButton *m_gridViewButton;
   QPushButton *m_listViewButton;
+  QPushButton *m_coverFlowViewButton = nullptr;
   // Kartend-dd8: collection categorization toolbar widgets
   QPushButton *m_hideSubcollectionsButton = nullptr;
   QComboBox *m_typeFilterComboBox = nullptr;

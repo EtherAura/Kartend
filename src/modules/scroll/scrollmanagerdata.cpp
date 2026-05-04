@@ -171,6 +171,14 @@ void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths,
 
   // Trigger update of visible widgets
   updateVirtualView();
+
+  // Kartend-3ile: cover-flow keeps a flat card list, refresh it whenever
+  // new file data lands. Skip when not in cover flow — building a card
+  // descriptor for every visual index is fast per-item but pointless work
+  // when the widget is hidden, and 30+ chunk arrivals × 29k items adds up.
+  if (m_coverFlowWidget && coverFlowActive()) {
+    rebuildCoverFlowCards();
+  }
 }
 
 void ScrollManager::injectCachedItems(int startIndex, const QStringList &filePaths,

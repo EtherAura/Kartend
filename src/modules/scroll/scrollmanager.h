@@ -20,6 +20,7 @@ class ItemWidget;
 class DatabaseManager;
 class QPropertyAnimation;
 class ArtworkManager;
+class CoverFlowWidget;
 class WidgetPoolManager;
 class FilterManager;
 class DataSourceManager;
@@ -200,6 +201,17 @@ signals:
   /// gallery-style previews — listeners should fall back to the current
   /// selection when empty.
   void artworkPreviewLaunchRequested(const QString &filePath);
+  /// Kartend-3ile: emitted when the user activates the centered card in
+  /// CoverFlow view (single click on center, double click, Enter, etc.) and
+  /// the activated index is a media item. Subcollection / virtual-folder
+  /// activations are routed through subcollectionEntered /
+  /// virtualFolderEntered above so they share the existing navigation path.
+  void coverFlowItemActivated(int visualIndex);
+  /// Kartend-3ile: fired when CoverFlow becomes the active view (true) or
+  /// any other ViewType replaces it (false). MainWindow wires this to
+  /// SidebarManager::setExternallyHidden so the carousel takes the full
+  /// viewport without persisting that as the user's sidebar preference.
+  void coverFlowActiveChanged(bool active);
 
 public slots:
   /// Receives the visual index for a file path from database query
@@ -350,6 +362,28 @@ private:
   void setupFilePathMappings();
   void setupEmptyVirtualScrolling();
   void setupNormalVirtualScrolling();
+
+  // Kartend-3ile: cover-flow integration — the widget is a sibling of
+  // m_gridContainer in the items page scroll-area layout and is shown only
+  // when CollectionConfig::viewType == CoverFlow.
+  void ensureCoverFlowWidget();
+  void rebuildCoverFlowCards();
+  void applyCoverFlowConfig();
+  void applyCoverFlowVisibility();
+  [[nodiscard]] bool coverFlowActive() const;
+  /// Resolve the preview-video path for @p visualIndex and push it to the
+  /// carousel widget. Called from updateSelectionForIndex on every
+  /// selection change so the per-item video lookup stays lazy — scanning
+  /// the video directory for tens of thousands of items at rebuild time
+  /// would freeze the UI thread the same way artwork lookup did.
+  void resolveAndPushCoverFlowVideo(int visualIndex);
+  /// Resolve the per-item gallery (standard + custom artwork variants
+  /// from ItemArtworkStore plus the preview video) for @p visualIndex
+  /// and push it to the carousel widget. Mirrors the resolver in
+  /// SidebarManager::updateSidebarMetadata so the cover-flow gallery
+  /// surfaces the same set of entries the sidebar would.
+  void resolveAndPushCoverFlowGallery(int visualIndex);
+  CoverFlowWidget *m_coverFlowWidget = nullptr;
 
   void handleProgrammaticScroll();
   void handleUserScroll();

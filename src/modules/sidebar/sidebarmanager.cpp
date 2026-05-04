@@ -70,9 +70,26 @@ void SidebarManager::toggleSidebar() {
     return;
   }
 
+  // Kartend-3ile: a deliberate user toggle outranks the cover-flow auto-hide
+  // so the user can pull the sidebar back in even while in cover flow.
+  m_externallyHidden = false;
   m_sidebarVisible = !m_sidebarVisible;
   updateSidebarLayout(m_currentCollectionIndex);
   emit sidebarVisibilityChanged(m_sidebarVisible);
+}
+
+void SidebarManager::setExternallyHidden(bool hidden) {
+  if (m_externallyHidden == hidden) {
+    return;
+  }
+  m_externallyHidden = hidden;
+  // Re-run layout: when forced hidden, the sidebar is removed from the
+  // layout regardless of m_sidebarVisible; when the override clears, the
+  // layout falls back to the persisted m_sidebarVisible state. Persistence
+  // is suppressed inside updateSidebarLayout while m_externallyHidden is
+  // true so the user's per-collection preference survives the round trip.
+  updateSidebarLayout(m_currentCollectionIndex);
+  emit sidebarVisibilityChanged(m_sidebarVisible && !m_externallyHidden);
 }
 
 void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
@@ -403,7 +420,11 @@ void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
   bool wasInLayout = (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1);
   m_MetadataSidebar->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
-  if (m_sidebarVisible) {
+  // Kartend-3ile: cover flow takes the full viewport — render as if
+  // m_sidebarVisible were false but skip the persistence step below so the
+  // user's per-collection preference is preserved across view-type cycles.
+  const bool effectiveVisible = m_sidebarVisible && !m_externallyHidden;
+  if (effectiveVisible) {
     if (isFixedMode) {
       m_MetadataSidebar->setParent(m_itemsPage);
       if (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1) {
@@ -441,10 +462,12 @@ void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
 
   bool isNowInLayout = (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1);
   if (wasInLayout != isNowInLayout) {
-    emit sidebarVisibilityChanged(m_sidebarVisible);
+    emit sidebarVisibilityChanged(effectiveVisible);
   }
 
-  if (currentCollectionIndex >= 0) {
+  // Skip persistence when the override is what's hiding the sidebar — this
+  // is a transient view-driven state, not a user-initiated choice.
+  if (currentCollectionIndex >= 0 && !m_externallyHidden) {
     saveSidebarStateForCollection(currentCollectionIndex, m_sidebarVisible);
   }
 

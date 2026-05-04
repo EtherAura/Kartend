@@ -178,6 +178,8 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   // default to empty (use the .ui label).
   settings.toolbarShowGridViewButton = s.value("toolbarShowGridViewButton", true).toBool();
   settings.toolbarShowListViewButton = s.value("toolbarShowListViewButton", true).toBool();
+  settings.toolbarShowCoverFlowViewButton =
+      s.value("toolbarShowCoverFlowViewButton", true).toBool();
   settings.toolbarShowHideSubcollectionsButton =
       s.value("toolbarShowHideSubcollectionsButton", true).toBool();
   settings.toolbarShowTypeFilter = s.value("toolbarShowTypeFilter", true).toBool();
@@ -186,6 +188,8 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.toolbarShowSearchBar = s.value("toolbarShowSearchBar", true).toBool();
   settings.toolbarGridViewButtonText = s.value("toolbarGridViewButtonText", QString()).toString();
   settings.toolbarListViewButtonText = s.value("toolbarListViewButtonText", QString()).toString();
+  settings.toolbarCoverFlowViewButtonText =
+      s.value("toolbarCoverFlowViewButtonText", QString()).toString();
   settings.toolbarHideSubcollectionsButtonText =
       s.value("toolbarHideSubcollectionsButtonText", QString()).toString();
   settings.toolbarTitleFilterText = s.value("toolbarTitleFilterText", QString()).toString();
@@ -282,6 +286,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   // Customizable toolbar (Kartend-81o)
   m_generalSettings.toolbarShowGridViewButton = settings.toolbarShowGridViewButton;
   m_generalSettings.toolbarShowListViewButton = settings.toolbarShowListViewButton;
+  m_generalSettings.toolbarShowCoverFlowViewButton = settings.toolbarShowCoverFlowViewButton;
   m_generalSettings.toolbarShowHideSubcollectionsButton =
       settings.toolbarShowHideSubcollectionsButton;
   m_generalSettings.toolbarShowTypeFilter = settings.toolbarShowTypeFilter;
@@ -290,6 +295,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.toolbarShowSearchBar = settings.toolbarShowSearchBar;
   m_generalSettings.toolbarGridViewButtonText = settings.toolbarGridViewButtonText;
   m_generalSettings.toolbarListViewButtonText = settings.toolbarListViewButtonText;
+  m_generalSettings.toolbarCoverFlowViewButtonText = settings.toolbarCoverFlowViewButtonText;
   m_generalSettings.toolbarHideSubcollectionsButtonText =
       settings.toolbarHideSubcollectionsButtonText;
   m_generalSettings.toolbarTitleFilterText = settings.toolbarTitleFilterText;
@@ -361,6 +367,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   // Customizable toolbar (Kartend-81o)
   s.setValue("toolbarShowGridViewButton", m_generalSettings.toolbarShowGridViewButton);
   s.setValue("toolbarShowListViewButton", m_generalSettings.toolbarShowListViewButton);
+  s.setValue("toolbarShowCoverFlowViewButton",
+             m_generalSettings.toolbarShowCoverFlowViewButton);
   s.setValue("toolbarShowHideSubcollectionsButton",
              m_generalSettings.toolbarShowHideSubcollectionsButton);
   s.setValue("toolbarShowTypeFilter", m_generalSettings.toolbarShowTypeFilter);
@@ -369,6 +377,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("toolbarShowSearchBar", m_generalSettings.toolbarShowSearchBar);
   s.setValue("toolbarGridViewButtonText", m_generalSettings.toolbarGridViewButtonText);
   s.setValue("toolbarListViewButtonText", m_generalSettings.toolbarListViewButtonText);
+  s.setValue("toolbarCoverFlowViewButtonText",
+             m_generalSettings.toolbarCoverFlowViewButtonText);
   s.setValue("toolbarHideSubcollectionsButtonText",
              m_generalSettings.toolbarHideSubcollectionsButtonText);
   s.setValue("toolbarTitleFilterText", m_generalSettings.toolbarTitleFilterText);

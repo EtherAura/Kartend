@@ -245,6 +245,41 @@ void MainWindow::connectScrollManager() {
       getInteractionManager()->applyImmediateViewportPositioningForSelection(index);
     }
   });
+  // Kartend-3ile: yield sidebar viewport space when entering CoverFlow,
+  // restore the persisted per-collection state when leaving.
+  QObject::connect(getScrollManager(), &ScrollManager::coverFlowActiveChanged, this,
+                   [this](bool active) {
+                     if (getSidebarManager()) {
+                       getSidebarManager()->setExternallyHidden(active);
+                     }
+                   });
+  // Kartend-3ile: cover-flow activates a card → land selection on it then
+  // route through the existing launch path. Subcollection / virtual-folder
+  // activations are handled by ScrollManager itself via subcollectionEntered
+  // / virtualFolderEntered above so they don't reach this slot. The owning
+  // collection comes from DatabaseManager — the launcher / core / params
+  // are configured per-collection and using currentCollectionIndex would
+  // mis-launch any item inherited from a subcollection in
+  // showAllSubcollectionItems mode (surfaces as "no launcher configured").
+  QObject::connect(getScrollManager(), &ScrollManager::coverFlowItemActivated, this,
+                   [this](int index) {
+                     if (!getInteractionManager() || !getScrollManager()) {
+                       return;
+                     }
+                     getInteractionManager()->selectItemByIndex(index, true);
+                     const QString filePath = getScrollManager()->filePathForVisualIndex(index);
+                     if (filePath.isEmpty()) {
+                       return;
+                     }
+                     int ownerIdx = currentCollectionIndex;
+                     if (getDatabaseManager()) {
+                       const int detected = getDatabaseManager()->getCollectionIndexForFile(filePath);
+                       if (detected >= 0) {
+                         ownerIdx = detected;
+                       }
+                     }
+                     getInteractionManager()->launchItemWithCollection(filePath, ownerIdx);
+                   });
   // Persist list column width when user resizes
   QObject::connect(getScrollManager(), &ScrollManager::listColumnWidthChanged, this,
                    [this](int width) {
@@ -344,6 +379,10 @@ void MainWindow::connectSearchComponents() {
   if (m_listViewButton) {
     QObject::connect(m_listViewButton, &QPushButton::clicked, this,
                      [this]() { setViewType(ViewType::List); });
+  }
+  if (m_coverFlowViewButton) {
+    QObject::connect(m_coverFlowViewButton, &QPushButton::clicked, this,
+                     [this]() { setViewType(ViewType::CoverFlow); });
   }
 }
 

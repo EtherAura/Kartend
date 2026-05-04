@@ -292,6 +292,14 @@ void ScrollManager::updateViewType(ViewType viewType) {
   }
 
   handleLayoutChange();
+
+  // Kartend-3ile: cover-flow uses a parallel widget tree; keep its config,
+  // card list, and visibility in sync with the grid's. ensureCoverFlowWidget
+  // is idempotent so we can call it on every transition.
+  ensureCoverFlowWidget();
+  applyCoverFlowConfig();
+  rebuildCoverFlowCards();
+  applyCoverFlowVisibility();
 }
 
 void ScrollManager::updateGridWidth(int newGridWidth) {

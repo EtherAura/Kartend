@@ -562,6 +562,8 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   };
   setToolbarCheck(ui->toolbarGridViewVisibleCheckBox, m_generalSettings.toolbarShowGridViewButton);
   setToolbarCheck(ui->toolbarListViewVisibleCheckBox, m_generalSettings.toolbarShowListViewButton);
+  setToolbarCheck(ui->toolbarCoverFlowViewVisibleCheckBox,
+                  m_generalSettings.toolbarShowCoverFlowViewButton);
   setToolbarCheck(ui->toolbarHideSubcollectionsVisibleCheckBox,
                   m_generalSettings.toolbarShowHideSubcollectionsButton);
   setToolbarCheck(ui->toolbarTypeFilterVisibleCheckBox, m_generalSettings.toolbarShowTypeFilter);
@@ -571,6 +573,8 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   setToolbarCheck(ui->toolbarSearchBarVisibleCheckBox, m_generalSettings.toolbarShowSearchBar);
   setToolbarText(ui->toolbarGridViewTextEdit, m_generalSettings.toolbarGridViewButtonText);
   setToolbarText(ui->toolbarListViewTextEdit, m_generalSettings.toolbarListViewButtonText);
+  setToolbarText(ui->toolbarCoverFlowViewTextEdit,
+                 m_generalSettings.toolbarCoverFlowViewButtonText);
   setToolbarText(ui->toolbarHideSubcollectionsTextEdit,
                  m_generalSettings.toolbarHideSubcollectionsButtonText);
   setToolbarText(ui->toolbarTitleFilterTextEdit, m_generalSettings.toolbarTitleFilterText);
@@ -772,6 +776,10 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
       mainWindow->m_generalSettings.toolbarShowListViewButton =
           ui->toolbarListViewVisibleCheckBox->isChecked();
     }
+    if (ui->toolbarCoverFlowViewVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowCoverFlowViewButton =
+          ui->toolbarCoverFlowViewVisibleCheckBox->isChecked();
+    }
     if (ui->toolbarHideSubcollectionsVisibleCheckBox) {
       mainWindow->m_generalSettings.toolbarShowHideSubcollectionsButton =
           ui->toolbarHideSubcollectionsVisibleCheckBox->isChecked();
@@ -797,6 +805,10 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     }
     if (ui->toolbarListViewTextEdit) {
       mainWindow->m_generalSettings.toolbarListViewButtonText = ui->toolbarListViewTextEdit->text();
+    }
+    if (ui->toolbarCoverFlowViewTextEdit) {
+      mainWindow->m_generalSettings.toolbarCoverFlowViewButtonText =
+          ui->toolbarCoverFlowViewTextEdit->text();
     }
     if (ui->toolbarHideSubcollectionsTextEdit) {
       mainWindow->m_generalSettings.toolbarHideSubcollectionsButtonText =
