@@ -18,6 +18,7 @@
 #include "databasemanager.h"
 #include "filtermanager.h"
 #include "itemartwork.h"
+#include "mainwindow.h"
 #include "pathutils.h"
 #include "scrolldatamanager.h"
 #include "videoutils.h"
@@ -104,7 +105,8 @@ void ScrollManager::applyCoverFlowConfig() {
   m_coverFlowWidget->setSelectionColor(cfg.selectionColor);
   m_coverFlowWidget->setBackgroundColor(cfg.backgroundColor);
   m_coverFlowWidget->setHideTitles(cfg.hideTitles);
-  m_coverFlowWidget->setFontSize(cfg.fontSize);
+  // Kartend-7eff: scale the cover-flow caption alongside grid/list items.
+  m_coverFlowWidget->setFontSize(MainWindow::zoomedFontSize(cfg.fontSize));
   m_coverFlowWidget->setFontFamily(cfg.customFontFamily);
 }
 

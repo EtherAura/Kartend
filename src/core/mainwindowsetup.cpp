@@ -63,6 +63,11 @@ void MainWindow::setupUI() {
 
   getSettingsManager()->loadGeneralSettings(m_generalSettings);
 
+  // Kartend-7eff: publish the persisted text-zoom multiplier into the static
+  // before any widget is constructed below — the upcoming applyGlobalUiFont
+  // and the scrollManager / sidebar setup paths all read zoomedFontSize().
+  primeTextZoomFromSettings(m_generalSettings.uiTextZoomPercent);
+
   // Kartend-9v0o: push the persisted global UI font to QApplication before any
   // widgets are constructed below, so menus/dialogs/toolbar all pick it up on
   // their first show without a fontChange roundtrip.
@@ -149,6 +154,9 @@ void MainWindow::setupUI() {
   // Kartend-81o: apply persisted toolbar visibility/text overrides to the
   // freshly-constructed toolbar widgets before any layout settles.
   applyToolbarCustomization();
+  // Kartend-7eff: bind Ctrl+= / Ctrl+- / Ctrl+0 after managers are wired so
+  // applyTextZoom() can refresh the scroll/sidebar pipeline on press.
+  setupTextZoomShortcuts();
   setupInitialTimers();
 }
 
