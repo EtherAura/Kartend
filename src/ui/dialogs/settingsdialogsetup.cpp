@@ -286,6 +286,65 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->sidebarModeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::checkForChanges);
   }
+  // Kartend-63e sidebar enhancements — wire all new sidebar fields to the
+  // dirty-check.
+  if (ui->sidebarPositionComboBox) {
+    connect(ui->sidebarPositionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarWidthSpinBox) {
+    connect(ui->sidebarWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarWidthLockedCheckBox) {
+    connect(ui->sidebarWidthLockedCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarBackgroundTypeComboBox) {
+    connect(ui->sidebarBackgroundTypeComboBox,
+            QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarBackgroundValueEdit) {
+    connect(ui->sidebarBackgroundValueEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarPatternIntensitySpinBox) {
+    connect(ui->sidebarPatternIntensitySpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarPatternColorEdit) {
+    connect(ui->sidebarPatternColorEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarTextColorEdit) {
+    connect(ui->sidebarTextColorEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarAccentColorEdit) {
+    connect(ui->sidebarAccentColorEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarHeaderBgEdit) {
+    connect(ui->sidebarHeaderBgEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarSectionBgEdit) {
+    connect(ui->sidebarSectionBgEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarHeaderBgOpacitySpinBox) {
+    connect(ui->sidebarHeaderBgOpacitySpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarSectionBgOpacitySpinBox) {
+    connect(ui->sidebarSectionBgOpacitySpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarActiveTabComboBox) {
+    connect(ui->sidebarActiveTabComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
   if (ui->hideHorizontalScrollbarCheckBox) {
     connect(ui->hideHorizontalScrollbarCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);

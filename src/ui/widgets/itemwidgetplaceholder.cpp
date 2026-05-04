@@ -2,7 +2,9 @@
 // This remains an ItemWidget member; this is a translation-unit split.
 #include "itemwidget.h"
 #include "uiconstants.h"
+#include <QApplication>
 #include <QColor>
+#include <QHash>
 #include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
@@ -11,25 +13,49 @@
 #include <QRectF>
 #include <Qt>
 
-// Build placeholder pattern
-auto ItemWidget::buildPlaceholderPattern(int width, int height) const -> QPixmap {
+// Kartend-63e: shared static so MetadataSidebar's Pattern background can
+// render the same hatch as missing-artwork item tiles.
+auto ItemWidget::buildPlaceholderTile(int width, int height, int cornerRadius, bool applyGradient,
+                                      const QColor &baseOverride, double lineAlphaScale)
+    -> QPixmap {
   if (width <= 0 || height <= 0) {
     return {};
   }
-  static QPixmap cache;
-  static quint64 cacheKey = 0;
-  static int cachedCornerRadius = 0;
+  // Per-size cache: avoids thrash when the sidebar (different size) and item
+  // tiles (item-card size) call this helper in alternation.
+  static QHash<quint64, QPixmap> cache;
   static QString cachedTileColor;
-  QColor base = palette().color(QPalette::Mid);
+  // Read the palette base from the global app palette by default. Callers
+  // (e.g. MetadataSidebar) can pass their own widget-instance Mid so a
+  // custom palette inherited from an ancestor is honored — without this
+  // override, the sidebar's pattern was visibly lighter than item tiles.
+  QColor base =
+      baseOverride.isValid() ? baseOverride : QApplication::palette().color(QPalette::Mid);
   constexpr int kKeyWidthShiftBits = 48;
   constexpr int kKeyHeightShiftBits = 32;
   constexpr quint64 kRgbaMask32 = 0xffffffffULL;
   quint64 key = (static_cast<quint64>(width) << kKeyWidthShiftBits) |
                 (static_cast<quint64>(height) << kKeyHeightShiftBits) |
                 (static_cast<quint64>(base.rgba()) & kRgbaMask32);
-  if (!cache.isNull() && cacheKey == key && cachedCornerRadius == m_cornerRadius &&
-      cachedTileColor == s_tileColor) {
-    return cache;
+  // Mix corner radius into the key so a 0-radius sidebar and a rounded item
+  // tile of the same size each get their own cache entry. One bit for the
+  // gradient flag so seamless and gradient variants don't collide. The
+  // base color is already part of `key` via base.rgba() above, so an
+  // override automatically gets its own cache slot.
+  key ^= static_cast<quint64>(cornerRadius) << 16;
+  if (applyGradient) {
+    key ^= 0x1ULL;
+  }
+  // Quantize the alpha scale into the key so the sidebar's dimmed variant
+  // doesn't collide with the full-intensity item tile.
+  key ^= static_cast<quint64>(std::clamp(lineAlphaScale * 100.0, 0.0, 200.0)) << 24;
+  if (cachedTileColor != s_tileColor) {
+    cache.clear();
+    cachedTileColor = s_tileColor;
+  }
+  auto cacheIt = cache.constFind(key);
+  if (cacheIt != cache.constEnd()) {
+    return cacheIt.value();
   }
 
   QPixmap pixmap(width, height);
@@ -71,7 +97,8 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const -> QPixmap
                    accentColor.blue() * (UIConstants::Placeholder::PRIMARY_TINT_DEN -
                                          UIConstants::Placeholder::PRIMARY_TINT_NUM)) /
                   UIConstants::Placeholder::PRIMARY_TINT_DEN);
-  primary.setAlpha(UIConstants::Placeholder::PRIMARY_ALPHA);
+  primary.setAlpha(static_cast<int>(
+      std::clamp(UIConstants::Placeholder::PRIMARY_ALPHA * lineAlphaScale, 0.0, 255.0)));
 
   QColor secondary = base;
   secondary.setHsl(hHue, hSat / 3,
@@ -89,7 +116,8 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const -> QPixmap
                      accentColor.blue() * (UIConstants::Placeholder::SECONDARY_TINT_DEN -
                                            UIConstants::Placeholder::SECONDARY_TINT_NUM)) /
                     UIConstants::Placeholder::SECONDARY_TINT_DEN);
-  secondary.setAlpha(UIConstants::Placeholder::SECONDARY_ALPHA);
+  secondary.setAlpha(static_cast<int>(
+      std::clamp(UIConstants::Placeholder::SECONDARY_ALPHA * lineAlphaScale, 0.0, 255.0)));
 
   int step = qBound(UIConstants::Placeholder::STEP_MIN,
                     qMin(width, height) / UIConstants::Placeholder::STEP_DIVISOR,
@@ -147,7 +175,7 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const -> QPixmap
   }
   pixmap = QPixmap::fromImage(img);
 
-  {
+  if (applyGradient) {
     QPainter painter(&pixmap);
     QLinearGradient gradient(0, 0, 0, height);
     QColor top(bgColor.red(), bgColor.green(), bgColor.blue(),
@@ -160,7 +188,7 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const -> QPixmap
   }
 
   // Apply corner radius masking at the end (after all drawing/processing)
-  if (m_cornerRadius > 0) {
+  if (cornerRadius > 0) {
     QPixmap maskedPixmap(width, height);
     maskedPixmap.fill(Qt::transparent);
 
@@ -168,7 +196,7 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const -> QPixmap
     maskPainter.setRenderHint(QPainter::Antialiasing, true);
 
     QPainterPath clipPath;
-    clipPath.addRoundedRect(QRectF(0, 0, width, height), m_cornerRadius, m_cornerRadius);
+    clipPath.addRoundedRect(QRectF(0, 0, width, height), cornerRadius, cornerRadius);
     maskPainter.setClipPath(clipPath);
     maskPainter.drawPixmap(0, 0, pixmap);
     maskPainter.end();
@@ -176,9 +204,12 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const -> QPixmap
     pixmap = maskedPixmap;
   }
 
-  cache = pixmap;
-  cacheKey = key;
-  cachedCornerRadius = m_cornerRadius;
-  cachedTileColor = s_tileColor;
+  cache.insert(key, pixmap);
   return pixmap;
+}
+
+// Instance wrapper used by per-item rendering — delegates to the static
+// builder with the widget's own corner radius.
+auto ItemWidget::buildPlaceholderPattern(int width, int height) const -> QPixmap {
+  return buildPlaceholderTile(width, height, m_cornerRadius);
 }

@@ -253,6 +253,15 @@ void MainWindow::connectScrollManager() {
                        getSidebarManager()->setExternallyHidden(active);
                      }
                    });
+  // Kartend-63e bug #7: lower the sidebar while the artwork preview overlay
+  // is showing so the overlay (parented to the top-level window) stays on
+  // top. Restored on hide.
+  QObject::connect(getScrollManager(), &ScrollManager::artworkPreviewVisibilityChanged, this,
+                   [this](bool visible) {
+                     if (getSidebarManager()) {
+                       getSidebarManager()->setOverlayActive(visible);
+                     }
+                   });
   // Kartend-3ile: cover-flow activates a card → land selection on it then
   // route through the existing launch path. Subcollection / virtual-folder
   // activations are handled by ScrollManager itself via subcollectionEntered

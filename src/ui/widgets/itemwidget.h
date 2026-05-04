@@ -83,6 +83,25 @@ public:
   static QColor titleTint();
   QColor m_titleTintColor; // Cached tint color for custom painting
 
+  /// Kartend-63e: build a placeholder-style hatched tile at the given size
+  /// using the app palette + s_tileColor + s_titleTintLightness. Static so
+  /// the metadata sidebar can render the exact same hatch the per-item
+  /// placeholder uses for "missing artwork" tiles. `cornerRadius` masks the
+  /// corners (0 = no rounding); the sidebar passes 0. `applyGradient`
+  /// controls the vertical fade overlay — items keep it (true) so the tile
+  /// matches the legacy look; the sidebar disables it (false) so a single
+  /// tall pattern doesn't get a stretched, washed-out gradient.
+  /// `baseOverride` lets a caller substitute its own widget-instance Mid
+  /// color (default = QApplication::palette() Mid). Pass an invalid color
+  /// to use the default. `lineAlphaScale` (0.0–1.0) scales both
+  /// primary/secondary line alphas — the sidebar uses ~0.5 because the
+  /// lines run much longer at sidebar scale than on a small item card and
+  /// were perceived as too bright at full PRIMARY_ALPHA.
+  static QPixmap buildPlaceholderTile(int width, int height, int cornerRadius = 0,
+                                      bool applyGradient = true,
+                                      const QColor &baseOverride = QColor(),
+                                      double lineAlphaScale = 1.0);
+
   // Static configuration for title appearance (set from GeneralSettings)
   static void setTitleTintSaturation(int saturation);
   static void setTitleTintLightness(int lightness);

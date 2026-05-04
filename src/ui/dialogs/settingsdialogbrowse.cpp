@@ -334,6 +334,54 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->sidebarModeComboBox) {
     ui->sidebarModeComboBox->setCurrentIndex(static_cast<int>(config.sidebarMode));
   }
+  // Kartend-63e sidebar enhancements.
+  if (ui->sidebarPositionComboBox) {
+    ui->sidebarPositionComboBox->setCurrentIndex(static_cast<int>(config.sidebarPosition));
+  }
+  if (ui->sidebarWidthSpinBox) {
+    ui->sidebarWidthSpinBox->setValue(config.sidebarWidth);
+  }
+  if (ui->sidebarWidthLockedCheckBox) {
+    ui->sidebarWidthLockedCheckBox->setChecked(config.sidebarWidthLocked);
+  }
+  if (ui->sidebarBackgroundTypeComboBox) {
+    ui->sidebarBackgroundTypeComboBox->setCurrentIndex(
+        static_cast<int>(config.sidebarBackgroundType));
+  }
+  if (ui->sidebarBackgroundValueEdit) {
+    if (config.sidebarBackgroundType == SidebarBackgroundType::Image) {
+      ui->sidebarBackgroundValueEdit->setText(config.sidebarBackgroundImage);
+    } else {
+      ui->sidebarBackgroundValueEdit->setText(config.sidebarBackgroundColor);
+    }
+  }
+  if (ui->sidebarPatternIntensitySpinBox) {
+    ui->sidebarPatternIntensitySpinBox->setValue(config.sidebarPatternIntensity);
+  }
+  if (ui->sidebarPatternColorEdit) {
+    ui->sidebarPatternColorEdit->setText(config.sidebarPatternColor);
+  }
+  if (ui->sidebarTextColorEdit) {
+    ui->sidebarTextColorEdit->setText(config.sidebarTextColor);
+  }
+  if (ui->sidebarAccentColorEdit) {
+    ui->sidebarAccentColorEdit->setText(config.sidebarAccentColor);
+  }
+  if (ui->sidebarHeaderBgEdit) {
+    ui->sidebarHeaderBgEdit->setText(config.sidebarHeaderBgColor);
+  }
+  if (ui->sidebarSectionBgEdit) {
+    ui->sidebarSectionBgEdit->setText(config.sidebarSectionBgColor);
+  }
+  if (ui->sidebarHeaderBgOpacitySpinBox) {
+    ui->sidebarHeaderBgOpacitySpinBox->setValue(config.sidebarHeaderBgOpacity);
+  }
+  if (ui->sidebarSectionBgOpacitySpinBox) {
+    ui->sidebarSectionBgOpacitySpinBox->setValue(config.sidebarSectionBgOpacity);
+  }
+  if (ui->sidebarActiveTabComboBox) {
+    ui->sidebarActiveTabComboBox->setCurrentIndex(static_cast<int>(config.sidebarActiveTab));
+  }
   if (ui->sidebarActiveCollectionLabel) {
     ui->sidebarActiveCollectionLabel->setText(tr("Editing: %1").arg(config.name));
   }
@@ -484,6 +532,22 @@ void SettingsDialog::clearCollectionUI() {
 
   if (ui->horizontalAlignmentComboBox) ui->horizontalAlignmentComboBox->setCurrentIndex(0);
   if (ui->sidebarModeComboBox) ui->sidebarModeComboBox->setCurrentIndex(0);
+  // Kartend-63e sidebar enhancements: clear/reset on no-selection.
+  if (ui->sidebarPositionComboBox) ui->sidebarPositionComboBox->setCurrentIndex(0);
+  if (ui->sidebarWidthSpinBox)
+    ui->sidebarWidthSpinBox->setValue(UIConstants::Sidebar::FIXED_WIDTH);
+  if (ui->sidebarWidthLockedCheckBox) ui->sidebarWidthLockedCheckBox->setChecked(true);
+  if (ui->sidebarBackgroundTypeComboBox) ui->sidebarBackgroundTypeComboBox->setCurrentIndex(0);
+  if (ui->sidebarBackgroundValueEdit) ui->sidebarBackgroundValueEdit->clear();
+  if (ui->sidebarPatternIntensitySpinBox) ui->sidebarPatternIntensitySpinBox->setValue(50);
+  if (ui->sidebarPatternColorEdit) ui->sidebarPatternColorEdit->clear();
+  if (ui->sidebarTextColorEdit) ui->sidebarTextColorEdit->clear();
+  if (ui->sidebarAccentColorEdit) ui->sidebarAccentColorEdit->clear();
+  if (ui->sidebarHeaderBgEdit) ui->sidebarHeaderBgEdit->clear();
+  if (ui->sidebarSectionBgEdit) ui->sidebarSectionBgEdit->clear();
+  if (ui->sidebarHeaderBgOpacitySpinBox) ui->sidebarHeaderBgOpacitySpinBox->setValue(200);
+  if (ui->sidebarSectionBgOpacitySpinBox) ui->sidebarSectionBgOpacitySpinBox->setValue(170);
+  if (ui->sidebarActiveTabComboBox) ui->sidebarActiveTabComboBox->setCurrentIndex(0);
   if (ui->viewTypeComboBox) ui->viewTypeComboBox->setCurrentIndex(0);
   if (ui->parentCollectionComboBox) ui->parentCollectionComboBox->clear();
   if (ui->sidebarActiveCollectionLabel) {

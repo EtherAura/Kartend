@@ -67,12 +67,21 @@ signals:
   /// that don't carry an associated media path).
   void launchRequested(const QString &filePath);
 
+  /// Kartend-63e bug #7: emitted from showEvent / hideEvent so consumers
+  /// (specifically SidebarManager) can lower the sidebar while the overlay
+  /// is on top. Without this, raise() calls during the overlay's lifetime
+  /// (e.g. window resize triggers updateSidebarLayout) would re-stack the
+  /// sidebar above the overlay.
+  void visibilityChanged(bool visible);
+
 protected:
   void paintEvent(QPaintEvent *event) override;
   void mousePressEvent(QMouseEvent *event) override;
   void mouseDoubleClickEvent(QMouseEvent *event) override;
   void keyPressEvent(QKeyEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
+  void showEvent(QShowEvent *event) override;
+  void hideEvent(QHideEvent *event) override;
 
 private:
   QLabel *m_artworkLabel = nullptr;

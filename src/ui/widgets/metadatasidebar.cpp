@@ -4,12 +4,17 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
+#include <QFontMetrics>
 #include <QHBoxLayout>
+#include <QMouseEvent>
+#include <algorithm>
 #include <QIcon>
 #include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
 #include <QSize>
+#include <QStyle>
+#include <QTabBar>
 #include <QTimer>
 #include <QToolButton>
 #include <QUrl>
@@ -17,6 +22,7 @@
 
 #include "artworkpreviewoverlay.h"
 #include "extensionutils.h"
+#include "itemwidget.h"
 #include "metadatasidebar.h"
 #include "pathutils.h"
 #include "uiconstants.h"
@@ -32,6 +38,13 @@
 MetadataSidebar::MetadataSidebar(QWidget *parent) : QWidget(parent), ui(new Ui::MetadataSidebar) {
   ui->setupUi(this);
   setAutoFillBackground(true);
+  // Kartend-63e bug #6: stop mouse events on the sidebar from propagating up
+  // to ancestors. The previous Overlay-mode implementation relied on Qt's
+  // default hit-testing alone, but the sidebar sits as a sibling of the grid
+  // — a moveEvent that crossed from the grid into the sidebar could still
+  // race the grid's hover-select tracking. WA_NoMousePropagation makes the
+  // sidebar a solid stop for unhandled mouse events.
+  setAttribute(Qt::WA_NoMousePropagation);
 
   QPalette pal = palette();
   pal.setColor(QPalette::Window, pal.color(QPalette::Window));
@@ -49,6 +62,27 @@ MetadataSidebar::MetadataSidebar(QWidget *parent) : QWidget(parent), ui(new Ui::
 
   setFixedWidth(UIConstants::Sidebar::FIXED_WIDTH);
 
+  // Kartend-63e bug #1: center the artwork preview, item name, and (below)
+  // the video preview widget so they sit on the sidebar's vertical center
+  // axis instead of flush-left. The QVBoxLayout itself stays top-aligned;
+  // per-item Qt::AlignHCenter handles horizontal centering only.
+  if (auto *contentLayout =
+          qobject_cast<QVBoxLayout *>(ui->artworkDisplay->parentWidget()->layout())) {
+    contentLayout->setAlignment(ui->artworkDisplay, Qt::AlignHCenter);
+    contentLayout->setAlignment(ui->artworkLabel, Qt::AlignHCenter);
+    contentLayout->setAlignment(ui->itemNameLabel, Qt::AlignHCenter);
+    contentLayout->setAlignment(ui->itemNameValue, Qt::AlignHCenter);
+    ui->itemNameValue->setAlignment(Qt::AlignHCenter);
+  }
+
+  // Kartend-63e bug #2: hide the inner scrollbar entirely. With the sidebar
+  // sized to the viewport, the content layout almost always fits — and when
+  // it doesn't, the user can still mouse-wheel to scroll. A native bar
+  // competing with the main grid's scrollbar in non-maximized windows was
+  // visually noisy, which is the actual user complaint.
+  ui->scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  ui->scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
   // Insert a preview video widget into the artwork pane, sized to match the
   // artwork display. Hidden by default; shown only when a preview video is
   // found for the current selection.
@@ -64,7 +98,11 @@ MetadataSidebar::MetadataSidebar(QWidget *parent) : QWidget(parent), ui(new Ui::
     } else {
       artworkParentLayout->addWidget(m_videoPreview);
     }
+    // Bug #1 cont'd: keep the video preview centered too.
+    artworkParentLayout->setAlignment(m_videoPreview, Qt::AlignHCenter);
   }
+
+  setupTabBar();
 
   // Debounce timer: avoid loading a video for every transient selection
   // change while the user is scrolling. Single-shot, restarted on each new
@@ -100,6 +138,13 @@ void MetadataSidebar::setMetadata(const QString &filePath, const QString &itemNa
   // Coming back from collection-summary mode (Kartend-3mn) — restore the
   // item-view chrome that was hidden while showing collection details.
   m_hasItemDisplayed = true;
+  // Kartend-63e: only restore the per-item chrome if the user is on the
+  // Item tab. Collection / File tabs keep their own visibility regardless of
+  // selection — `m_hasItemDisplayed` is still tracked so a switch back to
+  // Item picks up the latest selection.
+  if (m_activeTab != SidebarTab::Item) {
+    return;
+  }
   applyItemViewVisibility(true);
   ui->titleLabel->setText(tr("Item Information"));
   ui->itemNameLabel->setText(tr("Name:"));
@@ -176,7 +221,9 @@ void MetadataSidebar::clearMetadata() {
   ui->titleLabel->setText(tr("Item Information"));
   ui->itemNameLabel->setText(tr("Name:"));
   ui->itemNameValue->setText(tr("No item selected"));
+  m_currentFilePath.clear();
   ui->filePathValue->setText("-");
+  ui->filePathValue->setToolTip(QString());
   ui->fileSizeValue->setText("-");
   ui->lastModifiedValue->setText("-");
   ui->fileExtensionValue->setText("-");
@@ -270,9 +317,13 @@ void MetadataSidebar::updateFileInfo(const QString &filePath) {
     return;
   }
 
-  QString displayPath =
-      PathUtils::truncatePathForDisplay(filePath, UIConstants::Metadata::PATH_TRUNCATE_LENGTH);
-  ui->filePathValue->setText(displayPath);
+  // Kartend-63e bug #4: width-aware elision instead of a fixed 50-char
+  // right-truncate. The label is single-line (wordWrap is reset below) so
+  // QFontMetrics::elidedText with the label's current width gives the
+  // correct fit; resizeEvent re-runs this when the sidebar is resized.
+  m_currentFilePath = filePath;
+  ui->filePathValue->setWordWrap(false);
+  updateFilePathDisplay();
   ui->filePathValue->setToolTip(filePath);
 
   ui->fileSizeValue->setText(formatFileSize(fileInfo.size()));
@@ -283,6 +334,401 @@ void MetadataSidebar::updateFileInfo(const QString &filePath) {
     extension = "Unknown";
   }
   ui->fileExtensionValue->setText(extension + " file");
+}
+
+void MetadataSidebar::setupTabBar() {
+  // The .ui file's mainLayout is the QVBoxLayout that holds scrollArea.
+  // Find it, create the tab bar, and insert at index 0.
+  auto *mainLayout = qobject_cast<QVBoxLayout *>(layout());
+  if (!mainLayout) {
+    return;
+  }
+  m_tabBar = new QTabBar(this);
+  m_tabBar->setExpanding(true);
+  m_tabBar->setDocumentMode(true);
+  m_tabBar->addTab(tr("Item"));
+  m_tabBar->addTab(tr("Collection"));
+  m_tabBar->addTab(tr("File"));
+  // Kartend-63e: opaque tab bar so the sidebar pattern doesn't bleed through
+  // the gaps above/below the tabs. Without this, the patternEvent's full-
+  // sidebar fill leaks into the tab strip's transparent regions.
+  m_tabBar->setAutoFillBackground(true);
+  mainLayout->insertWidget(0, m_tabBar);
+
+  connect(m_tabBar, &QTabBar::currentChanged, this, [this](int index) {
+    SidebarTab newTab = SidebarTab::Item;
+    if (index == static_cast<int>(SidebarTab::Collection)) newTab = SidebarTab::Collection;
+    else if (index == static_cast<int>(SidebarTab::File)) newTab = SidebarTab::File;
+    if (newTab == m_activeTab) {
+      return;
+    }
+    m_activeTab = newTab;
+    applyTabVisibility();
+    emit activeTabChanged(newTab);
+  });
+}
+
+void MetadataSidebar::setActiveTab(SidebarTab tab) {
+  if (m_activeTab == tab && m_tabBar && m_tabBar->currentIndex() == static_cast<int>(tab)) {
+    return;
+  }
+  m_activeTab = tab;
+  if (m_tabBar) {
+    QSignalBlocker blocker(m_tabBar);
+    m_tabBar->setCurrentIndex(static_cast<int>(tab));
+  }
+  applyTabVisibility();
+}
+
+void MetadataSidebar::applyTabVisibility() {
+  // Lazy-build the File-tab placeholder on first switch so we don't pay for
+  // it when the user never visits that tab.
+  if (m_activeTab == SidebarTab::File && !m_filePlaceholder && ui->contentWidget) {
+    if (auto *cl = qobject_cast<QVBoxLayout *>(ui->contentWidget->layout())) {
+      m_filePlaceholder = new QLabel(tr("No custom view configured."), ui->contentWidget);
+      m_filePlaceholder->setAlignment(Qt::AlignCenter);
+      m_filePlaceholder->setWordWrap(true);
+      m_filePlaceholder->setStyleSheet("color: palette(mid); padding: 32px 16px;");
+      cl->addWidget(m_filePlaceholder);
+    }
+  }
+
+  switch (m_activeTab) {
+  case SidebarTab::Item:
+    if (m_filePlaceholder) m_filePlaceholder->hide();
+    if (m_hasItemDisplayed) {
+      applyItemViewVisibility(true);
+    } else {
+      // Falls back to the collection summary when no item is selected, the
+      // existing behavior the rest of the codebase already exercises.
+      renderCollectionSummary();
+    }
+    break;
+  case SidebarTab::Collection:
+    if (m_filePlaceholder) m_filePlaceholder->hide();
+    renderCollectionSummary();
+    break;
+  case SidebarTab::File:
+    applyItemViewVisibility(false);
+    if (m_filePlaceholder) m_filePlaceholder->show();
+    // Hide the title + collection summary chrome too so the placeholder
+    // sits alone.
+    ui->titleLabel->setVisible(false);
+    ui->itemNameLabel->setVisible(false);
+    ui->itemNameValue->setVisible(false);
+    break;
+  }
+
+  if (m_activeTab != SidebarTab::File) {
+    ui->titleLabel->setVisible(true);
+    ui->itemNameLabel->setVisible(true);
+    ui->itemNameValue->setVisible(true);
+  }
+}
+
+void MetadataSidebar::applyAppearance(const CollectionConfig &collection) {
+  setActiveTab(collection.sidebarActiveTab);
+  m_widthLocked = collection.sidebarWidthLocked;
+  m_position = collection.sidebarPosition;
+  // Mouse tracking is required so we can change the cursor over the grip
+  // strip without waiting for a click.
+  setMouseTracking(!m_widthLocked);
+  if (m_widthLocked) {
+    unsetCursor();
+  }
+  m_bgType = collection.sidebarBackgroundType;
+  m_bgColor = QColor(collection.sidebarBackgroundColor);
+  m_bgPattern = collection.sidebarPattern;
+  m_patternIntensity = std::clamp(collection.sidebarPatternIntensity, 0, 100);
+  m_patternColor = QColor(collection.sidebarPatternColor);
+  if (collection.sidebarBackgroundImage.isEmpty()) {
+    m_bgImage = QPixmap();
+  } else {
+    m_bgImage = QPixmap(collection.sidebarBackgroundImage);
+  }
+
+  // Make children transparent so the painted background shows through.
+  // The default .ui sets autoFillBackground on each of these so the sidebar
+  // draws as a solid palette(Window); flipping them off lets paintEvent
+  // own the visual.
+  setAutoFillBackground(false);
+  if (ui->scrollArea) {
+    ui->scrollArea->setAutoFillBackground(false);
+    if (auto *vp = ui->scrollArea->viewport()) {
+      vp->setAutoFillBackground(false);
+      vp->setStyleSheet("background: transparent;");
+    }
+  }
+  if (ui->contentWidget) {
+    ui->contentWidget->setAutoFillBackground(false);
+  }
+
+  // Plumb text + accent color through the contentWidget palette so the
+  // existing palette(highlight) / palette(windowtext) stylesheet hooks pick
+  // them up without re-styling each label.
+  if (ui->contentWidget) {
+    QPalette pal = ui->contentWidget->palette();
+    if (!collection.sidebarTextColor.isEmpty()) {
+      const QColor textColor(collection.sidebarTextColor);
+      if (textColor.isValid()) {
+        pal.setColor(QPalette::WindowText, textColor);
+        pal.setColor(QPalette::Text, textColor);
+      }
+    }
+    if (!collection.sidebarAccentColor.isEmpty()) {
+      const QColor accent(collection.sidebarAccentColor);
+      if (accent.isValid()) {
+        pal.setColor(QPalette::Highlight, accent);
+      }
+    }
+    ui->contentWidget->setPalette(pal);
+  }
+
+  // Kartend-63e: bubble backgrounds for readability over patterned bg.
+  // The bubble color is RGB-only; the user-controlled opacity is layered
+  // on top via the matching *Opacity field. When the color is blank, fall
+  // back to a sensible default derived from the other sidebar colors so
+  // bubbles always give some contrast without forcing a manual pick:
+  //   • Header → accent color (or palette highlight).
+  //   • Section → darker variant of the sidebar background color (or
+  //     palette window darkened).
+  auto composeBubble = [&](const QString &hex, int opacity, const QColor &fallback) -> QColor {
+    QColor c = hex.isEmpty() ? fallback : QColor(hex);
+    if (!c.isValid()) c = fallback;
+    c.setAlpha(std::clamp(opacity, 0, 255));
+    return c;
+  };
+  // Section fallback uses palette(Mid) — same color the missing-artwork
+  // item placeholder paints as its bg, so the value rows tint to match the
+  // item tiles. Header fallback is a slightly darker shade for hierarchy
+  // *and* readability: a Highlight-colored header on top of a brighter
+  // Highlight-derived bubble made the windowtext text disappear on dark
+  // themes. A darker Mid keeps light text legible.
+  QColor sectionFallback = QColor(collection.sidebarBackgroundColor);
+  if (!sectionFallback.isValid()) sectionFallback = palette().color(QPalette::Mid);
+  const QColor headerFallback = sectionFallback.darker(115);
+
+  const QColor header = composeBubble(collection.sidebarHeaderBgColor,
+                                      collection.sidebarHeaderBgOpacity, headerFallback);
+  const QColor section = composeBubble(collection.sidebarSectionBgColor,
+                                       collection.sidebarSectionBgOpacity, sectionFallback);
+  applyBubbleStyles(header.alpha() == 0 ? QString() : header.name(QColor::HexArgb),
+                    section.alpha() == 0 ? QString() : section.name(QColor::HexArgb));
+
+  update();
+}
+
+bool MetadataSidebar::isOnGrip(const QPoint &posInWidget) const {
+  if (m_widthLocked) {
+    return false;
+  }
+  // 6px-wide hot zone on the inner edge so the user has a forgiving target.
+  static constexpr int GRIP_WIDTH = 6;
+  if (m_position == SidebarPosition::Left) {
+    return posInWidget.x() >= width() - GRIP_WIDTH;
+  }
+  return posInWidget.x() < GRIP_WIDTH;
+}
+
+void MetadataSidebar::mousePressEvent(QMouseEvent *event) {
+  if (!m_widthLocked && event->button() == Qt::LeftButton && isOnGrip(event->pos())) {
+    m_widthDragging = true;
+    m_dragStartWidth = width();
+    m_dragStartX = event->globalPosition().toPoint().x();
+    event->accept();
+    return;
+  }
+  QWidget::mousePressEvent(event);
+}
+
+void MetadataSidebar::mouseMoveEvent(QMouseEvent *event) {
+  if (m_widthDragging) {
+    const int dx = event->globalPosition().toPoint().x() - m_dragStartX;
+    // Right-anchored sidebar: drag-left increases width, drag-right shrinks.
+    // Left-anchored: drag-right increases width.
+    int candidate = m_position == SidebarPosition::Left ? m_dragStartWidth + dx
+                                                        : m_dragStartWidth - dx;
+    candidate = std::clamp(candidate, UIConstants::Sidebar::MIN_WIDTH,
+                           UIConstants::Sidebar::MAX_WIDTH);
+    emit widthDragged(candidate);
+    event->accept();
+    return;
+  }
+  if (!m_widthLocked) {
+    setCursor(isOnGrip(event->pos()) ? Qt::SplitHCursor : Qt::ArrowCursor);
+  }
+  QWidget::mouseMoveEvent(event);
+}
+
+void MetadataSidebar::mouseReleaseEvent(QMouseEvent *event) {
+  if (m_widthDragging && event->button() == Qt::LeftButton) {
+    m_widthDragging = false;
+    emit widthCommitted(width());
+    event->accept();
+    return;
+  }
+  QWidget::mouseReleaseEvent(event);
+}
+
+void MetadataSidebar::leaveEvent(QEvent *event) {
+  if (!m_widthDragging) {
+    unsetCursor();
+  }
+  QWidget::leaveEvent(event);
+}
+
+void MetadataSidebar::paintEvent(QPaintEvent *event) {
+  QPainter painter(this);
+  const QColor fallbackBase = palette().color(QPalette::Window);
+  const QColor baseColor = m_bgColor.isValid() ? m_bgColor : fallbackBase;
+
+  switch (m_bgType) {
+  case SidebarBackgroundType::Color:
+    painter.fillRect(rect(), baseColor);
+    break;
+  case SidebarBackgroundType::Image:
+    painter.fillRect(rect(), baseColor);
+    if (!m_bgImage.isNull()) {
+      // Scale to cover the sidebar while preserving aspect ratio. Centered
+      // crop matches the main-view background-position: center semantics.
+      const QSize target = size();
+      QPixmap scaled =
+          m_bgImage.scaled(target, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+      const int x = (target.width() - scaled.width()) / 2;
+      const int y = (target.height() - scaled.height()) / 2;
+      painter.drawPixmap(x, y, scaled);
+    }
+    break;
+  case SidebarBackgroundType::Pattern: {
+    // Single full-size pattern (no tiling, no vertical gradient).
+    // Pass our own palette Mid so the pattern picks up any palette overrides
+    // inherited from an ancestor (itemsPage / m_mainContentWidget). Without
+    // this the static helper used QApplication::palette() Mid, which on
+    // some setups is visibly lighter than the items grid's effective Mid.
+    const QColor mid = palette().color(QPalette::Mid);
+    const QPixmap tile = ItemWidget::buildPlaceholderTile(
+        width(), height(), /*cornerRadius=*/0,
+        /*applyGradient=*/false, mid,
+        /*lineAlphaScale=*/m_patternIntensity / 100.0);
+    if (!tile.isNull()) {
+      painter.drawPixmap(0, 0, tile);
+    } else {
+      painter.fillRect(rect(), baseColor);
+    }
+    // Optional user-controlled tint on top. Lines are already dimmed via
+    // lineAlphaScale=0.5 above, so no default overlay is needed; users who
+    // want extra darkening can set sidebarPatternColor.
+    if (m_patternColor.isValid() && m_patternColor.alpha() > 0) {
+      painter.fillRect(rect(), m_patternColor);
+    }
+    break;
+  }
+  }
+
+  // Kartend-63e: paint a visible 1px guideline on the inner edge when the
+  // width is unlocked so the user can see where to grab. Skipped while
+  // dragging so the line doesn't smear during the live resize.
+  if (!m_widthLocked && !m_widthDragging) {
+    QColor edgeColor = palette().color(QPalette::Highlight);
+    edgeColor.setAlpha(160);
+    painter.setPen(QPen(edgeColor, 1));
+    if (m_position == SidebarPosition::Left) {
+      painter.drawLine(width() - 1, 0, width() - 1, height());
+    } else {
+      painter.drawLine(0, 0, 0, height());
+    }
+  }
+
+  QWidget::paintEvent(event);
+}
+
+void MetadataSidebar::applyBubbleStyles(const QString &headerHex, const QString &sectionHex) {
+  if (!ui->contentWidget) {
+    return;
+  }
+  // Build a stylesheet that selects the existing static-label objectNames in
+  // metadatasidebar.ui. Dynamic detail rows are tagged via objectName at
+  // creation in appendDetailRow / ensureGallerySection so they pick up the
+  // same bubble. Empty hex disables that bubble (no rule emitted).
+  QString sheet;
+  const auto qcolorOrEmpty = [](const QString &hex) {
+    if (hex.isEmpty()) return QColor();
+    QColor c(hex);
+    return c.isValid() ? c : QColor();
+  };
+  const QColor headerColor = qcolorOrEmpty(headerHex);
+  const QColor sectionColor = qcolorOrEmpty(sectionHex);
+
+  if (headerColor.isValid()) {
+    const QString rgba =
+        QString("rgba(%1,%2,%3,%4)")
+            .arg(headerColor.red())
+            .arg(headerColor.green())
+            .arg(headerColor.blue())
+            .arg(headerColor.alpha());
+    sheet += QString(
+                 "QLabel#titleLabel, QLabel#artworkLabel, QLabel#fileInfoTitle, "
+                 "QLabel[sidebarRole=\"header\"] { "
+                 "background-color: %1; border-radius: 6px; padding: 4px 8px; }")
+                 .arg(rgba);
+  }
+  if (sectionColor.isValid()) {
+    const QString rgba =
+        QString("rgba(%1,%2,%3,%4)")
+            .arg(sectionColor.red())
+            .arg(sectionColor.green())
+            .arg(sectionColor.blue())
+            .arg(sectionColor.alpha());
+    sheet += QString(
+                 "QLabel#itemNameValue, QLabel#filePathValue, QLabel#fileSizeValue, "
+                 "QLabel#lastModifiedValue, QLabel#fileExtensionValue, "
+                 "QLabel[sidebarRole=\"value\"] { "
+                 "background-color: %1; border-radius: 6px; padding: 4px 8px; }")
+                 .arg(rgba);
+  }
+  ui->contentWidget->setStyleSheet(sheet);
+  // Force a polish so newly-applied stylesheet rules take effect on already
+  // visible labels — without this, the first switch from blank → set bg
+  // sometimes leaves the labels unstyled until the next layout event.
+  ui->contentWidget->style()->polish(ui->contentWidget);
+}
+
+void MetadataSidebar::pausePreviewVideo() {
+  // Cancel any debounced start so a tab/selection change immediately before
+  // the overlay opened doesn't fire a delayed playVideo() under the overlay.
+  if (m_videoStartTimer) {
+    m_videoStartTimer->stop();
+  }
+  m_pendingVideoPath.clear();
+  if (m_videoPreview) {
+    m_videoPreview->stop();
+    m_videoPreview->hide();
+  }
+  // Restore the static artwork display so the sidebar isn't a black square
+  // while the overlay is on top.
+  ui->artworkDisplay->show();
+}
+
+void MetadataSidebar::updateFilePathDisplay() {
+  if (m_currentFilePath.isEmpty()) {
+    return;
+  }
+  // Account for the label's own left-padding (12px in the .ui) so the elided
+  // text doesn't visually overflow the value column. Falling back to the
+  // full path when the label has no width yet (initial layout) keeps
+  // setMetadata() callers from seeing a blank value while the layout settles.
+  const int available = ui->filePathValue->width() - 16;
+  if (available <= 0) {
+    ui->filePathValue->setText(m_currentFilePath);
+    return;
+  }
+  const QFontMetrics fm(ui->filePathValue->font());
+  ui->filePathValue->setText(fm.elidedText(m_currentFilePath, Qt::ElideMiddle, available));
+}
+
+void MetadataSidebar::resizeEvent(QResizeEvent *event) {
+  QWidget::resizeEvent(event);
+  updateFilePathDisplay();
 }
 
 // Formats file size into human-readable string with appropriate units (KB, MB,
@@ -405,6 +851,9 @@ void MetadataSidebar::ensureDetailsSection() {
   titleFont.setPointSize(11);
   m_detailsTitle->setFont(titleFont);
   m_detailsTitle->setStyleSheet("color: palette(highlight); padding: 4px 0px;");
+  // Kartend-63e: tag for the bubble-bg stylesheet so the dynamic Details
+  // header gets the same header bubble as the static section titles.
+  m_detailsTitle->setProperty("sidebarRole", "header");
   outer->addWidget(m_detailsTitle);
 
   // Manual button is owned by the outer Details layout (above the per-row
@@ -451,6 +900,8 @@ void MetadataSidebar::appendDetailRow(const QString &label, const QString &value
   valueWidget->setStyleSheet("color: palette(windowtext); padding: 2px 0px 8px 12px;");
   valueWidget->setWordWrap(wrap);
   valueWidget->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  // Kartend-63e: tag the value so the bubble-bg stylesheet picks it up.
+  valueWidget->setProperty("sidebarRole", "value");
 
   m_detailsLayout->addWidget(labelWidget);
   m_detailsLayout->addWidget(valueWidget);
@@ -838,6 +1289,10 @@ void MetadataSidebar::openGalleryPreview(const GalleryEntry &entry) {
       overlayParent = this;
     }
     m_galleryOverlay = new ArtworkPreviewOverlay(overlayParent);
+    // Kartend-63e bug #7: forward overlay visibility so SidebarManager can
+    // lower the sidebar while the overlay is showing.
+    connect(m_galleryOverlay, &ArtworkPreviewOverlay::visibilityChanged, this,
+            &MetadataSidebar::galleryOverlayVisibilityChanged);
   }
   if (entry.isVideo) {
     m_galleryOverlay->showVideoAtPath(entry.path);

@@ -11,6 +11,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include "collectionutils.h"
 #include "itemmetadata.h"
 #include "ui_metadatasidebar.h"
 #include "usagestatsstore.h"
@@ -20,6 +21,7 @@ class VideoPreviewWidget;
 QT_BEGIN_NAMESPACE
 class QHBoxLayout;
 class QPushButton;
+class QTabBar;
 class QTimer;
 QT_END_NAMESPACE
 
@@ -83,6 +85,23 @@ public:
   void setCollectionSummary(const CollectionSummary &summary);
   void clearMetadata();
   void setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy);
+  /// Kartend-63e bug #5: stops the sidebar's preview video and cancels any
+  /// pending start so it doesn't keep playing while a fullscreen overlay
+  /// (artwork preview / expand mode) shows its own video. Idempotent — safe
+  /// to call regardless of the current playback state.
+  void pausePreviewVideo();
+
+  /// Kartend-63e: applies per-collection sidebar appearance — background
+  /// type / color / image / pattern, text color, accent color. Called by
+  /// SidebarManager whenever the active collection changes or settings are
+  /// saved. Triggers a repaint.
+  void applyAppearance(const CollectionConfig &collection);
+
+  /// Kartend-63e: switches the active built-in sidebar tab. Item shows the
+  /// per-item view; Collection forces the summary regardless of selection;
+  /// File displays a placeholder until custom panes are wired up.
+  void setActiveTab(SidebarTab tab);
+  [[nodiscard]] SidebarTab activeTab() const { return m_activeTab; }
 
 signals:
   /// Fired when the user activates the gallery's "Edit links…" button
@@ -90,9 +109,50 @@ signals:
   /// owning manager handles persistence and refresh.
   void editArtworkRequested();
 
+  /// Kartend-63e bug #7: forwards the gallery overlay's visibility so
+  /// SidebarManager can lower the sidebar while the overlay is on top. Only
+  /// fires for the sidebar's own gallery overlay; the expand-mode overlay
+  /// owned by SelectionDisplayManager has its own wiring.
+  void galleryOverlayVisibilityChanged(bool visible);
+
+  /// Kartend-63e: fired during a width drag with the new candidate width
+  /// in pixels (already clamped to MIN/MAX). SidebarManager applies it
+  /// live; the matching widthCommitted() at drag-release is what triggers
+  /// the actual settings save.
+  void widthDragged(int width);
+  /// Kartend-63e: fired when the width drag is released. The integer value
+  /// is the final width; SidebarManager persists it via SettingsManager.
+  void widthCommitted(int width);
+  /// Kartend-63e: emitted when the user clicks a sidebar tab. SidebarManager
+  /// persists the new active tab to the current collection.
+  void activeTabChanged(SidebarTab tab);
+
+protected:
+  /// Kartend-63e bug #4: re-elide the file path when the sidebar is resized
+  /// so the path always fits the available width without losing the start /
+  /// end portions to a fixed-length right-truncation.
+  void resizeEvent(QResizeEvent *event) override;
+  /// Kartend-63e: render the per-collection background (color, image, or
+  /// procedurally-drawn pattern) before children paint.
+  void paintEvent(QPaintEvent *event) override;
+  /// Kartend-63e width drag handle. Mouse press / move / release on the
+  /// inner edge (left edge in Right position, right edge in Left position)
+  /// resize the sidebar live while the lock is off. The grip strip is
+  /// `WIDTH_GRIP_PX` wide and not rendered as a separate widget — the
+  /// cursor change + hit-test on the parent handles it cleanly.
+  void mousePressEvent(QMouseEvent *event) override;
+  void mouseMoveEvent(QMouseEvent *event) override;
+  void mouseReleaseEvent(QMouseEvent *event) override;
+  void leaveEvent(QEvent *event) override;
+
 private:
   void setupUI();
   void updateFileInfo(const QString &filePath);
+  void updateFilePathDisplay();
+  /// Kartend-63e: build + install the bubble-bg stylesheet on the content
+  /// widget. Empty hex disables the corresponding bubble. Stylesheet
+  /// selectors target the existing label objectNames in metadatasidebar.ui.
+  void applyBubbleStyles(const QString &headerHex, const QString &sectionHex);
   void loadArtwork(const QString &baseName, const QString &artworkDirectory);
   void schedulePreviewVideo(const QString &videoPath);
   void showArtworkOnly();
@@ -106,6 +166,34 @@ private:
   VideoPreviewWidget *m_videoPreview = nullptr;
   QTimer *m_videoStartTimer = nullptr;
   QString m_pendingVideoPath;
+  /// Kartend-63e bug #4: full file path of the current selection, kept so
+  /// resizeEvent can re-elide it width-aware without re-querying the model.
+  QString m_currentFilePath;
+  /// Kartend-63e: cached appearance state copied from CollectionConfig so
+  /// paintEvent doesn't need to reach back into the manager / model layer.
+  SidebarBackgroundType m_bgType = SidebarBackgroundType::Color;
+  QColor m_bgColor;
+  QPixmap m_bgImage;
+  SidebarPattern m_bgPattern = SidebarPattern::Crosshatch;
+  int m_patternIntensity = 50; // 0–100 % alpha multiplier for pattern lines
+  QColor m_patternColor;
+  /// Kartend-63e width drag state. WidthLocked false enables a draggable
+  /// grip on the inner edge; while m_widthDragging is true, mouseMove
+  /// emits widthDragged() and mouseRelease emits widthCommitted().
+  bool m_widthLocked = true;
+  SidebarPosition m_position = SidebarPosition::Right;
+  bool m_widthDragging = false;
+  int m_dragStartWidth = 0;
+  int m_dragStartX = 0;
+  [[nodiscard]] bool isOnGrip(const QPoint &posInWidget) const;
+
+  /// Kartend-63e tabs. The tab bar is created programmatically and inserted
+  /// at the top of mainLayout so the .ui file stays unchanged.
+  QTabBar *m_tabBar = nullptr;
+  QLabel *m_filePlaceholder = nullptr;
+  SidebarTab m_activeTab = SidebarTab::Item;
+  void setupTabBar();
+  void applyTabVisibility();
 
   // Dynamically-built "Details" section appended to the content layout.
   // Built lazily on first use so existing layouts (and tests that don't show
