@@ -18,6 +18,8 @@ set(INTEGRATION_TEST_SOURCES
   test_mainwindow_smoke.cpp
   test_settingsdialog_scope.cpp
   test_applysettingsdialog.cpp
+  test_applicationmanager_lifecycle.cpp
+  test_navigationmanager.cpp
 )
 
 set(INTEGRATION_TEST_HEADERS
@@ -25,6 +27,8 @@ set(INTEGRATION_TEST_HEADERS
   test_mainwindow_smoke.h
   test_settingsdialog_scope.h
   test_applysettingsdialog.h
+  test_applicationmanager_lifecycle.h
+  test_navigationmanager.h
 )
 
 add_executable(test_integration
