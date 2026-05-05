@@ -173,6 +173,13 @@ void VirtualScrollEngine::enforceScrollContentConstraints() {
   // positions.
   m_owner->m_gridContainer->setMinimumHeight(m_owner->m_metrics.totalHeight);
   m_owner->m_gridContainer->setMaximumHeight(m_owner->m_metrics.totalHeight);
+  // Kartend-dx9t: in Horizontal mode the long axis is X, so pin the container's
+  // width too so the scroll area's horizontal scrollbar reflects the full
+  // collection extent. Other modes leave width up to layout / VirtualContainerManager.
+  if (m_owner->m_metrics.isHorizontal) {
+    m_owner->m_gridContainer->setMinimumWidth(m_owner->m_metrics.totalWidth);
+    m_owner->m_gridContainer->setMaximumWidth(m_owner->m_metrics.totalWidth);
+  }
 }
 
 void VirtualScrollEngine::recreateLayout() {
@@ -343,6 +350,7 @@ void VirtualScrollEngine::positionVirtualContainer() {
   params.totalItems = m_owner->m_totalItems;
   params.alignment = m_owner->getCurrentAlignment();
   params.isFiltered = isFiltered;
+  params.isHorizontal = m_owner->m_metrics.isHorizontal;
 
   m_owner->m_containerManager->positionContainer(params);
 

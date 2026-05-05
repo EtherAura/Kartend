@@ -115,12 +115,30 @@ void InteractionManager::connectGamepadManagerSignals() {
   connect(m_gamepadManager.get(), &GamepadManager::requestSelectionMove, this,
           [this](int direction, bool vertical) {
             int effectiveDirection = direction;
-            if (vertical) {
-              // Check if we're in list mode - don't multiply by gridWidth
-              bool isListMode = false;
-              if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-                isListMode = (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
+            bool effectiveVertical = vertical;
+            ViewType vt = ViewType::Grid;
+            if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+              vt = (*m_collections)[*m_currentCollectionIndex].viewType;
+            }
+            if (vt == ViewType::Horizontal) {
+              // Kartend-dx9t: in Horizontal mode the d-pad axes swap roles —
+              // vertical stick steps within the column (±1, no gridWidth
+              // multiplier), horizontal stick advances columns (±gridWidth,
+              // routed via the vertical-wrap path so wrap behavior matches
+              // Up/Down in Grid mode). Mirrors the keyboard mapping.
+              if (vertical) {
+                effectiveDirection = direction;
+                effectiveVertical = false;
+              } else {
+                const int gridWidth = getCurrentGridWidth();
+                if (gridWidth > 0 && std::abs(direction) < gridWidth) {
+                  effectiveDirection = direction * gridWidth;
+                }
+                effectiveVertical = true;
               }
+            } else if (vertical) {
+              // Check if we're in list mode - don't multiply by gridWidth
+              bool isListMode = (vt == ViewType::List);
               if (!isListMode) {
                 const int gridWidth = getCurrentGridWidth();
                 if (gridWidth > 0 && std::abs(direction) < gridWidth) {
@@ -128,7 +146,7 @@ void InteractionManager::connectGamepadManagerSignals() {
                 }
               }
             }
-            handleArrowKeyNavigation(effectiveDirection, vertical);
+            handleArrowKeyNavigation(effectiveDirection, effectiveVertical);
           });
   connect(m_gamepadManager.get(), &GamepadManager::requestEnterAction, this, [this]() {
     if (m_scrollManager) {

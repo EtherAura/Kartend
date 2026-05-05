@@ -232,6 +232,9 @@ void MainWindow::applyToolbarCustomization() {
   if (ui->coverFlowViewButton) {
     ui->coverFlowViewButton->setVisible(gs.toolbarShowCoverFlowViewButton);
   }
+  if (ui->horizontalViewButton) {
+    ui->horizontalViewButton->setVisible(gs.toolbarShowHorizontalViewButton);
+  }
   if (ui->hideSubcollectionsButton) {
     ui->hideSubcollectionsButton->setVisible(gs.toolbarShowHideSubcollectionsButton);
   }
@@ -253,6 +256,7 @@ void MainWindow::applyToolbarCustomization() {
   if (ui->viewSearchSeparator) {
     const bool leftSideVisible = gs.toolbarShowGridViewButton || gs.toolbarShowListViewButton ||
                                  gs.toolbarShowCoverFlowViewButton ||
+                                 gs.toolbarShowHorizontalViewButton ||
                                  gs.toolbarShowHideSubcollectionsButton ||
                                  gs.toolbarShowTypeFilter || gs.toolbarShowTitleFilter;
     const bool rightSideVisible = gs.toolbarShowSearchModeButton || gs.toolbarShowSearchBar;
@@ -275,6 +279,11 @@ void MainWindow::applyToolbarCustomization() {
     ui->coverFlowViewButton->setText(gs.toolbarCoverFlowViewButtonText.isEmpty()
                                          ? QStringLiteral("◖◉◗")
                                          : gs.toolbarCoverFlowViewButtonText);
+  }
+  if (ui->horizontalViewButton) {
+    ui->horizontalViewButton->setText(gs.toolbarHorizontalViewButtonText.isEmpty()
+                                          ? QStringLiteral("⇆")
+                                          : gs.toolbarHorizontalViewButtonText);
   }
   if (ui->hideSubcollectionsButton) {
     ui->hideSubcollectionsButton->setText(gs.toolbarHideSubcollectionsButtonText.isEmpty()
@@ -631,6 +640,9 @@ void MainWindow::updateWindowTitleForCollection(int collectionIndex) {
     }
     if (m_coverFlowViewButton) {
       m_coverFlowViewButton->setChecked(viewType == ViewType::CoverFlow);
+    }
+    if (m_horizontalViewButton) {
+      m_horizontalViewButton->setChecked(viewType == ViewType::Horizontal);
     }
   }
   // Kartend-5h6: sync the title-filter toolbar to the new collection's

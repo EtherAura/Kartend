@@ -393,6 +393,10 @@ void MainWindow::connectSearchComponents() {
     QObject::connect(m_coverFlowViewButton, &QPushButton::clicked, this,
                      [this]() { setViewType(ViewType::CoverFlow); });
   }
+  if (m_horizontalViewButton) {
+    QObject::connect(m_horizontalViewButton, &QPushButton::clicked, this,
+                     [this]() { setViewType(ViewType::Horizontal); });
+  }
 }
 
 void MainWindow::refreshTypeFilterToolbar() {

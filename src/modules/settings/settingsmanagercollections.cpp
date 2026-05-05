@@ -195,6 +195,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
     config.customArtworkTypes = cleanedCustomTypes;
 
     config.gridWidth = settings.value("gridWidth", 4).toInt();
+    config.horizontalGridHeight = settings.value("horizontalGridHeight", 0).toInt();
     config.sidebarVisible = settings.value("sidebarVisible", false).toBool();
     config.showAllSubcollectionItems = settings.value("showAllSubcollectionItems", false).toBool();
     config.horizontalAlignment = CollectionUtils::stringToAlignment(
@@ -435,6 +436,7 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue("extensions", c.extensions.join(", "));
     settings.setValue("customArtworkTypes", c.customArtworkTypes.join(", "));
     settings.setValue("gridWidth", c.gridWidth);
+    settings.setValue("horizontalGridHeight", c.horizontalGridHeight);
     settings.setValue("sidebarVisible", c.sidebarVisible);
     settings.setValue("showAllSubcollectionItems", c.showAllSubcollectionItems);
     settings.setValue("horizontalAlignment",

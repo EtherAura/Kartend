@@ -174,14 +174,37 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
     // of axis, and CoverFlow (Kartend-3ile) collapses all four arrows to a
     // single-step carousel shift.
     bool singleStep = false;
+    bool isHorizontalView = false;
     if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
       const ViewType vt = (*m_collections)[*m_currentCollectionIndex].viewType;
       singleStep = (vt == ViewType::List) || (vt == ViewType::CoverFlow);
+      isHorizontalView = (vt == ViewType::Horizontal);
     }
 
     int direction = 0;
     bool vertical = false;
-    if (key == navLeftKey) {
+    if (isHorizontalView) {
+      // Kartend-dx9t: in Horizontal mode the visible meaning of the arrow
+      // keys is preserved (Down moves to the next item in the column;
+      // Right moves one column over) but the *step size* swaps sides:
+      // Up/Down step by 1, Left/Right step by gridWidth (= items per
+      // column). The vertical-wrap path expects direction == ±gridWidth,
+      // so Left/Right map to vertical=true to pick up the column-wrap
+      // behavior; Up/Down map to vertical=false for linear wrap.
+      if (key == navLeftKey) {
+        direction = -gridWidth;
+        vertical = true;
+      } else if (key == navRightKey) {
+        direction = gridWidth;
+        vertical = true;
+      } else if (key == navUpKey) {
+        direction = -1;
+        vertical = false;
+      } else if (key == navDownKey) {
+        direction = 1;
+        vertical = false;
+      }
+    } else if (key == navLeftKey) {
       direction = -1;
       vertical = false;
     } else if (key == navRightKey) {

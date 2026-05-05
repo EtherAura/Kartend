@@ -84,11 +84,20 @@ public:
 
   // Selection calculation helpers
   static int calculateNewSelection(int totalItems, int currentSelection, int direction,
-                                   bool wrapEnabled, bool vertical, int gridWidth, bool &didWrap);
+                                   bool wrapEnabled, bool vertical, int gridWidth, bool &didWrap,
+                                   bool horizontalLayout = false);
   static int calculateHorizontalSelection(int totalItems, int currentSelection, int direction,
                                           bool wrapEnabled, bool &didWrap);
   static int calculateVerticalSelection(int totalItems, int currentSelection, int direction,
                                         bool wrapEnabled, int gridWidth, bool &didWrap);
+  /// Kartend-dx9t: column-major selection move for the Horizontal view mode.
+  /// `direction` is ±1 for Up/Down (within-column step) or ±itemsPerCol for
+  /// Left/Right (between-column step). Wrap behavior mirrors Grid mode but on
+  /// the transposed axis: Up/Down wraps within the same column, Left/Right
+  /// wraps to first/last column.
+  static int calculateHorizontalLayoutSelection(int totalItems, int currentSelection, int direction,
+                                                bool wrapEnabled, int itemsPerCol,
+                                                bool downAxis, bool &didWrap);
   static bool hasRowChanged(int gridWidth, int currentSelection, int newSelection);
 
   // Key direction derivation

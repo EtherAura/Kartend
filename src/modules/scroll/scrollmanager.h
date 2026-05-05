@@ -100,6 +100,11 @@ public:
                          const QHash<QString, QString> &fileToArtworkDir);
   void cleanup();
   void updateGridWidth(int newGridWidth);
+  /// Kartend-dx9t: live-apply a change to the per-collection items-per-column
+  /// for the Horizontal view mode. No-op when the active view is not Horizontal,
+  /// since the value only feeds the layout in that mode. Pass 0 to mean
+  /// "fall back to gridWidth".
+  void updateHorizontalGridHeight(int newHorizontalGridHeight);
   void updateViewType(ViewType viewType);
   void updateVirtualView();
   [[nodiscard]] int getEffectiveHorizontalSpacing() const;

@@ -325,6 +325,9 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->gridWidthSpinBox) {
     ui->gridWidthSpinBox->setValue(config.gridWidth);
   }
+  if (ui->horizontalGridHeightSpinBox) {
+    ui->horizontalGridHeightSpinBox->setValue(config.horizontalGridHeight);
+  }
   if (ui->showAllSubcollectionItemsCheckBox) {
     ui->showAllSubcollectionItemsCheckBox->setChecked(config.showAllSubcollectionItems);
   }
@@ -528,6 +531,7 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->hideMissingArtworkCheckBox) ui->hideMissingArtworkCheckBox->setChecked(false);
 
   if (ui->gridWidthSpinBox) ui->gridWidthSpinBox->setValue(UIConstants::Grid::DEFAULT_WIDTH);
+  if (ui->horizontalGridHeightSpinBox) ui->horizontalGridHeightSpinBox->setValue(0);
   if (ui->horizontalSpacingSpinBox)
     ui->horizontalSpacingSpinBox->setValue(spacingInternalToUi(UIConstants::Grid::SPACING));
   if (ui->verticalSpacingSpinBox)

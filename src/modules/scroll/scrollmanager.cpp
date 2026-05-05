@@ -288,9 +288,27 @@ void ScrollManager::updateViewType(ViewType viewType) {
   }
 
   // Reset scroll position before layout change - grid and list modes have
-  // different row heights, so the old scroll position is meaningless
-  if (m_mediaScrollArea && m_mediaScrollArea->verticalScrollBar()) {
-    m_mediaScrollArea->verticalScrollBar()->setValue(0);
+  // different row heights, so the old scroll position is meaningless. Reset
+  // both scrollbars because Horizontal mode (Kartend-dx9t) drives the
+  // horizontal axis instead of the vertical one.
+  if (m_mediaScrollArea) {
+    if (m_mediaScrollArea->verticalScrollBar()) {
+      m_mediaScrollArea->verticalScrollBar()->setValue(0);
+    }
+    if (m_mediaScrollArea->horizontalScrollBar()) {
+      m_mediaScrollArea->horizontalScrollBar()->setValue(0);
+    }
+    // Kartend-dx9t: in Horizontal mode the items area needs a horizontal
+    // scrollbar (modulo the user's hideHorizontalScrollbar preference).
+    // Other modes leave the policy under the per-collection setting too —
+    // applyHorizontalScrollbarSetting is the canonical path for that — but
+    // configureHorizontalScrollbar in VirtualContainerManager will pin it
+    // off again on overflow. Force it back on here when entering Horizontal.
+    if (viewType == ViewType::Horizontal) {
+      m_mediaScrollArea->setHorizontalScrollBarPolicy(
+          m_context.config.hideHorizontalScrollbar ? Qt::ScrollBarAlwaysOff
+                                                   : Qt::ScrollBarAsNeeded);
+    }
   }
 
   handleLayoutChange();
@@ -325,6 +343,32 @@ void ScrollManager::updateGridWidth(int newGridWidth) {
   updateVirtualView();
 }
 
+void ScrollManager::updateHorizontalGridHeight(int newHorizontalGridHeight) {
+  if (m_context.config.horizontalGridHeight == newHorizontalGridHeight) {
+    return;
+  }
+  m_context.config.horizontalGridHeight = newHorizontalGridHeight;
+  // Only Horizontal view consults this field — other modes can absorb the
+  // setting change silently and pick it up the next time they switch in.
+  if (m_context.config.viewType != ViewType::Horizontal || !m_virtualContainer) {
+    return;
+  }
+  // Re-flow the existing widgets against the new fixed-axis count. Same
+  // pattern as updateGridWidth — the metric recompute drops the totalRows
+  // (= column count) along the long axis, then we reposition active widgets.
+  calculateVirtualMetrics();
+  positionVirtualContainer();
+  for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
+    ItemWidget *widget = it.value();
+    if (!widget) {
+      continue;
+    }
+    QPoint position = getItemPosition(it.key());
+    widget->setGeometry(position.x(), position.y(), m_metrics.itemWidth, m_metrics.itemHeight);
+  }
+  updateVirtualView();
+}
+
 // Updates active widgets for current viewport and triggers artwork updates
 // unless suppression is enforced without selection allowance
 auto ScrollManager::getEffectiveHorizontalSpacing() const -> int {
@@ -335,10 +379,19 @@ auto ScrollManager::getFirstVisibleRow() const -> int {
   if (!m_mediaScrollArea) {
     return 0;
   }
-  int scrollY = m_mediaScrollArea->verticalScrollBar()->value();
-  int viewportHeight = m_mediaScrollArea->viewport()->height();
+  // Kartend-dx9t: in Horizontal mode the long axis is X, so we read the
+  // horizontal scrollbar and the viewport width instead.
+  int scrollPos;
+  int viewportSize;
+  if (m_metrics.isHorizontal) {
+    scrollPos = m_mediaScrollArea->horizontalScrollBar()->value();
+    viewportSize = m_mediaScrollArea->viewport()->width();
+  } else {
+    scrollPos = m_mediaScrollArea->verticalScrollBar()->value();
+    viewportSize = m_mediaScrollArea->viewport()->height();
+  }
   auto [firstRow, lastRow] =
-      GridLayoutCalculator::getVisibleRowRange(scrollY, viewportHeight, m_metrics, 0);
+      GridLayoutCalculator::getVisibleRowRange(scrollPos, viewportSize, m_metrics, 0);
   return firstRow;
 }
 
@@ -346,10 +399,17 @@ auto ScrollManager::getLastVisibleRow() const -> int {
   if (!m_mediaScrollArea) {
     return 0;
   }
-  int scrollY = m_mediaScrollArea->verticalScrollBar()->value();
-  int viewportHeight = m_mediaScrollArea->viewport()->height();
+  int scrollPos;
+  int viewportSize;
+  if (m_metrics.isHorizontal) {
+    scrollPos = m_mediaScrollArea->horizontalScrollBar()->value();
+    viewportSize = m_mediaScrollArea->viewport()->width();
+  } else {
+    scrollPos = m_mediaScrollArea->verticalScrollBar()->value();
+    viewportSize = m_mediaScrollArea->viewport()->height();
+  }
   auto [firstRow, lastRow] =
-      GridLayoutCalculator::getVisibleRowRange(scrollY, viewportHeight, m_metrics, 0);
+      GridLayoutCalculator::getVisibleRowRange(scrollPos, viewportSize, m_metrics, 0);
   return lastRow;
 }
 
@@ -436,6 +496,11 @@ auto ScrollManager::willNeedVerticalScrollbar() const -> bool {
   if (!m_mediaScrollArea) {
     return false;
   }
+  // Kartend-dx9t: Horizontal mode shows a horizontal scrollbar instead, so
+  // the vertical scrollbar prediction is always false there.
+  if (m_metrics.isHorizontal) {
+    return false;
+  }
   return m_metrics.totalHeight > m_mediaScrollArea->viewport()->height();
 }
 
@@ -506,6 +571,13 @@ auto ScrollManager::getItemPosition(int visualIndex) const -> QPoint {
   // but we calculate which rows are visible using logical scroll position.
   // Place widgets so they appear at the correct viewport-relative position.
   if (m_metrics.isClipped && m_mediaScrollArea) {
+    if (m_metrics.isHorizontal) {
+      int widgetScrollX = m_mediaScrollArea->horizontalScrollBar()->value();
+      int viewportWidth = m_mediaScrollArea->viewport()->width();
+      int logicalScrollX = m_metrics.toLogicalScrollY(widgetScrollX, viewportWidth);
+      int relativeX = widgetScrollX + (pos.x() - logicalScrollX);
+      return QPoint(relativeX, pos.y());
+    }
     int widgetScrollY = m_mediaScrollArea->verticalScrollBar()->value();
     int viewportHeight = m_mediaScrollArea->viewport()->height();
     // Convert clamped scroll position to logical scroll position with viewport

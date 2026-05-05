@@ -575,6 +575,8 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   setToolbarCheck(ui->toolbarListViewVisibleCheckBox, m_generalSettings.toolbarShowListViewButton);
   setToolbarCheck(ui->toolbarCoverFlowViewVisibleCheckBox,
                   m_generalSettings.toolbarShowCoverFlowViewButton);
+  setToolbarCheck(ui->toolbarHorizontalViewVisibleCheckBox,
+                  m_generalSettings.toolbarShowHorizontalViewButton);
   setToolbarCheck(ui->toolbarHideSubcollectionsVisibleCheckBox,
                   m_generalSettings.toolbarShowHideSubcollectionsButton);
   setToolbarCheck(ui->toolbarTypeFilterVisibleCheckBox, m_generalSettings.toolbarShowTypeFilter);
@@ -586,6 +588,8 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   setToolbarText(ui->toolbarListViewTextEdit, m_generalSettings.toolbarListViewButtonText);
   setToolbarText(ui->toolbarCoverFlowViewTextEdit,
                  m_generalSettings.toolbarCoverFlowViewButtonText);
+  setToolbarText(ui->toolbarHorizontalViewTextEdit,
+                 m_generalSettings.toolbarHorizontalViewButtonText);
   setToolbarText(ui->toolbarHideSubcollectionsTextEdit,
                  m_generalSettings.toolbarHideSubcollectionsButtonText);
   setToolbarText(ui->toolbarTitleFilterTextEdit, m_generalSettings.toolbarTitleFilterText);
@@ -791,6 +795,10 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
       mainWindow->m_generalSettings.toolbarShowCoverFlowViewButton =
           ui->toolbarCoverFlowViewVisibleCheckBox->isChecked();
     }
+    if (ui->toolbarHorizontalViewVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowHorizontalViewButton =
+          ui->toolbarHorizontalViewVisibleCheckBox->isChecked();
+    }
     if (ui->toolbarHideSubcollectionsVisibleCheckBox) {
       mainWindow->m_generalSettings.toolbarShowHideSubcollectionsButton =
           ui->toolbarHideSubcollectionsVisibleCheckBox->isChecked();
@@ -820,6 +828,10 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     if (ui->toolbarCoverFlowViewTextEdit) {
       mainWindow->m_generalSettings.toolbarCoverFlowViewButtonText =
           ui->toolbarCoverFlowViewTextEdit->text();
+    }
+    if (ui->toolbarHorizontalViewTextEdit) {
+      mainWindow->m_generalSettings.toolbarHorizontalViewButtonText =
+          ui->toolbarHorizontalViewTextEdit->text();
     }
     if (ui->toolbarHideSubcollectionsTextEdit) {
       mainWindow->m_generalSettings.toolbarHideSubcollectionsButtonText =

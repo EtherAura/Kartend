@@ -119,6 +119,9 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
     config.customArtworkTypes = cleaned;
   }
   config.gridWidth = (ui->gridWidthSpinBox) ? ui->gridWidthSpinBox->value() : config.gridWidth;
+  config.horizontalGridHeight = (ui->horizontalGridHeightSpinBox)
+                                    ? ui->horizontalGridHeightSpinBox->value()
+                                    : config.horizontalGridHeight;
   config.showAllSubcollectionItems = (ui->showAllSubcollectionItemsCheckBox)
                                          ? ui->showAllSubcollectionItemsCheckBox->isChecked()
                                          : config.showAllSubcollectionItems;
@@ -318,6 +321,8 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ((ui->placeholderArtworkLineEdit) &&
        ui->placeholderArtworkLineEdit->text() != originalConfig.placeholderArtwork) ||
       ((ui->gridWidthSpinBox) && ui->gridWidthSpinBox->value() != originalConfig.gridWidth) ||
+      ((ui->horizontalGridHeightSpinBox) && ui->horizontalGridHeightSpinBox->value() !=
+                                                originalConfig.horizontalGridHeight) ||
       ((ui->showAllSubcollectionItemsCheckBox) &&
        ui->showAllSubcollectionItemsCheckBox->isChecked() !=
            originalConfig.showAllSubcollectionItems) ||
@@ -659,6 +664,11 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
           m_originalGeneralSettings.toolbarShowCoverFlowViewButton) {
     return true;
   }
+  if (ui->toolbarHorizontalViewVisibleCheckBox &&
+      ui->toolbarHorizontalViewVisibleCheckBox->isChecked() !=
+          m_originalGeneralSettings.toolbarShowHorizontalViewButton) {
+    return true;
+  }
   if (ui->toolbarHideSubcollectionsVisibleCheckBox &&
       ui->toolbarHideSubcollectionsVisibleCheckBox->isChecked() !=
           m_originalGeneralSettings.toolbarShowHideSubcollectionsButton) {
@@ -693,6 +703,11 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
   if (ui->toolbarCoverFlowViewTextEdit &&
       ui->toolbarCoverFlowViewTextEdit->text() !=
           m_originalGeneralSettings.toolbarCoverFlowViewButtonText) {
+    return true;
+  }
+  if (ui->toolbarHorizontalViewTextEdit &&
+      ui->toolbarHorizontalViewTextEdit->text() !=
+          m_originalGeneralSettings.toolbarHorizontalViewButtonText) {
     return true;
   }
   if (ui->toolbarHideSubcollectionsTextEdit &&

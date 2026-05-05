@@ -51,6 +51,10 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex) -> void
   if (collection.gridWidth != m_scrollManager->getCurrentGridWidth()) {
     m_scrollManager->updateGridWidth(collection.gridWidth);
   }
+  // Kartend-dx9t: live-apply the per-collection horizontal items-per-column
+  // setting. updateHorizontalGridHeight no-ops when the active view isn't
+  // Horizontal, so this is safe to call unconditionally.
+  m_scrollManager->updateHorizontalGridHeight(collection.horizontalGridHeight);
 
   SettingsUtils::applyHorizontalScrollbarSetting(m_itemScrollArea, collectionIndex,
                                                  (*m_collections));
