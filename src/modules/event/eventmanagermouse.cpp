@@ -65,17 +65,25 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   }
 
   auto *wheelEvent = static_cast<QWheelEvent *>(event);
-  QScrollBar *vScrollBar = m_itemScrollArea->verticalScrollBar();
-  if (!vScrollBar) {
+  const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
+  // Kartend-dx9t: in Horizontal mode the scroll axis is X — point all the
+  // scrollbar / viewport-size queries at the horizontal axis instead of the
+  // vertical one. The "wheel scrolls vertically by default" UX still applies
+  // — a vertical wheel notch advances the column-major selection one column,
+  // which is the natural mapping ("scroll forward through the collection").
+  const bool horizontalView = (collection.viewType == ViewType::Horizontal);
+  QScrollBar *axisScrollBar = horizontalView ? m_itemScrollArea->horizontalScrollBar()
+                                             : m_itemScrollArea->verticalScrollBar();
+  if (!axisScrollBar) {
     m_processingWheelEvent = false;
     return false;
   }
 
   // Stop arrow key animations but NOT wheel scroll animations - wheel
   // animations will be chained smoothly in startWheelScrollAnimation
-  AnimationManager::stopArrowKeyAnimationIfRunning(vScrollBar);
-
-  const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
+  if (!horizontalView) {
+    AnimationManager::stopArrowKeyAnimationIfRunning(axisScrollBar);
+  }
 
   const int wheelSteps = MouseManager::computeWheelSteps(wheelEvent);
   if (wheelSteps == 0) {
@@ -84,7 +92,7 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
 
   // Get scrollbar position for target calculation - actual animation start
   // position is determined by startWheelScrollAnimation based on running anim
-  int currentPos = vScrollBar->value();
+  int currentPos = axisScrollBar->value();
 
   if (m_state) {
     m_state->scroll().userScrollActive = true;
@@ -136,22 +144,34 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   }
 
   int margins = UIConstants::Grid::MARGINS;
-  int itemY = GridUtils::computeItemY(selectedIndex, gridWidth, itemHeight, vSpacing, margins);
-  // Add header offset for list view mode
-  itemY += headerOffset;
-
   QRect viewport = m_itemScrollArea->viewport()->rect();
-  int viewportHeight = viewport.height();
+  int targetPos = 0;
+  if (horizontalView && m_scrollManager) {
+    // Kartend-dx9t: target the horizontal scrollbar position that centers the
+    // newly-selected column. itemsPerRow now means items-per-column, so we
+    // derive the column index from selectedIndex / itemsPerCol.
+    const auto &metrics = m_scrollManager->getMetrics();
+    int viewportWidth = viewport.width();
+    targetPos = GridLayoutCalculator::calculateCenterScrollTarget(
+        selectedIndex, viewportWidth, axisScrollBar->maximum(), metrics);
+    targetPos = qBound(0, targetPos, axisScrollBar->maximum());
+  } else {
+    int itemY = GridUtils::computeItemY(selectedIndex, gridWidth, itemHeight, vSpacing, margins);
+    // Add header offset for list view mode
+    itemY += headerOffset;
 
-  // Calculate target scroll position in logical space (center the item)
-  int logicalTargetY = itemY - (viewportHeight - itemHeight) / 2;
+    int viewportHeight = viewport.height();
 
-  // Convert logical scroll target to widget scroll position for clipped grids
-  int targetPos = logicalTargetY;
-  if (m_viewportManager && m_viewportManager->getScrollScale() > 1.0) {
-    targetPos = m_viewportManager->toWidgetScrollY(logicalTargetY);
+    // Calculate target scroll position in logical space (center the item)
+    int logicalTargetY = itemY - (viewportHeight - itemHeight) / 2;
+
+    // Convert logical scroll target to widget scroll position for clipped grids
+    targetPos = logicalTargetY;
+    if (m_viewportManager && m_viewportManager->getScrollScale() > 1.0) {
+      targetPos = m_viewportManager->toWidgetScrollY(logicalTargetY);
+    }
+    targetPos = qBound(0, targetPos, axisScrollBar->maximum());
   }
-  targetPos = qBound(0, targetPos, vScrollBar->maximum());
 
   if (m_mouseManager) {
     m_mouseManager->setWheelScrolling(true);
@@ -169,7 +189,7 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   }
 
   if (m_animationManager) {
-    m_animationManager->startWheelScrollAnimation(vScrollBar, currentPos, targetPos, [this]() {
+    auto onFinished = [this]() {
       if (m_mouseManager) {
         m_mouseManager->setWheelScrolling(false);
       }
@@ -194,7 +214,14 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
         m_viewportManager->ensureItemVisible(selectedIndex, false);
       }
       emit wheelScrollEnded();
-    });
+    };
+    if (horizontalView) {
+      m_animationManager->startWheelScrollAnimationHorizontal(axisScrollBar, currentPos, targetPos,
+                                                              onFinished);
+    } else {
+      m_animationManager->startWheelScrollAnimation(axisScrollBar, currentPos, targetPos,
+                                                    onFinished);
+    }
   }
 
   // Defer virtual view update to next event loop iteration - allows
@@ -675,7 +702,22 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
   }
 
   const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
+  // Kartend-dx9t: the per-column step in Horizontal mode is the *effective*
+  // items-per-column from the live metrics (which already honor
+  // horizontalGridHeight's fallback to gridWidth). Reading collection.gridWidth
+  // directly was wrong when the user configured a separate horizontal height —
+  // the wheel would jump by gridWidth items even though each column actually
+  // contained horizontalGridHeight items, drifting the row index across columns
+  // and looking like a random vertical jitter.
   int gridWidth = collection.gridWidth;
+  if (collection.viewType == ViewType::Horizontal) {
+    const auto &metrics = m_scrollManager->getMetrics();
+    if (metrics.itemsPerRow > 0) {
+      gridWidth = metrics.itemsPerRow;
+    } else if (collection.horizontalGridHeight > 0) {
+      gridWidth = collection.horizontalGridHeight;
+    }
+  }
   if (gridWidth <= 0) {
     return false;
   }
@@ -690,24 +732,40 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
     currentSelection = 0;
   }
 
-  // Get row multiplier from settings
-  int rowMultiplier = m_generalSettings ? m_generalSettings->mouseWheelRows : 1;
-  // Kartend-9cl: scale wheel step by the global scroll-velocity multiplier.
-  // Done on the (row * wheelSteps) product so single-notch motion at 1.5×
-  // yields a perceivable 1.5-row step rather than rounding down to 1.
-  const double velocityMult = m_generalSettings ? m_generalSettings->scrollVelocityMultiplier : 1.0;
-  int rowDelta = -wheelSteps * rowMultiplier;
-  if (velocityMult != 1.0) {
-    // Round toward the direction of travel so tiny multipliers still move at
-    // least 1 row per notch in the intended direction.
-    const double scaled = static_cast<double>(rowDelta) * velocityMult;
-    rowDelta = scaled >= 0 ? static_cast<int>(scaled + 0.5) : -static_cast<int>(-scaled + 0.5);
-    if (rowDelta == 0 && wheelSteps != 0) {
-      rowDelta = (-wheelSteps > 0) ? 1 : -1;
+  // Kartend-dx9t: in Horizontal mode the wheel always advances exactly one
+  // column per discrete event — direction-only, magnitude clamped to ±1.
+  // Without the clamp, fast wheel motion or trackpad scrolling can return
+  // wheelSteps > 1, which (multiplied by gridWidth below) would jump several
+  // columns per tick and feel jittery. The global mouseWheelRows /
+  // scrollVelocityMultiplier knobs tune vertical scroll feel and should not
+  // compound on top of the already-coarse "skip a full gridHeight of items"
+  // step. List / CoverFlow (Kartend-3ile) keep their existing single-item step.
+  const bool isHorizontalView = (collection.viewType == ViewType::Horizontal);
+  int rowDelta;
+  if (isHorizontalView) {
+    rowDelta = (wheelSteps > 0) ? -1 : 1;
+  } else {
+    int rowMultiplier = m_generalSettings ? m_generalSettings->mouseWheelRows : 1;
+    // Kartend-9cl: scale wheel step by the global scroll-velocity multiplier.
+    // Done on the (row * wheelSteps) product so single-notch motion at 1.5×
+    // yields a perceivable 1.5-row step rather than rounding down to 1.
+    const double velocityMult =
+        m_generalSettings ? m_generalSettings->scrollVelocityMultiplier : 1.0;
+    rowDelta = -wheelSteps * rowMultiplier;
+    if (velocityMult != 1.0) {
+      // Round toward the direction of travel so tiny multipliers still move at
+      // least 1 row per notch in the intended direction.
+      const double scaled = static_cast<double>(rowDelta) * velocityMult;
+      rowDelta = scaled >= 0 ? static_cast<int>(scaled + 0.5) : -static_cast<int>(-scaled + 0.5);
+      if (rowDelta == 0 && wheelSteps != 0) {
+        rowDelta = (-wheelSteps > 0) ? 1 : -1;
+      }
     }
   }
 
-  // List and CoverFlow (Kartend-3ile) move by 1 item per step instead of gridWidth.
+  // List and CoverFlow (Kartend-3ile) move by 1 item per step instead of
+  // gridWidth. Horizontal (Kartend-dx9t) jumps one full column per tick —
+  // selectionDelta = rowDelta * gridWidth where rowDelta is forced to ±1 above.
   const bool singleStep =
       (collection.viewType == ViewType::List) || (collection.viewType == ViewType::CoverFlow);
   int selectionDelta = singleStep ? rowDelta : (rowDelta * gridWidth);

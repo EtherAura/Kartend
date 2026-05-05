@@ -104,8 +104,14 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction, bool vertic
   }
 
   bool didWrap = false;
+  bool horizontalLayout = false;
+  if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+    horizontalLayout =
+        ((*m_collections)[*m_currentCollectionIndex].viewType == ViewType::Horizontal);
+  }
   const int newSelection = KeyboardManager::calculateNewSelection(
-      totalItems, currentSelection, direction, wrapEnabled, vertical, gridWidth, didWrap);
+      totalItems, currentSelection, direction, wrapEnabled, vertical, gridWidth, didWrap,
+      horizontalLayout);
 
   if (didWrap) {
     if (m_viewportManager) {
@@ -211,8 +217,14 @@ void ArrowNavigationHandler::handleRepeatStep() {
   const int gridWidth = getCurrentGridWidth();
 
   bool didWrap = false;
+  bool horizontalLayout = false;
+  if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+    horizontalLayout =
+        ((*m_collections)[*m_currentCollectionIndex].viewType == ViewType::Horizontal);
+  }
   const int newSelection = KeyboardManager::calculateNewSelection(
-      totalItems, currentSelection, direction, wrapEnabled, repeatVertical, gridWidth, didWrap);
+      totalItems, currentSelection, direction, wrapEnabled, repeatVertical, gridWidth, didWrap,
+      horizontalLayout);
 
   if (newSelection == currentSelection) {
     return;

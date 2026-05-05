@@ -43,8 +43,12 @@ enum class SidebarTab { Item = 0, Collection = 1, File = 2 };
 
 enum class BackgroundType { Color = 0, Image = 1 };
 
-/// View type for displaying collection items
-enum class ViewType { Grid = 0, List = 1, CoverFlow = 2 };
+/// View type for displaying collection items.
+/// Kartend-dx9t: Horizontal flips the virtual-scrolling axis so items flow
+/// top-to-bottom then left-to-right. The collection's `gridWidth` is reused
+/// as "items per column" (the fixed dimension) instead of items per row, and
+/// the items area scrolls horizontally instead of vertically.
+enum class ViewType { Grid = 0, List = 1, CoverFlow = 2, Horizontal = 3 };
 
 namespace CollectionUtils {
 
@@ -74,6 +78,8 @@ namespace CollectionUtils {
     return "list";
   case ViewType::CoverFlow:
     return "coverflow";
+  case ViewType::Horizontal:
+    return "horizontal";
   case ViewType::Grid:
   default:
     return "grid";
@@ -84,6 +90,7 @@ namespace CollectionUtils {
   QString lower = str.toLower();
   if (lower == "list") return ViewType::List;
   if (lower == "coverflow") return ViewType::CoverFlow;
+  if (lower == "horizontal") return ViewType::Horizontal;
   return ViewType::Grid;
 }
 
@@ -263,6 +270,11 @@ struct CollectionConfig {
   /// per-item manual override.
   QStringList customArtworkTypes;
   int gridWidth;
+  /// Kartend-dx9t: per-collection items-per-column for the Horizontal view
+  /// mode. 0 means "fall back to gridWidth" so existing collections that
+  /// upgrade and try Horizontal mode still get a sensible default. Clamped to
+  /// the same [MIN_WIDTH, MAX_WIDTH] range as gridWidth at save time.
+  int horizontalGridHeight = 0;
   bool sidebarVisible;
   int parentCollectionIndex = -1;
   bool isSubcollection = false;
@@ -433,6 +445,7 @@ struct CollectionConfig {
            placeholderArtwork == other.placeholderArtwork &&
            collectionIcon == other.collectionIcon && extensions == other.extensions &&
            customArtworkTypes == other.customArtworkTypes && gridWidth == other.gridWidth &&
+           horizontalGridHeight == other.horizontalGridHeight &&
            sidebarVisible == other.sidebarVisible &&
            parentCollectionIndex == other.parentCollectionIndex &&
            isSubcollection == other.isSubcollection &&
@@ -536,6 +549,13 @@ struct CollectionConfig {
   // Validates numeric fields are within acceptable ranges
   void clampValues() {
     gridWidth = std::clamp(gridWidth, UIConstants::Grid::MIN_WIDTH, UIConstants::Grid::MAX_WIDTH);
+    // Kartend-dx9t: 0 stays 0 (means "inherit gridWidth"); any non-zero value
+    // is clamped to the same range as gridWidth so a hand-edit can't pin the
+    // column at 0 or saturate the layout calculation.
+    if (horizontalGridHeight != 0) {
+      horizontalGridHeight = std::clamp(horizontalGridHeight, UIConstants::Grid::MIN_WIDTH,
+                                        UIConstants::Grid::MAX_WIDTH);
+    }
     itemWidth = std::clamp(itemWidth, UIConstants::Item::MIN_WIDTH, UIConstants::Item::MAX_WIDTH);
     itemHeight =
         std::clamp(itemHeight, UIConstants::Item::MIN_HEIGHT, UIConstants::Item::MAX_HEIGHT);
@@ -851,6 +871,7 @@ struct GeneralSettings {
   bool toolbarShowGridViewButton = true;
   bool toolbarShowListViewButton = true;
   bool toolbarShowCoverFlowViewButton = true;
+  bool toolbarShowHorizontalViewButton = true;
   bool toolbarShowHideSubcollectionsButton = true;
   bool toolbarShowTypeFilter = true;
   bool toolbarShowTitleFilter = true;
@@ -859,6 +880,7 @@ struct GeneralSettings {
   QString toolbarGridViewButtonText;
   QString toolbarListViewButtonText;
   QString toolbarCoverFlowViewButtonText;
+  QString toolbarHorizontalViewButtonText;
   QString toolbarHideSubcollectionsButtonText;
   QString toolbarTitleFilterText;
 

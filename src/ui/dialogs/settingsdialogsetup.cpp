@@ -268,6 +268,12 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->gridWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::onGridWidthChanged);
   }
+  if (ui->horizontalGridHeightSpinBox) {
+    // Kartend-dx9t: feeds the same change-detection path as gridWidth so the
+    // dialog enables Save when only this field is touched.
+    connect(ui->horizontalGridHeightSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
   if (ui->showAllSubcollectionItemsCheckBox) {
     connect(ui->showAllSubcollectionItemsCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);

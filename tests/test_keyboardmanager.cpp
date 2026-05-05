@@ -57,6 +57,14 @@ private slots:
   void testDerive_upKey();
   void testDerive_downKey();
   void testDerive_unhandledKey();
+
+  // Kartend-dx9t: Horizontal layout (column-major) selection helper
+  void testHorizontalLayout_downStepWithinColumn();
+  void testHorizontalLayout_downAtBottomOfColumnNoWrap();
+  void testHorizontalLayout_downAtBottomOfColumnWrapsWithinColumn();
+  void testHorizontalLayout_rightAdvancesOneColumn();
+  void testHorizontalLayout_rightAtLastColumnWrapsToFirst();
+  void testHorizontalLayout_rightClampsToShortFinalColumn();
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -311,6 +319,65 @@ void TestKeyboardManager::testDerive_unhandledKey() {
   // Out-params are reset to defaults even on unhandled keys
   QCOMPARE(direction, 0);
   QVERIFY(!vertical);
+}
+
+// ─── Kartend-dx9t Horizontal layout (column-major) tests ────────────────────
+
+void TestKeyboardManager::testHorizontalLayout_downStepWithinColumn() {
+  // 9 items, 3 per column → 3 columns. Down at idx 0 (col 0, row 0) → idx 1.
+  bool didWrap = true;
+  int next = KeyboardManager::calculateHorizontalLayoutSelection(
+      9, 0, /*direction=*/+1, /*wrapEnabled=*/false, /*itemsPerCol=*/3, /*downAxis=*/true, didWrap);
+  QCOMPARE(next, 1);
+  QVERIFY(!didWrap);
+}
+
+void TestKeyboardManager::testHorizontalLayout_downAtBottomOfColumnNoWrap() {
+  // idx 2 is the bottom of column 0 (rows 0-2). Down with no wrap → stay.
+  bool didWrap = true;
+  int next = KeyboardManager::calculateHorizontalLayoutSelection(
+      9, 2, +1, /*wrapEnabled=*/false, /*itemsPerCol=*/3, /*downAxis=*/true, didWrap);
+  QCOMPARE(next, 2);
+  QVERIFY(!didWrap);
+}
+
+void TestKeyboardManager::testHorizontalLayout_downAtBottomOfColumnWrapsWithinColumn() {
+  // idx 2 (bottom of col 0). Down with wrap → wrap to idx 0 (top of *same* col).
+  bool didWrap = false;
+  int next = KeyboardManager::calculateHorizontalLayoutSelection(
+      9, 2, +1, /*wrapEnabled=*/true, /*itemsPerCol=*/3, /*downAxis=*/true, didWrap);
+  QCOMPARE(next, 0);
+  QVERIFY(didWrap);
+}
+
+void TestKeyboardManager::testHorizontalLayout_rightAdvancesOneColumn() {
+  // idx 1 (col 0, row 1). Right by +itemsPerCol → idx 4 (col 1, row 1).
+  bool didWrap = true;
+  int next = KeyboardManager::calculateHorizontalLayoutSelection(
+      9, 1, /*direction=*/+3, /*wrapEnabled=*/false, /*itemsPerCol=*/3, /*downAxis=*/false,
+      didWrap);
+  QCOMPARE(next, 4);
+  QVERIFY(!didWrap);
+}
+
+void TestKeyboardManager::testHorizontalLayout_rightAtLastColumnWrapsToFirst() {
+  // 9 items, 3/col → 3 cols. idx 7 (col 2, row 1). Right with wrap → idx 1.
+  bool didWrap = false;
+  int next = KeyboardManager::calculateHorizontalLayoutSelection(
+      9, 7, +3, /*wrapEnabled=*/true, /*itemsPerCol=*/3, /*downAxis=*/false, didWrap);
+  QCOMPARE(next, 1);
+  QVERIFY(didWrap);
+}
+
+void TestKeyboardManager::testHorizontalLayout_rightClampsToShortFinalColumn() {
+  // 8 items, 3/col → 3 cols (last col only has 2 rows: idx 6, 7).
+  // idx 5 (col 1, row 2). Right (+3) lands in col 2 — but col 2 has no row 2.
+  // Should clamp to row 1 of col 2 → idx 7.
+  bool didWrap = true;
+  int next = KeyboardManager::calculateHorizontalLayoutSelection(
+      8, 5, +3, /*wrapEnabled=*/false, /*itemsPerCol=*/3, /*downAxis=*/false, didWrap);
+  QCOMPARE(next, 7);
+  QVERIFY(!didWrap);
 }
 
 QTEST_MAIN(TestKeyboardManager)
