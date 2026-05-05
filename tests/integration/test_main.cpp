@@ -8,8 +8,10 @@
  * Qt does not officially support.
  */
 
+#include "test_applicationmanager_lifecycle.h"
 #include "test_applysettingsdialog.h"
 #include "test_mainwindow_smoke.h"
+#include "test_navigationmanager.h"
 #include "test_settingsdialog_scope.h"
 
 #include <QApplication>
@@ -44,6 +46,19 @@ int main(int argc, char *argv[]) {
   {
     TestApplySettingsDialog applySettings;
     status |= QTest::qExec(&applySettings, argc, argv);
+  }
+  // ApplicationManager lifecycle tests build their own bare ApplicationManager
+  // instances (no MainWindow), so they must run after the MainWindow-based
+  // tests above to avoid SQL connection-name collisions on
+  // "kartend_main" — DatabaseManager removes the connection in its dtor, so
+  // sequencing is sufficient.
+  {
+    TestApplicationManagerLifecycle appLifecycle;
+    status |= QTest::qExec(&appLifecycle, argc, argv);
+  }
+  {
+    TestNavigationManager nav;
+    status |= QTest::qExec(&nav, argc, argv);
   }
   return status;
 }
