@@ -747,6 +747,13 @@ struct GeneralSettings {
   int titleTintLightness = 60;   // Title text lightness (0-255)
   QString titleBaseColor;        // Base color for title text (empty = use highlight)
 
+  // Kartend-cub: when an item has no real artwork and falls back to placeholder
+  // art (procedural hatch tile or user-supplied placeholder image), draw the
+  // item's title text on top of the placeholder. Independent of the existing
+  // hideTitles flag — pairs well with hideTitles=on so the title only appears
+  // where it adds information (i.e., on tiles that would otherwise be blank).
+  bool showTitleInPlaceholder = false;
+
   // ─────────────────────────────────────────────────────────────────────────
   // Global UI font (Kartend-9v0o)
   // Applied via QApplication::setFont() after settings load so every widget

@@ -77,6 +77,8 @@ void MainWindow::setupUI() {
   ItemWidget::setTitleTintSaturation(m_generalSettings.titleTintSaturation);
   ItemWidget::setTitleTintLightness(m_generalSettings.titleTintLightness);
   ItemWidget::setTitleBaseColor(m_generalSettings.titleBaseColor);
+  // Kartend-cub
+  ItemWidget::setShowTitleInPlaceholder(m_generalSettings.showTitleInPlaceholder);
 
   setupUIReferences();
 

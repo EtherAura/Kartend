@@ -2135,6 +2135,20 @@
               </property>
              </widget>
             </item>
+            <item row="19" column="0">
+             <widget class="QLabel" name="showTitleInPlaceholderLabel">
+              <property name="text">
+               <string>Title in Placeholder Art:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="19" column="1">
+             <widget class="QCheckBox" name="showTitleInPlaceholderCheckBox">
+              <property name="toolTip">
+               <string>Draw the item title on top of placeholder art (the hatched pattern or any user-supplied placeholder image) when no real artwork exists for the item.</string>
+              </property>
+             </widget>
+            </item>
                 </layout>
                </item>
               <item>

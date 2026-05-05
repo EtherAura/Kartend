@@ -4,12 +4,16 @@
 #include "uiconstants.h"
 #include <QApplication>
 #include <QColor>
+#include <QFont>
+#include <QFontMetrics>
 #include <QHash>
+#include <QLabel>
 #include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
 #include <QRandomGenerator>
+#include <QRect>
 #include <QRectF>
 #include <Qt>
 
@@ -212,4 +216,58 @@ auto ItemWidget::buildPlaceholderTile(int width, int height, int cornerRadius, b
 // builder with the widget's own corner radius.
 auto ItemWidget::buildPlaceholderPattern(int width, int height) const -> QPixmap {
   return buildPlaceholderTile(width, height, m_cornerRadius);
+}
+
+// Kartend-cub: render the item title onto a placeholder pixmap. The
+// placeholder hatch and any user-supplied placeholder image both go through
+// this so the overlay is consistent across both paths. Painted on a copy of
+// the cached tile (the static builder's cache is shared across items).
+void ItemWidget::drawTitleOnPlaceholder(QPixmap &pixmap, qreal dpr) const {
+  if (!s_showTitleInPlaceholder || pixmap.isNull() || itemName.isEmpty()) {
+    return;
+  }
+  const int width = pixmap.width();
+  const int height = pixmap.height();
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
+  QPainter painter(&pixmap);
+  painter.setRenderHint(QPainter::TextAntialiasing);
+  painter.setRenderHint(QPainter::Antialiasing);
+
+  // Match the on-tile font to the item's nameLabel font when available so the
+  // overlay reads as the title's natural typeface; fall back to the app font
+  // when nameLabel hasn't been laid out yet (e.g. early reuse from the pool).
+  QFont titleFont = nameLabel ? nameLabel->font() : QApplication::font();
+  if (!s_customFontFamily.isEmpty()) {
+    titleFont.setFamily(s_customFontFamily);
+  }
+  // Scale point size for physical-pixel pixmaps so the overlay matches the
+  // visual weight of the on-screen nameLabel regardless of DPR.
+  if (titleFont.pointSizeF() > 0) {
+    titleFont.setPointSizeF(titleFont.pointSizeF() * dpr);
+  } else if (titleFont.pixelSize() > 0) {
+    titleFont.setPixelSize(qRound(titleFont.pixelSize() * dpr));
+  }
+  painter.setFont(titleFont);
+
+  const int margin = qMax(4, qMin(width, height) / 16);
+  QRect textRect(margin, margin, width - 2 * margin, height - 2 * margin);
+  const int flags = Qt::AlignCenter | Qt::TextWordWrap;
+
+  // Translucent dark wash sized to the wrapped title — keeps the text legible
+  // over both the hatched pattern and any user-supplied placeholder image
+  // without obscuring the whole tile. Only drawn when there's text to back.
+  QFontMetrics fm(titleFont);
+  QRect bounds = fm.boundingRect(textRect, flags, itemName);
+  if (bounds.isValid()) {
+    const int pad = qMax(2, margin / 2);
+    QRect washRect = bounds.adjusted(-pad, -pad, pad, pad).intersected(pixmap.rect());
+    QColor wash(0, 0, 0, 140);
+    painter.fillRect(washRect, wash);
+  }
+
+  painter.setPen(m_titleTintColor.isValid() ? m_titleTintColor : titleTint());
+  painter.drawText(textRect, flags, itemName);
 }
