@@ -2,7 +2,10 @@
 #include "menucontroller.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "historystore.h"
 #include "navigationmanager.h"
+#include "scrolldatamanager.h"
+#include "scrollmanager.h"
 #include "settingsmanager.h"
 #include "shortcutsdialog.h"
 #include "sidebarmanager.h"
@@ -11,9 +14,11 @@
 #include "uiconstants.h"
 
 #include <QApplication>
+#include <QFileInfo>
 #include <QMainWindow>
 #include <QMenu>
 #include <QMenuBar>
+#include <QRandomGenerator>
 #include <QToolButton>
 
 MenuController::MenuController(QObject *parent) : QObject(parent) {}
@@ -38,6 +43,9 @@ void MenuController::setupMenuBar() {
   setupShortcutsAction();
   setupStatisticsAction();
   setupGridWidthActions();
+  setupActionOpenRandomItem();
+  setupRecentMenu();
+  setupLayoutActions();
   setupHamburgerMenu();
 }
 
@@ -500,4 +508,180 @@ void MenuController::syncHamburgerVisibility() {
   QMenuBar *bar = m_ctx.mainWindow->menuBar();
   const bool menuBarHidden = bar && !bar->isVisible();
   m_ctx.ui->hamburgerMenuButton->setVisible(menuBarHidden);
+}
+
+// Kartend-iue: pick one media file at random from the active view and launch
+// it. Uses ScrollManager::filePathForVisualIndex() — the same path Enter /
+// double-click resolve through — so the result is the absolute, resolved
+// path that DatabaseManager::getCollectionIndexForFile() can key off. The
+// raw ScrollDataManager::filePaths() list won't work here: those are the
+// relative entries from the items table, while the file→collection map is
+// indexed by the resolved absolute paths.
+void MenuController::setupActionOpenRandomItem() {
+  if (!m_ctx.ui || !m_ctx.mainWindow || !m_ctx.ui->actionOpenRandomItem) return;
+
+  m_ctx.ui->actionOpenRandomItem->setShortcutContext(Qt::ApplicationShortcut);
+  m_ctx.mainWindow->addAction(m_ctx.ui->actionOpenRandomItem);
+
+  connect(m_ctx.ui->actionOpenRandomItem, &QAction::triggered, [this]() {
+    ScrollManager *scroll = m_ctx.getScrollManager ? m_ctx.getScrollManager() : nullptr;
+    if (!scroll) return;
+
+    const int total = scroll->getTotalItems();
+    if (total <= 0) return;
+
+    const int viewingIndex =
+        m_ctx.getCurrentCollectionIndex ? m_ctx.getCurrentCollectionIndex() : -1;
+    if (viewingIndex < 0) return;
+
+    // Visual indices interleave subcollections + virtual folders + media
+    // when unified sort is on, so a single random draw can land on a non-
+    // launchable entry. Retry up to a sensible bound; if every draw misses
+    // (collection has no media at all), bail silently.
+    QString path;
+    for (int attempt = 0; attempt < 32 && path.isEmpty(); ++attempt) {
+      const int pick = QRandomGenerator::global()->bounded(total);
+      path = scroll->filePathForVisualIndex(pick);
+    }
+    if (path.isEmpty()) return;
+
+    // Resolve the file's *source* collection — same dance Enter /
+    // double-click / context-menu launches do. Without this, a random pick
+    // from a synthetic collection (playlist, aggregator) hands its
+    // empty-launcher CollectionConfig to LaunchManager and trips "No
+    // launcher configured".
+    DatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
+    const int sourceIndex = db ? db->getCollectionIndexForFile(path) : -1;
+    const int ownerIndex = (sourceIndex >= 0) ? sourceIndex : viewingIndex;
+
+    if (m_ctx.onLaunchItem) {
+      m_ctx.onLaunchItem(path, ownerIndex);
+    }
+  });
+}
+
+// Kartend-iue: Recent submenu populated from the launch_history table on
+// QMenu::aboutToShow. Rebuilding lazily avoids stale entries after the user
+// launches new items between menu opens, and keeps the cost off the boot
+// path.
+void MenuController::setupRecentMenu() {
+  if (!m_ctx.ui || !m_ctx.ui->menuRecent) return;
+
+  // Initial placeholder so the menu doesn't look empty before the first show.
+  rebuildRecentMenu();
+
+  connect(m_ctx.ui->menuRecent, &QMenu::aboutToShow, this,
+          &MenuController::rebuildRecentMenu);
+}
+
+void MenuController::rebuildRecentMenu() {
+  if (!m_ctx.ui || !m_ctx.ui->menuRecent) return;
+
+  QMenu *menu = m_ctx.ui->menuRecent;
+  menu->clear();
+
+  DatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
+  if (!db) {
+    QAction *empty = menu->addAction(tr("(no recent items)"));
+    empty->setEnabled(false);
+    return;
+  }
+
+  // Cap at 10 — long enough to be useful, short enough to stay scannable.
+  // HistoryStore::loadRecent already orders by descending id (most recent
+  // first) so the menu ordering is correct as-is.
+  constexpr int kMaxRecent = 10;
+  const QList<HistoryStore::HistoryEntry> entries = db->loadRecentHistory(kMaxRecent);
+  if (entries.isEmpty()) {
+    QAction *empty = menu->addAction(tr("(no recent items)"));
+    empty->setEnabled(false);
+    return;
+  }
+
+  const CollectionHierarchyCache *cache =
+      m_ctx.getHierarchyCache ? m_ctx.getHierarchyCache() : nullptr;
+
+  for (const auto &entry : entries) {
+    // Prefer the denormalized name from history; fall back to basename so
+    // even rows missing a name still render something readable.
+    QString label = entry.name.isEmpty() ? QFileInfo(entry.path).fileName() : entry.name;
+    QAction *action = menu->addAction(label);
+    action->setToolTip(entry.path);
+
+    // Resolve uuid → current collection index. Prefer the path-based
+    // source-collection lookup (matches Enter / double-click / context-menu
+    // resolution and steers around playlist/synthetic uuids), and fall back
+    // to the stored uuid for legacy rows where the file→collection map is
+    // empty. If neither resolves, the source collection is gone and we
+    // disable the entry rather than launching into nothing.
+    int collectionIndex = -1;
+    if (db) {
+      collectionIndex = db->getCollectionIndexForFile(entry.path);
+    }
+    if (collectionIndex < 0 && cache) {
+      collectionIndex = cache->uuidToCollectionIndex(entry.collectionUuid);
+    }
+    if (collectionIndex < 0) {
+      action->setEnabled(false);
+      continue;
+    }
+
+    QString path = entry.path;
+    connect(action, &QAction::triggered, this, [this, path, collectionIndex]() {
+      if (m_ctx.onLaunchItem) {
+        m_ctx.onLaunchItem(path, collectionIndex);
+      }
+    });
+  }
+}
+
+// Kartend-iue: Layout submenu mirrors the toolbar view-mode buttons. Lives
+// in a QActionGroup so the four entries are mutually exclusive; checked
+// state is driven by syncLayoutActions() (called by MainWindow whenever the
+// active view type changes).
+void MenuController::setupLayoutActions() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+
+  m_layoutActionGroup = new QActionGroup(this);
+  m_layoutActionGroup->setExclusive(true);
+
+  auto wire = [this](QAction *action, ViewType viewType) {
+    if (!action) return;
+    m_layoutActionGroup->addAction(action);
+    action->setShortcutContext(Qt::ApplicationShortcut);
+    m_ctx.mainWindow->addAction(action);
+    connect(action, &QAction::triggered, [this, viewType]() {
+      if (m_ctx.onSetViewType) {
+        m_ctx.onSetViewType(viewType);
+      }
+    });
+  };
+
+  wire(m_ctx.ui->actionLayoutGrid, ViewType::Grid);
+  wire(m_ctx.ui->actionLayoutList, ViewType::List);
+  wire(m_ctx.ui->actionLayoutCoverFlow, ViewType::CoverFlow);
+  wire(m_ctx.ui->actionLayoutHorizontal, ViewType::Horizontal);
+
+  // Initial check — caller (MainWindow::createMenuBar) wires the view-type
+  // sync on collection switch + setViewType() so subsequent changes flow
+  // through automatically.
+  if (m_ctx.getCurrentViewType) {
+    syncLayoutActions(m_ctx.getCurrentViewType());
+  }
+}
+
+void MenuController::syncLayoutActions(ViewType viewType) {
+  if (!m_ctx.ui) return;
+  if (m_ctx.ui->actionLayoutGrid) {
+    m_ctx.ui->actionLayoutGrid->setChecked(viewType == ViewType::Grid);
+  }
+  if (m_ctx.ui->actionLayoutList) {
+    m_ctx.ui->actionLayoutList->setChecked(viewType == ViewType::List);
+  }
+  if (m_ctx.ui->actionLayoutCoverFlow) {
+    m_ctx.ui->actionLayoutCoverFlow->setChecked(viewType == ViewType::CoverFlow);
+  }
+  if (m_ctx.ui->actionLayoutHorizontal) {
+    m_ctx.ui->actionLayoutHorizontal->setChecked(viewType == ViewType::Horizontal);
+  }
 }
