@@ -644,6 +644,11 @@ void MainWindow::updateWindowTitleForCollection(int collectionIndex) {
     if (m_horizontalViewButton) {
       m_horizontalViewButton->setChecked(viewType == ViewType::Horizontal);
     }
+    // Kartend-iue: View → Layout submenu mirrors toolbar checked state on
+    // collection switch.
+    if (m_menuController) {
+      m_menuController->syncLayoutActions(viewType);
+    }
   }
   // Kartend-5h6: sync the title-filter toolbar to the new collection's
   // patterns/enabled flag whenever we re-enter a view.

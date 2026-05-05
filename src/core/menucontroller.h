@@ -6,6 +6,8 @@
 #include <QActionGroup>
 #include <QObject>
 
+#include "collectionutils.h"
+
 QT_BEGIN_NAMESPACE
 class QMainWindow;
 class QMenuBar;
@@ -19,6 +21,7 @@ class SidebarManager;
 class ScrollManager;
 class ArtworkManager;
 class DatabaseManager;
+class InteractionManager;
 
 /// Context struct for menu action callbacks.
 /// Contains pointers to managers and state needed by menu actions.
@@ -33,16 +36,21 @@ struct MenuControllerContext {
   std::function<ScrollManager *()> getScrollManager;
   std::function<ArtworkManager *()> getArtworkManager;
   std::function<DatabaseManager *()> getDatabaseManager;
+  std::function<InteractionManager *()> getInteractionManager;
 
   // State accessors
   std::function<int()> getCurrentCollectionIndex;
-  std::function<QList<struct CollectionConfig> *()> getCollections;
-  std::function<struct GeneralSettings *()> getGeneralSettings;
+  std::function<QList<CollectionConfig> *()> getCollections;
+  std::function<GeneralSettings *()> getGeneralSettings;
+  std::function<const CollectionHierarchyCache *()> getHierarchyCache;
+  std::function<ViewType()> getCurrentViewType;
 
   // Callbacks for actions that need MainWindow involvement
   std::function<void()> onOpenSettings;
   std::function<void()> onShowAbout;
   std::function<void(int delta)> onAdjustGridWidth;
+  std::function<void(ViewType)> onSetViewType;
+  std::function<void(const QString &filePath, int collectionIndex)> onLaunchItem;
 };
 
 /// Handles menu bar setup and action connections.
@@ -67,6 +75,11 @@ public:
   /// Sync sort action checked states with current settings.
   void syncSortActions();
 
+  /// Sync layout (view-mode) action checked states with the active view type.
+  /// Called by MainWindow whenever the view type changes (toolbar click,
+  /// settings dialog change, collection switch).
+  void syncLayoutActions(ViewType viewType);
+
 private:
   MenuControllerContext m_ctx;
 
@@ -77,6 +90,7 @@ private:
   QAction *m_gridWidthIncreaseAction = nullptr;
   QAction *m_gridWidthDecreaseAction = nullptr;
   QActionGroup *m_sortActionGroup = nullptr;
+  QActionGroup *m_layoutActionGroup = nullptr;
 
   // Setup methods for each action group
   void setupActionExit();
@@ -93,7 +107,14 @@ private:
   void setupStatisticsAction();
   void setupGridWidthActions();
   void setupHamburgerMenu();
+  void setupActionOpenRandomItem();
+  void setupRecentMenu();
+  void setupLayoutActions();
   void insertFullscreenInViewMenu(QAction *fullscreenAction);
+
+  // Repopulate the Recent submenu from launch history; called on
+  // QMenu::aboutToShow so the list is fresh each time.
+  void rebuildRecentMenu();
 
   // Mirror menu-bar visibility onto the toolbar hamburger button so the user
   // always has menu access whether the menu bar is hidden by F11 or F10.

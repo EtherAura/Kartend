@@ -257,9 +257,25 @@ void MainWindow::createMenuBar() {
   ctx.getScrollManager = [this]() { return getScrollManager(); };
   ctx.getArtworkManager = [this]() { return getArtworkManager(); };
   ctx.getDatabaseManager = [this]() { return getDatabaseManager(); };
+  ctx.getInteractionManager = [this]() { return getInteractionManager(); };
   ctx.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
   ctx.getCollections = [this]() { return &m_collections; };
   ctx.getGeneralSettings = [this]() { return &m_generalSettings; };
+  ctx.getHierarchyCache = [this]() -> const CollectionHierarchyCache * {
+    return &m_hierarchyCache;
+  };
+  ctx.getCurrentViewType = [this]() {
+    if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
+      return m_collections[currentCollectionIndex].viewType;
+    }
+    return ViewType::Grid;
+  };
+  ctx.onSetViewType = [this](ViewType viewType) { setViewType(viewType); };
+  ctx.onLaunchItem = [this](const QString &filePath, int collectionIndex) {
+    if (auto *im = getInteractionManager()) {
+      im->launchItemWithCollection(filePath, collectionIndex);
+    }
+  };
   ctx.onOpenSettings = [this]() {
     if (getSettingsManager()) {
       SettingsDialogContext context;
@@ -348,6 +364,10 @@ void MainWindow::setViewType(ViewType viewType) {
   }
   if (m_horizontalViewButton) {
     m_horizontalViewButton->setChecked(viewType == ViewType::Horizontal);
+  }
+  // Kartend-iue: keep the View → Layout submenu in sync with the toolbar.
+  if (m_menuController) {
+    m_menuController->syncLayoutActions(viewType);
   }
 
   // Trigger a full layout refresh - viewType affects widget dimensions and
