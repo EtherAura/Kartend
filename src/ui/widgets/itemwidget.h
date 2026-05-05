@@ -112,6 +112,10 @@ public:
   static void setSelectionColor(const QString &hexColor);
   static void setListRowColor(const QString &hexColor);
   static void setListAltRowColor(const QString &hexColor);
+  // Kartend-cub: when true, onArtworkChanged() draws itemName centered on the
+  // placeholder pixmap. Toggle is read at render time, so a setting flip
+  // followed by a viewport refresh updates every visible tile.
+  static void setShowTitleInPlaceholder(bool enabled);
   static int s_titleTintSaturation;
   static int s_titleTintLightness;
   static QString s_titleBaseColor;
@@ -121,6 +125,7 @@ public:
   static QString s_selectionColor;
   static QString s_listRowColor;
   static QString s_listAltRowColor;
+  static bool s_showTitleInPlaceholder;
 
   void mousePressEvent(QMouseEvent *event) override;
 
@@ -168,6 +173,12 @@ private:
   void updateTriangleIndicator();
   void paintTriangleIndicator();
   [[nodiscard]] QPixmap buildPlaceholderPattern(int width, int height) const;
+  /// Kartend-cub: paints `itemName` centered on @p pixmap with the title tint
+  /// color and a dark backing for legibility. No-op when itemName is empty or
+  /// the pixmap has zero area. @p dpr lets the caller scale the font when the
+  /// pixmap is in physical pixels (placeholder pattern path uses dpr=1, the
+  /// scaled-artwork path uses the screen DPR).
+  void drawTitleOnPlaceholder(QPixmap &pixmap, qreal dpr = 1.0) const;
   void setupPulseAnimation();
   void startPulseAnimation();
   QTimer *m_pulseDelayTimer;

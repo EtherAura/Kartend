@@ -100,6 +100,31 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     }
   });
 
+  // Kartend-cub: title-in-placeholder toggle. Pushes the new value into the
+  // ItemWidget static immediately and asks every visible widget to re-render
+  // its placeholder so the change is visible without scrolling.
+  if (ui->showTitleInPlaceholderCheckBox) {
+    connect(ui->showTitleInPlaceholderCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+      auto *mainWindow = qobject_cast<MainWindow *>(parent());
+      if ((mainWindow) && (mainWindow->getSettingsManager())) {
+        mainWindow->m_generalSettings.showTitleInPlaceholder = checked;
+        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
+        m_generalSettings = mainWindow->m_generalSettings;
+        ItemWidget::setShowTitleInPlaceholder(checked);
+        ScrollManager *scrollManager = mainWindow->getScrollManager();
+        if (scrollManager) {
+          const auto &activeWidgets = scrollManager->getActiveWidgets();
+          for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd(); ++it) {
+            ItemWidget *widget = it.value();
+            if (widget) {
+              widget->onArtworkChanged();
+            }
+          }
+        }
+      }
+    });
+  }
+
   if (ui->bootSplashCheckBox) {
     connect(ui->bootSplashCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
       auto *mainWindow = qobject_cast<MainWindow *>(parent());

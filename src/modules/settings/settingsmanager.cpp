@@ -75,6 +75,8 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.titleTintSaturation = s.value("titleTintSaturation", 180).toInt();
   settings.titleTintLightness = s.value("titleTintLightness", 60).toInt();
   settings.titleBaseColor = s.value("titleBaseColor", QString()).toString();
+  // Kartend-cub: opt-in title overlay on placeholder art
+  settings.showTitleInPlaceholder = s.value("showTitleInPlaceholder", false).toBool();
 
   // Kartend-9v0o: global UI font. Empty family / 0 size = platform default.
   // No clamp on point size beyond Qt's own validation; the spinbox in the
@@ -255,6 +257,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.titleTintSaturation = settings.titleTintSaturation;
   m_generalSettings.titleTintLightness = settings.titleTintLightness;
   m_generalSettings.titleBaseColor = settings.titleBaseColor;
+  // Kartend-cub
+  m_generalSettings.showTitleInPlaceholder = settings.showTitleInPlaceholder;
   // Kartend-9v0o: global UI font
   m_generalSettings.globalUiFontFamily = settings.globalUiFontFamily.trimmed();
   m_generalSettings.globalUiFontPointSize = settings.globalUiFontPointSize;
@@ -347,6 +351,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("titleTintSaturation", m_generalSettings.titleTintSaturation);
   s.setValue("titleTintLightness", m_generalSettings.titleTintLightness);
   s.setValue("titleBaseColor", m_generalSettings.titleBaseColor);
+  // Kartend-cub
+  s.setValue("showTitleInPlaceholder", m_generalSettings.showTitleInPlaceholder);
   // Kartend-9v0o: global UI font
   s.setValue("globalUiFontFamily", m_generalSettings.globalUiFontFamily);
   s.setValue("globalUiFontPointSize", m_generalSettings.globalUiFontPointSize);

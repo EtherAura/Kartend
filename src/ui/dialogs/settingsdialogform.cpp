@@ -341,6 +341,11 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->selectItemOnHoverCheckBox->setChecked(m_generalSettings.selectItemOnHover);
     ui->selectItemOnHoverCheckBox->blockSignals(false);
   }
+  if (ui->showTitleInPlaceholderCheckBox) {
+    ui->showTitleInPlaceholderCheckBox->blockSignals(true);
+    ui->showTitleInPlaceholderCheckBox->setChecked(m_generalSettings.showTitleInPlaceholder);
+    ui->showTitleInPlaceholderCheckBox->blockSignals(false);
+  }
   if (ui->bootSplashCheckBox) {
     ui->bootSplashCheckBox->blockSignals(true);
     ui->bootSplashCheckBox->setChecked(m_generalSettings.bootSplashEnabled);
