@@ -92,6 +92,10 @@ public:
   /// (artwork preview / expand mode) shows its own video. Idempotent — safe
   /// to call regardless of the current playback state.
   void pausePreviewVideo();
+  /// Kartend-cjry: toggle the sidebar preview video between playing and
+  /// paused. Returns true if a toggle occurred (i.e. a video is loaded),
+  /// false when there's nothing to toggle.
+  bool togglePreviewVideoPause();
 
   /// Kartend-63e: applies per-collection sidebar appearance — background
   /// type / color / image / pattern, text color, accent color. Called by
@@ -165,6 +169,21 @@ private:
   /// label's baseline size." Calling this with both blanks restores the
   /// original .ui fonts, which is what makes the override revertible.
   void applySidebarFont(const QString &family, int pointSize);
+  /// Kartend-xcfr: re-asserts AlignHCenter on the artwork/name region so the
+  /// stylesheet polish in applyAppearance() can't drop those items back to
+  /// flush-left. The file-info rows, gallery card, and Details rows stay
+  /// flush-left intentionally — only the artwork preview, video preview,
+  /// "Artwork" header, "Name:" label, and the item name value sit on the
+  /// center axis.
+  void applyContentAlignment();
+  /// Kartend-xcfr: scale the artwork + video preview boxes to the sidebar's
+  /// current content width so they grow/shrink with the user's drag-handle
+  /// resize. Re-renders the cached artwork pixmap at the new size to avoid
+  /// scaling artifacts. Capped at the .ui's designer max so a very wide
+  /// sidebar doesn't show a giant preview that pushes the file info off-
+  /// screen.
+  void applyPreviewSize();
+  [[nodiscard]] int previewBoxSize() const;
   void loadArtwork(const QString &baseName, const QString &artworkDirectory);
   void schedulePreviewVideo(const QString &videoPath);
   void showArtworkOnly();
@@ -178,6 +197,10 @@ private:
   VideoPreviewWidget *m_videoPreview = nullptr;
   QTimer *m_videoStartTimer = nullptr;
   QString m_pendingVideoPath;
+  /// Kartend-xcfr: original-resolution artwork pixmap kept so applyPreviewSize
+  /// can re-render the centered/scaled artworkDisplay pixmap when the sidebar
+  /// is resized, instead of re-reading the file from disk on every resize.
+  QPixmap m_artworkSource;
   /// Kartend-63e bug #4: full file path of the current selection, kept so
   /// resizeEvent can re-elide it width-aware without re-querying the model.
   QString m_currentFilePath;
