@@ -66,6 +66,15 @@ enum class ErrorCode {
   WidgetCreationFailed = 500,
   WidgetNotFound = 501,
 
+  // Kart packaging errors (700-799)
+  KartFormatInvalid = 700,
+  KartVersionUnsupported = 701,
+  KartManifestParseFailed = 702,
+  KartManifestInvalid = 703,
+  KartIntegrityCheckFailed = 704,
+  KartCompressionFailed = 705,
+  KartEntryReadFailed = 706,
+
   // General errors (900-999)
   InvalidArgument = 900,
   OperationCancelled = 901,
@@ -154,6 +163,9 @@ public:
   [[nodiscard]] bool isOk() const { return !m_error.isError(); }
   [[nodiscard]] bool isError() const { return m_error.isError(); }
   [[nodiscard]] const ErrorContext &error() const { return m_error; }
+  [[nodiscard]] bool hasErrorCode(ErrorCode code) const {
+    return m_error.isError() && m_error.code == code;
+  }
 
   static Result success() { return Result(); }
 
@@ -230,6 +242,20 @@ inline void logError(const ErrorContext &ctx) {
     return "WidgetCreationFailed";
   case ErrorCode::WidgetNotFound:
     return "WidgetNotFound";
+  case ErrorCode::KartFormatInvalid:
+    return "KartFormatInvalid";
+  case ErrorCode::KartVersionUnsupported:
+    return "KartVersionUnsupported";
+  case ErrorCode::KartManifestParseFailed:
+    return "KartManifestParseFailed";
+  case ErrorCode::KartManifestInvalid:
+    return "KartManifestInvalid";
+  case ErrorCode::KartIntegrityCheckFailed:
+    return "KartIntegrityCheckFailed";
+  case ErrorCode::KartCompressionFailed:
+    return "KartCompressionFailed";
+  case ErrorCode::KartEntryReadFailed:
+    return "KartEntryReadFailed";
   case ErrorCode::InvalidArgument:
     return "InvalidArgument";
   case ErrorCode::OperationCancelled:

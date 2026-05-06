@@ -17,6 +17,7 @@
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "interactionmanager.h"
+#include "kartmanager.h"
 #include "itemwidget.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
@@ -27,6 +28,7 @@
 #include "propertyutils.h"
 #include "scrollmanager.h"
 
+#include "detailpageoverlay.h"
 #include "nowplayingoverlay.h"
 #include "sessionmanager.h"
 #include "settingsdialog.h"
@@ -44,6 +46,8 @@
 Q_DECLARE_LOGGING_CATEGORY(lcMainWindow)
 
 void MainWindow::setupUI() {
+  setAcceptDrops(true);
+
   // Managers are initialized by ApplicationManager in the constructor
   getSessionManager()->initialize();
 
@@ -159,6 +163,8 @@ void MainWindow::setupUI() {
   // Kartend-7eff: bind Ctrl+= / Ctrl+- / Ctrl+0 after managers are wired so
   // applyTextZoom() can refresh the scroll/sidebar pipeline on press.
   setupTextZoomShortcuts();
+  setupVideoPauseShortcut();
+  setupPreviewVolumeSlider();
   setupInitialTimers();
 }
 
@@ -183,7 +189,7 @@ void MainWindow::setupUIReferences() {
   m_horizontalViewButton = ui->horizontalViewButton;
   // Kartend-dd8: collection categorization toolbar widgets
   m_hideSubcollectionsButton = ui->hideSubcollectionsButton;
-  m_typeFilterComboBox = ui->typeFilterComboBox;
+  m_typeFilterButton = ui->typeFilterButton;
   // Kartend-5h6: title-exclusion regex toolbar button
   m_titleFilterButton = ui->titleFilterButton;
   m_MetadataSidebar = ui->metadataSidebarWidget;
@@ -210,6 +216,12 @@ void MainWindow::setupUIReferences() {
   // Kartend-qxv: Persistent "Now Playing" overlay used while a runtime-tracked
   // child process is running. Stays hidden until LaunchManager signals start.
   m_nowPlayingOverlay = new NowPlayingOverlay(ui->centralwidget);
+
+  // Kartend-uve: full-window item detail page. Created here so it's parented
+  // to the central widget (covers everything underneath) and stays in the
+  // QObject tree across the application lifetime; DetailPageManager drives
+  // it via setupReferences below.
+  m_detailPageOverlay = new DetailPageOverlay(ui->centralwidget);
 }
 
 void MainWindow::initializeAppContext() {
@@ -291,6 +303,12 @@ void MainWindow::createMenuBar() {
   };
   ctx.onShowAbout = [this]() { showAbout(); };
   ctx.onAdjustGridWidth = [this](int delta) { adjustGridWidth(delta); };
+  ctx.onImportKart = [this]() {
+    if (auto *km = getKartManager()) km->importInteractive();
+  };
+  ctx.onExportKart = [this]() {
+    if (auto *km = getKartManager()) km->exportCollectionInteractive(currentCollectionIndex);
+  };
 
   m_menuController->setContext(ctx);
   m_menuController->setupMenuBar();

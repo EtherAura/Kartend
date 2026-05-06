@@ -18,6 +18,12 @@ struct ErrorContext;
 
 enum class HorizontalAlignment { Left = 0, Center = 1, Right = 2 };
 
+/// Kartend-guo5: anchor for the per-collection header logo overlay. Drawn at
+/// the top of the items viewport over the grid. Center matches the typical
+/// "title slate" usage; Left/Right are for users who want the logo offset so
+/// it doesn't fight a centered toolbar element.
+enum class HeaderLogoPosition { TopLeft = 0, TopCenter = 1, TopRight = 2 };
+
 enum class SidebarMode { Overlay = 0, Expand = 1 };
 
 /// Kartend-63e: which side of the items viewport the sidebar lives on. Applies
@@ -41,7 +47,11 @@ enum class SidebarPattern { Crosshatch = 0 };
 /// pane in a later iteration.
 enum class SidebarTab { Item = 0, Collection = 1, File = 2 };
 
-enum class BackgroundType { Color = 0, Image = 1 };
+/// Kartend-vbs: per-collection background can be a flat color, a wallpaper
+/// image, or a looping muted video file. Video uses BackgroundVideoWidget
+/// (QMediaPlayer + QVideoSink) parented to the items viewport; Image and
+/// Color route through QSS on the viewport as before.
+enum class BackgroundType { Color = 0, Image = 1, Video = 2 };
 
 /// View type for displaying collection items.
 /// Kartend-dx9t: Horizontal flips the virtual-scrolling axis so items flow
@@ -92,6 +102,25 @@ namespace CollectionUtils {
   if (lower == "coverflow") return ViewType::CoverFlow;
   if (lower == "horizontal") return ViewType::Horizontal;
   return ViewType::Grid;
+}
+
+[[nodiscard]] inline QString headerLogoPositionToString(HeaderLogoPosition pos) {
+  switch (pos) {
+  case HeaderLogoPosition::TopLeft:
+    return "topleft";
+  case HeaderLogoPosition::TopRight:
+    return "topright";
+  case HeaderLogoPosition::TopCenter:
+  default:
+    return "topcenter";
+  }
+}
+
+[[nodiscard]] inline HeaderLogoPosition stringToHeaderLogoPosition(const QString &str) {
+  const QString lower = str.toLower();
+  if (lower == "topleft") return HeaderLogoPosition::TopLeft;
+  if (lower == "topright") return HeaderLogoPosition::TopRight;
+  return HeaderLogoPosition::TopCenter;
 }
 
 [[nodiscard]] inline QString sidebarPositionToString(SidebarPosition pos) {
@@ -202,6 +231,17 @@ struct LauncherConfig {
 };
 
 namespace LauncherUtils {
+
+/// Kartend-8sox: returns true when @p launcherPath points at a libretro
+/// frontend (currently RetroArch). The substring check is the single source
+/// of truth — callers elsewhere ask "does this launcher take a libretro
+/// core?" instead of inspecting the path themselves, so the rest of the
+/// codebase stays free of specific emulator names. The match runs against
+/// the entire path so "/usr/bin/retroarch", "retroarch.exe", and bare
+/// "retroarch" in $PATH all qualify.
+[[nodiscard]] inline bool usesLibretroCore(const QString &launcherPath) {
+  return launcherPath.contains(QStringLiteral("retroarch"), Qt::CaseInsensitive);
+}
 
 /// Returns a LauncherConfig with fields resolved against the preset list.
 /// When `lc.presetId` matches a preset, that preset's name/path/core/params
@@ -359,9 +399,47 @@ struct CollectionConfig {
   BackgroundType backgroundType = BackgroundType::Color;
   QString backgroundColor; // Background color (hex like #1a1a2e)
   QString backgroundImage; // Background image path
+  /// Kartend-vbs: looping muted background video path. Active only when
+  /// backgroundType == Video; empty disables the video and falls back to
+  /// the system bg until the user picks a file. Sanitised on save like
+  /// backgroundImage.
+  QString backgroundVideo;
   QString primaryColor;    // Primary UI color for toolbar, menubar, search bar
   QString tileColor;       // Color for item tiles/placeholders (if blank, uses default)
   QString selectionColor;  // Color for selection rectangle and glide overlay border
+
+  /// Kartend-guo5: optional header logo image painted at the top of the items
+  /// viewport, distinct from `collectionIcon` (which renders on the
+  /// collection-as-tile entry). Empty path disables the overlay. Sanitised
+  /// like backgroundImage on save.
+  QString headerLogoImage;
+  HeaderLogoPosition headerLogoPosition = HeaderLogoPosition::TopCenter;
+
+  /// Kartend-qbp3: edge-darkening vignette overlay on the items viewport.
+  /// `vignetteIntensity` is the corner darkness percent (0 = no effect, 100
+  /// = pitch black at the corners). 60 is a sensible "noticeable but
+  /// subtle" default. Independent of background type — works equally well
+  /// over color, image, and video bgs.
+  bool vignetteEnabled = false;
+  int vignetteIntensity = 60;
+
+  /// Kartend-y25g: per-collection wallpaper parallax. When enabled, the
+  /// image background scrolls at `parallaxStrength` percent of the items
+  /// scroll speed (0 = bg locked / no parallax movement; 100 = bg moves
+  /// in lockstep with the content). Image bg only — video bgs paint via
+  /// their own widget and are not affected by this toggle.
+  bool wallpaperParallax = false;
+  int parallaxStrength = 30;
+
+  /// Kartend-eq8r: simulated backdrop blur on the items toolbar. When
+  /// enabled with an image bg, the wallpaper is pre-blurred (cheap
+  /// downscale-upscale) and painted as the toolbar background, mimicking
+  /// macOS Vibrancy. `backdropBlurRadius` controls the blur intensity
+  /// (higher = more blur). Video bgs are not blurred (per-frame Gaussian
+  /// is too expensive without GPU shaders); the toggle is a no-op while a
+  /// video bg is active.
+  bool toolbarBackdropBlur = false;
+  int backdropBlurRadius = 12;
 
   // Archive extraction for cores that don't support zipped content
   bool extractArchives = false; // Extract archives to temp dir before launch
@@ -477,8 +555,17 @@ struct CollectionConfig {
            itemHeight == other.itemHeight && fontSize == other.fontSize &&
            cornerRadius == other.cornerRadius && backgroundType == other.backgroundType &&
            backgroundColor == other.backgroundColor && backgroundImage == other.backgroundImage &&
+           backgroundVideo == other.backgroundVideo &&
            primaryColor == other.primaryColor && tileColor == other.tileColor &&
-           selectionColor == other.selectionColor && extractArchives == other.extractArchives &&
+           selectionColor == other.selectionColor &&
+           headerLogoImage == other.headerLogoImage &&
+           headerLogoPosition == other.headerLogoPosition &&
+           vignetteEnabled == other.vignetteEnabled &&
+           vignetteIntensity == other.vignetteIntensity &&
+           wallpaperParallax == other.wallpaperParallax &&
+           parallaxStrength == other.parallaxStrength &&
+           toolbarBackdropBlur == other.toolbarBackdropBlur &&
+           backdropBlurRadius == other.backdropBlurRadius && extractArchives == other.extractArchives &&
            extractedExtension == other.extractedExtension && expandMode == other.expandMode &&
            includeContentSubfolders == other.includeContentSubfolders &&
            includeArtworkSubfolders == other.includeArtworkSubfolders &&
@@ -573,6 +660,14 @@ struct CollectionConfig {
                                UIConstants::ListView::MAX_ROW_HEIGHT);
     sidebarWidth =
         std::clamp(sidebarWidth, UIConstants::Sidebar::MIN_WIDTH, UIConstants::Sidebar::MAX_WIDTH);
+    // Kartend-qbp3: corner darkness percent. 0 = effect off (the toggle is
+    // separate); 100 = pitch black at the corners.
+    vignetteIntensity = std::clamp(vignetteIntensity, 0, 100);
+    // Kartend-y25g: parallax strength percent.
+    parallaxStrength = std::clamp(parallaxStrength, 0, 100);
+    // Kartend-eq8r: backdrop blur radius. 4 is a barely-perceptible blur;
+    // anything above 32 is heavy enough that the source becomes unreadable.
+    backdropBlurRadius = std::clamp(backdropBlurRadius, 4, 32);
     // Kartend-bdl: keep the default-launcher pointer inside the visible list
     // so a stale config (or a deletion that out-paced the index) can never
     // refer past the end. 0 is always valid because the primary slot exists
@@ -776,6 +871,24 @@ struct GeneralSettings {
   int uiTextZoomPercent = 100;
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Preview video volume (Kartend-3m01)
+  // Global volume for sidebar / overlay preview audio, 0–100. Applied to all
+  // VideoPreviewWidget instances via the static setGlobalVolume() hook so a
+  // single toolbar slider controls every preview surface.
+  // ─────────────────────────────────────────────────────────────────────────
+  int previewVideoVolume = 100;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Startup video (Kartend-y3ke)
+  // Optional one-shot intro clip (logo / branding) shown above the main
+  // window on launch. Skippable via any key or mouse click. The enable bool
+  // is independent of the path so the user can keep a path configured but
+  // disable it temporarily without losing the value.
+  // ─────────────────────────────────────────────────────────────────────────
+  bool startupVideoEnabled = false;
+  QString startupVideoPath;
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Controls: Keyboard bindings (single-key, no modifier semantics)
   // Defaults match current hard-coded behavior.
   // ─────────────────────────────────────────────────────────────────────────
@@ -790,6 +903,10 @@ struct GeneralSettings {
   int keyAlphabeticForward = Qt::Key_PageDown;
   int keyJumpFirst = Qt::Key_Home;
   int keyJumpLast = Qt::Key_End;
+  // Kartend-uve: opens the dedicated item-detail page (full-window overlay)
+  // for the current selection. Default I = "info"; ignored while the search
+  // bar has focus so typing "i" in the filter still works.
+  int keyItemDetails = Qt::Key_I;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Controls: Gamepad bindings

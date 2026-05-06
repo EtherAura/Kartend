@@ -454,6 +454,14 @@ void ScrollManager::cleanup() {
   // Clear cached artwork paths - no longer valid for new collection
   if (m_widgetFactory) {
     m_widgetFactory->clearCachedArtworkPaths();
+    // Kartend-4boe: also drop the per-chunk "request already in flight" set.
+    // Without this, chunk indices left over from the previous view (in-flight
+    // requests, or empty-result chunks that the receiveItemsRange path
+    // intentionally keeps pending) suppress every new chunk request after a
+    // reload — widgets stay stuck on the "Loading..." placeholder until
+    // restart, which is exactly the symptom users see after adding a new
+    // subcollection.
+    m_widgetFactory->clearPendingRangeRequests();
   }
 
   // Explicitly delete active widgets before clearing the pool

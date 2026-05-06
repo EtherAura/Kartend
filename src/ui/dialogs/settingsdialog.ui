@@ -99,14 +99,14 @@
                <string>Mode:</string>
               </property>
               <property name="toolTip">
-               <string>Choose which collections future Save actions apply to (Kartend-enq)</string>
+               <string>Choose which collections future Save actions apply to</string>
               </property>
              </widget>
             </item>
             <item>
              <widget class="QComboBox" name="settingsScopeComboBox">
               <property name="toolTip">
-               <string>Settings Mode controls the scope of Save: just the selected collection, the selected collection plus its subcollections, or every collection (Kartend-enq)</string>
+               <string>Settings Mode controls the scope of Save: just the selected collection, the selected collection plus its subcollections, or every collection</string>
               </property>
               <item>
                <property name="text">
@@ -123,28 +123,6 @@
                 <string>All collections</string>
                </property>
               </item>
-             </widget>
-            </item>
-            <item>
-             <widget class="QToolButton" name="applyToButton">
-              <property name="maximumSize">
-               <size>
-                <width>30</width>
-                <height>30</height>
-               </size>
-              </property>
-              <property name="toolTip">
-               <string>Apply the current collection's appearance and layout settings to other collections (Kartend-63o)</string>
-              </property>
-              <property name="text">
-               <string/>
-              </property>
-              <property name="icon">
-               <iconset theme="QIcon::ThemeIcon::DocumentSaveAs"/>
-              </property>
-              <property name="popupMode">
-               <enum>QToolButton::ToolButtonPopupMode::InstantPopup</enum>
-              </property>
              </widget>
             </item>
             <item>
@@ -200,7 +178,7 @@
          <property name="currentIndex">
           <number>0</number>
          </property>
-         <!-- Configuration Tab -->
+         <!-- Configuration Tab (Kartend-gsla: artwork & launcher moved to dedicated tabs) -->
          <widget class="QWidget" name="configurationTab">
           <attribute name="title">
            <string>Configuration</string>
@@ -274,13 +252,109 @@
               </layout>
              </item>
              <item row="2" column="0">
+              <widget class="QLabel" name="label_fileExtensions">
+               <property name="text">
+                <string>File Extensions:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QLineEdit" name="fileExtensionsLineEdit">
+               <property name="toolTip">
+                <string>Comma-separated list of file extensions to include</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="0">
+              <widget class="QLabel" name="label_expandMode">
+               <property name="text">
+                <string>Expand Mode:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="QCheckBox" name="expandModeCheckBox">
+               <property name="toolTip">
+                <string>Two-stage activation: first double-click or Enter expands the artwork preview; a second activation on the same item launches it.</string>
+               </property>
+               <property name="text">
+                <string/>
+               </property>
+               <property name="checked">
+                <bool>false</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="0">
+              <widget class="QLabel" name="label_showAllSubcollectionItems">
+               <property name="text">
+                <string>Show All Subcollection Items:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="1">
+              <widget class="QCheckBox" name="showAllSubcollectionItemsCheckBox">
+               <property name="toolTip">
+                <string>Mix items from subcollections with parent collection items, sorted alphabetically</string>
+               </property>
+               <property name="text">
+                <string/>
+               </property>
+               <property name="checked">
+                <bool>false</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="0">
+              <widget class="QLabel" name="label_collectionType">
+               <property name="text">
+                <string>Type / Category:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="1">
+              <widget class="QComboBox" name="collectionTypeComboBox">
+               <property name="editable">
+                <bool>true</bool>
+               </property>
+               <property name="toolTip">
+                <string>Free-form category label (e.g. Games, Movies, Music). Subcollections inherit the nearest tagged ancestor when left blank. The toolbar type filter shows only subcollection tiles whose effective type matches.</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <spacer name="configurationVerticalSpacer">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+         <!-- Artwork Tab (Kartend-gsla) -->
+         <widget class="QWidget" name="artworkTab">
+          <attribute name="title">
+           <string>Artwork</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="artworkTabLayout">
+           <item>
+            <layout class="QFormLayout" name="artworkFormLayout">
+             <item row="0" column="0">
               <widget class="QLabel" name="label_artworkDir">
                <property name="text">
                 <string>Artwork:</string>
                </property>
               </widget>
              </item>
-             <item row="2" column="1">
+             <item row="0" column="1">
               <layout class="QHBoxLayout" name="artworkDirLayout">
                <item>
                 <widget class="QLineEdit" name="artworkDirLineEdit"/>
@@ -294,14 +368,14 @@
                </item>
               </layout>
              </item>
-              <item row="3" column="0">
+             <item row="1" column="0">
               <widget class="QLabel" name="label_videoDir">
                <property name="text">
                 <string>Video:</string>
                </property>
               </widget>
              </item>
-             <item row="3" column="1">
+             <item row="1" column="1">
               <layout class="QHBoxLayout" name="videoDirLayout">
                <item>
                 <widget class="QLineEdit" name="videoDirLineEdit">
@@ -319,14 +393,14 @@
                </item>
               </layout>
              </item>
-              <item row="4" column="0">
+             <item row="2" column="0">
               <widget class="QLabel" name="label_manualDir">
                <property name="text">
                 <string>Manual:</string>
                </property>
               </widget>
              </item>
-             <item row="4" column="1">
+             <item row="2" column="1">
               <layout class="QHBoxLayout" name="manualDirLayout">
                <item>
                 <widget class="QLineEdit" name="manualDirLineEdit">
@@ -344,14 +418,14 @@
                </item>
               </layout>
              </item>
-              <item row="5" column="0">
+             <item row="3" column="0">
               <widget class="QLabel" name="label_placeholderArtwork">
                <property name="text">
                 <string>Placeholder Artwork:</string>
                </property>
               </widget>
              </item>
-             <item row="5" column="1">
+             <item row="3" column="1">
               <layout class="QHBoxLayout" name="placeholderArtworkLayout">
                <item>
                 <widget class="QLineEdit" name="placeholderArtworkLineEdit">
@@ -369,28 +443,56 @@
                </item>
               </layout>
              </item>
-             <item row="6" column="0">
-              <widget class="QLabel" name="label_fileExtensions">
+             <item row="4" column="0">
+              <widget class="QLabel" name="label_customArtworkTypes">
                <property name="text">
-                <string>File Extensions:</string>
+                <string>Custom Artwork Types:</string>
                </property>
               </widget>
              </item>
-             <item row="6" column="1">
-              <widget class="QLineEdit" name="fileExtensionsLineEdit">
+             <item row="4" column="1">
+              <widget class="QLineEdit" name="customArtworkTypesLineEdit">
                <property name="toolTip">
-                <string>Comma-separated list of file extensions to include</string>
+                <string>Comma-separated list of user-defined artwork type ids beyond the standard set (box, screenshot, title, marquee, fanart, logo). Custom types only resolve via per-item manual links from the sidebar — they are NOT auto-discovered from artwork subdirectories.</string>
+               </property>
+               <property name="placeholderText">
+                <string>e.g. cabinet, flyer, character_select</string>
                </property>
               </widget>
              </item>
-             <item row="7" column="0">
+            </layout>
+           </item>
+           <item>
+            <spacer name="artworkVerticalSpacer">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+         <!-- Launcher Tab (Kartend-gsla) -->
+         <widget class="QWidget" name="launcherTab">
+          <attribute name="title">
+           <string>Launcher</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="launcherTabLayout">
+           <item>
+            <layout class="QFormLayout" name="launcherFormLayout">
+             <item row="0" column="0">
               <widget class="QLabel" name="label_launcher">
                <property name="text">
                 <string>Launcher:</string>
                </property>
               </widget>
              </item>
-             <item row="7" column="1">
+             <item row="0" column="1">
               <layout class="QHBoxLayout" name="launcherLayout">
                <item>
                 <widget class="QLineEdit" name="launcherLineEdit"/>
@@ -404,19 +506,19 @@
                </item>
               </layout>
              </item>
-             <item row="8" column="0">
+             <item row="1" column="0">
               <widget class="QLabel" name="label_core">
                <property name="text">
                 <string>Core Path:</string>
                </property>
               </widget>
              </item>
-             <item row="8" column="1">
+             <item row="1" column="1">
               <layout class="QHBoxLayout" name="coreLayout">
                <item>
                 <widget class="QLineEdit" name="coreLineEdit">
                  <property name="toolTip">
-                  <string>Path to RetroArch core file</string>
+                  <string>Path to libretro core file</string>
                  </property>
                 </widget>
                </item>
@@ -429,14 +531,14 @@
                </item>
               </layout>
              </item>
-             <item row="9" column="0">
+             <item row="2" column="0">
               <widget class="QLabel" name="label_launchParams">
                <property name="text">
                 <string>Launch Parameters:</string>
                </property>
               </widget>
              </item>
-             <item row="9" column="1">
+             <item row="2" column="1">
               <widget class="QLineEdit" name="launchParamsLineEdit">
                <property name="toolTip">
                 <string>Additional command-line parameters for the launcher</string>
@@ -446,14 +548,14 @@
                </property>
               </widget>
              </item>
-             <item row="10" column="0">
+             <item row="3" column="0">
               <widget class="QLabel" name="label_extractArchives">
                <property name="text">
                 <string>Extract Archives:</string>
                </property>
               </widget>
              </item>
-             <item row="10" column="1">
+             <item row="3" column="1">
               <widget class="QCheckBox" name="extractArchivesCheckBox">
                <property name="toolTip">
                 <string>Extract archived content to a temporary directory before launching (for cores that don't support zipped content)</string>
@@ -466,14 +568,14 @@
                </property>
               </widget>
              </item>
-             <item row="11" column="0">
+             <item row="4" column="0">
               <widget class="QLabel" name="label_extractedExtension">
                <property name="text">
                 <string>Launch Extension:</string>
                </property>
               </widget>
              </item>
-             <item row="11" column="1">
+             <item row="4" column="1">
               <widget class="QLineEdit" name="extractedExtensionLineEdit">
                <property name="toolTip">
                 <string>File extension to launch from extracted archive (e.g., .cue, .bin, .iso)</string>
@@ -483,88 +585,31 @@
                </property>
               </widget>
              </item>
-             <item row="12" column="0">
-              <widget class="QLabel" name="label_expandMode">
-               <property name="text">
-                <string>Expand Mode:</string>
-               </property>
-              </widget>
-             </item>
-             <item row="12" column="1">
-              <widget class="QCheckBox" name="expandModeCheckBox">
-               <property name="toolTip">
-                <string>Two-stage activation: first double-click or Enter expands the artwork preview; a second activation on the same item launches it.</string>
-               </property>
-               <property name="text">
-                <string/>
-               </property>
-               <property name="checked">
-                <bool>false</bool>
-               </property>
-              </widget>
-             </item>
-             <item row="13" column="0">
-              <widget class="QLabel" name="label_showAllSubcollectionItems">
-               <property name="text">
-                <string>Show All Subcollection Items:</string>
-               </property>
-              </widget>
-             </item>
-             <item row="13" column="1">
-              <widget class="QCheckBox" name="showAllSubcollectionItemsCheckBox">
-               <property name="toolTip">
-                <string>Mix items from subcollections with parent collection items, sorted alphabetically</string>
-               </property>
-               <property name="text">
-                <string/>
-               </property>
-               <property name="checked">
-                <bool>false</bool>
-               </property>
-              </widget>
-             </item>
-             <item row="14" column="0">
-              <widget class="QLabel" name="label_customArtworkTypes">
-               <property name="text">
-                <string>Custom Artwork Types:</string>
-               </property>
-              </widget>
-             </item>
-             <item row="14" column="1">
-              <widget class="QLineEdit" name="customArtworkTypesLineEdit">
-               <property name="toolTip">
-                <string>Comma-separated list of user-defined artwork type ids beyond the standard set (box, screenshot, title, marquee, fanart, logo). Custom types only resolve via per-item manual links from the sidebar — they are NOT auto-discovered from artwork subdirectories.</string>
-               </property>
-               <property name="placeholderText">
-                <string>e.g. cabinet, flyer, character_select</string>
-               </property>
-              </widget>
-             </item>
-             <item row="15" column="0">
+             <item row="5" column="0">
               <widget class="QLabel" name="label_launcherName">
                <property name="text">
                 <string>Launcher Name:</string>
                </property>
               </widget>
              </item>
-             <item row="15" column="1">
+             <item row="5" column="1">
               <widget class="QLineEdit" name="launcherNameLineEdit">
                <property name="toolTip">
                 <string>Display name for the primary launcher in the chooser dialog (optional). Defaults to the executable basename when empty.</string>
                </property>
                <property name="placeholderText">
-                <string>e.g. RetroArch, mGBA</string>
+                <string>Display label (defaults to executable name)</string>
                </property>
               </widget>
              </item>
-             <item row="16" column="0">
+             <item row="6" column="0">
               <widget class="QLabel" name="label_additionalLaunchers">
                <property name="text">
                 <string>Additional Launchers:</string>
                </property>
               </widget>
              </item>
-             <item row="16" column="1">
+             <item row="6" column="1">
               <layout class="QHBoxLayout" name="additionalLaunchersLayout">
                <item>
                 <widget class="QListWidget" name="additionalLaunchersList">
@@ -613,41 +658,24 @@
                </item>
               </layout>
              </item>
-             <item row="17" column="0">
+             <item row="7" column="0">
               <widget class="QLabel" name="label_defaultLauncher">
                <property name="text">
                 <string>Default Launcher:</string>
                </property>
               </widget>
              </item>
-             <item row="17" column="1">
+             <item row="7" column="1">
               <widget class="QComboBox" name="defaultLauncherComboBox">
                <property name="toolTip">
                 <string>Pre-selected launcher in the chooser dialog. Single-launcher collections ignore this setting.</string>
                </property>
               </widget>
              </item>
-             <item row="18" column="0">
-              <widget class="QLabel" name="label_collectionType">
-               <property name="text">
-                <string>Type / Category:</string>
-               </property>
-              </widget>
-             </item>
-             <item row="18" column="1">
-              <widget class="QComboBox" name="collectionTypeComboBox">
-               <property name="editable">
-                <bool>true</bool>
-               </property>
-               <property name="toolTip">
-                <string>Free-form category label (e.g. Games, Movies, Music). Subcollections inherit the nearest tagged ancestor when left blank. The toolbar type filter shows only subcollection tiles whose effective type matches.</string>
-               </property>
-              </widget>
-             </item>
             </layout>
            </item>
            <item>
-            <spacer name="configurationVerticalSpacer">
+            <spacer name="launcherVerticalSpacer">
              <property name="orientation">
               <enum>Qt::Orientation::Vertical</enum>
              </property>
@@ -932,8 +960,14 @@
                     </widget>
                    </item>
                    <item>
+                    <widget class="QRadioButton" name="backgroundVideoRadio">
+                     <property name="text"><string>Video</string></property>
+                     <property name="toolTip"><string>Looping muted video as background (Kartend-vbs)</string></property>
+                    </widget>
+                   </item>
+                   <item>
                     <widget class="QLineEdit" name="backgroundValueEdit">
-                     <property name="toolTip"><string>Background color (hex format like #FF5500) or image path</string></property>
+                     <property name="toolTip"><string>Background color (hex format like #FF5500), image path, or video path</string></property>
                      <property name="placeholderText"><string>Default</string></property>
                     </widget>
                    </item>
@@ -1103,6 +1137,43 @@
                    </item>
                   </layout>
                  </item>
+                 <item row="9" column="0">
+                  <widget class="QLabel" name="label_vignette">
+                   <property name="text"><string>Vignette:</string></property>
+                  </widget>
+                 </item>
+                 <item row="9" column="1">
+                  <layout class="QHBoxLayout" name="vignetteLayout">
+                   <item>
+                    <widget class="QCheckBox" name="vignetteEnabledCheckBox">
+                     <property name="text"><string>Enable</string></property>
+                     <property name="toolTip"><string>Darken the corners of the items area to make titles pop over busy backgrounds (Kartend-qbp3)</string></property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="label_vignetteIntensity">
+                     <property name="text"><string>Intensity:</string></property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QSpinBox" name="vignetteIntensitySpinBox">
+                     <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                     <property name="minimumWidth"><number>80</number></property>
+                     <property name="maximumWidth"><number>80</number></property>
+                     <property name="toolTip"><string>Corner darkness 0-100 (0 = no effect, 100 = pitch black at the corners)</string></property>
+                     <property name="minimum"><number>0</number></property>
+                     <property name="maximum"><number>100</number></property>
+                     <property name="value"><number>60</number></property>
+                    </widget>
+                   </item>
+                   <item>
+                    <spacer name="vignetteLayoutSpacer">
+                     <property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property>
+                     <property name="sizeHint" stdset="0"><size><width>10</width><height>10</height></size></property>
+                    </spacer>
+                   </item>
+                  </layout>
+                 </item>
                 </layout>
                </item>
                 <item><spacer name="appearanceColorsVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
@@ -1153,6 +1224,139 @@
                 </layout>
                </item>
                 <item><spacer name="appearanceListVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
+              </layout>
+             </widget>
+             <!-- Sub-tab: Toolbar (Kartend-guo5) -->
+             <widget class="QWidget" name="appearanceToolbarSubTab">
+              <attribute name="title"><string>Toolbar</string></attribute>
+              <layout class="QVBoxLayout" name="appearanceToolbarSubTabLayout">
+               <property name="spacing"><number>6</number></property>
+               <item>
+                <layout class="QFormLayout" name="appearanceToolbarFormLayout">
+                 <property name="horizontalSpacing"><number>8</number></property>
+                 <property name="verticalSpacing"><number>6</number></property>
+                 <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
+                 <item row="0" column="0">
+                  <widget class="QLabel" name="label_headerLogo">
+                   <property name="text"><string>Header Logo:</string></property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1">
+                  <layout class="QHBoxLayout" name="headerLogoLayout">
+                   <item>
+                    <widget class="QLineEdit" name="headerLogoEdit">
+                     <property name="toolTip"><string>Path to a logo/banner image painted at the top of the items area (Kartend-guo5)</string></property>
+                     <property name="placeholderText"><string>None</string></property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="browseHeaderLogoButton">
+                     <property name="text"><string>Browse...</string></property>
+                     <property name="toolTip"><string>Select a header logo image</string></property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QComboBox" name="headerLogoPositionComboBox">
+                     <property name="toolTip"><string>Where to anchor the header logo</string></property>
+                     <item><property name="text"><string>Top Left</string></property></item>
+                     <item><property name="text"><string>Top Center</string></property></item>
+                     <item><property name="text"><string>Top Right</string></property></item>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                </layout>
+               </item>
+               <item><spacer name="appearanceToolbarVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
+              </layout>
+             </widget>
+             <!-- Sub-tab: Effects (Kartend-y25g, eq8r) -->
+             <widget class="QWidget" name="appearanceEffectsSubTab">
+              <attribute name="title"><string>Effects</string></attribute>
+              <layout class="QVBoxLayout" name="appearanceEffectsSubTabLayout">
+               <property name="spacing"><number>6</number></property>
+               <item>
+                <layout class="QFormLayout" name="appearanceEffectsFormLayout">
+                 <property name="horizontalSpacing"><number>8</number></property>
+                 <property name="verticalSpacing"><number>6</number></property>
+                 <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
+                 <item row="0" column="0">
+                  <widget class="QLabel" name="label_wallpaperParallax">
+                   <property name="text"><string>Wallpaper Parallax:</string></property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1">
+                  <layout class="QHBoxLayout" name="wallpaperParallaxLayout">
+                   <item>
+                    <widget class="QCheckBox" name="wallpaperParallaxCheckBox">
+                     <property name="text"><string>Enable</string></property>
+                     <property name="toolTip"><string>Tie the image background's vertical position to the items scroll offset (Kartend-y25g). Image bg only — video bgs are unaffected.</string></property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="label_parallaxStrength">
+                     <property name="text"><string>Strength:</string></property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QSpinBox" name="parallaxStrengthSpinBox">
+                     <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                     <property name="minimumWidth"><number>80</number></property>
+                     <property name="maximumWidth"><number>80</number></property>
+                     <property name="toolTip"><string>0 = bg locked (no parallax movement); 100 = bg moves in lockstep with content. 30 is a subtle default.</string></property>
+                     <property name="minimum"><number>0</number></property>
+                     <property name="maximum"><number>100</number></property>
+                     <property name="value"><number>30</number></property>
+                    </widget>
+                   </item>
+                   <item>
+                    <spacer name="wallpaperParallaxSpacer">
+                     <property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property>
+                     <property name="sizeHint" stdset="0"><size><width>10</width><height>10</height></size></property>
+                    </spacer>
+                   </item>
+                  </layout>
+                 </item>
+                 <item row="1" column="0">
+                  <widget class="QLabel" name="label_toolbarBackdropBlur">
+                   <property name="text"><string>Toolbar Blur:</string></property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <layout class="QHBoxLayout" name="toolbarBackdropBlurLayout">
+                   <item>
+                    <widget class="QCheckBox" name="toolbarBackdropBlurCheckBox">
+                     <property name="text"><string>Enable</string></property>
+                     <property name="toolTip"><string>Use a blurred copy of the wallpaper as the toolbar background, mimicking macOS Vibrancy (Kartend-eq8r). Image bg only — no-op while a video bg is active.</string></property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="label_backdropBlurRadius">
+                     <property name="text"><string>Radius:</string></property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QSpinBox" name="backdropBlurRadiusSpinBox">
+                     <property name="sizePolicy"><sizepolicy hsizetype="Fixed" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                     <property name="minimumWidth"><number>80</number></property>
+                     <property name="maximumWidth"><number>80</number></property>
+                     <property name="toolTip"><string>Blur radius (4 = barely perceptible; 32 = source becomes unreadable).</string></property>
+                     <property name="minimum"><number>4</number></property>
+                     <property name="maximum"><number>32</number></property>
+                     <property name="value"><number>12</number></property>
+                    </widget>
+                   </item>
+                   <item>
+                    <spacer name="toolbarBackdropBlurSpacer">
+                     <property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property>
+                     <property name="sizeHint" stdset="0"><size><width>10</width><height>10</height></size></property>
+                    </spacer>
+                   </item>
+                  </layout>
+                 </item>
+                </layout>
+               </item>
+               <item><spacer name="appearanceEffectsVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
               </layout>
              </widget>
             </widget>
@@ -2149,6 +2353,45 @@
               </property>
              </widget>
             </item>
+            <item row="20" column="0">
+             <widget class="QLabel" name="startupVideoEnabledLabel">
+              <property name="text">
+               <string>Startup Video:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="20" column="1">
+             <widget class="QCheckBox" name="startupVideoEnabledCheckBox">
+              <property name="toolTip">
+               <string>Play a configurable video on application launch. Skippable via any key or click. (Kartend-y3ke)</string>
+              </property>
+             </widget>
+            </item>
+            <item row="21" column="0">
+             <widget class="QLabel" name="startupVideoPathLabel">
+              <property name="text">
+               <string>Startup Video File:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="21" column="1">
+             <layout class="QHBoxLayout" name="startupVideoPathLayout">
+              <item>
+               <widget class="QLineEdit" name="startupVideoPathLineEdit">
+                <property name="toolTip">
+                 <string>Absolute path to the video file played on launch (e.g. .mp4, .webm). Empty disables the feature regardless of the checkbox above. (Kartend-y3ke)</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="browseStartupVideoButton">
+                <property name="text">
+                 <string>Browse</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
                 </layout>
                </item>
               <item>
@@ -2228,7 +2471,7 @@
                    </sizepolicy>
                   </property>
                   <property name="toolTip">
-                   <string>.cfg files found in the Kartend config directory (excluding the active kartend.cfg)</string>
+                   <string>.cfg files found in the Kartend config directory. The currently active config is marked with "(active)".</string>
                   </property>
                  </widget>
                 </item>

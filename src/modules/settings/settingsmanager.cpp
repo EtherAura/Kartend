@@ -90,6 +90,16 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   // wasn't designed for.
   settings.uiTextZoomPercent = qBound(50, s.value("uiTextZoomPercent", 100).toInt(), 300);
 
+  // Kartend-3m01: preview video volume (0-100). Clamped on read so a
+  // hand-edited out-of-range value can't mute audio permanently or push
+  // QAudioOutput into undefined territory.
+  settings.previewVideoVolume = qBound(0, s.value("previewVideoVolume", 100).toInt(), 100);
+
+  // Kartend-y3ke: startup video. Stored even when disabled so the user can
+  // keep a path configured and toggle it off temporarily.
+  settings.startupVideoEnabled = s.value("startupVideoEnabled", false).toBool();
+  settings.startupVideoPath = s.value("startupVideoPath", QString()).toString();
+
   // Controls: keyboard bindings
   settings.keyNavLeft = s.value("keyNavLeft", static_cast<int>(Qt::Key_Left)).toInt();
   settings.keyNavRight = s.value("keyNavRight", static_cast<int>(Qt::Key_Right)).toInt();
@@ -104,6 +114,8 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
       s.value("keyAlphabeticForward", static_cast<int>(Qt::Key_PageDown)).toInt();
   settings.keyJumpFirst = s.value("keyJumpFirst", static_cast<int>(Qt::Key_Home)).toInt();
   settings.keyJumpLast = s.value("keyJumpLast", static_cast<int>(Qt::Key_End)).toInt();
+  // Kartend-uve: detail-page key (opens DetailPageOverlay).
+  settings.keyItemDetails = s.value("keyItemDetails", static_cast<int>(Qt::Key_I)).toInt();
 
   // Controls: gamepad bindings
   settings.gamepadUseDpad = s.value("gamepadUseDpad", true).toBool();
@@ -264,6 +276,11 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.globalUiFontPointSize = settings.globalUiFontPointSize;
   // Kartend-7eff: runtime text zoom
   m_generalSettings.uiTextZoomPercent = qBound(50, settings.uiTextZoomPercent, 300);
+  // Kartend-3m01: preview video volume
+  m_generalSettings.previewVideoVolume = qBound(0, settings.previewVideoVolume, 100);
+  // Kartend-y3ke: startup video
+  m_generalSettings.startupVideoEnabled = settings.startupVideoEnabled;
+  m_generalSettings.startupVideoPath = settings.startupVideoPath.trimmed();
 
   // Controls
   m_generalSettings.keyNavLeft = settings.keyNavLeft;
@@ -277,6 +294,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.keyAlphabeticForward = settings.keyAlphabeticForward;
   m_generalSettings.keyJumpFirst = settings.keyJumpFirst;
   m_generalSettings.keyJumpLast = settings.keyJumpLast;
+  m_generalSettings.keyItemDetails = settings.keyItemDetails;
   m_generalSettings.gamepadUseDpad = settings.gamepadUseDpad;
   m_generalSettings.gamepadUseLeftStick = settings.gamepadUseLeftStick;
   m_generalSettings.gamepadConfirmButton = settings.gamepadConfirmButton;
@@ -358,6 +376,11 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("globalUiFontPointSize", m_generalSettings.globalUiFontPointSize);
   // Kartend-7eff: runtime text zoom
   s.setValue("uiTextZoomPercent", m_generalSettings.uiTextZoomPercent);
+  // Kartend-3m01: preview video volume
+  s.setValue("previewVideoVolume", m_generalSettings.previewVideoVolume);
+  // Kartend-y3ke: startup video
+  s.setValue("startupVideoEnabled", m_generalSettings.startupVideoEnabled);
+  s.setValue("startupVideoPath", m_generalSettings.startupVideoPath);
   s.setValue("keyNavLeft", m_generalSettings.keyNavLeft);
   s.setValue("keyNavRight", m_generalSettings.keyNavRight);
   s.setValue("keyNavUp", m_generalSettings.keyNavUp);
@@ -369,6 +392,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("keyAlphabeticForward", m_generalSettings.keyAlphabeticForward);
   s.setValue("keyJumpFirst", m_generalSettings.keyJumpFirst);
   s.setValue("keyJumpLast", m_generalSettings.keyJumpLast);
+  s.setValue("keyItemDetails", m_generalSettings.keyItemDetails);
   s.setValue("gamepadUseDpad", m_generalSettings.gamepadUseDpad);
   s.setValue("gamepadUseLeftStick", m_generalSettings.gamepadUseLeftStick);
   s.setValue("gamepadConfirmButton", m_generalSettings.gamepadConfirmButton);
@@ -402,8 +426,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("toolbarShowGridViewButton", m_generalSettings.toolbarShowGridViewButton);
   s.setValue("toolbarShowListViewButton", m_generalSettings.toolbarShowListViewButton);
   s.setValue("toolbarShowCoverFlowViewButton", m_generalSettings.toolbarShowCoverFlowViewButton);
-  s.setValue("toolbarShowHorizontalViewButton",
-             m_generalSettings.toolbarShowHorizontalViewButton);
+  s.setValue("toolbarShowHorizontalViewButton", m_generalSettings.toolbarShowHorizontalViewButton);
   s.setValue("toolbarShowHideSubcollectionsButton",
              m_generalSettings.toolbarShowHideSubcollectionsButton);
   s.setValue("toolbarShowTypeFilter", m_generalSettings.toolbarShowTypeFilter);
@@ -413,8 +436,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("toolbarGridViewButtonText", m_generalSettings.toolbarGridViewButtonText);
   s.setValue("toolbarListViewButtonText", m_generalSettings.toolbarListViewButtonText);
   s.setValue("toolbarCoverFlowViewButtonText", m_generalSettings.toolbarCoverFlowViewButtonText);
-  s.setValue("toolbarHorizontalViewButtonText",
-             m_generalSettings.toolbarHorizontalViewButtonText);
+  s.setValue("toolbarHorizontalViewButtonText", m_generalSettings.toolbarHorizontalViewButtonText);
   s.setValue("toolbarHideSubcollectionsButtonText",
              m_generalSettings.toolbarHideSubcollectionsButtonText);
   s.setValue("toolbarTitleFilterText", m_generalSettings.toolbarTitleFilterText);

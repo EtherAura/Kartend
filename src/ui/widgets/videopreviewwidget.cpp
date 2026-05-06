@@ -9,6 +9,8 @@
 // state.
 #include "videopreviewwidget.h"
 
+#include <algorithm>
+
 #include <QAudioOutput>
 #include <QHideEvent>
 #include <QImage>
@@ -21,6 +23,9 @@
 #include <QVBoxLayout>
 #include <QVideoFrame>
 #include <QVideoSink>
+
+int VideoPreviewWidget::s_globalVolume = 100;
+QList<VideoPreviewWidget *> VideoPreviewWidget::s_instances;
 
 VideoPreviewWidget::VideoPreviewWidget(QWidget *parent) : QWidget(parent) {
   auto *layout = new QVBoxLayout(this);
@@ -39,12 +44,11 @@ VideoPreviewWidget::VideoPreviewWidget(QWidget *parent) : QWidget(parent) {
 
   m_player = new QMediaPlayer(this);
   m_audioOutput = new QAudioOutput(this);
-  // Audio plays at full volume — the user explicitly opted into hearing
-  // preview audio. Selection-change cadence is governed by the 500ms
-  // debounce in MetadataSidebar so the audio doesn't flap while scrolling.
+  // Audio is unmuted by default; volume comes from s_globalVolume so a
+  // toolbar slider (Kartend-3m01) controls every preview surface uniformly.
   m_audioOutput->setMuted(false);
-  m_audioOutput->setVolume(1.0);
   m_player->setAudioOutput(m_audioOutput);
+  applyGlobalVolume();
 
   m_sink = new QVideoSink(this);
   m_player->setVideoSink(m_sink);
@@ -52,13 +56,32 @@ VideoPreviewWidget::VideoPreviewWidget(QWidget *parent) : QWidget(parent) {
 
   connect(m_sink, &QVideoSink::videoFrameChanged, this,
           [this](const QVideoFrame &frame) { renderFrame(frame); });
+
+  s_instances.append(this);
 }
 
 VideoPreviewWidget::~VideoPreviewWidget() {
+  s_instances.removeOne(this);
   if (m_player) {
     m_player->stop();
     m_player->setSource(QUrl());
   }
+}
+
+void VideoPreviewWidget::setGlobalVolume(int percent) {
+  s_globalVolume = std::clamp(percent, 0, 100);
+  for (VideoPreviewWidget *w : s_instances) {
+    if (w) {
+      w->applyGlobalVolume();
+    }
+  }
+}
+
+void VideoPreviewWidget::applyGlobalVolume() {
+  if (!m_audioOutput) {
+    return;
+  }
+  m_audioOutput->setVolume(static_cast<qreal>(s_globalVolume) / 100.0);
 }
 
 void VideoPreviewWidget::renderFrame(const QVideoFrame &frame) {
@@ -102,6 +125,9 @@ void VideoPreviewWidget::playVideo(const QString &filePath) {
     return;
   }
   m_currentPath = filePath;
+  // Loading a new clip resets the user's manual pause — the user is asking
+  // to play this new video, not pause it.
+  m_userPaused = false;
   m_player->stop();
   m_player->setSource(QUrl::fromLocalFile(filePath));
   m_player->play();
@@ -115,9 +141,31 @@ void VideoPreviewWidget::stop() {
   m_player->setSource(QUrl());
   m_currentPath.clear();
   m_currentImage = QImage();
+  m_userPaused = false;
   if (m_imageLabel) {
     m_imageLabel->clear();
   }
+}
+
+bool VideoPreviewWidget::togglePauseResume() {
+  if (!m_player || m_currentPath.isEmpty()) {
+    return false;
+  }
+  if (m_player->playbackState() == QMediaPlayer::PlayingState) {
+    m_player->pause();
+    m_userPaused = true;
+  } else {
+    m_player->play();
+    m_userPaused = false;
+  }
+  return m_userPaused;
+}
+
+bool VideoPreviewWidget::isPaused() const {
+  if (!m_player || m_currentPath.isEmpty()) {
+    return false;
+  }
+  return m_player->playbackState() == QMediaPlayer::PausedState;
 }
 
 void VideoPreviewWidget::hideEvent(QHideEvent *event) {
@@ -131,8 +179,9 @@ void VideoPreviewWidget::hideEvent(QHideEvent *event) {
 
 void VideoPreviewWidget::showEvent(QShowEvent *event) {
   // Resume playback if a source is loaded and we were previously paused
-  // by hideEvent().
-  if (m_player && !m_currentPath.isEmpty() &&
+  // by hideEvent() — but skip when the user has explicitly paused via
+  // togglePauseResume(), so their intent survives a hide/show cycle.
+  if (m_player && !m_currentPath.isEmpty() && !m_userPaused &&
       m_player->playbackState() != QMediaPlayer::PlayingState) {
     m_player->play();
   }

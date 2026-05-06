@@ -220,19 +220,30 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
 
   // Background settings
   if (ui->backgroundImageRadio && ui->backgroundColorRadio) {
-    config.backgroundType =
-        ui->backgroundImageRadio->isChecked() ? BackgroundType::Image : BackgroundType::Color;
+    if (ui->backgroundVideoRadio && ui->backgroundVideoRadio->isChecked()) {
+      config.backgroundType = BackgroundType::Video;
+    } else if (ui->backgroundImageRadio->isChecked()) {
+      config.backgroundType = BackgroundType::Image;
+    } else {
+      config.backgroundType = BackgroundType::Color;
+    }
   }
   if (ui->backgroundValueEdit) {
     QString value = ui->backgroundValueEdit->text().trimmed();
-    if (config.backgroundType == BackgroundType::Image) {
-      config.backgroundImage = value;
-      // Clear color when switching to image mode
+    // Only the field matching the active type holds a value; the other two
+    // are cleared so an old value can't bleed back when the user toggles.
+    if (config.backgroundType == BackgroundType::Video) {
+      config.backgroundVideo = value;
       config.backgroundColor.clear();
+      config.backgroundImage.clear();
+    } else if (config.backgroundType == BackgroundType::Image) {
+      config.backgroundImage = value;
+      config.backgroundColor.clear();
+      config.backgroundVideo.clear();
     } else {
       config.backgroundColor = value;
-      // Clear image when switching to color mode
       config.backgroundImage.clear();
+      config.backgroundVideo.clear();
     }
   }
 
@@ -260,6 +271,39 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   // Custom font family (per-collection)
   config.customFontFamily =
       (ui->customFontEdit) ? ui->customFontEdit->text().trimmed() : config.customFontFamily;
+
+  // Kartend-guo5: header logo
+  if (ui->headerLogoEdit) {
+    config.headerLogoImage = ui->headerLogoEdit->text().trimmed();
+  }
+  if (ui->headerLogoPositionComboBox) {
+    config.headerLogoPosition =
+        static_cast<HeaderLogoPosition>(ui->headerLogoPositionComboBox->currentIndex());
+  }
+
+  // Kartend-qbp3: vignette
+  if (ui->vignetteEnabledCheckBox) {
+    config.vignetteEnabled = ui->vignetteEnabledCheckBox->isChecked();
+  }
+  if (ui->vignetteIntensitySpinBox) {
+    config.vignetteIntensity = ui->vignetteIntensitySpinBox->value();
+  }
+
+  // Kartend-y25g: wallpaper parallax
+  if (ui->wallpaperParallaxCheckBox) {
+    config.wallpaperParallax = ui->wallpaperParallaxCheckBox->isChecked();
+  }
+  if (ui->parallaxStrengthSpinBox) {
+    config.parallaxStrength = ui->parallaxStrengthSpinBox->value();
+  }
+
+  // Kartend-eq8r: toolbar backdrop blur
+  if (ui->toolbarBackdropBlurCheckBox) {
+    config.toolbarBackdropBlur = ui->toolbarBackdropBlurCheckBox->isChecked();
+  }
+  if (ui->backdropBlurRadiusSpinBox) {
+    config.backdropBlurRadius = ui->backdropBlurRadiusSpinBox->value();
+  }
 
   return config;
 }
@@ -321,8 +365,8 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ((ui->placeholderArtworkLineEdit) &&
        ui->placeholderArtworkLineEdit->text() != originalConfig.placeholderArtwork) ||
       ((ui->gridWidthSpinBox) && ui->gridWidthSpinBox->value() != originalConfig.gridWidth) ||
-      ((ui->horizontalGridHeightSpinBox) && ui->horizontalGridHeightSpinBox->value() !=
-                                                originalConfig.horizontalGridHeight) ||
+      ((ui->horizontalGridHeightSpinBox) &&
+       ui->horizontalGridHeightSpinBox->value() != originalConfig.horizontalGridHeight) ||
       ((ui->showAllSubcollectionItemsCheckBox) &&
        ui->showAllSubcollectionItemsCheckBox->isChecked() !=
            originalConfig.showAllSubcollectionItems) ||
@@ -332,9 +376,8 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ((ui->sidebarModeComboBox) &&
        ui->sidebarModeComboBox->currentIndex() != static_cast<int>(originalConfig.sidebarMode)) ||
       // Kartend-63e: dirty checks for the new sidebar fields.
-      ((ui->sidebarPositionComboBox) &&
-       ui->sidebarPositionComboBox->currentIndex() !=
-           static_cast<int>(originalConfig.sidebarPosition)) ||
+      ((ui->sidebarPositionComboBox) && ui->sidebarPositionComboBox->currentIndex() !=
+                                            static_cast<int>(originalConfig.sidebarPosition)) ||
       ((ui->sidebarWidthSpinBox) &&
        ui->sidebarWidthSpinBox->value() != originalConfig.sidebarWidth) ||
       ((ui->sidebarWidthLockedCheckBox) &&
@@ -367,9 +410,8 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
        ui->sidebarFontFamilyEdit->text().trimmed() != originalConfig.sidebarFontFamily) ||
       ((ui->sidebarFontSizeSpinBox) &&
        ui->sidebarFontSizeSpinBox->value() != originalConfig.sidebarFontPointSize) ||
-      ((ui->sidebarActiveTabComboBox) &&
-       ui->sidebarActiveTabComboBox->currentIndex() !=
-           static_cast<int>(originalConfig.sidebarActiveTab)) ||
+      ((ui->sidebarActiveTabComboBox) && ui->sidebarActiveTabComboBox->currentIndex() !=
+                                             static_cast<int>(originalConfig.sidebarActiveTab)) ||
       ((ui->viewTypeComboBox) &&
        ui->viewTypeComboBox->currentIndex() != static_cast<int>(originalConfig.viewType)) ||
       ((ui->hideMissingArtworkCheckBox) &&
@@ -464,12 +506,43 @@ auto SettingsDialog::checkDimensionChanges() const -> bool {
 // Checks color field changes
 auto SettingsDialog::checkColorChanges() const -> bool {
   const CollectionConfig &originalConfig = originalCollection;
+  // Kartend-guo5 / qbp3: header logo + vignette are theme-adjacent fields
+  // tracked here so hasUnsavedChanges() picks them up. Without this, typing
+  // a path or toggling vignette never enables the Save button and the OK
+  // path silently discards the edit.
+  const bool logoChanged =
+      (ui->headerLogoEdit &&
+       ui->headerLogoEdit->text().trimmed() != originalConfig.headerLogoImage) ||
+      (ui->headerLogoPositionComboBox &&
+       static_cast<HeaderLogoPosition>(ui->headerLogoPositionComboBox->currentIndex()) !=
+           originalConfig.headerLogoPosition);
+  const bool vignetteChanged = (ui->vignetteEnabledCheckBox &&
+                                ui->vignetteEnabledCheckBox->isChecked() !=
+                                    originalConfig.vignetteEnabled) ||
+                               (ui->vignetteIntensitySpinBox &&
+                                ui->vignetteIntensitySpinBox->value() !=
+                                    originalConfig.vignetteIntensity);
+  // Kartend-y25g / eq8r: parallax + blur ride along under the same dirty
+  // umbrella so typing into them enables the Save button.
+  const bool parallaxChanged = (ui->wallpaperParallaxCheckBox &&
+                                ui->wallpaperParallaxCheckBox->isChecked() !=
+                                    originalConfig.wallpaperParallax) ||
+                               (ui->parallaxStrengthSpinBox &&
+                                ui->parallaxStrengthSpinBox->value() !=
+                                    originalConfig.parallaxStrength);
+  const bool blurChanged = (ui->toolbarBackdropBlurCheckBox &&
+                            ui->toolbarBackdropBlurCheckBox->isChecked() !=
+                                originalConfig.toolbarBackdropBlur) ||
+                           (ui->backdropBlurRadiusSpinBox &&
+                            ui->backdropBlurRadiusSpinBox->value() !=
+                                originalConfig.backdropBlurRadius);
   return (
       ((ui->primaryColorEdit) &&
        ui->primaryColorEdit->text().trimmed() != originalConfig.primaryColor) ||
       ((ui->tileColorEdit) && ui->tileColorEdit->text().trimmed() != originalConfig.tileColor) ||
       ((ui->selectionColorEdit) &&
-       ui->selectionColorEdit->text().trimmed() != originalConfig.selectionColor));
+       ui->selectionColorEdit->text().trimmed() != originalConfig.selectionColor) ||
+      logoChanged || vignetteChanged || parallaxChanged || blurChanged);
 }
 
 // Checks list mode field changes
@@ -490,19 +563,27 @@ auto SettingsDialog::checkListModeChanges() const -> bool {
 // Checks background field changes
 auto SettingsDialog::checkBackgroundChanges() const -> bool {
   const CollectionConfig &originalConfig = originalCollection;
-  // Check background type
+  // Check background type — must include the Video radio (Kartend-vbs) so
+  // toggling between Color/Image/Video correctly dirties the dialog.
   if (ui->backgroundImageRadio && ui->backgroundColorRadio) {
-    BackgroundType currentType =
-        ui->backgroundImageRadio->isChecked() ? BackgroundType::Image : BackgroundType::Color;
+    BackgroundType currentType = BackgroundType::Color;
+    if (ui->backgroundVideoRadio && ui->backgroundVideoRadio->isChecked()) {
+      currentType = BackgroundType::Video;
+    } else if (ui->backgroundImageRadio->isChecked()) {
+      currentType = BackgroundType::Image;
+    }
     if (currentType != originalConfig.backgroundType) {
       return true;
     }
   }
-  // Check background value
+  // Check background value against the field matching the active type.
   if (ui->backgroundValueEdit) {
     QString currentValue = ui->backgroundValueEdit->text().trimmed();
-    // Compare against the appropriate original field based on type
-    if (ui->backgroundImageRadio && ui->backgroundImageRadio->isChecked()) {
+    if (ui->backgroundVideoRadio && ui->backgroundVideoRadio->isChecked()) {
+      if (currentValue != originalConfig.backgroundVideo) {
+        return true;
+      }
+    } else if (ui->backgroundImageRadio && ui->backgroundImageRadio->isChecked()) {
       if (currentValue != originalConfig.backgroundImage) {
         return true;
       }
@@ -537,6 +618,18 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
   }
   if (ui->bootSplashCheckBox &&
       ui->bootSplashCheckBox->isChecked() != m_originalGeneralSettings.bootSplashEnabled) {
+    return true;
+  }
+  // Kartend-y3ke + Kartend-wcow: startup video fields participate in the
+  // dirty-check comparison so the save button reflects unsaved edits.
+  if (ui->startupVideoEnabledCheckBox &&
+      ui->startupVideoEnabledCheckBox->isChecked() !=
+          m_originalGeneralSettings.startupVideoEnabled) {
+    return true;
+  }
+  if (ui->startupVideoPathLineEdit &&
+      ui->startupVideoPathLineEdit->text().trimmed() !=
+          m_originalGeneralSettings.startupVideoPath.trimmed()) {
     return true;
   }
   if (ui->resumeFocusSplashCheckBox && ui->resumeFocusSplashCheckBox->isChecked() !=
@@ -624,9 +717,8 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
                                            m_originalGeneralSettings.attractModeIdleTimeoutSec) {
     return true;
   }
-  if (ui->attractAutoScrollCheckBox &&
-      ui->attractAutoScrollCheckBox->isChecked() !=
-          m_originalGeneralSettings.attractModeAutoScrollEnabled) {
+  if (ui->attractAutoScrollCheckBox && ui->attractAutoScrollCheckBox->isChecked() !=
+                                           m_originalGeneralSettings.attractModeAutoScrollEnabled) {
     return true;
   }
   if (ui->attractScrollSpeedSpinBox &&

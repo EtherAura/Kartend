@@ -96,8 +96,8 @@ public:
   /// the transposed axis: Up/Down wraps within the same column, Left/Right
   /// wraps to first/last column.
   static int calculateHorizontalLayoutSelection(int totalItems, int currentSelection, int direction,
-                                                bool wrapEnabled, int itemsPerCol,
-                                                bool downAxis, bool &didWrap);
+                                                bool wrapEnabled, int itemsPerCol, bool downAxis,
+                                                bool &didWrap);
   static bool hasRowChanged(int gridWidth, int currentSelection, int newSelection);
 
   // Key direction derivation
@@ -115,6 +115,11 @@ signals:
   void requestAlphabeticNavigation(bool forward);
   void requestJumpToEdge(bool toEnd); // Home/End key navigation
   void requestEnterAction();
+  /// Kartend-uve: request to open the item detail page for the current
+  /// selection. Bound to GeneralSettings::keyItemDetails (default I).
+  /// Suppressed while the search bar has focus so typed letters still
+  /// reach the filter.
+  void requestItemDetails();
   void requestSearchModeToggle();
   void requestSearchBarFocus();
   void requestScrollAnimationStop();

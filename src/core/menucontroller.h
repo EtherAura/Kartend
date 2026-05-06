@@ -7,6 +7,7 @@
 #include <QObject>
 
 #include "collectionutils.h"
+#include "usagestatsstore.h"
 
 QT_BEGIN_NAMESPACE
 class QMainWindow;
@@ -51,6 +52,8 @@ struct MenuControllerContext {
   std::function<void(int delta)> onAdjustGridWidth;
   std::function<void(ViewType)> onSetViewType;
   std::function<void(const QString &filePath, int collectionIndex)> onLaunchItem;
+  std::function<void()> onImportKart;
+  std::function<void()> onExportKart;
 };
 
 /// Handles menu bar setup and action connections.
@@ -89,6 +92,8 @@ private:
   QAction *m_statisticsAction = nullptr;
   QAction *m_gridWidthIncreaseAction = nullptr;
   QAction *m_gridWidthDecreaseAction = nullptr;
+  QAction *m_importKartAction = nullptr;
+  QAction *m_exportKartAction = nullptr;
   QActionGroup *m_sortActionGroup = nullptr;
   QActionGroup *m_layoutActionGroup = nullptr;
 
@@ -108,13 +113,24 @@ private:
   void setupGridWidthActions();
   void setupHamburgerMenu();
   void setupActionOpenRandomItem();
+  void setupActionImportKart();
+  void setupActionExportKart();
   void setupRecentMenu();
+  void setupMostLaunchedMenu();
   void setupLayoutActions();
   void insertFullscreenInViewMenu(QAction *fullscreenAction);
 
-  // Repopulate the Recent submenu from launch history; called on
-  // QMenu::aboutToShow so the list is fresh each time.
+  // Repopulate the Recent submenu from items.last_played (Kartend-j5l3);
+  // called on QMenu::aboutToShow so the list is fresh each time.
   void rebuildRecentMenu();
+  // Repopulate the Most Launched submenu from items.play_count (Kartend-j5l3).
+  void rebuildMostLaunchedMenu();
+  // Shared row → menu-action wiring used by both Recent and Most Launched.
+  // Forward-declares avoid a hard include of usagestatsstore.h here; the
+  // real include is in menucontroller.cpp.
+  void populateLaunchEntriesIntoMenu(QMenu *menu,
+                                     const QList<UsageStatsStore::ItemUsageRow> &rows,
+                                     DatabaseManager *db);
 
   // Mirror menu-bar visibility onto the toolbar hamburger button so the user
   // always has menu access whether the menu bar is hidden by F11 or F10.

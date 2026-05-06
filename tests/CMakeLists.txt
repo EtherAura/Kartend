@@ -475,6 +475,113 @@ target_link_libraries(test_historystore
 )
 add_test(NAME HistoryStore COMMAND test_historystore)
 
+# KartManifest tests (Kartend-y3iy — JSON round-trip for the .kart packaging format)
+add_executable(test_kartmanifest
+  test_kartmanifest.cpp
+  ${SRC_DIR}/modules/kart/kartmanifest.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/itemmetadata.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+)
+target_include_directories(test_kartmanifest PRIVATE
+  ${SRC_DIR}/modules/kart
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_kartmanifest
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME KartManifest COMMAND test_kartmanifest)
+
+# KartReader tests (Kartend-vvvk — read + extract + sha256 verification)
+add_executable(test_kartreader
+  test_kartreader.cpp
+  ${SRC_DIR}/modules/kart/kartcompression.cpp
+  ${SRC_DIR}/modules/kart/kartmanifest.cpp
+  ${SRC_DIR}/modules/kart/kartreader.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/itemmetadata.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+)
+target_include_directories(test_kartreader PRIVATE
+  ${SRC_DIR}/modules/kart
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_kartreader
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Widgets
+  Qt6::Test
+)
+if (TARGET PkgConfig::ZSTD)
+  target_link_libraries(test_kartreader PkgConfig::ZSTD)
+  target_compile_definitions(test_kartreader PRIVATE KARTEND_HAS_ZSTD=1)
+endif()
+add_test(NAME KartReader COMMAND test_kartreader)
+
+# KartWriter tests (Kartend-a1za — export collection + zstd compression)
+add_executable(test_kartwriter
+  test_kartwriter.cpp
+  ${SRC_DIR}/modules/kart/kartcompression.cpp
+  ${SRC_DIR}/modules/kart/kartmanifest.cpp
+  ${SRC_DIR}/modules/kart/kartreader.cpp
+  ${SRC_DIR}/modules/kart/kartwriter.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/itemmetadata.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+)
+target_include_directories(test_kartwriter PRIVATE
+  ${SRC_DIR}/modules/kart
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_kartwriter
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Widgets
+  Qt6::Test
+)
+if (TARGET PkgConfig::ZSTD)
+  target_link_libraries(test_kartwriter PkgConfig::ZSTD)
+  target_compile_definitions(test_kartwriter PRIVATE KARTEND_HAS_ZSTD=1)
+endif()
+add_test(NAME KartWriter COMMAND test_kartwriter)
+
+# KartMerge tests (Kartend-ts9s + Kartend-m2n2 — merge policy + metadata persistence)
+add_executable(test_kartmerge
+  test_kartmerge.cpp
+  ${SRC_DIR}/modules/kart/kartmanifest.cpp
+  ${SRC_DIR}/modules/kart/kartmerge.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/itemmetadata.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+)
+target_include_directories(test_kartmerge PRIVATE
+  ${SRC_DIR}/modules/kart
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_kartmerge
+  Qt6::Core
+  Qt6::Gui
+  Qt6::Widgets
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME KartMerge COMMAND test_kartmerge)
+
 # SearchUtils smoke tests (header-only enum/struct)
 add_executable(test_searchutils test_searchutils.cpp)
 target_include_directories(test_searchutils PRIVATE ${SRC_DIR}/utils)

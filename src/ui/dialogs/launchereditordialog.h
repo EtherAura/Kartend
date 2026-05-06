@@ -8,7 +8,9 @@
 
 QT_BEGIN_NAMESPACE
 class QComboBox;
+class QFormLayout;
 class QLineEdit;
+class QWidget;
 QT_END_NAMESPACE
 
 /// Modal editor for a single LauncherConfig entry (Kartend-bdl). Used by the
@@ -48,11 +50,18 @@ private:
   /// `presetIndex` is an index into `m_availablePresets`; -1 means "Inline".
   void applyPresetSelection(int presetIndex);
 
+  /// Kartend-bafi: hide the Core Path row unless the launcher path resolves
+  /// to retroarch. Other launchers don't take a libretro core, so the field
+  /// is noise.
+  void updateCoreRowVisibility();
+
   QList<LauncherPreset> m_availablePresets;
+  QFormLayout *m_form = nullptr;
   QComboBox *m_presetCombo = nullptr;
   QLineEdit *m_nameEdit = nullptr;
   QLineEdit *m_launcherEdit = nullptr;
   QLineEdit *m_coreEdit = nullptr;
+  QWidget *m_coreRowWidget = nullptr;
   QLineEdit *m_paramsEdit = nullptr;
 };
 

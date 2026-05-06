@@ -256,6 +256,17 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
     return true;
   }
 
+  // Kartend-uve: detail page. Checked last so it can't shadow a re-bound
+  // arrow / search / confirm key, and only outside the search bar (the
+  // search-focused branch above returns before reaching here, so this is
+  // already gated).
+  const int detailsKey =
+      m_generalSettings ? m_generalSettings->keyItemDetails : static_cast<int>(Qt::Key_I);
+  if (key == detailsKey) {
+    emit requestItemDetails();
+    return true;
+  }
+
   return false;
 }
 

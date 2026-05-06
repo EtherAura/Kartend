@@ -2,6 +2,7 @@
 #define VIDEOPREVIEWWIDGET_H
 
 #include <QImage>
+#include <QList>
 #include <QString>
 #include <QWidget>
 
@@ -36,6 +37,21 @@ public:
   ~VideoPreviewWidget() override;
 
   /**
+   * @brief Set the global preview-audio volume (Kartend-3m01).
+   *
+   * @p percent is clamped to [0, 100]. The value is applied to every live
+   * VideoPreviewWidget immediately and stored as the default for any
+   * subsequently constructed instances. This is the only audio knob that
+   * matters in the app — preview videos are the only video surfaces with
+   * a QAudioOutput attached (background video and toolbar logos are silent
+   * by design).
+   */
+  static void setGlobalVolume(int percent);
+
+  /// Read the current global preview-audio volume as a 0-100 percent.
+  [[nodiscard]] static int globalVolume() { return s_globalVolume; }
+
+  /**
    * @brief Begin (or restart) playback of the video at @p filePath.
    *
    * The same path may be passed repeatedly; if it matches the currently
@@ -47,6 +63,31 @@ public:
    * @brief Stop playback and clear the current source.
    */
   void stop();
+
+  /**
+   * @brief Toggle between playing and paused states (Kartend-cjry).
+   *
+   * No-op when no source is loaded. Unlike stop(), the source is preserved
+   * so playback resumes from the same position. Returns the new paused
+   * state (true = now paused, false = now playing).
+   */
+  bool togglePauseResume();
+
+  /**
+   * @brief Whether playback is currently paused (Kartend-cjry).
+   *
+   * Distinguishes "paused with source loaded" from "stopped / no source"
+   * — togglePauseResume only acts on the former.
+   */
+  [[nodiscard]] bool isPaused() const;
+
+  /**
+   * @brief Whether a source is currently loaded (playing OR paused).
+   *
+   * Lets callers decide whether a pause-toggle keystroke is meaningful
+   * for this widget instance.
+   */
+  [[nodiscard]] bool hasLoadedSource() const { return !m_currentPath.isEmpty(); }
 
   /**
    * @brief The path of the video currently loaded (empty if none).
@@ -72,6 +113,19 @@ private:
   // produces another frame).
   QImage m_currentImage;
   QString m_currentPath;
+  // Kartend-cjry: distinguishes user-initiated pause from the visibility
+  // pause done by hideEvent(). showEvent() must not silently resume a
+  // user-paused video — the user's intent should survive a sidebar
+  // collapse/expand cycle.
+  bool m_userPaused = false;
+
+  // Kartend-3m01: shared volume state. Each instance pushes the current
+  // s_globalVolume into its QAudioOutput at construction; setGlobalVolume()
+  // walks s_instances to update every live widget when the toolbar slider
+  // moves. The list is the only registry — there's no signal indirection.
+  void applyGlobalVolume();
+  static int s_globalVolume;
+  static QList<VideoPreviewWidget *> s_instances;
 };
 
 #endif // VIDEOPREVIEWWIDGET_H

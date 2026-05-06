@@ -12,15 +12,29 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollBar>
+#include <QSignalBlocker>
+#include <QSlider>
 #include <QTimer>
 
 #include "applicationmanager.h"
 #include "artworkmanager.h"
+#include "attractmanager.h"
 #include "cachemanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "detailpagemanager.h"
+#include "detailpageoverlay.h"
 #include "interactionmanager.h"
+#include "kartmanager.h"
+#include "kartreader.h"
+
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QFileDialog>
+#include <QMimeData>
+#include <QUrl>
 #include "itemwidget.h"
+#include "keyboardmanager.h"
 #include "launchmanager.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
@@ -39,8 +53,10 @@
 #include "shortcutsdialog.h"
 #include "sidebarmanager.h"
 #include "splashoverlay.h"
+#include "startupvideooverlay.h"
 #include "stringutils.h"
 #include "timerutils.h"
+#include "videopreviewwidget.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
 
@@ -97,6 +113,28 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
 
 void MainWindow::showStartupSplash() {
   m_startupSplashHandled = true;
+  // Kartend-y3ke: startup video plays first when enabled. The splash is
+  // chained onto the video's dismissed signal so it still appears after
+  // the user skips or the clip ends — keeping users with both features
+  // configured from losing the splash.
+  if (m_generalSettings.startupVideoEnabled &&
+      !m_generalSettings.startupVideoPath.isEmpty()) {
+    auto *videoOverlay = new StartupVideoOverlay(this);
+    videoOverlay->setGeometry(rect());
+    videoOverlay->raise();
+    if (videoOverlay->playVideo(m_generalSettings.startupVideoPath)) {
+      videoOverlay->show();
+      connect(videoOverlay, &StartupVideoOverlay::dismissed, this, [this]() {
+        if (m_generalSettings.bootSplashEnabled && m_splashOverlay) {
+          m_splashOverlay->showSplash(SplashOverlay::Reason::Startup);
+        }
+      });
+      return;
+    }
+    // playVideo failed (missing/unreadable path): fall through to the
+    // normal splash path so the user still gets a startup indicator.
+    videoOverlay->deleteLater();
+  }
   if (m_generalSettings.bootSplashEnabled && m_splashOverlay) {
     m_splashOverlay->showSplash(SplashOverlay::Reason::Startup);
   }
@@ -189,6 +227,47 @@ void MainWindow::setupTextZoomShortcuts() {
   connect(zoomReset, &QAction::triggered, this, [this]() { applyTextZoom(100); });
 }
 
+void MainWindow::setupVideoPauseShortcut() {
+  auto *pauseVideo = new QAction(tr("Pause/Resume Preview Video"), this);
+  // Ctrl+K mirrors YouTube's universal pause shortcut. Plain K alone would
+  // collide with character input in the search bar; Space is consumed by
+  // coverflow navigation.
+  pauseVideo->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
+  pauseVideo->setShortcutContext(Qt::ApplicationShortcut);
+  addAction(pauseVideo);
+  connect(pauseVideo, &QAction::triggered, this, [this]() {
+    if (m_MetadataSidebar) {
+      m_MetadataSidebar->togglePreviewVideoPause();
+    }
+  });
+}
+
+void MainWindow::setupPreviewVolumeSlider() {
+  // Kartend-3m01: bind the toolbar volume slider to the static volume hook
+  // on VideoPreviewWidget. The slider's initial value is set from persisted
+  // settings; subsequent moves push to the hook AND back into settings so
+  // the value survives restarts.
+  if (!ui->previewVolumeSlider) {
+    return;
+  }
+  {
+    QSignalBlocker blocker(ui->previewVolumeSlider);
+    ui->previewVolumeSlider->setValue(m_generalSettings.previewVideoVolume);
+  }
+  VideoPreviewWidget::setGlobalVolume(m_generalSettings.previewVideoVolume);
+
+  connect(ui->previewVolumeSlider, &QSlider::valueChanged, this, [this](int value) {
+    if (value == m_generalSettings.previewVideoVolume) {
+      return;
+    }
+    m_generalSettings.previewVideoVolume = value;
+    VideoPreviewWidget::setGlobalVolume(value);
+    if (getSettingsManager()) {
+      getSettingsManager()->saveGeneralSettings(m_generalSettings);
+    }
+  });
+}
+
 void MainWindow::applyTextZoom(int percent) {
   const int clamped = std::clamp(percent, 50, 300);
   if (clamped == g_textZoomPercent && clamped == m_generalSettings.uiTextZoomPercent) {
@@ -238,8 +317,8 @@ void MainWindow::applyToolbarCustomization() {
   if (ui->hideSubcollectionsButton) {
     ui->hideSubcollectionsButton->setVisible(gs.toolbarShowHideSubcollectionsButton);
   }
-  if (ui->typeFilterComboBox) {
-    ui->typeFilterComboBox->setVisible(gs.toolbarShowTypeFilter);
+  if (ui->typeFilterButton) {
+    ui->typeFilterButton->setVisible(gs.toolbarShowTypeFilter);
   }
   if (ui->titleFilterButton) {
     ui->titleFilterButton->setVisible(gs.toolbarShowTitleFilter);
@@ -291,9 +370,50 @@ void MainWindow::applyToolbarCustomization() {
                                               : gs.toolbarHideSubcollectionsButtonText);
   }
   if (ui->titleFilterButton) {
-    ui->titleFilterButton->setText(gs.toolbarTitleFilterText.isEmpty() ? tr("Filter")
-                                                                       : gs.toolbarTitleFilterText);
+    ui->titleFilterButton->setText(gs.toolbarTitleFilterText.isEmpty()
+                                       ? QStringLiteral("🔎")
+                                       : gs.toolbarTitleFilterText);
   }
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent *event) {
+  if (!event || !event->mimeData() || !event->mimeData()->hasUrls()) {
+    return;
+  }
+  for (const QUrl &url : event->mimeData()->urls()) {
+    if (!url.isLocalFile()) continue;
+    if (url.toLocalFile().endsWith(".kart", Qt::CaseInsensitive)) {
+      event->acceptProposedAction();
+      return;
+    }
+  }
+}
+
+void MainWindow::dropEvent(QDropEvent *event) {
+  if (!event || !event->mimeData() || !event->mimeData()->hasUrls()) return;
+  auto *km = getKartManager();
+  if (!km) return;
+  for (const QUrl &url : event->mimeData()->urls()) {
+    if (!url.isLocalFile()) continue;
+    const QString path = url.toLocalFile();
+    if (!path.endsWith(".kart", Qt::CaseInsensitive)) continue;
+    auto peeked = KartReader::peekManifest(path);
+    if (peeked.isError()) {
+      QMessageBox::warning(this, tr("Import Kart"), peeked.error().message);
+      continue;
+    }
+    const QString suggested =
+        QDir::homePath() + "/" +
+        (peeked.value().name.isEmpty() ? QString("kart") : peeked.value().name);
+    const QString destDir = QFileDialog::getExistingDirectory(
+        this, tr("Import %1 to...").arg(peeked.value().name), suggested);
+    if (destDir.isEmpty()) continue;
+    auto res = km->importKart(path, destDir, true);
+    if (res.isError()) {
+      QMessageBox::warning(this, tr("Import Kart"), res.error().message);
+    }
+  }
+  event->acceptProposedAction();
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event) {
@@ -503,10 +623,31 @@ void MainWindow::setupManagerConnections() {
               if (m_nowPlayingOverlay) {
                 m_nowPlayingOverlay->showOverlay(displayName);
               }
+              // Kartend-2pzf: stop the sidebar's preview video so its audio
+              // doesn't compete with the launched application's audio.
+              if (m_MetadataSidebar) {
+                m_MetadataSidebar->pausePreviewVideo();
+              }
+              // Kartend-gs1g: suspend attract mode for the duration of the
+              // launch — the idle timer would otherwise fire under the
+              // launched app and start scrolling unseen.
+              if (auto *interaction = getInteractionManager()) {
+                if (auto *attract = interaction->attractManager()) {
+                  attract->setSuspended(true);
+                }
+              }
             });
     connect(launch, &LaunchManager::runtimeFinished, this, [this](const QString & /*filePath*/) {
       if (m_nowPlayingOverlay) {
         m_nowPlayingOverlay->hideOverlay();
+      }
+      // Kartend-gs1g: lift the attract suspension. setSuspended(false)
+      // re-arms a fresh idle countdown so attract waits the full timeout
+      // instead of kicking in the instant the launch ends.
+      if (auto *interaction = getInteractionManager()) {
+        if (auto *attract = interaction->attractManager()) {
+          attract->setSuspended(false);
+        }
       }
       // Bring Kartend back to the foreground when the tracked child
       // exits — the user expects "return on close" behavior.
@@ -532,6 +673,58 @@ void MainWindow::setupManagerConnections() {
   connectScrollBars();
   connectCollectionTypeToolbar();
   connectTitleFilterToolbar();
+
+  // Kartend-uve: detail page wiring. The overlay was created in
+  // mainwindowsetup.cpp and parented to ui->centralwidget so it can cover
+  // the entire window. Hand it to DetailPageManager along with the sidebar
+  // and DB so the manager can build payloads. Keyboard signal lives on
+  // InteractionManager's owned KeyboardManager.
+  if (auto *detail = getDetailPageManager()) {
+    DetailPageManagerSetup detailSetup;
+    detailSetup.ctx = &m_appContext;
+    detailSetup.overlay = m_detailPageOverlay;
+    detail->setupReferences(detailSetup);
+
+    if (auto *kb = getInteractionManager() ? getInteractionManager()->keyboardManager() : nullptr) {
+      connect(kb, &KeyboardManager::requestItemDetails, detail,
+              &DetailPageManager::showForCurrentSelection);
+    }
+
+    // Toolbar entry — clicking the ℹ button opens the detail page for the
+    // current selection (same code path as the keyboard shortcut). No-op
+    // when nothing is selected; DetailPageManager guards on context validity.
+    if (ui->detailPageButton) {
+      connect(ui->detailPageButton, &QPushButton::clicked, detail,
+              &DetailPageManager::showForCurrentSelection);
+    }
+
+    // Lower the sidebar while the detail page is up — same rationale as
+    // Kartend-63e bug #7 for the artwork preview overlay (without this,
+    // raise() calls during the overlay's lifetime would re-stack the
+    // sidebar on top).
+    if (m_detailPageOverlay) {
+      connect(m_detailPageOverlay, &DetailPageOverlay::visibilityChanged, this, [this](bool v) {
+        if (auto *sb = getSidebarManager()) {
+          sb->setOverlayActive(v);
+        }
+      });
+    }
+  }
+
+  if (auto *km = getKartManager()) {
+    kart::KartManagerSetup kartSetup;
+    kartSetup.settingsManager = getSettingsManager();
+    kartSetup.getCollections = [this]() { return &m_collections; };
+    kartSetup.getLauncherPresets = [this]() { return m_generalSettings.launcherPresets; };
+    kartSetup.getParentWindow = [this]() -> QWidget * { return this; };
+    km->setupReferences(kartSetup);
+
+    connect(km, &kart::KartManager::collectionImported, this, [this](const QString &) {
+      if (auto *sm = getSettingsManager()) {
+        sm->saveCollections(m_collections);
+      }
+    });
+  }
 }
 
 void MainWindow::updateWindowTitleWithFilter(int visible, int total) {
@@ -741,6 +934,9 @@ NavigationManager *MainWindow::getNavigationManager() const {
 InteractionManager *MainWindow::getInteractionManager() const {
   return m_appManager->getInteractionManager();
 }
+kart::KartManager *MainWindow::getKartManager() const {
+  return m_appManager->getKartManager();
+}
 SessionManager *MainWindow::getSessionManager() const {
   return m_appManager->getSessionManager();
 }
@@ -752,4 +948,7 @@ CacheManager *MainWindow::getCacheManager() const {
 }
 PlaylistManager *MainWindow::getPlaylistManager() const {
   return m_appManager->getPlaylistManager();
+}
+DetailPageManager *MainWindow::getDetailPageManager() const {
+  return m_appManager->getDetailPageManager();
 }

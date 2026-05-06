@@ -140,9 +140,9 @@ void ScrollManager::applyCoverFlowVisibility() {
     if (active) {
       m_mediaScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     } else {
-      m_mediaScrollArea->setHorizontalScrollBarPolicy(
-          m_context.config.hideHorizontalScrollbar ? Qt::ScrollBarAlwaysOff
-                                                   : Qt::ScrollBarAsNeeded);
+      m_mediaScrollArea->setHorizontalScrollBarPolicy(m_context.config.hideHorizontalScrollbar
+                                                          ? Qt::ScrollBarAlwaysOff
+                                                          : Qt::ScrollBarAsNeeded);
     }
   }
   if (active && m_coverFlowWidget) {
@@ -210,8 +210,7 @@ void ScrollManager::resolveAndPushCoverFlowVideo(int visualIndex) {
   // Only media items have preview videos — subcollection / virtual-folder
   // cards never carry one.
   const bool filtered = m_filterManager && m_filterManager->isFiltered();
-  const int actualIndex =
-      filtered ? m_filterManager->getActualIndex(visualIndex) : visualIndex;
+  const int actualIndex = filtered ? m_filterManager->getActualIndex(visualIndex) : visualIndex;
   if (actualIndex < 0 || !m_dataManager->isMediaIndex(actualIndex)) {
     m_coverFlowWidget->setVideoPathForIndex(visualIndex, QString());
     return;
@@ -256,8 +255,7 @@ void ScrollManager::resolveAndPushCoverFlowGallery(int visualIndex) {
     return;
   }
   const bool filtered = m_filterManager && m_filterManager->isFiltered();
-  const int actualIndex =
-      filtered ? m_filterManager->getActualIndex(visualIndex) : visualIndex;
+  const int actualIndex = filtered ? m_filterManager->getActualIndex(visualIndex) : visualIndex;
   // Subcollection / virtual-folder cards have no per-item artwork variants
   // — clear the gallery so the toolbar disappears for those entries.
   if (actualIndex < 0 || !m_dataManager->isMediaIndex(actualIndex)) {
@@ -333,8 +331,8 @@ void ScrollManager::resolveAndPushCoverFlowGallery(int visualIndex) {
   // pointing at the same file the primary artwork already does.
   QSet<QString> seenPaths;
   auto pushEntry = [&](const QString &type, const QString &label) {
-    const QString resolved = ItemArtworkStore::resolveArtworkPath(
-        overridesByType.value(type), baseName, artworkDirectory, type);
+    const QString resolved = ItemArtworkStore::resolveArtworkPath(overridesByType.value(type),
+                                                                  baseName, artworkDirectory, type);
     if (!resolved.isEmpty() && !seenPaths.contains(resolved)) {
       entries.append({label, resolved, /*isVideo=*/false});
       seenPaths.insert(resolved);
@@ -414,9 +412,8 @@ void ScrollManager::rebuildCoverFlowCards() {
       const QString fullPath =
           m_databaseManager ? m_databaseManager->resolveFilePath(rawEntry, m_context) : rawEntry;
       const QString fileName = QFileInfo(fullPath).fileName();
-      card.title = m_dataManager->fileNames().value(
-          fullPath.isEmpty() ? rawEntry : fullPath,
-          QFileInfo(fileName).completeBaseName());
+      card.title = m_dataManager->fileNames().value(fullPath.isEmpty() ? rawEntry : fullPath,
+                                                    QFileInfo(fileName).completeBaseName());
       card.artworkPath = resolveCardArtworkPath(fullPath, m_context, m_databaseManager);
     }
     cards.append(card);

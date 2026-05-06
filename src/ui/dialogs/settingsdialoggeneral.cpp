@@ -33,9 +33,10 @@
 #include "uiconstants.h"
 
 namespace {
-/// Kartend-88w: list every *.cfg in the Kartend config directory that isn't
-/// the live kartend.cfg. Sorted alphabetically so the dropdown order is
-/// stable across opens. Returns absolute paths.
+/// Kartend-88w: list every *.cfg in the Kartend config directory.
+/// Sorted alphabetically so the dropdown order is stable across opens.
+/// Returns absolute paths. The active config is included so the user can
+/// see (and re-load) it from the same control (Kartend-unpw).
 QStringList listEligibleConfigProfiles() {
   const QString livePath = SettingsUtils::getConfigPath();
   const QDir configDir = QFileInfo(livePath).absoluteDir();
@@ -46,14 +47,7 @@ QStringList listEligibleConfigProfiles() {
   const QFileInfoList entries =
       configDir.entryInfoList(QStringList() << "*.cfg", QDir::Files, QDir::Name);
   paths.reserve(entries.size());
-  const QString liveCanonical = QFileInfo(livePath).canonicalFilePath();
   for (const QFileInfo &entry : entries) {
-    // Skip the active config — loading it would be a no-op and only invites
-    // confusion. Compare canonical paths so a symlink or relative form still
-    // matches.
-    if (!liveCanonical.isEmpty() && entry.canonicalFilePath() == liveCanonical) {
-      continue;
-    }
     paths.append(entry.absoluteFilePath());
   }
   return paths;
@@ -66,8 +60,22 @@ void populateImportConfigComboBox(QComboBox *combo) {
   QSignalBlocker blocker(combo);
   combo->clear();
   const QStringList paths = listEligibleConfigProfiles();
+  const QString liveCanonical = QFileInfo(SettingsUtils::getConfigPath()).canonicalFilePath();
+  int activeIdx = -1;
   for (const QString &path : paths) {
-    combo->addItem(QFileInfo(path).fileName(), path);
+    QString label = QFileInfo(path).fileName();
+    // Kartend-unpw: tag the active config so the user can tell it apart
+    // from the other profiles in the same control. Loading it is still
+    // valid — it reloads the on-disk values, which is a useful "revert"
+    // path when the user has made unintended in-memory changes.
+    if (!liveCanonical.isEmpty() && QFileInfo(path).canonicalFilePath() == liveCanonical) {
+      label += QObject::tr(" (active)");
+      activeIdx = combo->count();
+    }
+    combo->addItem(label, path);
+  }
+  if (activeIdx >= 0) {
+    combo->setCurrentIndex(activeIdx);
   }
 }
 } // namespace
@@ -322,9 +330,33 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     }
   });
 
+  if (ui->backgroundVideoRadio) {
+    connect(ui->backgroundVideoRadio, &QRadioButton::toggled, this, [this](bool checked) {
+      if (checked) {
+        ui->browseBackgroundButton->setText(tr("Browse..."));
+        ui->browseBackgroundButton->setToolTip(tr("Select background video"));
+        ui->backgroundValueEdit->setPlaceholderText(tr("None"));
+        ui->backgroundValueEdit->setToolTip(tr("Path to a looping muted background video"));
+      }
+    });
+  }
+
   // Background picker button - opens color dialog or file dialog based on radio
   // selection
   connect(ui->browseBackgroundButton, &QPushButton::clicked, this, [this]() {
+    if (ui->backgroundVideoRadio && ui->backgroundVideoRadio->isChecked()) {
+      // Video file picker
+      QString currentPath = ui->backgroundValueEdit->text().trimmed();
+      QString startDir =
+          currentPath.isEmpty() ? QDir::homePath() : QFileInfo(currentPath).absolutePath();
+      QString filePath = QFileDialog::getOpenFileName(
+          this, tr("Select Background Video"), startDir,
+          tr("Videos (*.mp4 *.webm *.mkv *.mov *.avi *.m4v);;All Files (*)"));
+      if (!filePath.isEmpty()) {
+        ui->backgroundValueEdit->setText(filePath);
+      }
+      return;
+    }
     if (ui->backgroundColorRadio->isChecked()) {
       // Color picker
       QColor currentColor = Qt::white;
@@ -443,8 +475,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
                   tr("Select Sidebar Accent Color"));
   // Kartend-63e bubble bg pickers — open in alpha-aware mode so users can
   // dial in semi-opacity.
-  auto wireAlphaColorPicker = [this](QPushButton *button, QLineEdit *edit,
-                                     const QString &title) {
+  auto wireAlphaColorPicker = [this](QPushButton *button, QLineEdit *edit, const QString &title) {
     if (!button || !edit) return;
     connect(button, &QPushButton::clicked, this, [this, edit, title]() {
       QColor current = QColor(0, 0, 0, 96);
@@ -453,8 +484,8 @@ void SettingsDialog::setupGeneralSettingsConnections() {
         const QColor parsed(existing);
         if (parsed.isValid()) current = parsed;
       }
-      const QColor picked = QColorDialog::getColor(
-          current, this, title, QColorDialog::ShowAlphaChannel);
+      const QColor picked =
+          QColorDialog::getColor(current, this, title, QColorDialog::ShowAlphaChannel);
       if (picked.isValid()) {
         // name(QColor::HexArgb) preserves the alpha so the round-trip
         // matches what the user picked, instead of dropping to opaque.
@@ -499,6 +530,23 @@ void SettingsDialog::setupGeneralSettingsConnections() {
       ui->listRowColorEdit->setText(color.name());
     }
   });
+
+  // Kartend-guo5: header logo file picker
+  if (ui->browseHeaderLogoButton) {
+    connect(ui->browseHeaderLogoButton, &QPushButton::clicked, this, [this]() {
+      QString currentPath = ui->headerLogoEdit ? ui->headerLogoEdit->text().trimmed() : QString();
+      QString startDir =
+          currentPath.isEmpty() ? QDir::homePath() : QFileInfo(currentPath).absolutePath();
+      QString filePath = QFileDialog::getOpenFileName(
+          this, tr("Select Header Logo"), startDir,
+          tr("Logos (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.svg *.apng *.mng *.mp4 *.webm *.mkv "
+             "*.mov *.avi *.m4v);;Images (*.png *.jpg *.jpeg *.bmp *.svg);;Animated (*.gif *.webp "
+             "*.apng *.mng);;Videos (*.mp4 *.webm *.mkv *.mov *.avi *.m4v);;All Files (*)"));
+      if (!filePath.isEmpty() && ui->headerLogoEdit) {
+        ui->headerLogoEdit->setText(filePath);
+      }
+    });
+  }
 
   // List mode alternate row color picker button
   connect(ui->browseListAltRowColorButton, &QPushButton::clicked, this, [this]() {
@@ -565,6 +613,18 @@ void SettingsDialog::setupGeneralSettingsConnections() {
   }
   if (ui->artworkCycleModifierComboBox) {
     connect(ui->artworkCycleModifierComboBox, &QComboBox::currentIndexChanged, this, markChanged);
+  }
+
+  // Kartend-y3ke + Kartend-wcow: startup video fields persisted in
+  // GeneralSettings — wire them so the save icon illuminates on edit, like
+  // every other settings field does.
+  if (ui->startupVideoEnabledCheckBox) {
+    connect(ui->startupVideoEnabledCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->startupVideoPathLineEdit) {
+    connect(ui->startupVideoPathLineEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
   }
 
   // Attract mode connections for change detection

@@ -128,16 +128,27 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   // playlist-aware cache key.
   const bool isPlaylist = ctx.config.isPlaylist;
   const bool isRandomSort = (ctx.sortMode == SortMode::Random);
-  if (!isPlaylist && !hasSortedItemsCache() && !m_sortCacheBuildPending) {
+  if (!isPlaylist && !hasSortedItemsCache()) {
     if (isRandomSort) {
-      // Random mode: must build cache synchronously for consistent pagination
+      // Kartend-kh3f: random mode must build the cache synchronously so this
+      // and every subsequent page share one stable permutation. If a deferred
+      // build was already scheduled (typically by fetchItemCount running just
+      // before us), cancel it — the slow path falls back to alphabetical for
+      // random sort, which is exactly what users see on first start when we
+      // wait for the deferred build instead of forcing it here.
+      if (m_sortCacheBuildPending) {
+        m_sortCacheBuildPending = false;
+        m_pendingCacheUuids.clear();
+        m_pendingCacheFilter.clear();
+      }
       if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
         qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: Random sort requires cache, "
                                  "building synchronously";
       }
       (void)populateSortedItemsCache(uuids, trimmedFilter, ctx.sortMode);
       // Fall through to use the cache we just built
-    } else if (uuids.size() >= 10 && offset >= UIConstants::Database::PRECOMPUTE_SORT_THRESHOLD) {
+    } else if (!m_sortCacheBuildPending && uuids.size() >= 10 &&
+               offset >= UIConstants::Database::PRECOMPUTE_SORT_THRESHOLD) {
       if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
         qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: scheduling deferred cache "
                                  "build, offset="

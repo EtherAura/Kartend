@@ -96,6 +96,15 @@ void SettingsDialog::browsePlaceholderArtwork() {
   }
 }
 
+void SettingsDialog::browseStartupVideo() {
+  QString fileName = QFileDialog::getOpenFileName(
+      this, tr("Select Startup Video"), "",
+      tr("Video Files (*.mp4 *.webm *.mkv *.mov *.avi);;All Files (*)"));
+  if (!fileName.isEmpty() && ui->startupVideoPathLineEdit) {
+    ui->startupVideoPathLineEdit->setText(fileName);
+  }
+}
+
 void SettingsDialog::onRecursiveImportContent() {
   if (!ui->mediaDirLineEdit) {
     return;
@@ -434,14 +443,18 @@ void SettingsDialog::loadCollectionToUI(int index) {
 
   // Background settings
   if (ui->backgroundColorRadio && ui->backgroundImageRadio) {
-    if (config.backgroundType == BackgroundType::Image) {
+    if (config.backgroundType == BackgroundType::Video && ui->backgroundVideoRadio) {
+      ui->backgroundVideoRadio->setChecked(true);
+    } else if (config.backgroundType == BackgroundType::Image) {
       ui->backgroundImageRadio->setChecked(true);
     } else {
       ui->backgroundColorRadio->setChecked(true);
     }
   }
   if (ui->backgroundValueEdit) {
-    if (config.backgroundType == BackgroundType::Image) {
+    if (config.backgroundType == BackgroundType::Video) {
+      ui->backgroundValueEdit->setText(config.backgroundVideo);
+    } else if (config.backgroundType == BackgroundType::Image) {
       ui->backgroundValueEdit->setText(config.backgroundImage);
     } else {
       ui->backgroundValueEdit->setText(config.backgroundColor);
@@ -482,6 +495,38 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->customFontEdit->setText(config.customFontFamily);
   }
 
+  // Kartend-guo5: header logo
+  if (ui->headerLogoEdit) {
+    ui->headerLogoEdit->setText(config.headerLogoImage);
+  }
+  if (ui->headerLogoPositionComboBox) {
+    ui->headerLogoPositionComboBox->setCurrentIndex(static_cast<int>(config.headerLogoPosition));
+  }
+
+  // Kartend-qbp3: vignette
+  if (ui->vignetteEnabledCheckBox) {
+    ui->vignetteEnabledCheckBox->setChecked(config.vignetteEnabled);
+  }
+  if (ui->vignetteIntensitySpinBox) {
+    ui->vignetteIntensitySpinBox->setValue(config.vignetteIntensity);
+  }
+
+  // Kartend-y25g: wallpaper parallax
+  if (ui->wallpaperParallaxCheckBox) {
+    ui->wallpaperParallaxCheckBox->setChecked(config.wallpaperParallax);
+  }
+  if (ui->parallaxStrengthSpinBox) {
+    ui->parallaxStrengthSpinBox->setValue(config.parallaxStrength);
+  }
+
+  // Kartend-eq8r: toolbar backdrop blur
+  if (ui->toolbarBackdropBlurCheckBox) {
+    ui->toolbarBackdropBlurCheckBox->setChecked(config.toolbarBackdropBlur);
+  }
+  if (ui->backdropBlurRadiusSpinBox) {
+    ui->backdropBlurRadiusSpinBox->setValue(config.backdropBlurRadius);
+  }
+
   updateParentCollectionComboBox(index);
   updateFieldVisibility();
   updateGridWidthLimits();
@@ -516,6 +561,14 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->listRowColorEdit) ui->listRowColorEdit->clear();
   if (ui->listAltRowColorEdit) ui->listAltRowColorEdit->clear();
   if (ui->customFontEdit) ui->customFontEdit->clear();
+  if (ui->headerLogoEdit) ui->headerLogoEdit->clear();
+  if (ui->headerLogoPositionComboBox) ui->headerLogoPositionComboBox->setCurrentIndex(1);
+  if (ui->vignetteEnabledCheckBox) ui->vignetteEnabledCheckBox->setChecked(false);
+  if (ui->vignetteIntensitySpinBox) ui->vignetteIntensitySpinBox->setValue(60);
+  if (ui->wallpaperParallaxCheckBox) ui->wallpaperParallaxCheckBox->setChecked(false);
+  if (ui->parallaxStrengthSpinBox) ui->parallaxStrengthSpinBox->setValue(30);
+  if (ui->toolbarBackdropBlurCheckBox) ui->toolbarBackdropBlurCheckBox->setChecked(false);
+  if (ui->backdropBlurRadiusSpinBox) ui->backdropBlurRadiusSpinBox->setValue(12);
 
   if (ui->includeContentSubfoldersCheckBox) ui->includeContentSubfoldersCheckBox->setChecked(false);
   if (ui->showAllSubfolderItemsCheckBox) ui->showAllSubfolderItemsCheckBox->setChecked(false);
@@ -545,8 +598,7 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->sidebarModeComboBox) ui->sidebarModeComboBox->setCurrentIndex(0);
   // Kartend-63e sidebar enhancements: clear/reset on no-selection.
   if (ui->sidebarPositionComboBox) ui->sidebarPositionComboBox->setCurrentIndex(0);
-  if (ui->sidebarWidthSpinBox)
-    ui->sidebarWidthSpinBox->setValue(UIConstants::Sidebar::FIXED_WIDTH);
+  if (ui->sidebarWidthSpinBox) ui->sidebarWidthSpinBox->setValue(UIConstants::Sidebar::FIXED_WIDTH);
   if (ui->sidebarWidthLockedCheckBox) ui->sidebarWidthLockedCheckBox->setChecked(true);
   if (ui->sidebarBackgroundTypeComboBox) ui->sidebarBackgroundTypeComboBox->setCurrentIndex(0);
   if (ui->sidebarBackgroundValueEdit) ui->sidebarBackgroundValueEdit->clear();

@@ -1,7 +1,11 @@
 target_sources(${KARTEND_LIB_TARGET} PRIVATE
   artworkpreviewoverlay.cpp
+  backdropbluroverlay.cpp
+  backgroundvideowidget.cpp
   coverflowwidget.cpp
+  detailpageoverlay.cpp
   emptystatewidget.cpp
+  headerlogooverlay.cpp
   itemwidget.cpp
   itemwidgetindicator.cpp
   itemwidgetlifecycle.cpp
@@ -13,19 +17,27 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   metadatasidebar.cpp
   nowplayingoverlay.cpp
   splashoverlay.cpp
+  startupvideooverlay.cpp
   videopreviewwidget.cpp
   videothumbnailextractor.cpp
+  vignetteoverlay.cpp
   artworkpreviewoverlay.h
+  backdropbluroverlay.h
+  backgroundvideowidget.h
   coverflowwidget.h
+  detailpageoverlay.h
   emptystatewidget.h
+  headerlogooverlay.h
   itemwidget.h
   listheaderwidget.h
   loadingoverlay.h
   metadatasidebar.h
   nowplayingoverlay.h
   splashoverlay.h
+  startupvideooverlay.h
   videopreviewwidget.h
   videothumbnailextractor.h
+  vignetteoverlay.h
   itemwidget.ui
   metadatasidebar.ui
 )

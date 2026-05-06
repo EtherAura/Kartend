@@ -65,7 +65,7 @@ auto processSubcollection(const QString &sectionName, CollectionConfig &collecti
 
 void SettingsManager::finalizeCollections(const QHash<QString, CollectionConfig> &tempCollections,
                                           QList<CollectionConfig> &collections,
-                                          const bool &needsRewrite) const {
+                                          const bool &needsRewrite) {
   QStringList sectionNames = tempCollections.keys();
   sectionNames.sort();
 
@@ -94,7 +94,7 @@ void SettingsManager::finalizeCollections(const QHash<QString, CollectionConfig>
 
 // Loads collections from config (no automatic default collections; leaves list
 // empty if none)
-void SettingsManager::loadCollections(QList<CollectionConfig> &collections) const {
+void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
   collections.clear();
 
   QSettings settings(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
@@ -220,8 +220,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
     config.sidebarSectionBgColor = settings.value("sidebarSectionBgColor").toString();
     config.sidebarHeaderBgOpacity = settings.value("sidebarHeaderBgOpacity", 200).toInt();
     config.sidebarSectionBgOpacity = settings.value("sidebarSectionBgOpacity", 170).toInt();
-    config.sidebarWidth =
-        settings.value("sidebarWidth", UIConstants::Sidebar::FIXED_WIDTH).toInt();
+    config.sidebarWidth = settings.value("sidebarWidth", UIConstants::Sidebar::FIXED_WIDTH).toInt();
     config.sidebarWidthLocked = settings.value("sidebarWidthLocked", true).toBool();
     config.sidebarActiveTab =
         CollectionUtils::stringToSidebarTab(settings.value("sidebarActiveTab", "item").toString());
@@ -258,12 +257,36 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
 
     // Background settings
     QString bgType = settings.value("backgroundType", "color").toString().toLower();
-    config.backgroundType = (bgType == "image") ? BackgroundType::Image : BackgroundType::Color;
+    if (bgType == "image") {
+      config.backgroundType = BackgroundType::Image;
+    } else if (bgType == "video") {
+      config.backgroundType = BackgroundType::Video;
+    } else {
+      config.backgroundType = BackgroundType::Color;
+    }
     config.backgroundColor = settings.value("backgroundColor").toString();
     config.backgroundImage = settings.value("backgroundImage").toString();
+    config.backgroundVideo = settings.value("backgroundVideo").toString();
     config.primaryColor = settings.value("primaryColor").toString();
     config.tileColor = settings.value("tileColor").toString();
     config.selectionColor = settings.value("selectionColor").toString();
+
+    // Kartend-guo5: header logo
+    config.headerLogoImage = settings.value("headerLogoImage").toString();
+    config.headerLogoPosition = CollectionUtils::stringToHeaderLogoPosition(
+        settings.value("headerLogoPosition", "topcenter").toString());
+
+    // Kartend-qbp3: vignette
+    config.vignetteEnabled = settings.value("vignetteEnabled", false).toBool();
+    config.vignetteIntensity = settings.value("vignetteIntensity", 60).toInt();
+
+    // Kartend-y25g: wallpaper parallax
+    config.wallpaperParallax = settings.value("wallpaperParallax", false).toBool();
+    config.parallaxStrength = settings.value("parallaxStrength", 30).toInt();
+
+    // Kartend-eq8r: toolbar backdrop blur
+    config.toolbarBackdropBlur = settings.value("toolbarBackdropBlur", false).toBool();
+    config.backdropBlurRadius = settings.value("backdropBlurRadius", 12).toInt();
 
     // List mode settings
     config.listFontSize =
@@ -300,8 +323,12 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) cons
   TitleFilter::rebuildFromCollections(collections);
 }
 
-// Persist collection configurations to disk (no lastSelected_* entries)
-void SettingsManager::saveCollections(const QList<CollectionConfig> &collections) const {
+// Persist collection configurations to disk (no lastSelected_* entries).
+// Emits collectionsModified() at the end so all observers (toolbar type
+// filter, hierarchy cache, sidebar summary) refresh consistently — fixes
+// Kartend-9iwv where right-click / kart-import / inline edits saved without
+// firing a refresh, leaving the toolbar dropdown stale until restart.
+void SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
   QSettings settings(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   settings.setAtomicSyncRequired(true);
 
@@ -443,7 +470,8 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
                       CollectionUtils::alignmentToString(c.horizontalAlignment));
     settings.setValue("sidebarMode", (c.sidebarMode == SidebarMode::Expand) ? "fixed" : "overlay");
     // Kartend-63e sidebar enhancements.
-    settings.setValue("sidebarPosition", CollectionUtils::sidebarPositionToString(c.sidebarPosition));
+    settings.setValue("sidebarPosition",
+                      CollectionUtils::sidebarPositionToString(c.sidebarPosition));
     settings.setValue("sidebarBackgroundType",
                       CollectionUtils::sidebarBackgroundTypeToString(c.sidebarBackgroundType));
     settings.setValue("sidebarBackgroundColor", c.sidebarBackgroundColor);
@@ -483,14 +511,35 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue("itemHeight", c.itemHeight);
     settings.setValue("fontSize", c.fontSize);
     settings.setValue("cornerRadius", c.cornerRadius);
-    settings.setValue("backgroundType",
-                      (c.backgroundType == BackgroundType::Image) ? "image" : "color");
+    QString bgTypeStr = "color";
+    if (c.backgroundType == BackgroundType::Image) {
+      bgTypeStr = "image";
+    } else if (c.backgroundType == BackgroundType::Video) {
+      bgTypeStr = "video";
+    }
+    settings.setValue("backgroundType", bgTypeStr);
     settings.setValue("backgroundColor", c.backgroundColor);
     settings.setValue("backgroundImage",
                       sanitizePersistedPath(c.backgroundImage, "backgroundImage", sectionName));
+    settings.setValue("backgroundVideo",
+                      sanitizePersistedPath(c.backgroundVideo, "backgroundVideo", sectionName));
     settings.setValue("primaryColor", c.primaryColor);
     settings.setValue("tileColor", c.tileColor);
     settings.setValue("selectionColor", c.selectionColor);
+    // Kartend-guo5: header logo
+    settings.setValue("headerLogoImage",
+                      sanitizePersistedPath(c.headerLogoImage, "headerLogoImage", sectionName));
+    settings.setValue("headerLogoPosition",
+                      CollectionUtils::headerLogoPositionToString(c.headerLogoPosition));
+    // Kartend-qbp3: vignette
+    settings.setValue("vignetteEnabled", c.vignetteEnabled);
+    settings.setValue("vignetteIntensity", c.vignetteIntensity);
+    // Kartend-y25g: wallpaper parallax
+    settings.setValue("wallpaperParallax", c.wallpaperParallax);
+    settings.setValue("parallaxStrength", c.parallaxStrength);
+    // Kartend-eq8r: toolbar backdrop blur
+    settings.setValue("toolbarBackdropBlur", c.toolbarBackdropBlur);
+    settings.setValue("backdropBlurRadius", c.backdropBlurRadius);
 
     // List mode settings
     settings.setValue("listFontSize", c.listFontSize);
@@ -521,4 +570,10 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
   // collection reload — refreshing here means the reload sees the new
   // patterns even before loadCollections() runs again.
   TitleFilter::rebuildFromCollections(collections);
+
+  // Kartend-9iwv: notify observers regardless of how the save was initiated.
+  // The settings dialog flow used to emit this from the dialog controller;
+  // moving the emit here covers all paths uniformly (right-click edits, kart
+  // imports, inline toolbar edits) without ad-hoc per-call-site additions.
+  emit collectionsModified();
 }

@@ -44,7 +44,10 @@ void MenuController::setupMenuBar() {
   setupStatisticsAction();
   setupGridWidthActions();
   setupActionOpenRandomItem();
+  setupActionImportKart();
+  setupActionExportKart();
   setupRecentMenu();
+  setupMostLaunchedMenu();
   setupLayoutActions();
   setupHamburgerMenu();
 }
@@ -560,6 +563,33 @@ void MenuController::setupActionOpenRandomItem() {
   });
 }
 
+// Kartend-zgaq: File menu entry for importing a .kart package.
+void MenuController::setupActionImportKart() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_importKartAction = new QAction(tr("Import Kart..."), this);
+  m_ctx.mainWindow->addAction(m_importKartAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addSeparator();
+    m_ctx.ui->menuFile->addAction(m_importKartAction);
+  }
+  connect(m_importKartAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onImportKart) m_ctx.onImportKart();
+  });
+}
+
+// Kartend-zgaq: File menu entry for exporting the active collection as a .kart.
+void MenuController::setupActionExportKart() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_exportKartAction = new QAction(tr("Export Collection as Kart..."), this);
+  m_ctx.mainWindow->addAction(m_exportKartAction);
+  if (m_ctx.ui->menuFile) {
+    m_ctx.ui->menuFile->addAction(m_exportKartAction);
+  }
+  connect(m_exportKartAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onExportKart) m_ctx.onExportKart();
+  });
+}
+
 // Kartend-iue: Recent submenu populated from the launch_history table on
 // QMenu::aboutToShow. Rebuilding lazily avoids stale entries after the user
 // launches new items between menu opens, and keeps the cost off the boot
@@ -570,8 +600,7 @@ void MenuController::setupRecentMenu() {
   // Initial placeholder so the menu doesn't look empty before the first show.
   rebuildRecentMenu();
 
-  connect(m_ctx.ui->menuRecent, &QMenu::aboutToShow, this,
-          &MenuController::rebuildRecentMenu);
+  connect(m_ctx.ui->menuRecent, &QMenu::aboutToShow, this, &MenuController::rebuildRecentMenu);
 }
 
 void MenuController::rebuildRecentMenu() {
@@ -587,46 +616,87 @@ void MenuController::rebuildRecentMenu() {
     return;
   }
 
-  // Cap at 10 — long enough to be useful, short enough to stay scannable.
-  // HistoryStore::loadRecent already orders by descending id (most recent
-  // first) so the menu ordering is correct as-is.
+  // Kartend-j5l3: source from items.last_played (UsageStatsStore) rather than
+  // the history table — items.last_played is updated on every successful
+  // launch unconditionally, while history rows are gated on historyEnabled.
+  // A user who disabled the history log should still see their recent
+  // launches here.
   constexpr int kMaxRecent = 10;
-  const QList<HistoryStore::HistoryEntry> entries = db->loadRecentHistory(kMaxRecent);
-  if (entries.isEmpty()) {
+  const QList<UsageStatsStore::ItemUsageRow> rows = db->loadRecentlyPlayedItems(kMaxRecent);
+  if (rows.isEmpty()) {
     QAction *empty = menu->addAction(tr("(no recent items)"));
     empty->setEnabled(false);
     return;
   }
 
+  populateLaunchEntriesIntoMenu(menu, rows, db);
+}
+
+void MenuController::setupMostLaunchedMenu() {
+  if (!m_ctx.ui || !m_ctx.ui->menuMostLaunched) return;
+  rebuildMostLaunchedMenu();
+  connect(m_ctx.ui->menuMostLaunched, &QMenu::aboutToShow, this,
+          &MenuController::rebuildMostLaunchedMenu);
+}
+
+void MenuController::rebuildMostLaunchedMenu() {
+  if (!m_ctx.ui || !m_ctx.ui->menuMostLaunched) return;
+
+  QMenu *menu = m_ctx.ui->menuMostLaunched;
+  menu->clear();
+
+  DatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
+  if (!db) {
+    QAction *empty = menu->addAction(tr("(no launched items)"));
+    empty->setEnabled(false);
+    return;
+  }
+
+  // Kartend-j5l3: top items by play_count. UsageStatsStore::TOP_PLAYED_SQL
+  // already filters play_count > 0 so an unlaunched library shows the empty
+  // placeholder rather than a list of zero-count rows.
+  constexpr int kMaxTop = 10;
+  const QList<UsageStatsStore::ItemUsageRow> rows = db->loadTopPlayedItems(kMaxTop);
+  if (rows.isEmpty()) {
+    QAction *empty = menu->addAction(tr("(no launched items)"));
+    empty->setEnabled(false);
+    return;
+  }
+
+  populateLaunchEntriesIntoMenu(menu, rows, db);
+}
+
+void MenuController::populateLaunchEntriesIntoMenu(
+    QMenu *menu, const QList<UsageStatsStore::ItemUsageRow> &rows, DatabaseManager *db) {
+  if (!menu) return;
+
   const CollectionHierarchyCache *cache =
       m_ctx.getHierarchyCache ? m_ctx.getHierarchyCache() : nullptr;
 
-  for (const auto &entry : entries) {
-    // Prefer the denormalized name from history; fall back to basename so
-    // even rows missing a name still render something readable.
-    QString label = entry.name.isEmpty() ? QFileInfo(entry.path).fileName() : entry.name;
+  for (const auto &row : rows) {
+    // Prefer the stored name; fall back to basename for legacy rows that
+    // pre-date the denormalization.
+    QString label = row.name.isEmpty() ? QFileInfo(row.path).fileName() : row.name;
     QAction *action = menu->addAction(label);
-    action->setToolTip(entry.path);
+    action->setToolTip(row.path);
 
-    // Resolve uuid → current collection index. Prefer the path-based
-    // source-collection lookup (matches Enter / double-click / context-menu
-    // resolution and steers around playlist/synthetic uuids), and fall back
-    // to the stored uuid for legacy rows where the file→collection map is
-    // empty. If neither resolves, the source collection is gone and we
-    // disable the entry rather than launching into nothing.
+    // Resolve uuid → current collection index. Prefer path-based lookup so
+    // moved/renamed collections still resolve; fall back to stored uuid via
+    // the hierarchy cache. Disable the entry when the source collection is
+    // gone rather than silently launching nothing.
     int collectionIndex = -1;
     if (db) {
-      collectionIndex = db->getCollectionIndexForFile(entry.path);
+      collectionIndex = db->getCollectionIndexForFile(row.path);
     }
     if (collectionIndex < 0 && cache) {
-      collectionIndex = cache->uuidToCollectionIndex(entry.collectionUuid);
+      collectionIndex = cache->uuidToCollectionIndex(row.collectionUuid);
     }
     if (collectionIndex < 0) {
       action->setEnabled(false);
       continue;
     }
 
-    QString path = entry.path;
+    const QString path = row.path;
     connect(action, &QAction::triggered, this, [this, path, collectionIndex]() {
       if (m_ctx.onLaunchItem) {
         m_ctx.onLaunchItem(path, collectionIndex);

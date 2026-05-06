@@ -1,8 +1,9 @@
 // Signal/slot wiring for MainWindow's owned managers.
 // Extracted from mainwindow.cpp to keep that file focused on lifecycle and UI
 // setup. All functions here remain MainWindow members.
+#include <QAction>
+#include <QActionGroup>
 #include <QApplication>
-#include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QLabel>
@@ -270,25 +271,25 @@ void MainWindow::connectScrollManager() {
   // are configured per-collection and using currentCollectionIndex would
   // mis-launch any item inherited from a subcollection in
   // showAllSubcollectionItems mode (surfaces as "no launcher configured").
-  QObject::connect(getScrollManager(), &ScrollManager::coverFlowItemActivated, this,
-                   [this](int index) {
-                     if (!getInteractionManager() || !getScrollManager()) {
-                       return;
-                     }
-                     getInteractionManager()->selectItemByIndex(index, true);
-                     const QString filePath = getScrollManager()->filePathForVisualIndex(index);
-                     if (filePath.isEmpty()) {
-                       return;
-                     }
-                     int ownerIdx = currentCollectionIndex;
-                     if (getDatabaseManager()) {
-                       const int detected = getDatabaseManager()->getCollectionIndexForFile(filePath);
-                       if (detected >= 0) {
-                         ownerIdx = detected;
-                       }
-                     }
-                     getInteractionManager()->launchItemWithCollection(filePath, ownerIdx);
-                   });
+  QObject::connect(
+      getScrollManager(), &ScrollManager::coverFlowItemActivated, this, [this](int index) {
+        if (!getInteractionManager() || !getScrollManager()) {
+          return;
+        }
+        getInteractionManager()->selectItemByIndex(index, true);
+        const QString filePath = getScrollManager()->filePathForVisualIndex(index);
+        if (filePath.isEmpty()) {
+          return;
+        }
+        int ownerIdx = currentCollectionIndex;
+        if (getDatabaseManager()) {
+          const int detected = getDatabaseManager()->getCollectionIndexForFile(filePath);
+          if (detected >= 0) {
+            ownerIdx = detected;
+          }
+        }
+        getInteractionManager()->launchItemWithCollection(filePath, ownerIdx);
+      });
   // Persist list column width when user resizes
   QObject::connect(getScrollManager(), &ScrollManager::listColumnWidthChanged, this,
                    [this](int width) {
@@ -400,34 +401,61 @@ void MainWindow::connectSearchComponents() {
 }
 
 void MainWindow::refreshTypeFilterToolbar() {
-  if (!m_typeFilterComboBox) {
+  if (!m_typeFilterButton) {
     return;
   }
-  // Block the activated signal so rebuilding the dropdown doesn't trigger a
-  // redundant reload — the active filter is preserved by re-selecting it
-  // after the rebuild.
-  QSignalBlocker blocker(m_typeFilterComboBox);
-  const QString previous = m_generalSettings.collectionTypeFilter;
-  m_typeFilterComboBox->clear();
-  // Sentinel "<All types>" maps to an empty filter string. Stored as
-  // userData so the activated-handler can distinguish it from a user-typed
-  // value with the same display text.
-  m_typeFilterComboBox->addItem(tr("<All types>"), QString());
-  for (const QString &type : CollectionUtils::collectAllCollectionTypes(m_collections)) {
-    m_typeFilterComboBox->addItem(type, type);
+  // Rebuild the popup menu from scratch: types come from the live collection
+  // list, so stale actions left from a previous build would let the user pick
+  // a type that no longer exists.
+  QMenu *menu = m_typeFilterButton->menu();
+  if (!menu) {
+    menu = new QMenu(m_typeFilterButton);
+    m_typeFilterButton->setMenu(menu);
+  } else {
+    menu->clear();
   }
-  // Re-apply the previously active filter. If the type the user had picked
-  // no longer exists (collection deleted/retagged), fall back to <All types>
-  // and clear the persisted filter so the toolbar reflects reality.
-  int idx = previous.isEmpty() ? 0 : m_typeFilterComboBox->findData(previous);
-  if (idx < 0) {
-    idx = 0;
+
+  // QActionGroup gives the menu radio-button semantics: exactly one type (or
+  // <All types>) is checked at a time. Ownership is the menu so actions die
+  // with it on each rebuild.
+  auto *group = new QActionGroup(menu);
+  group->setExclusive(true);
+
+  const QString previous = m_generalSettings.collectionTypeFilter;
+  bool matchedPrevious = previous.isEmpty();
+
+  // Sentinel "<All types>" maps to an empty filter string. Stored as
+  // QAction::data so the trigger handler can distinguish it from a user-typed
+  // value with the same display text.
+  QAction *allAction = menu->addAction(tr("<All types>"));
+  allAction->setCheckable(true);
+  allAction->setData(QString());
+  group->addAction(allAction);
+  if (previous.isEmpty()) {
+    allAction->setChecked(true);
+  }
+
+  for (const QString &type : CollectionUtils::collectAllCollectionTypes(m_collections)) {
+    QAction *action = menu->addAction(type);
+    action->setCheckable(true);
+    action->setData(type);
+    group->addAction(action);
+    if (type == previous) {
+      action->setChecked(true);
+      matchedPrevious = true;
+    }
+  }
+
+  // If the previously-selected type no longer exists (collection deleted or
+  // retagged), fall back to <All types> and clear the persisted filter so the
+  // toolbar reflects reality.
+  if (!matchedPrevious) {
+    allAction->setChecked(true);
     m_generalSettings.collectionTypeFilter.clear();
     if (getSettingsManager()) {
       getSettingsManager()->saveGeneralSettings(m_generalSettings);
     }
   }
-  m_typeFilterComboBox->setCurrentIndex(idx);
 }
 
 void MainWindow::connectCollectionTypeToolbar() {
@@ -454,24 +482,25 @@ void MainWindow::connectCollectionTypeToolbar() {
     });
   }
 
-  if (m_typeFilterComboBox) {
-    QObject::connect(m_typeFilterComboBox, QOverload<int>::of(&QComboBox::activated), this,
-                     [this](int index) {
-                       if (!m_typeFilterComboBox) {
-                         return;
-                       }
-                       QString chosen = m_typeFilterComboBox->itemData(index).toString();
-                       if (m_generalSettings.collectionTypeFilter == chosen) {
-                         return;
-                       }
-                       m_generalSettings.collectionTypeFilter = chosen;
-                       if (getSettingsManager()) {
-                         getSettingsManager()->saveGeneralSettings(m_generalSettings);
-                       }
-                       if (getNavigationManager() && currentCollectionIndex >= 0) {
-                         getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-                       }
-                     });
+  if (m_typeFilterButton) {
+    // Connect to the button itself rather than each rebuilt action — actions
+    // are recreated on every refreshTypeFilterToolbar() call.
+    QObject::connect(m_typeFilterButton, &QToolButton::triggered, this, [this](QAction *action) {
+      if (!action) {
+        return;
+      }
+      const QString chosen = action->data().toString();
+      if (m_generalSettings.collectionTypeFilter == chosen) {
+        return;
+      }
+      m_generalSettings.collectionTypeFilter = chosen;
+      if (getSettingsManager()) {
+        getSettingsManager()->saveGeneralSettings(m_generalSettings);
+      }
+      if (getNavigationManager() && currentCollectionIndex >= 0) {
+        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+      }
+    });
   }
 }
 

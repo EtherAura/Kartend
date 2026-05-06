@@ -18,7 +18,6 @@
 #include <set>
 
 #include "applysettingsdialog.h"
-#include "collectionpickerdialog.h"
 #include "collectiontreewidget.h"
 #include "mainwindow.h"
 #include "settingsdialog.h"
@@ -548,9 +547,22 @@ void copyAppearanceAndLayoutFields(const CollectionConfig &src, CollectionConfig
     dst.backgroundType = src.backgroundType;
     dst.backgroundColor = src.backgroundColor;
     dst.backgroundImage = src.backgroundImage;
+    dst.backgroundVideo = src.backgroundVideo;
     dst.primaryColor = src.primaryColor;
     dst.tileColor = src.tileColor;
     dst.selectionColor = src.selectionColor;
+    // Kartend-guo5 / qbp3 / y25g / eq8r: header logo + vignette + parallax
+    // + backdrop blur ride along with the Colors category since they're
+    // presented in the same dialog area and users intuitively expect
+    // "apply theme" to cover them too.
+    dst.headerLogoImage = src.headerLogoImage;
+    dst.headerLogoPosition = src.headerLogoPosition;
+    dst.vignetteEnabled = src.vignetteEnabled;
+    dst.vignetteIntensity = src.vignetteIntensity;
+    dst.wallpaperParallax = src.wallpaperParallax;
+    dst.parallaxStrength = src.parallaxStrength;
+    dst.toolbarBackdropBlur = src.toolbarBackdropBlur;
+    dst.backdropBlurRadius = src.backdropBlurRadius;
   }
   if (categories.testFlag(ApplySettingsDialog::ListView)) {
     dst.listFontSize = src.listFontSize;
@@ -590,128 +602,6 @@ int SettingsDialog::applyCategoriesToIndices(const QList<int> &targetIndices,
   return applied;
 }
 
-void SettingsDialog::applyCurrentSettingsToIndices(const QList<int> &targetIndices,
-                                                   const QString &scopeLabel) {
-  if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
-    QMessageBox::information(this, tr("Apply Settings"),
-                             tr("Select a collection first, then use Apply to "
-                                "copy its appearance and layout to %1.")
-                                 .arg(scopeLabel));
-    return;
-  }
-  if (targetIndices.isEmpty()) {
-    QMessageBox::information(
-        this, tr("Apply Settings"),
-        tr("There are no collections in the scope \"%1\" to apply to.").arg(scopeLabel));
-    return;
-  }
-
-  // Snapshot the form first so we copy what the user currently sees, not the
-  // last-saved state. saveCollectionFromUI updates m_workingCollections and
-  // collections in place.
-  saveCollectionFromUI(currentCollectionIndex);
-
-  const QString sourceName = collections[currentCollectionIndex].name;
-
-  // Kartend-iyk: confirm + per-category opt-in via ApplySettingsDialog.
-  // Default mask is All (matches the legacy Kartend-63o bundle), so a user
-  // who just clicks OK gets the same behaviour as before.
-  ApplySettingsDialog dialog(ApplySettingsDialog::Mode::Push, collections, currentCollectionIndex,
-                             ApplySettingsDialog::All, this);
-  dialog.setHeaderText(tr("Copy appearance and layout settings from \"%1\" to %2 (%3 "
-                          "collection(s)). Tick the categories you want to overwrite — "
-                          "paths, extensions, launchers and scan-related flags are never "
-                          "copied.")
-                           .arg(sourceName)
-                           .arg(scopeLabel)
-                           .arg(targetIndices.size()));
-  if (dialog.exec() != QDialog::Accepted) {
-    return;
-  }
-  const ApplySettingsDialog::FieldCategories categories = dialog.selectedCategories();
-  if (categories == ApplySettingsDialog::None) {
-    QMessageBox::information(this, tr("Apply Settings"),
-                             tr("No categories were selected — nothing was copied."));
-    return;
-  }
-
-  const int applied = applyCategoriesToIndices(targetIndices, categories, currentCollectionIndex);
-  if (applied == 0) {
-    return;
-  }
-
-  // Persist immediately so the user's click has a durable effect even if
-  // they later close the dialog with Cancel (matching how addCollection()
-  // emits collectionSaved).
-  emit collectionSaved(collections);
-
-  // Refresh the tree + reload current UI so any visible differences show
-  // up in the selected collection's form if the user jumps between nodes.
-  updateCollectionTreeWidget();
-  if (currentCollectionIndex >= 0 && currentCollectionIndex < collections.size()) {
-    loadCollectionToUI(currentCollectionIndex);
-    originalCollection = m_workingCollections[currentCollectionIndex];
-  }
-  m_collectionSaved = true;
-  updateSaveButtonStyle();
-
-  QMessageBox::information(
-      this, tr("Apply Settings"),
-      tr("Copied settings from \"%1\" to %2 collection(s).").arg(sourceName).arg(applied));
-}
-
-void SettingsDialog::applyCurrentSettingsToAllCollections() {
-  QList<int> targets;
-  targets.reserve(collections.size());
-  for (int i = 0; i < collections.size(); ++i) {
-    if (i != currentCollectionIndex) {
-      targets.append(i);
-    }
-  }
-  applyCurrentSettingsToIndices(targets, tr("all other collections"));
-}
-
-void SettingsDialog::applyCurrentSettingsToSubcollections() {
-  if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
-    QMessageBox::information(this, tr("Apply Settings"),
-                             tr("Select a collection first to apply its "
-                                "settings to its subcollections."));
-    return;
-  }
-  const QList<int> descendants =
-      CollectionUtils::collectDescendantIndices(currentCollectionIndex, collections);
-  applyCurrentSettingsToIndices(descendants, tr("its subcollections"));
-}
-
-void SettingsDialog::applyCurrentSettingsToSelected() {
-  // Kartend-f5i9: arbitrary-target multi-select picker. Complements the
-  // existing all/subcollections paths (Kartend-63o) for users who want to
-  // push appearance to a hand-picked subset.
-  if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
-    QMessageBox::information(this, tr("Apply Settings"),
-                             tr("Select a source collection first, then use Apply to "
-                                "copy its appearance and layout to chosen targets."));
-    return;
-  }
-  if (collections.size() <= 1) {
-    QMessageBox::information(this, tr("Apply Settings"),
-                             tr("There are no other collections to apply settings to."));
-    return;
-  }
-
-  CollectionPickerDialog picker(collections, {currentCollectionIndex}, {}, this);
-  if (picker.exec() != QDialog::Accepted) {
-    return;
-  }
-  const QList<int> targets = picker.selectedIndices();
-  if (targets.isEmpty()) {
-    QMessageBox::information(this, tr("Apply Settings"),
-                             tr("No target collections were selected."));
-    return;
-  }
-  applyCurrentSettingsToIndices(targets, tr("%n selected collection(s)", "", targets.size()));
-}
-
 void SettingsDialog::duplicateCollection() {
   // Kartend-f5i9: full copy of the currently-selected collection. The user
   // chose 1a (full copy: paths/launchers/everything except name) and 2c (ask
@@ -732,8 +622,7 @@ void SettingsDialog::duplicateCollection() {
   }
 
   // Snapshot the live form first so the duplicate captures what the user
-  // currently sees, not the last-saved state. This mirrors how
-  // applyCurrentSettingsToIndices works.
+  // currently sees, not the last-saved state.
   saveCollectionFromUI(currentCollectionIndex);
 
   const CollectionConfig source = collections[currentCollectionIndex];
@@ -949,6 +838,8 @@ void SettingsDialog::onTreeContextMenuRequested(const QPoint &pos) {
     QAction *duplicateAction = menu.addAction(tr("Duplicate..."));
     QAction *deleteAction = menu.addAction(tr("Delete"));
     menu.addSeparator();
+    QAction *copyFromAction = menu.addAction(tr("Copy Settings From..."));
+    menu.addSeparator();
     QAction *expandSubAction = menu.addAction(tr("Expand subtree"));
     QAction *collapseSubAction = menu.addAction(tr("Collapse subtree"));
     // Subtree expand/collapse is only meaningful when the row has children.
@@ -989,6 +880,12 @@ void SettingsDialog::onTreeContextMenuRequested(const QPoint &pos) {
         return;
       }
       removeCollection();
+    });
+    connect(copyFromAction, &QAction::triggered, this, [this, switchToTarget]() {
+      if (!switchToTarget()) {
+        return;
+      }
+      copySettingsFromOtherCollection();
     });
     connect(expandSubAction, &QAction::triggered, this,
             [this, target]() { setSubtreeExpanded(target, true); });

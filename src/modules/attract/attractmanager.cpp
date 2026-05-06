@@ -40,8 +40,7 @@ AttractManager::AttractManager(QObject *parent)
   connect(m_idleTimer, &QTimer::timeout, this, &AttractManager::onIdleTimeout);
   connect(m_scrollTimer, &QTimer::timeout, this, &AttractManager::onScrollTick);
   connect(m_bouncePauseTimer, &QTimer::timeout, this, &AttractManager::onBouncePauseFinished);
-  connect(m_advanceSelectionTimer, &QTimer::timeout, this,
-          &AttractManager::onAdvanceSelectionTick);
+  connect(m_advanceSelectionTimer, &QTimer::timeout, this, &AttractManager::onAdvanceSelectionTick);
 }
 
 AttractManager::~AttractManager() = default;
@@ -133,8 +132,32 @@ void AttractManager::onActivityDetected() {
   resetIdleTimer();
 }
 
+void AttractManager::setSuspended(bool suspended) {
+  if (m_suspended == suspended) {
+    return;
+  }
+  m_suspended = suspended;
+  if (suspended) {
+    // Halt everything: any active scroll, the bounce-pause, and the idle
+    // countdown. While the launched program is running, nothing in the
+    // frontend should be moving.
+    if (m_attractActive) {
+      stopAttract();
+    }
+    m_idleTimer->stop();
+  } else {
+    // On resume, treat the user as freshly active so attract waits the
+    // full timeout before kicking in (avoids attract starting the instant
+    // the launched program exits, before the user has a chance to look).
+    resetIdleTimer();
+  }
+}
+
 void AttractManager::resetIdleTimer() {
   if (!isEnabled()) {
+    return;
+  }
+  if (m_suspended) {
     return;
   }
   if (m_isShuttingDown && *m_isShuttingDown) {
@@ -157,6 +180,9 @@ void AttractManager::resetIdleTimer() {
 // ─────────────────────────────────────────────────────────────────────────────
 void AttractManager::onIdleTimeout() {
   if (!isEnabled()) {
+    return;
+  }
+  if (m_suspended) {
     return;
   }
   if (m_isShuttingDown && *m_isShuttingDown) {

@@ -56,8 +56,8 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
     if (viewportWidth <= 0 || metrics.itemsPerRow <= 0) {
       return;
     }
-    int targetX = GridLayoutCalculator::calculateCenterScrollTarget(
-        index, viewportWidth, hScrollBar->maximum(), metrics);
+    int targetX = GridLayoutCalculator::calculateCenterScrollTarget(index, viewportWidth,
+                                                                    hScrollBar->maximum(), metrics);
     targetX = qBound(0, targetX, hScrollBar->maximum());
     int curX = hScrollBar->value();
     bool forceImmediate = computeForceImmediate(immediate);

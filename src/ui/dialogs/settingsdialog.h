@@ -92,17 +92,6 @@ private slots:
   /// (currentSubfolder) and the playlist markers (which mark virtual
   /// collections that aren't directly duplicable).
   void duplicateCollection();
-  /// Kartend-63o: propagate the currently-edited collection's appearance and
-  /// layout settings to every other collection in the list. Prompts for
-  /// confirmation first.
-  void applyCurrentSettingsToAllCollections();
-  /// Kartend-63o: propagate the currently-edited collection's appearance and
-  /// layout settings to its (recursive) descendants only.
-  void applyCurrentSettingsToSubcollections();
-  /// Kartend-f5i9: open a multi-select picker so the user can push the
-  /// curated appearance/layout subset onto an arbitrary set of collections.
-  /// Reuses the same field set as Kartend-63o's all/subs paths.
-  void applyCurrentSettingsToSelected();
   /// Kartend-iyk: pull-from-source. Opens ApplySettingsDialog in Pull mode
   /// so the user picks a source collection AND the field categories to
   /// copy onto the currently-edited collection. Marks the dialog dirty so
@@ -128,6 +117,7 @@ private slots:
   void browseVideoDir();
   void browseManualDir();
   void browsePlaceholderArtwork();
+  void browseStartupVideo();
   void checkForChanges();
   void onContentDirectoryChanged();
   void onGridWidthChanged(int value);
@@ -252,14 +242,6 @@ private:
   void revertCurrentCollectionEdits();
   /// Resolves unsaved changes prior to executing an action.
   auto resolveUnsavedChanges(const QString &actionDescription, bool refreshTreeAfterSave) -> bool;
-
-  /// Kartend-63o: propagate the current collection's appearance & layout
-  /// settings (grid/spacing/colors/fonts/view type, etc. — never
-  /// paths/extensions/behavior flags that would require a rescan) to every
-  /// index in @p targetIndices. Opens an ApplySettingsDialog so the user
-  /// can pick which field categories to copy (Kartend-iyk), persists the
-  /// modified collections, and refreshes the tree.
-  void applyCurrentSettingsToIndices(const QList<int> &targetIndices, const QString &scopeLabel);
 
   /// Kartend-enq: silent variant used by the Settings Mode auto-propagation
   /// path. Skips the per-category dialog and the post-apply summary because

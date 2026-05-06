@@ -52,6 +52,12 @@ if (PkgConfig_FOUND)
   pkg_check_modules(SDL2 QUIET IMPORTED_TARGET sdl2)
 endif()
 
+# Optional: zstd compression for the Kart packaging system (Kartend-giv).
+# Falls back to Qt's built-in qCompress (zlib) when not found.
+if (PkgConfig_FOUND)
+  pkg_check_modules(ZSTD QUIET IMPORTED_TARGET libzstd)
+endif()
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -136,6 +142,14 @@ else()
   message(STATUS "No gamepad backend found (Qt6::Gamepad or SDL2); building without gamepad support")
 endif()
 
+if (TARGET PkgConfig::ZSTD)
+  target_link_libraries(${KARTEND_LIB_TARGET} PUBLIC PkgConfig::ZSTD)
+  target_compile_definitions(${KARTEND_LIB_TARGET} PUBLIC KARTEND_HAS_ZSTD=1)
+  message(STATUS "zstd found; Kart compression will use zstd")
+else()
+  message(STATUS "zstd not found; Kart compression will use zlib (qCompress)")
+endif()
+
 target_compile_definitions(${KARTEND_LIB_TARGET}
   PUBLIC
     APP_ID="${KARTEND_APP_ID}"
@@ -156,9 +170,11 @@ target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
   ${SRC_DIR}/modules/attract
   ${SRC_DIR}/modules/cache
   ${SRC_DIR}/modules/database
+  ${SRC_DIR}/modules/detailpage
   ${SRC_DIR}/modules/event
   ${SRC_DIR}/modules/gamepad
   ${SRC_DIR}/modules/interaction
+  ${SRC_DIR}/modules/kart
   ${SRC_DIR}/modules/keyboard
   ${SRC_DIR}/modules/launch
   ${SRC_DIR}/modules/mouse

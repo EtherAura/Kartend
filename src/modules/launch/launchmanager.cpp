@@ -1,7 +1,8 @@
-// Launches media items with configured emulators, handling RetroArch cores and
+// Launches media items with configured launchers, handling libretro cores and
 // parameters.
 #include "launchmanager.h"
 #include "applicationcontext.h"
+#include "collectionutils.h"
 #include "configvalidation.h"
 #include "errorutils.h"
 #include "launcherchooserdialog.h"
@@ -115,10 +116,9 @@ auto LaunchManager::buildLaunchCommand(const LauncherConfig &launcher,
   LaunchCommand cmd;
   cmd.program = expandedLauncherPath;
 
-  const bool isRetroArch = expandedLauncherPath.contains("retroarch", Qt::CaseInsensitive);
-  if (isRetroArch) {
+  if (LauncherUtils::usesLibretroCore(expandedLauncherPath)) {
     if (expandedCorePath.isEmpty()) {
-      return ErrorContext::error(ErrorCode::InvalidArgument, "No RetroArch core configured",
+      return ErrorContext::error(ErrorCode::InvalidArgument, "No libretro core configured",
                                  "LaunchManager::buildLaunchCommand")
           .withDetails(QString("Collection '%1'").arg(collectionName));
     }
@@ -139,7 +139,7 @@ auto LaunchManager::buildLaunchCommand(const LauncherConfig &launcher,
     return cmd;
   }
 
-  // Non-RetroArch: parse optional launch parameters string.
+  // Plain launcher: parse optional launch parameters string.
   if (!expandedLaunchParameters.isEmpty()) {
     auto parseResult = parseParameters(expandedLaunchParameters);
     if (parseResult.isError()) {

@@ -230,8 +230,26 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->artworkDirLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
   }
+  // Kartend-wcow: video / manual directories were missing dirty wiring; the
+  // settings save reads them but the save icon stayed dim until any other
+  // field changed too.
+  if (ui->videoDirLineEdit) {
+    connect(ui->videoDirLineEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->manualDirLineEdit) {
+    connect(ui->manualDirLineEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
   if (ui->placeholderArtworkLineEdit) {
     connect(ui->placeholderArtworkLineEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
+  // Kartend-wcow: collection type combo (free-form, editable). currentTextChanged
+  // covers both selection and free typing; currentIndexChanged alone misses
+  // the user typing a brand-new label.
+  if (ui->collectionTypeComboBox) {
+    connect(ui->collectionTypeComboBox, &QComboBox::currentTextChanged, this,
             &SettingsDialog::checkForChanges);
   }
   if (ui->includeContentSubfoldersCheckBox) {
@@ -309,9 +327,8 @@ void SettingsDialog::setupFormFieldConnections() {
             &SettingsDialog::checkForChanges);
   }
   if (ui->sidebarBackgroundTypeComboBox) {
-    connect(ui->sidebarBackgroundTypeComboBox,
-            QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            &SettingsDialog::checkForChanges);
+    connect(ui->sidebarBackgroundTypeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &SettingsDialog::checkForChanges);
   }
   if (ui->sidebarBackgroundValueEdit) {
     connect(ui->sidebarBackgroundValueEdit, &QLineEdit::textChanged, this,
@@ -369,8 +386,7 @@ void SettingsDialog::setupFormFieldConnections() {
       if (ui->sidebarFontSizeSpinBox && ui->sidebarFontSizeSpinBox->value() > 0) {
         currentFont.setPointSize(ui->sidebarFontSizeSpinBox->value());
       }
-      const QFont chosen =
-          QFontDialog::getFont(&ok, currentFont, this, tr("Select Sidebar Font"));
+      const QFont chosen = QFontDialog::getFont(&ok, currentFont, this, tr("Select Sidebar Font"));
       if (ok) {
         ui->sidebarFontFamilyEdit->setText(chosen.family());
         if (ui->sidebarFontSizeSpinBox && chosen.pointSize() > 0) {
@@ -456,6 +472,45 @@ void SettingsDialog::setupFormFieldConnections() {
   }
   if (ui->backgroundImageRadio) {
     connect(ui->backgroundImageRadio, &QRadioButton::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  // Kartend-wcow: backgroundVideoRadio + the appearance-effects cluster
+  // (header logo, vignette, parallax, toolbar backdrop blur) all persist
+  // into CollectionConfig but were never wired to the dirty state.
+  if (ui->backgroundVideoRadio) {
+    connect(ui->backgroundVideoRadio, &QRadioButton::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->headerLogoEdit) {
+    connect(ui->headerLogoEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->headerLogoPositionComboBox) {
+    connect(ui->headerLogoPositionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &SettingsDialog::checkForChanges);
+  }
+  if (ui->vignetteEnabledCheckBox) {
+    connect(ui->vignetteEnabledCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->vignetteIntensitySpinBox) {
+    connect(ui->vignetteIntensitySpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->wallpaperParallaxCheckBox) {
+    connect(ui->wallpaperParallaxCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->parallaxStrengthSpinBox) {
+    connect(ui->parallaxStrengthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->toolbarBackdropBlurCheckBox) {
+    connect(ui->toolbarBackdropBlurCheckBox, &QCheckBox::toggled, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->backdropBlurRadiusSpinBox) {
+    connect(ui->backdropBlurRadiusSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
   }
 }
