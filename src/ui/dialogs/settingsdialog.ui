@@ -1600,7 +1600,7 @@
            <item>
             <widget class="QSpinBox" name="sidebarWidthSpinBox">
              <property name="minimum"><number>150</number></property>
-             <property name="maximum"><number>350</number></property>
+             <property name="maximum"><number>9999</number></property>
              <property name="suffix"><string> px</string></property>
             </widget>
            </item>

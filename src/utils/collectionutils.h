@@ -369,10 +369,10 @@ struct CollectionConfig {
   /// fully opaque (which would hide the user's chosen pattern entirely).
   int sidebarHeaderBgOpacity = 200;
   int sidebarSectionBgOpacity = 170;
-  /// Preferred sidebar width in pixels. Clamped to [MIN_WIDTH, MAX_WIDTH] at
-  /// apply time. Defaults to FIXED_WIDTH so existing collections keep their
-  /// historical look. When `sidebarWidthLocked` is true the user cannot drag
-  /// the inner edge to resize.
+  /// Preferred sidebar width in pixels. Floored at MIN_WIDTH at apply time;
+  /// no upper bound. Defaults to FIXED_WIDTH so existing collections keep
+  /// their historical look. When `sidebarWidthLocked` is true the user
+  /// cannot drag the inner edge to resize.
   int sidebarWidth = UIConstants::Sidebar::FIXED_WIDTH;
   bool sidebarWidthLocked = true;
   /// Which built-in sidebar tab is active. Persisted per collection so users
@@ -658,8 +658,7 @@ struct CollectionConfig {
                               UIConstants::Item::MAX_FONT_SIZE);
     listRowHeight = std::clamp(listRowHeight, UIConstants::ListView::MIN_ROW_HEIGHT,
                                UIConstants::ListView::MAX_ROW_HEIGHT);
-    sidebarWidth =
-        std::clamp(sidebarWidth, UIConstants::Sidebar::MIN_WIDTH, UIConstants::Sidebar::MAX_WIDTH);
+    sidebarWidth = std::max(sidebarWidth, UIConstants::Sidebar::MIN_WIDTH);
     // Kartend-qbp3: corner darkness percent. 0 = effect off (the toggle is
     // separate); 100 = pitch black at the corners.
     vignetteIntensity = std::clamp(vignetteIntensity, 0, 100);

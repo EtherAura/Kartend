@@ -561,8 +561,7 @@ void MetadataSidebar::mouseMoveEvent(QMouseEvent *event) {
     // Left-anchored: drag-right increases width.
     int candidate =
         m_position == SidebarPosition::Left ? m_dragStartWidth + dx : m_dragStartWidth - dx;
-    candidate =
-        std::clamp(candidate, UIConstants::Sidebar::MIN_WIDTH, UIConstants::Sidebar::MAX_WIDTH);
+    candidate = std::max(candidate, UIConstants::Sidebar::MIN_WIDTH);
     emit widthDragged(candidate);
     event->accept();
     return;

@@ -10,8 +10,6 @@ namespace UIConstants {
 namespace Sidebar {
 /// Minimum sidebar width in pixels
 inline constexpr int MIN_WIDTH = 150;
-/// Maximum sidebar width in pixels
-inline constexpr int MAX_WIDTH = 350;
 /// Fixed sidebar width when visible
 inline constexpr int FIXED_WIDTH = 300;
 /// Margin around sidebar content
