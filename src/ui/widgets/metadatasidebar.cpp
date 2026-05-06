@@ -1,14 +1,14 @@
 // Displays file metadata, artwork preview, and item details in the sidebar
 // panel.
+#include <algorithm>
 #include <QApplication>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFontMetrics>
 #include <QHBoxLayout>
-#include <QMouseEvent>
-#include <algorithm>
 #include <QIcon>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
@@ -63,19 +63,6 @@ MetadataSidebar::MetadataSidebar(QWidget *parent) : QWidget(parent), ui(new Ui::
 
   setFixedWidth(UIConstants::Sidebar::FIXED_WIDTH);
 
-  // Kartend-63e bug #1: center the artwork preview, item name, and (below)
-  // the video preview widget so they sit on the sidebar's vertical center
-  // axis instead of flush-left. The QVBoxLayout itself stays top-aligned;
-  // per-item Qt::AlignHCenter handles horizontal centering only.
-  if (auto *contentLayout =
-          qobject_cast<QVBoxLayout *>(ui->artworkDisplay->parentWidget()->layout())) {
-    contentLayout->setAlignment(ui->artworkDisplay, Qt::AlignHCenter);
-    contentLayout->setAlignment(ui->artworkLabel, Qt::AlignHCenter);
-    contentLayout->setAlignment(ui->itemNameLabel, Qt::AlignHCenter);
-    contentLayout->setAlignment(ui->itemNameValue, Qt::AlignHCenter);
-    ui->itemNameValue->setAlignment(Qt::AlignHCenter);
-  }
-
   // Kartend-63e bug #2: hide the inner scrollbar entirely. With the sidebar
   // sized to the viewport, the content layout almost always fits — and when
   // it doesn't, the user can still mouse-wheel to scroll. A native bar
@@ -99,11 +86,19 @@ MetadataSidebar::MetadataSidebar(QWidget *parent) : QWidget(parent), ui(new Ui::
     } else {
       artworkParentLayout->addWidget(m_videoPreview);
     }
-    // Bug #1 cont'd: keep the video preview centered too.
-    artworkParentLayout->setAlignment(m_videoPreview, Qt::AlignHCenter);
   }
 
   setupTabBar();
+
+  // Kartend-xcfr: center the artwork-section header, artwork preview, video
+  // preview, and item-name label/value. Everything else stays flush-left
+  // so long values (paths, sizes) read naturally. itemNameValue also needs
+  // its *text* alignment centered + wordWrap so a long name wraps inside
+  // the column instead of being cut off at the right edge.
+  ui->itemNameValue->setAlignment(Qt::AlignHCenter);
+  ui->itemNameValue->setWordWrap(true);
+  applyContentAlignment();
+  applyPreviewSize();
 
   // Debounce timer: avoid loading a video for every transient selection
   // change while the user is scrolling. Single-shot, restarted on each new
@@ -156,10 +151,10 @@ void MetadataSidebar::setMetadata(const QString &filePath, const QString &itemNa
   QFileInfo fileInfo(filePath);
   const QString baseName = fileInfo.completeBaseName();
 
-  // Default placeholder
-  QPixmap defaultPixmap(UIConstants::Metadata::ARTWORK_SIZE, UIConstants::Metadata::ARTWORK_SIZE);
-  defaultPixmap.fill(palette().color(QPalette::Mid));
-  ui->artworkDisplay->setPixmap(defaultPixmap);
+  // Drop the previous selection's cached artwork so applyPreviewSize falls
+  // back to the empty placeholder while the new image is resolved.
+  m_artworkSource = QPixmap();
+  applyPreviewSize();
 
   // Try collection's artwork directory first if provided
   if (!artworkDirectory.isEmpty()) {
@@ -228,9 +223,8 @@ void MetadataSidebar::clearMetadata() {
   ui->fileSizeValue->setText("-");
   ui->lastModifiedValue->setText("-");
   ui->fileExtensionValue->setText("-");
-  QPixmap emptyPixmap(UIConstants::Metadata::ARTWORK_SIZE, UIConstants::Metadata::ARTWORK_SIZE);
-  emptyPixmap.fill(palette().color(QPalette::Mid));
-  ui->artworkDisplay->setPixmap(emptyPixmap);
+  m_artworkSource = QPixmap();
+  applyPreviewSize();
 }
 
 void MetadataSidebar::setCollectionSummary(const CollectionSummary &summary) {
@@ -323,12 +317,13 @@ void MetadataSidebar::updateFileInfo(const QString &filePath) {
     return;
   }
 
-  // Kartend-63e bug #4: width-aware elision instead of a fixed 50-char
-  // right-truncate. The label is single-line (wordWrap is reset below) so
-  // QFontMetrics::elidedText with the label's current width gives the
-  // correct fit; resizeEvent re-runs this when the sidebar is resized.
+  // Kartend-xcfr: wrap the full path across multiple lines instead of
+  // eliding it. wordWrap on a path-like string with no spaces falls back
+  // to per-character wrapping at the cell width, so the user sees the
+  // entire path even on a narrow sidebar. The tooltip is kept for parity
+  // with the previous elide-based UI.
   m_currentFilePath = filePath;
-  ui->filePathValue->setWordWrap(false);
+  ui->filePathValue->setWordWrap(true);
   updateFilePathDisplay();
   ui->filePathValue->setToolTip(filePath);
 
@@ -363,8 +358,10 @@ void MetadataSidebar::setupTabBar() {
 
   connect(m_tabBar, &QTabBar::currentChanged, this, [this](int index) {
     SidebarTab newTab = SidebarTab::Item;
-    if (index == static_cast<int>(SidebarTab::Collection)) newTab = SidebarTab::Collection;
-    else if (index == static_cast<int>(SidebarTab::File)) newTab = SidebarTab::File;
+    if (index == static_cast<int>(SidebarTab::Collection))
+      newTab = SidebarTab::Collection;
+    else if (index == static_cast<int>(SidebarTab::File))
+      newTab = SidebarTab::File;
     if (newTab == m_activeTab) {
       return;
     }
@@ -526,6 +523,11 @@ void MetadataSidebar::applyAppearance(const CollectionConfig &collection) {
   applyBubbleStyles(header.alpha() == 0 ? QString() : header.name(QColor::HexArgb),
                     section.alpha() == 0 ? QString() : section.name(QColor::HexArgb));
 
+  // Kartend-xcfr: re-anchor every layout item to AlignHCenter after the
+  // appearance pass. The bubble stylesheet's polish step + any sections
+  // inserted since the last call would otherwise drop back to flush-left.
+  applyContentAlignment();
+
   update();
 }
 
@@ -557,10 +559,10 @@ void MetadataSidebar::mouseMoveEvent(QMouseEvent *event) {
     const int dx = event->globalPosition().toPoint().x() - m_dragStartX;
     // Right-anchored sidebar: drag-left increases width, drag-right shrinks.
     // Left-anchored: drag-right increases width.
-    int candidate = m_position == SidebarPosition::Left ? m_dragStartWidth + dx
-                                                        : m_dragStartWidth - dx;
-    candidate = std::clamp(candidate, UIConstants::Sidebar::MIN_WIDTH,
-                           UIConstants::Sidebar::MAX_WIDTH);
+    int candidate =
+        m_position == SidebarPosition::Left ? m_dragStartWidth + dx : m_dragStartWidth - dx;
+    candidate =
+        std::clamp(candidate, UIConstants::Sidebar::MIN_WIDTH, UIConstants::Sidebar::MAX_WIDTH);
     emit widthDragged(candidate);
     event->accept();
     return;
@@ -617,10 +619,10 @@ void MetadataSidebar::paintEvent(QPaintEvent *event) {
     // this the static helper used QApplication::palette() Mid, which on
     // some setups is visibly lighter than the items grid's effective Mid.
     const QColor mid = palette().color(QPalette::Mid);
-    const QPixmap tile = ItemWidget::buildPlaceholderTile(
-        width(), height(), /*cornerRadius=*/0,
-        /*applyGradient=*/false, mid,
-        /*lineAlphaScale=*/m_patternIntensity / 100.0);
+    const QPixmap tile =
+        ItemWidget::buildPlaceholderTile(width(), height(), /*cornerRadius=*/0,
+                                         /*applyGradient=*/false, mid,
+                                         /*lineAlphaScale=*/m_patternIntensity / 100.0);
     if (!tile.isNull()) {
       painter.drawPixmap(0, 0, tile);
     } else {
@@ -660,8 +662,7 @@ void MetadataSidebar::captureLabelFontBaselines() {
   // the override, so the snapshot is the un-overridden designer/code font.
   // Dead pointers from previous item changes are dropped here so the list
   // doesn't grow unbounded across many selection changes.
-  m_labelFontBaselines.removeIf(
-      [](const LabelFontBaseline &b) { return b.label.isNull(); });
+  m_labelFontBaselines.removeIf([](const LabelFontBaseline &b) { return b.label.isNull(); });
   QSet<QLabel *> known;
   known.reserve(m_labelFontBaselines.size());
   for (const auto &b : m_labelFontBaselines) {
@@ -676,6 +677,79 @@ void MetadataSidebar::captureLabelFontBaselines() {
     }
   }
   m_labelFontBaselinesCaptured = true;
+}
+
+int MetadataSidebar::previewBoxSize() const {
+  if (!ui) {
+    return UIConstants::Metadata::ARTWORK_SIZE;
+  }
+  // Prefer the scroll area's viewport width — the contentWidget tracks it
+  // via widgetResizable=true, but during the first resize pass the viewport
+  // is the authoritative source. Subtract 28px (10 + 10 layout margins +
+  // 8px slack) so the preview doesn't render flush against the sidebar
+  // edge. Floor at a usable minimum so a freshly-constructed sidebar
+  // (width=0 before show) doesn't render a collapsed frame.
+  int viewportW =
+      (ui->scrollArea && ui->scrollArea->viewport()) ? ui->scrollArea->viewport()->width() : 0;
+  if (viewportW <= 0 && ui->contentWidget) {
+    viewportW = ui->contentWidget->width();
+  }
+  return qMax(80, viewportW - 28);
+}
+
+void MetadataSidebar::applyPreviewSize() {
+  const int size = previewBoxSize();
+  if (ui && ui->artworkDisplay) {
+    ui->artworkDisplay->setFixedSize(size, size);
+  }
+  if (m_videoPreview) {
+    m_videoPreview->setFixedSize(size, size);
+  }
+  if (!ui || !ui->artworkDisplay) {
+    return;
+  }
+  // Re-render the cached source pixmap at the new size so the artwork stays
+  // crisp under both shrink and grow. Falls back to a flat placeholder when
+  // no artwork is loaded so the frame still paints.
+  if (!m_artworkSource.isNull()) {
+    QPixmap scaled =
+        m_artworkSource.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    QPixmap centered(size, size);
+    centered.fill(palette().color(QPalette::Base));
+    QPainter painter(&centered);
+    const int x = (size - scaled.width()) / 2;
+    const int y = (size - scaled.height()) / 2;
+    painter.drawPixmap(x, y, scaled);
+    painter.end();
+    ui->artworkDisplay->setPixmap(centered);
+  } else {
+    QPixmap empty(size, size);
+    empty.fill(palette().color(QPalette::Mid));
+    ui->artworkDisplay->setPixmap(empty);
+  }
+}
+
+void MetadataSidebar::applyContentAlignment() {
+  // Only the artwork-section header, artwork preview, video preview, and
+  // the "Name:" label sit on the sidebar's center axis. The item name
+  // *value* is intentionally NOT in this list — pairing layout-item
+  // AlignHCenter with wordWrap=true makes Qt size the label to its
+  // un-wrapped sizeHint and center it (overflowing both cell edges), which
+  // hides the middle of long names instead of wrapping them. Letting the
+  // value label fill the cell width keeps wrap behavior intact; its own
+  // text alignment (set in the constructor) handles centering inside the
+  // wrapped block.
+  auto *contentLayout = qobject_cast<QVBoxLayout *>(ui->contentWidget->layout());
+  if (!contentLayout) {
+    return;
+  }
+  const QList<QWidget *> centered = {
+      ui->artworkLabel, ui->artworkDisplay, ui->itemNameLabel, m_videoPreview};
+  for (QWidget *w : centered) {
+    if (w && contentLayout->indexOf(w) >= 0) {
+      contentLayout->setAlignment(w, Qt::AlignHCenter);
+    }
+  }
 }
 
 void MetadataSidebar::applySidebarFont(const QString &family, int pointSize) {
@@ -726,30 +800,26 @@ void MetadataSidebar::applyBubbleStyles(const QString &headerHex, const QString 
   const QColor sectionColor = qcolorOrEmpty(sectionHex);
 
   if (headerColor.isValid()) {
-    const QString rgba =
-        QString("rgba(%1,%2,%3,%4)")
-            .arg(headerColor.red())
-            .arg(headerColor.green())
-            .arg(headerColor.blue())
-            .arg(headerColor.alpha());
-    sheet += QString(
-                 "QLabel#titleLabel, QLabel#artworkLabel, QLabel#fileInfoTitle, "
-                 "QLabel[sidebarRole=\"header\"] { "
-                 "background-color: %1; border-radius: 6px; padding: 4px 8px; }")
+    const QString rgba = QString("rgba(%1,%2,%3,%4)")
+                             .arg(headerColor.red())
+                             .arg(headerColor.green())
+                             .arg(headerColor.blue())
+                             .arg(headerColor.alpha());
+    sheet += QString("QLabel#titleLabel, QLabel#artworkLabel, QLabel#fileInfoTitle, "
+                     "QLabel[sidebarRole=\"header\"] { "
+                     "background-color: %1; border-radius: 6px; padding: 4px 8px; }")
                  .arg(rgba);
   }
   if (sectionColor.isValid()) {
-    const QString rgba =
-        QString("rgba(%1,%2,%3,%4)")
-            .arg(sectionColor.red())
-            .arg(sectionColor.green())
-            .arg(sectionColor.blue())
-            .arg(sectionColor.alpha());
-    sheet += QString(
-                 "QLabel#itemNameValue, QLabel#filePathValue, QLabel#fileSizeValue, "
-                 "QLabel#lastModifiedValue, QLabel#fileExtensionValue, "
-                 "QLabel[sidebarRole=\"value\"] { "
-                 "background-color: %1; border-radius: 6px; padding: 4px 8px; }")
+    const QString rgba = QString("rgba(%1,%2,%3,%4)")
+                             .arg(sectionColor.red())
+                             .arg(sectionColor.green())
+                             .arg(sectionColor.blue())
+                             .arg(sectionColor.alpha());
+    sheet += QString("QLabel#itemNameValue, QLabel#filePathValue, QLabel#fileSizeValue, "
+                     "QLabel#lastModifiedValue, QLabel#fileExtensionValue, "
+                     "QLabel[sidebarRole=\"value\"] { "
+                     "background-color: %1; border-radius: 6px; padding: 4px 8px; }")
                  .arg(rgba);
   }
   ui->contentWidget->setStyleSheet(sheet);
@@ -775,26 +845,31 @@ void MetadataSidebar::pausePreviewVideo() {
   ui->artworkDisplay->show();
 }
 
+bool MetadataSidebar::togglePreviewVideoPause() {
+  if (!m_videoPreview || !m_videoPreview->hasLoadedSource()) {
+    return false;
+  }
+  m_videoPreview->togglePauseResume();
+  return true;
+}
+
 void MetadataSidebar::updateFilePathDisplay() {
   if (m_currentFilePath.isEmpty()) {
     return;
   }
-  // Account for the label's own left-padding (12px in the .ui) so the elided
-  // text doesn't visually overflow the value column. Falling back to the
-  // full path when the label has no width yet (initial layout) keeps
-  // setMetadata() callers from seeing a blank value while the layout settles.
-  const int available = ui->filePathValue->width() - 16;
-  if (available <= 0) {
-    ui->filePathValue->setText(m_currentFilePath);
-    return;
-  }
-  const QFontMetrics fm(ui->filePathValue->font());
-  ui->filePathValue->setText(fm.elidedText(m_currentFilePath, Qt::ElideMiddle, available));
+  // Kartend-xcfr: set the full path; QLabel wordWrap=true (set in
+  // updateFileInfo) handles per-character wrapping so the entire path is
+  // visible without truncation.
+  ui->filePathValue->setText(m_currentFilePath);
 }
 
 void MetadataSidebar::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);
   updateFilePathDisplay();
+  // Kartend-xcfr: track the artwork + video preview to the sidebar's current
+  // content width so a width-drag (or initial show) reflows the previews
+  // instead of leaving them pinned at the .ui's 200px design size.
+  applyPreviewSize();
 }
 
 // Formats file size into human-readable string with appropriate units (KB, MB,
@@ -835,20 +910,11 @@ void MetadataSidebar::loadArtwork(const QString &baseName, const QString &artwor
     if (QFile::exists(artworkPath)) {
       QPixmap artwork(artworkPath);
       if (!artwork.isNull()) {
-        QPixmap scaledArtwork =
-            artwork.scaled(UIConstants::Metadata::ARTWORK_SIZE, UIConstants::Metadata::ARTWORK_SIZE,
-                           Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        QPixmap centeredArtwork(UIConstants::Metadata::ARTWORK_SIZE,
-                                UIConstants::Metadata::ARTWORK_SIZE);
-        centeredArtwork.fill(palette().color(QPalette::Base));
-
-        QPainter painter(&centeredArtwork);
-        const int centerX = (UIConstants::Metadata::ARTWORK_SIZE - scaledArtwork.width()) / 2;
-        const int centerY = (UIConstants::Metadata::ARTWORK_SIZE - scaledArtwork.height()) / 2;
-        painter.drawPixmap(centerX, centerY, scaledArtwork);
-        painter.end();
-
-        ui->artworkDisplay->setPixmap(centeredArtwork);
+        // Cache the original-resolution pixmap so applyPreviewSize can
+        // re-render at the new dimension on sidebar resize without
+        // re-reading from disk.
+        m_artworkSource = artwork;
+        applyPreviewSize();
         return; // Found and loaded artwork
       }
     }
@@ -1127,9 +1193,10 @@ void MetadataSidebar::ensureGallerySection() {
                             UIConstants::Metadata::LABEL_SPACING);
   outer->setSpacing(UIConstants::Metadata::LABEL_SPACING);
 
-  // Title row pairs the section heading with the per-item "Edit links…"
-  // button (Kartend-53vk). Keeping them on one row saves vertical space and
-  // makes the affordance discoverable next to the thumbnails it controls.
+  // Title row pairs the section heading with the per-item edit affordance
+  // (Kartend-53vk). The button is short ("Edit") with a tooltip carrying
+  // the longer description so a narrow / zoomed sidebar doesn't clip the
+  // label — the previous "Edit links…" got cut off at the user's font zoom.
   auto *titleRow = new QHBoxLayout();
   titleRow->setContentsMargins(0, 0, 0, 0);
   titleRow->setSpacing(UIConstants::Metadata::LABEL_SPACING);
@@ -1142,7 +1209,7 @@ void MetadataSidebar::ensureGallerySection() {
   titleRow->addWidget(title);
   titleRow->addStretch(1);
 
-  m_galleryEditButton = new QPushButton(tr("Edit links…"), m_galleryContainer);
+  m_galleryEditButton = new QPushButton(tr("Edit"), m_galleryContainer);
   m_galleryEditButton->setCursor(Qt::PointingHandCursor);
   m_galleryEditButton->setToolTip(
       tr("Pick override files for any artwork type (standard or custom)."));
