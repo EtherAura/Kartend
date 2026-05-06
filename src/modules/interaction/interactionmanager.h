@@ -11,6 +11,7 @@
 #include <QScrollArea>
 
 QT_BEGIN_NAMESPACE
+class QAction;
 class QKeyEvent;
 class QLineEdit;
 class QPushButton;
@@ -69,7 +70,7 @@ struct InteractionManagerSetup {
   QWidget *itemsPage = nullptr;
   QWidget *collectionPage = nullptr;
   QLineEdit *searchBar = nullptr;
-  QPushButton *searchModeButton = nullptr;
+  QAction *searchModeAction = nullptr;
 
   // State references (can be overridden or taken from ctx)
   QList<CollectionConfig> *collections = nullptr;
@@ -94,7 +95,7 @@ struct InteractionManagerSetup {
   SETUP_GETTER_INLINE_UI_SAME(QStackedWidget *, StackedWidget, stackedWidget)
   SETUP_GETTER_INLINE_UI_SAME(QWidget *, ItemsPage, itemsPage)
   SETUP_GETTER_INLINE_UI_SAME(QLineEdit *, SearchBar, searchBar)
-  SETUP_GETTER_INLINE_UI_SAME(QPushButton *, SearchModeButton, searchModeButton)
+  SETUP_GETTER_INLINE_UI_SAME(QAction *, SearchModeAction, searchModeAction)
   SETUP_GETTER_INLINE_COL_SAME(QList<CollectionConfig> *, Collections, collections)
   SETUP_GETTER_INLINE_COL_SAME(int *, CurrentCollectionIndex, currentCollectionIndex)
   SETUP_GETTER_INLINE_COL_SAME(const CollectionHierarchyCache *, HierarchyCache, hierarchyCache)

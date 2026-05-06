@@ -11,11 +11,11 @@
 #include "settingsmanager.h"
 #include "settingsutils.h"
 #include "uiconstants.h"
+#include <QAction>
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QLineEdit>
-#include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
@@ -39,7 +39,7 @@ SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, NavigationManager *, NavigationMan
 SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, ScrollManager *, ScrollManager, scrollManager)
 SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, SettingsManager *, SettingsManager, settingsManager)
 SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QLineEdit *, SearchBar, searchBar)
-SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QPushButton *, SearchModeButton, searchModeButton)
+SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QAction *, SearchModeAction, searchModeAction)
 SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
 SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)
 SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QWidget *, ItemsPage, itemsPage)
@@ -68,7 +68,7 @@ void SearchManager::setupReferences(const SearchManagerSetup &setup) {
     m_generalSettings = setup.ctx->collection.generalSettings;
   }
   m_searchBar = setup.getSearchBar();
-  m_searchModeButton = setup.getSearchModeButton();
+  m_searchModeAction = setup.getSearchModeAction();
   m_itemScrollArea = setup.getItemScrollArea();
   m_stackedWidget = setup.getStackedWidget();
   m_collectionPage = setup.collectionPage;
@@ -102,38 +102,30 @@ void SearchManager::toggleSearchMode() {
 }
 
 void SearchManager::updateSearchModeButton() {
-  if (!m_searchModeButton) {
+  if (!m_searchModeAction) {
     return;
   }
 
-  constexpr int kSearchIconSizePx = 18;
+  // Always render the same Breeze "search" glyph regardless of mode — the
+  // tooltip carries the mode-specific text. Keeps the in-field action visually
+  // stable across CurrentCollection / CurrentAndSubcollections / AllCollections.
+  const QIcon icon = UIConstants::Icons::fromTheme(UIConstants::Icons::SEARCH);
 
-  QIcon icon;
   QString tip;
   switch (m_currentSearchMode) {
   case SearchMode::CurrentCollection:
-    icon = UIConstants::Icons::fromTheme(UIConstants::Icons::SEARCH_LOCAL);
-    tip = "Search: Current collection";
+    tip = tr("Search: Current collection (click to cycle modes)");
     break;
   case SearchMode::CurrentAndSubcollections:
-    icon = UIConstants::Icons::fromTheme(UIConstants::Icons::SEARCH_SUBCOLLECTIONS);
-    tip = "Search: Current + subcollections";
+    tip = tr("Search: Current + subcollections (click to cycle modes)");
     break;
   case SearchMode::AllCollections:
-    icon = UIConstants::Icons::fromTheme(UIConstants::Icons::SEARCH_GLOBAL);
-    tip = "Search: All collections";
+    tip = tr("Search: All collections (click to cycle modes)");
     break;
   }
 
-  m_searchModeButton->setText(QString());
-  if (!icon.isNull()) {
-    m_searchModeButton->setIcon(icon);
-    m_searchModeButton->setIconSize(QSize(kSearchIconSizePx, kSearchIconSizePx));
-  } else {
-    m_searchModeButton->setIcon(QIcon());
-  }
-  m_searchModeButton->setToolTip(tip);
-  m_searchModeButton->setStyleSheet(QString());
+  m_searchModeAction->setIcon(icon);
+  m_searchModeAction->setToolTip(tip);
 }
 
 void SearchManager::updateSearchBarPlaceholder() {

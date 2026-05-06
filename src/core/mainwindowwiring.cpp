@@ -64,14 +64,15 @@ void MainWindow::connectDatabaseManager() {
     }
   });
 
-  // Kartend-5h6: refresh the per-collection filter toolbar each time a
-  // collection's items finish loading. NavigationManager updates
-  // currentCollectionIndex through a raw pointer (no Qt signal), so this is
-  // the most reliable post-switch hook available — by the time itemsLoaded
-  // fires, the index points at the collection the user is now viewing.
+  // Refresh the consolidated filter popup each time a collection's items
+  // finish loading. NavigationManager updates currentCollectionIndex through
+  // a raw pointer (no Qt signal), so this is the most reliable post-switch
+  // hook available — by the time itemsLoaded fires, the index points at the
+  // collection the user is now viewing, and the popup's title-pattern toggle
+  // needs to mirror that collection's flag.
   QObject::connect(getDatabaseManager(), &DatabaseManager::itemsLoaded, this,
                    [this](const QStringList &, const QHash<QString, QString> &) {
-                     refreshTitleFilterToolbar();
+                     refreshFilterToolbar();
                    });
 
   // Update loading overlay with scan progress during initial collection loading
@@ -376,151 +377,148 @@ void MainWindow::connectSidebarManager() {
 }
 
 void MainWindow::connectSearchComponents() {
-  if ((m_searchModeButton) && (getInteractionManager())) {
-    QObject::connect(m_searchModeButton, &QPushButton::clicked, getInteractionManager(),
+  // Search-mode toggle lives inside the QLineEdit as a QAction (set up in
+  // MainWindow::setupSearchModeAction). Wire it to InteractionManager's
+  // existing toggle slot so the cycling behavior remains identical to the
+  // legacy QPushButton.
+  if ((m_searchModeAction) && (getInteractionManager())) {
+    QObject::connect(m_searchModeAction, &QAction::triggered, getInteractionManager(),
                      &InteractionManager::toggleSearchMode);
   }
-
-  // Connect view type toggle buttons
-  if (m_gridViewButton) {
-    QObject::connect(m_gridViewButton, &QPushButton::clicked, this,
-                     [this]() { setViewType(ViewType::Grid); });
-  }
-  if (m_listViewButton) {
-    QObject::connect(m_listViewButton, &QPushButton::clicked, this,
-                     [this]() { setViewType(ViewType::List); });
-  }
-  if (m_coverFlowViewButton) {
-    QObject::connect(m_coverFlowViewButton, &QPushButton::clicked, this,
-                     [this]() { setViewType(ViewType::CoverFlow); });
-  }
-  if (m_horizontalViewButton) {
-    QObject::connect(m_horizontalViewButton, &QPushButton::clicked, this,
-                     [this]() { setViewType(ViewType::Horizontal); });
-  }
+  // The four legacy view-type buttons have been replaced by m_viewModeButton's
+  // popup menu (wired up in MainWindow::setupViewModeButton).
 }
 
-void MainWindow::refreshTypeFilterToolbar() {
-  if (!m_typeFilterButton) {
+void MainWindow::refreshFilterToolbar() {
+  if (!m_filterButton) {
     return;
   }
-  // Rebuild the popup menu from scratch: types come from the live collection
-  // list, so stale actions left from a previous build would let the user pick
-  // a type that no longer exists.
-  QMenu *menu = m_typeFilterButton->menu();
+  // Rebuild the popup from scratch: the type list comes from the live
+  // collection set (so retagged/deleted types vanish on the next refresh) and
+  // the title-pattern checkable mirrors the active collection's flag, which
+  // changes per-view.
+  QMenu *menu = m_filterButton->menu();
   if (!menu) {
-    menu = new QMenu(m_typeFilterButton);
-    m_typeFilterButton->setMenu(menu);
-  } else {
-    menu->clear();
-  }
-
-  // QActionGroup gives the menu radio-button semantics: exactly one type (or
-  // <All types>) is checked at a time. Ownership is the menu so actions die
-  // with it on each rebuild.
-  auto *group = new QActionGroup(menu);
-  group->setExclusive(true);
-
-  const QString previous = m_generalSettings.collectionTypeFilter;
-  bool matchedPrevious = previous.isEmpty();
-
-  // Sentinel "<All types>" maps to an empty filter string. Stored as
-  // QAction::data so the trigger handler can distinguish it from a user-typed
-  // value with the same display text.
-  QAction *allAction = menu->addAction(tr("<All types>"));
-  allAction->setCheckable(true);
-  allAction->setData(QString());
-  group->addAction(allAction);
-  if (previous.isEmpty()) {
-    allAction->setChecked(true);
-  }
-
-  for (const QString &type : CollectionUtils::collectAllCollectionTypes(m_collections)) {
-    QAction *action = menu->addAction(type);
-    action->setCheckable(true);
-    action->setData(type);
-    group->addAction(action);
-    if (type == previous) {
-      action->setChecked(true);
-      matchedPrevious = true;
-    }
-  }
-
-  // If the previously-selected type no longer exists (collection deleted or
-  // retagged), fall back to <All types> and clear the persisted filter so the
-  // toolbar reflects reality.
-  if (!matchedPrevious) {
-    allAction->setChecked(true);
-    m_generalSettings.collectionTypeFilter.clear();
-    if (getSettingsManager()) {
-      getSettingsManager()->saveGeneralSettings(m_generalSettings);
-    }
-  }
-}
-
-void MainWindow::connectCollectionTypeToolbar() {
-  // Initial state mirrors the persisted GeneralSettings so a fresh launch
-  // restores the user's last filter / hide-subs choice.
-  if (m_hideSubcollectionsButton) {
-    QSignalBlocker blocker(m_hideSubcollectionsButton);
-    m_hideSubcollectionsButton->setChecked(m_generalSettings.hideSubcollectionTiles);
-  }
-  refreshTypeFilterToolbar();
-
-  if (m_hideSubcollectionsButton) {
-    QObject::connect(m_hideSubcollectionsButton, &QPushButton::toggled, this, [this](bool checked) {
-      if (m_generalSettings.hideSubcollectionTiles == checked) {
-        return;
-      }
-      m_generalSettings.hideSubcollectionTiles = checked;
-      if (getSettingsManager()) {
-        getSettingsManager()->saveGeneralSettings(m_generalSettings);
-      }
-      if (getNavigationManager() && currentCollectionIndex >= 0) {
-        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-      }
-    });
-  }
-
-  if (m_typeFilterButton) {
-    // Connect to the button itself rather than each rebuilt action — actions
-    // are recreated on every refreshTypeFilterToolbar() call.
-    QObject::connect(m_typeFilterButton, &QToolButton::triggered, this, [this](QAction *action) {
+    menu = new QMenu(m_filterButton);
+    m_filterButton->setMenu(menu);
+    QObject::connect(menu, &QMenu::triggered, this, [this](QAction *action) {
       if (!action) {
         return;
       }
-      const QString chosen = action->data().toString();
-      if (m_generalSettings.collectionTypeFilter == chosen) {
-        return;
+      const QString role = action->property("filterRole").toString();
+      if (role == QLatin1String("type")) {
+        const QString chosen = action->data().toString();
+        if (m_generalSettings.collectionTypeFilter == chosen) {
+          return;
+        }
+        m_generalSettings.collectionTypeFilter = chosen;
+        if (getSettingsManager()) {
+          getSettingsManager()->saveGeneralSettings(m_generalSettings);
+        }
+        if (getNavigationManager() && currentCollectionIndex >= 0) {
+          getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+        }
+      } else if (role == QLatin1String("title-toggle")) {
+        if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
+          return;
+        }
+        CollectionConfig &c = m_collections[currentCollectionIndex];
+        const bool checked = action->isChecked();
+        if (c.titleExclusionEnabled == checked) {
+          return;
+        }
+        c.titleExclusionEnabled = checked;
+        if (getSettingsManager()) {
+          getSettingsManager()->saveCollections(m_collections);
+        }
+        if (getNavigationManager()) {
+          getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+        }
+      } else if (role == QLatin1String("title-edit")) {
+        showTitleFilterEditor();
       }
-      m_generalSettings.collectionTypeFilter = chosen;
+    });
+  } else {
+    menu->clear();
+  }
+  // Wiped on clear() — null the cached pointer so we don't dereference a
+  // dangling QAction the next time refresh runs without rebuilding the
+  // section.
+  m_titleFilterEnabledAction = nullptr;
+
+  // Type filter section — only emitted when at least one collection actually
+  // declares a type tag. QActionGroup gives radio-button semantics so the
+  // <All types> sentinel and concrete types are mutually exclusive. Ownership
+  // is the menu so the group dies with the next clear().
+  const QStringList allTypes = CollectionUtils::collectAllCollectionTypes(m_collections);
+  if (!allTypes.isEmpty()) {
+    auto *typeGroup = new QActionGroup(menu);
+    typeGroup->setExclusive(true);
+
+    const QString previous = m_generalSettings.collectionTypeFilter;
+    bool matchedPrevious = previous.isEmpty();
+
+    QAction *allAction = menu->addAction(tr("<All types>"));
+    allAction->setCheckable(true);
+    allAction->setData(QString());
+    allAction->setProperty("filterRole", QStringLiteral("type"));
+    typeGroup->addAction(allAction);
+    if (previous.isEmpty()) {
+      allAction->setChecked(true);
+    }
+
+    for (const QString &type : allTypes) {
+      QAction *action = menu->addAction(type);
+      action->setCheckable(true);
+      action->setData(type);
+      action->setProperty("filterRole", QStringLiteral("type"));
+      typeGroup->addAction(action);
+      if (type == previous) {
+        action->setChecked(true);
+        matchedPrevious = true;
+      }
+    }
+
+    // If the previously-selected type no longer exists (collection deleted or
+    // retagged), fall back to <All types> and clear the persisted filter so
+    // the toolbar reflects reality.
+    if (!matchedPrevious) {
+      allAction->setChecked(true);
+      m_generalSettings.collectionTypeFilter.clear();
       if (getSettingsManager()) {
         getSettingsManager()->saveGeneralSettings(m_generalSettings);
       }
-      if (getNavigationManager() && currentCollectionIndex >= 0) {
-        getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-      }
-    });
-  }
-}
+    }
 
-void MainWindow::refreshTitleFilterToolbar() {
-  if (!m_titleFilterButton) {
-    return;
+    menu->addSeparator();
   }
-  // Mirror the active collection's enabled flag and pattern count so the
-  // user can tell at a glance whether the filter is on for the view they're
-  // looking at. The button stays enabled at all times — the click and popup
-  // handlers re-validate the index, and there is no NavigationManager signal
-  // that fires reliably on every collection switch (the type-filter combo
-  // can ignore this because its setting is global, not per-collection).
-  QSignalBlocker blocker(m_titleFilterButton);
+
+  // Title-pattern section — always present so the user can edit patterns
+  // even on collections that haven't enabled the toggle yet. Mirror the
+  // active collection's flag onto the checkable entry.
+  QAction *toggleAction = menu->addAction(tr("Apply title patterns"));
+  toggleAction->setCheckable(true);
+  toggleAction->setProperty("filterRole", QStringLiteral("title-toggle"));
+  bool toggleOn = false;
   if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
     const CollectionConfig &c = m_collections[currentCollectionIndex];
-    m_titleFilterButton->setChecked(c.titleExclusionEnabled && !c.titleExclusionPatterns.isEmpty());
-  } else {
-    m_titleFilterButton->setChecked(false);
+    toggleOn = c.titleExclusionEnabled && !c.titleExclusionPatterns.isEmpty();
   }
+  {
+    QSignalBlocker blocker(toggleAction);
+    toggleAction->setChecked(toggleOn);
+  }
+  m_titleFilterEnabledAction = toggleAction;
+
+  QAction *editAction = menu->addAction(tr("Edit title patterns…"));
+  editAction->setProperty("filterRole", QStringLiteral("title-edit"));
+}
+
+void MainWindow::connectFilterToolbar() {
+  // Single setup pass: refresh wires the QMenu::triggered handler the first
+  // time it runs, and every subsequent call just rebuilds the action list
+  // (handler stays on the menu).
+  refreshFilterToolbar();
 }
 
 void MainWindow::showTitleFilterEditor() {
@@ -587,45 +585,10 @@ void MainWindow::showTitleFilterEditor() {
   if (getSettingsManager()) {
     getSettingsManager()->saveCollections(m_collections);
   }
-  refreshTitleFilterToolbar();
+  refreshFilterToolbar();
   if (getNavigationManager() && currentCollectionIndex >= 0) {
     getNavigationManager()->safeReloadCollection(currentCollectionIndex);
   }
-}
-
-void MainWindow::connectTitleFilterToolbar() {
-  if (!m_titleFilterButton) {
-    return;
-  }
-  refreshTitleFilterToolbar();
-
-  // Body click toggles the per-collection enabled flag without opening the
-  // editor — patterns persist so the user can flip cleanup on/off cheaply.
-  QObject::connect(m_titleFilterButton, &QToolButton::toggled, this, [this](bool checked) {
-    if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
-      return;
-    }
-    CollectionConfig &c = m_collections[currentCollectionIndex];
-    if (c.titleExclusionEnabled == checked) {
-      return;
-    }
-    c.titleExclusionEnabled = checked;
-    if (getSettingsManager()) {
-      getSettingsManager()->saveCollections(m_collections);
-    }
-    if (getNavigationManager()) {
-      getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-    }
-  });
-
-  // Arrow / dropdown opens the editor. QToolButton with MenuButtonPopup
-  // expects a QMenu, but we need a multi-line editor — use a dummy QMenu
-  // whose aboutToShow handler hides the menu and launches the dialog
-  // instead. This keeps the visual arrow without dropping a literal QMenu
-  // popup on the user.
-  auto *menu = new QMenu(this);
-  menu->addAction(tr("Edit filter patterns…"), this, &MainWindow::showTitleFilterEditor);
-  m_titleFilterButton->setMenu(menu);
 }
 
 void MainWindow::connectScrollBars() const {

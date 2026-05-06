@@ -10,6 +10,7 @@
 #include <QPointer>
 
 QT_BEGIN_NAMESPACE
+class QAction;
 class QLineEdit;
 class QPushButton;
 class QScrollArea;
@@ -31,7 +32,7 @@ struct SearchManagerSetup {
   ScrollManager *scrollManager = nullptr;
   SettingsManager *settingsManager = nullptr;
   QLineEdit *searchBar = nullptr;
-  QPushButton *searchModeButton = nullptr;
+  QAction *searchModeAction = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QStackedWidget *stackedWidget = nullptr;
   QWidget *collectionPage = nullptr;
@@ -46,7 +47,7 @@ struct SearchManagerSetup {
   SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
   SETUP_GETTER_DECL(SettingsManager *, SettingsManager)
   SETUP_GETTER_DECL(QLineEdit *, SearchBar)
-  SETUP_GETTER_DECL(QPushButton *, SearchModeButton)
+  SETUP_GETTER_DECL(QAction *, SearchModeAction)
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
   SETUP_GETTER_DECL(QStackedWidget *, StackedWidget)
   SETUP_GETTER_DECL(QWidget *, ItemsPage)
@@ -116,7 +117,7 @@ private:
   GeneralSettings *m_generalSettings = nullptr;
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   QLineEdit *m_searchBar = nullptr;
-  QPushButton *m_searchModeButton = nullptr;
+  QAction *m_searchModeAction = nullptr;
   QScrollArea *m_itemScrollArea = nullptr;
   QStackedWidget *m_stackedWidget = nullptr;
   QWidget *m_collectionPage = nullptr;

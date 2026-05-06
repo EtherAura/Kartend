@@ -70,16 +70,27 @@ public:
   QGridLayout *itemGrid;
   QHBoxLayout *m_mainHorizontalLayout;
   QLineEdit *searchBar;
-  QPushButton *m_searchModeButton;
-  QPushButton *m_gridViewButton;
-  QPushButton *m_listViewButton;
-  QPushButton *m_coverFlowViewButton = nullptr;
-  QPushButton *m_horizontalViewButton = nullptr;
-  // Kartend-dd8: collection categorization toolbar widgets
-  QPushButton *m_hideSubcollectionsButton = nullptr;
-  QToolButton *m_typeFilterButton = nullptr;
-  // Kartend-5h6: title-exclusion regex toolbar (per-collection patterns)
-  QToolButton *m_titleFilterButton = nullptr;
+  /// Search-mode toggle exposed as an action embedded inside the QLineEdit
+  /// (QLineEdit::addAction at LeadingPosition). Replaces the standalone
+  /// searchModeButton.
+  QAction *m_searchModeAction = nullptr;
+  /// Single layout-picker QToolButton with InstantPopup menu listing the
+  /// view types as text entries. Replaces the four legacy view buttons
+  /// (grid/list/cover-flow/horizontal).
+  QToolButton *m_viewModeButton = nullptr;
+  QAction *m_viewActionGrid = nullptr;
+  QAction *m_viewActionList = nullptr;
+  QAction *m_viewActionCoverFlow = nullptr;
+  QAction *m_viewActionHorizontal = nullptr;
+  /// Single toolbar filter entry-point (Kartend-dd8 + Kartend-5h6 merged):
+  /// hosts an InstantPopup menu containing the type-filter radio group and
+  /// the per-collection title-pattern toggle + editor entry. Replaces the
+  /// former separate typeFilterButton, titleFilterButton, and the
+  /// hideSubcollectionsButton.
+  QToolButton *m_filterButton = nullptr;
+  /// Checkable menu entry mirroring CollectionConfig::titleExclusionEnabled
+  /// for the active collection. Lives inside m_filterButton's popup.
+  QAction *m_titleFilterEnabledAction = nullptr;
   EmptyStateWidget *loadingLabel;
   LoadingOverlay *m_loadingOverlay = nullptr;
 
@@ -180,6 +191,20 @@ public:
   /// VideoPreviewWidget::setGlobalVolume and persist on change.
   void setupPreviewVolumeSlider();
 
+  /// Build the layout-picker popup menu attached to m_viewModeButton. The menu
+  /// holds checkable text entries (Grid / List / Cover Flow / Horizontal) wired
+  /// to setViewType. Replaces the four standalone view buttons.
+  void setupViewModeButton();
+  /// Reflects @p viewType onto m_viewModeButton: ticks the matching menu
+  /// action and refreshes the button's tooltip + theme icon. Called from
+  /// setViewType() and updateWindowTitleForCollection().
+  void syncViewModeButton(ViewType viewType);
+  /// Creates the search-mode QAction with the kde-breeze "search" icon and
+  /// adds it to the searchBar QLineEdit at LeadingPosition. Wires the
+  /// triggered() signal to InteractionManager::toggleSearchMode (deferred
+  /// until the manager exists). Replaces the standalone searchModeButton.
+  void setupSearchModeAction();
+
 protected:
   bool event(QEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
@@ -220,24 +245,17 @@ private:
   void connectSidebarManager();
   void connectSearchComponents();
   void connectScrollBars() const;
-  /// Kartend-dd8: wires the toolbar type-filter combobox + hide-subcollections
-  /// toggle to GeneralSettings persistence and triggers a reload of the
-  /// current view when either changes.
-  void connectCollectionTypeToolbar();
-  /// Kartend-dd8: rebuilds the toolbar type-filter dropdown from the union of
-  /// types currently present in m_collections, preserving the active
-  /// selection. Called on startup and after settings changes that may have
-  /// added/removed type tags.
-  void refreshTypeFilterToolbar();
-
-  /// Kartend-5h6: wires the title-exclusion toolbar button. Body click
-  /// toggles the per-collection enabled flag; arrow click opens a popup
-  /// containing a QPlainTextEdit (one regex per line) with Apply/Cancel.
-  void connectTitleFilterToolbar();
-  /// Kartend-5h6: refreshes the title-exclusion button's checked state from
-  /// the current collection's CollectionConfig::titleExclusionEnabled. Called
-  /// after collection switches and after the popup applies edits.
-  void refreshTitleFilterToolbar();
+  /// Wires the consolidated m_filterButton: builds its popup once, hooks
+  /// settings persistence, and triggers a reload of the current view when
+  /// either the type filter (Kartend-dd8) or the title-exclusion toggle
+  /// (Kartend-5h6) changes.
+  void connectFilterToolbar();
+  /// Rebuilds m_filterButton's popup from scratch — the type list comes from
+  /// the live collection types (so deleted/retagged types vanish) and the
+  /// title-pattern toggle reflects the active collection's state. Called on
+  /// startup, on every collection switch, and after settings edits that may
+  /// have added/removed type tags.
+  void refreshFilterToolbar();
   /// Kartend-5h6: opens the popup editor for the current collection's
   /// title-exclusion patterns. Returns immediately when no collection is
   /// active or when the user cancels.

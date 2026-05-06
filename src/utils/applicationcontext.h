@@ -13,6 +13,7 @@ class QLineEdit;
 class QPushButton;
 class QLabel;
 class QMenuBar;
+class QAction;
 QT_END_NAMESPACE
 
 class MetadataSidebar;
@@ -98,7 +99,9 @@ struct ApplicationContext {
     // Optional / feature-specific
     QMenuBar *menubar = nullptr;
     QLineEdit *searchBar = nullptr;
-    QPushButton *searchModeButton = nullptr;
+    /// Search-mode toggle: a QAction added to the searchBar QLineEdit at
+    /// LeadingPosition (no longer a standalone button).
+    QAction *searchModeAction = nullptr;
     MetadataSidebar *sidebar = nullptr;
     EmptyStateWidget *loadingLabel = nullptr;
     LoadingOverlay *loadingOverlay = nullptr;

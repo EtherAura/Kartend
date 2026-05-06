@@ -78,9 +78,15 @@
            </property>
            <item>
             <widget class="QToolButton" name="hamburgerMenuButton">
+             <property name="minimumSize">
+              <size>
+               <width>34</width>
+               <height>30</height>
+              </size>
+             </property>
              <property name="maximumSize">
               <size>
-               <width>30</width>
+               <width>40</width>
                <height>30</height>
               </size>
              </property>
@@ -88,13 +94,19 @@
               <string>Menu</string>
              </property>
              <property name="text">
-              <string>≡</string>
+              <string/>
              </property>
              <property name="popupMode">
               <enum>QToolButton::InstantPopup</enum>
              </property>
+             <property name="toolButtonStyle">
+              <enum>Qt::ToolButtonIconOnly</enum>
+             </property>
              <property name="focusPolicy">
               <enum>Qt::NoFocus</enum>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QToolButton::menu-indicator { image: none; width: 0; }</string>
              </property>
              <property name="visible">
               <bool>false</bool>
@@ -166,133 +178,45 @@
              <property name="alignment">
               <set>Qt::AlignRight|Qt::AlignVCenter</set>
              </property>
+             <property name="styleSheet">
+              <string notr="true">QLabel { color: palette(placeholder-text); }</string>
+             </property>
              <property name="visible">
               <bool>false</bool>
              </property>
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="gridViewButton">
+            <widget class="QToolButton" name="viewModeButton">
+             <property name="minimumSize">
+              <size>
+               <width>34</width>
+               <height>30</height>
+              </size>
+             </property>
              <property name="maximumSize">
               <size>
-               <width>30</width>
+               <width>40</width>
                <height>30</height>
               </size>
              </property>
              <property name="toolTip">
-              <string>Grid View</string>
+              <string>Layout</string>
              </property>
              <property name="text">
-              <string>⊞</string>
+              <string/>
              </property>
-             <property name="flat">
-              <bool>true</bool>
+             <property name="popupMode">
+              <enum>QToolButton::InstantPopup</enum>
              </property>
-             <property name="checkable">
-              <bool>true</bool>
+             <property name="toolButtonStyle">
+              <enum>Qt::ToolButtonIconOnly</enum>
              </property>
              <property name="focusPolicy">
               <enum>Qt::NoFocus</enum>
              </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="listViewButton">
-             <property name="maximumSize">
-              <size>
-               <width>30</width>
-               <height>30</height>
-              </size>
-             </property>
-             <property name="toolTip">
-              <string>List View</string>
-             </property>
-             <property name="text">
-              <string>☰</string>
-             </property>
-             <property name="flat">
-              <bool>true</bool>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="focusPolicy">
-              <enum>Qt::NoFocus</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="coverFlowViewButton">
-             <property name="maximumSize">
-              <size>
-               <width>30</width>
-               <height>30</height>
-              </size>
-             </property>
-             <property name="toolTip">
-              <string>Cover Flow View</string>
-             </property>
-             <property name="text">
-              <string>◖◉◗</string>
-             </property>
-             <property name="flat">
-              <bool>true</bool>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="focusPolicy">
-              <enum>Qt::NoFocus</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="horizontalViewButton">
-             <property name="maximumSize">
-              <size>
-               <width>30</width>
-               <height>30</height>
-              </size>
-             </property>
-             <property name="toolTip">
-              <string>Horizontal View</string>
-             </property>
-             <property name="text">
-              <string>⇆</string>
-             </property>
-             <property name="flat">
-              <bool>true</bool>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="focusPolicy">
-              <enum>Qt::NoFocus</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="hideSubcollectionsButton">
-             <property name="maximumSize">
-              <size>
-               <width>30</width>
-               <height>30</height>
-              </size>
-             </property>
-             <property name="toolTip">
-              <string>Hide subcollection tiles (Kartend-dd8)</string>
-             </property>
-             <property name="text">
-              <string>📁</string>
-             </property>
-             <property name="flat">
-              <bool>true</bool>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="focusPolicy">
-              <enum>Qt::NoFocus</enum>
+             <property name="styleSheet">
+              <string notr="true">QToolButton::menu-indicator { image: none; width: 0; }</string>
              </property>
             </widget>
            </item>
@@ -319,49 +243,36 @@
             </widget>
            </item>
            <item>
-            <widget class="QToolButton" name="typeFilterButton">
+            <widget class="QToolButton" name="filterButton">
+             <property name="minimumSize">
+              <size>
+               <width>34</width>
+               <height>30</height>
+              </size>
+             </property>
              <property name="maximumSize">
               <size>
-               <width>50</width>
+               <width>40</width>
                <height>30</height>
               </size>
              </property>
              <property name="toolTip">
-              <string>Filter subcollection tiles by type. (Kartend-dd8, Kartend-szon)</string>
+              <string>Filter</string>
              </property>
              <property name="text">
-              <string notr="true">🏷</string>
+              <string/>
              </property>
              <property name="popupMode">
               <enum>QToolButton::InstantPopup</enum>
              </property>
-             <property name="focusPolicy">
-              <enum>Qt::NoFocus</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QToolButton" name="titleFilterButton">
-             <property name="maximumSize">
-              <size>
-               <width>50</width>
-               <height>30</height>
-              </size>
-             </property>
-             <property name="toolTip">
-              <string>Per-collection title filter. Click body to toggle, click arrow to edit regex patterns. (Kartend-5h6, Kartend-szon)</string>
-             </property>
-             <property name="text">
-              <string notr="true">🔎</string>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="popupMode">
-              <enum>QToolButton::MenuButtonPopup</enum>
+             <property name="toolButtonStyle">
+              <enum>Qt::ToolButtonIconOnly</enum>
              </property>
              <property name="focusPolicy">
               <enum>Qt::NoFocus</enum>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QToolButton::menu-indicator { image: none; width: 0; }</string>
              </property>
             </widget>
            </item>
@@ -375,8 +286,8 @@
              </property>
              <property name="maximumSize">
               <size>
-               <width>120</width>
-               <height>30</height>
+               <width>110</width>
+               <height>22</height>
               </size>
              </property>
              <property name="toolTip">
@@ -397,49 +308,8 @@
              <property name="focusPolicy">
               <enum>Qt::NoFocus</enum>
              </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QFrame" name="viewSearchSeparator">
-             <property name="minimumSize">
-              <size>
-               <width>1</width>
-               <height>20</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>1</width>
-               <height>20</height>
-              </size>
-             </property>
-             <property name="frameShape">
-              <enum>QFrame::VLine</enum>
-             </property>
-             <property name="frameShadow">
-              <enum>QFrame::Sunken</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="searchModeButton">
-             <property name="maximumSize">
-              <size>
-               <width>30</width>
-               <height>30</height>
-              </size>
-             </property>
-             <property name="toolTip">
-              <string>Search: Current collection only</string>
-             </property>
-             <property name="text">
-              <string></string>
-             </property>
-             <property name="flat">
-              <bool>true</bool>
-             </property>
-             <property name="focusPolicy">
-              <enum>Qt::NoFocus</enum>
+             <property name="styleSheet">
+              <string notr="true">QSlider::groove:horizontal { height: 3px; background: palette(mid); border-radius: 1px; } QSlider::sub-page:horizontal { background: palette(highlight); border-radius: 1px; } QSlider::handle:horizontal { background: palette(button-text); width: 8px; height: 10px; margin: -4px 0; border-radius: 4px; }</string>
              </property>
             </widget>
            </item>
@@ -447,7 +317,7 @@
             <widget class="QLineEdit" name="searchBar">
              <property name="maximumSize">
               <size>
-               <width>250</width>
+               <width>270</width>
                <height>16777215</height>
               </size>
              </property>

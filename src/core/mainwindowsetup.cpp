@@ -9,7 +9,9 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollBar>
+#include <QSize>
 #include <QTimer>
+#include <QToolButton>
 
 #include "applicationmanager.h"
 #include "artworkmanager.h"
@@ -182,16 +184,17 @@ void MainWindow::setupUIReferences() {
   m_mainContentWidget = ui->m_mainContentWidget;
   m_mainHorizontalLayout = ui->m_mainHorizontalLayout;
   searchBar = ui->searchBar;
-  m_searchModeButton = ui->searchModeButton;
-  m_gridViewButton = ui->gridViewButton;
-  m_listViewButton = ui->listViewButton;
-  m_coverFlowViewButton = ui->coverFlowViewButton;
-  m_horizontalViewButton = ui->horizontalViewButton;
-  // Kartend-dd8: collection categorization toolbar widgets
-  m_hideSubcollectionsButton = ui->hideSubcollectionsButton;
-  m_typeFilterButton = ui->typeFilterButton;
-  // Kartend-5h6: title-exclusion regex toolbar button
-  m_titleFilterButton = ui->titleFilterButton;
+  m_viewModeButton = ui->viewModeButton;
+  setupViewModeButton();
+  setupSearchModeAction();
+  // Single consolidated filter button (replaces typeFilterButton +
+  // titleFilterButton + hideSubcollectionsButton).
+  m_filterButton = ui->filterButton;
+  if (m_filterButton) {
+    m_filterButton->setIcon(
+        UIConstants::Icons::fromTheme({UIConstants::Icons::FILTER, "view-filter"}));
+    m_filterButton->setIconSize(QSize(18, 18));
+  }
   m_MetadataSidebar = ui->metadataSidebarWidget;
 
   // Prevent scroll area from stealing keyboard focus - we handle
@@ -240,7 +243,7 @@ void MainWindow::initializeAppContext() {
   m_appContext.ui.gridContainer = gridContainer;
   m_appContext.ui.menubar = ui->menubar;
   m_appContext.ui.searchBar = searchBar;
-  m_appContext.ui.searchModeButton = m_searchModeButton;
+  m_appContext.ui.searchModeAction = m_searchModeAction;
   m_appContext.ui.sidebar = m_MetadataSidebar;
   m_appContext.ui.loadingLabel = ui->loadingLabel;
   m_appContext.ui.loadingOverlay = m_loadingOverlay;
@@ -370,19 +373,8 @@ void MainWindow::setViewType(ViewType viewType) {
     getSettingsManager()->saveCollections(m_collections);
   }
 
-  // Update button checked states
-  if (m_gridViewButton) {
-    m_gridViewButton->setChecked(viewType == ViewType::Grid);
-  }
-  if (m_listViewButton) {
-    m_listViewButton->setChecked(viewType == ViewType::List);
-  }
-  if (m_coverFlowViewButton) {
-    m_coverFlowViewButton->setChecked(viewType == ViewType::CoverFlow);
-  }
-  if (m_horizontalViewButton) {
-    m_horizontalViewButton->setChecked(viewType == ViewType::Horizontal);
-  }
+  // Update view-mode button checked state and label.
+  syncViewModeButton(viewType);
   // Kartend-iue: keep the View → Layout submenu in sync with the toolbar.
   if (m_menuController) {
     m_menuController->syncLayoutActions(viewType);
