@@ -13,8 +13,8 @@
  */
 namespace ConfigValidation {
 
-// Check if a command is available in PATH (for non-path launchers like
-// "retroarch")
+// Check if a command is available in PATH (for launchers configured by name
+// rather than absolute path).
 [[nodiscard]] bool isCommandInPath(const QString &command);
 
 // Validation result with multiple issues

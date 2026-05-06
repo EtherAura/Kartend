@@ -54,6 +54,8 @@ struct ItemMetadata {
   /// True when no extended fields have meaningful values. Used by the sidebar
   /// to skip rendering the Details section entirely on bare items.
   [[nodiscard]] bool isEmpty() const;
+
+  bool operator==(const ItemMetadata &other) const = default;
 };
 
 /// Loads metadata for the given (collectionUuid, path). Returns an empty

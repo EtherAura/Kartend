@@ -37,8 +37,12 @@ public:
                            CacheManager *cacheManager, QObject *parent = nullptr);
   ~SettingsManager();
 
-  void loadCollections(QList<CollectionConfig> &collections) const;
-  void saveCollections(const QList<CollectionConfig> &collections) const;
+  void loadCollections(QList<CollectionConfig> &collections);
+  // Kartend-9iwv: emits collectionsModified() so observers (toolbar type
+  // filter, hierarchy cache, sidebar summary) refresh after any save —
+  // not just settings-dialog-driven ones. Non-const for that reason; the
+  // disk write itself doesn't mutate SettingsManager state.
+  void saveCollections(const QList<CollectionConfig> &collections);
   void setupDefaultCollections(QList<CollectionConfig> &collections);
   void openSettingsDialog(const SettingsDialogContext &context);
   auto loadGeneralSettings(GeneralSettings &settings) -> void;
@@ -90,7 +94,7 @@ private:
   QPointer<QWidget> m_pendingAddSummaryParent;
 
   void finalizeCollections(const QHash<QString, CollectionConfig> &tempCollections,
-                           QList<CollectionConfig> &collections, const bool &needsRewrite) const;
+                           QList<CollectionConfig> &collections, const bool &needsRewrite);
 };
 
 #endif // SETTINGSMANAGER_H

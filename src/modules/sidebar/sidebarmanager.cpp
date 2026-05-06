@@ -14,9 +14,9 @@
 #include "timerutils.h"
 #include "uiconstants.h"
 #include "videoutils.h"
+#include <algorithm>
 #include <QApplication>
 #include <QFileInfo>
-#include <algorithm>
 #include <QHash>
 #include <QHBoxLayout>
 #include <QList>
@@ -81,8 +81,7 @@ void SidebarManager::setupReferences(const SidebarManagerSetup &setup) {
       bool isFixedMode = false;
       if (m_collections && m_currentCollectionIndex >= 0 &&
           m_currentCollectionIndex < m_collections->size()) {
-        isFixedMode =
-            (*m_collections)[m_currentCollectionIndex].sidebarMode == SidebarMode::Expand;
+        isFixedMode = (*m_collections)[m_currentCollectionIndex].sidebarMode == SidebarMode::Expand;
       }
       if (!isFixedMode) {
         positionSidebarOverlay();
@@ -144,6 +143,9 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
     if (m_MetadataSidebar) {
       m_MetadataSidebar->clearMetadata();
     }
+    // Kartend-uve: drop the published item context so the detail page can't
+    // render a stale selection after a deselect / collection switch.
+    m_currentItemContext = {};
     return;
   }
 
@@ -331,6 +333,16 @@ void SidebarManager::updateSidebarMetadata(ItemWidget *selectedItem) {
   } else {
     m_currentItemOwningIndex = -1;
   }
+  // Kartend-uve: publish the resolved owner-aware context so the detail page
+  // can render the same item without redoing the lookup. videoDirectory and
+  // manualDirectory are already expanded above; capture them all.
+  m_currentItemContext.filePath = filePath;
+  m_currentItemContext.itemName = itemName;
+  m_currentItemContext.uuid = metaUuid;
+  m_currentItemContext.artworkDir = artworkDirectory;
+  m_currentItemContext.videoDir = videoDirectory;
+  m_currentItemContext.manualDir = manualDirectory;
+  m_currentItemContext.owningIndex = m_currentItemOwningIndex;
   m_MetadataSidebar->setArtworkEditEnabled(!metaUuid.isEmpty());
 }
 

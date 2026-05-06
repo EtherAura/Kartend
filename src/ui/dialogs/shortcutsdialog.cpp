@@ -98,6 +98,7 @@ void ShortcutsDialog::populateContent() {
               tr("Jump to previous letter (alphabetic)"));
   addShortcut(m_contentLayout, keyText(settings.keyAlphabeticForward),
               tr("Jump to next letter (alphabetic)"));
+  addShortcut(m_contentLayout, keyText(settings.keyItemDetails), tr("Open item detail page"));
 
   // Search
   addSection(m_contentLayout, tr("Search"));

@@ -6,7 +6,9 @@
 #include "cachemanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "detailpagemanager.h"
 #include "interactionmanager.h"
+#include "kartmanager.h"
 #include "navigationmanager.h"
 #include "playlistmanager.h"
 #include "scrollmanager.h"
@@ -74,6 +76,16 @@ void ApplicationManager::initialize() {
 
   // 10. InteractionManager
   m_interactionManager = std::make_unique<InteractionManager>(this);
+
+  // 11. DetailPageManager (Kartend-uve). Standalone — only depends on the
+  // overlay widget + SidebarManager + DatabaseManager, all of which are
+  // wired in MainWindow::setupManagerConnections via the setup struct.
+  m_detailPageManager = std::make_unique<DetailPageManager>(this);
+
+  // 12. KartManager (Kartend-zgaq). Coordinates Kart import/export. Wired in
+  // MainWindow::setupManagerConnections with SettingsManager + collection list
+  // accessors via the setup struct.
+  m_kartManager = std::make_unique<kart::KartManager>(this);
 }
 
 void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
@@ -147,6 +159,10 @@ DatabaseManager *ApplicationManager::getDatabaseManager() const {
   return m_databaseManager.get();
 }
 
+DetailPageManager *ApplicationManager::getDetailPageManager() const {
+  return m_detailPageManager.get();
+}
+
 InteractionManager *ApplicationManager::getInteractionManager() const {
   return m_interactionManager.get();
 }
@@ -174,3 +190,5 @@ SettingsManager *ApplicationManager::getSettingsManager() const {
 SidebarManager *ApplicationManager::getSidebarManager() const {
   return m_sidebarManager.get();
 }
+
+kart::KartManager *ApplicationManager::getKartManager() const { return m_kartManager.get(); }

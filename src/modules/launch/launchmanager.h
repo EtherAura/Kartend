@@ -57,7 +57,7 @@ struct LaunchCommand {
 };
 
 /// Handles launching media items with their configured launchers.
-/// Manages RetroArch cores, parameter parsing, and launch debouncing.
+/// Manages libretro cores, parameter parsing, and launch debouncing.
 class LaunchManager : public QObject {
   Q_OBJECT
 public:

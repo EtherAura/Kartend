@@ -63,8 +63,8 @@ auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config, int 
       metrics.totalWidth = MAX_WIDTH;
       metrics.scrollScale = static_cast<double>(rawWidth) / static_cast<double>(MAX_WIDTH);
       metrics.isClipped = true;
-      metrics.overflowAmount = static_cast<int>(qMin<qint64>(
-          rawWidth - static_cast<qint64>(MAX_WIDTH), static_cast<qint64>(INT_MAX)));
+      metrics.overflowAmount = static_cast<int>(
+          qMin<qint64>(rawWidth - static_cast<qint64>(MAX_WIDTH), static_cast<qint64>(INT_MAX)));
     } else {
       metrics.totalWidth = static_cast<int>(rawWidth);
       metrics.scrollScale = 1.0;
@@ -124,8 +124,7 @@ auto GridLayoutCalculator::adjustForFilter(const GridMetrics &baseMetrics, int f
     }
     int horizontalSpacingContribution =
         (adjusted.totalRows > 1) ? (adjusted.totalRows - 1) * baseMetrics.horizontalSpacing : 0;
-    adjusted.totalWidth = baseMetrics.margins * 2 +
-                          adjusted.totalRows * baseMetrics.itemWidth +
+    adjusted.totalWidth = baseMetrics.margins * 2 + adjusted.totalRows * baseMetrics.itemWidth +
                           horizontalSpacingContribution;
     adjusted.actualGridWidth = adjusted.totalWidth;
     return adjusted;

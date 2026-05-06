@@ -1,6 +1,16 @@
 // Sibling TU: appearance/styling application for NavigationManager.
 #include "artworkmanager.h"
 #include "artworkutils.h"
+#include "backgroundvideowidget.h"
+#include "backdropbluroverlay.h"
+#include "headerlogooverlay.h"
+#include "vignetteoverlay.h"
+#include <QAbstractSlider>
+#include <QBoxLayout>
+#include <QLayoutItem>
+#include <QPixmap>
+#include <QScrollBar>
+#include <QSpacerItem>
 #include "databasemanager.h"
 #include "errordialog.h"
 #include "interactionmanager.h"
@@ -79,19 +89,166 @@ void NavigationManager::applyBackgroundForCollection(int collectionIndex) {
     return;
   }
 
+  // Kartend-vbs: video bg routes through BackgroundVideoWidget instead of
+  // the QSS path because Qt stylesheets can't render video. The widget is
+  // lazy-created on first need and hidden (with decoder released) whenever
+  // the active collection doesn't use video.
+  const bool wantsVideo = (collection.backgroundType == BackgroundType::Video) &&
+                          !collection.backgroundVideo.isEmpty();
+  if (wantsVideo) {
+    if (!m_backgroundVideo) {
+      m_backgroundVideo = new BackgroundVideoWidget(viewport);
+    }
+    m_backgroundVideo->setVideoPath(collection.backgroundVideo);
+    // Lower so the scroll widget (and item grid) renders on top. show()
+    // before lower() avoids a one-frame flash where it'd come up raised.
+    m_backgroundVideo->show();
+    m_backgroundVideo->lower();
+  } else if (m_backgroundVideo) {
+    m_backgroundVideo->clear();
+    m_backgroundVideo->hide();
+  }
+
+  // Kartend-guo5: header logo as a real toolbar layout member. Insertion
+  // index depends on the chosen anchor so the logo pushes neighbouring
+  // controls aside instead of floating on top of them. TopLeft inserts at
+  // index 0 (truly leftmost); TopRight appends (truly rightmost); TopCenter
+  // sits just after the existing horizontal spacer that separates the
+  // title block from the right-side controls — i.e. roughly mid-toolbar.
+  auto *toolbarLayout =
+      m_itemsTopBar ? qobject_cast<QHBoxLayout *>(m_itemsTopBar->layout()) : nullptr;
+  const bool wantsLogo = !collection.headerLogoImage.isEmpty() && toolbarLayout;
+  if (wantsLogo) {
+    if (!m_headerLogo) {
+      m_headerLogo = new HeaderLogoOverlay(m_itemsTopBar);
+    }
+    // Always remove first so re-applying with a different position moves
+    // the widget rather than leaving stale duplicates in the layout.
+    toolbarLayout->removeWidget(m_headerLogo);
+
+    int insertIndex = 0;
+    switch (collection.headerLogoPosition) {
+    case HeaderLogoPosition::TopLeft:
+      insertIndex = 0;
+      break;
+    case HeaderLogoPosition::TopRight:
+      insertIndex = toolbarLayout->count();
+      break;
+    case HeaderLogoPosition::TopCenter: {
+      // Find the spacer that splits left and right toolbar groups; place
+      // the logo immediately after it. Falls back to layout end if the
+      // spacer ever gets removed in a future .ui edit.
+      int spacerIdx = -1;
+      for (int i = 0; i < toolbarLayout->count(); ++i) {
+        if (toolbarLayout->itemAt(i)->spacerItem()) {
+          spacerIdx = i;
+          break;
+        }
+      }
+      insertIndex = (spacerIdx >= 0) ? spacerIdx + 1 : toolbarLayout->count();
+      break;
+    }
+    }
+    toolbarLayout->insertWidget(insertIndex, m_headerLogo);
+    m_headerLogo->setLogo(collection.headerLogoImage, collection.headerLogoPosition);
+    m_headerLogo->show();
+  } else if (m_headerLogo) {
+    if (toolbarLayout) {
+      toolbarLayout->removeWidget(m_headerLogo);
+    }
+    m_headerLogo->clear();
+    m_headerLogo->hide();
+  }
+
+  // Kartend-qbp3: vignette overlay. Layered above the items grid (so it
+  // darkens grid edges) but below the header logo (so the logo stays
+  // bright in a corner if the user picks TopLeft/TopRight).
+  const bool wantsVignette = collection.vignetteEnabled && collection.vignetteIntensity > 0;
+  if (wantsVignette) {
+    if (!m_vignette) {
+      m_vignette = new VignetteOverlay(viewport);
+    }
+    m_vignette->setIntensity(collection.vignetteIntensity);
+    m_vignette->show();
+  } else if (m_vignette) {
+    m_vignette->hide();
+  }
+
+  // Re-establish viewport z-order every apply so any external raise()/lower()
+  // since last navigation can't leave the layers stacked wrong. Order:
+  // video → (scroll widget, default) → vignette. The header logo lives on
+  // m_itemsTopBar instead, so it isn't part of this stack.
+  if (m_backgroundVideo) {
+    m_backgroundVideo->lower();
+  }
+  if (m_vignette) {
+    m_vignette->raise();
+  }
+
+  // Kartend-eq8r: toolbar backdrop blur. Image bg only — sampling video
+  // frames every paint is too expensive without GPU shaders, so the
+  // toggle is treated as a no-op for video bgs. Parented to m_itemsTopBar
+  // and lowered behind the toolbar's button widgets so they render on top.
+  const bool wantsBlur = collection.toolbarBackdropBlur && m_itemsTopBar &&
+                         collection.backgroundType == BackgroundType::Image &&
+                         !collection.backgroundImage.isEmpty();
+  if (wantsBlur) {
+    if (!m_toolbarBlur) {
+      m_toolbarBlur = new BackdropBlurOverlay(m_itemsTopBar);
+    }
+    QPixmap source(collection.backgroundImage);
+    if (!source.isNull()) {
+      m_toolbarBlur->setSource(source, collection.backdropBlurRadius);
+      m_toolbarBlur->show();
+      m_toolbarBlur->lower();
+    } else if (m_toolbarBlur) {
+      m_toolbarBlur->clear();
+      m_toolbarBlur->hide();
+    }
+  } else if (m_toolbarBlur) {
+    m_toolbarBlur->clear();
+    m_toolbarBlur->hide();
+  }
+
+  // Kartend-y25g: connect the items scroll bar once so parallax can adjust
+  // the wallpaper's vertical position as the user scrolls. The handler
+  // self-bails when parallax is disabled for the active collection, so
+  // the connection is harmless when no collection wants the effect.
+  if (!m_scrollListenerConnected && m_itemScrollArea &&
+      m_itemScrollArea->verticalScrollBar()) {
+    connect(m_itemScrollArea->verticalScrollBar(), &QAbstractSlider::valueChanged, this,
+            [this](int /*v*/) { onItemsScrolled(); });
+    m_scrollListenerConnected = true;
+  }
+
   QString styleSheet;
-  if (collection.backgroundType == BackgroundType::Image && !collection.backgroundImage.isEmpty()) {
-    // Background image mode
+  if (wantsVideo) {
+    // Make the viewport (and its descendants — the scroll widget and grid
+    // container) transparent so the BackgroundVideoWidget child shows
+    // through. ItemWidgets paint their own pixmaps so they stay opaque
+    // where they need to be.
+    styleSheet = QStringLiteral("QWidget { background-color: transparent; }");
+  } else if (collection.backgroundType == BackgroundType::Image &&
+             !collection.backgroundImage.isEmpty()) {
+    // Background image mode. Parallax (Kartend-y25g) adjusts the vertical
+    // position by `scrollValue * strength / 100` — strength 0 keeps the bg
+    // locked (fully static), strength 100 makes it move at content speed.
     QString imagePath = collection.backgroundImage;
-    // Escape backslashes for CSS
     imagePath.replace("\\", "/");
+    int parallaxOffset = 0;
+    if (collection.wallpaperParallax && collection.parallaxStrength > 0 &&
+        m_itemScrollArea && m_itemScrollArea->verticalScrollBar()) {
+      const int v = m_itemScrollArea->verticalScrollBar()->value();
+      parallaxOffset = (v * collection.parallaxStrength) / 100;
+    }
     styleSheet = QString("QWidget { "
                          "background-image: url(\"%1\"); "
                          "background-repeat: no-repeat; "
-                         "background-position: center; "
+                         "background-position: center -%2px; "
                          "background-attachment: fixed; "
                          "}")
-                     .arg(imagePath);
+                     .arg(imagePath)
+                     .arg(parallaxOffset);
   } else if (!collection.backgroundColor.isEmpty()) {
     // Background color mode
     styleSheet = QString("QWidget { background-color: %1; }").arg(collection.backgroundColor);
@@ -119,10 +276,16 @@ void NavigationManager::applyPrimaryColorForCollection(int collectionIndex) {
   bool hasPrimaryColor =
       !collection.primaryColor.isEmpty() && QColor::isValidColorName(collection.primaryColor);
 
+  // Kartend-eq8r: when toolbar backdrop blur is active over an image bg,
+  // skip the primary-color fill — it would paint a flat color over the
+  // blurred wallpaper child and defeat the effect.
+  const bool blurActive = collection.toolbarBackdropBlur &&
+                          collection.backgroundType == BackgroundType::Image &&
+                          !collection.backgroundImage.isEmpty();
   // Apply primary color to toolbar/top bar (exact color, not tinted)
   if (m_itemsTopBar) {
     QString toolbarStyle;
-    if (hasPrimaryColor) {
+    if (hasPrimaryColor && !blurActive) {
       toolbarStyle =
           QString("QWidget#itemsTopBar { background-color: %1; }").arg(collection.primaryColor);
     }
@@ -158,6 +321,73 @@ void NavigationManager::applyPrimaryColorForCollection(int collectionIndex) {
     }
     m_searchBar->setStyleSheet(searchBarStyle);
   }
+}
+
+// Kartend-y25g: throttled scroll handler for wallpaper parallax. The
+// scroll bar can emit valueChanged dozens of times per second; rebuilding
+// the viewport stylesheet that often is wasteful, so we coalesce updates
+// to ~60Hz. The first edge fires immediately so the bg responds without
+// perceptible lag; subsequent emissions inside the window are dropped
+// and the timeout flush picks up the latest value.
+void NavigationManager::onItemsScrolled() {
+  if (!m_currentCollectionIndex || !m_collections || !m_itemScrollArea) {
+    return;
+  }
+  const int idx = *m_currentCollectionIndex;
+  if (idx < 0 || idx >= m_collections->size()) {
+    return;
+  }
+  const CollectionConfig &c = (*m_collections)[idx];
+  if (!c.wallpaperParallax || c.parallaxStrength <= 0 ||
+      c.backgroundType != BackgroundType::Image || c.backgroundImage.isEmpty()) {
+    return;
+  }
+
+  if (!m_parallaxThrottle) {
+    m_parallaxThrottle = new QTimer(this);
+    m_parallaxThrottle->setSingleShot(true);
+    connect(m_parallaxThrottle, &QTimer::timeout, this,
+            &NavigationManager::applyParallaxOffset);
+  }
+  if (m_parallaxThrottle->isActive()) {
+    // An update is already queued; the timeout will pick up the latest
+    // scroll value when it fires.
+    return;
+  }
+  applyParallaxOffset();
+  // ~60Hz throttle. Higher cadence wastes QSS rebuilds; lower starts to
+  // feel laggy on fast scrolls.
+  m_parallaxThrottle->start(16);
+}
+
+void NavigationManager::applyParallaxOffset() {
+  if (!m_currentCollectionIndex || !m_collections || !m_itemScrollArea ||
+      !m_itemScrollArea->viewport() || !m_itemScrollArea->verticalScrollBar()) {
+    return;
+  }
+  const int idx = *m_currentCollectionIndex;
+  if (idx < 0 || idx >= m_collections->size()) {
+    return;
+  }
+  const CollectionConfig &c = (*m_collections)[idx];
+  if (c.backgroundType != BackgroundType::Image || c.backgroundImage.isEmpty()) {
+    return;
+  }
+  const int strength = c.wallpaperParallax ? qBound(0, c.parallaxStrength, 100) : 0;
+  const int v = m_itemScrollArea->verticalScrollBar()->value();
+  const int offset = (v * strength) / 100;
+
+  QString imagePath = c.backgroundImage;
+  imagePath.replace("\\", "/");
+  const QString styleSheet = QString("QWidget { "
+                                     "background-image: url(\"%1\"); "
+                                     "background-repeat: no-repeat; "
+                                     "background-position: center -%2px; "
+                                     "background-attachment: fixed; "
+                                     "}")
+                                 .arg(imagePath)
+                                 .arg(offset);
+  m_itemScrollArea->viewport()->setStyleSheet(styleSheet);
 }
 
 void NavigationManager::restoreSelectionForCurrentCollection() {

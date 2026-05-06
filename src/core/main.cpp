@@ -3,6 +3,7 @@
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
+#include <QDir>
 #include <QGuiApplication>
 #include <QLoggingCategory>
 #include <QStringList>
@@ -13,7 +14,15 @@
 #include <cstdlib>
 
 #include "collectionutils.h"
+#include "errorutils.h"
+#include "kartdb.h"
+#include "kartmanager.h"
+#include "kartreader.h"
+#include "kartwriter.h"
 #include "mainwindow.h"
+#include "settingsmanager.h"
+
+#include <QSqlDatabase>
 
 auto main(int argc, char *argv[]) -> int {
   // Enable Wayland-native features when running on Wayland
@@ -63,9 +72,119 @@ auto main(int argc, char *argv[]) -> int {
         QApplication::translate("main", "name"));
     parser.addOption(collectionOption);
 
+    QCommandLineOption importKartOption(
+        QStringLiteral("import-kart"),
+        QApplication::translate("main", "Import a .kart package headlessly and exit."),
+        QApplication::translate("main", "path"));
+    parser.addOption(importKartOption);
+
+    QCommandLineOption toOption(
+        QStringLiteral("to"),
+        QApplication::translate("main", "Destination directory for --import-kart."),
+        QApplication::translate("main", "dir"));
+    parser.addOption(toOption);
+
+    QCommandLineOption exportKartOption(
+        QStringLiteral("export-kart"),
+        QApplication::translate("main", "Export the named collection headlessly and exit."),
+        QApplication::translate("main", "name"));
+    parser.addOption(exportKartOption);
+
+    QCommandLineOption exportOutOption(
+        QStringLiteral("export-out"),
+        QApplication::translate("main", "Output path for --export-kart."),
+        QApplication::translate("main", "path"));
+    parser.addOption(exportOutOption);
+
+    QCommandLineOption onConflictOption(
+        QStringLiteral("on-conflict"),
+        QApplication::translate("main", "Conflict policy for --import-kart: skip|overwrite|merge."),
+        QApplication::translate("main", "policy"), QStringLiteral("skip"));
+    parser.addOption(onConflictOption);
+
     parser.process(app);
     if (parser.isSet(collectionOption)) {
       cliCollectionOverride = parser.value(collectionOption).trimmed();
+    }
+
+    if (parser.isSet(importKartOption)) {
+      const QString src = parser.value(importKartOption);
+      const QString dest =
+          parser.isSet(toOption) ? parser.value(toOption) : (QDir::homePath() + "/imported-kart");
+      kart::MergeChoice headlessChoice = kart::MergeChoice::Skip;
+      if (parser.isSet(onConflictOption)) {
+        const QString v = parser.value(onConflictOption).toLower();
+        if (v == "overwrite") {
+          headlessChoice = kart::MergeChoice::Overwrite;
+        } else if (v == "merge") {
+          headlessChoice = kart::MergeChoice::Merge;
+        }
+      }
+      kart::KartManager km;
+      auto res = km.importKartHeadless(src, dest, false, headlessChoice);
+      if (res.isError()) {
+        fprintf(stderr, "kart import failed: %s\n", qPrintable(res.error().message));
+        if (!res.error().details.isEmpty()) {
+          fprintf(stderr, "  details: %s\n", qPrintable(res.error().details));
+        }
+        return 2;
+      }
+      fprintf(stderr, "imported to %s\n", qPrintable(res.value()));
+      return 0;
+    }
+
+    if (parser.isSet(exportKartOption)) {
+      const QString collectionName = parser.value(exportKartOption);
+      if (!parser.isSet(exportOutOption)) {
+        fprintf(stderr, "kart export requires --export-out <path>\n");
+        return 2;
+      }
+      const QString outPath = parser.value(exportOutOption);
+      SettingsManager headlessSettings(nullptr, nullptr, nullptr, nullptr);
+      QList<CollectionConfig> collections;
+      headlessSettings.loadCollections(collections);
+      int idx = -1;
+      for (int i = 0; i < collections.size(); ++i) {
+        if (collections.at(i).name == collectionName) {
+          idx = i;
+          break;
+        }
+      }
+      if (idx < 0) {
+        fprintf(stderr, "kart export: no collection named '%s'\n", qPrintable(collectionName));
+        return 2;
+      }
+      const CollectionConfig &cfg = collections.at(idx);
+      const QString collectionUuid =
+          CollectionUtils::computeCollectionUuid(cfg.name, cfg.mediaDirectory);
+      auto dbRes = kart::openMediaDbConnection(QStringLiteral("kart-cli-export"));
+      QSqlDatabase *dbPtr = nullptr;
+      QSqlDatabase db;
+      if (dbRes.isOk()) {
+        db = dbRes.value();
+        dbPtr = &db;
+      }
+      auto prep = KartWriter::prepareFromCollection(cfg, collectionUuid, {}, dbPtr);
+      if (dbPtr) {
+        kart::closeMediaDbConnection(db);
+      }
+      if (prep.isError()) {
+        fprintf(stderr, "kart export prep failed: %s\n", qPrintable(prep.error().message));
+        return 2;
+      }
+      auto params = prep.value();
+      params.uuid = collectionUuid;
+      params.name = cfg.name;
+      KartWriter::Writer writer;
+      QObject::connect(&writer, &KartWriter::Writer::progress,
+                       [](double f) { fprintf(stderr, "export progress: %.0f%%\n", f * 100.0); });
+      auto res = writer.writeKart(outPath, params);
+      if (res.isError()) {
+        fprintf(stderr, "kart export failed: %s\n", qPrintable(res.error().message));
+        return 2;
+      }
+      fprintf(stderr, "exported '%s' to %s\n", qPrintable(collectionName), qPrintable(outPath));
+      return 0;
     }
   }
 

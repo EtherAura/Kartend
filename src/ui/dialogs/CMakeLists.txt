@@ -5,6 +5,8 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   customfieldsdialog.cpp
   errordialog.cpp
   itemartworklinksdialog.cpp
+  kartmergedialog.cpp
+  kartprogressdialog.cpp
   launcherchooserdialog.cpp
   launchereditordialog.cpp
   settingsdialog.cpp
@@ -27,6 +29,8 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   customfieldsdialog.h
   errordialog.h
   itemartworklinksdialog.h
+  kartmergedialog.h
+  kartprogressdialog.h
   launcherchooserdialog.h
   launchereditordialog.h
   settingsdialog.h

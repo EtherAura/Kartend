@@ -4,6 +4,8 @@
 #include "videopreviewwidget.h"
 #include "videothumbnailextractor.h"
 
+#include <algorithm>
+#include <cmath>
 #include <QApplication>
 #include <QColor>
 #include <QFont>
@@ -21,18 +23,16 @@
 #include <QPropertyAnimation>
 #include <QResizeEvent>
 #include <QSet>
+#include <QtConcurrent>
 #include <QTransform>
 #include <QWheelEvent>
-#include <QtConcurrent>
-#include <algorithm>
-#include <cmath>
 
 namespace {
 
 // Visual tuning. Side-card behavior is controlled by these scale curves and
 // the per-step horizontal stride. Center card is always at offset 0 and full
 // scale; side cards taper off symmetrically.
-constexpr int kVisibleSideCards = 5;       ///< cards drawn each side of center
+constexpr int kVisibleSideCards = 5;        ///< cards drawn each side of center
 constexpr qreal kSideCardScaleStart = 0.78; ///< scale at offset = ±1
 constexpr qreal kSideCardScaleStep = 0.10;  ///< additional shrink per step
 constexpr qreal kSideCardMinScale = 0.30;   ///< floor
@@ -42,11 +42,11 @@ constexpr qreal kSideCardOpacityStep = 0.12;
 constexpr qreal kCenterStrideFactor = 0.62; ///< center-to-first-side stride / cardSize
 constexpr qreal kSideStrideFactor = 0.34;   ///< inter-side stride / cardSize
 constexpr int kGlideDurationMs = 240;
-constexpr qreal kCardSizeFactor = 0.72;     ///< card edge / min(viewportW, viewportH)
-constexpr int kReflectionAlpha = 70;        ///< 0-255
-constexpr int kGalleryThumbSize = 48;       ///< thumbnail edge in px
-constexpr int kGalleryThumbSpacing = 8;     ///< inter-thumbnail gap
-constexpr int kGalleryStripHeight = 64;     ///< vertical slot reserved at bottom
+constexpr qreal kCardSizeFactor = 0.72; ///< card edge / min(viewportW, viewportH)
+constexpr int kReflectionAlpha = 70;    ///< 0-255
+constexpr int kGalleryThumbSize = 48;   ///< thumbnail edge in px
+constexpr int kGalleryThumbSpacing = 8; ///< inter-thumbnail gap
+constexpr int kGalleryStripHeight = 64; ///< vertical slot reserved at bottom
 
 QPixmap loadAndScale(const QString &path, int targetSize) {
   if (path.isEmpty()) {
@@ -211,8 +211,7 @@ QList<QRect> CoverFlowWidget::galleryThumbRects() const {
     return rects;
   }
   const int count = m_gallery.size();
-  const int totalWidth =
-      count * kGalleryThumbSize + (count - 1) * kGalleryThumbSpacing;
+  const int totalWidth = count * kGalleryThumbSize + (count - 1) * kGalleryThumbSpacing;
   const int startX = std::max(0, (width() - totalWidth) / 2);
   const int y = height() - kGalleryStripHeight + (kGalleryStripHeight - kGalleryThumbSize) / 2;
   for (int i = 0; i < count; ++i) {
@@ -762,8 +761,7 @@ void CoverFlowWidget::applyVideoPreviewState() {
     }
     return;
   }
-  if (m_videoPreviewIndex != m_selectedIndex ||
-      m_videoPreview->currentVideoPath() != videoPath) {
+  if (m_videoPreviewIndex != m_selectedIndex || m_videoPreview->currentVideoPath() != videoPath) {
     m_videoPreview->playVideo(videoPath);
     m_videoPreviewIndex = m_selectedIndex;
   }
@@ -910,7 +908,8 @@ void CoverFlowWidget::keyPressEvent(QKeyEvent *event) {
     return;
   }
   case Qt::Key_PageDown: {
-    int newIdx = std::min(static_cast<int>(m_cards.size()) - 1, m_selectedIndex + kVisibleSideCards);
+    int newIdx =
+        std::min(static_cast<int>(m_cards.size()) - 1, m_selectedIndex + kVisibleSideCards);
     if (newIdx != m_selectedIndex) {
       emit selectionChangeRequested(newIdx);
     }
@@ -981,7 +980,8 @@ QPixmap CoverFlowWidget::pixmapForIndex(int idx) {
       m_pendingLoads.insert(path, watcher);
       connect(watcher, &QFutureWatcher<QPixmap>::finished, this, &CoverFlowWidget::onArtworkLoaded);
       const int target = cardSize();
-      watcher->setFuture(QtConcurrent::run([path, target]() { return loadAndScale(path, target); }));
+      watcher->setFuture(
+          QtConcurrent::run([path, target]() { return loadAndScale(path, target); }));
     }
   }
   int sz = cardSize();
@@ -1043,8 +1043,7 @@ void CoverFlowWidget::prunePixmapCache() {
   // current selection. Cheap heuristic: clear everything not in [sel-N..sel+N].
   QSet<QString> keep;
   int from = std::max(0, m_selectedIndex - kVisibleSideCards * 2);
-  int to = std::min(static_cast<int>(m_cards.size()) - 1,
-                    m_selectedIndex + kVisibleSideCards * 2);
+  int to = std::min(static_cast<int>(m_cards.size()) - 1, m_selectedIndex + kVisibleSideCards * 2);
   for (int i = from; i <= to; ++i) {
     keep.insert(m_cards[i].artworkPath);
   }

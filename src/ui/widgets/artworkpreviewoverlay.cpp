@@ -204,6 +204,15 @@ void ArtworkPreviewOverlay::hideOverlay() {
   m_displayWidget = nullptr;
 }
 
+bool ArtworkPreviewOverlay::togglePreviewVideoPause() {
+  if (!m_videoPreview || m_displayWidget != m_videoPreview ||
+      !m_videoPreview->hasLoadedSource()) {
+    return false;
+  }
+  m_videoPreview->togglePauseResume();
+  return true;
+}
+
 void ArtworkPreviewOverlay::centerContent() {
   if (!m_displayWidget || !m_closeButton) {
     return;
@@ -238,7 +247,11 @@ void ArtworkPreviewOverlay::mousePressEvent(QMouseEvent *event) {
     event->accept();
     return;
   }
-  QWidget::mousePressEvent(event);
+  // Kartend-rvq7: accept inside-content presses too. Without this, Qt
+  // propagates the unaccepted event up through the overlay's parent
+  // (m_mediaScrollArea), where EventManager's app-level filter treats it as
+  // a click on the underlying tile and changes selection.
+  event->accept();
 }
 
 void ArtworkPreviewOverlay::mouseDoubleClickEvent(QMouseEvent *event) {
@@ -249,7 +262,8 @@ void ArtworkPreviewOverlay::mouseDoubleClickEvent(QMouseEvent *event) {
     emit launchRequested(m_currentFilePath);
     return;
   }
-  QWidget::mouseDoubleClickEvent(event);
+  // Kartend-rvq7: same anti-propagation reasoning as mousePressEvent.
+  event->accept();
 }
 
 void ArtworkPreviewOverlay::keyPressEvent(QKeyEvent *event) {
@@ -264,6 +278,15 @@ void ArtworkPreviewOverlay::keyPressEvent(QKeyEvent *event) {
     event->accept();
     emit launchRequested(m_currentFilePath);
     return;
+  }
+  // Kartend-cjry: K toggles pause/resume on the overlay's video preview.
+  // Same letter as YouTube's universal pause key — picked over Space because
+  // Space is consumed by coverflow navigation elsewhere in the app.
+  if (event->key() == Qt::Key_K) {
+    if (togglePreviewVideoPause()) {
+      event->accept();
+      return;
+    }
   }
   QWidget::keyPressEvent(event);
 }

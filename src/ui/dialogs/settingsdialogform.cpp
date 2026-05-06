@@ -28,8 +28,8 @@
 #include <QVariant>
 #include <set>
 
-#include "extensionutils.h"
 #include "attractmanager.h"
+#include "extensionutils.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
 #include "mainwindow.h"
@@ -129,6 +129,12 @@ void SettingsDialog::saveCollectionFromUI(int index) {
   if (!validatePath(collection.backgroundImage, tr("Background Image"))) {
     return;
   }
+  if (!validatePath(collection.backgroundVideo, tr("Background Video"))) {
+    return;
+  }
+  if (!validatePath(collection.headerLogoImage, tr("Header Logo"))) {
+    return;
+  }
 
   updateParentCollectionFromUI(collection, index);
 
@@ -219,14 +225,14 @@ void SettingsDialog::updateDeleteButtonState() {
 
 void SettingsDialog::updateUIForLauncherType(const QString &launcherPath) {
   bool hasContentDir = !ui->mediaDirLineEdit->text().trimmed().isEmpty();
-  bool isRetroArch = launcherPath.contains("retroarch", Qt::CaseInsensitive);
-  bool showCore = hasContentDir && isRetroArch;
+  bool usesLibretroCore = LauncherUtils::usesLibretroCore(launcherPath);
+  bool showCore = hasContentDir && usesLibretroCore;
   ui->coreLineEdit->setVisible(showCore);
   ui->browseCoreButton->setVisible(showCore);
   ui->label_core->setVisible(showCore);
-  if (isRetroArch) {
-    ui->coreLineEdit->setToolTip("Path to RetroArch core file (.so/.dll/.dylib)");
-    ui->launchParamsLineEdit->setToolTip("Additional RetroArch parameters");
+  if (usesLibretroCore) {
+    ui->coreLineEdit->setToolTip("Path to libretro core file (.so/.dll/.dylib)");
+    ui->launchParamsLineEdit->setToolTip("Additional libretro frontend parameters");
   } else {
     ui->launchParamsLineEdit->setToolTip("Additional command-line parameters for the launcher");
   }
@@ -281,16 +287,17 @@ void SettingsDialog::updateFieldVisibility() {
 }
 
 void SettingsDialog::updateExtractArchivesVisibility() {
-  bool isRetroArch = ui->launcherLineEdit->text().contains("retroarch", Qt::CaseInsensitive);
+  bool usesLibretroCore = LauncherUtils::usesLibretroCore(ui->launcherLineEdit->text());
   bool extractEnabled = ui->extractArchivesCheckBox->isChecked();
 
-  // Show extract archives option only for RetroArch launchers
-  ui->label_extractArchives->setVisible(isRetroArch);
-  ui->extractArchivesCheckBox->setVisible(isRetroArch);
+  // Show extract archives option only for libretro frontends, since the
+  // archive-extract preflight is what feeds those cores.
+  ui->label_extractArchives->setVisible(usesLibretroCore);
+  ui->extractArchivesCheckBox->setVisible(usesLibretroCore);
 
   // Show extracted extension field only when extraction is enabled
-  ui->label_extractedExtension->setVisible(isRetroArch && extractEnabled);
-  ui->extractedExtensionLineEdit->setVisible(isRetroArch && extractEnabled);
+  ui->label_extractedExtension->setVisible(usesLibretroCore && extractEnabled);
+  ui->extractedExtensionLineEdit->setVisible(usesLibretroCore && extractEnabled);
 }
 
 void SettingsDialog::onExtractArchivesToggled(bool checked) {
@@ -350,6 +357,17 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->bootSplashCheckBox->blockSignals(true);
     ui->bootSplashCheckBox->setChecked(m_generalSettings.bootSplashEnabled);
     ui->bootSplashCheckBox->blockSignals(false);
+  }
+  // Kartend-y3ke: startup video
+  if (ui->startupVideoEnabledCheckBox) {
+    ui->startupVideoEnabledCheckBox->blockSignals(true);
+    ui->startupVideoEnabledCheckBox->setChecked(m_generalSettings.startupVideoEnabled);
+    ui->startupVideoEnabledCheckBox->blockSignals(false);
+  }
+  if (ui->startupVideoPathLineEdit) {
+    ui->startupVideoPathLineEdit->blockSignals(true);
+    ui->startupVideoPathLineEdit->setText(m_generalSettings.startupVideoPath);
+    ui->startupVideoPathLineEdit->blockSignals(false);
   }
   if (ui->resumeFocusSplashCheckBox) {
     ui->resumeFocusSplashCheckBox->blockSignals(true);
@@ -624,6 +642,15 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     }
     if (ui->bootSplashCheckBox) {
       mainWindow->m_generalSettings.bootSplashEnabled = ui->bootSplashCheckBox->isChecked();
+    }
+    // Kartend-y3ke: startup video
+    if (ui->startupVideoEnabledCheckBox) {
+      mainWindow->m_generalSettings.startupVideoEnabled =
+          ui->startupVideoEnabledCheckBox->isChecked();
+    }
+    if (ui->startupVideoPathLineEdit) {
+      mainWindow->m_generalSettings.startupVideoPath =
+          ui->startupVideoPathLineEdit->text().trimmed();
     }
     if (ui->resumeFocusSplashCheckBox) {
       mainWindow->m_generalSettings.resumeFocusSplashEnabled =

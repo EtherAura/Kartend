@@ -304,8 +304,8 @@ void ViewportManager::applyImmediateViewportPositioningForSelection(int targetIn
     if (viewportW <= 0) {
       return;
     }
-    int targetX = GridLayoutCalculator::calculateCenterScrollTarget(
-        targetIndex, viewportW, hScrollBar->maximum(), metrics);
+    int targetX = GridLayoutCalculator::calculateCenterScrollTarget(targetIndex, viewportW,
+                                                                    hScrollBar->maximum(), metrics);
     hScrollBar->setValue(qBound(0, targetX, hScrollBar->maximum()));
     return;
   }

@@ -74,6 +74,24 @@ public:
   /// re-stack the sidebar above the active overlay.
   void setOverlayActive(bool active);
 
+  /// Kartend-uve: cached resolution context for the currently-displayed item.
+  /// Populated in updateSidebarMetadata() so siblings (e.g. DetailPageManager)
+  /// can render the same item without redoing the showAllSubcollectionItems-
+  /// aware owner / artwork / video / manual directory lookup. `uuid` is empty
+  /// when no item is selected, the lookup failed, or the user is showing the
+  /// collection summary (no-selection state).
+  struct ItemContext {
+    QString filePath;
+    QString itemName;
+    QString uuid;         // collection_uuid for DB metadata lookup
+    QString artworkDir;   // expanded, owner-aware artwork directory
+    QString videoDir;     // expanded, owner-aware video directory
+    QString manualDir;    // expanded, owner-aware manual directory
+    int owningIndex = -1; // index in m_collections, -1 if unknown
+    [[nodiscard]] bool isValid() const { return !filePath.isEmpty() && !uuid.isEmpty(); }
+  };
+  [[nodiscard]] const ItemContext &currentItemContext() const { return m_currentItemContext; }
+
 signals:
   void sidebarVisibilityChanged(bool visible);
   void sidebarLayoutChanged();
@@ -104,13 +122,15 @@ private:
   int m_currentCollectionIndex;
 
   // Snapshot of the currently-displayed item used by the artwork link
-  // editor (Kartend-53vk). Captured in updateSidebarMetadata so the dialog
-  // doesn't have to recompute owning collection / UUID resolution.
+  // editor (Kartend-53vk) and the detail page (Kartend-uve). Captured in
+  // updateSidebarMetadata so callers don't have to recompute owning
+  // collection / UUID resolution.
   QString m_currentItemFilePath;
   QString m_currentItemName;
   QString m_currentItemUuid;
   int m_currentItemOwningIndex = -1;
   QString m_currentItemArtworkDir;
+  ItemContext m_currentItemContext;
 };
 
 #endif

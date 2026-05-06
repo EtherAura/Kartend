@@ -124,10 +124,19 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
       configA.selectionColor != configB.selectionColor ||
       configA.backgroundColor != configB.backgroundColor ||
       configA.backgroundImage != configB.backgroundImage ||
+      configA.backgroundVideo != configB.backgroundVideo ||
       configA.backgroundType != configB.backgroundType ||
       configA.listRowColor != configB.listRowColor ||
       configA.listAltRowColor != configB.listAltRowColor ||
-      configA.listRowHeight != configB.listRowHeight) {
+      configA.listRowHeight != configB.listRowHeight ||
+      configA.headerLogoImage != configB.headerLogoImage ||
+      configA.headerLogoPosition != configB.headerLogoPosition ||
+      configA.vignetteEnabled != configB.vignetteEnabled ||
+      configA.vignetteIntensity != configB.vignetteIntensity ||
+      configA.wallpaperParallax != configB.wallpaperParallax ||
+      configA.parallaxStrength != configB.parallaxStrength ||
+      configA.toolbarBackdropBlur != configB.toolbarBackdropBlur ||
+      configA.backdropBlurRadius != configB.backdropBlurRadius) {
     hasChanges = true;
     appearanceChanged = true;
   }
@@ -330,8 +339,10 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   }
 
   collections = newCollections;
+  // Kartend-9iwv: saveCollections() emits collectionsModified() itself, so
+  // an explicit emit here would double-fire and run rebuildHierarchyCache
+  // twice for no benefit. Removed.
   saveCollections(collections);
-  emit collectionsModified();
 
   // Kartend-tvg: detect collections that were freshly added during this
   // dialog session (UUID present in newCollections but not in the snapshot

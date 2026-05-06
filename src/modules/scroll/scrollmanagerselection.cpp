@@ -1,8 +1,8 @@
 // Selection facade methods. Real logic lives in SelectionDisplayManager
 // (Kartend-p79). These thin wrappers preserve the ScrollManager public API
 // for external callers (viewport, keyboard, selection, interaction modules).
-#include "scrollmanager.h"
 #include "coverflowwidget.h"
+#include "scrollmanager.h"
 #include "selectiondisplaymanager.h"
 
 void ScrollManager::onArrowKeyViewUpdate() {

@@ -22,7 +22,6 @@ class QScrollArea;
 class QLineEdit;
 class QPushButton;
 class QToolButton;
-class QComboBox;
 class QLabel;
 class QAction;
 class QActionGroup;
@@ -46,7 +45,13 @@ class LoadingOverlay;
 class EmptyStateWidget;
 class SplashOverlay;
 class NowPlayingOverlay;
+class DetailPageOverlay;
+class DetailPageManager;
 class MenuController;
+
+namespace kart {
+class KartManager;
+}
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -72,7 +77,7 @@ public:
   QPushButton *m_horizontalViewButton = nullptr;
   // Kartend-dd8: collection categorization toolbar widgets
   QPushButton *m_hideSubcollectionsButton = nullptr;
-  QComboBox *m_typeFilterComboBox = nullptr;
+  QToolButton *m_typeFilterButton = nullptr;
   // Kartend-5h6: title-exclusion regex toolbar (per-collection patterns)
   QToolButton *m_titleFilterButton = nullptr;
   EmptyStateWidget *loadingLabel;
@@ -105,8 +110,10 @@ public:
   [[nodiscard]] InteractionManager *getInteractionManager() const;
   [[nodiscard]] SessionManager *getSessionManager() const;
   [[nodiscard]] ArtworkManager *getArtworkManager() const;
+  [[nodiscard]] kart::KartManager *getKartManager() const;
   [[nodiscard]] CacheManager *getCacheManager() const;
   [[nodiscard]] PlaylistManager *getPlaylistManager() const;
+  [[nodiscard]] DetailPageManager *getDetailPageManager() const;
 
   /// Re-runs the playlist synthesis pass (Kartend-vlm7): drops any prior
   /// playlist-backed CollectionConfigs from m_collections, queries the live
@@ -165,6 +172,13 @@ public:
   /// 10 percentage points per press — enough to feel responsive without
   /// requiring many keystrokes to traverse the [50, 300] range.
   void setupTextZoomShortcuts();
+  /// Kartend-cjry: install Ctrl+K to toggle pause/resume on the sidebar's
+  /// preview video. The fullscreen artwork overlay handles its own K key
+  /// internally because it grabs keyboard focus when shown.
+  void setupVideoPauseShortcut();
+  /// Kartend-3m01: bind the toolbar volume slider to
+  /// VideoPreviewWidget::setGlobalVolume and persist on change.
+  void setupPreviewVolumeSlider();
 
 protected:
   bool event(QEvent *event) override;
@@ -172,12 +186,15 @@ protected:
   void keyPressEvent(QKeyEvent *event) override;
   auto eventFilter(QObject *watched, QEvent *event) -> bool override;
   void closeEvent(QCloseEvent *event) override;
+  void dragEnterEvent(QDragEnterEvent *event) override;
+  void dropEvent(QDropEvent *event) override;
 
 private:
   bool m_isShuttingDown = false;
   std::unique_ptr<MenuController> m_menuController;
   SplashOverlay *m_splashOverlay = nullptr;
   NowPlayingOverlay *m_nowPlayingOverlay = nullptr;
+  DetailPageOverlay *m_detailPageOverlay = nullptr; // Kartend-uve
   bool m_startupSplashHandled = false;
   bool m_windowWasInactive = false;
 

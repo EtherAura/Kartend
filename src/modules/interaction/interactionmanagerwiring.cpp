@@ -295,16 +295,15 @@ void InteractionManager::connectAttractManagerSignals() {
             }
             m_attractManager->onActivityDetected();
           });
-  connect(m_attractManager.get(), &AttractManager::requestSelectIndex, this,
-          [this](int index) {
-            // Explicit viewport centering: selectItemByIndex only centers when
-            // the target widget is already materialized. With random advance
-            // mode the target is usually far outside the viewport, so without
-            // this the virtual scroll never realises the widget and the jump
-            // silently fails.
-            centerItemVertically(index, false);
-            selectItemByIndex(index, true);
-          });
+  connect(m_attractManager.get(), &AttractManager::requestSelectIndex, this, [this](int index) {
+    // Explicit viewport centering: selectItemByIndex only centers when
+    // the target widget is already materialized. With random advance
+    // mode the target is usually far outside the viewport, so without
+    // this the virtual scroll never realises the widget and the jump
+    // silently fails.
+    centerItemVertically(index, false);
+    selectItemByIndex(index, true);
+  });
 }
 
 void InteractionManager::connectEventManagerSignals() {

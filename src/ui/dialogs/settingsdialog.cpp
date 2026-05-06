@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <functional>
 #include <QAbstractItemView>
-#include <QAction>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDir>
@@ -11,7 +10,6 @@
 #include <QFontDialog>
 #include <QInputDialog>
 #include <QKeySequence>
-#include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPixmapCache>
@@ -194,29 +192,6 @@ void SettingsDialog::setupButtonConnections() {
     connect(ui->editLinkedParentsButton, &QPushButton::clicked, this,
             &SettingsDialog::onEditLinkedParents);
   }
-  // Kartend-63o + Kartend-f5i9: populate the "apply to..." tool button's
-  // dropdown menu so users can propagate the current collection's
-  // appearance/layout settings to all collections, just subcollections, or a
-  // user-picked subset. Menu is owned by the button so Qt cleans it up with
-  // the dialog.
-  if (ui->applyToButton) {
-    auto *menu = new QMenu(ui->applyToButton);
-    QAction *allAction = menu->addAction(tr("Apply to All Collections..."));
-    QAction *subAction = menu->addAction(tr("Apply to Subcollections Only..."));
-    QAction *selAction = menu->addAction(tr("Apply to Selected Collections..."));
-    menu->addSeparator();
-    // Kartend-iyk: pull-from-source. Lives in the same menu so the user has
-    // one entry point for all cross-collection settings copying.
-    QAction *pullAction = menu->addAction(tr("Copy Settings From..."));
-    connect(allAction, &QAction::triggered, this,
-            &SettingsDialog::applyCurrentSettingsToAllCollections);
-    connect(subAction, &QAction::triggered, this,
-            &SettingsDialog::applyCurrentSettingsToSubcollections);
-    connect(selAction, &QAction::triggered, this, &SettingsDialog::applyCurrentSettingsToSelected);
-    connect(pullAction, &QAction::triggered, this,
-            &SettingsDialog::copySettingsFromOtherCollection);
-    ui->applyToButton->setMenu(menu);
-  }
   // Kartend-enq: wire the Settings Mode selector. Default is `Current` to
   // preserve legacy single-collection save behavior.
   if (ui->settingsScopeComboBox) {
@@ -239,6 +214,10 @@ void SettingsDialog::setupButtonConnections() {
   if (ui->browsePlaceholderArtworkButton) {
     connect(ui->browsePlaceholderArtworkButton, &QPushButton::clicked, this,
             &SettingsDialog::browsePlaceholderArtwork);
+  }
+  if (ui->browseStartupVideoButton) {
+    connect(ui->browseStartupVideoButton, &QPushButton::clicked, this,
+            &SettingsDialog::browseStartupVideo);
   }
   if (ui->recursiveImportContentButton) {
     connect(ui->recursiveImportContentButton, &QPushButton::clicked, this,

@@ -54,6 +54,11 @@ public:
   /// Hide the overlay and stop any video playback.
   void hideOverlay();
 
+  /// Kartend-cjry: toggle the overlay's preview video between playing and
+  /// paused. Returns true if a toggle occurred (i.e. video is loaded and
+  /// active), false otherwise so callers can fall back to other handlers.
+  bool togglePreviewVideoPause();
+
   /// File path of the currently-previewed item, or empty if none. Set by
   /// showArtworkForFile and showMediaForFile (gallery-style showAtPath
   /// callers leave it empty since they don't have an associated file).

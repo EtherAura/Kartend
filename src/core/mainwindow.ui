@@ -297,21 +297,43 @@
             </widget>
            </item>
            <item>
-            <widget class="QComboBox" name="typeFilterComboBox">
-             <property name="minimumSize">
-              <size>
-               <width>120</width>
-               <height>0</height>
-              </size>
-             </property>
+            <widget class="QPushButton" name="detailPageButton">
              <property name="maximumSize">
               <size>
-               <width>180</width>
-               <height>16777215</height>
+               <width>30</width>
+               <height>30</height>
               </size>
              </property>
              <property name="toolTip">
-              <string>Filter subcollection tiles by type. Choose &lt;All types&gt; to disable. (Kartend-dd8)</string>
+              <string>Show item details for the current selection (Kartend-uve)</string>
+             </property>
+             <property name="text">
+              <string>ℹ</string>
+             </property>
+             <property name="flat">
+              <bool>true</bool>
+             </property>
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="typeFilterButton">
+             <property name="maximumSize">
+              <size>
+               <width>50</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Filter subcollection tiles by type. (Kartend-dd8, Kartend-szon)</string>
+             </property>
+             <property name="text">
+              <string notr="true">🏷</string>
+             </property>
+             <property name="popupMode">
+              <enum>QToolButton::InstantPopup</enum>
              </property>
              <property name="focusPolicy">
               <enum>Qt::NoFocus</enum>
@@ -327,16 +349,50 @@
               </size>
              </property>
              <property name="toolTip">
-              <string>Per-collection title filter. Click body to toggle, click arrow to edit regex patterns. (Kartend-5h6)</string>
+              <string>Per-collection title filter. Click body to toggle, click arrow to edit regex patterns. (Kartend-5h6, Kartend-szon)</string>
              </property>
              <property name="text">
-              <string>Filter</string>
+              <string notr="true">🔎</string>
              </property>
              <property name="checkable">
               <bool>true</bool>
              </property>
              <property name="popupMode">
               <enum>QToolButton::MenuButtonPopup</enum>
+             </property>
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="previewVolumeSlider">
+             <property name="minimumSize">
+              <size>
+               <width>80</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>120</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Preview video volume (Kartend-3m01)</string>
+             </property>
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>100</number>
+             </property>
+             <property name="value">
+              <number>100</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
              </property>
              <property name="focusPolicy">
               <enum>Qt::NoFocus</enum>
@@ -541,10 +597,16 @@
       <string>&amp;Recent</string>
      </property>
     </widget>
+    <widget class="QMenu" name="menuMostLaunched">
+     <property name="title">
+      <string>&amp;Most Launched</string>
+     </property>
+    </widget>
     <addaction name="actionSoftRefresh"/>
     <addaction name="actionRefresh"/>
     <addaction name="separator"/>
     <addaction name="menuRecent"/>
+    <addaction name="menuMostLaunched"/>
     <addaction name="actionOpenRandomItem"/>
     <addaction name="separator"/>
     <addaction name="actionExit"/>

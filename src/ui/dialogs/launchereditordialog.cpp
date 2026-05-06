@@ -8,6 +8,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QWidget>
 
 LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig &initial,
                                            const QString &title,
@@ -18,6 +19,7 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
 
   auto *layout = new QVBoxLayout(this);
   auto *form = new QFormLayout();
+  m_form = form;
 
   // Kartend-p1jd: only render the preset combo when the caller passed a
   // non-empty list. The preset-management UI itself reuses this dialog to
@@ -56,13 +58,18 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
   form->addRow(tr("Launcher:"), launcherRow);
 
   m_coreEdit = new QLineEdit(initial.corePath, this);
-  m_coreEdit->setPlaceholderText(tr("RetroArch core (.so/.dll/.dylib) — leave blank for non-RA"));
-  auto *coreRow = new QHBoxLayout();
+  m_coreEdit->setPlaceholderText(tr("Libretro core (.so/.dll/.dylib)"));
+  // Kartend-bafi: wrap the core row in a container widget so QFormLayout's
+  // setRowVisible can hide the label + fields together when the launcher
+  // isn't retroarch.
+  m_coreRowWidget = new QWidget(this);
+  auto *coreRow = new QHBoxLayout(m_coreRowWidget);
+  coreRow->setContentsMargins(0, 0, 0, 0);
   coreRow->addWidget(m_coreEdit);
   auto *browseCore = new QPushButton(tr("Browse"), this);
   connect(browseCore, &QPushButton::clicked, this, &LauncherEditorDialog::onBrowseCore);
   coreRow->addWidget(browseCore);
-  form->addRow(tr("Core Path:"), coreRow);
+  form->addRow(tr("Core Path:"), m_coreRowWidget);
 
   m_paramsEdit = new QLineEdit(initial.launchParameters, this);
   m_paramsEdit->setPlaceholderText(tr("Optional parameters (e.g. -fullscreen)"));
@@ -77,12 +84,21 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
 
   resize(480, 220);
 
+  // Kartend-bafi: live-track the launcher path so the core row appears the
+  // moment the user types/browses to a retroarch executable.
+  connect(m_launcherEdit, &QLineEdit::textChanged, this,
+          [this](const QString &) { updateCoreRowVisibility(); });
+
   // Apply the initial preset selection (if any) so the dialog opens with
   // the fields locked to the preset values when editing a referenced
   // launcher. Skipped when there's no combo at all.
   if (m_presetCombo) {
     applyPresetSelection(m_presetCombo->currentIndex() - 1);
   }
+
+  // Kartend-bafi: seed visibility from the initial launcher path so freshly
+  // opened dialogs hide the core field when it doesn't apply.
+  updateCoreRowVisibility();
 }
 
 LauncherConfig LauncherEditorDialog::launcher() const {
@@ -131,4 +147,11 @@ void LauncherEditorDialog::applyPresetSelection(int presetIndex) {
   if (m_launcherEdit) m_launcherEdit->setEnabled(fieldsEditable);
   if (m_coreEdit) m_coreEdit->setEnabled(fieldsEditable);
   if (m_paramsEdit) m_paramsEdit->setEnabled(fieldsEditable);
+}
+
+void LauncherEditorDialog::updateCoreRowVisibility() {
+  if (!m_form || !m_coreRowWidget || !m_launcherEdit) {
+    return;
+  }
+  m_form->setRowVisible(m_coreRowWidget, LauncherUtils::usesLibretroCore(m_launcherEdit->text()));
 }

@@ -325,8 +325,61 @@ void StatisticsDialog::populateByCollection(
   }
   m_byCollectionTree->clear();
   m_byCollectionTree->setSortingEnabled(false);
+
+  // Kartend-r5rr: roll up descendant items into each parent collection's row
+  // so the count matches what the title bar shows for that collection (which
+  // is always recursive — see refreshTitleCounts() in mainwindow.cpp). Without
+  // this, a root parent with subcollections shows 0 items in stats while the
+  // title bar shows the full subtree total. Map uuid → collectionIndex once,
+  // then walk each row's subtree summing every stat field so launches and
+  // play time stay in step with itemCount.
+  QHash<QString, int> uuidToIndex;
+  if (m_collections) {
+    uuidToIndex.reserve(m_collections->size());
+    for (int i = 0; i < m_collections->size(); ++i) {
+      const CollectionConfig &c = (*m_collections)[i];
+      const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+      uuidToIndex.insert(CollectionUtils::computeCollectionUuid(c.name, expanded), i);
+    }
+  }
+
+  auto rollUpForUuid = [&](const QString &uuid) -> UsageStatsStore::CollectionUsage {
+    UsageStatsStore::CollectionUsage acc;
+    acc.collectionUuid = uuid;
+    if (!m_collections || !uuidToIndex.contains(uuid)) {
+      // Stale row (collection deleted) — use the raw stored values so the
+      // user can still see and clear it.
+      auto it = byUuid.constFind(uuid);
+      if (it != byUuid.constEnd()) {
+        acc = it.value();
+      }
+      return acc;
+    }
+    QList<int> stack;
+    stack.append(uuidToIndex.value(uuid));
+    while (!stack.isEmpty()) {
+      const int idx = stack.takeLast();
+      if (idx < 0 || idx >= m_collections->size()) {
+        continue;
+      }
+      const CollectionConfig &c = (*m_collections)[idx];
+      const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+      const QString descUuid = CollectionUtils::computeCollectionUuid(c.name, expanded);
+      auto it = byUuid.constFind(descUuid);
+      if (it != byUuid.constEnd()) {
+        acc.itemCount += it.value().itemCount;
+        acc.totalLaunches += it.value().totalLaunches;
+        acc.totalPlaySeconds += it.value().totalPlaySeconds;
+      }
+      for (int childIdx : CollectionUtils::directChildrenOf(idx, *m_collections)) {
+        stack.append(childIdx);
+      }
+    }
+    return acc;
+  };
+
   for (auto it = byUuid.constBegin(); it != byUuid.constEnd(); ++it) {
-    const auto &row = it.value();
+    const UsageStatsStore::CollectionUsage row = rollUpForUuid(it.key());
     auto *item = new NumericTreeItem(m_byCollectionTree);
     item->setText(0, labelForCollectionUuid(row.collectionUuid));
     item->setText(1, QLocale().toString(row.itemCount));

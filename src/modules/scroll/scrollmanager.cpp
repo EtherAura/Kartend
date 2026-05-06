@@ -305,9 +305,9 @@ void ScrollManager::updateViewType(ViewType viewType) {
     // configureHorizontalScrollbar in VirtualContainerManager will pin it
     // off again on overflow. Force it back on here when entering Horizontal.
     if (viewType == ViewType::Horizontal) {
-      m_mediaScrollArea->setHorizontalScrollBarPolicy(
-          m_context.config.hideHorizontalScrollbar ? Qt::ScrollBarAlwaysOff
-                                                   : Qt::ScrollBarAsNeeded);
+      m_mediaScrollArea->setHorizontalScrollBarPolicy(m_context.config.hideHorizontalScrollbar
+                                                          ? Qt::ScrollBarAlwaysOff
+                                                          : Qt::ScrollBarAsNeeded);
     }
   }
 
