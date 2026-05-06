@@ -816,5 +816,13 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
     }
   }
 
+  // Kartend-yl0t: wheel scroll uses the bare setSelectedIndex setter, which
+  // does not emit selectionChanged. Without this notify, listeners wired to
+  // SelectionManager::selectionChanged (e.g. the toolbar's itemPositionLabel
+  // via InteractionManager forwarding) stay frozen during wheel navigation.
+  if (m_selectionManager) {
+    m_selectionManager->notifySelectionChanged();
+  }
+
   return wrapTriggered;
 }

@@ -99,6 +99,10 @@ void SelectionManager::setSelectedIndex(int index) {
   m_selectedItemIndex = index;
 }
 
+void SelectionManager::notifySelectionChanged() {
+  emit selectionChanged(m_selectedItemIndex);
+}
+
 void SelectionManager::setSelectedFilePath(const QString &path) {
   m_selectedFilePath = path;
 }
