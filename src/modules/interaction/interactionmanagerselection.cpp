@@ -21,6 +21,7 @@
 #include "alphabeticnavigationhandler.h"
 #include "animationmanager.h"
 #include "arrownavigationhandler.h"
+#include "attractmanager.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
 #include "keyboardmanager.h"
@@ -296,6 +297,14 @@ void InteractionManager::initializeSearchModeForCurrentCollection() {
 // Delegates to LaunchManager for launching media items
 void InteractionManager::launchItemWithCollection(const QString &filePath, int collectionIndex) {
   if (m_launchManager) {
+    // Treat the launch itself as user activity so attract mode stops
+    // immediately. Without this, attract keeps advancing the selection during
+    // the gap between Enter-press and runtimeStarted (which only fires once
+    // QProcess::started arrives — a noticeable lag for video players), and
+    // never stops at all for detached launches.
+    if (m_attractManager) {
+      m_attractManager->onActivityDetected();
+    }
     m_launchManager->recordLaunch(filePath);
     m_launchManager->launchItem(filePath, collectionIndex);
   }
