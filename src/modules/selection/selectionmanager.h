@@ -91,6 +91,12 @@ public:
   void setSelectedFilePath(const QString &path);
   void setSelectedWidget(ItemWidget *widget);
 
+  // Emit selectionChanged for the current index. Use after calling
+  // setSelectedIndex() from paths that don't go through selectItemByIndex /
+  // selectItemByHover (e.g. wheel scroll, arrow handler, hold-scroll) so that
+  // listeners like the toolbar position label stay in sync.
+  void notifySelectionChanged();
+
   // Primary selection operations
   void clearSelection(bool isShuttingDown = false);
   void clearSelectionAndFocus();
