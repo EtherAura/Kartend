@@ -7,6 +7,8 @@
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QKeySequence>
+#include <QLineEdit>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPixmapCache>
 #include <QPushButton>
@@ -15,6 +17,7 @@
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QTimer>
+#include <QToolButton>
 
 #include "applicationmanager.h"
 #include "artworkmanager.h"
@@ -66,8 +69,8 @@ Q_LOGGING_CATEGORY(lcMainWindow, "kartend.mainwindow")
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow), stackedWidget(nullptr), itemsPage(nullptr),
       gridContainer(nullptr), m_mainContentWidget(nullptr), itemGrid(nullptr),
-      m_mainHorizontalLayout(nullptr), searchBar(nullptr), m_searchModeButton(nullptr),
-      loadingLabel(nullptr), currentCollectionIndex(-1), m_MetadataSidebar(nullptr) {
+      m_mainHorizontalLayout(nullptr), searchBar(nullptr), loadingLabel(nullptr),
+      currentCollectionIndex(-1), m_MetadataSidebar(nullptr) {
   m_appManager = std::make_unique<ApplicationManager>(this);
   m_appManager->initialize();
 
@@ -242,6 +245,85 @@ void MainWindow::setupVideoPauseShortcut() {
   });
 }
 
+void MainWindow::setupViewModeButton() {
+  if (!m_viewModeButton) {
+    return;
+  }
+  // Kartend-iue: keep the toolbar layout-picker visually in lockstep with the
+  // View → Layout menu by mounting a popup of text-only entries (Grid / List /
+  // Cover Flow / Horizontal). The four legacy individual icon buttons used to
+  // do this — collapsed here into a single Breeze-icon button so the toolbar
+  // doesn't carry one slot per layout.
+  auto *menu = new QMenu(m_viewModeButton);
+  auto *group = new QActionGroup(menu);
+  group->setExclusive(true);
+
+  auto addEntry = [&](const QString &text, ViewType type) {
+    QAction *action = menu->addAction(text);
+    action->setCheckable(true);
+    group->addAction(action);
+    connect(action, &QAction::triggered, this, [this, type]() { setViewType(type); });
+    return action;
+  };
+  m_viewActionGrid = addEntry(tr("&Grid"), ViewType::Grid);
+  m_viewActionList = addEntry(tr("&List"), ViewType::List);
+  m_viewActionCoverFlow = addEntry(tr("&Cover Flow"), ViewType::CoverFlow);
+  m_viewActionHorizontal = addEntry(tr("&Horizontal"), ViewType::Horizontal);
+
+  m_viewModeButton->setMenu(menu);
+  m_viewModeButton->setIcon(
+      UIConstants::Icons::fromTheme({UIConstants::Icons::VIEW_PICKER, "view-list-icons"}));
+  m_viewModeButton->setIconSize(QSize(18, 18));
+}
+
+void MainWindow::syncViewModeButton(ViewType viewType) {
+  const auto setChecked = [](QAction *action, bool on) {
+    if (action) {
+      QSignalBlocker blocker(action);
+      action->setChecked(on);
+    }
+  };
+  setChecked(m_viewActionGrid, viewType == ViewType::Grid);
+  setChecked(m_viewActionList, viewType == ViewType::List);
+  setChecked(m_viewActionCoverFlow, viewType == ViewType::CoverFlow);
+  setChecked(m_viewActionHorizontal, viewType == ViewType::Horizontal);
+  if (m_viewModeButton) {
+    QString tip;
+    switch (viewType) {
+    case ViewType::Grid:
+      tip = tr("Layout: Grid (click to change)");
+      break;
+    case ViewType::List:
+      tip = tr("Layout: List (click to change)");
+      break;
+    case ViewType::CoverFlow:
+      tip = tr("Layout: Cover Flow (click to change)");
+      break;
+    case ViewType::Horizontal:
+      tip = tr("Layout: Horizontal (click to change)");
+      break;
+    }
+    m_viewModeButton->setToolTip(tip);
+  }
+}
+
+void MainWindow::setupSearchModeAction() {
+  if (!searchBar) {
+    return;
+  }
+  // The search-mode toggle lives inside the QLineEdit (LeadingPosition) rather
+  // than as a sibling QPushButton — keeps the toolbar tighter and gives the
+  // search field a familiar magnifier-glass affordance. The triggered() signal
+  // is wired later in connectSearchComponents() once InteractionManager is
+  // alive.
+  m_searchModeAction =
+      searchBar->addAction(UIConstants::Icons::fromTheme(UIConstants::Icons::SEARCH),
+                           QLineEdit::LeadingPosition);
+  if (m_searchModeAction) {
+    m_searchModeAction->setToolTip(tr("Toggle search scope"));
+  }
+}
+
 void MainWindow::setupPreviewVolumeSlider() {
   // Kartend-3m01: bind the toolbar volume slider to the static volume hook
   // on VideoPreviewWidget. The slider's initial value is set from persisted
@@ -299,80 +381,19 @@ void MainWindow::applyToolbarCustomization() {
   }
   const auto &gs = m_generalSettings;
 
-  // Visibility — leave the labels (collection title, subfolder path, position
-  // counter) and the search-mode/search-bar separator alone; those are managed
-  // by navigation/search code based on runtime state, not user preference.
-  if (ui->gridViewButton) {
-    ui->gridViewButton->setVisible(gs.toolbarShowGridViewButton);
-  }
-  if (ui->listViewButton) {
-    ui->listViewButton->setVisible(gs.toolbarShowListViewButton);
-  }
-  if (ui->coverFlowViewButton) {
-    ui->coverFlowViewButton->setVisible(gs.toolbarShowCoverFlowViewButton);
-  }
-  if (ui->horizontalViewButton) {
-    ui->horizontalViewButton->setVisible(gs.toolbarShowHorizontalViewButton);
-  }
-  if (ui->hideSubcollectionsButton) {
-    ui->hideSubcollectionsButton->setVisible(gs.toolbarShowHideSubcollectionsButton);
-  }
-  if (ui->typeFilterButton) {
-    ui->typeFilterButton->setVisible(gs.toolbarShowTypeFilter);
-  }
-  if (ui->titleFilterButton) {
-    ui->titleFilterButton->setVisible(gs.toolbarShowTitleFilter);
-  }
-  if (ui->searchModeButton) {
-    ui->searchModeButton->setVisible(gs.toolbarShowSearchModeButton);
+  // The legacy per-view-button visibility flags (toolbarShowGridViewButton et
+  // al.) and the hide-subcollections / search-mode flags are kept in
+  // GeneralSettings for backward compat, but the underlying buttons have been
+  // removed (single viewModeButton, in-field search action, single
+  // filterButton). Only the consolidated filter button and the search bar
+  // remain user-toggleable from this codepath; the filter button stays on
+  // when *either* legacy flag (type or title) is on so existing settings
+  // don't accidentally hide it.
+  if (ui->filterButton) {
+    ui->filterButton->setVisible(gs.toolbarShowTypeFilter || gs.toolbarShowTitleFilter);
   }
   if (ui->searchBar) {
     ui->searchBar->setVisible(gs.toolbarShowSearchBar);
-  }
-  // The view/search separator only makes sense when at least one widget on
-  // each side is showing; collapse it whenever both adjacent groups are hidden
-  // so the toolbar doesn't show a stray vertical line.
-  if (ui->viewSearchSeparator) {
-    const bool leftSideVisible = gs.toolbarShowGridViewButton || gs.toolbarShowListViewButton ||
-                                 gs.toolbarShowCoverFlowViewButton ||
-                                 gs.toolbarShowHorizontalViewButton ||
-                                 gs.toolbarShowHideSubcollectionsButton ||
-                                 gs.toolbarShowTypeFilter || gs.toolbarShowTitleFilter;
-    const bool rightSideVisible = gs.toolbarShowSearchModeButton || gs.toolbarShowSearchBar;
-    ui->viewSearchSeparator->setVisible(leftSideVisible && rightSideVisible);
-  }
-
-  // Custom text overrides — empty string falls back to the .ui default so the
-  // user can clear an override and get the original label back.
-  if (ui->gridViewButton) {
-    ui->gridViewButton->setText(gs.toolbarGridViewButtonText.isEmpty()
-                                    ? QStringLiteral("⊞")
-                                    : gs.toolbarGridViewButtonText);
-  }
-  if (ui->listViewButton) {
-    ui->listViewButton->setText(gs.toolbarListViewButtonText.isEmpty()
-                                    ? QStringLiteral("☰")
-                                    : gs.toolbarListViewButtonText);
-  }
-  if (ui->coverFlowViewButton) {
-    ui->coverFlowViewButton->setText(gs.toolbarCoverFlowViewButtonText.isEmpty()
-                                         ? QStringLiteral("◖◉◗")
-                                         : gs.toolbarCoverFlowViewButtonText);
-  }
-  if (ui->horizontalViewButton) {
-    ui->horizontalViewButton->setText(gs.toolbarHorizontalViewButtonText.isEmpty()
-                                          ? QStringLiteral("⇆")
-                                          : gs.toolbarHorizontalViewButtonText);
-  }
-  if (ui->hideSubcollectionsButton) {
-    ui->hideSubcollectionsButton->setText(gs.toolbarHideSubcollectionsButtonText.isEmpty()
-                                              ? QStringLiteral("📁")
-                                              : gs.toolbarHideSubcollectionsButtonText);
-  }
-  if (ui->titleFilterButton) {
-    ui->titleFilterButton->setText(gs.toolbarTitleFilterText.isEmpty()
-                                       ? QStringLiteral("🔎")
-                                       : gs.toolbarTitleFilterText);
   }
 }
 
@@ -671,8 +692,7 @@ void MainWindow::setupManagerConnections() {
   connectSidebarManager();
   connectSearchComponents();
   connectScrollBars();
-  connectCollectionTypeToolbar();
-  connectTitleFilterToolbar();
+  connectFilterToolbar();
 
   // Kartend-uve: detail page wiring. The overlay was created in
   // mainwindowsetup.cpp and parented to ui->centralwidget so it can cover
@@ -825,35 +845,24 @@ void MainWindow::updateWindowTitleForCollection(int collectionIndex) {
 
     // Sync view type button states
     ViewType viewType = m_collections[collectionIndex].viewType;
-    if (m_gridViewButton) {
-      m_gridViewButton->setChecked(viewType == ViewType::Grid);
-    }
-    if (m_listViewButton) {
-      m_listViewButton->setChecked(viewType == ViewType::List);
-    }
-    if (m_coverFlowViewButton) {
-      m_coverFlowViewButton->setChecked(viewType == ViewType::CoverFlow);
-    }
-    if (m_horizontalViewButton) {
-      m_horizontalViewButton->setChecked(viewType == ViewType::Horizontal);
-    }
+    syncViewModeButton(viewType);
     // Kartend-iue: View → Layout submenu mirrors toolbar checked state on
     // collection switch.
     if (m_menuController) {
       m_menuController->syncLayoutActions(viewType);
     }
   }
-  // Kartend-5h6: sync the title-filter toolbar to the new collection's
-  // patterns/enabled flag whenever we re-enter a view.
-  refreshTitleFilterToolbar();
+  // Sync the consolidated filter popup so the per-collection title-pattern
+  // toggle and type radios reflect the active collection.
+  refreshFilterToolbar();
 }
 
 void MainWindow::rebuildHierarchyCache() {
   m_hierarchyCache.rebuild(m_collections);
-  // Kartend-dd8: collection list may have gained/lost type tags after
-  // settings edits — keep the toolbar dropdown in sync so retagged
-  // collections show up immediately and orphaned filters self-clear.
-  refreshTypeFilterToolbar();
+  // Collection list may have gained/lost type tags after settings edits —
+  // keep the toolbar filter popup in sync so retagged collections show up
+  // immediately and orphaned filters self-clear.
+  refreshFilterToolbar();
 }
 
 void MainWindow::resyncPlaylistCollections() {

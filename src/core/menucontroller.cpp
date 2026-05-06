@@ -19,6 +19,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QRandomGenerator>
+#include <QSize>
 #include <QToolButton>
 
 MenuController::MenuController(QObject *parent) : QObject(parent) {}
@@ -501,16 +502,32 @@ void MenuController::setupHamburgerMenu() {
   if (m_ctx.ui->menuSettings) popup->addAction(m_ctx.ui->menuSettings->menuAction());
   if (m_ctx.ui->menuHelp) popup->addAction(m_ctx.ui->menuHelp->menuAction());
 
+  // Replace the legacy "≡" glyph with the kde-breeze application-menu icon so
+  // the hamburger renders correctly even on themes that don't size the
+  // unicode glyph well, and so the button no longer gets visually clipped at
+  // the .ui's tight 30-px width.
   m_ctx.ui->hamburgerMenuButton->setMenu(popup);
+  m_ctx.ui->hamburgerMenuButton->setIcon(
+      UIConstants::Icons::fromTheme({UIConstants::Icons::MENU, "open-menu-symbolic"}));
+  m_ctx.ui->hamburgerMenuButton->setIconSize(QSize(18, 18));
 
   syncHamburgerVisibility();
 }
 
 void MenuController::syncHamburgerVisibility() {
   if (!m_ctx.ui || !m_ctx.ui->hamburgerMenuButton || !m_ctx.mainWindow) return;
-  QMenuBar *bar = m_ctx.mainWindow->menuBar();
-  const bool menuBarHidden = bar && !bar->isVisible();
-  m_ctx.ui->hamburgerMenuButton->setVisible(menuBarHidden);
+  // QMenuBar::isVisible() is false until the window has actually been shown,
+  // so reading it during early setup falsely reports "menu bar hidden" and
+  // the hamburger button gets stuck visible even though the menu bar is on.
+  // Drive visibility off the user-intent action instead, falling back to the
+  // menu bar's hidden state for runtime calls (fullscreen toggle).
+  bool showHamburger = false;
+  if (m_ctx.ui->actionShowMenuBar) {
+    showHamburger = !m_ctx.ui->actionShowMenuBar->isChecked();
+  } else if (QMenuBar *bar = m_ctx.mainWindow->menuBar()) {
+    showHamburger = bar->isHidden();
+  }
+  m_ctx.ui->hamburgerMenuButton->setVisible(showHamburger);
 }
 
 // Kartend-iue: pick one media file at random from the active view and launch
