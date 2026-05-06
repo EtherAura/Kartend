@@ -441,8 +441,8 @@ void SidebarManager::positionSidebarOverlay() {
   }
 
   const int sidebarMargin = UIConstants::Sidebar::MARGIN;
-  int sidebarWidth =
-      m_MetadataSidebar->width() > 0 ? m_MetadataSidebar->width() : UIConstants::Sidebar::MAX_WIDTH;
+  int sidebarWidth = m_MetadataSidebar->width() > 0 ? m_MetadataSidebar->width()
+                                                    : UIConstants::Sidebar::FIXED_WIDTH;
 
   // Read position from the active collection so the overlay anchors on the
   // correct edge (Kartend-63e).
@@ -518,8 +518,7 @@ void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
     const CollectionConfig &collection = (*m_collections)[currentCollectionIndex];
     isFixedMode = (collection.sidebarMode == SidebarMode::Expand);
     position = collection.sidebarPosition;
-    desiredWidth = std::clamp(collection.sidebarWidth, UIConstants::Sidebar::MIN_WIDTH,
-                              UIConstants::Sidebar::MAX_WIDTH);
+    desiredWidth = std::max(collection.sidebarWidth, UIConstants::Sidebar::MIN_WIDTH);
   }
 
   bool wasInLayout = (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1);
