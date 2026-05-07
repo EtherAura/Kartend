@@ -26,7 +26,7 @@ class ViewportManager;
 class SelectionManager;
 class ArtworkManager;
 class DatabaseManager;
-class SidebarManager;
+class DetailsPaneManager;
 class InteractionStateHolder;
 struct ApplicationContext;
 
@@ -47,7 +47,7 @@ struct EventManagerSetup {
   SelectionManager *selectionManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
   DatabaseManager *databaseManager = nullptr;
-  SidebarManager *sidebarManager = nullptr;
+  DetailsPaneManager *detailsPaneManager = nullptr;
 
   // UI elements (can be overridden or taken from ctx)
   QScrollArea *itemScrollArea = nullptr;
@@ -69,7 +69,7 @@ struct EventManagerSetup {
   SETUP_GETTER_DECL(SelectionManager *, SelectionManager)
   SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
   SETUP_GETTER_DECL(DatabaseManager *, DatabaseManager)
-  SETUP_GETTER_DECL(SidebarManager *, SidebarManager)
+  SETUP_GETTER_DECL(DetailsPaneManager *, DetailsPaneManager)
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
   SETUP_GETTER_DECL(QWidget *, GridContainer)
   SETUP_GETTER_DECL(QStackedWidget *, StackedWidget)
@@ -162,7 +162,7 @@ private:
   SelectionManager *m_selectionManager = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
   DatabaseManager *m_databaseManager = nullptr;
-  SidebarManager *m_sidebarManager = nullptr;
+  DetailsPaneManager *m_detailsPaneManager = nullptr;
   InteractionStateHolder *m_state = nullptr;
   GeneralSettings *m_generalSettings = nullptr;
 

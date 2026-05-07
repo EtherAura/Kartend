@@ -17,7 +17,7 @@
 #include <QRectF>
 #include <Qt>
 
-// Kartend-63e: shared static so MetadataSidebar's Pattern background can
+// Kartend-63e: shared static so DetailsPane's Pattern background can
 // render the same hatch as missing-artwork item tiles.
 auto ItemWidget::buildPlaceholderTile(int width, int height, int cornerRadius, bool applyGradient,
                                       const QColor &baseOverride, double lineAlphaScale)
@@ -30,7 +30,7 @@ auto ItemWidget::buildPlaceholderTile(int width, int height, int cornerRadius, b
   static QHash<quint64, QPixmap> cache;
   static QString cachedTileColor;
   // Read the palette base from the global app palette by default. Callers
-  // (e.g. MetadataSidebar) can pass their own widget-instance Mid so a
+  // (e.g. DetailsPane) can pass their own widget-instance Mid so a
   // custom palette inherited from an ancestor is honored — without this
   // override, the sidebar's pattern was visibly lighter than item tiles.
   QColor base =

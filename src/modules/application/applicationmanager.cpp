@@ -14,7 +14,7 @@
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 
 #include <QtConcurrent>
 
@@ -68,8 +68,8 @@ void ApplicationManager::initialize() {
   m_scrollManager = std::make_unique<ScrollManager>(this);
   m_scrollManager->setDatabaseManager(m_databaseManager.get());
 
-  // 8. SidebarManager
-  m_sidebarManager = std::make_unique<SidebarManager>(this);
+  // 8. DetailsPaneManager
+  m_detailsPaneManager = std::make_unique<DetailsPaneManager>(this);
 
   // 9. NavigationManager
   m_navigationManager = std::make_unique<NavigationManager>(this);
@@ -78,7 +78,7 @@ void ApplicationManager::initialize() {
   m_interactionManager = std::make_unique<InteractionManager>(this);
 
   // 11. DetailPageManager (Kartend-uve). Standalone — only depends on the
-  // overlay widget + SidebarManager + DatabaseManager, all of which are
+  // overlay widget + DetailsPaneManager + DatabaseManager, all of which are
   // wired in MainWindow::setupManagerConnections via the setup struct.
   m_detailPageManager = std::make_unique<DetailPageManager>(this);
 
@@ -187,8 +187,8 @@ SettingsManager *ApplicationManager::getSettingsManager() const {
   return m_settingsManager.get();
 }
 
-SidebarManager *ApplicationManager::getSidebarManager() const {
-  return m_sidebarManager.get();
+DetailsPaneManager *ApplicationManager::getDetailsPaneManager() const {
+  return m_detailsPaneManager.get();
 }
 
 kart::KartManager *ApplicationManager::getKartManager() const { return m_kartManager.get(); }

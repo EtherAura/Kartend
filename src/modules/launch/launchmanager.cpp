@@ -55,7 +55,7 @@ QString LaunchManager::resolveCollectionUuid(int collectionIndex) const {
     return {};
   }
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
-  // Mirrors how SidebarManager keys per-item rows: name + expanded media dir.
+  // Mirrors how DetailsPaneManager keys per-item rows: name + expanded media dir.
   // Uses the same helper so UUIDs stay consistent across reads/writes.
   const QString expandedMediaDir =
       PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);

@@ -427,7 +427,7 @@ QString DetailPageOverlay::formatRuntime(int seconds) {
 }
 
 QString DetailPageOverlay::formatTags(const QString &raw) {
-  // Mirrors MetadataSidebar::formatTags so the detail page renders the same
+  // Mirrors DetailsPane::formatTags so the detail page renders the same
   // values: tolerate either a JSON array or a comma-separated string.
   QString trimmed = raw.trimmed();
   if (trimmed.startsWith('[') && trimmed.endsWith(']')) {

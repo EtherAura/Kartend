@@ -137,12 +137,12 @@ void TestKartManifest::testCollectionConfigAllFieldsRoundTrip() {
   c.titleExclusionPatterns = {"\\(USA\\)"};
   c.titleExclusionEnabled = false;
   c.horizontalAlignment = HorizontalAlignment::Right;
-  c.sidebarMode = SidebarMode::Expand;
-  c.sidebarPosition = SidebarPosition::Left;
-  c.sidebarBackgroundType = SidebarBackgroundType::Pattern;
+  c.sidebarMode = DetailsPaneMode::Expand;
+  c.sidebarPosition = DetailsPanePosition::Left;
+  c.sidebarBackgroundType = DetailsPaneBackgroundType::Pattern;
   c.sidebarBackgroundColor = "#112233";
   c.sidebarBackgroundImage = "bg.png";
-  c.sidebarPattern = SidebarPattern::Crosshatch;
+  c.sidebarPattern = DetailsPanePattern::Crosshatch;
   c.sidebarPatternIntensity = 75;
   c.sidebarPatternColor = "#ffffff";
   c.sidebarTextColor = "#000000";
@@ -153,7 +153,7 @@ void TestKartManifest::testCollectionConfigAllFieldsRoundTrip() {
   c.sidebarSectionBgOpacity = 80;
   c.sidebarWidth = 320;
   c.sidebarWidthLocked = false;
-  c.sidebarActiveTab = SidebarTab::Collection;
+  c.sidebarActiveTab = DetailsPaneTab::Collection;
   c.sidebarFontFamily = "Inter";
   c.sidebarFontPointSize = 12;
   c.viewType = ViewType::Horizontal;

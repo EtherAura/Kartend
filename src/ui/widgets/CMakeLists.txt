@@ -14,7 +14,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   itemwidgetsetters.cpp
   listheaderwidget.cpp
   loadingoverlay.cpp
-  metadatasidebar.cpp
+  detailspane.cpp
   nowplayingoverlay.cpp
   splashoverlay.cpp
   startupvideooverlay.cpp
@@ -32,7 +32,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   itemwidget.h
   listheaderwidget.h
   loadingoverlay.h
-  metadatasidebar.h
+  detailspane.h
   nowplayingoverlay.h
   splashoverlay.h
   startupvideooverlay.h
@@ -41,5 +41,5 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   videothumbnailextractor.h
   vignetteoverlay.h
   itemwidget.ui
-  metadatasidebar.ui
+  detailspane.ui
 )

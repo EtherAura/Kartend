@@ -8,7 +8,7 @@
  * test target.
  *
  * Note: NavigationManager itself depends on DatabaseManager, ScrollManager,
- * SidebarManager, and ApplicationContext, so it requires integration-style
+ * DetailsPaneManager, and ApplicationContext, so it requires integration-style
  * tests. Those are tracked separately. This file covers the stack primitive
  * that the NavigationManager built upon during the al0 refactor.
  */

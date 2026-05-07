@@ -1,5 +1,5 @@
-#ifndef SIDEBARMANAGER_H
-#define SIDEBARMANAGER_H
+#ifndef DETAILSPANEMANAGER_H
+#define DETAILSPANEMANAGER_H
 
 #include "collectionutils.h"
 #include "setuputils.h"
@@ -10,17 +10,17 @@
 class QHBoxLayout;
 class QVBoxLayout;
 class QScrollArea;
-class MetadataSidebar;
+class DetailsPane;
 class ItemWidget;
 class SettingsManager;
 class ArtworkManager;
 class DatabaseManager;
 struct ApplicationContext;
 
-struct SidebarManagerSetup {
+struct DetailsPaneManagerSetup {
   ApplicationContext *ctx = nullptr;
 
-  MetadataSidebar *sidebar = nullptr;
+  DetailsPane *sidebar = nullptr;
   QWidget *itemsPage = nullptr;
   QHBoxLayout *mainLayout = nullptr;
   /// Kartend-u2gx: outer vertical layout (`itemsPageLayout`) the details pane
@@ -37,7 +37,7 @@ struct SidebarManagerSetup {
   DatabaseManager *databaseManager = nullptr;
   QList<CollectionConfig> *collections = nullptr;
 
-  SETUP_GETTER_DECL(MetadataSidebar *, Sidebar)
+  SETUP_GETTER_DECL(DetailsPane *, Sidebar)
   SETUP_GETTER_DECL(QWidget *, ItemsPage)
   SETUP_GETTER_DECL(QScrollArea *, ScrollArea)
   SETUP_GETTER_DECL(SettingsManager *, SettingsManager)
@@ -46,12 +46,12 @@ struct SidebarManagerSetup {
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
 };
 
-class SidebarManager : public QObject {
+class DetailsPaneManager : public QObject {
   Q_OBJECT
 
 public:
-  explicit SidebarManager(QObject *parent = nullptr);
-  void setupReferences(const SidebarManagerSetup &setup);
+  explicit DetailsPaneManager(QObject *parent = nullptr);
+  void setupReferences(const DetailsPaneManagerSetup &setup);
   void setupSidebar();
   void toggleSidebar();
   void updateSidebarMetadata(ItemWidget *selectedItem);
@@ -63,7 +63,7 @@ public:
   /// switches, scan completions, or settings saves.
   void refreshCollectionSummary();
   [[nodiscard]] bool isSidebarVisible() const;
-  [[nodiscard]] MetadataSidebar *sidebarWidget() const { return m_MetadataSidebar; }
+  [[nodiscard]] DetailsPane *sidebarWidget() const { return m_DetailsPane; }
   void saveSidebarStateForCollection(int collectionIndex, bool visible);
   void saveSidebarStateForCollection(const QString &collectionName, bool visible);
   [[nodiscard]] int currentCollectionIndex() const { return m_currentCollectionIndex; }
@@ -113,7 +113,7 @@ private slots:
   void openArtworkLinksDialog();
 
 private:
-  MetadataSidebar *m_MetadataSidebar;
+  DetailsPane *m_DetailsPane;
   QWidget *m_itemsPage;
   QHBoxLayout *m_mainHorizontalLayout;
   /// Kartend-u2gx: outer vertical layout used for Top/Bottom Expand dock.

@@ -7,7 +7,7 @@
  * an empty CollectionConfig list. These run in the integration-test binary
  * because ApplicationManager pulls in the full top-level manager closure
  * (CacheManager, SessionManager, ArtworkManager, DatabaseManager,
- * PlaylistManager, SettingsManager, ScrollManager, SidebarManager,
+ * PlaylistManager, SettingsManager, ScrollManager, DetailsPaneManager,
  * NavigationManager, InteractionManager).
  */
 

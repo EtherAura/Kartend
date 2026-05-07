@@ -10,7 +10,7 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
 
@@ -164,8 +164,8 @@ auto NavigationManager::prepareNonSharedNavigation(int collectionIndex) -> void 
     m_itemsPage->window()->activateWindow();
   }
 
-  if (m_sidebarManager) {
-    m_sidebarManager->applySidebarStateForCollection((*m_currentCollectionIndex));
+  if (m_detailsPaneManager) {
+    m_detailsPaneManager->applySidebarStateForCollection((*m_currentCollectionIndex));
   }
 
   if ((m_searchBar) && m_searchBar->text().trimmed().isEmpty()) {

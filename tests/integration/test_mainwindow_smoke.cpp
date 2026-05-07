@@ -11,7 +11,7 @@
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 
 #include <QDir>
 #include <QStandardPaths>
@@ -44,5 +44,5 @@ void TestMainWindowSmoke::testTopLevelManagersAreWired() {
   QVERIFY(win->getScrollManager());
   QVERIFY(win->getNavigationManager());
   QVERIFY(win->getInteractionManager());
-  QVERIFY(win->getSidebarManager());
+  QVERIFY(win->getDetailsPaneManager());
 }

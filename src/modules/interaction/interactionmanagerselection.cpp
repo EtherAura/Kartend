@@ -36,7 +36,7 @@
 #include "databasemanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrolldatamanager.h"
@@ -44,7 +44,7 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 
@@ -141,7 +141,7 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
     }
   }
 
-  if ((m_sidebarManager) && m_sidebarManager->isSidebarVisible()) {
+  if ((m_detailsPaneManager) && m_detailsPaneManager->isSidebarVisible()) {
     ItemWidget *widget = nullptr;
     if (m_selectionManager) {
       widget = m_selectionManager->widgetForIndex(targetIndex);
@@ -150,7 +150,7 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
       widget = active.value(targetIndex, nullptr);
     }
     if (widget) {
-      m_sidebarManager->updateSidebarMetadata(widget);
+      m_detailsPaneManager->updateSidebarMetadata(widget);
     }
     constexpr int kMetadataSidebarUpdateDelayMs = 120;
     scheduleSidebarMetadataUpdateIfVisible(targetIndex, 0, kMetadataSidebarUpdateDelayMs);
@@ -197,16 +197,16 @@ void InteractionManager::scheduleSidebarMetadataUpdateIfVisible(int targetIndex,
       if (!guard) {
         return;
       }
-      if (!guard->m_sidebarManager || !guard->m_scrollManager) {
+      if (!guard->m_detailsPaneManager || !guard->m_scrollManager) {
         return;
       }
-      if (!guard->m_sidebarManager->isSidebarVisible()) {
+      if (!guard->m_detailsPaneManager->isSidebarVisible()) {
         return;
       }
       ItemWidget *itemWidget =
           guard->m_scrollManager->getActiveWidgets().value(targetIndex, nullptr);
       if (itemWidget) {
-        guard->m_sidebarManager->updateSidebarMetadata(itemWidget);
+        guard->m_detailsPaneManager->updateSidebarMetadata(itemWidget);
       }
     });
   };

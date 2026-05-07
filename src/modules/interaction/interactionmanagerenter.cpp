@@ -35,7 +35,7 @@
 #include "databasemanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrolldatamanager.h"
@@ -43,7 +43,7 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 
@@ -99,8 +99,8 @@ auto InteractionManager::handleEnterOnSubcollection(int subActualIndex, int subC
       m_navigationManager->stackManager()->push(*m_currentCollectionIndex);
     }
     clearSelectionAndFocus();
-    if (m_sidebarManager) {
-      m_sidebarManager->updateSidebarMetadata(nullptr);
+    if (m_detailsPaneManager) {
+      m_detailsPaneManager->updateSidebarMetadata(nullptr);
     }
     const bool success = m_navigationManager->showCollectionItems(subIdx);
     if (!success) {

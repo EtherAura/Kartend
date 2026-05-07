@@ -21,7 +21,7 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"

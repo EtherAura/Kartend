@@ -24,7 +24,7 @@
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "menucontroller.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationmanager.h"
 #include "playlistmanager.h"
 #include "propertyutils.h"
@@ -37,7 +37,7 @@
 #include "settingsmanager.h"
 #include "settingsutils.h"
 #include "shortcutsdialog.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "splashoverlay.h"
 #include "stringutils.h"
 #include "textzoomhud.h"
@@ -196,7 +196,7 @@ void MainWindow::setupUIReferences() {
         UIConstants::Icons::fromTheme({UIConstants::Icons::FILTER, "view-filter"}));
     m_filterButton->setIconSize(QSize(18, 18));
   }
-  m_MetadataSidebar = ui->metadataSidebarWidget;
+  m_MetadataSidebar = ui->detailsPaneWidget;
 
   // Prevent scroll area from stealing keyboard focus - we handle
   // PageUp/PageDown and arrow keys ourselves via the event filter, and
@@ -259,7 +259,7 @@ void MainWindow::initializeAppContext() {
   m_appContext.managers.artworkManager = getArtworkManager();
   m_appContext.managers.settingsManager = getSettingsManager();
   m_appContext.managers.sessionManager = getSessionManager();
-  m_appContext.managers.sidebarManager = getSidebarManager();
+  m_appContext.managers.detailsPaneManager = getDetailsPaneManager();
   m_appContext.managers.databaseManager = getDatabaseManager();
   m_appContext.managers.navigationManager = getNavigationManager();
   m_appContext.managers.interactionManager = getInteractionManager();
@@ -274,7 +274,7 @@ void MainWindow::createMenuBar() {
   ctx.ui = ui;
   ctx.getNavigationManager = [this]() { return getNavigationManager(); };
   ctx.getSettingsManager = [this]() { return getSettingsManager(); };
-  ctx.getSidebarManager = [this]() { return getSidebarManager(); };
+  ctx.getDetailsPaneManager = [this]() { return getDetailsPaneManager(); };
   ctx.getScrollManager = [this]() { return getScrollManager(); };
   ctx.getArtworkManager = [this]() { return getArtworkManager(); };
   ctx.getDatabaseManager = [this]() { return getDatabaseManager(); };
@@ -303,7 +303,7 @@ void MainWindow::createMenuBar() {
       context.parent = this;
       context.collections = &m_collections;
       context.currentCollectionIndex = &currentCollectionIndex;
-      context.sidebarManager = getSidebarManager();
+      context.detailsPaneManager = getDetailsPaneManager();
       context.scrollManager = getScrollManager();
       context.navigationManager = getNavigationManager();
       context.databaseManager = getDatabaseManager();
@@ -404,10 +404,10 @@ void MainWindow::setViewType(ViewType viewType) {
 }
 
 void MainWindow::setupSidebar() {
-  if (getSidebarManager()) {
-    getSidebarManager()->setupSidebar();
+  if (getDetailsPaneManager()) {
+    getDetailsPaneManager()->setupSidebar();
 
-    SidebarManagerSetup setup;
+    DetailsPaneManagerSetup setup;
     setup.ctx = &m_appContext;
     setup.mainLayout = m_mainHorizontalLayout;
     // Kartend-u2gx: outer vertical layout + content widget enable Top/Bottom
@@ -419,9 +419,9 @@ void MainWindow::setupSidebar() {
     setup.artworkManager = getArtworkManager();
     setup.databaseManager = getDatabaseManager();
 
-    getSidebarManager()->setupReferences(setup);
+    getDetailsPaneManager()->setupReferences(setup);
 
-    QObject::connect(getSidebarManager(), &SidebarManager::sidebarVisibilityChanged, this,
+    QObject::connect(getDetailsPaneManager(), &DetailsPaneManager::sidebarVisibilityChanged, this,
                      [this](bool visible) {
                        if (ui->actionShowSidebar) {
                          ui->actionShowSidebar->blockSignals(true);

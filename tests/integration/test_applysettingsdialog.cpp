@@ -25,7 +25,7 @@ QList<CollectionConfig> makeCollections() {
   src.tileColor = QStringLiteral("#778899");
   src.selectionColor = QStringLiteral("#aabbcc");
   src.hideTitles = true;
-  src.sidebarMode = SidebarMode::Expand;
+  src.sidebarMode = DetailsPaneMode::Expand;
   src.listFontSize = 22;
   src.listRowHeight = 64;
   // Identity / paths / scan flags — must NEVER be copied regardless of mask.
@@ -48,7 +48,7 @@ QList<CollectionConfig> makeCollections() {
   dst.tileColor = QStringLiteral("#222222");
   dst.selectionColor = QStringLiteral("#333333");
   dst.hideTitles = false;
-  dst.sidebarMode = SidebarMode::Overlay;
+  dst.sidebarMode = DetailsPaneMode::Overlay;
   dst.listFontSize = 12;
   dst.listRowHeight = 28;
   dst.mediaDirectory = QStringLiteral("/dst/media");
@@ -164,7 +164,7 @@ void TestApplySettingsDialog::testApplyCategoriesAllPreservesPathsAndScanFlags()
   QCOMPARE(collections[1].backgroundColor, QStringLiteral("#112233"));
   QCOMPARE(collections[1].listRowHeight, 64);
   QCOMPARE(collections[1].hideTitles, true);
-  QCOMPARE(collections[1].sidebarMode, SidebarMode::Expand);
+  QCOMPARE(collections[1].sidebarMode, DetailsPaneMode::Expand);
   // Identity, paths, extensions, scan flags must be untouched even with the
   // full mask — that's the safety guarantee Kartend-iyk preserves.
   QCOMPARE(collections[1].name, QStringLiteral("Destination"));

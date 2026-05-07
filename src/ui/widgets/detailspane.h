@@ -1,5 +1,5 @@
-#ifndef METADATASIDEBAR_H
-#define METADATASIDEBAR_H
+#ifndef DETAILSPANE_H
+#define DETAILSPANE_H
 
 #include <QDateTime>
 #include <QFont>
@@ -15,7 +15,7 @@
 
 #include "collectionutils.h"
 #include "itemmetadata.h"
-#include "ui_metadatasidebar.h"
+#include "ui_detailspane.h"
 #include "usagestatsstore.h"
 
 class ArtworkPreviewOverlay;
@@ -27,11 +27,11 @@ class QTabBar;
 class QTimer;
 QT_END_NAMESPACE
 
-class MetadataSidebar : public QWidget {
+class DetailsPane : public QWidget {
   Q_OBJECT
 public:
-  explicit MetadataSidebar(QWidget *parent = nullptr);
-  ~MetadataSidebar();
+  explicit DetailsPane(QWidget *parent = nullptr);
+  ~DetailsPane();
   void setMetadata(const QString &filePath, const QString &itemName,
                    const QString &artworkDirectory = QString(),
                    const QString &videoDirectory = QString());
@@ -99,15 +99,15 @@ public:
 
   /// Kartend-63e: applies per-collection sidebar appearance — background
   /// type / color / image / pattern, text color, accent color. Called by
-  /// SidebarManager whenever the active collection changes or settings are
+  /// DetailsPaneManager whenever the active collection changes or settings are
   /// saved. Triggers a repaint.
   void applyAppearance(const CollectionConfig &collection);
 
   /// Kartend-63e: switches the active built-in sidebar tab. Item shows the
   /// per-item view; Collection forces the summary regardless of selection;
   /// File displays a placeholder until custom panes are wired up.
-  void setActiveTab(SidebarTab tab);
-  [[nodiscard]] SidebarTab activeTab() const { return m_activeTab; }
+  void setActiveTab(DetailsPaneTab tab);
+  [[nodiscard]] DetailsPaneTab activeTab() const { return m_activeTab; }
 
 signals:
   /// Fired when the user activates the gallery's "Edit links…" button
@@ -116,27 +116,27 @@ signals:
   void editArtworkRequested();
 
   /// Kartend-63e bug #7: forwards the gallery overlay's visibility so
-  /// SidebarManager can lower the sidebar while the overlay is on top. Only
+  /// DetailsPaneManager can lower the sidebar while the overlay is on top. Only
   /// fires for the sidebar's own gallery overlay; the expand-mode overlay
   /// owned by SelectionDisplayManager has its own wiring.
   void galleryOverlayVisibilityChanged(bool visible);
 
   /// Kartend-63e: fired during a width drag with the new candidate width
-  /// in pixels (already clamped to MIN/MAX). SidebarManager applies it
+  /// in pixels (already clamped to MIN/MAX). DetailsPaneManager applies it
   /// live; the matching widthCommitted() at drag-release is what triggers
   /// the actual settings save.
   void widthDragged(int width);
   /// Kartend-63e: fired when the width drag is released. The integer value
-  /// is the final width; SidebarManager persists it via SettingsManager.
+  /// is the final width; DetailsPaneManager persists it via SettingsManager.
   void widthCommitted(int width);
   /// Kartend-u2gx: height equivalents for Top/Bottom dock. Same lifecycle as
   /// the width pair — heightDragged() during the drag, heightCommitted() at
   /// release for persistence.
   void heightDragged(int height);
   void heightCommitted(int height);
-  /// Kartend-63e: emitted when the user clicks a sidebar tab. SidebarManager
+  /// Kartend-63e: emitted when the user clicks a sidebar tab. DetailsPaneManager
   /// persists the new active tab to the current collection.
-  void activeTabChanged(SidebarTab tab);
+  void activeTabChanged(DetailsPaneTab tab);
 
 protected:
   /// Kartend-63e bug #4: re-elide the file path when the sidebar is resized
@@ -168,7 +168,7 @@ private:
   void updateFilePathDisplay();
   /// Kartend-63e: build + install the bubble-bg stylesheet on the content
   /// widget. Empty hex disables the corresponding bubble. Stylesheet
-  /// selectors target the existing label objectNames in metadatasidebar.ui.
+  /// selectors target the existing label objectNames in detailspane.ui.
   void applyBubbleStyles(const QString &headerHex, const QString &sectionHex);
   /// Kartend-ekaa: capture every label's designer-set font once so the per-
   /// collection sidebar-font override can layer on top without losing the
@@ -233,7 +233,7 @@ private:
   [[nodiscard]] static QString formatFileSize(qint64 bytes);
   [[nodiscard]] static QString formatRuntime(int seconds);
   [[nodiscard]] static QString formatTags(const QString &raw);
-  Ui::MetadataSidebar *ui;
+  Ui::DetailsPane *ui;
   VideoPreviewWidget *m_videoPreview = nullptr;
   QTimer *m_videoStartTimer = nullptr;
   QString m_pendingVideoPath;
@@ -246,10 +246,10 @@ private:
   QString m_currentFilePath;
   /// Kartend-63e: cached appearance state copied from CollectionConfig so
   /// paintEvent doesn't need to reach back into the manager / model layer.
-  SidebarBackgroundType m_bgType = SidebarBackgroundType::Color;
+  DetailsPaneBackgroundType m_bgType = DetailsPaneBackgroundType::Color;
   QColor m_bgColor;
   QPixmap m_bgImage;
-  SidebarPattern m_bgPattern = SidebarPattern::Crosshatch;
+  DetailsPanePattern m_bgPattern = DetailsPanePattern::Crosshatch;
   int m_patternIntensity = 50; // 0–100 % alpha multiplier for pattern lines
   QColor m_patternColor;
   /// Kartend-63e width drag state. WidthLocked false enables a draggable
@@ -259,7 +259,7 @@ private:
   /// flag governs both, and only one of the two is ever active at once
   /// because the active edge is determined by m_position.
   bool m_widthLocked = true;
-  SidebarPosition m_position = SidebarPosition::Right;
+  DetailsPanePosition m_position = DetailsPanePosition::Right;
   bool m_widthDragging = false;
   int m_dragStartWidth = 0;
   int m_dragStartX = 0;
@@ -272,7 +272,7 @@ private:
   /// at the top of mainLayout so the .ui file stays unchanged.
   QTabBar *m_tabBar = nullptr;
   QLabel *m_filePlaceholder = nullptr;
-  SidebarTab m_activeTab = SidebarTab::Item;
+  DetailsPaneTab m_activeTab = DetailsPaneTab::Item;
   void setupTabBar();
   void applyTabVisibility();
 

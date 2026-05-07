@@ -11,7 +11,7 @@
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 
 #include <QList>
 #include <QSet>
@@ -51,7 +51,7 @@ void TestApplicationManagerLifecycle::testGettersReturnNullBeforeInitialize() {
   QVERIFY(manager.getPlaylistManager() == nullptr);
   QVERIFY(manager.getSettingsManager() == nullptr);
   QVERIFY(manager.getScrollManager() == nullptr);
-  QVERIFY(manager.getSidebarManager() == nullptr);
+  QVERIFY(manager.getDetailsPaneManager() == nullptr);
   QVERIFY(manager.getNavigationManager() == nullptr);
   QVERIFY(manager.getInteractionManager() == nullptr);
 }
@@ -77,7 +77,7 @@ void TestApplicationManagerLifecycle::testInitializeWiresAllManagers() {
   record(manager.getPlaylistManager());
   record(manager.getSettingsManager());
   record(manager.getScrollManager());
-  record(manager.getSidebarManager());
+  record(manager.getDetailsPaneManager());
   record(manager.getNavigationManager());
   record(manager.getInteractionManager());
 }
@@ -100,7 +100,7 @@ void TestApplicationManagerLifecycle::testManagersAreParentedToApplicationManage
   QCOMPARE(manager.getPlaylistManager()->parent(), &manager);
   QCOMPARE(manager.getSettingsManager()->parent(), &manager);
   QCOMPARE(manager.getScrollManager()->parent(), &manager);
-  QCOMPARE(manager.getSidebarManager()->parent(), &manager);
+  QCOMPARE(manager.getDetailsPaneManager()->parent(), &manager);
   QCOMPARE(manager.getNavigationManager()->parent(), &manager);
   QCOMPARE(manager.getInteractionManager()->parent(), &manager);
 

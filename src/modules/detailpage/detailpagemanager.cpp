@@ -13,9 +13,9 @@
 #include "databasemanager.h"
 #include "detailpageoverlay.h"
 #include "itemartwork.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 
-SETUP_GETTER_DEF_MGR_SAME(DetailPageManagerSetup, SidebarManager *, SidebarManager, sidebarManager)
+SETUP_GETTER_DEF_MGR_SAME(DetailPageManagerSetup, DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
 SETUP_GETTER_DEF_MGR_SAME(DetailPageManagerSetup, DatabaseManager *, DatabaseManager,
                           databaseManager)
 
@@ -24,7 +24,7 @@ DetailPageManager::~DetailPageManager() = default;
 
 void DetailPageManager::setupReferences(const DetailPageManagerSetup &setup) {
   m_overlay = setup.overlay;
-  m_sidebarManager = setup.getSidebarManager();
+  m_detailsPaneManager = setup.getDetailsPaneManager();
   m_databaseManager = setup.getDatabaseManager();
 
   if (m_overlay) {
@@ -39,10 +39,10 @@ void DetailPageManager::setupReferences(const DetailPageManagerSetup &setup) {
 }
 
 void DetailPageManager::showForCurrentSelection() {
-  if (!m_overlay || !m_sidebarManager) {
+  if (!m_overlay || !m_detailsPaneManager) {
     return;
   }
-  const auto &ctx = m_sidebarManager->currentItemContext();
+  const auto &ctx = m_detailsPaneManager->currentItemContext();
   if (!ctx.isValid()) {
     // No selection (or the sidebar hasn't resolved one yet): silently ignore
     // so the user can mash the key without seeing an error.
@@ -69,7 +69,7 @@ void DetailPageManager::showForCurrentSelection() {
   }
 
   // ── Artwork tiles (every standard type + any custom override the user
-  // configured). Mirrors SidebarManager::updateSidebarMetadata's gallery
+  // configured). Mirrors DetailsPaneManager::updateSidebarMetadata's gallery
   // build so the same set of artworks shows up here. ───────────────────
   QHash<QString, QString> overridesByType;
   QStringList customOrder;

@@ -26,10 +26,10 @@
 #include "itemwidget.h"
 #include "keyboardmanager.h"
 #include "mousemanager.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
@@ -63,8 +63,8 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   // at an ancestor like the items page, so an obj-based check would miss it.
   // Returning false lets the receiver's own wheelEvent run; the grid stays
   // put because applyWheelSelectionDelta lives further down this function.
-  if (m_sidebarManager) {
-    if (QWidget *sidebar = m_sidebarManager->sidebarWidget()) {
+  if (m_detailsPaneManager) {
+    if (QWidget *sidebar = m_detailsPaneManager->sidebarWidget()) {
       if (sidebar->isVisible() &&
           sidebar->rect().contains(sidebar->mapFromGlobal(QCursor::pos()))) {
         m_processingWheelEvent = false;
@@ -405,8 +405,8 @@ bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {
     }
 
     m_selectionManager->selectItemByHover(visualIndex);
-    if (m_sidebarManager && m_sidebarManager->isSidebarVisible()) {
-      m_sidebarManager->updateSidebarMetadata(widget);
+    if (m_detailsPaneManager && m_detailsPaneManager->isSidebarVisible()) {
+      m_detailsPaneManager->updateSidebarMetadata(widget);
     }
   }
 
@@ -577,8 +577,8 @@ void EventManager::pollCursorForContinuousHoverScroll() {
         qMax(m_state->arrow().suppressArrowCenterUntilMs, hoverScrollSuppressedUntil);
   }
   m_selectionManager->selectItemByHover(visualIndex);
-  if (m_sidebarManager && m_sidebarManager->isSidebarVisible()) {
-    m_sidebarManager->updateSidebarMetadata(widget);
+  if (m_detailsPaneManager && m_detailsPaneManager->isSidebarVisible()) {
+    m_detailsPaneManager->updateSidebarMetadata(widget);
   }
 
   // Stage a new hover-scroll cycle with the shorter continue delay

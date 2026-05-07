@@ -14,7 +14,7 @@
 #include "sessionmanager.h"
 #include "settingsdialog.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 #include <algorithm>

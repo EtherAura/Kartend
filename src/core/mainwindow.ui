@@ -419,7 +419,7 @@
             </widget>
            </item>
            <item>
-            <widget class="MetadataSidebar" name="metadataSidebarWidget">
+            <widget class="DetailsPane" name="detailsPaneWidget">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Fixed" vsizetype="Expanding">
                <horstretch>0</horstretch>
@@ -746,9 +746,9 @@
 
  <customwidgets>
   <customwidget>
-   <class>MetadataSidebar</class>
+   <class>DetailsPane</class>
    <extends>QWidget</extends>
-   <header>metadatasidebar.h</header>
+   <header>detailspane.h</header>
   </customwidget>
   <customwidget>
    <class>EmptyStateWidget</class>

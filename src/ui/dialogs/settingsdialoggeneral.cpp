@@ -415,7 +415,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
   connect(ui->sidebarBackgroundPickButton, &QPushButton::clicked, this, [this]() {
     if (!ui->sidebarBackgroundTypeComboBox) return;
     const int mode = ui->sidebarBackgroundTypeComboBox->currentIndex();
-    if (mode == static_cast<int>(SidebarBackgroundType::Image)) {
+    if (mode == static_cast<int>(DetailsPaneBackgroundType::Image)) {
       const QString currentPath = ui->sidebarBackgroundValueEdit->text().trimmed();
       const QString startDir =
           currentPath.isEmpty() ? QDir::homePath() : QFileInfo(currentPath).absolutePath();
@@ -444,10 +444,10 @@ void SettingsDialog::setupGeneralSettingsConnections() {
   connect(ui->sidebarBackgroundTypeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
           this, [this](int index) {
             if (!ui->sidebarBackgroundValueEdit) return;
-            if (index == static_cast<int>(SidebarBackgroundType::Image)) {
+            if (index == static_cast<int>(DetailsPaneBackgroundType::Image)) {
               ui->sidebarBackgroundPickButton->setText(tr("Browse..."));
               ui->sidebarBackgroundValueEdit->setPlaceholderText(tr("None"));
-            } else if (index == static_cast<int>(SidebarBackgroundType::Pattern)) {
+            } else if (index == static_cast<int>(DetailsPaneBackgroundType::Pattern)) {
               ui->sidebarBackgroundPickButton->setText(tr("Pick..."));
               ui->sidebarBackgroundValueEdit->setPlaceholderText(tr("(unused for pattern)"));
             } else {

@@ -17,13 +17,13 @@
 #include "itemwidget.h"
 #include "launcherchooserdialog.h"
 #include "launchmanager.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationmanager.h"
 #include "pathutils.h"
 #include "playlistmanager.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcInteractionManager)
@@ -73,8 +73,8 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
   // --- Toggle sidebar (properties) action ---
   QAction *propertiesAction = menu.addAction(tr("Properties"));
   QObject::connect(propertiesAction, &QAction::triggered, this, [this]() {
-    if (m_sidebarManager) {
-      m_sidebarManager->toggleSidebar();
+    if (m_detailsPaneManager) {
+      m_detailsPaneManager->toggleSidebar();
     }
   });
 
@@ -406,7 +406,7 @@ void InteractionManager::editCustomFields(const QString &filePath, const QString
     return;
   }
   // The owning collection of the file may differ from the displayed one in
-  // showAllSubcollectionItems mode; mirror SidebarManager and prefer the
+  // showAllSubcollectionItems mode; mirror DetailsPaneManager and prefer the
   // file's resolved collection so the metadata row's UUID matches across
   // navigation modes.
   int owningIndex = m_databaseManager->getCollectionIndexForFile(filePath);
@@ -445,8 +445,8 @@ void InteractionManager::editCustomFields(const QString &filePath, const QString
   }
 
   // Refresh the sidebar so the new fields render immediately.
-  if (m_sidebarManager) {
-    m_sidebarManager->updateSidebarMetadata(
+  if (m_detailsPaneManager) {
+    m_detailsPaneManager->updateSidebarMetadata(
         m_selectionManager ? m_selectionManager->selectedWidget() : nullptr);
   }
 }
@@ -482,8 +482,8 @@ void InteractionManager::setItemManualPath(const QString &filePath, const QStrin
   if (!m_databaseManager->saveItemMetadata(metadata)) {
     return;
   }
-  if (m_sidebarManager) {
-    m_sidebarManager->updateSidebarMetadata(
+  if (m_detailsPaneManager) {
+    m_detailsPaneManager->updateSidebarMetadata(
         m_selectionManager ? m_selectionManager->selectedWidget() : nullptr);
   }
 }
@@ -521,8 +521,8 @@ void InteractionManager::setItemLauncherOverride(const QString &filePath, int la
   if (!m_databaseManager->saveItemMetadata(metadata)) {
     return;
   }
-  if (m_sidebarManager) {
-    m_sidebarManager->updateSidebarMetadata(
+  if (m_detailsPaneManager) {
+    m_detailsPaneManager->updateSidebarMetadata(
         m_selectionManager ? m_selectionManager->selectedWidget() : nullptr);
   }
 }

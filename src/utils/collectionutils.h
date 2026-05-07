@@ -49,15 +49,6 @@ enum class DetailsPanePattern { Crosshatch = 0 };
 /// pane in a later iteration.
 enum class DetailsPaneTab { Item = 0, Collection = 1, File = 2 };
 
-// ─── Backward-compat aliases (Kartend-u2gx) ──────────────────────────────────
-// Older code paths still referenced as Sidebar* during the rename window. Keep
-// these aliases until every consumer is updated.
-using SidebarMode = DetailsPaneMode;
-using SidebarPosition = DetailsPanePosition;
-using SidebarBackgroundType = DetailsPaneBackgroundType;
-using SidebarPattern = DetailsPanePattern;
-using SidebarTab = DetailsPaneTab;
-
 /// Kartend-vbs: per-collection background can be a flat color, a wallpaper
 /// image, or a looping muted video file. Video uses BackgroundVideoWidget
 /// (QMediaPlayer + QVideoSink) parented to the items viewport; Image and
@@ -214,32 +205,6 @@ stringToDetailsPaneBackgroundType(const QString &str) {
   if (lower == "collection") return DetailsPaneTab::Collection;
   if (lower == "file") return DetailsPaneTab::File;
   return DetailsPaneTab::Item;
-}
-
-// ─── Backward-compat helper aliases (Kartend-u2gx) ───────────────────────────
-[[nodiscard]] inline QString sidebarPositionToString(DetailsPanePosition pos) {
-  return detailsPanePositionToString(pos);
-}
-[[nodiscard]] inline DetailsPanePosition stringToSidebarPosition(const QString &str) {
-  return stringToDetailsPanePosition(str);
-}
-[[nodiscard]] inline QString sidebarBackgroundTypeToString(DetailsPaneBackgroundType type) {
-  return detailsPaneBackgroundTypeToString(type);
-}
-[[nodiscard]] inline DetailsPaneBackgroundType stringToSidebarBackgroundType(const QString &str) {
-  return stringToDetailsPaneBackgroundType(str);
-}
-[[nodiscard]] inline QString sidebarPatternToString(DetailsPanePattern pattern) {
-  return detailsPanePatternToString(pattern);
-}
-[[nodiscard]] inline DetailsPanePattern stringToSidebarPattern(const QString &str) {
-  return stringToDetailsPanePattern(str);
-}
-[[nodiscard]] inline QString sidebarTabToString(DetailsPaneTab tab) {
-  return detailsPaneTabToString(tab);
-}
-[[nodiscard]] inline DetailsPaneTab stringToSidebarTab(const QString &str) {
-  return stringToDetailsPaneTab(str);
 }
 
 } // namespace CollectionUtils
@@ -412,22 +377,22 @@ struct CollectionConfig {
   /// from the toolbar without losing their pattern list.
   bool titleExclusionEnabled = true;
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Center;
-  SidebarMode sidebarMode = SidebarMode::Overlay;
+  DetailsPaneMode sidebarMode = DetailsPaneMode::Overlay;
   /// Kartend-63e sidebar enhancements. Position controls left/right placement;
   /// in Fixed mode this swaps the QHBoxLayout insertion index, in Overlay mode
   /// it swaps the X anchor in positionSidebarOverlay().
-  SidebarPosition sidebarPosition = SidebarPosition::Right;
+  DetailsPanePosition sidebarPosition = DetailsPanePosition::Right;
   /// Background rendering mode for the sidebar. Color and Image mirror the
   /// main-view background pattern. Pattern fills with `sidebarBackgroundColor`
   /// (or system Window when blank) and overlays the chosen procedural pattern
   /// tinted with `sidebarPatternColor`.
-  SidebarBackgroundType sidebarBackgroundType = SidebarBackgroundType::Color;
+  DetailsPaneBackgroundType sidebarBackgroundType = DetailsPaneBackgroundType::Color;
   QString sidebarBackgroundColor; // hex; blank falls back to palette(Window)
   QString sidebarBackgroundImage; // path; sanitized via validatePathSecurity on save
-  SidebarPattern sidebarPattern = SidebarPattern::Crosshatch;
+  DetailsPanePattern sidebarPattern = DetailsPanePattern::Crosshatch;
   /// Kartend-63e: 0–100 % opacity multiplier applied to pattern strokes.
   /// Lower values fade the lines into the bg without changing color; users
-  /// who add new SidebarPattern variants later get a single intensity knob
+  /// who add new DetailsPanePattern variants later get a single intensity knob
   /// for free. 50 matches the original sidebar dimming.
   int sidebarPatternIntensity = 50;
   QString sidebarPatternColor; // hex tint overlay painted on top of the pattern
@@ -450,11 +415,11 @@ struct CollectionConfig {
   /// no upper bound. Defaults to FIXED_WIDTH so existing collections keep
   /// their historical look. When `sidebarWidthLocked` is true the user
   /// cannot drag the inner edge to resize.
-  int sidebarWidth = UIConstants::Sidebar::FIXED_WIDTH;
+  int sidebarWidth = UIConstants::DetailsPane::FIXED_WIDTH;
   /// Kartend-u2gx: preferred pane height when docked Top or Bottom. Floored at
   /// MIN_HEIGHT at apply time; no upper bound. Defaults to FIXED_HEIGHT so a
   /// fresh switch to Top/Bottom dock has a sensible size.
-  int sidebarHeight = UIConstants::Sidebar::FIXED_HEIGHT;
+  int sidebarHeight = UIConstants::DetailsPane::FIXED_HEIGHT;
   /// Kartend-u2gx: name kept as `sidebarWidthLocked` to preserve the existing
   /// INI key, but semantically locks BOTH width drag (L/R) and height drag
   /// (T/B). When true the user cannot drag the inner edge to resize.
@@ -462,7 +427,7 @@ struct CollectionConfig {
   /// Which built-in sidebar tab is active. Persisted per collection so users
   /// can keep one collection on the Collection summary tab while another
   /// stays on the per-Item view.
-  SidebarTab sidebarActiveTab = SidebarTab::Item;
+  DetailsPaneTab sidebarActiveTab = DetailsPaneTab::Item;
   ViewType viewType = ViewType::Grid; // Grid (default) or List view
   /// Kartend-ks4n: when true, media items whose artwork lookup returns no
   /// match are hidden from the items page. Subcollections and virtual folders
@@ -763,9 +728,9 @@ struct CollectionConfig {
                               UIConstants::Item::MAX_FONT_SIZE);
     listRowHeight = std::clamp(listRowHeight, UIConstants::ListView::MIN_ROW_HEIGHT,
                                UIConstants::ListView::MAX_ROW_HEIGHT);
-    sidebarWidth = std::max(sidebarWidth, UIConstants::Sidebar::MIN_WIDTH);
+    sidebarWidth = std::max(sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
     // Kartend-u2gx: floor pane height; same no-upper-bound treatment as width.
-    sidebarHeight = std::max(sidebarHeight, UIConstants::Sidebar::MIN_HEIGHT);
+    sidebarHeight = std::max(sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
     // Kartend-qbp3: corner darkness percent. 0 = effect off (the toggle is
     // separate); 100 = pitch black at the corners.
     vignetteIntensity = std::clamp(vignetteIntensity, 0, 100);

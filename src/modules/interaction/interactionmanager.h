@@ -37,11 +37,11 @@ class ItemWidget;
 class DatabaseManager;
 class NavigationManager;
 class SettingsManager;
-class SidebarManager;
+class DetailsPaneManager;
 class ScrollManager;
 class SessionManager;
 class ArtworkManager;
-class MetadataSidebar;
+class DetailsPane;
 
 /**
  * @brief Setup struct for InteractionManager dependencies.
@@ -55,7 +55,7 @@ struct InteractionManagerSetup {
 
   // Manager dependencies (can be overridden or taken from ctx)
   ScrollManager *scrollManager = nullptr;
-  SidebarManager *sidebarManager = nullptr;
+  DetailsPaneManager *detailsPaneManager = nullptr;
   SettingsManager *settingsManager = nullptr;
   DatabaseManager *databaseManager = nullptr;
   NavigationManager *navigationManager = nullptr;
@@ -63,7 +63,7 @@ struct InteractionManagerSetup {
   ArtworkManager *artworkManager = nullptr;
 
   // UI elements (can be overridden or taken from ctx)
-  MetadataSidebar *sidebar = nullptr;
+  DetailsPane *sidebar = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QWidget *gridContainer = nullptr;
   QStackedWidget *stackedWidget = nullptr;
@@ -81,7 +81,7 @@ struct InteractionManagerSetup {
 
   // Manager accessors that check ctx fallback
   SETUP_GETTER_INLINE_MGR_SAME(ScrollManager *, ScrollManager, scrollManager)
-  SETUP_GETTER_INLINE_MGR_SAME(SidebarManager *, SidebarManager, sidebarManager)
+  SETUP_GETTER_INLINE_MGR_SAME(DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
   SETUP_GETTER_INLINE_MGR_SAME(SettingsManager *, SettingsManager, settingsManager)
   SETUP_GETTER_INLINE_MGR_SAME(DatabaseManager *, DatabaseManager, databaseManager)
   SETUP_GETTER_INLINE_MGR_SAME(NavigationManager *, NavigationManager, navigationManager)
@@ -91,7 +91,7 @@ struct InteractionManagerSetup {
   // UI element accessors that check ctx fallback
   SETUP_GETTER_INLINE_UI_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
   SETUP_GETTER_INLINE_UI_SAME(QWidget *, GridContainer, gridContainer)
-  SETUP_GETTER_INLINE_UI_SAME(MetadataSidebar *, Sidebar, sidebar)
+  SETUP_GETTER_INLINE_UI_SAME(DetailsPane *, Sidebar, sidebar)
   SETUP_GETTER_INLINE_UI_SAME(QStackedWidget *, StackedWidget, stackedWidget)
   SETUP_GETTER_INLINE_UI_SAME(QWidget *, ItemsPage, itemsPage)
   SETUP_GETTER_INLINE_UI_SAME(QLineEdit *, SearchBar, searchBar)
@@ -113,7 +113,7 @@ struct InteractionManagerSetup {
  *   AlphabeticNavigationHandler, AnimationManager, MouseManager, LaunchManager,
  *   ViewportManager, EventManager
  * - Owns InteractionStateHolder as value member (m_state)
- * - Does NOT own: m_scrollManager, m_sidebarManager, m_settingsManager,
+ * - Does NOT own: m_scrollManager, m_detailsPaneManager, m_settingsManager,
  * m_databaseManager, m_navigationManager, m_sessionManager, m_artworkManager,
  * UI widgets (borrowed references)
  *
@@ -333,7 +333,7 @@ private:
   std::unique_ptr<AttractManager> m_attractManager;
 
   ScrollManager *m_scrollManager = nullptr;
-  SidebarManager *m_sidebarManager = nullptr;
+  DetailsPaneManager *m_detailsPaneManager = nullptr;
   SettingsManager *m_settingsManager = nullptr;
   DatabaseManager *m_databaseManager = nullptr;
   NavigationManager *m_navigationManager = nullptr;

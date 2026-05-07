@@ -269,7 +269,7 @@ bool ViewportManager::handlePendingInitialCenterIfNeeded(QScrollBar *verticalScr
       m_state->click().pendingInitialCenter = true;
       // Defer centering until scrollbar has a valid range - happens during
       // initial layout when content height isn't calculated yet
-      QTimer::singleShot(UIConstants::Sidebar::INITIAL_CENTER_SCROLL_DELAY_MS, this,
+      QTimer::singleShot(UIConstants::DetailsPane::INITIAL_CENTER_SCROLL_DELAY_MS, this,
                          [this, index]() {
                            if (m_state) {
                              m_state->click().pendingInitialCenter = false;

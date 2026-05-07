@@ -9,12 +9,12 @@ namespace KartManifest {
 
 namespace {
 
-QString sidebarModeToString(SidebarMode mode) {
-  return mode == SidebarMode::Expand ? "expand" : "overlay";
+QString sidebarModeToString(DetailsPaneMode mode) {
+  return mode == DetailsPaneMode::Expand ? "expand" : "overlay";
 }
 
-SidebarMode stringToSidebarMode(const QString &s) {
-  return s.toLower() == "expand" ? SidebarMode::Expand : SidebarMode::Overlay;
+DetailsPaneMode stringToSidebarMode(const QString &s) {
+  return s.toLower() == "expand" ? DetailsPaneMode::Expand : DetailsPaneMode::Overlay;
 }
 
 QString backgroundTypeToString(BackgroundType type) {
@@ -138,12 +138,12 @@ QJsonObject collectionConfigToJson(const CollectionConfig &c) {
 
   o["horizontal_alignment"] = CollectionUtils::alignmentToString(c.horizontalAlignment);
   o["sidebar_mode"] = sidebarModeToString(c.sidebarMode);
-  o["sidebar_position"] = CollectionUtils::sidebarPositionToString(c.sidebarPosition);
+  o["sidebar_position"] = CollectionUtils::detailsPanePositionToString(c.sidebarPosition);
   o["sidebar_background_type"] =
-      CollectionUtils::sidebarBackgroundTypeToString(c.sidebarBackgroundType);
+      CollectionUtils::detailsPaneBackgroundTypeToString(c.sidebarBackgroundType);
   o["sidebar_background_color"] = c.sidebarBackgroundColor;
   o["sidebar_background_image"] = c.sidebarBackgroundImage;
-  o["sidebar_pattern"] = CollectionUtils::sidebarPatternToString(c.sidebarPattern);
+  o["sidebar_pattern"] = CollectionUtils::detailsPanePatternToString(c.sidebarPattern);
   o["sidebar_pattern_intensity"] = c.sidebarPatternIntensity;
   o["sidebar_pattern_color"] = c.sidebarPatternColor;
   o["sidebar_text_color"] = c.sidebarTextColor;
@@ -156,7 +156,7 @@ QJsonObject collectionConfigToJson(const CollectionConfig &c) {
   // Kartend-u2gx: pane height for Top/Bottom dock.
   o["sidebar_height"] = c.sidebarHeight;
   o["sidebar_width_locked"] = c.sidebarWidthLocked;
-  o["sidebar_active_tab"] = CollectionUtils::sidebarTabToString(c.sidebarActiveTab);
+  o["sidebar_active_tab"] = CollectionUtils::detailsPaneTabToString(c.sidebarActiveTab);
   o["sidebar_font_family"] = c.sidebarFontFamily;
   o["sidebar_font_point_size"] = c.sidebarFontPointSize;
 
@@ -249,12 +249,12 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
 
   c.horizontalAlignment = CollectionUtils::stringToAlignment(o["horizontal_alignment"].toString());
   c.sidebarMode = stringToSidebarMode(o["sidebar_mode"].toString());
-  c.sidebarPosition = CollectionUtils::stringToSidebarPosition(o["sidebar_position"].toString());
+  c.sidebarPosition = CollectionUtils::stringToDetailsPanePosition(o["sidebar_position"].toString());
   c.sidebarBackgroundType =
-      CollectionUtils::stringToSidebarBackgroundType(o["sidebar_background_type"].toString());
+      CollectionUtils::stringToDetailsPaneBackgroundType(o["sidebar_background_type"].toString());
   c.sidebarBackgroundColor = o["sidebar_background_color"].toString();
   c.sidebarBackgroundImage = o["sidebar_background_image"].toString();
-  c.sidebarPattern = CollectionUtils::stringToSidebarPattern(o["sidebar_pattern"].toString());
+  c.sidebarPattern = CollectionUtils::stringToDetailsPanePattern(o["sidebar_pattern"].toString());
   c.sidebarPatternIntensity = o["sidebar_pattern_intensity"].toInt(50);
   c.sidebarPatternColor = o["sidebar_pattern_color"].toString();
   c.sidebarTextColor = o["sidebar_text_color"].toString();
@@ -263,10 +263,10 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.sidebarSectionBgColor = o["sidebar_section_bg_color"].toString();
   c.sidebarHeaderBgOpacity = o["sidebar_header_bg_opacity"].toInt(200);
   c.sidebarSectionBgOpacity = o["sidebar_section_bg_opacity"].toInt(170);
-  c.sidebarWidth = o["sidebar_width"].toInt(UIConstants::Sidebar::FIXED_WIDTH);
-  c.sidebarHeight = o["sidebar_height"].toInt(UIConstants::Sidebar::FIXED_HEIGHT);
+  c.sidebarWidth = o["sidebar_width"].toInt(UIConstants::DetailsPane::FIXED_WIDTH);
+  c.sidebarHeight = o["sidebar_height"].toInt(UIConstants::DetailsPane::FIXED_HEIGHT);
   c.sidebarWidthLocked = o["sidebar_width_locked"].toBool(true);
-  c.sidebarActiveTab = CollectionUtils::stringToSidebarTab(o["sidebar_active_tab"].toString());
+  c.sidebarActiveTab = CollectionUtils::stringToDetailsPaneTab(o["sidebar_active_tab"].toString());
   c.sidebarFontFamily = o["sidebar_font_family"].toString();
   c.sidebarFontPointSize = o["sidebar_font_point_size"].toInt(0);
 
