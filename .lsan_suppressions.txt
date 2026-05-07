@@ -3,3 +3,13 @@
 # CacheManager intentionally leaks its QThreadPool to avoid blocking
 # in the destructor during application shutdown.
 leak:QThreadPool::QThreadPool
+
+# Qt6 GStreamer multimedia backend leaks GstDeviceMonitor and its
+# associated GstCaps/GArray/GPtrArray on first QMediaPlayer construction.
+# These are global caches inside the platform plugin (loaded via
+# QPlatformMediaIntegration::instance()) and freeing them is not in
+# our control. Seen on Ubuntu 24.04 / Qt 6.4 / gstreamer 1.24.
+leak:gst_device_monitor_new
+leak:gst_device_monitor_add_filter
+leak:libgstreamermediaplugin.so
+leak:QPlatformMediaIntegration::instance

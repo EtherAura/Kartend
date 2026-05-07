@@ -104,7 +104,7 @@ private slots:
 
 void TestKartReader::testPeekManifestRejectsBadMagic() {
   QTemporaryFile f;
-  writeTempKart(QByteArray("NOPE\0\0\0\1xxxxxxxxxxxxxxxxxx", 28), f);
+  writeTempKart(QByteArray("NOPE\0\0\0\1xxxxxxxxxxxxxxxxxx", 26), f);
   auto result = KartReader::peekManifest(f.fileName());
   QVERIFY(result.isError());
   QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartFormatInvalid));
