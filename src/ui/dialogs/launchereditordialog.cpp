@@ -59,7 +59,7 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
   auto *launcherRow = new QHBoxLayout();
   launcherRow->addWidget(m_launcherEdit);
   auto *browseLauncher = new QPushButton(tr("Browse"), this);
-  browseLauncher->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::DocumentOpen));
+  browseLauncher->setIcon(QIcon::fromTheme(QStringLiteral("document-open")));
   connect(browseLauncher, &QPushButton::clicked, this, &LauncherEditorDialog::onBrowseLauncher);
   launcherRow->addWidget(browseLauncher);
   form->addRow(tr("Launcher:"), launcherRow);
@@ -74,7 +74,7 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
   coreRow->setContentsMargins(0, 0, 0, 0);
   coreRow->addWidget(m_coreEdit);
   auto *browseCore = new QPushButton(tr("Browse"), this);
-  browseCore->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::DocumentOpen));
+  browseCore->setIcon(QIcon::fromTheme(QStringLiteral("document-open")));
   connect(browseCore, &QPushButton::clicked, this, &LauncherEditorDialog::onBrowseCore);
   coreRow->addWidget(browseCore);
   form->addRow(tr("Core Path:"), m_coreRowWidget);

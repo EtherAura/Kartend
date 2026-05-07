@@ -101,9 +101,9 @@ void ApplySettingsDialog::setupUi() {
   auto *btnRow = new QHBoxLayout;
   btnRow->setSpacing(8);
   auto *selectAll = new QPushButton(tr("Select All"), this);
-  selectAll->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::EditSelectAll));
+  selectAll->setIcon(QIcon::fromTheme(QStringLiteral("edit-select-all")));
   auto *selectNone = new QPushButton(tr("Select None"), this);
-  selectNone->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::EditClear));
+  selectNone->setIcon(QIcon::fromTheme(QStringLiteral("edit-clear")));
   btnRow->addWidget(selectAll);
   btnRow->addWidget(selectNone);
   btnRow->addStretch(1);

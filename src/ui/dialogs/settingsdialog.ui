@@ -32,7 +32,7 @@
      </property>
      <widget class="QWidget" name="collectionsTab">
       <attribute name="icon">
-       <iconset theme="QIcon::ThemeIcon::FolderOpen"/>
+       <iconset theme="folder-open"/>
       </attribute>
       <attribute name="title">
        <string>Collections</string>
@@ -55,7 +55,7 @@
                <string/>
               </property>
               <property name="icon">
-               <iconset theme="QIcon::ThemeIcon::DocumentNew"/>
+               <iconset theme="document-new"/>
               </property>
              </widget>
             </item>
@@ -71,7 +71,7 @@
                <string/>
               </property>
               <property name="icon">
-               <iconset theme="QIcon::ThemeIcon::EditDelete"/>
+               <iconset theme="edit-delete"/>
               </property>
              </widget>
             </item>
@@ -90,7 +90,7 @@
                <string/>
               </property>
               <property name="icon">
-               <iconset theme="QIcon::ThemeIcon::EditCopy"/>
+               <iconset theme="edit-copy"/>
               </property>
              </widget>
             </item>
@@ -154,7 +154,7 @@
                <string/>
               </property>
               <property name="icon">
-               <iconset theme="QIcon::ThemeIcon::DocumentSave"/>
+               <iconset theme="document-save"/>
               </property>
              </widget>
             </item>
@@ -1488,7 +1488,7 @@
           is being edited (driven by the Collections tab tree selection). -->
      <widget class="QWidget" name="sidebarTab">
       <attribute name="icon">
-       <iconset theme="QIcon::ThemeIcon::FormatJustifyRight"/>
+       <iconset theme="format-justify-right"/>
       </attribute>
       <attribute name="title">
        <string>Details Pane</string>
@@ -1827,7 +1827,7 @@
      </widget>
      <widget class="QWidget" name="launchersTab">
       <attribute name="icon">
-       <iconset theme="QIcon::ThemeIcon::InputGaming"/>
+       <iconset theme="input-gaming"/>
       </attribute>
       <attribute name="title">
        <string>Launchers</string>
@@ -1888,7 +1888,7 @@
      </widget>
      <widget class="QWidget" name="generalTab">
       <attribute name="icon">
-       <iconset theme="QIcon::ThemeIcon::DocumentProperties"/>
+       <iconset theme="document-properties"/>
       </attribute>
       <attribute name="title">
        <string>General</string>

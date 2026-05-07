@@ -63,7 +63,7 @@ void ShortcutsDialog::setupUI() {
   auto *buttonLayout = new QHBoxLayout();
   buttonLayout->addStretch();
   auto *closeButton = new QPushButton(tr("Close"), this);
-  closeButton->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::WindowClose));
+  closeButton->setIcon(QIcon::fromTheme(QStringLiteral("window-close")));
   closeButton->setDefault(true);
   connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);
   buttonLayout->addWidget(closeButton);

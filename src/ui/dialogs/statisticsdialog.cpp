@@ -185,7 +185,7 @@ void StatisticsDialog::setupUI() {
   auto *historyButtonRow = new QHBoxLayout();
   historyButtonRow->addStretch();
   m_clearHistoryButton = new QPushButton(tr("Clear history…"), historyTab);
-  m_clearHistoryButton->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::EditDelete));
+  m_clearHistoryButton->setIcon(QIcon::fromTheme(QStringLiteral("edit-delete")));
   m_clearHistoryButton->setToolTip(
       tr("Permanently delete every history entry. This cannot be undone."));
   connect(m_clearHistoryButton, &QPushButton::clicked, this,
@@ -201,7 +201,7 @@ void StatisticsDialog::setupUI() {
   auto *buttonLayout = new QHBoxLayout();
   buttonLayout->setSpacing(8);
   auto *resetButton = new QPushButton(tr("Reset usage stats…"), this);
-  resetButton->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::EditDelete));
+  resetButton->setIcon(QIcon::fromTheme(QStringLiteral("edit-delete")));
   resetButton->setToolTip(tr("Clear play count, last played, and time played for every item."));
   connect(resetButton, &QPushButton::clicked, this, &StatisticsDialog::onResetClicked);
   buttonLayout->addWidget(resetButton);
@@ -209,12 +209,12 @@ void StatisticsDialog::setupUI() {
   buttonLayout->addStretch();
 
   auto *refreshButton = new QPushButton(tr("Refresh"), this);
-  refreshButton->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::ViewRefresh));
+  refreshButton->setIcon(QIcon::fromTheme(QStringLiteral("view-refresh")));
   connect(refreshButton, &QPushButton::clicked, this, &StatisticsDialog::refresh);
   buttonLayout->addWidget(refreshButton);
 
   auto *closeButton = new QPushButton(tr("Close"), this);
-  closeButton->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::WindowClose));
+  closeButton->setIcon(QIcon::fromTheme(QStringLiteral("window-close")));
   closeButton->setDefault(true);
   connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);
   buttonLayout->addWidget(closeButton);
