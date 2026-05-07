@@ -11,6 +11,7 @@ depends=(
   'gcc-libs'
   'glibc'
   'qt6-base'
+  'qt6-multimedia'
   'sdl2'
 )
 makedepends=(
