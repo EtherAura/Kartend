@@ -10,6 +10,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QIcon>
 #include <QLabel>
 #include <QLocale>
 #include <QMessageBox>
@@ -25,8 +26,8 @@
 #include "settingsmanager.h"
 
 namespace {
-constexpr int DIALOG_WIDTH = 720;
-constexpr int DIALOG_HEIGHT = 540;
+constexpr int DIALOG_WIDTH = 920;
+constexpr int DIALOG_HEIGHT = 640;
 constexpr int TOP_LIST_LIMIT = 50;
 constexpr int RECENT_LIST_LIMIT = 50;
 constexpr int HISTORY_LIST_LIMIT = 1000;
@@ -48,16 +49,28 @@ StatisticsDialog::StatisticsDialog(DatabaseManager *databaseManager,
 
 void StatisticsDialog::setupUI() {
   auto *mainLayout = new QVBoxLayout(this);
-  mainLayout->setSpacing(12);
-  mainLayout->setContentsMargins(20, 20, 20, 20);
+  mainLayout->setSpacing(10);
+  mainLayout->setContentsMargins(12, 12, 12, 12);
 
-  // Header: aggregate counters in a two-column form. Bold values + dim
-  // labels match the metadata sidebar's typographic rhythm.
+  // Header: aggregate counters split across two side-by-side forms so the
+  // wider dialog isn't dominated by a single narrow column. Bold values +
+  // dim labels match the metadata sidebar's typographic rhythm.
   auto *headerFrame = new QFrame(this);
   headerFrame->setFrameShape(QFrame::StyledPanel);
-  auto *headerLayout = new QFormLayout(headerFrame);
-  headerLayout->setLabelAlignment(Qt::AlignRight);
-  headerLayout->setContentsMargins(16, 12, 16, 12);
+  auto *headerHBox = new QHBoxLayout(headerFrame);
+  headerHBox->setContentsMargins(16, 12, 16, 12);
+  headerHBox->setSpacing(20);
+
+  auto makeForm = [] {
+    auto *f = new QFormLayout();
+    f->setLabelAlignment(Qt::AlignRight);
+    f->setHorizontalSpacing(8);
+    f->setVerticalSpacing(6);
+    f->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    return f;
+  };
+  auto *headerLeft = makeForm();
+  auto *headerRight = makeForm();
 
   auto makeValueLabel = [this]() {
     auto *lbl = new QLabel(this);
@@ -73,10 +86,13 @@ void StatisticsDialog::setupUI() {
   m_totalTimeValue = makeValueLabel();
   m_itemsLaunchedValue = makeValueLabel();
 
-  headerLayout->addRow(tr("Total items:"), m_totalItemsValue);
-  headerLayout->addRow(tr("Items launched at least once:"), m_itemsLaunchedValue);
-  headerLayout->addRow(tr("Total launches:"), m_totalLaunchesValue);
-  headerLayout->addRow(tr("Total time played:"), m_totalTimeValue);
+  headerLeft->addRow(tr("Total items:"), m_totalItemsValue);
+  headerLeft->addRow(tr("Items launched at least once:"), m_itemsLaunchedValue);
+  headerRight->addRow(tr("Total launches:"), m_totalLaunchesValue);
+  headerRight->addRow(tr("Total time played:"), m_totalTimeValue);
+
+  headerHBox->addLayout(headerLeft, 1);
+  headerHBox->addLayout(headerRight, 1);
 
   mainLayout->addWidget(headerFrame);
 
@@ -169,6 +185,7 @@ void StatisticsDialog::setupUI() {
   auto *historyButtonRow = new QHBoxLayout();
   historyButtonRow->addStretch();
   m_clearHistoryButton = new QPushButton(tr("Clear history…"), historyTab);
+  m_clearHistoryButton->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::EditDelete));
   m_clearHistoryButton->setToolTip(
       tr("Permanently delete every history entry. This cannot be undone."));
   connect(m_clearHistoryButton, &QPushButton::clicked, this,
@@ -182,7 +199,9 @@ void StatisticsDialog::setupUI() {
 
   // Buttons: Reset (left, destructive) + Refresh + Close (right).
   auto *buttonLayout = new QHBoxLayout();
+  buttonLayout->setSpacing(8);
   auto *resetButton = new QPushButton(tr("Reset usage stats…"), this);
+  resetButton->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::EditDelete));
   resetButton->setToolTip(tr("Clear play count, last played, and time played for every item."));
   connect(resetButton, &QPushButton::clicked, this, &StatisticsDialog::onResetClicked);
   buttonLayout->addWidget(resetButton);
@@ -190,10 +209,12 @@ void StatisticsDialog::setupUI() {
   buttonLayout->addStretch();
 
   auto *refreshButton = new QPushButton(tr("Refresh"), this);
+  refreshButton->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::ViewRefresh));
   connect(refreshButton, &QPushButton::clicked, this, &StatisticsDialog::refresh);
   buttonLayout->addWidget(refreshButton);
 
   auto *closeButton = new QPushButton(tr("Close"), this);
+  closeButton->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::WindowClose));
   closeButton->setDefault(true);
   connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);
   buttonLayout->addWidget(closeButton);

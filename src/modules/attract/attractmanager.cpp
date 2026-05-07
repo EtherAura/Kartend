@@ -208,8 +208,12 @@ void AttractManager::startAttract() {
     return;
   }
 
-  QScrollBar *vBar = m_itemScrollArea->verticalScrollBar();
-  const bool scrollable = vBar && vBar->maximum() > 0;
+  // In Horizontal view the long axis is X, so attract drives the horizontal
+  // scrollbar; otherwise the vertical one.
+  const bool isHorizontal = m_scrollManager && m_scrollManager->getMetrics().isHorizontal;
+  QScrollBar *bar =
+      isHorizontal ? m_itemScrollArea->horizontalScrollBar() : m_itemScrollArea->verticalScrollBar();
+  const bool scrollable = bar && bar->maximum() > 0;
   if (wantScroll && !scrollable && !wantAdvance) {
     // Wanted to scroll but content fits viewport, and advance is off too —
     // try again on the next idle cycle.
@@ -273,8 +277,11 @@ void AttractManager::onScrollTick() {
     return;
   }
 
-  QScrollBar *vBar = m_itemScrollArea->verticalScrollBar();
-  if (!vBar) {
+  // Pick the bar that runs along the long axis of the current view.
+  const bool isHorizontal = m_scrollManager && m_scrollManager->getMetrics().isHorizontal;
+  QScrollBar *bar =
+      isHorizontal ? m_itemScrollArea->horizontalScrollBar() : m_itemScrollArea->verticalScrollBar();
+  if (!bar) {
     stopAttract();
     return;
   }
@@ -295,27 +302,27 @@ void AttractManager::onScrollTick() {
   }
   m_scrollAccumulator -= delta;
 
-  const int current = vBar->value();
+  const int current = bar->value();
   const int next = current + (delta * m_scrollDirection);
 
-  if (next >= vBar->maximum()) {
-    vBar->setValue(vBar->maximum());
+  if (next >= bar->maximum()) {
+    bar->setValue(bar->maximum());
     m_scrollAccumulator = 0.0;
-    // Reached bottom - pause then reverse
+    // Reached far end - pause then reverse
     m_bouncePaused = true;
     m_bouncePauseTimer->start(UIConstants::Attract::BOUNCE_PAUSE_MS);
     return;
   }
-  if (next <= vBar->minimum()) {
-    vBar->setValue(vBar->minimum());
+  if (next <= bar->minimum()) {
+    bar->setValue(bar->minimum());
     m_scrollAccumulator = 0.0;
-    // Reached top - pause then reverse
+    // Reached near end - pause then reverse
     m_bouncePaused = true;
     m_bouncePauseTimer->start(UIConstants::Attract::BOUNCE_PAUSE_MS);
     return;
   }
 
-  vBar->setValue(next);
+  bar->setValue(next);
 
   // Keep virtual scrolling view up to date
   if (m_scrollManager) {

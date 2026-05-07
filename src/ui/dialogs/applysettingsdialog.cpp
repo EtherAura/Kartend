@@ -8,6 +8,7 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -60,9 +61,11 @@ ApplySettingsDialog::ApplySettingsDialog(Mode mode, const QList<CollectionConfig
 
 void ApplySettingsDialog::setupUi() {
   setWindowTitle(m_mode == Mode::Pull ? tr("Copy Settings From...") : tr("Apply Settings"));
-  resize(460, 360);
+  resize(560, 420);
 
   auto *layout = new QVBoxLayout(this);
+  layout->setContentsMargins(12, 12, 12, 12);
+  layout->setSpacing(10);
 
   m_headerLabel = new QLabel(this);
   m_headerLabel->setWordWrap(true);
@@ -70,6 +73,9 @@ void ApplySettingsDialog::setupUi() {
 
   if (m_mode == Mode::Pull) {
     auto *sourceRow = new QFormLayout;
+    sourceRow->setHorizontalSpacing(8);
+    sourceRow->setVerticalSpacing(6);
+    sourceRow->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     m_sourceCombo = new QComboBox(this);
     sourceRow->addRow(tr("Copy from:"), m_sourceCombo);
     layout->addLayout(sourceRow);
@@ -81,7 +87,8 @@ void ApplySettingsDialog::setupUi() {
   // dialog — the assignment is also what convinces clang-analyzer that
   // boxLayout is used unconditionally; without it the analyzer treats the
   // (compile-time non-empty) loop body as potentially unreachable.
-  boxLayout->setContentsMargins(8, 8, 8, 8);
+  boxLayout->setContentsMargins(10, 10, 10, 10);
+  boxLayout->setSpacing(6);
   for (const auto &entry : kCategoryEntries) {
     auto *cb = new QCheckBox(tr(entry.label), box);
     cb->setToolTip(tr(entry.tooltip));
@@ -92,8 +99,11 @@ void ApplySettingsDialog::setupUi() {
   layout->addWidget(box, 1);
 
   auto *btnRow = new QHBoxLayout;
+  btnRow->setSpacing(8);
   auto *selectAll = new QPushButton(tr("Select All"), this);
+  selectAll->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::EditSelectAll));
   auto *selectNone = new QPushButton(tr("Select None"), this);
+  selectNone->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::EditClear));
   btnRow->addWidget(selectAll);
   btnRow->addWidget(selectNone);
   btnRow->addStretch(1);

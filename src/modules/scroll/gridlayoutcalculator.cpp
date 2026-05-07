@@ -4,8 +4,8 @@
 #include <algorithm>
 #include <climits>
 
-auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config, int totalItems)
-    -> GridMetrics {
+auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config, int totalItems,
+                                            bool sidebarShrinkingActive) -> GridMetrics {
   GridMetrics metrics;
   metrics.isHorizontal = (config.viewType == ViewType::Horizontal);
 
@@ -28,10 +28,16 @@ auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config, int 
     // controlled by horizontalGridHeight (falling back to gridWidth when 0 so
     // existing collections that flip to Horizontal mode without configuring
     // the new field still get a sane layout).
-    if (metrics.isHorizontal && config.horizontalGridHeight > 0) {
-      metrics.itemsPerRow = qMax(1, config.horizontalGridHeight);
+    // Kartend-0p3w: route both gridWidth and horizontalGridHeight through the
+    // effective-value helpers so sidebar-hidden alternates apply when the
+    // sidebar is hidden in Expand mode.
+    const int effectiveHorizontal =
+        CollectionUtils::effectiveHorizontalGridHeight(config, sidebarShrinkingActive);
+    if (metrics.isHorizontal && effectiveHorizontal > 0) {
+      metrics.itemsPerRow = qMax(1, effectiveHorizontal);
     } else {
-      metrics.itemsPerRow = qMax(1, config.gridWidth);
+      metrics.itemsPerRow =
+          qMax(1, CollectionUtils::effectiveGridWidth(config, sidebarShrinkingActive));
     }
     metrics.horizontalSpacing = config.horizontalSpacing;
     metrics.verticalSpacing = config.verticalSpacing;

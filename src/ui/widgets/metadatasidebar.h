@@ -129,6 +129,11 @@ signals:
   /// Kartend-63e: fired when the width drag is released. The integer value
   /// is the final width; SidebarManager persists it via SettingsManager.
   void widthCommitted(int width);
+  /// Kartend-u2gx: height equivalents for Top/Bottom dock. Same lifecycle as
+  /// the width pair — heightDragged() during the drag, heightCommitted() at
+  /// release for persistence.
+  void heightDragged(int height);
+  void heightCommitted(int height);
   /// Kartend-63e: emitted when the user clicks a sidebar tab. SidebarManager
   /// persists the new active tab to the current collection.
   void activeTabChanged(SidebarTab tab);
@@ -150,6 +155,12 @@ protected:
   void mouseMoveEvent(QMouseEvent *event) override;
   void mouseReleaseEvent(QMouseEvent *event) override;
   void leaveEvent(QEvent *event) override;
+  /// Kartend-u2gx: inner widgets (scrollArea, contentWidget, gallery thumbs)
+  /// can swallow mouse events that fall in the grip zone before they reach
+  /// the panel itself. We install ourselves as their event filter so we can
+  /// intercept press/move/release in the grip area and run the resize logic
+  /// no matter which descendant happened to be under the cursor.
+  bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
   void setupUI();
@@ -184,6 +195,35 @@ private:
   /// screen.
   void applyPreviewSize();
   [[nodiscard]] int previewBoxSize() const;
+  /// Kartend-u2gx: flip the contentLayout direction (TopToBottom / LeftToRight),
+  /// scrollbar policies, and inter-section separator orientation based on the
+  /// active dock edge. Called from applyAppearance after m_position is set.
+  void applyDockOrientation();
+  /// Kartend-u2gx: target gallery-thumb size in the current dock orientation.
+  /// In horizontal dock the thumbs scale to match the artwork preview so
+  /// they read as proportional siblings; in vertical dock they fall back to
+  /// the .ui's compact GALLERY_THUMB_SIZE constant.
+  [[nodiscard]] int currentGalleryThumbSize() const;
+  /// Kartend-u2gx: walk existing gallery thumb buttons and resize them to
+  /// match `currentGalleryThumbSize()`. Cheap to call after a dock change /
+  /// resize event; setIconSize handles the pixmap rescale internally.
+  void applyGalleryThumbSize();
+  /// Kartend-u2gx: build the dedicated horizontal-dock view. Lazy-created on
+  /// first switch into Top/Bottom dock so users who never dock horizontally
+  /// don't pay for the extra widgets.
+  void setupHorizontalView();
+  /// Kartend-u2gx: push current selection state (item name, file info,
+  /// artwork pixmap, gallery entries) into m_horizontalView's widgets.
+  /// Called on selection change, on dock-orientation change, and on resize.
+  void updateHorizontalView();
+  /// Kartend-u2gx: target square size for the horizontal view's preview tile
+  /// (artwork + video). Scales with panel viewport height minus the chrome
+  /// the horizontal view's own QHBoxLayout contributes (margins + spacing).
+  [[nodiscard]] int horizontalPreviewSize() const;
+  /// Kartend-u2gx: rebuild the horizontal view's gallery thumb strip from
+  /// `m_galleryEntries`, filtering out video entries (the live preview tile
+  /// already plays the video). Runs on every gallery / orientation change.
+  void rebuildHorizontalGallery();
   void loadArtwork(const QString &baseName, const QString &artworkDirectory);
   void schedulePreviewVideo(const QString &videoPath);
   void showArtworkOnly();
@@ -215,11 +255,17 @@ private:
   /// Kartend-63e width drag state. WidthLocked false enables a draggable
   /// grip on the inner edge; while m_widthDragging is true, mouseMove
   /// emits widthDragged() and mouseRelease emits widthCommitted().
+  /// Kartend-u2gx: m_heightDragging is the Top/Bottom equivalent — same lock
+  /// flag governs both, and only one of the two is ever active at once
+  /// because the active edge is determined by m_position.
   bool m_widthLocked = true;
   SidebarPosition m_position = SidebarPosition::Right;
   bool m_widthDragging = false;
   int m_dragStartWidth = 0;
   int m_dragStartX = 0;
+  bool m_heightDragging = false;
+  int m_dragStartHeight = 0;
+  int m_dragStartY = 0;
   [[nodiscard]] bool isOnGrip(const QPoint &posInWidget) const;
 
   /// Kartend-63e tabs. The tab bar is created programmatically and inserted
@@ -256,6 +302,36 @@ private:
   QWidget *m_galleryThumbsHost = nullptr;
   QPushButton *m_galleryEditButton = nullptr;
   bool m_galleryEditEnabled = false;
+  /// Kartend-u2gx: cached entries from the most recent setArtworkGallery
+  /// call. Used to rebuild the horizontal-view gallery whenever the user
+  /// switches dock orientation, without callers having to re-push the list.
+  QList<GalleryEntry> m_galleryEntries;
+  /// Kartend-u2gx: cached item name from the most recent setMetadata call.
+  /// The .ui's itemNameValue holds the same string but the horizontal view
+  /// reads from this so it doesn't matter whether the vertical labels have
+  /// been mutated by tab logic ("Name:" vs "Collection:").
+  QString m_currentItemName;
+
+  // ─── Dedicated horizontal-dock view (Kartend-u2gx) ───────────────────────
+  // m_horizontalView lives alongside the .ui's scrollArea in mainLayout.
+  // applyDockOrientation toggles which one is visible. Each child below is
+  // owned by m_horizontalView and built lazily by setupHorizontalView().
+  QWidget *m_horizontalView = nullptr;
+  QWidget *m_hPreviewArea = nullptr;
+  QHBoxLayout *m_hPreviewLayout = nullptr;
+  QLabel *m_hArtwork = nullptr;
+  QLabel *m_hName = nullptr;
+  QLabel *m_hPath = nullptr;
+  QLabel *m_hSizeValue = nullptr;
+  QLabel *m_hModifiedValue = nullptr;
+  QLabel *m_hTypeValue = nullptr;
+  QWidget *m_hMetaContainer = nullptr; // wraps the QFormLayout for show/hide
+  QWidget *m_hGalleryHost = nullptr;
+  QHBoxLayout *m_hGalleryLayout = nullptr;
+  /// Kartend-u2gx: Edit button lives at the far right of the panel, not
+  /// inside the gallery — keeps its position consistent regardless of how
+  /// many thumbs render. Toggled by setArtworkEditEnabled.
+  QPushButton *m_hEditButton = nullptr;
   // Owned-on-demand preview overlay reparented to the top-level window so it
   // can cover the full UI rather than just the narrow sidebar. nullptr until
   // the first thumbnail is clicked.

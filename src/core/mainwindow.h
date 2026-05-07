@@ -48,6 +48,7 @@ class NowPlayingOverlay;
 class DetailPageOverlay;
 class DetailPageManager;
 class MenuController;
+class TextZoomHud;
 
 namespace kart {
 class KartManager;
@@ -220,6 +221,7 @@ private:
   SplashOverlay *m_splashOverlay = nullptr;
   NowPlayingOverlay *m_nowPlayingOverlay = nullptr;
   DetailPageOverlay *m_detailPageOverlay = nullptr; // Kartend-uve
+  TextZoomHud *m_textZoomHud = nullptr;             // Kartend-0w4i
   bool m_startupSplashHandled = false;
   bool m_windowWasInactive = false;
 
@@ -243,6 +245,13 @@ private:
   void connectDatabaseManager();
   void connectScrollManager();
   void connectSidebarManager();
+  /// Kartend-0p3w: pushes the "sidebar is hidden AND its mode would shrink the
+  /// grid (Expand)" predicate to ScrollManager so the layout calculator picks
+  /// the alternate per-collection grid sizes when applicable. Called whenever
+  /// sidebar visibility changes, when navigating to a collection with a
+  /// different sidebar mode, and after the settings dialog live-applies a
+  /// sidebar-mode change.
+  void updateScrollManagerSidebarShrinking();
   void connectSearchComponents();
   void connectScrollBars() const;
   /// Wires the consolidated m_filterButton: builds its popup once, hooks

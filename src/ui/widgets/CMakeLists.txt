@@ -18,6 +18,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   nowplayingoverlay.cpp
   splashoverlay.cpp
   startupvideooverlay.cpp
+  textzoomhud.cpp
   videopreviewwidget.cpp
   videothumbnailextractor.cpp
   vignetteoverlay.cpp
@@ -35,6 +36,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   nowplayingoverlay.h
   splashoverlay.h
   startupvideooverlay.h
+  textzoomhud.h
   videopreviewwidget.h
   videothumbnailextractor.h
   vignetteoverlay.h

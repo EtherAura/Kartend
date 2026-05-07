@@ -196,6 +196,13 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
 
     config.gridWidth = settings.value("gridWidth", 4).toInt();
     config.horizontalGridHeight = settings.value("horizontalGridHeight", 0).toInt();
+    config.gridWidthSidebarHidden = settings.value("gridWidthSidebarHidden", 0).toInt();
+    config.horizontalGridHeightSidebarHidden =
+        settings.value("horizontalGridHeightSidebarHidden", 0).toInt();
+    // Kartend-u2gx: alt items-per-column when a Top/Bottom-docked details pane
+    // hides in Expand mode. 0 means "inherit gridWidth" — preserves existing
+    // behavior for collections that haven't opted in.
+    config.gridHeightSidebarHidden = settings.value("gridHeightSidebarHidden", 0).toInt();
     config.sidebarVisible = settings.value("sidebarVisible", false).toBool();
     config.showAllSubcollectionItems = settings.value("showAllSubcollectionItems", false).toBool();
     config.horizontalAlignment = CollectionUtils::stringToAlignment(
@@ -221,6 +228,11 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.sidebarHeaderBgOpacity = settings.value("sidebarHeaderBgOpacity", 200).toInt();
     config.sidebarSectionBgOpacity = settings.value("sidebarSectionBgOpacity", 170).toInt();
     config.sidebarWidth = settings.value("sidebarWidth", UIConstants::Sidebar::FIXED_WIDTH).toInt();
+    // Kartend-u2gx: pane height for Top/Bottom dock. Same persistence treatment
+    // as sidebarWidth (no migration of older configs needed — the default is
+    // applied when the key is absent).
+    config.sidebarHeight =
+        settings.value("sidebarHeight", UIConstants::Sidebar::FIXED_HEIGHT).toInt();
     config.sidebarWidthLocked = settings.value("sidebarWidthLocked", true).toBool();
     config.sidebarActiveTab =
         CollectionUtils::stringToSidebarTab(settings.value("sidebarActiveTab", "item").toString());
@@ -464,6 +476,9 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue("customArtworkTypes", c.customArtworkTypes.join(", "));
     settings.setValue("gridWidth", c.gridWidth);
     settings.setValue("horizontalGridHeight", c.horizontalGridHeight);
+    settings.setValue("gridWidthSidebarHidden", c.gridWidthSidebarHidden);
+    settings.setValue("horizontalGridHeightSidebarHidden", c.horizontalGridHeightSidebarHidden);
+    settings.setValue("gridHeightSidebarHidden", c.gridHeightSidebarHidden);
     settings.setValue("sidebarVisible", c.sidebarVisible);
     settings.setValue("showAllSubcollectionItems", c.showAllSubcollectionItems);
     settings.setValue("horizontalAlignment",
@@ -488,6 +503,7 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue("sidebarHeaderBgOpacity", c.sidebarHeaderBgOpacity);
     settings.setValue("sidebarSectionBgOpacity", c.sidebarSectionBgOpacity);
     settings.setValue("sidebarWidth", c.sidebarWidth);
+    settings.setValue("sidebarHeight", c.sidebarHeight);
     settings.setValue("sidebarWidthLocked", c.sidebarWidthLocked);
     settings.setValue("sidebarActiveTab", CollectionUtils::sidebarTabToString(c.sidebarActiveTab));
     settings.setValue("viewType", CollectionUtils::viewTypeToString(c.viewType));

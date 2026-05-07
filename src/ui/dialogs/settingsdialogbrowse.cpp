@@ -337,6 +337,12 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->horizontalGridHeightSpinBox) {
     ui->horizontalGridHeightSpinBox->setValue(config.horizontalGridHeight);
   }
+  if (ui->gridWidthSidebarHiddenSpinBox) {
+    ui->gridWidthSidebarHiddenSpinBox->setValue(config.gridWidthSidebarHidden);
+  }
+  if (ui->horizontalGridHeightSidebarHiddenSpinBox) {
+    ui->horizontalGridHeightSidebarHiddenSpinBox->setValue(config.horizontalGridHeightSidebarHidden);
+  }
   if (ui->showAllSubcollectionItemsCheckBox) {
     ui->showAllSubcollectionItemsCheckBox->setChecked(config.showAllSubcollectionItems);
   }
@@ -352,6 +358,11 @@ void SettingsDialog::loadCollectionToUI(int index) {
   }
   if (ui->sidebarWidthSpinBox) {
     ui->sidebarWidthSpinBox->setValue(config.sidebarWidth);
+  }
+  // Kartend-u2gx: pane height for Top/Bottom dock. Same form panel — visibility
+  // is toggled by updateSidebarModeVisibility() based on Position.
+  if (ui->sidebarHeightSpinBox) {
+    ui->sidebarHeightSpinBox->setValue(config.sidebarHeight);
   }
   if (ui->sidebarWidthLockedCheckBox) {
     ui->sidebarWidthLockedCheckBox->setChecked(config.sidebarWidthLocked);
@@ -585,6 +596,9 @@ void SettingsDialog::clearCollectionUI() {
 
   if (ui->gridWidthSpinBox) ui->gridWidthSpinBox->setValue(UIConstants::Grid::DEFAULT_WIDTH);
   if (ui->horizontalGridHeightSpinBox) ui->horizontalGridHeightSpinBox->setValue(0);
+  if (ui->gridWidthSidebarHiddenSpinBox) ui->gridWidthSidebarHiddenSpinBox->setValue(0);
+  if (ui->horizontalGridHeightSidebarHiddenSpinBox)
+    ui->horizontalGridHeightSidebarHiddenSpinBox->setValue(0);
   if (ui->horizontalSpacingSpinBox)
     ui->horizontalSpacingSpinBox->setValue(spacingInternalToUi(UIConstants::Grid::SPACING));
   if (ui->verticalSpacingSpinBox)
@@ -599,6 +613,8 @@ void SettingsDialog::clearCollectionUI() {
   // Kartend-63e sidebar enhancements: clear/reset on no-selection.
   if (ui->sidebarPositionComboBox) ui->sidebarPositionComboBox->setCurrentIndex(0);
   if (ui->sidebarWidthSpinBox) ui->sidebarWidthSpinBox->setValue(UIConstants::Sidebar::FIXED_WIDTH);
+  if (ui->sidebarHeightSpinBox)
+    ui->sidebarHeightSpinBox->setValue(UIConstants::Sidebar::FIXED_HEIGHT);
   if (ui->sidebarWidthLockedCheckBox) ui->sidebarWidthLockedCheckBox->setChecked(true);
   if (ui->sidebarBackgroundTypeComboBox) ui->sidebarBackgroundTypeComboBox->setCurrentIndex(0);
   if (ui->sidebarBackgroundValueEdit) ui->sidebarBackgroundValueEdit->clear();

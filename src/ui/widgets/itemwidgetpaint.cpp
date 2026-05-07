@@ -107,7 +107,9 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
     } else if (m_isSubcollection) {
       shouldShowTitle = !m_hideSubcollectionTitles;
     } else {
-      shouldShowTitle = !m_hideTitles;
+      // Kartend-029m: hideTitles is a grid-mode concern. In list mode the row
+      // IS the title -- suppressing it leaves a blank row with no fallback.
+      shouldShowTitle = m_isListMode || !m_hideTitles;
     }
     if (shouldShowTitle) {
       painter.setRenderHint(QPainter::TextAntialiasing);

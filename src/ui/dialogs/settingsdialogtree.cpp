@@ -341,6 +341,8 @@ void SettingsDialog::addCollection() {
     newCollection.isSubcollection = true;
     newCollection.gridWidth = parent.gridWidth;
     newCollection.horizontalGridHeight = parent.horizontalGridHeight;
+    newCollection.gridWidthSidebarHidden = parent.gridWidthSidebarHidden;
+    newCollection.horizontalGridHeightSidebarHidden = parent.horizontalGridHeightSidebarHidden;
     newCollection.horizontalSpacing = parent.horizontalSpacing;
     newCollection.verticalSpacing = parent.verticalSpacing;
     newCollection.itemWidth = parent.itemWidth;
@@ -524,6 +526,8 @@ void copyAppearanceAndLayoutFields(const CollectionConfig &src, CollectionConfig
   if (categories.testFlag(ApplySettingsDialog::GridLayout)) {
     dst.gridWidth = src.gridWidth;
     dst.horizontalGridHeight = src.horizontalGridHeight;
+    dst.gridWidthSidebarHidden = src.gridWidthSidebarHidden;
+    dst.horizontalGridHeightSidebarHidden = src.horizontalGridHeightSidebarHidden;
     dst.horizontalSpacing = src.horizontalSpacing;
     dst.verticalSpacing = src.verticalSpacing;
     dst.itemWidth = src.itemWidth;

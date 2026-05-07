@@ -292,6 +292,14 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->horizontalGridHeightSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
   }
+  if (ui->gridWidthSidebarHiddenSpinBox) {
+    connect(ui->gridWidthSidebarHiddenSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->horizontalGridHeightSidebarHiddenSpinBox) {
+    connect(ui->horizontalGridHeightSidebarHiddenSpinBox,
+            QOverload<int>::of(&QSpinBox::valueChanged), this, &SettingsDialog::checkForChanges);
+  }
   if (ui->showAllSubcollectionItemsCheckBox) {
     connect(ui->showAllSubcollectionItemsCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
@@ -317,9 +325,16 @@ void SettingsDialog::setupFormFieldConnections() {
   if (ui->sidebarPositionComboBox) {
     connect(ui->sidebarPositionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::checkForChanges);
+    // Kartend-u2gx: position drives whether Width or Height is exposed.
+    connect(ui->sidebarPositionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            &SettingsDialog::updateSidebarModeVisibility);
   }
   if (ui->sidebarWidthSpinBox) {
     connect(ui->sidebarWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->sidebarHeightSpinBox) {
+    connect(ui->sidebarHeightSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
   }
   if (ui->sidebarWidthLockedCheckBox) {
@@ -386,7 +401,7 @@ void SettingsDialog::setupFormFieldConnections() {
       if (ui->sidebarFontSizeSpinBox && ui->sidebarFontSizeSpinBox->value() > 0) {
         currentFont.setPointSize(ui->sidebarFontSizeSpinBox->value());
       }
-      const QFont chosen = QFontDialog::getFont(&ok, currentFont, this, tr("Select Sidebar Font"));
+      const QFont chosen = QFontDialog::getFont(&ok, currentFont, this, tr("Select Details Pane Font"));
       if (ok) {
         ui->sidebarFontFamilyEdit->setText(chosen.family());
         if (ui->sidebarFontSizeSpinBox && chosen.pointSize() > 0) {

@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFontMetrics>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QMouseEvent>
@@ -110,9 +111,19 @@ MetadataSidebar::MetadataSidebar(QWidget *parent) : QWidget(parent), ui(new Ui::
     if (m_pendingVideoPath.isEmpty() || !m_videoPreview) {
       return;
     }
-    ui->artworkDisplay->hide();
+    // In vertical dock the video replaces the artwork (cramped narrow panel
+    // can't host both stacked). In horizontal dock the video and artwork
+    // sit side-by-side inside m_hPreviewLayout — both stay visible based
+    // on availability, handled by updateHorizontalView().
+    const bool horizontal = CollectionUtils::isDetailsPaneHorizontal(m_position);
+    if (!horizontal) {
+      ui->artworkDisplay->hide();
+    }
     m_videoPreview->show();
     m_videoPreview->playVideo(m_pendingVideoPath);
+    if (horizontal) {
+      updateHorizontalView();
+    }
   });
 
   clearMetadata();
@@ -146,6 +157,7 @@ void MetadataSidebar::setMetadata(const QString &filePath, const QString &itemNa
   ui->itemNameLabel->setText(tr("Name:"));
 
   ui->itemNameValue->setText(itemName);
+  m_currentItemName = itemName;
   updateFileInfo(filePath);
 
   QFileInfo fileInfo(filePath);
@@ -187,6 +199,9 @@ void MetadataSidebar::setMetadata(const QString &filePath, const QString &itemNa
   ui->lastModifiedValue->show();
   ui->fileExtensionLabel->show();
   ui->fileExtensionValue->show();
+  // Kartend-u2gx: mirror the new selection into the dedicated horizontal view
+  // so users on T/B dock see the live data without a tab/dock toggle.
+  updateHorizontalView();
 }
 
 // Clears all metadata fields. When a collection summary has been cached
@@ -195,6 +210,7 @@ void MetadataSidebar::setMetadata(const QString &filePath, const QString &itemNa
 // pick up the new no-selection display without per-caller plumbing.
 void MetadataSidebar::clearMetadata() {
   m_hasItemDisplayed = false;
+  m_currentItemName.clear();
 
   // Tear down item-only chrome (artwork preview, video, gallery, details
   // rows, manual button) regardless of which mode we land in.
@@ -225,6 +241,7 @@ void MetadataSidebar::clearMetadata() {
   ui->fileExtensionValue->setText("-");
   m_artworkSource = QPixmap();
   applyPreviewSize();
+  updateHorizontalView();
 }
 
 void MetadataSidebar::setCollectionSummary(const CollectionSummary &summary) {
@@ -427,17 +444,63 @@ void MetadataSidebar::applyTabVisibility() {
     ui->itemNameLabel->setVisible(true);
     ui->itemNameValue->setVisible(true);
   }
+  // Kartend-u2gx: tab change can re-title labels (Name → Collection) and
+  // toggle item visibility — reflect that in the horizontal view.
+  updateHorizontalView();
 }
 
 void MetadataSidebar::applyAppearance(const CollectionConfig &collection) {
-  setActiveTab(collection.sidebarActiveTab);
+  // Kartend-u2gx: m_position must be set BEFORE setActiveTab(), because
+  // applyTabVisibility() consults it to decide whether the section-title
+  // chrome (titleLabel / artworkLabel / fileInfoTitle) should be hidden in
+  // T/B dock. Calling setActiveTab first would run that visibility logic
+  // against the previous orientation and the user would see ghost headers
+  // on the first paint after a position change.
   m_widthLocked = collection.sidebarWidthLocked;
   m_position = collection.sidebarPosition;
+  // Kartend-u2gx: flip the inner content layout direction + scrollbar policy
+  // to match the active dock edge. Done before setActiveTab so the wrappers
+  // and chrome state are in place when applyTabVisibility runs.
+  applyDockOrientation();
+  setActiveTab(collection.sidebarActiveTab);
   // Mouse tracking is required so we can change the cursor over the grip
   // strip without waiting for a click.
   setMouseTracking(!m_widthLocked);
   if (m_widthLocked) {
     unsetCursor();
+  }
+  // Kartend-u2gx: install/uninstall ourselves as event filter on inner widgets
+  // so grip-zone clicks that would otherwise be eaten by them get routed back
+  // here. Done every applyAppearance to handle the lock toggle. Mouse tracking
+  // is enabled on these widgets too so cursor hints work without a click.
+  const auto installFilter = [this](QWidget *w) {
+    if (!w) return;
+    if (m_widthLocked) {
+      w->removeEventFilter(this);
+      w->setMouseTracking(false);
+      w->unsetCursor();
+    } else {
+      w->installEventFilter(this);
+      w->setMouseTracking(true);
+    }
+  };
+  if (ui->scrollArea) {
+    installFilter(ui->scrollArea);
+    installFilter(ui->scrollArea->viewport());
+  }
+  installFilter(ui->contentWidget);
+  // Kartend-u2gx: in horizontal dock the .ui's scrollArea is hidden and the
+  // dedicated m_horizontalView (plus its children) sits in front of every
+  // pixel of the pane — without filtering them, grip-zone clicks get eaten
+  // by the horizontal-view children and the resize handle effectively
+  // doesn't exist in T/B + Horizontal-scrolling mode (Kartend-yl0t bug). We
+  // walk findChildren so any future widget added in setupHorizontalView is
+  // covered without having to repeat their names here.
+  if (m_horizontalView) {
+    installFilter(m_horizontalView);
+    for (QWidget *w : m_horizontalView->findChildren<QWidget *>()) {
+      installFilter(w);
+    }
   }
   m_bgType = collection.sidebarBackgroundType;
   m_bgColor = QColor(collection.sidebarBackgroundColor);
@@ -535,19 +598,34 @@ bool MetadataSidebar::isOnGrip(const QPoint &posInWidget) const {
   if (m_widthLocked) {
     return false;
   }
-  // 6px-wide hot zone on the inner edge so the user has a forgiving target.
-  static constexpr int GRIP_WIDTH = 6;
-  if (m_position == SidebarPosition::Left) {
-    return posInWidget.x() >= width() - GRIP_WIDTH;
+  // Kartend-u2gx: the grip lives on the inner edge — the side facing the grid.
+  // Right dock → left edge; Left dock → right edge; Top dock → bottom edge;
+  // Bottom dock → top edge.
+  const int grip = UIConstants::Sidebar::RESIZE_GRIP_PX;
+  switch (m_position) {
+  case SidebarPosition::Left:
+    return posInWidget.x() >= width() - grip;
+  case SidebarPosition::Top:
+    return posInWidget.y() >= height() - grip;
+  case SidebarPosition::Bottom:
+    return posInWidget.y() < grip;
+  case SidebarPosition::Right:
+  default:
+    return posInWidget.x() < grip;
   }
-  return posInWidget.x() < GRIP_WIDTH;
 }
 
 void MetadataSidebar::mousePressEvent(QMouseEvent *event) {
   if (!m_widthLocked && event->button() == Qt::LeftButton && isOnGrip(event->pos())) {
-    m_widthDragging = true;
-    m_dragStartWidth = width();
-    m_dragStartX = event->globalPosition().toPoint().x();
+    if (CollectionUtils::isDetailsPaneHorizontal(m_position)) {
+      m_heightDragging = true;
+      m_dragStartHeight = height();
+      m_dragStartY = event->globalPosition().toPoint().y();
+    } else {
+      m_widthDragging = true;
+      m_dragStartWidth = width();
+      m_dragStartX = event->globalPosition().toPoint().x();
+    }
     event->accept();
     return;
   }
@@ -566,8 +644,24 @@ void MetadataSidebar::mouseMoveEvent(QMouseEvent *event) {
     event->accept();
     return;
   }
+  if (m_heightDragging) {
+    // Kartend-u2gx: Top dock grows by dragging down (positive dy); Bottom dock
+    // grows by dragging up (negative dy → height increases).
+    const int dy = event->globalPosition().toPoint().y() - m_dragStartY;
+    int candidate =
+        m_position == SidebarPosition::Top ? m_dragStartHeight + dy : m_dragStartHeight - dy;
+    candidate = std::max(candidate, UIConstants::Sidebar::MIN_HEIGHT);
+    emit heightDragged(candidate);
+    event->accept();
+    return;
+  }
   if (!m_widthLocked) {
-    setCursor(isOnGrip(event->pos()) ? Qt::SplitHCursor : Qt::ArrowCursor);
+    if (isOnGrip(event->pos())) {
+      setCursor(CollectionUtils::isDetailsPaneHorizontal(m_position) ? Qt::SplitVCursor
+                                                                     : Qt::SplitHCursor);
+    } else {
+      setCursor(Qt::ArrowCursor);
+    }
   }
   QWidget::mouseMoveEvent(event);
 }
@@ -579,14 +673,104 @@ void MetadataSidebar::mouseReleaseEvent(QMouseEvent *event) {
     event->accept();
     return;
   }
+  if (m_heightDragging && event->button() == Qt::LeftButton) {
+    m_heightDragging = false;
+    emit heightCommitted(height());
+    event->accept();
+    return;
+  }
   QWidget::mouseReleaseEvent(event);
 }
 
 void MetadataSidebar::leaveEvent(QEvent *event) {
-  if (!m_widthDragging) {
+  if (!m_widthDragging && !m_heightDragging) {
     unsetCursor();
   }
   QWidget::leaveEvent(event);
+}
+
+bool MetadataSidebar::eventFilter(QObject *watched, QEvent *event) {
+  if (m_widthLocked) {
+    return QWidget::eventFilter(watched, event);
+  }
+  // Kartend-u2gx: forward press/move/release in the grip zone from any inner
+  // widget back to ourselves. mapTo(this, ...) translates the source widget's
+  // local coords into MetadataSidebar coords so isOnGrip() and the existing
+  // drag math both work unmodified.
+  auto *child = qobject_cast<QWidget *>(watched);
+  if (!child) {
+    return QWidget::eventFilter(watched, event);
+  }
+  switch (event->type()) {
+  case QEvent::MouseButtonPress: {
+    auto *me = static_cast<QMouseEvent *>(event);
+    if (me->button() != Qt::LeftButton) break;
+    const QPoint posInPanel = child->mapTo(this, me->position().toPoint());
+    if (!isOnGrip(posInPanel)) break;
+    if (CollectionUtils::isDetailsPaneHorizontal(m_position)) {
+      m_heightDragging = true;
+      m_dragStartHeight = height();
+      m_dragStartY = me->globalPosition().toPoint().y();
+    } else {
+      m_widthDragging = true;
+      m_dragStartWidth = width();
+      m_dragStartX = me->globalPosition().toPoint().x();
+    }
+    me->accept();
+    return true;
+  }
+  case QEvent::MouseMove: {
+    if (!m_widthDragging && !m_heightDragging) {
+      // Update the cursor when hovering over the grip zone via a child
+      // widget — without this the user gets no visual cue that the grip
+      // is reachable from inside the scroll area / content widget.
+      auto *me = static_cast<QMouseEvent *>(event);
+      const QPoint posInPanel = child->mapTo(this, me->position().toPoint());
+      if (isOnGrip(posInPanel)) {
+        child->setCursor(CollectionUtils::isDetailsPaneHorizontal(m_position) ? Qt::SplitVCursor
+                                                                              : Qt::SplitHCursor);
+      } else {
+        child->unsetCursor();
+      }
+      break;
+    }
+    auto *me = static_cast<QMouseEvent *>(event);
+    if (m_widthDragging) {
+      const int dx = me->globalPosition().toPoint().x() - m_dragStartX;
+      int candidate =
+          m_position == SidebarPosition::Left ? m_dragStartWidth + dx : m_dragStartWidth - dx;
+      candidate = std::max(candidate, UIConstants::Sidebar::MIN_WIDTH);
+      emit widthDragged(candidate);
+    } else {
+      const int dy = me->globalPosition().toPoint().y() - m_dragStartY;
+      int candidate =
+          m_position == SidebarPosition::Top ? m_dragStartHeight + dy : m_dragStartHeight - dy;
+      candidate = std::max(candidate, UIConstants::Sidebar::MIN_HEIGHT);
+      emit heightDragged(candidate);
+    }
+    me->accept();
+    return true;
+  }
+  case QEvent::MouseButtonRelease: {
+    auto *me = static_cast<QMouseEvent *>(event);
+    if (m_widthDragging && me->button() == Qt::LeftButton) {
+      m_widthDragging = false;
+      emit widthCommitted(width());
+      me->accept();
+      return true;
+    }
+    if (m_heightDragging && me->button() == Qt::LeftButton) {
+      m_heightDragging = false;
+      emit heightCommitted(height());
+      me->accept();
+      return true;
+    }
+    break;
+  }
+  default:
+    break;
+  }
+  return QWidget::eventFilter(watched, event);
 }
 
 void MetadataSidebar::paintEvent(QPaintEvent *event) {
@@ -637,17 +821,50 @@ void MetadataSidebar::paintEvent(QPaintEvent *event) {
   }
   }
 
-  // Kartend-63e: paint a visible 1px guideline on the inner edge when the
-  // width is unlocked so the user can see where to grab. Skipped while
-  // dragging so the line doesn't smear during the live resize.
-  if (!m_widthLocked && !m_widthDragging) {
+  // Kartend-63e / Kartend-u2gx: paint a guideline on the inner (grid-facing)
+  // edge while the resize lock is off so the user can see where to grab.
+  // Skipped during the live drag so the line doesn't smear. A 1px line was
+  // too easy to miss on T/B docks, where the items area's horizontal
+  // scrollbar lives right next to the grip — bump it to a 2px band and
+  // overlay a short central tick so the handle reads as a deliberate
+  // affordance rather than a stray highlight pixel.
+  if (!m_widthLocked && !m_widthDragging && !m_heightDragging) {
     QColor edgeColor = palette().color(QPalette::Highlight);
-    edgeColor.setAlpha(160);
-    painter.setPen(QPen(edgeColor, 1));
-    if (m_position == SidebarPosition::Left) {
-      painter.drawLine(width() - 1, 0, width() - 1, height());
-    } else {
-      painter.drawLine(0, 0, 0, height());
+    edgeColor.setAlpha(180);
+    QColor tickColor = edgeColor;
+    tickColor.setAlpha(255);
+    const int w = width();
+    const int h = height();
+    auto drawHandle = [&](int x1, int y1, int x2, int y2, bool horizontalEdge) {
+      painter.setPen(QPen(edgeColor, 2));
+      painter.drawLine(x1, y1, x2, y2);
+      // Center tick: a short perpendicular bar (~24px) drawn full-alpha so
+      // the handle is visible even when the band sits behind a scrollbar
+      // shadow on dark themes.
+      painter.setPen(QPen(tickColor, 2));
+      const int tickHalf = 12;
+      if (horizontalEdge) {
+        const int cx = w / 2;
+        painter.drawLine(cx - tickHalf, y1, cx + tickHalf, y1);
+      } else {
+        const int cy = h / 2;
+        painter.drawLine(x1, cy - tickHalf, x1, cy + tickHalf);
+      }
+    };
+    switch (m_position) {
+    case SidebarPosition::Left:
+      drawHandle(w - 1, 0, w - 1, h, /*horizontalEdge=*/false);
+      break;
+    case SidebarPosition::Top:
+      drawHandle(0, h - 1, w, h - 1, /*horizontalEdge=*/true);
+      break;
+    case SidebarPosition::Bottom:
+      drawHandle(0, 0, w, 0, /*horizontalEdge=*/true);
+      break;
+    case SidebarPosition::Right:
+    default:
+      drawHandle(0, 0, 0, h, /*horizontalEdge=*/false);
+      break;
     }
   }
 
@@ -682,12 +899,10 @@ int MetadataSidebar::previewBoxSize() const {
   if (!ui) {
     return UIConstants::Metadata::ARTWORK_SIZE;
   }
-  // Prefer the scroll area's viewport width — the contentWidget tracks it
-  // via widgetResizable=true, but during the first resize pass the viewport
-  // is the authoritative source. Subtract 28px (10 + 10 layout margins +
-  // 8px slack) so the preview doesn't render flush against the sidebar
-  // edge. Floor at a usable minimum so a freshly-constructed sidebar
-  // (width=0 before show) doesn't render a collapsed frame.
+  // Vertical dock (the only case the original .ui artwork preview is shown
+  // in — the dedicated horizontal view has its own preview tile). Tracks
+  // the scroll area's viewport width minus 28px (10 + 10 layout margins +
+  // 8px slack). Floored at 80 so an unsized panel doesn't collapse the box.
   int viewportW =
       (ui->scrollArea && ui->scrollArea->viewport()) ? ui->scrollArea->viewport()->width() : 0;
   if (viewportW <= 0 && ui->contentWidget) {
@@ -696,7 +911,339 @@ int MetadataSidebar::previewBoxSize() const {
   return qMax(80, viewportW - 28);
 }
 
+int MetadataSidebar::horizontalPreviewSize() const {
+  // Available vertical space = panel height − tabBar height − outer margins
+  // (m_horizontalView's QHBoxLayout has 8px top + 8px bottom = 16px).
+  // Floored at 80 so an unsized panel doesn't render postage-stamp previews.
+  int avail = height();
+  if (m_tabBar) avail -= m_tabBar->height();
+  avail -= 16;
+  return qMax(80, avail);
+}
+
+void MetadataSidebar::setupHorizontalView() {
+  if (m_horizontalView) {
+    return;
+  }
+  m_horizontalView = new QWidget(this);
+  auto *outer = new QHBoxLayout(m_horizontalView);
+  outer->setContentsMargins(8, 8, 8, 8);
+  outer->setSpacing(16);
+  outer->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+  // Preview tile: holds m_videoPreview, reparented in via applyDockOrientation.
+  // Sits at the far left.
+  m_hPreviewArea = new QWidget(m_horizontalView);
+  m_hPreviewLayout = new QHBoxLayout(m_hPreviewArea);
+  m_hPreviewLayout->setContentsMargins(0, 0, 0, 0);
+  m_hPreviewLayout->setSpacing(8);
+  m_hPreviewLayout->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+  outer->addWidget(m_hPreviewArea);
+
+  // Gallery host immediately after preview, so artwork thumbs (including the
+  // primary one) sit flush to the left next to the video.
+  m_hGalleryHost = new QWidget(m_horizontalView);
+  m_hGalleryLayout = new QHBoxLayout(m_hGalleryHost);
+  m_hGalleryLayout->setContentsMargins(0, 0, 0, 0);
+  m_hGalleryLayout->setSpacing(UIConstants::Metadata::GALLERY_THUMB_SPACING);
+  m_hGalleryLayout->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+  outer->addWidget(m_hGalleryHost);
+
+  // Info column: item name (large + bold) above an elided file path.
+  auto *infoCol = new QVBoxLayout();
+  infoCol->setContentsMargins(0, 0, 0, 0);
+  infoCol->setSpacing(4);
+  infoCol->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+  m_hName = new QLabel(m_horizontalView);
+  {
+    QFont f = m_hName->font();
+    f.setBold(true);
+    f.setPointSizeF(f.pointSizeF() * 1.4);
+    m_hName->setFont(f);
+  }
+  m_hName->setStyleSheet("color: palette(highlight);");
+  m_hName->setWordWrap(true);
+  infoCol->addWidget(m_hName);
+  m_hPath = new QLabel(m_horizontalView);
+  // Kartend-u2gx: path inherits the same palette WindowText as the metadata
+  // value labels so it reads as a continuation of the info card, not a
+  // dimmed secondary line.
+  m_hPath->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  infoCol->addWidget(m_hPath);
+  infoCol->addStretch(1);
+  outer->addLayout(infoCol);
+
+  // Metadata grid wrapped in a container so we can hide it cleanly on
+  // non-Item tabs (a bare QFormLayout has no widget handle to toggle).
+  m_hMetaContainer = new QWidget(m_horizontalView);
+  auto *metaForm = new QFormLayout(m_hMetaContainer);
+  metaForm->setContentsMargins(0, 0, 0, 0);
+  metaForm->setHorizontalSpacing(8);
+  metaForm->setVerticalSpacing(4);
+  metaForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+  metaForm->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
+  m_hSizeValue = new QLabel(m_hMetaContainer);
+  m_hModifiedValue = new QLabel(m_hMetaContainer);
+  m_hTypeValue = new QLabel(m_hMetaContainer);
+  metaForm->addRow(tr("Size:"), m_hSizeValue);
+  metaForm->addRow(tr("Modified:"), m_hModifiedValue);
+  metaForm->addRow(tr("Type:"), m_hTypeValue);
+  outer->addWidget(m_hMetaContainer);
+
+  // Stretch eats the slack between the gallery and the trailing Edit button
+  // so Edit pins to the far right of the panel.
+  outer->addStretch(1);
+
+  m_hEditButton = new QPushButton(tr("Edit"), m_horizontalView);
+  m_hEditButton->setCursor(Qt::PointingHandCursor);
+  m_hEditButton->setToolTip(tr("Pick override files for any artwork type (standard or custom)."));
+  m_hEditButton->setVisible(m_galleryEditEnabled);
+  connect(m_hEditButton, &QPushButton::clicked, this, &MetadataSidebar::editArtworkRequested);
+  outer->addWidget(m_hEditButton);
+
+  // Insert into mainLayout below tabBar / scrollArea so it can be toggled
+  // into view.
+  if (auto *mainLayout = qobject_cast<QVBoxLayout *>(layout())) {
+    mainLayout->addWidget(m_horizontalView);
+  }
+  m_horizontalView->hide();
+}
+
+void MetadataSidebar::rebuildHorizontalGallery() {
+  if (!m_hGalleryLayout) return;
+  // Clear existing thumbs.
+  while (QLayoutItem *child = m_hGalleryLayout->takeAt(0)) {
+    if (QWidget *w = child->widget()) w->deleteLater();
+    delete child;
+  }
+  // Thumbs scale to ~70% of the preview tile so they read as supporting
+  // siblings rather than competing for visual weight with the main preview.
+  // Floored at the .ui's compact constant to stay clickable on tiny panels.
+  const int thumbSize =
+      qMax(UIConstants::Metadata::GALLERY_THUMB_SIZE, (horizontalPreviewSize() * 7) / 10);
+  const int padding = UIConstants::Metadata::GALLERY_THUMB_PADDING;
+  const int iconSize = qMax(24, thumbSize - (padding * 2));
+
+  bool addedThumb = false;
+
+  // Kartend-u2gx: prepend the primary artwork as the first thumb. The grid
+  // tile and m_artworkSource use the same loadArtwork resolution path —
+  // which differs from ItemArtworkStore::resolveArtworkPath used by the
+  // gallery entries (the latter only finds files inside typed sub-
+  // directories like artwork/box/, artwork/screenshot/, etc.). Rendering
+  // m_artworkSource here means the user always sees the same artwork the
+  // grid shows, even when the typed-subdirectory layout is missing.
+  if (!m_artworkSource.isNull()) {
+    auto *primaryBtn = new QToolButton(m_hGalleryHost);
+    primaryBtn->setAutoRaise(true);
+    primaryBtn->setCursor(Qt::PointingHandCursor);
+    primaryBtn->setFixedSize(thumbSize, thumbSize);
+    primaryBtn->setIconSize(QSize(iconSize, iconSize));
+    primaryBtn->setIcon(QIcon(m_artworkSource));
+    primaryBtn->setToolTip(tr("Artwork"));
+    primaryBtn->setAccessibleName(tr("Artwork"));
+    m_hGalleryLayout->addWidget(primaryBtn);
+    addedThumb = true;
+  }
+
+  // Track which paths we've already added so the typed-subdirectory thumbs
+  // below don't duplicate the primary if it happens to live in one of them.
+  // The primary thumb has no path stored on it; we approximate by skipping
+  // any entry whose pixmap matches the first added thumb's pixmap by file
+  // path. Since m_artworkSource isn't keyed to a path, we skip this dedupe
+  // for now and accept the rare double thumb.
+
+  for (const GalleryEntry &entry : m_galleryEntries) {
+    if (entry.isVideo) continue; // Live preview tile handles video.
+    QPixmap pixmap(entry.path);
+    if (pixmap.isNull()) continue;
+    auto *btn = new QToolButton(m_hGalleryHost);
+    btn->setAutoRaise(true);
+    btn->setCursor(Qt::PointingHandCursor);
+    btn->setFixedSize(thumbSize, thumbSize);
+    btn->setIconSize(QSize(iconSize, iconSize));
+    btn->setIcon(QIcon(pixmap));
+    btn->setToolTip(entry.label);
+    btn->setAccessibleName(entry.label);
+    const GalleryEntry capturedEntry = entry;
+    connect(btn, &QToolButton::clicked, this,
+            [this, capturedEntry]() { openGalleryPreview(capturedEntry); });
+    m_hGalleryLayout->addWidget(btn);
+    addedThumb = true;
+  }
+  if (m_hGalleryHost) {
+    m_hGalleryHost->setVisible(addedThumb);
+  }
+}
+
+void MetadataSidebar::updateHorizontalView() {
+  if (!m_horizontalView) return;
+  // Kartend-u2gx: only run when actually in horizontal dock. If the user
+  // toggled to T/B then back to L/R, m_horizontalView still exists (hidden)
+  // — and previously this method was overriding m_videoPreview's size to
+  // horizontalPreviewSize(), which broke vertical-mode video playback
+  // because the widget was sized for the wrong axis.
+  if (!CollectionUtils::isDetailsPaneHorizontal(m_position)) return;
+
+  // Kartend-u2gx: tab-driven visibility — hide item-specific content on
+  // Collection / File tabs so flipping tabs has a real visual effect.
+  // Item tab: full strip (preview, info, metadata, gallery, edit).
+  // Collection tab: just the collection name (other fields are item-only).
+  // File tab: only the placeholder text.
+  const bool isItemTab = (m_activeTab == SidebarTab::Item);
+  const bool isFileTab = (m_activeTab == SidebarTab::File);
+
+  // Mirror the .ui's itemNameValue text — it already gets retitled per tab
+  // (item name on Item tab, collection name on Collection tab) and per
+  // selection state, so the horizontal view picks up whatever the vertical
+  // view is currently showing.
+  if (m_hName && ui) {
+    if (isFileTab) {
+      m_hName->setText(tr("Custom file view"));
+    } else {
+      const QString name = ui->itemNameValue->text();
+      m_hName->setText(name.isEmpty() ? tr("(no selection)") : name);
+    }
+  }
+  // Path: copy from the .ui's filePathValue (already populated by
+  // updateFileInfo). Eliding to ~600px keeps the strip readable; long paths
+  // wrap to a second line via the label's wordWrap when set.
+  if (m_hPath) {
+    if (isItemTab) {
+      const QString fullPath = ui ? ui->filePathValue->text() : QString();
+      QFontMetrics fm(m_hPath->font());
+      const int budget = qMax(200, m_horizontalView->width() / 3);
+      m_hPath->setText(fm.elidedText(fullPath, Qt::ElideMiddle, budget));
+      m_hPath->setToolTip(fullPath);
+      m_hPath->setVisible(true);
+    } else {
+      m_hPath->setVisible(false);
+    }
+  }
+  if (m_hSizeValue && ui) m_hSizeValue->setText(ui->fileSizeValue->text());
+  if (m_hModifiedValue && ui) m_hModifiedValue->setText(ui->lastModifiedValue->text());
+  if (m_hTypeValue && ui) m_hTypeValue->setText(ui->fileExtensionValue->text());
+  if (m_hMetaContainer) m_hMetaContainer->setVisible(isItemTab);
+  // Gallery (artwork thumbs) and Edit button stay visible across tabs —
+  // the user wants the same media row regardless of which tab is active.
+  // rebuildHorizontalGallery decides the actual visibility based on
+  // whether any thumbs were successfully built.
+  if (m_hEditButton) {
+    m_hEditButton->setVisible(m_galleryEditEnabled);
+  }
+
+  // Live video preview tile — only widget in the preview area now. Artwork
+  // (including the primary) lives in the gallery strip per user request.
+  // Re-show + restart playback if hidden; vertical-mode tab changes can call
+  // applyItemViewVisibility(false) which hides it without re-firing the
+  // debounce timer.
+  const int previewSize = horizontalPreviewSize();
+  if (m_videoPreview) {
+    m_videoPreview->setFixedSize(previewSize, previewSize);
+    const bool hasVideo = !m_pendingVideoPath.isEmpty();
+    if (hasVideo) {
+      const bool wasHidden = !m_videoPreview->isVisible();
+      m_videoPreview->show();
+      if (wasHidden) {
+        m_videoPreview->playVideo(m_pendingVideoPath);
+      }
+    } else {
+      m_videoPreview->hide();
+    }
+  }
+  // Preview area visibility tracks ONLY whether there's a video to play —
+  // it stays visible across Item/Collection/File tabs so the user sees the
+  // same media presence on every tab.
+  if (m_hPreviewArea) {
+    const bool hasVideo = m_videoPreview && !m_pendingVideoPath.isEmpty();
+    m_hPreviewArea->setVisible(hasVideo);
+  }
+  rebuildHorizontalGallery();
+}
+
+int MetadataSidebar::currentGalleryThumbSize() const {
+  // Vertical dock uses the .ui's compact constant. Horizontal dock has its
+  // own dedicated gallery inside m_horizontalView and ignores this.
+  return UIConstants::Metadata::GALLERY_THUMB_SIZE;
+}
+
+void MetadataSidebar::applyGalleryThumbSize() {
+  if (!m_galleryLayout) {
+    return;
+  }
+  const int thumbSize = currentGalleryThumbSize();
+  const int padding = UIConstants::Metadata::GALLERY_THUMB_PADDING;
+  const int iconSize = thumbSize - (padding * 2);
+  for (int i = 0; i < m_galleryLayout->count(); ++i) {
+    if (auto *btn = qobject_cast<QToolButton *>(m_galleryLayout->itemAt(i)->widget())) {
+      btn->setFixedSize(thumbSize, thumbSize);
+      btn->setIconSize(QSize(iconSize, iconSize));
+    }
+  }
+}
+
+void MetadataSidebar::applyDockOrientation() {
+  if (!ui) {
+    return;
+  }
+  const bool horizontal = CollectionUtils::isDetailsPaneHorizontal(m_position);
+  // Kartend-u2gx: dedicated horizontal layout. Vertical dock keeps the .ui's
+  // scrollArea-driven content; horizontal dock swaps in m_horizontalView,
+  // a custom QHBoxLayout designed from scratch for a wide-and-short strip.
+  // The vertical layout is left completely untouched so toggling back is
+  // lossless.
+  if (horizontal) {
+    if (!m_horizontalView) {
+      setupHorizontalView();
+    }
+    // Move the live video preview into the horizontal view so we don't have
+    // two QMediaPlayer instances. The artworkDisplay STAYS in the vertical
+    // contentLayout (it gets hidden along with scrollArea) — the user wants
+    // the primary artwork rendered as a gallery thumb next to the video,
+    // not as a separate big preview tile.
+    if (m_hPreviewLayout && m_videoPreview &&
+        m_hPreviewLayout->indexOf(m_videoPreview) == -1) {
+      m_hPreviewLayout->addWidget(m_videoPreview);
+    }
+    if (ui->scrollArea) ui->scrollArea->hide();
+    if (m_horizontalView) m_horizontalView->show();
+    updateHorizontalView();
+  } else {
+    if (m_horizontalView) m_horizontalView->hide();
+    if (ui->scrollArea) ui->scrollArea->show();
+    // Restore the video preview to its .ui-derived slot in contentLayout
+    // (immediately after artworkDisplay).
+    if (auto *cl = qobject_cast<QBoxLayout *>(ui->contentWidget->layout())) {
+      if (m_videoPreview && ui->artworkDisplay && cl->indexOf(m_videoPreview) == -1) {
+        const int artIdx = cl->indexOf(ui->artworkDisplay);
+        cl->insertWidget(artIdx >= 0 ? artIdx + 1 : -1, m_videoPreview);
+      }
+    }
+    if (ui->scrollArea) {
+      // Kartend-63e bug #2: vertical scrollbar suppressed even when content
+      // overflows — wheel scroll still works. Restore the original .ui
+      // behavior on L/R.
+      ui->scrollArea->setWidgetResizable(true);
+      ui->scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+      ui->scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    }
+  }
+  // Resize the preview boxes against the new orientation.
+  applyPreviewSize();
+}
+
 void MetadataSidebar::applyPreviewSize() {
+  // Kartend-u2gx: in horizontal dock the dedicated horizontal view owns the
+  // sizing of its own preview tile (video only). The artworkDisplay stays
+  // in the hidden vertical scrollArea so its size is irrelevant here.
+  const bool horizontal = CollectionUtils::isDetailsPaneHorizontal(m_position);
+  if (horizontal) {
+    if (m_horizontalView && m_videoPreview) {
+      const int previewSize = horizontalPreviewSize();
+      m_videoPreview->setFixedSize(previewSize, previewSize);
+    }
+    return;
+  }
   const int size = previewBoxSize();
   if (ui && ui->artworkDisplay) {
     ui->artworkDisplay->setFixedSize(size, size);
@@ -704,6 +1251,8 @@ void MetadataSidebar::applyPreviewSize() {
   if (m_videoPreview) {
     m_videoPreview->setFixedSize(size, size);
   }
+  // Vertical dock: scale gallery thumbs alongside the preview.
+  applyGalleryThumbSize();
   if (!ui || !ui->artworkDisplay) {
     return;
   }
@@ -869,6 +1418,11 @@ void MetadataSidebar::resizeEvent(QResizeEvent *event) {
   // content width so a width-drag (or initial show) reflows the previews
   // instead of leaving them pinned at the .ui's 200px design size.
   applyPreviewSize();
+  // Kartend-u2gx: re-elide path label + rescale preview tile in horizontal
+  // dock when the panel is resized.
+  if (CollectionUtils::isDetailsPaneHorizontal(m_position)) {
+    updateHorizontalView();
+  }
 }
 
 // Formats file size into human-readable string with appropriate units (KB, MB,
@@ -914,6 +1468,7 @@ void MetadataSidebar::loadArtwork(const QString &baseName, const QString &artwor
         // re-reading from disk.
         m_artworkSource = artwork;
         applyPreviewSize();
+        updateHorizontalView();
         return; // Found and loaded artwork
       }
     }
@@ -1206,7 +1761,11 @@ void MetadataSidebar::ensureGallerySection() {
   title->setFont(titleFont);
   title->setStyleSheet("color: palette(windowtext); padding: 2px 0px;");
   titleRow->addWidget(title);
-  titleRow->addStretch(1);
+  // Kartend-u2gx: Edit button stays directly to the right of the title with
+  // a small gap, instead of being pushed to the far right by a stretch.
+  // The previous addStretch made the button's location depend on the
+  // section's allocated width — which varies between vertical and horizontal
+  // dock — so users saw the button "move" between layouts.
 
   m_galleryEditButton = new QPushButton(tr("Edit"), m_galleryContainer);
   m_galleryEditButton->setCursor(Qt::PointingHandCursor);
@@ -1215,6 +1774,9 @@ void MetadataSidebar::ensureGallerySection() {
   m_galleryEditButton->setVisible(m_galleryEditEnabled);
   connect(m_galleryEditButton, &QPushButton::clicked, this, &MetadataSidebar::editArtworkRequested);
   titleRow->addWidget(m_galleryEditButton);
+  // Trailing stretch so any slack in the row goes to the right of the Edit
+  // button rather than between title and button.
+  titleRow->addStretch(1);
   outer->addLayout(titleRow);
 
   // Horizontal layout wrapped in a plain widget; if more than ~4 thumbs are
@@ -1264,6 +1826,10 @@ void MetadataSidebar::clearGallerySection() {
 }
 
 void MetadataSidebar::setArtworkGallery(const QList<GalleryEntry> &entries) {
+  // Kartend-u2gx: cache the raw entries so the dedicated horizontal view
+  // can render its own gallery from the same list (with video filtered out
+  // since the inline preview already plays it).
+  m_galleryEntries = entries;
   if (entries.isEmpty()) {
     if (m_galleryContainer) {
       clearGallerySection();
@@ -1281,6 +1847,10 @@ void MetadataSidebar::setArtworkGallery(const QList<GalleryEntry> &entries) {
         m_galleryContainer->hide();
       }
     }
+    // Kartend-u2gx: also clear the horizontal gallery so a previous
+    // selection's thumbs don't linger when the new selection has no
+    // artwork. The Edit button (if enabled) is rebuilt by rebuildHorizontalGallery.
+    rebuildHorizontalGallery();
     return;
   }
 
@@ -1290,7 +1860,11 @@ void MetadataSidebar::setArtworkGallery(const QList<GalleryEntry> &entries) {
   }
   clearGallerySection();
 
-  const int thumbSize = UIConstants::Metadata::GALLERY_THUMB_SIZE;
+  // Kartend-u2gx: pick the thumb size based on dock orientation so a horizontal
+  // dock builds proportionally-sized thumbs from the start (a later resize
+  // call would correct the sizing too, but this avoids a flash of small
+  // thumbs at first paint).
+  const int thumbSize = currentGalleryThumbSize();
   const int padding = UIConstants::Metadata::GALLERY_THUMB_PADDING;
   const int iconSize = thumbSize - (padding * 2);
   for (const GalleryEntry &entry : entries) {
@@ -1370,6 +1944,8 @@ void MetadataSidebar::setArtworkGallery(const QList<GalleryEntry> &entries) {
     m_galleryThumbsHost->show();
   }
   m_galleryContainer->show();
+  // Kartend-u2gx: keep the dedicated horizontal view's gallery in sync.
+  rebuildHorizontalGallery();
 }
 
 void MetadataSidebar::setArtworkEditEnabled(bool enabled) {
@@ -1392,6 +1968,12 @@ void MetadataSidebar::setArtworkEditEnabled(bool enabled) {
       m_galleryContainer->hide();
     }
   }
+  // Kartend-u2gx: rebuild the horizontal gallery + sync the trailing Edit
+  // button so both track the per-item edit permission in lockstep.
+  if (m_hEditButton) {
+    m_hEditButton->setVisible(enabled);
+  }
+  rebuildHorizontalGallery();
 }
 
 QPixmap MetadataSidebar::makeVideoPlaceholder(int iconSize) const {

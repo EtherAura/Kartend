@@ -123,6 +123,10 @@ QJsonObject collectionConfigToJson(const CollectionConfig &c) {
 
   o["grid_width"] = c.gridWidth;
   o["horizontal_grid_height"] = c.horizontalGridHeight;
+  o["grid_width_sidebar_hidden"] = c.gridWidthSidebarHidden;
+  o["horizontal_grid_height_sidebar_hidden"] = c.horizontalGridHeightSidebarHidden;
+  // Kartend-u2gx: alt items-per-column for Top/Bottom-pane-shrink case.
+  o["grid_height_sidebar_hidden"] = c.gridHeightSidebarHidden;
   o["sidebar_visible"] = c.sidebarVisible;
   o["parent_collection_index"] = c.parentCollectionIndex;
   o["is_subcollection"] = c.isSubcollection;
@@ -149,6 +153,8 @@ QJsonObject collectionConfigToJson(const CollectionConfig &c) {
   o["sidebar_header_bg_opacity"] = c.sidebarHeaderBgOpacity;
   o["sidebar_section_bg_opacity"] = c.sidebarSectionBgOpacity;
   o["sidebar_width"] = c.sidebarWidth;
+  // Kartend-u2gx: pane height for Top/Bottom dock.
+  o["sidebar_height"] = c.sidebarHeight;
   o["sidebar_width_locked"] = c.sidebarWidthLocked;
   o["sidebar_active_tab"] = CollectionUtils::sidebarTabToString(c.sidebarActiveTab);
   o["sidebar_font_family"] = c.sidebarFontFamily;
@@ -229,6 +235,9 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
 
   c.gridWidth = o["grid_width"].toInt(4);
   c.horizontalGridHeight = o["horizontal_grid_height"].toInt(0);
+  c.gridWidthSidebarHidden = o["grid_width_sidebar_hidden"].toInt(0);
+  c.horizontalGridHeightSidebarHidden = o["horizontal_grid_height_sidebar_hidden"].toInt(0);
+  c.gridHeightSidebarHidden = o["grid_height_sidebar_hidden"].toInt(0);
   c.sidebarVisible = o["sidebar_visible"].toBool(false);
   c.parentCollectionIndex = o["parent_collection_index"].toInt(-1);
   c.isSubcollection = o["is_subcollection"].toBool(false);
@@ -255,6 +264,7 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.sidebarHeaderBgOpacity = o["sidebar_header_bg_opacity"].toInt(200);
   c.sidebarSectionBgOpacity = o["sidebar_section_bg_opacity"].toInt(170);
   c.sidebarWidth = o["sidebar_width"].toInt(UIConstants::Sidebar::FIXED_WIDTH);
+  c.sidebarHeight = o["sidebar_height"].toInt(UIConstants::Sidebar::FIXED_HEIGHT);
   c.sidebarWidthLocked = o["sidebar_width_locked"].toBool(true);
   c.sidebarActiveTab = CollectionUtils::stringToSidebarTab(o["sidebar_active_tab"].toString());
   c.sidebarFontFamily = o["sidebar_font_family"].toString();

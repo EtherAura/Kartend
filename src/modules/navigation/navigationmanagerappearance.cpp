@@ -58,13 +58,21 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex) -> void
 
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
 
-  if (collection.gridWidth != m_scrollManager->getCurrentGridWidth()) {
-    m_scrollManager->updateGridWidth(collection.gridWidth);
+  // Kartend-0p3w: compare and apply the *effective* grid width — the alt
+  // (gridWidthSidebarHidden) is in play when the sidebar is hidden in Expand
+  // mode, and the navigation-time live-apply has to respect that or it'll
+  // briefly flash to the primary value before the sidebar restores the alt.
+  const bool sidebarShrinkingActive = m_scrollManager->sidebarShrinkingActive();
+  const int effectiveTargetWidth =
+      CollectionUtils::effectiveGridWidth(collection, sidebarShrinkingActive);
+  if (effectiveTargetWidth != m_scrollManager->getCurrentGridWidth()) {
+    m_scrollManager->updateGridWidth(effectiveTargetWidth);
   }
   // Kartend-dx9t: live-apply the per-collection horizontal items-per-column
   // setting. updateHorizontalGridHeight no-ops when the active view isn't
   // Horizontal, so this is safe to call unconditionally.
-  m_scrollManager->updateHorizontalGridHeight(collection.horizontalGridHeight);
+  m_scrollManager->updateHorizontalGridHeight(
+      CollectionUtils::effectiveHorizontalGridHeight(collection, sidebarShrinkingActive));
 
   SettingsUtils::applyHorizontalScrollbarSetting(m_itemScrollArea, collectionIndex,
                                                  (*m_collections));

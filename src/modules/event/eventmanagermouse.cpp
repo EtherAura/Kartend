@@ -26,6 +26,7 @@
 #include "itemwidget.h"
 #include "keyboardmanager.h"
 #include "mousemanager.h"
+#include "metadatasidebar.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
 #include "sidebarmanager.h"
@@ -42,8 +43,6 @@ Q_DECLARE_LOGGING_CATEGORY(lcEventManager)
   } while (0)
 
 bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
-  Q_UNUSED(obj);
-
   // Prevent reentrant wheel handling which can occur when animations
   // or signal processing trigger additional wheel events
   if (m_processingWheelEvent) {
@@ -55,6 +54,23 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   if (activeModal) {
     m_processingWheelEvent = false;
     return false;
+  }
+
+  // Wheel events over the sidebar should scroll the sidebar via Qt's normal
+  // wheel routing rather than driving grid selection. The cursor position
+  // (not obj) is the source of truth — when the sidebar's QScrollArea has
+  // nothing to scroll, Qt propagates the wheel up past it and obj would point
+  // at an ancestor like the items page, so an obj-based check would miss it.
+  // Returning false lets the receiver's own wheelEvent run; the grid stays
+  // put because applyWheelSelectionDelta lives further down this function.
+  if (m_sidebarManager) {
+    if (QWidget *sidebar = m_sidebarManager->sidebarWidget()) {
+      if (sidebar->isVisible() &&
+          sidebar->rect().contains(sidebar->mapFromGlobal(QCursor::pos()))) {
+        m_processingWheelEvent = false;
+        return false;
+      }
+    }
   }
 
   if (!m_itemScrollArea || !m_stackedWidget ||
@@ -129,8 +145,11 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   }
 
   // Get metrics from ScrollManager for correct dimensions in both grid and list
-  // modes
-  int gridWidth = collection.gridWidth;
+  // modes. The fallback path below (m_scrollManager == nullptr) routes through
+  // the effective-value helper (Kartend-0p3w) so the alt gridWidth still wins
+  // when sidebar is hidden in Expand mode.
+  int gridWidth = CollectionUtils::effectiveGridWidth(
+      collection, m_scrollManager ? m_scrollManager->sidebarShrinkingActive() : false);
   int itemHeight = collection.itemHeight;
   int vSpacing = collection.verticalSpacing;
   int headerOffset = 0;
@@ -709,13 +728,20 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
   // the wheel would jump by gridWidth items even though each column actually
   // contained horizontalGridHeight items, drifting the row index across columns
   // and looking like a random vertical jitter.
-  int gridWidth = collection.gridWidth;
+  // Kartend-0p3w: route both gridWidth and horizontalGridHeight reads through
+  // the effective-value helpers so the alt fields kick in when sidebar is
+  // hidden in Expand mode.
+  const bool shrink = m_scrollManager->sidebarShrinkingActive();
+  int gridWidth = CollectionUtils::effectiveGridWidth(collection, shrink);
   if (collection.viewType == ViewType::Horizontal) {
     const auto &metrics = m_scrollManager->getMetrics();
     if (metrics.itemsPerRow > 0) {
       gridWidth = metrics.itemsPerRow;
-    } else if (collection.horizontalGridHeight > 0) {
-      gridWidth = collection.horizontalGridHeight;
+    } else {
+      const int hgh = CollectionUtils::effectiveHorizontalGridHeight(collection, shrink);
+      if (hgh > 0) {
+        gridWidth = hgh;
+      }
     }
   }
   if (gridWidth <= 0) {

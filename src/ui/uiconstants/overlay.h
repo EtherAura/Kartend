@@ -16,6 +16,10 @@ inline constexpr int SEARCH_LOADING_PULSE_INTERVAL_MS = 800;
 inline constexpr int SPLASH_FADE_DURATION_MS = 180;
 /// Time the startup/focus splash remains visible before auto-hiding (ms).
 inline constexpr int SPLASH_VISIBLE_DURATION_MS = 1300;
+/// Fade in/out duration for the transient text-zoom HUD (ms).
+inline constexpr int TEXT_ZOOM_HUD_FADE_DURATION_MS = 120;
+/// Time the text-zoom HUD remains fully visible before auto-hiding (ms).
+inline constexpr int TEXT_ZOOM_HUD_HOLD_DURATION_MS = 900;
 } // namespace Overlay
 } // namespace UIConstants
 

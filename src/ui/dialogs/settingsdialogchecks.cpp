@@ -122,6 +122,13 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.horizontalGridHeight = (ui->horizontalGridHeightSpinBox)
                                     ? ui->horizontalGridHeightSpinBox->value()
                                     : config.horizontalGridHeight;
+  config.gridWidthSidebarHidden = (ui->gridWidthSidebarHiddenSpinBox)
+                                      ? ui->gridWidthSidebarHiddenSpinBox->value()
+                                      : config.gridWidthSidebarHidden;
+  config.horizontalGridHeightSidebarHidden =
+      (ui->horizontalGridHeightSidebarHiddenSpinBox)
+          ? ui->horizontalGridHeightSidebarHiddenSpinBox->value()
+          : config.horizontalGridHeightSidebarHidden;
   config.showAllSubcollectionItems = (ui->showAllSubcollectionItemsCheckBox)
                                          ? ui->showAllSubcollectionItemsCheckBox->isChecked()
                                          : config.showAllSubcollectionItems;
@@ -139,6 +146,9 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   }
   if (ui->sidebarWidthSpinBox) {
     config.sidebarWidth = ui->sidebarWidthSpinBox->value();
+  }
+  if (ui->sidebarHeightSpinBox) {
+    config.sidebarHeight = ui->sidebarHeightSpinBox->value();
   }
   if (ui->sidebarWidthLockedCheckBox) {
     config.sidebarWidthLocked = ui->sidebarWidthLockedCheckBox->isChecked();
@@ -367,6 +377,11 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ((ui->gridWidthSpinBox) && ui->gridWidthSpinBox->value() != originalConfig.gridWidth) ||
       ((ui->horizontalGridHeightSpinBox) &&
        ui->horizontalGridHeightSpinBox->value() != originalConfig.horizontalGridHeight) ||
+      ((ui->gridWidthSidebarHiddenSpinBox) &&
+       ui->gridWidthSidebarHiddenSpinBox->value() != originalConfig.gridWidthSidebarHidden) ||
+      ((ui->horizontalGridHeightSidebarHiddenSpinBox) &&
+       ui->horizontalGridHeightSidebarHiddenSpinBox->value() !=
+           originalConfig.horizontalGridHeightSidebarHidden) ||
       ((ui->showAllSubcollectionItemsCheckBox) &&
        ui->showAllSubcollectionItemsCheckBox->isChecked() !=
            originalConfig.showAllSubcollectionItems) ||
@@ -380,6 +395,8 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
                                             static_cast<int>(originalConfig.sidebarPosition)) ||
       ((ui->sidebarWidthSpinBox) &&
        ui->sidebarWidthSpinBox->value() != originalConfig.sidebarWidth) ||
+      ((ui->sidebarHeightSpinBox) &&
+       ui->sidebarHeightSpinBox->value() != originalConfig.sidebarHeight) ||
       ((ui->sidebarWidthLockedCheckBox) &&
        ui->sidebarWidthLockedCheckBox->isChecked() != originalConfig.sidebarWidthLocked) ||
       ((ui->sidebarBackgroundTypeComboBox) &&
