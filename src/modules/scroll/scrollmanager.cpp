@@ -27,6 +27,7 @@
 #include "timerutils.h"
 #include "uiconstants.h"
 #include "virtualcontainermanager.h"
+#include "virtualscrollengine.h"
 #include "widgetpoolmanager.h"
 #include <algorithm>
 #include <QApplication>
@@ -61,6 +62,10 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   // Widget pool for recycling ItemWidgets
   m_widgetPool = std::make_unique<WidgetPoolManager>(this);
 
+  // Virtual scrolling engine: owns layout / container / materialization
+  // algorithms (Kartend-158). Borrows ScrollManager state via friendship.
+  m_engine = std::make_unique<VirtualScrollEngine>(this);
+
   // Data source manager: owns FilterManager + ScrollDataManager +
   // PreSearchStateManager + SearchLoadingOverlay (Kartend-gg2).
   m_dataSource = std::make_unique<DataSourceManager>(this);
@@ -84,6 +89,10 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
           &ScrollManager::listColumnWidthChanged);
   connect(m_selectionDisplay.get(), &SelectionDisplayManager::listArtworkColumnWidthChanged, this,
           &ScrollManager::listArtworkColumnWidthChanged);
+  connect(m_selectionDisplay.get(), &SelectionDisplayManager::artworkPreviewLaunchRequested, this,
+          &ScrollManager::artworkPreviewLaunchRequested);
+  connect(m_selectionDisplay.get(), &SelectionDisplayManager::artworkPreviewVisibilityChanged, this,
+          &ScrollManager::artworkPreviewVisibilityChanged);
 
   connect(m_overlayManager, &SelectionOverlayManager::animationFinished, this, [this]() {
     // Update widget selection states when animation finishes
@@ -255,17 +264,17 @@ void ScrollManager::releaseWidget(ItemWidget *widget) {
 }
 
 // ScrollManagerSetup getter definitions (all resolve through ApplicationContext)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, QWidget *, GridContainer, gridContainer)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, QScrollArea *, MediaScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, const QList<CollectionConfig> *, Collections,
-                          collections)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
-                          hierarchyCache)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
-SETUP_GETTER_DEF_CTX_ONLY(ScrollManagerSetup, const GeneralSettings *, GeneralSettings,
-                          generalSettings)
+SETUP_GETTER_DEF_UI_CTX_ONLY(ScrollManagerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_UI_CTX_ONLY(ScrollManagerSetup, QScrollArea *, MediaScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(ScrollManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_COL_CTX_ONLY(ScrollManagerSetup, const QList<CollectionConfig> *, Collections,
+                              collections)
+SETUP_GETTER_DEF_COL_CTX_ONLY(ScrollManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
+                              hierarchyCache)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(ScrollManagerSetup, InteractionStateHolder *, InteractionState,
+                              interactionState)
+SETUP_GETTER_DEF_COL_CTX_ONLY(ScrollManagerSetup, const GeneralSettings *, GeneralSettings,
+                              generalSettings)
 
 void ScrollManager::updateViewType(ViewType viewType) {
   if (m_context.config.viewType == viewType) {
@@ -279,22 +288,88 @@ void ScrollManager::updateViewType(ViewType viewType) {
   }
 
   // Reset scroll position before layout change - grid and list modes have
-  // different row heights, so the old scroll position is meaningless
-  if (m_mediaScrollArea && m_mediaScrollArea->verticalScrollBar()) {
-    m_mediaScrollArea->verticalScrollBar()->setValue(0);
+  // different row heights, so the old scroll position is meaningless. Reset
+  // both scrollbars because Horizontal mode (Kartend-dx9t) drives the
+  // horizontal axis instead of the vertical one.
+  if (m_mediaScrollArea) {
+    if (m_mediaScrollArea->verticalScrollBar()) {
+      m_mediaScrollArea->verticalScrollBar()->setValue(0);
+    }
+    if (m_mediaScrollArea->horizontalScrollBar()) {
+      m_mediaScrollArea->horizontalScrollBar()->setValue(0);
+    }
+    // Kartend-dx9t: in Horizontal mode the items area needs a horizontal
+    // scrollbar (modulo the user's hideHorizontalScrollbar preference).
+    // Other modes leave the policy under the per-collection setting too —
+    // applyHorizontalScrollbarSetting is the canonical path for that — but
+    // configureHorizontalScrollbar in VirtualContainerManager will pin it
+    // off again on overflow. Force it back on here when entering Horizontal.
+    if (viewType == ViewType::Horizontal) {
+      m_mediaScrollArea->setHorizontalScrollBarPolicy(m_context.config.hideHorizontalScrollbar
+                                                          ? Qt::ScrollBarAlwaysOff
+                                                          : Qt::ScrollBarAsNeeded);
+    }
   }
 
   handleLayoutChange();
+
+  // Kartend-3ile: cover-flow uses a parallel widget tree; keep its config,
+  // card list, and visibility in sync with the grid's. ensureCoverFlowWidget
+  // is idempotent so we can call it on every transition.
+  ensureCoverFlowWidget();
+  applyCoverFlowConfig();
+  rebuildCoverFlowCards();
+  applyCoverFlowVisibility();
 }
 
 void ScrollManager::updateGridWidth(int newGridWidth) {
-  if (m_context.config.gridWidth == newGridWidth) {
+  // Kartend-0p3w: route the write to whichever field is currently active, so
+  // calculateMetrics (which reads via the effective-value helpers) picks it up
+  // on the next recompute. When the alt field is 0 (= "inherit primary") and
+  // we're shrinking, treat the alt as "newly configured" and store there
+  // instead of overwriting the primary — that way Ctrl+/- while sidebar is
+  // hidden specializes the alt the moment the user diverges from the primary.
+  int &target = (m_sidebarShrinkingActive && m_context.config.gridWidthSidebarHidden > 0)
+                    ? m_context.config.gridWidthSidebarHidden
+                    : m_context.config.gridWidth;
+  if (target == newGridWidth) {
     return;
   }
-  m_context.config.gridWidth = newGridWidth;
+  target = newGridWidth;
   if (!m_virtualContainer) {
     return;
   }
+  calculateVirtualMetrics();
+  positionVirtualContainer();
+  for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
+    ItemWidget *widget = it.value();
+    if (!widget) {
+      continue;
+    }
+    QPoint position = getItemPosition(it.key());
+    widget->setGeometry(position.x(), position.y(), m_metrics.itemWidth, m_metrics.itemHeight);
+  }
+  updateVirtualView();
+}
+
+void ScrollManager::updateHorizontalGridHeight(int newHorizontalGridHeight) {
+  // Kartend-0p3w: same active-field routing as updateGridWidth.
+  int &target =
+      (m_sidebarShrinkingActive && m_context.config.horizontalGridHeightSidebarHidden > 0)
+          ? m_context.config.horizontalGridHeightSidebarHidden
+          : m_context.config.horizontalGridHeight;
+  if (target == newHorizontalGridHeight) {
+    return;
+  }
+  target = newHorizontalGridHeight;
+  // Only Horizontal view consults this field — other modes can absorb the
+  // setting change silently and pick it up the next time they switch in.
+  if (m_context.config.viewType != ViewType::Horizontal || !m_virtualContainer) {
+    return;
+  }
+  // Re-flow the existing widgets against the new fixed-axis count. Same
+  // pattern as updateGridWidth — the metric recompute drops the totalRows
+  // (= column count) along the long axis, then we reposition active widgets.
   calculateVirtualMetrics();
   positionVirtualContainer();
   for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
@@ -318,10 +393,19 @@ auto ScrollManager::getFirstVisibleRow() const -> int {
   if (!m_mediaScrollArea) {
     return 0;
   }
-  int scrollY = m_mediaScrollArea->verticalScrollBar()->value();
-  int viewportHeight = m_mediaScrollArea->viewport()->height();
+  // Kartend-dx9t: in Horizontal mode the long axis is X, so we read the
+  // horizontal scrollbar and the viewport width instead.
+  int scrollPos;
+  int viewportSize;
+  if (m_metrics.isHorizontal) {
+    scrollPos = m_mediaScrollArea->horizontalScrollBar()->value();
+    viewportSize = m_mediaScrollArea->viewport()->width();
+  } else {
+    scrollPos = m_mediaScrollArea->verticalScrollBar()->value();
+    viewportSize = m_mediaScrollArea->viewport()->height();
+  }
   auto [firstRow, lastRow] =
-      GridLayoutCalculator::getVisibleRowRange(scrollY, viewportHeight, m_metrics, 0);
+      GridLayoutCalculator::getVisibleRowRange(scrollPos, viewportSize, m_metrics, 0);
   return firstRow;
 }
 
@@ -329,10 +413,17 @@ auto ScrollManager::getLastVisibleRow() const -> int {
   if (!m_mediaScrollArea) {
     return 0;
   }
-  int scrollY = m_mediaScrollArea->verticalScrollBar()->value();
-  int viewportHeight = m_mediaScrollArea->viewport()->height();
+  int scrollPos;
+  int viewportSize;
+  if (m_metrics.isHorizontal) {
+    scrollPos = m_mediaScrollArea->horizontalScrollBar()->value();
+    viewportSize = m_mediaScrollArea->viewport()->width();
+  } else {
+    scrollPos = m_mediaScrollArea->verticalScrollBar()->value();
+    viewportSize = m_mediaScrollArea->viewport()->height();
+  }
   auto [firstRow, lastRow] =
-      GridLayoutCalculator::getVisibleRowRange(scrollY, viewportHeight, m_metrics, 0);
+      GridLayoutCalculator::getVisibleRowRange(scrollPos, viewportSize, m_metrics, 0);
   return lastRow;
 }
 
@@ -419,6 +510,11 @@ auto ScrollManager::willNeedVerticalScrollbar() const -> bool {
   if (!m_mediaScrollArea) {
     return false;
   }
+  // Kartend-dx9t: Horizontal mode shows a horizontal scrollbar instead, so
+  // the vertical scrollbar prediction is always false there.
+  if (m_metrics.isHorizontal) {
+    return false;
+  }
   return m_metrics.totalHeight > m_mediaScrollArea->viewport()->height();
 }
 
@@ -433,7 +529,22 @@ void ScrollManager::notifyUserActivity() {
 }
 
 auto ScrollManager::getCurrentGridWidth() const -> int {
-  return m_context.config.gridWidth;
+  // Kartend-0p3w: returns the items-per-row currently driving the layout —
+  // matches what calculateMetrics() picks (alt when sidebar is hidden in
+  // Expand mode and the alt is configured, otherwise primary). Callers that
+  // navigate by visual rows (arrow keys, mouse wheel selection) must see the
+  // active value, not the persisted primary.
+  return CollectionUtils::effectiveGridWidth(m_context.config, m_sidebarShrinkingActive);
+}
+
+void ScrollManager::setSidebarShrinkingActive(bool active) {
+  if (m_sidebarShrinkingActive == active) {
+    return;
+  }
+  m_sidebarShrinkingActive = active;
+  // The actual relayout is driven by the existing recalculateContainerMetrics
+  // path that MainWindow already runs after sidebar-visibility changes — we
+  // just need the flag in place before that runs. No need to trigger here.
 }
 
 auto ScrollManager::getEffectiveViewportWidth() const -> int {
@@ -459,6 +570,24 @@ void ScrollManager::onArtworkPreviewRequested(const QString &filePath, const QSt
   }
 }
 
+// Public entry point used by InteractionManager for expand-mode activation.
+// Identical behavior to onArtworkPreviewRequested but exposed as a public
+// API for callers that don't go through the widget signal chain.
+void ScrollManager::showArtworkPreview(const QString &filePath, const QString &artworkDir) {
+  if (m_selectionDisplay) {
+    m_selectionDisplay->showArtworkPreview(filePath, artworkDir);
+  }
+}
+
+// Video-first preview entry point (Kartend-ljey). Used by expand-mode and
+// middle-click; falls back to artwork when no video matches.
+void ScrollManager::showMediaPreview(const QString &filePath, const QString &artworkDir,
+                                     const QString &videoDir) {
+  if (m_selectionDisplay) {
+    m_selectionDisplay->showMediaPreview(filePath, artworkDir, videoDir);
+  }
+}
+
 // Prime the container with target collection metrics before items are loaded
 // Creates and positions widget for given visual index, handling both
 auto ScrollManager::getItemPosition(int visualIndex) const -> QPoint {
@@ -471,6 +600,13 @@ auto ScrollManager::getItemPosition(int visualIndex) const -> QPoint {
   // but we calculate which rows are visible using logical scroll position.
   // Place widgets so they appear at the correct viewport-relative position.
   if (m_metrics.isClipped && m_mediaScrollArea) {
+    if (m_metrics.isHorizontal) {
+      int widgetScrollX = m_mediaScrollArea->horizontalScrollBar()->value();
+      int viewportWidth = m_mediaScrollArea->viewport()->width();
+      int logicalScrollX = m_metrics.toLogicalScrollY(widgetScrollX, viewportWidth);
+      int relativeX = widgetScrollX + (pos.x() - logicalScrollX);
+      return QPoint(relativeX, pos.y());
+    }
     int widgetScrollY = m_mediaScrollArea->verticalScrollBar()->value();
     int viewportHeight = m_mediaScrollArea->viewport()->height();
     // Convert clamped scroll position to logical scroll position with viewport

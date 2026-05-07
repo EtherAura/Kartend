@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Kartend
+Comment=Organize and launch multimedia collections
+Exec=kartend
+Icon=io.github.EtherAura.Kartend
+Terminal=false
+Type=Application
+Categories=Utility;Qt;
+Keywords=launcher;collection;media;games;

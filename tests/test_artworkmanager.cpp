@@ -11,6 +11,7 @@
 
 #include "applicationcontext.h"
 #include "artworkmanager.h"
+#include "artworkutils.h"
 #include "cachemanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
@@ -37,6 +38,12 @@ private slots:
   void testCreateProcessedArtwork_nullPixmap();
   void testCreateProcessedArtwork_validPixmap();
   void testFindArtworkForFile_missing();
+
+  // Pure cycle algorithm (Kartend-1v6) ---------------------------------------
+  void testNextArtworkType_emptyAvailable();
+  void testNextArtworkType_singleEntry();
+  void testNextArtworkType_advancesAndWraps();
+  void testNextArtworkType_currentNotInList();
 
   // Construction / lifecycle ------------------------------------------------
   void testConstruction_initialState();
@@ -82,7 +89,7 @@ void TestArtworkManager::init() {
   m_cache = std::make_unique<CacheManager>();
   m_state = std::make_unique<InteractionStateHolder>();
   m_ctx = std::make_unique<ApplicationContext>();
-  m_ctx->interactionState = m_state.get();
+  m_ctx->managers.interactionState = m_state.get();
 
   m_stacked = std::make_unique<QStackedWidget>();
   m_itemsPage = new QWidget();
@@ -131,6 +138,40 @@ void TestArtworkManager::testFindArtworkForFile_missing() {
   const QString path =
       ArtworkManager::findArtworkForFile("nonexistent.rom", m_tempDir.path());
   QVERIFY(path.isEmpty());
+}
+
+// ─── Pure cycle algorithm (Kartend-1v6) ─────────────────────────────────────
+
+void TestArtworkManager::testNextArtworkType_emptyAvailable() {
+  // No types available → no cycling possible, returns currentType verbatim.
+  QCOMPARE(ArtworkUtils::nextArtworkType(QString(), QStringList{}), QString());
+  QCOMPARE(ArtworkUtils::nextArtworkType(QStringLiteral("box"), QStringList{}),
+           QStringLiteral("box"));
+}
+
+void TestArtworkManager::testNextArtworkType_singleEntry() {
+  // One entry → cycle is a no-op, returns currentType verbatim regardless of
+  // whether it matches the lone entry. Matches the "user shift+middle-clicked
+  // but only one type exists" UX path: nothing visibly changes.
+  const QStringList only = {QStringLiteral("box")};
+  QCOMPARE(ArtworkUtils::nextArtworkType(QStringLiteral("box"), only), QStringLiteral("box"));
+  QCOMPARE(ArtworkUtils::nextArtworkType(QString(), only), QString());
+}
+
+void TestArtworkManager::testNextArtworkType_advancesAndWraps() {
+  // Empty-string entry represents the legacy "primary" artwork; cycle starts
+  // there and wraps from the last back to it.
+  const QStringList types = {QString(), QStringLiteral("box"), QStringLiteral("logo")};
+  QCOMPARE(ArtworkUtils::nextArtworkType(QString(), types), QStringLiteral("box"));
+  QCOMPARE(ArtworkUtils::nextArtworkType(QStringLiteral("box"), types), QStringLiteral("logo"));
+  QCOMPARE(ArtworkUtils::nextArtworkType(QStringLiteral("logo"), types), QString());
+}
+
+void TestArtworkManager::testNextArtworkType_currentNotInList() {
+  // Stale override (e.g., the underlying type was removed) → snap to the first
+  // entry rather than getting stuck on an invalid state.
+  const QStringList types = {QString(), QStringLiteral("box")};
+  QCOMPARE(ArtworkUtils::nextArtworkType(QStringLiteral("screenshot"), types), QString());
 }
 
 // ─── Construction / lifecycle ───────────────────────────────────────────────

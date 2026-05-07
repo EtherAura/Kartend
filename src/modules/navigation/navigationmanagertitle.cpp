@@ -7,6 +7,7 @@
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "emptystatewidget.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "loadingoverlay.h"

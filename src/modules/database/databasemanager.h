@@ -11,6 +11,10 @@
 
 #include "collectionutils.h"
 #include "errorutils.h"
+#include "historystore.h"
+#include "itemartwork.h"
+#include "itemmetadata.h"
+#include "usagestatsstore.h"
 
 class SessionManager;
 
@@ -71,6 +75,99 @@ public:
   [[nodiscard]] qint64
   countCollectionRecursive(int collectionIndex,
                            const QList<CollectionConfig> &allCollections) const;
+
+  /// Reads `collections.last_scanned` for the given UUID via the main-thread
+  /// connection (Kartend-3mn). Returns an invalid QDateTime when the row is
+  /// missing or the query fails — callers use that as the "never scanned"
+  /// signal.
+  [[nodiscard]] QDateTime loadCollectionLastScanned(const QString &collectionUuid) const;
+
+  /// Loads extended metadata for the given (collectionUuid, path) using the
+  /// main-thread connection. Returns an empty `ItemMetadata` (with the keys
+  /// preserved) when no row exists. Errors are logged via ErrorUtils and an
+  /// empty struct is returned so the sidebar can degrade gracefully.
+  [[nodiscard]] ItemMetadataStore::ItemMetadata loadItemMetadata(const QString &collectionUuid,
+                                                                 const QString &path) const;
+
+  /// Persists extended metadata via the main-thread connection. Used by
+  /// user-driven editors (e.g. custom fields dialog, Kartend-hpln). Returns
+  /// true on success; logs the structured error and returns false otherwise.
+  bool saveItemMetadata(const ItemMetadataStore::ItemMetadata &metadata);
+
+  /// Loads every artwork row stored for (collectionUuid, path) using the
+  /// main-thread connection (Kartend-un3l). Returns an empty list when the
+  /// item has no rows or on database failures (errors are logged), so
+  /// callers can degrade silently to subdirectory auto-discovery.
+  [[nodiscard]] QList<ItemArtworkStore::ItemArtwork> loadItemArtwork(const QString &collectionUuid,
+                                                                     const QString &path) const;
+
+  /// Persists a single artwork override row via the main-thread connection
+  /// (Kartend-53vk). Used by the per-item manual-link dialog. Returns true
+  /// on success; logs the structured error and returns false otherwise.
+  bool saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwork);
+
+  /// Removes a single artwork override row via the main-thread connection
+  /// (Kartend-53vk). Used by the per-item manual-link dialog when the user
+  /// clears an override. Succeeds even when no matching row exists.
+  bool removeItemArtwork(const QString &collectionUuid, const QString &path,
+                         const QString &artworkType);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Usage statistics (Kartend-7vi)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /// Loads play_count/last_played/total_play_seconds for a single item via the
+  /// main-thread connection. Returns a default-initialized struct on missing
+  /// row or DB error (errors logged), so the sidebar can degrade silently.
+  [[nodiscard]] UsageStatsStore::ItemUsageStats loadItemUsageStats(const QString &collectionUuid,
+                                                                   const QString &path) const;
+
+  /// Increments play_count and stamps last_played for the given item.
+  /// Best-effort: failures are logged; the launch path does not block on this.
+  void recordItemLaunch(const QString &collectionUuid, const QString &path);
+
+  /// Adds `seconds` to the item's cumulative total_play_seconds. Called when
+  /// runtime detection (Kartend-qxv) reports a tracked process exit. Negative
+  /// or zero durations are dropped.
+  void recordItemPlaySession(const QString &collectionUuid, const QString &path, qint64 seconds);
+
+  /// Whole-library aggregate counters used by the Statistics dialog header.
+  [[nodiscard]] UsageStatsStore::AggregateStats loadAggregateUsageStats() const;
+
+  /// Top items by play_count (descending). `limit` is clamped server-side to
+  /// [1, 1000] so callers can pass user-driven values without sanitizing.
+  [[nodiscard]] QList<UsageStatsStore::ItemUsageRow> loadTopPlayedItems(int limit) const;
+
+  /// Most recently launched items (descending last_played). `limit` clamped.
+  [[nodiscard]] QList<UsageStatsStore::ItemUsageRow> loadRecentlyPlayedItems(int limit) const;
+
+  /// Per-collection breakdown keyed on collection_uuid. Includes uuids whose
+  /// CollectionConfig may have been deleted, so totals match the aggregate.
+  [[nodiscard]] QHash<QString, UsageStatsStore::CollectionUsage> loadUsageByCollection() const;
+
+  /// Resets every usage column to zero/NULL across the entire library.
+  /// Returns true on success.
+  bool resetAllUsageStats();
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Launch history (Kartend-fse)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /// Appends a row to launch_history and trims down to `maxEntries` (when
+  /// > 0). Best-effort: failures are logged but never block the launch path.
+  /// Pass `name` when the caller already knows the user-visible title;
+  /// HistoryStore falls back to the path's basename otherwise.
+  void recordHistoryEntry(const QString &collectionUuid, const QString &path, const QString &name,
+                          int maxEntries);
+
+  /// Most recent history entries first. `limit` is clamped to [1, 100000].
+  [[nodiscard]] QList<HistoryStore::HistoryEntry> loadRecentHistory(int limit) const;
+
+  /// Total number of rows in launch_history. Used by the dialog header.
+  [[nodiscard]] qint64 historyEntryCount() const;
+
+  /// Wipes the launch_history table. Returns true on success.
+  bool clearHistory();
 
 signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);

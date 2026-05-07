@@ -141,6 +141,17 @@ void SettingsDialog::removeCollection() {
 
   QList<int> expandedBefore = captureExpandedStates();
 
+  // Kartend-gzmk: capture every name about to disappear so we can scrub
+  // them out of other collections' additionalParentNames *before* the
+  // index list shifts under us. Empty newName tells
+  // propagateCollectionNameChange to delete the entry.
+  QStringList namesAboutToVanish;
+  namesAboutToVanish.reserve(descendants.size() + 1);
+  namesAboutToVanish.append(collections[index].name);
+  for (int descIndex : descendants) {
+    namesAboutToVanish.append(collections[descIndex].name);
+  }
+
   // Remove descendants first (in reverse order to maintain indices)
   // Sort descendants in descending order so removal doesn't affect other
   // indices
@@ -177,6 +188,12 @@ void SettingsDialog::removeCollection() {
   }
   // Rebuild parent indices to be consistent
   rebuildParentIndices();
+
+  // Kartend-gzmk: scrub any link references to the removed names so the
+  // cache doesn't keep silently dropping them on every rebuild.
+  for (const QString &removed : namesAboutToVanish) {
+    propagateCollectionNameChange(removed, QString{});
+  }
 
   // Persist the removal immediately
   emit collectionSaved(collections);

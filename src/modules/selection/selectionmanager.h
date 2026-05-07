@@ -10,14 +10,14 @@
 
 class ItemWidget;
 class ScrollManager;
-class SidebarManager;
+class DetailsPaneManager;
 class SessionManager;
 class SettingsManager;
 class NavigationManager;
 class AnimationManager;
 class ViewportManager;
 class ArtworkManager;
-class MetadataSidebar;
+class DetailsPane;
 class InteractionStateHolder;
 class QWidget;
 class QScrollArea;
@@ -29,14 +29,14 @@ struct SelectionManagerSetup {
   const ApplicationContext *ctx = nullptr;
 
   ScrollManager *scrollManager = nullptr;
-  SidebarManager *sidebarManager = nullptr;
+  DetailsPaneManager *detailsPaneManager = nullptr;
   SessionManager *sessionManager = nullptr;
   SettingsManager *settingsManager = nullptr;
   NavigationManager *navigationManager = nullptr;
   AnimationManager *animationManager = nullptr;
   ViewportManager *viewportManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
-  MetadataSidebar *sidebar = nullptr;
+  DetailsPane *sidebar = nullptr;
   QWidget *itemsPage = nullptr;
   QWidget *gridContainer = nullptr;
   QScrollArea *itemScrollArea = nullptr;
@@ -47,14 +47,14 @@ struct SelectionManagerSetup {
 
   SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
   SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
-  SETUP_GETTER_DECL(SidebarManager *, SidebarManager)
+  SETUP_GETTER_DECL(DetailsPaneManager *, DetailsPaneManager)
   SETUP_GETTER_DECL(SessionManager *, SessionManager)
   SETUP_GETTER_DECL(SettingsManager *, SettingsManager)
   SETUP_GETTER_DECL(NavigationManager *, NavigationManager)
   SETUP_GETTER_DECL(AnimationManager *, AnimationManager)
   SETUP_GETTER_DECL(ViewportManager *, ViewportManager)
   SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
-  SETUP_GETTER_DECL(MetadataSidebar *, Sidebar)
+  SETUP_GETTER_DECL(DetailsPane *, Sidebar)
   SETUP_GETTER_DECL(QWidget *, ItemsPage)
   SETUP_GETTER_DECL(QWidget *, GridContainer)
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
@@ -69,7 +69,7 @@ struct SelectionManagerSetup {
  *
  * Owns the core selection state (selected index, file path, widget pointer)
  * and provides operations for selecting, clearing, and restoring selections.
- * Coordinates with ScrollManager for widget lookups and SidebarManager for
+ * Coordinates with ScrollManager for widget lookups and DetailsPaneManager for
  * metadata updates.
  */
 class SelectionManager : public QObject {
@@ -90,6 +90,12 @@ public:
   void setSelectedIndex(int index);
   void setSelectedFilePath(const QString &path);
   void setSelectedWidget(ItemWidget *widget);
+
+  // Emit selectionChanged for the current index. Use after calling
+  // setSelectedIndex() from paths that don't go through selectItemByIndex /
+  // selectItemByHover (e.g. wheel scroll, arrow handler, hold-scroll) so that
+  // listeners like the toolbar position label stay in sync.
+  void notifySelectionChanged();
 
   // Primary selection operations
   void clearSelection(bool isShuttingDown = false);
@@ -214,14 +220,14 @@ private:
   // Manager references
   InteractionStateHolder *m_state = nullptr;
   ScrollManager *m_scrollManager = nullptr;
-  SidebarManager *m_sidebarManager = nullptr;
+  DetailsPaneManager *m_detailsPaneManager = nullptr;
   SessionManager *m_sessionManager = nullptr;
   SettingsManager *m_settingsManager = nullptr;
   NavigationManager *m_navigationManager = nullptr;
   AnimationManager *m_animationManager = nullptr;
   ViewportManager *m_viewportManager = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
-  MetadataSidebar *m_MetadataSidebar = nullptr;
+  DetailsPane *m_MetadataSidebar = nullptr;
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   QLineEdit *m_searchBar = nullptr;
   QWidget *m_itemsPage = nullptr;

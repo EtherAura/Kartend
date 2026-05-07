@@ -26,6 +26,14 @@ inline constexpr int VALUE_INDENT = 12;
 inline constexpr int VALUE_PADDING = 2;
 /// Height of separator lines
 inline constexpr int SEPARATOR_HEIGHT = 8;
+/// Side length of an artwork gallery thumbnail (Kartend-un3l). Sized to fit
+/// 3 thumbs across the sidebar's MIN_WIDTH (150) and 4 across FIXED_WIDTH
+/// (300) with the standard layout margins.
+inline constexpr int GALLERY_THUMB_SIZE = 64;
+/// Horizontal/vertical spacing between gallery thumbnails.
+inline constexpr int GALLERY_THUMB_SPACING = 6;
+/// Padding inside each gallery thumbnail button (around the pixmap).
+inline constexpr int GALLERY_THUMB_PADDING = 4;
 } // namespace Metadata
 } // namespace UIConstants
 

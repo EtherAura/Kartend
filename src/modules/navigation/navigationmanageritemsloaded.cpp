@@ -2,13 +2,14 @@
 #include "artworkmanager.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
+#include "emptystatewidget.h"
 #include "errordialog.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "loadingoverlay.h"
 #include "loggingcategories.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationhelpers.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
@@ -18,7 +19,7 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
@@ -27,6 +28,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QLabel>
+#include <QLineEdit>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
@@ -105,8 +107,37 @@ auto NavigationManager::handleEmptyContent() -> void {
 
   if (!shuttingDown) {
     if (m_loadingLabel) {
-      m_loadingLabel->setText("No items found");
-      m_loadingLabel->setVisible(true);
+      const QString searchText = m_searchBar ? m_searchBar->text().trimmed() : QString();
+      const bool searchActive = !searchText.isEmpty();
+
+      bool collectionConfigured = true;
+      bool isSubcollectionOnly = false;
+      QString collectionName;
+      if (m_collections && m_currentCollectionIndex && *m_currentCollectionIndex >= 0 &&
+          *m_currentCollectionIndex < (*m_collections).size()) {
+        const CollectionConfig &cfg = (*m_collections)[*m_currentCollectionIndex];
+        collectionName = cfg.name;
+        const QString mediaDir = cfg.mediaDirectory.trimmed();
+        // A leaf collection with no media directory configured is the
+        // "needs setup" case; subcollection-only entries are valid empty.
+        isSubcollectionOnly = cfg.isSubcollection && mediaDir.isEmpty();
+        collectionConfigured = !mediaDir.isEmpty() || cfg.isSubcollection;
+      }
+
+      if (searchActive) {
+        m_loadingLabel->showSearchEmpty(searchText);
+      } else if (!collectionConfigured) {
+        m_loadingLabel->showNoMediaDirectory();
+      } else if (isSubcollectionOnly) {
+        m_loadingLabel->showMessage(tr("This collection has no items"),
+                                    tr("Choose a child collection from the sidebar."),
+                                    QStringLiteral("📂"));
+      } else {
+        const QString hint = collectionName.isEmpty()
+                                 ? tr("Add files to the collection's media directory.")
+                                 : tr("Add files to %1's media directory.").arg(collectionName);
+        m_loadingLabel->showMessage(tr("No items found"), hint, QStringLiteral("📭"));
+      }
     }
     resumeItemsPageRendering();
     if (m_refreshTitleCounts) m_refreshTitleCounts();
@@ -129,6 +160,10 @@ auto NavigationManager::setupCollectionContext(const QStringList &filePaths,
   if (m_generalSettings) {
     context.sortMode = m_generalSettings->sortMode;
     context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    // Kartend-dd8: mirror toolbar filters so subcollection tile visibility
+    // honors the active type filter / hide-subs toggle.
+    context.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
+    context.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
   }
   if (m_allCollectionsActive) {
     context.config.showAllSubcollectionItems = true;

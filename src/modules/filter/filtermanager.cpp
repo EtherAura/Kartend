@@ -1,5 +1,6 @@
 // Manages search filtering and subcollection filtering for scroll view
 #include "filtermanager.h"
+#include "artworkutils.h"
 #include "databasemanager.h"
 #include "filterhelpers.h"
 #include <QDir>
@@ -31,6 +32,18 @@ void FilterManager::setSourceData(const QStringList &filePaths,
 
 void FilterManager::setContext(const CollectionContext &context) {
   m_context = context;
+  // Kartend-ks4n: keep the per-collection "hide missing artwork" predicate in
+  // sync with the active collection's config so callers don't have to push the
+  // flag separately at each entry point.
+  m_hideMissingArtwork = m_context.config.hideMissingArtwork;
+  m_hideMissingArtworkDirectory = m_context.artworkDirectory.isEmpty()
+                                      ? m_context.config.artworkDirectory
+                                      : m_context.artworkDirectory;
+}
+
+void FilterManager::setHideMissingArtworkFilter(bool enabled, const QString &artworkDirectory) {
+  m_hideMissingArtwork = enabled;
+  m_hideMissingArtworkDirectory = artworkDirectory;
 }
 
 void FilterManager::applyFilter(const QString &searchText) {
@@ -43,6 +56,20 @@ void FilterManager::applyFilter(const QString &searchText) {
   m_currentFilter = trimmedQuery;
   m_isFiltered = true;
   rebuildFilteredIndices();
+
+  // Kartend-ks4n: prune media items that have no artwork after the search
+  // pass. Subcollection rows in m_filteredIndices are preserved as-is.
+  if (m_hideMissingArtwork && m_subcollections) {
+    int subCount = m_subcollections->size();
+    QList<int> kept;
+    kept.reserve(m_filteredIndices.size());
+    for (int originalIndex : m_filteredIndices) {
+      if (originalIndex < subCount || mediaItemHasArtwork(originalIndex - subCount)) {
+        kept.append(originalIndex);
+      }
+    }
+    m_filteredIndices = std::move(kept);
+  }
 
   if (!m_filePaths || !m_subcollections) {
     return;
@@ -85,28 +112,50 @@ void FilterManager::applySubcollectionFilter(int subcollectionIndex) {
 
   int subcollectionStartIndex = m_subcollections->size();
 
-  // Filter media items by collection ownership
+  // Filter media items by collection ownership; honor hideMissingArtwork
+  // (Kartend-ks4n) as an additional predicate.
   for (int mediaIndex = 0; mediaIndex < m_filePaths->size(); ++mediaIndex) {
     const QString &entry = (*m_filePaths)[mediaIndex];
-    if (itemBelongsToTargetCollections(entry, targetCollections)) {
-      m_filteredIndices.append(subcollectionStartIndex + mediaIndex);
+    if (!itemBelongsToTargetCollections(entry, targetCollections)) {
+      continue;
     }
+    if (m_hideMissingArtwork && !mediaItemHasArtwork(mediaIndex)) {
+      continue;
+    }
+    m_filteredIndices.append(subcollectionStartIndex + mediaIndex);
   }
 
   emit filterChanged(m_filteredIndices.size(), m_subcollections->size() + m_filePaths->size());
 }
 
 void FilterManager::clearFilter() {
-  if (!m_isFiltered) {
-    if (m_filePaths) {
-      emit filterChanged(m_filePaths->size(), m_filePaths->size());
-    }
-    return;
-  }
-  m_isFiltered = false;
   m_currentFilter.clear();
   m_filteredIndices.clear();
 
+  // Kartend-ks4n: when the per-collection hideMissingArtwork toggle is on,
+  // "clearing the filter" really means transitioning to the artwork-only
+  // baseline filter. We populate m_filteredIndices with every subcollection
+  // plus the media items that resolve to artwork, and keep m_isFiltered = true
+  // so the visual→actual index map runs through m_filteredIndices.
+  if (m_hideMissingArtwork && m_subcollections && m_filePaths) {
+    int subCount = m_subcollections->size();
+    m_filteredIndices.reserve(subCount + m_filePaths->size());
+    for (int subIndex = 0; subIndex < subCount; ++subIndex) {
+      m_filteredIndices.append(subIndex);
+    }
+    int visibleFiles = 0;
+    for (int mediaIndex = 0; mediaIndex < m_filePaths->size(); ++mediaIndex) {
+      if (mediaItemHasArtwork(mediaIndex)) {
+        m_filteredIndices.append(subCount + mediaIndex);
+        ++visibleFiles;
+      }
+    }
+    m_isFiltered = true;
+    emit filterChanged(visibleFiles, m_filePaths->size());
+    return;
+  }
+
+  m_isFiltered = false;
   if (m_filePaths) {
     emit filterChanged(m_filePaths->size(), m_filePaths->size());
   }
@@ -169,6 +218,24 @@ auto FilterManager::getDisplayNameForMediaItem(const QString &rawEntry) const ->
   return FilterHelpers::displayNameForMediaEntry(
       rawEntry, m_context.config.showAllSubcollectionItems, m_context.config.mediaDirectory,
       m_filePathToDisplayName, m_fileNames);
+}
+
+auto FilterManager::mediaItemHasArtwork(int mediaIndex) const -> bool {
+  if (m_hideMissingArtworkDirectory.isEmpty() || !m_filePaths) {
+    return true;
+  }
+  if (mediaIndex < 0 || mediaIndex >= m_filePaths->size()) {
+    return true;
+  }
+  const QString rawEntry = (*m_filePaths)[mediaIndex];
+  if (rawEntry.isEmpty()) {
+    return false;
+  }
+  // Mirrors the artwork resolution used by ItemWidgetFactory: prefer the
+  // directory-scan cache (cheap, hits while artwork is being populated) over
+  // a fresh stat-loop each rebuild.
+  const QString lookup = QFileInfo(rawEntry).fileName();
+  return !ArtworkUtils::findArtworkForFileCached(lookup, m_hideMissingArtworkDirectory).isEmpty();
 }
 
 void FilterManager::determineTargetCollections(int subcollectionIndex,

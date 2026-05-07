@@ -41,6 +41,79 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
 
   const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
 
+  // Kartend-dx9t: in Horizontal view the scroll axis is X. Centering still
+  // dispatches through centerItemVertically (kept as the canonical "center
+  // selection along the scroll axis" entry point) but we drive the
+  // horizontal scrollbar with a simpler animation path. Vertical centering
+  // is unnecessary because the column always fits in the viewport.
+  if (m_scrollManager && m_scrollManager->getMetrics().isHorizontal) {
+    QScrollBar *hScrollBar = m_itemScrollArea->horizontalScrollBar();
+    if (!hScrollBar) {
+      return;
+    }
+    const auto &metrics = m_scrollManager->getMetrics();
+    int viewportWidth = m_itemScrollArea->viewport()->width();
+    if (viewportWidth <= 0 || metrics.itemsPerRow <= 0) {
+      return;
+    }
+    int targetX = GridLayoutCalculator::calculateCenterScrollTarget(index, viewportWidth,
+                                                                    hScrollBar->maximum(), metrics);
+    targetX = qBound(0, targetX, hScrollBar->maximum());
+    int curX = hScrollBar->value();
+    bool forceImmediate = computeForceImmediate(immediate);
+    if (shouldEarlyReturnUserScroll(forceImmediate)) {
+      return;
+    }
+    int colIndex = index / metrics.itemsPerRow;
+    if (forceImmediate || qAbs(targetX - curX) <= 1) {
+      setProgrammaticScrollGuarded(true);
+      hScrollBar->setValue(targetX);
+      if (m_scrollManager) {
+        if (m_isWrappingNavigation) {
+          m_scrollManager->cleanupActiveWidgets();
+        }
+        m_scrollManager->updateVirtualView();
+        int idxDyn = (m_state && m_state->isSelectionSuppressed())
+                         ? m_state->pendingSelectionIndex()
+                         : index;
+        if (idxDyn >= 0) {
+          m_scrollManager->updateSelectionForIndex(idxDyn);
+        }
+      }
+      setProgrammaticScrollGuarded(false);
+      finalizeImmediateCenteringState(index, colIndex);
+      clearArtworkSuppressionViewportUpdateIfNeeded();
+      clearArrowCenterSuppressionWhenDue();
+      return;
+    }
+    // Kartend-dx9t: route clicks/arrow-centering through the same chained
+    // wheel-style animation (configurable scrollAnimationDurationMs +
+    // OutCubic). animateHorizontalSmooth's hardcoded 140ms felt jerky on
+    // click, while wheel scrolling already used the longer chained variant.
+    if (m_animationManager) {
+      auto onFinished = [this]() {
+        if (m_state) {
+          m_state->scroll().programmaticScroll = false;
+        }
+        if (m_scrollManager) {
+          m_scrollManager->refreshSelectionOverlayState();
+          m_scrollManager->updateVirtualView();
+        }
+      };
+      setProgrammaticScrollGuarded(true);
+      m_animationManager->startWheelScrollAnimationHorizontal(hScrollBar, curX, targetX,
+                                                              onFinished);
+    }
+    if (m_scrollManager) {
+      m_scrollManager->updateVirtualView();
+    }
+    m_lastSelectedRow = colIndex;
+    if (m_selectionManager) {
+      m_selectionManager->setLastSelectedRow(colIndex);
+    }
+    return;
+  }
+
   // Get metrics from ScrollManager for correct dimensions in both grid and list
   // modes
   int gridWidth = collection.gridWidth;
@@ -196,7 +269,7 @@ bool ViewportManager::handlePendingInitialCenterIfNeeded(QScrollBar *verticalScr
       m_state->click().pendingInitialCenter = true;
       // Defer centering until scrollbar has a valid range - happens during
       // initial layout when content height isn't calculated yet
-      QTimer::singleShot(UIConstants::Sidebar::INITIAL_CENTER_SCROLL_DELAY_MS, this,
+      QTimer::singleShot(UIConstants::DetailsPane::INITIAL_CENTER_SCROLL_DELAY_MS, this,
                          [this, index]() {
                            if (m_state) {
                              m_state->click().pendingInitialCenter = false;

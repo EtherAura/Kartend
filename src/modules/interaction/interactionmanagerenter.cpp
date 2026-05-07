@@ -35,7 +35,7 @@
 #include "databasemanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrolldatamanager.h"
@@ -43,7 +43,7 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 
@@ -99,8 +99,8 @@ auto InteractionManager::handleEnterOnSubcollection(int subActualIndex, int subC
       m_navigationManager->stackManager()->push(*m_currentCollectionIndex);
     }
     clearSelectionAndFocus();
-    if (m_sidebarManager) {
-      m_sidebarManager->updateSidebarMetadata(nullptr);
+    if (m_detailsPaneManager) {
+      m_detailsPaneManager->updateSidebarMetadata(nullptr);
     }
     const bool success = m_navigationManager->showCollectionItems(subIdx);
     if (!success) {
@@ -137,10 +137,22 @@ auto InteractionManager::handleEnterOnItem(int currentSelection, int /*totalItem
     path = m_scrollManager->filePathForVisualIndex(currentSelection);
   }
   if (!path.isEmpty()) {
-    saveCurrentSelection();
     const int cIdx =
         ((m_databaseManager) ? m_databaseManager->getCollectionIndexForFile(path) : -1);
+    // Kartend-xbwa: when the user is browsing a playlist, getCollectionIndexForFile
+    // returns the *source* collection (the one whose items table row holds this
+    // path), not the playlist's synthetic index — so the launcher chooser and
+    // per-item override (Kartend-dnx4) downstream key off the source's UUID +
+    // launcher list, not the empty/single-launcher playlist config. The
+    // fallback to the current collection only matters for ordinary collections
+    // where the file→collection map hasn't been populated yet.
     const int ownerIdx = (cIdx >= 0 ? cIdx : *m_currentCollectionIndex);
+    // Expand-mode: first activation expands the artwork preview; only the
+    // second activation on the same selection launches.
+    if (maybeExpandInsteadOfLaunch(path, ownerIdx, currentSelection)) {
+      return true;
+    }
+    saveCurrentSelection();
     launchItemWithCollection(path, ownerIdx);
   }
   return true;
@@ -176,4 +188,172 @@ auto InteractionManager::isItemOffscreen(int selection, int gridWidth) const -> 
   const int logicalVisibleBottom = logicalVisibleTop + viewportH;
   return (logicalItemY + collection.itemHeight) <= logicalVisibleTop ||
          logicalItemY >= logicalVisibleBottom;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Expand-mode (two-stage activation)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// When a collection has CollectionConfig::expandMode enabled, the first
+// activation (Enter or double-click) on a selected item shows the artwork
+// preview overlay instead of launching the item. A second activation on the
+// same item (no selection change in between) falls through to launch.
+//
+// State is tracked in InteractionStateHolder::expandedItemIndex(); the value
+// is cleared whenever selection changes (see connectSelectionManagerSignals)
+// or when the overlay is dismissed via Escape (see handleEscapeKey).
+auto InteractionManager::maybeExpandInsteadOfLaunch(const QString &filePath, int collectionIndex,
+                                                    int activationIndex) -> bool {
+  if (filePath.isEmpty() || !m_collections) {
+    return false;
+  }
+  // Expand-mode is a property of the *viewing* collection (what the user is
+  // currently browsing), not the file's owning collection. When a parent
+  // collection aggregates subcollection items via showAllSubcollectionItems,
+  // the activated file's owner is the subcollection, but the setting the
+  // user toggled lives on the parent they're viewing. Prefer the current
+  // view; fall back to the resolved owner if no view is set.
+  int effectiveIdx = (m_currentCollectionIndex && *m_currentCollectionIndex >= 0)
+                         ? *m_currentCollectionIndex
+                         : collectionIndex;
+  if (effectiveIdx < 0 || effectiveIdx >= m_collections->size()) {
+    return false;
+  }
+  const CollectionConfig &collection = (*m_collections)[effectiveIdx];
+  if (!collection.expandMode) {
+    return false;
+  }
+  // Use the owning collection's artwork directory so the preview matches
+  // the actual file (fall back to the viewing collection if the owner is
+  // unknown).
+  int artworkOwnerIdx = (collectionIndex >= 0 && collectionIndex < m_collections->size())
+                            ? collectionIndex
+                            : effectiveIdx;
+  const CollectionConfig &artworkOwner = (*m_collections)[artworkOwnerIdx];
+  // Already expanded for this exact item AND the overlay is still visible
+  // → fall through to launch and clear. If the user dismissed the overlay
+  // by clicking outside (without changing selection), treat the next
+  // activation as a fresh first-stage expand.
+  if (m_state.expandedItemIndex() == activationIndex && activationIndex >= 0 && m_scrollManager &&
+      m_scrollManager->isArtworkPreviewVisible()) {
+    m_state.clearExpandedItem();
+    m_scrollManager->hideArtworkPreview();
+    return false;
+  }
+  // First activation: expand into a video-first preview (Kartend-ljey).
+  // The overlay falls back to artwork when no video is found, preserving
+  // the original expand-mode behavior for collections without
+  // videoDirectory configured.
+  if (!m_scrollManager) {
+    return false;
+  }
+  const QString artworkDir =
+      SettingsUtils::expandConfigVariables(artworkOwner.artworkDirectory, artworkOwner.name);
+  const QString videoDir =
+      SettingsUtils::expandConfigVariables(artworkOwner.videoDirectory, artworkOwner.name);
+  m_scrollManager->showMediaPreview(filePath, artworkDir, videoDir);
+  m_state.setExpandedItemIndex(activationIndex);
+  return true;
+}
+
+void InteractionManager::onArtworkPreviewLaunchRequested(const QString &filePath) {
+  // Second-stage expand-mode activation OR Enter/double-click on a
+  // middle-click peek overlay: hide the overlay, clear expand state, and
+  // launch the previewed item. Prefers the path the overlay was showing
+  // (so a middle-click peek on a non-selected item launches the *clicked*
+  // item, not whatever happens to be selected) and falls back to the
+  // current selection for gallery thumbnail previews that don't carry a
+  // media path.
+  QString path = filePath;
+  if (path.isEmpty() && m_selectionManager) {
+    path = m_selectionManager->selectedFilePath();
+  }
+  if (path.isEmpty() && m_scrollManager) {
+    path = m_scrollManager->filePathForVisualIndex(currentSelectedIndex());
+  }
+  if (m_scrollManager) {
+    m_scrollManager->hideArtworkPreview();
+  }
+  m_state.clearExpandedItem();
+  if (path.isEmpty()) {
+    return;
+  }
+  const int cIdx = (m_databaseManager ? m_databaseManager->getCollectionIndexForFile(path) : -1);
+  int ownerIdx = cIdx;
+  if (ownerIdx < 0 && m_currentCollectionIndex) {
+    ownerIdx = *m_currentCollectionIndex;
+  }
+  if (ownerIdx < 0) {
+    return;
+  }
+  saveCurrentSelection();
+  launchItemWithCollection(path, ownerIdx);
+}
+
+void InteractionManager::onMediaPreviewRequested(ItemWidget *widget, int visualIndex) {
+  // Middle-click peek (Kartend-ljey). Resolves the clicked item's path and
+  // its owning collection, then opens a video-first preview overlay. Does
+  // *not* set m_state.expandedItemIndex — middle-click is a peek that
+  // dismisses on Escape / click-outside, not a first-stage launch.
+  if (!widget || !m_collections || !m_scrollManager) {
+    return;
+  }
+
+  QString filePath = widget->getFilePath();
+  if (filePath.isEmpty()) {
+    filePath = m_scrollManager->filePathForVisualIndex(visualIndex);
+  }
+  if (filePath.isEmpty()) {
+    return;
+  }
+
+  const int cIdx = m_databaseManager ? m_databaseManager->getCollectionIndexForFile(filePath) : -1;
+  int ownerIdx = cIdx;
+  if (ownerIdx < 0 && m_currentCollectionIndex) {
+    ownerIdx = *m_currentCollectionIndex;
+  }
+  if (ownerIdx < 0 || ownerIdx >= m_collections->size()) {
+    return;
+  }
+
+  const CollectionConfig &owner = (*m_collections)[ownerIdx];
+  // Resolve directories from the owning collection so a subcollection's
+  // configured paths win over the viewing parent in
+  // showAllSubcollectionItems mode (mirrors expand-mode's behavior).
+  const QString artworkDir =
+      SettingsUtils::expandConfigVariables(owner.artworkDirectory, owner.name);
+  const QString videoDir = SettingsUtils::expandConfigVariables(owner.videoDirectory, owner.name);
+
+  m_scrollManager->showMediaPreview(filePath, artworkDir, videoDir);
+}
+
+void InteractionManager::onArtworkTypeCycleRequested(ItemWidget *widget, int visualIndex) {
+  // Kartend-1v6: shift+middle-click (modifier configurable via
+  // GeneralSettings::artworkCycleModifier) cycles the clicked item's grid
+  // tile through the artwork types that exist on disk. Mirrors the path
+  // resolution pattern from onMediaPreviewRequested so a subcollection's
+  // configured artwork directory wins over the viewing parent in
+  // showAllSubcollectionItems mode.
+  if (!widget || !m_collections || !m_artworkManager || !m_scrollManager) {
+    return;
+  }
+
+  QString filePath = widget->getFilePath();
+  if (filePath.isEmpty()) {
+    filePath = m_scrollManager->filePathForVisualIndex(visualIndex);
+  }
+  if (filePath.isEmpty()) {
+    return;
+  }
+
+  const int cIdx = m_databaseManager ? m_databaseManager->getCollectionIndexForFile(filePath) : -1;
+  int ownerIdx = cIdx;
+  if (ownerIdx < 0 && m_currentCollectionIndex) {
+    ownerIdx = *m_currentCollectionIndex;
+  }
+  if (ownerIdx < 0 || ownerIdx >= m_collections->size()) {
+    return;
+  }
+
+  m_artworkManager->cycleArtworkType(widget, filePath, ownerIdx);
 }

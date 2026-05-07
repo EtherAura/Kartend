@@ -9,7 +9,9 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollBar>
+#include <QSize>
 #include <QTimer>
+#include <QToolButton>
 
 #include "applicationmanager.h"
 #include "artworkmanager.h"
@@ -17,21 +19,28 @@
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "interactionmanager.h"
+#include "kartmanager.h"
 #include "itemwidget.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "menucontroller.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationmanager.h"
+#include "playlistmanager.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"
+
+#include "detailpageoverlay.h"
+#include "nowplayingoverlay.h"
 #include "sessionmanager.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
 #include "shortcutsdialog.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
+#include "splashoverlay.h"
 #include "stringutils.h"
+#include "textzoomhud.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
@@ -40,18 +49,43 @@
 Q_DECLARE_LOGGING_CATEGORY(lcMainWindow)
 
 void MainWindow::setupUI() {
+  setAcceptDrops(true);
+
   // Managers are initialized by ApplicationManager in the constructor
   getSessionManager()->initialize();
 
   // Load settings
   getSettingsManager()->loadCollections(m_collections);
-  rebuildHierarchyCache();
+
+  // Kartend-vlm7: append synthesized playlist CollectionConfigs after INI
+  // collections so playlists nest into the hierarchy and appear as virtual
+  // collections. resyncPlaylistCollections also rebuilds the hierarchy cache,
+  // so we don't need a separate rebuild call here.
+  if (PlaylistManager *playlistManager = getPlaylistManager()) {
+    playlistManager->initialize();
+    QObject::connect(playlistManager, &PlaylistManager::playlistsChanged, this,
+                     [this]() { resyncPlaylistCollections(); });
+  }
+  resyncPlaylistCollections();
+
   getSettingsManager()->loadGeneralSettings(m_generalSettings);
+
+  // Kartend-7eff: publish the persisted text-zoom multiplier into the static
+  // before any widget is constructed below — the upcoming applyGlobalUiFont
+  // and the scrollManager / sidebar setup paths all read zoomedFontSize().
+  primeTextZoomFromSettings(m_generalSettings.uiTextZoomPercent);
+
+  // Kartend-9v0o: push the persisted global UI font to QApplication before any
+  // widgets are constructed below, so menus/dialogs/toolbar all pick it up on
+  // their first show without a fontChange roundtrip.
+  applyGlobalUiFont(m_generalSettings);
 
   // Apply text appearance settings to ItemWidget statics
   ItemWidget::setTitleTintSaturation(m_generalSettings.titleTintSaturation);
   ItemWidget::setTitleTintLightness(m_generalSettings.titleTintLightness);
   ItemWidget::setTitleBaseColor(m_generalSettings.titleBaseColor);
+  // Kartend-cub
+  ItemWidget::setShowTitleInPlaceholder(m_generalSettings.showTitleInPlaceholder);
 
   setupUIReferences();
 
@@ -126,6 +160,14 @@ void MainWindow::setupUI() {
   setupArtworkManager();
   setupLastSelectedIndices();
   setupEventFilters();
+  // Kartend-81o: apply persisted toolbar visibility/text overrides to the
+  // freshly-constructed toolbar widgets before any layout settles.
+  applyToolbarCustomization();
+  // Kartend-7eff: bind Ctrl+= / Ctrl+- / Ctrl+0 after managers are wired so
+  // applyTextZoom() can refresh the scroll/sidebar pipeline on press.
+  setupTextZoomShortcuts();
+  setupVideoPauseShortcut();
+  setupPreviewVolumeSlider();
   setupInitialTimers();
 }
 
@@ -143,10 +185,18 @@ void MainWindow::setupUIReferences() {
   m_mainContentWidget = ui->m_mainContentWidget;
   m_mainHorizontalLayout = ui->m_mainHorizontalLayout;
   searchBar = ui->searchBar;
-  m_searchModeButton = ui->searchModeButton;
-  m_gridViewButton = ui->gridViewButton;
-  m_listViewButton = ui->listViewButton;
-  m_MetadataSidebar = ui->metadataSidebarWidget;
+  m_viewModeButton = ui->viewModeButton;
+  setupViewModeButton();
+  setupSearchModeAction();
+  // Single consolidated filter button (replaces typeFilterButton +
+  // titleFilterButton + hideSubcollectionsButton).
+  m_filterButton = ui->filterButton;
+  if (m_filterButton) {
+    m_filterButton->setIcon(
+        UIConstants::Icons::fromTheme({UIConstants::Icons::FILTER, "view-filter"}));
+    m_filterButton->setIconSize(QSize(18, 18));
+  }
+  m_MetadataSidebar = ui->detailsPaneWidget;
 
   // Prevent scroll area from stealing keyboard focus - we handle
   // PageUp/PageDown and arrow keys ourselves via the event filter, and
@@ -162,38 +212,58 @@ void MainWindow::setupUIReferences() {
   // Create loading overlay (parented to central widget so it's above all
   // content)
   m_loadingOverlay = new LoadingOverlay(ui->centralwidget);
+
+  // Create transient splash overlay above the same central content. It stays
+  // independent from scan/loading progress overlays and manages its own timers.
+  m_splashOverlay = new SplashOverlay(ui->centralwidget);
+
+  // Kartend-qxv: Persistent "Now Playing" overlay used while a runtime-tracked
+  // child process is running. Stays hidden until LaunchManager signals start.
+  m_nowPlayingOverlay = new NowPlayingOverlay(ui->centralwidget);
+
+  // Kartend-uve: full-window item detail page. Created here so it's parented
+  // to the central widget (covers everything underneath) and stays in the
+  // QObject tree across the application lifetime; DetailPageManager drives
+  // it via setupReferences below.
+  m_detailPageOverlay = new DetailPageOverlay(ui->centralwidget);
+
+  // Kartend-0w4i: transient pill that flashes the current text-zoom percent
+  // on every Ctrl+/-/0 press. Parented to centralwidget so it floats above
+  // all content and tracks parent resizes via its own eventFilter.
+  m_textZoomHud = new TextZoomHud(ui->centralwidget);
 }
 
 void MainWindow::initializeAppContext() {
   // Collection state
-  m_appContext.collections = &m_collections;
-  m_appContext.currentCollectionIndex = &currentCollectionIndex;
-  m_appContext.hierarchyCache = &m_hierarchyCache;
-  m_appContext.generalSettings = &m_generalSettings;
-  m_appContext.isShuttingDown = &m_isShuttingDown;
+  m_appContext.collection.collections = &m_collections;
+  m_appContext.collection.currentCollectionIndex = &currentCollectionIndex;
+  m_appContext.collection.hierarchyCache = &m_hierarchyCache;
+  m_appContext.collection.generalSettings = &m_generalSettings;
+  m_appContext.collection.isShuttingDown = &m_isShuttingDown;
 
   // Common UI elements
-  m_appContext.itemScrollArea = ui->itemScrollArea;
-  m_appContext.stackedWidget = stackedWidget;
-  m_appContext.itemsPage = itemsPage;
-  m_appContext.itemsTopBar = ui->itemsTopBar;
-  m_appContext.gridContainer = gridContainer;
-  m_appContext.menubar = ui->menubar;
-  m_appContext.searchBar = searchBar;
-  m_appContext.searchModeButton = m_searchModeButton;
-  m_appContext.sidebar = m_MetadataSidebar;
-  m_appContext.loadingLabel = ui->loadingLabel;
-  m_appContext.loadingOverlay = m_loadingOverlay;
+  m_appContext.ui.itemScrollArea = ui->itemScrollArea;
+  m_appContext.ui.stackedWidget = stackedWidget;
+  m_appContext.ui.itemsPage = itemsPage;
+  m_appContext.ui.itemsTopBar = ui->itemsTopBar;
+  m_appContext.ui.gridContainer = gridContainer;
+  m_appContext.ui.menubar = ui->menubar;
+  m_appContext.ui.searchBar = searchBar;
+  m_appContext.ui.searchModeAction = m_searchModeAction;
+  m_appContext.ui.sidebar = m_MetadataSidebar;
+  m_appContext.ui.loadingLabel = ui->loadingLabel;
+  m_appContext.ui.loadingOverlay = m_loadingOverlay;
 
   // Manager references (for setup structs to use via ctx)
-  m_appContext.scrollManager = getScrollManager();
-  m_appContext.artworkManager = getArtworkManager();
-  m_appContext.settingsManager = getSettingsManager();
-  m_appContext.sessionManager = getSessionManager();
-  m_appContext.sidebarManager = getSidebarManager();
-  m_appContext.databaseManager = getDatabaseManager();
-  m_appContext.navigationManager = getNavigationManager();
-  m_appContext.interactionManager = getInteractionManager();
+  m_appContext.managers.scrollManager = getScrollManager();
+  m_appContext.managers.artworkManager = getArtworkManager();
+  m_appContext.managers.settingsManager = getSettingsManager();
+  m_appContext.managers.sessionManager = getSessionManager();
+  m_appContext.managers.detailsPaneManager = getDetailsPaneManager();
+  m_appContext.managers.databaseManager = getDatabaseManager();
+  m_appContext.managers.navigationManager = getNavigationManager();
+  m_appContext.managers.interactionManager = getInteractionManager();
+  m_appContext.managers.playlistManager = getPlaylistManager();
 }
 
 void MainWindow::createMenuBar() {
@@ -204,19 +274,36 @@ void MainWindow::createMenuBar() {
   ctx.ui = ui;
   ctx.getNavigationManager = [this]() { return getNavigationManager(); };
   ctx.getSettingsManager = [this]() { return getSettingsManager(); };
-  ctx.getSidebarManager = [this]() { return getSidebarManager(); };
+  ctx.getDetailsPaneManager = [this]() { return getDetailsPaneManager(); };
   ctx.getScrollManager = [this]() { return getScrollManager(); };
   ctx.getArtworkManager = [this]() { return getArtworkManager(); };
+  ctx.getDatabaseManager = [this]() { return getDatabaseManager(); };
+  ctx.getInteractionManager = [this]() { return getInteractionManager(); };
   ctx.getCurrentCollectionIndex = [this]() { return currentCollectionIndex; };
   ctx.getCollections = [this]() { return &m_collections; };
   ctx.getGeneralSettings = [this]() { return &m_generalSettings; };
+  ctx.getHierarchyCache = [this]() -> const CollectionHierarchyCache * {
+    return &m_hierarchyCache;
+  };
+  ctx.getCurrentViewType = [this]() {
+    if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
+      return m_collections[currentCollectionIndex].viewType;
+    }
+    return ViewType::Grid;
+  };
+  ctx.onSetViewType = [this](ViewType viewType) { setViewType(viewType); };
+  ctx.onLaunchItem = [this](const QString &filePath, int collectionIndex) {
+    if (auto *im = getInteractionManager()) {
+      im->launchItemWithCollection(filePath, collectionIndex);
+    }
+  };
   ctx.onOpenSettings = [this]() {
     if (getSettingsManager()) {
       SettingsDialogContext context;
       context.parent = this;
       context.collections = &m_collections;
       context.currentCollectionIndex = &currentCollectionIndex;
-      context.sidebarManager = getSidebarManager();
+      context.detailsPaneManager = getDetailsPaneManager();
       context.scrollManager = getScrollManager();
       context.navigationManager = getNavigationManager();
       context.databaseManager = getDatabaseManager();
@@ -225,6 +312,12 @@ void MainWindow::createMenuBar() {
   };
   ctx.onShowAbout = [this]() { showAbout(); };
   ctx.onAdjustGridWidth = [this](int delta) { adjustGridWidth(delta); };
+  ctx.onImportKart = [this]() {
+    if (auto *km = getKartManager()) km->importInteractive();
+  };
+  ctx.onExportKart = [this]() {
+    if (auto *km = getKartManager()) km->exportCollectionInteractive(currentCollectionIndex);
+  };
 
   m_menuController->setContext(ctx);
   m_menuController->setupMenuBar();
@@ -236,17 +329,27 @@ void MainWindow::adjustGridWidth(int delta) {
   }
 
   CollectionConfig &config = m_collections[currentCollectionIndex];
-  int newWidth = config.gridWidth + delta;
+
+  // Kartend-0p3w: figure out which gridWidth field is currently driving the
+  // layout, and mutate that one. When sidebar is hidden in Expand mode AND the
+  // alt is configured non-zero, the alt is the active field; otherwise the
+  // primary gridWidth is. Sidebar shrinking state is cached on ScrollManager so
+  // we don't have to recompute the predicate here.
+  const bool useAltField = getScrollManager() && getScrollManager()->sidebarShrinkingActive() &&
+                           config.gridWidthSidebarHidden > 0;
+  int &activeField = useAltField ? config.gridWidthSidebarHidden : config.gridWidth;
+
+  int newWidth = activeField + delta;
 
   // Clamp to valid range
   newWidth = qBound(UIConstants::Grid::MIN_WIDTH, newWidth, UIConstants::Grid::MAX_WIDTH);
 
-  if (newWidth == config.gridWidth) {
+  if (newWidth == activeField) {
     return; // No change needed
   }
 
   // Update the collection config
-  config.gridWidth = newWidth;
+  activeField = newWidth;
 
   // Persist the change (debounced) to avoid repeated disk writes when the user
   // holds the shortcut.
@@ -286,12 +389,11 @@ void MainWindow::setViewType(ViewType viewType) {
     getSettingsManager()->saveCollections(m_collections);
   }
 
-  // Update button checked states
-  if (m_gridViewButton) {
-    m_gridViewButton->setChecked(viewType == ViewType::Grid);
-  }
-  if (m_listViewButton) {
-    m_listViewButton->setChecked(viewType == ViewType::List);
+  // Update view-mode button checked state and label.
+  syncViewModeButton(viewType);
+  // Kartend-iue: keep the View → Layout submenu in sync with the toolbar.
+  if (m_menuController) {
+    m_menuController->syncLayoutActions(viewType);
   }
 
   // Trigger a full layout refresh - viewType affects widget dimensions and
@@ -302,18 +404,24 @@ void MainWindow::setViewType(ViewType viewType) {
 }
 
 void MainWindow::setupSidebar() {
-  if (getSidebarManager()) {
-    getSidebarManager()->setupSidebar();
+  if (getDetailsPaneManager()) {
+    getDetailsPaneManager()->setupSidebar();
 
-    SidebarManagerSetup setup;
+    DetailsPaneManagerSetup setup;
     setup.ctx = &m_appContext;
     setup.mainLayout = m_mainHorizontalLayout;
+    // Kartend-u2gx: outer vertical layout + content widget enable Top/Bottom
+    // dock in Expand mode. Both come straight from the .ui — no new widgets
+    // needed.
+    setup.outerLayout = ui->itemsPageLayout;
+    setup.contentWidget = m_mainContentWidget;
     setup.settingsManager = getSettingsManager();
     setup.artworkManager = getArtworkManager();
+    setup.databaseManager = getDatabaseManager();
 
-    getSidebarManager()->setupReferences(setup);
+    getDetailsPaneManager()->setupReferences(setup);
 
-    QObject::connect(getSidebarManager(), &SidebarManager::sidebarVisibilityChanged, this,
+    QObject::connect(getDetailsPaneManager(), &DetailsPaneManager::sidebarVisibilityChanged, this,
                      [this](bool visible) {
                        if (ui->actionShowSidebar) {
                          ui->actionShowSidebar->blockSignals(true);

@@ -5,13 +5,16 @@
 #include "artworkmanager.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
+#include "itemartwork.h"
 #include "itemwidget.h"
 #include "loggingcategories.h"
+#include "settingsutils.h"
 #include "uiconstants.h"
 #include "widgetpoolmanager.h"
 
 #include <QDir>
 #include <QFileInfo>
+#include <QPixmap>
 #include <QtGlobal>
 
 ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex, int &collectionIndex) {
@@ -62,6 +65,7 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex, int &collection
 
   // Skip artwork loading in list mode - but check if artwork exists for the
   // icon
+  const QString placeholderArtwork = resolvePlaceholderArtworkForCollection(collectionIndex);
   if (m_context.config.viewType != ViewType::List) {
     configureArtworkForWidget(widget, fullPath);
   } else {
@@ -91,6 +95,7 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex, int &collection
       widget->setHasArtwork(!artworkPath.isEmpty());
     }
   }
+  applyPlaceholderArtwork(widget, placeholderArtwork);
 
   return widget;
 }
@@ -161,6 +166,37 @@ void ItemWidgetFactory::updateCollectionIndexFromDatabase(const QString &fullPat
   }
 }
 
+QString ItemWidgetFactory::resolvePlaceholderArtworkForCollection(int collectionIndex) const {
+  QString placeholderArtwork;
+  if (m_collections && collectionIndex >= 0 && collectionIndex < m_collections->size()) {
+    placeholderArtwork =
+        CollectionUtils::resolvePlaceholderArtwork(collectionIndex, *m_collections).trimmed();
+  }
+  if (placeholderArtwork.isEmpty()) {
+    placeholderArtwork = m_context.config.placeholderArtwork.trimmed();
+  }
+  if (!placeholderArtwork.isEmpty()) {
+    const QString collectionName =
+        (m_collections && collectionIndex >= 0 && collectionIndex < m_collections->size())
+            ? m_collections->at(collectionIndex).name
+            : m_context.config.name;
+    placeholderArtwork = SettingsUtils::expandConfigVariables(placeholderArtwork, collectionName);
+  }
+  return placeholderArtwork;
+}
+
+void ItemWidgetFactory::applyPlaceholderArtwork(ItemWidget *widget,
+                                                const QString &placeholderArtwork) const {
+  if (!widget || placeholderArtwork.isEmpty() || widget->isListMode()) {
+    return;
+  }
+
+  QPixmap pixmap(placeholderArtwork);
+  if (!pixmap.isNull()) {
+    widget->setPlaceholderArtworkPixmap(pixmap);
+  }
+}
+
 void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QString &fullPath,
                                                   bool forceDirectLookup) {
   QElapsedTimer perfTimer;
@@ -212,6 +248,30 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
     QString relativeDir = QFileInfo(relativePath).path();
     if (!relativeDir.isEmpty() && relativeDir != ".") {
       artworkDir = QDir(artworkDir).absoluteFilePath(relativeDir);
+    }
+  }
+
+  // Kartend-1v6: if the user previously shift+middle-clicked this item to
+  // cycle its artwork type, prefer the override over the legacy lookup so a
+  // recycled widget reproduces the chosen type. The override map is the only
+  // thing that survives widget pool churn — clearing happens in
+  // ArtworkManager::clearWidgetReferences (collection change / pre-search).
+  if (m_artworkManager) {
+    const QString overrideType = m_artworkManager->artworkTypeOverrideFor(fullPath);
+    if (!overrideType.isEmpty()) {
+      const QString baseName = QFileInfo(fullPath).completeBaseName();
+      const QString overridePath =
+          ItemArtworkStore::findStandardArtwork(baseName, artworkDir, overrideType);
+      if (!overridePath.isEmpty()) {
+        if (widget && widget->isListMode()) {
+          widget->setHasArtwork(true);
+          return;
+        }
+        m_artworkManager->addPendingArtwork(widget, overridePath);
+        return;
+      }
+      // Override file vanished from disk — fall through to the legacy lookup
+      // so the widget shows *something* instead of a blank tile.
     }
   }
 

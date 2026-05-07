@@ -11,6 +11,7 @@
 #include <QScrollArea>
 
 QT_BEGIN_NAMESPACE
+class QAction;
 class QKeyEvent;
 class QLineEdit;
 class QPushButton;
@@ -36,11 +37,11 @@ class ItemWidget;
 class DatabaseManager;
 class NavigationManager;
 class SettingsManager;
-class SidebarManager;
+class DetailsPaneManager;
 class ScrollManager;
 class SessionManager;
 class ArtworkManager;
-class MetadataSidebar;
+class DetailsPane;
 
 /**
  * @brief Setup struct for InteractionManager dependencies.
@@ -54,7 +55,7 @@ struct InteractionManagerSetup {
 
   // Manager dependencies (can be overridden or taken from ctx)
   ScrollManager *scrollManager = nullptr;
-  SidebarManager *sidebarManager = nullptr;
+  DetailsPaneManager *detailsPaneManager = nullptr;
   SettingsManager *settingsManager = nullptr;
   DatabaseManager *databaseManager = nullptr;
   NavigationManager *navigationManager = nullptr;
@@ -62,14 +63,14 @@ struct InteractionManagerSetup {
   ArtworkManager *artworkManager = nullptr;
 
   // UI elements (can be overridden or taken from ctx)
-  MetadataSidebar *sidebar = nullptr;
+  DetailsPane *sidebar = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QWidget *gridContainer = nullptr;
   QStackedWidget *stackedWidget = nullptr;
   QWidget *itemsPage = nullptr;
   QWidget *collectionPage = nullptr;
   QLineEdit *searchBar = nullptr;
-  QPushButton *searchModeButton = nullptr;
+  QAction *searchModeAction = nullptr;
 
   // State references (can be overridden or taken from ctx)
   QList<CollectionConfig> *collections = nullptr;
@@ -79,27 +80,27 @@ struct InteractionManagerSetup {
   const CollectionHierarchyCache *hierarchyCache = nullptr;
 
   // Manager accessors that check ctx fallback
-  SETUP_GETTER_INLINE_SAME(ScrollManager *, ScrollManager, scrollManager)
-  SETUP_GETTER_INLINE_SAME(SidebarManager *, SidebarManager, sidebarManager)
-  SETUP_GETTER_INLINE_SAME(SettingsManager *, SettingsManager, settingsManager)
-  SETUP_GETTER_INLINE_SAME(DatabaseManager *, DatabaseManager, databaseManager)
-  SETUP_GETTER_INLINE_SAME(NavigationManager *, NavigationManager, navigationManager)
-  SETUP_GETTER_INLINE_SAME(SessionManager *, SessionManager, sessionManager)
-  SETUP_GETTER_INLINE_SAME(ArtworkManager *, ArtworkManager, artworkManager)
+  SETUP_GETTER_INLINE_MGR_SAME(ScrollManager *, ScrollManager, scrollManager)
+  SETUP_GETTER_INLINE_MGR_SAME(DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
+  SETUP_GETTER_INLINE_MGR_SAME(SettingsManager *, SettingsManager, settingsManager)
+  SETUP_GETTER_INLINE_MGR_SAME(DatabaseManager *, DatabaseManager, databaseManager)
+  SETUP_GETTER_INLINE_MGR_SAME(NavigationManager *, NavigationManager, navigationManager)
+  SETUP_GETTER_INLINE_MGR_SAME(SessionManager *, SessionManager, sessionManager)
+  SETUP_GETTER_INLINE_MGR_SAME(ArtworkManager *, ArtworkManager, artworkManager)
 
   // UI element accessors that check ctx fallback
-  SETUP_GETTER_INLINE_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
-  SETUP_GETTER_INLINE_SAME(QWidget *, GridContainer, gridContainer)
-  SETUP_GETTER_INLINE_SAME(MetadataSidebar *, Sidebar, sidebar)
-  SETUP_GETTER_INLINE_SAME(QStackedWidget *, StackedWidget, stackedWidget)
-  SETUP_GETTER_INLINE_SAME(QWidget *, ItemsPage, itemsPage)
-  SETUP_GETTER_INLINE_SAME(QLineEdit *, SearchBar, searchBar)
-  SETUP_GETTER_INLINE_SAME(QPushButton *, SearchModeButton, searchModeButton)
-  SETUP_GETTER_INLINE_SAME(QList<CollectionConfig> *, Collections, collections)
-  SETUP_GETTER_INLINE_SAME(int *, CurrentCollectionIndex, currentCollectionIndex)
-  SETUP_GETTER_INLINE_SAME(const CollectionHierarchyCache *, HierarchyCache, hierarchyCache)
-  SETUP_GETTER_INLINE_SAME(GeneralSettings *, GeneralSettings, generalSettings)
-  SETUP_GETTER_INLINE_SAME(const bool *, IsShuttingDown, isShuttingDown)
+  SETUP_GETTER_INLINE_UI_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
+  SETUP_GETTER_INLINE_UI_SAME(QWidget *, GridContainer, gridContainer)
+  SETUP_GETTER_INLINE_UI_SAME(DetailsPane *, Sidebar, sidebar)
+  SETUP_GETTER_INLINE_UI_SAME(QStackedWidget *, StackedWidget, stackedWidget)
+  SETUP_GETTER_INLINE_UI_SAME(QWidget *, ItemsPage, itemsPage)
+  SETUP_GETTER_INLINE_UI_SAME(QLineEdit *, SearchBar, searchBar)
+  SETUP_GETTER_INLINE_UI_SAME(QAction *, SearchModeAction, searchModeAction)
+  SETUP_GETTER_INLINE_COL_SAME(QList<CollectionConfig> *, Collections, collections)
+  SETUP_GETTER_INLINE_COL_SAME(int *, CurrentCollectionIndex, currentCollectionIndex)
+  SETUP_GETTER_INLINE_COL_SAME(const CollectionHierarchyCache *, HierarchyCache, hierarchyCache)
+  SETUP_GETTER_INLINE_COL_SAME(GeneralSettings *, GeneralSettings, generalSettings)
+  SETUP_GETTER_INLINE_COL_SAME(const bool *, IsShuttingDown, isShuttingDown)
 };
 
 /**
@@ -112,7 +113,7 @@ struct InteractionManagerSetup {
  *   AlphabeticNavigationHandler, AnimationManager, MouseManager, LaunchManager,
  *   ViewportManager, EventManager
  * - Owns InteractionStateHolder as value member (m_state)
- * - Does NOT own: m_scrollManager, m_sidebarManager, m_settingsManager,
+ * - Does NOT own: m_scrollManager, m_detailsPaneManager, m_settingsManager,
  * m_databaseManager, m_navigationManager, m_sessionManager, m_artworkManager,
  * UI widgets (borrowed references)
  *
@@ -174,6 +175,49 @@ public:
   void stopScrollAnimations();
   // Shows a right-click context menu for the item at the given visual index.
   void showContextMenu(ItemWidget *widget, int visualIndex, const QPoint &globalPos);
+  // Opens the custom-fields editor for the given media item (Kartend-hpln).
+  // Persists changes via DatabaseManager::saveItemMetadata() and refreshes
+  // the sidebar so new fields render immediately.
+  void editCustomFields(const QString &filePath, const QString &itemName);
+  // Sets or clears the per-item manual override for a media item
+  // (Kartend-9jdv). Stored in `item_metadata.manual_path`; passing an empty
+  // path clears the override and re-enables auto-discovery in the
+  // collection's manualDirectory. Refreshes the sidebar afterwards.
+  void setItemManualPath(const QString &filePath, const QString &manualPath);
+  // Sets or clears the per-item launcher override (Kartend-dnx4). Pass an
+  // index into the owning collection's unified launcher list (0 = primary,
+  // 1..N = additionalLaunchers[0..N-1]) to pin a launcher; pass -1 to clear
+  // the override and re-enable the multi-launcher chooser at launch.
+  void setItemLauncherOverride(const QString &filePath, int launcherIndex);
+
+  // ─── Playlist context-menu handlers (Kartend-vlm7) ────────────────────────
+  // Prompts for a playlist name, creates the playlist, and adds the given
+  // (srcUuid, filePath) reference. Cancelling the prompt is a no-op; an empty
+  // reference creates an empty playlist (useful for "set up first, fill
+  // later" workflows).
+  void addItemToNewPlaylist(const QString &srcUuid, const QString &filePath);
+  // Idempotent add — duplicates are silently rejected by PlaylistManager.
+  void addItemToPlaylist(const QString &playlistId, const QString &srcUuid,
+                         const QString &filePath);
+  // Inline-rename via a single QInputDialog. No-ops on cancel or unchanged
+  // name; the rename is always reflected in the sidebar via the
+  // playlistsChanged → resyncPlaylistCollections chain.
+  void renamePlaylistDialog(const QString &playlistId, const QString &currentName);
+  // Confirms (the cascade can't be undone) then deletes the playlist row plus
+  // all of its items. Source items in their owning collections are untouched.
+  void deletePlaylistConfirm(const QString &playlistId, const QString &currentName);
+
+  // ─── Playlist import / export (Kartend-5pqv) ──────────────────────────────
+  // Pops a save-file dialog and writes the playlist as JSON or M3U via
+  // PlaylistManager. M3U is a basic dialect (#EXTM3U + path-per-line); JSON
+  // is the lossless Kartend format that round-trips through importFromJson.
+  void exportPlaylistToFile(const QString &playlistId, const QString &currentName, bool asJson);
+  // Pops an open-file dialog and creates a new playlist from the chosen file.
+  // Format is auto-detected by extension (.json → JSON, anything else → M3U).
+  // M3U entries that don't resolve to a known item are skipped, with the
+  // count surfaced in a single completion message-box so the user knows
+  // why their imported playlist may be shorter than the source.
+  void importPlaylistFromFile();
   [[nodiscard]] bool isRestoringSelection() const;
   [[nodiscard]] int targetRestoreIndex() const;
   [[nodiscard]] bool forceImmediateCenter() const;
@@ -204,6 +248,21 @@ signals:
 public slots:
   void saveCurrentSelection();
   void handleImmediateSearchTextChanged(const QString &text);
+  /// Triggered when the user activates (Enter / double-click) while the
+  /// artwork preview overlay is visible. Hides the overlay, clears expand
+  /// state, and launches the previewed item (falling back to the current
+  /// selection when @p filePath is empty, e.g. for sidebar gallery
+  /// previews that don't carry a media path).
+  void onArtworkPreviewLaunchRequested(const QString &filePath = QString());
+  /// Triggered when the user middle-clicks a grid/list item (Kartend-ljey).
+  /// Opens a video-first preview overlay for the clicked item without
+  /// changing selection or starting the expand-mode launch sequence.
+  void onMediaPreviewRequested(ItemWidget *widget, int visualIndex);
+  /// Triggered when the user middle-clicks with the artwork-cycle modifier
+  /// held (Kartend-1v6). Resolves the item's path and owning collection
+  /// then asks ArtworkManager to advance to the next available artwork
+  /// type for that item. No selection or launch side-effects.
+  void onArtworkTypeCycleRequested(ItemWidget *widget, int visualIndex);
 
 private slots:
   // KeyboardManager callbacks
@@ -230,6 +289,12 @@ private:
   [[nodiscard]] QString derivePathFromIndex(int idx) const;
   [[nodiscard]] int resolveOwnerForPath(const QString &path) const;
   [[nodiscard]] int getFallbackCollectionIndex() const;
+
+  // Expand-mode helper: returns true when the activation was consumed by the
+  // expand path (artwork preview shown) and the caller must NOT launch.
+  // Returns false when the caller should proceed with launch.
+  [[nodiscard]] bool maybeExpandInsteadOfLaunch(const QString &filePath, int collectionIndex,
+                                                int activationIndex);
 
   // Search delegation (owned helper)
   std::unique_ptr<SearchManager> m_searchManager;
@@ -268,10 +333,14 @@ private:
   std::unique_ptr<AttractManager> m_attractManager;
 
   ScrollManager *m_scrollManager = nullptr;
-  SidebarManager *m_sidebarManager = nullptr;
+  DetailsPaneManager *m_detailsPaneManager = nullptr;
   SettingsManager *m_settingsManager = nullptr;
   DatabaseManager *m_databaseManager = nullptr;
   NavigationManager *m_navigationManager = nullptr;
+  // PlaylistManager pointer is sourced from the shared ApplicationContext at
+  // setupReferences time; the context-menu code (Kartend-vlm7) is its only
+  // current consumer. Borrowed reference, owned by ApplicationManager.
+  class PlaylistManager *m_playlistManager = nullptr;
   SessionManager *m_sessionManager = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;

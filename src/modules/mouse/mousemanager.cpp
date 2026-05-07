@@ -27,17 +27,17 @@ Q_LOGGING_CATEGORY(lcMouseManager, "kartend.mousemanager")
   } while (0)
 
 // MouseManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(MouseManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(MouseManagerSetup, SelectionManager *, SelectionManager, selectionManager)
-SETUP_GETTER_DEF_SAME(MouseManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(MouseManagerSetup, QWidget *, GridContainer, gridContainer)
-SETUP_GETTER_DEF_SAME(MouseManagerSetup, const QVector<CollectionConfig> *, Collections,
-                      collections)
-SETUP_GETTER_DEF_SAME(MouseManagerSetup, const int *, CurrentCollectionIndex,
-                      currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(MouseManagerSetup, GeneralSettings *, GeneralSettings, generalSettings)
-SETUP_GETTER_DEF_CTX_ONLY(MouseManagerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
+SETUP_GETTER_DEF_MGR_SAME(MouseManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_MGR_SAME(MouseManagerSetup, SelectionManager *, SelectionManager, selectionManager)
+SETUP_GETTER_DEF_UI_SAME(MouseManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_UI_SAME(MouseManagerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_COL_SAME(MouseManagerSetup, const QVector<CollectionConfig> *, Collections,
+                          collections)
+SETUP_GETTER_DEF_COL_SAME(MouseManagerSetup, const int *, CurrentCollectionIndex,
+                          currentCollectionIndex)
+SETUP_GETTER_DEF_COL_SAME(MouseManagerSetup, GeneralSettings *, GeneralSettings, generalSettings)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(MouseManagerSetup, InteractionStateHolder *, InteractionState,
+                              interactionState)
 
 MouseManager::MouseManager(QObject *parent) : QObject(parent) {}
 

@@ -5,6 +5,7 @@
 #include "artworkutils.h"
 #include "databasemanager.h"
 #include "itemwidget.h"
+#include "mainwindow.h"
 #include "uiconstants.h"
 #include "widgetpoolmanager.h"
 
@@ -69,9 +70,11 @@ void ItemWidgetFactory::configureBaseWidget(ItemWidget *widget) {
     widget->setArtworkColumnWidth(m_artworkColumnWidth);
   }
 
-  // Use list-specific font size in list mode, grid font size otherwise
+  // Use list-specific font size in list mode, grid font size otherwise.
+  // Kartend-7eff: layer the runtime text-zoom multiplier on top so item
+  // titles scale alongside menus/dialogs/sidebar.
   int fontSize = isListMode ? m_context.config.listFontSize : m_context.config.fontSize;
-  widget->setFontSize(fontSize);
+  widget->setFontSize(MainWindow::zoomedFontSize(fontSize));
 
   widget->setCornerRadius(m_context.config.cornerRadius);
   widget->setItemDimensions(m_itemWidth, m_itemHeight);
@@ -118,6 +121,8 @@ ItemWidget *ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex)
   // Artwork is searched in the current collection's artwork directory
   if (!subcollectionName.isEmpty() && m_artworkManager) {
     QString artworkDir = m_context.config.artworkDirectory;
+    const QString placeholderArtwork =
+        resolvePlaceholderArtworkForCollection(subcollectionIndex).trimmed();
     if (!artworkDir.isEmpty()) {
       QString artworkPath = ArtworkUtils::findArtworkForFile(subcollectionName, artworkDir);
       if (!artworkPath.isEmpty()) {
@@ -128,6 +133,7 @@ ItemWidget *ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex)
         }
       }
     }
+    applyPlaceholderArtwork(widget, placeholderArtwork);
   }
 
   // Connect double-click signal
@@ -157,12 +163,15 @@ ItemWidget *ItemWidgetFactory::createVirtualFolderWidget(const QString &folderPa
   // Artwork is searched in the current collection's artwork directory
   if (!displayName.isEmpty() && m_artworkManager) {
     QString artworkDir = m_context.config.artworkDirectory;
+    const QString placeholderArtwork =
+        resolvePlaceholderArtworkForCollection(m_context.currentIndex).trimmed();
     if (!artworkDir.isEmpty()) {
       QString artworkPath = ArtworkUtils::findArtworkForFile(displayName, artworkDir);
       if (!artworkPath.isEmpty()) {
         m_artworkManager->addPendingArtwork(widget, artworkPath);
       }
     }
+    applyPlaceholderArtwork(widget, placeholderArtwork);
   }
 
   // Connect double-click signal

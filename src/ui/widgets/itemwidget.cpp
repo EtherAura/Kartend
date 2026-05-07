@@ -40,6 +40,7 @@ QString ItemWidget::s_tileColor;
 QString ItemWidget::s_selectionColor;
 QString ItemWidget::s_listRowColor;
 QString ItemWidget::s_listAltRowColor;
+bool ItemWidget::s_showTitleInPlaceholder = false;
 
 void ItemWidget::setTitleTintSaturation(int saturation) {
   s_titleTintSaturation = qBound(0, saturation, 255);
@@ -75,6 +76,10 @@ void ItemWidget::setListRowColor(const QString &hexColor) {
 
 void ItemWidget::setListAltRowColor(const QString &hexColor) {
   s_listAltRowColor = hexColor;
+}
+
+void ItemWidget::setShowTitleInPlaceholder(bool enabled) {
+  s_showTitleInPlaceholder = enabled;
 }
 
 ItemWidget::ItemWidget(QWidget *parent)
@@ -413,7 +418,9 @@ void ItemWidget::onArtworkChanged() {
     if (width <= 0 || height <= 0) {
       return;
     }
-    imageLabel->setPixmap(buildPlaceholderPattern(width, height));
+    QPixmap placeholder = buildPlaceholderPattern(width, height);
+    drawTitleOnPlaceholder(placeholder);
+    imageLabel->setPixmap(placeholder);
     imageLabel->setStyleSheet(QString());
     return;
   }
@@ -426,8 +433,12 @@ void ItemWidget::onArtworkChanged() {
     return;
   }
 
-  if (storedPixmap.isNull()) {
-    imageLabel->setPixmap(buildPlaceholderPattern(width, height));
+  const QPixmap displayPixmap = storedPixmap.isNull() ? m_placeholderArtworkPixmap : storedPixmap;
+
+  if (displayPixmap.isNull()) {
+    QPixmap placeholder = buildPlaceholderPattern(width, height);
+    drawTitleOnPlaceholder(placeholder);
+    imageLabel->setPixmap(placeholder);
     imageLabel->setStyleSheet(QString());
   } else {
     // Get the screen DPR for the final output
@@ -441,7 +452,7 @@ void ItemWidget::onArtworkChanged() {
     int physicalH = qRound(height * dpr);
 
     // Create a copy of source with DPR=1 so we work in raw physical pixels
-    QPixmap sourceNoDpr = storedPixmap;
+    QPixmap sourceNoDpr = displayPixmap;
     sourceNoDpr.setDevicePixelRatio(1.0);
 
     // Scale to fit within physical target size
@@ -477,6 +488,13 @@ void ItemWidget::onArtworkChanged() {
       maskPainter.end();
 
       resultPixmap = maskedPixmap;
+    }
+
+    // Kartend-cub: user-supplied placeholder image is also "placeholder art" —
+    // overlay the title only when the real artwork is missing (storedPixmap
+    // null), not on actual artwork hits.
+    if (storedPixmap.isNull()) {
+      drawTitleOnPlaceholder(resultPixmap, dpr);
     }
 
     // Set DPR on final result for proper display

@@ -122,27 +122,45 @@ void QueryManager::sortFiles(QStringList &allFilePaths, SortMode mode) {
     return;
   }
 
-  bool descending = (mode == SortMode::NameDescending);
+  const bool descending = (mode == SortMode::NameDescending || mode == SortMode::DateDescending ||
+                           mode == SortMode::SizeDescending);
 
   struct SortEntry {
     QString path;
     QString sortKey;
     int priority = 0;
+    qint64 numericKey = 0;
   };
 
   QVector<SortEntry> entries;
   entries.reserve(allFilePaths.size());
   for (const QString &path : allFilePaths) {
-    const QString baseName = QFileInfo(path).completeBaseName();
+    const QFileInfo info(path);
+    const QString baseName = info.completeBaseName();
     QString sortKey = PathUtils::normalizeDisplayName(baseName);
     if (baseName.startsWith('\'') && baseName.length() > 1 &&
         (baseName[1].isDigit() || baseName[1].isLetter())) {
       sortKey = PathUtils::normalizeDisplayName(baseName.mid(1));
     }
-    entries.append(SortEntry{path, sortKey, getCharacterSortPriority(sortKey)});
+
+    qint64 numericKey = 0;
+    if (mode == SortMode::DateAscending || mode == SortMode::DateDescending) {
+      numericKey = info.exists() ? info.lastModified().toMSecsSinceEpoch() : 0;
+    } else if (mode == SortMode::SizeAscending || mode == SortMode::SizeDescending) {
+      numericKey = info.exists() ? info.size() : 0;
+    }
+
+    entries.append(SortEntry{path, sortKey, getCharacterSortPriority(sortKey), numericKey});
   }
 
   std::ranges::sort(entries, [&](const SortEntry &lhs, const SortEntry &rhs) {
+    if (mode == SortMode::DateAscending || mode == SortMode::DateDescending ||
+        mode == SortMode::SizeAscending || mode == SortMode::SizeDescending) {
+      if (lhs.numericKey != rhs.numericKey) {
+        return descending ? lhs.numericKey > rhs.numericKey : lhs.numericKey < rhs.numericKey;
+      }
+    }
+
     if (lhs.priority != rhs.priority) {
       return descending ? lhs.priority > rhs.priority : lhs.priority < rhs.priority;
     }

@@ -50,7 +50,13 @@ add_executable(test_launchmanager
   test_launchmanager.cpp
   ${SRC_DIR}/modules/launch/launchmanager.cpp
   ${SRC_DIR}/modules/launch/launchmanagerarchive.cpp
+  ${SRC_DIR}/ui/dialogs/launcherchooserdialog.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+)
+target_include_directories(test_launchmanager PRIVATE
+  ${SRC_DIR}/ui/dialogs
 )
 target_link_libraries(test_launchmanager
   Qt6::Core
@@ -69,6 +75,17 @@ target_link_libraries(test_pathutils
   Qt6::Test
 )
 add_test(NAME PathUtils COMMAND test_pathutils)
+
+# VideoUtils tests
+add_executable(test_videoutils
+  test_videoutils.cpp
+  ${SRC_DIR}/utils/videoutils.cpp
+)
+target_link_libraries(test_videoutils
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME VideoUtils COMMAND test_videoutils)
 
 # WidgetPoolManager tests
 add_executable(test_widgetpoolmanager
@@ -92,6 +109,21 @@ target_link_libraries(test_widgetpoolmanager
 )
 add_test(NAME WidgetPoolManager COMMAND test_widgetpoolmanager)
 
+# EmptyStateWidget tests
+add_executable(test_emptystatewidget
+  test_emptystatewidget.cpp
+  ${SRC_DIR}/ui/widgets/emptystatewidget.cpp
+)
+target_include_directories(test_emptystatewidget PRIVATE
+  ${SRC_DIR}/ui/widgets
+)
+target_link_libraries(test_emptystatewidget
+  Qt6::Core
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME EmptyStateWidget COMMAND test_emptystatewidget)
+
 # GridUtils tests
 add_executable(test_gridutils test_gridutils.cpp)
 target_link_libraries(test_gridutils Qt6::Core Qt6::Gui Qt6::Test)
@@ -114,6 +146,24 @@ target_link_libraries(test_cachemanager
   Qt6::Test
 )
 add_test(NAME CacheManager COMMAND test_cachemanager)
+
+# PlaylistManager tests (Kartend-vlm7)
+add_executable(test_playlistmanager
+  test_playlistmanager.cpp
+  ${SRC_DIR}/modules/playlist/playlistmanager.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+)
+target_include_directories(test_playlistmanager PRIVATE
+  ${SRC_DIR}/modules/playlist
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_playlistmanager
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME PlaylistManager COMMAND test_playlistmanager)
 
 # SessionManager tests
 add_executable(test_sessionmanager
@@ -181,6 +231,7 @@ add_executable(test_databasemanager
   ${SRC_DIR}/modules/database/databasemanager.cpp
   ${SRC_DIR}/modules/database/databasemanagerpaths.cpp
   ${SRC_DIR}/modules/database/databasemanagerworker.cpp
+  ${SRC_DIR}/utils/titlefilter.cpp
   ${SRC_DIR}/modules/query/querymanager.cpp
   ${SRC_DIR}/modules/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/query/querymanagerlifecycle.cpp
@@ -198,7 +249,12 @@ add_executable(test_databasemanager
   ${SRC_DIR}/utils/settingsutils.cpp
   ${SRC_DIR}/utils/pathutils.cpp
   ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/extensionutils.cpp
+  ${SRC_DIR}/utils/historystore.cpp
+  ${SRC_DIR}/utils/itemartwork.cpp
+  ${SRC_DIR}/utils/itemmetadata.cpp
   ${SRC_DIR}/utils/loggingcategories.cpp
+  ${SRC_DIR}/utils/usagestatsstore.cpp
 )
 target_include_directories(test_databasemanager PRIVATE
   ${SRC_DIR}/modules/database
@@ -237,6 +293,7 @@ add_executable(test_artworkmanager
   ${SRC_DIR}/utils/artworkutils.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/extensionutils.cpp
+  ${SRC_DIR}/utils/itemartwork.cpp
   ${SRC_DIR}/utils/settingsutils.cpp
   ${SRC_DIR}/utils/pathutils.cpp
   ${SRC_DIR}/utils/timerutils.cpp
@@ -256,6 +313,7 @@ target_link_libraries(test_artworkmanager
   Qt6::Gui
   Qt6::Widgets
   Qt6::Concurrent
+  Qt6::Sql
   Qt6::Test
 )
 add_test(NAME ArtworkManager COMMAND test_artworkmanager)
@@ -264,6 +322,30 @@ add_test(NAME ArtworkManager COMMAND test_artworkmanager)
 add_executable(test_stringutils test_stringutils.cpp)
 target_link_libraries(test_stringutils Qt6::Core Qt6::Test)
 add_test(NAME StringUtils COMMAND test_stringutils)
+
+# CliArgs tests (Kartend-z3w — --collection startup override)
+add_executable(test_cliargs
+  test_cliargs.cpp
+  ${SRC_DIR}/utils/cliargs.cpp
+)
+target_include_directories(test_cliargs PRIVATE ${SRC_DIR}/utils)
+target_link_libraries(test_cliargs Qt6::Core Qt6::Test)
+add_test(NAME CliArgs COMMAND test_cliargs)
+
+# TitleFilter tests (Kartend-5h6 — per-collection regex title cleanup)
+add_executable(test_titlefilter
+  test_titlefilter.cpp
+  ${SRC_DIR}/utils/titlefilter.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
+)
+target_include_directories(test_titlefilter PRIVATE
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_titlefilter Qt6::Core Qt6::Widgets Qt6::Test)
+add_test(NAME TitleFilter COMMAND test_titlefilter)
 
 # CollectionUtils tests (enum conversions, validation, UUID)
 add_executable(test_collectionutils
@@ -327,6 +409,178 @@ target_link_libraries(test_dbmigrations
   Qt6::Test
 )
 add_test(NAME DbMigrations COMMAND test_dbmigrations)
+
+# ItemMetadata storage round-trip tests
+add_executable(test_itemmetadata
+  test_itemmetadata.cpp
+  ${SRC_DIR}/utils/itemmetadata.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+)
+target_include_directories(test_itemmetadata PRIVATE
+  ${SRC_DIR}/utils
+)
+target_link_libraries(test_itemmetadata
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME ItemMetadata COMMAND test_itemmetadata)
+
+# ItemArtwork storage + standard-type resolution tests
+add_executable(test_itemartwork
+  test_itemartwork.cpp
+  ${SRC_DIR}/utils/itemartwork.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/extensionutils.cpp
+)
+target_include_directories(test_itemartwork PRIVATE
+  ${SRC_DIR}/utils
+)
+target_link_libraries(test_itemartwork
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME ItemArtwork COMMAND test_itemartwork)
+
+# UsageStatsStore tests (Kartend-7vi)
+add_executable(test_usagestatsstore
+  test_usagestatsstore.cpp
+  ${SRC_DIR}/utils/usagestatsstore.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+)
+target_include_directories(test_usagestatsstore PRIVATE
+  ${SRC_DIR}/utils
+)
+target_link_libraries(test_usagestatsstore
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME UsageStatsStore COMMAND test_usagestatsstore)
+
+# HistoryStore tests (Kartend-fse)
+add_executable(test_historystore
+  test_historystore.cpp
+  ${SRC_DIR}/utils/historystore.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+)
+target_include_directories(test_historystore PRIVATE
+  ${SRC_DIR}/utils
+)
+target_link_libraries(test_historystore
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME HistoryStore COMMAND test_historystore)
+
+# KartManifest tests (Kartend-y3iy — JSON round-trip for the .kart packaging format)
+add_executable(test_kartmanifest
+  test_kartmanifest.cpp
+  ${SRC_DIR}/modules/kart/kartmanifest.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/itemmetadata.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+)
+target_include_directories(test_kartmanifest PRIVATE
+  ${SRC_DIR}/modules/kart
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_kartmanifest
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME KartManifest COMMAND test_kartmanifest)
+
+# KartReader tests (Kartend-vvvk — read + extract + sha256 verification)
+add_executable(test_kartreader
+  test_kartreader.cpp
+  ${SRC_DIR}/modules/kart/kartcompression.cpp
+  ${SRC_DIR}/modules/kart/kartmanifest.cpp
+  ${SRC_DIR}/modules/kart/kartreader.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/itemmetadata.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+)
+target_include_directories(test_kartreader PRIVATE
+  ${SRC_DIR}/modules/kart
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_kartreader
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Widgets
+  Qt6::Test
+)
+if (TARGET PkgConfig::ZSTD)
+  target_link_libraries(test_kartreader PkgConfig::ZSTD)
+  target_compile_definitions(test_kartreader PRIVATE KARTEND_HAS_ZSTD=1)
+endif()
+add_test(NAME KartReader COMMAND test_kartreader)
+
+# KartWriter tests (Kartend-a1za — export collection + zstd compression)
+add_executable(test_kartwriter
+  test_kartwriter.cpp
+  ${SRC_DIR}/modules/kart/kartcompression.cpp
+  ${SRC_DIR}/modules/kart/kartmanifest.cpp
+  ${SRC_DIR}/modules/kart/kartreader.cpp
+  ${SRC_DIR}/modules/kart/kartwriter.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/itemmetadata.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+)
+target_include_directories(test_kartwriter PRIVATE
+  ${SRC_DIR}/modules/kart
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_kartwriter
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Widgets
+  Qt6::Test
+)
+if (TARGET PkgConfig::ZSTD)
+  target_link_libraries(test_kartwriter PkgConfig::ZSTD)
+  target_compile_definitions(test_kartwriter PRIVATE KARTEND_HAS_ZSTD=1)
+endif()
+add_test(NAME KartWriter COMMAND test_kartwriter)
+
+# KartMerge tests (Kartend-ts9s + Kartend-m2n2 — merge policy + metadata persistence)
+add_executable(test_kartmerge
+  test_kartmerge.cpp
+  ${SRC_DIR}/modules/kart/kartmanifest.cpp
+  ${SRC_DIR}/modules/kart/kartmerge.cpp
+  ${SRC_DIR}/utils/collectionutils.cpp
+  ${SRC_DIR}/utils/itemmetadata.cpp
+  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/settingsutils.cpp
+)
+target_include_directories(test_kartmerge PRIVATE
+  ${SRC_DIR}/modules/kart
+  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_kartmerge
+  Qt6::Core
+  Qt6::Gui
+  Qt6::Widgets
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME KartMerge COMMAND test_kartmerge)
 
 # SearchUtils smoke tests (header-only enum/struct)
 add_executable(test_searchutils test_searchutils.cpp)
@@ -445,3 +699,11 @@ target_link_libraries(test_filterhelpers
   Qt6::Test
 )
 add_test(NAME FilterHelpers COMMAND test_filterhelpers)
+
+# Integration test harness for UI-coordinator managers (Kartend-785).
+# Only built when the kartend_lib OBJECT library is available (i.e. when
+# tests/CMakeLists.txt is added from the top-level CMakeLists.txt rather than
+# configured stand-alone).
+if (TARGET ${KARTEND_LIB_TARGET})
+  add_subdirectory(integration)
+endif()

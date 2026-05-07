@@ -1,0 +1,25 @@
+app-id: io.github.EtherAura.Kartend
+runtime: org.kde.Platform
+runtime-version: '6.8'
+sdk: org.kde.Sdk
+command: kartend
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  - --filesystem=home
+  - --filesystem=/media
+  - --filesystem=/run/media
+modules:
+  - name: kartend
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - -DCMAKE_INSTALL_PREFIX=/app
+      - -DBUILD_TESTS=OFF
+      - -DENABLE_CCACHE=OFF
+      - -DMAINTENANCE=OFF
+    sources:
+      - type: dir
+        path: .

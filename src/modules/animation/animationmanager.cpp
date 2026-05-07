@@ -22,11 +22,11 @@ Q_LOGGING_CATEGORY(lcAnimationManager, "kartend.animationmanager")
   } while (0)
 
 // AnimationManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(AnimationManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(AnimationManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(AnimationManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_CTX_ONLY(AnimationManagerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
+SETUP_GETTER_DEF_UI_SAME(AnimationManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_MGR_SAME(AnimationManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_MGR_SAME(AnimationManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(AnimationManagerSetup, InteractionStateHolder *, InteractionState,
+                              interactionState)
 
 AnimationManager::AnimationManager(QObject *parent) : QObject(parent) {}
 
@@ -420,4 +420,43 @@ void AnimationManager::startWheelScrollAnimation(QScrollBar *vScrollBar, int sta
   connect(m_vScrollAnim, &QPropertyAnimation::finished, this, onFinished);
 
   m_vScrollAnim->start();
+}
+
+void AnimationManager::startWheelScrollAnimationHorizontal(QScrollBar *hScrollBar, int startVal,
+                                                           int endVal,
+                                                           std::function<void()> onFinished) {
+  initHorizontalAnimIfNeeded(hScrollBar);
+
+  // Same chain-from-current-value trick as the vertical version: when wheel
+  // notches stack up faster than the animation completes, blend the next
+  // animation from where this one currently is rather than snapping back.
+  int effectiveStart = startVal;
+  if (m_hScrollAnim->state() == QAbstractAnimation::Running) {
+    effectiveStart = m_hScrollAnim->currentValue().toInt();
+    m_hScrollAnim->stop();
+  }
+
+  m_hScrollAnim->setStartValue(effectiveStart);
+  m_hScrollAnim->setEndValue(endVal);
+
+  int duration = m_generalSettings ? m_generalSettings->scrollAnimationDurationMs
+                                   : UIConstants::Animation::SMOOTH_SCROLL_WHEEL_DURATION_MS;
+  m_hScrollAnim->setDuration(duration);
+  m_hScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
+
+  QObject::disconnect(m_hScrollAnim, nullptr, this, nullptr);
+  connect(m_hScrollAnim, &QPropertyAnimation::valueChanged, this,
+          [this]() { emit requestVirtualViewUpdate(); });
+  connect(m_hScrollAnim, &QPropertyAnimation::finished, this, onFinished);
+  // Always re-fire the canonical horizontal-finished signal so listeners
+  // wired in InteractionManager (glide-animating cleanup, overlay refresh)
+  // still see the end-of-anim event after the user callback runs.
+  connect(m_hScrollAnim, &QPropertyAnimation::finished, this,
+          &AnimationManager::onHScrollAnimationFinished);
+
+  // Mirror the smooth-glide signal so any glide-overlay logic latches the
+  // same way it does for the snap variant.
+  emit requestGlideAnimationStart();
+
+  m_hScrollAnim->start();
 }

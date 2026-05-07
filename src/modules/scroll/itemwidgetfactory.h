@@ -158,6 +158,8 @@ private:
   void resolveMediaItemPaths(const QString &rawFileName, QString &fullPath, QString &displayName,
                              int &collectionIndex);
   void updateCollectionIndexFromDatabase(const QString &fullPath, int &collectionIndex);
+  [[nodiscard]] QString resolvePlaceholderArtworkForCollection(int collectionIndex) const;
+  void applyPlaceholderArtwork(ItemWidget *widget, const QString &placeholderArtwork) const;
 
   WidgetPoolManager *m_widgetPool = nullptr;
   ArtworkManager *m_artworkManager = nullptr;

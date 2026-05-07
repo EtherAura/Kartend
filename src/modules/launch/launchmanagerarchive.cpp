@@ -136,9 +136,25 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
 }
 
 QString LaunchManager::findFileWithExtension(const QString &directory, const QString &extension) {
-  QString normalizedExt = extension.toLower();
-  if (!normalizedExt.startsWith('.')) {
-    normalizedExt = "." + normalizedExt;
+  // Kartend-qp9k: the launch-extension field accepts a comma-separated list
+  // (".cue, .bin, .iso") expressing user preference. Earlier extensions are
+  // preferred — a .cue index file wins over a .bin track when the archive
+  // ships both. We do one directory pass and keep the lowest-priority match
+  // we see, falling back to lower-priority extensions when none of the
+  // earlier ones turn up.
+  QStringList normalizedExts;
+  for (QString ext : extension.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+    ext = ext.trimmed().toLower();
+    if (ext.isEmpty()) {
+      continue;
+    }
+    if (!ext.startsWith(QLatin1Char('.'))) {
+      ext.prepend(QLatin1Char('.'));
+    }
+    normalizedExts.append(ext);
+  }
+  if (normalizedExts.isEmpty()) {
+    return {};
   }
 
   // Resolve the search root once so we can verify that every candidate file
@@ -157,6 +173,8 @@ QString LaunchManager::findFileWithExtension(const QString &directory, const QSt
   QDirIterator it(directory, QDir::Files | QDir::NoSymLinks | QDir::NoDotAndDotDot,
                   QDirIterator::Subdirectories);
 
+  int bestPriority = normalizedExts.size(); // sentinel: nothing matched yet
+  QString bestPath;
   int inspected = 0;
   while (it.hasNext()) {
     const QString filePath = it.next();
@@ -173,7 +191,15 @@ QString LaunchManager::findFileWithExtension(const QString &directory, const QSt
       continue;
     }
 
-    if (!filePath.toLower().endsWith(normalizedExt)) {
+    const QString lowerPath = filePath.toLower();
+    int matchPriority = -1;
+    for (int i = 0; i < bestPriority; ++i) {
+      if (lowerPath.endsWith(normalizedExts[i])) {
+        matchPriority = i;
+        break;
+      }
+    }
+    if (matchPriority < 0) {
       continue;
     }
 
@@ -193,7 +219,12 @@ QString LaunchManager::findFileWithExtension(const QString &directory, const QSt
       continue;
     }
 
-    return canonical;
+    bestPriority = matchPriority;
+    bestPath = canonical;
+    if (bestPriority == 0) {
+      // Top-priority extension matched — no further file can do better.
+      break;
+    }
   }
-  return {};
+  return bestPath;
 }

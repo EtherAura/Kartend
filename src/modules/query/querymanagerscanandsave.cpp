@@ -137,7 +137,7 @@ bool QueryManager::stageFilesystemScan(const CollectionConfig &collection,
       batchesSinceCommit = 0;
     }
 
-    insertScannedItemsBatch(batchPaths, batchTimestamps);
+    insertScannedItemsBatch(batchPaths, batchTimestamps, collection.mediaDirectory);
     itemsStaged += batchPaths.size();
     ++batchesSinceCommit;
 
@@ -372,9 +372,9 @@ bool QueryManager::stageFilesystemScan(const CollectionConfig &collection,
 // ============================================================================
 // Phase 2 – commitStagedScanResults
 // ============================================================================
-bool QueryManager::commitStagedScanResults(const CollectionConfig &collection,
-                                           const QString &uuid, const QString &extSignature,
-                                           const QString &dirSignature, int &itemsApplied) {
+bool QueryManager::commitStagedScanResults(const CollectionConfig &collection, const QString &uuid,
+                                           const QString &extSignature, const QString &dirSignature,
+                                           int &itemsApplied) {
   itemsApplied = 0;
 
   // Throttle progress emissions during the apply phase.

@@ -91,10 +91,13 @@ Result<void> validatePathSecurity(const QString &path) {
         .withDetails("Path was modified by Unicode normalization");
   }
 
-  // Reject shell metacharacters that could enable command injection.
-  // Note: ()[] are allowed as they're common in filenames and safe with
+  // Reject high-risk shell metacharacters that are rarely valid in configured
+  // paths. Ampersands are intentionally allowed: they are common in ROM titles
+  // (for example, "Sonic & Knuckles") and are safe when passed via QProcess
+  // argument lists without shell interpretation.
+  // Note: ()[] are also allowed as they're common in filenames and safe with
   // QProcess which passes arguments directly without shell interpretation.
-  static const QRegularExpression shellMeta(R"([;|&`$<>])");
+  static const QRegularExpression shellMeta(R"([;|`$<>])");
   if (shellMeta.match(normalized).hasMatch()) {
     return ErrorContext::error(ErrorCode::InvalidFilePath, "Path contains shell metacharacters",
                                "PathUtils::validatePathSecurity")

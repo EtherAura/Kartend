@@ -313,8 +313,12 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
     return false;
   }
 
-  // For collection sorting, we need to join with collections table
-  bool needsCollectionJoin =
+  // Some sort modes need columns that are only available on the items table.
+  const bool needsItemsTable =
+      (sortMode == SortMode::DateAscending || sortMode == SortMode::DateDescending ||
+       sortMode == SortMode::SizeAscending || sortMode == SortMode::SizeDescending);
+  // For collection sorting, we need to join with collections table.
+  const bool needsCollectionJoin =
       (sortMode == SortMode::CollectionAscending || sortMode == SortMode::CollectionDescending);
 
   // When filtering, use FTS to match the semantics of fetchItemCount and the
@@ -329,14 +333,15 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   QString sql;
   QString filterClause;
   if (!trimmedFilter.isEmpty() && !useFts) {
-    filterClause = needsCollectionJoin ? " AND i.name LIKE ?" : " AND name LIKE ?";
+    filterClause =
+        (needsCollectionJoin || needsItemsTable) ? " AND i.name LIKE ?" : " AND name LIKE ?";
   }
 
   if (useFts) {
     // FTS-backed select: filter rowids via items_fts MATCH then resolve to
     // items rows for collection joining / dedup. Mirrors the slow path's
     // FTS branch in fetchItemsRange so cache size matches count.
-    if (needsCollectionJoin) {
+    if (needsCollectionJoin || needsItemsTable) {
       if (useTempTable) {
         sql = "SELECT i.path, MIN(i.collection_uuid) as collection_uuid FROM "
               "items i "
@@ -367,7 +372,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
               buildUuidInClause(uuids.size()) + " GROUP BY path";
       }
     }
-  } else if (needsCollectionJoin) {
+  } else if (needsCollectionJoin || needsItemsTable) {
     // Join with collections to get collection name for sorting.
     // Use GROUP BY path to deduplicate paths that appear in multiple
     // collections (e.g., when showAllSubcollectionItems=true).
@@ -411,6 +416,18 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
     switch (sortMode) {
     case SortMode::NameDescending:
       sql += " ORDER BY path COLLATE NOCASE DESC";
+      break;
+    case SortMode::DateDescending:
+      sql += " ORDER BY MAX(i.last_modified) DESC, path COLLATE NOCASE";
+      break;
+    case SortMode::DateAscending:
+      sql += " ORDER BY MIN(i.last_modified) ASC, path COLLATE NOCASE";
+      break;
+    case SortMode::SizeDescending:
+      sql += " ORDER BY MAX(i.file_size) DESC, path COLLATE NOCASE";
+      break;
+    case SortMode::SizeAscending:
+      sql += " ORDER BY MIN(i.file_size) ASC, path COLLATE NOCASE";
       break;
     case SortMode::CollectionAscending:
       sql += " ORDER BY MIN(c.name) COLLATE NOCASE, path COLLATE NOCASE";
@@ -567,4 +584,117 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   }
 
   return true;
+}
+
+// ============================================================================
+// Playlist scope temp table (Kartend-vlm7)
+// ============================================================================
+// Materialises the (uuid, path) pairs for a single playlist into a temp table
+// the existing fetch SQL can join against via EXISTS. We rebuild whenever the
+// cached scope key changes — the key is "playlistId|max(rowid)" so any insert
+// or removal in playlist_items invalidates it without us needing explicit
+// signals from PlaylistManager.
+
+bool QueryManager::ensurePlaylistScopeTempTable() {
+  if (!m_db.isOpen()) {
+    return false;
+  }
+  QSqlQuery q(m_db);
+  if (!q.exec("CREATE TEMP TABLE IF NOT EXISTS query_playlist_scope ("
+              "uuid TEXT NOT NULL, "
+              "path TEXT NOT NULL, "
+              "PRIMARY KEY (uuid, path))")) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to create query_playlist_scope temp table",
+                                               "QueryManager::ensurePlaylistScopeTempTable")
+                             .withDetails(q.lastError().text()));
+    return false;
+  }
+  return true;
+}
+
+bool QueryManager::populatePlaylistScopeTempTable(const QString &playlistId) {
+  if (!m_db.isOpen() || playlistId.isEmpty()) {
+    return false;
+  }
+  if (!ensurePlaylistScopeTempTable()) {
+    return false;
+  }
+
+  QSqlQuery clear(m_db);
+  if (!clear.exec("DELETE FROM query_playlist_scope")) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to clear query_playlist_scope",
+                                               "QueryManager::populatePlaylistScopeTempTable")
+                             .withDetails(clear.lastError().text()));
+    return false;
+  }
+
+  // INSERT OR IGNORE because (uuid, path) is the PK; a malformed playlist_items
+  // table with duplicates wouldn't break the SELECT but would fail the INSERT.
+  QSqlQuery insert(m_db);
+  insert.prepare("INSERT OR IGNORE INTO query_playlist_scope (uuid, path) "
+                 "SELECT source_collection_uuid, source_path FROM playlist_items "
+                 "WHERE playlist_id = ?");
+  insert.addBindValue(playlistId);
+  if (!insert.exec()) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to populate query_playlist_scope",
+                                               "QueryManager::populatePlaylistScopeTempTable")
+                             .withDetails(insert.lastError().text()));
+    return false;
+  }
+  return true;
+}
+
+bool QueryManager::ensurePlaylistScopePopulated(const QString &playlistId) {
+  if (playlistId.isEmpty()) {
+    return false;
+  }
+
+  // Cheap invalidation token: max(rowid) for this playlist's items combined
+  // with the playlist id. Inserts and deletes both move max(rowid), so an
+  // unchanged token guarantees the temp table is still in sync. Empty
+  // playlists yield max(rowid) NULL → token "<id>|0", which is fine.
+  QSqlQuery probe(m_db);
+  probe.prepare("SELECT COALESCE(MAX(rowid), 0) FROM playlist_items WHERE playlist_id = ?");
+  probe.addBindValue(playlistId);
+  if (!probe.exec() || !probe.next()) {
+    return false;
+  }
+  const QString key = playlistId + QStringLiteral("|") + probe.value(0).toString();
+  if (key == m_cachedPlaylistScopeKey) {
+    return true;
+  }
+
+  if (!populatePlaylistScopeTempTable(playlistId)) {
+    return false;
+  }
+  m_cachedPlaylistScopeKey = key;
+  return true;
+}
+
+QStringList QueryManager::loadPlaylistSourceUuids(const QString &playlistId) {
+  QStringList result;
+  if (!m_db.isOpen() || playlistId.isEmpty()) {
+    return result;
+  }
+  QSqlQuery q(m_db);
+  q.prepare("SELECT DISTINCT source_collection_uuid FROM playlist_items "
+            "WHERE playlist_id = ?");
+  q.addBindValue(playlistId);
+  if (!q.exec()) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to load playlist source uuids",
+                                               "QueryManager::loadPlaylistSourceUuids")
+                             .withDetails(q.lastError().text()));
+    return result;
+  }
+  while (q.next()) {
+    const QString uuid = q.value(0).toString();
+    if (!uuid.isEmpty()) {
+      result.append(uuid);
+    }
+  }
+  return result;
 }

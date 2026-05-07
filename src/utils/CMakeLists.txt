@@ -1,16 +1,24 @@
-target_sources(kartend PRIVATE
+target_sources(${KARTEND_LIB_TARGET} PRIVATE
   artworkutils.cpp
+  cliargs.cpp
   collectionutils.cpp
   configvalidation.cpp
   dbmigrations.cpp
   extensionutils.cpp
+  historystore.cpp
+  itemartwork.cpp
+  itemmetadata.cpp
   loggingcategories.cpp
   pathutils.cpp
   settingsutils.cpp
   timerutils.cpp
+  titlefilter.cpp
+  usagestatsstore.cpp
+  videoutils.cpp
   adaptivebatcher.h
   applicationcontext.h
   artworkutils.h
+  cliargs.h
   collectionutils.h
   configvalidation.h
   dbmigrations.h
@@ -18,6 +26,7 @@ target_sources(kartend PRIVATE
   extensionutils.h
   forwarddecl.h
   gridutils.h
+  historystore.h
   loggingcategories.h
   pathutils.h
   propertyutils.h
@@ -27,4 +36,9 @@ target_sources(kartend PRIVATE
   stateutils.h
   stringutils.h
   timerutils.h
+  titlefilter.h
+  videoutils.h
+  itemartwork.h
+  itemmetadata.h
+  usagestatsstore.h
 )

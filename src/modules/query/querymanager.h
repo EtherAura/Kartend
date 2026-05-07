@@ -182,9 +182,9 @@ private:
   [[nodiscard]] bool ensureCollectionScanned(int collectionIndex,
                                              const CollectionConfig &collection);
   [[nodiscard]] bool scanAndSaveItemsToDatabase(int collectionIndex,
-                                                 const CollectionConfig &collection,
-                                                 int *outItemsScanned = nullptr,
-                                                 int *outItemsApplied = nullptr);
+                                                const CollectionConfig &collection,
+                                                int *outItemsScanned = nullptr,
+                                                int *outItemsApplied = nullptr);
 
   // Phase 1: Walk the filesystem (flat or recursive) and stream discovered
   // files into the scanned_items temp table. Returns the number of files
@@ -222,7 +222,8 @@ private:
   [[nodiscard]] bool ensureScannedItemsTempTable();
   void clearScannedItemsTempTable();
   void insertScannedItemsBatch(const QStringList &paths,
-                               const QHash<QString, QDateTime> &timestamps);
+                               const QHash<QString, QDateTime> &timestamps,
+                               const QString &mediaRoot);
   [[nodiscard]] bool applyScannedItemsToDatabase(int legacyId, const QString &collectionUuid);
   [[nodiscard]] bool deleteMissingItemsByUuidUsingScannedItems(const QString &collectionUuid);
 
@@ -242,6 +243,21 @@ private:
   QByteArray m_cachedQueryUuidsHash;
   [[nodiscard]] static QByteArray computeUuidListHash(const QStringList &uuids);
   [[nodiscard]] bool ensureQueryUuidsPopulated(const QStringList &uuids);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Playlist scope temp table (Kartend-vlm7)
+  // ───────────────────────────────────────────────────────────────────────────
+  // For playlist-backed virtual collections, the fetch SQL needs to constrain
+  // to the exact (collection_uuid, path) pairs stored in playlist_items —
+  // this is layered on top of the existing collection_uuid filter via an
+  // EXISTS clause. The temp table is repopulated when the playlist id changes
+  // or the playlist's contents are mutated (m_cachedPlaylistScopeKey is the
+  // invalidation token: hash of playlistId + max(rowid) of its items).
+  [[nodiscard]] bool ensurePlaylistScopeTempTable();
+  [[nodiscard]] bool populatePlaylistScopeTempTable(const QString &playlistId);
+  [[nodiscard]] bool ensurePlaylistScopePopulated(const QString &playlistId);
+  [[nodiscard]] QStringList loadPlaylistSourceUuids(const QString &playlistId);
+  QString m_cachedPlaylistScopeKey;
 
   // ───────────────────────────────────────────────────────────────────────────
   // Precomputed sorted order for O(1) range lookups on large collections

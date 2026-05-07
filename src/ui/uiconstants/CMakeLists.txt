@@ -1,4 +1,4 @@
-target_sources(kartend PRIVATE
+target_sources(${KARTEND_LIB_TARGET} PRIVATE
   animation.h
   artwork.h
   cache.h
@@ -23,7 +23,7 @@ target_sources(kartend PRIVATE
   scroll.h
   search.h
   selection.h
-  sidebar.h
+  detailspane.h
   timing.h
   viewport.h
   widget.h

@@ -1,4 +1,4 @@
-target_sources(kartend PRIVATE
+target_sources(${KARTEND_LIB_TARGET} PRIVATE
   arrowkeyscrollhelper.cpp
   datasourcemanager.cpp
   gridlayoutcalculator.cpp
@@ -9,6 +9,7 @@ target_sources(kartend PRIVATE
   scrolleventhandler.cpp
   scrollhelpers.cpp
   scrollmanager.cpp
+  scrollmanagercoverflow.cpp
   scrollmanagerdata.cpp
   scrollmanagerevents.cpp
   scrollmanagerfilter.cpp
@@ -19,6 +20,7 @@ target_sources(kartend PRIVATE
   selectioncoordinator.cpp
   selectiondisplaymanager.cpp
   virtualcontainermanager.cpp
+  virtualscrollengine.cpp
   arrowkeyscrollhelper.h
   datasourcemanager.h
   gridlayoutcalculator.h
@@ -31,4 +33,5 @@ target_sources(kartend PRIVATE
   selectiondisplaymanager.h
   selectionstatetracker.h
   virtualcontainermanager.h
+  virtualscrollengine.h
 )

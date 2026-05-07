@@ -1,5 +1,4 @@
-target_sources(kartend PRIVATE
-  main.cpp
+target_sources(${KARTEND_LIB_TARGET} PRIVATE
   mainwindow.cpp
   mainwindowsetup.cpp
   mainwindowtimers.cpp

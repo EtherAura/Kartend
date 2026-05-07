@@ -1,17 +1,40 @@
-target_sources(kartend PRIVATE
+target_sources(${KARTEND_LIB_TARGET} PRIVATE
+  applysettingsdialog.cpp
+  collectionpickerdialog.cpp
+  collectiontreewidget.cpp
+  customfieldsdialog.cpp
   errordialog.cpp
+  itemartworklinksdialog.cpp
+  kartmergedialog.cpp
+  kartprogressdialog.cpp
+  launcherchooserdialog.cpp
+  launchereditordialog.cpp
   settingsdialog.cpp
   settingsdialogbrowse.cpp
   settingsdialogchecks.cpp
   settingsdialogform.cpp
   settingsdialoggamepad.cpp
   settingsdialoggeneral.cpp
+  settingsdialoglaunchers.cpp
+  settingsdialoglinks.cpp
+  settingsdialogpresets.cpp
   settingsdialogremove.cpp
   settingsdialogsetup.cpp
   settingsdialogtree.cpp
   shortcutsdialog.cpp
+  statisticsdialog.cpp
+  applysettingsdialog.h
+  collectionpickerdialog.h
+  collectiontreewidget.h
+  customfieldsdialog.h
   errordialog.h
+  itemartworklinksdialog.h
+  kartmergedialog.h
+  kartprogressdialog.h
+  launcherchooserdialog.h
+  launchereditordialog.h
   settingsdialog.h
   shortcutsdialog.h
+  statisticsdialog.h
   settingsdialog.ui
 )

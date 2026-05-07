@@ -77,6 +77,43 @@
             <number>10</number>
            </property>
            <item>
+            <widget class="QToolButton" name="hamburgerMenuButton">
+             <property name="minimumSize">
+              <size>
+               <width>34</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>40</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Menu</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="popupMode">
+              <enum>QToolButton::InstantPopup</enum>
+             </property>
+             <property name="toolButtonStyle">
+              <enum>Qt::ToolButtonIconOnly</enum>
+             </property>
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QToolButton::menu-indicator { image: none; width: 0; }</string>
+             </property>
+             <property name="visible">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QLabel" name="itemsTitleLabel">
              <property name="font">
               <font>
@@ -141,85 +178,50 @@
              <property name="alignment">
               <set>Qt::AlignRight|Qt::AlignVCenter</set>
              </property>
+             <property name="styleSheet">
+              <string notr="true">QLabel { color: palette(placeholder-text); }</string>
+             </property>
              <property name="visible">
               <bool>false</bool>
              </property>
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="gridViewButton">
-             <property name="maximumSize">
-              <size>
-               <width>30</width>
-               <height>30</height>
-              </size>
-             </property>
-             <property name="toolTip">
-              <string>Grid View</string>
-             </property>
-             <property name="text">
-              <string>⊞</string>
-             </property>
-             <property name="flat">
-              <bool>true</bool>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="focusPolicy">
-              <enum>Qt::NoFocus</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="listViewButton">
-             <property name="maximumSize">
-              <size>
-               <width>30</width>
-               <height>30</height>
-              </size>
-             </property>
-             <property name="toolTip">
-              <string>List View</string>
-             </property>
-             <property name="text">
-              <string>☰</string>
-             </property>
-             <property name="flat">
-              <bool>true</bool>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-             <property name="focusPolicy">
-              <enum>Qt::NoFocus</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QFrame" name="viewSearchSeparator">
+            <widget class="QToolButton" name="viewModeButton">
              <property name="minimumSize">
               <size>
-               <width>1</width>
-               <height>20</height>
+               <width>34</width>
+               <height>30</height>
               </size>
              </property>
              <property name="maximumSize">
               <size>
-               <width>1</width>
-               <height>20</height>
+               <width>40</width>
+               <height>30</height>
               </size>
              </property>
-             <property name="frameShape">
-              <enum>QFrame::VLine</enum>
+             <property name="toolTip">
+              <string>Layout</string>
              </property>
-             <property name="frameShadow">
-              <enum>QFrame::Sunken</enum>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="popupMode">
+              <enum>QToolButton::InstantPopup</enum>
+             </property>
+             <property name="toolButtonStyle">
+              <enum>Qt::ToolButtonIconOnly</enum>
+             </property>
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QToolButton::menu-indicator { image: none; width: 0; }</string>
              </property>
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="searchModeButton">
+            <widget class="QPushButton" name="detailPageButton">
              <property name="maximumSize">
               <size>
                <width>30</width>
@@ -227,16 +229,87 @@
               </size>
              </property>
              <property name="toolTip">
-              <string>Search: Current collection only</string>
+              <string>Show item details for the current selection (Kartend-uve)</string>
              </property>
              <property name="text">
-              <string></string>
+              <string>ℹ</string>
              </property>
              <property name="flat">
               <bool>true</bool>
              </property>
              <property name="focusPolicy">
               <enum>Qt::NoFocus</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="filterButton">
+             <property name="minimumSize">
+              <size>
+               <width>34</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>40</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Filter</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="popupMode">
+              <enum>QToolButton::InstantPopup</enum>
+             </property>
+             <property name="toolButtonStyle">
+              <enum>Qt::ToolButtonIconOnly</enum>
+             </property>
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QToolButton::menu-indicator { image: none; width: 0; }</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="previewVolumeSlider">
+             <property name="minimumSize">
+              <size>
+               <width>80</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>110</width>
+               <height>22</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Preview video volume (Kartend-3m01)</string>
+             </property>
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>100</number>
+             </property>
+             <property name="value">
+              <number>100</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QSlider::groove:horizontal { height: 3px; background: palette(mid); border-radius: 1px; } QSlider::sub-page:horizontal { background: palette(highlight); border-radius: 1px; } QSlider::handle:horizontal { background: palette(button-text); width: 8px; height: 10px; margin: -4px 0; border-radius: 4px; }</string>
              </property>
             </widget>
            </item>
@@ -244,7 +317,7 @@
             <widget class="QLineEdit" name="searchBar">
              <property name="maximumSize">
               <size>
-               <width>250</width>
+               <width>270</width>
                <height>16777215</height>
               </size>
              </property>
@@ -335,16 +408,7 @@
                 </widget>
                </item>
                <item>
-                <widget class="QLabel" name="loadingLabel">
-                 <property name="alignment">
-                  <set>Qt::AlignCenter</set>
-                 </property>
-                 <property name="styleSheet">
-                  <string>QLabel { color: palette(text); font-size: 14px; }</string>
-                 </property>
-                 <property name="text">
-                  <string>Loading...</string>
-                 </property>
+                <widget class="EmptyStateWidget" name="loadingLabel">
                  <property name="visible">
                   <bool>false</bool>
                  </property>
@@ -355,7 +419,7 @@
             </widget>
            </item>
            <item>
-            <widget class="MetadataSidebar" name="metadataSidebarWidget">
+            <widget class="DetailsPane" name="detailsPaneWidget">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Fixed" vsizetype="Expanding">
                <horstretch>0</horstretch>
@@ -398,8 +462,22 @@
     <property name="title">
      <string>&amp;File</string>
     </property>
+    <widget class="QMenu" name="menuRecent">
+     <property name="title">
+      <string>&amp;Recent</string>
+     </property>
+    </widget>
+    <widget class="QMenu" name="menuMostLaunched">
+     <property name="title">
+      <string>&amp;Most Launched</string>
+     </property>
+    </widget>
     <addaction name="actionSoftRefresh"/>
     <addaction name="actionRefresh"/>
+    <addaction name="separator"/>
+    <addaction name="menuRecent"/>
+    <addaction name="menuMostLaunched"/>
+    <addaction name="actionOpenRandomItem"/>
     <addaction name="separator"/>
     <addaction name="actionExit"/>
    </widget>
@@ -407,9 +485,20 @@
     <property name="title">
      <string>&amp;View</string>
     </property>
+    <widget class="QMenu" name="menuLayout">
+     <property name="title">
+      <string>&amp;Layout</string>
+     </property>
+     <addaction name="actionLayoutGrid"/>
+     <addaction name="actionLayoutList"/>
+     <addaction name="actionLayoutCoverFlow"/>
+     <addaction name="actionLayoutHorizontal"/>
+    </widget>
     <addaction name="actionShowMenuBar"/>
     <addaction name="actionShowToolbar"/>
     <addaction name="actionShowSidebar"/>
+    <addaction name="separator"/>
+    <addaction name="menuLayout"/>
    </widget>
    <widget class="QMenu" name="menuSort">
     <property name="title">
@@ -417,6 +506,12 @@
     </property>
     <addaction name="actionSortNameAsc"/>
     <addaction name="actionSortNameDesc"/>
+    <addaction name="separator"/>
+    <addaction name="actionSortDateDesc"/>
+    <addaction name="actionSortDateAsc"/>
+    <addaction name="separator"/>
+    <addaction name="actionSortSizeDesc"/>
+    <addaction name="actionSortSizeAsc"/>
     <addaction name="separator"/>
     <addaction name="actionSortRandom"/>
     <addaction name="separator"/>
@@ -451,7 +546,7 @@
   </action>
   <action name="actionShowSidebar">
    <property name="text">
-    <string>Show Sidebar</string>
+    <string>Show Details Pane</string>
    </property>
    <property name="checkable">
     <bool>true</bool>
@@ -549,6 +644,38 @@
     <bool>true</bool>
    </property>
   </action>
+  <action name="actionSortDateDesc">
+   <property name="text">
+    <string>Date (Newest First)</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionSortDateAsc">
+   <property name="text">
+    <string>Date (Oldest First)</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionSortSizeDesc">
+   <property name="text">
+    <string>Size (Largest First)</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionSortSizeAsc">
+   <property name="text">
+    <string>Size (Smallest First)</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+  </action>
     <action name="actionSortSubfolders">
    <property name="checkable">
     <bool>true</bool>
@@ -560,13 +687,73 @@
     <string>Exclude subcollections and virtual folders from sorting (keep at top)</string>
    </property>
   </action>
+  <action name="actionOpenRandomItem">
+   <property name="text">
+    <string>Open &amp;Random Item</string>
+   </property>
+   <property name="toolTip">
+    <string>Pick a random media item from the current collection and launch it.</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+R</string>
+   </property>
+  </action>
+  <action name="actionLayoutGrid">
+   <property name="text">
+    <string>&amp;Grid</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+1</string>
+   </property>
+  </action>
+  <action name="actionLayoutList">
+   <property name="text">
+    <string>&amp;List</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+2</string>
+   </property>
+  </action>
+  <action name="actionLayoutCoverFlow">
+   <property name="text">
+    <string>&amp;Cover Flow</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+3</string>
+   </property>
+  </action>
+  <action name="actionLayoutHorizontal">
+   <property name="text">
+    <string>&amp;Horizontal</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+4</string>
+   </property>
+  </action>
  </widget>
 
  <customwidgets>
   <customwidget>
-   <class>MetadataSidebar</class>
+   <class>DetailsPane</class>
    <extends>QWidget</extends>
-   <header>metadatasidebar.h</header>
+   <header>detailspane.h</header>
+  </customwidget>
+  <customwidget>
+   <class>EmptyStateWidget</class>
+   <extends>QWidget</extends>
+   <header>emptystatewidget.h</header>
   </customwidget>
  </customwidgets>
 

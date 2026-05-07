@@ -1,9 +1,11 @@
-// Launches media items with configured emulators, handling RetroArch cores and
+// Launches media items with configured launchers, handling libretro cores and
 // parameters.
 #include "launchmanager.h"
 #include "applicationcontext.h"
+#include "collectionutils.h"
 #include "configvalidation.h"
 #include "errorutils.h"
+#include "launcherchooserdialog.h"
 #include "pathutils.h"
 #include "setuputils.h"
 #include "uiconstants.h"
@@ -29,12 +31,44 @@ Q_LOGGING_CATEGORY(lcLaunchManager, "kartend.launchmanager")
     }                                                                                              \
   } while (0)
 
-SETUP_GETTER_DEF_SAME(LaunchManagerSetup, QList<CollectionConfig> *, Collections, collections)
+SETUP_GETTER_DEF_COL_SAME(LaunchManagerSetup, QList<CollectionConfig> *, Collections, collections)
 
 LaunchManager::LaunchManager(QObject *parent) : QObject(parent) {}
 
 void LaunchManager::setupReferences(const LaunchManagerSetup &setup) {
+  m_ctx = setup.ctx;
   m_collections = setup.getCollections();
+  if (m_ctx) {
+    m_generalSettings = m_ctx->collection.generalSettings;
+  }
+  m_onLaunched = setup.onLaunched;
+  m_onPlaySessionEnded = setup.onPlaySessionEnded;
+  m_resolveLauncherOverride = setup.resolveLauncherOverride;
+}
+
+bool LaunchManager::runtimeDetectionEnabled() const {
+  return m_generalSettings && m_generalSettings->runtimeDetectionEnabled;
+}
+
+QString LaunchManager::resolveCollectionUuid(int collectionIndex) const {
+  if (!m_collections || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
+    return {};
+  }
+  const CollectionConfig &collection = (*m_collections)[collectionIndex];
+  // Mirrors how DetailsPaneManager keys per-item rows: name + expanded media dir.
+  // Uses the same helper so UUIDs stay consistent across reads/writes.
+  const QString expandedMediaDir =
+      PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
+  return CollectionUtils::computeCollectionUuid(collection.name, expandedMediaDir);
+}
+
+void LaunchManager::recordSuccessfulLaunch(const QString &filePath, const QString &collectionUuid) {
+  if (collectionUuid.isEmpty() || filePath.isEmpty()) {
+    return;
+  }
+  if (m_onLaunched) {
+    m_onLaunched(collectionUuid, filePath);
+  }
 }
 
 bool LaunchManager::canLaunch(const QString &filePath) const {
@@ -53,22 +87,23 @@ using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 using ErrorUtils::Result;
 
-auto LaunchManager::buildLaunchCommand(const CollectionConfig &collection, const QString &filePath)
+auto LaunchManager::buildLaunchCommand(const LauncherConfig &launcher,
+                                       const QString &collectionName, const QString &filePath)
     -> ErrorUtils::Result<LaunchCommand> {
   auto expandOnly = [&](const QString &text) -> QString {
     QString out = text;
-    out.replace("%collection%", collection.name, Qt::CaseInsensitive);
+    out.replace("%collection%", collectionName, Qt::CaseInsensitive);
     return out.trimmed();
   };
 
-  const QString expandedLauncherPath = expandOnly(collection.launcherPath);
-  const QString expandedCorePath = expandOnly(collection.corePath);
-  const QString expandedLaunchParameters = expandOnly(collection.launchParameters);
+  const QString expandedLauncherPath = expandOnly(launcher.launcherPath);
+  const QString expandedCorePath = expandOnly(launcher.corePath);
+  const QString expandedLaunchParameters = expandOnly(launcher.launchParameters);
 
   if (expandedLauncherPath.isEmpty()) {
     return ErrorContext::error(ErrorCode::InvalidArgument, "No launcher configured",
                                "LaunchManager::buildLaunchCommand")
-        .withDetails(QString("Collection '%1'").arg(collection.name));
+        .withDetails(QString("Collection '%1'").arg(collectionName));
   }
 
   // Validate media file path for security.
@@ -81,12 +116,11 @@ auto LaunchManager::buildLaunchCommand(const CollectionConfig &collection, const
   LaunchCommand cmd;
   cmd.program = expandedLauncherPath;
 
-  const bool isRetroArch = expandedLauncherPath.contains("retroarch", Qt::CaseInsensitive);
-  if (isRetroArch) {
+  if (LauncherUtils::usesLibretroCore(expandedLauncherPath)) {
     if (expandedCorePath.isEmpty()) {
-      return ErrorContext::error(ErrorCode::InvalidArgument, "No RetroArch core configured",
+      return ErrorContext::error(ErrorCode::InvalidArgument, "No libretro core configured",
                                  "LaunchManager::buildLaunchCommand")
-          .withDetails(QString("Collection '%1'").arg(collection.name));
+          .withDetails(QString("Collection '%1'").arg(collectionName));
     }
 
     // Core path should be a file path, not a flag.
@@ -105,7 +139,7 @@ auto LaunchManager::buildLaunchCommand(const CollectionConfig &collection, const
     return cmd;
   }
 
-  // Non-RetroArch: parse optional launch parameters string.
+  // Plain launcher: parse optional launch parameters string.
   if (!expandedLaunchParameters.isEmpty()) {
     auto parseResult = parseParameters(expandedLaunchParameters);
     if (parseResult.isError()) {
@@ -212,13 +246,71 @@ auto LaunchManager::validateLauncherPath(const QString &path) -> Result<QString>
   return canonicalPath;
 }
 
-void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
+void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int launcherIndex) {
   if ((!m_collections) || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
     QMessageBox::warning(nullptr, "Invalid Collection", "Invalid collection specified.");
     return;
   }
 
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
+
+  // Kartend-bdl: pick which launcher to use. When the caller forced an index
+  // (>= 0) we honour it; otherwise prompt the user when there are multiple
+  // launchers and fall through to the default for single-launcher collections.
+  int resolvedLauncherIndex = launcherIndex;
+  // Kartend-dnx4: per-item override silently bypasses the chooser. Only consult
+  // when the caller hasn't already forced a pick — a UI-driven explicit launch
+  // (e.g. context-menu "Launch with…") wins over the persisted override.
+  //
+  // Kartend-xbwa: playlist launches end up here too. The InteractionManager
+  // launch surfaces (Enter, double-click, context menu "Launch") all resolve
+  // `collectionIndex` to the *source* collection via
+  // DatabaseManager::getCollectionIndexForFile(filePath), so by the time we
+  // get here the chooser/override path is already keyed off the source — not
+  // the playlist's synthetic CollectionConfig (which has launcherCount() == 1
+  // and an empty mediaDirectory). No playlist-specific branch needed.
+  if (resolvedLauncherIndex < 0 && m_resolveLauncherOverride) {
+    const QString uuid = resolveCollectionUuid(collectionIndex);
+    if (!uuid.isEmpty()) {
+      const int overrideIndex = m_resolveLauncherOverride(uuid, filePath);
+      if (overrideIndex >= 0 && overrideIndex < collection.launcherCount()) {
+        resolvedLauncherIndex = overrideIndex;
+      }
+    }
+  }
+  if (resolvedLauncherIndex < 0) {
+    if (collection.launcherCount() > 1) {
+      QStringList launcherNames;
+      launcherNames.reserve(collection.launcherCount());
+      for (int i = 0; i < collection.launcherCount(); ++i) {
+        // Kartend-p1jd: resolve preset references so the chooser shows the
+        // preset's current name instead of a stale inline copy.
+        const LauncherConfig effective = LauncherUtils::resolvePreset(
+            collection.launcherAt(i),
+            m_generalSettings ? m_generalSettings->launcherPresets : QList<LauncherPreset>{});
+        launcherNames << (effective.name.trimmed().isEmpty() ? collection.launcherDisplayName(i)
+                                                             : effective.name.trimmed());
+      }
+      const int chosen = LauncherChooserDialog::choose(
+          nullptr, collection.name, launcherNames,
+          std::clamp(collection.defaultLauncherIndex, 0, collection.launcherCount() - 1));
+      if (chosen < 0) {
+        return; // User cancelled.
+      }
+      resolvedLauncherIndex = chosen;
+    } else {
+      resolvedLauncherIndex = 0;
+    }
+  }
+  if (resolvedLauncherIndex < 0 || resolvedLauncherIndex >= collection.launcherCount()) {
+    resolvedLauncherIndex = 0;
+  }
+  // Kartend-p1jd: resolve preset references at launch time. When the
+  // entry's presetId names a registered preset, its fields override the
+  // inline ones; otherwise the inline fields are used as-is.
+  const LauncherConfig launcher = LauncherUtils::resolvePreset(
+      collection.launcherAt(resolvedLauncherIndex),
+      m_generalSettings ? m_generalSettings->launcherPresets : QList<LauncherPreset>{});
 
   // Determine the actual file to launch (may be extracted from archive)
   QString launchFilePath = filePath;
@@ -240,7 +332,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
     qCDebug(lcLaunchManager) << "Launching extracted file:" << launchFilePath;
   }
 
-  auto commandResult = buildLaunchCommand(collection, launchFilePath);
+  auto commandResult = buildLaunchCommand(launcher, collection.name, launchFilePath);
   if (commandResult.isError()) {
     ErrorUtils::logError(commandResult.error());
     const QString msg = commandResult.error().message;
@@ -282,6 +374,27 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
     return;
   }
 
+  // Resolve UUID once: both the detached and tracked paths route stats
+  // updates through the same key. Empty UUID skips tracking silently — the
+  // launch itself still proceeds.
+  const QString collectionUuid = resolveCollectionUuid(collectionIndex);
+
+  // Kartend-qxv: when runtime detection is enabled, route through a tracked
+  // QProcess so we can emit started/finished signals and let the UI sleep
+  // behind a "Now Playing" overlay. Otherwise fall back to the historical
+  // detached launch which leaves Kartend ignorant of the child lifetime.
+  if (runtimeDetectionEnabled()) {
+    if (launchTracked(launcherPath, cmd, launchFilePath, collectionUuid)) {
+      // Kartend-7vi: increment play_count + last_played as soon as the
+      // tracked child has been spawned. Session duration is recorded
+      // separately when runtimeFinished fires.
+      recordSuccessfulLaunch(filePath, collectionUuid);
+      return;
+    }
+    // launchTracked already showed a message box on failure to start.
+    return;
+  }
+
   bool success = QProcess::startDetached(launcherPath, cmd.arguments);
 
   if (!success) {
@@ -292,7 +405,90 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex) {
                            .arg(cmd.arguments.join(" "));
 
     QMessageBox::critical(nullptr, "Launch Error", errorMsg);
+    return;
   }
+
+  // Kartend-7vi: detached launches can't measure session duration (we don't
+  // own the child PID), but we still record the launch event. Time-played
+  // remains zero until the user enables runtime detection.
+  recordSuccessfulLaunch(filePath, collectionUuid);
+}
+
+bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchCommand &cmd,
+                                  const QString &filePath, const QString &collectionUuid) {
+  // Only one tracked child at a time; reject overlapping launches so the
+  // overlay state stays coherent.
+  if (m_trackedChild) {
+    QMessageBox::information(
+        nullptr, "Already Running",
+        QString("Another tracked item is currently running:\n%1").arg(m_trackedFilePath));
+    return false;
+  }
+
+  auto *child = new QProcess(this);
+  m_trackedChild = child;
+  m_trackedFilePath = filePath;
+  m_trackedCollectionUuid = collectionUuid;
+  m_trackedStartTime = QDateTime();
+
+  // Detach the child from Kartend's stdio so a busy launcher doesn't fill
+  // our pipes (and to avoid blocking on closed channels at exit).
+  child->setProcessChannelMode(QProcess::ForwardedChannels);
+  child->setInputChannelMode(QProcess::ForwardedInputChannel);
+
+  const QString displayName = QFileInfo(filePath).completeBaseName();
+
+  connect(child, &QProcess::started, this, [this, filePath, displayName]() {
+    // Capture the start moment here rather than at child->start() so the
+    // recorded duration reflects actual run time (not queueing delay).
+    m_trackedStartTime = QDateTime::currentDateTimeUtc();
+    emit runtimeStarted(filePath, displayName);
+  });
+
+  // QProcess emits exactly one of finished() or errorOccurred()-with-FailedToStart
+  // before the object is safe to delete. Funnel both through a single cleanup
+  // lambda so the UI always sees a balanced started/finished pair.
+  auto cleanup = [this, child, filePath]() {
+    if (m_trackedChild != child) {
+      return; // Already cleaned up.
+    }
+    // Kartend-7vi: record the session duration before clearing the tracked
+    // state. Skip when the child never reached `started` (FailedToStart) —
+    // m_trackedStartTime stays default-constructed in that case.
+    if (m_trackedStartTime.isValid() && !m_trackedCollectionUuid.isEmpty() &&
+        m_onPlaySessionEnded) {
+      const qint64 elapsed = m_trackedStartTime.secsTo(QDateTime::currentDateTimeUtc());
+      if (elapsed > 0) {
+        m_onPlaySessionEnded(m_trackedCollectionUuid, filePath, elapsed);
+      }
+    }
+    m_trackedChild.clear();
+    m_trackedFilePath.clear();
+    m_trackedCollectionUuid.clear();
+    m_trackedStartTime = QDateTime();
+    emit runtimeFinished(filePath);
+    child->deleteLater();
+  };
+
+  connect(child, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+          [cleanup](int /*code*/, QProcess::ExitStatus /*status*/) { cleanup(); });
+
+  connect(child, &QProcess::errorOccurred, this,
+          [this, child, cleanup](QProcess::ProcessError error) {
+            // Only treat FailedToStart as terminal here — finished() will fire
+            // for crashes after start, and we want to keep the overlay up
+            // until the process is actually gone.
+            if (error == QProcess::FailedToStart) {
+              QMessageBox::critical(
+                  nullptr, "Launch Error",
+                  QString("Failed to start tracked launcher:\n%1").arg(child->errorString()));
+              cleanup();
+            }
+          });
+
+  child->start(launcherPath, cmd.arguments);
+  // start() returns void; FailedToStart is reported via errorOccurred.
+  return true;
 }
 
 auto LaunchManager::parseParameters(const QString &paramString) -> ErrorUtils::Result<QStringList> {

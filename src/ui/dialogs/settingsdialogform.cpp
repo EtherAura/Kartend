@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <functional>
 #include <QAbstractItemView>
+#include <QCheckBox>
 #include <QColorDialog>
 #include <QDir>
 #include <QEasingCurve>
@@ -10,6 +11,7 @@
 #include <QFontDialog>
 #include <QGraphicsDropShadowEffect>
 #include <QInputDialog>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QPalette>
 #include <QPixmapCache>
@@ -26,6 +28,7 @@
 #include <QVariant>
 #include <set>
 
+#include "attractmanager.h"
 #include "extensionutils.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
@@ -111,6 +114,12 @@ void SettingsDialog::saveCollectionFromUI(int index) {
   if (!validatePath(collection.artworkDirectory, tr("Artwork Directory"))) {
     return;
   }
+  if (!validatePath(collection.videoDirectory, tr("Video Directory"))) {
+    return;
+  }
+  if (!validatePath(collection.manualDirectory, tr("Manual Directory"))) {
+    return;
+  }
   if (!validatePath(collection.launcherPath, tr("Launcher Path"))) {
     return;
   }
@@ -118,6 +127,12 @@ void SettingsDialog::saveCollectionFromUI(int index) {
     return;
   }
   if (!validatePath(collection.backgroundImage, tr("Background Image"))) {
+    return;
+  }
+  if (!validatePath(collection.backgroundVideo, tr("Background Video"))) {
+    return;
+  }
+  if (!validatePath(collection.headerLogoImage, tr("Header Logo"))) {
     return;
   }
 
@@ -141,8 +156,8 @@ auto SettingsDialog::hasUnsavedChanges() const -> bool {
   }
 
   return checkBasicFieldChanges() || checkExtensionChanges() || checkTreeNameChanges() ||
-         checkParentCollectionChanges() || checkDimensionChanges() || checkColorChanges() ||
-         checkListModeChanges() || checkBackgroundChanges();
+         checkParentCollectionChanges() || checkLinkedParentsChanges() || checkDimensionChanges() ||
+         checkColorChanges() || checkListModeChanges() || checkBackgroundChanges();
 }
 
 void SettingsDialog::updateSaveButtonStyle() {
@@ -210,14 +225,14 @@ void SettingsDialog::updateDeleteButtonState() {
 
 void SettingsDialog::updateUIForLauncherType(const QString &launcherPath) {
   bool hasContentDir = !ui->mediaDirLineEdit->text().trimmed().isEmpty();
-  bool isRetroArch = launcherPath.contains("retroarch", Qt::CaseInsensitive);
-  bool showCore = hasContentDir && isRetroArch;
+  bool usesLibretroCore = LauncherUtils::usesLibretroCore(launcherPath);
+  bool showCore = hasContentDir && usesLibretroCore;
   ui->coreLineEdit->setVisible(showCore);
   ui->browseCoreButton->setVisible(showCore);
   ui->label_core->setVisible(showCore);
-  if (isRetroArch) {
-    ui->coreLineEdit->setToolTip("Path to RetroArch core file (.so/.dll/.dylib)");
-    ui->launchParamsLineEdit->setToolTip("Additional RetroArch parameters");
+  if (usesLibretroCore) {
+    ui->coreLineEdit->setToolTip("Path to libretro core file (.so/.dll/.dylib)");
+    ui->launchParamsLineEdit->setToolTip("Additional libretro frontend parameters");
   } else {
     ui->launchParamsLineEdit->setToolTip("Additional command-line parameters for the launcher");
   }
@@ -247,35 +262,43 @@ void SettingsDialog::updateFieldVisibility() {
   ui->label_artworkDir->setVisible(true);
   ui->artworkDirLineEdit->setVisible(true);
   ui->browseArtworkDirButton->setVisible(true);
+  ui->label_videoDir->setVisible(true);
+  ui->videoDirLineEdit->setVisible(true);
+  ui->browseVideoDirButton->setVisible(true);
+  ui->label_placeholderArtwork->setVisible(true);
+  ui->placeholderArtworkLineEdit->setVisible(true);
+  ui->browsePlaceholderArtworkButton->setVisible(true);
 
   if (hasContentDir) {
     updateUIForLauncherType(ui->launcherLineEdit->text());
-    updateExtractArchivesVisibility();
   } else {
     ui->label_core->setVisible(false);
     ui->coreLineEdit->setVisible(false);
     ui->browseCoreButton->setVisible(false);
-    ui->label_extractArchives->setVisible(false);
-    ui->extractArchivesCheckBox->setVisible(false);
-    ui->label_extractedExtension->setVisible(false);
-    ui->extractedExtensionLineEdit->setVisible(false);
   }
+  // Archive Handling stays visible regardless of content dir / launcher type
+  // so the user can toggle the option freely.
+  updateExtractArchivesVisibility();
 
   ui->label_sidebarMode->setVisible(true);
   ui->sidebarModeComboBox->setVisible(true);
 }
 
 void SettingsDialog::updateExtractArchivesVisibility() {
-  bool isRetroArch = ui->launcherLineEdit->text().contains("retroarch", Qt::CaseInsensitive);
+  // Archive Handling section is always visible — historically gated to
+  // libretro frontends, but the user wants the toggle accessible regardless
+  // of launcher type.
+  ui->label_extractArchives->setVisible(true);
+  ui->extractArchivesCheckBox->setVisible(true);
+
+  // Launch Extension is meaningful only when extraction is enabled.
   bool extractEnabled = ui->extractArchivesCheckBox->isChecked();
+  ui->label_extractedExtension->setVisible(extractEnabled);
+  ui->extractedExtensionLineEdit->setVisible(extractEnabled);
 
-  // Show extract archives option only for RetroArch launchers
-  ui->label_extractArchives->setVisible(isRetroArch);
-  ui->extractArchivesCheckBox->setVisible(isRetroArch);
-
-  // Show extracted extension field only when extraction is enabled
-  ui->label_extractedExtension->setVisible(isRetroArch && extractEnabled);
-  ui->extractedExtensionLineEdit->setVisible(isRetroArch && extractEnabled);
+  if (ui->launcherArchiveGroupBox) {
+    ui->launcherArchiveGroupBox->setVisible(true);
+  }
 }
 
 void SettingsDialog::onExtractArchivesToggled(bool checked) {
@@ -286,6 +309,19 @@ void SettingsDialog::onExtractArchivesToggled(bool checked) {
 void SettingsDialog::updateSidebarModeVisibility() {
   ui->label_sidebarMode->setVisible(true);
   ui->sidebarModeComboBox->setVisible(true);
+
+  // Kartend-u2gx: width-vs-height field visibility tracks the position combo.
+  // Right/Left expose Width; Top/Bottom expose Height. The lock checkbox
+  // governs both directions so it stays visible regardless.
+  if (ui->sidebarPositionComboBox) {
+    const auto pos =
+        static_cast<DetailsPanePosition>(ui->sidebarPositionComboBox->currentIndex());
+    const bool horizontalDock = CollectionUtils::isDetailsPaneHorizontal(pos);
+    if (ui->label_sidebarWidth) ui->label_sidebarWidth->setVisible(!horizontalDock);
+    if (ui->sidebarWidthSpinBox) ui->sidebarWidthSpinBox->setVisible(!horizontalDock);
+    if (ui->label_sidebarHeight) ui->label_sidebarHeight->setVisible(horizontalDock);
+    if (ui->sidebarHeightSpinBox) ui->sidebarHeightSpinBox->setVisible(horizontalDock);
+  }
 }
 
 void SettingsDialog::updateGridWidthLimits() {
@@ -325,6 +361,47 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->selectItemOnHoverCheckBox->blockSignals(true);
     ui->selectItemOnHoverCheckBox->setChecked(m_generalSettings.selectItemOnHover);
     ui->selectItemOnHoverCheckBox->blockSignals(false);
+  }
+  if (ui->showTitleInPlaceholderCheckBox) {
+    ui->showTitleInPlaceholderCheckBox->blockSignals(true);
+    ui->showTitleInPlaceholderCheckBox->setChecked(m_generalSettings.showTitleInPlaceholder);
+    ui->showTitleInPlaceholderCheckBox->blockSignals(false);
+  }
+  if (ui->bootSplashCheckBox) {
+    ui->bootSplashCheckBox->blockSignals(true);
+    ui->bootSplashCheckBox->setChecked(m_generalSettings.bootSplashEnabled);
+    ui->bootSplashCheckBox->blockSignals(false);
+  }
+  // Kartend-y3ke: startup video
+  if (ui->startupVideoEnabledCheckBox) {
+    ui->startupVideoEnabledCheckBox->blockSignals(true);
+    ui->startupVideoEnabledCheckBox->setChecked(m_generalSettings.startupVideoEnabled);
+    ui->startupVideoEnabledCheckBox->blockSignals(false);
+  }
+  if (ui->startupVideoPathLineEdit) {
+    ui->startupVideoPathLineEdit->blockSignals(true);
+    ui->startupVideoPathLineEdit->setText(m_generalSettings.startupVideoPath);
+    ui->startupVideoPathLineEdit->blockSignals(false);
+  }
+  if (ui->resumeFocusSplashCheckBox) {
+    ui->resumeFocusSplashCheckBox->blockSignals(true);
+    ui->resumeFocusSplashCheckBox->setChecked(m_generalSettings.resumeFocusSplashEnabled);
+    ui->resumeFocusSplashCheckBox->blockSignals(false);
+  }
+  if (ui->runtimeDetectionCheckBox) {
+    ui->runtimeDetectionCheckBox->blockSignals(true);
+    ui->runtimeDetectionCheckBox->setChecked(m_generalSettings.runtimeDetectionEnabled);
+    ui->runtimeDetectionCheckBox->blockSignals(false);
+  }
+  if (ui->historyEnabledCheckBox) {
+    ui->historyEnabledCheckBox->blockSignals(true);
+    ui->historyEnabledCheckBox->setChecked(m_generalSettings.historyEnabled);
+    ui->historyEnabledCheckBox->blockSignals(false);
+  }
+  if (ui->historyMaxEntriesSpinBox) {
+    ui->historyMaxEntriesSpinBox->blockSignals(true);
+    ui->historyMaxEntriesSpinBox->setValue(m_generalSettings.historyMaxEntries);
+    ui->historyMaxEntriesSpinBox->blockSignals(false);
   }
   if (ui->pixmapCacheSpinBox) {
     ui->pixmapCacheSpinBox->blockSignals(true);
@@ -391,6 +468,17 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->baseColorEdit->setText(m_generalSettings.titleBaseColor);
     ui->baseColorEdit->blockSignals(false);
   }
+  // Kartend-9v0o: global UI font controls
+  if (ui->globalUiFontFamilyEdit) {
+    ui->globalUiFontFamilyEdit->blockSignals(true);
+    ui->globalUiFontFamilyEdit->setText(m_generalSettings.globalUiFontFamily);
+    ui->globalUiFontFamilyEdit->blockSignals(false);
+  }
+  if (ui->globalUiFontSizeSpinBox) {
+    ui->globalUiFontSizeSpinBox->blockSignals(true);
+    ui->globalUiFontSizeSpinBox->setValue(m_generalSettings.globalUiFontPointSize);
+    ui->globalUiFontSizeSpinBox->blockSignals(false);
+  }
   if (ui->attractModeCheckBox) {
     ui->attractModeCheckBox->blockSignals(true);
     ui->attractModeCheckBox->setChecked(m_generalSettings.attractModeEnabled);
@@ -401,10 +489,33 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->attractIdleTimeoutSpinBox->setValue(m_generalSettings.attractModeIdleTimeoutSec);
     ui->attractIdleTimeoutSpinBox->blockSignals(false);
   }
+  if (ui->attractAutoScrollCheckBox) {
+    ui->attractAutoScrollCheckBox->blockSignals(true);
+    ui->attractAutoScrollCheckBox->setChecked(m_generalSettings.attractModeAutoScrollEnabled);
+    ui->attractAutoScrollCheckBox->blockSignals(false);
+  }
   if (ui->attractScrollSpeedSpinBox) {
     ui->attractScrollSpeedSpinBox->blockSignals(true);
     ui->attractScrollSpeedSpinBox->setValue(m_generalSettings.attractModeScrollSpeed);
     ui->attractScrollSpeedSpinBox->blockSignals(false);
+  }
+  if (ui->attractAdvanceSelectionCheckBox) {
+    ui->attractAdvanceSelectionCheckBox->blockSignals(true);
+    ui->attractAdvanceSelectionCheckBox->setChecked(
+        m_generalSettings.attractModeAdvanceSelectionEnabled);
+    ui->attractAdvanceSelectionCheckBox->blockSignals(false);
+  }
+  if (ui->attractAdvanceIntervalSpinBox) {
+    ui->attractAdvanceIntervalSpinBox->blockSignals(true);
+    ui->attractAdvanceIntervalSpinBox->setValue(
+        m_generalSettings.attractModeAdvanceSelectionIntervalSec);
+    ui->attractAdvanceIntervalSpinBox->blockSignals(false);
+  }
+  if (ui->attractAdvanceRandomCheckBox) {
+    ui->attractAdvanceRandomCheckBox->blockSignals(true);
+    ui->attractAdvanceRandomCheckBox->setChecked(
+        m_generalSettings.attractModeAdvanceSelectionRandom);
+    ui->attractAdvanceRandomCheckBox->blockSignals(false);
   }
   if (ui->startupCollectionComboBox) {
     ui->startupCollectionComboBox->blockSignals(true);
@@ -464,8 +575,69 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->gamepadToggleSidebarButtonLineEdit->blockSignals(false);
   }
 
+  // Kartend-1v6: artwork-cycle modifier dropdown. Populated lazily on first
+  // load so a freshly opened dialog reflects whatever the user picked last
+  // session. Order matches the order users tend to reach for: Shift first,
+  // Meta last (Win/Cmd is the most likely to clash with a global shortcut).
+  if (ui->artworkCycleModifierComboBox) {
+    QSignalBlocker blocker(ui->artworkCycleModifierComboBox);
+    if (ui->artworkCycleModifierComboBox->count() == 0) {
+      ui->artworkCycleModifierComboBox->addItem(tr("Shift"), static_cast<int>(Qt::ShiftModifier));
+      ui->artworkCycleModifierComboBox->addItem(tr("Ctrl"), static_cast<int>(Qt::ControlModifier));
+      ui->artworkCycleModifierComboBox->addItem(tr("Alt"), static_cast<int>(Qt::AltModifier));
+      ui->artworkCycleModifierComboBox->addItem(tr("Meta (Win/Cmd)"),
+                                                static_cast<int>(Qt::MetaModifier));
+    }
+    int comboIdx =
+        ui->artworkCycleModifierComboBox->findData(m_generalSettings.artworkCycleModifier);
+    ui->artworkCycleModifierComboBox->setCurrentIndex(comboIdx >= 0 ? comboIdx : 0);
+  }
+
+  // Kartend-81o: load toolbar customization controls.
+  auto setToolbarCheck = [](QCheckBox *box, bool value) {
+    if (!box) {
+      return;
+    }
+    QSignalBlocker blocker(box);
+    box->setChecked(value);
+  };
+  auto setToolbarText = [](QLineEdit *edit, const QString &value) {
+    if (!edit) {
+      return;
+    }
+    QSignalBlocker blocker(edit);
+    edit->setText(value);
+  };
+  setToolbarCheck(ui->toolbarGridViewVisibleCheckBox, m_generalSettings.toolbarShowGridViewButton);
+  setToolbarCheck(ui->toolbarListViewVisibleCheckBox, m_generalSettings.toolbarShowListViewButton);
+  setToolbarCheck(ui->toolbarCoverFlowViewVisibleCheckBox,
+                  m_generalSettings.toolbarShowCoverFlowViewButton);
+  setToolbarCheck(ui->toolbarHorizontalViewVisibleCheckBox,
+                  m_generalSettings.toolbarShowHorizontalViewButton);
+  setToolbarCheck(ui->toolbarHideSubcollectionsVisibleCheckBox,
+                  m_generalSettings.toolbarShowHideSubcollectionsButton);
+  setToolbarCheck(ui->toolbarTypeFilterVisibleCheckBox, m_generalSettings.toolbarShowTypeFilter);
+  setToolbarCheck(ui->toolbarTitleFilterVisibleCheckBox, m_generalSettings.toolbarShowTitleFilter);
+  setToolbarCheck(ui->toolbarSearchModeVisibleCheckBox,
+                  m_generalSettings.toolbarShowSearchModeButton);
+  setToolbarCheck(ui->toolbarSearchBarVisibleCheckBox, m_generalSettings.toolbarShowSearchBar);
+  setToolbarText(ui->toolbarGridViewTextEdit, m_generalSettings.toolbarGridViewButtonText);
+  setToolbarText(ui->toolbarListViewTextEdit, m_generalSettings.toolbarListViewButtonText);
+  setToolbarText(ui->toolbarCoverFlowViewTextEdit,
+                 m_generalSettings.toolbarCoverFlowViewButtonText);
+  setToolbarText(ui->toolbarHorizontalViewTextEdit,
+                 m_generalSettings.toolbarHorizontalViewButtonText);
+  setToolbarText(ui->toolbarHideSubcollectionsTextEdit,
+                 m_generalSettings.toolbarHideSubcollectionsButtonText);
+  setToolbarText(ui->toolbarTitleFilterTextEdit, m_generalSettings.toolbarTitleFilterText);
+
   // Store original general settings for change detection
   m_originalGeneralSettings = m_generalSettings;
+
+  // Kartend-p1jd: hydrate the launcher-presets list from the loaded general
+  // settings. Done after m_originalGeneralSettings is captured so the change
+  // detector can compare the live presets against the saved baseline.
+  loadLauncherPresetsToUI();
 
   updateGamepadCaptureUi();
 }
@@ -480,8 +652,23 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
       mainWindow->m_generalSettings.wrapNavigation = ui->wrapNavigationCheckBox->isChecked();
     }
     if (ui->selectItemOnHoverCheckBox) {
-      mainWindow->m_generalSettings.selectItemOnHover =
-          ui->selectItemOnHoverCheckBox->isChecked();
+      mainWindow->m_generalSettings.selectItemOnHover = ui->selectItemOnHoverCheckBox->isChecked();
+    }
+    if (ui->bootSplashCheckBox) {
+      mainWindow->m_generalSettings.bootSplashEnabled = ui->bootSplashCheckBox->isChecked();
+    }
+    // Kartend-y3ke: startup video
+    if (ui->startupVideoEnabledCheckBox) {
+      mainWindow->m_generalSettings.startupVideoEnabled =
+          ui->startupVideoEnabledCheckBox->isChecked();
+    }
+    if (ui->startupVideoPathLineEdit) {
+      mainWindow->m_generalSettings.startupVideoPath =
+          ui->startupVideoPathLineEdit->text().trimmed();
+    }
+    if (ui->resumeFocusSplashCheckBox) {
+      mainWindow->m_generalSettings.resumeFocusSplashEnabled =
+          ui->resumeFocusSplashCheckBox->isChecked();
     }
     if (ui->pixmapCacheSpinBox) {
       int newCacheSize = ui->pixmapCacheSpinBox->value();
@@ -528,9 +715,24 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
       mainWindow->m_generalSettings.attractModeIdleTimeoutSec =
           ui->attractIdleTimeoutSpinBox->value();
     }
+    if (ui->attractAutoScrollCheckBox) {
+      mainWindow->m_generalSettings.attractModeAutoScrollEnabled =
+          ui->attractAutoScrollCheckBox->isChecked();
+    }
     if (ui->attractScrollSpeedSpinBox) {
-      mainWindow->m_generalSettings.attractModeScrollSpeed =
-          ui->attractScrollSpeedSpinBox->value();
+      mainWindow->m_generalSettings.attractModeScrollSpeed = ui->attractScrollSpeedSpinBox->value();
+    }
+    if (ui->attractAdvanceSelectionCheckBox) {
+      mainWindow->m_generalSettings.attractModeAdvanceSelectionEnabled =
+          ui->attractAdvanceSelectionCheckBox->isChecked();
+    }
+    if (ui->attractAdvanceIntervalSpinBox) {
+      mainWindow->m_generalSettings.attractModeAdvanceSelectionIntervalSec =
+          ui->attractAdvanceIntervalSpinBox->value();
+    }
+    if (ui->attractAdvanceRandomCheckBox) {
+      mainWindow->m_generalSettings.attractModeAdvanceSelectionRandom =
+          ui->attractAdvanceRandomCheckBox->isChecked();
     }
     if (ui->titleSaturationSpinBox) {
       mainWindow->m_generalSettings.titleTintSaturation = ui->titleSaturationSpinBox->value();
@@ -607,8 +809,103 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
         mainWindow->m_generalSettings.gamepadToggleSidebarButton = v;
       }
     }
+    if (ui->artworkCycleModifierComboBox) {
+      const int rawModifier = ui->artworkCycleModifierComboBox->currentData().toInt();
+      switch (rawModifier) {
+      case static_cast<int>(Qt::ShiftModifier):
+      case static_cast<int>(Qt::ControlModifier):
+      case static_cast<int>(Qt::AltModifier):
+      case static_cast<int>(Qt::MetaModifier):
+        mainWindow->m_generalSettings.artworkCycleModifier = rawModifier;
+        break;
+      default:
+        break; // leave the existing value untouched on a stale combo entry
+      }
+    }
+    // Kartend-p1jd: launcher presets live on the dialog's m_generalSettings
+    // (mutated directly by the Launchers tab) — copy them onto the main
+    // window's settings before persisting so the saved snapshot includes
+    // any preset add/edit/remove the user just performed.
+    mainWindow->m_generalSettings.launcherPresets = m_generalSettings.launcherPresets;
+
+    // Kartend-81o: pull customizable-toolbar fields off the dialog controls.
+    if (ui->toolbarGridViewVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowGridViewButton =
+          ui->toolbarGridViewVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarListViewVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowListViewButton =
+          ui->toolbarListViewVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarCoverFlowViewVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowCoverFlowViewButton =
+          ui->toolbarCoverFlowViewVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarHorizontalViewVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowHorizontalViewButton =
+          ui->toolbarHorizontalViewVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarHideSubcollectionsVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowHideSubcollectionsButton =
+          ui->toolbarHideSubcollectionsVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarTypeFilterVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowTypeFilter =
+          ui->toolbarTypeFilterVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarTitleFilterVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowTitleFilter =
+          ui->toolbarTitleFilterVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarSearchModeVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowSearchModeButton =
+          ui->toolbarSearchModeVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarSearchBarVisibleCheckBox) {
+      mainWindow->m_generalSettings.toolbarShowSearchBar =
+          ui->toolbarSearchBarVisibleCheckBox->isChecked();
+    }
+    if (ui->toolbarGridViewTextEdit) {
+      mainWindow->m_generalSettings.toolbarGridViewButtonText = ui->toolbarGridViewTextEdit->text();
+    }
+    if (ui->toolbarListViewTextEdit) {
+      mainWindow->m_generalSettings.toolbarListViewButtonText = ui->toolbarListViewTextEdit->text();
+    }
+    if (ui->toolbarCoverFlowViewTextEdit) {
+      mainWindow->m_generalSettings.toolbarCoverFlowViewButtonText =
+          ui->toolbarCoverFlowViewTextEdit->text();
+    }
+    if (ui->toolbarHorizontalViewTextEdit) {
+      mainWindow->m_generalSettings.toolbarHorizontalViewButtonText =
+          ui->toolbarHorizontalViewTextEdit->text();
+    }
+    if (ui->toolbarHideSubcollectionsTextEdit) {
+      mainWindow->m_generalSettings.toolbarHideSubcollectionsButtonText =
+          ui->toolbarHideSubcollectionsTextEdit->text();
+    }
+    if (ui->toolbarTitleFilterTextEdit) {
+      mainWindow->m_generalSettings.toolbarTitleFilterText = ui->toolbarTitleFilterTextEdit->text();
+    }
+
     mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
     m_generalSettings = mainWindow->m_generalSettings;
+
+    // Push the new attract-mode tunables (idle timeout, scroll speed, advance-
+    // selection toggle/interval) into AttractManager so a runtime change applies
+    // without restarting attract mode.
+    if (auto *interaction = mainWindow->getInteractionManager()) {
+      if (auto *attract = interaction->attractManager()) {
+        attract->reloadSettings();
+      }
+    }
+    // Refresh the originals so the dirty indicator clears for the presets
+    // tab too. (Other fields' baselines are reset implicitly by the assign
+    // above; this line keeps the comment local to where it matters.)
+    m_originalGeneralSettings = m_generalSettings;
+
+    // Kartend-81o: push the new toolbar config onto the live UI immediately so
+    // the user sees the change without restart or extra clicks.
+    mainWindow->applyToolbarCustomization();
 
     // Refresh all visible widgets to apply text appearance changes immediately
     ScrollManager *scrollManager = mainWindow->getScrollManager();

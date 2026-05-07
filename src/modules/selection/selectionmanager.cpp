@@ -18,7 +18,7 @@
 #include "collectionutils.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "mousemanager.h"
 #include "navigationmanager.h"
 #include "scrolldatamanager.h"
@@ -26,7 +26,7 @@
 #include "selectionhelpers.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
@@ -40,26 +40,31 @@ Q_LOGGING_CATEGORY(lcSelectionManager, "kartend.selectionmanager")
   } while (0)
 
 // SelectionManagerSetup getter definitions
-SETUP_GETTER_DEF_CTX_ONLY(SelectionManagerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, SidebarManager *, SidebarManager, sidebarManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, SessionManager *, SessionManager, sessionManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, SettingsManager *, SettingsManager, settingsManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, NavigationManager *, NavigationManager,
-                      navigationManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, AnimationManager *, AnimationManager, animationManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, ViewportManager *, ViewportManager, viewportManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, MetadataSidebar *, Sidebar, sidebar)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QWidget *, ItemsPage, itemsPage)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QWidget *, GridContainer, gridContainer)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QList<CollectionConfig> *, Collections, collections)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
-                      hierarchyCache)
-SETUP_GETTER_DEF_SAME(SelectionManagerSetup, QLineEdit *, SearchBar, searchBar)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(SelectionManagerSetup, InteractionStateHolder *, InteractionState,
+                              interactionState)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, SessionManager *, SessionManager, sessionManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, SettingsManager *, SettingsManager,
+                          settingsManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, NavigationManager *, NavigationManager,
+                          navigationManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, AnimationManager *, AnimationManager,
+                          animationManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, ViewportManager *, ViewportManager,
+                          viewportManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, DetailsPane *, Sidebar, sidebar)
+SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_COL_SAME(SelectionManagerSetup, QList<CollectionConfig> *, Collections,
+                          collections)
+SETUP_GETTER_DEF_COL_SAME(SelectionManagerSetup, int *, CurrentCollectionIndex,
+                          currentCollectionIndex)
+SETUP_GETTER_DEF_COL_SAME(SelectionManagerSetup, const CollectionHierarchyCache *, HierarchyCache,
+                          hierarchyCache)
+SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QLineEdit *, SearchBar, searchBar)
 
 SelectionManager::SelectionManager(QObject *parent) : QObject(parent) {}
 
@@ -71,7 +76,7 @@ void SelectionManager::setupReferences(const SelectionManagerSetup &setup) {
 
   // Manager dependencies - use getters with ctx fallback
   m_scrollManager = setup.getScrollManager();
-  m_sidebarManager = setup.getSidebarManager();
+  m_detailsPaneManager = setup.getDetailsPaneManager();
   m_sessionManager = setup.getSessionManager();
   m_settingsManager = setup.getSettingsManager();
   m_navigationManager = setup.getNavigationManager();
@@ -92,6 +97,10 @@ void SelectionManager::setupReferences(const SelectionManagerSetup &setup) {
 
 void SelectionManager::setSelectedIndex(int index) {
   m_selectedItemIndex = index;
+}
+
+void SelectionManager::notifySelectionChanged() {
+  emit selectionChanged(m_selectedItemIndex);
 }
 
 void SelectionManager::setSelectedFilePath(const QString &path) {
@@ -181,13 +190,13 @@ void SelectionManager::updateFilePathForSelection(int index,
     }
   }
 
-  if ((m_sidebarManager) && m_sidebarManager->isSidebarVisible()) {
+  if ((m_detailsPaneManager) && m_detailsPaneManager->isSidebarVisible()) {
     ItemWidget *safeWidget = nullptr;
     if (m_scrollManager) {
       const auto &activeWidgets = m_scrollManager->getActiveWidgets();
       safeWidget = activeWidgets.value(index, nullptr);
     }
-    m_sidebarManager->updateSidebarMetadata(safeWidget);
+    m_detailsPaneManager->updateSidebarMetadata(safeWidget);
   }
 }
 
