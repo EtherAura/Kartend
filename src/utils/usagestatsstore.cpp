@@ -297,7 +297,7 @@ QString formatTimestamp(const QString &isoUtc) {
   if (!parsed.isValid()) {
     return isoUtc;
   }
-  parsed.setTimeZone(QTimeZone::UTC);
+  parsed.setTimeZone(QTimeZone::utc());
   const QDateTime local = parsed.toLocalTime();
   return QLocale().toString(local, QLocale::ShortFormat);
 }
