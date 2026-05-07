@@ -7,16 +7,13 @@
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <QProcess>
 #include <QString>
 #include <QStringList>
 
 #include "collectionutils.h"
 #include "errorutils.h"
 #include "setuputils.h"
-
-QT_BEGIN_NAMESPACE
-class QProcess;
-QT_END_NAMESPACE
 
 struct ApplicationContext;
 
