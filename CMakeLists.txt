@@ -190,7 +190,7 @@ target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
   ${SRC_DIR}/modules/selection
   ${SRC_DIR}/modules/session
   ${SRC_DIR}/modules/settings
-  ${SRC_DIR}/modules/sidebar
+  ${SRC_DIR}/modules/detailspane
   ${SRC_DIR}/modules/viewport
   ${SRC_DIR}/ui
   ${SRC_DIR}/ui/widgets

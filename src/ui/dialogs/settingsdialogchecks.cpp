@@ -137,12 +137,12 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
           ? static_cast<HorizontalAlignment>(ui->horizontalAlignmentComboBox->currentIndex())
           : config.horizontalAlignment;
   config.sidebarMode = (ui->sidebarModeComboBox)
-                           ? static_cast<SidebarMode>(ui->sidebarModeComboBox->currentIndex())
+                           ? static_cast<DetailsPaneMode>(ui->sidebarModeComboBox->currentIndex())
                            : config.sidebarMode;
   // Kartend-63e sidebar enhancements.
   if (ui->sidebarPositionComboBox) {
     config.sidebarPosition =
-        static_cast<SidebarPosition>(ui->sidebarPositionComboBox->currentIndex());
+        static_cast<DetailsPanePosition>(ui->sidebarPositionComboBox->currentIndex());
   }
   if (ui->sidebarWidthSpinBox) {
     config.sidebarWidth = ui->sidebarWidthSpinBox->value();
@@ -155,11 +155,11 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   }
   if (ui->sidebarBackgroundTypeComboBox) {
     config.sidebarBackgroundType =
-        static_cast<SidebarBackgroundType>(ui->sidebarBackgroundTypeComboBox->currentIndex());
+        static_cast<DetailsPaneBackgroundType>(ui->sidebarBackgroundTypeComboBox->currentIndex());
   }
   if (ui->sidebarBackgroundValueEdit) {
     const QString value = ui->sidebarBackgroundValueEdit->text().trimmed();
-    if (config.sidebarBackgroundType == SidebarBackgroundType::Image) {
+    if (config.sidebarBackgroundType == DetailsPaneBackgroundType::Image) {
       config.sidebarBackgroundImage = value;
       config.sidebarBackgroundColor.clear();
     } else {
@@ -202,7 +202,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
     config.sidebarFontPointSize = ui->sidebarFontSizeSpinBox->value();
   }
   if (ui->sidebarActiveTabComboBox) {
-    config.sidebarActiveTab = static_cast<SidebarTab>(ui->sidebarActiveTabComboBox->currentIndex());
+    config.sidebarActiveTab = static_cast<DetailsPaneTab>(ui->sidebarActiveTabComboBox->currentIndex());
   }
   config.viewType = (ui->viewTypeComboBox)
                         ? static_cast<ViewType>(ui->viewTypeComboBox->currentIndex())
@@ -404,7 +404,7 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
            static_cast<int>(originalConfig.sidebarBackgroundType)) ||
       ((ui->sidebarBackgroundValueEdit) &&
        ui->sidebarBackgroundValueEdit->text().trimmed() !=
-           (originalConfig.sidebarBackgroundType == SidebarBackgroundType::Image
+           (originalConfig.sidebarBackgroundType == DetailsPaneBackgroundType::Image
                 ? originalConfig.sidebarBackgroundImage
                 : originalConfig.sidebarBackgroundColor)) ||
       ((ui->sidebarPatternColorEdit) &&

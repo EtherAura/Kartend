@@ -65,7 +65,7 @@ public:
   [[nodiscard]] bool isActive() const { return m_active; }
 
 signals:
-  /// Fires when the overlay opens (true) or closes (false). SidebarManager
+  /// Fires when the overlay opens (true) or closes (false). DetailsPaneManager
   /// listens so the sidebar can be lowered while the overlay is up — same
   /// rationale as Kartend-63e bug #7 for the artwork preview overlay.
   void visibilityChanged(bool visible);

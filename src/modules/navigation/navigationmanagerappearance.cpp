@@ -18,7 +18,7 @@
 #include "itemwidget.h"
 #include "loadingoverlay.h"
 #include "loggingcategories.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "pathutils.h"
@@ -27,7 +27,7 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
@@ -81,8 +81,8 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex) -> void
   applyBackgroundForCollection(collectionIndex);
   applyPrimaryColorForCollection(collectionIndex);
 
-  if (m_sidebarManager) {
-    m_sidebarManager->applySidebarStateForCollection(collectionIndex);
+  if (m_detailsPaneManager) {
+    m_detailsPaneManager->applySidebarStateForCollection(collectionIndex);
   }
 }
 
@@ -502,8 +502,8 @@ void NavigationManager::persistCurrentSelection() {
 }
 
 void NavigationManager::applyUiPoliciesForCollection(int collectionIndex) {
-  if (m_sidebarManager) {
-    m_sidebarManager->applySidebarStateForCollection(collectionIndex);
+  if (m_detailsPaneManager) {
+    m_detailsPaneManager->applySidebarStateForCollection(collectionIndex);
   }
   if (m_settingsManager && m_itemScrollArea && m_collections) {
     SettingsUtils::applyHorizontalScrollbarSetting(m_itemScrollArea, collectionIndex,

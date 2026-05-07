@@ -8,7 +8,7 @@
 #include "scrollmanager.h"
 #include "settingsmanager.h"
 #include "shortcutsdialog.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "statisticsdialog.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
@@ -121,8 +121,8 @@ void MenuController::setupActionShowSidebar() {
 
   if (m_ctx.ui->actionShowSidebar) {
     connect(m_ctx.ui->actionShowSidebar, &QAction::triggered, [this]() {
-      if (m_ctx.getSidebarManager) {
-        if (auto *mgr = m_ctx.getSidebarManager()) {
+      if (m_ctx.getDetailsPaneManager) {
+        if (auto *mgr = m_ctx.getDetailsPaneManager()) {
           mgr->toggleSidebar();
         }
       }
@@ -859,7 +859,7 @@ void MenuController::setupActionDetailsPaneOrientation() {
   m_orientationActionGroup = new QActionGroup(this);
   m_orientationActionGroup->setExclusive(true);
 
-  auto addOrientation = [this](const QString &label, SidebarPosition pos) {
+  auto addOrientation = [this](const QString &label, DetailsPanePosition pos) {
     auto *action = new QAction(label, this);
     action->setCheckable(true);
     m_orientationActionGroup->addAction(action);
@@ -878,8 +878,8 @@ void MenuController::setupActionDetailsPaneOrientation() {
       // applySidebarStateForCollection re-runs applyAppearance + layout swap so
       // a Right→Top change reparents the pane into m_outerLayout immediately
       // (otherwise the user would have to toggle the pane to see the new edge).
-      if (m_ctx.getSidebarManager) {
-        if (auto *sb = m_ctx.getSidebarManager()) {
+      if (m_ctx.getDetailsPaneManager) {
+        if (auto *sb = m_ctx.getDetailsPaneManager()) {
           sb->applySidebarStateForCollection(idx);
         }
       }
@@ -887,10 +887,10 @@ void MenuController::setupActionDetailsPaneOrientation() {
     return action;
   };
 
-  m_orientationActionRight = addOrientation(tr("Right"), SidebarPosition::Right);
-  m_orientationActionLeft = addOrientation(tr("Left"), SidebarPosition::Left);
-  m_orientationActionTop = addOrientation(tr("Top"), SidebarPosition::Top);
-  m_orientationActionBottom = addOrientation(tr("Bottom"), SidebarPosition::Bottom);
+  m_orientationActionRight = addOrientation(tr("Right"), DetailsPanePosition::Right);
+  m_orientationActionLeft = addOrientation(tr("Left"), DetailsPanePosition::Left);
+  m_orientationActionTop = addOrientation(tr("Top"), DetailsPanePosition::Top);
+  m_orientationActionBottom = addOrientation(tr("Bottom"), DetailsPanePosition::Bottom);
 
   // Sit immediately after Show Details Pane so the pair reads as a single
   // group — the action's neighbor in the View menu (.ui order) is the
@@ -927,17 +927,17 @@ void MenuController::setupActionDetailsPaneOrientation() {
   }
 }
 
-void MenuController::syncOrientationActions(SidebarPosition position) {
+void MenuController::syncOrientationActions(DetailsPanePosition position) {
   if (m_orientationActionRight) {
-    m_orientationActionRight->setChecked(position == SidebarPosition::Right);
+    m_orientationActionRight->setChecked(position == DetailsPanePosition::Right);
   }
   if (m_orientationActionLeft) {
-    m_orientationActionLeft->setChecked(position == SidebarPosition::Left);
+    m_orientationActionLeft->setChecked(position == DetailsPanePosition::Left);
   }
   if (m_orientationActionTop) {
-    m_orientationActionTop->setChecked(position == SidebarPosition::Top);
+    m_orientationActionTop->setChecked(position == DetailsPanePosition::Top);
   }
   if (m_orientationActionBottom) {
-    m_orientationActionBottom->setChecked(position == SidebarPosition::Bottom);
+    m_orientationActionBottom->setChecked(position == DetailsPanePosition::Bottom);
   }
 }

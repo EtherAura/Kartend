@@ -16,7 +16,7 @@ class QMenuBar;
 class QAction;
 QT_END_NAMESPACE
 
-class MetadataSidebar;
+class DetailsPane;
 class InteractionStateHolder;
 class LoadingOverlay;
 class EmptyStateWidget;
@@ -26,7 +26,7 @@ class ScrollManager;
 class ArtworkManager;
 class SettingsManager;
 class SessionManager;
-class SidebarManager;
+class DetailsPaneManager;
 class DatabaseManager;
 class NavigationManager;
 class AnimationManager;
@@ -102,7 +102,7 @@ struct ApplicationContext {
     /// Search-mode toggle: a QAction added to the searchBar QLineEdit at
     /// LeadingPosition (no longer a standalone button).
     QAction *searchModeAction = nullptr;
-    MetadataSidebar *sidebar = nullptr;
+    DetailsPane *sidebar = nullptr;
     EmptyStateWidget *loadingLabel = nullptr;
     LoadingOverlay *loadingOverlay = nullptr;
   } ui;
@@ -115,7 +115,7 @@ struct ApplicationContext {
     ArtworkManager *artworkManager = nullptr;
     SettingsManager *settingsManager = nullptr;
     SessionManager *sessionManager = nullptr;
-    SidebarManager *sidebarManager = nullptr;
+    DetailsPaneManager *detailsPaneManager = nullptr;
     DatabaseManager *databaseManager = nullptr;
     NavigationManager *navigationManager = nullptr;
     AnimationManager *animationManager = nullptr;

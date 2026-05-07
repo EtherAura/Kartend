@@ -24,7 +24,7 @@ QT_END_NAMESPACE
 /// override map via `setOverrides()` and read the user's edits via
 /// `overrides()` after `accept()`. Persistence (insert/update/delete in the
 /// `item_artwork` table) is the caller's responsibility — typically the
-/// SidebarManager, which knows the owning collection's UUID.
+/// DetailsPaneManager, which knows the owning collection's UUID.
 class ItemArtworkLinksDialog : public QDialog {
   Q_OBJECT
 public:

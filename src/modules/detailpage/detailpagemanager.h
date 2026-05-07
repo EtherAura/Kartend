@@ -6,7 +6,7 @@
 
 class DatabaseManager;
 class DetailPageOverlay;
-class SidebarManager;
+class DetailsPaneManager;
 struct ApplicationContext;
 
 /**
@@ -16,17 +16,17 @@ struct ApplicationContext;
  * (parented to the central widget so it can cover the full window) and
  * handed in via setupReferences. The manager listens for the keyboard
  * "show details" request, pulls the resolved item context from
- * SidebarManager, loads metadata + artwork + usage stats from the database,
+ * DetailsPaneManager, loads metadata + artwork + usage stats from the database,
  * and pushes the assembled payload to the overlay.
  */
 struct DetailPageManagerSetup {
   ApplicationContext *ctx = nullptr;
 
   DetailPageOverlay *overlay = nullptr;
-  SidebarManager *sidebarManager = nullptr;
+  DetailsPaneManager *detailsPaneManager = nullptr;
   DatabaseManager *databaseManager = nullptr;
 
-  SETUP_GETTER_DECL(SidebarManager *, SidebarManager)
+  SETUP_GETTER_DECL(DetailsPaneManager *, DetailsPaneManager)
   SETUP_GETTER_DECL(DatabaseManager *, DatabaseManager)
 };
 
@@ -38,7 +38,7 @@ public:
 
   void setupReferences(const DetailPageManagerSetup &setup);
 
-  /// Builds the payload from the SidebarManager's cached item context, loads
+  /// Builds the payload from the DetailsPaneManager's cached item context, loads
   /// the DB-backed extended metadata + artwork + usage rows, and shows the
   /// overlay. No-op if no item is currently selected (sidebar context is
   /// invalid).
@@ -52,7 +52,7 @@ public:
 
 private:
   DetailPageOverlay *m_overlay = nullptr;
-  SidebarManager *m_sidebarManager = nullptr;
+  DetailsPaneManager *m_detailsPaneManager = nullptr;
   DatabaseManager *m_databaseManager = nullptr;
 };
 

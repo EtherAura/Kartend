@@ -24,12 +24,12 @@ QT_END_NAMESPACE
 class InteractionManager;
 class InteractionStateHolder;
 class SettingsManager;
-class SidebarManager;
+class DetailsPaneManager;
 class ScrollManager;
 class DatabaseManager;
 class SessionManager;
 class ArtworkManager;
-class MetadataSidebar;
+class DetailsPane;
 class SelectionRestoreManager;
 class LoadingOverlay;
 class EmptyStateWidget;
@@ -52,14 +52,14 @@ struct NavigationManagerSetup {
   // Manager dependencies (can be overridden or taken from ctx)
   InteractionManager *interactionManager = nullptr;
   SettingsManager *settingsManager = nullptr;
-  SidebarManager *sidebarManager = nullptr;
+  DetailsPaneManager *detailsPaneManager = nullptr;
   ScrollManager *scrollManager = nullptr;
   DatabaseManager *databaseManager = nullptr;
   SessionManager *sessionManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
 
   // UI elements (can be overridden or taken from ctx)
-  MetadataSidebar *sidebar = nullptr;
+  DetailsPane *sidebar = nullptr;
   int *currentCollectionIndex = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   const CollectionHierarchyCache *hierarchyCache = nullptr;
@@ -81,7 +81,7 @@ struct NavigationManagerSetup {
   // Manager accessors that check ctx fallback
   SETUP_GETTER_INLINE_MGR_SAME(InteractionManager *, InteractionManager, interactionManager)
   SETUP_GETTER_INLINE_MGR_SAME(SettingsManager *, SettingsManager, settingsManager)
-  SETUP_GETTER_INLINE_MGR_SAME(SidebarManager *, SidebarManager, sidebarManager)
+  SETUP_GETTER_INLINE_MGR_SAME(DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
   SETUP_GETTER_INLINE_MGR_SAME(ScrollManager *, ScrollManager, scrollManager)
   SETUP_GETTER_INLINE_MGR_SAME(DatabaseManager *, DatabaseManager, databaseManager)
   SETUP_GETTER_INLINE_MGR_SAME(SessionManager *, SessionManager, sessionManager)
@@ -97,7 +97,7 @@ struct NavigationManagerSetup {
   SETUP_GETTER_INLINE_UI_SAME(QLineEdit *, SearchBar, searchBar)
   SETUP_GETTER_INLINE_UI_SAME(EmptyStateWidget *, LoadingLabel, loadingLabel)
   SETUP_GETTER_INLINE_UI_SAME(LoadingOverlay *, LoadingOverlay, loadingOverlay)
-  SETUP_GETTER_INLINE_UI_SAME(MetadataSidebar *, Sidebar, sidebar)
+  SETUP_GETTER_INLINE_UI_SAME(DetailsPane *, Sidebar, sidebar)
   SETUP_GETTER_INLINE_COL_SAME(QList<CollectionConfig> *, Collections, collections)
   SETUP_GETTER_INLINE_COL_SAME(int *, CurrentCollectionIndex, currentCollectionIndex)
   SETUP_GETTER_INLINE_COL_SAME(const CollectionHierarchyCache *, HierarchyCache, hierarchyCache)
@@ -177,12 +177,12 @@ private:
   InteractionManager *m_interactionManager = nullptr;
   InteractionStateHolder *m_state = nullptr;
   SettingsManager *m_settingsManager = nullptr;
-  SidebarManager *m_sidebarManager = nullptr;
+  DetailsPaneManager *m_detailsPaneManager = nullptr;
   ScrollManager *m_scrollManager = nullptr;
   DatabaseManager *m_databaseManager = nullptr;
   SessionManager *m_sessionManager = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
-  MetadataSidebar *m_MetadataSidebar = nullptr;
+  DetailsPane *m_MetadataSidebar = nullptr;
   int *m_currentCollectionIndex = nullptr;
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   GeneralSettings *m_generalSettings = nullptr;

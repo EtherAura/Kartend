@@ -221,7 +221,7 @@ void SelectionDisplayManager::showArtworkPreview(const QString &filePath,
     m_artworkPreviewOverlay = std::make_unique<ArtworkPreviewOverlay>(m_mediaScrollArea);
     connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::launchRequested, this,
             &SelectionDisplayManager::artworkPreviewLaunchRequested);
-    // Kartend-63e bug #7: forward overlay visibility so SidebarManager can
+    // Kartend-63e bug #7: forward overlay visibility so DetailsPaneManager can
     // lower the sidebar while the overlay is on top.
     connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::visibilityChanged, this,
             &SelectionDisplayManager::artworkPreviewVisibilityChanged);
@@ -240,7 +240,7 @@ void SelectionDisplayManager::showMediaPreview(const QString &filePath, const QS
     m_artworkPreviewOverlay = std::make_unique<ArtworkPreviewOverlay>(m_mediaScrollArea);
     connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::launchRequested, this,
             &SelectionDisplayManager::artworkPreviewLaunchRequested);
-    // Kartend-63e bug #7: forward overlay visibility so SidebarManager can
+    // Kartend-63e bug #7: forward overlay visibility so DetailsPaneManager can
     // lower the sidebar while the overlay is on top.
     connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::visibilityChanged, this,
             &SelectionDisplayManager::artworkPreviewVisibilityChanged);

@@ -29,7 +29,7 @@
 #include "uiconstants/scroll.h"
 #include "uiconstants/search.h"
 #include "uiconstants/selection.h"
-#include "uiconstants/sidebar.h"
+#include "uiconstants/detailspane.h"
 #include "uiconstants/timing.h"
 #include "uiconstants/viewport.h"
 #include "uiconstants/widget.h"

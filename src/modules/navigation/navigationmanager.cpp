@@ -10,7 +10,7 @@
 #include "itemwidget.h"
 #include "loadingoverlay.h"
 #include "loggingcategories.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationstackmanager.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
@@ -18,7 +18,7 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
@@ -53,7 +53,7 @@ void NavigationManager::setupReferences(const NavigationManagerSetup &setup) {
   m_interactionManager = setup.getInteractionManager();
   m_state = setup.getInteractionState();
   m_settingsManager = setup.getSettingsManager();
-  m_sidebarManager = setup.getSidebarManager();
+  m_detailsPaneManager = setup.getDetailsPaneManager();
   m_scrollManager = setup.getScrollManager();
   m_databaseManager = setup.getDatabaseManager();
   m_sessionManager = setup.getSessionManager();

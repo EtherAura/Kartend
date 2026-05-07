@@ -27,7 +27,7 @@ QT_END_NAMESPACE
  * adequate for the small sidebar / overlay preview sizes we use.
  *
  * Audio plays at full volume — selection-change debouncing in callers
- * (MetadataSidebar uses 500ms) governs how often it kicks in. Stops
+ * (DetailsPane uses 500ms) governs how often it kicks in. Stops
  * playback automatically on hide and on destruction.
  */
 class VideoPreviewWidget : public QWidget {

@@ -42,7 +42,7 @@
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "menucontroller.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationmanager.h"
 #include "nowplayingoverlay.h"
 #include "pathutils.h"
@@ -54,7 +54,7 @@
 #include "settingsmanager.h"
 #include "settingsutils.h"
 #include "shortcutsdialog.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "splashoverlay.h"
 #include "startupvideooverlay.h"
 #include "stringutils.h"
@@ -371,8 +371,8 @@ void MainWindow::applyTextZoom(int percent) {
   // Re-push the global font with the new multiplier baked in.
   applyGlobalUiFont(m_generalSettings);
   // Re-run sidebar appearance so its font baselines pick up the new zoom.
-  if (getSidebarManager()) {
-    getSidebarManager()->applySidebarStateForCollection(currentCollectionIndex);
+  if (getDetailsPaneManager()) {
+    getDetailsPaneManager()->applySidebarStateForCollection(currentCollectionIndex);
   }
   // Tear down + rebuild the virtual scroll content so item widgets are
   // re-instantiated with the new scaled fontSize. Coverflow uses the same
@@ -732,7 +732,7 @@ void MainWindow::setupManagerConnections() {
     // sidebar on top).
     if (m_detailPageOverlay) {
       connect(m_detailPageOverlay, &DetailPageOverlay::visibilityChanged, this, [this](bool v) {
-        if (auto *sb = getSidebarManager()) {
+        if (auto *sb = getDetailsPaneManager()) {
           sb->setOverlayActive(v);
         }
       });
@@ -934,8 +934,8 @@ void MainWindow::resyncPlaylistCollections() {
 }
 
 // Delegated Getters
-SidebarManager *MainWindow::getSidebarManager() const {
-  return m_appManager->getSidebarManager();
+DetailsPaneManager *MainWindow::getDetailsPaneManager() const {
+  return m_appManager->getDetailsPaneManager();
 }
 SettingsManager *MainWindow::getSettingsManager() const {
   return m_appManager->getSettingsManager();

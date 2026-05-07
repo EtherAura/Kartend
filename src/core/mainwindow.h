@@ -37,10 +37,10 @@ class NavigationManager;
 class PlaylistManager;
 class SessionManager;
 class SettingsManager;
-class SidebarManager;
+class DetailsPaneManager;
 class ScrollManager;
 class ItemWidget;
-class MetadataSidebar;
+class DetailsPane;
 class LoadingOverlay;
 class EmptyStateWidget;
 class SplashOverlay;
@@ -111,10 +111,10 @@ public:
 
   // Getters for Managers
   [[nodiscard]] ApplicationManager *getApplicationManager() const { return m_appManager.get(); }
-  [[nodiscard]] MetadataSidebar *getMetadataSidebar() const { return m_MetadataSidebar; }
+  [[nodiscard]] DetailsPane *getMetadataSidebar() const { return m_MetadataSidebar; }
 
   // Delegated Getters
-  [[nodiscard]] SidebarManager *getSidebarManager() const;
+  [[nodiscard]] DetailsPaneManager *getDetailsPaneManager() const;
   [[nodiscard]] SettingsManager *getSettingsManager() const;
   [[nodiscard]] DatabaseManager *getDatabaseManager() const;
   [[nodiscard]] ScrollManager *getScrollManager() const;
@@ -234,7 +234,7 @@ private:
   int m_gridWidthActiveGeneration = 0;
 
   std::unique_ptr<ApplicationManager> m_appManager;
-  MetadataSidebar *m_MetadataSidebar = nullptr;
+  DetailsPane *m_MetadataSidebar = nullptr;
 
   void setupManagerConnections();
   void updateWindowTitleWithFilter(int visible, int total);

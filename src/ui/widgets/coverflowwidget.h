@@ -37,7 +37,7 @@ struct CoverFlowCardData {
 };
 
 /// Kartend-3ile: one entry in the per-item gallery toolbar shown beneath
-/// the carousel when in cover flow. Mirrors MetadataSidebar::GalleryEntry
+/// the carousel when in cover flow. Mirrors DetailsPane::GalleryEntry
 /// so the same resolver pattern works for both views.
 struct CoverFlowGalleryEntry {
   QString label;

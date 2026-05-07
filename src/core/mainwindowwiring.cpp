@@ -26,7 +26,7 @@
 #include "navigationmanager.h"
 #include "scrollmanager.h"
 #include "settingsmanager.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "titlefilter.h"
 #include "ui_mainwindow.h"
@@ -194,14 +194,14 @@ void MainWindow::connectDatabaseManager() {
   // Keep the sidebar's no-selection collection summary fresh after scans
   // finish or settings edits land (Kartend-3mn). cachedCountsUpdated covers
   // item-count changes that arrive without a full scan (e.g., manual deletes).
-  if (getSidebarManager()) {
+  if (getDetailsPaneManager()) {
     QObject::connect(getDatabaseManager(), &DatabaseManager::collectionScanCompleted,
-                     getSidebarManager(),
-                     [this](const QString &) { getSidebarManager()->refreshCollectionSummary(); });
+                     getDetailsPaneManager(),
+                     [this](const QString &) { getDetailsPaneManager()->refreshCollectionSummary(); });
     QObject::connect(getDatabaseManager(), &DatabaseManager::cachedCountsUpdated,
-                     getSidebarManager(), &SidebarManager::refreshCollectionSummary);
+                     getDetailsPaneManager(), &DetailsPaneManager::refreshCollectionSummary);
     QObject::connect(getSettingsManager(), &SettingsManager::collectionsModified,
-                     getSidebarManager(), &SidebarManager::refreshCollectionSummary);
+                     getDetailsPaneManager(), &DetailsPaneManager::refreshCollectionSummary);
   }
 }
 
@@ -251,8 +251,8 @@ void MainWindow::connectScrollManager() {
   // restore the persisted per-collection state when leaving.
   QObject::connect(getScrollManager(), &ScrollManager::coverFlowActiveChanged, this,
                    [this](bool active) {
-                     if (getSidebarManager()) {
-                       getSidebarManager()->setExternallyHidden(active);
+                     if (getDetailsPaneManager()) {
+                       getDetailsPaneManager()->setExternallyHidden(active);
                      }
                    });
   // Kartend-63e bug #7: lower the sidebar while the artwork preview overlay
@@ -260,8 +260,8 @@ void MainWindow::connectScrollManager() {
   // top. Restored on hide.
   QObject::connect(getScrollManager(), &ScrollManager::artworkPreviewVisibilityChanged, this,
                    [this](bool visible) {
-                     if (getSidebarManager()) {
-                       getSidebarManager()->setOverlayActive(visible);
+                     if (getDetailsPaneManager()) {
+                       getDetailsPaneManager()->setOverlayActive(visible);
                      }
                    });
   // Kartend-3ile: cover-flow activates a card → land selection on it then
@@ -344,12 +344,12 @@ void MainWindow::connectScrollManager() {
 
 void MainWindow::connectSidebarManager() {
   QObject::connect(
-      getSidebarManager(), &SidebarManager::sidebarVisibilityChanged, this, [this](bool visible) {
-        if (visible && (getSidebarManager()) && (getScrollManager()) && (getInteractionManager())) {
+      getDetailsPaneManager(), &DetailsPaneManager::sidebarVisibilityChanged, this, [this](bool visible) {
+        if (visible && (getDetailsPaneManager()) && (getScrollManager()) && (getInteractionManager())) {
           int sel = getInteractionManager()->currentSelectedIndex();
           if (sel >= 0) {
             ItemWidget *widgetPtr = getScrollManager()->getActiveWidgets().value(sel, nullptr);
-            getSidebarManager()->updateSidebarMetadata(widgetPtr);
+            getDetailsPaneManager()->updateSidebarMetadata(widgetPtr);
           }
         }
         // Kartend-0p3w: push the "sidebar hidden AND would shrink" predicate
@@ -359,37 +359,37 @@ void MainWindow::connectSidebarManager() {
         updateScrollManagerSidebarShrinking();
         // Delay metrics recalculation to allow sidebar animation to complete
         // before recalculating grid layout dimensions
-        QTimer::singleShot(UIConstants::Sidebar::METRICS_RECALC_DELAY_MS, this, [this]() {
+        QTimer::singleShot(UIConstants::DetailsPane::METRICS_RECALC_DELAY_MS, this, [this]() {
           if (getScrollManager()) {
             getScrollManager()->recalculateContainerMetrics();
           }
         });
       });
 
-  QObject::connect(getSidebarManager(), &SidebarManager::sidebarLayoutChanged, this, [this]() {
+  QObject::connect(getDetailsPaneManager(), &DetailsPaneManager::sidebarLayoutChanged, this, [this]() {
     if (getScrollManager()) {
       getScrollManager()->recalculateContainerMetrics();
     }
-    if ((getSidebarManager()) && (getScrollManager()) && (getInteractionManager()) &&
-        getSidebarManager()->isSidebarVisible()) {
+    if ((getDetailsPaneManager()) && (getScrollManager()) && (getInteractionManager()) &&
+        getDetailsPaneManager()->isSidebarVisible()) {
       int sel = getInteractionManager()->currentSelectedIndex();
       if (sel >= 0) {
         ItemWidget *widgetPtr = getScrollManager()->getActiveWidgets().value(sel, nullptr);
-        getSidebarManager()->updateSidebarMetadata(widgetPtr);
+        getDetailsPaneManager()->updateSidebarMetadata(widgetPtr);
       }
     }
   });
 }
 
 void MainWindow::updateScrollManagerSidebarShrinking() {
-  if (!getScrollManager() || !getSidebarManager()) {
+  if (!getScrollManager() || !getDetailsPaneManager()) {
     return;
   }
-  // Use SidebarManager's tracked index rather than MainWindow::currentCollectionIndex
+  // Use DetailsPaneManager's tracked index rather than MainWindow::currentCollectionIndex
   // because this can be called from inside applySidebarStateForCollection (via
   // its sidebarVisibilityChanged emission) before MainWindow has caught up to
   // the new index after a collection switch.
-  const int idx = getSidebarManager()->currentCollectionIndex();
+  const int idx = getDetailsPaneManager()->currentCollectionIndex();
   if (idx < 0 || idx >= m_collections.size()) {
     getScrollManager()->setSidebarShrinkingActive(false);
     return;
@@ -397,11 +397,11 @@ void MainWindow::updateScrollManagerSidebarShrinking() {
   const CollectionConfig &collection = m_collections[idx];
   // Overlay mode never shrinks the grid (the sidebar floats over content), so
   // the alt gridWidth only applies in Expand mode while the sidebar is hidden.
-  if (collection.sidebarMode != SidebarMode::Expand) {
+  if (collection.sidebarMode != DetailsPaneMode::Expand) {
     getScrollManager()->setSidebarShrinkingActive(false);
     return;
   }
-  const bool sidebarHidden = !getSidebarManager()->isSidebarVisible();
+  const bool sidebarHidden = !getDetailsPaneManager()->isSidebarVisible();
   // The pane only shrinks the grid along its own dock axis. A vertical-axis
   // dock (Top/Bottom) takes height, so vertical-scrolling views (Grid/List/
   // CoverFlow) — whose layout dimension is items-per-row, i.e. horizontal —

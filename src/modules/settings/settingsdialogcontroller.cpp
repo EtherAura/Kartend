@@ -16,7 +16,7 @@
 #include "settingsdialog.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 #include <QDialog>
@@ -182,10 +182,10 @@ void applyScrollbarSettings(QWidget *parent, int viewingIndex,
 }
 
 // Updates sidebar layout when mode changes
-void refreshSidebar(SidebarManager *sidebarManager, const QList<CollectionConfig> & /*collections*/,
+void refreshSidebar(DetailsPaneManager *detailsPaneManager, const QList<CollectionConfig> & /*collections*/,
                     int currentCollectionIndex) {
-  if (sidebarManager) {
-    sidebarManager->updateSidebarLayout(currentCollectionIndex);
+  if (detailsPaneManager) {
+    detailsPaneManager->updateSidebarLayout(currentCollectionIndex);
   }
 }
 
@@ -282,7 +282,7 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   QList<CollectionConfig> &collections = *context.collections;
   int &currentCollectionIndex = *context.currentCollectionIndex;
   QWidget *parent = context.parent;
-  SidebarManager *sidebarManager = context.sidebarManager;
+  DetailsPaneManager *detailsPaneManager = context.detailsPaneManager;
   ScrollManager *scrollManager = context.scrollManager;
   NavigationManager *navigationManager = context.navigationManager;
   DatabaseManager *databaseManager = context.databaseManager;
@@ -405,9 +405,9 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   currentCollectionIndex = resolvedCollectionIndex;
   viewingCollectionIndex = resolvedCollectionIndex;
 
-  if (sidebarManager) {
+  if (detailsPaneManager) {
     if (resolvedCollectionIndex >= 0) {
-      sidebarManager->applySidebarStateForCollection(resolvedCollectionIndex);
+      detailsPaneManager->applySidebarStateForCollection(resolvedCollectionIndex);
     }
   }
 
@@ -419,13 +419,13 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
 
   if (needsReload) {
     handleReloadRequired(collections, newCollections, originalCollections, viewingCollectionIndex,
-                         sidebarManager, scrollManager, navigationManager, m_artworkManager,
+                         detailsPaneManager, scrollManager, navigationManager, m_artworkManager,
                          m_cacheManager, currentCollectionIndex);
   } else {
     handleLayoutChanges(parent, collections, viewingCollectionIndex, titleChangedForView,
                         scrollbarChangedForView, sidebarModeChangedForView, gridWidthChangedForView,
                         spacingChangedForView, alignmentChangedForView, fontSizeChangedForView,
-                        hideTitlesChangedForView, sidebarManager, scrollManager, m_artworkManager,
+                        hideTitlesChangedForView, detailsPaneManager, scrollManager, m_artworkManager,
                         currentCollectionIndex);
 
     // If only appearance changed, still refresh widgets to show new colors
@@ -438,7 +438,7 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
 auto SettingsManager::handleReloadRequired(
     const QList<CollectionConfig> &collections, const QList<CollectionConfig> &newCollections,
     const QList<CollectionConfig> &originalCollections, int viewingCollectionIndex,
-    SidebarManager *sidebarManager, ScrollManager *scrollManager,
+    DetailsPaneManager *detailsPaneManager, ScrollManager *scrollManager,
     NavigationManager *navigationManager, ArtworkManager *artworkManager,
     CacheManager *cacheManager, int currentCollectionIndex) -> void {
   if (artworkManager) {
@@ -490,7 +490,7 @@ auto SettingsManager::handleLayoutChanges(
     QWidget *parent, const QList<CollectionConfig> &collections, int viewingCollectionIndex,
     bool titleChangedForView, bool scrollbarChangedForView, bool sidebarModeChangedForView,
     bool gridWidthChangedForView, bool spacingChangedForView, bool alignmentChangedForView,
-    bool fontSizeChangedForView, bool hideTitlesChangedForView, SidebarManager *sidebarManager,
+    bool fontSizeChangedForView, bool hideTitlesChangedForView, DetailsPaneManager *detailsPaneManager,
     ScrollManager *scrollManager, ArtworkManager *artworkManager, int currentCollectionIndex)
     -> void {
   if (viewingCollectionIndex < 0 || viewingCollectionIndex >= collections.size()) {
@@ -503,7 +503,7 @@ auto SettingsManager::handleLayoutChanges(
     applyScrollbarSettings(parent, viewingCollectionIndex, collections);
   }
   if (sidebarModeChangedForView) {
-    refreshSidebar(sidebarManager, collections, currentCollectionIndex);
+    refreshSidebar(detailsPaneManager, collections, currentCollectionIndex);
   }
   handleScrollBranch(scrollManager, artworkManager, collections, viewingCollectionIndex,
                      spacingChangedForView, sidebarModeChangedForView, gridWidthChangedForView,

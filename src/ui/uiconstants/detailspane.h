@@ -1,14 +1,14 @@
-#ifndef UICONSTANTS_SIDEBAR_H
-#define UICONSTANTS_SIDEBAR_H
+#ifndef UICONSTANTS_DETAILSPANE_H
+#define UICONSTANTS_DETAILSPANE_H
 
 namespace UIConstants {
 
 // =============================================================================
-// Sidebar (Kartend-u2gx: now the "details pane"; namespace name kept for the
-// rename window — Kartend-vyeq promotes UIConstants::DetailsPane.)
+// DetailsPane (Kartend-u2gx introduced the rename; Kartend-vyeq promoted the
+// namespace to UIConstants::DetailsPane.)
 // Details-pane dimensions and timing.
 // =============================================================================
-namespace Sidebar {
+namespace DetailsPane {
 /// Minimum details-pane width in pixels (Left/Right dock).
 inline constexpr int MIN_WIDTH = 150;
 /// Default details-pane width when first shown (Left/Right dock).
@@ -37,7 +37,7 @@ inline constexpr int VIDEO_PREVIEW_DEBOUNCE_MS = 500;
 /// metadata buttons). 8 strikes the balance — also paired with an event
 /// filter on inner widgets so children don't swallow grip-zone clicks.
 inline constexpr int RESIZE_GRIP_PX = 8;
-} // namespace Sidebar
+} // namespace DetailsPane
 } // namespace UIConstants
 
 #endif

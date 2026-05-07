@@ -215,7 +215,7 @@ signals:
   /// selection when empty.
   void artworkPreviewLaunchRequested(const QString &filePath);
   /// Kartend-63e bug #7: forwarded from SelectionDisplayManager. MainWindow
-  /// wires this to SidebarManager::setOverlayActive so the sidebar lowers
+  /// wires this to DetailsPaneManager::setOverlayActive so the sidebar lowers
   /// itself below the overlay while it's showing.
   void artworkPreviewVisibilityChanged(bool visible);
   /// Kartend-3ile: emitted when the user activates the centered card in
@@ -226,7 +226,7 @@ signals:
   void coverFlowItemActivated(int visualIndex);
   /// Kartend-3ile: fired when CoverFlow becomes the active view (true) or
   /// any other ViewType replaces it (false). MainWindow wires this to
-  /// SidebarManager::setExternallyHidden so the carousel takes the full
+  /// DetailsPaneManager::setExternallyHidden so the carousel takes the full
   /// viewport without persisting that as the user's sidebar preference.
   void coverFlowActiveChanged(bool active);
 
@@ -402,7 +402,7 @@ private:
   /// Resolve the per-item gallery (standard + custom artwork variants
   /// from ItemArtworkStore plus the preview video) for @p visualIndex
   /// and push it to the carousel widget. Mirrors the resolver in
-  /// SidebarManager::updateSidebarMetadata so the cover-flow gallery
+  /// DetailsPaneManager::updateSidebarMetadata so the cover-flow gallery
   /// surfaces the same set of entries the sidebar would.
   void resolveAndPushCoverFlowGallery(int visualIndex);
   CoverFlowWidget *m_coverFlowWidget = nullptr;

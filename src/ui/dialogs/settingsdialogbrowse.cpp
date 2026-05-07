@@ -372,7 +372,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
         static_cast<int>(config.sidebarBackgroundType));
   }
   if (ui->sidebarBackgroundValueEdit) {
-    if (config.sidebarBackgroundType == SidebarBackgroundType::Image) {
+    if (config.sidebarBackgroundType == DetailsPaneBackgroundType::Image) {
       ui->sidebarBackgroundValueEdit->setText(config.sidebarBackgroundImage);
     } else {
       ui->sidebarBackgroundValueEdit->setText(config.sidebarBackgroundColor);
@@ -612,9 +612,9 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->sidebarModeComboBox) ui->sidebarModeComboBox->setCurrentIndex(0);
   // Kartend-63e sidebar enhancements: clear/reset on no-selection.
   if (ui->sidebarPositionComboBox) ui->sidebarPositionComboBox->setCurrentIndex(0);
-  if (ui->sidebarWidthSpinBox) ui->sidebarWidthSpinBox->setValue(UIConstants::Sidebar::FIXED_WIDTH);
+  if (ui->sidebarWidthSpinBox) ui->sidebarWidthSpinBox->setValue(UIConstants::DetailsPane::FIXED_WIDTH);
   if (ui->sidebarHeightSpinBox)
-    ui->sidebarHeightSpinBox->setValue(UIConstants::Sidebar::FIXED_HEIGHT);
+    ui->sidebarHeightSpinBox->setValue(UIConstants::DetailsPane::FIXED_HEIGHT);
   if (ui->sidebarWidthLockedCheckBox) ui->sidebarWidthLockedCheckBox->setChecked(true);
   if (ui->sidebarBackgroundTypeComboBox) ui->sidebarBackgroundTypeComboBox->setCurrentIndex(0);
   if (ui->sidebarBackgroundValueEdit) ui->sidebarBackgroundValueEdit->clear();

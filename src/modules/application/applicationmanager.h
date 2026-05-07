@@ -15,7 +15,7 @@ class PlaylistManager;
 class ScrollManager;
 class SessionManager;
 class SettingsManager;
-class SidebarManager;
+class DetailsPaneManager;
 class MainWindow;
 
 namespace kart {
@@ -46,7 +46,7 @@ public:
   [[nodiscard]] ScrollManager *getScrollManager() const;
   [[nodiscard]] SessionManager *getSessionManager() const;
   [[nodiscard]] SettingsManager *getSettingsManager() const;
-  [[nodiscard]] SidebarManager *getSidebarManager() const;
+  [[nodiscard]] DetailsPaneManager *getDetailsPaneManager() const;
   [[nodiscard]] kart::KartManager *getKartManager() const;
 
 private:
@@ -64,7 +64,7 @@ private:
   std::unique_ptr<PlaylistManager> m_playlistManager;
   std::unique_ptr<SettingsManager> m_settingsManager;
   std::unique_ptr<ScrollManager> m_scrollManager;
-  std::unique_ptr<SidebarManager> m_sidebarManager;
+  std::unique_ptr<DetailsPaneManager> m_detailsPaneManager;
   std::unique_ptr<NavigationManager> m_navigationManager;
   std::unique_ptr<InteractionManager> m_interactionManager;
   // Kartend-uve. DetailPageManager has no destructors-during-shutdown

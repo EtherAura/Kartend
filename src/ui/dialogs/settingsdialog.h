@@ -22,7 +22,7 @@ class QPropertyAnimation;
 QT_END_NAMESPACE
 
 class CollectionTreeWidget;
-class SidebarManager;
+class DetailsPaneManager;
 class ScrollManager;
 class NavigationManager;
 

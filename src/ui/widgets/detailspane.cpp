@@ -25,7 +25,7 @@
 #include "extensionutils.h"
 #include "itemwidget.h"
 #include "mainwindow.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "pathutils.h"
 #include "uiconstants.h"
 #include "videopreviewwidget.h"
@@ -37,7 +37,7 @@
 
 // Creates metadata sidebar with scrollable layout for displaying item
 // information and artwork
-MetadataSidebar::MetadataSidebar(QWidget *parent) : QWidget(parent), ui(new Ui::MetadataSidebar) {
+DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsPane) {
   ui->setupUi(this);
   setAutoFillBackground(true);
   // Kartend-63e bug #6: stop mouse events on the sidebar from propagating up
@@ -62,7 +62,7 @@ MetadataSidebar::MetadataSidebar(QWidget *parent) : QWidget(parent), ui(new Ui::
   contentPalette.setColor(QPalette::Window, palette().color(QPalette::Window));
   ui->contentWidget->setPalette(contentPalette);
 
-  setFixedWidth(UIConstants::Sidebar::FIXED_WIDTH);
+  setFixedWidth(UIConstants::DetailsPane::FIXED_WIDTH);
 
   // Kartend-63e bug #2: hide the inner scrollbar entirely. With the sidebar
   // sized to the viewport, the content layout almost always fits — and when
@@ -106,7 +106,7 @@ MetadataSidebar::MetadataSidebar(QWidget *parent) : QWidget(parent), ui(new Ui::
   // selection that has a video.
   m_videoStartTimer = new QTimer(this);
   m_videoStartTimer->setSingleShot(true);
-  m_videoStartTimer->setInterval(UIConstants::Sidebar::VIDEO_PREVIEW_DEBOUNCE_MS);
+  m_videoStartTimer->setInterval(UIConstants::DetailsPane::VIDEO_PREVIEW_DEBOUNCE_MS);
   connect(m_videoStartTimer, &QTimer::timeout, this, [this]() {
     if (m_pendingVideoPath.isEmpty() || !m_videoPreview) {
       return;
@@ -129,13 +129,13 @@ MetadataSidebar::MetadataSidebar(QWidget *parent) : QWidget(parent), ui(new Ui::
   clearMetadata();
 }
 
-MetadataSidebar::~MetadataSidebar() {
+DetailsPane::~DetailsPane() {
   delete ui;
 }
 
 // Sets metadata fields and loads centered artwork from the configured
 // artwork directory or a sibling "artwork" directory if present
-void MetadataSidebar::setMetadata(const QString &filePath, const QString &itemName,
+void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
                                   const QString &artworkDirectory, const QString &videoDirectory) {
   if (filePath.isEmpty()) {
     clearMetadata();
@@ -149,7 +149,7 @@ void MetadataSidebar::setMetadata(const QString &filePath, const QString &itemNa
   // Item tab. Collection / File tabs keep their own visibility regardless of
   // selection — `m_hasItemDisplayed` is still tracked so a switch back to
   // Item picks up the latest selection.
-  if (m_activeTab != SidebarTab::Item) {
+  if (m_activeTab != DetailsPaneTab::Item) {
     return;
   }
   applyItemViewVisibility(true);
@@ -208,7 +208,7 @@ void MetadataSidebar::setMetadata(const QString &filePath, const QString &itemNa
 // (Kartend-3mn) the sidebar renders that instead of the legacy "No item
 // selected" placeholder; this lets every existing clearMetadata() call site
 // pick up the new no-selection display without per-caller plumbing.
-void MetadataSidebar::clearMetadata() {
+void DetailsPane::clearMetadata() {
   m_hasItemDisplayed = false;
   m_currentItemName.clear();
 
@@ -244,7 +244,7 @@ void MetadataSidebar::clearMetadata() {
   updateHorizontalView();
 }
 
-void MetadataSidebar::setCollectionSummary(const CollectionSummary &summary) {
+void DetailsPane::setCollectionSummary(const CollectionSummary &summary) {
   m_collectionSummary = summary;
   // Re-render whenever the sidebar is currently in the no-selection state
   // so first-time application (during applySidebarStateForCollection) and
@@ -255,7 +255,7 @@ void MetadataSidebar::setCollectionSummary(const CollectionSummary &summary) {
   }
 }
 
-void MetadataSidebar::applyItemViewVisibility(bool visible) {
+void DetailsPane::applyItemViewVisibility(bool visible) {
   // Per-item chrome that doesn't apply to collection summaries. Artwork +
   // file-info sections collapse together so the sidebar doesn't leave a
   // bare "Artwork" header above a hidden image.
@@ -275,7 +275,7 @@ void MetadataSidebar::applyItemViewVisibility(bool visible) {
   ui->fileExtensionValue->setVisible(visible);
 }
 
-void MetadataSidebar::renderCollectionSummary() {
+void DetailsPane::renderCollectionSummary() {
   applyItemViewVisibility(false);
   ui->titleLabel->setText(tr("Collection Information"));
   ui->itemNameLabel->setText(tr("Collection:"));
@@ -314,7 +314,7 @@ void MetadataSidebar::renderCollectionSummary() {
   m_detailsContainer->show();
 }
 
-QString MetadataSidebar::formatLastScanned(const QDateTime &lastScanned) {
+QString DetailsPane::formatLastScanned(const QDateTime &lastScanned) {
   if (!lastScanned.isValid()) {
     return tr("never");
   }
@@ -323,7 +323,7 @@ QString MetadataSidebar::formatLastScanned(const QDateTime &lastScanned) {
 
 // Updates file information fields including size, modification date, and file
 // type
-void MetadataSidebar::updateFileInfo(const QString &filePath) {
+void DetailsPane::updateFileInfo(const QString &filePath) {
   QFileInfo fileInfo(filePath);
 
   if (!fileInfo.exists()) {
@@ -354,7 +354,7 @@ void MetadataSidebar::updateFileInfo(const QString &filePath) {
   ui->fileExtensionValue->setText(extension + " file");
 }
 
-void MetadataSidebar::setupTabBar() {
+void DetailsPane::setupTabBar() {
   // The .ui file's mainLayout is the QVBoxLayout that holds scrollArea.
   // Find it, create the tab bar, and insert at index 0.
   auto *mainLayout = qobject_cast<QVBoxLayout *>(layout());
@@ -374,11 +374,11 @@ void MetadataSidebar::setupTabBar() {
   mainLayout->insertWidget(0, m_tabBar);
 
   connect(m_tabBar, &QTabBar::currentChanged, this, [this](int index) {
-    SidebarTab newTab = SidebarTab::Item;
-    if (index == static_cast<int>(SidebarTab::Collection))
-      newTab = SidebarTab::Collection;
-    else if (index == static_cast<int>(SidebarTab::File))
-      newTab = SidebarTab::File;
+    DetailsPaneTab newTab = DetailsPaneTab::Item;
+    if (index == static_cast<int>(DetailsPaneTab::Collection))
+      newTab = DetailsPaneTab::Collection;
+    else if (index == static_cast<int>(DetailsPaneTab::File))
+      newTab = DetailsPaneTab::File;
     if (newTab == m_activeTab) {
       return;
     }
@@ -388,7 +388,7 @@ void MetadataSidebar::setupTabBar() {
   });
 }
 
-void MetadataSidebar::setActiveTab(SidebarTab tab) {
+void DetailsPane::setActiveTab(DetailsPaneTab tab) {
   if (m_activeTab == tab && m_tabBar && m_tabBar->currentIndex() == static_cast<int>(tab)) {
     return;
   }
@@ -400,10 +400,10 @@ void MetadataSidebar::setActiveTab(SidebarTab tab) {
   applyTabVisibility();
 }
 
-void MetadataSidebar::applyTabVisibility() {
+void DetailsPane::applyTabVisibility() {
   // Lazy-build the File-tab placeholder on first switch so we don't pay for
   // it when the user never visits that tab.
-  if (m_activeTab == SidebarTab::File && !m_filePlaceholder && ui->contentWidget) {
+  if (m_activeTab == DetailsPaneTab::File && !m_filePlaceholder && ui->contentWidget) {
     if (auto *cl = qobject_cast<QVBoxLayout *>(ui->contentWidget->layout())) {
       m_filePlaceholder = new QLabel(tr("No custom view configured."), ui->contentWidget);
       m_filePlaceholder->setAlignment(Qt::AlignCenter);
@@ -414,7 +414,7 @@ void MetadataSidebar::applyTabVisibility() {
   }
 
   switch (m_activeTab) {
-  case SidebarTab::Item:
+  case DetailsPaneTab::Item:
     if (m_filePlaceholder) m_filePlaceholder->hide();
     if (m_hasItemDisplayed) {
       applyItemViewVisibility(true);
@@ -424,11 +424,11 @@ void MetadataSidebar::applyTabVisibility() {
       renderCollectionSummary();
     }
     break;
-  case SidebarTab::Collection:
+  case DetailsPaneTab::Collection:
     if (m_filePlaceholder) m_filePlaceholder->hide();
     renderCollectionSummary();
     break;
-  case SidebarTab::File:
+  case DetailsPaneTab::File:
     applyItemViewVisibility(false);
     if (m_filePlaceholder) m_filePlaceholder->show();
     // Hide the title + collection summary chrome too so the placeholder
@@ -439,7 +439,7 @@ void MetadataSidebar::applyTabVisibility() {
     break;
   }
 
-  if (m_activeTab != SidebarTab::File) {
+  if (m_activeTab != DetailsPaneTab::File) {
     ui->titleLabel->setVisible(true);
     ui->itemNameLabel->setVisible(true);
     ui->itemNameValue->setVisible(true);
@@ -449,7 +449,7 @@ void MetadataSidebar::applyTabVisibility() {
   updateHorizontalView();
 }
 
-void MetadataSidebar::applyAppearance(const CollectionConfig &collection) {
+void DetailsPane::applyAppearance(const CollectionConfig &collection) {
   // Kartend-u2gx: m_position must be set BEFORE setActiveTab(), because
   // applyTabVisibility() consults it to decide whether the section-title
   // chrome (titleLabel / artworkLabel / fileInfoTitle) should be hidden in
@@ -552,7 +552,7 @@ void MetadataSidebar::applyAppearance(const CollectionConfig &collection) {
 
   // Kartend-ekaa: per-collection sidebar font override. Layered on top of the
   // designer-set baseline so reverting (empty family + 0 size) restores the
-  // original .ui look without us walking metadatasidebar.ui at runtime.
+  // original .ui look without us walking detailspane.ui at runtime.
   applySidebarFont(collection.sidebarFontFamily, collection.sidebarFontPointSize);
 
   // Kartend-63e: bubble backgrounds for readability over patterned bg.
@@ -594,28 +594,28 @@ void MetadataSidebar::applyAppearance(const CollectionConfig &collection) {
   update();
 }
 
-bool MetadataSidebar::isOnGrip(const QPoint &posInWidget) const {
+bool DetailsPane::isOnGrip(const QPoint &posInWidget) const {
   if (m_widthLocked) {
     return false;
   }
   // Kartend-u2gx: the grip lives on the inner edge — the side facing the grid.
   // Right dock → left edge; Left dock → right edge; Top dock → bottom edge;
   // Bottom dock → top edge.
-  const int grip = UIConstants::Sidebar::RESIZE_GRIP_PX;
+  const int grip = UIConstants::DetailsPane::RESIZE_GRIP_PX;
   switch (m_position) {
-  case SidebarPosition::Left:
+  case DetailsPanePosition::Left:
     return posInWidget.x() >= width() - grip;
-  case SidebarPosition::Top:
+  case DetailsPanePosition::Top:
     return posInWidget.y() >= height() - grip;
-  case SidebarPosition::Bottom:
+  case DetailsPanePosition::Bottom:
     return posInWidget.y() < grip;
-  case SidebarPosition::Right:
+  case DetailsPanePosition::Right:
   default:
     return posInWidget.x() < grip;
   }
 }
 
-void MetadataSidebar::mousePressEvent(QMouseEvent *event) {
+void DetailsPane::mousePressEvent(QMouseEvent *event) {
   if (!m_widthLocked && event->button() == Qt::LeftButton && isOnGrip(event->pos())) {
     if (CollectionUtils::isDetailsPaneHorizontal(m_position)) {
       m_heightDragging = true;
@@ -632,14 +632,14 @@ void MetadataSidebar::mousePressEvent(QMouseEvent *event) {
   QWidget::mousePressEvent(event);
 }
 
-void MetadataSidebar::mouseMoveEvent(QMouseEvent *event) {
+void DetailsPane::mouseMoveEvent(QMouseEvent *event) {
   if (m_widthDragging) {
     const int dx = event->globalPosition().toPoint().x() - m_dragStartX;
     // Right-anchored sidebar: drag-left increases width, drag-right shrinks.
     // Left-anchored: drag-right increases width.
     int candidate =
-        m_position == SidebarPosition::Left ? m_dragStartWidth + dx : m_dragStartWidth - dx;
-    candidate = std::max(candidate, UIConstants::Sidebar::MIN_WIDTH);
+        m_position == DetailsPanePosition::Left ? m_dragStartWidth + dx : m_dragStartWidth - dx;
+    candidate = std::max(candidate, UIConstants::DetailsPane::MIN_WIDTH);
     emit widthDragged(candidate);
     event->accept();
     return;
@@ -649,8 +649,8 @@ void MetadataSidebar::mouseMoveEvent(QMouseEvent *event) {
     // grows by dragging up (negative dy → height increases).
     const int dy = event->globalPosition().toPoint().y() - m_dragStartY;
     int candidate =
-        m_position == SidebarPosition::Top ? m_dragStartHeight + dy : m_dragStartHeight - dy;
-    candidate = std::max(candidate, UIConstants::Sidebar::MIN_HEIGHT);
+        m_position == DetailsPanePosition::Top ? m_dragStartHeight + dy : m_dragStartHeight - dy;
+    candidate = std::max(candidate, UIConstants::DetailsPane::MIN_HEIGHT);
     emit heightDragged(candidate);
     event->accept();
     return;
@@ -666,7 +666,7 @@ void MetadataSidebar::mouseMoveEvent(QMouseEvent *event) {
   QWidget::mouseMoveEvent(event);
 }
 
-void MetadataSidebar::mouseReleaseEvent(QMouseEvent *event) {
+void DetailsPane::mouseReleaseEvent(QMouseEvent *event) {
   if (m_widthDragging && event->button() == Qt::LeftButton) {
     m_widthDragging = false;
     emit widthCommitted(width());
@@ -682,20 +682,20 @@ void MetadataSidebar::mouseReleaseEvent(QMouseEvent *event) {
   QWidget::mouseReleaseEvent(event);
 }
 
-void MetadataSidebar::leaveEvent(QEvent *event) {
+void DetailsPane::leaveEvent(QEvent *event) {
   if (!m_widthDragging && !m_heightDragging) {
     unsetCursor();
   }
   QWidget::leaveEvent(event);
 }
 
-bool MetadataSidebar::eventFilter(QObject *watched, QEvent *event) {
+bool DetailsPane::eventFilter(QObject *watched, QEvent *event) {
   if (m_widthLocked) {
     return QWidget::eventFilter(watched, event);
   }
   // Kartend-u2gx: forward press/move/release in the grip zone from any inner
   // widget back to ourselves. mapTo(this, ...) translates the source widget's
-  // local coords into MetadataSidebar coords so isOnGrip() and the existing
+  // local coords into DetailsPane coords so isOnGrip() and the existing
   // drag math both work unmodified.
   auto *child = qobject_cast<QWidget *>(watched);
   if (!child) {
@@ -738,14 +738,14 @@ bool MetadataSidebar::eventFilter(QObject *watched, QEvent *event) {
     if (m_widthDragging) {
       const int dx = me->globalPosition().toPoint().x() - m_dragStartX;
       int candidate =
-          m_position == SidebarPosition::Left ? m_dragStartWidth + dx : m_dragStartWidth - dx;
-      candidate = std::max(candidate, UIConstants::Sidebar::MIN_WIDTH);
+          m_position == DetailsPanePosition::Left ? m_dragStartWidth + dx : m_dragStartWidth - dx;
+      candidate = std::max(candidate, UIConstants::DetailsPane::MIN_WIDTH);
       emit widthDragged(candidate);
     } else {
       const int dy = me->globalPosition().toPoint().y() - m_dragStartY;
       int candidate =
-          m_position == SidebarPosition::Top ? m_dragStartHeight + dy : m_dragStartHeight - dy;
-      candidate = std::max(candidate, UIConstants::Sidebar::MIN_HEIGHT);
+          m_position == DetailsPanePosition::Top ? m_dragStartHeight + dy : m_dragStartHeight - dy;
+      candidate = std::max(candidate, UIConstants::DetailsPane::MIN_HEIGHT);
       emit heightDragged(candidate);
     }
     me->accept();
@@ -773,16 +773,16 @@ bool MetadataSidebar::eventFilter(QObject *watched, QEvent *event) {
   return QWidget::eventFilter(watched, event);
 }
 
-void MetadataSidebar::paintEvent(QPaintEvent *event) {
+void DetailsPane::paintEvent(QPaintEvent *event) {
   QPainter painter(this);
   const QColor fallbackBase = palette().color(QPalette::Window);
   const QColor baseColor = m_bgColor.isValid() ? m_bgColor : fallbackBase;
 
   switch (m_bgType) {
-  case SidebarBackgroundType::Color:
+  case DetailsPaneBackgroundType::Color:
     painter.fillRect(rect(), baseColor);
     break;
-  case SidebarBackgroundType::Image:
+  case DetailsPaneBackgroundType::Image:
     painter.fillRect(rect(), baseColor);
     if (!m_bgImage.isNull()) {
       // Scale to cover the sidebar while preserving aspect ratio. Centered
@@ -795,7 +795,7 @@ void MetadataSidebar::paintEvent(QPaintEvent *event) {
       painter.drawPixmap(x, y, scaled);
     }
     break;
-  case SidebarBackgroundType::Pattern: {
+  case DetailsPaneBackgroundType::Pattern: {
     // Single full-size pattern (no tiling, no vertical gradient).
     // Pass our own palette Mid so the pattern picks up any palette overrides
     // inherited from an ancestor (itemsPage / m_mainContentWidget). Without
@@ -852,16 +852,16 @@ void MetadataSidebar::paintEvent(QPaintEvent *event) {
       }
     };
     switch (m_position) {
-    case SidebarPosition::Left:
+    case DetailsPanePosition::Left:
       drawHandle(w - 1, 0, w - 1, h, /*horizontalEdge=*/false);
       break;
-    case SidebarPosition::Top:
+    case DetailsPanePosition::Top:
       drawHandle(0, h - 1, w, h - 1, /*horizontalEdge=*/true);
       break;
-    case SidebarPosition::Bottom:
+    case DetailsPanePosition::Bottom:
       drawHandle(0, 0, w, 0, /*horizontalEdge=*/true);
       break;
-    case SidebarPosition::Right:
+    case DetailsPanePosition::Right:
     default:
       drawHandle(0, 0, 0, h, /*horizontalEdge=*/false);
       break;
@@ -871,7 +871,7 @@ void MetadataSidebar::paintEvent(QPaintEvent *event) {
   QWidget::paintEvent(event);
 }
 
-void MetadataSidebar::captureLabelFontBaselines() {
+void DetailsPane::captureLabelFontBaselines() {
   // Sweep every current QLabel in the subtree and record any that we haven't
   // seen yet. Each label's *current* font is taken as its baseline — this is
   // correct because we only call this from applySidebarFont before applying
@@ -895,7 +895,7 @@ void MetadataSidebar::captureLabelFontBaselines() {
   m_labelFontBaselinesCaptured = true;
 }
 
-int MetadataSidebar::previewBoxSize() const {
+int DetailsPane::previewBoxSize() const {
   if (!ui) {
     return UIConstants::Metadata::ARTWORK_SIZE;
   }
@@ -911,7 +911,7 @@ int MetadataSidebar::previewBoxSize() const {
   return qMax(80, viewportW - 28);
 }
 
-int MetadataSidebar::horizontalPreviewSize() const {
+int DetailsPane::horizontalPreviewSize() const {
   // Available vertical space = panel height − tabBar height − outer margins
   // (m_horizontalView's QHBoxLayout has 8px top + 8px bottom = 16px).
   // Floored at 80 so an unsized panel doesn't render postage-stamp previews.
@@ -921,7 +921,7 @@ int MetadataSidebar::horizontalPreviewSize() const {
   return qMax(80, avail);
 }
 
-void MetadataSidebar::setupHorizontalView() {
+void DetailsPane::setupHorizontalView() {
   if (m_horizontalView) {
     return;
   }
@@ -998,7 +998,7 @@ void MetadataSidebar::setupHorizontalView() {
   m_hEditButton->setCursor(Qt::PointingHandCursor);
   m_hEditButton->setToolTip(tr("Pick override files for any artwork type (standard or custom)."));
   m_hEditButton->setVisible(m_galleryEditEnabled);
-  connect(m_hEditButton, &QPushButton::clicked, this, &MetadataSidebar::editArtworkRequested);
+  connect(m_hEditButton, &QPushButton::clicked, this, &DetailsPane::editArtworkRequested);
   outer->addWidget(m_hEditButton);
 
   // Insert into mainLayout below tabBar / scrollArea so it can be toggled
@@ -1009,7 +1009,7 @@ void MetadataSidebar::setupHorizontalView() {
   m_horizontalView->hide();
 }
 
-void MetadataSidebar::rebuildHorizontalGallery() {
+void DetailsPane::rebuildHorizontalGallery() {
   if (!m_hGalleryLayout) return;
   // Clear existing thumbs.
   while (QLayoutItem *child = m_hGalleryLayout->takeAt(0)) {
@@ -1076,7 +1076,7 @@ void MetadataSidebar::rebuildHorizontalGallery() {
   }
 }
 
-void MetadataSidebar::updateHorizontalView() {
+void DetailsPane::updateHorizontalView() {
   if (!m_horizontalView) return;
   // Kartend-u2gx: only run when actually in horizontal dock. If the user
   // toggled to T/B then back to L/R, m_horizontalView still exists (hidden)
@@ -1090,8 +1090,8 @@ void MetadataSidebar::updateHorizontalView() {
   // Item tab: full strip (preview, info, metadata, gallery, edit).
   // Collection tab: just the collection name (other fields are item-only).
   // File tab: only the placeholder text.
-  const bool isItemTab = (m_activeTab == SidebarTab::Item);
-  const bool isFileTab = (m_activeTab == SidebarTab::File);
+  const bool isItemTab = (m_activeTab == DetailsPaneTab::Item);
+  const bool isFileTab = (m_activeTab == DetailsPaneTab::File);
 
   // Mirror the .ui's itemNameValue text — it already gets retitled per tab
   // (item name on Item tab, collection name on Collection tab) and per
@@ -1161,13 +1161,13 @@ void MetadataSidebar::updateHorizontalView() {
   rebuildHorizontalGallery();
 }
 
-int MetadataSidebar::currentGalleryThumbSize() const {
+int DetailsPane::currentGalleryThumbSize() const {
   // Vertical dock uses the .ui's compact constant. Horizontal dock has its
   // own dedicated gallery inside m_horizontalView and ignores this.
   return UIConstants::Metadata::GALLERY_THUMB_SIZE;
 }
 
-void MetadataSidebar::applyGalleryThumbSize() {
+void DetailsPane::applyGalleryThumbSize() {
   if (!m_galleryLayout) {
     return;
   }
@@ -1182,7 +1182,7 @@ void MetadataSidebar::applyGalleryThumbSize() {
   }
 }
 
-void MetadataSidebar::applyDockOrientation() {
+void DetailsPane::applyDockOrientation() {
   if (!ui) {
     return;
   }
@@ -1232,7 +1232,7 @@ void MetadataSidebar::applyDockOrientation() {
   applyPreviewSize();
 }
 
-void MetadataSidebar::applyPreviewSize() {
+void DetailsPane::applyPreviewSize() {
   // Kartend-u2gx: in horizontal dock the dedicated horizontal view owns the
   // sizing of its own preview tile (video only). The artworkDisplay stays
   // in the hidden vertical scrollArea so its size is irrelevant here.
@@ -1277,7 +1277,7 @@ void MetadataSidebar::applyPreviewSize() {
   }
 }
 
-void MetadataSidebar::applyContentAlignment() {
+void DetailsPane::applyContentAlignment() {
   // Only the artwork-section header, artwork preview, video preview, and
   // the "Name:" label sit on the sidebar's center axis. The item name
   // *value* is intentionally NOT in this list — pairing layout-item
@@ -1300,7 +1300,7 @@ void MetadataSidebar::applyContentAlignment() {
   }
 }
 
-void MetadataSidebar::applySidebarFont(const QString &family, int pointSize) {
+void DetailsPane::applySidebarFont(const QString &family, int pointSize) {
   m_activeSidebarFontFamily = family.trimmed();
   m_activeSidebarFontPointSize = pointSize;
   captureLabelFontBaselines();
@@ -1330,12 +1330,12 @@ void MetadataSidebar::applySidebarFont(const QString &family, int pointSize) {
   }
 }
 
-void MetadataSidebar::applyBubbleStyles(const QString &headerHex, const QString &sectionHex) {
+void DetailsPane::applyBubbleStyles(const QString &headerHex, const QString &sectionHex) {
   if (!ui->contentWidget) {
     return;
   }
   // Build a stylesheet that selects the existing static-label objectNames in
-  // metadatasidebar.ui. Dynamic detail rows are tagged via objectName at
+  // detailspane.ui. Dynamic detail rows are tagged via objectName at
   // creation in appendDetailRow / ensureGallerySection so they pick up the
   // same bubble. Empty hex disables that bubble (no rule emitted).
   QString sheet;
@@ -1377,7 +1377,7 @@ void MetadataSidebar::applyBubbleStyles(const QString &headerHex, const QString 
   ui->contentWidget->style()->polish(ui->contentWidget);
 }
 
-void MetadataSidebar::pausePreviewVideo() {
+void DetailsPane::pausePreviewVideo() {
   // Cancel any debounced start so a tab/selection change immediately before
   // the overlay opened doesn't fire a delayed playVideo() under the overlay.
   if (m_videoStartTimer) {
@@ -1393,7 +1393,7 @@ void MetadataSidebar::pausePreviewVideo() {
   ui->artworkDisplay->show();
 }
 
-bool MetadataSidebar::togglePreviewVideoPause() {
+bool DetailsPane::togglePreviewVideoPause() {
   if (!m_videoPreview || !m_videoPreview->hasLoadedSource()) {
     return false;
   }
@@ -1401,7 +1401,7 @@ bool MetadataSidebar::togglePreviewVideoPause() {
   return true;
 }
 
-void MetadataSidebar::updateFilePathDisplay() {
+void DetailsPane::updateFilePathDisplay() {
   if (m_currentFilePath.isEmpty()) {
     return;
   }
@@ -1411,7 +1411,7 @@ void MetadataSidebar::updateFilePathDisplay() {
   ui->filePathValue->setText(m_currentFilePath);
 }
 
-void MetadataSidebar::resizeEvent(QResizeEvent *event) {
+void DetailsPane::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);
   updateFilePathDisplay();
   // Kartend-xcfr: track the artwork + video preview to the sidebar's current
@@ -1427,7 +1427,7 @@ void MetadataSidebar::resizeEvent(QResizeEvent *event) {
 
 // Formats file size into human-readable string with appropriate units (KB, MB,
 // GB)
-auto MetadataSidebar::formatFileSize(qint64 bytes) -> QString {
+auto DetailsPane::formatFileSize(qint64 bytes) -> QString {
   const qint64 kiloBytes = UIConstants::Metadata::FILE_SIZE_KB;
   const qint64 megaBytes = kiloBytes * UIConstants::Metadata::FILE_SIZE_KB;
   const qint64 gigaBytes = megaBytes * UIConstants::Metadata::FILE_SIZE_KB;
@@ -1445,7 +1445,7 @@ auto MetadataSidebar::formatFileSize(qint64 bytes) -> QString {
 }
 
 // Load artwork from specified directory
-void MetadataSidebar::loadArtwork(const QString &baseName, const QString &artworkDirectory) {
+void DetailsPane::loadArtwork(const QString &baseName, const QString &artworkDirectory) {
   QDir artworkDir(artworkDirectory);
   if (!artworkDir.exists()) {
     return;
@@ -1476,7 +1476,7 @@ void MetadataSidebar::loadArtwork(const QString &baseName, const QString &artwor
 }
 
 // Apply horzontal scrolling policy
-void MetadataSidebar::setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy) {
+void DetailsPane::setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy) {
   if (ui->scrollArea) {
     ui->scrollArea->setHorizontalScrollBarPolicy(policy);
     ui->scrollArea->updateGeometry();
@@ -1487,7 +1487,7 @@ void MetadataSidebar::setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy) {
 // Stops any current preview video and shows the static artwork display
 // instead. Called whenever selection changes (before the debounce timer
 // resolves) and when metadata is cleared.
-void MetadataSidebar::showArtworkOnly() {
+void DetailsPane::showArtworkOnly() {
   if (m_videoPreview) {
     m_videoPreview->stop();
     m_videoPreview->hide();
@@ -1497,7 +1497,7 @@ void MetadataSidebar::showArtworkOnly() {
 
 // Schedule preview video playback after the debounce interval. Passing an
 // empty path cancels any pending playback.
-void MetadataSidebar::schedulePreviewVideo(const QString &videoPath) {
+void DetailsPane::schedulePreviewVideo(const QString &videoPath) {
   m_pendingVideoPath = videoPath;
   if (!m_videoStartTimer) {
     return;
@@ -1511,7 +1511,7 @@ void MetadataSidebar::schedulePreviewVideo(const QString &videoPath) {
 // Lazily construct the Details section. Appended once to the bottom of the
 // content layout; subsequent calls reuse the existing widgets so we do not
 // churn the layout on every selection change.
-void MetadataSidebar::ensureDetailsSection() {
+void DetailsPane::ensureDetailsSection() {
   if (m_detailsContainer) {
     return;
   }
@@ -1549,7 +1549,7 @@ void MetadataSidebar::ensureDetailsSection() {
   m_manualButton = new QPushButton(tr("Open Manual"), m_detailsContainer);
   m_manualButton->setCursor(Qt::PointingHandCursor);
   m_manualButton->hide();
-  connect(m_manualButton, &QPushButton::clicked, this, &MetadataSidebar::openCurrentManual);
+  connect(m_manualButton, &QPushButton::clicked, this, &DetailsPane::openCurrentManual);
   outer->addWidget(m_manualButton);
 
   m_detailsLayout = new QVBoxLayout();
@@ -1560,7 +1560,7 @@ void MetadataSidebar::ensureDetailsSection() {
   m_detailsContainer->hide();
 }
 
-void MetadataSidebar::clearDetailsSection() {
+void DetailsPane::clearDetailsSection() {
   if (!m_detailsLayout) {
     return;
   }
@@ -1572,7 +1572,7 @@ void MetadataSidebar::clearDetailsSection() {
   }
 }
 
-void MetadataSidebar::appendDetailRow(const QString &label, const QString &value, bool wrap) {
+void DetailsPane::appendDetailRow(const QString &label, const QString &value, bool wrap) {
   if (!m_detailsLayout || value.trimmed().isEmpty()) {
     return;
   }
@@ -1593,7 +1593,7 @@ void MetadataSidebar::appendDetailRow(const QString &label, const QString &value
   m_detailsLayout->addWidget(valueWidget);
 }
 
-void MetadataSidebar::setExtendedMetadata(const ItemMetadataStore::ItemMetadata &metadata) {
+void DetailsPane::setExtendedMetadata(const ItemMetadataStore::ItemMetadata &metadata) {
   if (metadata.isEmpty()) {
     if (m_detailsContainer) {
       clearDetailsSection();
@@ -1645,7 +1645,7 @@ void MetadataSidebar::setExtendedMetadata(const ItemMetadataStore::ItemMetadata 
   m_detailsContainer->show();
 }
 
-void MetadataSidebar::setUsageStats(const UsageStatsStore::ItemUsageStats &stats) {
+void DetailsPane::setUsageStats(const UsageStatsStore::ItemUsageStats &stats) {
   // Tracking columns default to zero/empty for items that have never been
   // launched; treat them as "no rows to add" so the Details section stays
   // hidden on bare items.
@@ -1674,7 +1674,7 @@ void MetadataSidebar::setUsageStats(const UsageStatsStore::ItemUsageStats &stats
   m_detailsContainer->show();
 }
 
-QString MetadataSidebar::formatRuntime(int seconds) {
+QString DetailsPane::formatRuntime(int seconds) {
   if (seconds < 0) {
     return {};
   }
@@ -1690,14 +1690,14 @@ QString MetadataSidebar::formatRuntime(int seconds) {
   return QStringLiteral("%1s").arg(secs);
 }
 
-void MetadataSidebar::ensureManualButton() {
+void DetailsPane::ensureManualButton() {
   // Manual button lives inside the Details container's outer layout. Build
   // the container on-demand so an item with only a manual (no extended
   // metadata) still gets a visible button.
   ensureDetailsSection();
 }
 
-void MetadataSidebar::setManualFile(const QString &manualPath) {
+void DetailsPane::setManualFile(const QString &manualPath) {
   m_manualPath = manualPath;
   const bool hasManual = !manualPath.isEmpty();
   if (hasManual) {
@@ -1722,7 +1722,7 @@ void MetadataSidebar::setManualFile(const QString &manualPath) {
   }
 }
 
-void MetadataSidebar::openCurrentManual() {
+void DetailsPane::openCurrentManual() {
   if (m_manualPath.isEmpty()) {
     return;
   }
@@ -1732,7 +1732,7 @@ void MetadataSidebar::openCurrentManual() {
   QDesktopServices::openUrl(QUrl::fromLocalFile(m_manualPath));
 }
 
-void MetadataSidebar::ensureGallerySection() {
+void DetailsPane::ensureGallerySection() {
   if (m_galleryContainer) {
     return;
   }
@@ -1772,7 +1772,7 @@ void MetadataSidebar::ensureGallerySection() {
   m_galleryEditButton->setToolTip(
       tr("Pick override files for any artwork type (standard or custom)."));
   m_galleryEditButton->setVisible(m_galleryEditEnabled);
-  connect(m_galleryEditButton, &QPushButton::clicked, this, &MetadataSidebar::editArtworkRequested);
+  connect(m_galleryEditButton, &QPushButton::clicked, this, &DetailsPane::editArtworkRequested);
   titleRow->addWidget(m_galleryEditButton);
   // Trailing stretch so any slack in the row goes to the right of the Edit
   // button rather than between title and button.
@@ -1813,7 +1813,7 @@ void MetadataSidebar::ensureGallerySection() {
   m_galleryContainer->hide();
 }
 
-void MetadataSidebar::clearGallerySection() {
+void DetailsPane::clearGallerySection() {
   if (!m_galleryLayout) {
     return;
   }
@@ -1825,7 +1825,7 @@ void MetadataSidebar::clearGallerySection() {
   }
 }
 
-void MetadataSidebar::setArtworkGallery(const QList<GalleryEntry> &entries) {
+void DetailsPane::setArtworkGallery(const QList<GalleryEntry> &entries) {
   // Kartend-u2gx: cache the raw entries so the dedicated horizontal view
   // can render its own gallery from the same list (with video filtered out
   // since the inline preview already plays it).
@@ -1948,7 +1948,7 @@ void MetadataSidebar::setArtworkGallery(const QList<GalleryEntry> &entries) {
   rebuildHorizontalGallery();
 }
 
-void MetadataSidebar::setArtworkEditEnabled(bool enabled) {
+void DetailsPane::setArtworkEditEnabled(bool enabled) {
   m_galleryEditEnabled = enabled;
   if (enabled) {
     ensureGallerySection();
@@ -1976,7 +1976,7 @@ void MetadataSidebar::setArtworkEditEnabled(bool enabled) {
   rebuildHorizontalGallery();
 }
 
-QPixmap MetadataSidebar::makeVideoPlaceholder(int iconSize) const {
+QPixmap DetailsPane::makeVideoPlaceholder(int iconSize) const {
   // Simple play triangle on a muted-tile background — visible at thumb
   // size without needing a separate image asset. Not themeable beyond
   // palette colors, which is fine for an initial-extraction placeholder.
@@ -1997,7 +1997,7 @@ QPixmap MetadataSidebar::makeVideoPlaceholder(int iconSize) const {
   return pix;
 }
 
-void MetadataSidebar::openGalleryPreview(const GalleryEntry &entry) {
+void DetailsPane::openGalleryPreview(const GalleryEntry &entry) {
   if (entry.path.isEmpty()) {
     return;
   }
@@ -2011,10 +2011,10 @@ void MetadataSidebar::openGalleryPreview(const GalleryEntry &entry) {
       overlayParent = this;
     }
     m_galleryOverlay = new ArtworkPreviewOverlay(overlayParent);
-    // Kartend-63e bug #7: forward overlay visibility so SidebarManager can
+    // Kartend-63e bug #7: forward overlay visibility so DetailsPaneManager can
     // lower the sidebar while the overlay is showing.
     connect(m_galleryOverlay, &ArtworkPreviewOverlay::visibilityChanged, this,
-            &MetadataSidebar::galleryOverlayVisibilityChanged);
+            &DetailsPane::galleryOverlayVisibilityChanged);
   }
   if (entry.isVideo) {
     m_galleryOverlay->showVideoAtPath(entry.path);
@@ -2023,7 +2023,7 @@ void MetadataSidebar::openGalleryPreview(const GalleryEntry &entry) {
   }
 }
 
-QString MetadataSidebar::formatTags(const QString &raw) {
+QString DetailsPane::formatTags(const QString &raw) {
   // Accept either a JSON array string or a comma-separated list. We do not
   // pull in QJsonDocument here to keep this widget lightweight; the Details
   // section just renders whatever the source provides with light cleanup.

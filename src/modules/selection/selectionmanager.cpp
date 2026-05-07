@@ -18,7 +18,7 @@
 #include "collectionutils.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "mousemanager.h"
 #include "navigationmanager.h"
 #include "scrolldatamanager.h"
@@ -26,7 +26,7 @@
 #include "selectionhelpers.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
@@ -43,7 +43,7 @@ Q_LOGGING_CATEGORY(lcSelectionManager, "kartend.selectionmanager")
 SETUP_GETTER_DEF_MGR_CTX_ONLY(SelectionManagerSetup, InteractionStateHolder *, InteractionState,
                               interactionState)
 SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, SidebarManager *, SidebarManager, sidebarManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
 SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, SessionManager *, SessionManager, sessionManager)
 SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, SettingsManager *, SettingsManager,
                           settingsManager)
@@ -54,7 +54,7 @@ SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, AnimationManager *, AnimationMa
 SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, ViewportManager *, ViewportManager,
                           viewportManager)
 SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, MetadataSidebar *, Sidebar, sidebar)
+SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, DetailsPane *, Sidebar, sidebar)
 SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QWidget *, ItemsPage, itemsPage)
 SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QWidget *, GridContainer, gridContainer)
 SETUP_GETTER_DEF_UI_SAME(SelectionManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
@@ -76,7 +76,7 @@ void SelectionManager::setupReferences(const SelectionManagerSetup &setup) {
 
   // Manager dependencies - use getters with ctx fallback
   m_scrollManager = setup.getScrollManager();
-  m_sidebarManager = setup.getSidebarManager();
+  m_detailsPaneManager = setup.getDetailsPaneManager();
   m_sessionManager = setup.getSessionManager();
   m_settingsManager = setup.getSettingsManager();
   m_navigationManager = setup.getNavigationManager();
@@ -190,13 +190,13 @@ void SelectionManager::updateFilePathForSelection(int index,
     }
   }
 
-  if ((m_sidebarManager) && m_sidebarManager->isSidebarVisible()) {
+  if ((m_detailsPaneManager) && m_detailsPaneManager->isSidebarVisible()) {
     ItemWidget *safeWidget = nullptr;
     if (m_scrollManager) {
       const auto &activeWidgets = m_scrollManager->getActiveWidgets();
       safeWidget = activeWidgets.value(index, nullptr);
     }
-    m_sidebarManager->updateSidebarMetadata(safeWidget);
+    m_detailsPaneManager->updateSidebarMetadata(safeWidget);
   }
 }
 

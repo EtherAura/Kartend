@@ -18,7 +18,7 @@ QT_END_NAMESPACE
 class Ui_MainWindow;
 class NavigationManager;
 class SettingsManager;
-class SidebarManager;
+class DetailsPaneManager;
 class ScrollManager;
 class ArtworkManager;
 class DatabaseManager;
@@ -33,7 +33,7 @@ struct MenuControllerContext {
   // Manager getters (safer than raw pointers - allows null checks)
   std::function<NavigationManager *()> getNavigationManager;
   std::function<SettingsManager *()> getSettingsManager;
-  std::function<SidebarManager *()> getSidebarManager;
+  std::function<DetailsPaneManager *()> getDetailsPaneManager;
   std::function<ScrollManager *()> getScrollManager;
   std::function<ArtworkManager *()> getArtworkManager;
   std::function<DatabaseManager *()> getDatabaseManager;
@@ -87,7 +87,7 @@ public:
   /// the active collection's persisted sidebarPosition. Called by MainWindow
   /// on collection switch / settings save so the menu reflects the current
   /// pane edge.
-  void syncOrientationActions(SidebarPosition position);
+  void syncOrientationActions(DetailsPanePosition position);
 
   /// Restore persisted Show Menu Bar / Show Toolbar / Fullscreen states from
   /// GeneralSettings. Called once from setupMenuBar() after every action has
@@ -138,7 +138,7 @@ private:
   void setupLayoutActions();
   /// Build the View → Details Pane Orientation submenu. Each entry mutates
   /// the current collection's `sidebarPosition`, persists via SettingsManager,
-  /// and re-applies the layout via SidebarManager so the change takes effect
+  /// and re-applies the layout via DetailsPaneManager so the change takes effect
   /// without requiring a pane toggle. Mirrors the toolbar/settings flow.
   void setupActionDetailsPaneOrientation();
   void insertFullscreenInViewMenu(QAction *fullscreenAction);

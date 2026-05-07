@@ -17,13 +17,13 @@
 #include "collectionutils.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "mousemanager.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
@@ -320,10 +320,10 @@ void SelectionManager::beginFullSelectionRestore(int targetIndex) {
   // Finalize restore state
   finalizeRestore();
 
-  if ((m_sidebarManager) && m_sidebarManager->isSidebarVisible()) {
+  if ((m_detailsPaneManager) && m_detailsPaneManager->isSidebarVisible()) {
     ItemWidget *widget = widgetForIndex(targetIndex);
     if (widget) {
-      m_sidebarManager->updateSidebarMetadata(widget);
+      m_detailsPaneManager->updateSidebarMetadata(widget);
     }
     scheduleSidebarMetadataUpdateIfVisible(
         targetIndex, 0, UIConstants::Selection::METADATA_SIDEBAR_UPDATE_DELAY_MS);
@@ -362,17 +362,17 @@ void SelectionManager::finalizeRestoreFlagsAndFocus() {
 
 void SelectionManager::scheduleSidebarMetadataUpdateIfVisible(int targetIndex, int initialDelayMs,
                                                               int secondaryDelayMs) {
-  if (!m_sidebarManager || !m_sidebarManager->isSidebarVisible()) {
+  if (!m_detailsPaneManager || !m_detailsPaneManager->isSidebarVisible()) {
     return;
   }
 
   auto updateSidebar = [this, targetIndex]() {
-    if (!m_sidebarManager || !m_sidebarManager->isSidebarVisible()) {
+    if (!m_detailsPaneManager || !m_detailsPaneManager->isSidebarVisible()) {
       return;
     }
     ItemWidget *widget = widgetForIndex(targetIndex);
     if (widget) {
-      m_sidebarManager->updateSidebarMetadata(widget);
+      m_detailsPaneManager->updateSidebarMetadata(widget);
     }
   };
 

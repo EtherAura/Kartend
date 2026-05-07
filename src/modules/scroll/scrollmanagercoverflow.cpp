@@ -154,7 +154,7 @@ void ScrollManager::applyCoverFlowVisibility() {
     resolveAndPushCoverFlowVideo(initialIdx);
     resolveAndPushCoverFlowGallery(initialIdx);
   }
-  // Notify listeners (MainWindow → SidebarManager) so the sidebar can yield
+  // Notify listeners (MainWindow → DetailsPaneManager) so the sidebar can yield
   // viewport space to the carousel without overwriting the persisted
   // per-collection sidebarVisible preference.
   emit coverFlowActiveChanged(active);
@@ -223,7 +223,7 @@ void ScrollManager::resolveAndPushCoverFlowVideo(int visualIndex) {
     m_coverFlowWidget->setVideoPathForIndex(visualIndex, QString());
     return;
   }
-  // Mirror SidebarManager's owner-aware resolution so showAllSubcollectionItems
+  // Mirror DetailsPaneManager's owner-aware resolution so showAllSubcollectionItems
   // collections find videos stored under the child collection's videoDirectory
   // even though the active context is the parent.
   QString videoDirectory = m_context.config.videoDirectory;

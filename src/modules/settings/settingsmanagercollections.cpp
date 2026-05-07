@@ -208,16 +208,16 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.horizontalAlignment = CollectionUtils::stringToAlignment(
         settings.value("horizontalAlignment", "center").toString());
     config.sidebarMode = (settings.value("sidebarMode", "overlay").toString() == "fixed")
-                             ? SidebarMode::Expand
-                             : SidebarMode::Overlay;
+                             ? DetailsPaneMode::Expand
+                             : DetailsPaneMode::Overlay;
     // Kartend-63e sidebar enhancements.
-    config.sidebarPosition = CollectionUtils::stringToSidebarPosition(
+    config.sidebarPosition = CollectionUtils::stringToDetailsPanePosition(
         settings.value("sidebarPosition", "right").toString());
-    config.sidebarBackgroundType = CollectionUtils::stringToSidebarBackgroundType(
+    config.sidebarBackgroundType = CollectionUtils::stringToDetailsPaneBackgroundType(
         settings.value("sidebarBackgroundType", "color").toString());
     config.sidebarBackgroundColor = settings.value("sidebarBackgroundColor").toString();
     config.sidebarBackgroundImage = settings.value("sidebarBackgroundImage").toString();
-    config.sidebarPattern = CollectionUtils::stringToSidebarPattern(
+    config.sidebarPattern = CollectionUtils::stringToDetailsPanePattern(
         settings.value("sidebarPattern", "crosshatch").toString());
     config.sidebarPatternIntensity = settings.value("sidebarPatternIntensity", 50).toInt();
     config.sidebarPatternColor = settings.value("sidebarPatternColor").toString();
@@ -227,15 +227,15 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.sidebarSectionBgColor = settings.value("sidebarSectionBgColor").toString();
     config.sidebarHeaderBgOpacity = settings.value("sidebarHeaderBgOpacity", 200).toInt();
     config.sidebarSectionBgOpacity = settings.value("sidebarSectionBgOpacity", 170).toInt();
-    config.sidebarWidth = settings.value("sidebarWidth", UIConstants::Sidebar::FIXED_WIDTH).toInt();
+    config.sidebarWidth = settings.value("sidebarWidth", UIConstants::DetailsPane::FIXED_WIDTH).toInt();
     // Kartend-u2gx: pane height for Top/Bottom dock. Same persistence treatment
     // as sidebarWidth (no migration of older configs needed — the default is
     // applied when the key is absent).
     config.sidebarHeight =
-        settings.value("sidebarHeight", UIConstants::Sidebar::FIXED_HEIGHT).toInt();
+        settings.value("sidebarHeight", UIConstants::DetailsPane::FIXED_HEIGHT).toInt();
     config.sidebarWidthLocked = settings.value("sidebarWidthLocked", true).toBool();
     config.sidebarActiveTab =
-        CollectionUtils::stringToSidebarTab(settings.value("sidebarActiveTab", "item").toString());
+        CollectionUtils::stringToDetailsPaneTab(settings.value("sidebarActiveTab", "item").toString());
     config.viewType =
         CollectionUtils::stringToViewType(settings.value("viewType", "grid").toString());
     config.hideMissingArtwork = settings.value("hideMissingArtwork", false).toBool();
@@ -483,17 +483,17 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue("showAllSubcollectionItems", c.showAllSubcollectionItems);
     settings.setValue("horizontalAlignment",
                       CollectionUtils::alignmentToString(c.horizontalAlignment));
-    settings.setValue("sidebarMode", (c.sidebarMode == SidebarMode::Expand) ? "fixed" : "overlay");
+    settings.setValue("sidebarMode", (c.sidebarMode == DetailsPaneMode::Expand) ? "fixed" : "overlay");
     // Kartend-63e sidebar enhancements.
     settings.setValue("sidebarPosition",
-                      CollectionUtils::sidebarPositionToString(c.sidebarPosition));
+                      CollectionUtils::detailsPanePositionToString(c.sidebarPosition));
     settings.setValue("sidebarBackgroundType",
-                      CollectionUtils::sidebarBackgroundTypeToString(c.sidebarBackgroundType));
+                      CollectionUtils::detailsPaneBackgroundTypeToString(c.sidebarBackgroundType));
     settings.setValue("sidebarBackgroundColor", c.sidebarBackgroundColor);
     settings.setValue(
         "sidebarBackgroundImage",
         sanitizePersistedPath(c.sidebarBackgroundImage, "sidebarBackgroundImage", sectionName));
-    settings.setValue("sidebarPattern", CollectionUtils::sidebarPatternToString(c.sidebarPattern));
+    settings.setValue("sidebarPattern", CollectionUtils::detailsPanePatternToString(c.sidebarPattern));
     settings.setValue("sidebarPatternIntensity", c.sidebarPatternIntensity);
     settings.setValue("sidebarPatternColor", c.sidebarPatternColor);
     settings.setValue("sidebarTextColor", c.sidebarTextColor);
@@ -505,7 +505,7 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue("sidebarWidth", c.sidebarWidth);
     settings.setValue("sidebarHeight", c.sidebarHeight);
     settings.setValue("sidebarWidthLocked", c.sidebarWidthLocked);
-    settings.setValue("sidebarActiveTab", CollectionUtils::sidebarTabToString(c.sidebarActiveTab));
+    settings.setValue("sidebarActiveTab", CollectionUtils::detailsPaneTabToString(c.sidebarActiveTab));
     settings.setValue("viewType", CollectionUtils::viewTypeToString(c.viewType));
     settings.setValue("hideMissingArtwork", c.hideMissingArtwork);
     settings.setValue("hideHorizontalScrollbar", c.hideHorizontalScrollbar);

@@ -36,14 +36,14 @@
 #include "databasemanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
@@ -60,7 +60,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcInteractionManager)
 void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   // Manager dependencies - use accessors that check context fallback
   m_scrollManager = setup.getScrollManager();
-  m_sidebarManager = setup.getSidebarManager();
+  m_detailsPaneManager = setup.getDetailsPaneManager();
   m_settingsManager = setup.getSettingsManager();
   m_databaseManager = setup.getDatabaseManager();
   m_navigationManager = setup.getNavigationManager();

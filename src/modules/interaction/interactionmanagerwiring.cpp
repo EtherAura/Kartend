@@ -28,7 +28,7 @@
 #include "itemwidget.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "uiconstants.h"
 
 void InteractionManager::connectSearchManagerSignals() {
@@ -157,8 +157,8 @@ void InteractionManager::connectGamepadManagerSignals() {
   connect(m_gamepadManager.get(), &GamepadManager::requestEscapeAction, this,
           [this]() { (void)handleEscapeKey(); });
   connect(m_gamepadManager.get(), &GamepadManager::requestToggleSidebarAction, this, [this]() {
-    if (m_sidebarManager) {
-      m_sidebarManager->toggleSidebar();
+    if (m_detailsPaneManager) {
+      m_detailsPaneManager->toggleSidebar();
     }
   });
   connect(m_gamepadManager.get(), &GamepadManager::requestScrollAnimationStop, this, [this]() {
