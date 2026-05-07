@@ -125,6 +125,16 @@ public:
   void addSubcollectionArtworkPathsWithDedup(int parentIndex, QSet<QString> &processedDirectories);
   void initializeCache();
   void clearLoadedArtworkState();
+
+  // ─── Per-item artwork-type override (Kartend-1v6) ─────────────────────────
+  // The shift+middle-click gesture cycles the displayed artwork through the
+  // item's available types. The chosen type id is stashed in
+  // `m_artworkTypeOverrides` keyed on the absolute file path, so widget
+  // recycling re-applies the override when the same item scrolls back into
+  // view. Empty string == "the legacy flat-directory artwork (primary)".
+  void cycleArtworkType(ItemWidget *widget, const QString &fullPath, int collectionIndex);
+  [[nodiscard]] QString artworkTypeOverrideFor(const QString &fullPath) const;
+  void clearArtworkTypeOverrides();
   [[nodiscard]] TimerUtils::Coordinator *getTimerCoordinator() const;
 
   [[nodiscard]] static QPixmap createProcessedArtwork(const QPixmap &originalPixmap);
@@ -166,6 +176,11 @@ private:
   QSet<QString> m_silentlyCachedPaths;
   QSet<QString> m_silentPendingPaths;
   QStringList m_allArtworkPaths;
+  // Kartend-1v6: per-item artwork-type override map. Key is the absolute
+  // media file path; value is the artwork type id ("" == primary/legacy).
+  // Cleared whenever the active widget set is torn down (collection change,
+  // pre-search restore) so a fresh navigation starts back on the primary.
+  QHash<QString, QString> m_artworkTypeOverrides;
 
   bool m_silentLoadingActive;
   int m_silentLoadBatchSize;

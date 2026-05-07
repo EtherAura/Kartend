@@ -16,27 +16,29 @@
 #include <QTimer>
 
 // ArrowNavigationHandlerSetup getter definitions
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, KeyboardManager *, KeyboardManager,
-                      keyboardManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, AnimationManager *, AnimationManager,
-                      animationManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, ViewportManager *, ViewportManager,
-                      viewportManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, SelectionManager *, SelectionManager,
-                      selectionManager)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QWidget *, GridContainer, gridContainer)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QStackedWidget *, StackedWidget, stackedWidget)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QWidget *, ItemsPage, itemsPage)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, QList<CollectionConfig> *, Collections,
-                      collections)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, int *, CurrentCollectionIndex,
-                      currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(ArrowNavigationHandlerSetup, GeneralSettings *, GeneralSettings,
-                      generalSettings)
-SETUP_GETTER_DEF_CTX_ONLY(ArrowNavigationHandlerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
+SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, KeyboardManager *, KeyboardManager,
+                          keyboardManager)
+SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, ScrollManager *, ScrollManager,
+                          scrollManager)
+SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, AnimationManager *, AnimationManager,
+                          animationManager)
+SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, ViewportManager *, ViewportManager,
+                          viewportManager)
+SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, SelectionManager *, SelectionManager,
+                          selectionManager)
+SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QStackedWidget *, StackedWidget,
+                         stackedWidget)
+SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, QList<CollectionConfig> *, Collections,
+                          collections)
+SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, int *, CurrentCollectionIndex,
+                          currentCollectionIndex)
+SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, GeneralSettings *, GeneralSettings,
+                          generalSettings)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(ArrowNavigationHandlerSetup, InteractionStateHolder *,
+                              InteractionState, interactionState)
 
 ArrowNavigationHandler::ArrowNavigationHandler(QObject *parent) : QObject(parent) {}
 
@@ -102,8 +104,14 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction, bool vertic
   }
 
   bool didWrap = false;
-  const int newSelection = KeyboardManager::calculateNewSelection(
-      totalItems, currentSelection, direction, wrapEnabled, vertical, gridWidth, didWrap);
+  bool horizontalLayout = false;
+  if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+    horizontalLayout =
+        ((*m_collections)[*m_currentCollectionIndex].viewType == ViewType::Horizontal);
+  }
+  const int newSelection =
+      KeyboardManager::calculateNewSelection(totalItems, currentSelection, direction, wrapEnabled,
+                                             vertical, gridWidth, didWrap, horizontalLayout);
 
   if (didWrap) {
     if (m_viewportManager) {
@@ -209,8 +217,14 @@ void ArrowNavigationHandler::handleRepeatStep() {
   const int gridWidth = getCurrentGridWidth();
 
   bool didWrap = false;
-  const int newSelection = KeyboardManager::calculateNewSelection(
-      totalItems, currentSelection, direction, wrapEnabled, repeatVertical, gridWidth, didWrap);
+  bool horizontalLayout = false;
+  if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+    horizontalLayout =
+        ((*m_collections)[*m_currentCollectionIndex].viewType == ViewType::Horizontal);
+  }
+  const int newSelection =
+      KeyboardManager::calculateNewSelection(totalItems, currentSelection, direction, wrapEnabled,
+                                             repeatVertical, gridWidth, didWrap, horizontalLayout);
 
   if (newSelection == currentSelection) {
     return;
@@ -307,12 +321,20 @@ void ArrowNavigationHandler::performVisibilityForKeyMove(bool isNewRow, int newS
     return;
   }
 
-  // In list mode, every move is a row change since there's 1 item per row
+  // In list mode, every move is a row change since there's 1 item per row.
+  // In cover flow (Kartend-3ile) the carousel widget centers the selection
+  // itself, so we skip viewport scrolling entirely.
   bool isListMode = false;
+  bool isCoverFlow = false;
   if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-    isListMode = (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
+    const ViewType vt = (*m_collections)[*m_currentCollectionIndex].viewType;
+    isListMode = (vt == ViewType::List);
+    isCoverFlow = (vt == ViewType::CoverFlow);
   }
 
+  if (isCoverFlow) {
+    return;
+  }
   if (isListMode || isNewRow) {
     m_viewportManager->centerItemVertically(newSelection, false);
   } else {

@@ -20,6 +20,7 @@ class ItemWidget;
 class DatabaseManager;
 class QPropertyAnimation;
 class ArtworkManager;
+class CoverFlowWidget;
 class WidgetPoolManager;
 class FilterManager;
 class DataSourceManager;
@@ -37,6 +38,7 @@ class SelectionStateTracker;
 class SelectionDisplayManager;
 class ListHeaderWidget;
 class ArtworkPreviewOverlay;
+class VirtualScrollEngine;
 enum class ListSortColumn;
 
 namespace TimerUtils {
@@ -79,6 +81,11 @@ struct ScrollManagerSetup {
  */
 class ScrollManager : public QObject {
   Q_OBJECT
+  // Engine is a sibling helper that drives virtual-scrolling layout and
+  // widget materialization (Kartend-158). It accesses ScrollManager's state
+  // directly via friendship; canonical state ownership remains here.
+  friend class VirtualScrollEngine;
+
 public:
   ScrollManager(QObject *parent = nullptr);
   ~ScrollManager() override;
@@ -93,6 +100,19 @@ public:
                          const QHash<QString, QString> &fileToArtworkDir);
   void cleanup();
   void updateGridWidth(int newGridWidth);
+  /// Kartend-dx9t: live-apply a change to the per-collection items-per-column
+  /// for the Horizontal view mode. No-op when the active view is not Horizontal,
+  /// since the value only feeds the layout in that mode. Pass 0 to mean
+  /// "fall back to gridWidth".
+  void updateHorizontalGridHeight(int newHorizontalGridHeight);
+  /// Kartend-0p3w: track whether the sidebar is currently hidden AND its mode
+  /// would shrink the grid (Expand). MainWindow updates this whenever the
+  /// sidebar's visibility changes, before triggering recalculateContainerMetrics.
+  /// When the flag is true and the active collection has gridWidthSidebarHidden
+  /// (or horizontalGridHeightSidebarHidden) configured non-zero, those values
+  /// override the primary ones in the layout calculator.
+  void setSidebarShrinkingActive(bool active);
+  [[nodiscard]] bool sidebarShrinkingActive() const { return m_sidebarShrinkingActive; }
   void updateViewType(ViewType viewType);
   void updateVirtualView();
   [[nodiscard]] int getEffectiveHorizontalSpacing() const;
@@ -136,6 +156,14 @@ public:
   /// Hide the artwork preview overlay if visible (returns true if it was
   /// visible)
   bool hideArtworkPreview();
+  /// Show the artwork preview overlay for the given file path. Used by
+  /// expand-mode two-stage activation in InteractionManager.
+  void showArtworkPreview(const QString &filePath, const QString &artworkDir);
+  /// Show a video-first preview overlay (Kartend-ljey). Falls back to
+  /// artwork when no video is found in @p videoDir. Used by expand-mode
+  /// (first-stage) and middle-click peek.
+  void showMediaPreview(const QString &filePath, const QString &artworkDir,
+                        const QString &videoDir);
 
   void centerHorizontalScrollbar(int currentCollectionIndex,
                                  const QList<CollectionConfig> &collections);
@@ -180,6 +208,27 @@ signals:
   void listColumnWidthChanged(int width); // Emitted when list column width is resized
   void
   listArtworkColumnWidthChanged(int width); // Emitted when list artwork column width is resized
+  /// Forwarded from SelectionDisplayManager: user activated (Enter /
+  /// double-click) while the artwork preview overlay was visible.
+  /// @p filePath is the path of the previewed item, or empty for
+  /// gallery-style previews — listeners should fall back to the current
+  /// selection when empty.
+  void artworkPreviewLaunchRequested(const QString &filePath);
+  /// Kartend-63e bug #7: forwarded from SelectionDisplayManager. MainWindow
+  /// wires this to DetailsPaneManager::setOverlayActive so the sidebar lowers
+  /// itself below the overlay while it's showing.
+  void artworkPreviewVisibilityChanged(bool visible);
+  /// Kartend-3ile: emitted when the user activates the centered card in
+  /// CoverFlow view (single click on center, double click, Enter, etc.) and
+  /// the activated index is a media item. Subcollection / virtual-folder
+  /// activations are routed through subcollectionEntered /
+  /// virtualFolderEntered above so they share the existing navigation path.
+  void coverFlowItemActivated(int visualIndex);
+  /// Kartend-3ile: fired when CoverFlow becomes the active view (true) or
+  /// any other ViewType replaces it (false). MainWindow wires this to
+  /// DetailsPaneManager::setExternallyHidden so the carousel takes the full
+  /// viewport without persisting that as the user's sidebar preference.
+  void coverFlowActiveChanged(bool active);
 
 public slots:
   /// Receives the visual index for a file path from database query
@@ -302,6 +351,11 @@ private:
   bool m_isMutating = false;
   DatabaseManager *m_databaseManager = nullptr;
   bool m_destroying = false;
+  // Kartend-0p3w: cached sidebar-hidden-and-shrinking predicate, fed by
+  // MainWindow on sidebar-visibility changes. Read by VirtualScrollEngine when
+  // it builds layout metrics so the alternate per-collection grid sizes apply
+  // automatically.
+  bool m_sidebarShrinkingActive = false;
   bool m_processingScrollChange = false; // Reentrancy guard for onScrollChanged
   TimerUtils::DebouncedTimer *m_userScrollIdleTimer = nullptr;
   TimerUtils::DebouncedTimer *m_prewarmIdleTimer = nullptr;
@@ -319,16 +373,39 @@ private:
   // Rate-limited debug aid for range delivery.
   int m_rangeReceiveDebugBudget = 10;
 
-  // Helper methods to reduce cognitive complexity
-  [[nodiscard]] QSet<int> calculateNeededIndices() const;
-  void removeUnneededWidgets(const QSet<int> &needed);
-  void updateArtworkIfAllowed();
+  // Virtual scrolling engine: owns the algorithms for layout, container
+  // lifecycle, and widget materialization (Kartend-158). Constructed in the
+  // ScrollManager constructor; destroyed last among helper managers so it
+  // can safely touch ScrollManager state during teardown.
+  std::unique_ptr<VirtualScrollEngine> m_engine;
 
   void initializeSubcollections();
   void initializeVirtualFolders();
   void setupFilePathMappings();
   void setupEmptyVirtualScrolling();
   void setupNormalVirtualScrolling();
+
+  // Kartend-3ile: cover-flow integration — the widget is a sibling of
+  // m_gridContainer in the items page scroll-area layout and is shown only
+  // when CollectionConfig::viewType == CoverFlow.
+  void ensureCoverFlowWidget();
+  void rebuildCoverFlowCards();
+  void applyCoverFlowConfig();
+  void applyCoverFlowVisibility();
+  [[nodiscard]] bool coverFlowActive() const;
+  /// Resolve the preview-video path for @p visualIndex and push it to the
+  /// carousel widget. Called from updateSelectionForIndex on every
+  /// selection change so the per-item video lookup stays lazy — scanning
+  /// the video directory for tens of thousands of items at rebuild time
+  /// would freeze the UI thread the same way artwork lookup did.
+  void resolveAndPushCoverFlowVideo(int visualIndex);
+  /// Resolve the per-item gallery (standard + custom artwork variants
+  /// from ItemArtworkStore plus the preview video) for @p visualIndex
+  /// and push it to the carousel widget. Mirrors the resolver in
+  /// DetailsPaneManager::updateSidebarMetadata so the cover-flow gallery
+  /// surfaces the same set of entries the sidebar would.
+  void resolveAndPushCoverFlowGallery(int visualIndex);
+  CoverFlowWidget *m_coverFlowWidget = nullptr;
 
   void handleProgrammaticScroll();
   void handleUserScroll();

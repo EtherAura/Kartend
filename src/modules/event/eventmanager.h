@@ -26,7 +26,7 @@ class ViewportManager;
 class SelectionManager;
 class ArtworkManager;
 class DatabaseManager;
-class SidebarManager;
+class DetailsPaneManager;
 class InteractionStateHolder;
 struct ApplicationContext;
 
@@ -47,7 +47,7 @@ struct EventManagerSetup {
   SelectionManager *selectionManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
   DatabaseManager *databaseManager = nullptr;
-  SidebarManager *sidebarManager = nullptr;
+  DetailsPaneManager *detailsPaneManager = nullptr;
 
   // UI elements (can be overridden or taken from ctx)
   QScrollArea *itemScrollArea = nullptr;
@@ -69,7 +69,7 @@ struct EventManagerSetup {
   SETUP_GETTER_DECL(SelectionManager *, SelectionManager)
   SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
   SETUP_GETTER_DECL(DatabaseManager *, DatabaseManager)
-  SETUP_GETTER_DECL(SidebarManager *, SidebarManager)
+  SETUP_GETTER_DECL(DetailsPaneManager *, DetailsPaneManager)
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
   SETUP_GETTER_DECL(QWidget *, GridContainer)
   SETUP_GETTER_DECL(QStackedWidget *, StackedWidget)
@@ -114,6 +114,14 @@ signals:
   void widgetClicked(ItemWidget *widget, int visualIndex, const QPoint &clickPos,
                      QMouseEvent *event);
   void contextMenuRequested(ItemWidget *widget, int visualIndex, const QPoint &globalPos);
+  /// Emitted when the user middle-clicks an item (Kartend-ljey). Used to
+  /// open a video-first media preview overlay without launching.
+  void mediaPreviewRequested(ItemWidget *widget, int visualIndex);
+  /// Emitted when the user middle-clicks while holding the artwork-cycle
+  /// modifier configured in `GeneralSettings::artworkCycleModifier`
+  /// (Kartend-1v6). Cycles the displayed artwork through the item's
+  /// available types without changing selection or launching.
+  void artworkTypeCycleRequested(ItemWidget *widget, int visualIndex);
   void clearSelectionRequested();
   void slashKeyPressed();
   void escapeKeyPressed();
@@ -154,7 +162,7 @@ private:
   SelectionManager *m_selectionManager = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
   DatabaseManager *m_databaseManager = nullptr;
-  SidebarManager *m_sidebarManager = nullptr;
+  DetailsPaneManager *m_detailsPaneManager = nullptr;
   InteractionStateHolder *m_state = nullptr;
   GeneralSettings *m_generalSettings = nullptr;
 

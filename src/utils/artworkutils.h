@@ -7,6 +7,7 @@
 #include <QMutex>
 #include <QSet>
 #include <QString>
+#include <QStringList>
 
 /**
  * @brief Utility functions for artwork file operations.
@@ -140,6 +141,16 @@ private:
  * Call when collections change or need fresh filesystem data.
  */
 void clearDirectoryCache();
+
+/// Picks the next artwork type id in the cycle order (Kartend-1v6). The cycle
+/// is the @p availableTypes list in order, wrapping from the last entry back
+/// to the first. The empty-string entry conventionally represents the legacy
+/// flat-directory artwork (the "primary"). When @p currentType is not present
+/// in @p availableTypes, the first entry is returned so the user always lands
+/// on a defined state. When @p availableTypes has fewer than two entries,
+/// @p currentType is returned unchanged (cycling has no effect).
+[[nodiscard]] QString nextArtworkType(const QString &currentType,
+                                      const QStringList &availableTypes);
 
 } // namespace ArtworkUtils
 

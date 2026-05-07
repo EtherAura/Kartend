@@ -44,6 +44,15 @@ private slots:
   void testGetVisibleRowRange_scrolledDown();
   void testGetVisibleRowRange_emptyMetrics();
 
+  // Kartend-dx9t: Horizontal view-mode tests (axis-flipped layout).
+  void testHorizontal_calculateMetrics_dimensionsAreTransposed();
+  void testHorizontal_getItemPosition_columnMajor();
+  void testHorizontal_getVisibleRowRange_isColumnRange();
+  void testHorizontal_calculateCenterScrollTarget_centersAlongX();
+  void testHorizontal_indexAtPosition_columnMajor();
+  void testHorizontal_horizontalGridHeightOverridesGridWidth();
+  void testHorizontal_horizontalGridHeightZeroFallsBackToGridWidth();
+
 private:
   CollectionConfig m_config;
   GridMetrics m_metrics;
@@ -252,6 +261,128 @@ void TestGridLayoutCalculator::testGetVisibleRowRange_emptyMetrics() {
 
   QCOMPARE(first, 0);
   QCOMPARE(last, 0);
+}
+
+// ─── Kartend-dx9t Horizontal view tests ─────────────────────────────────────
+
+void TestGridLayoutCalculator::testHorizontal_calculateMetrics_dimensionsAreTransposed() {
+  CollectionConfig cfg = m_config;
+  cfg.viewType = ViewType::Horizontal;
+  cfg.gridWidth = 3; // items per column
+
+  GridMetrics metrics = GridLayoutCalculator::calculateMetrics(cfg, /*totalItems=*/10);
+
+  QVERIFY(metrics.isHorizontal);
+  QCOMPARE(metrics.itemsPerRow, 3); // reinterpreted as items-per-column
+  QCOMPARE(metrics.totalRows, 4);   // ceil(10 / 3) columns along the long axis
+
+  // The fixed (Y) dimension should equal margins*2 + 3 items + 2 spacings.
+  const int rowHeight = metrics.itemHeight + metrics.verticalSpacing;
+  const int expectedHeight = metrics.margins * 2 + 3 * metrics.itemHeight + 2 * metrics.verticalSpacing;
+  QCOMPARE(metrics.totalHeight, expectedHeight);
+  Q_UNUSED(rowHeight);
+
+  // The long (X) dimension should grow with column count.
+  const int expectedWidth = metrics.margins * 2 + 4 * metrics.itemWidth + 3 * metrics.horizontalSpacing;
+  QCOMPARE(metrics.totalWidth, expectedWidth);
+}
+
+void TestGridLayoutCalculator::testHorizontal_getItemPosition_columnMajor() {
+  CollectionConfig cfg = m_config;
+  cfg.viewType = ViewType::Horizontal;
+  cfg.gridWidth = 3;
+
+  GridMetrics m = GridLayoutCalculator::calculateMetrics(cfg, /*totalItems=*/9);
+
+  // Item 0: col 0, row 0 → top-left of grid
+  QPoint p0 = GridLayoutCalculator::getItemPosition(0, m);
+  QCOMPARE(p0.x(), m.margins);
+  QCOMPARE(p0.y(), m.margins);
+
+  // Item 2: col 0, row 2 → bottom of first column
+  QPoint p2 = GridLayoutCalculator::getItemPosition(2, m);
+  QCOMPARE(p2.x(), m.margins);
+  QCOMPARE(p2.y(), m.margins + 2 * (m.itemHeight + m.verticalSpacing));
+
+  // Item 3: col 1, row 0 → top of second column
+  QPoint p3 = GridLayoutCalculator::getItemPosition(3, m);
+  QCOMPARE(p3.x(), m.margins + (m.itemWidth + m.horizontalSpacing));
+  QCOMPARE(p3.y(), m.margins);
+}
+
+void TestGridLayoutCalculator::testHorizontal_getVisibleRowRange_isColumnRange() {
+  CollectionConfig cfg = m_config;
+  cfg.viewType = ViewType::Horizontal;
+  cfg.gridWidth = 3;
+
+  GridMetrics m = GridLayoutCalculator::calculateMetrics(cfg, /*totalItems=*/30);
+  // Viewport ~600 wide; with itemWidth=200 + hSpacing=10 → 210 col stride →
+  // ~3 columns visible at a time (with buffer).
+  auto [first, last] = GridLayoutCalculator::getVisibleRowRange(0, 600, m, /*bufferRows=*/0);
+  QCOMPARE(first, 0);
+  QVERIFY(last >= 2);
+  QVERIFY(last <= 3);
+
+  // Scrolled to ~middle of the strip.
+  auto [first2, last2] = GridLayoutCalculator::getVisibleRowRange(800, 600, m, /*bufferRows=*/0);
+  QVERIFY(first2 >= 3);
+  QVERIFY(last2 > first2);
+}
+
+void TestGridLayoutCalculator::testHorizontal_calculateCenterScrollTarget_centersAlongX() {
+  CollectionConfig cfg = m_config;
+  cfg.viewType = ViewType::Horizontal;
+  cfg.gridWidth = 3;
+
+  GridMetrics m = GridLayoutCalculator::calculateMetrics(cfg, /*totalItems=*/30);
+  const int colStride = m.itemWidth + m.horizontalSpacing;
+  // Item 9 lives at column 3 (9 / 3). centerTarget should aim at colX + half - vw/2.
+  int target = GridLayoutCalculator::calculateCenterScrollTarget(/*idx=*/9, /*viewportSize=*/600,
+                                                                  /*maxScroll=*/100000, m);
+  int itemX = m.margins + 3 * colStride;
+  int expected = itemX + (m.itemWidth / 2) - (600 / 2);
+  QCOMPARE(target, qMax(0, expected));
+}
+
+void TestGridLayoutCalculator::testHorizontal_indexAtPosition_columnMajor() {
+  CollectionConfig cfg = m_config;
+  cfg.viewType = ViewType::Horizontal;
+  cfg.gridWidth = 3;
+
+  GridMetrics m = GridLayoutCalculator::calculateMetrics(cfg, /*totalItems=*/30);
+  // A point inside the third item's slot (col 0, row 2).
+  QPoint p(m.margins + 5, m.margins + 2 * (m.itemHeight + m.verticalSpacing) + 5);
+  int idx = GridLayoutCalculator::indexAtPosition(p, m, /*totalItems=*/30);
+  QCOMPARE(idx, 2);
+  // A point inside the (col 1, row 0) slot.
+  QPoint p2(m.margins + (m.itemWidth + m.horizontalSpacing) + 5, m.margins + 5);
+  int idx2 = GridLayoutCalculator::indexAtPosition(p2, m, /*totalItems=*/30);
+  QCOMPARE(idx2, 3);
+}
+
+void TestGridLayoutCalculator::testHorizontal_horizontalGridHeightOverridesGridWidth() {
+  CollectionConfig cfg = m_config;
+  cfg.viewType = ViewType::Horizontal;
+  cfg.gridWidth = 4;
+  cfg.horizontalGridHeight = 6; // explicit override
+
+  GridMetrics m = GridLayoutCalculator::calculateMetrics(cfg, /*totalItems=*/12);
+
+  // itemsPerRow encodes the fixed-axis count → should follow the override, not gridWidth.
+  QCOMPARE(m.itemsPerRow, 6);
+  QCOMPARE(m.totalRows, 2); // ceil(12 / 6) columns
+}
+
+void TestGridLayoutCalculator::testHorizontal_horizontalGridHeightZeroFallsBackToGridWidth() {
+  CollectionConfig cfg = m_config;
+  cfg.viewType = ViewType::Horizontal;
+  cfg.gridWidth = 4;
+  cfg.horizontalGridHeight = 0; // sentinel: inherit gridWidth
+
+  GridMetrics m = GridLayoutCalculator::calculateMetrics(cfg, /*totalItems=*/12);
+
+  QCOMPARE(m.itemsPerRow, 4);
+  QCOMPARE(m.totalRows, 3); // ceil(12 / 4) columns
 }
 
 QTEST_MAIN(TestGridLayoutCalculator)

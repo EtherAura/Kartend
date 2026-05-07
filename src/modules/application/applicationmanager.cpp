@@ -6,12 +6,15 @@
 #include "cachemanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "detailpagemanager.h"
 #include "interactionmanager.h"
+#include "kartmanager.h"
 #include "navigationmanager.h"
+#include "playlistmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 
 #include <QtConcurrent>
 
@@ -55,18 +58,34 @@ void ApplicationManager::initialize() {
   // 6. DatabaseManager (needs SessionManager)
   m_databaseManager = std::make_unique<DatabaseManager>(m_sessionManager.get(), this);
 
+  // 6b. PlaylistManager (Kartend-vlm7) — opens its own main-thread connection
+  // on the same media.db. Construction is fast; initialize() does the I/O and
+  // is called by MainWindow before loadCollections() so synthesized playlist
+  // CollectionConfigs can be appended to m_collections in the same setup pass.
+  m_playlistManager = std::make_unique<PlaylistManager>(this);
+
   // 7. ScrollManager
   m_scrollManager = std::make_unique<ScrollManager>(this);
   m_scrollManager->setDatabaseManager(m_databaseManager.get());
 
-  // 8. SidebarManager
-  m_sidebarManager = std::make_unique<SidebarManager>(this);
+  // 8. DetailsPaneManager
+  m_detailsPaneManager = std::make_unique<DetailsPaneManager>(this);
 
   // 9. NavigationManager
   m_navigationManager = std::make_unique<NavigationManager>(this);
 
   // 10. InteractionManager
   m_interactionManager = std::make_unique<InteractionManager>(this);
+
+  // 11. DetailPageManager (Kartend-uve). Standalone — only depends on the
+  // overlay widget + DetailsPaneManager + DatabaseManager, all of which are
+  // wired in MainWindow::setupManagerConnections via the setup struct.
+  m_detailPageManager = std::make_unique<DetailPageManager>(this);
+
+  // 12. KartManager (Kartend-zgaq). Coordinates Kart import/export. Wired in
+  // MainWindow::setupManagerConnections with SettingsManager + collection list
+  // accessors via the setup struct.
+  m_kartManager = std::make_unique<kart::KartManager>(this);
 }
 
 void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
@@ -140,12 +159,20 @@ DatabaseManager *ApplicationManager::getDatabaseManager() const {
   return m_databaseManager.get();
 }
 
+DetailPageManager *ApplicationManager::getDetailPageManager() const {
+  return m_detailPageManager.get();
+}
+
 InteractionManager *ApplicationManager::getInteractionManager() const {
   return m_interactionManager.get();
 }
 
 NavigationManager *ApplicationManager::getNavigationManager() const {
   return m_navigationManager.get();
+}
+
+PlaylistManager *ApplicationManager::getPlaylistManager() const {
+  return m_playlistManager.get();
 }
 
 ScrollManager *ApplicationManager::getScrollManager() const {
@@ -160,6 +187,8 @@ SettingsManager *ApplicationManager::getSettingsManager() const {
   return m_settingsManager.get();
 }
 
-SidebarManager *ApplicationManager::getSidebarManager() const {
-  return m_sidebarManager.get();
+DetailsPaneManager *ApplicationManager::getDetailsPaneManager() const {
+  return m_detailsPaneManager.get();
 }
+
+kart::KartManager *ApplicationManager::getKartManager() const { return m_kartManager.get(); }

@@ -548,6 +548,35 @@ Common reasons for 0ms delays:
 - Allow Qt layout/property changes to settle
 - Prevent reentrancy during signal handling
 
+### Icon Theme
+
+**Always render UI glyphs as KDE Breeze theme icons.** Do not embed unicode/emoji
+("⊞ ☰ ◖◉◗ 🏷 🔎") or QString text in place of an icon — those don't follow the
+user's chosen icon theme, scale poorly across DPI, and look out of place next to
+real Breeze icons.
+
+- Look up the canonical Breeze name on
+  [api.kde.org/frameworks/breeze-icons](https://api.kde.org/frameworks/breeze-icons/html/index.html)
+  before introducing a new glyph. Common names already wired in
+  [src/ui/uiconstants/icons.h](src/ui/uiconstants/icons.h):
+  `search`, `filter-symbolic`, `application-menu`, `view-choose`, `folder`,
+  `folder-open`, `folder-documents`, `view-preview`.
+- Resolve via `UIConstants::Icons::fromTheme(name)` (single name) or the
+  initializer-list overload (name + fallbacks). Prefer adding new constants to
+  `icons.h` over inlining string literals at the call site.
+- For toolbar / button glyphs: set `setIcon(...)` and clear the legacy text
+  with `setText(QString())`. Use `setToolButtonStyle(Qt::ToolButtonIconOnly)`
+  on QToolButtons. Hide the auto-injected popup arrow on
+  `InstantPopup`-mode QToolButtons via stylesheet
+  `QToolButton::menu-indicator { image: none; width: 0; }` so the icon stays
+  centered.
+- For QLineEdit-embedded actions (e.g. the search-mode toggle), use
+  `QLineEdit::addAction(icon, QLineEdit::LeadingPosition)` rather than
+  parking a sibling QPushButton next to the field.
+- Add new Breeze icon names to `UIConstants::Icons` rather than repeating
+  raw strings; the wrapper centralizes fallback chains for distros that ship
+  partial Breeze packages.
+
 ### UI Constants
 
 All magic numbers live in `UIConstants` namespace (`src/ui/uiconstants.h`). **Never hardcode** timing, spacing, or dimensions.

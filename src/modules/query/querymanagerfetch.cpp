@@ -63,6 +63,12 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
 
   QStringList uuids = collectCollectionUuids(ctx, allCollections);
   if (uuids.isEmpty()) {
+    // Kartend-vlm7: an empty playlist is a valid state — show "0 items" rather
+    // than raising a "no valid uuids" error. The scope is empty by definition;
+    // there's nothing to query.
+    if (ctx.config.isPlaylist) {
+      return 0;
+    }
     auto err = ErrorContext::warning(ErrorCode::InvalidArgument,
                                      "No valid collection UUIDs for item count query",
                                      "QueryManager::fetchItemCount");
@@ -71,6 +77,17 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
     return 0;
   }
   const QString trimmedFilter = filter.trimmed();
+
+  // Kartend-vlm7: refresh the playlist scope temp table when it's stale so the
+  // EXISTS clause appended below filters against the right (uuid, path) set.
+  if (ctx.config.isPlaylist && !ensurePlaylistScopePopulated(ctx.config.playlistId)) {
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to populate playlist scope for item count",
+                                     "QueryManager::fetchItemCount");
+    ErrorUtils::logError(err);
+    emit errorOccurred(err);
+    return 0;
+  }
 
   qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCount: uuidCount=" << uuids.size()
                         << "showAllSubcollectionItems=" << ctx.config.showAllSubcollectionItems
@@ -156,6 +173,14 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
     }
   }
 
+  // Kartend-vlm7: narrow to playlist members. Composing this as an EXISTS
+  // clause keeps it orthogonal to the existing filter / FTS / temp-table
+  // logic so we don't fork the SQL builder.
+  if (ctx.config.isPlaylist) {
+    sql += " AND EXISTS (SELECT 1 FROM query_playlist_scope p "
+           "WHERE p.uuid = collection_uuid AND p.path = path)";
+  }
+
   // Use cached prepared statement - dynamic SQL is cached by query string
   QSqlQuery &query = getPreparedStatement(sql);
   int bindPos = 0;
@@ -189,8 +214,12 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
     //
     // Random sort mode ALWAYS requires a cache because SQL ORDER BY RANDOM()
     // with OFFSET cannot provide consistent results across paginated requests.
+    // Playlists (Kartend-vlm7) skip the sorted_items_cache in v1 — its hash
+    // collides with non-playlist queries over the same source uuids; revisit
+    // when we add a playlist-aware cache key.
     const bool isRandomSort = (ctx.sortMode == SortMode::Random);
-    if (isRandomSort || count >= UIConstants::Database::PRECOMPUTE_SORT_THRESHOLD) {
+    if (!ctx.config.isPlaylist &&
+        (isRandomSort || count >= UIConstants::Database::PRECOMPUTE_SORT_THRESHOLD)) {
       if (!hasSortedItemsCache() && !m_sortCacheBuildPending) {
         if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
           qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemCount: count=" << count
@@ -336,8 +365,19 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
   QStringList uuids = collectCollectionUuids(ctx, allCollections);
   CollectionDirMaps dirMaps = buildDirectoryMaps(ctx, allCollections);
 
+  // Kartend-vlm7: empty playlist short-circuits — there's nothing to find.
+  if (ctx.config.isPlaylist && uuids.isEmpty()) {
+    emit visualIndexForPathLoaded(-1, filePath);
+    return;
+  }
+  if (ctx.config.isPlaylist && !ensurePlaylistScopePopulated(ctx.config.playlistId)) {
+    emit visualIndexForPathLoaded(-1, filePath);
+    return;
+  }
+
   // Try sorted cache first (fast path)
-  if (hasSortedItemsCache()) {
+  // Kartend-vlm7: cache is bypassed for playlists (see fetchItemsRange).
+  if (!ctx.config.isPlaylist && hasSortedItemsCache()) {
     const QByteArray currentHash = computeSortCacheHash(uuids, QString(), ctx.sortMode);
     if (currentHash == m_sortedItemsCacheHash) {
       // Query sorted cache for this path
@@ -379,6 +419,18 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
   case SortMode::NameDescending:
     orderClause = "ORDER BY name COLLATE NOCASE DESC";
     break;
+  case SortMode::DateDescending:
+    orderClause = "ORDER BY last_modified DESC, name COLLATE NOCASE";
+    break;
+  case SortMode::DateAscending:
+    orderClause = "ORDER BY last_modified ASC, name COLLATE NOCASE";
+    break;
+  case SortMode::SizeDescending:
+    orderClause = "ORDER BY file_size DESC, name COLLATE NOCASE";
+    break;
+  case SortMode::SizeAscending:
+    orderClause = "ORDER BY file_size ASC, name COLLATE NOCASE";
+    break;
   case SortMode::CollectionAscending:
     orderClause = "ORDER BY collection_uuid, name COLLATE NOCASE";
     break;
@@ -407,12 +459,20 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
   // path, name doesn't work because the same path can have different
   // collection_uuid values. GROUP BY path ensures exactly one row per unique
   // path, matching COUNT(DISTINCT path) used by fetchItemCount.
+  // Kartend-vlm7: narrow the inner subquery to playlist members so the
+  // ROW_NUMBER mapping matches what fetchItemsRange returns.
+  const QString playlistClause =
+      ctx.config.isPlaylist
+          ? QStringLiteral(" AND EXISTS (SELECT 1 FROM query_playlist_scope p WHERE p.uuid = "
+                           "collection_uuid AND p.path = path)")
+          : QString();
+
   QString sql = QString("SELECT rn FROM ("
                         "  SELECT path, ROW_NUMBER() OVER (%1) - 1 as rn "
-                        "  FROM (SELECT path, name FROM items WHERE "
-                        "collection_uuid IN (%2) GROUP BY path)"
+                        "  FROM (SELECT path, name, last_modified, file_size FROM items WHERE "
+                        "collection_uuid IN (%2)%3 GROUP BY path)"
                         ") WHERE path = ?")
-                    .arg(orderClause, uuidPlaceholders);
+                    .arg(orderClause, uuidPlaceholders, playlistClause);
 
   QSqlQuery query(m_db);
   query.prepare(sql);

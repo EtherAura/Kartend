@@ -127,7 +127,7 @@ void QueryManager::saveItemsToDatabase(int collectionIndex, const QStringList &f
     for (int i = batchStart; i < batchEnd; ++i) {
       batchPaths.append(filePaths[i]);
     }
-    insertScannedItemsBatch(batchPaths, timestamps);
+    insertScannedItemsBatch(batchPaths, timestamps, collection.mediaDirectory);
 
     itemsInserted = batchEnd;
     ++batchesSinceCommit;

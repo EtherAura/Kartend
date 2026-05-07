@@ -14,7 +14,7 @@
 #include "sessionmanager.h"
 #include "settingsdialog.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 #include <algorithm>
@@ -75,6 +75,30 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.titleTintSaturation = s.value("titleTintSaturation", 180).toInt();
   settings.titleTintLightness = s.value("titleTintLightness", 60).toInt();
   settings.titleBaseColor = s.value("titleBaseColor", QString()).toString();
+  // Kartend-cub: opt-in title overlay on placeholder art
+  settings.showTitleInPlaceholder = s.value("showTitleInPlaceholder", false).toBool();
+
+  // Kartend-9v0o: global UI font. Empty family / 0 size = platform default.
+  // No clamp on point size beyond Qt's own validation; the spinbox in the
+  // settings dialog limits user input to a sane range.
+  settings.globalUiFontFamily = s.value("globalUiFontFamily", QString()).toString();
+  settings.globalUiFontPointSize = s.value("globalUiFontPointSize", 0).toInt();
+
+  // Kartend-7eff: runtime text zoom. Persisted as percent so a hand-edited
+  // value reads obviously; clamped to [50, 300] to keep typography legible
+  // and avoid absurdly tiny / huge widget sizes that the layout pipeline
+  // wasn't designed for.
+  settings.uiTextZoomPercent = qBound(50, s.value("uiTextZoomPercent", 100).toInt(), 300);
+
+  // Kartend-3m01: preview video volume (0-100). Clamped on read so a
+  // hand-edited out-of-range value can't mute audio permanently or push
+  // QAudioOutput into undefined territory.
+  settings.previewVideoVolume = qBound(0, s.value("previewVideoVolume", 100).toInt(), 100);
+
+  // Kartend-y3ke: startup video. Stored even when disabled so the user can
+  // keep a path configured and toggle it off temporarily.
+  settings.startupVideoEnabled = s.value("startupVideoEnabled", false).toBool();
+  settings.startupVideoPath = s.value("startupVideoPath", QString()).toString();
 
   // Controls: keyboard bindings
   settings.keyNavLeft = s.value("keyNavLeft", static_cast<int>(Qt::Key_Left)).toInt();
@@ -90,6 +114,8 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
       s.value("keyAlphabeticForward", static_cast<int>(Qt::Key_PageDown)).toInt();
   settings.keyJumpFirst = s.value("keyJumpFirst", static_cast<int>(Qt::Key_Home)).toInt();
   settings.keyJumpLast = s.value("keyJumpLast", static_cast<int>(Qt::Key_End)).toInt();
+  // Kartend-uve: detail-page key (opens DetailPageOverlay).
+  settings.keyItemDetails = s.value("keyItemDetails", static_cast<int>(Qt::Key_I)).toInt();
 
   // Controls: gamepad bindings
   settings.gamepadUseDpad = s.value("gamepadUseDpad", true).toBool();
@@ -99,32 +125,133 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.gamepadToggleSidebarButton =
       s.value("gamepadToggleSidebarButton", QString("Y")).toString();
 
+  // Kartend-1v6: artwork-cycle modifier. Coerce hand-edited junk back to Shift
+  // so the gesture is always reachable; allow only the single-modifier flags
+  // we expose in the settings UI.
+  {
+    const int rawModifier =
+        s.value("artworkCycleModifier", static_cast<int>(Qt::ShiftModifier)).toInt();
+    switch (rawModifier) {
+    case static_cast<int>(Qt::ShiftModifier):
+    case static_cast<int>(Qt::ControlModifier):
+    case static_cast<int>(Qt::AltModifier):
+    case static_cast<int>(Qt::MetaModifier):
+      settings.artworkCycleModifier = rawModifier;
+      break;
+    default:
+      settings.artworkCycleModifier = static_cast<int>(Qt::ShiftModifier);
+      break;
+    }
+  }
+
   // Sort preferences
   const int sortModeRaw = s.value("sortMode", static_cast<int>(SortMode::NameAscending)).toInt();
   if (sortModeRaw >= static_cast<int>(SortMode::NameAscending) &&
-      sortModeRaw <= static_cast<int>(SortMode::Random)) {
+      sortModeRaw <= static_cast<int>(SortMode::SizeAscending)) {
     settings.sortMode = static_cast<SortMode>(sortModeRaw);
   } else {
     settings.sortMode = SortMode::NameAscending;
   }
   settings.excludeSubfoldersFromSort = s.value("excludeSubfoldersFromSort", false).toBool();
+  // Kartend-dd8: collection categorization filters. Defaults are "no filter"
+  // so an upgrading user sees all subcollections as before until they pick a
+  // type or toggle the hide button on the toolbar.
+  settings.collectionTypeFilter = s.value("collectionTypeFilter", QString()).toString().trimmed();
+  settings.hideSubcollectionTiles = s.value("hideSubcollectionTiles", false).toBool();
   settings.listCollectionColumnWidth = s.value("listCollectionColumnWidth", 150).toInt();
   settings.listArtworkColumnWidth = s.value("listArtworkColumnWidth", 32).toInt();
   settings.startupCollection = s.value("startupCollection", QString()).toString();
 
   // Attract mode (Kartend-1pp)
   settings.attractModeEnabled = s.value("attractModeEnabled", false).toBool();
-  settings.attractModeIdleTimeoutSec =
-      qBound(UIConstants::Attract::MIN_IDLE_TIMEOUT_SEC,
-             s.value("attractModeIdleTimeoutSec", UIConstants::Attract::DEFAULT_IDLE_TIMEOUT_SEC)
+  settings.attractModeIdleTimeoutSec = qBound(
+      UIConstants::Attract::MIN_IDLE_TIMEOUT_SEC,
+      s.value("attractModeIdleTimeoutSec", UIConstants::Attract::DEFAULT_IDLE_TIMEOUT_SEC).toInt(),
+      UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
+  settings.attractModeAutoScrollEnabled = s.value("attractModeAutoScrollEnabled", true).toBool();
+  settings.attractModeScrollSpeed = qBound(
+      UIConstants::Attract::MIN_SCROLL_SPEED_PX,
+      s.value("attractModeScrollSpeed", UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX).toDouble(),
+      UIConstants::Attract::MAX_SCROLL_SPEED_PX);
+  settings.attractModeAdvanceSelectionEnabled =
+      s.value("attractModeAdvanceSelectionEnabled", false).toBool();
+  settings.attractModeAdvanceSelectionIntervalSec =
+      qBound(UIConstants::Attract::MIN_ADVANCE_INTERVAL_SEC,
+             s.value("attractModeAdvanceSelectionIntervalSec",
+                     UIConstants::Attract::DEFAULT_ADVANCE_INTERVAL_SEC)
                  .toInt(),
-             UIConstants::Attract::MAX_IDLE_TIMEOUT_SEC);
-  settings.attractModeScrollSpeed =
-      qBound(UIConstants::Attract::MIN_SCROLL_SPEED_PX,
-             s.value("attractModeScrollSpeed", UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX)
-                 .toInt(),
-             UIConstants::Attract::MAX_SCROLL_SPEED_PX);
+             UIConstants::Attract::MAX_ADVANCE_INTERVAL_SEC);
+  settings.attractModeAdvanceSelectionRandom =
+      s.value("attractModeAdvanceSelectionRandom", false).toBool();
+
+  // Splash screens
+  settings.bootSplashEnabled = s.value("bootSplashEnabled", true).toBool();
+  settings.resumeFocusSplashEnabled = s.value("resumeFocusSplashEnabled", true).toBool();
+
+  // Runtime detection (Kartend-qxv) — opt-in
+  settings.runtimeDetectionEnabled = s.value("runtimeDetectionEnabled", false).toBool();
+
+  // Launch history (Kartend-fse). Default is enabled with a 500-row cap so
+  // a fresh install starts logging immediately; the user disables in
+  // Settings → General. Negative caps land in the file via hand-edit only;
+  // qBound clamps them to a sane window so trim never deletes the whole
+  // table by accident.
+  settings.historyEnabled = s.value("historyEnabled", true).toBool();
+  settings.historyMaxEntries = qBound(10, s.value("historyMaxEntries", 500).toInt(), 50000);
+
+  // View-mode toggles (Kartend-lfu0). Defaults match the .ui defaults so an
+  // upgrading install sees no change until the user toggles F8/F10/F11.
+  settings.showMenuBar = s.value("showMenuBar", true).toBool();
+  settings.showToolbar = s.value("showToolbar", true).toBool();
+  settings.fullscreen = s.value("fullscreen", false).toBool();
+
+  // Customizable toolbar (Kartend-81o). Default visibility is "shown" so an
+  // upgrading user sees the toolbar exactly as before; custom text strings
+  // default to empty (use the .ui label).
+  settings.toolbarShowGridViewButton = s.value("toolbarShowGridViewButton", true).toBool();
+  settings.toolbarShowListViewButton = s.value("toolbarShowListViewButton", true).toBool();
+  settings.toolbarShowCoverFlowViewButton =
+      s.value("toolbarShowCoverFlowViewButton", true).toBool();
+  settings.toolbarShowHorizontalViewButton =
+      s.value("toolbarShowHorizontalViewButton", true).toBool();
+  settings.toolbarShowHideSubcollectionsButton =
+      s.value("toolbarShowHideSubcollectionsButton", true).toBool();
+  settings.toolbarShowTypeFilter = s.value("toolbarShowTypeFilter", true).toBool();
+  settings.toolbarShowTitleFilter = s.value("toolbarShowTitleFilter", true).toBool();
+  settings.toolbarShowSearchModeButton = s.value("toolbarShowSearchModeButton", true).toBool();
+  settings.toolbarShowSearchBar = s.value("toolbarShowSearchBar", true).toBool();
+  settings.toolbarGridViewButtonText = s.value("toolbarGridViewButtonText", QString()).toString();
+  settings.toolbarListViewButtonText = s.value("toolbarListViewButtonText", QString()).toString();
+  settings.toolbarCoverFlowViewButtonText =
+      s.value("toolbarCoverFlowViewButtonText", QString()).toString();
+  settings.toolbarHorizontalViewButtonText =
+      s.value("toolbarHorizontalViewButtonText", QString()).toString();
+  settings.toolbarHideSubcollectionsButtonText =
+      s.value("toolbarHideSubcollectionsButtonText", QString()).toString();
+  settings.toolbarTitleFilterText = s.value("toolbarTitleFilterText", QString()).toString();
   s.endGroup();
+
+  // Kartend-p1jd: launcher presets live at the top level (outside [General])
+  // so they remain a clear, named section the user can hand-edit. Stored as
+  // a QSettings array so size is implicit.
+  settings.launcherPresets.clear();
+  const int presetCount = s.beginReadArray("Launchers");
+  settings.launcherPresets.reserve(presetCount);
+  for (int i = 0; i < presetCount; ++i) {
+    s.setArrayIndex(i);
+    LauncherPreset preset;
+    preset.id = s.value("id").toString();
+    preset.name = s.value("name").toString();
+    preset.launcherPath = s.value("launcherPath").toString();
+    preset.corePath = s.value("corePath").toString();
+    preset.launchParameters = s.value("launchParameters").toString();
+    // Drop entries with no id — they can't be referenced and would shadow
+    // valid presets if a hand-edit accidentally cleared the field.
+    if (!preset.id.trimmed().isEmpty()) {
+      settings.launcherPresets.append(preset);
+    }
+  }
+  s.endArray();
 
   settings.lastSelectedItems.clear();
   m_generalSettings = settings;
@@ -144,11 +271,22 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.listClickHoldRepeatIntervalMs = settings.listClickHoldRepeatIntervalMs;
   m_generalSettings.mouseWheelRows = settings.mouseWheelRows;
   m_generalSettings.scrollAnimationDurationMs = settings.scrollAnimationDurationMs;
-  m_generalSettings.scrollVelocityMultiplier =
-      qBound(0.25, settings.scrollVelocityMultiplier, 5.0);
+  m_generalSettings.scrollVelocityMultiplier = qBound(0.25, settings.scrollVelocityMultiplier, 5.0);
   m_generalSettings.titleTintSaturation = settings.titleTintSaturation;
   m_generalSettings.titleTintLightness = settings.titleTintLightness;
   m_generalSettings.titleBaseColor = settings.titleBaseColor;
+  // Kartend-cub
+  m_generalSettings.showTitleInPlaceholder = settings.showTitleInPlaceholder;
+  // Kartend-9v0o: global UI font
+  m_generalSettings.globalUiFontFamily = settings.globalUiFontFamily.trimmed();
+  m_generalSettings.globalUiFontPointSize = settings.globalUiFontPointSize;
+  // Kartend-7eff: runtime text zoom
+  m_generalSettings.uiTextZoomPercent = qBound(50, settings.uiTextZoomPercent, 300);
+  // Kartend-3m01: preview video volume
+  m_generalSettings.previewVideoVolume = qBound(0, settings.previewVideoVolume, 100);
+  // Kartend-y3ke: startup video
+  m_generalSettings.startupVideoEnabled = settings.startupVideoEnabled;
+  m_generalSettings.startupVideoPath = settings.startupVideoPath.trimmed();
 
   // Controls
   m_generalSettings.keyNavLeft = settings.keyNavLeft;
@@ -162,13 +300,18 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.keyAlphabeticForward = settings.keyAlphabeticForward;
   m_generalSettings.keyJumpFirst = settings.keyJumpFirst;
   m_generalSettings.keyJumpLast = settings.keyJumpLast;
+  m_generalSettings.keyItemDetails = settings.keyItemDetails;
   m_generalSettings.gamepadUseDpad = settings.gamepadUseDpad;
   m_generalSettings.gamepadUseLeftStick = settings.gamepadUseLeftStick;
   m_generalSettings.gamepadConfirmButton = settings.gamepadConfirmButton;
   m_generalSettings.gamepadBackButton = settings.gamepadBackButton;
   m_generalSettings.gamepadToggleSidebarButton = settings.gamepadToggleSidebarButton;
+  m_generalSettings.artworkCycleModifier = settings.artworkCycleModifier;
   m_generalSettings.sortMode = settings.sortMode;
   m_generalSettings.excludeSubfoldersFromSort = settings.excludeSubfoldersFromSort;
+  // Kartend-dd8: collection categorization filters
+  m_generalSettings.collectionTypeFilter = settings.collectionTypeFilter.trimmed();
+  m_generalSettings.hideSubcollectionTiles = settings.hideSubcollectionTiles;
   m_generalSettings.listCollectionColumnWidth = settings.listCollectionColumnWidth;
   m_generalSettings.listArtworkColumnWidth = settings.listArtworkColumnWidth;
   m_generalSettings.startupCollection = settings.startupCollection;
@@ -176,7 +319,46 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   // Attract mode
   m_generalSettings.attractModeEnabled = settings.attractModeEnabled;
   m_generalSettings.attractModeIdleTimeoutSec = settings.attractModeIdleTimeoutSec;
+  m_generalSettings.attractModeAutoScrollEnabled = settings.attractModeAutoScrollEnabled;
   m_generalSettings.attractModeScrollSpeed = settings.attractModeScrollSpeed;
+  m_generalSettings.attractModeAdvanceSelectionEnabled =
+      settings.attractModeAdvanceSelectionEnabled;
+  m_generalSettings.attractModeAdvanceSelectionIntervalSec =
+      settings.attractModeAdvanceSelectionIntervalSec;
+  m_generalSettings.attractModeAdvanceSelectionRandom = settings.attractModeAdvanceSelectionRandom;
+
+  // Runtime detection (Kartend-qxv)
+  m_generalSettings.runtimeDetectionEnabled = settings.runtimeDetectionEnabled;
+  // Launch history (Kartend-fse)
+  m_generalSettings.historyEnabled = settings.historyEnabled;
+  m_generalSettings.historyMaxEntries = qBound(10, settings.historyMaxEntries, 50000);
+  // View-mode toggles (Kartend-lfu0)
+  m_generalSettings.showMenuBar = settings.showMenuBar;
+  m_generalSettings.showToolbar = settings.showToolbar;
+  m_generalSettings.fullscreen = settings.fullscreen;
+  // Customizable toolbar (Kartend-81o)
+  m_generalSettings.toolbarShowGridViewButton = settings.toolbarShowGridViewButton;
+  m_generalSettings.toolbarShowListViewButton = settings.toolbarShowListViewButton;
+  m_generalSettings.toolbarShowCoverFlowViewButton = settings.toolbarShowCoverFlowViewButton;
+  m_generalSettings.toolbarShowHorizontalViewButton = settings.toolbarShowHorizontalViewButton;
+  m_generalSettings.toolbarShowHideSubcollectionsButton =
+      settings.toolbarShowHideSubcollectionsButton;
+  m_generalSettings.toolbarShowTypeFilter = settings.toolbarShowTypeFilter;
+  m_generalSettings.toolbarShowTitleFilter = settings.toolbarShowTitleFilter;
+  m_generalSettings.toolbarShowSearchModeButton = settings.toolbarShowSearchModeButton;
+  m_generalSettings.toolbarShowSearchBar = settings.toolbarShowSearchBar;
+  m_generalSettings.toolbarGridViewButtonText = settings.toolbarGridViewButtonText;
+  m_generalSettings.toolbarListViewButtonText = settings.toolbarListViewButtonText;
+  m_generalSettings.toolbarCoverFlowViewButtonText = settings.toolbarCoverFlowViewButtonText;
+  m_generalSettings.toolbarHorizontalViewButtonText = settings.toolbarHorizontalViewButtonText;
+  m_generalSettings.toolbarHideSubcollectionsButtonText =
+      settings.toolbarHideSubcollectionsButtonText;
+  m_generalSettings.toolbarTitleFilterText = settings.toolbarTitleFilterText;
+  // Splash screens
+  m_generalSettings.bootSplashEnabled = settings.bootSplashEnabled;
+  m_generalSettings.resumeFocusSplashEnabled = settings.resumeFocusSplashEnabled;
+  // Launcher presets (Kartend-p1jd)
+  m_generalSettings.launcherPresets = settings.launcherPresets;
 
   QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   s.setAtomicSyncRequired(true);
@@ -197,6 +379,18 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("titleTintSaturation", m_generalSettings.titleTintSaturation);
   s.setValue("titleTintLightness", m_generalSettings.titleTintLightness);
   s.setValue("titleBaseColor", m_generalSettings.titleBaseColor);
+  // Kartend-cub
+  s.setValue("showTitleInPlaceholder", m_generalSettings.showTitleInPlaceholder);
+  // Kartend-9v0o: global UI font
+  s.setValue("globalUiFontFamily", m_generalSettings.globalUiFontFamily);
+  s.setValue("globalUiFontPointSize", m_generalSettings.globalUiFontPointSize);
+  // Kartend-7eff: runtime text zoom
+  s.setValue("uiTextZoomPercent", m_generalSettings.uiTextZoomPercent);
+  // Kartend-3m01: preview video volume
+  s.setValue("previewVideoVolume", m_generalSettings.previewVideoVolume);
+  // Kartend-y3ke: startup video
+  s.setValue("startupVideoEnabled", m_generalSettings.startupVideoEnabled);
+  s.setValue("startupVideoPath", m_generalSettings.startupVideoPath);
   s.setValue("keyNavLeft", m_generalSettings.keyNavLeft);
   s.setValue("keyNavRight", m_generalSettings.keyNavRight);
   s.setValue("keyNavUp", m_generalSettings.keyNavUp);
@@ -208,20 +402,74 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("keyAlphabeticForward", m_generalSettings.keyAlphabeticForward);
   s.setValue("keyJumpFirst", m_generalSettings.keyJumpFirst);
   s.setValue("keyJumpLast", m_generalSettings.keyJumpLast);
+  s.setValue("keyItemDetails", m_generalSettings.keyItemDetails);
   s.setValue("gamepadUseDpad", m_generalSettings.gamepadUseDpad);
   s.setValue("gamepadUseLeftStick", m_generalSettings.gamepadUseLeftStick);
   s.setValue("gamepadConfirmButton", m_generalSettings.gamepadConfirmButton);
   s.setValue("gamepadBackButton", m_generalSettings.gamepadBackButton);
   s.setValue("gamepadToggleSidebarButton", m_generalSettings.gamepadToggleSidebarButton);
+  s.setValue("artworkCycleModifier", m_generalSettings.artworkCycleModifier);
   s.setValue("sortMode", static_cast<int>(m_generalSettings.sortMode));
   s.setValue("excludeSubfoldersFromSort", m_generalSettings.excludeSubfoldersFromSort);
+  // Kartend-dd8: collection categorization toolbar state
+  s.setValue("collectionTypeFilter", m_generalSettings.collectionTypeFilter);
+  s.setValue("hideSubcollectionTiles", m_generalSettings.hideSubcollectionTiles);
   s.setValue("listCollectionColumnWidth", m_generalSettings.listCollectionColumnWidth);
   s.setValue("listArtworkColumnWidth", m_generalSettings.listArtworkColumnWidth);
   s.setValue("startupCollection", m_generalSettings.startupCollection);
   s.setValue("attractModeEnabled", m_generalSettings.attractModeEnabled);
   s.setValue("attractModeIdleTimeoutSec", m_generalSettings.attractModeIdleTimeoutSec);
+  s.setValue("runtimeDetectionEnabled", m_generalSettings.runtimeDetectionEnabled);
+  s.setValue("historyEnabled", m_generalSettings.historyEnabled);
+  s.setValue("historyMaxEntries", m_generalSettings.historyMaxEntries);
+  s.setValue("attractModeAutoScrollEnabled", m_generalSettings.attractModeAutoScrollEnabled);
   s.setValue("attractModeScrollSpeed", m_generalSettings.attractModeScrollSpeed);
+  s.setValue("attractModeAdvanceSelectionEnabled",
+             m_generalSettings.attractModeAdvanceSelectionEnabled);
+  s.setValue("attractModeAdvanceSelectionIntervalSec",
+             m_generalSettings.attractModeAdvanceSelectionIntervalSec);
+  s.setValue("attractModeAdvanceSelectionRandom",
+             m_generalSettings.attractModeAdvanceSelectionRandom);
+  s.setValue("bootSplashEnabled", m_generalSettings.bootSplashEnabled);
+  s.setValue("resumeFocusSplashEnabled", m_generalSettings.resumeFocusSplashEnabled);
+  // View-mode toggles (Kartend-lfu0)
+  s.setValue("showMenuBar", m_generalSettings.showMenuBar);
+  s.setValue("showToolbar", m_generalSettings.showToolbar);
+  s.setValue("fullscreen", m_generalSettings.fullscreen);
+  // Customizable toolbar (Kartend-81o)
+  s.setValue("toolbarShowGridViewButton", m_generalSettings.toolbarShowGridViewButton);
+  s.setValue("toolbarShowListViewButton", m_generalSettings.toolbarShowListViewButton);
+  s.setValue("toolbarShowCoverFlowViewButton", m_generalSettings.toolbarShowCoverFlowViewButton);
+  s.setValue("toolbarShowHorizontalViewButton", m_generalSettings.toolbarShowHorizontalViewButton);
+  s.setValue("toolbarShowHideSubcollectionsButton",
+             m_generalSettings.toolbarShowHideSubcollectionsButton);
+  s.setValue("toolbarShowTypeFilter", m_generalSettings.toolbarShowTypeFilter);
+  s.setValue("toolbarShowTitleFilter", m_generalSettings.toolbarShowTitleFilter);
+  s.setValue("toolbarShowSearchModeButton", m_generalSettings.toolbarShowSearchModeButton);
+  s.setValue("toolbarShowSearchBar", m_generalSettings.toolbarShowSearchBar);
+  s.setValue("toolbarGridViewButtonText", m_generalSettings.toolbarGridViewButtonText);
+  s.setValue("toolbarListViewButtonText", m_generalSettings.toolbarListViewButtonText);
+  s.setValue("toolbarCoverFlowViewButtonText", m_generalSettings.toolbarCoverFlowViewButtonText);
+  s.setValue("toolbarHorizontalViewButtonText", m_generalSettings.toolbarHorizontalViewButtonText);
+  s.setValue("toolbarHideSubcollectionsButtonText",
+             m_generalSettings.toolbarHideSubcollectionsButtonText);
+  s.setValue("toolbarTitleFilterText", m_generalSettings.toolbarTitleFilterText);
   s.endGroup();
+
+  // Kartend-p1jd: persist launcher presets as a top-level [Launchers] array.
+  // beginWriteArray clears any existing entries with the same prefix, so a
+  // preset removed via the dialog doesn't linger as a stale row.
+  s.beginWriteArray("Launchers", m_generalSettings.launcherPresets.size());
+  for (int i = 0; i < m_generalSettings.launcherPresets.size(); ++i) {
+    s.setArrayIndex(i);
+    const LauncherPreset &preset = m_generalSettings.launcherPresets[i];
+    s.setValue("id", preset.id);
+    s.setValue("name", preset.name);
+    s.setValue("launcherPath", preset.launcherPath);
+    s.setValue("corePath", preset.corePath);
+    s.setValue("launchParameters", preset.launchParameters);
+  }
+  s.endArray();
   s.sync();
 
   if (s.status() != QSettings::NoError) {

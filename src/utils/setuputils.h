@@ -14,35 +14,42 @@
  * that aggregates the dependencies needed by that manager.
  *
  * Setup structs follow a pattern where each field has a getter that returns
- * the direct field value if set, otherwise falls back to ApplicationContext.
- * This header provides macros to reduce the ~4 lines per getter to 1 line.
+ * the direct field value if set, otherwise falls back to one of the three
+ * `ApplicationContext` sub-structs (`collection`, `ui`, `managers`).
+ *
+ * Pick the macro variant matching the sub-struct that owns the fallback
+ * field:
+ *
+ *   - `*_COL_*`  → falls back to `ctx->collection.<field>`
+ *   - `*_UI_*`   → falls back to `ctx->ui.<field>`
+ *   - `*_MGR_*`  → falls back to `ctx->managers.<field>`
  *
  * ## Macro Categories
  *
- * ### Declaration Macros (for .h files)
- * - `SETUP_GETTER_DECL(TYPE, NAME)` - Declares getter with local + ctx fallback
- * - `SETUP_GETTER_DECL_CTX_ONLY(TYPE, NAME)` - Declares getter for ctx-only
- * field
+ * ### Declaration (for .h files)
+ *   `SETUP_GETTER_DECL(TYPE, NAME)` — Declares a getter
+ *   `SETUP_GETTER_DECL_CTX_ONLY(TYPE, NAME)` — Same, no local override
  *
- * ### Definition Macros (for .cpp files)
- * - `SETUP_GETTER_DEF(STRUCT, TYPE, NAME, FIELD, CTX_FIELD)` - Full definition
- * - `SETUP_GETTER_DEF_SAME(STRUCT, TYPE, NAME, FIELD)` - When field names match
- * - `SETUP_GETTER_DEF_CTX_ONLY(STRUCT, TYPE, NAME, CTX_FIELD)` - Ctx-only field
+ * ### Definition (for .cpp files), section-aware
+ *   `SETUP_GETTER_DEF_<SECTION>(STRUCT, TYPE, NAME, FIELD, CTX_FIELD)`
+ *   `SETUP_GETTER_DEF_<SECTION>_SAME(STRUCT, TYPE, NAME, FIELD)`
+ *   `SETUP_GETTER_DEF_<SECTION>_CTX_ONLY(STRUCT, TYPE, NAME, CTX_FIELD)`
  *
- * ### Inline Macros (for header-only definitions)
- * - `SETUP_GETTER_INLINE(TYPE, NAME, FIELD, CTX_FIELD)` - Inline with fallback
- * - `SETUP_GETTER_INLINE_SAME(TYPE, NAME, FIELD)` - Inline, same field name
- * - `SETUP_GETTER_INLINE_CTX_ONLY(TYPE, NAME, CTX_FIELD)` - Inline ctx-only
+ *   where `<SECTION>` is `COL`, `UI`, or `MGR`.
+ *
+ * ### Inline (for header-only definitions), section-aware
+ *   `SETUP_GETTER_INLINE_<SECTION>(TYPE, NAME, FIELD, CTX_FIELD)`
+ *   `SETUP_GETTER_INLINE_<SECTION>_SAME(TYPE, NAME, FIELD)`
+ *   `SETUP_GETTER_INLINE_<SECTION>_CTX_ONLY(TYPE, NAME, CTX_FIELD)`
  *
  * ## Example Usage
  *
- * In header file (e.g., mymanager.h):
+ * Header (mymanager.h):
  * @code
  *   struct MyManagerSetup {
  *     const ApplicationContext *ctx = nullptr;
- *     ScrollManager *scrollManager = nullptr;   // Can be overridden locally
- *     QWidget *gridContainer = nullptr;         // Can be overridden locally
- *     // InteractionStateHolder comes only from ctx, no local field
+ *     ScrollManager *scrollManager = nullptr;
+ *     QWidget *gridContainer = nullptr;
  *
  *     SETUP_GETTER_DECL(ScrollManager*, ScrollManager)
  *     SETUP_GETTER_DECL(QWidget*, GridContainer)
@@ -50,116 +57,107 @@
  *   };
  * @endcode
  *
- * In source file (e.g., mymanager.cpp):
+ * Source (mymanager.cpp):
  * @code
- *   // Field names match between struct and ctx:
- *   SETUP_GETTER_DEF_SAME(MyManagerSetup, ScrollManager*, ScrollManager,
- * scrollManager) SETUP_GETTER_DEF_SAME(MyManagerSetup, QWidget*, GridContainer,
- * gridContainer)
- *
- *   // Field only exists in ctx:
- *   SETUP_GETTER_DEF_CTX_ONLY(MyManagerSetup, InteractionStateHolder*,
- * InteractionState, interactionState)
- *
- *   // Different field names in struct vs ctx:
- *   SETUP_GETTER_DEF(MyManagerSetup, QScrollArea*, MediaScrollArea,
- * mediaScrollArea, itemScrollArea)
+ *   SETUP_GETTER_DEF_MGR_SAME(MyManagerSetup, ScrollManager*,
+ *                             ScrollManager, scrollManager)
+ *   SETUP_GETTER_DEF_UI_SAME(MyManagerSetup, QWidget*,
+ *                            GridContainer, gridContainer)
+ *   SETUP_GETTER_DEF_MGR_CTX_ONLY(MyManagerSetup, InteractionStateHolder*,
+ *                                 InteractionState, interactionState)
  * @endcode
  *
  * ## Fallback Behavior
  *
  * 1. If the local struct field is non-null, it's returned (allows override)
- * 2. Otherwise, if ctx is non-null, the corresponding ctx field is returned
+ * 2. Otherwise, if ctx is non-null, the corresponding ctx sub-struct field
+ *    is returned
  * 3. Otherwise, nullptr is returned
- *
- * This allows manager setup to either use shared context values or override
- * specific fields when needed (e.g., for owned sub-managers).
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Header-only declaration macros (for use in .h files)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * @brief Declares a getter method in a setup struct header.
- *
- * @param TYPE   The return type (e.g., ScrollManager*)
- * @param NAME   The getter suffix (e.g., ScrollManager -> getScrollManager())
- */
 #define SETUP_GETTER_DECL(TYPE, NAME) [[nodiscard]] auto get##NAME() const -> TYPE;
 
-/**
- * @brief Declares a getter for ctx-only fields (no local field).
- */
 #define SETUP_GETTER_DECL_CTX_ONLY(TYPE, NAME) [[nodiscard]] auto get##NAME() const -> TYPE;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Implementation definition macros (for use in .cpp files)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * @brief Defines a getter with local field and ctx fallback.
- *
- * @param STRUCT    The setup struct name (e.g., KeyboardManagerSetup)
- * @param TYPE      The return type
- * @param NAME      The getter suffix (e.g., ScrollManager)
- * @param FIELD     The local field name (e.g., scrollManager)
- * @param CTX_FIELD The ApplicationContext field name (e.g., scrollManager)
- */
-#define SETUP_GETTER_DEF(STRUCT, TYPE, NAME, FIELD, CTX_FIELD)                                     \
+// Generic section-aware definition (used internally by section variants)
+#define SETUP_GETTER_DEF_SECTION(STRUCT, TYPE, NAME, FIELD, SECTION, CTX_FIELD)                    \
   auto STRUCT::get##NAME() const->TYPE {                                                           \
-    return FIELD ? FIELD : (ctx ? ctx->CTX_FIELD : nullptr);                                       \
+    return FIELD ? FIELD : (ctx ? ctx->SECTION.CTX_FIELD : nullptr);                               \
   }
 
-/**
- * @brief Defines a getter where local field and ctx field have the same name.
- *
- * @param STRUCT The setup struct name
- * @param TYPE   The return type
- * @param NAME   The getter suffix
- * @param FIELD  The field name (same in struct and ctx)
- */
-#define SETUP_GETTER_DEF_SAME(STRUCT, TYPE, NAME, FIELD)                                           \
-  SETUP_GETTER_DEF(STRUCT, TYPE, NAME, FIELD, FIELD)
-
-/**
- * @brief Defines a getter for ctx-only fields (no local override).
- *
- * @param STRUCT    The setup struct name
- * @param TYPE      The return type
- * @param NAME      The getter suffix
- * @param CTX_FIELD The ApplicationContext field name
- */
-#define SETUP_GETTER_DEF_CTX_ONLY(STRUCT, TYPE, NAME, CTX_FIELD)                                   \
+#define SETUP_GETTER_DEF_SECTION_CTX_ONLY(STRUCT, TYPE, NAME, SECTION, CTX_FIELD)                  \
   auto STRUCT::get##NAME() const->TYPE {                                                           \
-    return ctx ? ctx->CTX_FIELD : nullptr;                                                         \
+    return ctx ? ctx->SECTION.CTX_FIELD : nullptr;                                                 \
   }
+
+// Collection section
+#define SETUP_GETTER_DEF_COL(STRUCT, TYPE, NAME, FIELD, CTX_FIELD)                                 \
+  SETUP_GETTER_DEF_SECTION(STRUCT, TYPE, NAME, FIELD, collection, CTX_FIELD)
+#define SETUP_GETTER_DEF_COL_SAME(STRUCT, TYPE, NAME, FIELD)                                       \
+  SETUP_GETTER_DEF_COL(STRUCT, TYPE, NAME, FIELD, FIELD)
+#define SETUP_GETTER_DEF_COL_CTX_ONLY(STRUCT, TYPE, NAME, CTX_FIELD)                               \
+  SETUP_GETTER_DEF_SECTION_CTX_ONLY(STRUCT, TYPE, NAME, collection, CTX_FIELD)
+
+// UI section
+#define SETUP_GETTER_DEF_UI(STRUCT, TYPE, NAME, FIELD, CTX_FIELD)                                  \
+  SETUP_GETTER_DEF_SECTION(STRUCT, TYPE, NAME, FIELD, ui, CTX_FIELD)
+#define SETUP_GETTER_DEF_UI_SAME(STRUCT, TYPE, NAME, FIELD)                                        \
+  SETUP_GETTER_DEF_UI(STRUCT, TYPE, NAME, FIELD, FIELD)
+#define SETUP_GETTER_DEF_UI_CTX_ONLY(STRUCT, TYPE, NAME, CTX_FIELD)                                \
+  SETUP_GETTER_DEF_SECTION_CTX_ONLY(STRUCT, TYPE, NAME, ui, CTX_FIELD)
+
+// Manager section
+#define SETUP_GETTER_DEF_MGR(STRUCT, TYPE, NAME, FIELD, CTX_FIELD)                                 \
+  SETUP_GETTER_DEF_SECTION(STRUCT, TYPE, NAME, FIELD, managers, CTX_FIELD)
+#define SETUP_GETTER_DEF_MGR_SAME(STRUCT, TYPE, NAME, FIELD)                                       \
+  SETUP_GETTER_DEF_MGR(STRUCT, TYPE, NAME, FIELD, FIELD)
+#define SETUP_GETTER_DEF_MGR_CTX_ONLY(STRUCT, TYPE, NAME, CTX_FIELD)                               \
+  SETUP_GETTER_DEF_SECTION_CTX_ONLY(STRUCT, TYPE, NAME, managers, CTX_FIELD)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Inline definition macros (for header-only structs or simple cases)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * @brief Inline getter definition with local field and ctx fallback.
- *
- * Use when you want the getter defined inline in the header.
- */
-#define SETUP_GETTER_INLINE(TYPE, NAME, FIELD, CTX_FIELD)                                          \
+#define SETUP_GETTER_INLINE_SECTION(TYPE, NAME, FIELD, SECTION, CTX_FIELD)                         \
   [[nodiscard]] auto get##NAME() const -> TYPE {                                                   \
-    return FIELD ? FIELD : (ctx ? ctx->CTX_FIELD : nullptr);                                       \
+    return FIELD ? FIELD : (ctx ? ctx->SECTION.CTX_FIELD : nullptr);                               \
   }
 
-/**
- * @brief Inline getter for same-named field in struct and ctx.
- */
-#define SETUP_GETTER_INLINE_SAME(TYPE, NAME, FIELD) SETUP_GETTER_INLINE(TYPE, NAME, FIELD, FIELD)
-
-/**
- * @brief Inline getter for ctx-only fields.
- */
-#define SETUP_GETTER_INLINE_CTX_ONLY(TYPE, NAME, CTX_FIELD)                                        \
+#define SETUP_GETTER_INLINE_SECTION_CTX_ONLY(TYPE, NAME, SECTION, CTX_FIELD)                       \
   [[nodiscard]] auto get##NAME() const -> TYPE {                                                   \
-    return ctx ? ctx->CTX_FIELD : nullptr;                                                         \
+    return ctx ? ctx->SECTION.CTX_FIELD : nullptr;                                                 \
   }
+
+// Collection section
+#define SETUP_GETTER_INLINE_COL(TYPE, NAME, FIELD, CTX_FIELD)                                      \
+  SETUP_GETTER_INLINE_SECTION(TYPE, NAME, FIELD, collection, CTX_FIELD)
+#define SETUP_GETTER_INLINE_COL_SAME(TYPE, NAME, FIELD)                                            \
+  SETUP_GETTER_INLINE_COL(TYPE, NAME, FIELD, FIELD)
+#define SETUP_GETTER_INLINE_COL_CTX_ONLY(TYPE, NAME, CTX_FIELD)                                    \
+  SETUP_GETTER_INLINE_SECTION_CTX_ONLY(TYPE, NAME, collection, CTX_FIELD)
+
+// UI section
+#define SETUP_GETTER_INLINE_UI(TYPE, NAME, FIELD, CTX_FIELD)                                       \
+  SETUP_GETTER_INLINE_SECTION(TYPE, NAME, FIELD, ui, CTX_FIELD)
+#define SETUP_GETTER_INLINE_UI_SAME(TYPE, NAME, FIELD)                                             \
+  SETUP_GETTER_INLINE_UI(TYPE, NAME, FIELD, FIELD)
+#define SETUP_GETTER_INLINE_UI_CTX_ONLY(TYPE, NAME, CTX_FIELD)                                     \
+  SETUP_GETTER_INLINE_SECTION_CTX_ONLY(TYPE, NAME, ui, CTX_FIELD)
+
+// Manager section
+#define SETUP_GETTER_INLINE_MGR(TYPE, NAME, FIELD, CTX_FIELD)                                      \
+  SETUP_GETTER_INLINE_SECTION(TYPE, NAME, FIELD, managers, CTX_FIELD)
+#define SETUP_GETTER_INLINE_MGR_SAME(TYPE, NAME, FIELD)                                            \
+  SETUP_GETTER_INLINE_MGR(TYPE, NAME, FIELD, FIELD)
+#define SETUP_GETTER_INLINE_MGR_CTX_ONLY(TYPE, NAME, CTX_FIELD)                                    \
+  SETUP_GETTER_INLINE_SECTION_CTX_ONLY(TYPE, NAME, managers, CTX_FIELD)
 
 #endif // SETUPUTILS_H

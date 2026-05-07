@@ -18,8 +18,10 @@
 
 #include "alphabeticnavigationhandler.h"
 #include "animationmanager.h"
+#include "applicationcontext.h"
 #include "arrownavigationhandler.h"
 #include "attractmanager.h"
+#include "databasemanager.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
 #include "keyboardmanager.h"
@@ -34,14 +36,14 @@
 #include "databasemanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
@@ -58,10 +60,14 @@ Q_DECLARE_LOGGING_CATEGORY(lcInteractionManager)
 void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   // Manager dependencies - use accessors that check context fallback
   m_scrollManager = setup.getScrollManager();
-  m_sidebarManager = setup.getSidebarManager();
+  m_detailsPaneManager = setup.getDetailsPaneManager();
   m_settingsManager = setup.getSettingsManager();
   m_databaseManager = setup.getDatabaseManager();
   m_navigationManager = setup.getNavigationManager();
+  // Kartend-vlm7: the only consumer is the context menu, so we just read the
+  // pointer directly from the shared ApplicationContext rather than adding a
+  // dedicated setup field.
+  m_playlistManager = (setup.ctx ? setup.ctx->managers.playlistManager : nullptr);
   m_sessionManager = setup.getSessionManager();
   m_artworkManager = setup.getArtworkManager();
 
@@ -145,6 +151,48 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   if (m_launchManager) {
     LaunchManagerSetup launchSetup;
     launchSetup.ctx = setup.ctx;
+    // Kartend-7vi: forward launch + session events into DatabaseManager via
+    // callbacks so LaunchManager itself doesn't take a hard link-time
+    // dependency on the database module (keeps the launch unit tests slim).
+    if (setup.ctx) {
+      const ApplicationContext *appCtx = setup.ctx;
+      launchSetup.onLaunched = [appCtx](const QString &uuid, const QString &filePath) {
+        if (!appCtx->managers.databaseManager) {
+          return;
+        }
+        appCtx->managers.databaseManager->recordItemLaunch(uuid, filePath);
+        // Kartend-fse: chronological history runs on the same hook so a single
+        // launch updates aggregate stats and the history log atomically.
+        // historyEnabled gates the insert; historyMaxEntries (>0) drives the
+        // post-insert trim so the table never grows unbounded.
+        const GeneralSettings *gs = appCtx->collection.generalSettings;
+        if (gs && gs->historyEnabled) {
+          // Pull the user-visible name from item_metadata.title when present
+          // so the dialog matches what the sidebar shows; HistoryStore falls
+          // back to the path basename when the title is empty.
+          const auto metadata = appCtx->managers.databaseManager->loadItemMetadata(uuid, filePath);
+          appCtx->managers.databaseManager->recordHistoryEntry(uuid, filePath, metadata.title,
+                                                               gs->historyMaxEntries);
+        }
+      };
+      launchSetup.onPlaySessionEnded = [appCtx](const QString &uuid, const QString &filePath,
+                                                qint64 seconds) {
+        if (appCtx->managers.databaseManager) {
+          appCtx->managers.databaseManager->recordItemPlaySession(uuid, filePath, seconds);
+        }
+      };
+      // Kartend-dnx4: per-item launcher override pulled from item_metadata.
+      // Callback indirection keeps test_launchmanager free of the database
+      // module at link time.
+      launchSetup.resolveLauncherOverride = [appCtx](const QString &uuid,
+                                                     const QString &filePath) -> int {
+        if (!appCtx->managers.databaseManager) {
+          return -1;
+        }
+        const auto metadata = appCtx->managers.databaseManager->loadItemMetadata(uuid, filePath);
+        return metadata.launcherIndex;
+      };
+    }
     m_launchManager->setupReferences(launchSetup);
   }
 
@@ -178,6 +226,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     attractSetup.ctx = setup.ctx;
     attractSetup.itemScrollArea = m_itemScrollArea;
     attractSetup.scrollManager = m_scrollManager;
+    attractSetup.selectionManager = m_selectionManager.get();
     attractSetup.generalSettings = m_generalSettings;
     attractSetup.isShuttingDown = m_isShuttingDown;
     m_attractManager->setupReferences(attractSetup);

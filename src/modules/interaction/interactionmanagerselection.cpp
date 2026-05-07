@@ -21,6 +21,7 @@
 #include "alphabeticnavigationhandler.h"
 #include "animationmanager.h"
 #include "arrownavigationhandler.h"
+#include "attractmanager.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
 #include "keyboardmanager.h"
@@ -35,7 +36,7 @@
 #include "databasemanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrolldatamanager.h"
@@ -43,7 +44,7 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 
@@ -140,7 +141,7 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
     }
   }
 
-  if ((m_sidebarManager) && m_sidebarManager->isSidebarVisible()) {
+  if ((m_detailsPaneManager) && m_detailsPaneManager->isSidebarVisible()) {
     ItemWidget *widget = nullptr;
     if (m_selectionManager) {
       widget = m_selectionManager->widgetForIndex(targetIndex);
@@ -149,7 +150,7 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
       widget = active.value(targetIndex, nullptr);
     }
     if (widget) {
-      m_sidebarManager->updateSidebarMetadata(widget);
+      m_detailsPaneManager->updateSidebarMetadata(widget);
     }
     constexpr int kMetadataSidebarUpdateDelayMs = 120;
     scheduleSidebarMetadataUpdateIfVisible(targetIndex, 0, kMetadataSidebarUpdateDelayMs);
@@ -196,16 +197,16 @@ void InteractionManager::scheduleSidebarMetadataUpdateIfVisible(int targetIndex,
       if (!guard) {
         return;
       }
-      if (!guard->m_sidebarManager || !guard->m_scrollManager) {
+      if (!guard->m_detailsPaneManager || !guard->m_scrollManager) {
         return;
       }
-      if (!guard->m_sidebarManager->isSidebarVisible()) {
+      if (!guard->m_detailsPaneManager->isSidebarVisible()) {
         return;
       }
       ItemWidget *itemWidget =
           guard->m_scrollManager->getActiveWidgets().value(targetIndex, nullptr);
       if (itemWidget) {
-        guard->m_sidebarManager->updateSidebarMetadata(itemWidget);
+        guard->m_detailsPaneManager->updateSidebarMetadata(itemWidget);
       }
     });
   };
@@ -296,6 +297,14 @@ void InteractionManager::initializeSearchModeForCurrentCollection() {
 // Delegates to LaunchManager for launching media items
 void InteractionManager::launchItemWithCollection(const QString &filePath, int collectionIndex) {
   if (m_launchManager) {
+    // Treat the launch itself as user activity so attract mode stops
+    // immediately. Without this, attract keeps advancing the selection during
+    // the gap between Enter-press and runtimeStarted (which only fires once
+    // QProcess::started arrives — a noticeable lag for video players), and
+    // never stops at all for detached launches.
+    if (m_attractManager) {
+      m_attractManager->onActivityDetected();
+    }
     m_launchManager->recordLaunch(filePath);
     m_launchManager->launchItem(filePath, collectionIndex);
   }

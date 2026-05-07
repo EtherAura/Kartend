@@ -129,6 +129,15 @@ public:
   void startWheelScrollAnimation(QScrollBar *vScrollBar, int startVal, int endVal,
                                  std::function<void()> onFinished);
 
+  /// Kartend-dx9t: horizontal-axis sibling of startWheelScrollAnimation. Used
+  /// by Horizontal view mode where the wheel drives the X scrollbar. Mirrors
+  /// the vertical version exactly — chains from currentValue when an anim is
+  /// already running so consecutive wheel notches blend instead of restart,
+  /// and uses the configurable scrollAnimationDurationMs / OutCubic for the
+  /// same momentum feel as vertical wheel scrolling.
+  void startWheelScrollAnimationHorizontal(QScrollBar *hScrollBar, int startVal, int endVal,
+                                           std::function<void()> onFinished);
+
 signals:
   /// Emitted when vertical scroll animation finishes
   void verticalAnimationFinished();

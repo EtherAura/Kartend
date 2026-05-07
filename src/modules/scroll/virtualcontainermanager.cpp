@@ -82,6 +82,27 @@ void VirtualContainerManager::positionContainer(const ContainerPositionParams &p
     return;
   }
 
+  if (params.isHorizontal) {
+    // Kartend-dx9t: horizontal layout pins the container to the top-left and
+    // sizes the grid container to match the long-axis width so the
+    // horizontal scrollbar reflects the full content. Vertical alignment /
+    // centering is unused — the column always fits in the viewport.
+    if (m_gridContainer) {
+      m_gridContainer->setMinimumSize(params.totalWidth, params.totalHeight);
+      m_gridContainer->setMaximumSize(params.totalWidth, params.totalHeight);
+    }
+    m_virtualContainer->setFixedSize(params.totalWidth, params.totalHeight);
+    m_virtualContainer->move(0, 0);
+    // Scrollbar policy is owned by ScrollManager::updateViewType /
+    // applyHorizontalScrollbarSetting — don't override it here.
+    if (m_scrollArea->horizontalScrollBarPolicy() != Qt::ScrollBarAlwaysOff) {
+      if (auto *hbar = m_scrollArea->horizontalScrollBar()) {
+        hbar->show();
+      }
+    }
+    return;
+  }
+
   int viewportWidth = getEffectiveViewportWidth();
   int scrollbarWidth = getScrollbarWidth();
 

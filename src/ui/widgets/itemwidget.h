@@ -34,6 +34,7 @@ public:
   void setItemName(const QString &name);
   void setFilePath(const QString &path);
   void setArtworkPixmap(const QPixmap &pixmap);
+  void setPlaceholderArtworkPixmap(const QPixmap &pixmap);
   virtual void setSelected(bool selected);
   void resetForReuse();
 
@@ -82,6 +83,25 @@ public:
   static QColor titleTint();
   QColor m_titleTintColor; // Cached tint color for custom painting
 
+  /// Kartend-63e: build a placeholder-style hatched tile at the given size
+  /// using the app palette + s_tileColor + s_titleTintLightness. Static so
+  /// the metadata sidebar can render the exact same hatch the per-item
+  /// placeholder uses for "missing artwork" tiles. `cornerRadius` masks the
+  /// corners (0 = no rounding); the sidebar passes 0. `applyGradient`
+  /// controls the vertical fade overlay — items keep it (true) so the tile
+  /// matches the legacy look; the sidebar disables it (false) so a single
+  /// tall pattern doesn't get a stretched, washed-out gradient.
+  /// `baseOverride` lets a caller substitute its own widget-instance Mid
+  /// color (default = QApplication::palette() Mid). Pass an invalid color
+  /// to use the default. `lineAlphaScale` (0.0–1.0) scales both
+  /// primary/secondary line alphas — the sidebar uses ~0.5 because the
+  /// lines run much longer at sidebar scale than on a small item card and
+  /// were perceived as too bright at full PRIMARY_ALPHA.
+  static QPixmap buildPlaceholderTile(int width, int height, int cornerRadius = 0,
+                                      bool applyGradient = true,
+                                      const QColor &baseOverride = QColor(),
+                                      double lineAlphaScale = 1.0);
+
   // Static configuration for title appearance (set from GeneralSettings)
   static void setTitleTintSaturation(int saturation);
   static void setTitleTintLightness(int lightness);
@@ -92,6 +112,10 @@ public:
   static void setSelectionColor(const QString &hexColor);
   static void setListRowColor(const QString &hexColor);
   static void setListAltRowColor(const QString &hexColor);
+  // Kartend-cub: when true, onArtworkChanged() draws itemName centered on the
+  // placeholder pixmap. Toggle is read at render time, so a setting flip
+  // followed by a viewport refresh updates every visible tile.
+  static void setShowTitleInPlaceholder(bool enabled);
   static int s_titleTintSaturation;
   static int s_titleTintLightness;
   static QString s_titleBaseColor;
@@ -101,6 +125,7 @@ public:
   static QString s_selectionColor;
   static QString s_listRowColor;
   static QString s_listAltRowColor;
+  static bool s_showTitleInPlaceholder;
 
   void mousePressEvent(QMouseEvent *event) override;
 
@@ -132,6 +157,7 @@ private:
   QString filePath;
   QString m_collectionName;   // Parent collection name for list mode display
   QString m_artworkDirectory; // Artwork directory for this item's collection
+  QPixmap m_placeholderArtworkPixmap;
   bool m_isSubcollection = false;
   int m_subcollectionIndex = -1;
   bool m_isVirtualFolder = false;
@@ -147,6 +173,12 @@ private:
   void updateTriangleIndicator();
   void paintTriangleIndicator();
   [[nodiscard]] QPixmap buildPlaceholderPattern(int width, int height) const;
+  /// Kartend-cub: paints `itemName` centered on @p pixmap with the title tint
+  /// color and a dark backing for legibility. No-op when itemName is empty or
+  /// the pixmap has zero area. @p dpr lets the caller scale the font when the
+  /// pixmap is in physical pixels (placeholder pattern path uses dpr=1, the
+  /// scaled-artwork path uses the screen DPR).
+  void drawTitleOnPlaceholder(QPixmap &pixmap, qreal dpr = 1.0) const;
   void setupPulseAnimation();
   void startPulseAnimation();
   QTimer *m_pulseDelayTimer;

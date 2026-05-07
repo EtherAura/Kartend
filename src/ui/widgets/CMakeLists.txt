@@ -1,5 +1,11 @@
-target_sources(kartend PRIVATE
+target_sources(${KARTEND_LIB_TARGET} PRIVATE
   artworkpreviewoverlay.cpp
+  backdropbluroverlay.cpp
+  backgroundvideowidget.cpp
+  coverflowwidget.cpp
+  detailpageoverlay.cpp
+  emptystatewidget.cpp
+  headerlogooverlay.cpp
   itemwidget.cpp
   itemwidgetindicator.cpp
   itemwidgetlifecycle.cpp
@@ -8,12 +14,32 @@ target_sources(kartend PRIVATE
   itemwidgetsetters.cpp
   listheaderwidget.cpp
   loadingoverlay.cpp
-  metadatasidebar.cpp
+  detailspane.cpp
+  nowplayingoverlay.cpp
+  splashoverlay.cpp
+  startupvideooverlay.cpp
+  textzoomhud.cpp
+  videopreviewwidget.cpp
+  videothumbnailextractor.cpp
+  vignetteoverlay.cpp
   artworkpreviewoverlay.h
+  backdropbluroverlay.h
+  backgroundvideowidget.h
+  coverflowwidget.h
+  detailpageoverlay.h
+  emptystatewidget.h
+  headerlogooverlay.h
   itemwidget.h
   listheaderwidget.h
   loadingoverlay.h
-  metadatasidebar.h
+  detailspane.h
+  nowplayingoverlay.h
+  splashoverlay.h
+  startupvideooverlay.h
+  textzoomhud.h
+  videopreviewwidget.h
+  videothumbnailextractor.h
+  vignetteoverlay.h
   itemwidget.ui
-  metadatasidebar.ui
+  detailspane.ui
 )

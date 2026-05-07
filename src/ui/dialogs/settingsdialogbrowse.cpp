@@ -73,6 +73,38 @@ void SettingsDialog::browseArtworkDir() {
   }
 }
 
+void SettingsDialog::browseVideoDir() {
+  QString dirName = QFileDialog::getExistingDirectory(this, tr("Select Video Directory"), "");
+  if (!dirName.isEmpty() && ui->videoDirLineEdit) {
+    ui->videoDirLineEdit->setText(dirName);
+  }
+}
+
+void SettingsDialog::browseManualDir() {
+  QString dirName = QFileDialog::getExistingDirectory(this, tr("Select Manual Directory"), "");
+  if (!dirName.isEmpty() && ui->manualDirLineEdit) {
+    ui->manualDirLineEdit->setText(dirName);
+  }
+}
+
+void SettingsDialog::browsePlaceholderArtwork() {
+  QString fileName = QFileDialog::getOpenFileName(
+      this, tr("Select Placeholder Artwork"), "",
+      tr("Image Files (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;All Files (*)"));
+  if (!fileName.isEmpty() && ui->placeholderArtworkLineEdit) {
+    ui->placeholderArtworkLineEdit->setText(fileName);
+  }
+}
+
+void SettingsDialog::browseStartupVideo() {
+  QString fileName = QFileDialog::getOpenFileName(
+      this, tr("Select Startup Video"), "",
+      tr("Video Files (*.mp4 *.webm *.mkv *.mov *.avi);;All Files (*)"));
+  if (!fileName.isEmpty() && ui->startupVideoPathLineEdit) {
+    ui->startupVideoPathLineEdit->setText(fileName);
+  }
+}
+
 void SettingsDialog::onRecursiveImportContent() {
   if (!ui->mediaDirLineEdit) {
     return;
@@ -232,17 +264,34 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->launchParamsLineEdit) {
     ui->launchParamsLineEdit->setText(config.launchParameters);
   }
+  if (ui->launcherNameLineEdit) {
+    ui->launcherNameLineEdit->setText(config.launcherName);
+  }
+  loadAdditionalLaunchersToUI(config);
+  loadLinkedParentsToUI(config);
   if (ui->extractArchivesCheckBox) {
     ui->extractArchivesCheckBox->setChecked(config.extractArchives);
   }
   if (ui->extractedExtensionLineEdit) {
     ui->extractedExtensionLineEdit->setText(config.extractedExtension);
   }
+  if (ui->expandModeCheckBox) {
+    ui->expandModeCheckBox->setChecked(config.expandMode);
+  }
   if (ui->mediaDirLineEdit) {
     ui->mediaDirLineEdit->setText(config.mediaDirectory);
   }
   if (ui->artworkDirLineEdit) {
     ui->artworkDirLineEdit->setText(config.artworkDirectory);
+  }
+  if (ui->videoDirLineEdit) {
+    ui->videoDirLineEdit->setText(config.videoDirectory);
+  }
+  if (ui->manualDirLineEdit) {
+    ui->manualDirLineEdit->setText(config.manualDirectory);
+  }
+  if (ui->placeholderArtworkLineEdit) {
+    ui->placeholderArtworkLineEdit->setText(config.placeholderArtwork);
   }
   if (ui->includeContentSubfoldersCheckBox) {
     ui->includeContentSubfoldersCheckBox->setChecked(config.includeContentSubfolders);
@@ -265,8 +314,34 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->fileExtensionsLineEdit) {
     ui->fileExtensionsLineEdit->setText(config.extensions.join(", "));
   }
+  if (ui->customArtworkTypesLineEdit) {
+    ui->customArtworkTypesLineEdit->setText(config.customArtworkTypes.join(", "));
+  }
+  if (ui->collectionTypeComboBox) {
+    // Kartend-dd8: rebuild the dropdown from the union of types currently in
+    // use across the working list so the user sees everything they've already
+    // tagged. Editable=true means free-form values still survive a round-trip
+    // even if they aren't in the dropdown.
+    QSignalBlocker blocker(ui->collectionTypeComboBox);
+    ui->collectionTypeComboBox->clear();
+    QStringList types = CollectionUtils::collectAllCollectionTypes(m_workingCollections);
+    ui->collectionTypeComboBox->addItem(QString());
+    for (const QString &t : types) {
+      ui->collectionTypeComboBox->addItem(t);
+    }
+    ui->collectionTypeComboBox->setEditText(config.type);
+  }
   if (ui->gridWidthSpinBox) {
     ui->gridWidthSpinBox->setValue(config.gridWidth);
+  }
+  if (ui->horizontalGridHeightSpinBox) {
+    ui->horizontalGridHeightSpinBox->setValue(config.horizontalGridHeight);
+  }
+  if (ui->gridWidthSidebarHiddenSpinBox) {
+    ui->gridWidthSidebarHiddenSpinBox->setValue(config.gridWidthSidebarHidden);
+  }
+  if (ui->horizontalGridHeightSidebarHiddenSpinBox) {
+    ui->horizontalGridHeightSidebarHiddenSpinBox->setValue(config.horizontalGridHeightSidebarHidden);
   }
   if (ui->showAllSubcollectionItemsCheckBox) {
     ui->showAllSubcollectionItemsCheckBox->setChecked(config.showAllSubcollectionItems);
@@ -277,8 +352,74 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->sidebarModeComboBox) {
     ui->sidebarModeComboBox->setCurrentIndex(static_cast<int>(config.sidebarMode));
   }
+  // Kartend-63e sidebar enhancements.
+  if (ui->sidebarPositionComboBox) {
+    ui->sidebarPositionComboBox->setCurrentIndex(static_cast<int>(config.sidebarPosition));
+  }
+  if (ui->sidebarWidthSpinBox) {
+    ui->sidebarWidthSpinBox->setValue(config.sidebarWidth);
+  }
+  // Kartend-u2gx: pane height for Top/Bottom dock. Same form panel — visibility
+  // is toggled by updateSidebarModeVisibility() based on Position.
+  if (ui->sidebarHeightSpinBox) {
+    ui->sidebarHeightSpinBox->setValue(config.sidebarHeight);
+  }
+  if (ui->sidebarWidthLockedCheckBox) {
+    ui->sidebarWidthLockedCheckBox->setChecked(config.sidebarWidthLocked);
+  }
+  if (ui->sidebarBackgroundTypeComboBox) {
+    ui->sidebarBackgroundTypeComboBox->setCurrentIndex(
+        static_cast<int>(config.sidebarBackgroundType));
+  }
+  if (ui->sidebarBackgroundValueEdit) {
+    if (config.sidebarBackgroundType == DetailsPaneBackgroundType::Image) {
+      ui->sidebarBackgroundValueEdit->setText(config.sidebarBackgroundImage);
+    } else {
+      ui->sidebarBackgroundValueEdit->setText(config.sidebarBackgroundColor);
+    }
+  }
+  if (ui->sidebarPatternIntensitySpinBox) {
+    ui->sidebarPatternIntensitySpinBox->setValue(config.sidebarPatternIntensity);
+  }
+  if (ui->sidebarPatternColorEdit) {
+    ui->sidebarPatternColorEdit->setText(config.sidebarPatternColor);
+  }
+  if (ui->sidebarTextColorEdit) {
+    ui->sidebarTextColorEdit->setText(config.sidebarTextColor);
+  }
+  if (ui->sidebarAccentColorEdit) {
+    ui->sidebarAccentColorEdit->setText(config.sidebarAccentColor);
+  }
+  if (ui->sidebarHeaderBgEdit) {
+    ui->sidebarHeaderBgEdit->setText(config.sidebarHeaderBgColor);
+  }
+  if (ui->sidebarSectionBgEdit) {
+    ui->sidebarSectionBgEdit->setText(config.sidebarSectionBgColor);
+  }
+  if (ui->sidebarHeaderBgOpacitySpinBox) {
+    ui->sidebarHeaderBgOpacitySpinBox->setValue(config.sidebarHeaderBgOpacity);
+  }
+  if (ui->sidebarSectionBgOpacitySpinBox) {
+    ui->sidebarSectionBgOpacitySpinBox->setValue(config.sidebarSectionBgOpacity);
+  }
+  // Kartend-ekaa: per-collection sidebar font override.
+  if (ui->sidebarFontFamilyEdit) {
+    ui->sidebarFontFamilyEdit->setText(config.sidebarFontFamily);
+  }
+  if (ui->sidebarFontSizeSpinBox) {
+    ui->sidebarFontSizeSpinBox->setValue(config.sidebarFontPointSize);
+  }
+  if (ui->sidebarActiveTabComboBox) {
+    ui->sidebarActiveTabComboBox->setCurrentIndex(static_cast<int>(config.sidebarActiveTab));
+  }
+  if (ui->sidebarActiveCollectionLabel) {
+    ui->sidebarActiveCollectionLabel->setText(tr("Editing: %1").arg(config.name));
+  }
   if (ui->viewTypeComboBox) {
     ui->viewTypeComboBox->setCurrentIndex(static_cast<int>(config.viewType));
+  }
+  if (ui->hideMissingArtworkCheckBox) {
+    ui->hideMissingArtworkCheckBox->setChecked(config.hideMissingArtwork);
   }
   if (ui->horizontalSpacingSpinBox) {
     ui->horizontalSpacingSpinBox->setValue(spacingInternalToUi(config.horizontalSpacing));
@@ -313,14 +454,18 @@ void SettingsDialog::loadCollectionToUI(int index) {
 
   // Background settings
   if (ui->backgroundColorRadio && ui->backgroundImageRadio) {
-    if (config.backgroundType == BackgroundType::Image) {
+    if (config.backgroundType == BackgroundType::Video && ui->backgroundVideoRadio) {
+      ui->backgroundVideoRadio->setChecked(true);
+    } else if (config.backgroundType == BackgroundType::Image) {
       ui->backgroundImageRadio->setChecked(true);
     } else {
       ui->backgroundColorRadio->setChecked(true);
     }
   }
   if (ui->backgroundValueEdit) {
-    if (config.backgroundType == BackgroundType::Image) {
+    if (config.backgroundType == BackgroundType::Video) {
+      ui->backgroundValueEdit->setText(config.backgroundVideo);
+    } else if (config.backgroundType == BackgroundType::Image) {
       ui->backgroundValueEdit->setText(config.backgroundImage);
     } else {
       ui->backgroundValueEdit->setText(config.backgroundColor);
@@ -361,6 +506,38 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->customFontEdit->setText(config.customFontFamily);
   }
 
+  // Kartend-guo5: header logo
+  if (ui->headerLogoEdit) {
+    ui->headerLogoEdit->setText(config.headerLogoImage);
+  }
+  if (ui->headerLogoPositionComboBox) {
+    ui->headerLogoPositionComboBox->setCurrentIndex(static_cast<int>(config.headerLogoPosition));
+  }
+
+  // Kartend-qbp3: vignette
+  if (ui->vignetteEnabledCheckBox) {
+    ui->vignetteEnabledCheckBox->setChecked(config.vignetteEnabled);
+  }
+  if (ui->vignetteIntensitySpinBox) {
+    ui->vignetteIntensitySpinBox->setValue(config.vignetteIntensity);
+  }
+
+  // Kartend-y25g: wallpaper parallax
+  if (ui->wallpaperParallaxCheckBox) {
+    ui->wallpaperParallaxCheckBox->setChecked(config.wallpaperParallax);
+  }
+  if (ui->parallaxStrengthSpinBox) {
+    ui->parallaxStrengthSpinBox->setValue(config.parallaxStrength);
+  }
+
+  // Kartend-eq8r: toolbar backdrop blur
+  if (ui->toolbarBackdropBlurCheckBox) {
+    ui->toolbarBackdropBlurCheckBox->setChecked(config.toolbarBackdropBlur);
+  }
+  if (ui->backdropBlurRadiusSpinBox) {
+    ui->backdropBlurRadiusSpinBox->setValue(config.backdropBlurRadius);
+  }
+
   updateParentCollectionComboBox(index);
   updateFieldVisibility();
   updateGridWidthLimits();
@@ -373,9 +550,21 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->launcherLineEdit) ui->launcherLineEdit->clear();
   if (ui->coreLineEdit) ui->coreLineEdit->clear();
   if (ui->launchParamsLineEdit) ui->launchParamsLineEdit->clear();
+  if (ui->launcherNameLineEdit) ui->launcherNameLineEdit->clear();
+  clearAdditionalLaunchersUI();
+  clearLinkedParentsUI();
   if (ui->mediaDirLineEdit) ui->mediaDirLineEdit->clear();
   if (ui->artworkDirLineEdit) ui->artworkDirLineEdit->clear();
+  if (ui->videoDirLineEdit) ui->videoDirLineEdit->clear();
+  if (ui->manualDirLineEdit) ui->manualDirLineEdit->clear();
+  if (ui->placeholderArtworkLineEdit) ui->placeholderArtworkLineEdit->clear();
   if (ui->fileExtensionsLineEdit) ui->fileExtensionsLineEdit->clear();
+  if (ui->customArtworkTypesLineEdit) ui->customArtworkTypesLineEdit->clear();
+  if (ui->collectionTypeComboBox) {
+    QSignalBlocker blocker(ui->collectionTypeComboBox);
+    ui->collectionTypeComboBox->clear();
+    ui->collectionTypeComboBox->setEditText(QString());
+  }
   if (ui->backgroundValueEdit) ui->backgroundValueEdit->clear();
   if (ui->primaryColorEdit) ui->primaryColorEdit->clear();
   if (ui->tileColorEdit) ui->tileColorEdit->clear();
@@ -383,6 +572,14 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->listRowColorEdit) ui->listRowColorEdit->clear();
   if (ui->listAltRowColorEdit) ui->listAltRowColorEdit->clear();
   if (ui->customFontEdit) ui->customFontEdit->clear();
+  if (ui->headerLogoEdit) ui->headerLogoEdit->clear();
+  if (ui->headerLogoPositionComboBox) ui->headerLogoPositionComboBox->setCurrentIndex(1);
+  if (ui->vignetteEnabledCheckBox) ui->vignetteEnabledCheckBox->setChecked(false);
+  if (ui->vignetteIntensitySpinBox) ui->vignetteIntensitySpinBox->setValue(60);
+  if (ui->wallpaperParallaxCheckBox) ui->wallpaperParallaxCheckBox->setChecked(false);
+  if (ui->parallaxStrengthSpinBox) ui->parallaxStrengthSpinBox->setValue(30);
+  if (ui->toolbarBackdropBlurCheckBox) ui->toolbarBackdropBlurCheckBox->setChecked(false);
+  if (ui->backdropBlurRadiusSpinBox) ui->backdropBlurRadiusSpinBox->setValue(12);
 
   if (ui->includeContentSubfoldersCheckBox) ui->includeContentSubfoldersCheckBox->setChecked(false);
   if (ui->showAllSubfolderItemsCheckBox) ui->showAllSubfolderItemsCheckBox->setChecked(false);
@@ -395,8 +592,13 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->hideVerticalScrollbarCheckBox) ui->hideVerticalScrollbarCheckBox->setChecked(false);
   if (ui->hideTitlesCheckBox) ui->hideTitlesCheckBox->setChecked(false);
   if (ui->hideSubcollectionTitlesCheckBox) ui->hideSubcollectionTitlesCheckBox->setChecked(false);
+  if (ui->hideMissingArtworkCheckBox) ui->hideMissingArtworkCheckBox->setChecked(false);
 
   if (ui->gridWidthSpinBox) ui->gridWidthSpinBox->setValue(UIConstants::Grid::DEFAULT_WIDTH);
+  if (ui->horizontalGridHeightSpinBox) ui->horizontalGridHeightSpinBox->setValue(0);
+  if (ui->gridWidthSidebarHiddenSpinBox) ui->gridWidthSidebarHiddenSpinBox->setValue(0);
+  if (ui->horizontalGridHeightSidebarHiddenSpinBox)
+    ui->horizontalGridHeightSidebarHiddenSpinBox->setValue(0);
   if (ui->horizontalSpacingSpinBox)
     ui->horizontalSpacingSpinBox->setValue(spacingInternalToUi(UIConstants::Grid::SPACING));
   if (ui->verticalSpacingSpinBox)
@@ -408,8 +610,30 @@ void SettingsDialog::clearCollectionUI() {
 
   if (ui->horizontalAlignmentComboBox) ui->horizontalAlignmentComboBox->setCurrentIndex(0);
   if (ui->sidebarModeComboBox) ui->sidebarModeComboBox->setCurrentIndex(0);
+  // Kartend-63e sidebar enhancements: clear/reset on no-selection.
+  if (ui->sidebarPositionComboBox) ui->sidebarPositionComboBox->setCurrentIndex(0);
+  if (ui->sidebarWidthSpinBox) ui->sidebarWidthSpinBox->setValue(UIConstants::DetailsPane::FIXED_WIDTH);
+  if (ui->sidebarHeightSpinBox)
+    ui->sidebarHeightSpinBox->setValue(UIConstants::DetailsPane::FIXED_HEIGHT);
+  if (ui->sidebarWidthLockedCheckBox) ui->sidebarWidthLockedCheckBox->setChecked(true);
+  if (ui->sidebarBackgroundTypeComboBox) ui->sidebarBackgroundTypeComboBox->setCurrentIndex(0);
+  if (ui->sidebarBackgroundValueEdit) ui->sidebarBackgroundValueEdit->clear();
+  if (ui->sidebarPatternIntensitySpinBox) ui->sidebarPatternIntensitySpinBox->setValue(50);
+  if (ui->sidebarPatternColorEdit) ui->sidebarPatternColorEdit->clear();
+  if (ui->sidebarTextColorEdit) ui->sidebarTextColorEdit->clear();
+  if (ui->sidebarAccentColorEdit) ui->sidebarAccentColorEdit->clear();
+  if (ui->sidebarHeaderBgEdit) ui->sidebarHeaderBgEdit->clear();
+  if (ui->sidebarSectionBgEdit) ui->sidebarSectionBgEdit->clear();
+  if (ui->sidebarHeaderBgOpacitySpinBox) ui->sidebarHeaderBgOpacitySpinBox->setValue(200);
+  if (ui->sidebarSectionBgOpacitySpinBox) ui->sidebarSectionBgOpacitySpinBox->setValue(170);
+  if (ui->sidebarFontFamilyEdit) ui->sidebarFontFamilyEdit->clear();
+  if (ui->sidebarFontSizeSpinBox) ui->sidebarFontSizeSpinBox->setValue(0);
+  if (ui->sidebarActiveTabComboBox) ui->sidebarActiveTabComboBox->setCurrentIndex(0);
   if (ui->viewTypeComboBox) ui->viewTypeComboBox->setCurrentIndex(0);
   if (ui->parentCollectionComboBox) ui->parentCollectionComboBox->clear();
+  if (ui->sidebarActiveCollectionLabel) {
+    ui->sidebarActiveCollectionLabel->setText(tr("Editing: (no collection selected)"));
+  }
 
   if (ui->backgroundColorRadio) ui->backgroundColorRadio->setChecked(true);
   if (ui->subfolderOptionsWidget) ui->subfolderOptionsWidget->setVisible(false);

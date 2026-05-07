@@ -27,7 +27,7 @@
 #include "mousemanager.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
@@ -41,29 +41,28 @@ Q_LOGGING_CATEGORY(lcEventManager, "kartend.eventmanager")
   } while (0)
 
 // EventManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(EventManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, AnimationManager *, AnimationManager, animationManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, ViewportManager *, ViewportManager, viewportManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, SelectionManager *, SelectionManager, selectionManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, DatabaseManager *, DatabaseManager, databaseManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, SidebarManager *, SidebarManager, sidebarManager)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget *, GridContainer, gridContainer)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget *, ItemsPage, itemsPage)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QWidget *, ItemsTopBar, itemsTopBar)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QLineEdit *, SearchBar, searchBar)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, QList<CollectionConfig> *, Collections, collections)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
-SETUP_GETTER_DEF_SAME(EventManagerSetup, GeneralSettings *, GeneralSettings, generalSettings)
-SETUP_GETTER_DEF_CTX_ONLY(EventManagerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
+SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, AnimationManager *, AnimationManager, animationManager)
+SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, ViewportManager *, ViewportManager, viewportManager)
+SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, SelectionManager *, SelectionManager, selectionManager)
+SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, DatabaseManager *, DatabaseManager, databaseManager)
+SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
+SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)
+SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QWidget *, ItemsTopBar, itemsTopBar)
+SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QLineEdit *, SearchBar, searchBar)
+SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, QList<CollectionConfig> *, Collections, collections)
+SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
+SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, GeneralSettings *, GeneralSettings, generalSettings)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(EventManagerSetup, InteractionStateHolder *, InteractionState,
+                              interactionState)
 
 EventManager::EventManager(QObject *parent) : QObject(parent) {
   m_hoverScrollTimer.setSingleShot(true);
-  connect(&m_hoverScrollTimer, &QTimer::timeout, this,
-          &EventManager::commitPendingHoverScroll);
+  connect(&m_hoverScrollTimer, &QTimer::timeout, this, &EventManager::commitPendingHoverScroll);
 }
 
 EventManager::~EventManager() = default;
@@ -77,7 +76,7 @@ void EventManager::setupReferences(const EventManagerSetup &setup) {
   m_selectionManager = setup.getSelectionManager();
   m_artworkManager = setup.getArtworkManager();
   m_databaseManager = setup.getDatabaseManager();
-  m_sidebarManager = setup.getSidebarManager();
+  m_detailsPaneManager = setup.getDetailsPaneManager();
   m_state = setup.getInteractionState();
   m_generalSettings = setup.getGeneralSettings();
   m_itemScrollArea = setup.getItemScrollArea();

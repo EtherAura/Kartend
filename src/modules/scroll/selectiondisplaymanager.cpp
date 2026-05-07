@@ -219,10 +219,33 @@ void SelectionDisplayManager::showArtworkPreview(const QString &filePath,
   // Create overlay lazily on first use
   if (!m_artworkPreviewOverlay) {
     m_artworkPreviewOverlay = std::make_unique<ArtworkPreviewOverlay>(m_mediaScrollArea);
+    connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::launchRequested, this,
+            &SelectionDisplayManager::artworkPreviewLaunchRequested);
+    // Kartend-63e bug #7: forward overlay visibility so DetailsPaneManager can
+    // lower the sidebar while the overlay is on top.
+    connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::visibilityChanged, this,
+            &SelectionDisplayManager::artworkPreviewVisibilityChanged);
   }
 
   // Show artwork preview using the item's collection artwork directory
   m_artworkPreviewOverlay->showArtworkForFile(filePath, artworkDir);
+}
+
+void SelectionDisplayManager::showMediaPreview(const QString &filePath, const QString &artworkDir,
+                                               const QString &videoDir) {
+  if (!m_mediaScrollArea) {
+    return;
+  }
+  if (!m_artworkPreviewOverlay) {
+    m_artworkPreviewOverlay = std::make_unique<ArtworkPreviewOverlay>(m_mediaScrollArea);
+    connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::launchRequested, this,
+            &SelectionDisplayManager::artworkPreviewLaunchRequested);
+    // Kartend-63e bug #7: forward overlay visibility so DetailsPaneManager can
+    // lower the sidebar while the overlay is on top.
+    connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::visibilityChanged, this,
+            &SelectionDisplayManager::artworkPreviewVisibilityChanged);
+  }
+  m_artworkPreviewOverlay->showMediaForFile(filePath, artworkDir, videoDir);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -36,14 +36,14 @@
 #include "databasemanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
@@ -173,12 +173,23 @@ void InteractionManager::handleWidgetDoubleClickedWithCollection(const QString &
   }
 
   if (!path.isEmpty() && collIdx >= 0) {
+    // Expand-mode: first double-click expands the artwork preview overlay
+    // instead of launching; a second double-click on the same selection
+    // (no selection change in between) falls through to launch.
+    const int activationIdx = currentSelectedIndex();
+    if (maybeExpandInsteadOfLaunch(path, collIdx, activationIdx)) {
+      return;
+    }
     launchItemWithCollection(path, collIdx);
     return;
   }
   const int fallbackIdx = getFallbackCollectionIndex();
   QString selectedPath = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
   if (fallbackIdx >= 0 && !selectedPath.isEmpty()) {
+    const int activationIdx = currentSelectedIndex();
+    if (maybeExpandInsteadOfLaunch(selectedPath, fallbackIdx, activationIdx)) {
+      return;
+    }
     launchItemWithCollection(selectedPath, fallbackIdx);
   }
 }

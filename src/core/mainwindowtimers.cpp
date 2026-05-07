@@ -13,13 +13,13 @@
 #include "interactionmanager.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
-#include "metadatasidebar.h"
+#include "detailspane.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
@@ -30,7 +30,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcMainWindow)
 void MainWindow::setupInitialTimers() {
   // Defer initial horizontal centering until after the first show event so
   // the scroll area has accurate viewport metrics to center against.
-  QTimer::singleShot(UIConstants::Sidebar::INITIAL_CENTER_SCROLL_DELAY_MS, this, [this]() {
+  QTimer::singleShot(UIConstants::DetailsPane::INITIAL_CENTER_SCROLL_DELAY_MS, this, [this]() {
     if (getScrollManager()) {
       getScrollManager()->centerHorizontalScrollbar(currentCollectionIndex, m_collections);
     }
@@ -84,7 +84,7 @@ void MainWindow::setupInitialTimersEmptyCollections() {
       context.parent = this;
       context.collections = &m_collections;
       context.currentCollectionIndex = &currentCollectionIndex;
-      context.sidebarManager = getSidebarManager();
+      context.detailsPaneManager = getDetailsPaneManager();
       context.scrollManager = getScrollManager();
       context.navigationManager = getNavigationManager();
       context.databaseManager = getDatabaseManager();

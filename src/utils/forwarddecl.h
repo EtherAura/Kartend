@@ -17,7 +17,7 @@ struct CollectionContext;
 struct CollectionHierarchyCache;
 struct GeneralSettings;
 enum class HorizontalAlignment;
-enum class SidebarMode;
+enum class DetailsPaneMode;
 
 // From applicationcontext.h
 struct ApplicationContext;
@@ -58,13 +58,13 @@ class SelectionManager;
 class SelectionRestoreManager;
 class SessionManager;
 class SettingsManager;
-class SidebarManager;
+class DetailsPaneManager;
 class ViewportManager;
 class WidgetPoolManager;
 
 // UI forward declarations
 class ItemWidget;
-class MetadataSidebar;
+class DetailsPane;
 class SettingsDialog;
 
 // Scroll module forward declarations

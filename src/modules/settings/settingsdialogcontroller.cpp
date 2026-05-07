@@ -16,7 +16,7 @@
 #include "settingsdialog.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 #include <QDialog>
@@ -37,8 +37,16 @@ auto compareNonReloadFields(const CollectionConfig &configA, const CollectionCon
       configA.launchParameters != configB.launchParameters ||
       configA.extractArchives != configB.extractArchives ||
       configA.extractedExtension != configB.extractedExtension ||
+      configA.expandMode != configB.expandMode ||
       configA.parentCollectionIndex != configB.parentCollectionIndex ||
-      configA.isSubcollection != configB.isSubcollection) {
+      configA.isSubcollection != configB.isSubcollection ||
+      // Without sidebarPosition here, an orientation-only edit in the settings
+      // dialog returned hasChanges=false and silently dropped the new value —
+      // the user had to toggle the pane (or change another field) before the
+      // chosen edge took effect. applySidebarStateForCollection downstream
+      // re-runs the layout swap so the pane reparents into the right Qt
+      // layout immediately on save.
+      configA.sidebarPosition != configB.sidebarPosition) {
     hasChanges = true;
   }
 }
@@ -107,6 +115,14 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
     // View type changes require full layout update like spacing changes
     spacingChanged = true;
   }
+  if (configA.hideMissingArtwork != configB.hideMissingArtwork) {
+    hasChanges = true;
+    // Kartend-ks4n: toggling the hide-missing-artwork predicate changes the
+    // visible item count and the layout/scrollbars; ride the spacingChanged
+    // path so handleScrollBranch calls primeLayoutFor + recreateLayout, which
+    // re-runs the FilterManager baseline inside setupVirtualScrolling.
+    spacingChanged = true;
+  }
   if (configA.name != configB.name) {
     titleChanged = true;
   }
@@ -115,10 +131,19 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
       configA.selectionColor != configB.selectionColor ||
       configA.backgroundColor != configB.backgroundColor ||
       configA.backgroundImage != configB.backgroundImage ||
+      configA.backgroundVideo != configB.backgroundVideo ||
       configA.backgroundType != configB.backgroundType ||
       configA.listRowColor != configB.listRowColor ||
       configA.listAltRowColor != configB.listAltRowColor ||
-      configA.listRowHeight != configB.listRowHeight) {
+      configA.listRowHeight != configB.listRowHeight ||
+      configA.headerLogoImage != configB.headerLogoImage ||
+      configA.headerLogoPosition != configB.headerLogoPosition ||
+      configA.vignetteEnabled != configB.vignetteEnabled ||
+      configA.vignetteIntensity != configB.vignetteIntensity ||
+      configA.wallpaperParallax != configB.wallpaperParallax ||
+      configA.parallaxStrength != configB.parallaxStrength ||
+      configA.toolbarBackdropBlur != configB.toolbarBackdropBlur ||
+      configA.backdropBlurRadius != configB.backdropBlurRadius) {
     hasChanges = true;
     appearanceChanged = true;
   }
@@ -157,10 +182,10 @@ void applyScrollbarSettings(QWidget *parent, int viewingIndex,
 }
 
 // Updates sidebar layout when mode changes
-void refreshSidebar(SidebarManager *sidebarManager, const QList<CollectionConfig> & /*collections*/,
+void refreshSidebar(DetailsPaneManager *detailsPaneManager, const QList<CollectionConfig> & /*collections*/,
                     int currentCollectionIndex) {
-  if (sidebarManager) {
-    sidebarManager->updateSidebarLayout(currentCollectionIndex);
+  if (detailsPaneManager) {
+    detailsPaneManager->updateSidebarLayout(currentCollectionIndex);
   }
 }
 
@@ -257,7 +282,7 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   QList<CollectionConfig> &collections = *context.collections;
   int &currentCollectionIndex = *context.currentCollectionIndex;
   QWidget *parent = context.parent;
-  SidebarManager *sidebarManager = context.sidebarManager;
+  DetailsPaneManager *detailsPaneManager = context.detailsPaneManager;
   ScrollManager *scrollManager = context.scrollManager;
   NavigationManager *navigationManager = context.navigationManager;
   DatabaseManager *databaseManager = context.databaseManager;
@@ -321,8 +346,10 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   }
 
   collections = newCollections;
+  // Kartend-9iwv: saveCollections() emits collectionsModified() itself, so
+  // an explicit emit here would double-fire and run rebuildHierarchyCache
+  // twice for no benefit. Removed.
   saveCollections(collections);
-  emit collectionsModified();
 
   // Kartend-tvg: detect collections that were freshly added during this
   // dialog session (UUID present in newCollections but not in the snapshot
@@ -378,9 +405,9 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   currentCollectionIndex = resolvedCollectionIndex;
   viewingCollectionIndex = resolvedCollectionIndex;
 
-  if (sidebarManager) {
+  if (detailsPaneManager) {
     if (resolvedCollectionIndex >= 0) {
-      sidebarManager->applySidebarStateForCollection(resolvedCollectionIndex);
+      detailsPaneManager->applySidebarStateForCollection(resolvedCollectionIndex);
     }
   }
 
@@ -392,13 +419,13 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
 
   if (needsReload) {
     handleReloadRequired(collections, newCollections, originalCollections, viewingCollectionIndex,
-                         sidebarManager, scrollManager, navigationManager, m_artworkManager,
+                         detailsPaneManager, scrollManager, navigationManager, m_artworkManager,
                          m_cacheManager, currentCollectionIndex);
   } else {
     handleLayoutChanges(parent, collections, viewingCollectionIndex, titleChangedForView,
                         scrollbarChangedForView, sidebarModeChangedForView, gridWidthChangedForView,
                         spacingChangedForView, alignmentChangedForView, fontSizeChangedForView,
-                        hideTitlesChangedForView, sidebarManager, scrollManager, m_artworkManager,
+                        hideTitlesChangedForView, detailsPaneManager, scrollManager, m_artworkManager,
                         currentCollectionIndex);
 
     // If only appearance changed, still refresh widgets to show new colors
@@ -411,7 +438,7 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
 auto SettingsManager::handleReloadRequired(
     const QList<CollectionConfig> &collections, const QList<CollectionConfig> &newCollections,
     const QList<CollectionConfig> &originalCollections, int viewingCollectionIndex,
-    SidebarManager *sidebarManager, ScrollManager *scrollManager,
+    DetailsPaneManager *detailsPaneManager, ScrollManager *scrollManager,
     NavigationManager *navigationManager, ArtworkManager *artworkManager,
     CacheManager *cacheManager, int currentCollectionIndex) -> void {
   if (artworkManager) {
@@ -463,7 +490,7 @@ auto SettingsManager::handleLayoutChanges(
     QWidget *parent, const QList<CollectionConfig> &collections, int viewingCollectionIndex,
     bool titleChangedForView, bool scrollbarChangedForView, bool sidebarModeChangedForView,
     bool gridWidthChangedForView, bool spacingChangedForView, bool alignmentChangedForView,
-    bool fontSizeChangedForView, bool hideTitlesChangedForView, SidebarManager *sidebarManager,
+    bool fontSizeChangedForView, bool hideTitlesChangedForView, DetailsPaneManager *detailsPaneManager,
     ScrollManager *scrollManager, ArtworkManager *artworkManager, int currentCollectionIndex)
     -> void {
   if (viewingCollectionIndex < 0 || viewingCollectionIndex >= collections.size()) {
@@ -476,7 +503,7 @@ auto SettingsManager::handleLayoutChanges(
     applyScrollbarSettings(parent, viewingCollectionIndex, collections);
   }
   if (sidebarModeChangedForView) {
-    refreshSidebar(sidebarManager, collections, currentCollectionIndex);
+    refreshSidebar(detailsPaneManager, collections, currentCollectionIndex);
   }
   handleScrollBranch(scrollManager, artworkManager, collections, viewingCollectionIndex,
                      spacingChangedForView, sidebarModeChangedForView, gridWidthChangedForView,
@@ -506,14 +533,13 @@ void SettingsManager::onCollectionScanSummary(const QString &collectionUuid, int
             .arg(itemsApplied)
             .arg(itemsScanned));
   } else {
-    QMessageBox::warning(
-        parent, tr("Collection Added"),
-        tr("Collection \"%1\" added, but the initial scan did not complete "
-           "cleanly.\n\n%2 of %3 items were added before the scan stopped. "
-           "Check the media directory path and file extensions, then try "
-           "again.")
-            .arg(name)
-            .arg(itemsApplied)
-            .arg(itemsScanned));
+    QMessageBox::warning(parent, tr("Collection Added"),
+                         tr("Collection \"%1\" added, but the initial scan did not complete "
+                            "cleanly.\n\n%2 of %3 items were added before the scan stopped. "
+                            "Check the media directory path and file extensions, then try "
+                            "again.")
+                             .arg(name)
+                             .arg(itemsApplied)
+                             .arg(itemsScanned));
   }
 }

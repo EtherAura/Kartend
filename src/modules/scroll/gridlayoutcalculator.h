@@ -18,6 +18,10 @@
 struct GridMetrics {
   int itemWidth = 0;
   int itemHeight = 0;
+  /// Items along the *fixed* dimension. In Grid/List/CoverFlow this is
+  /// items-per-row (column count). In Horizontal mode (Kartend-dx9t) the axis
+  /// flips and this is items-per-column (row count) — the field name is kept
+  /// for source compatibility across the hundreds of callers.
   int itemsPerRow = 0;
   int horizontalSpacing = 0;
   int verticalSpacing = 0;
@@ -26,11 +30,18 @@ struct GridMetrics {
   int totalHeight = 0;   // Clamped height for Qt widget (≤ QWIDGETSIZE_MAX)
   int logicalHeight = 0; // True logical height (may exceed Qt limits)
   int actualGridWidth = 0;
+  /// Rows along the *long/scrolling* dimension. In Horizontal mode this is the
+  /// column count instead; helpers that compute "first/last row" treat it as
+  /// "first/last long-axis index" regardless.
   int totalRows = 0;
   double scrollScale = 1.0; // Scale factor: logicalHeight / totalHeight
   bool isClipped = false;   // True if logicalHeight > QWIDGETSIZE_MAX
   int overflowAmount = 0;   // logicalHeight - totalHeight when clipped
   int headerOffset = 0;     // Offset for list header in list view mode
+  /// Kartend-dx9t: when true, the items area scrolls along x instead of y.
+  /// Set during `calculateMetrics` from `config.viewType == Horizontal`.
+  /// Downstream code uses this in lieu of re-reading the config.
+  bool isHorizontal = false;
 
   [[nodiscard]] bool isValid() const { return itemWidth > 0 && itemHeight > 0 && itemsPerRow > 0; }
 
@@ -117,9 +128,15 @@ public:
    * @brief Calculate grid metrics from collection configuration.
    * @param config Collection configuration with grid settings.
    * @param totalItems Total number of items to lay out.
+   * @param sidebarShrinkingActive Kartend-0p3w: when true, the sidebar is hidden
+   *        AND its mode would shrink the grid (Expand) — apply the alternate
+   *        gridWidthSidebarHidden / horizontalGridHeightSidebarHidden values
+   *        when configured. Defaults to false so existing call sites that don't
+   *        care about sidebar state keep using the primary fields.
    * @return Computed grid metrics.
    */
-  [[nodiscard]] static GridMetrics calculateMetrics(const CollectionConfig &config, int totalItems);
+  [[nodiscard]] static GridMetrics calculateMetrics(const CollectionConfig &config, int totalItems,
+                                                    bool sidebarShrinkingActive = false);
 
   /**
    * @brief Recalculate metrics for filtered view with fewer items.
@@ -163,39 +180,48 @@ public:
                                            int totalItems);
 
   /**
-   * @brief Calculate the range of visible rows for a viewport.
-   * @param scrollY Current vertical scroll position.
-   * @param viewportHeight Height of the visible viewport.
-   * @param metrics Grid metrics to use for calculation.
-   * @param bufferRows Number of extra rows to include as buffer.
-   * @return Pair of (firstVisibleRow, lastVisibleRow).
+   * @brief Calculate the range of visible "rows" along the long axis.
+   *
+   * In Grid/List/CoverFlow this is rows (vertical scroll position +
+   * viewport height). In Horizontal mode (Kartend-dx9t) the same call
+   * is reinterpreted as columns (horizontal scroll position + viewport
+   * width); the caller picks which scrollbar to read from `metrics.isHorizontal`.
+   *
+   * @param scrollPos Current scroll position along the long axis.
+   * @param viewportSize Size of the viewport along the long axis.
+   * @param metrics Grid metrics (drives the axis interpretation).
+   * @param bufferRows Number of extra rows/columns to include as buffer.
+   * @return Pair of (firstVisible, lastVisible) along the long axis.
    */
   [[nodiscard]] static std::pair<int, int>
-  getVisibleRowRange(int scrollY, int viewportHeight, const GridMetrics &metrics,
+  getVisibleRowRange(int scrollPos, int viewportSize, const GridMetrics &metrics,
                      int bufferRows = UIConstants::Grid::BUFFER_ROWS);
 
   /**
    * @brief Calculate the range of visible item indices.
-   * @param scrollY Current vertical scroll position.
-   * @param viewportHeight Height of the visible viewport.
+   * @param scrollPos Current scroll position along the long axis.
+   * @param viewportSize Size of the viewport along the long axis.
    * @param metrics Grid metrics to use for calculation.
    * @param totalItems Total number of items.
    * @param bufferRows Number of extra rows to include as buffer.
    * @return Pair of (firstVisibleIndex, lastVisibleIndex).
    */
   [[nodiscard]] static std::pair<int, int>
-  getVisibleIndexRange(int scrollY, int viewportHeight, const GridMetrics &metrics, int totalItems,
+  getVisibleIndexRange(int scrollPos, int viewportSize, const GridMetrics &metrics, int totalItems,
                        int bufferRows = UIConstants::Grid::BUFFER_ROWS);
 
   /**
-   * @brief Calculate scroll target to center an item vertically.
+   * @brief Calculate scroll target to center an item along the long axis.
+   *
+   * In Grid this centers vertically; in Horizontal it centers horizontally.
+   *
    * @param itemIndex Index of the item to center.
-   * @param viewportHeight Height of the visible viewport.
+   * @param viewportSize Size of the viewport along the long axis.
    * @param maxScroll Maximum scroll value.
    * @param metrics Grid metrics to use for calculation.
    * @return Target scroll position.
    */
-  [[nodiscard]] static int calculateCenterScrollTarget(int itemIndex, int viewportHeight,
+  [[nodiscard]] static int calculateCenterScrollTarget(int itemIndex, int viewportSize,
                                                        int maxScroll, const GridMetrics &metrics);
 
   /**

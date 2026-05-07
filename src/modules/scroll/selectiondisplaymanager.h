@@ -107,6 +107,11 @@ public:
   bool hideArtworkPreview();
   /// Lazy-creates the overlay if needed and shows it for the given file.
   void showArtworkPreview(const QString &filePath, const QString &artworkDir);
+  /// Lazy-creates the overlay and shows a video-first preview for the
+  /// given file, falling back to artwork when no video is found
+  /// (Kartend-ljey).
+  void showMediaPreview(const QString &filePath, const QString &artworkDir,
+                        const QString &videoDir);
 
   // ─────────────────────────────────────────────────────────────────────
   // Selection update logic (moved from ScrollManager, Kartend-p79)
@@ -133,6 +138,17 @@ signals:
   void listColumnWidthChanged(int width);
   /// Emitted when the user resizes the artwork column.
   void listArtworkColumnWidthChanged(int width);
+  /// Emitted when the user activates (Enter / double-click) while the
+  /// artwork preview overlay is visible. Used by expand-mode to launch
+  /// the previewed item on the second activation. @p filePath is the path
+  /// of the item the overlay is displaying; may be empty for gallery
+  /// thumbnail previews that don't carry an associated media path, in
+  /// which case the listener should fall back to the current selection.
+  void artworkPreviewLaunchRequested(const QString &filePath);
+  /// Kartend-63e bug #7: emitted from the overlay's show/hide events. Wired
+  /// up at lazy-creation time so DetailsPaneManager can lower the sidebar while
+  /// the overlay is on top.
+  void artworkPreviewVisibilityChanged(bool visible);
 
 private slots:
   void onListColumnClicked(ListSortColumn column);

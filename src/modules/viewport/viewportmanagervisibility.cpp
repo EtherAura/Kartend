@@ -34,6 +34,17 @@ void ViewportManager::ensureHorizontallyVisible(int index) {
     return;
   }
 
+  // Kartend-dx9t: in Horizontal view "ensure horizontally visible" reduces to
+  // a no-op — the item's column always fits in the viewport's height, and the
+  // long-axis scrolling is handled by centerItemVertically (which dispatches
+  // to the horizontal scrollbar in this mode).
+  if (m_scrollManager && m_scrollManager->getMetrics().isHorizontal) {
+    if (m_scrollManager) {
+      m_scrollManager->updateVirtualView();
+    }
+    return;
+  }
+
   const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
   int gridWidth = collection.gridWidth;
   if (gridWidth <= 0) {
@@ -95,6 +106,15 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
   if (m_state && m_state->click().deferCenterOnClick && !m_physicalKeyDown) {
     return;
   }
+
+  // Kartend-dx9t: in Horizontal view, "ensure visible" defers to the
+  // horizontal-axis centering path — the only scroll axis there.
+  if (m_scrollManager && m_scrollManager->getMetrics().isHorizontal) {
+    Q_UNUSED(allowHorizontalScroll);
+    centerItemVertically(index, /*immediate=*/true);
+    return;
+  }
+
   const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
 
   // Get metrics from ScrollManager for correct dimensions in both grid and list
@@ -268,6 +288,25 @@ void ViewportManager::applyImmediateViewportPositioningForSelection(int targetIn
     return;
   }
   if (targetIndex < 0) {
+    return;
+  }
+
+  // Kartend-dx9t: in Horizontal mode, snap the horizontal scrollbar so the
+  // wrapped selection is centered along the long axis. Vertical position is
+  // unused (column always visible).
+  if (m_scrollManager && m_scrollManager->getMetrics().isHorizontal) {
+    QScrollBar *hScrollBar = m_itemScrollArea->horizontalScrollBar();
+    if (!hScrollBar) {
+      return;
+    }
+    const auto &metrics = m_scrollManager->getMetrics();
+    int viewportW = m_itemScrollArea->viewport()->width();
+    if (viewportW <= 0) {
+      return;
+    }
+    int targetX = GridLayoutCalculator::calculateCenterScrollTarget(targetIndex, viewportW,
+                                                                    hScrollBar->maximum(), metrics);
+    hScrollBar->setValue(qBound(0, targetX, hScrollBar->maximum()));
     return;
   }
 

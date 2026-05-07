@@ -16,10 +16,14 @@
 #include "databasemanager.h"
 #include "dbmigrations.h"
 #include "errorutils.h"
+#include "historystore.h"
+#include "itemartwork.h"
+#include "itemmetadata.h"
 #include "pathutils.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
 #include "uiconstants.h"
+#include "usagestatsstore.h"
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcDatabaseManager)
@@ -49,6 +53,217 @@ auto DatabaseManager::countCollectionRecursive(int collectionIndex,
     total += countCollectionByUuid(descendantUuid);
   }
   return total;
+}
+
+auto DatabaseManager::loadCollectionLastScanned(const QString &collectionUuid) const -> QDateTime {
+  if (collectionUuid.isEmpty() || !m_db.isValid() || !m_db.isOpen()) {
+    return {};
+  }
+  QSqlQuery query(m_db);
+  query.prepare(QStringLiteral("SELECT last_scanned FROM collections WHERE uuid = ?"));
+  query.bindValue(0, collectionUuid);
+  if (!query.exec() || !query.next()) {
+    return {};
+  }
+  return QDateTime::fromString(query.value(0).toString(), Qt::ISODate);
+}
+
+auto DatabaseManager::loadItemMetadata(const QString &collectionUuid, const QString &path) const
+    -> ItemMetadataStore::ItemMetadata {
+  // Use the main-thread connection. Reads are tiny single-row lookups; the
+  // worker thread continues to own writes for scan/persist.
+  auto result = ItemMetadataStore::load(const_cast<QSqlDatabase &>(m_db), collectionUuid, path);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    ItemMetadataStore::ItemMetadata empty;
+    empty.collectionUuid = collectionUuid;
+    empty.path = path;
+    return empty;
+  }
+  return result.value();
+}
+
+bool DatabaseManager::saveItemMetadata(const ItemMetadataStore::ItemMetadata &metadata) {
+  // User-driven edits are infrequent single-row upserts; running on the
+  // main-thread connection avoids needing to round-trip through QueryManager
+  // signals just to surface success/failure to the dialog.
+  auto result = ItemMetadataStore::save(m_db, metadata);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    emit errorOccurred(result.error());
+    return false;
+  }
+  return true;
+}
+
+auto DatabaseManager::loadItemArtwork(const QString &collectionUuid, const QString &path) const
+    -> QList<ItemArtworkStore::ItemArtwork> {
+  // Main-thread connection: the sidebar fetches at most a few rows per item
+  // when the selection changes, so a worker round-trip would be overhead for
+  // no real concurrency benefit.
+  auto result =
+      ItemArtworkStore::loadAllForItem(const_cast<QSqlDatabase &>(m_db), collectionUuid, path);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return {};
+  }
+  return result.value();
+}
+
+bool DatabaseManager::saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwork) {
+  // Mirrors saveItemMetadata: user-driven single-row upsert on the main-thread
+  // connection so the per-item link dialog can react to success/failure
+  // without rerouting through the worker thread.
+  auto result = ItemArtworkStore::save(m_db, artwork);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    emit errorOccurred(result.error());
+    return false;
+  }
+  return true;
+}
+
+bool DatabaseManager::removeItemArtwork(const QString &collectionUuid, const QString &path,
+                                        const QString &artworkType) {
+  auto result = ItemArtworkStore::remove(m_db, collectionUuid, path, artworkType);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    emit errorOccurred(result.error());
+    return false;
+  }
+  return true;
+}
+
+// ─── Usage stats (Kartend-7vi) ───────────────────────────────────────────────
+// All paths use the main-thread connection: writes are tiny single-row updates
+// triggered by user actions (launch, runtime exit), and reads are dialog-time
+// aggregates that don't need worker concurrency.
+
+auto DatabaseManager::loadItemUsageStats(const QString &collectionUuid, const QString &path) const
+    -> UsageStatsStore::ItemUsageStats {
+  auto result =
+      UsageStatsStore::loadForItem(const_cast<QSqlDatabase &>(m_db), collectionUuid, path);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    UsageStatsStore::ItemUsageStats empty;
+    empty.collectionUuid = collectionUuid;
+    empty.path = path;
+    return empty;
+  }
+  return result.value();
+}
+
+void DatabaseManager::recordItemLaunch(const QString &collectionUuid, const QString &path) {
+  auto result = UsageStatsStore::recordLaunch(m_db, collectionUuid, path);
+  if (result.isError()) {
+    // Tracking is best-effort — log but never block the launch path.
+    ErrorUtils::logError(result.error());
+  }
+}
+
+void DatabaseManager::recordItemPlaySession(const QString &collectionUuid, const QString &path,
+                                            qint64 seconds) {
+  auto result = UsageStatsStore::recordPlaySession(m_db, collectionUuid, path, seconds);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+  }
+}
+
+auto DatabaseManager::loadAggregateUsageStats() const -> UsageStatsStore::AggregateStats {
+  auto result = UsageStatsStore::loadAggregate(const_cast<QSqlDatabase &>(m_db));
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return {};
+  }
+  return result.value();
+}
+
+auto DatabaseManager::loadTopPlayedItems(int limit) const -> QList<UsageStatsStore::ItemUsageRow> {
+  auto result = UsageStatsStore::loadTopPlayed(const_cast<QSqlDatabase &>(m_db), limit);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return {};
+  }
+  return result.value();
+}
+
+auto DatabaseManager::loadRecentlyPlayedItems(int limit) const
+    -> QList<UsageStatsStore::ItemUsageRow> {
+  auto result = UsageStatsStore::loadRecentlyPlayed(const_cast<QSqlDatabase &>(m_db), limit);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return {};
+  }
+  return result.value();
+}
+
+auto DatabaseManager::loadUsageByCollection() const
+    -> QHash<QString, UsageStatsStore::CollectionUsage> {
+  auto result = UsageStatsStore::loadCollectionBreakdown(const_cast<QSqlDatabase &>(m_db));
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return {};
+  }
+  return result.value();
+}
+
+bool DatabaseManager::resetAllUsageStats() {
+  auto result = UsageStatsStore::resetAll(m_db);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    emit errorOccurred(result.error());
+    return false;
+  }
+  return true;
+}
+
+// ─── Launch history (Kartend-fse) ────────────────────────────────────────────
+// Same main-thread connection rationale as the usage-stats helpers above:
+// inserts/trims are tiny and triggered by user actions, reads are dialog-time
+// scans bounded by the user-configured cap.
+
+void DatabaseManager::recordHistoryEntry(const QString &collectionUuid, const QString &path,
+                                         const QString &name, int maxEntries) {
+  auto result = HistoryStore::recordLaunch(m_db, collectionUuid, path, name);
+  if (result.isError()) {
+    // Best-effort tracking — log but never block the launch path.
+    ErrorUtils::logError(result.error());
+    return;
+  }
+  if (maxEntries > 0) {
+    auto trim = HistoryStore::trimToMaxEntries(m_db, maxEntries);
+    if (trim.isError()) {
+      ErrorUtils::logError(trim.error());
+    }
+  }
+}
+
+auto DatabaseManager::loadRecentHistory(int limit) const -> QList<HistoryStore::HistoryEntry> {
+  auto result = HistoryStore::loadRecent(const_cast<QSqlDatabase &>(m_db), limit);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return {};
+  }
+  return result.value();
+}
+
+auto DatabaseManager::historyEntryCount() const -> qint64 {
+  auto result = HistoryStore::count(const_cast<QSqlDatabase &>(m_db));
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return 0;
+  }
+  return result.value();
+}
+
+bool DatabaseManager::clearHistory() {
+  auto result = HistoryStore::clearAll(m_db);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    emit errorOccurred(result.error());
+    return false;
+  }
+  return true;
 }
 
 // Count items globally across all collections

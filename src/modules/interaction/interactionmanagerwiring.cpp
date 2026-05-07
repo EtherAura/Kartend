@@ -28,7 +28,7 @@
 #include "itemwidget.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "uiconstants.h"
 
 void InteractionManager::connectSearchManagerSignals() {
@@ -46,8 +46,12 @@ void InteractionManager::connectSearchManagerSignals() {
 }
 
 void InteractionManager::connectSelectionManagerSignals() {
-  connect(m_selectionManager.get(), &SelectionManager::selectionChanged, this,
-          [this](int index) { emit selectionChanged(index); });
+  connect(m_selectionManager.get(), &SelectionManager::selectionChanged, this, [this](int index) {
+    // Selection moved → reset expand-mode state so the next
+    // activation expands first, not launches.
+    m_state.clearExpandedItem();
+    emit selectionChanged(index);
+  });
   connect(m_selectionManager.get(), &SelectionManager::requestFocusItemsPage, this, [this]() {
     if (m_itemsPage) {
       m_itemsPage->setFocus();
@@ -111,12 +115,30 @@ void InteractionManager::connectGamepadManagerSignals() {
   connect(m_gamepadManager.get(), &GamepadManager::requestSelectionMove, this,
           [this](int direction, bool vertical) {
             int effectiveDirection = direction;
-            if (vertical) {
-              // Check if we're in list mode - don't multiply by gridWidth
-              bool isListMode = false;
-              if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-                isListMode = (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
+            bool effectiveVertical = vertical;
+            ViewType vt = ViewType::Grid;
+            if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+              vt = (*m_collections)[*m_currentCollectionIndex].viewType;
+            }
+            if (vt == ViewType::Horizontal) {
+              // Kartend-dx9t: in Horizontal mode the d-pad axes swap roles —
+              // vertical stick steps within the column (±1, no gridWidth
+              // multiplier), horizontal stick advances columns (±gridWidth,
+              // routed via the vertical-wrap path so wrap behavior matches
+              // Up/Down in Grid mode). Mirrors the keyboard mapping.
+              if (vertical) {
+                effectiveDirection = direction;
+                effectiveVertical = false;
+              } else {
+                const int gridWidth = getCurrentGridWidth();
+                if (gridWidth > 0 && std::abs(direction) < gridWidth) {
+                  effectiveDirection = direction * gridWidth;
+                }
+                effectiveVertical = true;
               }
+            } else if (vertical) {
+              // Check if we're in list mode - don't multiply by gridWidth
+              bool isListMode = (vt == ViewType::List);
               if (!isListMode) {
                 const int gridWidth = getCurrentGridWidth();
                 if (gridWidth > 0 && std::abs(direction) < gridWidth) {
@@ -124,7 +146,7 @@ void InteractionManager::connectGamepadManagerSignals() {
                 }
               }
             }
-            handleArrowKeyNavigation(effectiveDirection, vertical);
+            handleArrowKeyNavigation(effectiveDirection, effectiveVertical);
           });
   connect(m_gamepadManager.get(), &GamepadManager::requestEnterAction, this, [this]() {
     if (m_scrollManager) {
@@ -135,8 +157,8 @@ void InteractionManager::connectGamepadManagerSignals() {
   connect(m_gamepadManager.get(), &GamepadManager::requestEscapeAction, this,
           [this]() { (void)handleEscapeKey(); });
   connect(m_gamepadManager.get(), &GamepadManager::requestToggleSidebarAction, this, [this]() {
-    if (m_sidebarManager) {
-      m_sidebarManager->toggleSidebar();
+    if (m_detailsPaneManager) {
+      m_detailsPaneManager->toggleSidebar();
     }
   });
   connect(m_gamepadManager.get(), &GamepadManager::requestScrollAnimationStop, this, [this]() {
@@ -265,8 +287,23 @@ void InteractionManager::connectAttractManagerSignals() {
   connect(m_selectionManager.get(), &SelectionManager::selectionChanged, m_attractManager.get(),
           [this](int index) {
             Q_UNUSED(index);
+            // Selection changes that AttractManager itself drives via the
+            // advance-selection timer must not be treated as user activity,
+            // otherwise attract mode would immediately stop on its own tick.
+            if (m_attractManager->isDrivingSelection()) {
+              return;
+            }
             m_attractManager->onActivityDetected();
           });
+  connect(m_attractManager.get(), &AttractManager::requestSelectIndex, this, [this](int index) {
+    // Explicit viewport centering: selectItemByIndex only centers when
+    // the target widget is already materialized. With random advance
+    // mode the target is usually far outside the viewport, so without
+    // this the virtual scroll never realises the widget and the jump
+    // silently fails.
+    centerItemVertically(index, false);
+    selectItemByIndex(index, true);
+  });
 }
 
 void InteractionManager::connectEventManagerSignals() {
@@ -274,6 +311,10 @@ void InteractionManager::connectEventManagerSignals() {
           &InteractionManager::handleWidgetDoubleClickedWithCollection);
   connect(m_eventManager.get(), &EventManager::contextMenuRequested, this,
           &InteractionManager::showContextMenu);
+  connect(m_eventManager.get(), &EventManager::mediaPreviewRequested, this,
+          &InteractionManager::onMediaPreviewRequested);
+  connect(m_eventManager.get(), &EventManager::artworkTypeCycleRequested, this,
+          &InteractionManager::onArtworkTypeCycleRequested);
   connect(m_eventManager.get(), &EventManager::widgetClicked, this,
           [this](ItemWidget *widget, int visualIndex, const QPoint &clickPos, QMouseEvent *event) {
             Q_UNUSED(widget);

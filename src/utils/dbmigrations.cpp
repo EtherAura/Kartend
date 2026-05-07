@@ -101,7 +101,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
     return;
   }
 
-  constexpr int CURRENT_SCHEMA_VERSION = 3;
+  constexpr int CURRENT_SCHEMA_VERSION = 10;
   const int version = getUserVersion(db);
   if (version >= CURRENT_SCHEMA_VERSION) {
     return;
@@ -230,7 +230,202 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
     }
 
     setUserVersion(db, 3);
-    // mutableVersion would be 3 here but function ends
+    mutableVersion = 3;
+  }
+
+  if (mutableVersion < 4) {
+    // v4: Add file_size so item lists can sort by size without touching the
+    // filesystem at query time. Existing rows backfill to 0 until the next
+    // collection rescan refreshes metadata from disk.
+    ensureColumn(db, "items", "file_size", "INTEGER DEFAULT 0", origin);
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_items_uuid_last_modified ON "
+                "items(collection_uuid, last_modified)",
+                origin, "idx_items_uuid_last_modified");
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_items_uuid_file_size ON "
+                "items(collection_uuid, file_size)",
+                origin, "idx_items_uuid_file_size");
+
+    setUserVersion(db, 4);
+    mutableVersion = 4;
+  }
+
+  if (mutableVersion < 5) {
+    // v5: Add item_metadata table for extended per-item metadata
+    // (scraper-populated structured fields + user-defined custom fields +
+    // optional manual path override). Keyed by (collection_uuid, path) so
+    // entries survive item id renumbering across rescans.
+    ensureIndex(db,
+                "CREATE TABLE IF NOT EXISTS item_metadata ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "collection_uuid TEXT NOT NULL DEFAULT '', "
+                "path TEXT NOT NULL, "
+                "title TEXT, "
+                "description TEXT, "
+                "genre TEXT, "
+                "developer TEXT, "
+                "publisher TEXT, "
+                "release_date TEXT, "
+                "content_rating TEXT, "
+                "players TEXT, "
+                "runtime_seconds INTEGER, "
+                "tags TEXT, "
+                "custom_fields TEXT, "
+                "manual_path TEXT, "
+                "source TEXT, "
+                "updated_at TEXT NOT NULL DEFAULT '', "
+                "UNIQUE(collection_uuid, path)"
+                ")",
+                origin, "item_metadata");
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_item_metadata_uuid_path ON "
+                "item_metadata(collection_uuid, path)",
+                origin, "idx_item_metadata_uuid_path");
+
+    setUserVersion(db, 5);
+    mutableVersion = 5;
+  }
+
+  if (mutableVersion < 6) {
+    // v6: Add item_artwork table for multi-type per-item artwork (Kartend-yf1).
+    // Keyed by (collection_uuid, path, artwork_type) so each item can have one
+    // row per type (box, screenshot, marquee, etc., plus user-defined custom
+    // types added in a later sub-issue). manual_path is the per-item override;
+    // when NULL, callers fall back to subdirectory auto-discovery for the
+    // standard types only. Mirrors the v5 pattern so entries survive id
+    // renumbering across rescans.
+    ensureIndex(db,
+                "CREATE TABLE IF NOT EXISTS item_artwork ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "collection_uuid TEXT NOT NULL DEFAULT '', "
+                "path TEXT NOT NULL, "
+                "artwork_type TEXT NOT NULL, "
+                "manual_path TEXT, "
+                "updated_at TEXT NOT NULL DEFAULT '', "
+                "UNIQUE(collection_uuid, path, artwork_type)"
+                ")",
+                origin, "item_artwork");
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_item_artwork_uuid_path ON "
+                "item_artwork(collection_uuid, path)",
+                origin, "idx_item_artwork_uuid_path");
+
+    setUserVersion(db, 6);
+    mutableVersion = 6;
+  }
+
+  if (mutableVersion < 7) {
+    // v7: Cumulative play-time tracking (Kartend-7vi). play_count and
+    // last_played already exist from v1; add total_play_seconds for the
+    // runtime-detection (Kartend-qxv) accumulated session duration. Also
+    // index last_played so the "Recently played" view can sort cheaply.
+    ensureColumn(db, "items", "total_play_seconds", "INTEGER DEFAULT 0", origin);
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_items_last_played ON "
+                "items(last_played)",
+                origin, "idx_items_last_played");
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_items_play_count ON "
+                "items(play_count)",
+                origin, "idx_items_play_count");
+
+    setUserVersion(db, 7);
+    mutableVersion = 7;
+  }
+
+  if (mutableVersion < 8) {
+    // v8: Per-item launcher override (Kartend-dnx4). Stores a unified
+    // launcher index (0 = primary, 1..N = additionalLaunchers[0..N-1]) so an
+    // item can pin a specific launcher and skip the multi-launcher chooser
+    // dialog. NULL means "no override" — fall through to the chooser /
+    // collection default. Lives on item_metadata to share the same
+    // (collection_uuid, path) key as manual_path / custom_fields.
+    ensureColumn(db, "item_metadata", "launcher_index", "INTEGER", origin);
+
+    setUserVersion(db, 8);
+    mutableVersion = 8;
+  }
+
+  if (mutableVersion < 9) {
+    // v9: Chronological launch history (Kartend-fse). Append-only log keyed
+    // by an auto-incrementing id; the same (collection_uuid, path) appears
+    // multiple times on purpose. `name` is denormalized at insert time so
+    // rows stay readable after the source item is deleted.
+    ensureIndex(db,
+                "CREATE TABLE IF NOT EXISTS launch_history ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "collection_uuid TEXT NOT NULL DEFAULT '', "
+                "path TEXT NOT NULL DEFAULT '', "
+                "name TEXT, "
+                "launched_at TEXT NOT NULL DEFAULT ''"
+                ")",
+                origin, "launch_history");
+    // Index for trim-to-N and "recent" queries — both walk the table in
+    // descending id order. SQLite already serves this from the implicit
+    // PK index, but an explicit launched_at index keeps any future
+    // launched_at-based queries cheap (e.g. "older than 30 days").
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_launch_history_launched_at "
+                "ON launch_history(launched_at)",
+                origin, "idx_launch_history_launched_at");
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_launch_history_uuid_path "
+                "ON launch_history(collection_uuid, path)",
+                origin, "idx_launch_history_uuid_path");
+
+    setUserVersion(db, 9);
+    mutableVersion = 9;
+  }
+
+  if (mutableVersion < 10) {
+    // v10: Playlists (Kartend-vlm7). A playlist is a virtual collection whose
+    // items are explicit (collection_uuid, path) references into the existing
+    // `items` table — so a single playlist can mix media from any number of
+    // source collections. `parent_collection_uuid` is optional: empty means
+    // "root-level virtual collection", otherwise the playlist nests under the
+    // collection with that uuid (mirrors CollectionConfig::parentCollectionIndex
+    // for INI-backed collections). `reserved_kind` is a slot for built-in
+    // playlists (e.g. 'favorites' in Kartend-5mg8); user-created playlists
+    // leave it empty.
+    ensureIndex(db,
+                "CREATE TABLE IF NOT EXISTS playlists ("
+                "id TEXT PRIMARY KEY, "
+                "name TEXT NOT NULL, "
+                "icon TEXT NOT NULL DEFAULT '', "
+                "parent_collection_uuid TEXT NOT NULL DEFAULT '', "
+                "reserved_kind TEXT NOT NULL DEFAULT '', "
+                "created_at TEXT NOT NULL DEFAULT '', "
+                "updated_at TEXT NOT NULL DEFAULT ''"
+                ")",
+                origin, "playlists");
+
+    // Playlist items reference rows by (collection_uuid, path) — the same key
+    // shape used by item_metadata / item_artwork — so entries survive item id
+    // renumbering across rescans. `position` is a dense 0-based ordering
+    // controlled by the playlist editor; the (playlist_id, position) PK lets
+    // ORDER BY position serve the natural list view directly.
+    ensureIndex(db,
+                "CREATE TABLE IF NOT EXISTS playlist_items ("
+                "playlist_id TEXT NOT NULL, "
+                "position INTEGER NOT NULL, "
+                "source_collection_uuid TEXT NOT NULL, "
+                "source_path TEXT NOT NULL, "
+                "added_at TEXT NOT NULL DEFAULT '', "
+                "PRIMARY KEY (playlist_id, position), "
+                "FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE"
+                ")",
+                origin, "playlist_items");
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_playlist_items_lookup "
+                "ON playlist_items(source_collection_uuid, source_path)",
+                origin, "idx_playlist_items_lookup");
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_playlist_items_playlist "
+                "ON playlist_items(playlist_id)",
+                origin, "idx_playlist_items_playlist");
+
+    setUserVersion(db, 10);
   }
 }
 

@@ -4,13 +4,12 @@
 #include <functional>
 #include <QAbstractItemView>
 #include <QColorDialog>
+#include <QComboBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QFontDialog>
-#include <QAction>
 #include <QInputDialog>
 #include <QKeySequence>
-#include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPixmapCache>
@@ -24,6 +23,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "collectiontreewidget.h"
 #include "extensionutils.h"
 #include "gamepadmanager.h"
 #include "interactionmanager.h"
@@ -184,25 +184,41 @@ void SettingsDialog::setupButtonConnections() {
   connect(ui->addCollectionButton, &QPushButton::clicked, this, &SettingsDialog::addCollection);
   connect(ui->removeCollectionButton, &QPushButton::clicked, this,
           &SettingsDialog::removeCollection);
-  // Kartend-63o: populate the "apply to..." tool button's dropdown menu so
-  // users can propagate the current collection's appearance/layout settings
-  // to all collections or to subcollections only. Menu is owned by the
-  // button so Qt cleans it up with the dialog.
-  if (ui->applyToButton) {
-    auto *menu = new QMenu(ui->applyToButton);
-    QAction *allAction = menu->addAction(tr("Apply to All Collections..."));
-    QAction *subAction = menu->addAction(tr("Apply to Subcollections Only..."));
-    connect(allAction, &QAction::triggered, this,
-            &SettingsDialog::applyCurrentSettingsToAllCollections);
-    connect(subAction, &QAction::triggered, this,
-            &SettingsDialog::applyCurrentSettingsToSubcollections);
-    ui->applyToButton->setMenu(menu);
+  if (ui->duplicateCollectionButton) {
+    connect(ui->duplicateCollectionButton, &QPushButton::clicked, this,
+            &SettingsDialog::duplicateCollection);
+  }
+  if (ui->editLinkedParentsButton) {
+    connect(ui->editLinkedParentsButton, &QPushButton::clicked, this,
+            &SettingsDialog::onEditLinkedParents);
+  }
+  // Kartend-enq: wire the Settings Mode selector. Default is `Current` to
+  // preserve legacy single-collection save behavior.
+  if (ui->settingsScopeComboBox) {
+    ui->settingsScopeComboBox->setCurrentIndex(static_cast<int>(m_settingsScope));
+    connect(ui->settingsScopeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            &SettingsDialog::onSettingsScopeChanged);
   }
   connect(ui->browseLauncherButton, &QPushButton::clicked, this, &SettingsDialog::browseLauncher);
   connect(ui->browseCoreButton, &QPushButton::clicked, this, &SettingsDialog::browseCore);
   connect(ui->browseMediaDirButton, &QPushButton::clicked, this, &SettingsDialog::browseMediaDir);
   connect(ui->browseArtworkDirButton, &QPushButton::clicked, this,
           &SettingsDialog::browseArtworkDir);
+  if (ui->browseVideoDirButton) {
+    connect(ui->browseVideoDirButton, &QPushButton::clicked, this, &SettingsDialog::browseVideoDir);
+  }
+  if (ui->browseManualDirButton) {
+    connect(ui->browseManualDirButton, &QPushButton::clicked, this,
+            &SettingsDialog::browseManualDir);
+  }
+  if (ui->browsePlaceholderArtworkButton) {
+    connect(ui->browsePlaceholderArtworkButton, &QPushButton::clicked, this,
+            &SettingsDialog::browsePlaceholderArtwork);
+  }
+  if (ui->browseStartupVideoButton) {
+    connect(ui->browseStartupVideoButton, &QPushButton::clicked, this,
+            &SettingsDialog::browseStartupVideo);
+  }
   if (ui->recursiveImportContentButton) {
     connect(ui->recursiveImportContentButton, &QPushButton::clicked, this,
             &SettingsDialog::onRecursiveImportContent);
@@ -217,6 +233,80 @@ void SettingsDialog::setupConnections() {
   setupTreeWidgetConnections();
   setupUIConstraints();
   setupGeneralSettingsConnections();
+}
+
+void SettingsDialog::onSettingsScopeChanged(int comboIndex) {
+  // Kartend-enq: clamp combo index defensively in case the .ui file is
+  // edited and adds/removes entries; only emit when the scope actually
+  // changes so dependent UI doesn't churn.
+  SettingsScope newScope = SettingsScope::Current;
+  switch (comboIndex) {
+  case 1:
+    newScope = SettingsScope::CurrentAndSubcollections;
+    break;
+  case 2:
+    newScope = SettingsScope::All;
+    break;
+  default:
+    newScope = SettingsScope::Current;
+    break;
+  }
+  if (newScope == m_settingsScope) {
+    return;
+  }
+  m_settingsScope = newScope;
+  applyScopeFieldGating();
+  emit settingsScopeChanged(m_settingsScope);
+}
+
+void SettingsDialog::applyScopeFieldGating() {
+  // Kartend-c06: when the user picks a wider scope, edits to fields outside
+  // the curated propagation subset only ever affect the currently-selected
+  // collection. Disable those controls so the UI matches the propagation
+  // behavior — paths, extensions, launcher/core, extract & scan flags, and
+  // parent linkage. The list mirrors copyAppearanceAndLayoutFields()'s
+  // exclusions in settingsdialogtree.cpp.
+  const bool enabled = (m_settingsScope == SettingsScope::Current);
+  QWidget *const gatedFields[] = {
+      ui->parentCollectionComboBox,
+      ui->mediaDirLineEdit,
+      ui->browseMediaDirButton,
+      ui->recursiveImportContentButton,
+      ui->artworkDirLineEdit,
+      ui->browseArtworkDirButton,
+      ui->videoDirLineEdit,
+      ui->browseVideoDirButton,
+      ui->manualDirLineEdit,
+      ui->browseManualDirButton,
+      ui->placeholderArtworkLineEdit,
+      ui->browsePlaceholderArtworkButton,
+      ui->fileExtensionsLineEdit,
+      ui->customArtworkTypesLineEdit,
+      ui->launcherLineEdit,
+      ui->browseLauncherButton,
+      ui->coreLineEdit,
+      ui->browseCoreButton,
+      ui->launchParamsLineEdit,
+      ui->launcherNameLineEdit,
+      ui->additionalLaunchersList,
+      ui->addAdditionalLauncherButton,
+      ui->editAdditionalLauncherButton,
+      ui->removeAdditionalLauncherButton,
+      ui->defaultLauncherComboBox,
+      ui->extractArchivesCheckBox,
+      ui->extractedExtensionLineEdit,
+      ui->includeContentSubfoldersCheckBox,
+      ui->includeArtworkSubfoldersCheckBox,
+      ui->showAllSubcollectionItemsCheckBox,
+      ui->showAllSubfolderItemsCheckBox,
+      ui->hideSubfolderTitlesCheckBox,
+      ui->showHiddenFoldersCheckBox,
+  };
+  for (QWidget *w : gatedFields) {
+    if (w) {
+      w->setEnabled(enabled);
+    }
+  }
 }
 
 auto SettingsDialog::spacingInternalToUi(int spacing) -> int {

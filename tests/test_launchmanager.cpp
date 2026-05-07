@@ -49,6 +49,20 @@ private slots:
   // buildLaunchCommand tests
   void testBuildLaunchCommand_nonRetroArch_usesLaunchParameters();
   void testBuildLaunchCommand_retroArch_usesCorePath();
+  void testBuildLaunchCommand_allowsAmpersandMediaPath();
+
+  // Multi-launcher (Kartend-bdl) tests
+  void testLauncherCount_singlePrimary();
+  void testLauncherCount_withAdditional();
+  void testLauncherAt_returnsAdditionalEntry();
+  void testLauncherDisplayName_fallsBackToBasename();
+  void testBuildLaunchCommand_explicitLauncherConfig();
+  void testClampValues_clampsDefaultLauncherIndex();
+
+  // Preset resolution (Kartend-p1jd) tests
+  void testResolvePreset_returnsInputWhenNoPresetId();
+  void testResolvePreset_overridesFieldsFromMatchingPreset();
+  void testResolvePreset_fallsBackToInlineWhenPresetMissing();
 
   // findFileWithExtension hardening tests
   void testFindFileWithExtension_findsFlatFile();
@@ -119,7 +133,8 @@ void TestLaunchManager::testValidatePathSecurity_shellMetacharacters_data() {
 
   QTest::newRow("semicolon") << "/path/to;command" << "semicolon injection" << true;
   QTest::newRow("pipe") << "/path/to|command" << "pipe injection" << true;
-  QTest::newRow("ampersand") << "/path/to&command" << "background injection" << true;
+  QTest::newRow("ampersand") << "/path/to/Sonic & Knuckles.zip" << "ampersand in filename"
+                             << false;
   QTest::newRow("backtick") << "/path/to`command`" << "command substitution" << true;
   QTest::newRow("dollar") << "/path/to$HOME" << "variable expansion" << true;
   QTest::newRow("parens") << "/path/to$(command)" << "subshell" << true;
@@ -380,6 +395,172 @@ void TestLaunchManager::testBuildLaunchCommand_retroArch_usesCorePath() {
   QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
   QCOMPARE(result.value().program, QString("retroarch"));
   QCOMPARE(result.value().arguments, (QStringList{"-L", "/tmp/core.so", filePath}));
+}
+
+void TestLaunchManager::testBuildLaunchCommand_allowsAmpersandMediaPath() {
+  CollectionConfig config;
+  config.name = "Sega - Mega Drive - Genesis";
+  config.launcherPath = "retroarch";
+  config.corePath = "/tmp/genesis_plus_gx_libretro.so";
+
+  const QString filePath =
+      "/mnt/Games/Arcade/Collections/Sega - Mega Drive - Genesis/ROMs/"
+      "Sonic & Knuckles (World) (Beta) (1994-06-10).zip";
+  auto result = LaunchManager::buildLaunchCommand(config, filePath);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().program, QString("retroarch"));
+  QCOMPARE(result.value().arguments,
+           (QStringList{"-L", "/tmp/genesis_plus_gx_libretro.so", filePath}));
+}
+
+// ---------------------------------------------------------------------------
+// Multi-launcher (Kartend-bdl)
+// ---------------------------------------------------------------------------
+
+void TestLaunchManager::testLauncherCount_singlePrimary() {
+  CollectionConfig config;
+  config.launcherPath = "echo";
+  QCOMPARE(config.launcherCount(), 1);
+}
+
+void TestLaunchManager::testLauncherCount_withAdditional() {
+  CollectionConfig config;
+  config.launcherPath = "echo";
+  config.additionalLaunchers.append(LauncherConfig{"mGBA", "/usr/bin/mgba", "", ""});
+  config.additionalLaunchers.append(LauncherConfig{"VBA-M", "/usr/bin/vbam", "", ""});
+  QCOMPARE(config.launcherCount(), 3);
+}
+
+void TestLaunchManager::testLauncherAt_returnsAdditionalEntry() {
+  CollectionConfig config;
+  config.name = "GBA";
+  config.launcherName = "RetroArch";
+  config.launcherPath = "/usr/bin/retroarch";
+  config.corePath = "/cores/mgba.so";
+  config.launchParameters = "-fullscreen";
+  config.additionalLaunchers.append(
+      LauncherConfig{"mGBA Standalone", "/usr/bin/mgba", "", "--audio-buffers=2048"});
+
+  LauncherConfig primary = config.launcherAt(0);
+  QCOMPARE(primary.name, QString("RetroArch"));
+  QCOMPARE(primary.launcherPath, QString("/usr/bin/retroarch"));
+  QCOMPARE(primary.corePath, QString("/cores/mgba.so"));
+  QCOMPARE(primary.launchParameters, QString("-fullscreen"));
+
+  LauncherConfig additional = config.launcherAt(1);
+  QCOMPARE(additional.name, QString("mGBA Standalone"));
+  QCOMPARE(additional.launcherPath, QString("/usr/bin/mgba"));
+  QCOMPARE(additional.launchParameters, QString("--audio-buffers=2048"));
+
+  // Out-of-range falls through to an empty config (caller checks isEmpty()).
+  LauncherConfig outOfRange = config.launcherAt(99);
+  QVERIFY(outOfRange.launcherPath.isEmpty());
+}
+
+void TestLaunchManager::testLauncherDisplayName_fallsBackToBasename() {
+  CollectionConfig config;
+  config.launcherPath = "/usr/local/bin/retroarch";
+  // No explicit launcherName → display name should be the basename.
+  QCOMPARE(config.launcherDisplayName(0), QString("retroarch"));
+
+  config.launcherName = "RA + GBA";
+  QCOMPARE(config.launcherDisplayName(0), QString("RA + GBA"));
+
+  config.additionalLaunchers.append(LauncherConfig{"", "/opt/mgba/mgba-qt", "", ""});
+  QCOMPARE(config.launcherDisplayName(1), QString("mgba-qt"));
+}
+
+void TestLaunchManager::testBuildLaunchCommand_explicitLauncherConfig() {
+  // The new buildLaunchCommand overload takes a LauncherConfig directly so a
+  // user-picked entry from the chooser dialog (Kartend-bdl) can drive the
+  // command without round-tripping through CollectionConfig's primary slot.
+  LauncherConfig launcher{"mGBA", "/usr/bin/mgba", "", "--fullscreen"};
+  const QString filePath = "/tmp/game.gba";
+  auto result = LaunchManager::buildLaunchCommand(launcher, "GBA", filePath);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().program, QString("/usr/bin/mgba"));
+  QCOMPARE(result.value().arguments, (QStringList{"--fullscreen", filePath}));
+}
+
+void TestLaunchManager::testClampValues_clampsDefaultLauncherIndex() {
+  CollectionConfig config;
+  config.launcherPath = "echo";
+  config.defaultLauncherIndex = 7;
+  config.clampValues();
+  // With 1 launcher, valid range is [0, 0] — anything else clamps down.
+  QCOMPARE(config.defaultLauncherIndex, 0);
+
+  config.additionalLaunchers.append(LauncherConfig{"mGBA", "/usr/bin/mgba", "", ""});
+  config.defaultLauncherIndex = 5;
+  config.clampValues();
+  QCOMPARE(config.defaultLauncherIndex, 1);
+
+  config.defaultLauncherIndex = -3;
+  config.clampValues();
+  QCOMPARE(config.defaultLauncherIndex, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Preset resolution (Kartend-p1jd)
+// ---------------------------------------------------------------------------
+
+void TestLaunchManager::testResolvePreset_returnsInputWhenNoPresetId() {
+  // No presetId means "use inline fields verbatim" — the resolver must be a
+  // no-op even when the presets list is non-empty (since nothing matches).
+  LauncherConfig inline_;
+  inline_.name = "Inline mGBA";
+  inline_.launcherPath = "/usr/bin/mgba";
+  inline_.launchParameters = "--fullscreen";
+
+  QList<LauncherPreset> presets;
+  presets.append({"preset-1", "RetroArch", "/usr/bin/retroarch", "/cores/mgba.so", "-v"});
+
+  const LauncherConfig out = LauncherUtils::resolvePreset(inline_, presets);
+  QCOMPARE(out.name, inline_.name);
+  QCOMPARE(out.launcherPath, inline_.launcherPath);
+  QCOMPARE(out.launchParameters, inline_.launchParameters);
+  QVERIFY(out.presetId.isEmpty());
+}
+
+void TestLaunchManager::testResolvePreset_overridesFieldsFromMatchingPreset() {
+  // When presetId matches, the preset's fields replace the inline ones —
+  // this is the whole point: editing the preset propagates to all
+  // references without touching the collection's launcher entry.
+  LauncherConfig ref;
+  ref.presetId = "preset-1";
+  ref.name = "stale inline name"; // should be ignored once the preset wins
+  ref.launcherPath = "/old/path";
+  ref.launchParameters = "--stale";
+
+  QList<LauncherPreset> presets;
+  presets.append({"preset-1", "RetroArch + mGBA", "/usr/bin/retroarch", "/cores/mgba.so",
+                  "--fullscreen"});
+
+  const LauncherConfig out = LauncherUtils::resolvePreset(ref, presets);
+  QCOMPARE(out.name, QString("RetroArch + mGBA"));
+  QCOMPARE(out.launcherPath, QString("/usr/bin/retroarch"));
+  QCOMPARE(out.corePath, QString("/cores/mgba.so"));
+  QCOMPARE(out.launchParameters, QString("--fullscreen"));
+  // Preset id stays attached so the resolved config can round-trip.
+  QCOMPARE(out.presetId, QString("preset-1"));
+}
+
+void TestLaunchManager::testResolvePreset_fallsBackToInlineWhenPresetMissing() {
+  // A reference to a deleted preset must not crash or silently lose data —
+  // the resolver returns the original inline config (typically empty
+  // fields, surfaced as a clear "no launcher configured" error at launch).
+  LauncherConfig ref;
+  ref.presetId = "deleted-preset";
+  ref.name = "Fallback Inline";
+  ref.launcherPath = "/usr/bin/mgba";
+
+  QList<LauncherPreset> presets;
+  presets.append({"some-other-preset", "Different", "/x", "", ""});
+
+  const LauncherConfig out = LauncherUtils::resolvePreset(ref, presets);
+  QCOMPARE(out.name, QString("Fallback Inline"));
+  QCOMPARE(out.launcherPath, QString("/usr/bin/mgba"));
+  QCOMPARE(out.presetId, QString("deleted-preset"));
 }
 
 // ---------------------------------------------------------------------------

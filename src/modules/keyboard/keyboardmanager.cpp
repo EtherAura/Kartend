@@ -26,16 +26,17 @@ Q_LOGGING_CATEGORY(lcKeyboardManager, "kartend.keyboardmanager")
   } while (0)
 
 // KeyboardManagerSetup getter definitions
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QWidget *, GridContainer, gridContainer)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QWidget *, ItemsPage, itemsPage)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QLineEdit *, SearchBar, searchBar)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, QList<CollectionConfig> *, Collections, collections)
-SETUP_GETTER_DEF_SAME(KeyboardManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
-SETUP_GETTER_DEF_CTX_ONLY(KeyboardManagerSetup, InteractionStateHolder *, InteractionState,
-                          interactionState)
+SETUP_GETTER_DEF_MGR_SAME(KeyboardManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QWidget *, GridContainer, gridContainer)
+SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
+SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)
+SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QLineEdit *, SearchBar, searchBar)
+SETUP_GETTER_DEF_COL_SAME(KeyboardManagerSetup, QList<CollectionConfig> *, Collections, collections)
+SETUP_GETTER_DEF_COL_SAME(KeyboardManagerSetup, int *, CurrentCollectionIndex,
+                          currentCollectionIndex)
+SETUP_GETTER_DEF_MGR_CTX_ONLY(KeyboardManagerSetup, InteractionStateHolder *, InteractionState,
+                              interactionState)
 
 KeyboardManager::KeyboardManager(QObject *parent) : QObject(parent) {
   initTimers();
@@ -169,27 +170,52 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
       }
     }
 
-    // Check if we're in list mode - use step of 1 for vertical navigation
-    bool isListMode = false;
+    // Step of 1 in non-grid views: List walks one item per arrow regardless
+    // of axis, and CoverFlow (Kartend-3ile) collapses all four arrows to a
+    // single-step carousel shift.
+    bool singleStep = false;
+    bool isHorizontalView = false;
     if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-      isListMode = (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::List;
+      const ViewType vt = (*m_collections)[*m_currentCollectionIndex].viewType;
+      singleStep = (vt == ViewType::List) || (vt == ViewType::CoverFlow);
+      isHorizontalView = (vt == ViewType::Horizontal);
     }
 
     int direction = 0;
     bool vertical = false;
-    if (key == navLeftKey) {
+    if (isHorizontalView) {
+      // Kartend-dx9t: in Horizontal mode the visible meaning of the arrow
+      // keys is preserved (Down moves to the next item in the column;
+      // Right moves one column over) but the *step size* swaps sides:
+      // Up/Down step by 1, Left/Right step by gridWidth (= items per
+      // column). The vertical-wrap path expects direction == ±gridWidth,
+      // so Left/Right map to vertical=true to pick up the column-wrap
+      // behavior; Up/Down map to vertical=false for linear wrap.
+      if (key == navLeftKey) {
+        direction = -gridWidth;
+        vertical = true;
+      } else if (key == navRightKey) {
+        direction = gridWidth;
+        vertical = true;
+      } else if (key == navUpKey) {
+        direction = -1;
+        vertical = false;
+      } else if (key == navDownKey) {
+        direction = 1;
+        vertical = false;
+      }
+    } else if (key == navLeftKey) {
       direction = -1;
       vertical = false;
     } else if (key == navRightKey) {
       direction = 1;
       vertical = false;
     } else if (key == navUpKey) {
-      // In list mode, move by 1 item; in grid mode, move by gridWidth
-      direction = isListMode ? -1 : -gridWidth;
+      // List/CoverFlow move by 1; grid moves by gridWidth.
+      direction = singleStep ? -1 : -gridWidth;
       vertical = true;
     } else if (key == navDownKey) {
-      // In list mode, move by 1 item; in grid mode, move by gridWidth
-      direction = isListMode ? 1 : gridWidth;
+      direction = singleStep ? 1 : gridWidth;
       vertical = true;
     }
 
@@ -227,6 +253,17 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
   }
   if (key == jumpLastKey) {
     emit requestJumpToEdge(true); // jump to last item
+    return true;
+  }
+
+  // Kartend-uve: detail page. Checked last so it can't shadow a re-bound
+  // arrow / search / confirm key, and only outside the search bar (the
+  // search-focused branch above returns before reaching here, so this is
+  // already gated).
+  const int detailsKey =
+      m_generalSettings ? m_generalSettings->keyItemDetails : static_cast<int>(Qt::Key_I);
+  if (key == detailsKey) {
+    emit requestItemDetails();
     return true;
   }
 

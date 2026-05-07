@@ -1,0 +1,847 @@
+// Controls details pane visibility, positioning, and content updates.
+#include "detailspanemanager.h"
+#include "applicationcontext.h"
+#include "artworkmanager.h"
+#include "collectionutils.h"
+#include "databasemanager.h"
+#include "itemartwork.h"
+#include "itemartworklinksdialog.h"
+#include "itemmetadata.h"
+#include "itemwidget.h"
+#include "detailspane.h"
+#include "pathutils.h"
+#include "settingsmanager.h"
+#include "timerutils.h"
+#include "uiconstants.h"
+#include "videoutils.h"
+#include <algorithm>
+#include <QApplication>
+#include <QFileInfo>
+#include <QHash>
+#include <QHBoxLayout>
+#include <QList>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QSet>
+#include <QString>
+#include <QTimer>
+#include <QVBoxLayout>
+
+#include <QLoggingCategory>
+Q_LOGGING_CATEGORY(lcDetailsPaneManager, "kartend.detailspanemanager")
+#define debugLog(msg)                                                                              \
+  do {                                                                                             \
+    if (lcDetailsPaneManager().isDebugEnabled()) {                                                     \
+      qCDebug(lcDetailsPaneManager) << msg;                                                            \
+    }                                                                                              \
+  } while (0)
+
+// DetailsPaneManagerSetup getter definitions
+SETUP_GETTER_DEF_UI_SAME(DetailsPaneManagerSetup, DetailsPane *, Sidebar, sidebar)
+SETUP_GETTER_DEF_UI_SAME(DetailsPaneManagerSetup, QWidget *, ItemsPage, itemsPage)
+SETUP_GETTER_DEF_UI(DetailsPaneManagerSetup, QScrollArea *, ScrollArea, scrollArea, itemScrollArea)
+SETUP_GETTER_DEF_MGR_SAME(DetailsPaneManagerSetup, SettingsManager *, SettingsManager, settingsManager)
+SETUP_GETTER_DEF_MGR_SAME(DetailsPaneManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
+SETUP_GETTER_DEF_MGR_SAME(DetailsPaneManagerSetup, DatabaseManager *, DatabaseManager, databaseManager)
+SETUP_GETTER_DEF_COL_SAME(DetailsPaneManagerSetup, QList<CollectionConfig> *, Collections, collections)
+
+DetailsPaneManager::DetailsPaneManager(QObject *parent)
+    : QObject(parent), m_DetailsPane(nullptr), m_itemsPage(nullptr),
+      m_mainHorizontalLayout(nullptr), m_itemScrollArea(nullptr), m_currentCollectionIndex(-1) {}
+
+void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
+  m_DetailsPane = setup.getSidebar();
+  m_itemsPage = setup.getItemsPage();
+  m_mainHorizontalLayout = setup.mainLayout;
+  m_outerLayout = setup.outerLayout;
+  m_mainContentWidget = setup.contentWidget;
+  m_itemScrollArea = setup.getScrollArea();
+  m_settingsManager = setup.getSettingsManager();
+  m_artworkManager = setup.getArtworkManager();
+  m_databaseManager = setup.getDatabaseManager();
+  m_collections = setup.getCollections();
+
+  // Wire the per-item artwork-link editor (Kartend-53vk). The sidebar
+  // widget itself has no item context, so the manager handles the dialog.
+  if (m_DetailsPane) {
+    connect(m_DetailsPane, &DetailsPane::editArtworkRequested, this,
+            &DetailsPaneManager::openArtworkLinksDialog);
+    // Kartend-63e bug #7: lower the sidebar while its own gallery overlay is
+    // showing so the overlay (parented to the top-level window) stays on top.
+    connect(m_DetailsPane, &DetailsPane::galleryOverlayVisibilityChanged, this,
+            &DetailsPaneManager::setOverlayActive);
+    // Kartend-63e width drag: live resize via the inner-edge grip. Drag
+    // events apply the width without persisting; commit on release writes
+    // the final value to settings so a click without movement doesn't
+    // touch the INI on every frame.
+    connect(m_DetailsPane, &DetailsPane::widthDragged, this, [this](int width) {
+      if (!m_DetailsPane) return;
+      m_DetailsPane->setFixedWidth(width);
+      // In overlay mode the sidebar is absolutely positioned — re-anchor so
+      // the right edge stays pinned to the viewport (or the left edge in
+      // Left position). In fixed mode the layout handles re-flow so we
+      // skip the explicit position call.
+      bool isFixedMode = false;
+      if (m_collections && m_currentCollectionIndex >= 0 &&
+          m_currentCollectionIndex < m_collections->size()) {
+        isFixedMode = (*m_collections)[m_currentCollectionIndex].sidebarMode == DetailsPaneMode::Expand;
+      }
+      if (!isFixedMode) {
+        positionSidebarOverlay();
+      }
+    });
+    connect(m_DetailsPane, &DetailsPane::widthCommitted, this, [this](int width) {
+      if (!m_collections || m_currentCollectionIndex < 0 ||
+          m_currentCollectionIndex >= m_collections->size()) {
+        return;
+      }
+      (*m_collections)[m_currentCollectionIndex].sidebarWidth = width;
+      if (m_settingsManager) {
+        m_settingsManager->saveCollections(*m_collections);
+      }
+    });
+    // Kartend-u2gx: height-drag handlers for Top/Bottom dock. Mirror the width
+    // pair — live setFixedHeight() during the drag, persist on commit. In
+    // Overlay mode the pane is absolutely positioned so we re-anchor; in
+    // Expand mode the outer QVBoxLayout reflows automatically.
+    connect(m_DetailsPane, &DetailsPane::heightDragged, this, [this](int height) {
+      if (!m_DetailsPane) return;
+      m_DetailsPane->setFixedHeight(height);
+      bool isFixedMode = false;
+      if (m_collections && m_currentCollectionIndex >= 0 &&
+          m_currentCollectionIndex < m_collections->size()) {
+        isFixedMode = (*m_collections)[m_currentCollectionIndex].sidebarMode == DetailsPaneMode::Expand;
+      }
+      if (!isFixedMode) {
+        positionSidebarOverlay();
+      }
+    });
+    connect(m_DetailsPane, &DetailsPane::heightCommitted, this, [this](int height) {
+      if (!m_collections || m_currentCollectionIndex < 0 ||
+          m_currentCollectionIndex >= m_collections->size()) {
+        return;
+      }
+      (*m_collections)[m_currentCollectionIndex].sidebarHeight = height;
+      if (m_settingsManager) {
+        m_settingsManager->saveCollections(*m_collections);
+      }
+    });
+    // Kartend-63e tabs: persist the user's tab choice per collection.
+    connect(m_DetailsPane, &DetailsPane::activeTabChanged, this, [this](DetailsPaneTab tab) {
+      if (!m_collections || m_currentCollectionIndex < 0 ||
+          m_currentCollectionIndex >= m_collections->size()) {
+        return;
+      }
+      (*m_collections)[m_currentCollectionIndex].sidebarActiveTab = tab;
+      if (m_settingsManager) {
+        m_settingsManager->saveCollections(*m_collections);
+      }
+    });
+  }
+}
+
+void DetailsPaneManager::toggleSidebar() {
+  if (!m_DetailsPane) {
+    return;
+  }
+
+  // Kartend-3ile: a deliberate user toggle outranks the cover-flow auto-hide
+  // so the user can pull the sidebar back in even while in cover flow.
+  m_externallyHidden = false;
+  m_sidebarVisible = !m_sidebarVisible;
+  updateSidebarLayout(m_currentCollectionIndex);
+  emit sidebarVisibilityChanged(m_sidebarVisible);
+}
+
+void DetailsPaneManager::setExternallyHidden(bool hidden) {
+  if (m_externallyHidden == hidden) {
+    return;
+  }
+  m_externallyHidden = hidden;
+  // Re-run layout: when forced hidden, the sidebar is removed from the
+  // layout regardless of m_sidebarVisible; when the override clears, the
+  // layout falls back to the persisted m_sidebarVisible state. Persistence
+  // is suppressed inside updateSidebarLayout while m_externallyHidden is
+  // true so the user's per-collection preference survives the round trip.
+  updateSidebarLayout(m_currentCollectionIndex);
+  emit sidebarVisibilityChanged(m_sidebarVisible && !m_externallyHidden);
+}
+
+void DetailsPaneManager::updateSidebarMetadata(ItemWidget *selectedItem) {
+  if (!m_DetailsPane || !selectedItem) {
+    if (m_DetailsPane) {
+      m_DetailsPane->clearMetadata();
+    }
+    // Kartend-uve: drop the published item context so the detail page can't
+    // render a stale selection after a deselect / collection switch.
+    m_currentItemContext = {};
+    return;
+  }
+
+  QString filePath = selectedItem->getFilePath();
+  QString itemName = selectedItem->getItemName();
+
+  // Get artwork + video directories from current collection config. Each
+  // directory tracks the collection *name* it should be expanded against
+  // for %collection% substitution — that name is the current view by
+  // default and gets reassigned to the owning collection's name when
+  // owner-aware refinement (below) chooses the owner's value.
+  QString artworkDirectory;
+  QString videoDirectory;
+  QString manualDirectory;
+  QString collectionName;
+  QString artworkExpansionName;
+  QString videoExpansionName;
+  QString manualExpansionName;
+  QString expandedMediaDir;
+  if (m_collections && m_currentCollectionIndex >= 0 &&
+      m_currentCollectionIndex < m_collections->size()) {
+    const CollectionConfig &collection = (*m_collections)[m_currentCollectionIndex];
+    artworkDirectory = collection.artworkDirectory;
+    videoDirectory = collection.videoDirectory;
+    manualDirectory = collection.manualDirectory;
+    collectionName = collection.name;
+    artworkExpansionName = collection.name;
+    videoExpansionName = collection.name;
+    manualExpansionName = collection.name;
+    expandedMediaDir = PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
+  }
+
+  // Resolve the owning collection (may differ from the currently-displayed
+  // collection in showAllSubcollectionItems mode) so per-item metadata,
+  // manual files, artwork, and video previews all key off the same UUID
+  // and inherit from the same directory tree.
+  QString metaUuid;
+  if (m_databaseManager) {
+    const int owningIndex = m_databaseManager->getCollectionIndexForFile(filePath);
+    if (owningIndex >= 0 && m_collections && owningIndex < m_collections->size()) {
+      const CollectionConfig &owning = (*m_collections)[owningIndex];
+      const QString owningMediaDir =
+          PathUtils::validateAndExpandPath(owning.mediaDirectory, owning.name);
+      metaUuid = CollectionUtils::computeCollectionUuid(owning.name, owningMediaDir);
+      // Prefer the owning collection's manualDirectory in
+      // showAllSubcollectionItems mode so a child's directory wins over
+      // the parent's when both are set.
+      if (!owning.manualDirectory.trimmed().isEmpty()) {
+        manualDirectory = owning.manualDirectory;
+        manualExpansionName = owning.name;
+      } else if (manualDirectory.trimmed().isEmpty() && m_collections) {
+        // Fall back to the nearest ancestor with a manualDirectory
+        // (mirrors resolveArtworkDirectory's behavior so subcollections
+        // inherit). The ancestor's name is unknown to us at this point;
+        // %collection% substitution falls back to the owner's name, which
+        // is the closest meaningful identifier.
+        manualDirectory = CollectionUtils::resolveManualDirectory(owningIndex, *m_collections);
+        manualExpansionName = owning.name;
+      }
+      // Same precedence rules for artworkDirectory so the gallery's
+      // subdirectory probe lands in the correct collection's tree.
+      if (!owning.artworkDirectory.trimmed().isEmpty()) {
+        artworkDirectory = owning.artworkDirectory;
+        artworkExpansionName = owning.name;
+      } else if (artworkDirectory.trimmed().isEmpty() && m_collections) {
+        artworkDirectory = CollectionUtils::resolveArtworkDirectory(owningIndex, *m_collections);
+        artworkExpansionName = owning.name;
+      }
+      // Same for videoDirectory — without this, sidebar video previews
+      // miss when a parent aggregates children via
+      // showAllSubcollectionItems and only the child has videoDirectory
+      // configured. Middle-click + expand-mode already do this by going
+      // through the owner's collection directly.
+      if (!owning.videoDirectory.trimmed().isEmpty()) {
+        videoDirectory = owning.videoDirectory;
+        videoExpansionName = owning.name;
+      } else if (videoDirectory.trimmed().isEmpty() && m_collections) {
+        videoDirectory = CollectionUtils::resolveVideoDirectory(owningIndex, *m_collections);
+        videoExpansionName = owning.name;
+      }
+    } else if (!collectionName.isEmpty()) {
+      metaUuid = CollectionUtils::computeCollectionUuid(collectionName, expandedMediaDir);
+    }
+  }
+
+  // Expand %collection% / ~ in each directory so the lookups use real
+  // filesystem paths. validateAndExpandPath returns "" when the resolved
+  // directory doesn't exist, which is the right semantics here: the
+  // downstream resolvers all guard on emptiness anyway.
+  if (!artworkDirectory.trimmed().isEmpty()) {
+    artworkDirectory = PathUtils::validateAndExpandPath(artworkDirectory, artworkExpansionName);
+  }
+  if (!videoDirectory.trimmed().isEmpty()) {
+    videoDirectory = PathUtils::validateAndExpandPath(videoDirectory, videoExpansionName);
+  }
+  if (!manualDirectory.trimmed().isEmpty()) {
+    manualDirectory = PathUtils::validateAndExpandPath(manualDirectory, manualExpansionName);
+  }
+
+  debugLog(QString("video lookup: filePath='%1' videoDir='%2' (post-expansion)")
+               .arg(filePath, videoDirectory));
+
+  m_DetailsPane->setMetadata(filePath, itemName, artworkDirectory, videoDirectory);
+
+  // Extended metadata + manual file (Kartend-rx64 / Kartend-9jdv).
+  ItemMetadataStore::ItemMetadata loadedMetadata;
+  if (m_databaseManager && !metaUuid.isEmpty()) {
+    loadedMetadata = m_databaseManager->loadItemMetadata(metaUuid, filePath);
+  }
+  if (m_databaseManager) {
+    m_DetailsPane->setExtendedMetadata(loadedMetadata);
+  }
+
+  // Usage statistics (Kartend-7vi). Append play count / last played / time
+  // played to the Details section. Loaded after setExtendedMetadata so the
+  // section's row layout is already in place; setUsageStats only appends.
+  if (m_databaseManager && !metaUuid.isEmpty()) {
+    const auto usage = m_databaseManager->loadItemUsageStats(metaUuid, filePath);
+    m_DetailsPane->setUsageStats(usage);
+  }
+
+  const QString baseName = QFileInfo(filePath).completeBaseName();
+  const QString manualPath =
+      ItemMetadataStore::resolveManualFile(loadedMetadata.manualPath, baseName, manualDirectory);
+  m_DetailsPane->setManualFile(manualPath);
+
+  // Build the artwork gallery (Kartend-un3l). For every standard artwork
+  // type, prefer the per-item DB override, then fall back to the
+  // {artworkDirectory}/{type}/{baseName}.{ext} subdirectory layout. Custom
+  // (non-standard) types only resolve via a stored override. An empty list
+  // hides the gallery section.
+  QList<DetailsPane::GalleryEntry> galleryEntries;
+  if (m_databaseManager && !metaUuid.isEmpty()) {
+    QHash<QString, QString> overridesByType;
+    QStringList customOrder;
+    const auto rows = m_databaseManager->loadItemArtwork(metaUuid, filePath);
+    for (const auto &row : rows) {
+      overridesByType.insert(row.artworkType, row.manualPath);
+      if (!ItemArtworkStore::isStandardType(row.artworkType)) {
+        customOrder.append(row.artworkType);
+      }
+    }
+
+    auto pushEntry = [&](const QString &type, const QString &label) {
+      const QString resolved = ItemArtworkStore::resolveArtworkPath(
+          overridesByType.value(type), baseName, artworkDirectory, type);
+      if (!resolved.isEmpty()) {
+        galleryEntries.append({label, resolved, /*isVideo=*/false});
+      }
+    };
+
+    for (const QString &type : ItemArtworkStore::standardTypes()) {
+      pushEntry(type, ItemArtworkStore::standardTypeDisplayName(type));
+    }
+    for (const QString &type : customOrder) {
+      // For custom types the user-chosen id IS the human label until (c)
+      // adds a per-collection registry of friendly names.
+      pushEntry(type, type);
+    }
+  }
+
+  // Prepend the video tile so the gallery follows the video-first ordering
+  // the rest of the preview flow uses (Kartend-ljey). Auto-discovered via
+  // VideoUtils against the owning collection's videoDirectory; per-item
+  // overrides can be added later alongside the artwork override system.
+  if (!videoDirectory.trimmed().isEmpty()) {
+    const QString videoPath = VideoUtils::findVideoForFile(filePath, videoDirectory);
+    if (!videoPath.isEmpty()) {
+      galleryEntries.prepend({tr("Video"), videoPath, /*isVideo=*/true});
+    }
+  }
+
+  m_DetailsPane->setArtworkGallery(galleryEntries);
+
+  // Capture the resolved owner context so the artwork-link editor dialog
+  // (Kartend-53vk) doesn't have to redo the showAllSubcollectionItems-aware
+  // lookup. Only enable the edit affordance once we have a UUID — without
+  // one we couldn't persist anything anyway.
+  m_currentItemFilePath = filePath;
+  m_currentItemName = itemName;
+  m_currentItemUuid = metaUuid;
+  m_currentItemArtworkDir = artworkDirectory;
+  if (m_databaseManager) {
+    m_currentItemOwningIndex = m_databaseManager->getCollectionIndexForFile(filePath);
+  } else {
+    m_currentItemOwningIndex = -1;
+  }
+  // Kartend-uve: publish the resolved owner-aware context so the detail page
+  // can render the same item without redoing the lookup. videoDirectory and
+  // manualDirectory are already expanded above; capture them all.
+  m_currentItemContext.filePath = filePath;
+  m_currentItemContext.itemName = itemName;
+  m_currentItemContext.uuid = metaUuid;
+  m_currentItemContext.artworkDir = artworkDirectory;
+  m_currentItemContext.videoDir = videoDirectory;
+  m_currentItemContext.manualDir = manualDirectory;
+  m_currentItemContext.owningIndex = m_currentItemOwningIndex;
+  m_DetailsPane->setArtworkEditEnabled(!metaUuid.isEmpty());
+}
+
+void DetailsPaneManager::applySidebarStateForCollection(int collectionIndex) {
+  if (!m_collections || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
+    return;
+  }
+
+  m_currentCollectionIndex = collectionIndex;
+  const CollectionConfig &collection = (*m_collections)[collectionIndex];
+  m_sidebarVisible = collection.sidebarVisible;
+
+  // Kartend-63e: apply per-collection appearance (bg type, colors, pattern).
+  if (m_DetailsPane) {
+    m_DetailsPane->applyAppearance(collection);
+  }
+
+  // Push the new collection's summary to the sidebar so the no-selection
+  // state shows useful context (Kartend-3mn).
+  refreshCollectionSummary();
+
+  updateSidebarLayout(collectionIndex);
+  emit sidebarVisibilityChanged(m_sidebarVisible);
+
+  // Reposition overlay sidebar after layout is finalized - on startup, the
+  // viewport geometry may not be fully set when this is first called, causing
+  // the sidebar to overlap the scrollbar. Deferring ensures correct
+  // positioning. Kartend-63e: only reposition for Overlay mode — Fixed mode
+  // is now in m_mainHorizontalLayout and absolute-positioning it would
+  // wreck the layout dock.
+  if (m_sidebarVisible && collection.sidebarMode != DetailsPaneMode::Expand) {
+    QTimer::singleShot(50, this, [this]() { positionSidebarOverlay(); });
+  }
+}
+
+void DetailsPaneManager::setupSidebar() {
+  m_sidebarVisible = false;
+}
+
+void DetailsPaneManager::refreshCollectionSummary() {
+  if (!m_DetailsPane) {
+    return;
+  }
+  if (!m_collections || m_currentCollectionIndex < 0 ||
+      m_currentCollectionIndex >= m_collections->size()) {
+    m_DetailsPane->setCollectionSummary({});
+    return;
+  }
+
+  const CollectionConfig &collection = (*m_collections)[m_currentCollectionIndex];
+  DetailsPane::CollectionSummary summary;
+  summary.name = collection.name;
+  summary.type = CollectionUtils::effectiveCollectionType(m_currentCollectionIndex, *m_collections);
+  summary.extensions = collection.extensions;
+
+  // Render expanded paths (with %collection% / ~ resolved) so the user sees
+  // the real filesystem location. validateAndExpandPath returns "" when the
+  // resolved directory does not exist; fall back to the raw template in
+  // that case so the user can still see what was configured.
+  auto expandOrRaw = [&](const QString &raw) -> QString {
+    if (raw.trimmed().isEmpty()) {
+      return {};
+    }
+    const QString expanded = PathUtils::validateAndExpandPath(raw, collection.name);
+    return expanded.isEmpty() ? raw : expanded;
+  };
+  summary.mediaDirectory = expandOrRaw(collection.mediaDirectory);
+  summary.artworkDirectory = expandOrRaw(collection.artworkDirectory);
+  summary.videoDirectory = expandOrRaw(collection.videoDirectory);
+  summary.manualDirectory = expandOrRaw(collection.manualDirectory);
+
+  if (collection.isSubcollection && collection.parentCollectionIndex >= 0 &&
+      collection.parentCollectionIndex < m_collections->size()) {
+    summary.parentName = (*m_collections)[collection.parentCollectionIndex].name;
+  }
+
+  if (m_databaseManager) {
+    summary.itemCount =
+        m_databaseManager->countCollectionRecursive(m_currentCollectionIndex, *m_collections);
+    // UUID keying must match how DatabaseManager computes it elsewhere:
+    // validateAndExpandPath without a raw fallback. Mismatched casing or
+    // a missing-directory empty-string here would make last_scanned silently
+    // miss its row.
+    const QString uuidMediaDir =
+        PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
+    const QString uuid = CollectionUtils::computeCollectionUuid(collection.name, uuidMediaDir);
+    summary.lastScanned = m_databaseManager->loadCollectionLastScanned(uuid);
+  }
+
+  m_DetailsPane->setCollectionSummary(summary);
+}
+
+void DetailsPaneManager::positionSidebarOverlay() {
+  if (!m_DetailsPane || !m_itemsPage) {
+    return;
+  }
+
+  const int sidebarMargin = UIConstants::DetailsPane::MARGIN;
+
+  // Read position + size from the active collection so the overlay anchors on
+  // the correct edge (Kartend-63e / Kartend-u2gx).
+  DetailsPanePosition position = DetailsPanePosition::Right;
+  int desiredWidth = UIConstants::DetailsPane::FIXED_WIDTH;
+  int desiredHeight = UIConstants::DetailsPane::FIXED_HEIGHT;
+  if (m_collections && m_currentCollectionIndex >= 0 &&
+      m_currentCollectionIndex < m_collections->size()) {
+    const CollectionConfig &collection = (*m_collections)[m_currentCollectionIndex];
+    position = collection.sidebarPosition;
+    desiredWidth = std::max(collection.sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
+    desiredHeight = std::max(collection.sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
+  }
+
+  QRect viewportRectInItems;
+  if (m_itemScrollArea && m_itemScrollArea->viewport()) {
+    const QPoint topLeft = m_itemScrollArea->viewport()->mapTo(m_itemsPage, QPoint(0, 0));
+    viewportRectInItems = QRect(topLeft, m_itemScrollArea->viewport()->size());
+  } else {
+    viewportRectInItems = m_itemsPage->rect();
+  }
+
+  // Kartend-63e: anchor flush with the viewport edge — earlier code subtracted
+  // a full scrollbar width to keep the bar visible to the right of the
+  // sidebar, but the user wants the gap minimized.
+  // Kartend-u2gx: Top/Bottom dock spans the full viewport perpendicular to
+  // the dock edge (i.e. full width, fixed height).
+  int x = viewportRectInItems.left() + sidebarMargin;
+  int y = viewportRectInItems.top() + sidebarMargin;
+  int w = qMax(0, viewportRectInItems.width() - (sidebarMargin * 2));
+  int h = qMax(0, viewportRectInItems.height() - (sidebarMargin * 2));
+
+  switch (position) {
+  case DetailsPanePosition::Left:
+    w = qMin(desiredWidth, viewportRectInItems.width() - sidebarMargin);
+    break;
+  case DetailsPanePosition::Right:
+    w = qMin(desiredWidth, viewportRectInItems.width() - sidebarMargin);
+    x = viewportRectInItems.left() + viewportRectInItems.width() - w - sidebarMargin;
+    break;
+  case DetailsPanePosition::Top:
+    h = qMin(desiredHeight, viewportRectInItems.height() - sidebarMargin);
+    break;
+  case DetailsPanePosition::Bottom:
+    h = qMin(desiredHeight, viewportRectInItems.height() - sidebarMargin);
+    y = viewportRectInItems.top() + viewportRectInItems.height() - h - sidebarMargin;
+    break;
+  }
+
+  m_DetailsPane->setGeometry(x, y, w, h);
+  // Skip raise() while a fullscreen overlay (artwork preview) is showing —
+  // the overlay needs to stay above the sidebar (Kartend-63e bug #7).
+  if (!m_overlayActive) {
+    m_DetailsPane->raise();
+  }
+}
+
+void DetailsPaneManager::setOverlayActive(bool active) {
+  if (m_overlayActive == active) {
+    return;
+  }
+  m_overlayActive = active;
+  // When the overlay closes, re-stack the sidebar so it sits above its
+  // siblings again. When it opens, lower the sidebar so the overlay
+  // (which is reparented to the top-level window and raise()'d on show)
+  // can cover it cleanly.
+  if (m_DetailsPane) {
+    if (active) {
+      // Kartend-63e bug #5: silence the sidebar's looping preview video
+      // before the overlay starts its own — without this, two video tracks
+      // play simultaneously and audio from the muted-but-still-decoding
+      // sidebar player can leak under the overlay's playback.
+      m_DetailsPane->pausePreviewVideo();
+      m_DetailsPane->lower();
+    } else {
+      m_DetailsPane->raise();
+    }
+  }
+}
+
+void DetailsPaneManager::updateSidebarLayout(int currentCollectionIndex) {
+  if (!m_DetailsPane || !m_mainHorizontalLayout) {
+    return;
+  }
+
+  bool isFixedMode = false;
+  DetailsPanePosition position = DetailsPanePosition::Right;
+  int desiredWidth = UIConstants::DetailsPane::FIXED_WIDTH;
+  int desiredHeight = UIConstants::DetailsPane::FIXED_HEIGHT;
+  if (m_collections && currentCollectionIndex >= 0 &&
+      currentCollectionIndex < m_collections->size()) {
+    const CollectionConfig &collection = (*m_collections)[currentCollectionIndex];
+    isFixedMode = (collection.sidebarMode == DetailsPaneMode::Expand);
+    position = collection.sidebarPosition;
+    desiredWidth = std::max(collection.sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
+    desiredHeight = std::max(collection.sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
+  }
+
+  // Kartend-u2gx: tracking "in some layout" rather than just the horizontal
+  // one — Top/Bottom Expand puts the pane in m_outerLayout instead.
+  auto inAnyLayout = [this]() {
+    if (m_mainHorizontalLayout && m_mainHorizontalLayout->indexOf(m_DetailsPane) != -1) {
+      return true;
+    }
+    if (m_outerLayout && m_outerLayout->indexOf(m_DetailsPane) != -1) {
+      return true;
+    }
+    return false;
+  };
+  auto removeFromLayouts = [this]() {
+    if (m_mainHorizontalLayout && m_mainHorizontalLayout->indexOf(m_DetailsPane) != -1) {
+      m_mainHorizontalLayout->removeWidget(m_DetailsPane);
+    }
+    if (m_outerLayout && m_outerLayout->indexOf(m_DetailsPane) != -1) {
+      m_outerLayout->removeWidget(m_DetailsPane);
+    }
+  };
+  // Kartend-u2gx: swap the size policy so a Top/Bottom-docked pane stretches
+  // horizontally with a fixed height, while a Left/Right-docked pane stretches
+  // vertically with a fixed width. Without this swap the .ui's Fixed/Expanding
+  // hsizetype/vsizetype would pin the pane to a narrow column even after we
+  // try to dock it across the top.
+  auto applyDockSizing = [this, position, desiredWidth, desiredHeight]() {
+    if (!m_DetailsPane) return;
+    if (CollectionUtils::isDetailsPaneHorizontal(position)) {
+      m_DetailsPane->setMinimumWidth(0);
+      m_DetailsPane->setMaximumWidth(QWIDGETSIZE_MAX);
+      m_DetailsPane->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+      m_DetailsPane->setFixedHeight(desiredHeight);
+    } else {
+      m_DetailsPane->setMinimumHeight(0);
+      m_DetailsPane->setMaximumHeight(QWIDGETSIZE_MAX);
+      m_DetailsPane->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+      m_DetailsPane->setFixedWidth(desiredWidth);
+    }
+  };
+
+  bool wasInLayout = inAnyLayout();
+  m_DetailsPane->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+  // Kartend-3ile: cover flow takes the full viewport — render as if
+  // m_sidebarVisible were false but skip the persistence step below so the
+  // user's per-collection preference is preserved across view-type cycles.
+  const bool effectiveVisible = m_sidebarVisible && !m_externallyHidden;
+  if (effectiveVisible) {
+    if (isFixedMode) {
+      removeFromLayouts();
+      applyDockSizing();
+      // Kartend-63e bug #3 fix / Kartend-u2gx: Fixed mode docks into a Qt
+      // layout so the grid reflows into the remaining space. Left/Right go
+      // into the existing horizontal layout; Top/Bottom go into the outer
+      // vertical layout (above or below m_mainContentWidget). When the outer
+      // layout isn't wired up, fall back to the horizontal layout for L/R
+      // and to absolute positioning for T/B (matches Overlay).
+      if (CollectionUtils::isDetailsPaneHorizontal(position) && m_outerLayout &&
+          m_mainContentWidget) {
+        const int contentIndex = m_outerLayout->indexOf(m_mainContentWidget);
+        if (position == DetailsPanePosition::Top) {
+          const int insertAt = contentIndex >= 0 ? contentIndex : 0;
+          m_outerLayout->insertWidget(insertAt, m_DetailsPane);
+        } else {
+          // Bottom: insert after m_mainContentWidget. addWidget puts it at the
+          // end; if there are trailing items in the outer layout we'd want a
+          // proper index, but in practice the content widget is the last entry.
+          if (contentIndex >= 0) {
+            m_outerLayout->insertWidget(contentIndex + 1, m_DetailsPane);
+          } else {
+            m_outerLayout->addWidget(m_DetailsPane);
+          }
+        }
+      } else if (position == DetailsPanePosition::Left) {
+        m_mainHorizontalLayout->insertWidget(0, m_DetailsPane);
+      } else if (position == DetailsPanePosition::Right) {
+        m_mainHorizontalLayout->addWidget(m_DetailsPane);
+      } else {
+        // Top/Bottom Expand without an outer layout: degrade to overlay.
+        m_DetailsPane->setParent(m_itemsPage);
+        positionSidebarOverlay();
+      }
+      m_DetailsPane->setVisible(true);
+    } else {
+      // Overlay mode: free-floating child of itemsPage so the pane visually
+      // overlaps the grid without consuming layout space. The geometry call
+      // in positionSidebarOverlay handles all four positions.
+      m_DetailsPane->setParent(m_itemsPage);
+      removeFromLayouts();
+      applyDockSizing();
+      positionSidebarOverlay();
+      m_DetailsPane->setVisible(true);
+    }
+  } else {
+    m_DetailsPane->setVisible(false);
+    removeFromLayouts();
+  }
+
+  bool isNowInLayout = inAnyLayout();
+  if (wasInLayout != isNowInLayout) {
+    emit sidebarVisibilityChanged(effectiveVisible);
+  }
+
+  // Kartend-u2gx: force layout reflow when the dock target changed mid-call
+  // (e.g. user just flipped Position from Right to Top in settings — the
+  // widget moves between m_mainHorizontalLayout and m_outerLayout, but Qt
+  // won't repaint the new placement unless the affected layouts are
+  // invalidated and the widget's size hint is re-queried).
+  m_DetailsPane->updateGeometry();
+  if (m_outerLayout) {
+    m_outerLayout->invalidate();
+    m_outerLayout->activate();
+  }
+  if (m_mainHorizontalLayout) {
+    m_mainHorizontalLayout->invalidate();
+    m_mainHorizontalLayout->activate();
+  }
+
+  // Skip persistence when the override is what's hiding the sidebar — this
+  // is a transient view-driven state, not a user-initiated choice.
+  if (currentCollectionIndex >= 0 && !m_externallyHidden) {
+    saveSidebarStateForCollection(currentCollectionIndex, m_sidebarVisible);
+  }
+
+  if (m_artworkManager) {
+    if (auto *timerCoordinator = m_artworkManager->getTimerCoordinator()) {
+      timerCoordinator->scheduleLayoutUpdate();
+    }
+  }
+
+  // Delay sidebar layout changed signal to allow show/hide animation
+  // to start before other components react to the layout change
+  QTimer::singleShot(UIConstants::DetailsPane::LAYOUT_NOTIFY_DELAY_MS, this,
+                     [this]() { emit sidebarLayoutChanged(); });
+}
+
+auto DetailsPaneManager::isSidebarVisible() const -> bool {
+  return m_sidebarVisible;
+}
+
+// Persists the sidebar visibility state for a collection index and writes
+// settings
+void DetailsPaneManager::saveSidebarStateForCollection(int collectionIndex, bool visible) {
+  if (!m_collections || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
+    return;
+  }
+  (*m_collections)[collectionIndex].sidebarVisible = visible;
+  if (m_settingsManager) {
+    m_settingsManager->saveCollections(*m_collections);
+  }
+}
+
+void DetailsPaneManager::openArtworkLinksDialog() {
+  if (!m_DetailsPane || !m_databaseManager || !m_collections) {
+    return;
+  }
+  if (m_currentItemFilePath.isEmpty() || m_currentItemUuid.isEmpty()) {
+    return;
+  }
+
+  // Resolve the custom-types list from the owning collection (which can
+  // differ from the currently-displayed collection in
+  // showAllSubcollectionItems mode). Falls back to an empty list if the
+  // owning index has been invalidated mid-flight.
+  QStringList customTypes;
+  if (m_currentItemOwningIndex >= 0 && m_currentItemOwningIndex < m_collections->size()) {
+    customTypes = (*m_collections)[m_currentItemOwningIndex].customArtworkTypes;
+  }
+
+  const QString baseName = QFileInfo(m_currentItemFilePath).completeBaseName();
+
+  // Snapshot the current overrides so we can compute insert/update/delete
+  // diffs after the dialog is accepted. Also include any custom-type rows
+  // already stored in the DB but no longer listed in the collection's
+  // config — that way the user can clear stale entries instead of being
+  // unable to see them. We render those as extra "custom" rows.
+  QHash<QString, QString> originalOverrides;
+  QStringList allCustomTypes = customTypes;
+  const auto rows = m_databaseManager->loadItemArtwork(m_currentItemUuid, m_currentItemFilePath);
+  for (const auto &row : rows) {
+    originalOverrides.insert(row.artworkType, row.manualPath);
+    if (!ItemArtworkStore::isStandardType(row.artworkType) &&
+        !allCustomTypes.contains(row.artworkType)) {
+      allCustomTypes.append(row.artworkType);
+    }
+  }
+
+  ItemArtworkLinksDialog dialog(m_DetailsPane->window());
+  dialog.setItemTitle(m_currentItemName.isEmpty() ? baseName : m_currentItemName);
+  dialog.setTypeRows(ItemArtworkStore::standardTypes(), allCustomTypes);
+  dialog.setOverrides(originalOverrides);
+  if (!m_currentItemArtworkDir.trimmed().isEmpty()) {
+    dialog.setBrowseStartDirectory(m_currentItemArtworkDir);
+  }
+
+  if (dialog.exec() != QDialog::Accepted) {
+    return;
+  }
+
+  const QHash<QString, QString> newOverrides = dialog.overrides();
+
+  // Persist the diff: every type whose final value differs from the
+  // original gets either a save (non-empty) or a remove (cleared). We
+  // intentionally do NOT batch this in a transaction — the existing
+  // ItemArtworkStore API is single-row, and a few extra round-trips per
+  // edit session is negligible compared to the UI feedback latency.
+  QSet<QString> visitedTypes;
+  for (auto it = newOverrides.constBegin(); it != newOverrides.constEnd(); ++it) {
+    visitedTypes.insert(it.key());
+    const QString original = originalOverrides.value(it.key());
+    if (it.value() == original) {
+      continue;
+    }
+    ItemArtworkStore::ItemArtwork artwork;
+    artwork.collectionUuid = m_currentItemUuid;
+    artwork.path = m_currentItemFilePath;
+    artwork.artworkType = it.key();
+    artwork.manualPath = it.value();
+    m_databaseManager->saveItemArtwork(artwork);
+  }
+  for (auto it = originalOverrides.constBegin(); it != originalOverrides.constEnd(); ++it) {
+    if (visitedTypes.contains(it.key())) {
+      continue;
+    }
+    // Was set, now cleared.
+    m_databaseManager->removeItemArtwork(m_currentItemUuid, m_currentItemFilePath, it.key());
+  }
+
+  // Refresh the gallery inline using the cached owner context — we don't
+  // hold a pointer to the selected ItemWidget here, so we can't re-run
+  // updateSidebarMetadata. The logic mirrors that method's gallery build.
+  if (m_DetailsPane && !m_currentItemUuid.isEmpty()) {
+    QList<DetailsPane::GalleryEntry> galleryEntries;
+    QHash<QString, QString> overridesByType;
+    QStringList customOrder;
+    const auto refreshedRows =
+        m_databaseManager->loadItemArtwork(m_currentItemUuid, m_currentItemFilePath);
+    for (const auto &row : refreshedRows) {
+      overridesByType.insert(row.artworkType, row.manualPath);
+      if (!ItemArtworkStore::isStandardType(row.artworkType)) {
+        customOrder.append(row.artworkType);
+      }
+    }
+    auto pushEntry = [&](const QString &type, const QString &label) {
+      const QString resolved = ItemArtworkStore::resolveArtworkPath(
+          overridesByType.value(type), baseName, m_currentItemArtworkDir, type);
+      if (!resolved.isEmpty()) {
+        galleryEntries.append({label, resolved, /*isVideo=*/false});
+      }
+    };
+    for (const QString &type : ItemArtworkStore::standardTypes()) {
+      pushEntry(type, ItemArtworkStore::standardTypeDisplayName(type));
+    }
+    for (const QString &type : customOrder) {
+      pushEntry(type, type);
+    }
+    m_DetailsPane->setArtworkGallery(galleryEntries);
+  }
+}
+
+// Persists the sidebar visibility state by collection name, forwarding to
+// index-based save
+void DetailsPaneManager::saveSidebarStateForCollection(const QString &collectionName, bool visible) {
+  if (!m_collections) {
+    return;
+  }
+  int idx = -1;
+  for (int i = 0; i < m_collections->size(); ++i) {
+    if ((*m_collections)[i].name == collectionName) {
+      idx = i;
+      break;
+    }
+  }
+  if (idx < 0) {
+    return;
+  }
+  saveSidebarStateForCollection(idx, visible);
+}

@@ -15,6 +15,7 @@ QString computeCollectionUuid(const QString &name, const QString &mediaDir) {
 
 void CollectionHierarchyCache::rebuild(const QList<CollectionConfig> &collections) {
   m_directChildren.clear();
+  m_linkedDirectChildren.clear();
   m_allDescendants.clear();
   m_collectionUuids.clear();
   m_uuidToMediaDir.clear();
@@ -25,7 +26,7 @@ void CollectionHierarchyCache::rebuild(const QList<CollectionConfig> &collection
   m_mediaDirToArtworkDir.clear();
   m_collections = &collections;
 
-  // Build direct children map
+  // Primary children — single parent per collection via parentCollectionIndex.
   for (int i = 0; i < collections.size(); ++i) {
     int parent = collections[i].parentCollectionIndex;
     if (parent >= 0) {
@@ -33,7 +34,42 @@ void CollectionHierarchyCache::rebuild(const QList<CollectionConfig> &collection
     }
   }
 
-  // Pre-compute all descendants for each collection
+  // Kartend-gzmk: linked children — additionalParentNames resolved to indices.
+  // Names are user-controlled and may reference deleted/typo'd parents; we
+  // silently skip unknowns and self-references so a stale config can't wedge
+  // the tree. Linked children are appended after primary so the merged list
+  // visually groups "real" children first.
+  QHash<QString, int> nameToIndex;
+  nameToIndex.reserve(collections.size());
+  for (int i = 0; i < collections.size(); ++i) {
+    nameToIndex.insert(collections[i].name, i);
+  }
+  for (int i = 0; i < collections.size(); ++i) {
+    for (const QString &parentName : collections[i].additionalParentNames) {
+      const int parentIdx = nameToIndex.value(parentName, -1);
+      if (parentIdx < 0 || parentIdx == i) {
+        continue;
+      }
+      // Suppress duplicate links (same parent named twice in the list)
+      // and skip if the user already has it as their primary parent —
+      // listing it again would just push the same child twice through the
+      // merge below.
+      if (m_linkedDirectChildren[parentIdx].contains(i)) {
+        continue;
+      }
+      if (collections[i].parentCollectionIndex == parentIdx) {
+        continue;
+      }
+      m_linkedDirectChildren[parentIdx].append(i);
+      // Append to the merged children list (primary entries are already
+      // present; linked entries trail).
+      m_directChildren[parentIdx].append(i);
+    }
+  }
+
+  // Pre-compute all descendants. computeDescendants() walks m_directChildren,
+  // so it already sees both primary and linked children, and dedupes via the
+  // visited set so a Kartend-gzmk cycle resolves to a finite walk.
   for (int i = 0; i < collections.size(); ++i) {
     m_allDescendants[i] = computeDescendants(i);
   }

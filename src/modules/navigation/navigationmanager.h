@@ -24,15 +24,20 @@ QT_END_NAMESPACE
 class InteractionManager;
 class InteractionStateHolder;
 class SettingsManager;
-class SidebarManager;
+class DetailsPaneManager;
 class ScrollManager;
 class DatabaseManager;
 class SessionManager;
 class ArtworkManager;
-class MetadataSidebar;
+class DetailsPane;
 class SelectionRestoreManager;
 class LoadingOverlay;
+class EmptyStateWidget;
 class NavigationStackManager;
+class BackgroundVideoWidget;
+class BackdropBlurOverlay;
+class HeaderLogoOverlay;
+class VignetteOverlay;
 
 /**
  * @brief Setup struct for NavigationManager dependencies.
@@ -47,14 +52,14 @@ struct NavigationManagerSetup {
   // Manager dependencies (can be overridden or taken from ctx)
   InteractionManager *interactionManager = nullptr;
   SettingsManager *settingsManager = nullptr;
-  SidebarManager *sidebarManager = nullptr;
+  DetailsPaneManager *detailsPaneManager = nullptr;
   ScrollManager *scrollManager = nullptr;
   DatabaseManager *databaseManager = nullptr;
   SessionManager *sessionManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
 
   // UI elements (can be overridden or taken from ctx)
-  MetadataSidebar *sidebar = nullptr;
+  DetailsPane *sidebar = nullptr;
   int *currentCollectionIndex = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   const CollectionHierarchyCache *hierarchyCache = nullptr;
@@ -64,7 +69,7 @@ struct NavigationManagerSetup {
   QWidget *itemsTopBar = nullptr;
   QStackedWidget *stackedWidget = nullptr;
   QMenuBar *menubar = nullptr;
-  QLabel *loadingLabel = nullptr;
+  EmptyStateWidget *loadingLabel = nullptr;
   LoadingOverlay *loadingOverlay = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QWidget *gridContainer = nullptr;
@@ -74,30 +79,30 @@ struct NavigationManagerSetup {
   std::function<void()> refreshTitleCounts;
 
   // Manager accessors that check ctx fallback
-  SETUP_GETTER_INLINE_SAME(InteractionManager *, InteractionManager, interactionManager)
-  SETUP_GETTER_INLINE_SAME(SettingsManager *, SettingsManager, settingsManager)
-  SETUP_GETTER_INLINE_SAME(SidebarManager *, SidebarManager, sidebarManager)
-  SETUP_GETTER_INLINE_SAME(ScrollManager *, ScrollManager, scrollManager)
-  SETUP_GETTER_INLINE_SAME(DatabaseManager *, DatabaseManager, databaseManager)
-  SETUP_GETTER_INLINE_SAME(SessionManager *, SessionManager, sessionManager)
-  SETUP_GETTER_INLINE_SAME(ArtworkManager *, ArtworkManager, artworkManager)
+  SETUP_GETTER_INLINE_MGR_SAME(InteractionManager *, InteractionManager, interactionManager)
+  SETUP_GETTER_INLINE_MGR_SAME(SettingsManager *, SettingsManager, settingsManager)
+  SETUP_GETTER_INLINE_MGR_SAME(DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
+  SETUP_GETTER_INLINE_MGR_SAME(ScrollManager *, ScrollManager, scrollManager)
+  SETUP_GETTER_INLINE_MGR_SAME(DatabaseManager *, DatabaseManager, databaseManager)
+  SETUP_GETTER_INLINE_MGR_SAME(SessionManager *, SessionManager, sessionManager)
+  SETUP_GETTER_INLINE_MGR_SAME(ArtworkManager *, ArtworkManager, artworkManager)
 
   // UI element accessors that check ctx fallback
-  SETUP_GETTER_INLINE_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
-  SETUP_GETTER_INLINE_SAME(QWidget *, GridContainer, gridContainer)
-  SETUP_GETTER_INLINE_SAME(QWidget *, ItemsPage, itemsPage)
-  SETUP_GETTER_INLINE_SAME(QWidget *, ItemsTopBar, itemsTopBar)
-  SETUP_GETTER_INLINE_SAME(QStackedWidget *, StackedWidget, stackedWidget)
-  SETUP_GETTER_INLINE_SAME(QMenuBar *, Menubar, menubar)
-  SETUP_GETTER_INLINE_SAME(QLineEdit *, SearchBar, searchBar)
-  SETUP_GETTER_INLINE_SAME(QLabel *, LoadingLabel, loadingLabel)
-  SETUP_GETTER_INLINE_SAME(LoadingOverlay *, LoadingOverlay, loadingOverlay)
-  SETUP_GETTER_INLINE_SAME(MetadataSidebar *, Sidebar, sidebar)
-  SETUP_GETTER_INLINE_SAME(QList<CollectionConfig> *, Collections, collections)
-  SETUP_GETTER_INLINE_SAME(int *, CurrentCollectionIndex, currentCollectionIndex)
-  SETUP_GETTER_INLINE_SAME(const CollectionHierarchyCache *, HierarchyCache, hierarchyCache)
-  SETUP_GETTER_INLINE_SAME(GeneralSettings *, GeneralSettings, generalSettings)
-  SETUP_GETTER_INLINE_CTX_ONLY(InteractionStateHolder *, InteractionState, interactionState)
+  SETUP_GETTER_INLINE_UI_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
+  SETUP_GETTER_INLINE_UI_SAME(QWidget *, GridContainer, gridContainer)
+  SETUP_GETTER_INLINE_UI_SAME(QWidget *, ItemsPage, itemsPage)
+  SETUP_GETTER_INLINE_UI_SAME(QWidget *, ItemsTopBar, itemsTopBar)
+  SETUP_GETTER_INLINE_UI_SAME(QStackedWidget *, StackedWidget, stackedWidget)
+  SETUP_GETTER_INLINE_UI_SAME(QMenuBar *, Menubar, menubar)
+  SETUP_GETTER_INLINE_UI_SAME(QLineEdit *, SearchBar, searchBar)
+  SETUP_GETTER_INLINE_UI_SAME(EmptyStateWidget *, LoadingLabel, loadingLabel)
+  SETUP_GETTER_INLINE_UI_SAME(LoadingOverlay *, LoadingOverlay, loadingOverlay)
+  SETUP_GETTER_INLINE_UI_SAME(DetailsPane *, Sidebar, sidebar)
+  SETUP_GETTER_INLINE_COL_SAME(QList<CollectionConfig> *, Collections, collections)
+  SETUP_GETTER_INLINE_COL_SAME(int *, CurrentCollectionIndex, currentCollectionIndex)
+  SETUP_GETTER_INLINE_COL_SAME(const CollectionHierarchyCache *, HierarchyCache, hierarchyCache)
+  SETUP_GETTER_INLINE_COL_SAME(GeneralSettings *, GeneralSettings, generalSettings)
+  SETUP_GETTER_INLINE_MGR_CTX_ONLY(InteractionStateHolder *, InteractionState, interactionState)
 };
 
 class NavigationManager : public QObject {
@@ -172,12 +177,12 @@ private:
   InteractionManager *m_interactionManager = nullptr;
   InteractionStateHolder *m_state = nullptr;
   SettingsManager *m_settingsManager = nullptr;
-  SidebarManager *m_sidebarManager = nullptr;
+  DetailsPaneManager *m_detailsPaneManager = nullptr;
   ScrollManager *m_scrollManager = nullptr;
   DatabaseManager *m_databaseManager = nullptr;
   SessionManager *m_sessionManager = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
-  MetadataSidebar *m_MetadataSidebar = nullptr;
+  DetailsPane *m_MetadataSidebar = nullptr;
   int *m_currentCollectionIndex = nullptr;
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   GeneralSettings *m_generalSettings = nullptr;
@@ -196,10 +201,34 @@ private:
   QWidget *m_itemsTopBar = nullptr;
   QStackedWidget *m_stackedWidget = nullptr;
   QMenuBar *m_menubar = nullptr;
-  QLabel *m_loadingLabel = nullptr;
+  EmptyStateWidget *m_loadingLabel = nullptr;
   LoadingOverlay *m_loadingOverlay = nullptr;
   QScrollArea *m_itemScrollArea = nullptr;
   QWidget *m_gridContainer = nullptr;
+  // Kartend-vbs: lazy-created on first collection that requests a video
+  // background. Parented to the items viewport so its lifetime mirrors the
+  // scroll area's. Hidden + decoder-released when the active collection
+  // doesn't use video, so collections without one pay zero playback cost.
+  BackgroundVideoWidget *m_backgroundVideo = nullptr;
+  // Kartend-guo5: lazy-created header logo overlay; same lifetime/parenting
+  // pattern as m_backgroundVideo. Hidden when the active collection has no
+  // logo configured.
+  HeaderLogoOverlay *m_headerLogo = nullptr;
+  // Kartend-qbp3: lazy-created vignette overlay layered above the logo so
+  // the logo isn't darkened along with the corners.
+  VignetteOverlay *m_vignette = nullptr;
+  // Kartend-eq8r: lazy-created toolbar backdrop blur. Hidden whenever the
+  // active collection has the toggle off or uses a video bg (sampling
+  // frames every paint is too expensive without GPU shaders).
+  BackdropBlurOverlay *m_toolbarBlur = nullptr;
+  // Kartend-y25g: throttle for parallax stylesheet rebuilds. Lazy-created
+  // on first scroll while parallax is active. Caps QSS updates at ~60Hz
+  // so a fast scroll doesn't thrash Qt's stylesheet engine.
+  QTimer *m_parallaxThrottle = nullptr;
+  bool m_scrollListenerConnected = false;
+  // Helpers exposed via the .cpp.
+  void onItemsScrolled();
+  void applyParallaxOffset();
   std::function<bool()> m_isShuttingDown;
   std::function<void()> m_refreshTitleCounts;
 

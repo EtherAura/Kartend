@@ -7,6 +7,7 @@
 #include "artworkmanager.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
+#include "emptystatewidget.h"
 #include "errordialog.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
@@ -20,7 +21,7 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "sidebarmanager.h"
+#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
@@ -62,10 +63,20 @@ auto NavigationManager::loadCollectionData(int collectionIndex) -> void {
     if (m_generalSettings) {
       context.sortMode = m_generalSettings->sortMode;
       context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+      // Kartend-dd8: mirror toolbar filters so the scroll pipeline can drop
+      // subcollection tiles whose effective type doesn't match the active
+      // filter, or hide them entirely.
+      context.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
+      context.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
     }
 
     bool hasMediaDirectory = !context.config.mediaDirectory.trimmed().isEmpty();
-    if (hasMediaDirectory || context.config.showAllSubcollectionItems) {
+    // Kartend-vlm7: a playlist has no mediaDirectory but its items live in
+    // playlist_items rather than on disk, so it still wants the full count +
+    // range fetch path. Treat it as "has data" so we don't fall through to
+    // the empty-emit branch.
+    if (hasMediaDirectory || context.config.showAllSubcollectionItems ||
+        context.config.isPlaylist) {
       // NOTE: Don't show overlay here - it will be shown by scanStarting signal
       // if a scan is actually needed. For cached collections, no overlay
       // appears.
@@ -152,6 +163,10 @@ auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &con
   if (m_generalSettings) {
     minimalContext.sortMode = m_generalSettings->sortMode;
     minimalContext.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    // Kartend-dd8: minimal context still needs the toolbar filter so the
+    // immediate cached viewport hides the same tiles the full reload would.
+    minimalContext.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
+    minimalContext.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
   }
 
   // Store minimal context for now - will be replaced with full context
@@ -264,6 +279,9 @@ CollectionContext NavigationManager::buildExpandedContextForIndex(int collection
   if (m_generalSettings) {
     context.sortMode = m_generalSettings->sortMode;
     context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    // Kartend-dd8: toolbar filter mirroring (see load context above).
+    context.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
+    context.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
   }
 
   // Use pre-computed UUIDs and directory maps from hierarchy cache
@@ -391,8 +409,7 @@ void NavigationManager::onItemsLoaded(const QStringList &filePaths,
 
 void NavigationManager::onMediaLibraryError(const ErrorUtils::ErrorContext &error) {
   if (m_loadingLabel) {
-    m_loadingLabel->deleteLater();
-    m_loadingLabel = nullptr;
+    m_loadingLabel->hide();
   }
 
   // Hide loading overlay if visible

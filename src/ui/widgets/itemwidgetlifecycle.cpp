@@ -49,6 +49,7 @@ void ItemWidget::resetForReuse() {
   filePath.clear();
   itemName.clear();
   storedPixmap = QPixmap(); // Clear stored artwork
+  m_placeholderArtworkPixmap = QPixmap();
   // Don't generate placeholder here - onArtworkChanged() will be called after
   // configuration and will generate the placeholder with correct dimensions
   if (triangleIndicator) {
@@ -109,7 +110,24 @@ void ItemWidget::setAsVirtualFolder(const QString &folderPath, const QString &di
 
 // Set item name
 void ItemWidget::setItemName(const QString &name) {
+  const bool nameChanged = (itemName != name);
   itemName = name;
+  // Kartend-skd9: the placeholder-art title overlay is baked into the
+  // pixmap by onArtworkChanged(). configureBaseWidget calls onArtworkChanged
+  // once with an empty itemName (during resetForReuse), and the dimension-
+  // driven re-render is gated by setItemDimensions's "same dimensions" early
+  // return — so a recycled widget with identical dimensions but a brand-new
+  // name keeps the previous placeholder (no title) until something else
+  // forces a redraw. Schedule one deferred refresh so the overlay catches
+  // up to the current name.
+  if (nameChanged && s_showTitleInPlaceholder) {
+    QPointer<ItemWidget> ptr = this;
+    QTimer::singleShot(0, this, [ptr]() {
+      if (ptr) {
+        ptr->onArtworkChanged();
+      }
+    });
+  }
   if (nameLabel) {
     // Show title if: regular item with titles visible, OR subcollection with
     // subcollection titles visible, OR virtual folder with subfolder titles
@@ -120,7 +138,9 @@ void ItemWidget::setItemName(const QString &name) {
     } else if (m_isSubcollection) {
       shouldShowTitle = !m_hideSubcollectionTitles;
     } else {
-      shouldShowTitle = !m_hideTitles;
+      // Kartend-029m: hideTitles is a grid-mode concern. In list mode the row
+      // IS the title -- suppressing it leaves a blank row with no fallback.
+      shouldShowTitle = m_isListMode || !m_hideTitles;
     }
 
     if (!shouldShowTitle) {
@@ -162,5 +182,12 @@ void ItemWidget::setArtworkPixmap(const QPixmap &pixmap) {
   });
   if (nameLabel) {
     nameLabel->raise();
+  }
+}
+
+void ItemWidget::setPlaceholderArtworkPixmap(const QPixmap &pixmap) {
+  m_placeholderArtworkPixmap = pixmap;
+  if (storedPixmap.isNull()) {
+    onArtworkChanged();
   }
 }
