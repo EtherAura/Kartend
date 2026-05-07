@@ -5,6 +5,83 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.5] - 2026-05-06
+
+### Added
+
+- Sorting by date and file size
+- Optional, configurable splash screens (startup + focus-return)
+  with per-collection placeholder artwork and title overlays
+- Per-collection expand mode with two-stage activation
+- Per-collection 'hide items without artwork' toggle
+- Per-collection regex title-exclusion filter
+- Per-collection multi-launcher with chooser dialog, per-item
+  launcher overrides, and global launcher presets
+- Per-collection appearance settings, sidebar tabs, sidebar
+  promoted to a top-level Settings tab, and per-collection
+  sidebar font override
+- Settings: scope selector with gating for non-propagatable
+  fields, duplicate-collection + apply-to-selected picker,
+  collection-tree context menu with drag-drop reparenting,
+  alias-parent links with linked-appearance rendering,
+  collection type metadata + toolbar filter + hide-subs,
+  config import/export via Backup section
+- Playlists: data model + virtual collection foundation,
+  built-in Favorites playlist, M3U + JSON import/export,
+  documented playlist→source launcher chooser contract
+- Chronological launch history log
+- Per-item usage tracking and Statistics dialog
+- Item metadata: extended fields with sidebar Details section,
+  user-defined custom fields, per-item manual links
+- Artwork: item_artwork storage with standard-type
+  auto-discovery, custom artwork types, per-item manual-link
+  editor, sidebar artwork gallery, cycle item artwork type
+  with modifier+middle-click
+- Video: per-item video previews in sidebar, video-first
+  overlay with middle-click peek, gallery video tile,
+  unmuted sidebar/overlay audio
+- Optional runtime detection with Now Playing overlay
+- Coverflow 3D carousel view mode with gallery toolbar,
+  horizontal scrolling view mode
+- Customizable items-page toolbar (kde-breeze icons, view
+  dropdown, in-field search, consolidated filter)
+- Hamburger fallback when the menu bar is hidden;
+  randomize / recent / layout menu entries
+- Sidebar: collection summary when no item is selected,
+  upper width limit removed
+- Typography: global UI font family + size, runtime text
+  zoom (Ctrl+/-/0)
+- Attract mode: advance-selection + sub-pixel scroll
+- Contextual empty-state widget
+- Details pane (renamed from sidebar): orientation menu and
+  view-aware grid sizing
+- Packaging: Arch PKGBUILD and Flatpak manifest
+- Tests: integration test harness for UI-coordinator managers,
+  ApplicationManager + NavigationManager lifecycle coverage,
+  and unit tests for new metadata, artwork, history, playlist,
+  usage-stats, kart, title-filter, video, and grid-layout modules
+
+### Changed
+
+- Refactor: split `ApplicationContext` into ui/managers/collection
+  sub-structs
+- Refactor: promoted `scrollmanagervirtual.cpp` into a
+  `VirtualScrollEngine` class
+- Project-wide clang-format pass
+
+### Fixed
+
+- Allow ampersands in launch paths
+- Render video-preview frames via `QVideoSink` instead of
+  `QVideoWidget`
+- Sidebar: expand video/artwork/manual paths and apply
+  owner-aware lookup; center artwork/name region, scale
+  previews, wrap long values
+- Filter toolbar: always-enabled with explicit 'Filter' label
+- Toolbar position label refreshes on wheel scroll
+- Treat launch as attract activity to suppress spurious
+  attract-mode triggers
+
 ## [0.0.4] - 2026-04-25
 
 ### Added
