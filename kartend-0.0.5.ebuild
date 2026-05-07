@@ -24,6 +24,7 @@ RESTRICT="!test? ( test )"
 
 RDEPEND="
 	dev-qt/qtbase:6[gui,sql,sqlite,widgets,concurrent]
+	dev-qt/qtmultimedia:6[widgets]
 	gamepad? ( dev-qt/qtgamepad:6 )
 	sdl? ( media-libs/libsdl2 )
 "
@@ -47,7 +48,7 @@ src_install() {
 	dobin "${BUILD_DIR}/kartend"
 
 	# Desktop file
-	domenu src/assets/kartend.desktop
+	domenu src/assets/io.github.EtherAura.Kartend.desktop
 
 	# Documentation
 	dodoc readme.md
