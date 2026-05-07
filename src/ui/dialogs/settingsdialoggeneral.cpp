@@ -420,7 +420,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
       const QString startDir =
           currentPath.isEmpty() ? QDir::homePath() : QFileInfo(currentPath).absolutePath();
       const QString filePath = QFileDialog::getOpenFileName(
-          this, tr("Select Sidebar Background Image"), startDir,
+          this, tr("Select Details Pane Background Image"), startDir,
           tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;All Files (*)"));
       if (!filePath.isEmpty()) {
         ui->sidebarBackgroundValueEdit->setText(filePath);
@@ -432,7 +432,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
         currentColor = QColor(currentValue);
       }
       const QColor color =
-          QColorDialog::getColor(currentColor, this, tr("Select Sidebar Background Color"));
+          QColorDialog::getColor(currentColor, this, tr("Select Details Pane Background Color"));
       if (color.isValid()) {
         ui->sidebarBackgroundValueEdit->setText(color.name());
       }
@@ -470,9 +470,9 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     });
   };
   wireColorPicker(ui->sidebarTextColorPickButton, ui->sidebarTextColorEdit,
-                  tr("Select Sidebar Text Color"));
+                  tr("Select Details Pane Text Color"));
   wireColorPicker(ui->sidebarAccentColorPickButton, ui->sidebarAccentColorEdit,
-                  tr("Select Sidebar Accent Color"));
+                  tr("Select Details Pane Accent Color"));
   // Kartend-63e bubble bg pickers — open in alpha-aware mode so users can
   // dial in semi-opacity.
   auto wireAlphaColorPicker = [this](QPushButton *button, QLineEdit *edit, const QString &title) {
@@ -496,14 +496,14 @@ void SettingsDialog::setupGeneralSettingsConnections() {
   // Kartend-63e: bubble color pickers are RGB-only — opacity has its own
   // spinbox so the user can tune translucency without re-picking the color.
   wireColorPicker(ui->sidebarHeaderBgPickButton, ui->sidebarHeaderBgEdit,
-                  tr("Select Sidebar Header Bubble Color"));
+                  tr("Select Details Pane Header Bubble Color"));
   wireColorPicker(ui->sidebarSectionBgPickButton, ui->sidebarSectionBgEdit,
-                  tr("Select Sidebar Section Bubble Color"));
+                  tr("Select Details Pane Section Bubble Color"));
   // Pattern overlay tint (replaces the old "line color" since sidebar
   // Pattern mode now uses the placeholder builder for line colors). This
   // one IS alpha-aware — it's a single combined knob for "tint + dim".
   wireAlphaColorPicker(ui->sidebarPatternColorPickButton, ui->sidebarPatternColorEdit,
-                       tr("Select Sidebar Pattern Overlay Tint"));
+                       tr("Select Details Pane Pattern Overlay Tint"));
 
   // Selection color picker button
   connect(ui->browseSelectionColorButton, &QPushButton::clicked, this, [this]() {

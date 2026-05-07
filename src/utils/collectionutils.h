@@ -24,28 +24,39 @@ enum class HorizontalAlignment { Left = 0, Center = 1, Right = 2 };
 /// it doesn't fight a centered toolbar element.
 enum class HeaderLogoPosition { TopLeft = 0, TopCenter = 1, TopRight = 2 };
 
-enum class SidebarMode { Overlay = 0, Expand = 1 };
+enum class DetailsPaneMode { Overlay = 0, Expand = 1 };
 
-/// Kartend-63e: which side of the items viewport the sidebar lives on. Applies
-/// in both Overlay and Fixed modes — Overlay swaps the X anchor, Fixed swaps
-/// the layout insertion index.
-enum class SidebarPosition { Right = 0, Left = 1 };
+/// Kartend-63e / Kartend-u2gx: which edge of the items viewport the details
+/// pane docks against. Right/Left are width-driven; Top/Bottom are
+/// height-driven. In Expand mode the layout swaps the insertion index and
+/// orientation; in Overlay mode the anchor edge is swapped.
+enum class DetailsPanePosition { Right = 0, Left = 1, Top = 2, Bottom = 3 };
 
-/// Kartend-63e: how the sidebar background is rendered. Color and Image mirror
-/// the main-view BackgroundType values. Pattern adds a procedurally-drawn
-/// pattern (currently only Crosshatch) tinted by `sidebarPatternColor`.
-enum class SidebarBackgroundType { Color = 0, Image = 1, Pattern = 2 };
+/// Kartend-63e: how the details-pane background is rendered. Color and Image
+/// mirror the main-view BackgroundType values. Pattern adds a
+/// procedurally-drawn pattern (currently only Crosshatch) tinted by
+/// `detailsPanePatternColor`.
+enum class DetailsPaneBackgroundType { Color = 0, Image = 1, Pattern = 2 };
 
-/// Kartend-63e: built-in sidebar background patterns. Single value today;
+/// Kartend-63e: built-in details-pane background patterns. Single value today;
 /// dots/lines/etc. can be added without breaking persistence because the int
 /// representation is what's serialized.
-enum class SidebarPattern { Crosshatch = 0 };
+enum class DetailsPanePattern { Crosshatch = 0 };
 
-/// Kartend-63e: which built-in tab is active in the sidebar. Item is the
+/// Kartend-63e: which built-in tab is active in the details pane. Item is the
 /// per-item view (artwork + metadata); Collection forces the collection
 /// summary even with a selection; File is reserved for a user-customizable
 /// pane in a later iteration.
-enum class SidebarTab { Item = 0, Collection = 1, File = 2 };
+enum class DetailsPaneTab { Item = 0, Collection = 1, File = 2 };
+
+// ─── Backward-compat aliases (Kartend-u2gx) ──────────────────────────────────
+// Older code paths still referenced as Sidebar* during the rename window. Keep
+// these aliases until every consumer is updated.
+using SidebarMode = DetailsPaneMode;
+using SidebarPosition = DetailsPanePosition;
+using SidebarBackgroundType = DetailsPaneBackgroundType;
+using SidebarPattern = DetailsPanePattern;
+using SidebarTab = DetailsPaneTab;
 
 /// Kartend-vbs: per-collection background can be a flat color, a wallpaper
 /// image, or a looping muted video file. Video uses BackgroundVideoWidget
@@ -123,64 +134,112 @@ namespace CollectionUtils {
   return HeaderLogoPosition::TopCenter;
 }
 
-[[nodiscard]] inline QString sidebarPositionToString(SidebarPosition pos) {
-  return pos == SidebarPosition::Left ? "left" : "right";
+[[nodiscard]] inline QString detailsPanePositionToString(DetailsPanePosition pos) {
+  switch (pos) {
+  case DetailsPanePosition::Left:
+    return "left";
+  case DetailsPanePosition::Top:
+    return "top";
+  case DetailsPanePosition::Bottom:
+    return "bottom";
+  case DetailsPanePosition::Right:
+  default:
+    return "right";
+  }
 }
 
-[[nodiscard]] inline SidebarPosition stringToSidebarPosition(const QString &str) {
-  return str.toLower() == "left" ? SidebarPosition::Left : SidebarPosition::Right;
+[[nodiscard]] inline DetailsPanePosition stringToDetailsPanePosition(const QString &str) {
+  const QString lower = str.toLower();
+  if (lower == "left") return DetailsPanePosition::Left;
+  if (lower == "top") return DetailsPanePosition::Top;
+  if (lower == "bottom") return DetailsPanePosition::Bottom;
+  return DetailsPanePosition::Right;
 }
 
-[[nodiscard]] inline QString sidebarBackgroundTypeToString(SidebarBackgroundType type) {
+/// Kartend-u2gx: true for Top/Bottom dock — tells layout/drag code to treat the
+/// pane's height (not width) as the configurable dimension and to span the full
+/// viewport perpendicular to the dock edge.
+[[nodiscard]] inline bool isDetailsPaneHorizontal(DetailsPanePosition pos) {
+  return pos == DetailsPanePosition::Top || pos == DetailsPanePosition::Bottom;
+}
+
+[[nodiscard]] inline QString detailsPaneBackgroundTypeToString(DetailsPaneBackgroundType type) {
   switch (type) {
-  case SidebarBackgroundType::Image:
+  case DetailsPaneBackgroundType::Image:
     return "image";
-  case SidebarBackgroundType::Pattern:
+  case DetailsPaneBackgroundType::Pattern:
     return "pattern";
-  case SidebarBackgroundType::Color:
+  case DetailsPaneBackgroundType::Color:
   default:
     return "color";
   }
 }
 
-[[nodiscard]] inline SidebarBackgroundType stringToSidebarBackgroundType(const QString &str) {
+[[nodiscard]] inline DetailsPaneBackgroundType
+stringToDetailsPaneBackgroundType(const QString &str) {
   const QString lower = str.toLower();
-  if (lower == "image") return SidebarBackgroundType::Image;
-  if (lower == "pattern") return SidebarBackgroundType::Pattern;
-  return SidebarBackgroundType::Color;
+  if (lower == "image") return DetailsPaneBackgroundType::Image;
+  if (lower == "pattern") return DetailsPaneBackgroundType::Pattern;
+  return DetailsPaneBackgroundType::Color;
 }
 
-[[nodiscard]] inline QString sidebarPatternToString(SidebarPattern pattern) {
+[[nodiscard]] inline QString detailsPanePatternToString(DetailsPanePattern pattern) {
   switch (pattern) {
-  case SidebarPattern::Crosshatch:
+  case DetailsPanePattern::Crosshatch:
   default:
     return "crosshatch";
   }
 }
 
-[[nodiscard]] inline SidebarPattern stringToSidebarPattern(const QString &str) {
+[[nodiscard]] inline DetailsPanePattern stringToDetailsPanePattern(const QString &str) {
   // Single value for now; future patterns slot in here without persistence breakage.
   Q_UNUSED(str);
-  return SidebarPattern::Crosshatch;
+  return DetailsPanePattern::Crosshatch;
 }
 
-[[nodiscard]] inline QString sidebarTabToString(SidebarTab tab) {
+[[nodiscard]] inline QString detailsPaneTabToString(DetailsPaneTab tab) {
   switch (tab) {
-  case SidebarTab::Collection:
+  case DetailsPaneTab::Collection:
     return "collection";
-  case SidebarTab::File:
+  case DetailsPaneTab::File:
     return "file";
-  case SidebarTab::Item:
+  case DetailsPaneTab::Item:
   default:
     return "item";
   }
 }
 
-[[nodiscard]] inline SidebarTab stringToSidebarTab(const QString &str) {
+[[nodiscard]] inline DetailsPaneTab stringToDetailsPaneTab(const QString &str) {
   const QString lower = str.toLower();
-  if (lower == "collection") return SidebarTab::Collection;
-  if (lower == "file") return SidebarTab::File;
-  return SidebarTab::Item;
+  if (lower == "collection") return DetailsPaneTab::Collection;
+  if (lower == "file") return DetailsPaneTab::File;
+  return DetailsPaneTab::Item;
+}
+
+// ─── Backward-compat helper aliases (Kartend-u2gx) ───────────────────────────
+[[nodiscard]] inline QString sidebarPositionToString(DetailsPanePosition pos) {
+  return detailsPanePositionToString(pos);
+}
+[[nodiscard]] inline DetailsPanePosition stringToSidebarPosition(const QString &str) {
+  return stringToDetailsPanePosition(str);
+}
+[[nodiscard]] inline QString sidebarBackgroundTypeToString(DetailsPaneBackgroundType type) {
+  return detailsPaneBackgroundTypeToString(type);
+}
+[[nodiscard]] inline DetailsPaneBackgroundType stringToSidebarBackgroundType(const QString &str) {
+  return stringToDetailsPaneBackgroundType(str);
+}
+[[nodiscard]] inline QString sidebarPatternToString(DetailsPanePattern pattern) {
+  return detailsPanePatternToString(pattern);
+}
+[[nodiscard]] inline DetailsPanePattern stringToSidebarPattern(const QString &str) {
+  return stringToDetailsPanePattern(str);
+}
+[[nodiscard]] inline QString sidebarTabToString(DetailsPaneTab tab) {
+  return detailsPaneTabToString(tab);
+}
+[[nodiscard]] inline DetailsPaneTab stringToSidebarTab(const QString &str) {
+  return stringToDetailsPaneTab(str);
 }
 
 } // namespace CollectionUtils
@@ -315,6 +374,24 @@ struct CollectionConfig {
   /// upgrade and try Horizontal mode still get a sensible default. Clamped to
   /// the same [MIN_WIDTH, MAX_WIDTH] range as gridWidth at save time.
   int horizontalGridHeight = 0;
+  /// Kartend-0p3w: alternate items-per-row applied when the sidebar is hidden
+  /// AND the active sidebar mode actually shrinks the grid (Expand). 0 means
+  /// "inherit gridWidth" so existing collections behave unchanged. Overlay mode
+  /// always uses gridWidth regardless of sidebar visibility, since the floating
+  /// sidebar doesn't reduce the grid's available area.
+  int gridWidthSidebarHidden = 0;
+  /// Kartend-0p3w: alternate items-per-column for Horizontal view, applied when
+  /// the sidebar is hidden in Expand mode. 0 means "inherit horizontalGridHeight"
+  /// (which itself falls back to gridWidth when 0).
+  int horizontalGridHeightSidebarHidden = 0;
+  /// Kartend-u2gx: alternate vertical-axis grid override applied when a
+  /// Top/Bottom-docked details pane hides in Expand mode. Reserved for views
+  /// that have a meaningful items-per-column dimension (e.g. Horizontal); 0
+  /// means "no override" so existing layouts are unaffected. Sibling to
+  /// gridWidthSidebarHidden but for the vertical-shrink case. Persisted but
+  /// not yet consumed by the layout calculator — exposed here so callers can
+  /// round-trip the value through INI and the kart manifest.
+  int gridHeightSidebarHidden = 0;
   bool sidebarVisible;
   int parentCollectionIndex = -1;
   bool isSubcollection = false;
@@ -374,6 +451,13 @@ struct CollectionConfig {
   /// their historical look. When `sidebarWidthLocked` is true the user
   /// cannot drag the inner edge to resize.
   int sidebarWidth = UIConstants::Sidebar::FIXED_WIDTH;
+  /// Kartend-u2gx: preferred pane height when docked Top or Bottom. Floored at
+  /// MIN_HEIGHT at apply time; no upper bound. Defaults to FIXED_HEIGHT so a
+  /// fresh switch to Top/Bottom dock has a sensible size.
+  int sidebarHeight = UIConstants::Sidebar::FIXED_HEIGHT;
+  /// Kartend-u2gx: name kept as `sidebarWidthLocked` to preserve the existing
+  /// INI key, but semantically locks BOTH width drag (L/R) and height drag
+  /// (T/B). When true the user cannot drag the inner edge to resize.
   bool sidebarWidthLocked = true;
   /// Which built-in sidebar tab is active. Persisted per collection so users
   /// can keep one collection on the Collection summary tab while another
@@ -524,6 +608,9 @@ struct CollectionConfig {
            collectionIcon == other.collectionIcon && extensions == other.extensions &&
            customArtworkTypes == other.customArtworkTypes && gridWidth == other.gridWidth &&
            horizontalGridHeight == other.horizontalGridHeight &&
+           gridWidthSidebarHidden == other.gridWidthSidebarHidden &&
+           horizontalGridHeightSidebarHidden == other.horizontalGridHeightSidebarHidden &&
+           gridHeightSidebarHidden == other.gridHeightSidebarHidden &&
            sidebarVisible == other.sidebarVisible &&
            parentCollectionIndex == other.parentCollectionIndex &&
            isSubcollection == other.isSubcollection &&
@@ -546,7 +633,8 @@ struct CollectionConfig {
            sidebarSectionBgColor == other.sidebarSectionBgColor &&
            sidebarHeaderBgOpacity == other.sidebarHeaderBgOpacity &&
            sidebarSectionBgOpacity == other.sidebarSectionBgOpacity &&
-           sidebarWidth == other.sidebarWidth && sidebarWidthLocked == other.sidebarWidthLocked &&
+           sidebarWidth == other.sidebarWidth && sidebarHeight == other.sidebarHeight &&
+           sidebarWidthLocked == other.sidebarWidthLocked &&
            sidebarActiveTab == other.sidebarActiveTab && viewType == other.viewType &&
            horizontalSpacing == other.horizontalSpacing &&
            verticalSpacing == other.verticalSpacing &&
@@ -643,6 +731,23 @@ struct CollectionConfig {
       horizontalGridHeight = std::clamp(horizontalGridHeight, UIConstants::Grid::MIN_WIDTH,
                                         UIConstants::Grid::MAX_WIDTH);
     }
+    // Kartend-0p3w: 0 stays 0 ("inherit primary"); any non-zero alt is clamped
+    // to the same valid range so a hand-edit can't pin the grid at 0 columns.
+    if (gridWidthSidebarHidden != 0) {
+      gridWidthSidebarHidden = std::clamp(gridWidthSidebarHidden, UIConstants::Grid::MIN_WIDTH,
+                                          UIConstants::Grid::MAX_WIDTH);
+    }
+    if (horizontalGridHeightSidebarHidden != 0) {
+      horizontalGridHeightSidebarHidden = std::clamp(horizontalGridHeightSidebarHidden,
+                                                     UIConstants::Grid::MIN_WIDTH,
+                                                     UIConstants::Grid::MAX_WIDTH);
+    }
+    // Kartend-u2gx: same 0-stays-0 rule for the vertical-shrink override used
+    // when a Top/Bottom-docked details pane hides in Expand mode.
+    if (gridHeightSidebarHidden != 0) {
+      gridHeightSidebarHidden = std::clamp(gridHeightSidebarHidden, UIConstants::Grid::MIN_WIDTH,
+                                           UIConstants::Grid::MAX_WIDTH);
+    }
     itemWidth = std::clamp(itemWidth, UIConstants::Item::MIN_WIDTH, UIConstants::Item::MAX_WIDTH);
     itemHeight =
         std::clamp(itemHeight, UIConstants::Item::MIN_HEIGHT, UIConstants::Item::MAX_HEIGHT);
@@ -659,6 +764,8 @@ struct CollectionConfig {
     listRowHeight = std::clamp(listRowHeight, UIConstants::ListView::MIN_ROW_HEIGHT,
                                UIConstants::ListView::MAX_ROW_HEIGHT);
     sidebarWidth = std::max(sidebarWidth, UIConstants::Sidebar::MIN_WIDTH);
+    // Kartend-u2gx: floor pane height; same no-upper-bound treatment as width.
+    sidebarHeight = std::max(sidebarHeight, UIConstants::Sidebar::MIN_HEIGHT);
     // Kartend-qbp3: corner darkness percent. 0 = effect off (the toggle is
     // separate); 100 = pitch black at the corners.
     vignetteIntensity = std::clamp(vignetteIntensity, 0, 100);
@@ -711,6 +818,32 @@ namespace CollectionUtils {
     return UIConstants::Grid::DEFAULT_WIDTH;
   }
   return (*collections)[*indexPtr].gridWidth;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Effective grid sizing helpers (Kartend-0p3w)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// "Sidebar shrinking active" is the predicate captured by the caller: sidebar
+// is currently hidden AND the collection's sidebarMode is Expand (i.e. the
+// sidebar would push the grid when shown). Overlay mode never shrinks, so we
+// always use the primary value there. The alt fields default to 0, which means
+// "inherit the primary" — a fresh upgrade keeps existing layout behavior.
+
+[[nodiscard]] inline int effectiveGridWidth(const CollectionConfig &config,
+                                            bool sidebarShrinkingActive) {
+  if (sidebarShrinkingActive && config.gridWidthSidebarHidden > 0) {
+    return config.gridWidthSidebarHidden;
+  }
+  return config.gridWidth;
+}
+
+[[nodiscard]] inline int effectiveHorizontalGridHeight(const CollectionConfig &config,
+                                                      bool sidebarShrinkingActive) {
+  if (sidebarShrinkingActive && config.horizontalGridHeightSidebarHidden > 0) {
+    return config.horizontalGridHeightSidebarHidden;
+  }
+  return config.horizontalGridHeight;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -982,6 +1115,17 @@ struct GeneralSettings {
   // ─────────────────────────────────────────────────────────────────────────
   QString collectionTypeFilter;
   bool hideSubcollectionTiles = false;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // View-mode toggles (Kartend-lfu0)
+  // Persisted state for the View → Show Menu Bar (F10), Show Toolbar (F8),
+  // and Fullscreen (F11) actions so the chosen UI chrome survives across
+  // launches. Defaults match the original .ui-defined "all visible, not
+  // fullscreen" state so a fresh install opens unchanged.
+  // ─────────────────────────────────────────────────────────────────────────
+  bool showMenuBar = true;
+  bool showToolbar = true;
+  bool fullscreen = false;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Customizable toolbar (Kartend-81o)

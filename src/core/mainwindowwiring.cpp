@@ -352,6 +352,11 @@ void MainWindow::connectSidebarManager() {
             getSidebarManager()->updateSidebarMetadata(widgetPtr);
           }
         }
+        // Kartend-0p3w: push the "sidebar hidden AND would shrink" predicate
+        // into ScrollManager so the upcoming metrics recompute picks the right
+        // gridWidth / horizontalGridHeight pair. Overlay mode never shrinks
+        // (the sidebar floats), so it stays on the primary values.
+        updateScrollManagerSidebarShrinking();
         // Delay metrics recalculation to allow sidebar animation to complete
         // before recalculating grid layout dimensions
         QTimer::singleShot(UIConstants::Sidebar::METRICS_RECALC_DELAY_MS, this, [this]() {
@@ -374,6 +379,44 @@ void MainWindow::connectSidebarManager() {
       }
     }
   });
+}
+
+void MainWindow::updateScrollManagerSidebarShrinking() {
+  if (!getScrollManager() || !getSidebarManager()) {
+    return;
+  }
+  // Use SidebarManager's tracked index rather than MainWindow::currentCollectionIndex
+  // because this can be called from inside applySidebarStateForCollection (via
+  // its sidebarVisibilityChanged emission) before MainWindow has caught up to
+  // the new index after a collection switch.
+  const int idx = getSidebarManager()->currentCollectionIndex();
+  if (idx < 0 || idx >= m_collections.size()) {
+    getScrollManager()->setSidebarShrinkingActive(false);
+    return;
+  }
+  const CollectionConfig &collection = m_collections[idx];
+  // Overlay mode never shrinks the grid (the sidebar floats over content), so
+  // the alt gridWidth only applies in Expand mode while the sidebar is hidden.
+  if (collection.sidebarMode != SidebarMode::Expand) {
+    getScrollManager()->setSidebarShrinkingActive(false);
+    return;
+  }
+  const bool sidebarHidden = !getSidebarManager()->isSidebarVisible();
+  // The pane only shrinks the grid along its own dock axis. A vertical-axis
+  // dock (Top/Bottom) takes height, so vertical-scrolling views (Grid/List/
+  // CoverFlow) — whose layout dimension is items-per-row, i.e. horizontal —
+  // are unaffected by it. Symmetrically, an L/R dock leaves Horizontal view's
+  // items-per-column dimension untouched. When the pane doesn't reduce the
+  // relevant axis at all, the alt-when-hidden value should stay in effect
+  // even while the pane is visible — toggling it never reclaimed any space
+  // along that axis, so the user's "more items" value isn't a hidden-only
+  // arrangement, it's the only correct one for that combo.
+  const bool paneIsHorizontalDock =
+      CollectionUtils::isDetailsPaneHorizontal(collection.sidebarPosition);
+  const bool relevantAxisIsHorizontal = (collection.viewType != ViewType::Horizontal);
+  const bool paneAffectsRelevantAxis =
+      relevantAxisIsHorizontal ? !paneIsHorizontalDock : paneIsHorizontalDock;
+  getScrollManager()->setSidebarShrinkingActive(sidebarHidden || !paneAffectsRelevantAxis);
 }
 
 void MainWindow::connectSearchComponents() {

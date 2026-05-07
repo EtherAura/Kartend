@@ -83,6 +83,18 @@ public:
   /// settings dialog change, collection switch).
   void syncLayoutActions(ViewType viewType);
 
+  /// Sync the View → Details Pane Orientation submenu's checked entry with
+  /// the active collection's persisted sidebarPosition. Called by MainWindow
+  /// on collection switch / settings save so the menu reflects the current
+  /// pane edge.
+  void syncOrientationActions(SidebarPosition position);
+
+  /// Restore persisted Show Menu Bar / Show Toolbar / Fullscreen states from
+  /// GeneralSettings. Called once from setupMenuBar() after every action has
+  /// been wired so checked states and widget visibility stay in lockstep on
+  /// startup (Kartend-lfu0).
+  void applyPersistedViewState();
+
 private:
   MenuControllerContext m_ctx;
 
@@ -96,6 +108,12 @@ private:
   QAction *m_exportKartAction = nullptr;
   QActionGroup *m_sortActionGroup = nullptr;
   QActionGroup *m_layoutActionGroup = nullptr;
+  QActionGroup *m_orientationActionGroup = nullptr;
+  QMenu *m_orientationMenu = nullptr;
+  QAction *m_orientationActionRight = nullptr;
+  QAction *m_orientationActionLeft = nullptr;
+  QAction *m_orientationActionTop = nullptr;
+  QAction *m_orientationActionBottom = nullptr;
 
   // Setup methods for each action group
   void setupActionExit();
@@ -118,6 +136,11 @@ private:
   void setupRecentMenu();
   void setupMostLaunchedMenu();
   void setupLayoutActions();
+  /// Build the View → Details Pane Orientation submenu. Each entry mutates
+  /// the current collection's `sidebarPosition`, persists via SettingsManager,
+  /// and re-applies the layout via SidebarManager so the change takes effect
+  /// without requiring a pane toggle. Mirrors the toolbar/settings flow.
+  void setupActionDetailsPaneOrientation();
   void insertFullscreenInViewMenu(QAction *fullscreenAction);
 
   // Repopulate the Recent submenu from items.last_played (Kartend-j5l3);

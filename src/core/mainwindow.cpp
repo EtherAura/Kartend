@@ -58,6 +58,7 @@
 #include "splashoverlay.h"
 #include "startupvideooverlay.h"
 #include "stringutils.h"
+#include "textzoomhud.h"
 #include "timerutils.h"
 #include "videopreviewwidget.h"
 #include "ui_mainwindow.h"
@@ -352,6 +353,13 @@ void MainWindow::setupPreviewVolumeSlider() {
 
 void MainWindow::applyTextZoom(int percent) {
   const int clamped = std::clamp(percent, 50, 300);
+  // Always surface the HUD, even when the value didn't change — that's the
+  // signal to the user that the keypress was received and they're already at
+  // the floor/ceiling. Without this, pressing Ctrl+- at 50% would feel like
+  // the shortcut wasn't registered.
+  if (m_textZoomHud) {
+    m_textZoomHud->showZoom(clamped);
+  }
   if (clamped == g_textZoomPercent && clamped == m_generalSettings.uiTextZoomPercent) {
     return;
   }
@@ -850,6 +858,7 @@ void MainWindow::updateWindowTitleForCollection(int collectionIndex) {
     // collection switch.
     if (m_menuController) {
       m_menuController->syncLayoutActions(viewType);
+      m_menuController->syncOrientationActions(m_collections[collectionIndex].sidebarPosition);
     }
   }
   // Sync the consolidated filter popup so the per-collection title-pattern

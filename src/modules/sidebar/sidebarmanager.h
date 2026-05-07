@@ -8,6 +8,7 @@
 #include <QWidget>
 
 class QHBoxLayout;
+class QVBoxLayout;
 class QScrollArea;
 class MetadataSidebar;
 class ItemWidget;
@@ -22,6 +23,14 @@ struct SidebarManagerSetup {
   MetadataSidebar *sidebar = nullptr;
   QWidget *itemsPage = nullptr;
   QHBoxLayout *mainLayout = nullptr;
+  /// Kartend-u2gx: outer vertical layout (`itemsPageLayout`) the details pane
+  /// docks into for Top/Bottom Expand mode. Optional — without it, T/B Expand
+  /// falls back to the L/R behavior so older callers keep compiling.
+  QVBoxLayout *outerLayout = nullptr;
+  /// Kartend-u2gx: the content widget that holds `mainLayout`. Used to locate
+  /// the insertion index when docking the pane above (Top) or below (Bottom)
+  /// it in `outerLayout`.
+  QWidget *contentWidget = nullptr;
   QScrollArea *scrollArea = nullptr;
   SettingsManager *settingsManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
@@ -54,6 +63,7 @@ public:
   /// switches, scan completions, or settings saves.
   void refreshCollectionSummary();
   [[nodiscard]] bool isSidebarVisible() const;
+  [[nodiscard]] MetadataSidebar *sidebarWidget() const { return m_MetadataSidebar; }
   void saveSidebarStateForCollection(int collectionIndex, bool visible);
   void saveSidebarStateForCollection(const QString &collectionName, bool visible);
   [[nodiscard]] int currentCollectionIndex() const { return m_currentCollectionIndex; }
@@ -106,6 +116,13 @@ private:
   MetadataSidebar *m_MetadataSidebar;
   QWidget *m_itemsPage;
   QHBoxLayout *m_mainHorizontalLayout;
+  /// Kartend-u2gx: outer vertical layout used for Top/Bottom Expand dock.
+  /// nullptr when a caller doesn't supply one — T/B Expand falls back to
+  /// Overlay-style absolute positioning in that case.
+  QVBoxLayout *m_outerLayout = nullptr;
+  /// Kartend-u2gx: the widget owning `m_mainHorizontalLayout`. Used to anchor
+  /// the pane's insertion index in `m_outerLayout`.
+  QWidget *m_mainContentWidget = nullptr;
   QScrollArea *m_itemScrollArea;
   SettingsManager *m_settingsManager = nullptr;
   ArtworkManager *m_artworkManager = nullptr;

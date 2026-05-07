@@ -271,33 +271,34 @@ void SettingsDialog::updateFieldVisibility() {
 
   if (hasContentDir) {
     updateUIForLauncherType(ui->launcherLineEdit->text());
-    updateExtractArchivesVisibility();
   } else {
     ui->label_core->setVisible(false);
     ui->coreLineEdit->setVisible(false);
     ui->browseCoreButton->setVisible(false);
-    ui->label_extractArchives->setVisible(false);
-    ui->extractArchivesCheckBox->setVisible(false);
-    ui->label_extractedExtension->setVisible(false);
-    ui->extractedExtensionLineEdit->setVisible(false);
   }
+  // Archive Handling stays visible regardless of content dir / launcher type
+  // so the user can toggle the option freely.
+  updateExtractArchivesVisibility();
 
   ui->label_sidebarMode->setVisible(true);
   ui->sidebarModeComboBox->setVisible(true);
 }
 
 void SettingsDialog::updateExtractArchivesVisibility() {
-  bool usesLibretroCore = LauncherUtils::usesLibretroCore(ui->launcherLineEdit->text());
+  // Archive Handling section is always visible — historically gated to
+  // libretro frontends, but the user wants the toggle accessible regardless
+  // of launcher type.
+  ui->label_extractArchives->setVisible(true);
+  ui->extractArchivesCheckBox->setVisible(true);
+
+  // Launch Extension is meaningful only when extraction is enabled.
   bool extractEnabled = ui->extractArchivesCheckBox->isChecked();
+  ui->label_extractedExtension->setVisible(extractEnabled);
+  ui->extractedExtensionLineEdit->setVisible(extractEnabled);
 
-  // Show extract archives option only for libretro frontends, since the
-  // archive-extract preflight is what feeds those cores.
-  ui->label_extractArchives->setVisible(usesLibretroCore);
-  ui->extractArchivesCheckBox->setVisible(usesLibretroCore);
-
-  // Show extracted extension field only when extraction is enabled
-  ui->label_extractedExtension->setVisible(usesLibretroCore && extractEnabled);
-  ui->extractedExtensionLineEdit->setVisible(usesLibretroCore && extractEnabled);
+  if (ui->launcherArchiveGroupBox) {
+    ui->launcherArchiveGroupBox->setVisible(true);
+  }
 }
 
 void SettingsDialog::onExtractArchivesToggled(bool checked) {
@@ -308,6 +309,19 @@ void SettingsDialog::onExtractArchivesToggled(bool checked) {
 void SettingsDialog::updateSidebarModeVisibility() {
   ui->label_sidebarMode->setVisible(true);
   ui->sidebarModeComboBox->setVisible(true);
+
+  // Kartend-u2gx: width-vs-height field visibility tracks the position combo.
+  // Right/Left expose Width; Top/Bottom expose Height. The lock checkbox
+  // governs both directions so it stays visible regardless.
+  if (ui->sidebarPositionComboBox) {
+    const auto pos =
+        static_cast<DetailsPanePosition>(ui->sidebarPositionComboBox->currentIndex());
+    const bool horizontalDock = CollectionUtils::isDetailsPaneHorizontal(pos);
+    if (ui->label_sidebarWidth) ui->label_sidebarWidth->setVisible(!horizontalDock);
+    if (ui->sidebarWidthSpinBox) ui->sidebarWidthSpinBox->setVisible(!horizontalDock);
+    if (ui->label_sidebarHeight) ui->label_sidebarHeight->setVisible(horizontalDock);
+    if (ui->sidebarHeightSpinBox) ui->sidebarHeightSpinBox->setVisible(horizontalDock);
+  }
 }
 
 void SettingsDialog::updateGridWidthLimits() {

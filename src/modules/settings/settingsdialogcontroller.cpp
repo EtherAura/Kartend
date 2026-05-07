@@ -39,7 +39,14 @@ auto compareNonReloadFields(const CollectionConfig &configA, const CollectionCon
       configA.extractedExtension != configB.extractedExtension ||
       configA.expandMode != configB.expandMode ||
       configA.parentCollectionIndex != configB.parentCollectionIndex ||
-      configA.isSubcollection != configB.isSubcollection) {
+      configA.isSubcollection != configB.isSubcollection ||
+      // Without sidebarPosition here, an orientation-only edit in the settings
+      // dialog returned hasChanges=false and silently dropped the new value —
+      // the user had to toggle the pane (or change another field) before the
+      // chosen edge took effect. applySidebarStateForCollection downstream
+      // re-runs the layout swap so the pane reparents into the right Qt
+      // layout immediately on save.
+      configA.sidebarPosition != configB.sidebarPosition) {
     hasChanges = true;
   }
 }

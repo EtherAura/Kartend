@@ -128,9 +128,15 @@ public:
    * @brief Calculate grid metrics from collection configuration.
    * @param config Collection configuration with grid settings.
    * @param totalItems Total number of items to lay out.
+   * @param sidebarShrinkingActive Kartend-0p3w: when true, the sidebar is hidden
+   *        AND its mode would shrink the grid (Expand) — apply the alternate
+   *        gridWidthSidebarHidden / horizontalGridHeightSidebarHidden values
+   *        when configured. Defaults to false so existing call sites that don't
+   *        care about sidebar state keep using the primary fields.
    * @return Computed grid metrics.
    */
-  [[nodiscard]] static GridMetrics calculateMetrics(const CollectionConfig &config, int totalItems);
+  [[nodiscard]] static GridMetrics calculateMetrics(const CollectionConfig &config, int totalItems,
+                                                    bool sidebarShrinkingActive = false);
 
   /**
    * @brief Recalculate metrics for filtered view with fewer items.

@@ -199,6 +199,12 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.historyEnabled = s.value("historyEnabled", true).toBool();
   settings.historyMaxEntries = qBound(10, s.value("historyMaxEntries", 500).toInt(), 50000);
 
+  // View-mode toggles (Kartend-lfu0). Defaults match the .ui defaults so an
+  // upgrading install sees no change until the user toggles F8/F10/F11.
+  settings.showMenuBar = s.value("showMenuBar", true).toBool();
+  settings.showToolbar = s.value("showToolbar", true).toBool();
+  settings.fullscreen = s.value("fullscreen", false).toBool();
+
   // Customizable toolbar (Kartend-81o). Default visibility is "shown" so an
   // upgrading user sees the toolbar exactly as before; custom text strings
   // default to empty (use the .ui label).
@@ -326,6 +332,10 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   // Launch history (Kartend-fse)
   m_generalSettings.historyEnabled = settings.historyEnabled;
   m_generalSettings.historyMaxEntries = qBound(10, settings.historyMaxEntries, 50000);
+  // View-mode toggles (Kartend-lfu0)
+  m_generalSettings.showMenuBar = settings.showMenuBar;
+  m_generalSettings.showToolbar = settings.showToolbar;
+  m_generalSettings.fullscreen = settings.fullscreen;
   // Customizable toolbar (Kartend-81o)
   m_generalSettings.toolbarShowGridViewButton = settings.toolbarShowGridViewButton;
   m_generalSettings.toolbarShowListViewButton = settings.toolbarShowListViewButton;
@@ -422,6 +432,10 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
              m_generalSettings.attractModeAdvanceSelectionRandom);
   s.setValue("bootSplashEnabled", m_generalSettings.bootSplashEnabled);
   s.setValue("resumeFocusSplashEnabled", m_generalSettings.resumeFocusSplashEnabled);
+  // View-mode toggles (Kartend-lfu0)
+  s.setValue("showMenuBar", m_generalSettings.showMenuBar);
+  s.setValue("showToolbar", m_generalSettings.showToolbar);
+  s.setValue("fullscreen", m_generalSettings.fullscreen);
   // Customizable toolbar (Kartend-81o)
   s.setValue("toolbarShowGridViewButton", m_generalSettings.toolbarShowGridViewButton);
   s.setValue("toolbarShowListViewButton", m_generalSettings.toolbarShowListViewButton);

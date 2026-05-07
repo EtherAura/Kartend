@@ -5,6 +5,7 @@
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -18,7 +19,12 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
   setModal(true);
 
   auto *layout = new QVBoxLayout(this);
+  layout->setContentsMargins(12, 12, 12, 12);
+  layout->setSpacing(10);
   auto *form = new QFormLayout();
+  form->setHorizontalSpacing(8);
+  form->setVerticalSpacing(6);
+  form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
   m_form = form;
 
   // Kartend-p1jd: only render the preset combo when the caller passed a
@@ -53,6 +59,7 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
   auto *launcherRow = new QHBoxLayout();
   launcherRow->addWidget(m_launcherEdit);
   auto *browseLauncher = new QPushButton(tr("Browse"), this);
+  browseLauncher->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::DocumentOpen));
   connect(browseLauncher, &QPushButton::clicked, this, &LauncherEditorDialog::onBrowseLauncher);
   launcherRow->addWidget(browseLauncher);
   form->addRow(tr("Launcher:"), launcherRow);
@@ -67,6 +74,7 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
   coreRow->setContentsMargins(0, 0, 0, 0);
   coreRow->addWidget(m_coreEdit);
   auto *browseCore = new QPushButton(tr("Browse"), this);
+  browseCore->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::DocumentOpen));
   connect(browseCore, &QPushButton::clicked, this, &LauncherEditorDialog::onBrowseCore);
   coreRow->addWidget(browseCore);
   form->addRow(tr("Core Path:"), m_coreRowWidget);
@@ -82,7 +90,7 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   layout->addWidget(buttons);
 
-  resize(480, 220);
+  resize(640, 280);
 
   // Kartend-bafi: live-track the launcher path so the core row appears the
   // moment the user types/browses to a retroarch executable.

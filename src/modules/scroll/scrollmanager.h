@@ -105,6 +105,14 @@ public:
   /// since the value only feeds the layout in that mode. Pass 0 to mean
   /// "fall back to gridWidth".
   void updateHorizontalGridHeight(int newHorizontalGridHeight);
+  /// Kartend-0p3w: track whether the sidebar is currently hidden AND its mode
+  /// would shrink the grid (Expand). MainWindow updates this whenever the
+  /// sidebar's visibility changes, before triggering recalculateContainerMetrics.
+  /// When the flag is true and the active collection has gridWidthSidebarHidden
+  /// (or horizontalGridHeightSidebarHidden) configured non-zero, those values
+  /// override the primary ones in the layout calculator.
+  void setSidebarShrinkingActive(bool active);
+  [[nodiscard]] bool sidebarShrinkingActive() const { return m_sidebarShrinkingActive; }
   void updateViewType(ViewType viewType);
   void updateVirtualView();
   [[nodiscard]] int getEffectiveHorizontalSpacing() const;
@@ -343,6 +351,11 @@ private:
   bool m_isMutating = false;
   DatabaseManager *m_databaseManager = nullptr;
   bool m_destroying = false;
+  // Kartend-0p3w: cached sidebar-hidden-and-shrinking predicate, fed by
+  // MainWindow on sidebar-visibility changes. Read by VirtualScrollEngine when
+  // it builds layout metrics so the alternate per-collection grid sizes apply
+  // automatically.
+  bool m_sidebarShrinkingActive = false;
   bool m_processingScrollChange = false; // Reentrancy guard for onScrollChanged
   TimerUtils::DebouncedTimer *m_userScrollIdleTimer = nullptr;
   TimerUtils::DebouncedTimer *m_prewarmIdleTimer = nullptr;

@@ -40,6 +40,7 @@
 #include "sidebarmanager.h"
 #include "splashoverlay.h"
 #include "stringutils.h"
+#include "textzoomhud.h"
 #include "timerutils.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
@@ -225,6 +226,11 @@ void MainWindow::setupUIReferences() {
   // QObject tree across the application lifetime; DetailPageManager drives
   // it via setupReferences below.
   m_detailPageOverlay = new DetailPageOverlay(ui->centralwidget);
+
+  // Kartend-0w4i: transient pill that flashes the current text-zoom percent
+  // on every Ctrl+/-/0 press. Parented to centralwidget so it floats above
+  // all content and tracks parent resizes via its own eventFilter.
+  m_textZoomHud = new TextZoomHud(ui->centralwidget);
 }
 
 void MainWindow::initializeAppContext() {
@@ -323,17 +329,27 @@ void MainWindow::adjustGridWidth(int delta) {
   }
 
   CollectionConfig &config = m_collections[currentCollectionIndex];
-  int newWidth = config.gridWidth + delta;
+
+  // Kartend-0p3w: figure out which gridWidth field is currently driving the
+  // layout, and mutate that one. When sidebar is hidden in Expand mode AND the
+  // alt is configured non-zero, the alt is the active field; otherwise the
+  // primary gridWidth is. Sidebar shrinking state is cached on ScrollManager so
+  // we don't have to recompute the predicate here.
+  const bool useAltField = getScrollManager() && getScrollManager()->sidebarShrinkingActive() &&
+                           config.gridWidthSidebarHidden > 0;
+  int &activeField = useAltField ? config.gridWidthSidebarHidden : config.gridWidth;
+
+  int newWidth = activeField + delta;
 
   // Clamp to valid range
   newWidth = qBound(UIConstants::Grid::MIN_WIDTH, newWidth, UIConstants::Grid::MAX_WIDTH);
 
-  if (newWidth == config.gridWidth) {
+  if (newWidth == activeField) {
     return; // No change needed
   }
 
   // Update the collection config
-  config.gridWidth = newWidth;
+  activeField = newWidth;
 
   // Persist the change (debounced) to avoid repeated disk writes when the user
   // holds the shortcut.
@@ -394,6 +410,11 @@ void MainWindow::setupSidebar() {
     SidebarManagerSetup setup;
     setup.ctx = &m_appContext;
     setup.mainLayout = m_mainHorizontalLayout;
+    // Kartend-u2gx: outer vertical layout + content widget enable Top/Bottom
+    // dock in Expand mode. Both come straight from the .ui — no new widgets
+    // needed.
+    setup.outerLayout = ui->itemsPageLayout;
+    setup.contentWidget = m_mainContentWidget;
     setup.settingsManager = getSettingsManager();
     setup.artworkManager = getArtworkManager();
     setup.databaseManager = getDatabaseManager();

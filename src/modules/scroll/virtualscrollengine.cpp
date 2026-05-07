@@ -372,8 +372,8 @@ void VirtualScrollEngine::cleanupVirtualContainer() {
 
 void VirtualScrollEngine::calculateVirtualMetrics() {
   // Use GridLayoutCalculator for metrics calculation
-  m_owner->m_metrics =
-      GridLayoutCalculator::calculateMetrics(m_owner->m_context.config, m_owner->m_totalItems);
+  m_owner->m_metrics = GridLayoutCalculator::calculateMetrics(
+      m_owner->m_context.config, m_owner->m_totalItems, m_owner->m_sidebarShrinkingActive);
 
   // List mode: set item width to fill available viewport (minus scrollbar and
   // margins)

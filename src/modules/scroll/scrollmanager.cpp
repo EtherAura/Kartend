@@ -323,10 +323,19 @@ void ScrollManager::updateViewType(ViewType viewType) {
 }
 
 void ScrollManager::updateGridWidth(int newGridWidth) {
-  if (m_context.config.gridWidth == newGridWidth) {
+  // Kartend-0p3w: route the write to whichever field is currently active, so
+  // calculateMetrics (which reads via the effective-value helpers) picks it up
+  // on the next recompute. When the alt field is 0 (= "inherit primary") and
+  // we're shrinking, treat the alt as "newly configured" and store there
+  // instead of overwriting the primary — that way Ctrl+/- while sidebar is
+  // hidden specializes the alt the moment the user diverges from the primary.
+  int &target = (m_sidebarShrinkingActive && m_context.config.gridWidthSidebarHidden > 0)
+                    ? m_context.config.gridWidthSidebarHidden
+                    : m_context.config.gridWidth;
+  if (target == newGridWidth) {
     return;
   }
-  m_context.config.gridWidth = newGridWidth;
+  target = newGridWidth;
   if (!m_virtualContainer) {
     return;
   }
@@ -344,10 +353,15 @@ void ScrollManager::updateGridWidth(int newGridWidth) {
 }
 
 void ScrollManager::updateHorizontalGridHeight(int newHorizontalGridHeight) {
-  if (m_context.config.horizontalGridHeight == newHorizontalGridHeight) {
+  // Kartend-0p3w: same active-field routing as updateGridWidth.
+  int &target =
+      (m_sidebarShrinkingActive && m_context.config.horizontalGridHeightSidebarHidden > 0)
+          ? m_context.config.horizontalGridHeightSidebarHidden
+          : m_context.config.horizontalGridHeight;
+  if (target == newHorizontalGridHeight) {
     return;
   }
-  m_context.config.horizontalGridHeight = newHorizontalGridHeight;
+  target = newHorizontalGridHeight;
   // Only Horizontal view consults this field — other modes can absorb the
   // setting change silently and pick it up the next time they switch in.
   if (m_context.config.viewType != ViewType::Horizontal || !m_virtualContainer) {
@@ -515,7 +529,22 @@ void ScrollManager::notifyUserActivity() {
 }
 
 auto ScrollManager::getCurrentGridWidth() const -> int {
-  return m_context.config.gridWidth;
+  // Kartend-0p3w: returns the items-per-row currently driving the layout —
+  // matches what calculateMetrics() picks (alt when sidebar is hidden in
+  // Expand mode and the alt is configured, otherwise primary). Callers that
+  // navigate by visual rows (arrow keys, mouse wheel selection) must see the
+  // active value, not the persisted primary.
+  return CollectionUtils::effectiveGridWidth(m_context.config, m_sidebarShrinkingActive);
+}
+
+void ScrollManager::setSidebarShrinkingActive(bool active) {
+  if (m_sidebarShrinkingActive == active) {
+    return;
+  }
+  m_sidebarShrinkingActive = active;
+  // The actual relayout is driven by the existing recalculateContainerMetrics
+  // path that MainWindow already runs after sidebar-visibility changes — we
+  // just need the flag in place before that runs. No need to trigger here.
 }
 
 auto ScrollManager::getEffectiveViewportWidth() const -> int {

@@ -25,6 +25,7 @@
 #include <QSet>
 #include <QString>
 #include <QTimer>
+#include <QVBoxLayout>
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcSidebarManager, "kartend.sidebarmanager")
@@ -52,6 +53,8 @@ void SidebarManager::setupReferences(const SidebarManagerSetup &setup) {
   m_MetadataSidebar = setup.getSidebar();
   m_itemsPage = setup.getItemsPage();
   m_mainHorizontalLayout = setup.mainLayout;
+  m_outerLayout = setup.outerLayout;
+  m_mainContentWidget = setup.contentWidget;
   m_itemScrollArea = setup.getScrollArea();
   m_settingsManager = setup.getSettingsManager();
   m_artworkManager = setup.getArtworkManager();
@@ -93,6 +96,32 @@ void SidebarManager::setupReferences(const SidebarManagerSetup &setup) {
         return;
       }
       (*m_collections)[m_currentCollectionIndex].sidebarWidth = width;
+      if (m_settingsManager) {
+        m_settingsManager->saveCollections(*m_collections);
+      }
+    });
+    // Kartend-u2gx: height-drag handlers for Top/Bottom dock. Mirror the width
+    // pair — live setFixedHeight() during the drag, persist on commit. In
+    // Overlay mode the pane is absolutely positioned so we re-anchor; in
+    // Expand mode the outer QVBoxLayout reflows automatically.
+    connect(m_MetadataSidebar, &MetadataSidebar::heightDragged, this, [this](int height) {
+      if (!m_MetadataSidebar) return;
+      m_MetadataSidebar->setFixedHeight(height);
+      bool isFixedMode = false;
+      if (m_collections && m_currentCollectionIndex >= 0 &&
+          m_currentCollectionIndex < m_collections->size()) {
+        isFixedMode = (*m_collections)[m_currentCollectionIndex].sidebarMode == SidebarMode::Expand;
+      }
+      if (!isFixedMode) {
+        positionSidebarOverlay();
+      }
+    });
+    connect(m_MetadataSidebar, &MetadataSidebar::heightCommitted, this, [this](int height) {
+      if (!m_collections || m_currentCollectionIndex < 0 ||
+          m_currentCollectionIndex >= m_collections->size()) {
+        return;
+      }
+      (*m_collections)[m_currentCollectionIndex].sidebarHeight = height;
       if (m_settingsManager) {
         m_settingsManager->saveCollections(*m_collections);
       }
@@ -441,15 +470,18 @@ void SidebarManager::positionSidebarOverlay() {
   }
 
   const int sidebarMargin = UIConstants::Sidebar::MARGIN;
-  int sidebarWidth = m_MetadataSidebar->width() > 0 ? m_MetadataSidebar->width()
-                                                    : UIConstants::Sidebar::FIXED_WIDTH;
 
-  // Read position from the active collection so the overlay anchors on the
-  // correct edge (Kartend-63e).
+  // Read position + size from the active collection so the overlay anchors on
+  // the correct edge (Kartend-63e / Kartend-u2gx).
   SidebarPosition position = SidebarPosition::Right;
+  int desiredWidth = UIConstants::Sidebar::FIXED_WIDTH;
+  int desiredHeight = UIConstants::Sidebar::FIXED_HEIGHT;
   if (m_collections && m_currentCollectionIndex >= 0 &&
       m_currentCollectionIndex < m_collections->size()) {
-    position = (*m_collections)[m_currentCollectionIndex].sidebarPosition;
+    const CollectionConfig &collection = (*m_collections)[m_currentCollectionIndex];
+    position = collection.sidebarPosition;
+    desiredWidth = std::max(collection.sidebarWidth, UIConstants::Sidebar::MIN_WIDTH);
+    desiredHeight = std::max(collection.sidebarHeight, UIConstants::Sidebar::MIN_HEIGHT);
   }
 
   QRect viewportRectInItems;
@@ -462,19 +494,32 @@ void SidebarManager::positionSidebarOverlay() {
 
   // Kartend-63e: anchor flush with the viewport edge — earlier code subtracted
   // a full scrollbar width to keep the bar visible to the right of the
-  // sidebar, but the user wants the gap minimized. The vertical scrollbar
-  // tucks behind the sidebar; mouse-wheel and keyboard scroll still work.
-  int sidebarX = 0;
-  if (position == SidebarPosition::Left) {
-    sidebarX = viewportRectInItems.left() + sidebarMargin;
-  } else {
-    sidebarX =
-        viewportRectInItems.left() + viewportRectInItems.width() - sidebarWidth - sidebarMargin;
-  }
-  const int sidebarY = viewportRectInItems.top() + sidebarMargin;
-  const int height = qMax(0, viewportRectInItems.height() - (sidebarMargin * 2));
+  // sidebar, but the user wants the gap minimized.
+  // Kartend-u2gx: Top/Bottom dock spans the full viewport perpendicular to
+  // the dock edge (i.e. full width, fixed height).
+  int x = viewportRectInItems.left() + sidebarMargin;
+  int y = viewportRectInItems.top() + sidebarMargin;
+  int w = qMax(0, viewportRectInItems.width() - (sidebarMargin * 2));
+  int h = qMax(0, viewportRectInItems.height() - (sidebarMargin * 2));
 
-  m_MetadataSidebar->setGeometry(sidebarX, sidebarY, sidebarWidth, height);
+  switch (position) {
+  case SidebarPosition::Left:
+    w = qMin(desiredWidth, viewportRectInItems.width() - sidebarMargin);
+    break;
+  case SidebarPosition::Right:
+    w = qMin(desiredWidth, viewportRectInItems.width() - sidebarMargin);
+    x = viewportRectInItems.left() + viewportRectInItems.width() - w - sidebarMargin;
+    break;
+  case SidebarPosition::Top:
+    h = qMin(desiredHeight, viewportRectInItems.height() - sidebarMargin);
+    break;
+  case SidebarPosition::Bottom:
+    h = qMin(desiredHeight, viewportRectInItems.height() - sidebarMargin);
+    y = viewportRectInItems.top() + viewportRectInItems.height() - h - sidebarMargin;
+    break;
+  }
+
+  m_MetadataSidebar->setGeometry(x, y, w, h);
   // Skip raise() while a fullscreen overlay (artwork preview) is showing —
   // the overlay needs to stay above the sidebar (Kartend-63e bug #7).
   if (!m_overlayActive) {
@@ -513,15 +558,56 @@ void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
   bool isFixedMode = false;
   SidebarPosition position = SidebarPosition::Right;
   int desiredWidth = UIConstants::Sidebar::FIXED_WIDTH;
+  int desiredHeight = UIConstants::Sidebar::FIXED_HEIGHT;
   if (m_collections && currentCollectionIndex >= 0 &&
       currentCollectionIndex < m_collections->size()) {
     const CollectionConfig &collection = (*m_collections)[currentCollectionIndex];
     isFixedMode = (collection.sidebarMode == SidebarMode::Expand);
     position = collection.sidebarPosition;
     desiredWidth = std::max(collection.sidebarWidth, UIConstants::Sidebar::MIN_WIDTH);
+    desiredHeight = std::max(collection.sidebarHeight, UIConstants::Sidebar::MIN_HEIGHT);
   }
 
-  bool wasInLayout = (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1);
+  // Kartend-u2gx: tracking "in some layout" rather than just the horizontal
+  // one — Top/Bottom Expand puts the pane in m_outerLayout instead.
+  auto inAnyLayout = [this]() {
+    if (m_mainHorizontalLayout && m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1) {
+      return true;
+    }
+    if (m_outerLayout && m_outerLayout->indexOf(m_MetadataSidebar) != -1) {
+      return true;
+    }
+    return false;
+  };
+  auto removeFromLayouts = [this]() {
+    if (m_mainHorizontalLayout && m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1) {
+      m_mainHorizontalLayout->removeWidget(m_MetadataSidebar);
+    }
+    if (m_outerLayout && m_outerLayout->indexOf(m_MetadataSidebar) != -1) {
+      m_outerLayout->removeWidget(m_MetadataSidebar);
+    }
+  };
+  // Kartend-u2gx: swap the size policy so a Top/Bottom-docked pane stretches
+  // horizontally with a fixed height, while a Left/Right-docked pane stretches
+  // vertically with a fixed width. Without this swap the .ui's Fixed/Expanding
+  // hsizetype/vsizetype would pin the pane to a narrow column even after we
+  // try to dock it across the top.
+  auto applyDockSizing = [this, position, desiredWidth, desiredHeight]() {
+    if (!m_MetadataSidebar) return;
+    if (CollectionUtils::isDetailsPaneHorizontal(position)) {
+      m_MetadataSidebar->setMinimumWidth(0);
+      m_MetadataSidebar->setMaximumWidth(QWIDGETSIZE_MAX);
+      m_MetadataSidebar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+      m_MetadataSidebar->setFixedHeight(desiredHeight);
+    } else {
+      m_MetadataSidebar->setMinimumHeight(0);
+      m_MetadataSidebar->setMaximumHeight(QWIDGETSIZE_MAX);
+      m_MetadataSidebar->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+      m_MetadataSidebar->setFixedWidth(desiredWidth);
+    }
+  };
+
+  bool wasInLayout = inAnyLayout();
   m_MetadataSidebar->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
   // Kartend-3ile: cover flow takes the full viewport — render as if
@@ -530,42 +616,73 @@ void SidebarManager::updateSidebarLayout(int currentCollectionIndex) {
   const bool effectiveVisible = m_sidebarVisible && !m_externallyHidden;
   if (effectiveVisible) {
     if (isFixedMode) {
-      // Kartend-63e bug #3 fix: Fixed mode docks into the QHBoxLayout so the
-      // grid is pushed into the remaining space rather than rendering
-      // underneath an absolutely-positioned overlay. QLayout::insertWidget /
-      // addWidget reparents the sidebar to the layout's owner widget
-      // automatically, so we don't need an explicit setParent() here.
-      m_MetadataSidebar->setFixedWidth(desiredWidth);
-      if (wasInLayout) {
-        m_mainHorizontalLayout->removeWidget(m_MetadataSidebar);
-      }
-      if (position == SidebarPosition::Left) {
+      removeFromLayouts();
+      applyDockSizing();
+      // Kartend-63e bug #3 fix / Kartend-u2gx: Fixed mode docks into a Qt
+      // layout so the grid reflows into the remaining space. Left/Right go
+      // into the existing horizontal layout; Top/Bottom go into the outer
+      // vertical layout (above or below m_mainContentWidget). When the outer
+      // layout isn't wired up, fall back to the horizontal layout for L/R
+      // and to absolute positioning for T/B (matches Overlay).
+      if (CollectionUtils::isDetailsPaneHorizontal(position) && m_outerLayout &&
+          m_mainContentWidget) {
+        const int contentIndex = m_outerLayout->indexOf(m_mainContentWidget);
+        if (position == SidebarPosition::Top) {
+          const int insertAt = contentIndex >= 0 ? contentIndex : 0;
+          m_outerLayout->insertWidget(insertAt, m_MetadataSidebar);
+        } else {
+          // Bottom: insert after m_mainContentWidget. addWidget puts it at the
+          // end; if there are trailing items in the outer layout we'd want a
+          // proper index, but in practice the content widget is the last entry.
+          if (contentIndex >= 0) {
+            m_outerLayout->insertWidget(contentIndex + 1, m_MetadataSidebar);
+          } else {
+            m_outerLayout->addWidget(m_MetadataSidebar);
+          }
+        }
+      } else if (position == SidebarPosition::Left) {
         m_mainHorizontalLayout->insertWidget(0, m_MetadataSidebar);
-      } else {
+      } else if (position == SidebarPosition::Right) {
         m_mainHorizontalLayout->addWidget(m_MetadataSidebar);
+      } else {
+        // Top/Bottom Expand without an outer layout: degrade to overlay.
+        m_MetadataSidebar->setParent(m_itemsPage);
+        positionSidebarOverlay();
       }
       m_MetadataSidebar->setVisible(true);
     } else {
-      // Overlay mode: free-floating child of itemsPage so the sidebar
-      // visually overlaps the grid without consuming layout space.
+      // Overlay mode: free-floating child of itemsPage so the pane visually
+      // overlaps the grid without consuming layout space. The geometry call
+      // in positionSidebarOverlay handles all four positions.
       m_MetadataSidebar->setParent(m_itemsPage);
-      if (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1) {
-        m_mainHorizontalLayout->removeWidget(m_MetadataSidebar);
-      }
-      m_MetadataSidebar->setFixedWidth(desiredWidth);
+      removeFromLayouts();
+      applyDockSizing();
       positionSidebarOverlay();
       m_MetadataSidebar->setVisible(true);
     }
   } else {
     m_MetadataSidebar->setVisible(false);
-    if (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1) {
-      m_mainHorizontalLayout->removeWidget(m_MetadataSidebar);
-    }
+    removeFromLayouts();
   }
 
-  bool isNowInLayout = (m_mainHorizontalLayout->indexOf(m_MetadataSidebar) != -1);
+  bool isNowInLayout = inAnyLayout();
   if (wasInLayout != isNowInLayout) {
     emit sidebarVisibilityChanged(effectiveVisible);
+  }
+
+  // Kartend-u2gx: force layout reflow when the dock target changed mid-call
+  // (e.g. user just flipped Position from Right to Top in settings — the
+  // widget moves between m_mainHorizontalLayout and m_outerLayout, but Qt
+  // won't repaint the new placement unless the affected layouts are
+  // invalidated and the widget's size hint is re-queried).
+  m_MetadataSidebar->updateGeometry();
+  if (m_outerLayout) {
+    m_outerLayout->invalidate();
+    m_outerLayout->activate();
+  }
+  if (m_mainHorizontalLayout) {
+    m_mainHorizontalLayout->invalidate();
+    m_mainHorizontalLayout->activate();
   }
 
   // Skip persistence when the override is what's hiding the sidebar — this

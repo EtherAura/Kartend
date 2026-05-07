@@ -546,7 +546,7 @@
   </action>
   <action name="actionShowSidebar">
    <property name="text">
-    <string>Show Sidebar</string>
+    <string>Show Details Pane</string>
    </property>
    <property name="checkable">
     <bool>true</bool>

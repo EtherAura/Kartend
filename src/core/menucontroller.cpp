@@ -50,7 +50,9 @@ void MenuController::setupMenuBar() {
   setupRecentMenu();
   setupMostLaunchedMenu();
   setupLayoutActions();
+  setupActionDetailsPaneOrientation();
   setupHamburgerMenu();
+  applyPersistedViewState();
 }
 
 void MenuController::setupActionExit() {
@@ -72,6 +74,17 @@ void MenuController::setupActionShowMenuBar() {
         m_ctx.ui->menubar->setVisible(checked);
       }
       syncHamburgerVisibility();
+      // Kartend-lfu0: persist explicit user toggle.
+      if (m_ctx.getGeneralSettings) {
+        if (auto *settings = m_ctx.getGeneralSettings()) {
+          settings->showMenuBar = checked;
+          if (m_ctx.getSettingsManager) {
+            if (auto *mgr = m_ctx.getSettingsManager()) {
+              mgr->saveGeneralSettings(*settings);
+            }
+          }
+        }
+      }
     });
     m_ctx.ui->actionShowMenuBar->setShortcutContext(Qt::ApplicationShortcut);
     m_ctx.mainWindow->addAction(m_ctx.ui->actionShowMenuBar);
@@ -85,6 +98,17 @@ void MenuController::setupActionShowToolbar() {
     connect(m_ctx.ui->actionShowToolbar, &QAction::triggered, [this](bool checked) {
       if (m_ctx.ui->itemsTopBar) {
         m_ctx.ui->itemsTopBar->setVisible(checked);
+      }
+      // Kartend-lfu0: persist explicit user toggle.
+      if (m_ctx.getGeneralSettings) {
+        if (auto *settings = m_ctx.getGeneralSettings()) {
+          settings->showToolbar = checked;
+          if (m_ctx.getSettingsManager) {
+            if (auto *mgr = m_ctx.getSettingsManager()) {
+              mgr->saveGeneralSettings(*settings);
+            }
+          }
+        }
       }
     });
     m_ctx.ui->actionShowToolbar->setShortcutContext(Qt::ApplicationShortcut);
@@ -398,7 +422,58 @@ void MenuController::setupFullscreenAction() {
       m_fullscreenAction->setChecked(false);
     }
     syncHamburgerVisibility();
+    // Kartend-lfu0: persist explicit user toggle. We only mirror the fullscreen
+    // flag — the menu-bar auto-hide/show inside this lambda is a transient UI
+    // affordance, not a change to the user's saved Show Menu Bar preference.
+    if (m_ctx.getGeneralSettings) {
+      if (auto *settings = m_ctx.getGeneralSettings()) {
+        settings->fullscreen = entering;
+        if (m_ctx.getSettingsManager) {
+          if (auto *mgr = m_ctx.getSettingsManager()) {
+            mgr->saveGeneralSettings(*settings);
+          }
+        }
+      }
+    }
   });
+}
+
+void MenuController::applyPersistedViewState() {
+  if (!m_ctx.mainWindow || !m_ctx.getGeneralSettings) return;
+  GeneralSettings *settings = m_ctx.getGeneralSettings();
+  if (!settings) return;
+
+  // Menu bar: setChecked() emits toggled (not triggered), so the persistence
+  // lambda above is not re-entered during restore.
+  if (m_ctx.ui && m_ctx.ui->actionShowMenuBar && m_ctx.ui->menubar) {
+    m_ctx.ui->actionShowMenuBar->setChecked(settings->showMenuBar);
+    m_ctx.ui->menubar->setVisible(settings->showMenuBar);
+  }
+
+  // Toolbar
+  if (m_ctx.ui && m_ctx.ui->actionShowToolbar && m_ctx.ui->itemsTopBar) {
+    m_ctx.ui->actionShowToolbar->setChecked(settings->showToolbar);
+    m_ctx.ui->itemsTopBar->setVisible(settings->showToolbar);
+  }
+
+  // Fullscreen: called from setupMenuBar() during MainWindow construction —
+  // before main.cpp's window.show(). showFullScreen() makes the window visible
+  // in fullscreen state; the subsequent show() leaves the state intact. We
+  // also hide the menu bar here to mirror the F11 lambda's coupling so the
+  // restored chrome matches what the user saw when they last enabled it.
+  if (m_fullscreenAction) {
+    if (settings->fullscreen) {
+      m_ctx.mainWindow->showFullScreen();
+      if (m_ctx.mainWindow->menuBar()) {
+        m_ctx.mainWindow->menuBar()->hide();
+      }
+      m_fullscreenAction->setChecked(true);
+    } else {
+      m_fullscreenAction->setChecked(false);
+    }
+  }
+
+  syncHamburgerVisibility();
 }
 
 void MenuController::insertFullscreenInViewMenu(QAction *fullscreenAction) {
@@ -465,9 +540,14 @@ void MenuController::setupStatisticsAction() {
 void MenuController::setupGridWidthActions() {
   if (!m_ctx.mainWindow) return;
 
-  // Ctrl++ to increase grid width (more columns, smaller items)
+  // Kartend-0w4i: grid-width chord moved to Ctrl+Shift+/- to free Ctrl+/-
+  // for text zoom (see MainWindow::setupTextZoomShortcuts). The two
+  // ApplicationShortcuts conflicted, leaving Ctrl+- ambiguous so neither
+  // action fired. Bind both Plus and Equal for the increase action so US/EU
+  // layouts hit the same chord (mirrors the text-zoom binding).
   m_gridWidthIncreaseAction = new QAction(tr("Increase Grid Width"), this);
-  m_gridWidthIncreaseAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Plus));
+  m_gridWidthIncreaseAction->setShortcuts({QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Plus),
+                                           QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Equal)});
   m_gridWidthIncreaseAction->setShortcutContext(Qt::ApplicationShortcut);
   m_ctx.mainWindow->addAction(m_gridWidthIncreaseAction);
   connect(m_gridWidthIncreaseAction, &QAction::triggered, [this]() {
@@ -476,9 +556,8 @@ void MenuController::setupGridWidthActions() {
     }
   });
 
-  // Ctrl+- to decrease grid width (fewer columns, larger items)
   m_gridWidthDecreaseAction = new QAction(tr("Decrease Grid Width"), this);
-  m_gridWidthDecreaseAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus));
+  m_gridWidthDecreaseAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Minus));
   m_gridWidthDecreaseAction->setShortcutContext(Qt::ApplicationShortcut);
   m_ctx.mainWindow->addAction(m_gridWidthDecreaseAction);
   connect(m_gridWidthDecreaseAction, &QAction::triggered, [this]() {
@@ -770,5 +849,95 @@ void MenuController::syncLayoutActions(ViewType viewType) {
   }
   if (m_ctx.ui->actionLayoutHorizontal) {
     m_ctx.ui->actionLayoutHorizontal->setChecked(viewType == ViewType::Horizontal);
+  }
+}
+
+void MenuController::setupActionDetailsPaneOrientation() {
+  if (!m_ctx.ui || !m_ctx.mainWindow || !m_ctx.ui->menuView) return;
+
+  m_orientationMenu = new QMenu(tr("Details Pane Orientation"), m_ctx.mainWindow);
+  m_orientationActionGroup = new QActionGroup(this);
+  m_orientationActionGroup->setExclusive(true);
+
+  auto addOrientation = [this](const QString &label, SidebarPosition pos) {
+    auto *action = new QAction(label, this);
+    action->setCheckable(true);
+    m_orientationActionGroup->addAction(action);
+    m_orientationMenu->addAction(action);
+    connect(action, &QAction::triggered, this, [this, pos]() {
+      auto *collections = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
+      const int idx = m_ctx.getCurrentCollectionIndex ? m_ctx.getCurrentCollectionIndex() : -1;
+      if (!collections || idx < 0 || idx >= collections->size()) return;
+      if ((*collections)[idx].sidebarPosition == pos) return;
+      (*collections)[idx].sidebarPosition = pos;
+      if (m_ctx.getSettingsManager) {
+        if (auto *sm = m_ctx.getSettingsManager()) {
+          sm->saveCollections(*collections);
+        }
+      }
+      // applySidebarStateForCollection re-runs applyAppearance + layout swap so
+      // a Right→Top change reparents the pane into m_outerLayout immediately
+      // (otherwise the user would have to toggle the pane to see the new edge).
+      if (m_ctx.getSidebarManager) {
+        if (auto *sb = m_ctx.getSidebarManager()) {
+          sb->applySidebarStateForCollection(idx);
+        }
+      }
+    });
+    return action;
+  };
+
+  m_orientationActionRight = addOrientation(tr("Right"), SidebarPosition::Right);
+  m_orientationActionLeft = addOrientation(tr("Left"), SidebarPosition::Left);
+  m_orientationActionTop = addOrientation(tr("Top"), SidebarPosition::Top);
+  m_orientationActionBottom = addOrientation(tr("Bottom"), SidebarPosition::Bottom);
+
+  // Sit immediately after Show Details Pane so the pair reads as a single
+  // group — the action's neighbor in the View menu (.ui order) is the
+  // separator before the Layout submenu, and we want the orientation submenu
+  // placed before that separator. Walk the action list to find the slot
+  // explicitly so the .ui can be re-ordered later without breaking placement.
+  QAction *showSidebarAct = m_ctx.ui->actionShowSidebar;
+  const QList<QAction *> existing = m_ctx.ui->menuView->actions();
+  QAction *insertBefore = nullptr;
+  bool sawShowSidebar = false;
+  for (QAction *act : existing) {
+    if (sawShowSidebar) {
+      insertBefore = act;
+      break;
+    }
+    if (act == showSidebarAct) {
+      sawShowSidebar = true;
+    }
+  }
+  if (insertBefore) {
+    m_ctx.ui->menuView->insertMenu(insertBefore, m_orientationMenu);
+  } else {
+    m_ctx.ui->menuView->addMenu(m_orientationMenu);
+  }
+
+  // Initial sync — picks up the active collection's persisted position so the
+  // checkmark is correct on first menu open without waiting for a switch.
+  if (m_ctx.getCollections && m_ctx.getCurrentCollectionIndex) {
+    auto *collections = m_ctx.getCollections();
+    const int idx = m_ctx.getCurrentCollectionIndex();
+    if (collections && idx >= 0 && idx < collections->size()) {
+      syncOrientationActions((*collections)[idx].sidebarPosition);
+    }
+  }
+}
+
+void MenuController::syncOrientationActions(SidebarPosition position) {
+  if (m_orientationActionRight) {
+    m_orientationActionRight->setChecked(position == SidebarPosition::Right);
+  }
+  if (m_orientationActionLeft) {
+    m_orientationActionLeft->setChecked(position == SidebarPosition::Left);
+  }
+  if (m_orientationActionTop) {
+    m_orientationActionTop->setChecked(position == SidebarPosition::Top);
+  }
+  if (m_orientationActionBottom) {
+    m_orientationActionBottom->setChecked(position == SidebarPosition::Bottom);
   }
 }
