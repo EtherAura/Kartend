@@ -293,7 +293,13 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite clang-tidy clang-format cppcheck jq
+          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite clang-tidy clang-format-19 cppcheck jq
+          # Pin clang-format to v19 (Ubuntu 24.04 default `clang-format` is
+          # v18, which formats slightly differently from v19/v21 we use
+          # locally). Symlinking makes `clang-format` resolve to v19 in PATH
+          # so .scripts/build.sh's --format-check matches what developers
+          # produce locally with v19+.
+          sudo ln -sf /usr/bin/clang-format-19 /usr/local/bin/clang-format
 
       - name: Cache ccache
         uses: actions/cache@v5

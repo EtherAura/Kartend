@@ -64,10 +64,14 @@ QueryManager::QueryManager(SessionManager *sessionManager, const QString &connec
 
 QueryManager::~QueryManager() {
   // Abandon the thread pool without waiting - process is exiting anyway.
+  // The pool itself is intentionally leaked (~QThreadPool blocks; let the OS
+  // clean it up). The pointer is *not* nulled out: requestCancelScan() may
+  // still be called from another thread (DatabaseManager teardown does this
+  // while m_workerThread is mid-quit), and a concurrent write to this field
+  // races with that read for no benefit — we're about to die anyway, the
+  // dangling pointer is never dereferenced after destruction completes.
   if (m_scanThreadPool) {
     m_scanThreadPool->clear();
-    // Intentionally NOT deleting - ~QThreadPool blocks. Let OS clean up.
-    m_scanThreadPool = nullptr;
   }
 
   clearStatementCache();

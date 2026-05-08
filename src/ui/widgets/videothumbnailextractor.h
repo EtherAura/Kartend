@@ -56,6 +56,9 @@ private:
   VideoThumbnailExtractor();
   ~VideoThumbnailExtractor() override;
 
+  // See videothumbnailextractor.cpp — defers QtMultimedia backend init
+  // until the first frame request actually arrives.
+  void ensureMediaPipeline();
   void processNext();
   void onMediaStatusChanged(int status);
   void onVideoFrame();

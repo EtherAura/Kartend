@@ -19,3 +19,9 @@ called_from_lib:libglib-2.0.so
 # threaded-ml thread); pulseaudio uses its own sync primitives that TSan
 # can't observe.
 called_from_lib:libpulsecommon
+
+# QtMultimedia / GStreamer backend: VideoThumbnailExtractor and other media
+# widgets fall through to the gstreamer backend on Linux when ffmpeg isn't
+# selected. gstreamer manages its own per-thread allocators and frees on
+# pipeline tear-down from a worker thread that TSan can't reason about.
+called_from_lib:libgstreamer-1.0.so

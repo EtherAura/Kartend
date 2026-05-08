@@ -75,6 +75,10 @@
  * 3. Otherwise, nullptr is returned
  */
 
+// clang-format off
+// Trailing-return-type arrows inside macros confuse clang-format's pointer
+// alignment heuristics (Right) — the formatter eats the spaces around `->`
+// and produces unreadable `const->TYPE`. Keep formatting hands-off here.
 // ─────────────────────────────────────────────────────────────────────────────
 // Header-only declaration macros (for use in .h files)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -89,12 +93,12 @@
 
 // Generic section-aware definition (used internally by section variants)
 #define SETUP_GETTER_DEF_SECTION(STRUCT, TYPE, NAME, FIELD, SECTION, CTX_FIELD)                    \
-  auto STRUCT::get##NAME() const->TYPE {                                                           \
+  auto STRUCT::get##NAME() const -> TYPE {                                                         \
     return FIELD ? FIELD : (ctx ? ctx->SECTION.CTX_FIELD : nullptr);                               \
   }
 
 #define SETUP_GETTER_DEF_SECTION_CTX_ONLY(STRUCT, TYPE, NAME, SECTION, CTX_FIELD)                  \
-  auto STRUCT::get##NAME() const->TYPE {                                                           \
+  auto STRUCT::get##NAME() const -> TYPE {                                                         \
     return ctx ? ctx->SECTION.CTX_FIELD : nullptr;                                                 \
   }
 
@@ -159,5 +163,6 @@
   SETUP_GETTER_INLINE_MGR(TYPE, NAME, FIELD, FIELD)
 #define SETUP_GETTER_INLINE_MGR_CTX_ONLY(TYPE, NAME, CTX_FIELD)                                    \
   SETUP_GETTER_INLINE_SECTION_CTX_ONLY(TYPE, NAME, managers, CTX_FIELD)
+// clang-format on
 
 #endif // SETUPUTILS_H

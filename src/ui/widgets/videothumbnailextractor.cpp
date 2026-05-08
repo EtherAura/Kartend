@@ -27,6 +27,20 @@ VideoThumbnailExtractor *VideoThumbnailExtractor::instance() {
 }
 
 VideoThumbnailExtractor::VideoThumbnailExtractor() {
+  // QMediaPlayer / QAudioOutput / QVideoSink + the timeout timer are
+  // constructed lazily on the first requestFrame() call; see
+  // ensureMediaPipeline(). Eager construction would spin up the
+  // QtMultimedia + PulseAudio backend at first DetailPageOverlay
+  // instantiation (which happens during MainWindow setup), even when no
+  // thumbnails are ever requested — wasteful in normal use, and a source
+  // of TSan-flagged libgstreamer races / Release+gcc SIGILL on CI runners
+  // without a real audio device.
+}
+
+void VideoThumbnailExtractor::ensureMediaPipeline() {
+  if (m_player) {
+    return;
+  }
   m_player = new QMediaPlayer(this);
   m_audioOutput = new QAudioOutput(this);
   m_audioOutput->setMuted(true);
@@ -89,6 +103,7 @@ void VideoThumbnailExtractor::processNext() {
   if (m_queue.isEmpty()) {
     return;
   }
+  ensureMediaPipeline();
   m_currentPath = m_queue.dequeue();
   m_seekedForCurrent = false;
 
