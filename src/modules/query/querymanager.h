@@ -245,7 +245,7 @@ private:
   [[nodiscard]] bool ensureQueryUuidsPopulated(const QStringList &uuids);
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Playlist scope temp table (Kartend-vlm7)
+  // Playlist scope temp table
   // ───────────────────────────────────────────────────────────────────────────
   // For playlist-backed virtual collections, the fetch SQL needs to constrain
   // to the exact (collection_uuid, path) pairs stored in playlist_items —

@@ -1,24 +1,18 @@
 // Sibling TU: appearance/styling application for NavigationManager.
 #include "artworkmanager.h"
 #include "artworkutils.h"
-#include "backgroundvideowidget.h"
 #include "backdropbluroverlay.h"
-#include "headerlogooverlay.h"
-#include "vignetteoverlay.h"
-#include <QAbstractSlider>
-#include <QBoxLayout>
-#include <QLayoutItem>
-#include <QPixmap>
-#include <QScrollBar>
-#include <QSpacerItem>
+#include "backgroundvideowidget.h"
 #include "databasemanager.h"
+#include "detailspane.h"
+#include "detailspanemanager.h"
 #include "errordialog.h"
+#include "headerlogooverlay.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "loadingoverlay.h"
 #include "loggingcategories.h"
-#include "detailspane.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "pathutils.h"
@@ -27,17 +21,23 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "detailspanemanager.h"
 #include "timerutils.h"
-#include "ui_mainwindow.h"
 #include "uiconstants.h"
+#include "vignetteoverlay.h"
 #include <algorithm>
+#include <QAbstractSlider>
 #include <QApplication>
+#include <QBoxLayout>
 #include <QDateTime>
 #include <QDir>
 #include <QLabel>
+#include <QLayoutItem>
+#include <QLineEdit>
+#include <QMenuBar>
+#include <QPixmap>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSpacerItem>
 #include <QStackedWidget>
 #include <QtGlobal>
 #include <QTimer>
@@ -58,7 +58,7 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex) -> void
 
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
 
-  // Kartend-0p3w: compare and apply the *effective* grid width — the alt
+  // compare and apply the *effective* grid width — the alt
   // (gridWidthSidebarHidden) is in play when the sidebar is hidden in Expand
   // mode, and the navigation-time live-apply has to respect that or it'll
   // briefly flash to the primary value before the sidebar restores the alt.
@@ -68,7 +68,7 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex) -> void
   if (effectiveTargetWidth != m_scrollManager->getCurrentGridWidth()) {
     m_scrollManager->updateGridWidth(effectiveTargetWidth);
   }
-  // Kartend-dx9t: live-apply the per-collection horizontal items-per-column
+  // live-apply the per-collection horizontal items-per-column
   // setting. updateHorizontalGridHeight no-ops when the active view isn't
   // Horizontal, so this is safe to call unconditionally.
   m_scrollManager->updateHorizontalGridHeight(
@@ -97,12 +97,12 @@ void NavigationManager::applyBackgroundForCollection(int collectionIndex) {
     return;
   }
 
-  // Kartend-vbs: video bg routes through BackgroundVideoWidget instead of
+  // video bg routes through BackgroundVideoWidget instead of
   // the QSS path because Qt stylesheets can't render video. The widget is
   // lazy-created on first need and hidden (with decoder released) whenever
   // the active collection doesn't use video.
-  const bool wantsVideo = (collection.backgroundType == BackgroundType::Video) &&
-                          !collection.backgroundVideo.isEmpty();
+  const bool wantsVideo =
+      (collection.backgroundType == BackgroundType::Video) && !collection.backgroundVideo.isEmpty();
   if (wantsVideo) {
     if (!m_backgroundVideo) {
       m_backgroundVideo = new BackgroundVideoWidget(viewport);
@@ -117,7 +117,7 @@ void NavigationManager::applyBackgroundForCollection(int collectionIndex) {
     m_backgroundVideo->hide();
   }
 
-  // Kartend-guo5: header logo as a real toolbar layout member. Insertion
+  // header logo as a real toolbar layout member. Insertion
   // index depends on the chosen anchor so the logo pushes neighbouring
   // controls aside instead of floating on top of them. TopLeft inserts at
   // index 0 (truly leftmost); TopRight appends (truly rightmost); TopCenter
@@ -168,7 +168,7 @@ void NavigationManager::applyBackgroundForCollection(int collectionIndex) {
     m_headerLogo->hide();
   }
 
-  // Kartend-qbp3: vignette overlay. Layered above the items grid (so it
+  // vignette overlay. Layered above the items grid (so it
   // darkens grid edges) but below the header logo (so the logo stays
   // bright in a corner if the user picks TopLeft/TopRight).
   const bool wantsVignette = collection.vignetteEnabled && collection.vignetteIntensity > 0;
@@ -193,7 +193,7 @@ void NavigationManager::applyBackgroundForCollection(int collectionIndex) {
     m_vignette->raise();
   }
 
-  // Kartend-eq8r: toolbar backdrop blur. Image bg only — sampling video
+  // toolbar backdrop blur. Image bg only — sampling video
   // frames every paint is too expensive without GPU shaders, so the
   // toggle is treated as a no-op for video bgs. Parented to m_itemsTopBar
   // and lowered behind the toolbar's button widgets so they render on top.
@@ -218,12 +218,11 @@ void NavigationManager::applyBackgroundForCollection(int collectionIndex) {
     m_toolbarBlur->hide();
   }
 
-  // Kartend-y25g: connect the items scroll bar once so parallax can adjust
+  // connect the items scroll bar once so parallax can adjust
   // the wallpaper's vertical position as the user scrolls. The handler
   // self-bails when parallax is disabled for the active collection, so
   // the connection is harmless when no collection wants the effect.
-  if (!m_scrollListenerConnected && m_itemScrollArea &&
-      m_itemScrollArea->verticalScrollBar()) {
+  if (!m_scrollListenerConnected && m_itemScrollArea && m_itemScrollArea->verticalScrollBar()) {
     connect(m_itemScrollArea->verticalScrollBar(), &QAbstractSlider::valueChanged, this,
             [this](int /*v*/) { onItemsScrolled(); });
     m_scrollListenerConnected = true;
@@ -238,14 +237,14 @@ void NavigationManager::applyBackgroundForCollection(int collectionIndex) {
     styleSheet = QStringLiteral("QWidget { background-color: transparent; }");
   } else if (collection.backgroundType == BackgroundType::Image &&
              !collection.backgroundImage.isEmpty()) {
-    // Background image mode. Parallax (Kartend-y25g) adjusts the vertical
+    // Background image mode. Parallax adjusts the vertical
     // position by `scrollValue * strength / 100` — strength 0 keeps the bg
     // locked (fully static), strength 100 makes it move at content speed.
     QString imagePath = collection.backgroundImage;
     imagePath.replace("\\", "/");
     int parallaxOffset = 0;
-    if (collection.wallpaperParallax && collection.parallaxStrength > 0 &&
-        m_itemScrollArea && m_itemScrollArea->verticalScrollBar()) {
+    if (collection.wallpaperParallax && collection.parallaxStrength > 0 && m_itemScrollArea &&
+        m_itemScrollArea->verticalScrollBar()) {
       const int v = m_itemScrollArea->verticalScrollBar()->value();
       parallaxOffset = (v * collection.parallaxStrength) / 100;
     }
@@ -284,7 +283,7 @@ void NavigationManager::applyPrimaryColorForCollection(int collectionIndex) {
   bool hasPrimaryColor =
       !collection.primaryColor.isEmpty() && QColor::isValidColorName(collection.primaryColor);
 
-  // Kartend-eq8r: when toolbar backdrop blur is active over an image bg,
+  // when toolbar backdrop blur is active over an image bg,
   // skip the primary-color fill — it would paint a flat color over the
   // blurred wallpaper child and defeat the effect.
   const bool blurActive = collection.toolbarBackdropBlur &&
@@ -331,7 +330,7 @@ void NavigationManager::applyPrimaryColorForCollection(int collectionIndex) {
   }
 }
 
-// Kartend-y25g: throttled scroll handler for wallpaper parallax. The
+// throttled scroll handler for wallpaper parallax. The
 // scroll bar can emit valueChanged dozens of times per second; rebuilding
 // the viewport stylesheet that often is wasteful, so we coalesce updates
 // to ~60Hz. The first edge fires immediately so the bg responds without
@@ -354,8 +353,7 @@ void NavigationManager::onItemsScrolled() {
   if (!m_parallaxThrottle) {
     m_parallaxThrottle = new QTimer(this);
     m_parallaxThrottle->setSingleShot(true);
-    connect(m_parallaxThrottle, &QTimer::timeout, this,
-            &NavigationManager::applyParallaxOffset);
+    connect(m_parallaxThrottle, &QTimer::timeout, this, &NavigationManager::applyParallaxOffset);
   }
   if (m_parallaxThrottle->isActive()) {
     // An update is already queued; the timeout will pick up the latest

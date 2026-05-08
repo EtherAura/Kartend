@@ -21,7 +21,7 @@ struct ContainerPositionParams {
   int totalItems = 0;
   HorizontalAlignment alignment = HorizontalAlignment::Center;
   bool isFiltered = false;
-  /// Kartend-dx9t: when true, the items area scrolls along x. The container
+  /// when true, the items area scrolls along x. The container
   /// keeps its full width (no overflow-clamping or center-shift) and the
   /// horizontal scrollbar is left enabled instead of force-hidden.
   bool isHorizontal = false;

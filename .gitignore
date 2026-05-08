@@ -9,6 +9,30 @@ build/
 .DS_Store
 .vscode/
 
+# Defensive: catch in-source CMake artifacts if a `cmake -B .` ever runs
+# from the source root by accident. The /build entry above only protects
+# the canonical out-of-tree dir; without these patterns dozens of stray
+# Makefile / CMakeFiles/ directories scatter through src/.
+CMakeCache.txt
+/CMakeFiles/
+/cmake_install.cmake
+/CTestTestfile.cmake
+/CPackConfig.cmake
+/CPackSourceConfig.cmake
+/install_manifest.txt
+src/**/CMakeFiles/
+src/**/cmake_install.cmake
+src/**/CTestTestfile.cmake
+src/**/Makefile
+tests/**/CMakeFiles/
+tests/**/cmake_install.cmake
+tests/**/CTestTestfile.cmake
+tests/**/Makefile
+
+# Qt autogen artifacts (only land here if cmake configures in-tree)
+.qt/
+*_autogen/
+
 # IDE files
 *.user
 *.swp

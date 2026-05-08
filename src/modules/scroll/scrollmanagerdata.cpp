@@ -1,5 +1,5 @@
 // Data ingest, virtual scrolling setup, and cleanup methods extracted from
-// scrollmanager.cpp (Kartend-mhf). All remain ScrollManager members and
+// scrollmanager.cpp. All remain ScrollManager members and
 // access existing class state (m_dataManager, m_filterManager,
 // m_widgetFactory, m_widgetPool, m_artworkManager, m_metrics, etc.).
 #include "applicationcontext.h"
@@ -23,6 +23,8 @@
 #include "widgetpoolmanager.h"
 
 #include <QHash>
+
+#include <utility>
 #include <QLoggingCategory>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -172,7 +174,7 @@ void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths,
   // Trigger update of visible widgets
   updateVirtualView();
 
-  // Kartend-3ile: cover-flow keeps a flat card list, refresh it whenever
+  // cover-flow keeps a flat card list, refresh it whenever
   // new file data lands. Skip when not in cover flow — building a card
   // descriptor for every visual index is fast per-item but pointless work
   // when the widget is hidden, and 30+ chunk arrivals × 29k items adds up.
@@ -454,7 +456,7 @@ void ScrollManager::cleanup() {
   // Clear cached artwork paths - no longer valid for new collection
   if (m_widgetFactory) {
     m_widgetFactory->clearCachedArtworkPaths();
-    // Kartend-4boe: also drop the per-chunk "request already in flight" set.
+    // also drop the per-chunk "request already in flight" set.
     // Without this, chunk indices left over from the previous view (in-flight
     // requests, or empty-result chunks that the receiveItemsRange path
     // intentionally keeps pending) suppress every new chunk request after a
@@ -466,10 +468,8 @@ void ScrollManager::cleanup() {
 
   // Explicitly delete active widgets before clearing the pool
   // This ensures proper cleanup order and prevents use-after-free
-  for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
-    if (ItemWidget *widget = it.value()) {
-      delete widget;
-    }
+  for (ItemWidget *widget : std::as_const(m_activeWidgets)) {
+    delete widget;
   }
   m_activeWidgets.clear();
 

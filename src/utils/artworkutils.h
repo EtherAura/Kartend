@@ -142,7 +142,7 @@ private:
  */
 void clearDirectoryCache();
 
-/// Picks the next artwork type id in the cycle order (Kartend-1v6). The cycle
+/// Picks the next artwork type id in the cycle order. The cycle
 /// is the @p availableTypes list in order, wrapping from the last entry back
 /// to the first. The empty-string entry conventionally represents the legacy
 /// flat-directory artwork (the "primary"). When @p currentType is not present

@@ -63,11 +63,11 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
   m_widgetPool = std::make_unique<WidgetPoolManager>(this);
 
   // Virtual scrolling engine: owns layout / container / materialization
-  // algorithms (Kartend-158). Borrows ScrollManager state via friendship.
+  // algorithms. Borrows ScrollManager state via friendship.
   m_engine = std::make_unique<VirtualScrollEngine>(this);
 
   // Data source manager: owns FilterManager + ScrollDataManager +
-  // PreSearchStateManager + SearchLoadingOverlay (Kartend-gg2).
+  // PreSearchStateManager + SearchLoadingOverlay.
   m_dataSource = std::make_unique<DataSourceManager>(this);
   m_filterManager = m_dataSource->filterManager();
   m_dataManager = m_dataSource->dataManager();
@@ -77,7 +77,7 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
           &ScrollManager::filterChanged);
 
   // Selection display manager: owns overlay + state tracker + list header +
-  // artwork preview overlay (Kartend-3u5).
+  // artwork preview overlay.
   m_selectionDisplay = std::make_unique<SelectionDisplayManager>(this);
   m_overlayManager = m_selectionDisplay->overlay();
   m_selectionState = m_selectionDisplay->state();
@@ -116,7 +116,7 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
     updateVirtualView();
   });
 
-  // SearchLoadingOverlay is now owned by m_dataSource (Kartend-gg2).
+  // SearchLoadingOverlay is now owned by m_dataSource.
 
   // Virtual container manager for container lifecycle
   m_containerManager = std::make_unique<VirtualContainerManager>(this);
@@ -156,7 +156,7 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
           &ScrollManager::updateVirtualView);
 
   // ScrollDataManager and PreSearchStateManager are now owned by m_dataSource
-  // (Kartend-gg2). Raw aliases (m_dataManager, m_preSearchStateManager) were
+  // Raw aliases (m_dataManager, m_preSearchStateManager) were
   // set up at construction.
 
   // Note: SelectionStateTracker is now owned by m_selectionDisplay; the
@@ -289,7 +289,7 @@ void ScrollManager::updateViewType(ViewType viewType) {
 
   // Reset scroll position before layout change - grid and list modes have
   // different row heights, so the old scroll position is meaningless. Reset
-  // both scrollbars because Horizontal mode (Kartend-dx9t) drives the
+  // both scrollbars because Horizontal mode drives the
   // horizontal axis instead of the vertical one.
   if (m_mediaScrollArea) {
     if (m_mediaScrollArea->verticalScrollBar()) {
@@ -298,7 +298,7 @@ void ScrollManager::updateViewType(ViewType viewType) {
     if (m_mediaScrollArea->horizontalScrollBar()) {
       m_mediaScrollArea->horizontalScrollBar()->setValue(0);
     }
-    // Kartend-dx9t: in Horizontal mode the items area needs a horizontal
+    // in Horizontal mode the items area needs a horizontal
     // scrollbar (modulo the user's hideHorizontalScrollbar preference).
     // Other modes leave the policy under the per-collection setting too —
     // applyHorizontalScrollbarSetting is the canonical path for that — but
@@ -313,7 +313,7 @@ void ScrollManager::updateViewType(ViewType viewType) {
 
   handleLayoutChange();
 
-  // Kartend-3ile: cover-flow uses a parallel widget tree; keep its config,
+  // cover-flow uses a parallel widget tree; keep its config,
   // card list, and visibility in sync with the grid's. ensureCoverFlowWidget
   // is idempotent so we can call it on every transition.
   ensureCoverFlowWidget();
@@ -323,7 +323,7 @@ void ScrollManager::updateViewType(ViewType viewType) {
 }
 
 void ScrollManager::updateGridWidth(int newGridWidth) {
-  // Kartend-0p3w: route the write to whichever field is currently active, so
+  // route the write to whichever field is currently active, so
   // calculateMetrics (which reads via the effective-value helpers) picks it up
   // on the next recompute. When the alt field is 0 (= "inherit primary") and
   // we're shrinking, treat the alt as "newly configured" and store there
@@ -353,11 +353,10 @@ void ScrollManager::updateGridWidth(int newGridWidth) {
 }
 
 void ScrollManager::updateHorizontalGridHeight(int newHorizontalGridHeight) {
-  // Kartend-0p3w: same active-field routing as updateGridWidth.
-  int &target =
-      (m_sidebarShrinkingActive && m_context.config.horizontalGridHeightSidebarHidden > 0)
-          ? m_context.config.horizontalGridHeightSidebarHidden
-          : m_context.config.horizontalGridHeight;
+  // same active-field routing as updateGridWidth.
+  int &target = (m_sidebarShrinkingActive && m_context.config.horizontalGridHeightSidebarHidden > 0)
+                    ? m_context.config.horizontalGridHeightSidebarHidden
+                    : m_context.config.horizontalGridHeight;
   if (target == newHorizontalGridHeight) {
     return;
   }
@@ -393,7 +392,7 @@ auto ScrollManager::getFirstVisibleRow() const -> int {
   if (!m_mediaScrollArea) {
     return 0;
   }
-  // Kartend-dx9t: in Horizontal mode the long axis is X, so we read the
+  // in Horizontal mode the long axis is X, so we read the
   // horizontal scrollbar and the viewport width instead.
   int scrollPos;
   int viewportSize;
@@ -475,6 +474,10 @@ bool ScrollManager::hideArtworkPreview() {
   return m_selectionDisplay && m_selectionDisplay->hideArtworkPreview();
 }
 
+int ScrollManager::subcollectionIndexFromActual(int actualIndex) const {
+  return m_dataManager ? m_dataManager->subcollectionIndexFromActual(actualIndex) : -1;
+}
+
 void ScrollManager::recenterVirtualContainer() {
   positionVirtualContainer();
 }
@@ -510,7 +513,7 @@ auto ScrollManager::willNeedVerticalScrollbar() const -> bool {
   if (!m_mediaScrollArea) {
     return false;
   }
-  // Kartend-dx9t: Horizontal mode shows a horizontal scrollbar instead, so
+  // Horizontal mode shows a horizontal scrollbar instead, so
   // the vertical scrollbar prediction is always false there.
   if (m_metrics.isHorizontal) {
     return false;
@@ -529,7 +532,7 @@ void ScrollManager::notifyUserActivity() {
 }
 
 auto ScrollManager::getCurrentGridWidth() const -> int {
-  // Kartend-0p3w: returns the items-per-row currently driving the layout —
+  // returns the items-per-row currently driving the layout —
   // matches what calculateMetrics() picks (alt when sidebar is hidden in
   // Expand mode and the alt is configured, otherwise primary). Callers that
   // navigate by visual rows (arrow keys, mouse wheel selection) must see the
@@ -579,7 +582,7 @@ void ScrollManager::showArtworkPreview(const QString &filePath, const QString &a
   }
 }
 
-// Video-first preview entry point (Kartend-ljey). Used by expand-mode and
+// Video-first preview entry point. Used by expand-mode and
 // middle-click; falls back to artwork when no video matches.
 void ScrollManager::showMediaPreview(const QString &filePath, const QString &artworkDir,
                                      const QString &videoDir) {

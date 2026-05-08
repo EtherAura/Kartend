@@ -1,6 +1,6 @@
 // DataSourceManager: owns FilterManager, ScrollDataManager,
 // PreSearchStateManager, and SearchLoadingOverlay. Extracted from
-// ScrollManager (Kartend-gg2).
+// ScrollManager.
 #include "datasourcemanager.h"
 
 #include "filtermanager.h"

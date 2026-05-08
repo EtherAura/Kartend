@@ -36,7 +36,7 @@ auto SessionManager::snapshotSessionJsonBytesForShutdown() const -> QByteArray {
 }
 
 void SessionManager::saveSessionBytesToDiskForShutdown(const QByteArray &data) {
-  const QString metadataPath = getCacheDirectory() + "/metadata/session.json";
+  const QString metadataPath = getCacheDirectory() + QStringLiteral("/metadata/session.json");
   if (!atomicWriteFile(metadataPath, data)) {
     ErrorUtils::logError(
         ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
@@ -48,15 +48,16 @@ void SessionManager::saveSessionBytesToDiskForShutdown(const QByteArray &data) {
 
 QString SessionManager::getCacheDirectory() {
   // Use GenericCacheLocation + app name for consistent ~/.cache/kartend path
-  return QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + "/kartend";
+  return QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) +
+         QStringLiteral("/kartend");
 }
 
 void SessionManager::initialize() {
-  QString metadataPath = getCacheDirectory() + "/metadata/session.json";
+  QString metadataPath = getCacheDirectory() + QStringLiteral("/metadata/session.json");
   QFile metadataFile(metadataPath);
   if (!metadataFile.exists()) {
     // Fallback to old cache.json if session.json doesn't exist
-    metadataPath = getCacheDirectory() + "/metadata/cache.json";
+    metadataPath = getCacheDirectory() + QStringLiteral("/metadata/cache.json");
     metadataFile.setFileName(metadataPath);
     if (!metadataFile.exists()) {
       return;
@@ -216,7 +217,7 @@ void SessionManager::saveToDisk() {
   QJsonObject root = buildSessionJson();
   locker.unlock();
 
-  QString metadataPath = getCacheDirectory() + "/metadata/session.json";
+  QString metadataPath = getCacheDirectory() + QStringLiteral("/metadata/session.json");
   if (!atomicWriteFile(metadataPath, QJsonDocument(root).toJson())) {
     ErrorUtils::logError(ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
                                                            "Failed to persist session metadata",
@@ -232,7 +233,7 @@ void SessionManager::saveToDiskForShutdown() {
   QJsonObject root = buildSessionJson();
   locker.unlock();
 
-  QString metadataPath = getCacheDirectory() + "/metadata/session.json";
+  QString metadataPath = getCacheDirectory() + QStringLiteral("/metadata/session.json");
   if (!atomicWriteFile(metadataPath, QJsonDocument(root).toJson())) {
     ErrorUtils::logError(
         ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,

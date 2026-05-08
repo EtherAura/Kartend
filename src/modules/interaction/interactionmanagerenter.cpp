@@ -33,17 +33,16 @@
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "detailspane.h"
+#include "detailspanemanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
-#include "detailspane.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
-#include "scrolldatamanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 
@@ -72,9 +71,7 @@ auto InteractionManager::processEnterOrReturnKey(int totalItems) -> bool {
   const int renderedSubCount = m_scrollManager ? m_scrollManager->getSubcollectionCount() : 0;
   if (actualIndex >= 0 && actualIndex < renderedSubCount) {
     const int subCollIdx =
-        m_scrollManager && m_scrollManager->getDataManager()
-            ? m_scrollManager->getDataManager()->subcollectionIndexFromActual(actualIndex)
-            : -1;
+        m_scrollManager ? m_scrollManager->subcollectionIndexFromActual(actualIndex) : -1;
     if (subCollIdx >= 0) {
       return handleEnterOnSubcollection(actualIndex, subCollIdx);
     }
@@ -139,10 +136,10 @@ auto InteractionManager::handleEnterOnItem(int currentSelection, int /*totalItem
   if (!path.isEmpty()) {
     const int cIdx =
         ((m_databaseManager) ? m_databaseManager->getCollectionIndexForFile(path) : -1);
-    // Kartend-xbwa: when the user is browsing a playlist, getCollectionIndexForFile
+    // when the user is browsing a playlist, getCollectionIndexForFile
     // returns the *source* collection (the one whose items table row holds this
     // path), not the playlist's synthetic index — so the launcher chooser and
-    // per-item override (Kartend-dnx4) downstream key off the source's UUID +
+    // per-item override downstream key off the source's UUID +
     // launcher list, not the empty/single-launcher playlist config. The
     // fallback to the current collection only matters for ordinary collections
     // where the file→collection map hasn't been populated yet.
@@ -240,7 +237,7 @@ auto InteractionManager::maybeExpandInsteadOfLaunch(const QString &filePath, int
     m_scrollManager->hideArtworkPreview();
     return false;
   }
-  // First activation: expand into a video-first preview (Kartend-ljey).
+  // First activation: expand into a video-first preview.
   // The overlay falls back to artwork when no video is found, preserving
   // the original expand-mode behavior for collections without
   // videoDirectory configured.
@@ -291,7 +288,7 @@ void InteractionManager::onArtworkPreviewLaunchRequested(const QString &filePath
 }
 
 void InteractionManager::onMediaPreviewRequested(ItemWidget *widget, int visualIndex) {
-  // Middle-click peek (Kartend-ljey). Resolves the clicked item's path and
+  // Middle-click peek. Resolves the clicked item's path and
   // its owning collection, then opens a video-first preview overlay. Does
   // *not* set m_state.expandedItemIndex — middle-click is a peek that
   // dismisses on Escape / click-outside, not a first-stage launch.
@@ -328,7 +325,7 @@ void InteractionManager::onMediaPreviewRequested(ItemWidget *widget, int visualI
 }
 
 void InteractionManager::onArtworkTypeCycleRequested(ItemWidget *widget, int visualIndex) {
-  // Kartend-1v6: shift+middle-click (modifier configurable via
+  // shift+middle-click (modifier configurable via
   // GeneralSettings::artworkCycleModifier) cycles the clicked item's grid
   // tile through the artwork types that exist on disk. Mirrors the path
   // resolution pattern from onMediaPreviewRequested so a subcollection's

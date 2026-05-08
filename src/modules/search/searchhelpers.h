@@ -11,7 +11,7 @@
 // "allow all" decisions can be unit-tested without instantiating SearchManager
 // (which depends on the full UI graph + filesystem-backed collection scans).
 //
-// See bd Kartend-tty for the broader extraction effort.
+// See bd for the broader extraction effort.
 namespace SearchHelpers {
 
 // Builds the ordered cycle of search modes available for the current

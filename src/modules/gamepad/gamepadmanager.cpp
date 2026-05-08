@@ -125,7 +125,11 @@ void GamepadManager::attachToFirstConnectedController() {
 }
 
 void GamepadManager::detachController() {
-  if (m_keyboardManager) {
+  // Skip keyboard interactions during shutdown: KeyboardManager::stopRepeat
+  // emits a signal whose slot reaches sibling managers (m_arrowHandler) that
+  // may already be destroyed in InteractionManager's reverse-declaration
+  // teardown — calling it here would re-enter freed memory.
+  if (m_keyboardManager && !shuttingDown()) {
     m_keyboardManager->setPhysicalKeyDown(false);
     m_keyboardManager->stopRepeat(true);
   }

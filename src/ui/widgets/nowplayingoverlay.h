@@ -11,7 +11,7 @@ QT_END_NAMESPACE
 
 /**
  * @brief Full-window "Now Playing" overlay shown while a runtime-tracked
- *        child process is running (Kartend-qxv).
+ * child process is running.
  *
  * Unlike SplashOverlay this does not auto-hide — it stays visible until
  * `hideOverlay()` is called (typically when the tracked child exits).

@@ -1,4 +1,5 @@
 // Routing/dispatch cluster split out from navigationmanager.cpp.
+#include "detailspanemanager.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "loadingoverlay.h"
@@ -10,10 +11,9 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "detailspanemanager.h"
-#include "ui_mainwindow.h"
 #include "uiconstants.h"
 
+#include <QLineEdit>
 #include <QStackedWidget>
 #include <QtGlobal>
 

@@ -318,7 +318,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->customArtworkTypesLineEdit->setText(config.customArtworkTypes.join(", "));
   }
   if (ui->collectionTypeComboBox) {
-    // Kartend-dd8: rebuild the dropdown from the union of types currently in
+    // rebuild the dropdown from the union of types currently in
     // use across the working list so the user sees everything they've already
     // tagged. Editable=true means free-form values still survive a round-trip
     // even if they aren't in the dropdown.
@@ -341,7 +341,8 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->gridWidthSidebarHiddenSpinBox->setValue(config.gridWidthSidebarHidden);
   }
   if (ui->horizontalGridHeightSidebarHiddenSpinBox) {
-    ui->horizontalGridHeightSidebarHiddenSpinBox->setValue(config.horizontalGridHeightSidebarHidden);
+    ui->horizontalGridHeightSidebarHiddenSpinBox->setValue(
+        config.horizontalGridHeightSidebarHidden);
   }
   if (ui->showAllSubcollectionItemsCheckBox) {
     ui->showAllSubcollectionItemsCheckBox->setChecked(config.showAllSubcollectionItems);
@@ -352,14 +353,14 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->sidebarModeComboBox) {
     ui->sidebarModeComboBox->setCurrentIndex(static_cast<int>(config.sidebarMode));
   }
-  // Kartend-63e sidebar enhancements.
+  // sidebar enhancements.
   if (ui->sidebarPositionComboBox) {
     ui->sidebarPositionComboBox->setCurrentIndex(static_cast<int>(config.sidebarPosition));
   }
   if (ui->sidebarWidthSpinBox) {
     ui->sidebarWidthSpinBox->setValue(config.sidebarWidth);
   }
-  // Kartend-u2gx: pane height for Top/Bottom dock. Same form panel — visibility
+  // pane height for Top/Bottom dock. Same form panel — visibility
   // is toggled by updateSidebarModeVisibility() based on Position.
   if (ui->sidebarHeightSpinBox) {
     ui->sidebarHeightSpinBox->setValue(config.sidebarHeight);
@@ -402,7 +403,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->sidebarSectionBgOpacitySpinBox) {
     ui->sidebarSectionBgOpacitySpinBox->setValue(config.sidebarSectionBgOpacity);
   }
-  // Kartend-ekaa: per-collection sidebar font override.
+  // per-collection sidebar font override.
   if (ui->sidebarFontFamilyEdit) {
     ui->sidebarFontFamilyEdit->setText(config.sidebarFontFamily);
   }
@@ -506,7 +507,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->customFontEdit->setText(config.customFontFamily);
   }
 
-  // Kartend-guo5: header logo
+  // header logo
   if (ui->headerLogoEdit) {
     ui->headerLogoEdit->setText(config.headerLogoImage);
   }
@@ -514,7 +515,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->headerLogoPositionComboBox->setCurrentIndex(static_cast<int>(config.headerLogoPosition));
   }
 
-  // Kartend-qbp3: vignette
+  // vignette
   if (ui->vignetteEnabledCheckBox) {
     ui->vignetteEnabledCheckBox->setChecked(config.vignetteEnabled);
   }
@@ -522,7 +523,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->vignetteIntensitySpinBox->setValue(config.vignetteIntensity);
   }
 
-  // Kartend-y25g: wallpaper parallax
+  // wallpaper parallax
   if (ui->wallpaperParallaxCheckBox) {
     ui->wallpaperParallaxCheckBox->setChecked(config.wallpaperParallax);
   }
@@ -530,7 +531,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
     ui->parallaxStrengthSpinBox->setValue(config.parallaxStrength);
   }
 
-  // Kartend-eq8r: toolbar backdrop blur
+  // toolbar backdrop blur
   if (ui->toolbarBackdropBlurCheckBox) {
     ui->toolbarBackdropBlurCheckBox->setChecked(config.toolbarBackdropBlur);
   }
@@ -610,9 +611,10 @@ void SettingsDialog::clearCollectionUI() {
 
   if (ui->horizontalAlignmentComboBox) ui->horizontalAlignmentComboBox->setCurrentIndex(0);
   if (ui->sidebarModeComboBox) ui->sidebarModeComboBox->setCurrentIndex(0);
-  // Kartend-63e sidebar enhancements: clear/reset on no-selection.
+  // sidebar enhancements: clear/reset on no-selection.
   if (ui->sidebarPositionComboBox) ui->sidebarPositionComboBox->setCurrentIndex(0);
-  if (ui->sidebarWidthSpinBox) ui->sidebarWidthSpinBox->setValue(UIConstants::DetailsPane::FIXED_WIDTH);
+  if (ui->sidebarWidthSpinBox)
+    ui->sidebarWidthSpinBox->setValue(UIConstants::DetailsPane::FIXED_WIDTH);
   if (ui->sidebarHeightSpinBox)
     ui->sidebarHeightSpinBox->setValue(UIConstants::DetailsPane::FIXED_HEIGHT);
   if (ui->sidebarWidthLockedCheckBox) ui->sidebarWidthLockedCheckBox->setChecked(true);

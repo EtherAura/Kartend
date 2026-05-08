@@ -7,7 +7,7 @@ QT_BEGIN_NAMESPACE
 class QPaintEvent;
 QT_END_NAMESPACE
 
-/// Kartend-qbp3: edge-darkening vignette painted over the items viewport.
+/// edge-darkening vignette painted over the items viewport.
 /// Uses a radial gradient that's transparent at center and progressively
 /// darker toward the corners, controlled by `intensity` (0-100). Mouse-event
 /// transparent so the items grid below stays interactive.

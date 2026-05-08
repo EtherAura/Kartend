@@ -16,17 +16,16 @@
 #include "applicationcontext.h"
 #include "artworkmanager.h"
 #include "collectionutils.h"
+#include "detailspane.h"
+#include "detailspanemanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
-#include "detailspane.h"
 #include "mousemanager.h"
 #include "navigationmanager.h"
-#include "scrolldatamanager.h"
 #include "scrollmanager.h"
 #include "selectionhelpers.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
-#include "detailspanemanager.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
@@ -43,7 +42,8 @@ Q_LOGGING_CATEGORY(lcSelectionManager, "kartend.selectionmanager")
 SETUP_GETTER_DEF_MGR_CTX_ONLY(SelectionManagerSetup, InteractionStateHolder *, InteractionState,
                               interactionState)
 SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
+SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, DetailsPaneManager *, DetailsPaneManager,
+                          detailsPaneManager)
 SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, SessionManager *, SessionManager, sessionManager)
 SETUP_GETTER_DEF_MGR_SAME(SelectionManagerSetup, SettingsManager *, SettingsManager,
                           settingsManager)
@@ -73,6 +73,10 @@ SelectionManager::~SelectionManager() = default;
 void SelectionManager::setupReferences(const SelectionManagerSetup &setup) {
   // State holder - from ctx
   m_state = setup.getInteractionState();
+  // SelectionManager proxies all selection-restore state through m_state, so
+  // wiring it is a hard precondition. Failing fast here is far easier to
+  // diagnose than a null deref deep in a click handler.
+  Q_ASSERT(m_state);
 
   // Manager dependencies - use getters with ctx fallback
   m_scrollManager = setup.getScrollManager();
@@ -93,6 +97,30 @@ void SelectionManager::setupReferences(const SelectionManagerSetup &setup) {
   m_currentCollectionIndex = setup.getCurrentCollectionIndex();
   m_hierarchyCache = setup.getHierarchyCache();
   m_searchBar = setup.getSearchBar();
+}
+
+bool SelectionManager::isRestoringSelection() const {
+  return m_state->selectionRestore().restoring;
+}
+
+int SelectionManager::targetRestoreIndex() const {
+  return m_state->selectionRestore().targetIndex;
+}
+
+void SelectionManager::setRestoringSelection(bool restoring) {
+  m_state->selectionRestore().restoring = restoring;
+}
+
+void SelectionManager::setTargetRestoreIndex(int index) {
+  m_state->selectionRestore().targetIndex = index;
+}
+
+void SelectionManager::setForceImmediateCenter(bool force) {
+  m_state->selectionRestore().forceImmediateCenter = force;
+}
+
+bool SelectionManager::forceImmediateCenter() const {
+  return m_state->selectionRestore().forceImmediateCenter;
 }
 
 void SelectionManager::setSelectedIndex(int index) {
@@ -190,13 +218,22 @@ void SelectionManager::updateFilePathForSelection(int index,
     }
   }
 
-  if ((m_detailsPaneManager) && m_detailsPaneManager->isSidebarVisible()) {
+  if (m_detailsPaneManager) {
     ItemWidget *safeWidget = nullptr;
     if (m_scrollManager) {
       const auto &activeWidgets = m_scrollManager->getActiveWidgets();
       safeWidget = activeWidgets.value(index, nullptr);
     }
-    m_detailsPaneManager->updateSidebarMetadata(safeWidget);
+    if (safeWidget) {
+      if (m_detailsPaneManager->isSidebarVisible()) {
+        m_detailsPaneManager->updateSidebarMetadata(safeWidget);
+      }
+    } else if (!m_selectedFilePath.isEmpty()) {
+      // No materialized ItemWidget (Cover Flow renders its own cards) — keep
+      // m_currentItemContext fresh so the info-page overlay still works.
+      m_detailsPaneManager->updateSidebarMetadata(
+          m_selectedFilePath, QFileInfo(m_selectedFilePath).completeBaseName());
+    }
   }
 }
 
@@ -223,9 +260,7 @@ QString SelectionManager::titleForIndex(int index, const QList<int> & /*subcolle
   const int actualIndex = m_scrollManager ? m_scrollManager->getFilteredIndex(index) : index;
   const int renderedSubCount = m_scrollManager ? m_scrollManager->getSubcollectionCount() : 0;
   if (actualIndex >= 0 && actualIndex < renderedSubCount) {
-    int subIdx = (m_scrollManager && m_scrollManager->getDataManager())
-                     ? m_scrollManager->getDataManager()->subcollectionIndexFromActual(actualIndex)
-                     : -1;
+    int subIdx = m_scrollManager ? m_scrollManager->subcollectionIndexFromActual(actualIndex) : -1;
     if (m_collections && subIdx >= 0 && subIdx < m_collections->size()) {
       return (*m_collections)[subIdx].name;
     }
@@ -407,7 +442,8 @@ void SelectionManager::handleSuccessfulSelection(int index) {
     m_lastSelectedRow = index / gridWidth;
   }
 
-  bool restoringMatch = m_restoringSelection && (index == m_targetRestoreIndex);
+  const auto &restoreState = m_state->selectionRestore();
+  bool restoringMatch = restoreState.restoring && (index == restoreState.targetIndex);
 
   int currentColl = ((m_currentCollectionIndex) ? *m_currentCollectionIndex : -1);
   if ((m_collections) && currentColl >= 0 && index >= 0) {
@@ -417,7 +453,7 @@ void SelectionManager::handleSuccessfulSelection(int index) {
     return;
   }
 
-  bool immediate = m_forceImmediateCenter || restoringMatch;
+  bool immediate = restoreState.forceImmediateCenter || restoringMatch;
   emit requestCenterVertically(index, immediate);
   if (m_scrollManager) {
     m_scrollManager->updateVirtualView();
@@ -438,9 +474,7 @@ QString SelectionManager::titleForIndexInColl(int coll, int idx) const {
     const int actualIdx = m_scrollManager->getFilteredIndex(idx);
     const int renderedSubCount = m_scrollManager->getSubcollectionCount();
     if (actualIdx >= 0 && actualIdx < renderedSubCount) {
-      int subIdx = m_scrollManager->getDataManager()
-                       ? m_scrollManager->getDataManager()->subcollectionIndexFromActual(actualIdx)
-                       : -1;
+      int subIdx = m_scrollManager->subcollectionIndexFromActual(actualIdx);
       if (subIdx >= 0 && subIdx < m_collections->size()) {
         return (*m_collections)[subIdx].name;
       }

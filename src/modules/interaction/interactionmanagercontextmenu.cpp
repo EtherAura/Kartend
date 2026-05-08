@@ -1,5 +1,5 @@
 // Sibling translation unit for InteractionManager.
-// Right-click context menu implementation (Kartend-g6f).
+// Right-click context menu implementation.
 // These remain InteractionManager members; this is a translation-unit split.
 #include "interactionmanager.h"
 
@@ -13,17 +13,17 @@
 #include "collectionutils.h"
 #include "customfieldsdialog.h"
 #include "databasemanager.h"
+#include "detailspane.h"
+#include "detailspanemanager.h"
 #include "itemmetadata.h"
 #include "itemwidget.h"
 #include "launcherchooserdialog.h"
 #include "launchmanager.h"
-#include "detailspane.h"
 #include "navigationmanager.h"
 #include "pathutils.h"
 #include "playlistmanager.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
-#include "detailspanemanager.h"
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcInteractionManager)
@@ -86,7 +86,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
     }
   });
 
-  // --- Edit custom fields (Kartend-hpln, media items only) ---
+  // --- Edit custom fields (, media items only) ---
   if (isMediaItem && !filePath.isEmpty() && m_databaseManager && m_collections &&
       m_currentCollectionIndex) {
     menu.addSeparator();
@@ -95,7 +95,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
     QObject::connect(customFieldsAction, &QAction::triggered, this,
                      [this, filePath, itemName]() { editCustomFields(filePath, itemName); });
 
-    // --- Set / clear per-item manual override (Kartend-9jdv) ---
+    // --- Set / clear per-item manual override ---
     // Show "Set manual file..." always (lets the user point at any file).
     // Show "Clear manual override" only when an override is currently set,
     // mirroring how custom fields silently no-op when none exist.
@@ -133,7 +133,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
         }
       }
 
-      // --- Per-item launcher override (Kartend-dnx4) ---
+      // --- Per-item launcher override ---
       // Only meaningful when the owning collection has more than one
       // launcher — pinning a single-launcher collection to "launcher 0"
       // would be a no-op masquerading as a configuration choice.
@@ -171,7 +171,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
     }
   }
 
-  // ─── Playlist actions (Kartend-vlm7) ──────────────────────────────────────
+  // ─── Playlist actions ──────────────────────────────────────
   // Two surfaces:
   //   (a) On any media item — "Add to playlist ▶ <list> | New playlist…"
   //       lets the user assemble playlists from anywhere in the library.
@@ -205,7 +205,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
 
       menu.addSeparator();
 
-      // Kartend-5mg8: top-level favorites toggle. Faster than navigating into
+      // top-level favorites toggle. Faster than navigating into
       // the "Add to playlist" submenu and locating the favorites entry, since
       // starring is the most common per-item playlist action. The label flips
       // based on current membership so a single click is always meaningful.
@@ -244,7 +244,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       QObject::connect(newPlaylistAction, &QAction::triggered, this,
                        [this, srcUuid, filePath]() { addItemToNewPlaylist(srcUuid, filePath); });
 
-      // Kartend-5pqv: import a playlist from a JSON or M3U file. Lives next
+      // import a playlist from a JSON or M3U file. Lives next
       // to "New playlist…" rather than under a separate top-level entry so
       // the discovery surface for "create a playlist" is one place.
       QAction *importAction = addToMenu->addAction(tr("Import playlist from file…"));
@@ -294,7 +294,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       menu.addSeparator();
       const QString playlistId = (*m_collections)[*m_currentCollectionIndex].playlistId;
       const QString currentName = (*m_collections)[*m_currentCollectionIndex].name;
-      // Kartend-5mg8: built-in playlists keep rename (so users can localize
+      // built-in playlists keep rename (so users can localize
       // the label) but hide delete — PlaylistManager refuses the call anyway,
       // and surfacing a button that always errors is worse UX than just
       // omitting it.
@@ -306,7 +306,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
         renamePlaylistDialog(playlistId, currentName);
       });
 
-      // Kartend-5pqv: export the current playlist. The submenu houses both
+      // export the current playlist. The submenu houses both
       // formats so the menu stays scannable; M3U for cross-app interop, JSON
       // for lossless Kartend round-trip.
       QMenu *exportMenu = menu.addMenu(tr("Export playlist"));

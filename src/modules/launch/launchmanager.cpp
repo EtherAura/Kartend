@@ -254,15 +254,15 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
 
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
 
-  // Kartend-bdl: pick which launcher to use. When the caller forced an index
+  // pick which launcher to use. When the caller forced an index
   // (>= 0) we honour it; otherwise prompt the user when there are multiple
   // launchers and fall through to the default for single-launcher collections.
   int resolvedLauncherIndex = launcherIndex;
-  // Kartend-dnx4: per-item override silently bypasses the chooser. Only consult
+  // per-item override silently bypasses the chooser. Only consult
   // when the caller hasn't already forced a pick — a UI-driven explicit launch
   // (e.g. context-menu "Launch with…") wins over the persisted override.
   //
-  // Kartend-xbwa: playlist launches end up here too. The InteractionManager
+  // playlist launches end up here too. The InteractionManager
   // launch surfaces (Enter, double-click, context menu "Launch") all resolve
   // `collectionIndex` to the *source* collection via
   // DatabaseManager::getCollectionIndexForFile(filePath), so by the time we
@@ -283,7 +283,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
       QStringList launcherNames;
       launcherNames.reserve(collection.launcherCount());
       for (int i = 0; i < collection.launcherCount(); ++i) {
-        // Kartend-p1jd: resolve preset references so the chooser shows the
+        // resolve preset references so the chooser shows the
         // preset's current name instead of a stale inline copy.
         const LauncherConfig effective = LauncherUtils::resolvePreset(
             collection.launcherAt(i),
@@ -305,7 +305,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   if (resolvedLauncherIndex < 0 || resolvedLauncherIndex >= collection.launcherCount()) {
     resolvedLauncherIndex = 0;
   }
-  // Kartend-p1jd: resolve preset references at launch time. When the
+  // resolve preset references at launch time. When the
   // entry's presetId names a registered preset, its fields override the
   // inline ones; otherwise the inline fields are used as-is.
   const LauncherConfig launcher = LauncherUtils::resolvePreset(
@@ -379,13 +379,13 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
   // launch itself still proceeds.
   const QString collectionUuid = resolveCollectionUuid(collectionIndex);
 
-  // Kartend-qxv: when runtime detection is enabled, route through a tracked
+  // when runtime detection is enabled, route through a tracked
   // QProcess so we can emit started/finished signals and let the UI sleep
   // behind a "Now Playing" overlay. Otherwise fall back to the historical
   // detached launch which leaves Kartend ignorant of the child lifetime.
   if (runtimeDetectionEnabled()) {
     if (launchTracked(launcherPath, cmd, launchFilePath, collectionUuid)) {
-      // Kartend-7vi: increment play_count + last_played as soon as the
+      // increment play_count + last_played as soon as the
       // tracked child has been spawned. Session duration is recorded
       // separately when runtimeFinished fires.
       recordSuccessfulLaunch(filePath, collectionUuid);
@@ -408,7 +408,7 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
     return;
   }
 
-  // Kartend-7vi: detached launches can't measure session duration (we don't
+  // detached launches can't measure session duration (we don't
   // own the child PID), but we still record the launch event. Time-played
   // remains zero until the user enables runtime detection.
   recordSuccessfulLaunch(filePath, collectionUuid);
@@ -452,7 +452,7 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
     if (m_trackedChild != child) {
       return; // Already cleaned up.
     }
-    // Kartend-7vi: record the session duration before clearing the tracked
+    // record the session duration before clearing the tracked
     // state. Skip when the child never reached `started` (FailedToStart) —
     // m_trackedStartTime stays default-constructed in that case.
     if (m_trackedStartTime.isValid() && !m_trackedCollectionUuid.isEmpty() &&

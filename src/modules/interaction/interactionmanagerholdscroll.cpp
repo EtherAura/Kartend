@@ -193,7 +193,7 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
   // Vertical scrolling
   int currentIndex = std::max(0, currentSelectedIndex());
 
-  // List and CoverFlow (Kartend-3ile) move by 1 item per step instead of gridWidth.
+  // List and CoverFlow move by 1 item per step instead of gridWidth.
   bool singleStep = false;
   if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     const ViewType vt = (*m_collections)[*m_currentCollectionIndex].viewType;

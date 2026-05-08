@@ -63,7 +63,7 @@ void ScrollDataManager::initializeSubcollections(const CollectionContext &contex
     }
   }
 
-  // Kartend-dd8: apply toolbar-level subcollection visibility controls.
+  // apply toolbar-level subcollection visibility controls.
   // hideSubcollectionTiles short-circuits past the type filter — it's a
   // global "media items only" mode. The type filter then drops tiles whose
   // effective type (own type, or nearest tagged ancestor) doesn't match.

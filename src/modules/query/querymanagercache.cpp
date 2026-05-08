@@ -324,7 +324,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
   // When filtering, use FTS to match the semantics of fetchItemCount and the
   // slow-path fetchItemsRange. Mixing FTS-prefix counting with LIKE-substring
   // cache building leaves a count > cache-size mismatch, surfacing as blank
-  // placeholder tiles at the tail of the result grid (bd Kartend-m9s).
+  // placeholder tiles at the tail of the result grid.
   const QString ftsQuery = (m_itemsFtsAvailable && m_itemsFtsReady && !trimmedFilter.isEmpty())
                                ? buildFtsPrefixQuery(trimmedFilter)
                                : QString();
@@ -587,7 +587,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
 }
 
 // ============================================================================
-// Playlist scope temp table (Kartend-vlm7)
+// Playlist scope temp table
 // ============================================================================
 // Materialises the (uuid, path) pairs for a single playlist into a temp table
 // the existing fetch SQL can join against via EXISTS. We rebuild whenever the

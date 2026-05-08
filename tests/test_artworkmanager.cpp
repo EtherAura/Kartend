@@ -39,7 +39,7 @@ private slots:
   void testCreateProcessedArtwork_validPixmap();
   void testFindArtworkForFile_missing();
 
-  // Pure cycle algorithm (Kartend-1v6) ---------------------------------------
+  // Pure cycle algorithm ---------------------------------------
   void testNextArtworkType_emptyAvailable();
   void testNextArtworkType_singleEntry();
   void testNextArtworkType_advancesAndWraps();
@@ -140,7 +140,7 @@ void TestArtworkManager::testFindArtworkForFile_missing() {
   QVERIFY(path.isEmpty());
 }
 
-// ─── Pure cycle algorithm (Kartend-1v6) ─────────────────────────────────────
+// ─── Pure cycle algorithm ─────────────────────────────────────
 
 void TestArtworkManager::testNextArtworkType_emptyAvailable() {
   // No types available → no cycling possible, returns currentType verbatim.

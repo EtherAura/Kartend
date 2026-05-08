@@ -32,6 +32,21 @@ private slots:
   void priority_digit_returns2();
   void priority_letter_returns3();
   void priority_otherPunctuation_returns1();
+
+  // orderByForSortMode
+  void orderBy_nameAscending_bare_noLimit();
+  void orderBy_nameDescending_bare();
+  void orderBy_dateDescending_withSortPrefix_andLimit();
+  void orderBy_collectionAscending_collectionUuidStaysUnprefixed();
+  void orderBy_artworkFirst_fallsThroughToNameAsc();
+  void orderBy_random_fallsThroughToNameAsc();
+  void orderBy_appendLimitOffset_whenRequested();
+
+  // placeholderList
+  void placeholderList_zero_returnsEmpty();
+  void placeholderList_negative_returnsEmpty();
+  void placeholderList_one_returnsSingleQuestionMark();
+  void placeholderList_three_returnsCommaSeparated();
 };
 
 void TestQueryHelpers::fts_emptyInput_returnsEmpty() {
@@ -139,6 +154,69 @@ void TestQueryHelpers::priority_letter_returns3() {
 void TestQueryHelpers::priority_otherPunctuation_returns1() {
   QCOMPARE(QueryHelpers::characterSortPriority(QStringLiteral("-game")), 1);
   QCOMPARE(QueryHelpers::characterSortPriority(QStringLiteral("@home")), 1);
+}
+
+void TestQueryHelpers::orderBy_nameAscending_bare_noLimit() {
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::NameAscending, false, false),
+           QStringLiteral("ORDER BY name COLLATE NOCASE"));
+}
+
+void TestQueryHelpers::orderBy_nameDescending_bare() {
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::NameDescending, false, false),
+           QStringLiteral("ORDER BY name COLLATE NOCASE DESC"));
+}
+
+void TestQueryHelpers::orderBy_dateDescending_withSortPrefix_andLimit() {
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::DateDescending, true, true),
+           QStringLiteral(
+               "ORDER BY sort_last_modified DESC, sort_name COLLATE NOCASE LIMIT ? OFFSET ?"));
+}
+
+void TestQueryHelpers::orderBy_collectionAscending_collectionUuidStaysUnprefixed() {
+  // collection_uuid is the GROUP BY key; never aliased even with sort prefix.
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::CollectionAscending, true, false),
+           QStringLiteral("ORDER BY collection_uuid, sort_name COLLATE NOCASE"));
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::CollectionAscending, false, false),
+           QStringLiteral("ORDER BY collection_uuid, name COLLATE NOCASE"));
+}
+
+void TestQueryHelpers::orderBy_artworkFirst_fallsThroughToNameAsc() {
+  // ArtworkFirst/ArtworkLast/Random/NameAscending all share the same SQL
+  // ORDER BY (alphabetical asc). The non-alphabetical behavior comes from
+  // sorted_items_cache, not from SQL.
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::ArtworkFirst, false, false),
+           QueryHelpers::orderByForSortMode(SortMode::NameAscending, false, false));
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::ArtworkLast, false, false),
+           QueryHelpers::orderByForSortMode(SortMode::NameAscending, false, false));
+}
+
+void TestQueryHelpers::orderBy_random_fallsThroughToNameAsc() {
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::Random, true, true),
+           QueryHelpers::orderByForSortMode(SortMode::NameAscending, true, true));
+}
+
+void TestQueryHelpers::orderBy_appendLimitOffset_whenRequested() {
+  const QString without = QueryHelpers::orderByForSortMode(SortMode::SizeAscending, true, false);
+  const QString with = QueryHelpers::orderByForSortMode(SortMode::SizeAscending, true, true);
+  QVERIFY(!without.endsWith(QStringLiteral("LIMIT ? OFFSET ?")));
+  QVERIFY(with.endsWith(QStringLiteral(" LIMIT ? OFFSET ?")));
+  QCOMPARE(with, without + QStringLiteral(" LIMIT ? OFFSET ?"));
+}
+
+void TestQueryHelpers::placeholderList_zero_returnsEmpty() {
+  QCOMPARE(QueryHelpers::placeholderList(0), QString());
+}
+
+void TestQueryHelpers::placeholderList_negative_returnsEmpty() {
+  QCOMPARE(QueryHelpers::placeholderList(-3), QString());
+}
+
+void TestQueryHelpers::placeholderList_one_returnsSingleQuestionMark() {
+  QCOMPARE(QueryHelpers::placeholderList(1), QStringLiteral("?"));
+}
+
+void TestQueryHelpers::placeholderList_three_returnsCommaSeparated() {
+  QCOMPARE(QueryHelpers::placeholderList(3), QStringLiteral("?, ?, ?"));
 }
 
 QTEST_APPLESS_MAIN(TestQueryHelpers)

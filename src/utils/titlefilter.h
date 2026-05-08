@@ -10,7 +10,7 @@
 
 struct CollectionConfig;
 
-// Per-collection title cleanup engine (Kartend-5h6).
+// Per-collection title cleanup engine.
 //
 // Each collection can carry a list of regex patterns (CollectionConfig::
 // titleExclusionPatterns) plus an enable toggle (titleExclusionEnabled). When

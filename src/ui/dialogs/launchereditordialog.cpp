@@ -27,7 +27,7 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
   form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
   m_form = form;
 
-  // Kartend-p1jd: only render the preset combo when the caller passed a
+  // only render the preset combo when the caller passed a
   // non-empty list. The preset-management UI itself reuses this dialog to
   // edit preset entries directly — and presets can't reference other
   // presets, so the combo is omitted in that flow.
@@ -66,7 +66,7 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
 
   m_coreEdit = new QLineEdit(initial.corePath, this);
   m_coreEdit->setPlaceholderText(tr("Libretro core (.so/.dll/.dylib)"));
-  // Kartend-bafi: wrap the core row in a container widget so QFormLayout's
+  // wrap the core row in a container widget so QFormLayout's
   // setRowVisible can hide the label + fields together when the launcher
   // isn't retroarch.
   m_coreRowWidget = new QWidget(this);
@@ -92,7 +92,7 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
 
   resize(640, 280);
 
-  // Kartend-bafi: live-track the launcher path so the core row appears the
+  // live-track the launcher path so the core row appears the
   // moment the user types/browses to a retroarch executable.
   connect(m_launcherEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { updateCoreRowVisibility(); });
@@ -104,7 +104,7 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
     applyPresetSelection(m_presetCombo->currentIndex() - 1);
   }
 
-  // Kartend-bafi: seed visibility from the initial launcher path so freshly
+  // seed visibility from the initial launcher path so freshly
   // opened dialogs hide the core field when it doesn't apply.
   updateCoreRowVisibility();
 }

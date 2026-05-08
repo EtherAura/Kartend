@@ -5,7 +5,7 @@
 //   - applyResultsToUi (member)
 //   - loadArtworkParallel (member)
 // Extracted from artworkmanager.cpp during the Tier 4 LOC sweep
-// (Kartend-7ii) to bring artworkmanager.cpp under 500 LOC.
+// to bring artworkmanager.cpp under 500 LOC.
 #include "artworkmanager.h"
 #include "artworkmanagerinternal.h"
 #include "cachemanager.h"
@@ -239,8 +239,7 @@ void ArtworkManager::dispatchAndTrackPrecacheBatch(const QStringList &artworkPat
 }
 
 // Applies processed artwork results to UI widgets on the GUI thread.
-void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults,
-                                      bool highPriority) {
+void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults) {
   for (const auto &result : batchResults) {
     if (result.widget.isNull() || result.image.isNull()) {
       continue;
@@ -260,7 +259,7 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
     // delivered. Widgets are pooled and recycled across roles (item ↔
     // subcollection ↔ virtual folder); without this check, an in-flight
     // artwork load queued for the previous role can clobber the new role's
-    // pixmap (bd Kartend-dxz: subcollection tiles displaying item artwork).
+    // pixmap (bd: subcollection tiles displaying item artwork).
     //   - Items:           identity = file path basename
     //   - Subcollections:  identity = subcollection name (== itemName)
     //   - Virtual folders: identity = folder display name (== itemName)
@@ -306,9 +305,6 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
     if (!QApplication::closingDown()) {
       widget->setArtworkPixmap(pixmap);
       widget->update();
-      if (highPriority) {
-        widget->repaint();
-      }
     }
   }
 }

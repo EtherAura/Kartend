@@ -20,7 +20,7 @@ class QVideoSink;
 QT_END_NAMESPACE
 
 /**
- * @brief One-shot fullscreen startup video overlay (Kartend-y3ke).
+ * @brief One-shot fullscreen startup video overlay.
  *
  * Plays a configurable startup clip on top of the main window when the
  * application launches. Dismisses on any key press, mouse click, or when

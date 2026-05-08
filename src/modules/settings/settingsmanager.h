@@ -24,7 +24,7 @@ struct SettingsDialogContext {
   DetailsPaneManager *detailsPaneManager = nullptr;
   ScrollManager *scrollManager = nullptr;
   NavigationManager *navigationManager = nullptr;
-  // Kartend-tvg: needed so the dialog controller can subscribe to post-scan
+  // needed so the dialog controller can subscribe to post-scan
   // summary signals and display the "X of Y items added" confirmation box
   // when a newly-added collection finishes its first scan.
   DatabaseManager *databaseManager = nullptr;
@@ -38,7 +38,7 @@ public:
   ~SettingsManager();
 
   void loadCollections(QList<CollectionConfig> &collections);
-  // Kartend-9iwv: emits collectionsModified() so observers (toolbar type
+  // emits collectionsModified so observers (toolbar type
   // filter, hierarchy cache, sidebar summary) refresh after any save —
   // not just settings-dialog-driven ones. Non-const for that reason; the
   // disk write itself doesn't mutate SettingsManager state.
@@ -75,7 +75,7 @@ private slots:
   /// Handles QueryManager's post-scan summary (forwarded via DatabaseManager).
   /// If the scan's UUID matches a collection the user just added through the
   /// settings dialog, pops a "Collection Added — X of Y items" message box.
-  /// Kartend-tvg.
+
   void onCollectionScanSummary(const QString &collectionUuid, int itemsScanned, int itemsApplied,
                                bool success);
 
@@ -85,7 +85,7 @@ private:
   CacheManager *m_cacheManager = nullptr;
   GeneralSettings m_generalSettings;
 
-  // Kartend-tvg: UUIDs of collections the user just added through the settings
+  // UUIDs of collections the user just added through the settings
   // dialog that are still waiting for their first scan-summary signal. Value is
   // the collection's display name so the message box can reference it.
   QHash<QString, QString> m_pendingAddSummaries;

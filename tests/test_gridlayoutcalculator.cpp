@@ -44,7 +44,7 @@ private slots:
   void testGetVisibleRowRange_scrolledDown();
   void testGetVisibleRowRange_emptyMetrics();
 
-  // Kartend-dx9t: Horizontal view-mode tests (axis-flipped layout).
+  // Horizontal view-mode tests (axis-flipped layout).
   void testHorizontal_calculateMetrics_dimensionsAreTransposed();
   void testHorizontal_getItemPosition_columnMajor();
   void testHorizontal_getVisibleRowRange_isColumnRange();
@@ -263,7 +263,7 @@ void TestGridLayoutCalculator::testGetVisibleRowRange_emptyMetrics() {
   QCOMPARE(last, 0);
 }
 
-// ─── Kartend-dx9t Horizontal view tests ─────────────────────────────────────
+// ─── Horizontal view tests ─────────────────────────────────────
 
 void TestGridLayoutCalculator::testHorizontal_calculateMetrics_dimensionsAreTransposed() {
   CollectionConfig cfg = m_config;

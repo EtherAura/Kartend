@@ -27,6 +27,7 @@ class ArtworkManager;
 class SettingsManager;
 class SessionManager;
 class DetailsPaneManager;
+class DetailPageManager;
 class DatabaseManager;
 class NavigationManager;
 class AnimationManager;
@@ -116,6 +117,7 @@ struct ApplicationContext {
     SettingsManager *settingsManager = nullptr;
     SessionManager *sessionManager = nullptr;
     DetailsPaneManager *detailsPaneManager = nullptr;
+    DetailPageManager *detailPageManager = nullptr;
     DatabaseManager *databaseManager = nullptr;
     NavigationManager *navigationManager = nullptr;
     AnimationManager *animationManager = nullptr;
@@ -128,7 +130,7 @@ struct ApplicationContext {
     SearchManager *searchManager = nullptr;
     LaunchManager *launchManager = nullptr;
     CacheManager *cacheManager = nullptr;
-    PlaylistManager *playlistManager = nullptr; // Kartend-vlm7
+    PlaylistManager *playlistManager = nullptr;
 
     // Centralized interaction state (owned by InteractionManager)
     InteractionStateHolder *interactionState = nullptr;

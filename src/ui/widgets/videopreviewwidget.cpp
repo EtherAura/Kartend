@@ -1,4 +1,4 @@
-// Looping preview video with audio (Kartend-ahg + Kartend-ljey).
+// Looping preview video with audio (+).
 //
 // Renders frames into a QLabel via QVideoSink rather than using
 // QVideoWidget. QVideoWidget's native-window backend plays audio fine but
@@ -45,7 +45,7 @@ VideoPreviewWidget::VideoPreviewWidget(QWidget *parent) : QWidget(parent) {
   m_player = new QMediaPlayer(this);
   m_audioOutput = new QAudioOutput(this);
   // Audio is unmuted by default; volume comes from s_globalVolume so a
-  // toolbar slider (Kartend-3m01) controls every preview surface uniformly.
+  // toolbar slider controls every preview surface uniformly.
   m_audioOutput->setMuted(false);
   m_player->setAudioOutput(m_audioOutput);
   applyGlobalVolume();

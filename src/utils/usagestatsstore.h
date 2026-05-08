@@ -10,7 +10,7 @@
 class QSqlDatabase;
 
 /// Read/write helpers for per-item usage statistics stored on the existing
-/// `items` table (Kartend-7vi).
+/// `items` table.
 ///
 /// Three columns drive everything:
 ///   - `play_count`         (INTEGER, since v1)        — incremented on launch
@@ -84,7 +84,7 @@ loadForItem(QSqlDatabase &db, const QString &collectionUuid, const QString &path
                                                     const QString &path);
 
 /// Adds `seconds` to `total_play_seconds`. Called from LaunchManager when a
-/// runtime-tracked child process exits (Kartend-qxv pipeline). `seconds` must
+/// runtime-tracked child process exits (pipeline). `seconds` must
 /// be non-negative; zero/negative inputs are rejected to keep noise out of
 /// the table.
 [[nodiscard]] ErrorUtils::Result<bool> recordPlaySession(QSqlDatabase &db,

@@ -37,11 +37,11 @@ struct ItemMetadata {
   int runtimeSeconds = -1;
   /// JSON array string (e.g. `["co-op","arcade"]`) or empty.
   QString tags;
-  /// JSON object string for user-defined key/value pairs (Kartend-hpln).
+  /// JSON object string for user-defined key/value pairs.
   QString customFields;
-  /// Optional override for the per-item manual file (Kartend-9jdv).
+  /// Optional override for the per-item manual file.
   QString manualPath;
-  /// Optional per-item launcher override (Kartend-dnx4). When >= 0, indexes
+  /// Optional per-item launcher override. When >= 0, indexes
   /// into the owning collection's unified launcher list (0 = primary, 1..N =
   /// additionalLaunchers[0..N-1]) and bypasses the multi-launcher chooser at
   /// launch. Negative means "no override" — fall through to the chooser /

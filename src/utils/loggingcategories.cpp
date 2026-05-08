@@ -7,4 +7,4 @@
 Q_LOGGING_CATEGORY(lcPerfTrace, "kartend.perftrace", QtWarningMsg)
 Q_LOGGING_CATEGORY(lcSearchDiag, "kartend.searchdiag", QtWarningMsg)
 Q_LOGGING_CATEGORY(lcScanFlow, "kartend.scanflow", QtDebugMsg)
-// lcErrors is defined inline in errorutils.h (Kartend-v3v).
+// lcErrors is defined inline in errorutils.h.

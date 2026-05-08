@@ -1,12 +1,12 @@
-// Kartend-qbp3: edge-darkening vignette overlay. Paints a radial gradient
+// edge-darkening vignette overlay. Paints a radial gradient
 // from transparent at center to alpha-blended black at the corners. The
 // gradient is anchored to a circle that touches the corners of the rect so
 // the darkening lands evenly on a non-square viewport.
 #include "vignetteoverlay.h"
 
 #include <QEvent>
-#include <QPaintEvent>
 #include <QPainter>
+#include <QPaintEvent>
 #include <QRadialGradient>
 #include <QResizeEvent>
 #include <QtMath>

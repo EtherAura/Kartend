@@ -1,6 +1,6 @@
 // Read/write access to per-item usage statistics on the items table.
 //
-// Three columns power Kartend-7vi:
+// Three columns power:
 //   - play_count          (v1)   incremented on launch
 //   - last_played         (v1)   stamped on launch (ISO-8601 UTC)
 //   - total_play_seconds  (v7)   accumulated runtime when runtime detection is on

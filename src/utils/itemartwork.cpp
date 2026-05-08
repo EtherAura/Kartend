@@ -1,5 +1,5 @@
 // Read/write access to the item_artwork table introduced in schema v6
-// (Kartend-yf1 sub-issue (a)). Mirrors the ItemMetadataStore pattern: keyed
+// (sub-issue (a)). Mirrors the ItemMetadataStore pattern: keyed
 // rows survive item id renumbering across rescans, manual overrides win when
 // set, standard types fall back to subdirectory auto-discovery.
 #include "itemartwork.h"

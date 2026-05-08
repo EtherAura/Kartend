@@ -265,7 +265,7 @@ void TestItemMetadata::runtimeSecondsNullableRoundTrip() {
 
 void TestItemMetadata::launcherIndexNullableRoundTrip() {
   // Mirrors the runtime-seconds NULL contract for the per-item launcher
-  // override (Kartend-dnx4): -1 in the struct means "no override" and
+  // override: -1 in the struct means "no override" and
   // serializes to NULL; setting a non-negative value round-trips intact;
   // returning to -1 must clear the column back to NULL.
   const QString conn = "im_launcher_null";

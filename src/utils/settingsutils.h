@@ -21,12 +21,12 @@ public:
   static auto applyVerticalScrollbarSetting(QScrollArea *scrollArea, int collectionIndex,
                                             const QList<CollectionConfig> &collections) -> void;
 
-  /// Kartend-88w: copy the active kartend.cfg verbatim to @p destPath. Returns
+  /// copy the active kartend.cfg verbatim to @p destPath. Returns
   /// FileNotFound if the live config doesn't exist yet, FileWriteError if the
   /// destination can't be written.
   [[nodiscard]] static auto exportConfig(const QString &destPath) -> ErrorUtils::Result<void>;
 
-  /// Kartend-88w: validate @p sourcePath as a Kartend INI, then atomically
+  /// validate @p sourcePath as a Kartend INI, then atomically
   /// replace the live kartend.cfg with its contents. The previous config is
   /// preserved as kartend.cfg.bak in the same directory. Returns
   /// ConfigLoadFailed if the source can't be parsed as a Kartend config.

@@ -126,7 +126,7 @@ public:
   void initializeCache();
   void clearLoadedArtworkState();
 
-  // ─── Per-item artwork-type override (Kartend-1v6) ─────────────────────────
+  // ─── Per-item artwork-type override ─────────────────────────
   // The shift+middle-click gesture cycles the displayed artwork through the
   // item's available types. The chosen type id is stashed in
   // `m_artworkTypeOverrides` keyed on the absolute file path, so widget
@@ -147,7 +147,7 @@ private:
   CacheManager *m_cacheManager;
   void trackWidget(ItemWidget *widget);
   /// Applies processed artwork results to UI widgets on the GUI thread.
-  void applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults, bool highPriority);
+  void applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults);
   void collectUncachedAndApplyCached(const QList<ArtworkInfo> &items,
                                      QList<ArtworkInfo> &uncachedItems);
   void dispatchAndTrackBatch(const QList<ArtworkInfo> &batch, bool highPriority);
@@ -176,7 +176,7 @@ private:
   QSet<QString> m_silentlyCachedPaths;
   QSet<QString> m_silentPendingPaths;
   QStringList m_allArtworkPaths;
-  // Kartend-1v6: per-item artwork-type override map. Key is the absolute
+  // per-item artwork-type override map. Key is the absolute
   // media file path; value is the artwork type id ("" == primary/legacy).
   // Cleared whenever the active widget set is torn down (collection change,
   // pre-search restore) so a fresh navigation starts back on the primary.

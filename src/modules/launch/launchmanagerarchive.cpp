@@ -136,7 +136,7 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
 }
 
 QString LaunchManager::findFileWithExtension(const QString &directory, const QString &extension) {
-  // Kartend-qp9k: the launch-extension field accepts a comma-separated list
+  // the launch-extension field accepts a comma-separated list
   // (".cue, .bin, .iso") expressing user preference. Earlier extensions are
   // preferred — a .cue index file wins over a .bin track when the archive
   // ships both. We do one directory pass and keep the lowest-priority match

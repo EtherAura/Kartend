@@ -1,6 +1,13 @@
 #ifndef COLLECTIONUTILS_H
 #define COLLECTIONUTILS_H
 
+// Standalone enums (HorizontalAlignment, DetailsPane*, BackgroundType,
+// ViewType, SortMode) live in collectiontypes.h so files that only need
+// the type tags don't pay the cost of including UIConstants, CollectionConfig,
+// and the hierarchy cache. This header re-includes that file so existing
+// callers compile unchanged.
+#include "collectiontypes.h"
+
 #include <algorithm>
 #include <QDir>
 #include <QHash>
@@ -15,52 +22,6 @@
 namespace ErrorUtils {
 struct ErrorContext;
 }
-
-enum class HorizontalAlignment { Left = 0, Center = 1, Right = 2 };
-
-/// Kartend-guo5: anchor for the per-collection header logo overlay. Drawn at
-/// the top of the items viewport over the grid. Center matches the typical
-/// "title slate" usage; Left/Right are for users who want the logo offset so
-/// it doesn't fight a centered toolbar element.
-enum class HeaderLogoPosition { TopLeft = 0, TopCenter = 1, TopRight = 2 };
-
-enum class DetailsPaneMode { Overlay = 0, Expand = 1 };
-
-/// Kartend-63e / Kartend-u2gx: which edge of the items viewport the details
-/// pane docks against. Right/Left are width-driven; Top/Bottom are
-/// height-driven. In Expand mode the layout swaps the insertion index and
-/// orientation; in Overlay mode the anchor edge is swapped.
-enum class DetailsPanePosition { Right = 0, Left = 1, Top = 2, Bottom = 3 };
-
-/// Kartend-63e: how the details-pane background is rendered. Color and Image
-/// mirror the main-view BackgroundType values. Pattern adds a
-/// procedurally-drawn pattern (currently only Crosshatch) tinted by
-/// `detailsPanePatternColor`.
-enum class DetailsPaneBackgroundType { Color = 0, Image = 1, Pattern = 2 };
-
-/// Kartend-63e: built-in details-pane background patterns. Single value today;
-/// dots/lines/etc. can be added without breaking persistence because the int
-/// representation is what's serialized.
-enum class DetailsPanePattern { Crosshatch = 0 };
-
-/// Kartend-63e: which built-in tab is active in the details pane. Item is the
-/// per-item view (artwork + metadata); Collection forces the collection
-/// summary even with a selection; File is reserved for a user-customizable
-/// pane in a later iteration.
-enum class DetailsPaneTab { Item = 0, Collection = 1, File = 2 };
-
-/// Kartend-vbs: per-collection background can be a flat color, a wallpaper
-/// image, or a looping muted video file. Video uses BackgroundVideoWidget
-/// (QMediaPlayer + QVideoSink) parented to the items viewport; Image and
-/// Color route through QSS on the viewport as before.
-enum class BackgroundType { Color = 0, Image = 1, Video = 2 };
-
-/// View type for displaying collection items.
-/// Kartend-dx9t: Horizontal flips the virtual-scrolling axis so items flow
-/// top-to-bottom then left-to-right. The collection's `gridWidth` is reused
-/// as "items per column" (the fixed dimension) instead of items per row, and
-/// the items area scrolls horizontally instead of vertically.
-enum class ViewType { Grid = 0, List = 1, CoverFlow = 2, Horizontal = 3 };
 
 namespace CollectionUtils {
 
@@ -147,7 +108,7 @@ namespace CollectionUtils {
   return DetailsPanePosition::Right;
 }
 
-/// Kartend-u2gx: true for Top/Bottom dock — tells layout/drag code to treat the
+/// true for Top/Bottom dock — tells layout/drag code to treat the
 /// pane's height (not width) as the configurable dimension and to span the full
 /// viewport perpendicular to the dock edge.
 [[nodiscard]] inline bool isDetailsPaneHorizontal(DetailsPanePosition pos) {
@@ -209,7 +170,7 @@ stringToDetailsPaneBackgroundType(const QString &str) {
 
 } // namespace CollectionUtils
 
-/// Kartend-p1jd: a globally-registered, reusable launcher configuration. A
+/// a globally-registered, reusable launcher configuration. A
 /// LauncherConfig that carries a non-empty `presetId` matching a preset's
 /// `id` inherits its name + path + core + parameters from the preset at
 /// resolution time (LauncherUtils::resolvePreset). Renaming a preset is
@@ -229,21 +190,21 @@ struct LauncherPreset {
   }
 };
 
-/// Kartend-bdl: one entry in a collection's launcher list. The legacy primary
+/// one entry in a collection's launcher list. The legacy primary
 /// launcher (CollectionConfig::launcherPath/corePath/launchParameters) is
 /// always present as launcher index 0; entries in
 /// CollectionConfig::additionalLaunchers occupy indices 1..N. `name` is a
 /// user-visible label shown in the launcher chooser; empty falls back to the
 /// executable basename.
 ///
-/// Kartend-p1jd: when `presetId` matches a registered LauncherPreset id, the
+/// when `presetId` matches a registered LauncherPreset id, the
 /// preset's fields override the inline launcher fields at resolution time.
 struct LauncherConfig {
   QString name;
   QString launcherPath;
   QString corePath;
   QString launchParameters;
-  /// Optional reference to a globally-registered preset (Kartend-p1jd).
+  /// Optional reference to a globally-registered preset.
   /// When set and the preset exists, all other fields are inherited from
   /// the preset. Empty means "use the inline fields verbatim".
   QString presetId;
@@ -256,7 +217,7 @@ struct LauncherConfig {
 
 namespace LauncherUtils {
 
-/// Kartend-8sox: returns true when @p launcherPath points at a libretro
+/// returns true when @p launcherPath points at a libretro
 /// frontend (currently RetroArch). The substring check is the single source
 /// of truth — callers elsewhere ask "does this launcher take a libretro
 /// core?" instead of inspecting the path themselves, so the rest of the
@@ -271,31 +232,15 @@ namespace LauncherUtils {
 /// When `lc.presetId` matches a preset, that preset's name/path/core/params
 /// replace the inline fields (the preset id stays attached for round-trip
 /// persistence). When the preset is missing or `presetId` is empty, the
-/// returned config equals `lc`. Kartend-p1jd.
-[[nodiscard]] inline LauncherConfig resolvePreset(const LauncherConfig &lc,
-                                                  const QList<LauncherPreset> &presets) {
-  if (lc.presetId.isEmpty()) {
-    return lc;
-  }
-  for (const LauncherPreset &preset : presets) {
-    if (preset.id == lc.presetId) {
-      LauncherConfig resolved;
-      resolved.name = preset.name;
-      resolved.launcherPath = preset.launcherPath;
-      resolved.corePath = preset.corePath;
-      resolved.launchParameters = preset.launchParameters;
-      resolved.presetId = lc.presetId;
-      return resolved;
-    }
-  }
-  return lc;
-}
+/// returned config equals `lc`.
+[[nodiscard]] LauncherConfig resolvePreset(const LauncherConfig &lc,
+                                           const QList<LauncherPreset> &presets);
 
 } // namespace LauncherUtils
 
 struct CollectionConfig {
   QString name;
-  /// Free-form category/type tag (Kartend-dd8). Empty for an untagged
+  /// Free-form category/type tag. Empty for an untagged
   /// collection — subcollections inherit the nearest non-empty ancestor type
   /// for filter purposes (see CollectionUtils::effectiveCollectionType). The
   /// value is just a user-chosen label like "Games" / "Movies" / "Music"; the
@@ -305,15 +250,15 @@ struct CollectionConfig {
   QString corePath;
   QString launchParameters;
   /// User-visible name for the primary (legacy) launcher. Empty is fine — the
-  /// chooser dialog falls back to the executable basename. Kartend-bdl.
+  /// chooser dialog falls back to the executable basename.
   QString launcherName;
   /// Extra launchers beyond the primary, indexed at 1..N in launcher views.
-  /// Kartend-bdl.
+
   QList<LauncherConfig> additionalLaunchers;
   /// Index into the unified launcher view (0 = primary, 1..N =
   /// additionalLaunchers[0..N-1]). The chooser dialog pre-selects this entry
   /// when launcherCount() > 1; for single-launcher collections it is
-  /// effectively ignored. Kartend-bdl.
+  /// effectively ignored.
   int defaultLauncherIndex = 0;
   QString mediaDirectory;
   QString artworkDirectory;
@@ -321,35 +266,35 @@ struct CollectionConfig {
   /// Directory that holds per-item manual files (PDF, EPUB, TXT, etc.).
   /// Files are matched by completeBaseName(), parallel to artworkDirectory
   /// and videoDirectory. Optional; when empty no manual is auto-discovered.
-  /// Per-item overrides live in `item_metadata.manual_path` (Kartend-9jdv).
+  /// Per-item overrides live in `item_metadata.manual_path`.
   QString manualDirectory;
   QString placeholderArtwork;
   QString collectionIcon;
   QStringList extensions;
   /// User-defined custom artwork type ids beyond the standard set
-  /// (Kartend-53vk). Each entry is a free-form string the user picks; the
+  /// Each entry is a free-form string the user picks; the
   /// sidebar uses it both as the artwork_type id stored in `item_artwork` and
   /// as the gallery thumbnail label until a friendly-name registry is added.
   /// Auto-discovery does NOT apply to custom types — they only resolve via a
   /// per-item manual override.
   QStringList customArtworkTypes;
   int gridWidth;
-  /// Kartend-dx9t: per-collection items-per-column for the Horizontal view
+  /// per-collection items-per-column for the Horizontal view
   /// mode. 0 means "fall back to gridWidth" so existing collections that
   /// upgrade and try Horizontal mode still get a sensible default. Clamped to
   /// the same [MIN_WIDTH, MAX_WIDTH] range as gridWidth at save time.
   int horizontalGridHeight = 0;
-  /// Kartend-0p3w: alternate items-per-row applied when the sidebar is hidden
+  /// alternate items-per-row applied when the sidebar is hidden
   /// AND the active sidebar mode actually shrinks the grid (Expand). 0 means
   /// "inherit gridWidth" so existing collections behave unchanged. Overlay mode
   /// always uses gridWidth regardless of sidebar visibility, since the floating
   /// sidebar doesn't reduce the grid's available area.
   int gridWidthSidebarHidden = 0;
-  /// Kartend-0p3w: alternate items-per-column for Horizontal view, applied when
+  /// alternate items-per-column for Horizontal view, applied when
   /// the sidebar is hidden in Expand mode. 0 means "inherit horizontalGridHeight"
   /// (which itself falls back to gridWidth when 0).
   int horizontalGridHeightSidebarHidden = 0;
-  /// Kartend-u2gx: alternate vertical-axis grid override applied when a
+  /// alternate vertical-axis grid override applied when a
   /// Top/Bottom-docked details pane hides in Expand mode. Reserved for views
   /// that have a meaningful items-per-column dimension (e.g. Horizontal); 0
   /// means "no override" so existing layouts are unaffected. Sibling to
@@ -365,20 +310,20 @@ struct CollectionConfig {
   bool hideTitles = false;
   bool hideSubcollectionTitles = false;
   /// Per-collection regex patterns stripped from displayed item titles
-  /// (Kartend-5h6). One pattern per entry; processed in order via
+  /// One pattern per entry; processed in order via
   /// QString::remove(). Common use is dropping region tags like `\s*\(USA\)`
   /// or revision tags like `\s*\[!\]` so only the canonical title shows in
   /// the grid/list. Patterns are stored verbatim (no escaping) — the user
   /// types regex syntax directly in the toolbar popup. Invalid patterns are
   /// skipped at compile time rather than aborting the whole list.
   QStringList titleExclusionPatterns;
-  /// Master switch for the exclusion list (Kartend-5h6). When false the
+  /// Master switch for the exclusion list. When false the
   /// patterns persist but are not applied — lets the user toggle the cleanup
   /// from the toolbar without losing their pattern list.
   bool titleExclusionEnabled = true;
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Center;
   DetailsPaneMode sidebarMode = DetailsPaneMode::Overlay;
-  /// Kartend-63e sidebar enhancements. Position controls left/right placement;
+  /// sidebar enhancements. Position controls left/right placement;
   /// in Fixed mode this swaps the QHBoxLayout insertion index, in Overlay mode
   /// it swaps the X anchor in positionSidebarOverlay().
   DetailsPanePosition sidebarPosition = DetailsPanePosition::Right;
@@ -390,7 +335,7 @@ struct CollectionConfig {
   QString sidebarBackgroundColor; // hex; blank falls back to palette(Window)
   QString sidebarBackgroundImage; // path; sanitized via validatePathSecurity on save
   DetailsPanePattern sidebarPattern = DetailsPanePattern::Crosshatch;
-  /// Kartend-63e: 0–100 % opacity multiplier applied to pattern strokes.
+  /// 0–100 % opacity multiplier applied to pattern strokes.
   /// Lower values fade the lines into the bg without changing color; users
   /// who add new DetailsPanePattern variants later get a single intensity knob
   /// for free. 50 matches the original sidebar dimming.
@@ -398,7 +343,7 @@ struct CollectionConfig {
   QString sidebarPatternColor; // hex tint overlay painted on top of the pattern
   QString sidebarTextColor;    // hex; blank falls back to palette(WindowText)
   QString sidebarAccentColor;  // hex; blank falls back to palette(highlight)
-  /// Kartend-63e: semi-opaque "bubble" backgrounds drawn behind sidebar
+  /// semi-opaque "bubble" backgrounds drawn behind sidebar
   /// content for readability over patterned/image backgrounds. The color
   /// holds RGB only; per-bubble alpha is the matching `*Opacity` field
   /// (0–255). Blank color falls back to a sensible default derived from
@@ -416,11 +361,11 @@ struct CollectionConfig {
   /// their historical look. When `sidebarWidthLocked` is true the user
   /// cannot drag the inner edge to resize.
   int sidebarWidth = UIConstants::DetailsPane::FIXED_WIDTH;
-  /// Kartend-u2gx: preferred pane height when docked Top or Bottom. Floored at
+  /// preferred pane height when docked Top or Bottom. Floored at
   /// MIN_HEIGHT at apply time; no upper bound. Defaults to FIXED_HEIGHT so a
   /// fresh switch to Top/Bottom dock has a sensible size.
   int sidebarHeight = UIConstants::DetailsPane::FIXED_HEIGHT;
-  /// Kartend-u2gx: name kept as `sidebarWidthLocked` to preserve the existing
+  /// name kept as `sidebarWidthLocked` to preserve the existing
   /// INI key, but semantically locks BOTH width drag (L/R) and height drag
   /// (T/B). When true the user cannot drag the inner edge to resize.
   bool sidebarWidthLocked = true;
@@ -429,7 +374,7 @@ struct CollectionConfig {
   /// stays on the per-Item view.
   DetailsPaneTab sidebarActiveTab = DetailsPaneTab::Item;
   ViewType viewType = ViewType::Grid; // Grid (default) or List view
-  /// Kartend-ks4n: when true, media items whose artwork lookup returns no
+  /// when true, media items whose artwork lookup returns no
   /// match are hidden from the items page. Subcollections and virtual folders
   /// are unaffected. The filter combines with the active search /
   /// subcollection filter as an additional predicate, so search results are
@@ -448,23 +393,23 @@ struct CollectionConfig {
   BackgroundType backgroundType = BackgroundType::Color;
   QString backgroundColor; // Background color (hex like #1a1a2e)
   QString backgroundImage; // Background image path
-  /// Kartend-vbs: looping muted background video path. Active only when
+  /// looping muted background video path. Active only when
   /// backgroundType == Video; empty disables the video and falls back to
   /// the system bg until the user picks a file. Sanitised on save like
   /// backgroundImage.
   QString backgroundVideo;
-  QString primaryColor;    // Primary UI color for toolbar, menubar, search bar
-  QString tileColor;       // Color for item tiles/placeholders (if blank, uses default)
-  QString selectionColor;  // Color for selection rectangle and glide overlay border
+  QString primaryColor;   // Primary UI color for toolbar, menubar, search bar
+  QString tileColor;      // Color for item tiles/placeholders (if blank, uses default)
+  QString selectionColor; // Color for selection rectangle and glide overlay border
 
-  /// Kartend-guo5: optional header logo image painted at the top of the items
+  /// optional header logo image painted at the top of the items
   /// viewport, distinct from `collectionIcon` (which renders on the
   /// collection-as-tile entry). Empty path disables the overlay. Sanitised
   /// like backgroundImage on save.
   QString headerLogoImage;
   HeaderLogoPosition headerLogoPosition = HeaderLogoPosition::TopCenter;
 
-  /// Kartend-qbp3: edge-darkening vignette overlay on the items viewport.
+  /// edge-darkening vignette overlay on the items viewport.
   /// `vignetteIntensity` is the corner darkness percent (0 = no effect, 100
   /// = pitch black at the corners). 60 is a sensible "noticeable but
   /// subtle" default. Independent of background type — works equally well
@@ -472,7 +417,7 @@ struct CollectionConfig {
   bool vignetteEnabled = false;
   int vignetteIntensity = 60;
 
-  /// Kartend-y25g: per-collection wallpaper parallax. When enabled, the
+  /// per-collection wallpaper parallax. When enabled, the
   /// image background scrolls at `parallaxStrength` percent of the items
   /// scroll speed (0 = bg locked / no parallax movement; 100 = bg moves
   /// in lockstep with the content). Image bg only — video bgs paint via
@@ -480,7 +425,7 @@ struct CollectionConfig {
   bool wallpaperParallax = false;
   int parallaxStrength = 30;
 
-  /// Kartend-eq8r: simulated backdrop blur on the items toolbar. When
+  /// simulated backdrop blur on the items toolbar. When
   /// enabled with an image bg, the wallpaper is pre-blurred (cheap
   /// downscale-upscale) and painted as the toolbar background, mimicking
   /// macOS Vibrancy. `backdropBlurRadius` controls the blur intensity
@@ -522,7 +467,7 @@ struct CollectionConfig {
   // Text appearance settings (per-collection)
   QString customFontFamily; // Custom font family (empty = system default)
 
-  // ─── Sidebar font (Kartend-ekaa) ───────────────────────────────────────────
+  // ─── Sidebar font ───────────────────────────────────────────
   // Per-collection override for the metadata sidebar's text. Empty family /
   // 0 size = inherit from the application font (which itself respects
   // GeneralSettings::globalUiFontFamily). Stored alongside the rest of the
@@ -532,7 +477,7 @@ struct CollectionConfig {
   QString sidebarFontFamily;
   int sidebarFontPointSize = 0;
 
-  // ─── Playlist support (Kartend-vlm7) ───────────────────────────────────────
+  // ─── Playlist support ───────────────────────────────────────
   // Runtime-only marker for synthesized "virtual collection" entries backed by
   // the SQLite `playlists` table instead of an INI section. Synthesised at
   // startup by PlaylistManager and appended to MainWindow::m_collections so
@@ -542,7 +487,7 @@ struct CollectionConfig {
   bool isPlaylist = false;
   QString playlistId; // UUID — matches playlists.id when isPlaylist is true.
 
-  // ─── Collection links / alias parents (Kartend-gzmk) ────────────────────────
+  // ─── Collection links / alias parents ────────────────────────
   // Names of additional parent collections this collection should appear
   // under (in addition to its primary parentCollectionIndex). Stored as
   // names rather than indices so reorder/rename of the parent list survives
@@ -552,7 +497,7 @@ struct CollectionConfig {
   // the tree. Self-references (a collection naming itself) are likewise
   // dropped. Empty when the collection has no aliases.
   QStringList additionalParentNames;
-  /// Reserved-kind tag for built-in playlists (Kartend-5mg8). Empty for
+  /// Reserved-kind tag for built-in playlists. Empty for
   /// ordinary user-created playlists; "favorites" for the auto-created
   /// favorites slot. The UI uses this to hide the Delete action on built-ins
   /// and to highlight the favorites toggle on items that already belong to
@@ -608,9 +553,8 @@ struct CollectionConfig {
            itemHeight == other.itemHeight && fontSize == other.fontSize &&
            cornerRadius == other.cornerRadius && backgroundType == other.backgroundType &&
            backgroundColor == other.backgroundColor && backgroundImage == other.backgroundImage &&
-           backgroundVideo == other.backgroundVideo &&
-           primaryColor == other.primaryColor && tileColor == other.tileColor &&
-           selectionColor == other.selectionColor &&
+           backgroundVideo == other.backgroundVideo && primaryColor == other.primaryColor &&
+           tileColor == other.tileColor && selectionColor == other.selectionColor &&
            headerLogoImage == other.headerLogoImage &&
            headerLogoPosition == other.headerLogoPosition &&
            vignetteEnabled == other.vignetteEnabled &&
@@ -618,7 +562,8 @@ struct CollectionConfig {
            wallpaperParallax == other.wallpaperParallax &&
            parallaxStrength == other.parallaxStrength &&
            toolbarBackdropBlur == other.toolbarBackdropBlur &&
-           backdropBlurRadius == other.backdropBlurRadius && extractArchives == other.extractArchives &&
+           backdropBlurRadius == other.backdropBlurRadius &&
+           extractArchives == other.extractArchives &&
            extractedExtension == other.extractedExtension && expandMode == other.expandMode &&
            includeContentSubfolders == other.includeContentSubfolders &&
            includeArtworkSubfolders == other.includeArtworkSubfolders &&
@@ -633,7 +578,7 @@ struct CollectionConfig {
            additionalParentNames == other.additionalParentNames;
   }
 
-  // ─── Launcher list helpers (Kartend-bdl) ───────────────────────────────────
+  // ─── Launcher list helpers ───────────────────────────────────
   /// Total number of launchers visible to the user: 1 primary + N additional.
   [[nodiscard]] int launcherCount() const { return 1 + additionalLaunchers.size(); }
 
@@ -644,7 +589,7 @@ struct CollectionConfig {
     if (index == 0) {
       // Qualify with this-> so the compiler doesn't confuse the legacy fields
       // with the same-named members on LauncherConfig during aggregate init.
-      // The trailing empty string is the (Kartend-p1jd) presetId — the
+      // The trailing empty string is the presetId — the
       // primary launcher slot itself never references a preset.
       return LauncherConfig{this->launcherName, this->launcherPath, this->corePath,
                             this->launchParameters, QString{}};
@@ -689,25 +634,25 @@ struct CollectionConfig {
   // Validates numeric fields are within acceptable ranges
   void clampValues() {
     gridWidth = std::clamp(gridWidth, UIConstants::Grid::MIN_WIDTH, UIConstants::Grid::MAX_WIDTH);
-    // Kartend-dx9t: 0 stays 0 (means "inherit gridWidth"); any non-zero value
+    // 0 stays 0 (means "inherit gridWidth"); any non-zero value
     // is clamped to the same range as gridWidth so a hand-edit can't pin the
     // column at 0 or saturate the layout calculation.
     if (horizontalGridHeight != 0) {
       horizontalGridHeight = std::clamp(horizontalGridHeight, UIConstants::Grid::MIN_WIDTH,
                                         UIConstants::Grid::MAX_WIDTH);
     }
-    // Kartend-0p3w: 0 stays 0 ("inherit primary"); any non-zero alt is clamped
+    // 0 stays 0 ("inherit primary"); any non-zero alt is clamped
     // to the same valid range so a hand-edit can't pin the grid at 0 columns.
     if (gridWidthSidebarHidden != 0) {
       gridWidthSidebarHidden = std::clamp(gridWidthSidebarHidden, UIConstants::Grid::MIN_WIDTH,
                                           UIConstants::Grid::MAX_WIDTH);
     }
     if (horizontalGridHeightSidebarHidden != 0) {
-      horizontalGridHeightSidebarHidden = std::clamp(horizontalGridHeightSidebarHidden,
-                                                     UIConstants::Grid::MIN_WIDTH,
-                                                     UIConstants::Grid::MAX_WIDTH);
+      horizontalGridHeightSidebarHidden =
+          std::clamp(horizontalGridHeightSidebarHidden, UIConstants::Grid::MIN_WIDTH,
+                     UIConstants::Grid::MAX_WIDTH);
     }
-    // Kartend-u2gx: same 0-stays-0 rule for the vertical-shrink override used
+    // same 0-stays-0 rule for the vertical-shrink override used
     // when a Top/Bottom-docked details pane hides in Expand mode.
     if (gridHeightSidebarHidden != 0) {
       gridHeightSidebarHidden = std::clamp(gridHeightSidebarHidden, UIConstants::Grid::MIN_WIDTH,
@@ -729,17 +674,17 @@ struct CollectionConfig {
     listRowHeight = std::clamp(listRowHeight, UIConstants::ListView::MIN_ROW_HEIGHT,
                                UIConstants::ListView::MAX_ROW_HEIGHT);
     sidebarWidth = std::max(sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
-    // Kartend-u2gx: floor pane height; same no-upper-bound treatment as width.
+    // floor pane height; same no-upper-bound treatment as width.
     sidebarHeight = std::max(sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
-    // Kartend-qbp3: corner darkness percent. 0 = effect off (the toggle is
+    // corner darkness percent. 0 = effect off (the toggle is
     // separate); 100 = pitch black at the corners.
     vignetteIntensity = std::clamp(vignetteIntensity, 0, 100);
-    // Kartend-y25g: parallax strength percent.
+    // parallax strength percent.
     parallaxStrength = std::clamp(parallaxStrength, 0, 100);
-    // Kartend-eq8r: backdrop blur radius. 4 is a barely-perceptible blur;
+    // backdrop blur radius. 4 is a barely-perceptible blur;
     // anything above 32 is heavy enough that the source becomes unreadable.
     backdropBlurRadius = std::clamp(backdropBlurRadius, 4, 32);
-    // Kartend-bdl: keep the default-launcher pointer inside the visible list
+    // keep the default-launcher pointer inside the visible list
     // so a stale config (or a deletion that out-paced the index) can never
     // refer past the end. 0 is always valid because the primary slot exists
     // even when its launcherPath is empty.
@@ -786,7 +731,7 @@ namespace CollectionUtils {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Effective grid sizing helpers (Kartend-0p3w)
+// Effective grid sizing helpers
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // "Sidebar shrinking active" is the predicate captured by the caller: sidebar
@@ -804,7 +749,7 @@ namespace CollectionUtils {
 }
 
 [[nodiscard]] inline int effectiveHorizontalGridHeight(const CollectionConfig &config,
-                                                      bool sidebarShrinkingActive) {
+                                                       bool sidebarShrinkingActive) {
   if (sidebarShrinkingActive && config.horizontalGridHeightSidebarHidden > 0) {
     return config.horizontalGridHeightSidebarHidden;
   }
@@ -818,48 +763,9 @@ namespace CollectionUtils {
 /// Count virtual folders (subdirectories) for a collection config.
 /// Returns 0 if includeContentSubfolders is disabled or showAllSubfolderItems
 /// is enabled.
-[[nodiscard]] inline int countVirtualFolders(const CollectionConfig &config) {
-  // Only count virtual folders if includeContentSubfolders is enabled
-  // AND showAllSubfolderItems is false (otherwise items are flattened)
-  if (!config.includeContentSubfolders || config.showAllSubfolderItems) {
-    return 0;
-  }
-
-  // Determine the effective directory to scan
-  QString scanDir = config.mediaDirectory;
-  if (!config.currentSubfolder.isEmpty()) {
-    scanDir = QDir(scanDir).absoluteFilePath(config.currentSubfolder);
-  }
-
-  QDir dir(scanDir);
-  if (!dir.exists()) {
-    return 0;
-  }
-
-  // Count subdirectories, optionally including hidden folders
-  QDir::Filters filters = QDir::Dirs | QDir::NoDotAndDotDot;
-  if (config.showHiddenFolders) {
-    filters |= QDir::Hidden;
-  }
-  return dir.entryList(filters).size();
-}
+[[nodiscard]] int countVirtualFolders(const CollectionConfig &config);
 
 } // namespace CollectionUtils
-
-/// Sort mode for collection items
-enum class SortMode {
-  NameAscending = 0,        // A → Z (default)
-  NameDescending = 1,       // Z → A
-  CollectionAscending = 2,  // Collection name A → Z
-  CollectionDescending = 3, // Collection name Z → A
-  ArtworkFirst = 4,         // Items with artwork first
-  ArtworkLast = 5,          // Items with artwork last
-  Random = 6,               // Shuffle
-  DateDescending = 7,       // Newest modified first
-  DateAscending = 8,        // Oldest modified first
-  SizeDescending = 9,       // Largest file first
-  SizeAscending = 10        // Smallest file first
-};
 
 struct CollectionContext {
   int currentIndex = -1;
@@ -903,7 +809,7 @@ struct CollectionContext {
   QList<int> subcollectionOverride;
   bool suppressVirtualFolders = false;
 
-  // ─── Collection categorization filters (Kartend-dd8) ───────────────────────
+  // ─── Collection categorization filters ───────────────────────
   // Mirrored from GeneralSettings on every navigation entry so the scroll
   // pipeline can drop subcollection tiles whose effective type doesn't match
   // the active filter, or hide them entirely. Empty filter == show all.
@@ -939,7 +845,7 @@ struct GeneralSettings {
   int titleTintLightness = 60;   // Title text lightness (0-255)
   QString titleBaseColor;        // Base color for title text (empty = use highlight)
 
-  // Kartend-cub: when an item has no real artwork and falls back to placeholder
+  // when an item has no real artwork and falls back to placeholder
   // art (procedural hatch tile or user-supplied placeholder image), draw the
   // item's title text on top of the placeholder. Independent of the existing
   // hideTitles flag — pairs well with hideTitles=on so the title only appears
@@ -947,7 +853,7 @@ struct GeneralSettings {
   bool showTitleInPlaceholder = false;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Global UI font (Kartend-9v0o)
+  // Global UI font
   // Applied via QApplication::setFont() after settings load so every widget
   // without an explicit font (menus, dialogs, toolbar, sidebar, item titles
   // that haven't set a per-collection customFontFamily, etc.) inherits it.
@@ -958,7 +864,7 @@ struct GeneralSettings {
   int globalUiFontPointSize = 0;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Runtime text zoom (Kartend-7eff)
+  // Runtime text zoom
   // Application-wide multiplier applied on top of every font size — global UI
   // font, per-collection grid/list/coverflow item titles, and the metadata
   // sidebar. Stored as percent (100 = unscaled). Bound at runtime to
@@ -968,7 +874,7 @@ struct GeneralSettings {
   int uiTextZoomPercent = 100;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Preview video volume (Kartend-3m01)
+  // Preview video volume
   // Global volume for sidebar / overlay preview audio, 0–100. Applied to all
   // VideoPreviewWidget instances via the static setGlobalVolume() hook so a
   // single toolbar slider controls every preview surface.
@@ -976,7 +882,7 @@ struct GeneralSettings {
   int previewVideoVolume = 100;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Startup video (Kartend-y3ke)
+  // Startup video
   // Optional one-shot intro clip (logo / branding) shown above the main
   // window on launch. Skippable via any key or mouse click. The enable bool
   // is independent of the path so the user can keep a path configured but
@@ -1000,7 +906,7 @@ struct GeneralSettings {
   int keyAlphabeticForward = Qt::Key_PageDown;
   int keyJumpFirst = Qt::Key_Home;
   int keyJumpLast = Qt::Key_End;
-  // Kartend-uve: opens the dedicated item-detail page (full-window overlay)
+  // opens the dedicated item-detail page (full-window overlay)
   // for the current selection. Default I = "info"; ignored while the search
   // bar has focus so typing "i" in the filter still works.
   int keyItemDetails = Qt::Key_I;
@@ -1015,12 +921,12 @@ struct GeneralSettings {
   QString gamepadBackButton = "B";
   QString gamepadToggleSidebarButton = "Y";
   // ─────────────────────────────────────────────────────────────────────────
-  // Mouse: artwork-cycle modifier (Kartend-1v6)
+  // Mouse: artwork-cycle modifier
   // Stored as the integer value of a single Qt::KeyboardModifier flag
   // (Shift / Control / Alt / Meta). Combined with middle-click to cycle the
   // grid widget through the item's available artwork types. Default Shift
   // chosen to leave plain middle-click on its existing media-preview action
-  // (Kartend-ljey). Loader clamps unrecognized values back to Shift so a
+  // Loader clamps unrecognized values back to Shift so a
   // hand-edit can't disable the gesture entirely.
   // ─────────────────────────────────────────────────────────────────────────
   int artworkCycleModifier = static_cast<int>(Qt::ShiftModifier);
@@ -1035,7 +941,7 @@ struct GeneralSettings {
   QString startupCollection;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Attract mode / autoscroll (Kartend-1pp)
+  // Attract mode / autoscroll
   // ─────────────────────────────────────────────────────────────────────────
   bool attractModeEnabled = false;
   int attractModeIdleTimeoutSec = 120;      // Seconds of idle before activation
@@ -1046,11 +952,19 @@ struct GeneralSettings {
   bool attractModeAdvanceSelectionRandom = false; // Pick random vs. sequential next
 
   // Splash screens
+  // Empty title/subtitle strings mean "use the built-in default" (app display
+  // name for boot title, localized "Welcome back" for resume title, etc.).
+  // Custom values are used verbatim — no %1 substitution — so a user who
+  // wants the app name in the text needs to type it.
   bool bootSplashEnabled = true;
   bool resumeFocusSplashEnabled = true;
+  QString bootSplashTitle;
+  QString bootSplashSubtitle;
+  QString resumeFocusSplashTitle;
+  QString resumeFocusSplashSubtitle;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Runtime detection (Kartend-qxv)
+  // Runtime detection
   // When enabled, launched media items are tracked via a non-detached
   // QProcess so the UI can sleep behind a "Now Playing" overlay while the
   // child runs and automatically restore + raise the window when it exits.
@@ -1058,7 +972,7 @@ struct GeneralSettings {
   bool runtimeDetectionEnabled = false;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Launch history (Kartend-fse)
+  // Launch history
   // Chronological log of every successful launch, persisted in the
   // `launch_history` SQLite table and rendered by the History tab of the
   // Statistics dialog. Disabled flips off both new-row inserts and the
@@ -1070,7 +984,7 @@ struct GeneralSettings {
   int historyMaxEntries = 500;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Collection categorization (Kartend-dd8)
+  // Collection categorization
   // Toolbar-driven filters that hide subcollection tiles when navigating into
   // a parent. `collectionTypeFilter` is a user-visible label that matches
   // CollectionConfig::type (with parent-chain inheritance via
@@ -1082,7 +996,7 @@ struct GeneralSettings {
   bool hideSubcollectionTiles = false;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // View-mode toggles (Kartend-lfu0)
+  // View-mode toggles
   // Persisted state for the View → Show Menu Bar (F10), Show Toolbar (F8),
   // and Fullscreen (F11) actions so the chosen UI chrome survives across
   // launches. Defaults match the original .ui-defined "all visible, not
@@ -1093,7 +1007,7 @@ struct GeneralSettings {
   bool fullscreen = false;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Customizable toolbar (Kartend-81o)
+  // Customizable toolbar
   // Per-button visibility flags and text overrides for the items-page top bar.
   // Empty *Text strings mean "use the .ui default" so existing installs see no
   // visual change after upgrade. The search-mode button is icon-only and the
@@ -1117,7 +1031,7 @@ struct GeneralSettings {
   QString toolbarTitleFilterText;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Launcher presets (Kartend-p1jd)
+  // Launcher presets
   // Globally-registered, reusable launcher configurations referenced by
   // collection-level launcher entries via LauncherConfig::presetId. Stored
   // in the [Launchers] settings array; managed via the "Launchers" tab in
@@ -1139,48 +1053,90 @@ public:
   void rebuild(const QList<CollectionConfig> &collections);
 
   /// Returns the union of primary children and linked children
-  /// (Kartend-gzmk) for @p parentIndex. Primary children come first in
+  /// for @p parentIndex. Primary children come first in
   /// insertion order; linked children are appended in insertion order with
   /// duplicates suppressed. Most navigation/scroll/search code paths read
   /// children through this accessor, so they pick up alias parents
   /// automatically when the cache is rebuilt.
-  [[nodiscard]] QList<int> directChildren(int parentIndex) const {
-    return m_directChildren.value(parentIndex);
+  [[nodiscard]] const QList<int> &directChildren(int parentIndex) const {
+    auto it = m_directChildren.constFind(parentIndex);
+    if (it == m_directChildren.cend()) {
+      static const QList<int> kEmpty;
+      return kEmpty;
+    }
+    return it.value();
   }
 
   /// Subset of directChildren(@p parentIndex) reachable only via the
   /// CollectionConfig::additionalParentNames link list — i.e. the
-  /// "see-also" appearances. Used by the settings tree (Kartend-gzmk
+  /// "see-also" appearances. Used by the settings tree (
   /// stage 2) to render linked appearances in italics. Does NOT include
   /// the primary children.
-  [[nodiscard]] QList<int> linkedDirectChildren(int parentIndex) const {
-    return m_linkedDirectChildren.value(parentIndex);
+  [[nodiscard]] const QList<int> &linkedDirectChildren(int parentIndex) const {
+    auto it = m_linkedDirectChildren.constFind(parentIndex);
+    if (it == m_linkedDirectChildren.cend()) {
+      static const QList<int> kEmpty;
+      return kEmpty;
+    }
+    return it.value();
   }
 
   /// All descendants of @p parentIndex via the merged child graph
   /// (primary + linked). Deduped and cycle-bounded — even mutual links
   /// resolve to a finite set. The starting node itself is excluded.
-  [[nodiscard]] QList<int> allDescendants(int parentIndex) const {
-    return m_allDescendants.value(parentIndex);
+  [[nodiscard]] const QList<int> &allDescendants(int parentIndex) const {
+    auto it = m_allDescendants.constFind(parentIndex);
+    if (it == m_allDescendants.cend()) {
+      static const QList<int> kEmpty;
+      return kEmpty;
+    }
+    return it.value();
   }
 
   // UUID accessors - O(1) lookup of pre-computed values
-  [[nodiscard]] QString collectionUuid(int index) const { return m_collectionUuids.value(index); }
-
-  [[nodiscard]] QString expandedMediaDir(int index) const {
-    return m_expandedMediaDirs.value(index);
+  [[nodiscard]] const QString &collectionUuid(int index) const {
+    auto it = m_collectionUuids.constFind(index);
+    if (it == m_collectionUuids.cend()) {
+      static const QString kEmpty;
+      return kEmpty;
+    }
+    return it.value();
   }
 
-  [[nodiscard]] QString expandedArtworkDir(int index) const {
-    return m_expandedArtworkDirs.value(index);
+  [[nodiscard]] const QString &expandedMediaDir(int index) const {
+    auto it = m_expandedMediaDirs.constFind(index);
+    if (it == m_expandedMediaDirs.cend()) {
+      static const QString kEmpty;
+      return kEmpty;
+    }
+    return it.value();
   }
 
-  [[nodiscard]] QString uuidToMediaDir(const QString &uuid) const {
-    return m_uuidToMediaDir.value(uuid);
+  [[nodiscard]] const QString &expandedArtworkDir(int index) const {
+    auto it = m_expandedArtworkDirs.constFind(index);
+    if (it == m_expandedArtworkDirs.cend()) {
+      static const QString kEmpty;
+      return kEmpty;
+    }
+    return it.value();
   }
 
-  [[nodiscard]] QString uuidToArtworkDir(const QString &uuid) const {
-    return m_uuidToArtworkDir.value(uuid);
+  [[nodiscard]] const QString &uuidToMediaDir(const QString &uuid) const {
+    auto it = m_uuidToMediaDir.constFind(uuid);
+    if (it == m_uuidToMediaDir.cend()) {
+      static const QString kEmpty;
+      return kEmpty;
+    }
+    return it.value();
+  }
+
+  [[nodiscard]] const QString &uuidToArtworkDir(const QString &uuid) const {
+    auto it = m_uuidToArtworkDir.constFind(uuid);
+    if (it == m_uuidToArtworkDir.cend()) {
+      static const QString kEmpty;
+      return kEmpty;
+    }
+    return it.value();
   }
 
   [[nodiscard]] int uuidToCollectionIndex(const QString &uuid) const {
@@ -1211,27 +1167,22 @@ public:
     return QString();
   }
 
-  // Get all UUIDs for a collection and its descendants (for DB queries)
-  [[nodiscard]] QStringList descendantUuids(int parentIndex) const {
-    QStringList uuids;
-    QString parentUuid = m_collectionUuids.value(parentIndex);
-    if (!parentUuid.isEmpty()) {
-      uuids << parentUuid;
+  // Get all UUIDs for a collection and its descendants (for DB queries).
+  // Precomputed in rebuild() so this is an O(1) lookup on the hot path.
+  [[nodiscard]] const QStringList &descendantUuids(int parentIndex) const {
+    auto it = m_descendantUuids.constFind(parentIndex);
+    if (it == m_descendantUuids.cend()) {
+      static const QStringList kEmpty;
+      return kEmpty;
     }
-    for (int descendant : m_allDescendants.value(parentIndex)) {
-      QString uuid = m_collectionUuids.value(descendant);
-      if (!uuid.isEmpty()) {
-        uuids << uuid;
-      }
-    }
-    return uuids;
+    return it.value();
   }
 
   [[nodiscard]] bool isValid() const { return m_collections; }
 
 private:
   /// Cycle-safe descendant walk over the merged child graph. Without the
-  /// visited set, a Kartend-gzmk link cycle (A links B, B links A) would
+  /// visited set, a link cycle (A links B, B links A) would
   /// loop forever. Traversal order is BFS; result excludes the starting
   /// node so a self-link doesn't make a collection its own descendant.
   QList<int> computeDescendants(int parentIndex) const {
@@ -1253,7 +1204,7 @@ private:
 
   const QList<CollectionConfig> *m_collections = nullptr;
   QHash<int, QList<int>> m_directChildren;       // primary ∪ linked, primary first
-  QHash<int, QList<int>> m_linkedDirectChildren; // Kartend-gzmk: linked-only subset
+  QHash<int, QList<int>> m_linkedDirectChildren; // linked-only subset
   QHash<int, QList<int>> m_allDescendants;
 
   // Pre-computed UUIDs and directory mappings (eliminates SHA1 on each startup)
@@ -1264,39 +1215,17 @@ private:
   QHash<QString, QString> m_uuidToArtworkDir;     // UUID -> expanded artwork dir
   QHash<QString, int> m_uuidToCollectionIndex;    // UUID -> collection index
   QHash<QString, QString> m_mediaDirToArtworkDir; // media dir -> artwork dir (for file lookups)
+  QHash<int, QStringList> m_descendantUuids;      // index -> [self_uuid, descendant_uuids...]
 };
 
 // Legacy inline functions for backward compatibility
 namespace CollectionUtils {
 
-[[nodiscard]] inline QList<int>
-collectDescendantIndices(int parentIndex, const QList<CollectionConfig> &collections) {
-  QList<int> descendants;
-  for (int index = 0; index < collections.size(); ++index) {
-    if (collections[index].parentCollectionIndex == parentIndex) {
-      descendants.append(index);
-      descendants.append(collectDescendantIndices(index, collections));
-    }
-  }
-  return descendants;
-}
+[[nodiscard]] QList<int> collectDescendantIndices(int parentIndex,
+                                                  const QList<CollectionConfig> &collections);
 
-[[nodiscard]] inline QString hierarchicalNameFor(const CollectionConfig &collection,
-                                                 const QList<CollectionConfig> &collections) {
-  if (!collection.isSubcollection || collection.parentCollectionIndex < 0) {
-    return collection.name;
-  }
-  QStringList parts;
-  parts.prepend(collection.name);
-  int parent = collection.parentCollectionIndex;
-  while (parent >= 0 && parent < collections.size()) {
-    const CollectionConfig &p = collections[parent];
-    parts.prepend(p.name);
-    if (!p.isSubcollection) break;
-    parent = p.parentCollectionIndex;
-  }
-  return parts.join('/');
-}
+[[nodiscard]] QString hierarchicalNameFor(const CollectionConfig &collection,
+                                          const QList<CollectionConfig> &collections);
 
 /**
  * @brief Returns the ancestor index chain for a collection, root-first.
@@ -1307,50 +1236,36 @@ collectDescendantIndices(int parentIndex, const QList<CollectionConfig> &collect
  * include `collection` itself. Returns an empty list for non-subcollections or
  * collections whose `parentCollectionIndex` is out of range.
  *
- * Use this to render multi-level breadcrumbs (Kartend-7pq).
+ * Use this to render multi-level breadcrumbs.
  */
-[[nodiscard]] inline QList<int> ancestorIndexChain(const CollectionConfig &collection,
-                                                   const QList<CollectionConfig> &collections) {
-  QList<int> chain;
-  if (!collection.isSubcollection || collection.parentCollectionIndex < 0) {
-    return chain;
-  }
-  int parent = collection.parentCollectionIndex;
-  // Guard against cycles by bounding the walk length.
-  const int maxDepth = collections.size();
-  int steps = 0;
-  while (parent >= 0 && parent < collections.size() && steps < maxDepth) {
-    chain.prepend(parent);
-    const CollectionConfig &p = collections[parent];
-    if (!p.isSubcollection) {
-      break;
-    }
-    parent = p.parentCollectionIndex;
-    ++steps;
-  }
-  return chain;
-}
+[[nodiscard]] QList<int> ancestorIndexChain(const CollectionConfig &collection,
+                                            const QList<CollectionConfig> &collections);
 
-[[nodiscard]] inline QString selectionSessionKeyFor(const CollectionConfig &collection,
-                                                    const QList<CollectionConfig> &collections) {
-  const QString base = hierarchicalNameFor(collection, collections);
-  QString subfolder = QDir::cleanPath(collection.currentSubfolder.trimmed());
-  if (subfolder.isEmpty() || subfolder == ".") {
-    return base;
-  }
-  return base + "|subfolder=" + subfolder;
-}
+[[nodiscard]] QString selectionSessionKeyFor(const CollectionConfig &collection,
+                                             const QList<CollectionConfig> &collections);
 
-[[nodiscard]] inline QList<int> directChildrenOf(int parentIndex,
-                                                 const QList<CollectionConfig> &collections) {
-  QList<int> children;
-  for (int i = 0; i < collections.size(); ++i) {
-    if (collections[i].parentCollectionIndex == parentIndex) {
-      children.append(i);
-    }
-  }
-  return children;
-}
+/**
+ * @brief Detects whether reparenting `childIndex` under `potentialParentIndex`
+ * would create a cycle in the collection hierarchy.
+ *
+ * Walks up `potentialParentIndex`'s ancestor chain looking for `childIndex`.
+ * If found, the proposed reparent is illegal. Also defends against pre-existing
+ * cycles in the input data by tracking visited indices.
+ *
+ * Returns true (i.e. "circular, reject the operation") in these cases:
+ *   - either index is out of range
+ *   - childIndex == potentialParentIndex (self-parenting)
+ *   - childIndex is already an ancestor of potentialParentIndex
+ *   - the existing chain has a pre-existing cycle (data corruption)
+ *
+ * Pure function — extracted from SettingsDialog so the validation can be
+ * unit-tested without instantiating the full settings dialog.
+ */
+[[nodiscard]] bool wouldCreateCircularReference(int childIndex, int potentialParentIndex,
+                                                 const QList<CollectionConfig> &collections);
+
+[[nodiscard]] QList<int> directChildrenOf(int parentIndex,
+                                          const QList<CollectionConfig> &collections);
 
 /**
  * @brief Resolves artwork directory for a collection, falling back to parent if
@@ -1363,94 +1278,41 @@ collectDescendantIndices(int parentIndex, const QList<CollectionConfig> &collect
  * Walks up the parent chain until a non-empty artworkDirectory is found.
  * Returns empty string if no ancestor has an artwork directory.
  */
-[[nodiscard]] inline QString resolveArtworkDirectory(int collectionIndex,
-                                                     const QList<CollectionConfig> &collections) {
-  if (collectionIndex < 0 || collectionIndex >= collections.size()) {
-    return {};
-  }
+/**
+ * @brief Walks up the parent chain looking for a non-empty value of @p field
+ * on @p collectionIndex or its nearest ancestor. Returns the empty string if
+ * no ancestor has the field set.
+ *
+ * The four directory resolvers below were textually identical except for the
+ * member they read; this helper consolidates the parent-chain walk so future
+ * fixes (cycle handling, subcollection semantics) need only one edit.
+ */
+[[nodiscard]] QString resolveInheritedField(int collectionIndex,
+                                            const QList<CollectionConfig> &collections,
+                                            QString CollectionConfig::*field);
 
-  int current = collectionIndex;
-  while (current >= 0 && current < collections.size()) {
-    const CollectionConfig &c = collections[current];
-    if (!c.artworkDirectory.trimmed().isEmpty()) {
-      return c.artworkDirectory;
-    }
-    if (!c.isSubcollection || c.parentCollectionIndex < 0) {
-      break;
-    }
-    current = c.parentCollectionIndex;
-  }
-  return {};
-}
+[[nodiscard]] QString resolveArtworkDirectory(int collectionIndex,
+                                              const QList<CollectionConfig> &collections);
 
 /**
  * @brief Resolves video directory for a collection, falling back to parent if
- * empty. Mirrors resolveArtworkDirectory; used by the sidebar so subcollections
- * inherit a parent's videoDirectory in showAllSubcollectionItems mode.
+ * empty. Used by the sidebar so subcollections inherit a parent's
+ * videoDirectory in showAllSubcollectionItems mode.
  */
-[[nodiscard]] inline QString resolveVideoDirectory(int collectionIndex,
-                                                   const QList<CollectionConfig> &collections) {
-  if (collectionIndex < 0 || collectionIndex >= collections.size()) {
-    return {};
-  }
-  int current = collectionIndex;
-  while (current >= 0 && current < collections.size()) {
-    const CollectionConfig &c = collections[current];
-    if (!c.videoDirectory.trimmed().isEmpty()) {
-      return c.videoDirectory;
-    }
-    if (!c.isSubcollection || c.parentCollectionIndex < 0) {
-      break;
-    }
-    current = c.parentCollectionIndex;
-  }
-  return {};
-}
+[[nodiscard]] QString resolveVideoDirectory(int collectionIndex,
+                                            const QList<CollectionConfig> &collections);
 
-[[nodiscard]] inline QString resolveManualDirectory(int collectionIndex,
-                                                    const QList<CollectionConfig> &collections) {
-  if (collectionIndex < 0 || collectionIndex >= collections.size()) {
-    return {};
-  }
-  int current = collectionIndex;
-  while (current >= 0 && current < collections.size()) {
-    const CollectionConfig &c = collections[current];
-    if (!c.manualDirectory.trimmed().isEmpty()) {
-      return c.manualDirectory;
-    }
-    if (!c.isSubcollection || c.parentCollectionIndex < 0) {
-      break;
-    }
-    current = c.parentCollectionIndex;
-  }
-  return {};
-}
+[[nodiscard]] QString resolveManualDirectory(int collectionIndex,
+                                             const QList<CollectionConfig> &collections);
 
-[[nodiscard]] inline QString resolvePlaceholderArtwork(int collectionIndex,
-                                                       const QList<CollectionConfig> &collections) {
-  if (collectionIndex < 0 || collectionIndex >= collections.size()) {
-    return {};
-  }
-
-  int current = collectionIndex;
-  while (current >= 0 && current < collections.size()) {
-    const CollectionConfig &c = collections[current];
-    if (!c.placeholderArtwork.trimmed().isEmpty()) {
-      return c.placeholderArtwork;
-    }
-    if (!c.isSubcollection || c.parentCollectionIndex < 0) {
-      break;
-    }
-    current = c.parentCollectionIndex;
-  }
-  return {};
-}
+[[nodiscard]] QString resolvePlaceholderArtwork(int collectionIndex,
+                                                const QList<CollectionConfig> &collections);
 
 /**
  * @brief Returns the effective category/type for a collection, walking up
  * the parent chain when the collection's own `type` field is empty.
  *
- * Kartend-dd8: the per-collection type is optional. Subcollections can either
+ * the per-collection type is optional. Subcollections can either
  * declare their own type or inherit from the nearest non-empty ancestor —
  * this matches the user's mental model of "this whole branch is Games" while
  * still letting an oddball subcollection be tagged differently. Returns an
@@ -1459,56 +1321,16 @@ collectDescendantIndices(int parentIndex, const QList<CollectionConfig> &collect
  * Cycle-safe: bounds the walk by `collections.size()` so a malformed
  * parentCollectionIndex chain can't loop forever.
  */
-[[nodiscard]] inline QString effectiveCollectionType(int collectionIndex,
-                                                     const QList<CollectionConfig> &collections) {
-  if (collectionIndex < 0 || collectionIndex >= collections.size()) {
-    return {};
-  }
-  int current = collectionIndex;
-  const int maxDepth = collections.size();
-  for (int steps = 0; steps < maxDepth; ++steps) {
-    if (current < 0 || current >= collections.size()) {
-      break;
-    }
-    const CollectionConfig &c = collections[current];
-    if (!c.type.trimmed().isEmpty()) {
-      return c.type.trimmed();
-    }
-    if (!c.isSubcollection || c.parentCollectionIndex < 0) {
-      break;
-    }
-    current = c.parentCollectionIndex;
-  }
-  return {};
-}
+[[nodiscard]] QString effectiveCollectionType(int collectionIndex,
+                                              const QList<CollectionConfig> &collections);
 
 /**
  * @brief Returns the set of distinct non-empty `type` labels across the full
  * collection list (roots and subcollections), case-insensitive deduped and
  * sorted alphabetically. Used to populate the toolbar filter dropdown and
- * the per-collection editor's combobox completion (Kartend-dd8).
+ * the per-collection editor's combobox completion.
  */
-[[nodiscard]] inline QStringList
-collectAllCollectionTypes(const QList<CollectionConfig> &collections) {
-  QStringList result;
-  QSet<QString> seenLower;
-  for (const CollectionConfig &c : collections) {
-    QString trimmed = c.type.trimmed();
-    if (trimmed.isEmpty()) {
-      continue;
-    }
-    QString lower = trimmed.toLower();
-    if (seenLower.contains(lower)) {
-      continue;
-    }
-    seenLower.insert(lower);
-    result.append(trimmed);
-  }
-  std::sort(result.begin(), result.end(), [](const QString &a, const QString &b) {
-    return QString::compare(a, b, Qt::CaseInsensitive) < 0;
-  });
-  return result;
-}
+[[nodiscard]] QStringList collectAllCollectionTypes(const QList<CollectionConfig> &collections);
 
 /**
  * @brief Computes a deterministic UUID from collection name and media

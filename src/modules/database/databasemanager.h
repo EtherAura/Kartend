@@ -77,7 +77,7 @@ public:
                            const QList<CollectionConfig> &allCollections) const;
 
   /// Reads `collections.last_scanned` for the given UUID via the main-thread
-  /// connection (Kartend-3mn). Returns an invalid QDateTime when the row is
+  /// connection. Returns an invalid QDateTime when the row is
   /// missing or the query fails — callers use that as the "never scanned"
   /// signal.
   [[nodiscard]] QDateTime loadCollectionLastScanned(const QString &collectionUuid) const;
@@ -90,30 +90,30 @@ public:
                                                                  const QString &path) const;
 
   /// Persists extended metadata via the main-thread connection. Used by
-  /// user-driven editors (e.g. custom fields dialog, Kartend-hpln). Returns
+  /// user-driven editors (e.g. custom fields dialog,). Returns
   /// true on success; logs the structured error and returns false otherwise.
   bool saveItemMetadata(const ItemMetadataStore::ItemMetadata &metadata);
 
   /// Loads every artwork row stored for (collectionUuid, path) using the
-  /// main-thread connection (Kartend-un3l). Returns an empty list when the
+  /// main-thread connection. Returns an empty list when the
   /// item has no rows or on database failures (errors are logged), so
   /// callers can degrade silently to subdirectory auto-discovery.
   [[nodiscard]] QList<ItemArtworkStore::ItemArtwork> loadItemArtwork(const QString &collectionUuid,
                                                                      const QString &path) const;
 
   /// Persists a single artwork override row via the main-thread connection
-  /// (Kartend-53vk). Used by the per-item manual-link dialog. Returns true
+  /// Used by the per-item manual-link dialog. Returns true
   /// on success; logs the structured error and returns false otherwise.
   bool saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwork);
 
   /// Removes a single artwork override row via the main-thread connection
-  /// (Kartend-53vk). Used by the per-item manual-link dialog when the user
+  /// Used by the per-item manual-link dialog when the user
   /// clears an override. Succeeds even when no matching row exists.
   bool removeItemArtwork(const QString &collectionUuid, const QString &path,
                          const QString &artworkType);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Usage statistics (Kartend-7vi)
+  // Usage statistics
   // ──────────────────────────────────────────────────────────────────────────
 
   /// Loads play_count/last_played/total_play_seconds for a single item via the
@@ -127,7 +127,7 @@ public:
   void recordItemLaunch(const QString &collectionUuid, const QString &path);
 
   /// Adds `seconds` to the item's cumulative total_play_seconds. Called when
-  /// runtime detection (Kartend-qxv) reports a tracked process exit. Negative
+  /// runtime detection reports a tracked process exit. Negative
   /// or zero durations are dropped.
   void recordItemPlaySession(const QString &collectionUuid, const QString &path, qint64 seconds);
 
@@ -150,7 +150,7 @@ public:
   bool resetAllUsageStats();
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Launch history (Kartend-fse)
+  // Launch history
   // ──────────────────────────────────────────────────────────────────────────
 
   /// Appends a row to launch_history and trims down to `maxEntries` (when

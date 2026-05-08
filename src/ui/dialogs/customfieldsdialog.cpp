@@ -1,4 +1,4 @@
-// Per-item editor for user-defined custom metadata fields (Kartend-hpln).
+// Per-item editor for user-defined custom metadata fields.
 // See header for rationale on how invalid rows are handled.
 #include "customfieldsdialog.h"
 

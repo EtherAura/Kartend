@@ -10,13 +10,13 @@
 #include "cachemanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "detailspanemanager.h"
 #include "mainwindow.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 #include <QDialog>
@@ -117,7 +117,7 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
   }
   if (configA.hideMissingArtwork != configB.hideMissingArtwork) {
     hasChanges = true;
-    // Kartend-ks4n: toggling the hide-missing-artwork predicate changes the
+    // toggling the hide-missing-artwork predicate changes the
     // visible item count and the layout/scrollbars; ride the spacingChanged
     // path so handleScrollBranch calls primeLayoutFor + recreateLayout, which
     // re-runs the FilterManager baseline inside setupVirtualScrolling.
@@ -157,7 +157,7 @@ void updateWindowTitle(QWidget *parent, int viewingIndex,
   }
   auto *titleLabel = parent->findChild<QLabel *>("itemsTitleLabel");
   if (titleLabel) {
-    // Show full ancestor chain (Kartend-7pq) so the post-save refresh matches
+    // Show full ancestor chain so the post-save refresh matches
     // the breadcrumb rendered by NavigationManager::updateItemsPageTitle.
     // This path is a plain-text fallback (no clickable links); the real
     // breadcrumb is rebuilt by the navigation code shortly after.
@@ -182,8 +182,8 @@ void applyScrollbarSettings(QWidget *parent, int viewingIndex,
 }
 
 // Updates sidebar layout when mode changes
-void refreshSidebar(DetailsPaneManager *detailsPaneManager, const QList<CollectionConfig> & /*collections*/,
-                    int currentCollectionIndex) {
+void refreshSidebar(DetailsPaneManager *detailsPaneManager,
+                    const QList<CollectionConfig> & /*collections*/, int currentCollectionIndex) {
   if (detailsPaneManager) {
     detailsPaneManager->updateSidebarLayout(currentCollectionIndex);
   }
@@ -346,12 +346,12 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   }
 
   collections = newCollections;
-  // Kartend-9iwv: saveCollections() emits collectionsModified() itself, so
+  // saveCollections emits collectionsModified itself, so
   // an explicit emit here would double-fire and run rebuildHierarchyCache
   // twice for no benefit. Removed.
   saveCollections(collections);
 
-  // Kartend-tvg: detect collections that were freshly added during this
+  // detect collections that were freshly added during this
   // dialog session (UUID present in newCollections but not in the snapshot
   // captured at dialog open time) and stage a confirmation message box to
   // fire once their first scan completes. We only stage collections that
@@ -425,8 +425,8 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
     handleLayoutChanges(parent, collections, viewingCollectionIndex, titleChangedForView,
                         scrollbarChangedForView, sidebarModeChangedForView, gridWidthChangedForView,
                         spacingChangedForView, alignmentChangedForView, fontSizeChangedForView,
-                        hideTitlesChangedForView, detailsPaneManager, scrollManager, m_artworkManager,
-                        currentCollectionIndex);
+                        hideTitlesChangedForView, detailsPaneManager, scrollManager,
+                        m_artworkManager, currentCollectionIndex);
 
     // If only appearance changed, still refresh widgets to show new colors
     if (appearanceChangedForView && scrollManager) {
@@ -490,9 +490,9 @@ auto SettingsManager::handleLayoutChanges(
     QWidget *parent, const QList<CollectionConfig> &collections, int viewingCollectionIndex,
     bool titleChangedForView, bool scrollbarChangedForView, bool sidebarModeChangedForView,
     bool gridWidthChangedForView, bool spacingChangedForView, bool alignmentChangedForView,
-    bool fontSizeChangedForView, bool hideTitlesChangedForView, DetailsPaneManager *detailsPaneManager,
-    ScrollManager *scrollManager, ArtworkManager *artworkManager, int currentCollectionIndex)
-    -> void {
+    bool fontSizeChangedForView, bool hideTitlesChangedForView,
+    DetailsPaneManager *detailsPaneManager, ScrollManager *scrollManager,
+    ArtworkManager *artworkManager, int currentCollectionIndex) -> void {
   if (viewingCollectionIndex < 0 || viewingCollectionIndex >= collections.size()) {
     return;
   }
@@ -510,7 +510,7 @@ auto SettingsManager::handleLayoutChanges(
                      alignmentChangedForView, fontSizeChangedForView, hideTitlesChangedForView);
 }
 
-// Kartend-tvg: show "Collection Added — X of Y items" confirmation once the
+// show "Collection Added — X of Y items" confirmation once the
 // first scan for a newly-added collection completes. Tracked UUIDs come from
 // openSettingsDialog's diff of the collection list at dialog open vs on
 // accept.

@@ -1,6 +1,6 @@
 // Search/filter/pre-search-state methods extracted from scrollmanager.cpp.
 // Operate on raw aliases (m_filterManager, m_dataManager,
-// m_preSearchStateManager) into m_dataSource (Kartend-gg2).
+// m_preSearchStateManager) into m_dataSource.
 #include "datasourcemanager.h"
 #include "filtermanager.h"
 #include "presearchstatemanager.h"

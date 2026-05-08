@@ -31,18 +31,14 @@
 #include "kartmanager.h"
 #include "kartreader.h"
 
-#include <QDragEnterEvent>
-#include <QDropEvent>
-#include <QFileDialog>
-#include <QMimeData>
-#include <QUrl>
+#include "detailspane.h"
+#include "detailspanemanager.h"
 #include "itemwidget.h"
 #include "keyboardmanager.h"
 #include "launchmanager.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "menucontroller.h"
-#include "detailspane.h"
 #include "navigationmanager.h"
 #include "nowplayingoverlay.h"
 #include "pathutils.h"
@@ -54,15 +50,20 @@
 #include "settingsmanager.h"
 #include "settingsutils.h"
 #include "shortcutsdialog.h"
-#include "detailspanemanager.h"
 #include "splashoverlay.h"
 #include "startupvideooverlay.h"
 #include "stringutils.h"
+#include "textzoom.h"
 #include "textzoomhud.h"
 #include "timerutils.h"
-#include "videopreviewwidget.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
+#include "videopreviewwidget.h"
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QFileDialog>
+#include <QMimeData>
+#include <QUrl>
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcMainWindow, "kartend.mainwindow")
@@ -117,12 +118,11 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
 
 void MainWindow::showStartupSplash() {
   m_startupSplashHandled = true;
-  // Kartend-y3ke: startup video plays first when enabled. The splash is
+  // startup video plays first when enabled. The splash is
   // chained onto the video's dismissed signal so it still appears after
   // the user skips or the clip ends — keeping users with both features
   // configured from losing the splash.
-  if (m_generalSettings.startupVideoEnabled &&
-      !m_generalSettings.startupVideoPath.isEmpty()) {
+  if (m_generalSettings.startupVideoEnabled && !m_generalSettings.startupVideoPath.isEmpty()) {
     auto *videoOverlay = new StartupVideoOverlay(this);
     videoOverlay->setGeometry(rect());
     videoOverlay->raise();
@@ -130,7 +130,9 @@ void MainWindow::showStartupSplash() {
       videoOverlay->show();
       connect(videoOverlay, &StartupVideoOverlay::dismissed, this, [this]() {
         if (m_generalSettings.bootSplashEnabled && m_splashOverlay) {
-          m_splashOverlay->showSplash(SplashOverlay::Reason::Startup);
+          m_splashOverlay->showSplash(SplashOverlay::Reason::Startup,
+                                      m_generalSettings.bootSplashTitle,
+                                      m_generalSettings.bootSplashSubtitle);
         }
       });
       return;
@@ -140,13 +142,17 @@ void MainWindow::showStartupSplash() {
     videoOverlay->deleteLater();
   }
   if (m_generalSettings.bootSplashEnabled && m_splashOverlay) {
-    m_splashOverlay->showSplash(SplashOverlay::Reason::Startup);
+    m_splashOverlay->showSplash(SplashOverlay::Reason::Startup,
+                                m_generalSettings.bootSplashTitle,
+                                m_generalSettings.bootSplashSubtitle);
   }
 }
 
 void MainWindow::showFocusReturnSplash() {
   if (m_generalSettings.resumeFocusSplashEnabled && m_splashOverlay) {
-    m_splashOverlay->showSplash(SplashOverlay::Reason::FocusReturn);
+    m_splashOverlay->showSplash(SplashOverlay::Reason::FocusReturn,
+                                m_generalSettings.resumeFocusSplashTitle,
+                                m_generalSettings.resumeFocusSplashSubtitle);
   }
 }
 
@@ -163,7 +169,7 @@ void MainWindow::applyGlobalUiFont(const GeneralSettings &settings) {
   if (settings.globalUiFontPointSize > 0) {
     font.setPointSize(settings.globalUiFontPointSize);
   }
-  // Kartend-7eff: layer the runtime text zoom on top so menus/dialogs/
+  // layer the runtime text zoom on top so menus/dialogs/
   // toolbar scale at the same rate as item titles. Computed against the
   // size that was already chosen above (user override or baseline) so the
   // override stays the authoritative "100 %" reference.
@@ -174,236 +180,27 @@ void MainWindow::applyGlobalUiFont(const GeneralSettings &settings) {
   QApplication::setFont(font);
 }
 
-namespace {
-// Kartend-7eff: lives outside the class so the static initializer runs once
-// at first translation unit load. Defaulting to 100 (unscaled) means any
-// code that calls textZoomPercent() before MainWindow has set it from
-// settings still gets a sane value.
-int g_textZoomPercent = 100;
-} // namespace
+// Text-zoom state lives in src/utils/textzoom.{h,cpp} so widget modules can
+// use it without including this header. MainWindow's static methods stay
+// as thin forwarders to keep the existing call surface stable for callers
+// that already have a MainWindow header in scope.
 
 int MainWindow::textZoomPercent() {
-  return g_textZoomPercent;
+  return TextZoom::percent();
 }
 
 void MainWindow::primeTextZoomFromSettings(int percent) {
-  g_textZoomPercent = std::clamp(percent, 50, 300);
+  TextZoom::primeFromSettings(percent);
 }
 
 int MainWindow::zoomedFontSize(int baseSize) {
-  if (baseSize <= 0 || g_textZoomPercent == 100) {
-    return baseSize;
-  }
-  // Floor at 1pt: a fontSize of 0 confuses Qt's font system on some
-  // platforms, and the user can always reset zoom rather than relying on
-  // an undisplayable size as a feature.
-  return std::max(1, baseSize * g_textZoomPercent / 100);
+  return TextZoom::zoomedFontSize(baseSize);
 }
 
-void MainWindow::setupTextZoomShortcuts() {
-  // Three application-context QActions: zoom in (Ctrl++ / Ctrl+=), zoom out
-  // (Ctrl+-), reset (Ctrl+0). The lambdas capture `this` so applyTextZoom
-  // can dispatch the cascade refresh — the shortcuts stay live regardless
-  // of which child widget has focus.
-  static constexpr int kStep = 10;
-  auto *zoomIn = new QAction(tr("Zoom Text In"), this);
-  // The platform-default Ctrl++ shortcut comes through as Qt::Key_Plus on
-  // some keyboards and Qt::Key_Equal on others; bind both so US/EU layouts
-  // are equally happy.
-  zoomIn->setShortcuts(
-      {QKeySequence(Qt::CTRL | Qt::Key_Plus), QKeySequence(Qt::CTRL | Qt::Key_Equal)});
-  zoomIn->setShortcutContext(Qt::ApplicationShortcut);
-  addAction(zoomIn);
-  connect(zoomIn, &QAction::triggered, this,
-          [this]() { applyTextZoom(textZoomPercent() + kStep); });
-
-  auto *zoomOut = new QAction(tr("Zoom Text Out"), this);
-  zoomOut->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus));
-  zoomOut->setShortcutContext(Qt::ApplicationShortcut);
-  addAction(zoomOut);
-  connect(zoomOut, &QAction::triggered, this,
-          [this]() { applyTextZoom(textZoomPercent() - kStep); });
-
-  auto *zoomReset = new QAction(tr("Reset Text Zoom"), this);
-  zoomReset->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
-  zoomReset->setShortcutContext(Qt::ApplicationShortcut);
-  addAction(zoomReset);
-  connect(zoomReset, &QAction::triggered, this, [this]() { applyTextZoom(100); });
-}
-
-void MainWindow::setupVideoPauseShortcut() {
-  auto *pauseVideo = new QAction(tr("Pause/Resume Preview Video"), this);
-  // Ctrl+K mirrors YouTube's universal pause shortcut. Plain K alone would
-  // collide with character input in the search bar; Space is consumed by
-  // coverflow navigation.
-  pauseVideo->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
-  pauseVideo->setShortcutContext(Qt::ApplicationShortcut);
-  addAction(pauseVideo);
-  connect(pauseVideo, &QAction::triggered, this, [this]() {
-    if (m_MetadataSidebar) {
-      m_MetadataSidebar->togglePreviewVideoPause();
-    }
-  });
-}
-
-void MainWindow::setupViewModeButton() {
-  if (!m_viewModeButton) {
-    return;
-  }
-  // Kartend-iue: keep the toolbar layout-picker visually in lockstep with the
-  // View → Layout menu by mounting a popup of text-only entries (Grid / List /
-  // Cover Flow / Horizontal). The four legacy individual icon buttons used to
-  // do this — collapsed here into a single Breeze-icon button so the toolbar
-  // doesn't carry one slot per layout.
-  auto *menu = new QMenu(m_viewModeButton);
-  auto *group = new QActionGroup(menu);
-  group->setExclusive(true);
-
-  auto addEntry = [&](const QString &text, ViewType type) {
-    QAction *action = menu->addAction(text);
-    action->setCheckable(true);
-    group->addAction(action);
-    connect(action, &QAction::triggered, this, [this, type]() { setViewType(type); });
-    return action;
-  };
-  m_viewActionGrid = addEntry(tr("&Grid"), ViewType::Grid);
-  m_viewActionList = addEntry(tr("&List"), ViewType::List);
-  m_viewActionCoverFlow = addEntry(tr("&Cover Flow"), ViewType::CoverFlow);
-  m_viewActionHorizontal = addEntry(tr("&Horizontal"), ViewType::Horizontal);
-
-  m_viewModeButton->setMenu(menu);
-  m_viewModeButton->setIcon(
-      UIConstants::Icons::fromTheme({UIConstants::Icons::VIEW_PICKER, "view-list-icons"}));
-  m_viewModeButton->setIconSize(QSize(18, 18));
-}
-
-void MainWindow::syncViewModeButton(ViewType viewType) {
-  const auto setChecked = [](QAction *action, bool on) {
-    if (action) {
-      QSignalBlocker blocker(action);
-      action->setChecked(on);
-    }
-  };
-  setChecked(m_viewActionGrid, viewType == ViewType::Grid);
-  setChecked(m_viewActionList, viewType == ViewType::List);
-  setChecked(m_viewActionCoverFlow, viewType == ViewType::CoverFlow);
-  setChecked(m_viewActionHorizontal, viewType == ViewType::Horizontal);
-  if (m_viewModeButton) {
-    QString tip;
-    switch (viewType) {
-    case ViewType::Grid:
-      tip = tr("Layout: Grid (click to change)");
-      break;
-    case ViewType::List:
-      tip = tr("Layout: List (click to change)");
-      break;
-    case ViewType::CoverFlow:
-      tip = tr("Layout: Cover Flow (click to change)");
-      break;
-    case ViewType::Horizontal:
-      tip = tr("Layout: Horizontal (click to change)");
-      break;
-    }
-    m_viewModeButton->setToolTip(tip);
-  }
-}
-
-void MainWindow::setupSearchModeAction() {
-  if (!searchBar) {
-    return;
-  }
-  // The search-mode toggle lives inside the QLineEdit (LeadingPosition) rather
-  // than as a sibling QPushButton — keeps the toolbar tighter and gives the
-  // search field a familiar magnifier-glass affordance. The triggered() signal
-  // is wired later in connectSearchComponents() once InteractionManager is
-  // alive.
-  m_searchModeAction =
-      searchBar->addAction(UIConstants::Icons::fromTheme(UIConstants::Icons::SEARCH),
-                           QLineEdit::LeadingPosition);
-  if (m_searchModeAction) {
-    m_searchModeAction->setToolTip(tr("Toggle search scope"));
-  }
-}
-
-void MainWindow::setupPreviewVolumeSlider() {
-  // Kartend-3m01: bind the toolbar volume slider to the static volume hook
-  // on VideoPreviewWidget. The slider's initial value is set from persisted
-  // settings; subsequent moves push to the hook AND back into settings so
-  // the value survives restarts.
-  if (!ui->previewVolumeSlider) {
-    return;
-  }
-  {
-    QSignalBlocker blocker(ui->previewVolumeSlider);
-    ui->previewVolumeSlider->setValue(m_generalSettings.previewVideoVolume);
-  }
-  VideoPreviewWidget::setGlobalVolume(m_generalSettings.previewVideoVolume);
-
-  connect(ui->previewVolumeSlider, &QSlider::valueChanged, this, [this](int value) {
-    if (value == m_generalSettings.previewVideoVolume) {
-      return;
-    }
-    m_generalSettings.previewVideoVolume = value;
-    VideoPreviewWidget::setGlobalVolume(value);
-    if (getSettingsManager()) {
-      getSettingsManager()->saveGeneralSettings(m_generalSettings);
-    }
-  });
-}
-
-void MainWindow::applyTextZoom(int percent) {
-  const int clamped = std::clamp(percent, 50, 300);
-  // Always surface the HUD, even when the value didn't change — that's the
-  // signal to the user that the keypress was received and they're already at
-  // the floor/ceiling. Without this, pressing Ctrl+- at 50% would feel like
-  // the shortcut wasn't registered.
-  if (m_textZoomHud) {
-    m_textZoomHud->showZoom(clamped);
-  }
-  if (clamped == g_textZoomPercent && clamped == m_generalSettings.uiTextZoomPercent) {
-    return;
-  }
-  g_textZoomPercent = clamped;
-  m_generalSettings.uiTextZoomPercent = clamped;
-  if (getSettingsManager()) {
-    getSettingsManager()->saveGeneralSettings(m_generalSettings);
-  }
-  // Re-push the global font with the new multiplier baked in.
-  applyGlobalUiFont(m_generalSettings);
-  // Re-run sidebar appearance so its font baselines pick up the new zoom.
-  if (getDetailsPaneManager()) {
-    getDetailsPaneManager()->applySidebarStateForCollection(currentCollectionIndex);
-  }
-  // Tear down + rebuild the virtual scroll content so item widgets are
-  // re-instantiated with the new scaled fontSize. Coverflow uses the same
-  // scroll module entry point, so this covers grid, list, and 3D modes.
-  if (getScrollManager()) {
-    getScrollManager()->preCalculateLayout();
-    getScrollManager()->forceVirtualViewUpdate();
-  }
-}
-
-void MainWindow::applyToolbarCustomization() {
-  if (!ui) {
-    return;
-  }
-  const auto &gs = m_generalSettings;
-
-  // The legacy per-view-button visibility flags (toolbarShowGridViewButton et
-  // al.) and the hide-subcollections / search-mode flags are kept in
-  // GeneralSettings for backward compat, but the underlying buttons have been
-  // removed (single viewModeButton, in-field search action, single
-  // filterButton). Only the consolidated filter button and the search bar
-  // remain user-toggleable from this codepath; the filter button stays on
-  // when *either* legacy flag (type or title) is on so existing settings
-  // don't accidentally hide it.
-  if (ui->filterButton) {
-    ui->filterButton->setVisible(gs.toolbarShowTypeFilter || gs.toolbarShowTitleFilter);
-  }
-  if (ui->searchBar) {
-    ui->searchBar->setVisible(gs.toolbarShowSearchBar);
-  }
-}
+// Toolbar / shortcut setup methods (setupTextZoomShortcuts, setupVideoPauseShortcut,
+// setupViewModeButton, syncViewModeButton, setupSearchModeAction,
+// setupPreviewVolumeSlider, applyTextZoom, applyToolbarCustomization) live in
+// mainwindowtoolbar.cpp.
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *event) {
   if (!event || !event->mimeData() || !event->mimeData()->hasUrls()) {
@@ -506,6 +303,25 @@ void MainWindow::refreshTitleCounts() {
     return recursive;
   };
 
+  // Appends " — N subfolders, M subcollections" to @p title when @p cur has
+  // any direct children. Used by both the subfolder and the collection
+  // branches below.
+  auto appendChildPartsSuffix = [this, cur](QString &title) {
+    const int directSubfolderCount = CollectionUtils::countVirtualFolders(m_collections[cur]);
+    const int directSubcollectionCount =
+        CollectionUtils::directChildrenOf(cur, m_collections).size();
+    QStringList childParts;
+    if (directSubfolderCount > 0) {
+      childParts << QString("%1 subfolders").arg(directSubfolderCount);
+    }
+    if (directSubcollectionCount > 0) {
+      childParts << QString("%1 subcollections").arg(directSubcollectionCount);
+    }
+    if (!childParts.isEmpty()) {
+      title += QString(" — %1").arg(childParts.join(", "));
+    }
+  };
+
   // Check if we're in a subfolder
   const QString &subfolder = m_collections[cur].currentSubfolder;
   if (!subfolder.isEmpty() && getScrollManager()) {
@@ -517,8 +333,7 @@ void MainWindow::refreshTitleCounts() {
       subfolderName = subfolder.mid(lastSlash + 1);
     }
 
-    int subfolderItemCount = getScrollManager()->getTotalItems();
-
+    const int subfolderItemCount = getScrollManager()->getTotalItems();
     const qint64 collectionCount = cachedRecursiveCountForIndex(cur);
     QString counts;
     if (collectionCount >= 0) {
@@ -529,20 +344,8 @@ void MainWindow::refreshTitleCounts() {
       counts = QString("(%1 Items)").arg(StringUtils::formatCountNumber(subfolderItemCount));
     }
 
-    int directSubfolderCount = CollectionUtils::countVirtualFolders(m_collections[cur]);
-    int directSubcollectionCount = CollectionUtils::directChildrenOf(cur, m_collections).size();
-
     QString title = QString("%1 %2").arg(subfolderName, counts);
-    QStringList childParts;
-    if (directSubfolderCount > 0) {
-      childParts << QString("%1 subfolders").arg(directSubfolderCount);
-    }
-    if (directSubcollectionCount > 0) {
-      childParts << QString("%1 subcollections").arg(directSubcollectionCount);
-    }
-    if (!childParts.isEmpty()) {
-      title += QString(" — %1").arg(childParts.join(", "));
-    }
+    appendChildPartsSuffix(title);
     setWindowTitle(title);
     return;
   }
@@ -571,16 +374,11 @@ void MainWindow::refreshTitleCounts() {
   for (int i = 0; i < chain.size(); ++i) {
     int idx = chain[i];
     qint64 countVal = -1;
-
-    // For the current collection (first in chain) with
-    // showAllSubcollectionItems, use the actual view count which includes
-    // flattened descendant items
     if (i == 0 && showAllItems && viewTotalItems >= 0) {
       countVal = viewTotalItems;
     } else {
       countVal = cachedRecursiveCountForIndex(idx);
     }
-
     if (countVal >= 0) {
       anyKnown = true;
       parts << StringUtils::formatCountNumber(countVal);
@@ -589,30 +387,14 @@ void MainWindow::refreshTitleCounts() {
     }
   }
 
-  QString base = m_collections[cur].name;
+  const QString base = m_collections[cur].name;
   QString counts;
   if (anyKnown) {
-    if (parts.size() == 1) {
-      counts = QString("(%1 Items)").arg(parts.first());
-    } else {
-      counts = QString("(%1 Items)").arg(parts.join('/'));
-    }
+    counts = QString("(%1 Items)").arg(parts.size() == 1 ? parts.first() : parts.join('/'));
   }
-
-  int directSubfolderCount = CollectionUtils::countVirtualFolders(m_collections[cur]);
-  int directSubcollectionCount = CollectionUtils::directChildrenOf(cur, m_collections).size();
 
   QString title = counts.isEmpty() ? base : QString("%1 %2").arg(base, counts);
-  QStringList childParts;
-  if (directSubfolderCount > 0) {
-    childParts << QString("%1 subfolders").arg(directSubfolderCount);
-  }
-  if (directSubcollectionCount > 0) {
-    childParts << QString("%1 subcollections").arg(directSubcollectionCount);
-  }
-  if (!childParts.isEmpty()) {
-    title += QString(" — %1").arg(childParts.join(", "));
-  }
+  appendChildPartsSuffix(title);
   setWindowTitle(title);
 }
 
@@ -643,7 +425,7 @@ void MainWindow::setupManagerConnections() {
   m_appContext.managers.searchManager = getInteractionManager()->searchManager();
   m_appContext.managers.launchManager = getInteractionManager()->launchManager();
 
-  // Kartend-qxv: when runtime detection is enabled, the LaunchManager spawns
+  // when runtime detection is enabled, the LaunchManager spawns
   // a tracked QProcess and emits started/finished signals. Show a "Now
   // Playing" overlay while the child runs and raise the window when it exits.
   if (auto *launch = getInteractionManager()->launchManager()) {
@@ -652,12 +434,12 @@ void MainWindow::setupManagerConnections() {
               if (m_nowPlayingOverlay) {
                 m_nowPlayingOverlay->showOverlay(displayName);
               }
-              // Kartend-2pzf: stop the sidebar's preview video so its audio
+              // stop the sidebar's preview video so its audio
               // doesn't compete with the launched application's audio.
               if (m_MetadataSidebar) {
                 m_MetadataSidebar->pausePreviewVideo();
               }
-              // Kartend-gs1g: suspend attract mode for the duration of the
+              // suspend attract mode for the duration of the
               // launch — the idle timer would otherwise fire under the
               // launched app and start scrolling unseen.
               if (auto *interaction = getInteractionManager()) {
@@ -670,7 +452,7 @@ void MainWindow::setupManagerConnections() {
       if (m_nowPlayingOverlay) {
         m_nowPlayingOverlay->hideOverlay();
       }
-      // Kartend-gs1g: lift the attract suspension. setSuspended(false)
+      // lift the attract suspension. setSuspended(false)
       // re-arms a fresh idle countdown so attract waits the full timeout
       // instead of kicking in the instant the launch ends.
       if (auto *interaction = getInteractionManager()) {
@@ -702,7 +484,7 @@ void MainWindow::setupManagerConnections() {
   connectScrollBars();
   connectFilterToolbar();
 
-  // Kartend-uve: detail page wiring. The overlay was created in
+  // detail page wiring. The overlay was created in
   // mainwindowsetup.cpp and parented to ui->centralwidget so it can cover
   // the entire window. Hand it to DetailPageManager along with the sidebar
   // and DB so the manager can build payloads. Keyboard signal lives on
@@ -727,7 +509,7 @@ void MainWindow::setupManagerConnections() {
     }
 
     // Lower the sidebar while the detail page is up — same rationale as
-    // Kartend-63e bug #7 for the artwork preview overlay (without this,
+    // bug #7 for the artwork preview overlay (without this,
     // raise() calls during the overlay's lifetime would re-stack the
     // sidebar on top).
     if (m_detailPageOverlay) {
@@ -769,7 +551,7 @@ void MainWindow::updateWindowTitleWithFilter(int visible, int total) {
 }
 
 void MainWindow::updateItemPositionLabel() {
-  // Kartend-tof: show "<pos> / <total>" next to the view-mode buttons.
+  // show "<pos> / <total>" next to the view-mode buttons.
   // Hidden until we have a concrete total. `currentSelectedIndex()` is a
   // visual index (includes subcollection tiles + virtual folders + media
   // files), which matches ScrollManager::getTotalItems() — so presenting
@@ -854,7 +636,7 @@ void MainWindow::updateWindowTitleForCollection(int collectionIndex) {
     // Sync view type button states
     ViewType viewType = m_collections[collectionIndex].viewType;
     syncViewModeButton(viewType);
-    // Kartend-iue: View → Layout submenu mirrors toolbar checked state on
+    // View → Layout submenu mirrors toolbar checked state on
     // collection switch.
     if (m_menuController) {
       m_menuController->syncLayoutActions(viewType);
@@ -889,7 +671,7 @@ void MainWindow::resyncPlaylistCollections() {
     return;
   }
 
-  // Kartend-5mg8: guarantee the built-in favorites playlist exists. Doing it
+  // guarantee the built-in favorites playlist exists. Doing it
   // here (rather than once at startup) means the row is restored on the next
   // resync if the DB has been wiped between launches, without forcing a
   // separate "first run" code path.
@@ -915,10 +697,10 @@ void MainWindow::resyncPlaylistCollections() {
     cfg.name = row.name;
     cfg.isPlaylist = true;
     cfg.playlistId = row.id;
-    cfg.playlistReservedKind = row.reservedKind; // Kartend-5mg8
+    cfg.playlistReservedKind = row.reservedKind;
     cfg.collectionIcon = row.icon;
     // Empty mediaDirectory keeps the scan / virtual-folder / archive paths
-    // off — the QueryManager playlist branch (Kartend-vlm7) reads items from
+    // off — the QueryManager playlist branch reads items from
     // playlist_items via source uuid+path instead.
     if (!row.parentCollectionUuid.isEmpty()) {
       const int parentIdx = uuidToIndex.value(row.parentCollectionUuid, -1);

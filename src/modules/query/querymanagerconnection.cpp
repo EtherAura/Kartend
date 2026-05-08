@@ -58,10 +58,16 @@ auto QueryManager::getPreparedStatement(const QString &sql) -> QSqlQuery & {
   }
 
   // Create new prepared statement and cache it (QCache takes ownership).
+  // Cost (1) is well below maxCost (MAX_STATEMENT_CACHE_SIZE=32), so the
+  // freshly-inserted entry is guaranteed to land in the cache rather than
+  // being deleted on insert. Reading the value back through the cache
+  // lookup keeps the lifetime contract explicit (and quiets the
+  // clang-analyzer-cplusplus.NewDelete false positive on `*query` after
+  // an insert that could *theoretically* evict the just-inserted item).
   auto *query = new QSqlQuery(m_db);
   query->prepare(sql);
   m_statementCache.insert(sql, query, 1);
-  return *query;
+  return *m_statementCache.object(sql);
 }
 
 // Clears statement cache - call when database connection changes

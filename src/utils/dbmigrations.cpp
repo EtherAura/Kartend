@@ -288,7 +288,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   }
 
   if (mutableVersion < 6) {
-    // v6: Add item_artwork table for multi-type per-item artwork (Kartend-yf1).
+    // v6: Add item_artwork table for multi-type per-item artwork.
     // Keyed by (collection_uuid, path, artwork_type) so each item can have one
     // row per type (box, screenshot, marquee, etc., plus user-defined custom
     // types added in a later sub-issue). manual_path is the per-item override;
@@ -316,9 +316,9 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   }
 
   if (mutableVersion < 7) {
-    // v7: Cumulative play-time tracking (Kartend-7vi). play_count and
+    // v7: Cumulative play-time tracking. play_count and
     // last_played already exist from v1; add total_play_seconds for the
-    // runtime-detection (Kartend-qxv) accumulated session duration. Also
+    // runtime-detection accumulated session duration. Also
     // index last_played so the "Recently played" view can sort cheaply.
     ensureColumn(db, "items", "total_play_seconds", "INTEGER DEFAULT 0", origin);
     ensureIndex(db,
@@ -335,7 +335,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   }
 
   if (mutableVersion < 8) {
-    // v8: Per-item launcher override (Kartend-dnx4). Stores a unified
+    // v8: Per-item launcher override. Stores a unified
     // launcher index (0 = primary, 1..N = additionalLaunchers[0..N-1]) so an
     // item can pin a specific launcher and skip the multi-launcher chooser
     // dialog. NULL means "no override" — fall through to the chooser /
@@ -348,7 +348,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   }
 
   if (mutableVersion < 9) {
-    // v9: Chronological launch history (Kartend-fse). Append-only log keyed
+    // v9: Chronological launch history. Append-only log keyed
     // by an auto-incrementing id; the same (collection_uuid, path) appears
     // multiple times on purpose. `name` is denormalized at insert time so
     // rows stay readable after the source item is deleted.
@@ -379,14 +379,14 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   }
 
   if (mutableVersion < 10) {
-    // v10: Playlists (Kartend-vlm7). A playlist is a virtual collection whose
+    // v10: Playlists. A playlist is a virtual collection whose
     // items are explicit (collection_uuid, path) references into the existing
     // `items` table — so a single playlist can mix media from any number of
     // source collections. `parent_collection_uuid` is optional: empty means
     // "root-level virtual collection", otherwise the playlist nests under the
     // collection with that uuid (mirrors CollectionConfig::parentCollectionIndex
     // for INI-backed collections). `reserved_kind` is a slot for built-in
-    // playlists (e.g. 'favorites' in Kartend-5mg8); user-created playlists
+    // playlists (e.g. 'favorites' in); user-created playlists
     // leave it empty.
     ensureIndex(db,
                 "CREATE TABLE IF NOT EXISTS playlists ("

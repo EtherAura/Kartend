@@ -48,7 +48,7 @@ private slots:
   void computeCollectionUuid_emptyInputs();
   void computeCollectionUuid_isHex40();
 
-  // ancestorIndexChain (Kartend-7pq)
+  // ancestorIndexChain
   void ancestorIndexChain_topLevelReturnsEmpty();
   void ancestorIndexChain_oneDeep();
   void ancestorIndexChain_multiDeepRootFirst();
@@ -56,12 +56,12 @@ private slots:
   void ancestorIndexChain_invalidParentReturnsEmpty();
   void ancestorIndexChain_cycleIsBounded();
 
-  // placeholder artwork inheritance (Kartend-so1)
+  // placeholder artwork inheritance
   void resolvePlaceholderArtwork_usesOwnValue();
   void resolvePlaceholderArtwork_inheritsFromParent();
   void resolvePlaceholderArtwork_returnsEmptyWhenUnset();
 
-  // alias-parent links via CollectionHierarchyCache (Kartend-gzmk)
+  // alias-parent links via CollectionHierarchyCache
   void hierarchyCache_directChildren_includesLinkedParent();
   void hierarchyCache_linkedDirectChildren_returnsLinkedOnly();
   void hierarchyCache_directChildren_primaryFirstThenLinked();
@@ -71,7 +71,7 @@ private slots:
   void hierarchyCache_allDescendants_handlesMutualLinkCycle();
   void hierarchyCache_allDescendants_excludesSelf();
 
-  // collection categorization (Kartend-dd8)
+  // collection categorization
   void effectiveCollectionType_returnsOwnTypeWhenSet();
   void effectiveCollectionType_inheritsFromParentWhenEmpty();
   void effectiveCollectionType_walksMultipleLevels();
@@ -81,6 +81,15 @@ private slots:
   void collectAllCollectionTypes_returnsSortedUnion();
   void collectAllCollectionTypes_dedupesCaseInsensitive();
   void collectAllCollectionTypes_skipsEmpty();
+
+  // wouldCreateCircularReference
+  void circularRef_outOfRangeIndices_treatedAsCircular();
+  void circularRef_selfParenting_isCircular();
+  void circularRef_directCycle_detected();
+  void circularRef_multiHopCycle_detected();
+  void circularRef_unrelatedSubtree_isAllowed();
+  void circularRef_topLevelReparent_isAllowed();
+  void circularRef_existingDataCycle_isBounded();
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -276,7 +285,7 @@ void TestCollectionUtils::computeCollectionUuid_isHex40() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ancestorIndexChain (Kartend-7pq full-path breadcrumb)
+// ancestorIndexChain (full-path breadcrumb)
 // ─────────────────────────────────────────────────────────────────────────────
 
 namespace {
@@ -370,7 +379,7 @@ void TestCollectionUtils::resolvePlaceholderArtwork_returnsEmptyWhenUnset() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CollectionHierarchyCache + alias parents (Kartend-gzmk)
+// CollectionHierarchyCache + alias parents
 // ─────────────────────────────────────────────────────────────────────────────
 
 void TestCollectionUtils::hierarchyCache_directChildren_includesLinkedParent() {
@@ -508,7 +517,7 @@ void TestCollectionUtils::hierarchyCache_allDescendants_excludesSelf() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Collection categorization (Kartend-dd8)
+// Collection categorization
 // ─────────────────────────────────────────────────────────────────────────────
 
 void TestCollectionUtils::effectiveCollectionType_returnsOwnTypeWhenSet() {
@@ -605,6 +614,111 @@ void TestCollectionUtils::collectAllCollectionTypes_skipsEmpty() {
   cs << a << b << c;
   const QStringList result = CollectionUtils::collectAllCollectionTypes(cs);
   QCOMPARE(result, QStringList{QStringLiteral("Games")});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// wouldCreateCircularReference
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+// Build a small hierarchy:
+//   0: Root (top-level)
+//     1: ChildA (parent=0)
+//       2: GrandchildA (parent=1)
+//     3: ChildB (parent=0)
+//   4: OtherRoot (top-level)
+QList<CollectionConfig> sampleHierarchy() {
+  QList<CollectionConfig> cs;
+  CollectionConfig root;
+  root.name = QStringLiteral("Root");
+  root.parentCollectionIndex = -1;
+  cs.append(root);
+
+  CollectionConfig childA;
+  childA.name = QStringLiteral("ChildA");
+  childA.parentCollectionIndex = 0;
+  childA.isSubcollection = true;
+  cs.append(childA);
+
+  CollectionConfig grandchildA;
+  grandchildA.name = QStringLiteral("GrandchildA");
+  grandchildA.parentCollectionIndex = 1;
+  grandchildA.isSubcollection = true;
+  cs.append(grandchildA);
+
+  CollectionConfig childB;
+  childB.name = QStringLiteral("ChildB");
+  childB.parentCollectionIndex = 0;
+  childB.isSubcollection = true;
+  cs.append(childB);
+
+  CollectionConfig otherRoot;
+  otherRoot.name = QStringLiteral("OtherRoot");
+  otherRoot.parentCollectionIndex = -1;
+  cs.append(otherRoot);
+  return cs;
+}
+} // namespace
+
+void TestCollectionUtils::circularRef_outOfRangeIndices_treatedAsCircular() {
+  const auto cs = sampleHierarchy();
+  QVERIFY(CollectionUtils::wouldCreateCircularReference(-1, 0, cs));
+  QVERIFY(CollectionUtils::wouldCreateCircularReference(0, -1, cs));
+  QVERIFY(CollectionUtils::wouldCreateCircularReference(99, 0, cs));
+  QVERIFY(CollectionUtils::wouldCreateCircularReference(0, 99, cs));
+}
+
+void TestCollectionUtils::circularRef_selfParenting_isCircular() {
+  const auto cs = sampleHierarchy();
+  QVERIFY(CollectionUtils::wouldCreateCircularReference(2, 2, cs));
+}
+
+void TestCollectionUtils::circularRef_directCycle_detected() {
+  // Reparent ChildA (1) under its own child GrandchildA (2) — direct cycle.
+  const auto cs = sampleHierarchy();
+  QVERIFY(CollectionUtils::wouldCreateCircularReference(1, 2, cs));
+}
+
+void TestCollectionUtils::circularRef_multiHopCycle_detected() {
+  // Reparent Root (0) under GrandchildA (2) — would make Root descend from
+  // itself via 0 → 2 → 1 → 0.
+  const auto cs = sampleHierarchy();
+  QVERIFY(CollectionUtils::wouldCreateCircularReference(0, 2, cs));
+}
+
+void TestCollectionUtils::circularRef_unrelatedSubtree_isAllowed() {
+  // Move ChildB (3) under OtherRoot (4) — different subtree, no cycle.
+  const auto cs = sampleHierarchy();
+  QVERIFY(!CollectionUtils::wouldCreateCircularReference(3, 4, cs));
+}
+
+void TestCollectionUtils::circularRef_topLevelReparent_isAllowed() {
+  // Move ChildA (1) under OtherRoot (4) — top-level swap, no cycle.
+  const auto cs = sampleHierarchy();
+  QVERIFY(!CollectionUtils::wouldCreateCircularReference(1, 4, cs));
+}
+
+void TestCollectionUtils::circularRef_existingDataCycle_isBounded() {
+  // Build corrupt input where 1 → 2 → 1 (existing cycle); the function must
+  // terminate AND report circular rather than infinite-looping.
+  QList<CollectionConfig> cs;
+  CollectionConfig a;
+  a.name = QStringLiteral("A");
+  a.parentCollectionIndex = -1;
+  cs.append(a);
+  CollectionConfig b;
+  b.name = QStringLiteral("B");
+  b.parentCollectionIndex = 2; // points at C
+  cs.append(b);
+  CollectionConfig c;
+  c.name = QStringLiteral("C");
+  c.parentCollectionIndex = 1; // points back at B → cycle
+  cs.append(c);
+
+  // Asking whether reparenting 0 under 1 would be circular hits the existing
+  // 1↔2 cycle while walking up. Must detect and return true within bounded
+  // time (test would hang otherwise).
+  QVERIFY(CollectionUtils::wouldCreateCircularReference(0, 1, cs));
 }
 
 QTEST_APPLESS_MAIN(TestCollectionUtils)

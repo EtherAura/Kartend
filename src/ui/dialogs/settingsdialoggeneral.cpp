@@ -33,10 +33,10 @@
 #include "uiconstants.h"
 
 namespace {
-/// Kartend-88w: list every *.cfg in the Kartend config directory.
+/// list every *.cfg in the Kartend config directory.
 /// Sorted alphabetically so the dropdown order is stable across opens.
 /// Returns absolute paths. The active config is included so the user can
-/// see (and re-load) it from the same control (Kartend-unpw).
+/// see (and re-load) it from the same control.
 QStringList listEligibleConfigProfiles() {
   const QString livePath = SettingsUtils::getConfigPath();
   const QDir configDir = QFileInfo(livePath).absoluteDir();
@@ -64,7 +64,7 @@ void populateImportConfigComboBox(QComboBox *combo) {
   int activeIdx = -1;
   for (const QString &path : paths) {
     QString label = QFileInfo(path).fileName();
-    // Kartend-unpw: tag the active config so the user can tell it apart
+    // tag the active config so the user can tell it apart
     // from the other profiles in the same control. Loading it is still
     // valid — it reloads the on-disk values, which is a useful "revert"
     // path when the user has made unintended in-memory changes.
@@ -108,7 +108,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     }
   });
 
-  // Kartend-cub: title-in-placeholder toggle. Pushes the new value into the
+  // title-in-placeholder toggle. Pushes the new value into the
   // ItemWidget static immediately and asks every visible widget to re-render
   // its placeholder so the change is visible without scrolling.
   if (ui->showTitleInPlaceholderCheckBox) {
@@ -155,6 +155,32 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     });
   }
 
+  // Splash text overrides: persist on focus-out so partial typing doesn't
+  // hammer the config file or trigger a dirty save mid-edit.
+  auto wireSplashTextEdit = [this](QLineEdit *edit, QString GeneralSettings::*field) {
+    if (!edit) {
+      return;
+    }
+    connect(edit, &QLineEdit::editingFinished, this, [this, edit, field]() {
+      auto *mainWindow = qobject_cast<MainWindow *>(parent());
+      if (!mainWindow || !mainWindow->getSettingsManager()) {
+        return;
+      }
+      const QString value = edit->text().trimmed();
+      if (mainWindow->m_generalSettings.*field == value) {
+        return;
+      }
+      mainWindow->m_generalSettings.*field = value;
+      mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
+      m_generalSettings = mainWindow->m_generalSettings;
+    });
+  };
+  wireSplashTextEdit(ui->bootSplashTitleLineEdit, &GeneralSettings::bootSplashTitle);
+  wireSplashTextEdit(ui->bootSplashSubtitleLineEdit, &GeneralSettings::bootSplashSubtitle);
+  wireSplashTextEdit(ui->resumeFocusSplashTitleLineEdit, &GeneralSettings::resumeFocusSplashTitle);
+  wireSplashTextEdit(ui->resumeFocusSplashSubtitleLineEdit,
+                     &GeneralSettings::resumeFocusSplashSubtitle);
+
   if (ui->runtimeDetectionCheckBox) {
     connect(ui->runtimeDetectionCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
       auto *mainWindow = qobject_cast<MainWindow *>(parent());
@@ -166,7 +192,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     });
   }
 
-  // Kartend-fse: launch-history settings save immediately, mirroring the
+  // launch-history settings save immediately, mirroring the
   // other check/spinbox handlers above. Live save means the next launch
   // picks up the new gate/cap without round-tripping through OK/Apply.
   if (ui->historyEnabledCheckBox) {
@@ -250,7 +276,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     connect(ui->customFontEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
   }
 
-  // Kartend-9v0o: global UI font controls. Saved + applied immediately so the
+  // global UI font controls. Saved + applied immediately so the
   // change is visible while the dialog is still open (matches the "live save"
   // pattern of every checkbox above).
   auto persistGlobalUiFont = [this]() {
@@ -408,7 +434,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     }
   });
 
-  // ─── Kartend-63e sidebar color/background pickers ─────────────────────────
+  // ─── sidebar color/background pickers ─────────────────────────
   // Sidebar background button: Color → color dialog, Image → file dialog,
   // Pattern → no-op (user only edits the pattern color, the value field is
   // ignored).
@@ -473,7 +499,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
                   tr("Select Details Pane Text Color"));
   wireColorPicker(ui->sidebarAccentColorPickButton, ui->sidebarAccentColorEdit,
                   tr("Select Details Pane Accent Color"));
-  // Kartend-63e bubble bg pickers — open in alpha-aware mode so users can
+  // bubble bg pickers — open in alpha-aware mode so users can
   // dial in semi-opacity.
   auto wireAlphaColorPicker = [this](QPushButton *button, QLineEdit *edit, const QString &title) {
     if (!button || !edit) return;
@@ -493,7 +519,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
       }
     });
   };
-  // Kartend-63e: bubble color pickers are RGB-only — opacity has its own
+  // bubble color pickers are RGB-only — opacity has its own
   // spinbox so the user can tune translucency without re-picking the color.
   wireColorPicker(ui->sidebarHeaderBgPickButton, ui->sidebarHeaderBgEdit,
                   tr("Select Details Pane Header Bubble Color"));
@@ -531,7 +557,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     }
   });
 
-  // Kartend-guo5: header logo file picker
+  // header logo file picker
   if (ui->browseHeaderLogoButton) {
     connect(ui->browseHeaderLogoButton, &QPushButton::clicked, this, [this]() {
       QString currentPath = ui->headerLogoEdit ? ui->headerLogoEdit->text().trimmed() : QString();
@@ -615,7 +641,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     connect(ui->artworkCycleModifierComboBox, &QComboBox::currentIndexChanged, this, markChanged);
   }
 
-  // Kartend-y3ke + Kartend-wcow: startup video fields persisted in
+  // +: startup video fields persisted in
   // GeneralSettings — wire them so the save icon illuminates on edit, like
   // every other settings field does.
   if (ui->startupVideoEnabledCheckBox) {
@@ -707,7 +733,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
             &SettingsDialog::checkForChanges);
   }
 
-  // Kartend-81o: customizable toolbar fields — every change marks the dialog
+  // customizable toolbar fields — every change marks the dialog
   // dirty so the user gets the standard Save / Discard / Cancel prompt.
   for (auto *box : {ui->toolbarGridViewVisibleCheckBox, ui->toolbarListViewVisibleCheckBox,
                     ui->toolbarHideSubcollectionsVisibleCheckBox,
@@ -724,7 +750,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     }
   }
 
-  // Kartend-88w: configuration backup — Export saves the live config to a
+  // configuration backup — Export saves the live config to a
   // named .cfg in the Kartend config directory; the Load combo lists every
   // other .cfg in that directory and replaces kartend.cfg with the selection.
   populateImportConfigComboBox(ui->importConfigComboBox);

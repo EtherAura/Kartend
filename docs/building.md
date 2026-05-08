@@ -1,4 +1,13 @@
-emerge --ask dev-build/cmake dev-build/ninja llvm-core/clang llvm-core/lld dev-qt/qtbase:6 dev-qt/qttools:6 dev-util/ccache# Building
+# Building
+
+## Dependencies
+
+### Gentoo
+
+```bash
+emerge --ask dev-build/cmake dev-build/ninja llvm-core/clang llvm-core/lld \
+  dev-qt/qtbase:6 dev-qt/qtmultimedia:6 dev-qt/qttools:6 dev-util/ccache
+```
 
 ## Build Script Options
 
@@ -13,7 +22,7 @@ The build script (`.scripts/build.sh`) supports the following options:
 | `--apply-fixes` | Auto-apply clang-tidy fixes (requires `--maintenance`) |
 | `--format-check` | Check code formatting without applying changes (requires `--maintenance`) |
 | `--format-apply` | Auto-apply clang-format fixes (requires `--maintenance`) |
-| `--tests` | Configure with `-DBUILD_TESTS=ON` |
+| `--tests` | Configure with `-DKARTEND_BUILD_TESTS=ON` |
 | `--run-tests` | Run `ctest` after a successful build (requires `--tests`) |
 | `--pgo` | Two-pass Profile-Guided Optimization build |
 | `--pgo-generate` | First PGO pass: generate profile data |
@@ -26,6 +35,11 @@ The build script (`.scripts/build.sh`) supports the following options:
 | `--reports` | Assemble reports into `.backups/reports` (off by default) |
 | `--archive` | Create `.backups/*.tar.gz` source archives (off by default) |
 | `--no-ccache` | Disable ccache even if installed |
+| `--clang` | Force Clang/LLD toolchain for a release build (default: system compiler) |
+| `--install` | Run `cmake --install` after build (auto-elevates with sudo/doas) |
+| `--uninstall` | Remove files from the most recent install (reads `install_manifest.txt`) |
+| `--prefix=PATH` | Pass `-DCMAKE_INSTALL_PREFIX=PATH` to configure |
+| `--jobs=N` | Override `-j` parallelism for the build step (default: `nproc`) |
 
 ### Output Directories
 
@@ -90,19 +104,23 @@ cmake --build build/ninja-release --parallel $(nproc)
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `CMAKE_BUILD_TYPE` | — | `Release` or `Debug` |
-| `MAINTENANCE` | `OFF` | Enable `-Werror` for CI/maintenance builds |
-| `BUILD_TESTS` | `OFF` | Build unit test executables |
-| `ENABLE_CCACHE` | `ON` | Use `ccache` if available (faster rebuilds) |
-| `USE_PGO` | `OFF` | Enable Profile-Guided Optimization |
-| `PGO_GENERATE` | `OFF` | Generate PGO profile data |
-| `PGO_USE` | `OFF` | Use existing PGO profile data |
-| `PGO_PROFILE_DIR` | `build/pgo_profiles` | Directory for PGO profile data |
+| `CMAKE_BUILD_TYPE` | — | `Release`, `Debug`, or `RelWithDebInfo` |
+| `KARTEND_MAINTENANCE` | `OFF` | Enable `-Werror` for CI/maintenance builds |
+| `KARTEND_BUILD_TESTS` | `OFF` | Build unit test executables |
+| `KARTEND_ENABLE_CCACHE` | `ON` | Use `ccache` if available (faster rebuilds) |
+| `KARTEND_ENABLE_SANITIZERS` | `OFF` | Enable ASan+UBSan (requires `Debug`; configure errors otherwise) |
+| `KARTEND_ENABLE_COVERAGE` | `OFF` | Enable gcov/lcov instrumentation (Debug only) |
+| `KARTEND_PORTABLE_RELEASE` | `OFF` | Drop `-march=native`/`-O3`/fast-math for distro packaging; keeps LTO + hardening |
+| `KARTEND_LINKER_MAP` | `OFF` | Emit `kartend.map` next to `.backups/reports/` in Debug builds |
+| `KARTEND_USE_PGO` | `OFF` | Enable Profile-Guided Optimization |
+| `KARTEND_PGO_GENERATE` | `OFF` | Generate PGO profile data |
+| `KARTEND_PGO_USE` | `OFF` | Use existing PGO profile data |
+| `KARTEND_PGO_PROFILE_DIR` | `build/pgo_profiles` | Directory for PGO profile data |
 
 Example with options:
 
 ```bash
-cmake ../.. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON -DMAINTENANCE=ON
+cmake ../.. -DCMAKE_BUILD_TYPE=Release -DKARTEND_BUILD_TESTS=ON -DKARTEND_MAINTENANCE=ON
 ```
 
 ### ccache
@@ -112,7 +130,7 @@ If `ccache` is installed, the project will automatically use it by default.
 To explicitly disable it (e.g., for debugging compiler issues):
 
 ```bash
-cmake ../.. -DENABLE_CCACHE=OFF
+cmake ../.. -DKARTEND_ENABLE_CCACHE=OFF
 ```
 
 ## Debug Build
@@ -131,7 +149,7 @@ If Ninja is installed, the build script will use it by default for faster builds
 Recommended manual Ninja build (separate directory):
 
 ```bash
-cmake -S . -B build/ninja-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON -DCMAKE_CXX_COMPILER=clang++
+cmake -S . -B build/ninja-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DKARTEND_BUILD_TESTS=ON -DCMAKE_CXX_COMPILER=clang++
 cmake --build build/ninja-release --parallel $(nproc)
 ctest --test-dir build/ninja-release --output-on-failure
 ```
@@ -147,12 +165,12 @@ For manual PGO:
 
 ```bash
 # Pass 1: Generate profile data
-cmake -S . -B build/ninja-pgo -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_PGO=ON -DPGO_GENERATE=ON
+cmake -S . -B build/ninja-pgo -G Ninja -DCMAKE_BUILD_TYPE=Release -DKARTEND_USE_PGO=ON -DKARTEND_PGO_GENERATE=ON
 cmake --build build/ninja-pgo --parallel $(nproc)
 # Run the application to generate profile data...
 
 # Pass 2: Use profile data
-cmake -S . -B build/ninja-pgo -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_PGO=ON -DPGO_USE=ON
+cmake -S . -B build/ninja-pgo -G Ninja -DCMAKE_BUILD_TYPE=Release -DKARTEND_USE_PGO=ON -DKARTEND_PGO_USE=ON
 cmake --build build/ninja-pgo --parallel $(nproc)
 ```
 

@@ -13,6 +13,7 @@ QT_BEGIN_NAMESPACE
 class QEvent;
 class QLineEdit;
 class QMouseEvent;
+class QScrollBar;
 class QStackedWidget;
 class QWidget;
 QT_END_NAMESPACE
@@ -114,12 +115,12 @@ signals:
   void widgetClicked(ItemWidget *widget, int visualIndex, const QPoint &clickPos,
                      QMouseEvent *event);
   void contextMenuRequested(ItemWidget *widget, int visualIndex, const QPoint &globalPos);
-  /// Emitted when the user middle-clicks an item (Kartend-ljey). Used to
+  /// Emitted when the user middle-clicks an item. Used to
   /// open a video-first media preview overlay without launching.
   void mediaPreviewRequested(ItemWidget *widget, int visualIndex);
   /// Emitted when the user middle-clicks while holding the artwork-cycle
   /// modifier configured in `GeneralSettings::artworkCycleModifier`
-  /// (Kartend-1v6). Cycles the displayed artwork through the item's
+  /// Cycles the displayed artwork through the item's
   /// available types without changing selection or launching.
   void artworkTypeCycleRequested(ItemWidget *widget, int visualIndex);
   void clearSelectionRequested();
@@ -152,6 +153,14 @@ private:
   void commitPendingHoverScroll();
   void clearPendingHoverScroll();
   void pollCursorForContinuousHoverScroll();
+
+  // Wheel-event helpers (extracted from handleWheelEvent so the top-level
+  // dispatcher reads as a clear sequence instead of a 200-line method).
+  [[nodiscard]] bool wheelEventBelongsToSidebar() const;
+  [[nodiscard]] bool wheelEventCanProceed() const;
+  [[nodiscard]] int computeWheelTargetScroll(int selectedIndex, const CollectionConfig &collection,
+                                              QScrollBar *axisScrollBar, bool horizontalView) const;
+  void onWheelAnimationFinished();
 
   // Manager references
   ScrollManager *m_scrollManager = nullptr;

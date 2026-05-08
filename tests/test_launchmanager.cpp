@@ -51,7 +51,7 @@ private slots:
   void testBuildLaunchCommand_retroArch_usesCorePath();
   void testBuildLaunchCommand_allowsAmpersandMediaPath();
 
-  // Multi-launcher (Kartend-bdl) tests
+  // Multi-launcher tests
   void testLauncherCount_singlePrimary();
   void testLauncherCount_withAdditional();
   void testLauncherAt_returnsAdditionalEntry();
@@ -59,7 +59,7 @@ private slots:
   void testBuildLaunchCommand_explicitLauncherConfig();
   void testClampValues_clampsDefaultLauncherIndex();
 
-  // Preset resolution (Kartend-p1jd) tests
+  // Preset resolution tests
   void testResolvePreset_returnsInputWhenNoPresetId();
   void testResolvePreset_overridesFieldsFromMatchingPreset();
   void testResolvePreset_fallsBackToInlineWhenPresetMissing();
@@ -414,7 +414,7 @@ void TestLaunchManager::testBuildLaunchCommand_allowsAmpersandMediaPath() {
 }
 
 // ---------------------------------------------------------------------------
-// Multi-launcher (Kartend-bdl)
+// Multi-launcher
 // ---------------------------------------------------------------------------
 
 void TestLaunchManager::testLauncherCount_singlePrimary() {
@@ -472,7 +472,7 @@ void TestLaunchManager::testLauncherDisplayName_fallsBackToBasename() {
 
 void TestLaunchManager::testBuildLaunchCommand_explicitLauncherConfig() {
   // The new buildLaunchCommand overload takes a LauncherConfig directly so a
-  // user-picked entry from the chooser dialog (Kartend-bdl) can drive the
+  // user-picked entry from the chooser dialog can drive the
   // command without round-tripping through CollectionConfig's primary slot.
   LauncherConfig launcher{"mGBA", "/usr/bin/mgba", "", "--fullscreen"};
   const QString filePath = "/tmp/game.gba";
@@ -501,7 +501,7 @@ void TestLaunchManager::testClampValues_clampsDefaultLauncherIndex() {
 }
 
 // ---------------------------------------------------------------------------
-// Preset resolution (Kartend-p1jd)
+// Preset resolution
 // ---------------------------------------------------------------------------
 
 void TestLaunchManager::testResolvePreset_returnsInputWhenNoPresetId() {

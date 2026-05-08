@@ -1,5 +1,5 @@
 // Scroll event handling and double-click slots extracted from
-// scrollmanager.cpp (Kartend-mhf). All remain ScrollManager members and
+// scrollmanager.cpp. All remain ScrollManager members and
 // access existing class state (m_scrollTimer, m_arrowKeyViewUpdateTimer,
 // m_scrollEventHandler, m_arrowKeyScrollHelper, m_state, etc.).
 #include "arrowkeyscrollhelper.h"

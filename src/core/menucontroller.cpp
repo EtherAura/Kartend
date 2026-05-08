@@ -2,19 +2,20 @@
 #include "menucontroller.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "detailspanemanager.h"
 #include "historystore.h"
 #include "navigationmanager.h"
 #include "scrolldatamanager.h"
 #include "scrollmanager.h"
 #include "settingsmanager.h"
 #include "shortcutsdialog.h"
-#include "detailspanemanager.h"
 #include "statisticsdialog.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
 
 #include <QApplication>
 #include <QFileInfo>
+#include <QFontMetrics>
 #include <QMainWindow>
 #include <QMenu>
 #include <QMenuBar>
@@ -28,6 +29,52 @@ MenuController::~MenuController() = default;
 
 void MenuController::setContext(const MenuControllerContext &context) {
   m_ctx = context;
+}
+
+// ─── Setup helpers ───────────────────────────────────────────────────────
+
+bool MenuController::connectGlobalAction(QAction *action, std::function<void()> handler) {
+  if (!action || !m_ctx.mainWindow) {
+    return false;
+  }
+  connect(action, &QAction::triggered, this, std::move(handler));
+  action->setShortcutContext(Qt::ApplicationShortcut);
+  m_ctx.mainWindow->addAction(action);
+  return true;
+}
+
+bool MenuController::connectMenuAction(QAction *action, std::function<void()> handler) {
+  if (!action) {
+    return false;
+  }
+  connect(action, &QAction::triggered, this, std::move(handler));
+  return true;
+}
+
+bool MenuController::connectVisibilityToggle(QAction *action, std::function<void(bool)> applyVisual,
+                                             bool GeneralSettings::*field) {
+  if (!action || !m_ctx.mainWindow) {
+    return false;
+  }
+  connect(action, &QAction::triggered, this, [this, applyVisual, field](bool checked) {
+    if (applyVisual) {
+      applyVisual(checked);
+    }
+    // persist explicit user toggle.
+    if (m_ctx.getGeneralSettings) {
+      if (auto *settings = m_ctx.getGeneralSettings()) {
+        settings->*field = checked;
+        if (m_ctx.getSettingsManager) {
+          if (auto *mgr = m_ctx.getSettingsManager()) {
+            mgr->saveGeneralSettings(*settings);
+          }
+        }
+      }
+    }
+  });
+  action->setShortcutContext(Qt::ApplicationShortcut);
+  m_ctx.mainWindow->addAction(action);
+  return true;
 }
 
 void MenuController::setupMenuBar() {
@@ -56,114 +103,69 @@ void MenuController::setupMenuBar() {
 }
 
 void MenuController::setupActionExit() {
-  if (!m_ctx.ui || !m_ctx.mainWindow) return;
-
-  if (m_ctx.ui->actionExit) {
-    connect(m_ctx.ui->actionExit, &QAction::triggered, m_ctx.mainWindow, &QWidget::close);
-    m_ctx.ui->actionExit->setShortcutContext(Qt::ApplicationShortcut);
-    m_ctx.mainWindow->addAction(m_ctx.ui->actionExit);
-  }
+  if (!m_ctx.ui) return;
+  connectGlobalAction(m_ctx.ui->actionExit, [this]() {
+    if (m_ctx.mainWindow) m_ctx.mainWindow->close();
+  });
 }
 
 void MenuController::setupActionShowMenuBar() {
-  if (!m_ctx.ui || !m_ctx.mainWindow) return;
-
-  if (m_ctx.ui->actionShowMenuBar) {
-    connect(m_ctx.ui->actionShowMenuBar, &QAction::triggered, [this](bool checked) {
-      if (m_ctx.ui->menubar) {
-        m_ctx.ui->menubar->setVisible(checked);
-      }
-      syncHamburgerVisibility();
-      // Kartend-lfu0: persist explicit user toggle.
-      if (m_ctx.getGeneralSettings) {
-        if (auto *settings = m_ctx.getGeneralSettings()) {
-          settings->showMenuBar = checked;
-          if (m_ctx.getSettingsManager) {
-            if (auto *mgr = m_ctx.getSettingsManager()) {
-              mgr->saveGeneralSettings(*settings);
-            }
-          }
+  if (!m_ctx.ui) return;
+  connectVisibilityToggle(
+      m_ctx.ui->actionShowMenuBar,
+      [this](bool checked) {
+        if (m_ctx.ui->menubar) {
+          m_ctx.ui->menubar->setVisible(checked);
         }
-      }
-    });
-    m_ctx.ui->actionShowMenuBar->setShortcutContext(Qt::ApplicationShortcut);
-    m_ctx.mainWindow->addAction(m_ctx.ui->actionShowMenuBar);
-  }
+        syncHamburgerVisibility();
+      },
+      &GeneralSettings::showMenuBar);
 }
 
 void MenuController::setupActionShowToolbar() {
-  if (!m_ctx.ui || !m_ctx.mainWindow) return;
-
-  if (m_ctx.ui->actionShowToolbar) {
-    connect(m_ctx.ui->actionShowToolbar, &QAction::triggered, [this](bool checked) {
-      if (m_ctx.ui->itemsTopBar) {
-        m_ctx.ui->itemsTopBar->setVisible(checked);
-      }
-      // Kartend-lfu0: persist explicit user toggle.
-      if (m_ctx.getGeneralSettings) {
-        if (auto *settings = m_ctx.getGeneralSettings()) {
-          settings->showToolbar = checked;
-          if (m_ctx.getSettingsManager) {
-            if (auto *mgr = m_ctx.getSettingsManager()) {
-              mgr->saveGeneralSettings(*settings);
-            }
-          }
+  if (!m_ctx.ui) return;
+  connectVisibilityToggle(
+      m_ctx.ui->actionShowToolbar,
+      [this](bool checked) {
+        if (m_ctx.ui->itemsTopBar) {
+          m_ctx.ui->itemsTopBar->setVisible(checked);
         }
-      }
-    });
-    m_ctx.ui->actionShowToolbar->setShortcutContext(Qt::ApplicationShortcut);
-    m_ctx.mainWindow->addAction(m_ctx.ui->actionShowToolbar);
-  }
+      },
+      &GeneralSettings::showToolbar);
 }
 
 void MenuController::setupActionShowSidebar() {
-  if (!m_ctx.ui || !m_ctx.mainWindow) return;
-
-  if (m_ctx.ui->actionShowSidebar) {
-    connect(m_ctx.ui->actionShowSidebar, &QAction::triggered, [this]() {
-      if (m_ctx.getDetailsPaneManager) {
-        if (auto *mgr = m_ctx.getDetailsPaneManager()) {
-          mgr->toggleSidebar();
-        }
+  if (!m_ctx.ui) return;
+  connectGlobalAction(m_ctx.ui->actionShowSidebar, [this]() {
+    if (m_ctx.getDetailsPaneManager) {
+      if (auto *mgr = m_ctx.getDetailsPaneManager()) {
+        mgr->toggleSidebar();
       }
-    });
-    m_ctx.ui->actionShowSidebar->setShortcutContext(Qt::ApplicationShortcut);
-    m_ctx.mainWindow->addAction(m_ctx.ui->actionShowSidebar);
-  }
+    }
+  });
 }
 
 void MenuController::setupActionSettings() {
-  if (!m_ctx.ui || !m_ctx.mainWindow) return;
-
-  if (m_ctx.ui->actionSettings) {
-    connect(m_ctx.ui->actionSettings, &QAction::triggered, [this]() {
-      if (m_ctx.onOpenSettings) {
-        m_ctx.onOpenSettings();
-      }
-    });
-    m_ctx.ui->actionSettings->setShortcutContext(Qt::ApplicationShortcut);
-    m_ctx.mainWindow->addAction(m_ctx.ui->actionSettings);
-  }
+  if (!m_ctx.ui) return;
+  connectGlobalAction(m_ctx.ui->actionSettings, [this]() {
+    if (m_ctx.onOpenSettings) {
+      m_ctx.onOpenSettings();
+    }
+  });
 }
 
 void MenuController::setupActionAbout() {
   if (!m_ctx.ui) return;
-
-  if (m_ctx.ui->actionAbout) {
-    connect(m_ctx.ui->actionAbout, &QAction::triggered, [this]() {
-      if (m_ctx.onShowAbout) {
-        m_ctx.onShowAbout();
-      }
-    });
-  }
+  connectMenuAction(m_ctx.ui->actionAbout, [this]() {
+    if (m_ctx.onShowAbout) {
+      m_ctx.onShowAbout();
+    }
+  });
 }
 
 void MenuController::setupActionAboutQt() {
   if (!m_ctx.ui) return;
-
-  if (m_ctx.ui->actionAboutQt) {
-    connect(m_ctx.ui->actionAboutQt, &QAction::triggered, qApp, &QApplication::aboutQt);
-  }
+  connectMenuAction(m_ctx.ui->actionAboutQt, []() { QApplication::aboutQt(); });
 }
 
 void MenuController::setupActionRefresh() {
@@ -422,7 +424,7 @@ void MenuController::setupFullscreenAction() {
       m_fullscreenAction->setChecked(false);
     }
     syncHamburgerVisibility();
-    // Kartend-lfu0: persist explicit user toggle. We only mirror the fullscreen
+    // persist explicit user toggle. We only mirror the fullscreen
     // flag — the menu-bar auto-hide/show inside this lambda is a transient UI
     // affordance, not a change to the user's saved Show Menu Bar preference.
     if (m_ctx.getGeneralSettings) {
@@ -495,52 +497,46 @@ void MenuController::insertFullscreenInViewMenu(QAction *fullscreenAction) {
 }
 
 void MenuController::setupShortcutsAction() {
-  if (!m_ctx.mainWindow) return;
-
   m_shortcutsAction = new QAction(tr("Keyboard Shortcuts"), this);
   m_shortcutsAction->setShortcut(QKeySequence(Qt::Key_F1));
-  m_shortcutsAction->setShortcutContext(Qt::ApplicationShortcut);
-  m_ctx.mainWindow->addAction(m_shortcutsAction);
-
-  // Add to Help menu if it exists
+  if (!connectGlobalAction(m_shortcutsAction, [this]() {
+        ShortcutsDialog dialog(m_ctx.mainWindow);
+        dialog.exec();
+      })) {
+    return;
+  }
   if (m_ctx.ui && m_ctx.ui->menuHelp) {
     m_ctx.ui->menuHelp->addAction(m_shortcutsAction);
   }
-
-  connect(m_shortcutsAction, &QAction::triggered, [this]() {
-    ShortcutsDialog dialog(m_ctx.mainWindow);
-    dialog.exec();
-  });
 }
 
 void MenuController::setupStatisticsAction() {
-  if (!m_ctx.mainWindow) return;
-
   // Programmatic action (no .ui entry yet) so the menu wiring stays self-
   // contained alongside the dialog. Lives in the Help menu next to Shortcuts.
   m_statisticsAction = new QAction(tr("Usage Statistics…"), this);
-  m_statisticsAction->setShortcutContext(Qt::ApplicationShortcut);
-  m_ctx.mainWindow->addAction(m_statisticsAction);
-
+  if (!connectGlobalAction(m_statisticsAction, [this]() {
+        DatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
+        QList<CollectionConfig> *collections =
+            m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
+        GeneralSettings *settings = m_ctx.getGeneralSettings ? m_ctx.getGeneralSettings() : nullptr;
+        SettingsManager *settingsMgr =
+            m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr;
+        const bool runtimeOn = settings && settings->runtimeDetectionEnabled;
+        StatisticsDialog dialog(db, collections, runtimeOn, settings, settingsMgr,
+                                m_ctx.mainWindow);
+        dialog.exec();
+      })) {
+    return;
+  }
   if (m_ctx.ui && m_ctx.ui->menuHelp) {
     m_ctx.ui->menuHelp->addAction(m_statisticsAction);
   }
-
-  connect(m_statisticsAction, &QAction::triggered, [this]() {
-    DatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
-    QList<CollectionConfig> *collections = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
-    GeneralSettings *settings = m_ctx.getGeneralSettings ? m_ctx.getGeneralSettings() : nullptr;
-    SettingsManager *settingsMgr = m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr;
-    const bool runtimeOn = settings && settings->runtimeDetectionEnabled;
-    StatisticsDialog dialog(db, collections, runtimeOn, settings, settingsMgr, m_ctx.mainWindow);
-    dialog.exec();
-  });
 }
 
 void MenuController::setupGridWidthActions() {
   if (!m_ctx.mainWindow) return;
 
-  // Kartend-0w4i: grid-width chord moved to Ctrl+Shift+/- to free Ctrl+/-
+  // grid-width chord moved to Ctrl+Shift+/- to free Ctrl+/-
   // for text zoom (see MainWindow::setupTextZoomShortcuts). The two
   // ApplicationShortcuts conflicted, leaving Ctrl+- ambiguous so neither
   // action fired. Bind both Plus and Equal for the increase action so US/EU
@@ -590,6 +586,18 @@ void MenuController::setupHamburgerMenu() {
       UIConstants::Icons::fromTheme({UIConstants::Icons::MENU, "open-menu-symbolic"}));
   m_ctx.ui->hamburgerMenuButton->setIconSize(QSize(18, 18));
 
+  // Qt's auto-sizing for a popup containing only submenu actions
+  // underestimates the column reserved for the ">" indicator on some styles,
+  // leaving the arrow crowding the label text. Reserve room for the longest
+  // label plus padding for the indicator and side margins.
+  const QFontMetrics fm(popup->fontMetrics());
+  int labelWidth = 0;
+  const auto popupActions = popup->actions();
+  for (const QAction *a : popupActions) {
+    labelWidth = std::max(labelWidth, fm.horizontalAdvance(a->text()));
+  }
+  popup->setMinimumWidth(labelWidth + 80);
+
   syncHamburgerVisibility();
 }
 
@@ -609,7 +617,7 @@ void MenuController::syncHamburgerVisibility() {
   m_ctx.ui->hamburgerMenuButton->setVisible(showHamburger);
 }
 
-// Kartend-iue: pick one media file at random from the active view and launch
+// pick one media file at random from the active view and launch
 // it. Uses ScrollManager::filePathForVisualIndex() — the same path Enter /
 // double-click resolve through — so the result is the absolute, resolved
 // path that DatabaseManager::getCollectionIndexForFile() can key off. The
@@ -659,7 +667,7 @@ void MenuController::setupActionOpenRandomItem() {
   });
 }
 
-// Kartend-zgaq: File menu entry for importing a .kart package.
+// File menu entry for importing a.kart package.
 void MenuController::setupActionImportKart() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_importKartAction = new QAction(tr("Import Kart..."), this);
@@ -673,7 +681,7 @@ void MenuController::setupActionImportKart() {
   });
 }
 
-// Kartend-zgaq: File menu entry for exporting the active collection as a .kart.
+// File menu entry for exporting the active collection as a.kart.
 void MenuController::setupActionExportKart() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_exportKartAction = new QAction(tr("Export Collection as Kart..."), this);
@@ -686,7 +694,7 @@ void MenuController::setupActionExportKart() {
   });
 }
 
-// Kartend-iue: Recent submenu populated from the launch_history table on
+// Recent submenu populated from the launch_history table on
 // QMenu::aboutToShow. Rebuilding lazily avoids stale entries after the user
 // launches new items between menu opens, and keeps the cost off the boot
 // path.
@@ -712,7 +720,7 @@ void MenuController::rebuildRecentMenu() {
     return;
   }
 
-  // Kartend-j5l3: source from items.last_played (UsageStatsStore) rather than
+  // source from items.last_played (UsageStatsStore) rather than
   // the history table — items.last_played is updated on every successful
   // launch unconditionally, while history rows are gated on historyEnabled.
   // A user who disabled the history log should still see their recent
@@ -748,7 +756,7 @@ void MenuController::rebuildMostLaunchedMenu() {
     return;
   }
 
-  // Kartend-j5l3: top items by play_count. UsageStatsStore::TOP_PLAYED_SQL
+  // top items by play_count. UsageStatsStore::TOP_PLAYED_SQL
   // already filters play_count > 0 so an unlaunched library shows the empty
   // placeholder rather than a list of zero-count rows.
   constexpr int kMaxTop = 10;
@@ -762,8 +770,9 @@ void MenuController::rebuildMostLaunchedMenu() {
   populateLaunchEntriesIntoMenu(menu, rows, db);
 }
 
-void MenuController::populateLaunchEntriesIntoMenu(
-    QMenu *menu, const QList<UsageStatsStore::ItemUsageRow> &rows, DatabaseManager *db) {
+void MenuController::populateLaunchEntriesIntoMenu(QMenu *menu,
+                                                   const QList<UsageStatsStore::ItemUsageRow> &rows,
+                                                   DatabaseManager *db) {
   if (!menu) return;
 
   const CollectionHierarchyCache *cache =
@@ -801,7 +810,7 @@ void MenuController::populateLaunchEntriesIntoMenu(
   }
 }
 
-// Kartend-iue: Layout submenu mirrors the toolbar view-mode buttons. Lives
+// Layout submenu mirrors the toolbar view-mode buttons. Lives
 // in a QActionGroup so the four entries are mutually exclusive; checked
 // state is driven by syncLayoutActions() (called by MainWindow whenever the
 // active view type changes).

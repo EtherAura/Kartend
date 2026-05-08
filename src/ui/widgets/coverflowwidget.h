@@ -1,7 +1,7 @@
 #ifndef COVERFLOWWIDGET_H
 #define COVERFLOWWIDGET_H
 
-// Kartend-3ile: Cover-flow view mode.
+// Cover-flow view mode.
 //
 // Custom QPainter-based widget that renders a horizontal carousel of cards
 // with the focused item centered and surrounding cards perspective-skewed
@@ -36,7 +36,7 @@ struct CoverFlowCardData {
   QString videoPath;   ///< Absolute path to preview video. Empty -> no video.
 };
 
-/// Kartend-3ile: one entry in the per-item gallery toolbar shown beneath
+/// one entry in the per-item gallery toolbar shown beneath
 /// the carousel when in cover flow. Mirrors DetailsPane::GalleryEntry
 /// so the same resolver pattern works for both views.
 struct CoverFlowGalleryEntry {
@@ -59,14 +59,14 @@ public:
   void setSelectedIndex(int index, bool animate);
   [[nodiscard]] int selectedIndex() const { return m_selectedIndex; }
 
-  /// Kartend-3ile: video paths are resolved lazily by ScrollManager on
+  /// video paths are resolved lazily by ScrollManager on
   /// selection change because filesystem-scanning a video directory for
   /// every one of 29k items at rebuild time freezes the UI thread. When
   /// the canonical selection lands, ScrollManager calls this to update
   /// the centered card's preview source. Empty path clears the slot.
   void setVideoPathForIndex(int index, const QString &videoPath);
 
-  /// Kartend-3ile: replace the gallery toolbar for the centered card.
+  /// replace the gallery toolbar for the centered card.
   /// Each entry becomes a clickable thumbnail along the bottom edge that
   /// switches the centered card's display between artwork variants and
   /// preview video. Empty list hides the toolbar.
@@ -102,10 +102,12 @@ protected:
   void keyPressEvent(QKeyEvent *e) override;
   void hideEvent(QHideEvent *e) override;
 
-private slots:
-  void onArtworkLoaded();
-
 private:
+  // Schedule an async pixmap load for @p path; the connect()ed lambda
+  // owns the lookup-by-path so we don't have to reverse-scan m_pendingLoads
+  // from a slot's sender() (QFutureWatcher<T> is not Q_OBJECT).
+  void startArtworkLoad(const QString &path);
+
   struct CardLayout {
     int index = -1;
     qreal offset = 0.0; ///< distance from current center, fractional
@@ -142,6 +144,14 @@ private:
   QHash<QString, QPixmap> m_pixmapCache;
   QHash<QString, QFutureWatcher<QPixmap> *> m_pendingLoads;
 
+  // Per-instance placeholder cache (was function-local static — multiple
+  // CoverFlowWidget instances with different tile colors would thrash a
+  // shared single-slot cache when switching collections).
+  mutable QPixmap m_placeholderCache;
+  mutable quint64 m_placeholderCacheKey = 0;
+  mutable int m_placeholderCachedRadius = 0;
+  mutable QString m_placeholderCachedTile;
+
   int m_cornerRadius = 0;
   QString m_tileColor;
   QString m_selectionColor;
@@ -150,7 +160,7 @@ private:
   int m_fontSize = 12;
   QString m_fontFamily;
 
-  // Kartend-3ile: middle-click toggles between artwork and video preview on
+  // middle-click toggles between artwork and video preview on
   // the centered card. The QLabel-based VideoPreviewWidget is reused so we
   // get the same Wayland-friendly QVideoSink pipeline the sidebar uses.
   // The widget is sized + repositioned every paintEvent to track the
@@ -162,7 +172,7 @@ private:
   int m_videoPreviewIndex = -1;
   QRect m_lastCenterRect;
 
-  // Per-item gallery toolbar (Kartend-3ile). m_gallery is replaced on each
+  // Per-item gallery toolbar. m_gallery is replaced on each
   // selection change; m_galleryActiveIndex selects which entry drives the
   // centered card's display (-1 = the card's default artworkPath).
   QList<CoverFlowGalleryEntry> m_gallery;

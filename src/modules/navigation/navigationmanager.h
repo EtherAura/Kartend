@@ -205,23 +205,23 @@ private:
   LoadingOverlay *m_loadingOverlay = nullptr;
   QScrollArea *m_itemScrollArea = nullptr;
   QWidget *m_gridContainer = nullptr;
-  // Kartend-vbs: lazy-created on first collection that requests a video
+  // lazy-created on first collection that requests a video
   // background. Parented to the items viewport so its lifetime mirrors the
   // scroll area's. Hidden + decoder-released when the active collection
   // doesn't use video, so collections without one pay zero playback cost.
   BackgroundVideoWidget *m_backgroundVideo = nullptr;
-  // Kartend-guo5: lazy-created header logo overlay; same lifetime/parenting
+  // lazy-created header logo overlay; same lifetime/parenting
   // pattern as m_backgroundVideo. Hidden when the active collection has no
   // logo configured.
   HeaderLogoOverlay *m_headerLogo = nullptr;
-  // Kartend-qbp3: lazy-created vignette overlay layered above the logo so
+  // lazy-created vignette overlay layered above the logo so
   // the logo isn't darkened along with the corners.
   VignetteOverlay *m_vignette = nullptr;
-  // Kartend-eq8r: lazy-created toolbar backdrop blur. Hidden whenever the
+  // lazy-created toolbar backdrop blur. Hidden whenever the
   // active collection has the toggle off or uses a video bg (sampling
   // frames every paint is too expensive without GPU shaders).
   BackdropBlurOverlay *m_toolbarBlur = nullptr;
-  // Kartend-y25g: throttle for parallax stylesheet rebuilds. Lazy-created
+  // throttle for parallax stylesheet rebuilds. Lazy-created
   // on first scroll while parallax is active. Caps QSS updates at ~60Hz
   // so a fast scroll doesn't thrash Qt's stylesheet engine.
   QTimer *m_parallaxThrottle = nullptr;

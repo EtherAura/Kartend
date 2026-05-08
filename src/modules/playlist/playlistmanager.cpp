@@ -190,7 +190,7 @@ bool PlaylistManager::deletePlaylist(const QString &id) {
     return false;
   }
 
-  // Kartend-5mg8: refuse to drop reserved playlists. Built-ins (favorites and
+  // refuse to drop reserved playlists. Built-ins (favorites and
   // any future named slot) must outlive the user's menu choices — if we let
   // the favorites row vanish, the next ensureFavoritesPlaylist() would
   // recreate it under a fresh id, dropping every starred reference along the
@@ -264,7 +264,7 @@ bool PlaylistManager::addItem(const QString &playlistId, const QString &sourceCo
   }
 
   // Stamp the parent's updated_at so a future "sort playlists by recency"
-  // (Kartend-vlm7 follow-up) can rely on it.
+  // (follow-up) can rely on it.
   QSqlQuery touch(m_db);
   touch.prepare(QStringLiteral("UPDATE playlists SET updated_at = ? WHERE id = ?"));
   touch.addBindValue(isoNow());
@@ -476,7 +476,7 @@ QString PlaylistManager::ensureFavoritesPlaylist(const QString &defaultName) {
 }
 
 // ============================================================================
-// Import / export (Kartend-5pqv)
+// Import / export
 // ============================================================================
 
 namespace {
@@ -641,7 +641,7 @@ ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPat
   const QString &newId = created.value();
 
   const QJsonArray itemsArray = root.value("items").toArray();
-  for (const auto val : itemsArray) {
+  for (const auto &val : itemsArray) {
     const QJsonObject obj = val.toObject();
     const QString uuid = obj.value("source_collection_uuid").toString();
     const QString path = obj.value("source_path").toString();

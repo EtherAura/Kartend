@@ -39,6 +39,7 @@
 - ❌ Never use `bd edit` (opens `$EDITOR`, blocks the agent). Use `--title/--description/--notes/--design/--append-notes`.
 - ❌ Never close an issue without committing AND pushing the corresponding code.
 - ❌ Never invent placeholder issue IDs — always use real `bd-*` IDs returned by `bd create`.
+- ❌ **Never reference beads issue codes (`Kartend-XXXX`) in code, comments, commit messages, docstrings, or any user-facing surface** (tooltips, labels, dialog text, AppStream metadata, README, CHANGELOG, etc.). Beads IDs are internal-only — they belong in `bd` notes/design fields and the `bd` database, never in the codebase. The issue's *content* (rationale, design) goes in the comment; the *ID* stays out.
 - ✅ When the user describes new work, your FIRST action is `bd create` (or `bd ready` to check for an existing match).
 - ✅ When in doubt about priority: P0=critical/blocking, P1=high, P2=normal (default), P3=backlog, P4=future/nice-to-have.
 - ✅ When discovering related work mid-task, file it (`--deps discovered-from:<id>`) — don't expand the current issue's scope.
@@ -107,8 +108,8 @@ src/
 `MainWindow` owns `ApplicationManager`, which creates top-level managers in controlled destruction order (declared bottom-up in `applicationmanager.h`).
 
 **Two-tier ownership model:**
-- **ApplicationManager** owns: `CacheManager`, `SessionManager`, `ArtworkManager`, `SettingsManager`, `DatabaseManager`, `ScrollManager`, `SidebarManager`, `NavigationManager`, `InteractionManager`
-- **InteractionManager** owns: `SearchManager`, `SelectionManager`, `KeyboardManager`, `GamepadManager`, `ArrowNavigationHandler`, `AlphabeticNavigationHandler`, `AnimationManager`, `MouseManager`, `LaunchManager`, `ViewportManager`, `EventManager`
+- **ApplicationManager** owns: `CacheManager`, `SessionManager`, `ArtworkManager`, `SettingsManager`, `DatabaseManager`, `ScrollManager`, `DetailsPaneManager`, `NavigationManager`, `InteractionManager`, `PlaylistManager`, `DetailPageManager`, `KartManager`
+- **InteractionManager** owns: `SearchManager`, `SelectionManager`, `KeyboardManager`, `GamepadManager`, `ArrowNavigationHandler`, `AlphabeticNavigationHandler`, `AnimationManager`, `MouseManager`, `LaunchManager`, `ViewportManager`, `EventManager`, `AttractManager`
 
 Additional helper managers owned by their parent feature module (not top-level): `WidgetPoolManager`, `FilterManager`, `SelectionRestoreManager`, `SelectionOverlayManager`, `SearchLoadingOverlay`, `NavigationStackManager`.
 
@@ -140,7 +141,11 @@ m_appContext.selectionManager = getInteractionManager()->selectionManager();
 | `CacheManager` | ApplicationManager | |
 | `SessionManager` | ApplicationManager | |
 | `SettingsManager` | ApplicationManager | |
-| `SidebarManager` | ApplicationManager | |
+| `DetailsPaneManager` | ApplicationManager | (renamed from `SidebarManager`) |
+| `PlaylistManager` | ApplicationManager | owns its own SQLite connection on the main thread |
+| `DetailPageManager` | ApplicationManager | detail-page coordinator |
+| `KartManager` | ApplicationManager | Kart import/export coordinator |
+| `AttractManager` | InteractionManager | attract-mode idle scroll/advance |
 | `GamepadManager` | InteractionManager | `dpadPressed`, `buttonPressed` (compiled in when Qt6::Gamepad or SDL2 is found) |
 | `AlphabeticNavigationHandler` | InteractionManager | `requestSelectionByIndex` |
 | `WidgetPoolManager` | ScrollManager | (helper, no signals) |

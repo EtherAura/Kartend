@@ -18,26 +18,26 @@
 #include "cachemanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "detailspane.h"
 #include "interactionmanager.h"
-#include "kartmanager.h"
 #include "itemwidget.h"
+#include "kartmanager.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "menucontroller.h"
-#include "detailspane.h"
 #include "navigationmanager.h"
 #include "playlistmanager.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"
 
 #include "detailpageoverlay.h"
+#include "detailspanemanager.h"
 #include "nowplayingoverlay.h"
 #include "sessionmanager.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
 #include "shortcutsdialog.h"
-#include "detailspanemanager.h"
 #include "splashoverlay.h"
 #include "stringutils.h"
 #include "textzoomhud.h"
@@ -57,7 +57,7 @@ void MainWindow::setupUI() {
   // Load settings
   getSettingsManager()->loadCollections(m_collections);
 
-  // Kartend-vlm7: append synthesized playlist CollectionConfigs after INI
+  // append synthesized playlist CollectionConfigs after INI
   // collections so playlists nest into the hierarchy and appear as virtual
   // collections. resyncPlaylistCollections also rebuilds the hierarchy cache,
   // so we don't need a separate rebuild call here.
@@ -70,12 +70,12 @@ void MainWindow::setupUI() {
 
   getSettingsManager()->loadGeneralSettings(m_generalSettings);
 
-  // Kartend-7eff: publish the persisted text-zoom multiplier into the static
+  // publish the persisted text-zoom multiplier into the static
   // before any widget is constructed below — the upcoming applyGlobalUiFont
   // and the scrollManager / sidebar setup paths all read zoomedFontSize().
   primeTextZoomFromSettings(m_generalSettings.uiTextZoomPercent);
 
-  // Kartend-9v0o: push the persisted global UI font to QApplication before any
+  // push the persisted global UI font to QApplication before any
   // widgets are constructed below, so menus/dialogs/toolbar all pick it up on
   // their first show without a fontChange roundtrip.
   applyGlobalUiFont(m_generalSettings);
@@ -84,7 +84,7 @@ void MainWindow::setupUI() {
   ItemWidget::setTitleTintSaturation(m_generalSettings.titleTintSaturation);
   ItemWidget::setTitleTintLightness(m_generalSettings.titleTintLightness);
   ItemWidget::setTitleBaseColor(m_generalSettings.titleBaseColor);
-  // Kartend-cub
+
   ItemWidget::setShowTitleInPlaceholder(m_generalSettings.showTitleInPlaceholder);
 
   setupUIReferences();
@@ -160,10 +160,10 @@ void MainWindow::setupUI() {
   setupArtworkManager();
   setupLastSelectedIndices();
   setupEventFilters();
-  // Kartend-81o: apply persisted toolbar visibility/text overrides to the
+  // apply persisted toolbar visibility/text overrides to the
   // freshly-constructed toolbar widgets before any layout settles.
   applyToolbarCustomization();
-  // Kartend-7eff: bind Ctrl+= / Ctrl+- / Ctrl+0 after managers are wired so
+  // bind Ctrl+= / Ctrl+- / Ctrl+0 after managers are wired so
   // applyTextZoom() can refresh the scroll/sidebar pipeline on press.
   setupTextZoomShortcuts();
   setupVideoPauseShortcut();
@@ -217,17 +217,17 @@ void MainWindow::setupUIReferences() {
   // independent from scan/loading progress overlays and manages its own timers.
   m_splashOverlay = new SplashOverlay(ui->centralwidget);
 
-  // Kartend-qxv: Persistent "Now Playing" overlay used while a runtime-tracked
+  // Persistent "Now Playing" overlay used while a runtime-tracked
   // child process is running. Stays hidden until LaunchManager signals start.
   m_nowPlayingOverlay = new NowPlayingOverlay(ui->centralwidget);
 
-  // Kartend-uve: full-window item detail page. Created here so it's parented
+  // full-window item detail page. Created here so it's parented
   // to the central widget (covers everything underneath) and stays in the
   // QObject tree across the application lifetime; DetailPageManager drives
   // it via setupReferences below.
   m_detailPageOverlay = new DetailPageOverlay(ui->centralwidget);
 
-  // Kartend-0w4i: transient pill that flashes the current text-zoom percent
+  // transient pill that flashes the current text-zoom percent
   // on every Ctrl+/-/0 press. Parented to centralwidget so it floats above
   // all content and tracks parent resizes via its own eventFilter.
   m_textZoomHud = new TextZoomHud(ui->centralwidget);
@@ -260,6 +260,7 @@ void MainWindow::initializeAppContext() {
   m_appContext.managers.settingsManager = getSettingsManager();
   m_appContext.managers.sessionManager = getSessionManager();
   m_appContext.managers.detailsPaneManager = getDetailsPaneManager();
+  m_appContext.managers.detailPageManager = getDetailPageManager();
   m_appContext.managers.databaseManager = getDatabaseManager();
   m_appContext.managers.navigationManager = getNavigationManager();
   m_appContext.managers.interactionManager = getInteractionManager();
@@ -330,7 +331,7 @@ void MainWindow::adjustGridWidth(int delta) {
 
   CollectionConfig &config = m_collections[currentCollectionIndex];
 
-  // Kartend-0p3w: figure out which gridWidth field is currently driving the
+  // figure out which gridWidth field is currently driving the
   // layout, and mutate that one. When sidebar is hidden in Expand mode AND the
   // alt is configured non-zero, the alt is the active field; otherwise the
   // primary gridWidth is. Sidebar shrinking state is cached on ScrollManager so
@@ -391,7 +392,7 @@ void MainWindow::setViewType(ViewType viewType) {
 
   // Update view-mode button checked state and label.
   syncViewModeButton(viewType);
-  // Kartend-iue: keep the View → Layout submenu in sync with the toolbar.
+  // keep the View → Layout submenu in sync with the toolbar.
   if (m_menuController) {
     m_menuController->syncLayoutActions(viewType);
   }
@@ -410,7 +411,7 @@ void MainWindow::setupSidebar() {
     DetailsPaneManagerSetup setup;
     setup.ctx = &m_appContext;
     setup.mainLayout = m_mainHorizontalLayout;
-    // Kartend-u2gx: outer vertical layout + content widget enable Top/Bottom
+    // outer vertical layout + content widget enable Top/Bottom
     // dock in Expand mode. Both come straight from the .ui — no new widgets
     // needed.
     setup.outerLayout = ui->itemsPageLayout;

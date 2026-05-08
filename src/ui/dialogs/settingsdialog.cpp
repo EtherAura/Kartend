@@ -192,7 +192,7 @@ void SettingsDialog::setupButtonConnections() {
     connect(ui->editLinkedParentsButton, &QPushButton::clicked, this,
             &SettingsDialog::onEditLinkedParents);
   }
-  // Kartend-enq: wire the Settings Mode selector. Default is `Current` to
+  // wire the Settings Mode selector. Default is `Current` to
   // preserve legacy single-collection save behavior.
   if (ui->settingsScopeComboBox) {
     ui->settingsScopeComboBox->setCurrentIndex(static_cast<int>(m_settingsScope));
@@ -236,7 +236,7 @@ void SettingsDialog::setupConnections() {
 }
 
 void SettingsDialog::onSettingsScopeChanged(int comboIndex) {
-  // Kartend-enq: clamp combo index defensively in case the .ui file is
+  // clamp combo index defensively in case the.ui file is
   // edited and adds/removes entries; only emit when the scope actually
   // changes so dependent UI doesn't churn.
   SettingsScope newScope = SettingsScope::Current;
@@ -260,7 +260,7 @@ void SettingsDialog::onSettingsScopeChanged(int comboIndex) {
 }
 
 void SettingsDialog::applyScopeFieldGating() {
-  // Kartend-c06: when the user picks a wider scope, edits to fields outside
+  // when the user picks a wider scope, edits to fields outside
   // the curated propagation subset only ever affect the currently-selected
   // collection. Disable those controls so the UI matches the propagation
   // behavior — paths, extensions, launcher/core, extract & scan flags, and

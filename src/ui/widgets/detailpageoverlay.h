@@ -20,7 +20,7 @@ class QScrollArea;
 QT_END_NAMESPACE
 
 /**
- * @brief Full-window detail page for the currently selected item (Kartend-uve).
+ * @brief Full-window detail page for the currently selected item.
  *
  * Shows a hero artwork (cycle-able through every available artwork type with
  * Left/Right or the on-image arrows), the item title, full description, a
@@ -41,6 +41,7 @@ public:
   struct ArtworkEntry {
     QString label;
     QString path;
+    bool isVideo = false;
   };
 
   /// Bundle of everything the overlay displays. Populated by
@@ -67,7 +68,7 @@ public:
 signals:
   /// Fires when the overlay opens (true) or closes (false). DetailsPaneManager
   /// listens so the sidebar can be lowered while the overlay is up — same
-  /// rationale as Kartend-63e bug #7 for the artwork preview overlay.
+  /// rationale as bug #7 for the artwork preview overlay.
   void visibilityChanged(bool visible);
 
   /// Emitted when the user clicks the manual button. The manager opens the

@@ -60,19 +60,19 @@ private:
   std::unique_ptr<DatabaseManager> m_databaseManager;
   // PlaylistManager owns its own SQLite connection on the main thread; declared
   // after DatabaseManager so it tears down first (Qt destroys SQL connections
-  // in reverse-declaration order). Kartend-vlm7.
+  // in reverse-declaration order).
   std::unique_ptr<PlaylistManager> m_playlistManager;
   std::unique_ptr<SettingsManager> m_settingsManager;
   std::unique_ptr<ScrollManager> m_scrollManager;
   std::unique_ptr<DetailsPaneManager> m_detailsPaneManager;
   std::unique_ptr<NavigationManager> m_navigationManager;
   std::unique_ptr<InteractionManager> m_interactionManager;
-  // Kartend-uve. DetailPageManager has no destructors-during-shutdown
+  //. DetailPageManager has no destructors-during-shutdown
   // dependencies on other managers; declared last so it tears down first
   // (its only owned member is the QObject parent link).
   std::unique_ptr<DetailPageManager> m_detailPageManager;
 
-  // Kartend-zgaq. KartManager coordinates Kart import/export and depends only
+  //. KartManager coordinates Kart import/export and depends only
   // on SettingsManager (for collection registration). Has no shutdown ordering
   // requirements beyond being a QObject child.
   std::unique_ptr<kart::KartManager> m_kartManager;

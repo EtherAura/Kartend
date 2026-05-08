@@ -37,7 +37,7 @@ public:
   ~VideoPreviewWidget() override;
 
   /**
-   * @brief Set the global preview-audio volume (Kartend-3m01).
+   * @brief Set the global preview-audio volume.
    *
    * @p percent is clamped to [0, 100]. The value is applied to every live
    * VideoPreviewWidget immediately and stored as the default for any
@@ -65,7 +65,7 @@ public:
   void stop();
 
   /**
-   * @brief Toggle between playing and paused states (Kartend-cjry).
+   * @brief Toggle between playing and paused states.
    *
    * No-op when no source is loaded. Unlike stop(), the source is preserved
    * so playback resumes from the same position. Returns the new paused
@@ -74,7 +74,7 @@ public:
   bool togglePauseResume();
 
   /**
-   * @brief Whether playback is currently paused (Kartend-cjry).
+   * @brief Whether playback is currently paused.
    *
    * Distinguishes "paused with source loaded" from "stopped / no source"
    * — togglePauseResume only acts on the former.
@@ -113,13 +113,13 @@ private:
   // produces another frame).
   QImage m_currentImage;
   QString m_currentPath;
-  // Kartend-cjry: distinguishes user-initiated pause from the visibility
+  // distinguishes user-initiated pause from the visibility
   // pause done by hideEvent(). showEvent() must not silently resume a
   // user-paused video — the user's intent should survive a sidebar
   // collapse/expand cycle.
   bool m_userPaused = false;
 
-  // Kartend-3m01: shared volume state. Each instance pushes the current
+  // shared volume state. Each instance pushes the current
   // s_globalVolume into its QAudioOutput at construction; setGlobalVolume()
   // walks s_instances to update every live widget when the toolbar slider
   // moves. The list is the only registry — there's no signal indirection.

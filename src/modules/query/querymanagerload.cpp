@@ -349,7 +349,7 @@ auto QueryManager::collectCollectionUuids(const CollectionContext &ctx,
     -> QStringList {
   QStringList uuids;
 
-  // Kartend-vlm7: a playlist's "scope" is the union of source collection
+  // a playlist's "scope" is the union of source collection
   // uuids across its items — there's no single owning collection. The fetch
   // SQL still uses this list for its top-level WHERE, then layers a
   // (uuid, path) EXISTS clause via query_playlist_scope to narrow down to
@@ -419,7 +419,7 @@ auto QueryManager::buildDirectoryMaps(const CollectionContext &ctx,
     -> CollectionDirMaps {
   CollectionDirMaps maps;
 
-  // Kartend-vlm7: a playlist's items can come from any collection. Build
+  // a playlist's items can come from any collection. Build
   // mappings for every real (non-playlist) collection whose uuid appears in
   // the playlist's source uuid set so the post-fetch path resolution still
   // turns relative paths into absolutes via the right media directory.

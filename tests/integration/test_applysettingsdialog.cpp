@@ -166,7 +166,7 @@ void TestApplySettingsDialog::testApplyCategoriesAllPreservesPathsAndScanFlags()
   QCOMPARE(collections[1].hideTitles, true);
   QCOMPARE(collections[1].sidebarMode, DetailsPaneMode::Expand);
   // Identity, paths, extensions, scan flags must be untouched even with the
-  // full mask — that's the safety guarantee Kartend-iyk preserves.
+  // full mask — that's the safety guarantee preserves.
   QCOMPARE(collections[1].name, QStringLiteral("Destination"));
   QCOMPARE(collections[1].mediaDirectory, QStringLiteral("/dst/media"));
   QCOMPARE(collections[1].artworkDirectory, QStringLiteral("/dst/artwork"));

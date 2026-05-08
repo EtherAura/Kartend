@@ -20,6 +20,10 @@ set(INTEGRATION_TEST_SOURCES
   test_applysettingsdialog.cpp
   test_applicationmanager_lifecycle.cpp
   test_navigationmanager.cpp
+  test_eventmanager_detailspane.cpp
+  test_detailspane_coverflow.cpp
+  test_settingsdialog_changes.cpp
+  test_scrollmanager.cpp
 )
 
 set(INTEGRATION_TEST_HEADERS
@@ -29,6 +33,10 @@ set(INTEGRATION_TEST_HEADERS
   test_applysettingsdialog.h
   test_applicationmanager_lifecycle.h
   test_navigationmanager.h
+  test_eventmanager_detailspane.h
+  test_detailspane_coverflow.h
+  test_settingsdialog_changes.h
+  test_scrollmanager.h
 )
 
 add_executable(test_integration

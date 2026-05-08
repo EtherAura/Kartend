@@ -34,6 +34,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   launcherchooserdialog.h
   launchereditordialog.h
   settingsdialog.h
+  settingsformbinding.h
   shortcutsdialog.h
   statisticsdialog.h
   settingsdialog.ui

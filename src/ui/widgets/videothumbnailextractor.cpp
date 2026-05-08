@@ -1,4 +1,4 @@
-// Async video thumbnail extractor (Kartend-ljey).
+// Async video thumbnail extractor.
 #include "videothumbnailextractor.h"
 
 #include <QAudioOutput>

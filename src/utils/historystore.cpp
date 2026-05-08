@@ -1,6 +1,6 @@
-// Append-only chronological launch-history log (Kartend-fse).
+// Append-only chronological launch-history log.
 //
-// Stats (Kartend-7vi) lives on the `items` table as aggregates; history
+// Stats lives on the `items` table as aggregates; history
 // keeps a separate table because the dialog needs to show repeated launches
 // of the same item as distinct rows ("X, Y, X, Z") rather than a deduped
 // roll-up.

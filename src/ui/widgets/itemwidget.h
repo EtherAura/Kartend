@@ -83,7 +83,7 @@ public:
   static QColor titleTint();
   QColor m_titleTintColor; // Cached tint color for custom painting
 
-  /// Kartend-63e: build a placeholder-style hatched tile at the given size
+  /// build a placeholder-style hatched tile at the given size
   /// using the app palette + s_tileColor + s_titleTintLightness. Static so
   /// the metadata sidebar can render the exact same hatch the per-item
   /// placeholder uses for "missing artwork" tiles. `cornerRadius` masks the
@@ -112,7 +112,7 @@ public:
   static void setSelectionColor(const QString &hexColor);
   static void setListRowColor(const QString &hexColor);
   static void setListAltRowColor(const QString &hexColor);
-  // Kartend-cub: when true, onArtworkChanged() draws itemName centered on the
+  // when true, onArtworkChanged draws itemName centered on the
   // placeholder pixmap. Toggle is read at render time, so a setting flip
   // followed by a viewport refresh updates every visible tile.
   static void setShowTitleInPlaceholder(bool enabled);
@@ -173,7 +173,7 @@ private:
   void updateTriangleIndicator();
   void paintTriangleIndicator();
   [[nodiscard]] QPixmap buildPlaceholderPattern(int width, int height) const;
-  /// Kartend-cub: paints `itemName` centered on @p pixmap with the title tint
+  /// paints `itemName` centered on @p pixmap with the title tint
   /// color and a dark backing for legibility. No-op when itemName is empty or
   /// the pixmap has zero area. @p dpr lets the caller scale the font when the
   /// pixmap is in physical pixels (placeholder pattern path uses dpr=1, the

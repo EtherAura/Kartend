@@ -90,7 +90,7 @@ public:
                                           bool wrapEnabled, bool &didWrap);
   static int calculateVerticalSelection(int totalItems, int currentSelection, int direction,
                                         bool wrapEnabled, int gridWidth, bool &didWrap);
-  /// Kartend-dx9t: column-major selection move for the Horizontal view mode.
+  /// column-major selection move for the Horizontal view mode.
   /// `direction` is ±1 for Up/Down (within-column step) or ±itemsPerCol for
   /// Left/Right (between-column step). Wrap behavior mirrors Grid mode but on
   /// the transposed axis: Up/Down wraps within the same column, Left/Right
@@ -115,7 +115,7 @@ signals:
   void requestAlphabeticNavigation(bool forward);
   void requestJumpToEdge(bool toEnd); // Home/End key navigation
   void requestEnterAction();
-  /// Kartend-uve: request to open the item detail page for the current
+  /// request to open the item detail page for the current
   /// selection. Bound to GeneralSettings::keyItemDetails (default I).
   /// Suppressed while the search bar has focus so typed letters still
   /// reach the filter.

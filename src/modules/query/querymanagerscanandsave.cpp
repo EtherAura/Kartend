@@ -1,4 +1,4 @@
-// Scan-and-save pipeline for QueryManager (Kartend-8sq refactor).
+// Scan-and-save pipeline for QueryManager (refactor).
 //
 // The monolithic scanAndSaveItemsToDatabase (~553 LOC) has been decomposed
 // into two focused phases plus a thin orchestrator:
@@ -576,7 +576,7 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
                                               int *outItemsScanned, int *outItemsApplied) {
   Q_UNUSED(collectionIndex)
 
-  // Kartend-tvg: populate summary counters for the caller even on early-return
+  // populate summary counters for the caller even on early-return
   // error paths so the UI gets a consistent "0 of 0" report instead of stale
   // garbage when a scan can't run.
   if (outItemsScanned) {
@@ -663,7 +663,7 @@ bool QueryManager::scanAndSaveItemsToDatabase(int collectionIndex,
   const bool success =
       commitStagedScanResults(collection, uuid, extSignature, dirSignature, itemsApplied);
 
-  // Kartend-tvg: surface scan stats to the caller.
+  // surface scan stats to the caller.
   if (outItemsScanned) {
     *outItemsScanned = itemsStaged;
   }

@@ -171,7 +171,7 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
     }
 
     // Step of 1 in non-grid views: List walks one item per arrow regardless
-    // of axis, and CoverFlow (Kartend-3ile) collapses all four arrows to a
+    // of axis, and CoverFlow collapses all four arrows to a
     // single-step carousel shift.
     bool singleStep = false;
     bool isHorizontalView = false;
@@ -184,7 +184,7 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
     int direction = 0;
     bool vertical = false;
     if (isHorizontalView) {
-      // Kartend-dx9t: in Horizontal mode the visible meaning of the arrow
+      // in Horizontal mode the visible meaning of the arrow
       // keys is preserved (Down moves to the next item in the column;
       // Right moves one column over) but the *step size* swaps sides:
       // Up/Down step by 1, Left/Right step by gridWidth (= items per
@@ -256,7 +256,7 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
     return true;
   }
 
-  // Kartend-uve: detail page. Checked last so it can't shadow a re-bound
+  // detail page. Checked last so it can't shadow a re-bound
   // arrow / search / confirm key, and only outside the search bar (the
   // search-focused branch above returns before reaching here, so this is
   // already gated).

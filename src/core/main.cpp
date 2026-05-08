@@ -50,7 +50,7 @@ auto main(int argc, char *argv[]) -> int {
   QApplication::setApplicationVersion(APP_VERSION);
   QApplication::setWindowIcon(QIcon(":/icon.svg"));
 
-  // Kartend-z3w: parse CLI options. Use process() so --help, --version, and
+  // parse CLI options. Use process so --help, --version, and
   // unknown-option errors are handled with the standard Qt behavior (print
   // to stderr/stdout and exit). The parser definition mirrors
   // CliArgs::parseStartupArguments(); kept inline here to retain process()
@@ -245,7 +245,7 @@ auto main(int argc, char *argv[]) -> int {
 
   {
     MainWindow window;
-    // Kartend-z3w: override the persisted startupCollection for this launch
+    // override the persisted startupCollection for this launch
     // when --collection was supplied. setupInitialTimersWithCollections() reads
     // m_generalSettings.startupCollection from inside a QTimer::singleShot(0)
     // lambda that fires after exec() begins, so it's safe to mutate the field

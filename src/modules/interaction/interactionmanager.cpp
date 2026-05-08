@@ -34,16 +34,16 @@
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "detailspane.h"
+#include "detailspanemanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
-#include "detailspane.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
@@ -371,7 +371,23 @@ void InteractionManager::selectItemByIndex(int index, bool allowHorizontalScroll
       handleSuccessfulSelection(index);
     }
   } else {
-    trySelectWidget(index, subcollections, 0);
+    bool isCoverFlow = false;
+    if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+      isCoverFlow =
+          ((*m_collections)[*m_currentCollectionIndex].viewType == ViewType::CoverFlow);
+    }
+    if (isCoverFlow) {
+      // Cover Flow renders CoverFlowCards instead of ItemWidgets, so the
+      // virtual-grid retry loop would never resolve a widget here. Commit
+      // the selection state directly so file path / metadata context stay
+      // current for the info page and other consumers.
+      updateFilePathForSelection(index, subcollections);
+      if (!suppressed) {
+        handleSuccessfulSelection(index);
+      }
+    } else {
+      trySelectWidget(index, subcollections, 0);
+    }
   }
 
   const int selected = currentSelectedIndex();

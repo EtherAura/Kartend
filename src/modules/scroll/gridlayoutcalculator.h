@@ -19,7 +19,7 @@ struct GridMetrics {
   int itemWidth = 0;
   int itemHeight = 0;
   /// Items along the *fixed* dimension. In Grid/List/CoverFlow this is
-  /// items-per-row (column count). In Horizontal mode (Kartend-dx9t) the axis
+  /// items-per-row (column count). In Horizontal mode the axis
   /// flips and this is items-per-column (row count) — the field name is kept
   /// for source compatibility across the hundreds of callers.
   int itemsPerRow = 0;
@@ -38,7 +38,7 @@ struct GridMetrics {
   bool isClipped = false;   // True if logicalHeight > QWIDGETSIZE_MAX
   int overflowAmount = 0;   // logicalHeight - totalHeight when clipped
   int headerOffset = 0;     // Offset for list header in list view mode
-  /// Kartend-dx9t: when true, the items area scrolls along x instead of y.
+  /// when true, the items area scrolls along x instead of y.
   /// Set during `calculateMetrics` from `config.viewType == Horizontal`.
   /// Downstream code uses this in lieu of re-reading the config.
   bool isHorizontal = false;
@@ -128,7 +128,7 @@ public:
    * @brief Calculate grid metrics from collection configuration.
    * @param config Collection configuration with grid settings.
    * @param totalItems Total number of items to lay out.
-   * @param sidebarShrinkingActive Kartend-0p3w: when true, the sidebar is hidden
+   * @param sidebarShrinkingActive: when true, the sidebar is hidden
    *        AND its mode would shrink the grid (Expand) — apply the alternate
    *        gridWidthSidebarHidden / horizontalGridHeightSidebarHidden values
    *        when configured. Defaults to false so existing call sites that don't
@@ -183,7 +183,7 @@ public:
    * @brief Calculate the range of visible "rows" along the long axis.
    *
    * In Grid/List/CoverFlow this is rows (vertical scroll position +
-   * viewport height). In Horizontal mode (Kartend-dx9t) the same call
+   * viewport height). In Horizontal mode the same call
    * is reinterpreted as columns (horizontal scroll position + viewport
    * width); the caller picks which scrollbar to read from `metrics.isHorizontal`.
    *

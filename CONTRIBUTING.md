@@ -5,7 +5,7 @@ Thank you for considering contributing to Kartend! This document outlines the pr
 ## Development Setup
 
 1. Install dependencies (see [docs/building.md](docs/building.md)):
-   - Qt6 (Core, Gui, Widgets, Sql, Concurrent)
+   - Qt6 (Core, Gui, Widgets, Sql, Concurrent, Multimedia, MultimediaWidgets)
    - CMake 3.20+
    - C++23 compiler (Clang or GCC)
 

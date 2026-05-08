@@ -113,7 +113,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     settings.beginGroup(group);
     CollectionConfig config;
     config.name = settings.value("name").toString();
-    // Kartend-dd8: free-form category label. Empty means "untagged" — the
+    // free-form category label. Empty means "untagged" — the
     // sidebar/toolbar filter resolves an empty type by walking up the parent
     // chain via CollectionUtils::effectiveCollectionType.
     config.type = settings.value("type").toString().trimmed();
@@ -121,7 +121,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.corePath = settings.value("corePath").toString();
     config.launchParameters = settings.value("launchParameters").toString();
     config.launcherName = settings.value("launcherName").toString();
-    // Kartend-bdl: additional launchers are stored as a QSettings array under
+    // additional launchers are stored as a QSettings array under
     // "additionalLaunchers". When the key is absent (legacy configs), the
     // collection just has the primary launcher and the array stays empty.
     const int additionalCount = settings.beginReadArray("additionalLaunchers");
@@ -133,12 +133,12 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
       launcher.launcherPath = settings.value("launcherPath").toString();
       launcher.corePath = settings.value("corePath").toString();
       launcher.launchParameters = settings.value("launchParameters").toString();
-      // Kartend-p1jd: optional reference to a global preset.
+      // optional reference to a global preset.
       launcher.presetId = settings.value("presetId").toString();
       config.additionalLaunchers.append(launcher);
     }
     settings.endArray();
-    // Kartend-gzmk: alias parents — names of additional collections this
+    // alias parents — names of additional collections this
     // collection should appear under. Stored as a QSettings string array so
     // names can contain commas/semicolons without escaping concerns.
     const int additionalParentsCount = settings.beginReadArray("additionalParents");
@@ -178,7 +178,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     }
     config.extensions = normalized;
 
-    // User-defined custom artwork type ids (Kartend-53vk). Stored as
+    // User-defined custom artwork type ids. Stored as
     // comma-separated values; each token is trimmed. Empty tokens and
     // duplicates are dropped at load time so a sloppy edit can't wedge the
     // sidebar gallery (the type id doubles as the artwork_type DB key).
@@ -199,7 +199,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.gridWidthSidebarHidden = settings.value("gridWidthSidebarHidden", 0).toInt();
     config.horizontalGridHeightSidebarHidden =
         settings.value("horizontalGridHeightSidebarHidden", 0).toInt();
-    // Kartend-u2gx: alt items-per-column when a Top/Bottom-docked details pane
+    // alt items-per-column when a Top/Bottom-docked details pane
     // hides in Expand mode. 0 means "inherit gridWidth" — preserves existing
     // behavior for collections that haven't opted in.
     config.gridHeightSidebarHidden = settings.value("gridHeightSidebarHidden", 0).toInt();
@@ -210,7 +210,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.sidebarMode = (settings.value("sidebarMode", "overlay").toString() == "fixed")
                              ? DetailsPaneMode::Expand
                              : DetailsPaneMode::Overlay;
-    // Kartend-63e sidebar enhancements.
+    // sidebar enhancements.
     config.sidebarPosition = CollectionUtils::stringToDetailsPanePosition(
         settings.value("sidebarPosition", "right").toString());
     config.sidebarBackgroundType = CollectionUtils::stringToDetailsPaneBackgroundType(
@@ -227,15 +227,16 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.sidebarSectionBgColor = settings.value("sidebarSectionBgColor").toString();
     config.sidebarHeaderBgOpacity = settings.value("sidebarHeaderBgOpacity", 200).toInt();
     config.sidebarSectionBgOpacity = settings.value("sidebarSectionBgOpacity", 170).toInt();
-    config.sidebarWidth = settings.value("sidebarWidth", UIConstants::DetailsPane::FIXED_WIDTH).toInt();
-    // Kartend-u2gx: pane height for Top/Bottom dock. Same persistence treatment
+    config.sidebarWidth =
+        settings.value("sidebarWidth", UIConstants::DetailsPane::FIXED_WIDTH).toInt();
+    // pane height for Top/Bottom dock. Same persistence treatment
     // as sidebarWidth (no migration of older configs needed — the default is
     // applied when the key is absent).
     config.sidebarHeight =
         settings.value("sidebarHeight", UIConstants::DetailsPane::FIXED_HEIGHT).toInt();
     config.sidebarWidthLocked = settings.value("sidebarWidthLocked", true).toBool();
-    config.sidebarActiveTab =
-        CollectionUtils::stringToDetailsPaneTab(settings.value("sidebarActiveTab", "item").toString());
+    config.sidebarActiveTab = CollectionUtils::stringToDetailsPaneTab(
+        settings.value("sidebarActiveTab", "item").toString());
     config.viewType =
         CollectionUtils::stringToViewType(settings.value("viewType", "grid").toString());
     config.hideMissingArtwork = settings.value("hideMissingArtwork", false).toBool();
@@ -243,7 +244,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.hideVerticalScrollbar = settings.value("hideVerticalScrollbar", false).toBool();
     config.hideTitles = settings.value("hideTitles", false).toBool();
     config.hideSubcollectionTitles = settings.value("hideSubcollectionTitles", false).toBool();
-    // Kartend-5h6: title-exclusion patterns are stored as a QSettings array so
+    // title-exclusion patterns are stored as a QSettings array so
     // each pattern can contain commas / brackets / backslashes without
     // delimiter escaping concerns. titleExclusionEnabled defaults to true so a
     // user adding patterns sees them apply immediately.
@@ -283,20 +284,20 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.tileColor = settings.value("tileColor").toString();
     config.selectionColor = settings.value("selectionColor").toString();
 
-    // Kartend-guo5: header logo
+    // header logo
     config.headerLogoImage = settings.value("headerLogoImage").toString();
     config.headerLogoPosition = CollectionUtils::stringToHeaderLogoPosition(
         settings.value("headerLogoPosition", "topcenter").toString());
 
-    // Kartend-qbp3: vignette
+    // vignette
     config.vignetteEnabled = settings.value("vignetteEnabled", false).toBool();
     config.vignetteIntensity = settings.value("vignetteIntensity", 60).toInt();
 
-    // Kartend-y25g: wallpaper parallax
+    // wallpaper parallax
     config.wallpaperParallax = settings.value("wallpaperParallax", false).toBool();
     config.parallaxStrength = settings.value("parallaxStrength", 30).toInt();
 
-    // Kartend-eq8r: toolbar backdrop blur
+    // toolbar backdrop blur
     config.toolbarBackdropBlur = settings.value("toolbarBackdropBlur", false).toBool();
     config.backdropBlurRadius = settings.value("backdropBlurRadius", 12).toInt();
 
@@ -311,7 +312,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     // Text appearance settings (per-collection)
     config.customFontFamily = settings.value("customFontFamily").toString();
 
-    // Kartend-ekaa: sidebar font override.
+    // sidebar font override.
     config.sidebarFontFamily = settings.value("sidebarFontFamily").toString();
     config.sidebarFontPointSize = settings.value("sidebarFontPointSize", 0).toInt();
 
@@ -329,7 +330,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
   auto validation = ConfigValidation::validateAllCollections(collections);
   ConfigValidation::logValidationResult(validation, "loadCollections");
 
-  // Kartend-5h6: refresh the title-exclusion registry whenever the on-disk
+  // refresh the title-exclusion registry whenever the on-disk
   // collection list is reloaded so QueryManager / scroll consumers see the
   // patterns from the very first item fetched after launch.
   TitleFilter::rebuildFromCollections(collections);
@@ -338,7 +339,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
 // Persist collection configurations to disk (no lastSelected_* entries).
 // Emits collectionsModified() at the end so all observers (toolbar type
 // filter, hierarchy cache, sidebar summary) refresh consistently — fixes
-// Kartend-9iwv where right-click / kart-import / inline edits saved without
+// where right-click / kart-import / inline edits saved without
 // firing a refresh, leaving the toolbar dropdown stale until restart.
 void SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
   QSettings settings(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
@@ -371,7 +372,7 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
   QSet<QString> newGroupNames;
 
   for (int i = 0; i < collections.size(); ++i) {
-    // Kartend-vlm7: synthesized playlist configs live in m_collections at
+    // synthesized playlist configs live in m_collections at
     // runtime so the rest of the UI treats them like real subcollections, but
     // they're persisted in the SQLite playlists table — never round-trip them
     // back into kartend.cfg, otherwise an INI section would shadow the DB row.
@@ -416,7 +417,7 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
 
     settings.beginGroup(iniGroupName);
     settings.setValue("name", c.name);
-    // Kartend-dd8: persist the free-form category label. Stored verbatim
+    // persist the free-form category label. Stored verbatim
     // (whitespace already trimmed at load) so a hand-edit round-trips.
     settings.setValue("type", c.type);
     settings.setValue("launcherPath",
@@ -424,7 +425,7 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue("corePath", sanitizePersistedPath(c.corePath, "corePath", sectionName));
     settings.setValue("launchParameters", c.launchParameters);
     settings.setValue("launcherName", c.launcherName);
-    // Kartend-bdl: persist the additional-launcher list as a QSettings array.
+    // persist the additional-launcher list as a QSettings array.
     // beginWriteArray clears any existing entries with the same prefix, so
     // launchers removed via the dialog don't linger in the INI.
     settings.beginWriteArray("additionalLaunchers", c.additionalLaunchers.size());
@@ -439,11 +440,11 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
       settings.setValue("corePath",
                         sanitizePersistedPath(launcher.corePath, coreFieldId, sectionName));
       settings.setValue("launchParameters", launcher.launchParameters);
-      // Kartend-p1jd: persist the preset reference (empty when inline).
+      // persist the preset reference (empty when inline).
       settings.setValue("presetId", launcher.presetId);
     }
     settings.endArray();
-    // Kartend-gzmk: persist the alias-parent name list as a QSettings array.
+    // persist the alias-parent name list as a QSettings array.
     // beginWriteArray clears prior entries so removals propagate.
     settings.beginWriteArray("additionalParents", c.additionalParentNames.size());
     for (int i = 0; i < c.additionalParentNames.size(); ++i) {
@@ -483,8 +484,9 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue("showAllSubcollectionItems", c.showAllSubcollectionItems);
     settings.setValue("horizontalAlignment",
                       CollectionUtils::alignmentToString(c.horizontalAlignment));
-    settings.setValue("sidebarMode", (c.sidebarMode == DetailsPaneMode::Expand) ? "fixed" : "overlay");
-    // Kartend-63e sidebar enhancements.
+    settings.setValue("sidebarMode",
+                      (c.sidebarMode == DetailsPaneMode::Expand) ? "fixed" : "overlay");
+    // sidebar enhancements.
     settings.setValue("sidebarPosition",
                       CollectionUtils::detailsPanePositionToString(c.sidebarPosition));
     settings.setValue("sidebarBackgroundType",
@@ -493,7 +495,8 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue(
         "sidebarBackgroundImage",
         sanitizePersistedPath(c.sidebarBackgroundImage, "sidebarBackgroundImage", sectionName));
-    settings.setValue("sidebarPattern", CollectionUtils::detailsPanePatternToString(c.sidebarPattern));
+    settings.setValue("sidebarPattern",
+                      CollectionUtils::detailsPanePatternToString(c.sidebarPattern));
     settings.setValue("sidebarPatternIntensity", c.sidebarPatternIntensity);
     settings.setValue("sidebarPatternColor", c.sidebarPatternColor);
     settings.setValue("sidebarTextColor", c.sidebarTextColor);
@@ -505,14 +508,15 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue("sidebarWidth", c.sidebarWidth);
     settings.setValue("sidebarHeight", c.sidebarHeight);
     settings.setValue("sidebarWidthLocked", c.sidebarWidthLocked);
-    settings.setValue("sidebarActiveTab", CollectionUtils::detailsPaneTabToString(c.sidebarActiveTab));
+    settings.setValue("sidebarActiveTab",
+                      CollectionUtils::detailsPaneTabToString(c.sidebarActiveTab));
     settings.setValue("viewType", CollectionUtils::viewTypeToString(c.viewType));
     settings.setValue("hideMissingArtwork", c.hideMissingArtwork);
     settings.setValue("hideHorizontalScrollbar", c.hideHorizontalScrollbar);
     settings.setValue("hideVerticalScrollbar", c.hideVerticalScrollbar);
     settings.setValue("hideTitles", c.hideTitles);
     settings.setValue("hideSubcollectionTitles", c.hideSubcollectionTitles);
-    // Kartend-5h6: persist the title-exclusion list via beginWriteArray so
+    // persist the title-exclusion list via beginWriteArray so
     // patterns removed by the user disappear from the INI cleanly.
     settings.beginWriteArray("titleExclusionPatterns", c.titleExclusionPatterns.size());
     for (int i = 0; i < c.titleExclusionPatterns.size(); ++i) {
@@ -542,18 +546,18 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue("primaryColor", c.primaryColor);
     settings.setValue("tileColor", c.tileColor);
     settings.setValue("selectionColor", c.selectionColor);
-    // Kartend-guo5: header logo
+    // header logo
     settings.setValue("headerLogoImage",
                       sanitizePersistedPath(c.headerLogoImage, "headerLogoImage", sectionName));
     settings.setValue("headerLogoPosition",
                       CollectionUtils::headerLogoPositionToString(c.headerLogoPosition));
-    // Kartend-qbp3: vignette
+    // vignette
     settings.setValue("vignetteEnabled", c.vignetteEnabled);
     settings.setValue("vignetteIntensity", c.vignetteIntensity);
-    // Kartend-y25g: wallpaper parallax
+    // wallpaper parallax
     settings.setValue("wallpaperParallax", c.wallpaperParallax);
     settings.setValue("parallaxStrength", c.parallaxStrength);
-    // Kartend-eq8r: toolbar backdrop blur
+    // toolbar backdrop blur
     settings.setValue("toolbarBackdropBlur", c.toolbarBackdropBlur);
     settings.setValue("backdropBlurRadius", c.backdropBlurRadius);
 
@@ -565,7 +569,7 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
 
     // Text appearance settings (per-collection)
     settings.setValue("customFontFamily", c.customFontFamily);
-    // Kartend-ekaa: sidebar font override
+    // sidebar font override
     settings.setValue("sidebarFontFamily", c.sidebarFontFamily);
     settings.setValue("sidebarFontPointSize", c.sidebarFontPointSize);
     settings.endGroup();
@@ -581,13 +585,13 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
                                               .arg(static_cast<int>(settings.status()))));
   }
 
-  // Kartend-5h6: keep the registry in sync with the just-persisted list. The
+  // keep the registry in sync with the just-persisted list. The
   // toolbar popup calls saveCollections() after edits and then triggers a
   // collection reload — refreshing here means the reload sees the new
   // patterns even before loadCollections() runs again.
   TitleFilter::rebuildFromCollections(collections);
 
-  // Kartend-9iwv: notify observers regardless of how the save was initiated.
+  // notify observers regardless of how the save was initiated.
   // The settings dialog flow used to emit this from the dialog controller;
   // moving the emit here covers all paths uniformly (right-click edits, kart
   // imports, inline toolbar edits) without ad-hoc per-call-site additions.

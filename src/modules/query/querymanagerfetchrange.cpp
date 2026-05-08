@@ -20,6 +20,7 @@
 #include "collectionutils.h"
 #include "errorutils.h"
 #include "pathutils.h"
+#include "queryhelpers.h"
 #include "querymanagerhelpers.h"
 #include "uiconstants.h"
 
@@ -66,7 +67,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   QStringList uuids = collectCollectionUuids(ctx, allCollections);
   CollectionDirMaps dirMaps = buildDirectoryMaps(ctx, allCollections);
 
-  // Kartend-vlm7: empty playlist short-circuits — no UUIDs means no items to
+  // empty playlist short-circuits — no UUIDs means no items to
   // fetch. Emit an empty result so the navigation overlay clears instead of
   // hanging on an "in flight" count.
   if (ctx.config.isPlaylist && uuids.isEmpty()) {
@@ -120,17 +121,17 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   // OFFSET cannot provide consistent random order across paginated requests.
   // Each page would get different random items. So for random mode, we build
   // the cache synchronously before proceeding.
-  // EXCEPTION: Playlists (Kartend-vlm7) bypass the sorted_items_cache in v1.
+  // EXCEPTION: Playlists bypass the sorted_items_cache in v1.
   // The cache hash keys off the uuid list + filter + sort mode, which would
   // collide with a regular query over the same uuids — so a playlist would
   // grab a cache built for "all items in those source collections" and show
-  // way too many items. Sub-issue Kartend-xbwa can revisit once we have a
+  // way too many items. Sub-issue can revisit once we have a
   // playlist-aware cache key.
   const bool isPlaylist = ctx.config.isPlaylist;
   const bool isRandomSort = (ctx.sortMode == SortMode::Random);
   if (!isPlaylist && !hasSortedItemsCache()) {
     if (isRandomSort) {
-      // Kartend-kh3f: random mode must build the cache synchronously so this
+      // random mode must build the cache synchronously so this
       // and every subsequent page share one stable permutation. If a deferred
       // build was already scheduled (typically by fetchItemCount running just
       // before us), cancel it — the slow path falls back to alphabetical for
@@ -331,7 +332,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
     }
   }
 
-  // Kartend-vlm7: same playlist EXISTS clause as fetchItemCountImpl. Layered
+  // same playlist EXISTS clause as fetchItemCountImpl. Layered
   // before GROUP BY so the dedup-by-path semantics still apply.
   if (isPlaylist) {
     sql += " AND EXISTS (SELECT 1 FROM query_playlist_scope p "
@@ -347,41 +348,16 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   // synchronous cache building above. If we get here for random, fall back to
   // alphabetical as a safeguard (items won't be truly random but at least
   // pagination will be consistent).
-  switch (ctx.sortMode) {
-  case SortMode::NameDescending:
-    sql += " ORDER BY sort_name COLLATE NOCASE DESC LIMIT ? OFFSET ?";
-    break;
-  case SortMode::DateDescending:
-    sql += " ORDER BY sort_last_modified DESC, sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
-    break;
-  case SortMode::DateAscending:
-    sql += " ORDER BY sort_last_modified ASC, sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
-    break;
-  case SortMode::SizeDescending:
-    sql += " ORDER BY sort_file_size DESC, sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
-    break;
-  case SortMode::SizeAscending:
-    sql += " ORDER BY sort_file_size ASC, sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
-    break;
-  case SortMode::CollectionAscending:
-    // For collection sorting in slow path, we can't easily join, so fall back
-    // to name sort The cache path handles this correctly with proper joins
-    sql += " ORDER BY collection_uuid, sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
-    break;
-  case SortMode::CollectionDescending:
-    sql += " ORDER BY collection_uuid DESC, sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
-    break;
-  case SortMode::Random:
-    // This shouldn't happen - Random mode forces cache creation above.
-    // Fall back to alphabetical for consistent pagination.
-    qCWarning(lcQueryManager) << "[QueryManager] fetchItemsRange: Random sort reached slow "
-                                 "path unexpectedly";
-    sql += " ORDER BY sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
-    break;
-  default:
-    sql += " ORDER BY sort_name COLLATE NOCASE LIMIT ? OFFSET ?";
-    break;
+  if (ctx.sortMode == SortMode::Random) {
+    // Random mode is supposed to force cache creation above; if we reach
+    // this slow path, fall back to alphabetical for consistent pagination
+    // and log a warning so the unexpected route is visible.
+    qCWarning(lcQueryManager)
+        << "[QueryManager] fetchItemsRange: Random sort reached slow path unexpectedly";
   }
+  sql += QStringLiteral(" ") +
+         QueryHelpers::orderByForSortMode(ctx.sortMode, /*useSortPrefix=*/true,
+                                           /*withLimitOffset=*/true);
 
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange (slow path): offset=" << offset

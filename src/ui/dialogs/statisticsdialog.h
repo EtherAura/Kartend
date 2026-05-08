@@ -20,7 +20,7 @@ class DatabaseManager;
 struct GeneralSettings;
 class SettingsManager;
 
-/// Aggregate usage-statistics dialog (Kartend-7vi).
+/// Aggregate usage-statistics dialog.
 ///
 /// Header: total items / total launches / total time played, plus a note when
 /// runtime detection is disabled (time-played is 0 in that case).
@@ -59,7 +59,7 @@ private:
   DatabaseManager *m_databaseManager = nullptr;
   const QList<CollectionConfig> *m_collections = nullptr;
   bool m_runtimeDetectionEnabled = false;
-  /// Kartend-fse: the dialog drives historyEnabled (live toggle on the
+  /// the dialog drives historyEnabled (live toggle on the
   /// History tab) by writing through these. Both can be null when the
   /// caller didn't wire them — the tab still renders its rows but the
   /// toggle is hidden.
@@ -75,7 +75,7 @@ private:
   QTreeWidget *m_mostPlayedTree = nullptr;
   QTreeWidget *m_recentlyPlayedTree = nullptr;
   QTreeWidget *m_byCollectionTree = nullptr;
-  // History tab (Kartend-fse)
+  // History tab
   QTreeWidget *m_historyTree = nullptr;
   QLabel *m_historyDisabledNote = nullptr;
   class QCheckBox *m_historyEnabledCheckBox = nullptr;

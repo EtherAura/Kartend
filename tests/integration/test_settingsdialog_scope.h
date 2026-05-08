@@ -1,6 +1,6 @@
 /**
  * @file test_settingsdialog_scope.h
- * @brief Kartend-enq: integration tests for the Settings Mode scope selector
+ * @brief: integration tests for the Settings Mode scope selector
  *        in SettingsDialog.
  *
  * Builds a real SettingsDialog with a small synthetic collection list, then

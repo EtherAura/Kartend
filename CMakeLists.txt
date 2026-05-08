@@ -1,22 +1,51 @@
 cmake_minimum_required(VERSION 3.20)
 
+# Project version is sourced from the top-level VERSION file (single source of
+# truth across CMakeLists.txt, PKGBUILD, ebuild filename, AppStream metainfo,
+# and Flatpak yaml). See .scripts/bump-version.sh and release.yml's
+# 'Verify tag matches version' step.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" KARTEND_VERSION_RAW)
+string(STRIP "${KARTEND_VERSION_RAW}" KARTEND_VERSION)
+if (NOT KARTEND_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+  message(FATAL_ERROR
+    "VERSION file contains '${KARTEND_VERSION}' — expected a semver MAJOR.MINOR.PATCH triple.")
+endif()
+
 project(kartend
-  VERSION 0.0.5
+  VERSION ${KARTEND_VERSION}
   LANGUAGES CXX
 )
 
 set(KARTEND_APP_ID "io.github.EtherAura.Kartend")
 
-option(MAINTENANCE "Maintenance build mode (-Werror on)" OFF)
-option(USE_PGO "Enable Profile-Guided Optimization" OFF)
-option(PGO_GENERATE "Generate PGO profile data" OFF)
-option(PGO_USE "Use existing PGO profile data" OFF)
-option(PGO_PROFILE_DIR "Directory for PGO profile data" "${CMAKE_BINARY_DIR}/pgo_profiles")
-option(ENABLE_SANITIZERS "Enable ASan+UBSan in Debug builds" OFF)
-option(ENABLE_COVERAGE "Enable gcov/lcov coverage instrumentation in Debug builds" OFF)
-option(ENABLE_CCACHE "Use ccache for faster rebuilds (if available)" ON)
+# All project options are KARTEND_-prefixed to namespace them away from the
+# CMake/3rd-party global option space.
+option(KARTEND_MAINTENANCE "Maintenance build mode (-Werror on)" OFF)
+option(KARTEND_BUILD_TESTS "Build unit tests" OFF)
+option(KARTEND_ENABLE_CCACHE "Use ccache for faster rebuilds (if available)" ON)
+option(KARTEND_ENABLE_SANITIZERS "Enable ASan+UBSan in Debug builds" OFF)
+# TSan is mutually exclusive with ASan (the runtime libraries conflict). Keep
+# them as separate options and FATAL_ERROR if both are requested.
+option(KARTEND_ENABLE_TSAN "Enable ThreadSanitizer in Debug builds" OFF)
+option(KARTEND_ENABLE_COVERAGE "Enable gcov/lcov coverage instrumentation in Debug builds" OFF)
+option(KARTEND_USE_PGO "Enable Profile-Guided Optimization" OFF)
+option(KARTEND_PGO_GENERATE "Generate PGO profile data" OFF)
+option(KARTEND_PGO_USE "Use existing PGO profile data" OFF)
+set(KARTEND_PGO_PROFILE_DIR "${CMAKE_BINARY_DIR}/pgo_profiles" CACHE PATH "Directory for PGO profile data")
+# Distro/portable releases: keep release-class hardening + LTO without
+# -march=native or -O3/fast-math. Set this when packaging (PKGBUILD, ebuild,
+# Flatpak) so binaries run on every host CPU of the target arch.
+option(KARTEND_PORTABLE_RELEASE "Use portable release flags (no -march=native, no -O3)" OFF)
+# Linker map files: opt-in. Used by .scripts/build.sh which exports the map
+# under .backups/reports during local debug runs.
+option(KARTEND_LINKER_MAP "Emit a linker .map file in Debug builds" OFF)
+# Optional backend toggles. Default ON (auto-detect); distros that want to
+# guarantee a particular backend can flip the unwanted one OFF.
+option(KARTEND_ENABLE_QT_GAMEPAD "Allow auto-detecting Qt6::Gamepad" ON)
+option(KARTEND_ENABLE_SDL2_GAMEPAD "Allow auto-detecting SDL2 gamepad fallback" ON)
+option(KARTEND_ENABLE_ZSTD "Allow auto-detecting libzstd for kart compression" ON)
 
-if (ENABLE_CCACHE)
+if (KARTEND_ENABLE_CCACHE)
   find_program(CCACHE_PROGRAM ccache)
   if (CCACHE_PROGRAM)
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
@@ -25,7 +54,7 @@ if (ENABLE_CCACHE)
     message(STATUS "ccache not found; continuing without it")
   endif()
 else()
-  message(STATUS "ccache disabled (ENABLE_CCACHE=OFF)")
+  message(STATUS "ccache disabled (KARTEND_ENABLE_CCACHE=OFF)")
 endif()
 
 set(CMAKE_AUTOMOC ON)
@@ -39,22 +68,26 @@ set(CMAKE_AUTOUIC_SEARCH_PATHS
   ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/widgets
 )
 
-# Qt6 required
+# Qt6 required. 6.4 is the floor: project uses QTimeZone::utc() which was
+# added in 6.4 (see kartend's usagestats module).
+set(KARTEND_MIN_QT_VERSION 6.4)
 set(QT_REQUIRED_COMPONENTS Core Gui Widgets Sql Concurrent Multimedia MultimediaWidgets)
-find_package(Qt6 COMPONENTS ${QT_REQUIRED_COMPONENTS} REQUIRED)
+find_package(Qt6 ${KARTEND_MIN_QT_VERSION} COMPONENTS ${QT_REQUIRED_COMPONENTS} REQUIRED)
 
 # Optional: Qt Gamepad support
-find_package(Qt6 COMPONENTS Gamepad QUIET)
+if (KARTEND_ENABLE_QT_GAMEPAD)
+  find_package(Qt6 ${KARTEND_MIN_QT_VERSION} COMPONENTS Gamepad QUIET)
+endif()
 
 # Optional: SDL2 fallback gamepad backend (used when Qt6::Gamepad unavailable)
 find_package(PkgConfig QUIET)
-if (PkgConfig_FOUND)
+if (PkgConfig_FOUND AND KARTEND_ENABLE_SDL2_GAMEPAD)
   pkg_check_modules(SDL2 QUIET IMPORTED_TARGET sdl2)
 endif()
 
-# Optional: zstd compression for the Kart packaging system (Kartend-giv).
+# Optional: zstd compression for the Kart packaging system.
 # Falls back to Qt's built-in qCompress (zlib) when not found.
-if (PkgConfig_FOUND)
+if (PkgConfig_FOUND AND KARTEND_ENABLE_ZSTD)
   pkg_check_modules(ZSTD QUIET IMPORTED_TARGET libzstd)
 endif()
 
@@ -63,12 +96,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-if (ENABLE_SANITIZERS)
+if (KARTEND_ENABLE_SANITIZERS AND KARTEND_ENABLE_TSAN)
+  message(FATAL_ERROR
+    "KARTEND_ENABLE_SANITIZERS (ASan+UBSan) and KARTEND_ENABLE_TSAN are "
+    "mutually exclusive — their runtime libraries conflict. Pick one.")
+endif()
+
+if (KARTEND_ENABLE_SANITIZERS)
   if (NOT (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
-    message(WARNING "ENABLE_SANITIZERS is only supported on GCC/Clang")
+    message(WARNING "KARTEND_ENABLE_SANITIZERS is only supported on GCC/Clang")
+  elseif (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message(FATAL_ERROR
+      "KARTEND_ENABLE_SANITIZERS=ON requires -DCMAKE_BUILD_TYPE=Debug "
+      "(got '${CMAKE_BUILD_TYPE}'). The flags are gated on Debug to avoid "
+      "fighting Release LTO/-O3/-fomit-frame-pointer.")
   else()
-    # Debug-only to avoid fighting the aggressive Release flags (LTO, -O3,
-    # -fomit-frame-pointer, etc.).
     add_compile_options(
       $<$<CONFIG:Debug>:-fsanitize=address,undefined>
       $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
@@ -80,9 +122,29 @@ if (ENABLE_SANITIZERS)
   endif()
 endif()
 
-if (ENABLE_COVERAGE)
+if (KARTEND_ENABLE_TSAN)
   if (NOT (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
-    message(WARNING "ENABLE_COVERAGE is only supported on GCC/Clang")
+    message(WARNING "KARTEND_ENABLE_TSAN is only supported on GCC/Clang")
+  elseif (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message(FATAL_ERROR
+      "KARTEND_ENABLE_TSAN=ON requires -DCMAKE_BUILD_TYPE=Debug "
+      "(got '${CMAKE_BUILD_TYPE}'). TSan needs unoptimized builds for usable "
+      "reports.")
+  else()
+    add_compile_options(
+      $<$<CONFIG:Debug>:-fsanitize=thread>
+      $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
+      $<$<CONFIG:Debug>:-O1>
+    )
+    add_link_options(
+      $<$<CONFIG:Debug>:-fsanitize=thread>
+    )
+  endif()
+endif()
+
+if (KARTEND_ENABLE_COVERAGE)
+  if (NOT (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
+    message(WARNING "KARTEND_ENABLE_COVERAGE is only supported on GCC/Clang")
   else()
     # Debug-only: full coverage instrumentation requires no optimization
     # to map back to source lines reliably.
@@ -198,7 +260,7 @@ target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
   ${SRC_DIR}/utils
 )
 
-target_compile_options(${KARTEND_LIB_TARGET} PRIVATE -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-lambda-capture -Wno-unused-lambda-capture)
+target_compile_options(${KARTEND_LIB_TARGET} PRIVATE -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-lambda-capture)
 
 # Keep GCC-only intent with Clang analogue on RISC-V
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "[Rr][Ii][Ss][Cc][Vv]")
@@ -209,22 +271,69 @@ if (CMAKE_SYSTEM_PROCESSOR MATCHES "[Rr][Ii][Ss][Cc][Vv]")
   endif()
 endif()
 
-# Release flags
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  set(RELEASE_COMPILE_OPTS -O3 -ffast-math -march=native -flto=auto -fomit-frame-pointer -funroll-loops -fno-signed-zeros -fno-trapping-math -fno-math-errno -fno-semantic-interposition -ftree-vectorize -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -DQT_NO_DEBUG -fmerge-all-constants -fdelete-null-pointer-checks)
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  set(RELEASE_COMPILE_OPTS -O3 -ffast-math -march=native -flto=auto -fomit-frame-pointer -funroll-loops -fno-signed-zeros -fno-trapping-math -fno-math-errno -fno-semantic-interposition -ftree-vectorize -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -DQT_NO_DEBUG -fmerge-all-constants -fdelete-null-pointer-checks)
+# Release flags split into:
+#   HARDENING_*    — always-on for non-Debug. Distro packagers need these.
+#   RELEASE_PERF_* — high-performance Release-only. -march=native makes the
+#                    binary non-portable, so KARTEND_PORTABLE_RELEASE skips it
+#                    (and -O3/fast-math) for distro packaging.
+set(HARDENING_COMPILE_OPTS -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE)
+set(HARDENING_LINK_OPTS -Wl,-z,now -Wl,-z,relro -pie)
+
+if (KARTEND_PORTABLE_RELEASE)
+  set(RELEASE_PERF_COMPILE_OPTS -flto=auto -DQT_NO_DEBUG)
+  set(RELEASE_PERF_LINK_OPTS -flto=auto -Wl,--gc-sections -Wl,--as-needed)
 else()
-  set(RELEASE_COMPILE_OPTS -O3 -ffast-math -march=native -flto=auto -fomit-frame-pointer -funroll-loops -fno-signed-zeros -fno-trapping-math -fno-math-errno -fno-semantic-interposition -ftree-vectorize -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -DQT_NO_DEBUG -fmerge-all-constants -fdelete-null-pointer-checks)
+  # Removed flags (the perf gain on a Qt frontend is in the noise, the risk
+  # is real):
+  #   -ffast-math: defines __FAST_MATH__ which can poison transitive headers
+  #     (some libraries #error on it) and changes IEEE-754 rounding;
+  #     -fno-signed-zeros / -fno-trapping-math / -fno-math-errno are part of
+  #     the same family.
+  #   -fdelete-null-pointer-checks: legal C++ pessimization that has caused
+  #     CVE-class bugs in mainstream projects when assumptions about UB
+  #     differ between compiler versions.
+  #   -fmerge-all-constants: violates the C/C++ standard's "distinct
+  #     addresses for distinct objects" guarantee; rarely matters in
+  #     practice but breaks identity comparisons of string literals.
+  set(RELEASE_PERF_COMPILE_OPTS
+    -O3 -march=native -flto=auto
+    -fomit-frame-pointer -funroll-loops
+    -fno-semantic-interposition -ftree-vectorize
+    -DQT_NO_DEBUG
+  )
+  set(RELEASE_PERF_LINK_OPTS -flto=auto -Wl,-O3 -Wl,--gc-sections -Wl,--as-needed)
 endif()
-set(RELEASE_LINK_OPTS -flto=auto -Wl,-O3 -Wl,--gc-sections -Wl,--as-needed -Wl,-z,now -Wl,-z,relro -pie)
+
 # lld is only compatible with Clang LTO objects; GCC LTO (GIMPLE) requires
 # the GNU linker or gold.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  list(PREPEND RELEASE_LINK_OPTS -fuse-ld=lld)
+  list(PREPEND RELEASE_PERF_LINK_OPTS -fuse-ld=lld)
 endif()
-target_compile_options(${KARTEND_LIB_TARGET} PRIVATE $<$<CONFIG:Release>:${RELEASE_COMPILE_OPTS}>)
-target_link_options(kartend PRIVATE $<$<CONFIG:Release>:${RELEASE_LINK_OPTS}>)
+
+# RPATH: portable bundles (Flatpak, AppImage) ship Qt and other transitive
+# libraries inside the bundle alongside the executable. Embed $ORIGIN-relative
+# install RPATH so the binary resolves them without LD_LIBRARY_PATH. System
+# package builds (PKGBUILD, ebuild, distro CI) use the distro's standard
+# library paths and want NO embedded RPATH — leaving the install RPATH unset
+# is the right default there. AUTO_USE_LINK_PATH is disabled so the build
+# tree's link paths don't leak into the installed binary.
+if (KARTEND_PORTABLE_RELEASE)
+  set_target_properties(kartend PROPERTIES
+    INSTALL_RPATH "\$ORIGIN/../lib;\$ORIGIN/../lib64"
+    INSTALL_RPATH_USE_LINK_PATH FALSE
+    BUILD_WITH_INSTALL_RPATH FALSE
+    SKIP_BUILD_RPATH FALSE
+  )
+endif()
+
+target_compile_options(${KARTEND_LIB_TARGET} PRIVATE
+  $<$<NOT:$<CONFIG:Debug>>:${HARDENING_COMPILE_OPTS}>
+  $<$<CONFIG:Release>:${RELEASE_PERF_COMPILE_OPTS}>
+)
+target_link_options(kartend PRIVATE
+  $<$<NOT:$<CONFIG:Debug>>:${HARDENING_LINK_OPTS}>
+  $<$<CONFIG:Release>:${RELEASE_PERF_LINK_OPTS}>
+)
 
 # LTO objects in the OBJECT library are unreadable to a non-LTO link step, so
 # every consumer of kartend_lib (the main exe AND the integration test binary)
@@ -241,32 +350,44 @@ else()
   )
 endif()
 
-# PGO configuration
-if(USE_PGO)
-    if(PGO_GENERATE)
-        message(STATUS "PGO: Generating profile data in ${PGO_PROFILE_DIR}")
-        list(APPEND RELEASE_COMPILE_OPTS -fprofile-generate=${PGO_PROFILE_DIR})
-        list(APPEND RELEASE_LINK_OPTS -fprofile-generate=${PGO_PROFILE_DIR})
-    elseif(PGO_USE)
-        message(STATUS "PGO: Using profile data from ${PGO_PROFILE_DIR}")
-        list(APPEND RELEASE_COMPILE_OPTS -fprofile-use=${PGO_PROFILE_DIR} -fprofile-correction)
-        list(APPEND RELEASE_LINK_OPTS -fprofile-use=${PGO_PROFILE_DIR})
-    endif()
+# PGO: applied directly to targets (must come AFTER target_compile_options
+# above used genex substitution — applying via separate target_*_options calls
+# accumulates rather than relying on dead list(APPEND) text substitution).
+if (KARTEND_USE_PGO)
+  if (KARTEND_PGO_GENERATE)
+    message(STATUS "PGO: Generating profile data in ${KARTEND_PGO_PROFILE_DIR}")
+    target_compile_options(${KARTEND_LIB_TARGET} PRIVATE
+      $<$<CONFIG:Release>:-fprofile-generate=${KARTEND_PGO_PROFILE_DIR}>)
+    target_link_options(kartend PRIVATE
+      $<$<CONFIG:Release>:-fprofile-generate=${KARTEND_PGO_PROFILE_DIR}>)
+  elseif (KARTEND_PGO_USE)
+    message(STATUS "PGO: Using profile data from ${KARTEND_PGO_PROFILE_DIR}")
+    target_compile_options(${KARTEND_LIB_TARGET} PRIVATE
+      $<$<CONFIG:Release>:-fprofile-use=${KARTEND_PGO_PROFILE_DIR}>
+      $<$<CONFIG:Release>:-fprofile-correction>)
+    target_link_options(kartend PRIVATE
+      $<$<CONFIG:Release>:-fprofile-use=${KARTEND_PGO_PROFILE_DIR}>)
+  endif()
 endif()
 
-# Strip in Release unless MAINTENANCE
-if (NOT MAINTENANCE)
-  target_link_options(kartend PRIVATE $<$<CONFIG:Release>:-s>)
-endif()
+# NOTE: Release builds intentionally do NOT pass `-Wl,-s` to the linker.
+# Distro packaging (Arch makepkg, Gentoo with FEATURES=splitdebug, Debian
+# debug-symbol packages) does its own stripping and typically wants
+# unstripped input so it can split debug info into a separate package.
+# Pre-stripping here yields empty debug splits and makes downstream
+# packagers' jobs harder. Flatpak and AppImage builders also strip on
+# their own. Local installers can pass --strip themselves if desired.
 
 target_compile_definitions(${KARTEND_LIB_TARGET} PRIVATE $<$<CONFIG:Release>:NDEBUG>)
 
-# Debug-only linker map file output (fixed name)
-# Only emit when the target directory exists (local dev builds create it via
-# build.sh; CI runners do not).
-set(_MAP_DIR "${CMAKE_BINARY_DIR}/../../../.backups/reports")
-cmake_path(NORMAL_PATH _MAP_DIR)
-if (IS_DIRECTORY "${_MAP_DIR}")
+# Debug-only linker map file output. Opt-in via -DKARTEND_LINKER_MAP=ON; the
+# map is written to the build directory so sandboxed/chroot builders
+# (Flatpak, distro CI) can use the option without needing the source tree's
+# parent dir to be writable. Copy the map out post-build if you want it
+# alongside reports — build.sh does not assume any particular location.
+if (KARTEND_LINKER_MAP)
+  set(_MAP_DIR "${CMAKE_BINARY_DIR}/maps")
+  file(MAKE_DIRECTORY "${_MAP_DIR}")
   target_link_options(kartend PRIVATE
     $<$<CONFIG:Debug>:-Wl,-Map,${_MAP_DIR}/kartend.map>
   )
@@ -285,16 +406,56 @@ if (UNIX AND NOT APPLE)
           DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/metainfo)
 endif()
 
-# MAINTENANCE adds -Werror
-if (MAINTENANCE)
+# Uninstall: read install_manifest.txt and remove the listed files. Honors
+# DESTDIR. Run via `cmake --build <build-dir> --target uninstall`.
+if (NOT TARGET uninstall)
+  add_custom_target(uninstall
+    COMMAND ${CMAKE_COMMAND} -P "${CMAKE_SOURCE_DIR}/cmake/uninstall.cmake"
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Removing files listed in install_manifest.txt"
+    VERBATIM)
+endif()
+
+# KARTEND_MAINTENANCE adds -Werror
+if (KARTEND_MAINTENANCE)
   target_compile_options(${KARTEND_LIB_TARGET} PRIVATE -Werror)
 endif()
 
-# Tests (optional)
-option(BUILD_TESTS "Build unit tests" OFF)
-if (BUILD_TESTS)
+# Tests (optional; declared at top with other options)
+if (KARTEND_BUILD_TESTS)
   # Ensure CTest is enabled at the top-level so `ctest` run from the main build
   # directory discovers tests defined in subdirectories.
   enable_testing()
   add_subdirectory(tests)
 endif()
+
+# CPack: enables `cpack -G TGZ` for binary tarballs and `cpack --config
+# CPackSourceConfig.cmake -G TGZ` for source tarballs. The tag-triggered
+# release workflow uses `git archive` directly, so CPack is here for
+# ad-hoc prerelease bundling and downstream packaging assistance.
+set(CPACK_PACKAGE_NAME "kartend")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_VENDOR "EtherAura")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+  "Qt6 KDE frontend for organizing and launching multimedia collections")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/EtherAura/Kartend")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/readme.md")
+set(CPACK_GENERATOR "TGZ")
+set(CPACK_SOURCE_GENERATOR "TGZ")
+set(CPACK_SOURCE_PACKAGE_FILE_NAME "Kartend-${PROJECT_VERSION}")
+set(CPACK_SOURCE_IGNORE_FILES
+  "/\\\\.git/"
+  "/\\\\.beads/"
+  "/\\\\.cache/"
+  "/\\\\.claude/"
+  "/\\\\.obsidian/"
+  "/\\\\.vscode/"
+  "/build/"
+  "/Testing/"
+  "/\\\\.backups/"
+  "\\\\.dolt/"
+  "\\\\.swp$"
+  "~$"
+)
+include(CPack)

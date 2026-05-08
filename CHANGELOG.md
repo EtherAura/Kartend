@@ -5,6 +5,88 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `KARTEND_PORTABLE_RELEASE` CMake option for distro packaging
+  (drops `-march=native`/`-O3`/fast-math, keeps LTO + hardening)
+- `KARTEND_LINKER_MAP` CMake option (replaces fragile `_MAP_DIR`
+  filesystem walk; build script flips it on for debug builds)
+- `KARTEND_ENABLE_QT_GAMEPAD` / `KARTEND_ENABLE_SDL2_GAMEPAD` /
+  `KARTEND_ENABLE_ZSTD` toggles so distro USE flags actually
+  control auto-detection
+- CMake `uninstall` target (reads `install_manifest.txt`); replaces
+  the readme's shell-loop instructions
+- `build.sh` flags: `--prefix=PATH`, `--jobs=N`, `--uninstall`,
+  `--clang`
+- CPack integration (`cpack -G TGZ` for source/binary tarballs)
+- Tag-triggered GitHub Release workflow with sha256 publishing
+- `.github/dependabot.yml` for weekly GitHub Actions bumps
+- `.editorconfig` for cross-editor indent/EOL/whitespace
+- PKGBUILD `check()` running ctest at package time
+
+### Changed
+
+- All project CMake options namespaced to `KARTEND_*`
+  (`MAINTENANCE` → `KARTEND_MAINTENANCE`, `BUILD_TESTS` →
+  `KARTEND_BUILD_TESTS`, `ENABLE_*`/`USE_PGO`/`PGO_*` likewise)
+- Release flags split into always-on hardening
+  (`-fstack-protector-strong`, `-D_FORTIFY_SOURCE=2`, `-fPIE`,
+  `-Wl,-z,relro`, `-Wl,-z,now`) and Release-only performance flags
+- Pinned minimum Qt version to 6.4 in `find_package`
+- PKGBUILD: switched to tarball source; added `qt6-gamepad` dep
+- Flatpak: added `--socket=pulseaudio` for video preview audio;
+  switched to Release + `KARTEND_PORTABLE_RELEASE=ON`
+- ebuild: `gamepad`/`sdl`/`zstd` USE flags now drive the matching
+  CMake toggles (previously only affected RDEPEND)
+- CI ccache key uses `github.run_id` instead of source-file hash
+  (was rotating the cache on every change)
+- `build.sh`: unknown flags now exit with code 2 instead of being
+  silently ignored
+
+### Fixed
+
+- PGO instrumentation never reached the compiler — `list(APPEND
+  RELEASE_COMPILE_OPTS ...)` ran after `target_compile_options()`
+  had already substituted the variable text
+- `option(PGO_PROFILE_DIR "..." "${path}")` was being coerced to a
+  boolean; replaced with `set(... CACHE PATH ...)`
+- Duplicate `-Wno-unused-lambda-capture` in compile flags
+- Three identical `RELEASE_COMPILE_OPTS` branches collapsed to one
+- `ENABLE_SANITIZERS=ON` with non-Debug config used to silently
+  produce no instrumentation; now errors at configure time
+- `docs/building.md` first line was a corrupt paste of an emerge
+  command concatenated to the heading
+- readme stale `--no-archive`/`--no-reports`/`--fast` references
+- readme wrong icon install path (`pixmaps/` → `icons/hicolor/...`)
+- Missing `Multimedia`/`MultimediaWidgets` from readme + CONTRIBUTING
+  Qt component lists
+- Metainfo XML missing 0.0.5 release entry
+- ebuild duplicate `dobin`/`domenu` calls (CMake `install()` already
+  handled them)
+- CI workflow + PKGBUILD + ebuild missing `qt6-multimedia` runtime
+  dep that v0.0.5's video preview / overlays / startup-video
+  features require — every CI matrix job and downstream package
+  failed configure with `Failed to find required Qt component
+  "Multimedia"`
+- `launchmanager.h` forward-declared `QProcess` for a
+  `QPointer<QProcess>` member, which broke `mocs_compilation` on
+  Ubuntu 24.04 / Qt 6.4 (older `qpointer.h` casts through the
+  complete type); replaced with a real `#include <QProcess>`
+- Replaced `QIcon::ThemeIcon` enum (Qt 6.7+) with XDG icon-name
+  string literals across dialogs and `settingsdialog.ui` so
+  builds work on Qt 6.4
+- `usagestatsstore.cpp` used `QTimeZone::UTC` (Qt 6.5+); replaced
+  with the equivalent `QTimeZone::utc()` accessor (also valid on
+  later Qt) for Qt 6.4 compatibility
+- `tests/test_kartreader.cpp` ASan global-buffer-overflow: the
+  `QByteArray` ctor was told to read 28 bytes from a 26-byte
+  literal; corrected to the real content length
+- Added LSan suppressions for known-leak third-party paths in
+  GStreamer / `QPlatformMediaIntegration::instance` so sanitizer
+  CI runs aren't drowned in non-actionable noise
+
 ## [0.0.5] - 2026-05-06
 
 ### Added
@@ -174,3 +256,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Gamepad support (Qt6 Gamepad / SDL2 fallback)
 - Gentoo ebuild packaging
 - CI with build, test, sanitizer, and maintenance checks
+
+[Unreleased]: https://github.com/EtherAura/Kartend/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/EtherAura/Kartend/compare/v0.0.4...v0.0.5
+[0.0.4]: https://github.com/EtherAura/Kartend/compare/v0.0.3...v0.0.4
+[0.0.3]: https://github.com/EtherAura/Kartend/compare/v0.0.2...v0.0.3
+[0.0.2]: https://github.com/EtherAura/Kartend/compare/v0.0.1...v0.0.2
+[0.0.1]: https://github.com/EtherAura/Kartend/releases/tag/v0.0.1

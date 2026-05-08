@@ -83,7 +83,7 @@ void VirtualContainerManager::positionContainer(const ContainerPositionParams &p
   }
 
   if (params.isHorizontal) {
-    // Kartend-dx9t: horizontal layout pins the container to the top-left and
+    // horizontal layout pins the container to the top-left and
     // sizes the grid container to match the long-axis width so the
     // horizontal scrollbar reflects the full content. Vertical alignment /
     // centering is unused — the column always fits in the viewport.

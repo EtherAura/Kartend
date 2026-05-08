@@ -1,4 +1,4 @@
-// Tests for HistoryStore (Kartend-fse).
+// Tests for HistoryStore.
 //
 // Uses an in-memory SQLite database with the full migration chain applied so
 // the schema mirrors what the live app sees.

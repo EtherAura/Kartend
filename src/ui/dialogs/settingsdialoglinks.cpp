@@ -1,4 +1,4 @@
-// Alias-parent ("Linked Parents") controls for SettingsDialog (Kartend-gzmk).
+// Alias-parent ("Linked Parents") controls for SettingsDialog.
 // Sibling translation unit hosting the load/save/picker logic for
 // CollectionConfig::additionalParentNames so the link feature lives in one
 // place — modeled on settingsdialoglaunchers.cpp.

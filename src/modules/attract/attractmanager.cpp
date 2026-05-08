@@ -1,4 +1,4 @@
-// Idle-triggered autoscroll (attract mode) for Kartend (Kartend-1pp).
+// Idle-triggered autoscroll (attract mode) for Kartend.
 // When the user is idle for a configurable timeout, the viewport smoothly
 // scrolls through the collection, reversing at top/bottom boundaries.
 // Any user interaction immediately stops the autoscroll.
@@ -211,8 +211,8 @@ void AttractManager::startAttract() {
   // In Horizontal view the long axis is X, so attract drives the horizontal
   // scrollbar; otherwise the vertical one.
   const bool isHorizontal = m_scrollManager && m_scrollManager->getMetrics().isHorizontal;
-  QScrollBar *bar =
-      isHorizontal ? m_itemScrollArea->horizontalScrollBar() : m_itemScrollArea->verticalScrollBar();
+  QScrollBar *bar = isHorizontal ? m_itemScrollArea->horizontalScrollBar()
+                                 : m_itemScrollArea->verticalScrollBar();
   const bool scrollable = bar && bar->maximum() > 0;
   if (wantScroll && !scrollable && !wantAdvance) {
     // Wanted to scroll but content fits viewport, and advance is off too —
@@ -279,8 +279,8 @@ void AttractManager::onScrollTick() {
 
   // Pick the bar that runs along the long axis of the current view.
   const bool isHorizontal = m_scrollManager && m_scrollManager->getMetrics().isHorizontal;
-  QScrollBar *bar =
-      isHorizontal ? m_itemScrollArea->horizontalScrollBar() : m_itemScrollArea->verticalScrollBar();
+  QScrollBar *bar = isHorizontal ? m_itemScrollArea->horizontalScrollBar()
+                                 : m_itemScrollArea->verticalScrollBar();
   if (!bar) {
     stopAttract();
     return;

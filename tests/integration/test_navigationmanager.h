@@ -1,6 +1,6 @@
 /**
  * @file test_navigationmanager.h
- * @brief Kartend-rzw: integration tests for NavigationManager's
+ * @brief: integration tests for NavigationManager's
  *        signal-driven coordination surface.
  *
  * Covers the slots that cannot be exercised in pure unit tests because

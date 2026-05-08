@@ -92,7 +92,7 @@ public:
   /// Restore persisted Show Menu Bar / Show Toolbar / Fullscreen states from
   /// GeneralSettings. Called once from setupMenuBar() after every action has
   /// been wired so checked states and widget visibility stay in lockstep on
-  /// startup (Kartend-lfu0).
+  /// startup.
   void applyPersistedViewState();
 
 private:
@@ -114,6 +114,34 @@ private:
   QAction *m_orientationActionLeft = nullptr;
   QAction *m_orientationActionTop = nullptr;
   QAction *m_orientationActionBottom = nullptr;
+
+  // ─── Setup helpers ────────────────────────────────────────────────────
+  //
+  // These collapse the repeated "null-check ctx.ui+mainWindow, check action
+  // exists, connect, setShortcutContext, addAction" cargo from each
+  // setupActionX() into a couple of one-liners. Returns true when the
+  // action existed and was wired (so callers can short-circuit decoration
+  // logic) — specifically allowing the body of each setupAction* method
+  // to read as a single helper call plus its lambda.
+
+  /// Connects @p action to @p handler, marks it as ApplicationShortcut,
+  /// and registers it on the main window so the shortcut is reachable
+  /// from any focused widget. No-op (returns false) when @p action or the
+  /// main window is null.
+  bool connectGlobalAction(QAction *action, std::function<void()> handler);
+
+  /// Connects @p action to @p handler. Used for menu-only items that don't
+  /// participate in the global shortcut chain (Help → About / About Qt).
+  /// No-op (returns false) when @p action is null.
+  bool connectMenuAction(QAction *action, std::function<void()> handler);
+
+  /// Toggle action that mirrors a bool field on GeneralSettings and
+  /// persists via SettingsManager. @p applyVisual receives the new
+  /// checked state so the caller can flip the corresponding widget's
+  /// visibility. Used by setupActionShowMenuBar / ShowToolbar /
+  /// FullscreenAction.
+  bool connectVisibilityToggle(QAction *action, std::function<void(bool)> applyVisual,
+                               bool GeneralSettings::*field);
 
   // Setup methods for each action group
   void setupActionExit();
@@ -143,16 +171,15 @@ private:
   void setupActionDetailsPaneOrientation();
   void insertFullscreenInViewMenu(QAction *fullscreenAction);
 
-  // Repopulate the Recent submenu from items.last_played (Kartend-j5l3);
+  // Repopulate the Recent submenu from items.last_played;
   // called on QMenu::aboutToShow so the list is fresh each time.
   void rebuildRecentMenu();
-  // Repopulate the Most Launched submenu from items.play_count (Kartend-j5l3).
+  // Repopulate the Most Launched submenu from items.play_count.
   void rebuildMostLaunchedMenu();
   // Shared row → menu-action wiring used by both Recent and Most Launched.
   // Forward-declares avoid a hard include of usagestatsstore.h here; the
   // real include is in menucontroller.cpp.
-  void populateLaunchEntriesIntoMenu(QMenu *menu,
-                                     const QList<UsageStatsStore::ItemUsageRow> &rows,
+  void populateLaunchEntriesIntoMenu(QMenu *menu, const QList<UsageStatsStore::ItemUsageRow> &rows,
                                      DatabaseManager *db);
 
   // Mirror menu-bar visibility onto the toolbar hamburger button so the user

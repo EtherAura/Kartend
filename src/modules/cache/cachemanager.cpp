@@ -85,12 +85,27 @@ CacheManager::CacheManager() {
 CacheManager::~CacheManager() {
   m_cancelIo->store(true, std::memory_order_release);
 
-  // Clear queued tasks but DON'T delete the pool - that would block waiting
-  // for running tasks. Just abandon it; the process is exiting anyway.
+  // Cooperative shutdown: signal cancel, drop queued tasks, then wait
+  // briefly for any in-flight task to notice the flag (the disk-I/O
+  // lambda checks cancelFlag at the start and inside its inner loop,
+  // so it returns within milliseconds in the common case). If it
+  // doesn't drain in time, fall back to the abandon-the-pool path
+  // rather than blocking shutdown.
   if (m_ioThreadPool) {
     m_ioThreadPool->clear();
-    // Intentionally NOT deleting m_ioThreadPool - ~QThreadPool blocks.
-    // The OS will clean up when the process exits.
+    constexpr int kShutdownDrainMs = 2000;
+    if (m_ioThreadPool->waitForDone(kShutdownDrainMs)) {
+      delete m_ioThreadPool;
+    } else {
+      qCWarning(lcCacheManager) << "CacheManager: I/O thread pool did not drain in"
+                                << kShutdownDrainMs
+                                << "ms during shutdown; abandoning pool to avoid blocking exit";
+      // Intentional leak: deleting now would call ~QThreadPool which
+      // blocks until all running tasks finish. The OS reaps memory at
+      // process exit. The .lsan_suppressions.txt entry covers this
+      // path; remove the suppression once the slow path is no longer
+      // possible (e.g. all cache I/O made strictly cancellable).
+    }
     m_ioThreadPool = nullptr;
   }
 
@@ -111,7 +126,7 @@ void CacheManager::saveTimestampsSnapshotToDiskForShutdown(
     const QHash<QString, qint64> &timestampsCopy) {
   // Write-only operation: safe to call from a worker thread.
   // On shutdown, write all timestamps (full save, not incremental).
-  QString metadataPath = getCacheDirectory() + "/metadata/artwork_cache.json";
+  QString metadataPath = getCacheDirectory() + QStringLiteral("/metadata/artwork_cache.json");
   writeTimestamps(timestampsCopy, metadataPath);
 }
 
@@ -143,11 +158,11 @@ void CacheManager::releaseGuiResources() {
 
 // Returns cache directory path, creating subdirs if needed
 auto CacheManager::getCacheDirectory() -> QString {
-  QString cacheDir =
-      QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + "/kartend";
+  QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) +
+                     QStringLiteral("/kartend");
   QDir dir(cacheDir);
-  const QString artworkDirPath = cacheDir + "/artwork";
-  const QString metadataDirPath = cacheDir + "/metadata";
+  const QString artworkDirPath = cacheDir + QStringLiteral("/artwork");
+  const QString metadataDirPath = cacheDir + QStringLiteral("/metadata");
   static bool loggedMkpathFailure = false;
 
   if (!dir.exists("artwork") && !dir.mkpath(artworkDirPath)) {
@@ -176,7 +191,8 @@ auto CacheManager::getCacheDirectory() -> QString {
 // Returns on-disk cache path for a given artwork file path
 auto CacheManager::getArtworkCachePath(const QString &artworkPath) -> QString {
   QByteArray hash = QCryptographicHash::hash(artworkPath.toUtf8(), QCryptographicHash::Md5);
-  return CacheManager::getCacheDirectory() + "/artwork/" + hash.toHex() + ".png";
+  return CacheManager::getCacheDirectory() + QStringLiteral("/artwork/") + hash.toHex() +
+         QStringLiteral(".png");
 }
 
 // Processes timestamps section from JSON

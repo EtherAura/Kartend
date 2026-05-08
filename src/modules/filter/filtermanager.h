@@ -67,7 +67,7 @@ public:
   void setContext(const CollectionContext &context);
 
   /**
-   * @brief Configure the "hide items without artwork" predicate (Kartend-ks4n).
+   * @brief Configure the "hide items without artwork" predicate.
    *
    * When @p enabled is true, every active filter — including the unfiltered
    * passthrough — additionally hides media items whose artwork lookup in
@@ -137,7 +137,7 @@ private:
   [[nodiscard]] bool matchesMediaItemFilter(int mediaIndex, const QString &needle) const;
   [[nodiscard]] QString getDisplayNameForMediaItem(const QString &rawEntry) const;
 
-  // Kartend-ks4n: returns true when artwork lookup for the media file at
+  // returns true when artwork lookup for the media file at
   // @p mediaIndex resolves to a real file. Returns true when the artwork
   // directory or filename is empty so the predicate is a no-op for collections
   // that have no artwork pipeline configured.
@@ -166,7 +166,7 @@ private:
   QString m_currentFilter;
   QList<int> m_filteredIndices;
 
-  // Kartend-ks4n: per-collection "hide items without artwork" toggle.
+  // per-collection "hide items without artwork" toggle.
   // Combines with the active search/subcollection filter as an additional
   // predicate; when no other filter is active the manager still reports
   // m_isFiltered = true so the visual→actual index map runs through

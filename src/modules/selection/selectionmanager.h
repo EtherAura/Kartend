@@ -108,14 +108,17 @@ public:
                                      // set userSelectionMade)
   void prepareForRestore(int targetIndex);
   void finalizeRestore();
-  [[nodiscard]] bool isRestoringSelection() const { return m_restoringSelection; }
-  [[nodiscard]] int targetRestoreIndex() const { return m_targetRestoreIndex; }
+  // Restore-state accessors proxy the canonical state in InteractionStateHolder
+  // (m_state->selectionRestore()). m_state is asserted non-null in setup, so
+  // these accessors don't guard.
+  [[nodiscard]] bool isRestoringSelection() const;
+  [[nodiscard]] int targetRestoreIndex() const;
 
   // Restore state flags (exposed for InteractionManager coordination)
-  void setRestoringSelection(bool restoring) { m_restoringSelection = restoring; }
-  void setTargetRestoreIndex(int index) { m_targetRestoreIndex = index; }
-  void setForceImmediateCenter(bool force) { m_forceImmediateCenter = force; }
-  [[nodiscard]] bool forceImmediateCenter() const { return m_forceImmediateCenter; }
+  void setRestoringSelection(bool restoring);
+  void setTargetRestoreIndex(int index);
+  void setForceImmediateCenter(bool force);
+  [[nodiscard]] bool forceImmediateCenter() const;
 
   // Selection persistence
   void persistSelection(int collectionIndex, int itemIndex, const QString &title);
@@ -210,12 +213,8 @@ private:
   int m_selectedItemIndex = -1;
   int m_lastSelectedRow = -1;
 
-  // Selection restore state
-  bool m_restoringSelection = false;
-  int m_targetRestoreIndex = -1;
-  bool m_forceImmediateCenter = false;
-  int m_selectionRestoreToken = 0;
-  bool m_selectionRestorePending = false;
+  // Selection restore state lives in InteractionStateHolder (m_state) — the
+  // single source of truth. Accessors above proxy through it.
 
   // Manager references
   InteractionStateHolder *m_state = nullptr;

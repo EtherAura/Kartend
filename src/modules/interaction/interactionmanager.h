@@ -38,6 +38,7 @@ class DatabaseManager;
 class NavigationManager;
 class SettingsManager;
 class DetailsPaneManager;
+class DetailPageManager;
 class ScrollManager;
 class SessionManager;
 class ArtworkManager;
@@ -56,6 +57,7 @@ struct InteractionManagerSetup {
   // Manager dependencies (can be overridden or taken from ctx)
   ScrollManager *scrollManager = nullptr;
   DetailsPaneManager *detailsPaneManager = nullptr;
+  DetailPageManager *detailPageManager = nullptr;
   SettingsManager *settingsManager = nullptr;
   DatabaseManager *databaseManager = nullptr;
   NavigationManager *navigationManager = nullptr;
@@ -82,6 +84,7 @@ struct InteractionManagerSetup {
   // Manager accessors that check ctx fallback
   SETUP_GETTER_INLINE_MGR_SAME(ScrollManager *, ScrollManager, scrollManager)
   SETUP_GETTER_INLINE_MGR_SAME(DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
+  SETUP_GETTER_INLINE_MGR_SAME(DetailPageManager *, DetailPageManager, detailPageManager)
   SETUP_GETTER_INLINE_MGR_SAME(SettingsManager *, SettingsManager, settingsManager)
   SETUP_GETTER_INLINE_MGR_SAME(DatabaseManager *, DatabaseManager, databaseManager)
   SETUP_GETTER_INLINE_MGR_SAME(NavigationManager *, NavigationManager, navigationManager)
@@ -175,22 +178,22 @@ public:
   void stopScrollAnimations();
   // Shows a right-click context menu for the item at the given visual index.
   void showContextMenu(ItemWidget *widget, int visualIndex, const QPoint &globalPos);
-  // Opens the custom-fields editor for the given media item (Kartend-hpln).
+  // Opens the custom-fields editor for the given media item.
   // Persists changes via DatabaseManager::saveItemMetadata() and refreshes
   // the sidebar so new fields render immediately.
   void editCustomFields(const QString &filePath, const QString &itemName);
   // Sets or clears the per-item manual override for a media item
-  // (Kartend-9jdv). Stored in `item_metadata.manual_path`; passing an empty
+  // Stored in `item_metadata.manual_path`; passing an empty
   // path clears the override and re-enables auto-discovery in the
   // collection's manualDirectory. Refreshes the sidebar afterwards.
   void setItemManualPath(const QString &filePath, const QString &manualPath);
-  // Sets or clears the per-item launcher override (Kartend-dnx4). Pass an
+  // Sets or clears the per-item launcher override. Pass an
   // index into the owning collection's unified launcher list (0 = primary,
   // 1..N = additionalLaunchers[0..N-1]) to pin a launcher; pass -1 to clear
   // the override and re-enable the multi-launcher chooser at launch.
   void setItemLauncherOverride(const QString &filePath, int launcherIndex);
 
-  // ─── Playlist context-menu handlers (Kartend-vlm7) ────────────────────────
+  // ─── Playlist context-menu handlers ────────────────────────
   // Prompts for a playlist name, creates the playlist, and adds the given
   // (srcUuid, filePath) reference. Cancelling the prompt is a no-op; an empty
   // reference creates an empty playlist (useful for "set up first, fill
@@ -207,7 +210,7 @@ public:
   // all of its items. Source items in their owning collections are untouched.
   void deletePlaylistConfirm(const QString &playlistId, const QString &currentName);
 
-  // ─── Playlist import / export (Kartend-5pqv) ──────────────────────────────
+  // ─── Playlist import / export ──────────────────────────────
   // Pops a save-file dialog and writes the playlist as JSON or M3U via
   // PlaylistManager. M3U is a basic dialect (#EXTM3U + path-per-line); JSON
   // is the lossless Kartend format that round-trips through importFromJson.
@@ -237,10 +240,9 @@ private:
   bool m_navigationInProgress = false;
   InteractionStateHolder m_state;
 
-  // Selection restore token for cancellation - kept here as it coordinates with
-  // NavigationManager
-  int m_selectionRestoreToken = 0;
-  bool m_selectionRestorePending = false;
+  // Selection restore tokens (restoreToken / restorePending) live in
+  // m_state.selectionRestore() — the canonical owner. NavigationManager and
+  // SelectionRestoreManager coordinate through the same struct.
 
 signals:
   void selectionChanged(int index);
@@ -254,12 +256,12 @@ public slots:
   /// selection when @p filePath is empty, e.g. for sidebar gallery
   /// previews that don't carry a media path).
   void onArtworkPreviewLaunchRequested(const QString &filePath = QString());
-  /// Triggered when the user middle-clicks a grid/list item (Kartend-ljey).
+  /// Triggered when the user middle-clicks a grid/list item.
   /// Opens a video-first preview overlay for the clicked item without
   /// changing selection or starting the expand-mode launch sequence.
   void onMediaPreviewRequested(ItemWidget *widget, int visualIndex);
   /// Triggered when the user middle-clicks with the artwork-cycle modifier
-  /// held (Kartend-1v6). Resolves the item's path and owning collection
+  /// held. Resolves the item's path and owning collection
   /// then asks ArtworkManager to advance to the next available artwork
   /// type for that item. No selection or launch side-effects.
   void onArtworkTypeCycleRequested(ItemWidget *widget, int visualIndex);
@@ -334,11 +336,12 @@ private:
 
   ScrollManager *m_scrollManager = nullptr;
   DetailsPaneManager *m_detailsPaneManager = nullptr;
+  DetailPageManager *m_detailPageManager = nullptr;
   SettingsManager *m_settingsManager = nullptr;
   DatabaseManager *m_databaseManager = nullptr;
   NavigationManager *m_navigationManager = nullptr;
   // PlaylistManager pointer is sourced from the shared ApplicationContext at
-  // setupReferences time; the context-menu code (Kartend-vlm7) is its only
+  // setupReferences time; the context-menu code is its only
   // current consumer. Borrowed reference, owned by ApplicationManager.
   class PlaylistManager *m_playlistManager = nullptr;
   SessionManager *m_sessionManager = nullptr;

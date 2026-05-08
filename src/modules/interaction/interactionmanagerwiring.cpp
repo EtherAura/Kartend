@@ -25,10 +25,10 @@
 #include "viewportmanager.h"
 
 #include "collectionutils.h"
+#include "detailspanemanager.h"
 #include "itemwidget.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
-#include "detailspanemanager.h"
 #include "uiconstants.h"
 
 void InteractionManager::connectSearchManagerSignals() {
@@ -121,7 +121,7 @@ void InteractionManager::connectGamepadManagerSignals() {
               vt = (*m_collections)[*m_currentCollectionIndex].viewType;
             }
             if (vt == ViewType::Horizontal) {
-              // Kartend-dx9t: in Horizontal mode the d-pad axes swap roles —
+              // in Horizontal mode the d-pad axes swap roles —
               // vertical stick steps within the column (±1, no gridWidth
               // multiplier), horizontal stick advances columns (±gridWidth,
               // routed via the vertical-wrap path so wrap behavior matches

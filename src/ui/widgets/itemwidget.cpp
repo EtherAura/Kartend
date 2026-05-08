@@ -490,7 +490,7 @@ void ItemWidget::onArtworkChanged() {
       resultPixmap = maskedPixmap;
     }
 
-    // Kartend-cub: user-supplied placeholder image is also "placeholder art" —
+    // user-supplied placeholder image is also "placeholder art" —
     // overlay the title only when the real artwork is missing (storedPixmap
     // null), not on actual artwork hits.
     if (storedPixmap.isNull()) {

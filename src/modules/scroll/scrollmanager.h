@@ -82,7 +82,7 @@ struct ScrollManagerSetup {
 class ScrollManager : public QObject {
   Q_OBJECT
   // Engine is a sibling helper that drives virtual-scrolling layout and
-  // widget materialization (Kartend-158). It accesses ScrollManager's state
+  // widget materialization. It accesses ScrollManager's state
   // directly via friendship; canonical state ownership remains here.
   friend class VirtualScrollEngine;
 
@@ -100,12 +100,12 @@ public:
                          const QHash<QString, QString> &fileToArtworkDir);
   void cleanup();
   void updateGridWidth(int newGridWidth);
-  /// Kartend-dx9t: live-apply a change to the per-collection items-per-column
+  /// live-apply a change to the per-collection items-per-column
   /// for the Horizontal view mode. No-op when the active view is not Horizontal,
   /// since the value only feeds the layout in that mode. Pass 0 to mean
   /// "fall back to gridWidth".
   void updateHorizontalGridHeight(int newHorizontalGridHeight);
-  /// Kartend-0p3w: track whether the sidebar is currently hidden AND its mode
+  /// track whether the sidebar is currently hidden AND its mode
   /// would shrink the grid (Expand). MainWindow updates this whenever the
   /// sidebar's visibility changes, before triggering recalculateContainerMetrics.
   /// When the flag is true and the active collection has gridWidthSidebarHidden
@@ -159,7 +159,7 @@ public:
   /// Show the artwork preview overlay for the given file path. Used by
   /// expand-mode two-stage activation in InteractionManager.
   void showArtworkPreview(const QString &filePath, const QString &artworkDir);
-  /// Show a video-first preview overlay (Kartend-ljey). Falls back to
+  /// Show a video-first preview overlay. Falls back to
   /// artwork when no video is found in @p videoDir. Used by expand-mode
   /// (first-stage) and middle-click peek.
   void showMediaPreview(const QString &filePath, const QString &artworkDir,
@@ -214,17 +214,17 @@ signals:
   /// gallery-style previews — listeners should fall back to the current
   /// selection when empty.
   void artworkPreviewLaunchRequested(const QString &filePath);
-  /// Kartend-63e bug #7: forwarded from SelectionDisplayManager. MainWindow
+  /// bug #7: forwarded from SelectionDisplayManager. MainWindow
   /// wires this to DetailsPaneManager::setOverlayActive so the sidebar lowers
   /// itself below the overlay while it's showing.
   void artworkPreviewVisibilityChanged(bool visible);
-  /// Kartend-3ile: emitted when the user activates the centered card in
+  /// emitted when the user activates the centered card in
   /// CoverFlow view (single click on center, double click, Enter, etc.) and
   /// the activated index is a media item. Subcollection / virtual-folder
   /// activations are routed through subcollectionEntered /
   /// virtualFolderEntered above so they share the existing navigation path.
   void coverFlowItemActivated(int visualIndex);
-  /// Kartend-3ile: fired when CoverFlow becomes the active view (true) or
+  /// fired when CoverFlow becomes the active view (true) or
   /// any other ViewType replaces it (false). MainWindow wires this to
   /// DetailsPaneManager::setExternallyHidden so the carousel takes the full
   /// viewport without persisting that as the user's sidebar preference.
@@ -266,7 +266,7 @@ private:
 
   // Data source manager: owns FilterManager + ScrollDataManager +
   // PreSearchStateManager + SearchLoadingOverlay (extracted from
-  // ScrollManager, Kartend-gg2).
+  // ScrollManager,).
   std::unique_ptr<DataSourceManager> m_dataSource;
 
   // Raw aliases into m_dataSource for the in-place filter/data update
@@ -278,7 +278,7 @@ private:
   SearchLoadingOverlay *m_searchLoadingOverlay = nullptr;
 
   // Selection display manager owns overlay + state tracker + list header +
-  // artwork preview overlay (extracted from ScrollManager, Kartend-3u5).
+  // artwork preview overlay (extracted from ScrollManager,).
   std::unique_ptr<SelectionDisplayManager> m_selectionDisplay;
 
   // Raw aliases into m_selectionDisplay for the in-place selection update
@@ -306,31 +306,17 @@ private:
   std::unique_ptr<ArrowKeyScrollHelper> m_arrowKeyScrollHelper;
 
   // Data manager and pre-search state manager are now owned by m_dataSource
-  // (Kartend-gg2). Raw aliases above (m_dataManager, m_preSearchStateManager).
+  // Raw aliases above (m_dataManager, m_preSearchStateManager).
 
   // List header widget, column widths, and artwork preview overlay are now
-  // owned by m_selectionDisplay (Kartend-3u5).
+  // owned by m_selectionDisplay.
 
 public:
-  [[nodiscard]] const WidgetPoolManager *getWidgetPool() const { return m_widgetPool.get(); }
-  [[nodiscard]] const FilterManager *getFilterManager() const { return m_filterManager; }
-  [[nodiscard]] const SelectionOverlayManager *getOverlayManager() const {
-    return m_overlayManager;
-  }
-  [[nodiscard]] const VirtualContainerManager *getContainerManager() const {
-    return m_containerManager.get();
-  }
-  [[nodiscard]] const SelectionCoordinator *getSelectionCoordinator() const {
-    return m_selectionCoordinator.get();
-  }
-  [[nodiscard]] const ScrollEventHandler *getScrollEventHandler() const {
-    return m_scrollEventHandler.get();
-  }
-  [[nodiscard]] const ScrollDataManager *getDataManager() const { return m_dataManager; }
-  [[nodiscard]] const PreSearchStateManager *getPreSearchStateManager() const {
-    return m_preSearchStateManager;
-  }
-  [[nodiscard]] const SelectionStateTracker *getSelectionState() const { return m_selectionState; }
+  // Resolve a raw item index to the subcollection index that owns it, or -1
+  // if the item is not part of a subcollection (or the data manager isn't
+  // wired). Encapsulates ScrollDataManager so callers don't need to reach
+  // into ScrollManager's internals.
+  [[nodiscard]] int subcollectionIndexFromActual(int actualIndex) const;
 
 private:
   const GeneralSettings *m_generalSettings = nullptr;
@@ -351,7 +337,7 @@ private:
   bool m_isMutating = false;
   DatabaseManager *m_databaseManager = nullptr;
   bool m_destroying = false;
-  // Kartend-0p3w: cached sidebar-hidden-and-shrinking predicate, fed by
+  // cached sidebar-hidden-and-shrinking predicate, fed by
   // MainWindow on sidebar-visibility changes. Read by VirtualScrollEngine when
   // it builds layout metrics so the alternate per-collection grid sizes apply
   // automatically.
@@ -374,7 +360,7 @@ private:
   int m_rangeReceiveDebugBudget = 10;
 
   // Virtual scrolling engine: owns the algorithms for layout, container
-  // lifecycle, and widget materialization (Kartend-158). Constructed in the
+  // lifecycle, and widget materialization. Constructed in the
   // ScrollManager constructor; destroyed last among helper managers so it
   // can safely touch ScrollManager state during teardown.
   std::unique_ptr<VirtualScrollEngine> m_engine;
@@ -385,7 +371,7 @@ private:
   void setupEmptyVirtualScrolling();
   void setupNormalVirtualScrolling();
 
-  // Kartend-3ile: cover-flow integration — the widget is a sibling of
+  // cover-flow integration — the widget is a sibling of
   // m_gridContainer in the items page scroll-area layout and is shown only
   // when CollectionConfig::viewType == CoverFlow.
   void ensureCoverFlowWidget();
@@ -413,7 +399,7 @@ private:
   void finalizeScrollChanges();
 
   // Selection update helpers and related internals were moved to
-  // SelectionDisplayManager (Kartend-p79). ScrollManager keeps thin facade
+  // SelectionDisplayManager. ScrollManager keeps thin facade
   // methods (updateSelectionForIndex, refreshSelectionOverlayState,
   // setForceSelectionOverlayVisible, selectionOverlayRectForIndex,
   // onArrowKeyViewUpdate) declared in the public/slots sections above.

@@ -14,10 +14,10 @@ class QComboBox;
 class QLabel;
 QT_END_NAMESPACE
 
-/// Kartend-iyk: granular field-category selector used by the "Apply settings
+/// granular field-category selector used by the "Apply settings
 /// to..." and "Copy settings from..." actions in the settings dialog.
 ///
-/// The legacy Kartend-63o action propagated a fixed bundle of appearance and
+/// The legacy action propagated a fixed bundle of appearance and
 /// layout fields. With the advanced flow the user can opt in/out of each
 /// category, so the dialog owns the mask AND (in pull mode) the source
 /// collection picker. Identity, paths, scan-affecting flags, and launchers

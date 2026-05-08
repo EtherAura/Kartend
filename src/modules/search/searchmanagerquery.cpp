@@ -140,7 +140,7 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
     // setupVirtualScrolling on the same collection context. CurrentAndSub-
     // collections and AllCollections are DB-backed and can change the visible
     // data backing (and the subcollection/virtual-folder tile composition), so
-    // they take the full reload path on clear instead. See bd Kartend-w9c.
+    // they take the full reload path on clear instead. See bd.
     const bool canUsePreSearchState = (m_currentSearchMode == SearchMode::CurrentCollection);
     if (m_scrollManager && canUsePreSearchState) {
       m_preSearchTotalItems = m_scrollManager->getTotalItems();
@@ -213,7 +213,7 @@ void SearchManager::performDebouncedSearch() {
     // showAllSubcollectionItems is true, so the in-memory file list is mostly
     // empty placeholders. Filtering it would silently drop unloaded items.
     // The DB-backed path uses FTS/LIKE and returns the full result set.
-    // See bd Kartend-w9c.
+    // See bd.
     qCDebug(lcSearchDiag) << "dispatch filterItemsCurrentAndSubcollections";
     if (m_scrollManager) {
       m_scrollManager->showSearchLoadingOverlay();

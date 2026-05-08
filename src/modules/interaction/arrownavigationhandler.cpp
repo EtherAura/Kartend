@@ -322,7 +322,7 @@ void ArrowNavigationHandler::performVisibilityForKeyMove(bool isNewRow, int newS
   }
 
   // In list mode, every move is a row change since there's 1 item per row.
-  // In cover flow (Kartend-3ile) the carousel widget centers the selection
+  // In cover flow the carousel widget centers the selection
   // itself, so we skip viewport scrolling entirely.
   bool isListMode = false;
   bool isCoverFlow = false;

@@ -1,4 +1,4 @@
-// Tests for PlaylistManager (Kartend-vlm7).
+// Tests for PlaylistManager.
 //
 // PlaylistManager owns CRUD against the v10 `playlists` + `playlist_items`
 // tables on the same media.db the rest of the app uses. The tests below
@@ -319,7 +319,7 @@ void TestPlaylistManager::deletePlaylist_refusesReservedRow() {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Import / export tests (Kartend-5pqv)
+// Import / export tests
 // ────────────────────────────────────────────────────────────────────────────
 
 namespace {

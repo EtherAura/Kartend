@@ -1,8 +1,8 @@
 // Read/write access to the item_metadata table.
 //
-// The table stores extended per-item metadata (Kartend-rx64) plus columns
-// reserved for sibling features (manual_path for Kartend-9jdv, custom_fields
-// for Kartend-hpln). All structured fields are optional and skipped from
+// The table stores extended per-item metadata plus columns
+// reserved for sibling features (manual_path for, custom_fields
+// for). All structured fields are optional and skipped from
 // the sidebar when empty.
 #include "itemmetadata.h"
 
@@ -67,7 +67,7 @@ QVariant nullableRuntime(int seconds) {
 }
 
 // Same NULL-vs-int handling as nullableRuntime, but for the per-item launcher
-// override (Kartend-dnx4): -1 means "no override" and serializes to NULL so
+// override: -1 means "no override" and serializes to NULL so
 // the column round-trips cleanly via SELECT's isNull() check below.
 QVariant nullableLauncherIndex(int index) {
   return index < 0 ? QVariant(QMetaType(QMetaType::Int)) : QVariant(index);

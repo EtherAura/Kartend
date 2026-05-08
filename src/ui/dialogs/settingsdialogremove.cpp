@@ -141,7 +141,7 @@ void SettingsDialog::removeCollection() {
 
   QList<int> expandedBefore = captureExpandedStates();
 
-  // Kartend-gzmk: capture every name about to disappear so we can scrub
+  // capture every name about to disappear so we can scrub
   // them out of other collections' additionalParentNames *before* the
   // index list shifts under us. Empty newName tells
   // propagateCollectionNameChange to delete the entry.
@@ -189,7 +189,7 @@ void SettingsDialog::removeCollection() {
   // Rebuild parent indices to be consistent
   rebuildParentIndices();
 
-  // Kartend-gzmk: scrub any link references to the removed names so the
+  // scrub any link references to the removed names so the
   // cache doesn't keep silently dropping them on every rebuild.
   for (const QString &removed : namesAboutToVanish) {
     propagateCollectionNameChange(removed, QString{});

@@ -11,6 +11,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   loggingcategories.cpp
   pathutils.cpp
   settingsutils.cpp
+  textzoom.cpp
   timerutils.cpp
   titlefilter.cpp
   usagestatsstore.cpp
@@ -19,12 +20,12 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   applicationcontext.h
   artworkutils.h
   cliargs.h
+  collectiontypes.h
   collectionutils.h
   configvalidation.h
   dbmigrations.h
   errorutils.h
   extensionutils.h
-  forwarddecl.h
   gridutils.h
   historystore.h
   loggingcategories.h
@@ -35,6 +36,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   setuputils.h
   stateutils.h
   stringutils.h
+  textzoom.h
   timerutils.h
   titlefilter.h
   videoutils.h

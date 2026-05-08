@@ -10,8 +10,12 @@
 
 #include "test_applicationmanager_lifecycle.h"
 #include "test_applysettingsdialog.h"
+#include "test_detailspane_coverflow.h"
+#include "test_eventmanager_detailspane.h"
 #include "test_mainwindow_smoke.h"
 #include "test_navigationmanager.h"
+#include "test_scrollmanager.h"
+#include "test_settingsdialog_changes.h"
 #include "test_settingsdialog_scope.h"
 
 #include <QApplication>
@@ -59,6 +63,22 @@ int main(int argc, char *argv[]) {
   {
     TestNavigationManager nav;
     status |= QTest::qExec(&nav, argc, argv);
+  }
+  {
+    TestEventManagerDetailsPane emDp;
+    status |= QTest::qExec(&emDp, argc, argv);
+  }
+  {
+    TestDetailsPaneCoverflow dpCf;
+    status |= QTest::qExec(&dpCf, argc, argv);
+  }
+  {
+    TestSettingsDialogChanges sdCh;
+    status |= QTest::qExec(&sdCh, argc, argv);
+  }
+  {
+    TestScrollManager sm;
+    status |= QTest::qExec(&sm, argc, argv);
   }
   return status;
 }

@@ -1,6 +1,6 @@
 // VirtualScrollEngine: drives virtual-scrolling layout, container lifecycle,
 // and widget materialization for ScrollManager. Promoted from
-// scrollmanagervirtual.cpp (Kartend-158).
+// scrollmanagervirtual.cpp.
 #include "virtualscrollengine.h"
 
 #include "applicationcontext.h"
@@ -18,7 +18,7 @@
 #include "itemwidgetfactory.h"
 #include "listheaderwidget.h"
 #include "loggingcategories.h"
-#include "mainwindow.h"
+#include "textzoom.h"
 #include "presearchstatemanager.h"
 #include "scrolldatamanager.h"
 #include "scrolleventhandler.h"
@@ -142,13 +142,15 @@ auto VirtualScrollEngine::calculateNeededIndices() const -> QSet<int> {
 }
 
 void VirtualScrollEngine::removeUnneededWidgets(const QSet<int> &needed) {
-  QList<int> existing = m_owner->m_activeWidgets.keys();
-  for (int visualIndex : existing) {
-    if (!needed.contains(visualIndex)) {
-      if (ItemWidget *widget = m_owner->m_activeWidgets.value(visualIndex)) {
+  for (auto it = m_owner->m_activeWidgets.begin(); it != m_owner->m_activeWidgets.end();
+       /* advance inside */) {
+    if (!needed.contains(it.key())) {
+      if (ItemWidget *widget = it.value()) {
         m_owner->releaseWidget(widget);
       }
-      m_owner->m_activeWidgets.remove(visualIndex);
+      it = m_owner->m_activeWidgets.erase(it);
+    } else {
+      ++it;
     }
   }
 }
@@ -173,7 +175,7 @@ void VirtualScrollEngine::enforceScrollContentConstraints() {
   // positions.
   m_owner->m_gridContainer->setMinimumHeight(m_owner->m_metrics.totalHeight);
   m_owner->m_gridContainer->setMaximumHeight(m_owner->m_metrics.totalHeight);
-  // Kartend-dx9t: in Horizontal mode the long axis is X, so pin the container's
+  // in Horizontal mode the long axis is X, so pin the container's
   // width too so the scroll area's horizontal scrollbar reflects the full
   // collection extent. Other modes leave width up to layout / VirtualContainerManager.
   if (m_owner->m_metrics.isHorizontal) {
@@ -192,8 +194,8 @@ void VirtualScrollEngine::recreateLayout() {
   bool isListMode = (m_owner->m_context.config.viewType == ViewType::List);
   int fontSize =
       isListMode ? m_owner->m_context.config.listFontSize : m_owner->m_context.config.fontSize;
-  // Kartend-7eff: scale before push so item titles match the active zoom.
-  fontSize = MainWindow::zoomedFontSize(fontSize);
+  // scale before push so item titles match the active zoom.
+  fontSize = TextZoom::zoomedFontSize(fontSize);
   for (auto it = m_owner->m_activeWidgets.begin(); it != m_owner->m_activeWidgets.end(); ++it) {
     ItemWidget *widget = it.value();
     if (!widget) {
@@ -298,7 +300,7 @@ void VirtualScrollEngine::primeLayoutFor(const CollectionConfig &config) {
   if (m_owner->m_widgetFactory) {
     m_owner->m_widgetFactory->setCollectionContext(m_owner->m_context);
   }
-  // Kartend-ks4n: settings save calls primeLayoutFor with the updated config.
+  // settings save calls primeLayoutFor with the updated config.
   // Re-push the source data + context so the FilterManager's hideMissingArtwork
   // baseline reflects the new toggle, then either rebuild the artwork-only
   // baseline (when no other filter is active) or re-run the active search /
@@ -437,8 +439,8 @@ void VirtualScrollEngine::ensureWidgetForIndex(int visualIndex) {
     bool isListMode = (m_owner->m_context.config.viewType == ViewType::List);
     int fontSize =
         isListMode ? m_owner->m_context.config.listFontSize : m_owner->m_context.config.fontSize;
-    // Kartend-7eff: same as the bulk-update branch above.
-    fontSize = MainWindow::zoomedFontSize(fontSize);
+    // same as the bulk-update branch above.
+    fontSize = TextZoom::zoomedFontSize(fontSize);
     existing->setHideTitles(m_owner->m_context.config.hideTitles);
     existing->setHideSubcollectionTitles(m_owner->m_context.config.hideSubcollectionTitles);
     existing->setFontSize(fontSize);

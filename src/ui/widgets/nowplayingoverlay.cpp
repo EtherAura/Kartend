@@ -1,5 +1,5 @@
 // "Now Playing" overlay shown while a runtime-tracked child process is
-// running (Kartend-qxv). Mirrors SplashOverlay's visual language but stays
+// running. Mirrors SplashOverlay's visual language but stays
 // up indefinitely until hideOverlay() is invoked.
 #include "nowplayingoverlay.h"
 

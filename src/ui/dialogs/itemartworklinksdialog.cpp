@@ -1,4 +1,4 @@
-// Per-item editor for artwork override paths (Kartend-53vk).
+// Per-item editor for artwork override paths.
 #include "itemartworklinksdialog.h"
 
 #include <QDialogButtonBox>

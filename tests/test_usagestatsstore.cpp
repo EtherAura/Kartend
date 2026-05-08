@@ -1,4 +1,4 @@
-// Tests for UsageStatsStore (Kartend-7vi).
+// Tests for UsageStatsStore.
 //
 // Uses an in-memory SQLite database with the full migration chain applied so
 // the schema mirrors what the live app sees.

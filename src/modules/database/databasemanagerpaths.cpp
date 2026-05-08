@@ -134,7 +134,7 @@ bool DatabaseManager::removeItemArtwork(const QString &collectionUuid, const QSt
   return true;
 }
 
-// ─── Usage stats (Kartend-7vi) ───────────────────────────────────────────────
+// ─── Usage stats ───────────────────────────────────────────────
 // All paths use the main-thread connection: writes are tiny single-row updates
 // triggered by user actions (launch, runtime exit), and reads are dialog-time
 // aggregates that don't need worker concurrency.
@@ -217,7 +217,7 @@ bool DatabaseManager::resetAllUsageStats() {
   return true;
 }
 
-// ─── Launch history (Kartend-fse) ────────────────────────────────────────────
+// ─── Launch history ────────────────────────────────────────────
 // Same main-thread connection rationale as the usage-stats helpers above:
 // inserts/trims are tiny and triggered by user actions, reads are dialog-time
 // scans bounded by the user-configured cap.

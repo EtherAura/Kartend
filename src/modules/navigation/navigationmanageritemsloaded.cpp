@@ -2,6 +2,8 @@
 #include "artworkmanager.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
+#include "detailspane.h"
+#include "detailspanemanager.h"
 #include "emptystatewidget.h"
 #include "errordialog.h"
 #include "interactionmanager.h"
@@ -9,7 +11,6 @@
 #include "itemwidget.h"
 #include "loadingoverlay.h"
 #include "loggingcategories.h"
-#include "detailspane.h"
 #include "navigationhelpers.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
@@ -19,9 +20,7 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "detailspanemanager.h"
 #include "timerutils.h"
-#include "ui_mainwindow.h"
 #include "uiconstants.h"
 #include <algorithm>
 #include <QApplication>
@@ -160,7 +159,7 @@ auto NavigationManager::setupCollectionContext(const QStringList &filePaths,
   if (m_generalSettings) {
     context.sortMode = m_generalSettings->sortMode;
     context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
-    // Kartend-dd8: mirror toolbar filters so subcollection tile visibility
+    // mirror toolbar filters so subcollection tile visibility
     // honors the active type filter / hide-subs toggle.
     context.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
     context.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;

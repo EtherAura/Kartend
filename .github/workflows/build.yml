@@ -1,5 +1,10 @@
 name: Build and Test
 
+# Runner: pinned to ubuntu-24.04 in every job below. GitHub Actions does not
+# support sharing `runs-on:` across jobs without a reusable workflow or
+# repo-level `vars`, so the literal is repeated. When bumping, update all
+# four jobs together.
+
 on:
   push:
     branches: [ main, develop ]
@@ -12,25 +17,39 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    
+
     strategy:
+      fail-fast: false
       matrix:
         build_type: [Release, Debug]
-    
+        compiler: [gcc, clang]
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite
+          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite libzstd-dev
 
       - name: Cache ccache
         uses: actions/cache@v4
         with:
+          # Cache key is content-addressed on the build config files. A
+          # source-only change (the common case) reuses the existing cache;
+          # a config change rolls a new cache. Avoid github.run_id keys —
+          # they force a write on every run and balloon the repo cache size.
           path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-${{ matrix.build_type }}-${{ hashFiles('CMakeLists.txt', 'src/**', 'tests/**') }}
+          key: ${{ runner.os }}-ccache-${{ matrix.build_type }}-${{ matrix.compiler }}-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
           restore-keys: |
+            ${{ runner.os }}-ccache-${{ matrix.build_type }}-${{ matrix.compiler }}-
             ${{ runner.os }}-ccache-${{ matrix.build_type }}-
             ${{ runner.os }}-ccache-
 
@@ -39,33 +58,94 @@ jobs:
           ccache --set-config=cache_dir=$HOME/.cache/ccache
           ccache --set-config=max_size=1G
           ccache --zero-stats
-          
+
       - name: Create build directory
-        run: mkdir -p build/${{ matrix.build_type }}
-        
+        run: mkdir -p build/${{ matrix.build_type }}-${{ matrix.compiler }}
+
       - name: Configure CMake
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
         run: |
-          cd build/${{ matrix.build_type }}
+          cd build/${{ matrix.build_type }}-${{ matrix.compiler }}
           cmake -G Ninja ../.. \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-            -DBUILD_TESTS=ON \
+            -DKARTEND_BUILD_TESTS=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          
+
       - name: Build
         run: |
-          cd build/${{ matrix.build_type }}
+          cd build/${{ matrix.build_type }}-${{ matrix.compiler }}
           cmake --build . --parallel $(nproc)
 
       - name: ccache stats
         run: ccache --show-stats
-          
+
       - name: Run Tests
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          cd build/${{ matrix.build_type }}
+          cd build/${{ matrix.build_type }}-${{ matrix.compiler }}
           ctest --output-on-failure
+
+  # Build with zstd explicitly disabled. Kart compression falls back to
+  # qCompress (zlib), and test_kartreader.cpp's QSKIP("Built without zstd
+  # support") path actually runs. Without this job the no-zstd code path
+  # is untested and could rot silently.
+  build-no-zstd:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        # Deliberately omit libzstd-dev. KARTEND_ENABLE_ZSTD=OFF below makes
+        # the omission explicit even on runners that ship libzstd-dev as a
+        # transitive dep of some other package.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-no-zstd-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-no-zstd-
+            ${{ runner.os }}-ccache-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=cache_dir=$HOME/.cache/ccache
+          ccache --set-config=max_size=512M
+          ccache --zero-stats
+
+      - name: Configure CMake
+        run: |
+          mkdir -p build/no-zstd
+          cd build/no-zstd
+          cmake -G Ninja ../.. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DKARTEND_BUILD_TESTS=ON \
+            -DKARTEND_ENABLE_ZSTD=OFF \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: |
+          cd build/no-zstd
+          cmake --build . --parallel $(nproc)
+
+      - name: Run Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          cd build/no-zstd
+          ctest --output-on-failure
+
+      - name: ccache stats
+        run: ccache --show-stats
 
   sanitizers:
     runs-on: ubuntu-24.04
@@ -82,7 +162,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-sanitize-${{ hashFiles('CMakeLists.txt', 'src/**', 'tests/**') }}
+          key: ${{ runner.os }}-ccache-sanitize-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
           restore-keys: |
             ${{ runner.os }}-ccache-sanitize-
             ${{ runner.os }}-ccache-
@@ -101,8 +181,8 @@ jobs:
           cd build/Sanitize
           cmake -G Ninja ../.. \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DBUILD_TESTS=ON \
-            -DENABLE_SANITIZERS=ON \
+            -DKARTEND_BUILD_TESTS=ON \
+            -DKARTEND_ENABLE_SANITIZERS=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
@@ -139,6 +219,71 @@ jobs:
           cd build/Sanitize
           ./kartend
 
+  # TSan job — separate from ASan/UBSan because their runtime libraries
+  # conflict. Targets the concurrent surfaces (DatabaseManager+QueryManager
+  # worker thread, ArtworkManager QtConcurrent batches, CacheManager I/O
+  # thread pool). Uses Clang since its TSan is generally more reliable than
+  # GCC's on Qt-heavy code.
+  thread-sanitizer:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite libzstd-dev
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-tsan-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-tsan-
+            ${{ runner.os }}-ccache-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=cache_dir=$HOME/.cache/ccache
+          ccache --set-config=max_size=1G
+          ccache --zero-stats
+
+      - name: Configure CMake (Debug + TSan)
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          mkdir -p build/TSan
+          cd build/TSan
+          cmake -G Ninja ../.. \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DKARTEND_BUILD_TESTS=ON \
+            -DKARTEND_ENABLE_TSAN=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: |
+          cd build/TSan
+          cmake --build . --parallel $(nproc)
+
+      - name: ccache stats
+        run: ccache --show-stats
+
+      - name: Run Tests (TSan)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          # halt_on_error=1 means the first data race fails the build.
+          # second_deadlock_stack=1 prints the full stack of both threads
+          # involved in a lock-order inversion, which is how Qt event loop
+          # deadlocks usually surface.
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+        run: |
+          cd build/TSan
+          ctest --output-on-failure
+
   maintenance-check:
     runs-on: ubuntu-24.04
     
@@ -148,13 +293,13 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite clang-tidy clang-format cppcheck
+          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite clang-tidy clang-format cppcheck jq
 
       - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-maintenance-${{ hashFiles('CMakeLists.txt', 'src/**', 'tests/**') }}
+          key: ${{ runner.os }}-ccache-maintenance-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
           restore-keys: |
             ${{ runner.os }}-ccache-maintenance-
             ${{ runner.os }}-ccache-
@@ -187,7 +332,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-coverage-${{ hashFiles('CMakeLists.txt', 'src/**', 'tests/**') }}
+          key: ${{ runner.os }}-ccache-coverage-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
           restore-keys: |
             ${{ runner.os }}-ccache-coverage-
             ${{ runner.os }}-ccache-
@@ -202,8 +347,8 @@ jobs:
         run: |
           cmake -S . -B build/coverage -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DBUILD_TESTS=ON \
-            -DENABLE_COVERAGE=ON \
+            -DKARTEND_BUILD_TESTS=ON \
+            -DKARTEND_ENABLE_COVERAGE=ON \
             -DCMAKE_CXX_COMPILER=g++ \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
@@ -241,6 +386,42 @@ jobs:
         run: |
           lcov --list build/coverage/coverage.filtered.info \
                --ignore-errors inconsistent | tee build/coverage/coverage-summary.txt
+
+      - name: Surface coverage in step summary + enforce floor
+        env:
+          # Defensive floor: catches gross regressions (e.g. someone deletes
+          # the integration suite) without failing on small drift. Bump this
+          # toward the actual baseline once you've observed a few CI runs and
+          # the number is stable. Set to 0 to disable enforcement entirely
+          # (report-only mode).
+          KARTEND_COVERAGE_MIN_LINES: '30'
+        run: |
+          # lcov --summary prints lines like "  lines.....: 47.3% (1234 of 2611 lines)"
+          # Capture the percentage and write a GitHub step summary.
+          line_pct="$(lcov --summary build/coverage/coverage.filtered.info \
+                          --ignore-errors inconsistent 2>&1 \
+                      | awk '/^[[:space:]]+lines/ { gsub("%","",$2); print $2; exit }')"
+          fn_pct="$(lcov --summary build/coverage/coverage.filtered.info \
+                        --ignore-errors inconsistent 2>&1 \
+                    | awk '/^[[:space:]]+functions/ { gsub("%","",$2); print $2; exit }')"
+          {
+            echo "## Coverage"
+            echo ""
+            echo "| metric | percent |"
+            echo "|---|---|"
+            echo "| lines | ${line_pct:-?}% |"
+            echo "| functions | ${fn_pct:-?}% |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          floor="${KARTEND_COVERAGE_MIN_LINES:-0}"
+          if [ "$floor" -gt 0 ] && [ -n "$line_pct" ]; then
+            # awk handles the float comparison; bash arithmetic can't.
+            below="$(awk -v p="$line_pct" -v f="$floor" 'BEGIN { print (p+0 < f+0) ? "1" : "0" }')"
+            if [ "$below" = "1" ]; then
+              echo "::error::Line coverage $line_pct% is below floor $floor%"
+              exit 1
+            fi
+          fi
 
       - name: Generate HTML report
         run: |

@@ -32,7 +32,7 @@ void FilterManager::setSourceData(const QStringList &filePaths,
 
 void FilterManager::setContext(const CollectionContext &context) {
   m_context = context;
-  // Kartend-ks4n: keep the per-collection "hide missing artwork" predicate in
+  // keep the per-collection "hide missing artwork" predicate in
   // sync with the active collection's config so callers don't have to push the
   // flag separately at each entry point.
   m_hideMissingArtwork = m_context.config.hideMissingArtwork;
@@ -57,7 +57,7 @@ void FilterManager::applyFilter(const QString &searchText) {
   m_isFiltered = true;
   rebuildFilteredIndices();
 
-  // Kartend-ks4n: prune media items that have no artwork after the search
+  // prune media items that have no artwork after the search
   // pass. Subcollection rows in m_filteredIndices are preserved as-is.
   if (m_hideMissingArtwork && m_subcollections) {
     int subCount = m_subcollections->size();
@@ -113,7 +113,7 @@ void FilterManager::applySubcollectionFilter(int subcollectionIndex) {
   int subcollectionStartIndex = m_subcollections->size();
 
   // Filter media items by collection ownership; honor hideMissingArtwork
-  // (Kartend-ks4n) as an additional predicate.
+  // as an additional predicate.
   for (int mediaIndex = 0; mediaIndex < m_filePaths->size(); ++mediaIndex) {
     const QString &entry = (*m_filePaths)[mediaIndex];
     if (!itemBelongsToTargetCollections(entry, targetCollections)) {
@@ -132,7 +132,7 @@ void FilterManager::clearFilter() {
   m_currentFilter.clear();
   m_filteredIndices.clear();
 
-  // Kartend-ks4n: when the per-collection hideMissingArtwork toggle is on,
+  // when the per-collection hideMissingArtwork toggle is on,
   // "clearing the filter" really means transitioning to the artwork-only
   // baseline filter. We populate m_filteredIndices with every subcollection
   // plus the media items that resolve to artwork, and keep m_isFiltered = true
@@ -167,13 +167,16 @@ auto FilterManager::getActualIndex(int visualIndex) const -> int {
 
 void FilterManager::rebuildFilteredIndices() {
   m_filteredIndices.clear();
-  QString needle = m_currentFilter.toLower();
-  if (needle.isEmpty()) {
+  if (m_currentFilter.isEmpty()) {
     return;
   }
   if (!m_filePaths || !m_subcollections) {
     return;
   }
+
+  // Match helpers use Qt::CaseInsensitive directly — no per-item toLower()
+  // allocation in the loop body.
+  const QString &needle = m_currentFilter;
 
   int subCount = m_subcollections->size();
   int totalOriginal = subCount + m_filePaths->size();
@@ -211,7 +214,7 @@ auto FilterManager::matchesMediaItemFilter(int mediaIndex, const QString &needle
   }
   QString rawEntry = m_filePaths->value(mediaIndex);
   QString display = getDisplayNameForMediaItem(rawEntry);
-  return display.toLower().contains(needle);
+  return display.contains(needle, Qt::CaseInsensitive);
 }
 
 auto FilterManager::getDisplayNameForMediaItem(const QString &rawEntry) const -> QString {

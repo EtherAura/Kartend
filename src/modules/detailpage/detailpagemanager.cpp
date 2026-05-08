@@ -1,4 +1,4 @@
-// Coordinates the Kartend-uve item detail page (overlay + data load).
+// Coordinates the item detail page (overlay + data load).
 #include "detailpagemanager.h"
 
 #include <QDateTime>
@@ -12,10 +12,12 @@
 #include "artworkutils.h"
 #include "databasemanager.h"
 #include "detailpageoverlay.h"
-#include "itemartwork.h"
 #include "detailspanemanager.h"
+#include "itemartwork.h"
+#include "videoutils.h"
 
-SETUP_GETTER_DEF_MGR_SAME(DetailPageManagerSetup, DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
+SETUP_GETTER_DEF_MGR_SAME(DetailPageManagerSetup, DetailsPaneManager *, DetailsPaneManager,
+                          detailsPaneManager)
 SETUP_GETTER_DEF_MGR_SAME(DetailPageManagerSetup, DatabaseManager *, DatabaseManager,
                           databaseManager)
 
@@ -104,8 +106,8 @@ void DetailPageManager::showForCurrentSelection() {
   // case. Prepend so it's the first thing shown; only added when no typed
   // artwork already covered the same file.
   if (!ctx.artworkDir.isEmpty()) {
-    const QString fallback = ArtworkUtils::findArtworkForFile(QFileInfo(ctx.filePath).fileName(),
-                                                              ctx.artworkDir);
+    const QString fallback =
+        ArtworkUtils::findArtworkForFile(QFileInfo(ctx.filePath).fileName(), ctx.artworkDir);
     if (!fallback.isEmpty()) {
       bool alreadyListed = false;
       for (const auto &entry : payload.artwork) {
@@ -115,8 +117,18 @@ void DetailPageManager::showForCurrentSelection() {
         }
       }
       if (!alreadyListed) {
-        payload.artwork.prepend({tr("Cover"), fallback});
+        payload.artwork.prepend({tr("Cover"), fallback, /*isVideo=*/false});
       }
+    }
+  }
+
+  // Prepend the video tile so the gallery follows the video-first ordering
+  // the sidebar uses. Mirrors DetailsPaneManager::updateSidebarMetadata's
+  // video lookup; an empty videoDir or missing file just yields no tile.
+  if (!ctx.videoDir.isEmpty()) {
+    const QString videoPath = VideoUtils::findVideoForFile(ctx.filePath, ctx.videoDir);
+    if (!videoPath.isEmpty()) {
+      payload.artwork.prepend({tr("Video"), videoPath, /*isVideo=*/true});
     }
   }
 
