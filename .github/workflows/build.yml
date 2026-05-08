@@ -40,7 +40,7 @@ jobs:
           sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite libzstd-dev
 
       - name: Cache ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           # Cache key is content-addressed on the build config files. A
           # source-only change (the common case) reuses the existing cache;
@@ -107,7 +107,7 @@ jobs:
           sudo apt-get install -y g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite
 
       - name: Cache ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ccache
           key: ${{ runner.os }}-ccache-no-zstd-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
@@ -159,7 +159,7 @@ jobs:
           sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite
 
       - name: Cache ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ccache
           key: ${{ runner.os }}-ccache-sanitize-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
@@ -236,7 +236,7 @@ jobs:
           sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite libzstd-dev
 
       - name: Cache ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ccache
           key: ${{ runner.os }}-ccache-tsan-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
@@ -296,7 +296,7 @@ jobs:
           sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite clang-tidy clang-format cppcheck jq
 
       - name: Cache ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ccache
           key: ${{ runner.os }}-ccache-maintenance-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
@@ -329,7 +329,7 @@ jobs:
           sudo apt-get install -y g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite lcov
 
       - name: Cache ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ccache
           key: ${{ runner.os }}-ccache-coverage-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
