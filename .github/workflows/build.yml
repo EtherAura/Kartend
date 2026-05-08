@@ -37,7 +37,24 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite libzstd-dev
+          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite libzstd-dev pulseaudio
+
+      - name: Start dummy pulseaudio
+        # Qt 6.4's PulseAudio backend SIGILLs in Release builds when
+        # pa_context_connect() fails (no audio device on bare CI runners).
+        # Start a userspace pulseaudio daemon with a null sink so the
+        # connection succeeds and the backend takes its happy path. Has no
+        # effect on test correctness — every test runs with QT_QPA_PLATFORM=
+        # offscreen anyway.
+        run: |
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/pulse-runtime"
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          pulseaudio --start --exit-idle-time=-1 --daemonize \
+            --load='module-null-sink sink_name=NullOutput' \
+            --load='module-null-source source_name=NullInput' || true
+          # Persist runtime dir for downstream steps in the same job.
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
 
       - name: Cache ccache
         uses: actions/cache@v5
@@ -104,7 +121,17 @@ jobs:
         # transitive dep of some other package.
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite
+          sudo apt-get install -y g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite pulseaudio
+
+      - name: Start dummy pulseaudio
+        run: |
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/pulse-runtime"
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          pulseaudio --start --exit-idle-time=-1 --daemonize \
+            --load='module-null-sink sink_name=NullOutput' \
+            --load='module-null-source source_name=NullInput' || true
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
 
       - name: Cache ccache
         uses: actions/cache@v5
@@ -156,7 +183,17 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite
+          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite pulseaudio
+
+      - name: Start dummy pulseaudio
+        run: |
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/pulse-runtime"
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          pulseaudio --start --exit-idle-time=-1 --daemonize \
+            --load='module-null-sink sink_name=NullOutput' \
+            --load='module-null-source source_name=NullInput' || true
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
 
       - name: Cache ccache
         uses: actions/cache@v5
@@ -233,7 +270,24 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite libzstd-dev
+          sudo apt-get install -y clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite libzstd-dev pulseaudio
+
+      - name: Start dummy pulseaudio
+        # Qt 6.4's PulseAudio backend SIGILLs in Release builds when
+        # pa_context_connect() fails (no audio device on bare CI runners).
+        # Start a userspace pulseaudio daemon with a null sink so the
+        # connection succeeds and the backend takes its happy path. Has no
+        # effect on test correctness — every test runs with QT_QPA_PLATFORM=
+        # offscreen anyway.
+        run: |
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/pulse-runtime"
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          pulseaudio --start --exit-idle-time=-1 --daemonize \
+            --load='module-null-sink sink_name=NullOutput' \
+            --load='module-null-source source_name=NullInput' || true
+          # Persist runtime dir for downstream steps in the same job.
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
 
       - name: Cache ccache
         uses: actions/cache@v5
@@ -320,6 +374,24 @@ jobs:
         run: |
           bash .scripts/build.sh --maintenance --format-check
 
+      - name: Surface promoted-error clang-tidy findings
+        if: ${{ failure() }}
+        # The build script's "[ERROR] clang-tidy check failed" message tells
+        # us *that* a promoted-as-error check fired, but not *which*. Echo
+        # the error lines from the log file so the failure is debuggable
+        # without re-running with --debug-output.
+        run: |
+          if [ -f build/ninja-maintenance/logs/clang-tidy.log ]; then
+            echo "::group::clang-tidy promoted errors"
+            grep -E 'error:.*\[(bugprone|clang-analyzer)' build/ninja-maintenance/logs/clang-tidy.log || echo "(no matching error lines)"
+            echo "::endgroup::"
+          fi
+          if [ -f build/ninja-maintenance/logs/clang-format.log ]; then
+            echo "::group::clang-format issues"
+            tail -100 build/ninja-maintenance/logs/clang-format.log || true
+            echo "::endgroup::"
+          fi
+
       - name: ccache stats
         run: ccache --show-stats
 
@@ -332,7 +404,17 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite lcov
+          sudo apt-get install -y g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite lcov pulseaudio
+
+      - name: Start dummy pulseaudio
+        run: |
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/pulse-runtime"
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          pulseaudio --start --exit-idle-time=-1 --daemonize \
+            --load='module-null-sink sink_name=NullOutput' \
+            --load='module-null-source source_name=NullInput' || true
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
 
       - name: Cache ccache
         uses: actions/cache@v5

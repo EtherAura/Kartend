@@ -1,4 +1,5 @@
 build/
+build-*/
 /Testing/
 *.tar.gz
 *.o

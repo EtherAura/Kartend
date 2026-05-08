@@ -25,3 +25,18 @@ called_from_lib:libpulsecommon
 # selected. gstreamer manages its own per-thread allocators and frees on
 # pipeline tear-down from a worker thread that TSan can't reason about.
 called_from_lib:libgstreamer-1.0.so
+
+# QueryManager owns a std::shared_ptr<atomic_bool> cancellation token. When
+# the QueryManager destructor runs on the worker thread (Qt deleteLater
+# pattern), the shared_ptr's control block deallocator races with the
+# main thread's last release of the same token captured by the running
+# scan job. The atomic_bool itself is correctly synchronized; the
+# control-block teardown isn't observable to TSan as a happens-before edge.
+race:_Sp_counted_ptr_inplace
+race:_Sp_counted_base
+
+# QWaitCondition::~QWaitCondition fires pthread_cond_destroy on a condition
+# variable whose last waiter has already been released. TSan flags the
+# destroy as racing with the wait-side cleanup even though the condition
+# is provably unused at this point.
+race:pthread_cond_destroy
