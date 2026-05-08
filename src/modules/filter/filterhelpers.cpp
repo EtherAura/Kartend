@@ -16,9 +16,8 @@ auto mapVisualToActualIndex(int visualIndex, bool isFiltered, const QList<int> &
   return filteredIndices[visualIndex];
 }
 
-auto subcollectionNameMatches(const QString &subcollectionName, const QString &needleLower)
-    -> bool {
-  return subcollectionName.toLower().contains(needleLower);
+auto subcollectionNameMatches(const QString &subcollectionName, const QString &needle) -> bool {
+  return subcollectionName.contains(needle, Qt::CaseInsensitive);
 }
 
 auto displayNameForMediaEntry(const QString &rawEntry, bool showAllSubcollectionItems,

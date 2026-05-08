@@ -30,7 +30,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcCacheManager)
 void CacheManager::initialize() {
   QMutexLocker locker(&m_mutex);
 
-  QString metadataPath = getCacheDirectory() + "/metadata/artwork_cache.json";
+  QString metadataPath = getCacheDirectory() + QStringLiteral("/metadata/artwork_cache.json");
   QFile metadataFile(metadataPath);
   if (!metadataFile.open(QIODevice::ReadOnly)) {
     return;
@@ -189,7 +189,7 @@ void CacheManager::saveToDisk() {
       }
       dirtyTimestamps.clear();
       m_metadataDirty = false;
-      metadataPath = getCacheDirectory() + "/metadata/artwork_cache.json";
+      metadataPath = getCacheDirectory() + QStringLiteral("/metadata/artwork_cache.json");
     }
     for (const QString &path : std::as_const(dirtyArtwork)) {
       if (QPixmap *pix = artworkCache.object(path)) {
@@ -294,7 +294,7 @@ void CacheManager::saveToDiskForShutdown() {
   }
 
   // On shutdown, write all timestamps (full save to preserve complete state).
-  QString metadataPath = getCacheDirectory() + "/metadata/artwork_cache.json";
+  QString metadataPath = getCacheDirectory() + QStringLiteral("/metadata/artwork_cache.json");
   writeTimestamps(timestampsCopy, metadataPath);
 }
 

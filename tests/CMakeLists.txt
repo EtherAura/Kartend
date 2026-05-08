@@ -147,7 +147,7 @@ target_link_libraries(test_cachemanager
 )
 add_test(NAME CacheManager COMMAND test_cachemanager)
 
-# PlaylistManager tests (Kartend-vlm7)
+# PlaylistManager tests
 add_executable(test_playlistmanager
   test_playlistmanager.cpp
   ${SRC_DIR}/modules/playlist/playlistmanager.cpp
@@ -323,7 +323,7 @@ add_executable(test_stringutils test_stringutils.cpp)
 target_link_libraries(test_stringutils Qt6::Core Qt6::Test)
 add_test(NAME StringUtils COMMAND test_stringutils)
 
-# CliArgs tests (Kartend-z3w — --collection startup override)
+# CliArgs tests (--collection startup override)
 add_executable(test_cliargs
   test_cliargs.cpp
   ${SRC_DIR}/utils/cliargs.cpp
@@ -332,7 +332,7 @@ target_include_directories(test_cliargs PRIVATE ${SRC_DIR}/utils)
 target_link_libraries(test_cliargs Qt6::Core Qt6::Test)
 add_test(NAME CliArgs COMMAND test_cliargs)
 
-# TitleFilter tests (Kartend-5h6 — per-collection regex title cleanup)
+# TitleFilter tests (per-collection regex title cleanup)
 add_executable(test_titlefilter
   test_titlefilter.cpp
   ${SRC_DIR}/utils/titlefilter.cpp
@@ -443,7 +443,7 @@ target_link_libraries(test_itemartwork
 )
 add_test(NAME ItemArtwork COMMAND test_itemartwork)
 
-# UsageStatsStore tests (Kartend-7vi)
+# UsageStatsStore tests
 add_executable(test_usagestatsstore
   test_usagestatsstore.cpp
   ${SRC_DIR}/utils/usagestatsstore.cpp
@@ -459,7 +459,7 @@ target_link_libraries(test_usagestatsstore
 )
 add_test(NAME UsageStatsStore COMMAND test_usagestatsstore)
 
-# HistoryStore tests (Kartend-fse)
+# HistoryStore tests
 add_executable(test_historystore
   test_historystore.cpp
   ${SRC_DIR}/utils/historystore.cpp
@@ -475,7 +475,7 @@ target_link_libraries(test_historystore
 )
 add_test(NAME HistoryStore COMMAND test_historystore)
 
-# KartManifest tests (Kartend-y3iy — JSON round-trip for the .kart packaging format)
+# KartManifest tests (JSON round-trip for the .kart packaging format)
 add_executable(test_kartmanifest
   test_kartmanifest.cpp
   ${SRC_DIR}/modules/kart/kartmanifest.cpp
@@ -498,7 +498,7 @@ target_link_libraries(test_kartmanifest
 )
 add_test(NAME KartManifest COMMAND test_kartmanifest)
 
-# KartReader tests (Kartend-vvvk — read + extract + sha256 verification)
+# KartReader tests (read + extract + sha256 verification)
 add_executable(test_kartreader
   test_kartreader.cpp
   ${SRC_DIR}/modules/kart/kartcompression.cpp
@@ -527,7 +527,7 @@ if (TARGET PkgConfig::ZSTD)
 endif()
 add_test(NAME KartReader COMMAND test_kartreader)
 
-# KartWriter tests (Kartend-a1za — export collection + zstd compression)
+# KartWriter tests (export collection + zstd compression)
 add_executable(test_kartwriter
   test_kartwriter.cpp
   ${SRC_DIR}/modules/kart/kartcompression.cpp
@@ -557,7 +557,7 @@ if (TARGET PkgConfig::ZSTD)
 endif()
 add_test(NAME KartWriter COMMAND test_kartwriter)
 
-# KartMerge tests (Kartend-ts9s + Kartend-m2n2 — merge policy + metadata persistence)
+# KartMerge tests (merge policy + metadata persistence)
 add_executable(test_kartmerge
   test_kartmerge.cpp
   ${SRC_DIR}/modules/kart/kartmanifest.cpp
@@ -588,7 +588,7 @@ target_include_directories(test_searchutils PRIVATE ${SRC_DIR}/utils)
 target_link_libraries(test_searchutils Qt6::Core Qt6::Test)
 add_test(NAME SearchUtils COMMAND test_searchutils)
 
-# NavigationHelpers tests (pure helpers extracted under Kartend-tty)
+# NavigationHelpers tests (pure helpers extracted)
 add_executable(test_navigationhelpers
   test_navigationhelpers.cpp
   ${SRC_DIR}/modules/navigation/navigationhelpers.cpp
@@ -608,7 +608,7 @@ target_link_libraries(test_navigationhelpers
 )
 add_test(NAME NavigationHelpers COMMAND test_navigationhelpers)
 
-# SearchHelpers tests (pure helpers extracted under Kartend-tty)
+# SearchHelpers tests (pure helpers extracted)
 add_executable(test_searchhelpers
   test_searchhelpers.cpp
   ${SRC_DIR}/modules/search/searchhelpers.cpp
@@ -628,7 +628,7 @@ target_link_libraries(test_searchhelpers
 )
 add_test(NAME SearchHelpers COMMAND test_searchhelpers)
 
-# MouseHelpers tests (pure helpers extracted under Kartend-tty)
+# MouseHelpers tests (pure helpers extracted)
 add_executable(test_mousehelpers
   test_mousehelpers.cpp
   ${SRC_DIR}/modules/mouse/mousehelpers.cpp
@@ -642,7 +642,7 @@ target_link_libraries(test_mousehelpers
 )
 add_test(NAME MouseHelpers COMMAND test_mousehelpers)
 
-# SelectionHelpers tests (pure helpers extracted under Kartend-tty)
+# SelectionHelpers tests (pure helpers extracted)
 add_executable(test_selectionhelpers
   test_selectionhelpers.cpp
   ${SRC_DIR}/modules/selection/selectionhelpers.cpp
@@ -656,7 +656,7 @@ target_link_libraries(test_selectionhelpers
 )
 add_test(NAME SelectionHelpers COMMAND test_selectionhelpers)
 
-# ScrollHelpers tests (pure helpers extracted under Kartend-tty)
+# ScrollHelpers tests (pure helpers extracted)
 add_executable(test_scrollhelpers
   test_scrollhelpers.cpp
   ${SRC_DIR}/modules/scroll/scrollhelpers.cpp
@@ -672,7 +672,7 @@ target_link_libraries(test_scrollhelpers
 )
 add_test(NAME ScrollHelpers COMMAND test_scrollhelpers)
 
-# QueryHelpers tests (pure helpers extracted under Kartend-tty)
+# QueryHelpers tests (pure helpers extracted)
 add_executable(test_queryhelpers
   test_queryhelpers.cpp
   ${SRC_DIR}/modules/query/queryhelpers.cpp
@@ -686,7 +686,7 @@ target_link_libraries(test_queryhelpers
 )
 add_test(NAME QueryHelpers COMMAND test_queryhelpers)
 
-# FilterHelpers tests (pure helpers extracted under Kartend-tty)
+# FilterHelpers tests (pure helpers extracted)
 add_executable(test_filterhelpers
   test_filterhelpers.cpp
   ${SRC_DIR}/modules/filter/filterhelpers.cpp
@@ -700,7 +700,24 @@ target_link_libraries(test_filterhelpers
 )
 add_test(NAME FilterHelpers COMMAND test_filterhelpers)
 
-# Integration test harness for UI-coordinator managers (Kartend-785).
+# Filter hot-path benchmarks. Labelled "benchmark" so default ctest runs skip
+# them — invoke with `ctest -L benchmark` to track regression. Walltime
+# numbers vary by hardware; compare against a stored baseline.
+add_executable(bench_filterhelpers
+  bench_filterhelpers.cpp
+  ${SRC_DIR}/modules/filter/filterhelpers.cpp
+)
+target_include_directories(bench_filterhelpers PRIVATE
+  ${SRC_DIR}/modules/filter
+)
+target_link_libraries(bench_filterhelpers
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME BenchFilterHelpers COMMAND bench_filterhelpers)
+set_tests_properties(BenchFilterHelpers PROPERTIES LABELS "benchmark")
+
+# Integration test harness for UI-coordinator managers.
 # Only built when the kartend_lib OBJECT library is available (i.e. when
 # tests/CMakeLists.txt is added from the top-level CMakeLists.txt rather than
 # configured stand-alone).

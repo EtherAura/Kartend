@@ -34,16 +34,16 @@
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "detailspane.h"
+#include "detailspanemanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
-#include "detailspane.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
@@ -61,10 +61,11 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   // Manager dependencies - use accessors that check context fallback
   m_scrollManager = setup.getScrollManager();
   m_detailsPaneManager = setup.getDetailsPaneManager();
+  m_detailPageManager = setup.getDetailPageManager();
   m_settingsManager = setup.getSettingsManager();
   m_databaseManager = setup.getDatabaseManager();
   m_navigationManager = setup.getNavigationManager();
-  // Kartend-vlm7: the only consumer is the context menu, so we just read the
+  // the only consumer is the context menu, so we just read the
   // pointer directly from the shared ApplicationContext rather than adding a
   // dedicated setup field.
   m_playlistManager = (setup.ctx ? setup.ctx->managers.playlistManager : nullptr);
@@ -151,7 +152,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
   if (m_launchManager) {
     LaunchManagerSetup launchSetup;
     launchSetup.ctx = setup.ctx;
-    // Kartend-7vi: forward launch + session events into DatabaseManager via
+    // forward launch + session events into DatabaseManager via
     // callbacks so LaunchManager itself doesn't take a hard link-time
     // dependency on the database module (keeps the launch unit tests slim).
     if (setup.ctx) {
@@ -161,7 +162,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
           return;
         }
         appCtx->managers.databaseManager->recordItemLaunch(uuid, filePath);
-        // Kartend-fse: chronological history runs on the same hook so a single
+        // chronological history runs on the same hook so a single
         // launch updates aggregate stats and the history log atomically.
         // historyEnabled gates the insert; historyMaxEntries (>0) drives the
         // post-insert trim so the table never grows unbounded.
@@ -181,7 +182,7 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
           appCtx->managers.databaseManager->recordItemPlaySession(uuid, filePath, seconds);
         }
       };
-      // Kartend-dnx4: per-item launcher override pulled from item_metadata.
+      // per-item launcher override pulled from item_metadata.
       // Callback indirection keeps test_launchmanager free of the database
       // module at link time.
       launchSetup.resolveLauncherOverride = [appCtx](const QString &uuid,

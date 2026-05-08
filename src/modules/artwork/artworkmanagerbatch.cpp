@@ -99,7 +99,7 @@ void ArtworkManager::collectUncachedAndApplyCached(const QList<ArtworkInfo> &ite
     // delivered. Widgets are pooled and recycled across roles (item ↔
     // subcollection ↔ virtual folder); without this check, a queued artwork
     // load for the previous role can clobber the new role's pixmap
-    // (bd Kartend-dxz).
+    //.
     QString widgetBaseName;
     if (info.mediaItem->isSubcollection() || info.mediaItem->isVirtualFolder()) {
       widgetBaseName = info.mediaItem->getItemName();
@@ -204,7 +204,7 @@ void ArtworkManager::dispatchAndTrackBatch(const QList<ArtworkInfo> &batch, bool
                 << "elapsedMs=" << elapsedMs;
           }
 
-          self->applyResultsToUi(results, highPriority);
+          self->applyResultsToUi(results);
           // Update adaptive batcher with completed batch timing
           // (high-priority only)
           if (highPriority && !results.isEmpty()) {

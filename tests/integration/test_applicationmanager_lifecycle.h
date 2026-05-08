@@ -1,6 +1,6 @@
 /**
  * @file test_applicationmanager_lifecycle.h
- * @brief Kartend-crr: lifecycle tests for ApplicationManager.
+ * @brief: lifecycle tests for ApplicationManager.
  *
  * Covers construct/destruct without initialize() (defensive teardown), the
  * post-initialize manager wiring/parenting graph, and shutdown() safety with

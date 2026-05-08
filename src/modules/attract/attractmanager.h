@@ -77,7 +77,7 @@ public slots:
   /// Re-reads the enabled/timeout/speed settings (e.g. after settings change).
   void reloadSettings();
 
-  /// Kartend-gs1g: suspend / resume attract mode externally. While suspended,
+  /// suspend / resume attract mode externally. While suspended,
   /// the idle timer is halted, attract mode is stopped, and the manager
   /// refuses to start a new attract cycle. Resuming reseeds the idle timer
   /// from now so attract waits the full timeout before kicking back in.
@@ -129,7 +129,7 @@ private:
   bool m_bouncePaused = false;
   bool m_drivingSelection = false;
   double m_scrollAccumulator = 0.0; // Fractional-pixel buffer for sub-px speeds
-  // Kartend-gs1g: external suspend flag. While true, onIdleTimeout() refuses
+  // external suspend flag. While true, onIdleTimeout refuses
   // to start attract, and resetIdleTimer() refuses to arm the timer. Cleared
   // by setSuspended(false), which then arms a fresh idle countdown.
   bool m_suspended = false;

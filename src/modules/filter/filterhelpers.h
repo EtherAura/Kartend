@@ -9,7 +9,7 @@
 // and display-name resolution can be unit-tested without instantiating
 // FilterManager (which depends on DatabaseManager and the collection graph).
 //
-// See bd Kartend-tty for the broader extraction effort.
+// See bd for the broader extraction effort.
 namespace FilterHelpers {
 
 // Maps a filtered "visual" index to the underlying actual item index.
@@ -22,11 +22,12 @@ namespace FilterHelpers {
 
 // Case-insensitive substring search for a subcollection name.
 //
-// Returns true if the lowercased subcollection name contains the lowercased
-// needle. needle is assumed already lowercased by the caller (mirrors
-// FilterManager's internal contract).
+// Returns true if subcollectionName contains needle (case-insensitive). needle
+// can be any case — the comparison is Qt::CaseInsensitive so callers don't
+// need to pre-lower it (and shouldn't, since per-item lowering allocates a
+// fresh QString per match in hot filter loops).
 [[nodiscard]] auto subcollectionNameMatches(const QString &subcollectionName,
-                                            const QString &needleLower) -> bool;
+                                            const QString &needle) -> bool;
 
 // Resolves the display name for a media-item raw entry, mirroring
 // FilterManager::getDisplayNameForMediaItem semantics.

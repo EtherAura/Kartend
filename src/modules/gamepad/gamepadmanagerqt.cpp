@@ -57,7 +57,9 @@ void GamepadManager::attachToGamepad(int deviceId) {
 }
 
 void GamepadManager::detachGamepad() {
-  if (m_keyboardManager) {
+  // See detachController() for why keyboard interactions are skipped during
+  // shutdown.
+  if (m_keyboardManager && !shuttingDown()) {
     m_keyboardManager->setPhysicalKeyDown(false);
     m_keyboardManager->stopRepeat(true);
   }

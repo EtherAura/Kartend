@@ -33,6 +33,33 @@
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
+namespace {
+
+// Dirty-check helpers: return true when @p widget exists and its current
+// value differs from @p orig. Each helper bakes in the widget's "current
+// value" accessor so callers don't have to spell it out. Reduces the
+// settingsdialog check*Changes() functions from OR-chains of
+// `(ui->X && ui->X->method() != originalConfig.field)` cargo to
+// readable per-field checks.
+
+inline bool lineChanged(const QLineEdit *w, const QString &orig) {
+  return w && w->text() != orig;
+}
+inline bool lineTrimmedChanged(const QLineEdit *w, const QString &orig) {
+  return w && w->text().trimmed() != orig;
+}
+inline bool checkboxChanged(const QCheckBox *w, bool orig) {
+  return w && w->isChecked() != orig;
+}
+inline bool spinIntChanged(const QSpinBox *w, int orig) {
+  return w && w->value() != orig;
+}
+template <typename EnumT> bool comboEnumChanged(const QComboBox *w, EnumT orig) {
+  return w && w->currentIndex() != static_cast<int>(orig);
+}
+
+} // namespace
+
 auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   CollectionConfig config;
   if (currentCollectionIndex >= 0 && currentCollectionIndex < m_workingCollections.size()) {
@@ -65,7 +92,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
                                   : config.extractedExtension;
   config.expandMode =
       (ui->expandModeCheckBox) ? ui->expandModeCheckBox->isChecked() : config.expandMode;
-  // Kartend-dd8: read free-form type label from the editable combobox. Use
+  // read free-form type label from the editable combobox. Use
   // currentText() rather than currentIndex() so a freshly typed value (not
   // yet committed via Enter) round-trips, and trim whitespace so accidental
   // padding doesn't fragment the type set.
@@ -139,7 +166,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.sidebarMode = (ui->sidebarModeComboBox)
                            ? static_cast<DetailsPaneMode>(ui->sidebarModeComboBox->currentIndex())
                            : config.sidebarMode;
-  // Kartend-63e sidebar enhancements.
+  // sidebar enhancements.
   if (ui->sidebarPositionComboBox) {
     config.sidebarPosition =
         static_cast<DetailsPanePosition>(ui->sidebarPositionComboBox->currentIndex());
@@ -194,7 +221,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   if (ui->sidebarSectionBgOpacitySpinBox) {
     config.sidebarSectionBgOpacity = ui->sidebarSectionBgOpacitySpinBox->value();
   }
-  // Kartend-ekaa: per-collection sidebar font override.
+  // per-collection sidebar font override.
   if (ui->sidebarFontFamilyEdit) {
     config.sidebarFontFamily = ui->sidebarFontFamilyEdit->text().trimmed();
   }
@@ -202,7 +229,8 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
     config.sidebarFontPointSize = ui->sidebarFontSizeSpinBox->value();
   }
   if (ui->sidebarActiveTabComboBox) {
-    config.sidebarActiveTab = static_cast<DetailsPaneTab>(ui->sidebarActiveTabComboBox->currentIndex());
+    config.sidebarActiveTab =
+        static_cast<DetailsPaneTab>(ui->sidebarActiveTabComboBox->currentIndex());
   }
   config.viewType = (ui->viewTypeComboBox)
                         ? static_cast<ViewType>(ui->viewTypeComboBox->currentIndex())
@@ -282,7 +310,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.customFontFamily =
       (ui->customFontEdit) ? ui->customFontEdit->text().trimmed() : config.customFontFamily;
 
-  // Kartend-guo5: header logo
+  // header logo
   if (ui->headerLogoEdit) {
     config.headerLogoImage = ui->headerLogoEdit->text().trimmed();
   }
@@ -291,7 +319,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
         static_cast<HeaderLogoPosition>(ui->headerLogoPositionComboBox->currentIndex());
   }
 
-  // Kartend-qbp3: vignette
+  // vignette
   if (ui->vignetteEnabledCheckBox) {
     config.vignetteEnabled = ui->vignetteEnabledCheckBox->isChecked();
   }
@@ -299,7 +327,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
     config.vignetteIntensity = ui->vignetteIntensitySpinBox->value();
   }
 
-  // Kartend-y25g: wallpaper parallax
+  // wallpaper parallax
   if (ui->wallpaperParallaxCheckBox) {
     config.wallpaperParallax = ui->wallpaperParallaxCheckBox->isChecked();
   }
@@ -307,7 +335,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
     config.parallaxStrength = ui->parallaxStrengthSpinBox->value();
   }
 
-  // Kartend-eq8r: toolbar backdrop blur
+  // toolbar backdrop blur
   if (ui->toolbarBackdropBlurCheckBox) {
     config.toolbarBackdropBlur = ui->toolbarBackdropBlurCheckBox->isChecked();
   }
@@ -341,126 +369,93 @@ auto SettingsDialog::updateParentCollectionFromUI(CollectionConfig &collection, 
 
 // Checks basic field changes against original configuration
 auto SettingsDialog::checkBasicFieldChanges() const -> bool {
-  const CollectionConfig &originalConfig = originalCollection;
+  const CollectionConfig &o = originalCollection;
 
-  // Kartend-bdl: also flag changes when the user has edited the launcher
-  // name, the additional-launchers list, or the default-launcher pick.
+  // Special cases: launcher dirty-check, additional-launchers list, default
+  // launcher index (only valid when combobox has entries), the
+  // collection-type combobox (compares trimmed currentText, not index), the
+  // sidebar background value (compares against image OR color depending on
+  // the type), and the spacing fields (apply spacingUiToInternal first).
   const bool launcherNameChanged =
-      ui->launcherNameLineEdit &&
-      ui->launcherNameLineEdit->text().trimmed() != originalConfig.launcherName;
-  const bool additionalChanged = m_workingAdditionalLaunchers != originalConfig.additionalLaunchers;
+      ui->launcherNameLineEdit && ui->launcherNameLineEdit->text().trimmed() != o.launcherName;
+  const bool additionalChanged = m_workingAdditionalLaunchers != o.additionalLaunchers;
   const bool defaultLauncherChanged =
       ui->defaultLauncherComboBox && ui->defaultLauncherComboBox->count() > 0 &&
-      ui->defaultLauncherComboBox->currentIndex() != originalConfig.defaultLauncherIndex;
-  return (
-      launcherNameChanged || additionalChanged || defaultLauncherChanged ||
-      ((ui->launcherLineEdit) && ui->launcherLineEdit->text() != originalConfig.launcherPath) ||
-      ((ui->coreLineEdit) && ui->coreLineEdit->text() != originalConfig.corePath) ||
-      ((ui->launchParamsLineEdit) &&
-       ui->launchParamsLineEdit->text() != originalConfig.launchParameters) ||
-      ((ui->extractArchivesCheckBox) &&
-       ui->extractArchivesCheckBox->isChecked() != originalConfig.extractArchives) ||
-      ((ui->extractedExtensionLineEdit) &&
-       ui->extractedExtensionLineEdit->text() != originalConfig.extractedExtension) ||
-      ((ui->expandModeCheckBox) &&
-       ui->expandModeCheckBox->isChecked() != originalConfig.expandMode) ||
-      ((ui->collectionTypeComboBox) &&
-       ui->collectionTypeComboBox->currentText().trimmed() != originalConfig.type) ||
-      ((ui->mediaDirLineEdit) && ui->mediaDirLineEdit->text() != originalConfig.mediaDirectory) ||
-      ((ui->artworkDirLineEdit) &&
-       ui->artworkDirLineEdit->text() != originalConfig.artworkDirectory) ||
-      ((ui->videoDirLineEdit) && ui->videoDirLineEdit->text() != originalConfig.videoDirectory) ||
-      ((ui->manualDirLineEdit) &&
-       ui->manualDirLineEdit->text() != originalConfig.manualDirectory) ||
-      ((ui->placeholderArtworkLineEdit) &&
-       ui->placeholderArtworkLineEdit->text() != originalConfig.placeholderArtwork) ||
-      ((ui->gridWidthSpinBox) && ui->gridWidthSpinBox->value() != originalConfig.gridWidth) ||
-      ((ui->horizontalGridHeightSpinBox) &&
-       ui->horizontalGridHeightSpinBox->value() != originalConfig.horizontalGridHeight) ||
-      ((ui->gridWidthSidebarHiddenSpinBox) &&
-       ui->gridWidthSidebarHiddenSpinBox->value() != originalConfig.gridWidthSidebarHidden) ||
-      ((ui->horizontalGridHeightSidebarHiddenSpinBox) &&
-       ui->horizontalGridHeightSidebarHiddenSpinBox->value() !=
-           originalConfig.horizontalGridHeightSidebarHidden) ||
-      ((ui->showAllSubcollectionItemsCheckBox) &&
-       ui->showAllSubcollectionItemsCheckBox->isChecked() !=
-           originalConfig.showAllSubcollectionItems) ||
-      ((ui->horizontalAlignmentComboBox) &&
-       ui->horizontalAlignmentComboBox->currentIndex() !=
-           static_cast<int>(originalConfig.horizontalAlignment)) ||
-      ((ui->sidebarModeComboBox) &&
-       ui->sidebarModeComboBox->currentIndex() != static_cast<int>(originalConfig.sidebarMode)) ||
-      // Kartend-63e: dirty checks for the new sidebar fields.
-      ((ui->sidebarPositionComboBox) && ui->sidebarPositionComboBox->currentIndex() !=
-                                            static_cast<int>(originalConfig.sidebarPosition)) ||
-      ((ui->sidebarWidthSpinBox) &&
-       ui->sidebarWidthSpinBox->value() != originalConfig.sidebarWidth) ||
-      ((ui->sidebarHeightSpinBox) &&
-       ui->sidebarHeightSpinBox->value() != originalConfig.sidebarHeight) ||
-      ((ui->sidebarWidthLockedCheckBox) &&
-       ui->sidebarWidthLockedCheckBox->isChecked() != originalConfig.sidebarWidthLocked) ||
-      ((ui->sidebarBackgroundTypeComboBox) &&
-       ui->sidebarBackgroundTypeComboBox->currentIndex() !=
-           static_cast<int>(originalConfig.sidebarBackgroundType)) ||
-      ((ui->sidebarBackgroundValueEdit) &&
-       ui->sidebarBackgroundValueEdit->text().trimmed() !=
-           (originalConfig.sidebarBackgroundType == DetailsPaneBackgroundType::Image
-                ? originalConfig.sidebarBackgroundImage
-                : originalConfig.sidebarBackgroundColor)) ||
-      ((ui->sidebarPatternColorEdit) &&
-       ui->sidebarPatternColorEdit->text().trimmed() != originalConfig.sidebarPatternColor) ||
-      ((ui->sidebarPatternIntensitySpinBox) &&
-       ui->sidebarPatternIntensitySpinBox->value() != originalConfig.sidebarPatternIntensity) ||
-      ((ui->sidebarTextColorEdit) &&
-       ui->sidebarTextColorEdit->text().trimmed() != originalConfig.sidebarTextColor) ||
-      ((ui->sidebarAccentColorEdit) &&
-       ui->sidebarAccentColorEdit->text().trimmed() != originalConfig.sidebarAccentColor) ||
-      ((ui->sidebarHeaderBgEdit) &&
-       ui->sidebarHeaderBgEdit->text().trimmed() != originalConfig.sidebarHeaderBgColor) ||
-      ((ui->sidebarSectionBgEdit) &&
-       ui->sidebarSectionBgEdit->text().trimmed() != originalConfig.sidebarSectionBgColor) ||
-      ((ui->sidebarHeaderBgOpacitySpinBox) &&
-       ui->sidebarHeaderBgOpacitySpinBox->value() != originalConfig.sidebarHeaderBgOpacity) ||
-      ((ui->sidebarSectionBgOpacitySpinBox) &&
-       ui->sidebarSectionBgOpacitySpinBox->value() != originalConfig.sidebarSectionBgOpacity) ||
-      ((ui->sidebarFontFamilyEdit) &&
-       ui->sidebarFontFamilyEdit->text().trimmed() != originalConfig.sidebarFontFamily) ||
-      ((ui->sidebarFontSizeSpinBox) &&
-       ui->sidebarFontSizeSpinBox->value() != originalConfig.sidebarFontPointSize) ||
-      ((ui->sidebarActiveTabComboBox) && ui->sidebarActiveTabComboBox->currentIndex() !=
-                                             static_cast<int>(originalConfig.sidebarActiveTab)) ||
-      ((ui->viewTypeComboBox) &&
-       ui->viewTypeComboBox->currentIndex() != static_cast<int>(originalConfig.viewType)) ||
-      ((ui->hideMissingArtworkCheckBox) &&
-       ui->hideMissingArtworkCheckBox->isChecked() != originalConfig.hideMissingArtwork) ||
-      ((ui->horizontalSpacingSpinBox) &&
-       spacingUiToInternal(ui->horizontalSpacingSpinBox->value()) !=
-           originalConfig.horizontalSpacing) ||
-      ((ui->verticalSpacingSpinBox) && spacingUiToInternal(ui->verticalSpacingSpinBox->value()) !=
-                                           originalConfig.verticalSpacing) ||
-      ((ui->hideHorizontalScrollbarCheckBox) && ui->hideHorizontalScrollbarCheckBox->isChecked() !=
-                                                    originalConfig.hideHorizontalScrollbar) ||
-      ((ui->hideVerticalScrollbarCheckBox) &&
-       ui->hideVerticalScrollbarCheckBox->isChecked() != originalConfig.hideVerticalScrollbar) ||
-      ((ui->hideTitlesCheckBox) &&
-       ui->hideTitlesCheckBox->isChecked() != originalConfig.hideTitles) ||
-      ((ui->hideSubcollectionTitlesCheckBox) && ui->hideSubcollectionTitlesCheckBox->isChecked() !=
-                                                    originalConfig.hideSubcollectionTitles) ||
-      ((ui->includeContentSubfoldersCheckBox) &&
-       ui->includeContentSubfoldersCheckBox->isChecked() !=
-           originalConfig.includeContentSubfolders) ||
-      ((ui->showAllSubfolderItemsCheckBox) &&
-       ui->showAllSubfolderItemsCheckBox->isChecked() != originalConfig.showAllSubfolderItems) ||
-      ((ui->hideSubfolderTitlesCheckBox) &&
-       ui->hideSubfolderTitlesCheckBox->isChecked() != originalConfig.hideSubfolderTitles) ||
-      ((ui->showHiddenFoldersCheckBox) &&
-       ui->showHiddenFoldersCheckBox->isChecked() != originalConfig.showHiddenFolders) ||
-      ((ui->includeArtworkSubfoldersCheckBox) &&
-       ui->includeArtworkSubfoldersCheckBox->isChecked() !=
-           originalConfig.includeArtworkSubfolders) ||
-      ((ui->fontSizeSpinBox) && ui->fontSizeSpinBox->value() != originalConfig.fontSize) ||
-      ((ui->cornerRadiusSpinBox) &&
-       ui->cornerRadiusSpinBox->value() != originalConfig.cornerRadius));
+      ui->defaultLauncherComboBox->currentIndex() != o.defaultLauncherIndex;
+  const bool typeChanged =
+      ui->collectionTypeComboBox && ui->collectionTypeComboBox->currentText().trimmed() != o.type;
+  const QString sidebarBgOrig = o.sidebarBackgroundType == DetailsPaneBackgroundType::Image
+                                    ? o.sidebarBackgroundImage
+                                    : o.sidebarBackgroundColor;
+  const bool sidebarBgValueChanged =
+      lineTrimmedChanged(ui->sidebarBackgroundValueEdit, sidebarBgOrig);
+  const bool hSpacingChanged =
+      ui->horizontalSpacingSpinBox &&
+      spacingUiToInternal(ui->horizontalSpacingSpinBox->value()) != o.horizontalSpacing;
+  const bool vSpacingChanged =
+      ui->verticalSpacingSpinBox &&
+      spacingUiToInternal(ui->verticalSpacingSpinBox->value()) != o.verticalSpacing;
+
+  return launcherNameChanged || additionalChanged || defaultLauncherChanged || typeChanged ||
+         sidebarBgValueChanged || hSpacingChanged || vSpacingChanged ||
+
+         // Launcher / archive paths
+         lineChanged(ui->launcherLineEdit, o.launcherPath) ||
+         lineChanged(ui->coreLineEdit, o.corePath) ||
+         lineChanged(ui->launchParamsLineEdit, o.launchParameters) ||
+         checkboxChanged(ui->extractArchivesCheckBox, o.extractArchives) ||
+         lineChanged(ui->extractedExtensionLineEdit, o.extractedExtension) ||
+         checkboxChanged(ui->expandModeCheckBox, o.expandMode) ||
+
+         // Directories
+         lineChanged(ui->mediaDirLineEdit, o.mediaDirectory) ||
+         lineChanged(ui->artworkDirLineEdit, o.artworkDirectory) ||
+         lineChanged(ui->videoDirLineEdit, o.videoDirectory) ||
+         lineChanged(ui->manualDirLineEdit, o.manualDirectory) ||
+         lineChanged(ui->placeholderArtworkLineEdit, o.placeholderArtwork) ||
+
+         // Grid metrics
+         spinIntChanged(ui->gridWidthSpinBox, o.gridWidth) ||
+         spinIntChanged(ui->horizontalGridHeightSpinBox, o.horizontalGridHeight) ||
+         spinIntChanged(ui->gridWidthSidebarHiddenSpinBox, o.gridWidthSidebarHidden) ||
+         spinIntChanged(ui->horizontalGridHeightSidebarHiddenSpinBox,
+                        o.horizontalGridHeightSidebarHidden) ||
+         checkboxChanged(ui->showAllSubcollectionItemsCheckBox, o.showAllSubcollectionItems) ||
+         comboEnumChanged(ui->horizontalAlignmentComboBox, o.horizontalAlignment) ||
+
+         // Sidebar geometry + background
+         comboEnumChanged(ui->sidebarModeComboBox, o.sidebarMode) ||
+         comboEnumChanged(ui->sidebarPositionComboBox, o.sidebarPosition) ||
+         spinIntChanged(ui->sidebarWidthSpinBox, o.sidebarWidth) ||
+         spinIntChanged(ui->sidebarHeightSpinBox, o.sidebarHeight) ||
+         checkboxChanged(ui->sidebarWidthLockedCheckBox, o.sidebarWidthLocked) ||
+         comboEnumChanged(ui->sidebarBackgroundTypeComboBox, o.sidebarBackgroundType) ||
+         lineTrimmedChanged(ui->sidebarPatternColorEdit, o.sidebarPatternColor) ||
+         spinIntChanged(ui->sidebarPatternIntensitySpinBox, o.sidebarPatternIntensity) ||
+         lineTrimmedChanged(ui->sidebarTextColorEdit, o.sidebarTextColor) ||
+         lineTrimmedChanged(ui->sidebarAccentColorEdit, o.sidebarAccentColor) ||
+         lineTrimmedChanged(ui->sidebarHeaderBgEdit, o.sidebarHeaderBgColor) ||
+         lineTrimmedChanged(ui->sidebarSectionBgEdit, o.sidebarSectionBgColor) ||
+         spinIntChanged(ui->sidebarHeaderBgOpacitySpinBox, o.sidebarHeaderBgOpacity) ||
+         spinIntChanged(ui->sidebarSectionBgOpacitySpinBox, o.sidebarSectionBgOpacity) ||
+         lineTrimmedChanged(ui->sidebarFontFamilyEdit, o.sidebarFontFamily) ||
+         spinIntChanged(ui->sidebarFontSizeSpinBox, o.sidebarFontPointSize) ||
+         comboEnumChanged(ui->sidebarActiveTabComboBox, o.sidebarActiveTab) ||
+
+         // View / scrollbars / titles / folders / typography
+         comboEnumChanged(ui->viewTypeComboBox, o.viewType) ||
+         checkboxChanged(ui->hideMissingArtworkCheckBox, o.hideMissingArtwork) ||
+         checkboxChanged(ui->hideHorizontalScrollbarCheckBox, o.hideHorizontalScrollbar) ||
+         checkboxChanged(ui->hideVerticalScrollbarCheckBox, o.hideVerticalScrollbar) ||
+         checkboxChanged(ui->hideTitlesCheckBox, o.hideTitles) ||
+         checkboxChanged(ui->hideSubcollectionTitlesCheckBox, o.hideSubcollectionTitles) ||
+         checkboxChanged(ui->includeContentSubfoldersCheckBox, o.includeContentSubfolders) ||
+         checkboxChanged(ui->showAllSubfolderItemsCheckBox, o.showAllSubfolderItems) ||
+         checkboxChanged(ui->hideSubfolderTitlesCheckBox, o.hideSubfolderTitles) ||
+         checkboxChanged(ui->showHiddenFoldersCheckBox, o.showHiddenFolders) ||
+         checkboxChanged(ui->includeArtworkSubfoldersCheckBox, o.includeArtworkSubfolders) ||
+         spinIntChanged(ui->fontSizeSpinBox, o.fontSize) ||
+         spinIntChanged(ui->cornerRadiusSpinBox, o.cornerRadius);
 }
 
 // Checks extension list changes
@@ -522,65 +517,36 @@ auto SettingsDialog::checkDimensionChanges() const -> bool {
 
 // Checks color field changes
 auto SettingsDialog::checkColorChanges() const -> bool {
-  const CollectionConfig &originalConfig = originalCollection;
-  // Kartend-guo5 / qbp3: header logo + vignette are theme-adjacent fields
-  // tracked here so hasUnsavedChanges() picks them up. Without this, typing
-  // a path or toggling vignette never enables the Save button and the OK
-  // path silently discards the edit.
-  const bool logoChanged =
-      (ui->headerLogoEdit &&
-       ui->headerLogoEdit->text().trimmed() != originalConfig.headerLogoImage) ||
-      (ui->headerLogoPositionComboBox &&
-       static_cast<HeaderLogoPosition>(ui->headerLogoPositionComboBox->currentIndex()) !=
-           originalConfig.headerLogoPosition);
-  const bool vignetteChanged = (ui->vignetteEnabledCheckBox &&
-                                ui->vignetteEnabledCheckBox->isChecked() !=
-                                    originalConfig.vignetteEnabled) ||
-                               (ui->vignetteIntensitySpinBox &&
-                                ui->vignetteIntensitySpinBox->value() !=
-                                    originalConfig.vignetteIntensity);
-  // Kartend-y25g / eq8r: parallax + blur ride along under the same dirty
-  // umbrella so typing into them enables the Save button.
-  const bool parallaxChanged = (ui->wallpaperParallaxCheckBox &&
-                                ui->wallpaperParallaxCheckBox->isChecked() !=
-                                    originalConfig.wallpaperParallax) ||
-                               (ui->parallaxStrengthSpinBox &&
-                                ui->parallaxStrengthSpinBox->value() !=
-                                    originalConfig.parallaxStrength);
-  const bool blurChanged = (ui->toolbarBackdropBlurCheckBox &&
-                            ui->toolbarBackdropBlurCheckBox->isChecked() !=
-                                originalConfig.toolbarBackdropBlur) ||
-                           (ui->backdropBlurRadiusSpinBox &&
-                            ui->backdropBlurRadiusSpinBox->value() !=
-                                originalConfig.backdropBlurRadius);
-  return (
-      ((ui->primaryColorEdit) &&
-       ui->primaryColorEdit->text().trimmed() != originalConfig.primaryColor) ||
-      ((ui->tileColorEdit) && ui->tileColorEdit->text().trimmed() != originalConfig.tileColor) ||
-      ((ui->selectionColorEdit) &&
-       ui->selectionColorEdit->text().trimmed() != originalConfig.selectionColor) ||
-      logoChanged || vignetteChanged || parallaxChanged || blurChanged);
+  const CollectionConfig &o = originalCollection;
+  // / qbp3 / y25g / eq8r: theme-adjacent fields (logo, vignette,
+  // parallax, blur) are tracked here so hasUnsavedChanges() picks them up.
+  return lineTrimmedChanged(ui->primaryColorEdit, o.primaryColor) ||
+         lineTrimmedChanged(ui->tileColorEdit, o.tileColor) ||
+         lineTrimmedChanged(ui->selectionColorEdit, o.selectionColor) ||
+         lineTrimmedChanged(ui->headerLogoEdit, o.headerLogoImage) ||
+         comboEnumChanged(ui->headerLogoPositionComboBox, o.headerLogoPosition) ||
+         checkboxChanged(ui->vignetteEnabledCheckBox, o.vignetteEnabled) ||
+         spinIntChanged(ui->vignetteIntensitySpinBox, o.vignetteIntensity) ||
+         checkboxChanged(ui->wallpaperParallaxCheckBox, o.wallpaperParallax) ||
+         spinIntChanged(ui->parallaxStrengthSpinBox, o.parallaxStrength) ||
+         checkboxChanged(ui->toolbarBackdropBlurCheckBox, o.toolbarBackdropBlur) ||
+         spinIntChanged(ui->backdropBlurRadiusSpinBox, o.backdropBlurRadius);
 }
 
 // Checks list mode field changes
 auto SettingsDialog::checkListModeChanges() const -> bool {
-  const CollectionConfig &originalConfig = originalCollection;
-  return (((ui->listFontSizeSpinBox) &&
-           ui->listFontSizeSpinBox->value() != originalConfig.listFontSize) ||
-          ((ui->listRowHeightSpinBox) &&
-           ui->listRowHeightSpinBox->value() != originalConfig.listRowHeight) ||
-          ((ui->listRowColorEdit) &&
-           ui->listRowColorEdit->text().trimmed() != originalConfig.listRowColor) ||
-          ((ui->listAltRowColorEdit) &&
-           ui->listAltRowColorEdit->text().trimmed() != originalConfig.listAltRowColor) ||
-          ((ui->customFontEdit) &&
-           ui->customFontEdit->text().trimmed() != originalConfig.customFontFamily));
+  const CollectionConfig &o = originalCollection;
+  return spinIntChanged(ui->listFontSizeSpinBox, o.listFontSize) ||
+         spinIntChanged(ui->listRowHeightSpinBox, o.listRowHeight) ||
+         lineTrimmedChanged(ui->listRowColorEdit, o.listRowColor) ||
+         lineTrimmedChanged(ui->listAltRowColorEdit, o.listAltRowColor) ||
+         lineTrimmedChanged(ui->customFontEdit, o.customFontFamily);
 }
 
 // Checks background field changes
 auto SettingsDialog::checkBackgroundChanges() const -> bool {
   const CollectionConfig &originalConfig = originalCollection;
-  // Check background type — must include the Video radio (Kartend-vbs) so
+  // Check background type — must include the Video radio so
   // toggling between Color/Image/Video correctly dirties the dialog.
   if (ui->backgroundImageRadio && ui->backgroundColorRadio) {
     BackgroundType currentType = BackgroundType::Color;
@@ -614,7 +580,7 @@ auto SettingsDialog::checkBackgroundChanges() const -> bool {
 }
 
 auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
-  // Kartend-p1jd: launcher presets are mutated directly on m_generalSettings
+  // launcher presets are mutated directly on m_generalSettings
   // (no per-control widgets), so compare the live list against the saved
   // baseline up front. Earlier guard so a preset edit always dirties the
   // dialog even when no other field changed.
@@ -637,20 +603,37 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
       ui->bootSplashCheckBox->isChecked() != m_originalGeneralSettings.bootSplashEnabled) {
     return true;
   }
-  // Kartend-y3ke + Kartend-wcow: startup video fields participate in the
+  // +: startup video fields participate in the
   // dirty-check comparison so the save button reflects unsaved edits.
-  if (ui->startupVideoEnabledCheckBox &&
-      ui->startupVideoEnabledCheckBox->isChecked() !=
-          m_originalGeneralSettings.startupVideoEnabled) {
+  if (ui->startupVideoEnabledCheckBox && ui->startupVideoEnabledCheckBox->isChecked() !=
+                                             m_originalGeneralSettings.startupVideoEnabled) {
     return true;
   }
-  if (ui->startupVideoPathLineEdit &&
-      ui->startupVideoPathLineEdit->text().trimmed() !=
-          m_originalGeneralSettings.startupVideoPath.trimmed()) {
+  if (ui->startupVideoPathLineEdit && ui->startupVideoPathLineEdit->text().trimmed() !=
+                                          m_originalGeneralSettings.startupVideoPath.trimmed()) {
     return true;
   }
   if (ui->resumeFocusSplashCheckBox && ui->resumeFocusSplashCheckBox->isChecked() !=
                                            m_originalGeneralSettings.resumeFocusSplashEnabled) {
+    return true;
+  }
+  if (ui->bootSplashTitleLineEdit && ui->bootSplashTitleLineEdit->text().trimmed() !=
+                                         m_originalGeneralSettings.bootSplashTitle.trimmed()) {
+    return true;
+  }
+  if (ui->bootSplashSubtitleLineEdit &&
+      ui->bootSplashSubtitleLineEdit->text().trimmed() !=
+          m_originalGeneralSettings.bootSplashSubtitle.trimmed()) {
+    return true;
+  }
+  if (ui->resumeFocusSplashTitleLineEdit &&
+      ui->resumeFocusSplashTitleLineEdit->text().trimmed() !=
+          m_originalGeneralSettings.resumeFocusSplashTitle.trimmed()) {
+    return true;
+  }
+  if (ui->resumeFocusSplashSubtitleLineEdit &&
+      ui->resumeFocusSplashSubtitleLineEdit->text().trimmed() !=
+          m_originalGeneralSettings.resumeFocusSplashSubtitle.trimmed()) {
     return true;
   }
   if (ui->runtimeDetectionCheckBox && ui->runtimeDetectionCheckBox->isChecked() !=
@@ -757,7 +740,7 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
           m_originalGeneralSettings.attractModeAdvanceSelectionRandom) {
     return true;
   }
-  // Kartend-81o: customizable toolbar fields.
+  // customizable toolbar fields.
   if (ui->toolbarGridViewVisibleCheckBox &&
       ui->toolbarGridViewVisibleCheckBox->isChecked() !=
           m_originalGeneralSettings.toolbarShowGridViewButton) {
@@ -828,7 +811,7 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
       ui->toolbarTitleFilterTextEdit->text() != m_originalGeneralSettings.toolbarTitleFilterText) {
     return true;
   }
-  // Kartend-1v6: artwork-cycle modifier dropdown.
+  // artwork-cycle modifier dropdown.
   if (ui->artworkCycleModifierComboBox && ui->artworkCycleModifierComboBox->currentData().toInt() !=
                                               m_originalGeneralSettings.artworkCycleModifier) {
     return true;

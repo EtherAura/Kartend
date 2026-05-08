@@ -13,7 +13,7 @@ class QVideoFrame;
 class QVideoSink;
 QT_END_NAMESPACE
 
-/// Kartend-vbs: looping muted video painted to fill the items viewport, used
+/// looping muted video painted to fill the items viewport, used
 /// as a per-collection background. Renders frames via QVideoSink into the
 /// widget's own paintEvent (cover-fit, KeepAspectRatioByExpanding) so the
 /// video covers the rect regardless of source aspect ratio. Transparent for

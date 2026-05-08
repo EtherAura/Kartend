@@ -12,7 +12,7 @@
 // All functions are stateless and free of Qt object dependencies. They take
 // their inputs explicitly so tests can construct minimal fixtures.
 //
-// See bd Kartend-tty for the broader extraction effort.
+// See bd for the broader extraction effort.
 namespace NavigationHelpers {
 
 // Walks the parentCollectionIndex chain and returns 1-based depth.

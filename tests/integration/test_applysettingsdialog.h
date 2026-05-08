@@ -1,6 +1,6 @@
 /**
  * @file test_applysettingsdialog.h
- * @brief Kartend-iyk: integration tests for the per-category Apply Settings
+ * @brief: integration tests for the per-category Apply Settings
  *        dialog and the mask-aware copy used by SettingsDialog.
  *
  * Exercises the FieldCategory enum, the dialog's source-combo behaviour in

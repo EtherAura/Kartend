@@ -7,6 +7,7 @@
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "detailpagemanager.h"
+#include "detailspanemanager.h"
 #include "interactionmanager.h"
 #include "kartmanager.h"
 #include "navigationmanager.h"
@@ -14,7 +15,6 @@
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
-#include "detailspanemanager.h"
 
 #include <QtConcurrent>
 
@@ -58,7 +58,7 @@ void ApplicationManager::initialize() {
   // 6. DatabaseManager (needs SessionManager)
   m_databaseManager = std::make_unique<DatabaseManager>(m_sessionManager.get(), this);
 
-  // 6b. PlaylistManager (Kartend-vlm7) — opens its own main-thread connection
+  // 6b. PlaylistManager — opens its own main-thread connection
   // on the same media.db. Construction is fast; initialize() does the I/O and
   // is called by MainWindow before loadCollections() so synthesized playlist
   // CollectionConfigs can be appended to m_collections in the same setup pass.
@@ -77,12 +77,12 @@ void ApplicationManager::initialize() {
   // 10. InteractionManager
   m_interactionManager = std::make_unique<InteractionManager>(this);
 
-  // 11. DetailPageManager (Kartend-uve). Standalone — only depends on the
+  // 11. DetailPageManager. Standalone — only depends on the
   // overlay widget + DetailsPaneManager + DatabaseManager, all of which are
   // wired in MainWindow::setupManagerConnections via the setup struct.
   m_detailPageManager = std::make_unique<DetailPageManager>(this);
 
-  // 12. KartManager (Kartend-zgaq). Coordinates Kart import/export. Wired in
+  // 12. KartManager. Coordinates Kart import/export. Wired in
   // MainWindow::setupManagerConnections with SettingsManager + collection list
   // accessors via the setup struct.
   m_kartManager = std::make_unique<kart::KartManager>(this);
@@ -191,4 +191,6 @@ DetailsPaneManager *ApplicationManager::getDetailsPaneManager() const {
   return m_detailsPaneManager.get();
 }
 
-kart::KartManager *ApplicationManager::getKartManager() const { return m_kartManager.get(); }
+kart::KartManager *ApplicationManager::getKartManager() const {
+  return m_kartManager.get();
+}

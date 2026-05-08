@@ -11,7 +11,7 @@ class QTableWidget;
 QT_END_NAMESPACE
 
 /// Per-item dialog for editing user-defined custom metadata fields
-/// (Kartend-hpln). Operates on an in-memory `CustomFieldList`; the caller is
+/// Operates on an in-memory `CustomFieldList`; the caller is
 /// responsible for persisting via `DatabaseManager::saveItemMetadata()`.
 ///
 /// The dialog accepts whatever the user types — empty/duplicate keys are

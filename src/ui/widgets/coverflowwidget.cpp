@@ -1,4 +1,4 @@
-// Kartend-3ile: Cover-flow view mode implementation.
+// Cover-flow view mode implementation.
 
 #include "coverflowwidget.h"
 #include "videopreviewwidget.h"
@@ -628,6 +628,11 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
     t.translate(-c.rect.center().x(), -c.rect.center().y());
     painter.setTransform(t, true);
 
+    // Scale the source pixmap once and reuse it for both the reflection
+    // and the card itself. Was being computed twice with identical args
+    // — meaningful at kVisibleSideCards=5 cards * 60fps glide animation.
+    const QPixmap scaled = pm.scaled(c.rect.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
     // Paint reflection underneath (a flipped, faded copy) for the iTunes
     // look — only for the center-ish band to keep paint cost low.
     if (absDelta < 1.5) {
@@ -639,7 +644,6 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
       flip.scale(1.0, -0.5);
       flip.translate(-refl.center().x(), -refl.top());
       painter.setTransform(flip, true);
-      QPixmap scaled = pm.scaled(c.rect.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
       QRect target = c.rect;
       target.moveCenter(c.rect.center());
       painter.drawPixmap(target, scaled);
@@ -651,8 +655,7 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
       painter.fillRect(refl, g);
     }
 
-    // The card itself: scaled to fit the target rect, with corner radius.
-    QPixmap scaled = pm.scaled(c.rect.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    // The card itself: same scaled pixmap, with corner radius.
     QRect target = scaled.rect();
     target.moveCenter(c.rect.center());
     if (m_cornerRadius > 0) {
@@ -976,12 +979,7 @@ QPixmap CoverFlowWidget::pixmapForIndex(int idx) {
   } else {
     // Gallery override path — load it directly into the cache.
     if (!m_pendingLoads.contains(path)) {
-      auto *watcher = new QFutureWatcher<QPixmap>(this);
-      m_pendingLoads.insert(path, watcher);
-      connect(watcher, &QFutureWatcher<QPixmap>::finished, this, &CoverFlowWidget::onArtworkLoaded);
-      const int target = cardSize();
-      watcher->setFuture(
-          QtConcurrent::run([path, target]() { return loadAndScale(path, target); }));
+      startArtworkLoad(path);
     }
   }
   int sz = cardSize();
@@ -996,40 +994,27 @@ void CoverFlowWidget::requestArtworkLoad(int idx) {
   if (path.isEmpty() || m_pendingLoads.contains(path) || m_pixmapCache.contains(path)) {
     return;
   }
-  auto *watcher = new QFutureWatcher<QPixmap>(this);
-  m_pendingLoads.insert(path, watcher);
-  connect(watcher, &QFutureWatcher<QPixmap>::finished, this, &CoverFlowWidget::onArtworkLoaded);
-  int target = cardSize();
-  watcher->setFuture(QtConcurrent::run([path, target]() { return loadAndScale(path, target); }));
+  startArtworkLoad(path);
 }
 
-void CoverFlowWidget::onArtworkLoaded() {
-  // QFutureWatcher<T> doesn't have Q_OBJECT, so qobject_cast doesn't work.
-  // The base type QFutureWatcherBase is what carries the QObject identity;
-  // we recover the typed pointer by reverse-looking through m_pendingLoads.
-  auto *senderObj = sender();
-  if (!senderObj) {
-    return;
-  }
-  QString matchedPath;
-  QFutureWatcher<QPixmap> *watcher = nullptr;
-  for (auto it = m_pendingLoads.begin(); it != m_pendingLoads.end(); ++it) {
-    if (static_cast<QObject *>(it.value()) == senderObj) {
-      matchedPath = it.key();
-      watcher = it.value();
-      m_pendingLoads.erase(it);
-      break;
+void CoverFlowWidget::startArtworkLoad(const QString &path) {
+  // Capture path in the finished lambda so we don't have to reverse-look-up
+  // the watcher from sender() — QFutureWatcher<T> isn't Q_OBJECT, so a
+  // qobject_cast doesn't work and the previous code linearly scanned
+  // m_pendingLoads to recover the typed pointer.
+  auto *watcher = new QFutureWatcher<QPixmap>(this);
+  m_pendingLoads.insert(path, watcher);
+  const int target = cardSize();
+  connect(watcher, &QFutureWatcher<QPixmap>::finished, this, [this, watcher, path]() {
+    m_pendingLoads.remove(path);
+    const QPixmap pm = watcher->result();
+    watcher->deleteLater();
+    if (!pm.isNull()) {
+      m_pixmapCache.insert(path, pm);
+      update();
     }
-  }
-  if (!watcher) {
-    return;
-  }
-  QPixmap pm = watcher->result();
-  watcher->deleteLater();
-  if (!matchedPath.isEmpty() && !pm.isNull()) {
-    m_pixmapCache.insert(matchedPath, pm);
-    update();
-  }
+  });
+  watcher->setFuture(QtConcurrent::run([path, target]() { return loadAndScale(path, target); }));
 }
 
 void CoverFlowWidget::prunePixmapCache() {
@@ -1060,16 +1045,12 @@ QPixmap CoverFlowWidget::buildPlaceholderPixmap(int width, int height) const {
   if (width <= 0 || height <= 0) {
     return {};
   }
-  static QPixmap cache;
-  static quint64 cacheKey = 0;
-  static int cachedRadius = 0;
-  static QString cachedTile;
   QColor base = tileColorOrFallback();
   quint64 key = (static_cast<quint64>(width) << 48) | (static_cast<quint64>(height) << 32) |
                 (static_cast<quint64>(base.rgba()) & 0xffffffffULL);
-  if (!cache.isNull() && cacheKey == key && cachedRadius == m_cornerRadius &&
-      cachedTile == m_tileColor) {
-    return cache;
+  if (!m_placeholderCache.isNull() && m_placeholderCacheKey == key &&
+      m_placeholderCachedRadius == m_cornerRadius && m_placeholderCachedTile == m_tileColor) {
+    return m_placeholderCache;
   }
 
   QPixmap pixmap(width, height);
@@ -1122,9 +1103,9 @@ QPixmap CoverFlowWidget::buildPlaceholderPixmap(int width, int height) const {
     pixmap = masked;
   }
 
-  cache = pixmap;
-  cacheKey = key;
-  cachedRadius = m_cornerRadius;
-  cachedTile = m_tileColor;
+  m_placeholderCache = pixmap;
+  m_placeholderCacheKey = key;
+  m_placeholderCachedRadius = m_cornerRadius;
+  m_placeholderCachedTile = m_tileColor;
   return pixmap;
 }

@@ -343,7 +343,7 @@ void TestDbMigrations::v7AddsUsageStatsColumnAndIndexes() {
   DbMigrations::applySchemaMigrations(db, "test");
 
   QCOMPARE(getUserVersion(db), 10);
-  // Cumulative play-time column added in v7 (Kartend-7vi).
+  // Cumulative play-time column added in v7.
   QVERIFY(tableHasColumn(db, "items", "total_play_seconds"));
   // Indexes used by the Most-played / Recently-played dialog tabs.
   QVERIFY(indexExists(db, "idx_items_last_played"));
@@ -359,7 +359,7 @@ void TestDbMigrations::v8AddsLauncherIndexColumn() {
   DbMigrations::applySchemaMigrations(db, "test");
 
   QCOMPARE(getUserVersion(db), 10);
-  // Per-item launcher override column added in v8 (Kartend-dnx4).
+  // Per-item launcher override column added in v8.
   QVERIFY(tableHasColumn(db, "item_metadata", "launcher_index"));
 
   closeAndRemove(db, conn);
@@ -372,7 +372,7 @@ void TestDbMigrations::v9AddsLaunchHistoryTable() {
   DbMigrations::applySchemaMigrations(db, "test");
 
   QCOMPARE(getUserVersion(db), 10);
-  // Append-only history table added in v9 (Kartend-fse).
+  // Append-only history table added in v9.
   QVERIFY(tableExists(db, "launch_history"));
   QVERIFY(tableHasColumn(db, "launch_history", "id"));
   QVERIFY(tableHasColumn(db, "launch_history", "collection_uuid"));
@@ -397,7 +397,7 @@ void TestDbMigrations::v9AddsLaunchHistoryTable() {
 }
 
 void TestDbMigrations::v10AddsPlaylistTables() {
-  // Kartend-vlm7: playlists + playlist_items added in v10. Both tables and
+  // playlists + playlist_items added in v10. Both tables and
   // their lookup indexes must exist after migration; the FK cascade on
   // playlist_items.playlist_id is exercised end-to-end in
   // test_playlistmanager.cpp's deletePlaylist_cascadesItems().

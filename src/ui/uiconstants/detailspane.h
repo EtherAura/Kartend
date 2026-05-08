@@ -4,7 +4,7 @@
 namespace UIConstants {
 
 // =============================================================================
-// DetailsPane (Kartend-u2gx introduced the rename; Kartend-vyeq promoted the
+// DetailsPane (introduced the rename; promoted the
 // namespace to UIConstants::DetailsPane.)
 // Details-pane dimensions and timing.
 // =============================================================================
@@ -13,9 +13,9 @@ namespace DetailsPane {
 inline constexpr int MIN_WIDTH = 150;
 /// Default details-pane width when first shown (Left/Right dock).
 inline constexpr int FIXED_WIDTH = 300;
-/// Kartend-u2gx: minimum details-pane height in pixels (Top/Bottom dock).
+/// minimum details-pane height in pixels (Top/Bottom dock).
 inline constexpr int MIN_HEIGHT = 120;
-/// Kartend-u2gx: default details-pane height in pixels (Top/Bottom dock).
+/// default details-pane height in pixels (Top/Bottom dock).
 inline constexpr int FIXED_HEIGHT = 280;
 /// Margin around details-pane content.
 inline constexpr int MARGIN = 0;
@@ -31,7 +31,7 @@ inline constexpr int LAYOUT_NOTIFY_DELAY_MS = 100;
 inline constexpr int INITIAL_CENTER_SCROLL_DELAY_MS = 50;
 /// Delay after selection settles before starting preview video playback.
 inline constexpr int VIDEO_PREVIEW_DEBOUNCE_MS = 500;
-/// Kartend-u2gx: width of the resize grip on the inner edge (px). Has to be
+/// width of the resize grip on the inner edge (px). Has to be
 /// wide enough to be a forgiving target but narrow enough that it doesn't
 /// eat clicks aimed at controls near the inner edge (gallery edit button,
 /// metadata buttons). 8 strikes the balance — also paired with an event

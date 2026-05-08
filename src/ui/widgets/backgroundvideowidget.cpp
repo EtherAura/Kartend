@@ -1,4 +1,4 @@
-// Kartend-vbs: per-collection background video. Mirrors VideoPreviewWidget's
+// per-collection background video. Mirrors VideoPreviewWidget's
 // QVideoSink-based pipeline (frames decoded into a QImage, painted via
 // paintEvent) but is tuned for the items viewport: always muted, cover-fit
 // scaling, mouse-event transparent, and no QAudioOutput attached so the

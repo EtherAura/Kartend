@@ -13,7 +13,7 @@ class QWidget;
 
 /**
  * @brief Owns the data-source sub-managers extracted from ScrollManager
- * (Kartend-gg2).
+ *.
  *
  * Bundles four concerns previously held directly by ScrollManager:
  *  - FilterManager (search/subcollection filtering)

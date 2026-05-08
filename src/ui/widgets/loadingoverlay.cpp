@@ -44,9 +44,9 @@ protected:
     QRect spinnerRect(offset, offset, SPINNER_SIZE, SPINNER_SIZE);
 
     painter.save();
-    painter.translate(width() / 2, height() / 2);
+    painter.translate(width() / 2.0, height() / 2.0);
     painter.rotate(m_angle);
-    painter.translate(-width() / 2, -height() / 2);
+    painter.translate(-width() / 2.0, -height() / 2.0);
 
     // Draw background arc
     QPen bgPen(SPINNER_BG_COLOR, SPINNER_THICKNESS, Qt::SolidLine, Qt::RoundCap);

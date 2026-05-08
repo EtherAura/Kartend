@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+#
+# Pre-commit hook for Kartend.
+#
+# Two cheap-to-run checks that catch the bulk of "I forgot to ..." mistakes:
+#   1. clang-format on staged .cpp/.h files (fail on drift, not auto-fix)
+#   2. version consistency: VERSION ↔ PKGBUILD pkgver= ↔ ebuild filename ↔
+#      AppStream metainfo's most-recent <release> entry
+#
+# Install with: .scripts/git-hooks/install.sh
+#
+# Bypass for emergencies: git commit --no-verify (but please don't habituate).
+
+set -euo pipefail
+
+# Run from repo root regardless of where the user invoked git.
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+red()    { printf '\033[31m%s\033[0m\n' "$*"; }
+yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
+green()  { printf '\033[32m%s\033[0m\n' "$*"; }
+
+fail=0
+
+# ── 1. clang-format on staged .cpp/.h ────────────────────────────────────────
+# Only check files that exist in the index (skip deletions). --diff-filter=ACM
+# == Added / Copied / Modified.
+mapfile -d '' STAGED_SRC < <(
+  git diff --cached --name-only --diff-filter=ACM -z -- '*.cpp' '*.h'
+)
+
+if [ ${#STAGED_SRC[@]} -gt 0 ]; then
+  if command -v clang-format >/dev/null 2>&1; then
+    drift=()
+    for file in "${STAGED_SRC[@]}"; do
+      [ -n "$file" ] || continue
+      if ! clang-format --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
+        drift+=("$file")
+      fi
+    done
+    if [ ${#drift[@]} -gt 0 ]; then
+      red "clang-format drift detected in $(printf '%d' "${#drift[@]}") staged file(s):"
+      printf '  %s\n' "${drift[@]}"
+      yellow "Run '.scripts/build.sh --maintenance --format-apply' to auto-fix, then re-stage."
+      fail=1
+    fi
+  else
+    yellow "Skipping clang-format check: clang-format not on PATH."
+  fi
+fi
+
+# ── 2. Version consistency ───────────────────────────────────────────────────
+# Cheap to run on every commit; catches the case where someone bumps PKGBUILD
+# but forgets the metainfo entry (or vice versa). Only enforces consistency,
+# not a particular value — that's the release.yml job at tag time.
+if [ -f VERSION ]; then
+  CANONICAL="$(tr -d '[:space:]' < VERSION)"
+
+  if [ -f PKGBUILD ]; then
+    PKGVER="$(awk -F= '/^pkgver=/ { print $2; exit }' PKGBUILD)"
+    if [ "$PKGVER" != "$CANONICAL" ]; then
+      red "PKGBUILD pkgver='$PKGVER' but VERSION='$CANONICAL'"
+      fail=1
+    fi
+  fi
+
+  if ! ls "kartend-${CANONICAL}.ebuild" >/dev/null 2>&1; then
+    red "ebuild filename mismatch: expected kartend-${CANONICAL}.ebuild, found:"
+    ls kartend-*.ebuild 2>/dev/null | sed 's/^/  /' || echo "  (none)"
+    fail=1
+  fi
+
+  METAINFO="src/assets/io.github.EtherAura.Kartend.metainfo.xml"
+  if [ -f "$METAINFO" ]; then
+    METAVER="$(awk 'match($0, /<release[[:space:]]+version="([^"]+)"/, a) { print a[1]; exit }' "$METAINFO")"
+    if [ "$METAVER" != "$CANONICAL" ]; then
+      red "AppStream metainfo most-recent <release> version='$METAVER' but VERSION='$CANONICAL'"
+      yellow "  Run '.scripts/bump-version.sh ${CANONICAL}' to add the missing entry."
+      fail=1
+    fi
+  fi
+fi
+
+if [ "$fail" -ne 0 ]; then
+  red "Pre-commit checks failed. Bypass with 'git commit --no-verify' if you really mean it."
+  exit 1
+fi
+
+green "Pre-commit checks passed."
+exit 0

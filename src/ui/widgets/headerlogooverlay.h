@@ -17,7 +17,7 @@ class QVideoFrame;
 class QVideoSink;
 QT_END_NAMESPACE
 
-/// Kartend-guo5: per-collection toolbar logo. Lives as a real layout member
+/// per-collection toolbar logo. Lives as a real layout member
 /// of the items top bar so the chosen anchor — leftmost / center / rightmost
 /// — pushes neighbouring controls aside rather than overlapping them.
 ///

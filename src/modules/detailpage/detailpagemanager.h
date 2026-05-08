@@ -10,7 +10,7 @@ class DetailsPaneManager;
 struct ApplicationContext;
 
 /**
- * @brief Coordinates the Kartend-uve item detail page.
+ * @brief Coordinates the item detail page.
  *
  * Owns no widget itself — the `DetailPageOverlay` is created by MainWindow
  * (parented to the central widget so it can cover the full window) and

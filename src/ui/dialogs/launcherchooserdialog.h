@@ -10,7 +10,7 @@ class QListWidget;
 QT_END_NAMESPACE
 
 /// Modal launcher picker shown when a collection has more than one launcher
-/// configured (Kartend-bdl). Lists each launcher's display name; Enter or
+/// configured. Lists each launcher's display name; Enter or
 /// double-click on the selected row launches with that launcher; Escape
 /// cancels.
 ///

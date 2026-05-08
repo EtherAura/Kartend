@@ -19,6 +19,7 @@
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "detailspanemanager.h"
 #include "gridlayoutcalculator.h"
 #include "gridutils.h"
 #include "interactionstateholder.h"
@@ -27,7 +28,6 @@
 #include "mousemanager.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
-#include "detailspanemanager.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
@@ -47,7 +47,8 @@ SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, ViewportManager *, ViewportManager,
 SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, SelectionManager *, SelectionManager, selectionManager)
 SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
 SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, DatabaseManager *, DatabaseManager, databaseManager)
-SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
+SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, DetailsPaneManager *, DetailsPaneManager,
+                          detailsPaneManager)
 SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
 SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QWidget *, GridContainer, gridContainer)
 SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)

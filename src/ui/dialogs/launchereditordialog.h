@@ -13,14 +13,14 @@ class QLineEdit;
 class QWidget;
 QT_END_NAMESPACE
 
-/// Modal editor for a single LauncherConfig entry (Kartend-bdl). Used by the
+/// Modal editor for a single LauncherConfig entry. Used by the
 /// Settings dialog's Additional Launchers list to add or edit a launcher.
 /// Validation is intentionally minimal here — the Save path on the parent
 /// settings dialog re-runs PathUtils::validatePathSecurity on the launcher
 /// and core paths before persistence, mirroring how the primary launcher is
 /// validated.
 ///
-/// Kartend-p1jd: when launched with a non-empty `availablePresets` list, the
+/// when launched with a non-empty `availablePresets` list, the
 /// dialog shows a "Use preset" combo. Picking a preset fills the form
 /// fields from the preset and disables them; the saved LauncherConfig
 /// carries the preset id so the reference round-trips. Picking "Inline" or
@@ -41,7 +41,7 @@ public:
 private slots:
   void onBrowseLauncher();
   void onBrowseCore();
-  /// Kartend-p1jd: react to the user picking a preset in the combo —
+  /// react to the user picking a preset in the combo —
   /// fills/clears the field values and toggles edit-ability.
   void onPresetChanged(int comboIndex);
 
@@ -50,7 +50,7 @@ private:
   /// `presetIndex` is an index into `m_availablePresets`; -1 means "Inline".
   void applyPresetSelection(int presetIndex);
 
-  /// Kartend-bafi: hide the Core Path row unless the launcher path resolves
+  /// hide the Core Path row unless the launcher path resolves
   /// to retroarch. Other launchers don't take a libretro core, so the field
   /// is noise.
   void updateCoreRowVisibility();

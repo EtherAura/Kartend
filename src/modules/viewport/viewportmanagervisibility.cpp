@@ -34,7 +34,7 @@ void ViewportManager::ensureHorizontallyVisible(int index) {
     return;
   }
 
-  // Kartend-dx9t: in Horizontal view "ensure horizontally visible" reduces to
+  // in Horizontal view "ensure horizontally visible" reduces to
   // a no-op — the item's column always fits in the viewport's height, and the
   // long-axis scrolling is handled by centerItemVertically (which dispatches
   // to the horizontal scrollbar in this mode).
@@ -107,7 +107,7 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
     return;
   }
 
-  // Kartend-dx9t: in Horizontal view, "ensure visible" defers to the
+  // in Horizontal view, "ensure visible" defers to the
   // horizontal-axis centering path — the only scroll axis there.
   if (m_scrollManager && m_scrollManager->getMetrics().isHorizontal) {
     Q_UNUSED(allowHorizontalScroll);
@@ -291,7 +291,7 @@ void ViewportManager::applyImmediateViewportPositioningForSelection(int targetIn
     return;
   }
 
-  // Kartend-dx9t: in Horizontal mode, snap the horizontal scrollbar so the
+  // in Horizontal mode, snap the horizontal scrollbar so the
   // wrapped selection is centered along the long axis. Vertical position is
   // unused (column always visible).
   if (m_scrollManager && m_scrollManager->getMetrics().isHorizontal) {

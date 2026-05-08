@@ -112,7 +112,7 @@ void ItemWidget::setAsVirtualFolder(const QString &folderPath, const QString &di
 void ItemWidget::setItemName(const QString &name) {
   const bool nameChanged = (itemName != name);
   itemName = name;
-  // Kartend-skd9: the placeholder-art title overlay is baked into the
+  // the placeholder-art title overlay is baked into the
   // pixmap by onArtworkChanged(). configureBaseWidget calls onArtworkChanged
   // once with an empty itemName (during resetForReuse), and the dimension-
   // driven re-render is gated by setItemDimensions's "same dimensions" early
@@ -138,7 +138,7 @@ void ItemWidget::setItemName(const QString &name) {
     } else if (m_isSubcollection) {
       shouldShowTitle = !m_hideSubcollectionTitles;
     } else {
-      // Kartend-029m: hideTitles is a grid-mode concern. In list mode the row
+      // hideTitles is a grid-mode concern. In list mode the row
       // IS the title -- suppressing it leaves a blank row with no fallback.
       shouldShowTitle = m_isListMode || !m_hideTitles;
     }

@@ -1,4 +1,4 @@
-// Unit tests for TitleFilter (Kartend-5h6).
+// Unit tests for TitleFilter.
 //
 // TitleFilter is the per-collection title-cleanup engine consumed by the
 // DatabaseManager interception path. These tests exercise the public surface:

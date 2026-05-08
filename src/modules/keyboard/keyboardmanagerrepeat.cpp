@@ -43,7 +43,7 @@ void KeyboardManager::beginHoldRepeat() {
   } else {
     baseInterval = m_generalSettings ? m_generalSettings->keyboardRepeatIntervalMs : 260;
   }
-  // Kartend-9cl: scale the key-repeat cadence by the global scroll-velocity
+  // scale the key-repeat cadence by the global scroll-velocity
   // multiplier. Higher multiplier → shorter interval → more items/second
   // while the arrow key is held. Guard against zero-division and clamp the
   // effective interval to at least 10ms to avoid saturating the event loop.

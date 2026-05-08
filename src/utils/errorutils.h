@@ -8,7 +8,7 @@
 
 namespace ErrorUtils {
 
-// Cross-cutting error logging channel (Kartend-v3v). Defined inline so
+// Cross-cutting error logging channel. Defined inline so
 // any translation unit that includes errorutils.h — including small test
 // targets that don't link loggingcategories.cpp — picks up the definition.
 // Always-on at info level so centralized error reports surface in release
@@ -136,7 +136,13 @@ public:
   [[nodiscard]] bool isOk() const { return m_value.has_value(); }
   [[nodiscard]] bool isError() const { return !m_value.has_value(); }
 
+  // Precondition: isOk() must be true. std::optional::value() throws
+  // std::bad_optional_access on the error path, which surfaces precondition
+  // violations as exceptions instead of UB. Callers that haven't checked
+  // isOk() first are at fault; valueOr() is the safe alternative.
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
   [[nodiscard]] const T &value() const { return m_value.value(); }
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
   [[nodiscard]] T &value() { return m_value.value(); }
   [[nodiscard]] T valueOr(T defaultValue) const {
     return m_value.value_or(std::move(defaultValue));

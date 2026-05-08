@@ -7,6 +7,7 @@
 #include "artworkmanager.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
+#include "detailspanemanager.h"
 #include "emptystatewidget.h"
 #include "errordialog.h"
 #include "interactionmanager.h"
@@ -21,9 +22,7 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "detailspanemanager.h"
 #include "timerutils.h"
-#include "ui_mainwindow.h"
 #include "uiconstants.h"
 
 #include <algorithm>
@@ -31,6 +30,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QLabel>
+#include <QLineEdit>
 #include <QLoggingCategory>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -63,7 +63,7 @@ auto NavigationManager::loadCollectionData(int collectionIndex) -> void {
     if (m_generalSettings) {
       context.sortMode = m_generalSettings->sortMode;
       context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
-      // Kartend-dd8: mirror toolbar filters so the scroll pipeline can drop
+      // mirror toolbar filters so the scroll pipeline can drop
       // subcollection tiles whose effective type doesn't match the active
       // filter, or hide them entirely.
       context.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
@@ -71,7 +71,7 @@ auto NavigationManager::loadCollectionData(int collectionIndex) -> void {
     }
 
     bool hasMediaDirectory = !context.config.mediaDirectory.trimmed().isEmpty();
-    // Kartend-vlm7: a playlist has no mediaDirectory but its items live in
+    // a playlist has no mediaDirectory but its items live in
     // playlist_items rather than on disk, so it still wants the full count +
     // range fetch path. Treat it as "has data" so we don't fall through to
     // the empty-emit branch.
@@ -163,7 +163,7 @@ auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &con
   if (m_generalSettings) {
     minimalContext.sortMode = m_generalSettings->sortMode;
     minimalContext.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
-    // Kartend-dd8: minimal context still needs the toolbar filter so the
+    // minimal context still needs the toolbar filter so the
     // immediate cached viewport hides the same tiles the full reload would.
     minimalContext.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
     minimalContext.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
@@ -279,7 +279,7 @@ CollectionContext NavigationManager::buildExpandedContextForIndex(int collection
   if (m_generalSettings) {
     context.sortMode = m_generalSettings->sortMode;
     context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
-    // Kartend-dd8: toolbar filter mirroring (see load context above).
+    // toolbar filter mirroring (see load context above).
     context.collectionTypeFilter = m_generalSettings->collectionTypeFilter;
     context.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
   }

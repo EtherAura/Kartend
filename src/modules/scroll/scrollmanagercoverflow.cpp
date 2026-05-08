@@ -1,4 +1,4 @@
-// Kartend-3ile: ScrollManager glue for the CoverFlow ViewType.
+// ScrollManager glue for the CoverFlow ViewType.
 //
 // CoverFlowWidget lives as a sibling of gridContainer in the items page
 // scroll-area layout. When the active collection's view type is CoverFlow we
@@ -18,7 +18,7 @@
 #include "databasemanager.h"
 #include "filtermanager.h"
 #include "itemartwork.h"
-#include "mainwindow.h"
+#include "textzoom.h"
 #include "pathutils.h"
 #include "scrolldatamanager.h"
 #include "videoutils.h"
@@ -105,8 +105,8 @@ void ScrollManager::applyCoverFlowConfig() {
   m_coverFlowWidget->setSelectionColor(cfg.selectionColor);
   m_coverFlowWidget->setBackgroundColor(cfg.backgroundColor);
   m_coverFlowWidget->setHideTitles(cfg.hideTitles);
-  // Kartend-7eff: scale the cover-flow caption alongside grid/list items.
-  m_coverFlowWidget->setFontSize(MainWindow::zoomedFontSize(cfg.fontSize));
+  // scale the cover-flow caption alongside grid/list items.
+  m_coverFlowWidget->setFontSize(TextZoom::zoomedFontSize(cfg.fontSize));
   m_coverFlowWidget->setFontFamily(cfg.customFontFamily);
 }
 

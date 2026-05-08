@@ -1,4 +1,4 @@
-// Kartend-guo5: per-collection toolbar logo. Layout member of the items top
+// per-collection toolbar logo. Layout member of the items top
 // bar — the chosen anchor (TopLeft / TopCenter / TopRight) decides where in
 // the QHBoxLayout NavigationManager inserts the widget; the widget itself
 // just paints whatever the active source last produced.
@@ -49,7 +49,9 @@ HeaderLogoOverlay::HeaderLogoOverlay(QWidget *parent) : QWidget(parent) {
   setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 }
 
-HeaderLogoOverlay::~HeaderLogoOverlay() { teardownMedia(); }
+HeaderLogoOverlay::~HeaderLogoOverlay() {
+  teardownMedia();
+}
 
 HeaderLogoOverlay::MediaKind HeaderLogoOverlay::detectKind(const QString &path) {
   static const QStringList videoExt = {"mp4", "webm", "mkv", "mov", "avi", "m4v"};
@@ -222,8 +224,7 @@ void HeaderLogoOverlay::paintEvent(QPaintEvent *event) {
   }
   QPainter painter(this);
   painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-  QPixmap scaled =
-      m_pixmap.scaled(rect().size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+  QPixmap scaled = m_pixmap.scaled(rect().size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
   const int x = (rect().width() - scaled.width()) / 2;
   const int y = (rect().height() - scaled.height()) / 2;
   painter.drawPixmap(x, y, scaled);

@@ -110,7 +110,7 @@ auto SettingsDialog::createTreeItem(int collectionIndex, QTreeWidgetItem *parent
       (parent) ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(collectionTreeWidget);
   item->setText(0, collections[collectionIndex].name);
   item->setFlags(item->flags() | Qt::ItemIsEditable);
-  // Kartend-gzmk: Qt::UserRole flag distinguishes the canonical row (false)
+  // Qt::UserRole flag distinguishes the canonical row (false)
   // from linked-appearance mirrors (true). Most slots branch on this flag.
   item->setData(0, Qt::UserRole, false);
   itemToCollectionIndex[item] = collectionIndex;
@@ -259,7 +259,7 @@ void SettingsDialog::onTreeItemChanged(QTreeWidgetItem *item, int column) {
   if (column != 0 || !itemToCollectionIndex.contains(item)) {
     return;
   }
-  // Kartend-gzmk: rename only fires for the canonical row. Linked mirrors
+  // rename only fires for the canonical row. Linked mirrors
   // are flagged read-only via ItemIsEditable, but defensively skip if a
   // signal sneaks in.
   if (item->data(0, Qt::UserRole).toBool()) {
@@ -278,7 +278,7 @@ void SettingsDialog::onTreeItemChanged(QTreeWidgetItem *item, int column) {
     collections[collectionIndex].name = newName;
     m_workingCollections[collectionIndex].name = newName;
 
-    // Kartend-gzmk: rename in-place propagates to linked mirrors so they
+    // rename in-place propagates to linked mirrors so they
     // don't drift, and rewrites references in other collections'
     // additionalParentNames so links survive the rename.
     for (QTreeWidgetItem *linked : collectionIndexToLinkedItems.value(collectionIndex)) {
@@ -471,31 +471,12 @@ void SettingsDialog::updateParentCollectionComboBox(int currentIndex) {
 
 auto SettingsDialog::wouldCreateCircularReference(int childIndex, int potentialParentIndex) const
     -> bool {
-  if (childIndex < 0 || childIndex >= collections.size() || potentialParentIndex < 0 ||
-      potentialParentIndex >= collections.size()) {
-    return true;
-  }
-  if (potentialParentIndex == childIndex) {
-    return true;
-  }
-
-  int currentParent = collections[potentialParentIndex].parentCollectionIndex;
-  std::set<int> visited;
-  while (currentParent >= 0 && currentParent < collections.size()) {
-    if (visited.contains(currentParent)) {
-      return true;
-    }
-    visited.insert(currentParent);
-    if (currentParent == childIndex) {
-      return true;
-    }
-    currentParent = collections[currentParent].parentCollectionIndex;
-  }
-  return false;
+  return CollectionUtils::wouldCreateCircularReference(childIndex, potentialParentIndex,
+                                                        collections);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Kartend-63o: propagate appearance/layout settings to other collections
+// propagate appearance/layout settings to other collections
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // These helpers copy a curated subset of the currently-edited collection's
@@ -516,7 +497,7 @@ auto SettingsDialog::wouldCreateCircularReference(int childIndex, int potentialP
 
 namespace {
 
-// Kartend-iyk: copy a per-category subset from @p src onto @p dst. Each flag
+// copy a per-category subset from @p src onto @p dst. Each flag
 // in @p categories enables one logical group of fields. Categories not in
 // the mask leave @p dst's existing values untouched. Identity, paths,
 // launcher list, and scan-affecting flags are never copied regardless of
@@ -555,7 +536,7 @@ void copyAppearanceAndLayoutFields(const CollectionConfig &src, CollectionConfig
     dst.primaryColor = src.primaryColor;
     dst.tileColor = src.tileColor;
     dst.selectionColor = src.selectionColor;
-    // Kartend-guo5 / qbp3 / y25g / eq8r: header logo + vignette + parallax
+    // / qbp3 / y25g / eq8r: header logo + vignette + parallax
     // + backdrop blur ride along with the Colors category since they're
     // presented in the same dialog area and users intuitively expect
     // "apply theme" to cover them too.
@@ -607,7 +588,7 @@ int SettingsDialog::applyCategoriesToIndices(const QList<int> &targetIndices,
 }
 
 void SettingsDialog::duplicateCollection() {
-  // Kartend-f5i9: full copy of the currently-selected collection. The user
+  // full copy of the currently-selected collection. The user
   // chose 1a (full copy: paths/launchers/everything except name) and 2c (ask
   // for parent at duplicate time) during scoping. Runtime-only state is
   // stripped because it never belongs in a fresh copy.
@@ -722,7 +703,7 @@ void SettingsDialog::duplicateCollection() {
 }
 
 int SettingsDialog::propagateAppearanceToIndicesSilently(const QList<int> &targetIndices) {
-  // Kartend-enq: silent propagation used by the Settings Mode auto-apply
+  // silent propagation used by the Settings Mode auto-apply
   // path. Skips the per-category dialog because the mode itself is the
   // user's opt-in — the silent path always copies the full curated subset.
   // Caller is responsible for emitting collectionSaved() and refreshing
@@ -731,7 +712,7 @@ int SettingsDialog::propagateAppearanceToIndicesSilently(const QList<int> &targe
 }
 
 void SettingsDialog::copySettingsFromOtherCollection() {
-  // Kartend-iyk: pull-from-source. The user picks a source collection and
+  // pull-from-source. The user picks a source collection and
   // a category mask via ApplySettingsDialog, then we overwrite the
   // currently-edited collection's selected fields. Unlike the push paths
   // we don't auto-emit collectionSaved — instead we mark the form dirty so
@@ -813,7 +794,7 @@ void SettingsDialog::copySettingsFromOtherCollection() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Kartend-j613: tree context menu + drag-drop reparenting resync.
+// tree context menu + drag-drop reparenting resync.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void SettingsDialog::setSubtreeExpanded(QTreeWidgetItem *item, bool expanded) {
@@ -833,7 +814,7 @@ void SettingsDialog::onTreeContextMenuRequested(const QPoint &pos) {
   QTreeWidgetItem *target = collectionTreeWidget->itemAt(pos);
 
   QMenu menu(collectionTreeWidget);
-  // Kartend-gzmk: linked-mirror rows are read-only viewports; per-row
+  // linked-mirror rows are read-only viewports; per-row
   // actions (rename, duplicate, delete) belong on the canonical row.
   const bool isLinked = target && target->data(0, Qt::UserRole).toBool();
   // Per-row actions only make sense when the click hit a non-linked item.
@@ -914,7 +895,7 @@ void SettingsDialog::onTreeRearranged() {
   // Walk the post-drop tree and resync parentCollectionIndex /
   // isSubcollection on every collection. This is the only place where
   // parent linkage gets rewritten by user input outside the parent combo.
-  // Kartend-gzmk: linked mirrors aren't draggable, but a drop can still
+  // linked mirrors aren't draggable, but a drop can still
   // shuffle them along with their primary parent — so we skip linked
   // items when resolving the canonical primary parent for each collection
   // and recurse into them so their children (if any — currently none) are

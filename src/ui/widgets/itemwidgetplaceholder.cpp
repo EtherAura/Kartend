@@ -17,7 +17,7 @@
 #include <QRectF>
 #include <Qt>
 
-// Kartend-63e: shared static so DetailsPane's Pattern background can
+// shared static so DetailsPane's Pattern background can
 // render the same hatch as missing-artwork item tiles.
 auto ItemWidget::buildPlaceholderTile(int width, int height, int cornerRadius, bool applyGradient,
                                       const QColor &baseOverride, double lineAlphaScale)
@@ -218,7 +218,7 @@ auto ItemWidget::buildPlaceholderPattern(int width, int height) const -> QPixmap
   return buildPlaceholderTile(width, height, m_cornerRadius);
 }
 
-// Kartend-cub: render the item title onto a placeholder pixmap. The
+// render the item title onto a placeholder pixmap. The
 // placeholder hatch and any user-supplied placeholder image both go through
 // this so the overlay is consistent across both paths. Painted on a copy of
 // the cached tile (the static builder's cache is shared across items).

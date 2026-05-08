@@ -1,5 +1,5 @@
 // Sibling translation unit for ScrollManager.
-// After Kartend-158, the actual virtual-scrolling logic lives in
+// After, the actual virtual-scrolling logic lives in
 // VirtualScrollEngine (virtualscrollengine.{h,cpp}). The methods below remain
 // on ScrollManager as the public/private API surface, but each one is now a
 // thin forwarder to the engine. The engine accesses ScrollManager state via

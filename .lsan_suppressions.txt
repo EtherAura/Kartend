@@ -1,7 +1,11 @@
 # LeakSanitizer suppressions for known/intentional leaks
 #
-# CacheManager intentionally leaks its QThreadPool to avoid blocking
-# in the destructor during application shutdown.
+# CacheManager normally drains and deletes its QThreadPool in the
+# destructor (cooperative cancel via m_cancelIo + waitForDone(2s)).
+# This suppression covers the rare fallback path where a long-running
+# I/O task fails to notice the cancel within the timeout, in which
+# case we abandon the pool rather than blocking exit. Remove this
+# suppression once cache I/O is provably strictly cancellable.
 leak:QThreadPool::QThreadPool
 
 # Qt6 GStreamer multimedia backend leaks GstDeviceMonitor and its

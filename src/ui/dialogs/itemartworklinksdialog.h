@@ -11,7 +11,7 @@ class QPushButton;
 class QTableWidget;
 QT_END_NAMESPACE
 
-/// Per-item editor for artwork override paths (Kartend-53vk). Shows one row
+/// Per-item editor for artwork override paths. Shows one row
 /// per artwork type — every standard type (box, screenshot, …) plus the
 /// collection's user-defined custom types — letting the user pick a file for
 /// any of them. Auto-discovery is intentionally NOT exposed here: the

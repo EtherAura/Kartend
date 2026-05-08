@@ -1,4 +1,4 @@
-// Kartend-eq8r: simulated backdrop blur. QGraphicsBlurEffect attached to
+// simulated backdrop blur. QGraphicsBlurEffect attached to
 // the widget itself blurs whatever paintEvent draws — in our case a
 // cover-fit copy of the wallpaper pixmap. Cheap (single shot per source
 // change) and gives a true Gaussian blur without custom shaders.
@@ -12,8 +12,8 @@
 
 #include <QEvent>
 #include <QGraphicsBlurEffect>
-#include <QPaintEvent>
 #include <QPainter>
+#include <QPaintEvent>
 #include <QResizeEvent>
 #include <QShowEvent>
 
@@ -58,8 +58,8 @@ void BackdropBlurOverlay::paintEvent(QPaintEvent *event) {
   painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
   // Cover-fit so the toolbar's strip shows a non-letterboxed slice of the
   // wallpaper. KeepAspectRatioByExpanding scales by the larger dimension.
-  QPixmap scaled = m_pixmap.scaled(rect().size(), Qt::KeepAspectRatioByExpanding,
-                                   Qt::SmoothTransformation);
+  QPixmap scaled =
+      m_pixmap.scaled(rect().size(), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
   const int x = (rect().width() - scaled.width()) / 2;
   const int y = (rect().height() - scaled.height()) / 2;
   painter.drawPixmap(x, y, scaled);

@@ -133,7 +133,7 @@ void StatisticsDialog::setupUI() {
   m_tabs->addTab(m_recentlyPlayedTree, tr("Recently played"));
   m_tabs->addTab(m_byCollectionTree, tr("By collection"));
 
-  // Kartend-fse: history tab. Sits inside a container so the tab can host
+  // history tab. Sits inside a container so the tab can host
   // its own toggle/clear controls without stuffing them into the dialog
   // footer (which already owns the global Reset/Refresh/Close buttons).
   auto *historyTab = new QWidget(this);
@@ -347,7 +347,7 @@ void StatisticsDialog::populateByCollection(
   m_byCollectionTree->clear();
   m_byCollectionTree->setSortingEnabled(false);
 
-  // Kartend-r5rr: roll up descendant items into each parent collection's row
+  // roll up descendant items into each parent collection's row
   // so the count matches what the title bar shows for that collection (which
   // is always recursive — see refreshTitleCounts() in mainwindow.cpp). Without
   // this, a root parent with subcollections shows 0 items in stats while the

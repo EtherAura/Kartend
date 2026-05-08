@@ -21,7 +21,7 @@ void DatabaseManager::onWorkerItemsLoaded(const QStringList &filePaths,
                                           const QHash<QString, QString> &fileToArtworkDir,
                                           const QHash<QString, QString> &fileToMediaDir,
                                           const QHash<QString, int> &fileToCollectionIndex) {
-  // Kartend-5h6: apply per-collection title-exclusion patterns on the main
+  // apply per-collection title-exclusion patterns on the main
   // thread, after the worker has produced the underscore-cleaned base names.
   // Doing it here (rather than inside QueryManager) keeps the worker free of
   // settings-dependent state and lets a single TitleFilter registry serve all
@@ -94,7 +94,7 @@ void DatabaseManager::onWorkerItemsRangeLoaded(int offset, const QStringList &fi
   qCDebug(lcSearchDiag) << "[DatabaseManager] onWorkerItemsRangeLoaded: offset=" << offset
                         << "paths=" << filePaths.size();
 
-  // Kartend-5h6: mirror the main-loaded path — strip per-collection title
+  // mirror the main-loaded path — strip per-collection title
   // patterns before downstream consumers see the names.
   QHash<QString, QString> filteredNames = fileNames;
   for (auto it = filteredNames.begin(); it != filteredNames.end(); ++it) {
@@ -102,21 +102,14 @@ void DatabaseManager::onWorkerItemsRangeLoaded(int offset, const QStringList &fi
     it.value() = TitleFilter::apply(collectionIdx, it.value());
   }
   // Merge the directory and collection index mappings from range query into our
-  // cache This enables findArtworkDirectoryForFile() and
-  // getCollectionIndexForFile() to work for range-loaded items
+  // cache. This enables findArtworkDirectoryForFile() and
+  // getCollectionIndexForFile() to work for range-loaded items.
   if (!fileToArtworkDir.isEmpty() || !fileToMediaDir.isEmpty() ||
       !fileToCollectionIndex.isEmpty()) {
     QMutexLocker locker(&m_dataMutex);
-    for (auto it = fileToArtworkDir.constBegin(); it != fileToArtworkDir.constEnd(); ++it) {
-      m_fileToArtworkDir.insert(it.key(), it.value());
-    }
-    for (auto it = fileToMediaDir.constBegin(); it != fileToMediaDir.constEnd(); ++it) {
-      m_fileToMediaDir.insert(it.key(), it.value());
-    }
-    for (auto it = fileToCollectionIndex.constBegin(); it != fileToCollectionIndex.constEnd();
-         ++it) {
-      m_fileToCollectionIndex.insert(it.key(), it.value());
-    }
+    m_fileToArtworkDir.insert(fileToArtworkDir);
+    m_fileToMediaDir.insert(fileToMediaDir);
+    m_fileToCollectionIndex.insert(fileToCollectionIndex);
   }
 
   emit itemsRangeLoaded(offset, filePaths, filteredNames, fileToArtworkDir, fileToMediaDir,

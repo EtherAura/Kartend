@@ -5,7 +5,7 @@
 #include "artworkutils.h"
 #include "databasemanager.h"
 #include "itemwidget.h"
-#include "mainwindow.h"
+#include "textzoom.h"
 #include "uiconstants.h"
 #include "widgetpoolmanager.h"
 
@@ -71,10 +71,10 @@ void ItemWidgetFactory::configureBaseWidget(ItemWidget *widget) {
   }
 
   // Use list-specific font size in list mode, grid font size otherwise.
-  // Kartend-7eff: layer the runtime text-zoom multiplier on top so item
+  // layer the runtime text-zoom multiplier on top so item
   // titles scale alongside menus/dialogs/sidebar.
   int fontSize = isListMode ? m_context.config.listFontSize : m_context.config.fontSize;
-  widget->setFontSize(MainWindow::zoomedFontSize(fontSize));
+  widget->setFontSize(TextZoom::zoomedFontSize(fontSize));
 
   widget->setCornerRadius(m_context.config.cornerRadius);
   widget->setItemDimensions(m_itemWidth, m_itemHeight);

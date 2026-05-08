@@ -58,7 +58,7 @@ private slots:
   void testDerive_downKey();
   void testDerive_unhandledKey();
 
-  // Kartend-dx9t: Horizontal layout (column-major) selection helper
+  // Horizontal layout (column-major) selection helper
   void testHorizontalLayout_downStepWithinColumn();
   void testHorizontalLayout_downAtBottomOfColumnNoWrap();
   void testHorizontalLayout_downAtBottomOfColumnWrapsWithinColumn();
@@ -321,7 +321,7 @@ void TestKeyboardManager::testDerive_unhandledKey() {
   QVERIFY(!vertical);
 }
 
-// ─── Kartend-dx9t Horizontal layout (column-major) tests ────────────────────
+// ─── Horizontal layout (column-major) tests ────────────────────
 
 void TestKeyboardManager::testHorizontalLayout_downStepWithinColumn() {
   // 9 items, 3 per column → 3 columns. Down at idx 0 (col 0, row 0) → idx 1.

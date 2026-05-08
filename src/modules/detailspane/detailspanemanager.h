@@ -23,11 +23,11 @@ struct DetailsPaneManagerSetup {
   DetailsPane *sidebar = nullptr;
   QWidget *itemsPage = nullptr;
   QHBoxLayout *mainLayout = nullptr;
-  /// Kartend-u2gx: outer vertical layout (`itemsPageLayout`) the details pane
+  /// outer vertical layout (`itemsPageLayout`) the details pane
   /// docks into for Top/Bottom Expand mode. Optional — without it, T/B Expand
   /// falls back to the L/R behavior so older callers keep compiling.
   QVBoxLayout *outerLayout = nullptr;
-  /// Kartend-u2gx: the content widget that holds `mainLayout`. Used to locate
+  /// the content widget that holds `mainLayout`. Used to locate
   /// the insertion index when docking the pane above (Top) or below (Bottom)
   /// it in `outerLayout`.
   QWidget *contentWidget = nullptr;
@@ -55,11 +55,17 @@ public:
   void setupSidebar();
   void toggleSidebar();
   void updateSidebarMetadata(ItemWidget *selectedItem);
+  /// Path-based overload used when no ItemWidget is materialized for the
+  /// selection (notably Cover Flow, which renders its own CoverFlowCards
+  /// instead of ItemWidgets in the virtual grid). Populates
+  /// m_currentItemContext so DetailPageManager and other consumers can
+  /// resolve the same item without an ItemWidget pointer.
+  void updateSidebarMetadata(const QString &filePath, const QString &itemName);
   void applySidebarStateForCollection(int collectionIndex);
   void updateSidebarLayout(int currentCollectionIndex);
   void positionSidebarOverlay();
   /// Recomputes the collection-level summary the sidebar shows when no
-  /// item is selected (Kartend-3mn). Cheap; safe to call after collection
+  /// item is selected. Cheap; safe to call after collection
   /// switches, scan completions, or settings saves.
   void refreshCollectionSummary();
   [[nodiscard]] bool isSidebarVisible() const;
@@ -68,7 +74,7 @@ public:
   void saveSidebarStateForCollection(const QString &collectionName, bool visible);
   [[nodiscard]] int currentCollectionIndex() const { return m_currentCollectionIndex; }
 
-  /// Kartend-3ile: external override that hides the sidebar without touching
+  /// external override that hides the sidebar without touching
   /// the persisted per-collection sidebarVisible flag. Cover flow uses this
   /// to take the full viewport while preserving the user's sidebar
   /// preference for grid/list views. Setting back to false re-runs layout
@@ -77,14 +83,14 @@ public:
   void setExternallyHidden(bool hidden);
   [[nodiscard]] bool isExternallyHidden() const { return m_externallyHidden; }
 
-  /// Kartend-63e: tracks whether a fullscreen overlay (artwork preview /
+  /// tracks whether a fullscreen overlay (artwork preview /
   /// expand-mode video) is currently visible. While true, the sidebar's
   /// raise() is skipped so the overlay can stay on top — without this flag,
   /// re-running updateSidebarLayout (e.g. after a window resize) would
   /// re-stack the sidebar above the active overlay.
   void setOverlayActive(bool active);
 
-  /// Kartend-uve: cached resolution context for the currently-displayed item.
+  /// cached resolution context for the currently-displayed item.
   /// Populated in updateSidebarMetadata() so siblings (e.g. DetailPageManager)
   /// can render the same item without redoing the showAllSubcollectionItems-
   /// aware owner / artwork / video / manual directory lookup. `uuid` is empty
@@ -108,7 +114,7 @@ signals:
 
 private slots:
   /// Opens the per-item artwork-link editor dialog for the current
-  /// selection (Kartend-53vk). Persists the user's diff via DatabaseManager
+  /// selection. Persists the user's diff via DatabaseManager
   /// and refreshes the gallery so newly-set overrides appear immediately.
   void openArtworkLinksDialog();
 
@@ -116,11 +122,11 @@ private:
   DetailsPane *m_DetailsPane;
   QWidget *m_itemsPage;
   QHBoxLayout *m_mainHorizontalLayout;
-  /// Kartend-u2gx: outer vertical layout used for Top/Bottom Expand dock.
+  /// outer vertical layout used for Top/Bottom Expand dock.
   /// nullptr when a caller doesn't supply one — T/B Expand falls back to
   /// Overlay-style absolute positioning in that case.
   QVBoxLayout *m_outerLayout = nullptr;
-  /// Kartend-u2gx: the widget owning `m_mainHorizontalLayout`. Used to anchor
+  /// the widget owning `m_mainHorizontalLayout`. Used to anchor
   /// the pane's insertion index in `m_outerLayout`.
   QWidget *m_mainContentWidget = nullptr;
   QScrollArea *m_itemScrollArea;
@@ -129,17 +135,17 @@ private:
   DatabaseManager *m_databaseManager = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   bool m_sidebarVisible = false;
-  /// Kartend-3ile: separate from m_sidebarVisible because this flag is
+  /// separate from m_sidebarVisible because this flag is
   /// driven by the active view type (cover flow auto-hides) rather than
   /// the user's per-collection preference. Effective visibility is the
   /// AND of (!m_externallyHidden) and m_sidebarVisible.
   bool m_externallyHidden = false;
-  /// Kartend-63e: see setOverlayActive() doc above.
+  /// see setOverlayActive doc above.
   bool m_overlayActive = false;
   int m_currentCollectionIndex;
 
   // Snapshot of the currently-displayed item used by the artwork link
-  // editor (Kartend-53vk) and the detail page (Kartend-uve). Captured in
+  // editor and the detail page. Captured in
   // updateSidebarMetadata so callers don't have to recompute owning
   // collection / UUID resolution.
   QString m_currentItemFilePath;

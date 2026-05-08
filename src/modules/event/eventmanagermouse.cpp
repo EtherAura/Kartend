@@ -9,6 +9,7 @@
 #include <QMouseEvent>
 #include <QPointer>
 #include <QScrollArea>
+#include <QScopeGuard>
 #include <QScrollBar>
 #include <QStackedWidget>
 #include <QTimer>
@@ -20,16 +21,16 @@
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "detailspane.h"
+#include "detailspanemanager.h"
 #include "gridlayoutcalculator.h"
 #include "gridutils.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "keyboardmanager.h"
 #include "mousemanager.h"
-#include "detailspane.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
-#include "detailspanemanager.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
@@ -42,61 +43,129 @@ Q_DECLARE_LOGGING_CATEGORY(lcEventManager)
     }                                                                                              \
   } while (0)
 
-bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
-  // Prevent reentrant wheel handling which can occur when animations
-  // or signal processing trigger additional wheel events
-  if (m_processingWheelEvent) {
-    return true; // Accept event to prevent default handling
-  }
-  m_processingWheelEvent = true;
-
-  const QWidget *activeModal = QApplication::activeModalWidget();
-  if (activeModal) {
-    m_processingWheelEvent = false;
+bool EventManager::wheelEventBelongsToSidebar() const {
+  // Wheel events over the sidebar should scroll the sidebar via Qt's normal
+  // wheel routing rather than driving grid selection. The cursor position is
+  // the source of truth — when the sidebar's QScrollArea has nothing to scroll,
+  // Qt propagates the wheel up past it and `obj` would point at an ancestor
+  // like the items page, so an obj-based check would miss it.
+  if (!m_detailsPaneManager) {
     return false;
   }
+  QWidget *sidebar = m_detailsPaneManager->sidebarWidget();
+  return sidebar && sidebar->isVisible() &&
+         sidebar->rect().contains(sidebar->mapFromGlobal(QCursor::pos()));
+}
 
-  // Wheel events over the sidebar should scroll the sidebar via Qt's normal
-  // wheel routing rather than driving grid selection. The cursor position
-  // (not obj) is the source of truth — when the sidebar's QScrollArea has
-  // nothing to scroll, Qt propagates the wheel up past it and obj would point
-  // at an ancestor like the items page, so an obj-based check would miss it.
-  // Returning false lets the receiver's own wheelEvent run; the grid stays
-  // put because applyWheelSelectionDelta lives further down this function.
-  if (m_detailsPaneManager) {
-    if (QWidget *sidebar = m_detailsPaneManager->sidebarWidget()) {
-      if (sidebar->isVisible() &&
-          sidebar->rect().contains(sidebar->mapFromGlobal(QCursor::pos()))) {
-        m_processingWheelEvent = false;
-        return false;
-      }
-    }
+bool EventManager::wheelEventCanProceed() const {
+  return m_itemScrollArea && m_stackedWidget &&
+         CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections) &&
+         m_stackedWidget->currentWidget() == m_itemsPage;
+}
+
+int EventManager::computeWheelTargetScroll(int selectedIndex, const CollectionConfig &collection,
+                                            QScrollBar *axisScrollBar,
+                                            bool horizontalView) const {
+  // Calculate target scroll position so the new selection stays visible.
+  // ScrollManager metrics override the per-collection defaults — both code
+  // paths must agree on itemsPerRow / itemHeight / verticalSpacing.
+  int gridWidth = CollectionUtils::effectiveGridWidth(
+      collection, m_scrollManager ? m_scrollManager->sidebarShrinkingActive() : false);
+  int itemHeight = collection.itemHeight;
+  int vSpacing = collection.verticalSpacing;
+  int headerOffset = 0;
+  if (m_scrollManager) {
+    const auto &metrics = m_scrollManager->getMetrics();
+    gridWidth = metrics.itemsPerRow;
+    itemHeight = metrics.itemHeight;
+    vSpacing = metrics.verticalSpacing;
+    headerOffset = metrics.headerOffset;
   }
 
-  if (!m_itemScrollArea || !m_stackedWidget ||
-      !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections) ||
-      m_stackedWidget->currentWidget() != m_itemsPage) {
-    m_processingWheelEvent = false;
+  const int margins = UIConstants::Grid::MARGINS;
+  const QRect viewport = m_itemScrollArea->viewport()->rect();
+  int targetPos = 0;
+
+  if (horizontalView && m_scrollManager) {
+    // itemsPerRow means items-per-column in horizontal view; derive the
+    // column index from selectedIndex / itemsPerCol and center it.
+    const auto &metrics = m_scrollManager->getMetrics();
+    targetPos = GridLayoutCalculator::calculateCenterScrollTarget(
+        selectedIndex, viewport.width(), axisScrollBar->maximum(), metrics);
+  } else {
+    int itemY = GridUtils::computeItemY(selectedIndex, gridWidth, itemHeight, vSpacing, margins);
+    itemY += headerOffset; // list view header
+
+    const int logicalTargetY = itemY - (viewport.height() - itemHeight) / 2;
+    targetPos = logicalTargetY;
+    if (m_viewportManager && m_viewportManager->getScrollScale() > 1.0) {
+      targetPos = m_viewportManager->toWidgetScrollY(logicalTargetY);
+    }
+  }
+  return qBound(0, targetPos, axisScrollBar->maximum());
+}
+
+void EventManager::onWheelAnimationFinished() {
+  if (m_mouseManager) {
+    m_mouseManager->setWheelScrolling(false);
+  }
+  if (m_viewportManager) {
+    m_viewportManager->setContinuousScrollActive(false);
+  }
+  if (m_state) {
+    m_state->scroll().userScrollActive = false;
+    m_state->scroll().programmaticScroll = false;
+    m_state->clearArrowCenterSuppression();
+    if (m_scrollManager) {
+      m_scrollManager->refreshSelectionOverlayState();
+    }
+  }
+  const int selectedIndex =
+      m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
+  if (m_scrollManager && selectedIndex >= 0) {
+    m_scrollManager->updateSelectionForIndex(selectedIndex);
+  }
+  // Selection might have scrolled outside the viewport during chained wheel
+  // events; bring it back in before signaling the scroll-ended consumers.
+  if (m_viewportManager && selectedIndex >= 0) {
+    m_viewportManager->ensureItemVisible(selectedIndex, false);
+  }
+  emit wheelScrollEnded();
+}
+
+bool EventManager::handleWheelEvent(QObject * /*obj*/, QEvent *event) {
+  // Reentrancy guard: animations + signal processing can re-enter wheel
+  // handling. RAII-style reset on every early-return path.
+  if (m_processingWheelEvent) {
+    return true; // Accept to prevent default handling.
+  }
+  m_processingWheelEvent = true;
+  auto resetGuard = qScopeGuard([this]() { m_processingWheelEvent = false; });
+
+  if (QApplication::activeModalWidget()) {
+    return false;
+  }
+  if (wheelEventBelongsToSidebar()) {
+    return false;
+  }
+  if (!wheelEventCanProceed()) {
     return false;
   }
 
   auto *wheelEvent = static_cast<QWheelEvent *>(event);
   const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
-  // Kartend-dx9t: in Horizontal mode the scroll axis is X — point all the
-  // scrollbar / viewport-size queries at the horizontal axis instead of the
-  // vertical one. The "wheel scrolls vertically by default" UX still applies
-  // — a vertical wheel notch advances the column-major selection one column,
-  // which is the natural mapping ("scroll forward through the collection").
+  // Horizontal view flips the scroll axis. The "wheel notch advances by one
+  // column" UX is preserved — vertical wheel motion drives column-major
+  // selection movement.
   const bool horizontalView = (collection.viewType == ViewType::Horizontal);
   QScrollBar *axisScrollBar = horizontalView ? m_itemScrollArea->horizontalScrollBar()
                                              : m_itemScrollArea->verticalScrollBar();
   if (!axisScrollBar) {
-    m_processingWheelEvent = false;
     return false;
   }
 
-  // Stop arrow key animations but NOT wheel scroll animations - wheel
-  // animations will be chained smoothly in startWheelScrollAnimation
+  // Stop arrow-key animations only. Wheel animations are chained smoothly by
+  // startWheelScrollAnimation.
   if (!horizontalView) {
     AnimationManager::stopArrowKeyAnimationIfRunning(axisScrollBar);
   }
@@ -106,20 +175,19 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
     return false;
   }
 
-  // Get scrollbar position for target calculation - actual animation start
-  // position is determined by startWheelScrollAnimation based on running anim
-  int currentPos = axisScrollBar->value();
+  const int currentPos = axisScrollBar->value();
 
   if (m_state) {
     m_state->scroll().userScrollActive = true;
     m_state->scroll().programmaticScroll = true;
     m_state->suppressArrowCenterFor(UIConstants::Mouse::WHEEL_SUPPRESS_ARROW_CENTER_MS);
-    // Skip refreshSelectionOverlayState here - too frequent during rapid
-    // wheel events; animation completion will refresh the state
+    // refreshSelectionOverlayState is intentionally skipped here — too frequent
+    // during rapid wheel events. Animation completion refreshes it.
   }
 
-  const bool wrapTriggered = applyWheelSelectionDelta(wheelSteps);
-  if (wrapTriggered) {
+  if (applyWheelSelectionDelta(wheelSteps)) {
+    // Wrap detected: bail out of animation and let updateVirtualView re-paint
+    // the new visible page.
     if (m_mouseManager) {
       m_mouseManager->setWheelScrolling(false);
     }
@@ -136,61 +204,15 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
     return true;
   }
 
-  // Calculate target scroll position based on new selection position
-  // This ensures the selection always stays visible during wheel scrolling
-  int selectedIndex = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
+  const int selectedIndex =
+      m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
   if (selectedIndex < 0) {
     event->accept();
     return true;
   }
 
-  // Get metrics from ScrollManager for correct dimensions in both grid and list
-  // modes. The fallback path below (m_scrollManager == nullptr) routes through
-  // the effective-value helper (Kartend-0p3w) so the alt gridWidth still wins
-  // when sidebar is hidden in Expand mode.
-  int gridWidth = CollectionUtils::effectiveGridWidth(
-      collection, m_scrollManager ? m_scrollManager->sidebarShrinkingActive() : false);
-  int itemHeight = collection.itemHeight;
-  int vSpacing = collection.verticalSpacing;
-  int headerOffset = 0;
-
-  if (m_scrollManager) {
-    const auto &metrics = m_scrollManager->getMetrics();
-    gridWidth = metrics.itemsPerRow;
-    itemHeight = metrics.itemHeight;
-    vSpacing = metrics.verticalSpacing;
-    headerOffset = metrics.headerOffset;
-  }
-
-  int margins = UIConstants::Grid::MARGINS;
-  QRect viewport = m_itemScrollArea->viewport()->rect();
-  int targetPos = 0;
-  if (horizontalView && m_scrollManager) {
-    // Kartend-dx9t: target the horizontal scrollbar position that centers the
-    // newly-selected column. itemsPerRow now means items-per-column, so we
-    // derive the column index from selectedIndex / itemsPerCol.
-    const auto &metrics = m_scrollManager->getMetrics();
-    int viewportWidth = viewport.width();
-    targetPos = GridLayoutCalculator::calculateCenterScrollTarget(
-        selectedIndex, viewportWidth, axisScrollBar->maximum(), metrics);
-    targetPos = qBound(0, targetPos, axisScrollBar->maximum());
-  } else {
-    int itemY = GridUtils::computeItemY(selectedIndex, gridWidth, itemHeight, vSpacing, margins);
-    // Add header offset for list view mode
-    itemY += headerOffset;
-
-    int viewportHeight = viewport.height();
-
-    // Calculate target scroll position in logical space (center the item)
-    int logicalTargetY = itemY - (viewportHeight - itemHeight) / 2;
-
-    // Convert logical scroll target to widget scroll position for clipped grids
-    targetPos = logicalTargetY;
-    if (m_viewportManager && m_viewportManager->getScrollScale() > 1.0) {
-      targetPos = m_viewportManager->toWidgetScrollY(logicalTargetY);
-    }
-    targetPos = qBound(0, targetPos, axisScrollBar->maximum());
-  }
+  const int targetPos =
+      computeWheelTargetScroll(selectedIndex, collection, axisScrollBar, horizontalView);
 
   if (m_mouseManager) {
     m_mouseManager->setWheelScrolling(true);
@@ -199,41 +221,8 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
     m_viewportManager->setContinuousScrollActive(true);
   }
 
-  if (m_state) {
-    m_state->scroll().userScrollActive = true;
-    m_state->scroll().programmaticScroll = true;
-    // Skip refreshSelectionOverlayState here - called too frequently during
-    // rapid wheel events and causes overhead; let animation completion handle
-    // it
-  }
-
   if (m_animationManager) {
-    auto onFinished = [this]() {
-      if (m_mouseManager) {
-        m_mouseManager->setWheelScrolling(false);
-      }
-      if (m_viewportManager) {
-        m_viewportManager->setContinuousScrollActive(false);
-      }
-      if (m_state) {
-        m_state->scroll().userScrollActive = false;
-        m_state->scroll().programmaticScroll = false;
-        m_state->clearArrowCenterSuppression();
-        if (m_scrollManager) {
-          m_scrollManager->refreshSelectionOverlayState();
-        }
-      }
-      int selectedIndex = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
-      if (m_scrollManager && selectedIndex >= 0) {
-        m_scrollManager->updateSelectionForIndex(selectedIndex);
-      }
-      // Ensure selected item is visible after wheel scroll completes -
-      // prevents selection from being scrolled outside the viewport
-      if (m_viewportManager && selectedIndex >= 0) {
-        m_viewportManager->ensureItemVisible(selectedIndex, false);
-      }
-      emit wheelScrollEnded();
-    };
+    auto onFinished = [this]() { onWheelAnimationFinished(); };
     if (horizontalView) {
       m_animationManager->startWheelScrollAnimationHorizontal(axisScrollBar, currentPos, targetPos,
                                                               onFinished);
@@ -243,8 +232,8 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
     }
   }
 
-  // Defer virtual view update to next event loop iteration - allows
-  // the scroll position to settle before recalculating visible items
+  // Defer virtual view update one event-loop tick so the scroll position
+  // settles before recalculating visible items.
   if (m_scrollManager) {
     QTimer::singleShot(0, this, [this]() {
       if (m_scrollManager) {
@@ -255,7 +244,6 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
 
   emit wheelScrollStarted();
   event->accept();
-  m_processingWheelEvent = false;
   return true;
 }
 
@@ -490,7 +478,7 @@ void EventManager::commitPendingHoverScroll() {
   // early-returns whenever the selection overlay is still animating from the
   // immediate hover-selection that ran HOVER_SCROLL_DELAY_MS ago. That race
   // (overlay anim outlasting the hover-scroll dwell) was why hover-induced
-  // scrolling silently did nothing (Kartend-xtj). Calling centerItemVertically
+  // scrolling silently did nothing. Calling centerItemVertically
   // is the same canonical centering API arrow-key navigation uses, so it is
   // not gated on overlay animation state.
   if (m_viewportManager) {
@@ -615,9 +603,9 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
     return false;
   }
 
-  // Middle-click media preview (Kartend-ljey). Opens a video-first preview
+  // Middle-click media preview. Opens a video-first preview
   // overlay for the clicked item without changing selection or launching.
-  // Kartend-1v6: when the configured artwork-cycle modifier (default Shift)
+  // when the configured artwork-cycle modifier (default Shift)
   // is held, the same button instead cycles the displayed artwork through
   // the item's available types. Setting this modifier to one of Ctrl/Alt/
   // Meta lets the user pick the chord that doesn't collide with their WM.
@@ -721,14 +709,14 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
   }
 
   const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
-  // Kartend-dx9t: the per-column step in Horizontal mode is the *effective*
+  // the per-column step in Horizontal mode is the *effective*
   // items-per-column from the live metrics (which already honor
   // horizontalGridHeight's fallback to gridWidth). Reading collection.gridWidth
   // directly was wrong when the user configured a separate horizontal height —
   // the wheel would jump by gridWidth items even though each column actually
   // contained horizontalGridHeight items, drifting the row index across columns
   // and looking like a random vertical jitter.
-  // Kartend-0p3w: route both gridWidth and horizontalGridHeight reads through
+  // route both gridWidth and horizontalGridHeight reads through
   // the effective-value helpers so the alt fields kick in when sidebar is
   // hidden in Expand mode.
   const bool shrink = m_scrollManager->sidebarShrinkingActive();
@@ -758,21 +746,21 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
     currentSelection = 0;
   }
 
-  // Kartend-dx9t: in Horizontal mode the wheel always advances exactly one
+  // in Horizontal mode the wheel always advances exactly one
   // column per discrete event — direction-only, magnitude clamped to ±1.
   // Without the clamp, fast wheel motion or trackpad scrolling can return
   // wheelSteps > 1, which (multiplied by gridWidth below) would jump several
   // columns per tick and feel jittery. The global mouseWheelRows /
   // scrollVelocityMultiplier knobs tune vertical scroll feel and should not
   // compound on top of the already-coarse "skip a full gridHeight of items"
-  // step. List / CoverFlow (Kartend-3ile) keep their existing single-item step.
+  // step. List / CoverFlow keep their existing single-item step.
   const bool isHorizontalView = (collection.viewType == ViewType::Horizontal);
   int rowDelta;
   if (isHorizontalView) {
     rowDelta = (wheelSteps > 0) ? -1 : 1;
   } else {
     int rowMultiplier = m_generalSettings ? m_generalSettings->mouseWheelRows : 1;
-    // Kartend-9cl: scale wheel step by the global scroll-velocity multiplier.
+    // scale wheel step by the global scroll-velocity multiplier.
     // Done on the (row * wheelSteps) product so single-notch motion at 1.5×
     // yields a perceivable 1.5-row step rather than rounding down to 1.
     const double velocityMult =
@@ -789,8 +777,8 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
     }
   }
 
-  // List and CoverFlow (Kartend-3ile) move by 1 item per step instead of
-  // gridWidth. Horizontal (Kartend-dx9t) jumps one full column per tick —
+  // List and CoverFlow move by 1 item per step instead of
+  // gridWidth. Horizontal jumps one full column per tick —
   // selectionDelta = rowDelta * gridWidth where rowDelta is forced to ±1 above.
   const bool singleStep =
       (collection.viewType == ViewType::List) || (collection.viewType == ViewType::CoverFlow);
@@ -842,7 +830,7 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
     }
   }
 
-  // Kartend-yl0t: wheel scroll uses the bare setSelectedIndex setter, which
+  // wheel scroll uses the bare setSelectedIndex setter, which
   // does not emit selectionChanged. Without this notify, listeners wired to
   // SelectionManager::selectionChanged (e.g. the toolbar's itemPositionLabel
   // via InteractionManager forwarding) stay frozen during wheel navigation.

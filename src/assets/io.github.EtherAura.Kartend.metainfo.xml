@@ -37,10 +37,66 @@
     <binary>kartend</binary>
   </provides>
   <releases>
-    <release version="0.0.4" date="2026-04-25" />
-    <release version="0.0.3" date="2026-04-24" />
-    <release version="0.0.2" date="2026-04-21" />
-    <release version="0.0.1" date="2026-04-18" />
+    <release version="0.0.5" date="2026-05-06">
+      <description>
+        <p>
+          Substantial feature release: per-collection multi-launchers with chooser
+          dialog, splash screens with placeholder artwork, expand mode with
+          two-stage activation, regex title-exclusion, sortable date/file size,
+          and a configurable items-page toolbar.
+        </p>
+        <p>
+          Adds the Coverflow 3D view, horizontal scrolling layout, video previews
+          and a Now Playing overlay, per-item metadata with custom fields, an
+          artwork gallery, chronological launch history, per-item usage stats,
+          attract mode, alias-parent links, playlists with M3U/JSON import/export,
+          and a runtime text zoom HUD.
+        </p>
+        <p>
+          Packaging adds Arch PKGBUILD and a Flatpak manifest. Tests gain an
+          integration harness for UI-coordinator managers.
+        </p>
+      </description>
+    </release>
+    <release version="0.0.4" date="2026-04-25">
+      <description>
+        <p>
+          Adds the attract-mode settings UI (enable toggle, idle timeout, scroll
+          speed) and reworks the timeout reset to react to selection changes.
+        </p>
+      </description>
+    </release>
+    <release version="0.0.3" date="2026-04-24">
+      <description>
+        <p>
+          Settings dialog polish, expanded build-script docs, and a fix for the
+          shutdown crash where widget-pool callbacks could outlive their targets.
+          Adds DatabaseManager lifecycle and path-resolution unit tests.
+        </p>
+      </description>
+    </release>
+    <release version="0.0.2" date="2026-04-21">
+      <description>
+        <p>
+          Large refactor splitting the largest managers (Scroll, Query, Settings,
+          Navigation, Interaction, Viewport, ItemWidget, MainWindow,
+          SettingsDialog) into focused sibling translation units. Fixes a UBSan
+          shutdown vptr violation and a missing include that broke the build on
+          Ubuntu 24.04 libstdc++.
+        </p>
+      </description>
+    </release>
+    <release version="0.0.1" date="2026-04-18">
+      <description>
+        <p>
+          Initial release. Virtual scrolling with widget pooling, async artwork
+          loading with disk cache, collection hierarchy with subcollection
+          navigation, session persistence, configurable launchers, full keyboard
+          navigation, glide scroll animations, grid and list view modes, metadata
+          sidebar, FTS5 search, gamepad support, and Gentoo ebuild packaging.
+        </p>
+      </description>
+    </release>
   </releases>
   <content_rating type="oars-1.1" />
 </component>

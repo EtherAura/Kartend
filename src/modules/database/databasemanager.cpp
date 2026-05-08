@@ -327,7 +327,7 @@ void DatabaseManager::fetchItemCount(const CollectionContext &context,
   // Scans can be expensive and their completion triggers count refreshes that
   // can invalidate in-flight paginated search range loads (causing blank views
   // + high CPU from repeated rebuilds).
-  // Kartend-vlm7: playlists have no filesystem to scan — their items are
+  // playlists have no filesystem to scan — their items are
   // resolved directly from playlist_items by the worker, so skipping the scan
   // dispatch keeps the scan worker from chasing an empty mediaDirectory.
   if (filter.trimmed().isEmpty() && !context.config.isPlaylist) {

@@ -1,4 +1,4 @@
-// Launcher-presets controls for SettingsDialog (Kartend-p1jd).
+// Launcher-presets controls for SettingsDialog.
 // Sibling translation unit for the global "Launchers" tab. Preset edits
 // mutate m_generalSettings.launcherPresets in place; persistence happens
 // via the standard saveGeneralSettings() flow when the user clicks Save.

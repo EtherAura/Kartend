@@ -1,4 +1,4 @@
-// Full-window detail page overlay for the selected item (Kartend-uve).
+// Full-window detail page overlay for the selected item.
 #include "detailpageoverlay.h"
 
 #include <QApplication>
@@ -12,6 +12,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPalette>
+#include <QPolygon>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollArea>
@@ -20,6 +21,7 @@
 
 #include "itemmetadata.h"
 #include "uiconstants.h"
+#include "videothumbnailextractor.h"
 
 namespace {
 constexpr int kCardMargin = 48;
@@ -36,6 +38,21 @@ DetailPageOverlay::DetailPageOverlay(QWidget *parent) : QWidget(parent) {
   if (parent) {
     parent->installEventFilter(this);
   }
+  // Re-render the hero pane when an async video frame extraction lands so
+  // the user sees the actual thumbnail replace the placeholder. Connection
+  // lives for the overlay's lifetime; the guard inside the lambda keeps it
+  // cheap when an unrelated video resolves.
+  connect(VideoThumbnailExtractor::instance(), &VideoThumbnailExtractor::frameReady, this,
+          [this](const QString &videoPath, const QPixmap & /*pixmap*/) {
+            if (!m_active || m_currentArtworkIndex < 0 ||
+                m_currentArtworkIndex >= m_payload.artwork.size()) {
+              return;
+            }
+            const auto &entry = m_payload.artwork[m_currentArtworkIndex];
+            if (entry.isVideo && entry.path == videoPath) {
+              renderHeroArtwork();
+            }
+          });
   QWidget::hide();
 }
 
@@ -283,7 +300,35 @@ void DetailPageOverlay::renderHeroArtwork() {
   }
   const auto &entry = m_payload.artwork[m_currentArtworkIndex];
 
-  QPixmap pixmap(entry.path);
+  QPixmap pixmap;
+  if (entry.isVideo) {
+    // Mirror the sidebar gallery: prefer a cached extracted frame; otherwise
+    // show a play-triangle placeholder and request async extraction. Cached
+    // *null* records a prior failure — keep the placeholder rather than
+    // re-requesting.
+    auto *extractor = VideoThumbnailExtractor::instance();
+    if (extractor->hasCacheEntry(entry.path)) {
+      pixmap = extractor->cached(entry.path);
+    } else {
+      extractor->requestFrame(entry.path);
+    }
+    if (pixmap.isNull()) {
+      QPixmap placeholder(kHeroSize, kHeroSize);
+      placeholder.fill(palette().color(QPalette::Mid));
+      QPainter painter(&placeholder);
+      painter.setRenderHint(QPainter::Antialiasing);
+      painter.setBrush(palette().color(QPalette::Window));
+      painter.setPen(Qt::NoPen);
+      const int margin = kHeroSize / 4;
+      QPolygon triangle;
+      triangle << QPoint(margin, margin) << QPoint(margin, kHeroSize - margin)
+               << QPoint(kHeroSize - margin, kHeroSize / 2);
+      painter.drawPolygon(triangle);
+      pixmap = placeholder;
+    }
+  } else {
+    pixmap = QPixmap(entry.path);
+  }
   if (pixmap.isNull()) {
     m_heroLabel->setText(tr("Unable to load %1").arg(entry.label));
   } else {
@@ -363,7 +408,7 @@ void DetailPageOverlay::rebuildMetadataGrid(const Payload &payload) {
   appendMetadataRow(tr("Runtime"), formatRuntime(md.runtimeSeconds));
   appendMetadataRow(tr("Tags"), formatTags(md.tags), /*wrap=*/true);
 
-  // Custom fields (Kartend-hpln). Alphabetically ordered by parseCustomFields.
+  // Custom fields. Alphabetically ordered by parseCustomFields.
   const auto customFields = ItemMetadataStore::parseCustomFields(md.customFields);
   for (const auto &pair : customFields) {
     appendMetadataRow(pair.first, pair.second, /*wrap=*/true);
@@ -379,7 +424,7 @@ void DetailPageOverlay::rebuildMetadataGrid(const Payload &payload) {
   appendMetadataRow(tr("Modified"), payload.fileModified);
   appendMetadataRow(tr("Extension"), payload.fileExtension);
 
-  // Usage statistics (Kartend-7vi). Each row is skipped when empty so an
+  // Usage statistics. Each row is skipped when empty so an
   // un-launched item shows nothing here.
   if (payload.usage.playCount > 0) {
     appendMetadataRow(tr("Play count"), QString::number(payload.usage.playCount));
@@ -494,7 +539,7 @@ void DetailPageOverlay::keyPressEvent(QKeyEvent *event) {
 
 void DetailPageOverlay::mousePressEvent(QMouseEvent *event) {
   // Click outside the card dismisses the overlay — same affordance as the
-  // artwork preview overlay (Kartend-un3l).
+  // artwork preview overlay.
   if (m_card && !m_card->geometry().contains(event->pos())) {
     hideOverlay();
     event->accept();

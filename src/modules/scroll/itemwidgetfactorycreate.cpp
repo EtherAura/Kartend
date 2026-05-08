@@ -88,7 +88,7 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex, int &collection
       // first lookup for an uncached directory (it queues a background scan).
       // For list mode we can't rely on the post-prewarm reconfigure alone --
       // do a direct synchronous lookup so the artwork preview button
-      // ('view-preview' icon) appears on first paint (Kartend-cbd).
+      // ('view-preview' icon) appears on first paint.
       if (artworkPath.isEmpty()) {
         artworkPath = ArtworkUtils::findArtworkForFile(fileName, artworkDir);
       }
@@ -251,7 +251,7 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
     }
   }
 
-  // Kartend-1v6: if the user previously shift+middle-clicked this item to
+  // if the user previously shift+middle-clicked this item to
   // cycle its artwork type, prefer the override over the legacy lookup so a
   // recycled widget reproduces the chosen type. The override map is the only
   // thing that survives widget pool churn — clearing happens in
@@ -310,7 +310,7 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
   // also reached from reconfigureArtworkForActiveWidgets() after the directory
   // cache is warmed, which is the only chance list-mode widgets get to learn
   // their artwork exists when the cache was cold during initial creation
-  // (Kartend-cbd).
+  //
   if (widget && widget->isListMode()) {
     widget->setHasArtwork(!artworkPath.isEmpty());
     return;

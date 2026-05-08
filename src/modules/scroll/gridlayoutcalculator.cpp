@@ -24,11 +24,11 @@ auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config, int 
     // Grid / Horizontal / CoverFlow: use collection config
     metrics.itemWidth = config.itemWidth;
     metrics.itemHeight = config.itemHeight;
-    // Kartend-dx9t: in Horizontal mode the fixed dimension is items-per-column,
+    // in Horizontal mode the fixed dimension is items-per-column,
     // controlled by horizontalGridHeight (falling back to gridWidth when 0 so
     // existing collections that flip to Horizontal mode without configuring
     // the new field still get a sane layout).
-    // Kartend-0p3w: route both gridWidth and horizontalGridHeight through the
+    // route both gridWidth and horizontalGridHeight through the
     // effective-value helpers so sidebar-hidden alternates apply when the
     // sidebar is hidden in Expand mode.
     const int effectiveHorizontal =
@@ -47,7 +47,7 @@ auto GridLayoutCalculator::calculateMetrics(const CollectionConfig &config, int 
   metrics.margins = UIConstants::Grid::MARGINS;
 
   if (metrics.isHorizontal) {
-    // Kartend-dx9t: axis-flipped layout. itemsPerRow is reinterpreted as
+    // axis-flipped layout. itemsPerRow is reinterpreted as
     // items-per-column (the fixed Y axis); totalRows becomes the column
     // count (the long, scrollable X axis).
     int itemsPerCol = metrics.itemsPerRow;
@@ -113,7 +113,7 @@ auto GridLayoutCalculator::adjustForFilter(const GridMetrics &baseMetrics, int f
   GridMetrics adjusted = baseMetrics;
 
   if (baseMetrics.isHorizontal) {
-    // Kartend-dx9t: horizontal partial-fit collapses the long-axis (column
+    // horizontal partial-fit collapses the long-axis (column
     // count). itemsPerRow stays as items-per-column — we just shrink the
     // scrollable width when the filtered set fits in fewer than one column.
     if (filteredItemCount > 0 && filteredItemCount < baseMetrics.itemsPerRow) {
@@ -237,7 +237,7 @@ auto GridLayoutCalculator::indexAtPosition(const QPoint &pos, const GridMetrics 
 auto GridLayoutCalculator::getVisibleRowRange(int scrollPos, int viewportSize,
                                               const GridMetrics &metrics, int bufferRows)
     -> std::pair<int, int> {
-  // In Horizontal mode (Kartend-dx9t) "row" is reinterpreted as "long-axis
+  // In Horizontal mode "row" is reinterpreted as "long-axis
   // index" — i.e. column index — and the caller passes scrollX/viewportWidth.
   if (metrics.isHorizontal) {
     int columnWidth = metrics.itemWidth + metrics.horizontalSpacing;

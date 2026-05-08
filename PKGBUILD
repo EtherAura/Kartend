@@ -12,31 +12,50 @@ depends=(
   'glibc'
   'qt6-base'
   'qt6-multimedia'
+  'qt6-gamepad'
   'sdl2'
 )
 makedepends=(
   'cmake'
-  'git'
   'ninja'
 )
-source=("${pkgname}::git+${url}.git#tag=v${pkgver}")
+checkdepends=()
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz")
+# Verifying GitHub's auto-archive sha256 isn't reliable — its gzip parameters
+# can change without notice. For v0.0.6+ this URL should switch to the release
+# page asset (releases/download/vX.Y.Z/Kartend-X.Y.Z.tar.gz) published by
+# .github/workflows/release.yml, at which point sha256sums can be filled in
+# from the deterministic `git archive` output (see workflow's post-publish step).
 sha256sums=('SKIP')
 
 build() {
-  cmake -S "${pkgname}" -B build -G Ninja \
-    -DCMAKE_BUILD_TYPE=None \
+  cmake -S "Kartend-${pkgver}" -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr \
-    -DBUILD_TESTS=OFF \
-    -DENABLE_CCACHE=OFF \
-    -DMAINTENANCE=OFF
+    -DKARTEND_BUILD_TESTS=OFF \
+    -DKARTEND_ENABLE_CCACHE=OFF \
+    -DKARTEND_MAINTENANCE=OFF \
+    -DKARTEND_PORTABLE_RELEASE=ON
 
   cmake --build build
+}
+
+check() {
+  # Tests are opt-in at configure time; reconfigure with KARTEND_BUILD_TESTS=ON
+  # in a sibling dir so the packaging build itself stays test-free.
+  cmake -S "Kartend-${pkgver}" -B build-tests -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DKARTEND_BUILD_TESTS=ON \
+    -DKARTEND_ENABLE_CCACHE=OFF \
+    -DKARTEND_PORTABLE_RELEASE=ON
+  cmake --build build-tests
+  ctest --test-dir build-tests --output-on-failure
 }
 
 package() {
   DESTDIR="${pkgdir}" cmake --install build
 
-  install -Dm644 "${pkgname}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
-  install -Dm644 "${pkgname}/readme.md" "${pkgdir}/usr/share/doc/${pkgname}/readme.md"
-  cp -a "${pkgname}/docs" "${pkgdir}/usr/share/doc/${pkgname}/"
+  install -Dm644 "Kartend-${pkgver}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 "Kartend-${pkgver}/readme.md" "${pkgdir}/usr/share/doc/${pkgname}/readme.md"
+  cp -a "Kartend-${pkgver}/docs" "${pkgdir}/usr/share/doc/${pkgname}/"
 }

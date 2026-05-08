@@ -15,7 +15,7 @@ class VideoPreviewWidget;
  * @brief Modal overlay widget that displays artwork or video for a selected
  * item in a centered popup.
  *
- * Originally artwork-only (Kartend-un3l); extended in Kartend-ljey to host a
+ * Originally artwork-only; extended to host a
  * looping muted video preview as well. The two display modes are mutually
  * exclusive — switching media stops/clears the inactive widget. The overlay
  * covers the parent widget and dismisses on Escape, click-outside, or the
@@ -32,7 +32,7 @@ public:
   void showArtworkForFile(const QString &filePath, const QString &artworkDirectory);
 
   /// Show the overlay with the artwork file at the given absolute path.
-  /// Used by the sidebar artwork gallery (Kartend-un3l) when the path was
+  /// Used by the sidebar artwork gallery when the path was
   /// resolved by ItemArtworkStore and there is no need to re-search a
   /// directory. `launchRequested` is still emitted on Enter / double-click;
   /// callers that only want preview behavior should leave that signal
@@ -44,7 +44,7 @@ public:
   /// click-outside, or the close button) stops playback.
   void showVideoAtPath(const QString &absoluteVideoPath);
 
-  /// Convenience entry point for video-first preview (Kartend-ljey). Tries
+  /// Convenience entry point for video-first preview. Tries
   /// VideoUtils::findVideoForFile() against @p videoDirectory first; falls
   /// back to artwork lookup if no video is found. Returns true if either
   /// medium was shown, false if neither resolved.
@@ -54,7 +54,7 @@ public:
   /// Hide the overlay and stop any video playback.
   void hideOverlay();
 
-  /// Kartend-cjry: toggle the overlay's preview video between playing and
+  /// toggle the overlay's preview video between playing and
   /// paused. Returns true if a toggle occurred (i.e. video is loaded and
   /// active), false otherwise so callers can fall back to other handlers.
   bool togglePreviewVideoPause();
@@ -72,7 +72,7 @@ signals:
   /// that don't carry an associated media path).
   void launchRequested(const QString &filePath);
 
-  /// Kartend-63e bug #7: emitted from showEvent / hideEvent so consumers
+  /// bug #7: emitted from showEvent / hideEvent so consumers
   /// (specifically DetailsPaneManager) can lower the sidebar while the overlay
   /// is on top. Without this, raise() calls during the overlay's lifetime
   /// (e.g. window resize triggers updateSidebarLayout) would re-stack the

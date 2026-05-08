@@ -8,7 +8,7 @@
 // SelectionDisplayManager / VirtualContainerManager (which depend on the
 // full UI graph).
 //
-// See bd Kartend-tty for the broader extraction effort.
+// See bd for the broader extraction effort.
 namespace ScrollHelpers {
 
 // Returns true if the selection move from prevIndex -> selectedIndex should be

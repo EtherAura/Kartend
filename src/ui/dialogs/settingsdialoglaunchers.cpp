@@ -1,4 +1,4 @@
-// Multi-launcher controls for SettingsDialog (Kartend-bdl).
+// Multi-launcher controls for SettingsDialog.
 // Sibling translation unit hosting the load/save/edit logic for the
 // Additional Launchers list and Default Launcher combo. Kept separate from
 // settingsdialogform.cpp so the launcher feature lives in one place.

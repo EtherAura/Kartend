@@ -15,6 +15,9 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   listheaderwidget.cpp
   loadingoverlay.cpp
   detailspane.cpp
+  detailspanedrag.cpp
+  detailspanehorizontal.cpp
+  detailspanepaint.cpp
   nowplayingoverlay.cpp
   splashoverlay.cpp
   startupvideooverlay.cpp

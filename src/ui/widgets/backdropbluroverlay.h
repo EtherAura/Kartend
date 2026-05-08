@@ -10,7 +10,7 @@ class QGraphicsBlurEffect;
 class QPaintEvent;
 QT_END_NAMESPACE
 
-/// Kartend-eq8r: simulated backdrop blur. Paints a copy of the wallpaper
+/// simulated backdrop blur. Paints a copy of the wallpaper
 /// scaled cover-fit to the widget's rect, with a QGraphicsBlurEffect on
 /// the widget itself so Qt blurs the rendered output. Used as a child of
 /// the items top bar to mimic macOS Vibrancy: the toolbar shows a blurred

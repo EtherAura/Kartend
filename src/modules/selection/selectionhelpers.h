@@ -5,7 +5,7 @@
 // horizontal-hop animation rules can be unit-tested without instantiating the
 // SelectionManager (which depends on ScrollManager + the full UI graph).
 //
-// See bd Kartend-tty for the broader extraction effort.
+// See bd for the broader extraction effort.
 namespace SelectionHelpers {
 
 // Returns true if the target index lands on a different row than the

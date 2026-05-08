@@ -35,6 +35,7 @@
 #include "mainwindow.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
+#include "settingsformbinding.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
 #include "ui_settingsdialog.h"
@@ -161,7 +162,7 @@ auto SettingsDialog::hasUnsavedChanges() const -> bool {
 }
 
 void SettingsDialog::updateSaveButtonStyle() {
-  // Kartend-9f6: illuminate the save icon while there are unsaved changes.
+  // illuminate the save icon while there are unsaved changes.
   // The button also stays enabled so the user can click Save; when there are
   // no changes we detach the glow and disable the button.
   const bool dirty = hasUnsavedChanges();
@@ -310,12 +311,11 @@ void SettingsDialog::updateSidebarModeVisibility() {
   ui->label_sidebarMode->setVisible(true);
   ui->sidebarModeComboBox->setVisible(true);
 
-  // Kartend-u2gx: width-vs-height field visibility tracks the position combo.
+  // width-vs-height field visibility tracks the position combo.
   // Right/Left expose Width; Top/Bottom expose Height. The lock checkbox
   // governs both directions so it stays visible regardless.
   if (ui->sidebarPositionComboBox) {
-    const auto pos =
-        static_cast<DetailsPanePosition>(ui->sidebarPositionComboBox->currentIndex());
+    const auto pos = static_cast<DetailsPanePosition>(ui->sidebarPositionComboBox->currentIndex());
     const bool horizontalDock = CollectionUtils::isDetailsPaneHorizontal(pos);
     if (ui->label_sidebarWidth) ui->label_sidebarWidth->setVisible(!horizontalDock);
     if (ui->sidebarWidthSpinBox) ui->sidebarWidthSpinBox->setVisible(!horizontalDock);
@@ -347,176 +347,48 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   if (mainWindow) {
     m_generalSettings = mainWindow->m_generalSettings;
   }
-  if (ui->rememberSelectionCheckBox) {
-    ui->rememberSelectionCheckBox->blockSignals(true);
-    ui->rememberSelectionCheckBox->setChecked(m_generalSettings.rememberSelection);
-    ui->rememberSelectionCheckBox->blockSignals(false);
-  }
-  if (ui->wrapNavigationCheckBox) {
-    ui->wrapNavigationCheckBox->blockSignals(true);
-    ui->wrapNavigationCheckBox->setChecked(m_generalSettings.wrapNavigation);
-    ui->wrapNavigationCheckBox->blockSignals(false);
-  }
-  if (ui->selectItemOnHoverCheckBox) {
-    ui->selectItemOnHoverCheckBox->blockSignals(true);
-    ui->selectItemOnHoverCheckBox->setChecked(m_generalSettings.selectItemOnHover);
-    ui->selectItemOnHoverCheckBox->blockSignals(false);
-  }
-  if (ui->showTitleInPlaceholderCheckBox) {
-    ui->showTitleInPlaceholderCheckBox->blockSignals(true);
-    ui->showTitleInPlaceholderCheckBox->setChecked(m_generalSettings.showTitleInPlaceholder);
-    ui->showTitleInPlaceholderCheckBox->blockSignals(false);
-  }
-  if (ui->bootSplashCheckBox) {
-    ui->bootSplashCheckBox->blockSignals(true);
-    ui->bootSplashCheckBox->setChecked(m_generalSettings.bootSplashEnabled);
-    ui->bootSplashCheckBox->blockSignals(false);
-  }
-  // Kartend-y3ke: startup video
-  if (ui->startupVideoEnabledCheckBox) {
-    ui->startupVideoEnabledCheckBox->blockSignals(true);
-    ui->startupVideoEnabledCheckBox->setChecked(m_generalSettings.startupVideoEnabled);
-    ui->startupVideoEnabledCheckBox->blockSignals(false);
-  }
-  if (ui->startupVideoPathLineEdit) {
-    ui->startupVideoPathLineEdit->blockSignals(true);
-    ui->startupVideoPathLineEdit->setText(m_generalSettings.startupVideoPath);
-    ui->startupVideoPathLineEdit->blockSignals(false);
-  }
-  if (ui->resumeFocusSplashCheckBox) {
-    ui->resumeFocusSplashCheckBox->blockSignals(true);
-    ui->resumeFocusSplashCheckBox->setChecked(m_generalSettings.resumeFocusSplashEnabled);
-    ui->resumeFocusSplashCheckBox->blockSignals(false);
-  }
-  if (ui->runtimeDetectionCheckBox) {
-    ui->runtimeDetectionCheckBox->blockSignals(true);
-    ui->runtimeDetectionCheckBox->setChecked(m_generalSettings.runtimeDetectionEnabled);
-    ui->runtimeDetectionCheckBox->blockSignals(false);
-  }
-  if (ui->historyEnabledCheckBox) {
-    ui->historyEnabledCheckBox->blockSignals(true);
-    ui->historyEnabledCheckBox->setChecked(m_generalSettings.historyEnabled);
-    ui->historyEnabledCheckBox->blockSignals(false);
-  }
-  if (ui->historyMaxEntriesSpinBox) {
-    ui->historyMaxEntriesSpinBox->blockSignals(true);
-    ui->historyMaxEntriesSpinBox->setValue(m_generalSettings.historyMaxEntries);
-    ui->historyMaxEntriesSpinBox->blockSignals(false);
-  }
-  if (ui->pixmapCacheSpinBox) {
-    ui->pixmapCacheSpinBox->blockSignals(true);
-    ui->pixmapCacheSpinBox->setValue(m_generalSettings.pixmapCacheSizeMB);
-    ui->pixmapCacheSpinBox->blockSignals(false);
-  }
-  if (ui->keyboardSpeedSpinBox) {
-    ui->keyboardSpeedSpinBox->blockSignals(true);
-    ui->keyboardSpeedSpinBox->setValue(m_generalSettings.keyboardRepeatIntervalMs);
-    ui->keyboardSpeedSpinBox->blockSignals(false);
-  }
-  if (ui->keyboardRepeatDelaySpinBox) {
-    ui->keyboardRepeatDelaySpinBox->blockSignals(true);
-    ui->keyboardRepeatDelaySpinBox->setValue(m_generalSettings.keyboardRepeatDelayMs);
-    ui->keyboardRepeatDelaySpinBox->blockSignals(false);
-  }
-  if (ui->clickHoldDelaySpinBox) {
-    ui->clickHoldDelaySpinBox->blockSignals(true);
-    ui->clickHoldDelaySpinBox->setValue(m_generalSettings.clickHoldDelayMs);
-    ui->clickHoldDelaySpinBox->blockSignals(false);
-  }
-  if (ui->clickHoldRepeatIntervalSpinBox) {
-    ui->clickHoldRepeatIntervalSpinBox->blockSignals(true);
-    ui->clickHoldRepeatIntervalSpinBox->setValue(m_generalSettings.clickHoldRepeatIntervalMs);
-    ui->clickHoldRepeatIntervalSpinBox->blockSignals(false);
-  }
-  if (ui->listKeyboardRepeatSpinBox) {
-    ui->listKeyboardRepeatSpinBox->blockSignals(true);
-    ui->listKeyboardRepeatSpinBox->setValue(m_generalSettings.listKeyboardRepeatIntervalMs);
-    ui->listKeyboardRepeatSpinBox->blockSignals(false);
-  }
-  if (ui->listClickHoldRepeatSpinBox) {
-    ui->listClickHoldRepeatSpinBox->blockSignals(true);
-    ui->listClickHoldRepeatSpinBox->setValue(m_generalSettings.listClickHoldRepeatIntervalMs);
-    ui->listClickHoldRepeatSpinBox->blockSignals(false);
-  }
-  if (ui->mouseWheelSpeedSpinBox) {
-    ui->mouseWheelSpeedSpinBox->blockSignals(true);
-    ui->mouseWheelSpeedSpinBox->setValue(m_generalSettings.mouseWheelRows);
-    ui->mouseWheelSpeedSpinBox->blockSignals(false);
-  }
-  if (ui->scrollAnimationSpeedSpinBox) {
-    ui->scrollAnimationSpeedSpinBox->blockSignals(true);
-    ui->scrollAnimationSpeedSpinBox->setValue(m_generalSettings.scrollAnimationDurationMs);
-    ui->scrollAnimationSpeedSpinBox->blockSignals(false);
-  }
-  if (ui->scrollVelocityMultiplierSpinBox) {
-    ui->scrollVelocityMultiplierSpinBox->blockSignals(true);
-    ui->scrollVelocityMultiplierSpinBox->setValue(m_generalSettings.scrollVelocityMultiplier);
-    ui->scrollVelocityMultiplierSpinBox->blockSignals(false);
-  }
-  if (ui->titleSaturationSpinBox) {
-    ui->titleSaturationSpinBox->blockSignals(true);
-    ui->titleSaturationSpinBox->setValue(m_generalSettings.titleTintSaturation);
-    ui->titleSaturationSpinBox->blockSignals(false);
-  }
-  if (ui->titleLightnessSpinBox) {
-    ui->titleLightnessSpinBox->blockSignals(true);
-    ui->titleLightnessSpinBox->setValue(m_generalSettings.titleTintLightness);
-    ui->titleLightnessSpinBox->blockSignals(false);
-  }
-  if (ui->baseColorEdit) {
-    ui->baseColorEdit->blockSignals(true);
-    ui->baseColorEdit->setText(m_generalSettings.titleBaseColor);
-    ui->baseColorEdit->blockSignals(false);
-  }
-  // Kartend-9v0o: global UI font controls
-  if (ui->globalUiFontFamilyEdit) {
-    ui->globalUiFontFamilyEdit->blockSignals(true);
-    ui->globalUiFontFamilyEdit->setText(m_generalSettings.globalUiFontFamily);
-    ui->globalUiFontFamilyEdit->blockSignals(false);
-  }
-  if (ui->globalUiFontSizeSpinBox) {
-    ui->globalUiFontSizeSpinBox->blockSignals(true);
-    ui->globalUiFontSizeSpinBox->setValue(m_generalSettings.globalUiFontPointSize);
-    ui->globalUiFontSizeSpinBox->blockSignals(false);
-  }
-  if (ui->attractModeCheckBox) {
-    ui->attractModeCheckBox->blockSignals(true);
-    ui->attractModeCheckBox->setChecked(m_generalSettings.attractModeEnabled);
-    ui->attractModeCheckBox->blockSignals(false);
-  }
-  if (ui->attractIdleTimeoutSpinBox) {
-    ui->attractIdleTimeoutSpinBox->blockSignals(true);
-    ui->attractIdleTimeoutSpinBox->setValue(m_generalSettings.attractModeIdleTimeoutSec);
-    ui->attractIdleTimeoutSpinBox->blockSignals(false);
-  }
-  if (ui->attractAutoScrollCheckBox) {
-    ui->attractAutoScrollCheckBox->blockSignals(true);
-    ui->attractAutoScrollCheckBox->setChecked(m_generalSettings.attractModeAutoScrollEnabled);
-    ui->attractAutoScrollCheckBox->blockSignals(false);
-  }
-  if (ui->attractScrollSpeedSpinBox) {
-    ui->attractScrollSpeedSpinBox->blockSignals(true);
-    ui->attractScrollSpeedSpinBox->setValue(m_generalSettings.attractModeScrollSpeed);
-    ui->attractScrollSpeedSpinBox->blockSignals(false);
-  }
-  if (ui->attractAdvanceSelectionCheckBox) {
-    ui->attractAdvanceSelectionCheckBox->blockSignals(true);
-    ui->attractAdvanceSelectionCheckBox->setChecked(
+  SettingsFormBinding::loadInto(ui->rememberSelectionCheckBox, m_generalSettings.rememberSelection);
+  SettingsFormBinding::loadInto(ui->wrapNavigationCheckBox, m_generalSettings.wrapNavigation);
+  SettingsFormBinding::loadInto(ui->selectItemOnHoverCheckBox, m_generalSettings.selectItemOnHover);
+  SettingsFormBinding::loadInto(ui->showTitleInPlaceholderCheckBox, m_generalSettings.showTitleInPlaceholder);
+  SettingsFormBinding::loadInto(ui->bootSplashCheckBox, m_generalSettings.bootSplashEnabled);
+  // startup video
+  SettingsFormBinding::loadInto(ui->startupVideoEnabledCheckBox, m_generalSettings.startupVideoEnabled);
+  SettingsFormBinding::loadInto(ui->startupVideoPathLineEdit, m_generalSettings.startupVideoPath);
+  SettingsFormBinding::loadInto(ui->resumeFocusSplashCheckBox, m_generalSettings.resumeFocusSplashEnabled);
+  SettingsFormBinding::loadInto(ui->bootSplashTitleLineEdit, m_generalSettings.bootSplashTitle);
+  SettingsFormBinding::loadInto(ui->bootSplashSubtitleLineEdit, m_generalSettings.bootSplashSubtitle);
+  SettingsFormBinding::loadInto(ui->resumeFocusSplashTitleLineEdit, m_generalSettings.resumeFocusSplashTitle);
+  SettingsFormBinding::loadInto(ui->resumeFocusSplashSubtitleLineEdit, m_generalSettings.resumeFocusSplashSubtitle);
+  SettingsFormBinding::loadInto(ui->runtimeDetectionCheckBox, m_generalSettings.runtimeDetectionEnabled);
+  SettingsFormBinding::loadInto(ui->historyEnabledCheckBox, m_generalSettings.historyEnabled);
+  SettingsFormBinding::loadInto(ui->historyMaxEntriesSpinBox, m_generalSettings.historyMaxEntries);
+  SettingsFormBinding::loadInto(ui->pixmapCacheSpinBox, m_generalSettings.pixmapCacheSizeMB);
+  SettingsFormBinding::loadInto(ui->keyboardSpeedSpinBox, m_generalSettings.keyboardRepeatIntervalMs);
+  SettingsFormBinding::loadInto(ui->keyboardRepeatDelaySpinBox, m_generalSettings.keyboardRepeatDelayMs);
+  SettingsFormBinding::loadInto(ui->clickHoldDelaySpinBox, m_generalSettings.clickHoldDelayMs);
+  SettingsFormBinding::loadInto(ui->clickHoldRepeatIntervalSpinBox, m_generalSettings.clickHoldRepeatIntervalMs);
+  SettingsFormBinding::loadInto(ui->listKeyboardRepeatSpinBox, m_generalSettings.listKeyboardRepeatIntervalMs);
+  SettingsFormBinding::loadInto(ui->listClickHoldRepeatSpinBox, m_generalSettings.listClickHoldRepeatIntervalMs);
+  SettingsFormBinding::loadInto(ui->mouseWheelSpeedSpinBox, m_generalSettings.mouseWheelRows);
+  SettingsFormBinding::loadInto(ui->scrollAnimationSpeedSpinBox, m_generalSettings.scrollAnimationDurationMs);
+  SettingsFormBinding::loadInto(ui->scrollVelocityMultiplierSpinBox, m_generalSettings.scrollVelocityMultiplier);
+  SettingsFormBinding::loadInto(ui->titleSaturationSpinBox, m_generalSettings.titleTintSaturation);
+  SettingsFormBinding::loadInto(ui->titleLightnessSpinBox, m_generalSettings.titleTintLightness);
+  SettingsFormBinding::loadInto(ui->baseColorEdit, m_generalSettings.titleBaseColor);
+  // global UI font controls
+  SettingsFormBinding::loadInto(ui->globalUiFontFamilyEdit, m_generalSettings.globalUiFontFamily);
+  SettingsFormBinding::loadInto(ui->globalUiFontSizeSpinBox, m_generalSettings.globalUiFontPointSize);
+  SettingsFormBinding::loadInto(ui->attractModeCheckBox, m_generalSettings.attractModeEnabled);
+  SettingsFormBinding::loadInto(ui->attractIdleTimeoutSpinBox, m_generalSettings.attractModeIdleTimeoutSec);
+  SettingsFormBinding::loadInto(ui->attractAutoScrollCheckBox, m_generalSettings.attractModeAutoScrollEnabled);
+  SettingsFormBinding::loadInto(ui->attractScrollSpeedSpinBox, m_generalSettings.attractModeScrollSpeed);
+  SettingsFormBinding::loadInto(ui->attractAdvanceSelectionCheckBox, 
         m_generalSettings.attractModeAdvanceSelectionEnabled);
-    ui->attractAdvanceSelectionCheckBox->blockSignals(false);
-  }
-  if (ui->attractAdvanceIntervalSpinBox) {
-    ui->attractAdvanceIntervalSpinBox->blockSignals(true);
-    ui->attractAdvanceIntervalSpinBox->setValue(
+  SettingsFormBinding::loadInto(ui->attractAdvanceIntervalSpinBox, 
         m_generalSettings.attractModeAdvanceSelectionIntervalSec);
-    ui->attractAdvanceIntervalSpinBox->blockSignals(false);
-  }
-  if (ui->attractAdvanceRandomCheckBox) {
-    ui->attractAdvanceRandomCheckBox->blockSignals(true);
-    ui->attractAdvanceRandomCheckBox->setChecked(
+  SettingsFormBinding::loadInto(ui->attractAdvanceRandomCheckBox, 
         m_generalSettings.attractModeAdvanceSelectionRandom);
-    ui->attractAdvanceRandomCheckBox->blockSignals(false);
-  }
   if (ui->startupCollectionComboBox) {
     ui->startupCollectionComboBox->blockSignals(true);
     ui->startupCollectionComboBox->clear();
@@ -549,33 +421,13 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   setKeyEdit(ui->keyBackEdit, m_generalSettings.keyBack);
   setKeyEdit(ui->keySearchEdit, m_generalSettings.keySearch);
 
-  if (ui->gamepadUseDpadCheckBox) {
-    ui->gamepadUseDpadCheckBox->blockSignals(true);
-    ui->gamepadUseDpadCheckBox->setChecked(m_generalSettings.gamepadUseDpad);
-    ui->gamepadUseDpadCheckBox->blockSignals(false);
-  }
-  if (ui->gamepadUseLeftStickCheckBox) {
-    ui->gamepadUseLeftStickCheckBox->blockSignals(true);
-    ui->gamepadUseLeftStickCheckBox->setChecked(m_generalSettings.gamepadUseLeftStick);
-    ui->gamepadUseLeftStickCheckBox->blockSignals(false);
-  }
-  if (ui->gamepadConfirmButtonLineEdit) {
-    ui->gamepadConfirmButtonLineEdit->blockSignals(true);
-    ui->gamepadConfirmButtonLineEdit->setText(m_generalSettings.gamepadConfirmButton);
-    ui->gamepadConfirmButtonLineEdit->blockSignals(false);
-  }
-  if (ui->gamepadBackButtonLineEdit) {
-    ui->gamepadBackButtonLineEdit->blockSignals(true);
-    ui->gamepadBackButtonLineEdit->setText(m_generalSettings.gamepadBackButton);
-    ui->gamepadBackButtonLineEdit->blockSignals(false);
-  }
-  if (ui->gamepadToggleSidebarButtonLineEdit) {
-    ui->gamepadToggleSidebarButtonLineEdit->blockSignals(true);
-    ui->gamepadToggleSidebarButtonLineEdit->setText(m_generalSettings.gamepadToggleSidebarButton);
-    ui->gamepadToggleSidebarButtonLineEdit->blockSignals(false);
-  }
+  SettingsFormBinding::loadInto(ui->gamepadUseDpadCheckBox, m_generalSettings.gamepadUseDpad);
+  SettingsFormBinding::loadInto(ui->gamepadUseLeftStickCheckBox, m_generalSettings.gamepadUseLeftStick);
+  SettingsFormBinding::loadInto(ui->gamepadConfirmButtonLineEdit, m_generalSettings.gamepadConfirmButton);
+  SettingsFormBinding::loadInto(ui->gamepadBackButtonLineEdit, m_generalSettings.gamepadBackButton);
+  SettingsFormBinding::loadInto(ui->gamepadToggleSidebarButtonLineEdit, m_generalSettings.gamepadToggleSidebarButton);
 
-  // Kartend-1v6: artwork-cycle modifier dropdown. Populated lazily on first
+  // artwork-cycle modifier dropdown. Populated lazily on first
   // load so a freshly opened dialog reflects whatever the user picked last
   // session. Order matches the order users tend to reach for: Shift first,
   // Meta last (Win/Cmd is the most likely to clash with a global shortcut).
@@ -593,7 +445,7 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->artworkCycleModifierComboBox->setCurrentIndex(comboIdx >= 0 ? comboIdx : 0);
   }
 
-  // Kartend-81o: load toolbar customization controls.
+  // load toolbar customization controls.
   auto setToolbarCheck = [](QCheckBox *box, bool value) {
     if (!box) {
       return;
@@ -634,7 +486,7 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   // Store original general settings for change detection
   m_originalGeneralSettings = m_generalSettings;
 
-  // Kartend-p1jd: hydrate the launcher-presets list from the loaded general
+  // hydrate the launcher-presets list from the loaded general
   // settings. Done after m_originalGeneralSettings is captured so the change
   // detector can compare the live presets against the saved baseline.
   loadLauncherPresetsToUI();
@@ -645,95 +497,40 @@ void SettingsDialog::loadGeneralSettingsToUI() {
 void SettingsDialog::saveGeneralSettingsFromUI() {
   auto *mainWindow = qobject_cast<MainWindow *>(parent());
   if ((mainWindow) && (mainWindow->getSettingsManager())) {
-    if (ui->rememberSelectionCheckBox) {
-      mainWindow->m_generalSettings.rememberSelection = ui->rememberSelectionCheckBox->isChecked();
-    }
-    if (ui->wrapNavigationCheckBox) {
-      mainWindow->m_generalSettings.wrapNavigation = ui->wrapNavigationCheckBox->isChecked();
-    }
-    if (ui->selectItemOnHoverCheckBox) {
-      mainWindow->m_generalSettings.selectItemOnHover = ui->selectItemOnHoverCheckBox->isChecked();
-    }
-    if (ui->bootSplashCheckBox) {
-      mainWindow->m_generalSettings.bootSplashEnabled = ui->bootSplashCheckBox->isChecked();
-    }
-    // Kartend-y3ke: startup video
-    if (ui->startupVideoEnabledCheckBox) {
-      mainWindow->m_generalSettings.startupVideoEnabled =
-          ui->startupVideoEnabledCheckBox->isChecked();
-    }
-    if (ui->startupVideoPathLineEdit) {
-      mainWindow->m_generalSettings.startupVideoPath =
-          ui->startupVideoPathLineEdit->text().trimmed();
-    }
-    if (ui->resumeFocusSplashCheckBox) {
-      mainWindow->m_generalSettings.resumeFocusSplashEnabled =
-          ui->resumeFocusSplashCheckBox->isChecked();
-    }
+    SettingsFormBinding::saveFrom(ui->rememberSelectionCheckBox, mainWindow->m_generalSettings.rememberSelection);
+    SettingsFormBinding::saveFrom(ui->wrapNavigationCheckBox, mainWindow->m_generalSettings.wrapNavigation);
+    SettingsFormBinding::saveFrom(ui->selectItemOnHoverCheckBox, mainWindow->m_generalSettings.selectItemOnHover);
+    SettingsFormBinding::saveFrom(ui->bootSplashCheckBox, mainWindow->m_generalSettings.bootSplashEnabled);
+    // startup video
+    SettingsFormBinding::saveFrom(ui->startupVideoEnabledCheckBox, mainWindow->m_generalSettings.startupVideoEnabled);
+    SettingsFormBinding::saveFrom(ui->startupVideoPathLineEdit, mainWindow->m_generalSettings.startupVideoPath);
+    SettingsFormBinding::saveFrom(ui->resumeFocusSplashCheckBox, mainWindow->m_generalSettings.resumeFocusSplashEnabled);
+    SettingsFormBinding::saveFrom(ui->bootSplashTitleLineEdit, mainWindow->m_generalSettings.bootSplashTitle);
+    SettingsFormBinding::saveFrom(ui->bootSplashSubtitleLineEdit, mainWindow->m_generalSettings.bootSplashSubtitle);
+    SettingsFormBinding::saveFrom(ui->resumeFocusSplashTitleLineEdit, mainWindow->m_generalSettings.resumeFocusSplashTitle);
+    SettingsFormBinding::saveFrom(ui->resumeFocusSplashSubtitleLineEdit, mainWindow->m_generalSettings.resumeFocusSplashSubtitle);
     if (ui->pixmapCacheSpinBox) {
       int newCacheSize = ui->pixmapCacheSpinBox->value();
       mainWindow->m_generalSettings.pixmapCacheSizeMB = newCacheSize;
       // Apply immediately (in KB)
       QPixmapCache::setCacheLimit(newCacheSize * 1024);
     }
-    if (ui->keyboardSpeedSpinBox) {
-      mainWindow->m_generalSettings.keyboardRepeatIntervalMs = ui->keyboardSpeedSpinBox->value();
-    }
-    if (ui->keyboardRepeatDelaySpinBox) {
-      mainWindow->m_generalSettings.keyboardRepeatDelayMs = ui->keyboardRepeatDelaySpinBox->value();
-    }
-    if (ui->clickHoldDelaySpinBox) {
-      mainWindow->m_generalSettings.clickHoldDelayMs = ui->clickHoldDelaySpinBox->value();
-    }
-    if (ui->clickHoldRepeatIntervalSpinBox) {
-      mainWindow->m_generalSettings.clickHoldRepeatIntervalMs =
-          ui->clickHoldRepeatIntervalSpinBox->value();
-    }
-    if (ui->listKeyboardRepeatSpinBox) {
-      mainWindow->m_generalSettings.listKeyboardRepeatIntervalMs =
-          ui->listKeyboardRepeatSpinBox->value();
-    }
-    if (ui->listClickHoldRepeatSpinBox) {
-      mainWindow->m_generalSettings.listClickHoldRepeatIntervalMs =
-          ui->listClickHoldRepeatSpinBox->value();
-    }
-    if (ui->mouseWheelSpeedSpinBox) {
-      mainWindow->m_generalSettings.mouseWheelRows = ui->mouseWheelSpeedSpinBox->value();
-    }
-    if (ui->scrollAnimationSpeedSpinBox) {
-      mainWindow->m_generalSettings.scrollAnimationDurationMs =
-          ui->scrollAnimationSpeedSpinBox->value();
-    }
-    if (ui->scrollVelocityMultiplierSpinBox) {
-      mainWindow->m_generalSettings.scrollVelocityMultiplier =
-          ui->scrollVelocityMultiplierSpinBox->value();
-    }
-    if (ui->attractModeCheckBox) {
-      mainWindow->m_generalSettings.attractModeEnabled = ui->attractModeCheckBox->isChecked();
-    }
-    if (ui->attractIdleTimeoutSpinBox) {
-      mainWindow->m_generalSettings.attractModeIdleTimeoutSec =
-          ui->attractIdleTimeoutSpinBox->value();
-    }
-    if (ui->attractAutoScrollCheckBox) {
-      mainWindow->m_generalSettings.attractModeAutoScrollEnabled =
-          ui->attractAutoScrollCheckBox->isChecked();
-    }
-    if (ui->attractScrollSpeedSpinBox) {
-      mainWindow->m_generalSettings.attractModeScrollSpeed = ui->attractScrollSpeedSpinBox->value();
-    }
-    if (ui->attractAdvanceSelectionCheckBox) {
-      mainWindow->m_generalSettings.attractModeAdvanceSelectionEnabled =
-          ui->attractAdvanceSelectionCheckBox->isChecked();
-    }
-    if (ui->attractAdvanceIntervalSpinBox) {
-      mainWindow->m_generalSettings.attractModeAdvanceSelectionIntervalSec =
-          ui->attractAdvanceIntervalSpinBox->value();
-    }
-    if (ui->attractAdvanceRandomCheckBox) {
-      mainWindow->m_generalSettings.attractModeAdvanceSelectionRandom =
-          ui->attractAdvanceRandomCheckBox->isChecked();
-    }
+    SettingsFormBinding::saveFrom(ui->keyboardSpeedSpinBox, mainWindow->m_generalSettings.keyboardRepeatIntervalMs);
+    SettingsFormBinding::saveFrom(ui->keyboardRepeatDelaySpinBox, mainWindow->m_generalSettings.keyboardRepeatDelayMs);
+    SettingsFormBinding::saveFrom(ui->clickHoldDelaySpinBox, mainWindow->m_generalSettings.clickHoldDelayMs);
+    SettingsFormBinding::saveFrom(ui->clickHoldRepeatIntervalSpinBox, mainWindow->m_generalSettings.clickHoldRepeatIntervalMs);
+    SettingsFormBinding::saveFrom(ui->listKeyboardRepeatSpinBox, mainWindow->m_generalSettings.listKeyboardRepeatIntervalMs);
+    SettingsFormBinding::saveFrom(ui->listClickHoldRepeatSpinBox, mainWindow->m_generalSettings.listClickHoldRepeatIntervalMs);
+    SettingsFormBinding::saveFrom(ui->mouseWheelSpeedSpinBox, mainWindow->m_generalSettings.mouseWheelRows);
+    SettingsFormBinding::saveFrom(ui->scrollAnimationSpeedSpinBox, mainWindow->m_generalSettings.scrollAnimationDurationMs);
+    SettingsFormBinding::saveFrom(ui->scrollVelocityMultiplierSpinBox, mainWindow->m_generalSettings.scrollVelocityMultiplier);
+    SettingsFormBinding::saveFrom(ui->attractModeCheckBox, mainWindow->m_generalSettings.attractModeEnabled);
+    SettingsFormBinding::saveFrom(ui->attractIdleTimeoutSpinBox, mainWindow->m_generalSettings.attractModeIdleTimeoutSec);
+    SettingsFormBinding::saveFrom(ui->attractAutoScrollCheckBox, mainWindow->m_generalSettings.attractModeAutoScrollEnabled);
+    SettingsFormBinding::saveFrom(ui->attractScrollSpeedSpinBox, mainWindow->m_generalSettings.attractModeScrollSpeed);
+    SettingsFormBinding::saveFrom(ui->attractAdvanceSelectionCheckBox, mainWindow->m_generalSettings.attractModeAdvanceSelectionEnabled);
+    SettingsFormBinding::saveFrom(ui->attractAdvanceIntervalSpinBox, mainWindow->m_generalSettings.attractModeAdvanceSelectionIntervalSec);
+    SettingsFormBinding::saveFrom(ui->attractAdvanceRandomCheckBox, mainWindow->m_generalSettings.attractModeAdvanceSelectionRandom);
     if (ui->titleSaturationSpinBox) {
       mainWindow->m_generalSettings.titleTintSaturation = ui->titleSaturationSpinBox->value();
       // Apply to ItemWidget static settings
@@ -784,13 +581,8 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     mainWindow->m_generalSettings.keySearch =
         singleKeyFromEdit(ui->keySearchEdit, mainWindow->m_generalSettings.keySearch);
 
-    if (ui->gamepadUseDpadCheckBox) {
-      mainWindow->m_generalSettings.gamepadUseDpad = ui->gamepadUseDpadCheckBox->isChecked();
-    }
-    if (ui->gamepadUseLeftStickCheckBox) {
-      mainWindow->m_generalSettings.gamepadUseLeftStick =
-          ui->gamepadUseLeftStickCheckBox->isChecked();
-    }
+    SettingsFormBinding::saveFrom(ui->gamepadUseDpadCheckBox, mainWindow->m_generalSettings.gamepadUseDpad);
+    SettingsFormBinding::saveFrom(ui->gamepadUseLeftStickCheckBox, mainWindow->m_generalSettings.gamepadUseLeftStick);
     if (ui->gamepadConfirmButtonLineEdit) {
       const QString v = ui->gamepadConfirmButtonLineEdit->text().trimmed();
       if (!v.isEmpty()) {
@@ -822,70 +614,28 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
         break; // leave the existing value untouched on a stale combo entry
       }
     }
-    // Kartend-p1jd: launcher presets live on the dialog's m_generalSettings
+    // launcher presets live on the dialog's m_generalSettings
     // (mutated directly by the Launchers tab) — copy them onto the main
     // window's settings before persisting so the saved snapshot includes
     // any preset add/edit/remove the user just performed.
     mainWindow->m_generalSettings.launcherPresets = m_generalSettings.launcherPresets;
 
-    // Kartend-81o: pull customizable-toolbar fields off the dialog controls.
-    if (ui->toolbarGridViewVisibleCheckBox) {
-      mainWindow->m_generalSettings.toolbarShowGridViewButton =
-          ui->toolbarGridViewVisibleCheckBox->isChecked();
-    }
-    if (ui->toolbarListViewVisibleCheckBox) {
-      mainWindow->m_generalSettings.toolbarShowListViewButton =
-          ui->toolbarListViewVisibleCheckBox->isChecked();
-    }
-    if (ui->toolbarCoverFlowViewVisibleCheckBox) {
-      mainWindow->m_generalSettings.toolbarShowCoverFlowViewButton =
-          ui->toolbarCoverFlowViewVisibleCheckBox->isChecked();
-    }
-    if (ui->toolbarHorizontalViewVisibleCheckBox) {
-      mainWindow->m_generalSettings.toolbarShowHorizontalViewButton =
-          ui->toolbarHorizontalViewVisibleCheckBox->isChecked();
-    }
-    if (ui->toolbarHideSubcollectionsVisibleCheckBox) {
-      mainWindow->m_generalSettings.toolbarShowHideSubcollectionsButton =
-          ui->toolbarHideSubcollectionsVisibleCheckBox->isChecked();
-    }
-    if (ui->toolbarTypeFilterVisibleCheckBox) {
-      mainWindow->m_generalSettings.toolbarShowTypeFilter =
-          ui->toolbarTypeFilterVisibleCheckBox->isChecked();
-    }
-    if (ui->toolbarTitleFilterVisibleCheckBox) {
-      mainWindow->m_generalSettings.toolbarShowTitleFilter =
-          ui->toolbarTitleFilterVisibleCheckBox->isChecked();
-    }
-    if (ui->toolbarSearchModeVisibleCheckBox) {
-      mainWindow->m_generalSettings.toolbarShowSearchModeButton =
-          ui->toolbarSearchModeVisibleCheckBox->isChecked();
-    }
-    if (ui->toolbarSearchBarVisibleCheckBox) {
-      mainWindow->m_generalSettings.toolbarShowSearchBar =
-          ui->toolbarSearchBarVisibleCheckBox->isChecked();
-    }
-    if (ui->toolbarGridViewTextEdit) {
-      mainWindow->m_generalSettings.toolbarGridViewButtonText = ui->toolbarGridViewTextEdit->text();
-    }
-    if (ui->toolbarListViewTextEdit) {
-      mainWindow->m_generalSettings.toolbarListViewButtonText = ui->toolbarListViewTextEdit->text();
-    }
-    if (ui->toolbarCoverFlowViewTextEdit) {
-      mainWindow->m_generalSettings.toolbarCoverFlowViewButtonText =
-          ui->toolbarCoverFlowViewTextEdit->text();
-    }
-    if (ui->toolbarHorizontalViewTextEdit) {
-      mainWindow->m_generalSettings.toolbarHorizontalViewButtonText =
-          ui->toolbarHorizontalViewTextEdit->text();
-    }
-    if (ui->toolbarHideSubcollectionsTextEdit) {
-      mainWindow->m_generalSettings.toolbarHideSubcollectionsButtonText =
-          ui->toolbarHideSubcollectionsTextEdit->text();
-    }
-    if (ui->toolbarTitleFilterTextEdit) {
-      mainWindow->m_generalSettings.toolbarTitleFilterText = ui->toolbarTitleFilterTextEdit->text();
-    }
+    // pull customizable-toolbar fields off the dialog controls.
+    SettingsFormBinding::saveFrom(ui->toolbarGridViewVisibleCheckBox, mainWindow->m_generalSettings.toolbarShowGridViewButton);
+    SettingsFormBinding::saveFrom(ui->toolbarListViewVisibleCheckBox, mainWindow->m_generalSettings.toolbarShowListViewButton);
+    SettingsFormBinding::saveFrom(ui->toolbarCoverFlowViewVisibleCheckBox, mainWindow->m_generalSettings.toolbarShowCoverFlowViewButton);
+    SettingsFormBinding::saveFrom(ui->toolbarHorizontalViewVisibleCheckBox, mainWindow->m_generalSettings.toolbarShowHorizontalViewButton);
+    SettingsFormBinding::saveFrom(ui->toolbarHideSubcollectionsVisibleCheckBox, mainWindow->m_generalSettings.toolbarShowHideSubcollectionsButton);
+    SettingsFormBinding::saveFrom(ui->toolbarTypeFilterVisibleCheckBox, mainWindow->m_generalSettings.toolbarShowTypeFilter);
+    SettingsFormBinding::saveFrom(ui->toolbarTitleFilterVisibleCheckBox, mainWindow->m_generalSettings.toolbarShowTitleFilter);
+    SettingsFormBinding::saveFrom(ui->toolbarSearchModeVisibleCheckBox, mainWindow->m_generalSettings.toolbarShowSearchModeButton);
+    SettingsFormBinding::saveFrom(ui->toolbarSearchBarVisibleCheckBox, mainWindow->m_generalSettings.toolbarShowSearchBar);
+    SettingsFormBinding::saveFrom(ui->toolbarGridViewTextEdit, mainWindow->m_generalSettings.toolbarGridViewButtonText, /*trim=*/false);
+    SettingsFormBinding::saveFrom(ui->toolbarListViewTextEdit, mainWindow->m_generalSettings.toolbarListViewButtonText, /*trim=*/false);
+    SettingsFormBinding::saveFrom(ui->toolbarCoverFlowViewTextEdit, mainWindow->m_generalSettings.toolbarCoverFlowViewButtonText, /*trim=*/false);
+    SettingsFormBinding::saveFrom(ui->toolbarHorizontalViewTextEdit, mainWindow->m_generalSettings.toolbarHorizontalViewButtonText, /*trim=*/false);
+    SettingsFormBinding::saveFrom(ui->toolbarHideSubcollectionsTextEdit, mainWindow->m_generalSettings.toolbarHideSubcollectionsButtonText, /*trim=*/false);
+    SettingsFormBinding::saveFrom(ui->toolbarTitleFilterTextEdit, mainWindow->m_generalSettings.toolbarTitleFilterText, /*trim=*/false);
 
     mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
     m_generalSettings = mainWindow->m_generalSettings;
@@ -903,7 +653,7 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     // above; this line keeps the comment local to where it matters.)
     m_originalGeneralSettings = m_generalSettings;
 
-    // Kartend-81o: push the new toolbar config onto the live UI immediately so
+    // push the new toolbar config onto the live UI immediately so
     // the user sees the change without restart or extra clicks.
     mainWindow->applyToolbarCustomization();
 

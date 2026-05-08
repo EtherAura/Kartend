@@ -19,17 +19,16 @@ constexpr int kTopMargin = 24;
 constexpr int kHorizontalPadding = 22;
 constexpr int kVerticalPadding = 10;
 
-const QString kPillStyle =
-    QStringLiteral("background-color: rgba(20, 23, 30, 230);"
-                   "color: white;"
-                   "font-size: 16px;"
-                   "font-weight: 600;"
-                   "letter-spacing: 0.4px;"
-                   "border: 1px solid rgba(255, 255, 255, 60);"
-                   "border-radius: 14px;"
-                   "padding: %1px %2px;")
-        .arg(kVerticalPadding)
-        .arg(kHorizontalPadding);
+const QString kPillStyle = QStringLiteral("background-color: rgba(20, 23, 30, 230);"
+                                          "color: white;"
+                                          "font-size: 16px;"
+                                          "font-weight: 600;"
+                                          "letter-spacing: 0.4px;"
+                                          "border: 1px solid rgba(255, 255, 255, 60);"
+                                          "border-radius: 14px;"
+                                          "padding: %1px %2px;")
+                               .arg(kVerticalPadding)
+                               .arg(kHorizontalPadding);
 } // namespace
 
 TextZoomHud::TextZoomHud(QWidget *parent) : QWidget(parent) {

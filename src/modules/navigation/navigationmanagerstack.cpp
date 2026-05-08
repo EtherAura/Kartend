@@ -12,7 +12,7 @@
 #include "selectionrestoremanager.h"
 #include "settingsmanager.h"
 #include "timerutils.h"
-#include "ui_mainwindow.h"
+#include "detailspane.h"
 #include "uiconstants.h"
 
 #include <QApplication>

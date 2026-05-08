@@ -1,4 +1,4 @@
-// Artwork / video preview overlay (Kartend-un3l + Kartend-ljey).
+// Artwork / video preview overlay (+).
 #include "artworkpreviewoverlay.h"
 #include "artworkutils.h"
 #include "uiconstants.h"
@@ -101,7 +101,7 @@ bool ArtworkPreviewOverlay::showMediaForFile(const QString &filePath,
                                              const QString &videoDirectory) {
   m_currentFilePath = filePath;
 
-  // Video-first per user preference (Kartend-ljey).
+  // Video-first per user preference.
   if (!videoDirectory.isEmpty()) {
     const QString videoPath = VideoUtils::findVideoForFile(filePath, videoDirectory);
     if (!videoPath.isEmpty()) {
@@ -205,8 +205,7 @@ void ArtworkPreviewOverlay::hideOverlay() {
 }
 
 bool ArtworkPreviewOverlay::togglePreviewVideoPause() {
-  if (!m_videoPreview || m_displayWidget != m_videoPreview ||
-      !m_videoPreview->hasLoadedSource()) {
+  if (!m_videoPreview || m_displayWidget != m_videoPreview || !m_videoPreview->hasLoadedSource()) {
     return false;
   }
   m_videoPreview->togglePauseResume();
@@ -247,7 +246,7 @@ void ArtworkPreviewOverlay::mousePressEvent(QMouseEvent *event) {
     event->accept();
     return;
   }
-  // Kartend-rvq7: accept inside-content presses too. Without this, Qt
+  // accept inside-content presses too. Without this, Qt
   // propagates the unaccepted event up through the overlay's parent
   // (m_mediaScrollArea), where EventManager's app-level filter treats it as
   // a click on the underlying tile and changes selection.
@@ -262,7 +261,7 @@ void ArtworkPreviewOverlay::mouseDoubleClickEvent(QMouseEvent *event) {
     emit launchRequested(m_currentFilePath);
     return;
   }
-  // Kartend-rvq7: same anti-propagation reasoning as mousePressEvent.
+  // same anti-propagation reasoning as mousePressEvent.
   event->accept();
 }
 
@@ -279,7 +278,7 @@ void ArtworkPreviewOverlay::keyPressEvent(QKeyEvent *event) {
     emit launchRequested(m_currentFilePath);
     return;
   }
-  // Kartend-cjry: K toggles pause/resume on the overlay's video preview.
+  // K toggles pause/resume on the overlay's video preview.
   // Same letter as YouTube's universal pause key — picked over Space because
   // Space is consumed by coverflow navigation elsewhere in the app.
   if (event->key() == Qt::Key_K) {

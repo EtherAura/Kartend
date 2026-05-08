@@ -33,16 +33,18 @@
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "detailpagemanager.h"
+#include "detailpageoverlay.h"
+#include "detailspane.h"
+#include "detailspanemanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
-#include "detailspane.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 
@@ -203,6 +205,18 @@ auto InteractionManager::handleEscapeKey() -> bool {
     // Also clear expand-mode state so the next activation expands again.
     m_state.clearExpandedItem();
     return true;
+  }
+  // Then the detail-page overlay (info mode). Its own keyPressEvent would
+  // handle Escape, but the app-wide event filter consumes the key first via
+  // KeyboardManager → requestEscapeAction; route the dismiss here so the
+  // overlay closes regardless of which path the key takes.
+  if (m_detailPageManager) {
+    if (auto *overlay = m_detailPageManager->overlay()) {
+      if (overlay->isActive()) {
+        m_detailPageManager->hideOverlay();
+        return true;
+      }
+    }
   }
 
   const QString current = (m_searchBar ? m_searchBar->text().trimmed() : QString());

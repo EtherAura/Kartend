@@ -229,7 +229,7 @@
               </size>
              </property>
              <property name="toolTip">
-              <string>Show item details for the current selection (Kartend-uve)</string>
+              <string>Show item details for the current selection</string>
              </property>
              <property name="text">
               <string>ℹ</string>
@@ -291,7 +291,7 @@
               </size>
              </property>
              <property name="toolTip">
-              <string>Preview video volume (Kartend-3m01)</string>
+              <string>Preview video volume</string>
              </property>
              <property name="minimum">
               <number>0</number>

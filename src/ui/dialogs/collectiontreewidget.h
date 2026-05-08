@@ -11,7 +11,7 @@ class QTreeWidgetItem;
 QT_END_NAMESPACE
 
 /// Promoted QTreeWidget used by SettingsDialog for the collection tree
-/// (Kartend-j613). Adds drag-and-drop reparenting with a host-supplied cycle
+/// Adds drag-and-drop reparenting with a host-supplied cycle
 /// check so the dialog can keep its existing
 /// SettingsDialog::wouldCreateCircularReference() invariant. The widget itself
 /// owns no model state — after a successful drop it emits treeRearranged() so

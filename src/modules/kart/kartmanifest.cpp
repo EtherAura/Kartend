@@ -50,7 +50,7 @@ QStringList jsonToStringList(const QJsonValue &v) {
     return out;
   }
   const QJsonArray arr = v.toArray();
-  for (const auto item : arr) {
+  for (const auto &item : arr) {
     out.append(item.toString());
   }
   return out;
@@ -125,7 +125,7 @@ QJsonObject collectionConfigToJson(const CollectionConfig &c) {
   o["horizontal_grid_height"] = c.horizontalGridHeight;
   o["grid_width_sidebar_hidden"] = c.gridWidthSidebarHidden;
   o["horizontal_grid_height_sidebar_hidden"] = c.horizontalGridHeightSidebarHidden;
-  // Kartend-u2gx: alt items-per-column for Top/Bottom-pane-shrink case.
+  // alt items-per-column for Top/Bottom-pane-shrink case.
   o["grid_height_sidebar_hidden"] = c.gridHeightSidebarHidden;
   o["sidebar_visible"] = c.sidebarVisible;
   o["parent_collection_index"] = c.parentCollectionIndex;
@@ -153,7 +153,7 @@ QJsonObject collectionConfigToJson(const CollectionConfig &c) {
   o["sidebar_header_bg_opacity"] = c.sidebarHeaderBgOpacity;
   o["sidebar_section_bg_opacity"] = c.sidebarSectionBgOpacity;
   o["sidebar_width"] = c.sidebarWidth;
-  // Kartend-u2gx: pane height for Top/Bottom dock.
+  // pane height for Top/Bottom dock.
   o["sidebar_height"] = c.sidebarHeight;
   o["sidebar_width_locked"] = c.sidebarWidthLocked;
   o["sidebar_active_tab"] = CollectionUtils::detailsPaneTabToString(c.sidebarActiveTab);
@@ -219,7 +219,7 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.launcherName = o["launcher_name"].toString();
 
   const QJsonArray addlArr = o["additional_launchers"].toArray();
-  for (const auto v : addlArr) {
+  for (const auto &v : addlArr) {
     c.additionalLaunchers.append(jsonToLauncherConfig(v.toObject()));
   }
   c.defaultLauncherIndex = o["default_launcher_index"].toInt(0);
@@ -249,7 +249,8 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
 
   c.horizontalAlignment = CollectionUtils::stringToAlignment(o["horizontal_alignment"].toString());
   c.sidebarMode = stringToSidebarMode(o["sidebar_mode"].toString());
-  c.sidebarPosition = CollectionUtils::stringToDetailsPanePosition(o["sidebar_position"].toString());
+  c.sidebarPosition =
+      CollectionUtils::stringToDetailsPanePosition(o["sidebar_position"].toString());
   c.sidebarBackgroundType =
       CollectionUtils::stringToDetailsPaneBackgroundType(o["sidebar_background_type"].toString());
   c.sidebarBackgroundColor = o["sidebar_background_color"].toString();
@@ -460,11 +461,11 @@ ErrorUtils::Result<Manifest> parse(const QByteArray &json) {
   m.collectionConfig = jsonToCollectionConfig(root["collection_config"].toObject());
 
   const QJsonArray launchersArr = root["launchers"].toArray();
-  for (const auto v : launchersArr) {
+  for (const auto &v : launchersArr) {
     m.launchers.append(jsonToLauncherPreset(v.toObject()));
   }
   const QJsonArray itemsArr = root["items"].toArray();
-  for (const auto v : itemsArr) {
+  for (const auto &v : itemsArr) {
     m.items.append(jsonToItem(v.toObject()));
   }
   return m;

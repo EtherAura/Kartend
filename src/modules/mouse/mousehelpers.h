@@ -5,7 +5,7 @@
 // viewport-based vertical scroll direction can be unit-tested without
 // instantiating MouseManager (which needs ScrollManager/QScrollArea/UI graph).
 //
-// See bd Kartend-tty for the broader extraction effort.
+// See bd for the broader extraction effort.
 namespace MouseHelpers {
 
 // Converts a vertical mouse wheel angleDelta (Qt: 1/8 of a degree, typical

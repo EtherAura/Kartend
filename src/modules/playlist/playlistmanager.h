@@ -12,7 +12,7 @@
 struct CollectionConfig;
 
 /// Stores everything the synthesizer needs to materialize a playlist as a
-/// virtual CollectionConfig in MainWindow::m_collections (Kartend-vlm7).
+/// virtual CollectionConfig in MainWindow::m_collections.
 /// `parentCollectionUuid` empty means the playlist sits at the root level;
 /// otherwise it nests under whichever real collection has that uuid.
 struct PlaylistRow {
@@ -62,7 +62,7 @@ public:
   /// verbatim (caller is responsible for trimming / non-empty validation);
   /// `parentCollectionUuid` empty parks the playlist at the root level.
   /// `reservedKind` is normally empty — reserved for built-in playlists
-  /// (Kartend-5mg8 follow-up).
+  /// (follow-up).
   ErrorUtils::Result<QString> createPlaylist(const QString &name,
                                              const QString &parentCollectionUuid = QString(),
                                              const QString &reservedKind = QString());
@@ -73,7 +73,7 @@ public:
 
   /// Removes the playlist row and (via FK ON DELETE CASCADE) its items.
   /// Reserved playlists (reserved_kind != '') are refused — the favorites
-  /// playlist (Kartend-5mg8) and future built-ins must outlive the user's
+  /// playlist and future built-ins must outlive the user's
   /// menu choices so we don't have to re-create them on next launch and lose
   /// every starred item along the way.
   bool deletePlaylist(const QString &id);
@@ -110,7 +110,7 @@ public:
   [[nodiscard]] bool containsItem(const QString &playlistId, const QString &sourceCollectionUuid,
                                   const QString &sourcePath) const;
 
-  // ─── Import / export (Kartend-5pqv) ──────────────────────────────────────
+  // ─── Import / export ──────────────────────────────────────
 
   /// Writes a playlist as a JSON document at `outPath`. The format is the
   /// canonical Kartend serialization — round-trips losslessly through
@@ -144,7 +144,7 @@ public:
   [[nodiscard]] ErrorUtils::Result<QString>
   importFromM3U(const QString &inPath, const QString &playlistName, int *outSkipped = nullptr);
 
-  // ─── Favorites built-in (Kartend-5mg8) ────────────────────────────────────
+  // ─── Favorites built-in ────────────────────────────────────
 
   /// Returns the id of the unique playlist with reserved_kind='favorites',
   /// creating it (with the default `defaultName`) if it does not yet exist.
@@ -168,7 +168,7 @@ signals:
 private:
   QSqlDatabase m_db;
   QString m_connectionName;
-  QString m_favoritesId; // Cached id of the reserved favorites playlist (Kartend-5mg8).
+  QString m_favoritesId; // Cached id of the reserved favorites playlist.
 };
 
 #endif // PLAYLISTMANAGER_H

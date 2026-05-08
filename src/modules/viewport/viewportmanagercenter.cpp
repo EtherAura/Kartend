@@ -41,7 +41,7 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
 
   const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
 
-  // Kartend-dx9t: in Horizontal view the scroll axis is X. Centering still
+  // in Horizontal view the scroll axis is X. Centering still
   // dispatches through centerItemVertically (kept as the canonical "center
   // selection along the scroll axis" entry point) but we drive the
   // horizontal scrollbar with a simpler animation path. Vertical centering
@@ -86,7 +86,7 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
       clearArrowCenterSuppressionWhenDue();
       return;
     }
-    // Kartend-dx9t: route clicks/arrow-centering through the same chained
+    // route clicks/arrow-centering through the same chained
     // wheel-style animation (configurable scrollAnimationDurationMs +
     // OutCubic). animateHorizontalSmooth's hardcoded 140ms felt jerky on
     // click, while wheel scrolling already used the longer chained variant.

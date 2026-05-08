@@ -23,22 +23,19 @@ StartupOptions parseStartupArguments(const QStringList &arguments) {
 
   QCommandLineOption importKartOption(
       QStringLiteral("import-kart"),
-      QCoreApplication::translate("CliArgs",
-                                  "Import a .kart package headlessly and exit."),
+      QCoreApplication::translate("CliArgs", "Import a .kart package headlessly and exit."),
       QCoreApplication::translate("CliArgs", "path"));
   parser.addOption(importKartOption);
 
   QCommandLineOption toOption(
       QStringLiteral("to"),
-      QCoreApplication::translate("CliArgs",
-                                  "Destination directory for --import-kart."),
+      QCoreApplication::translate("CliArgs", "Destination directory for --import-kart."),
       QCoreApplication::translate("CliArgs", "dir"));
   parser.addOption(toOption);
 
   QCommandLineOption exportKartOption(
       QStringLiteral("export-kart"),
-      QCoreApplication::translate("CliArgs",
-                                  "Export the named collection headlessly and exit."),
+      QCoreApplication::translate("CliArgs", "Export the named collection headlessly and exit."),
       QCoreApplication::translate("CliArgs", "name"));
   parser.addOption(exportKartOption);
 

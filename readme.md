@@ -31,16 +31,19 @@ https://github.com/user-attachments/assets/e31ba6f6-f523-4fe5-a647-2af05299e389
 ## Dependencies
 
 - **CMake** 3.20+
-- **Qt6** (Core, Gui, Widgets, Sql, Concurrent)
+- **Qt6** (Core, Gui, Widgets, Sql, Concurrent, Multimedia, MultimediaWidgets)
 - **C++23** compiler (Clang or GCC)
-- **lld** linker (for release builds)
+- **lld** linker (recommended for Clang LTO; Clang release builds default to lld)
 - **Ninja** (recommended; build script uses it by default when available)
 - **ccache** (optional; speeds up rebuilds)
+- **Qt6 Gamepad** *or* **SDL2** (optional; auto-detected gamepad backend)
+- **zstd** (optional; auto-detected, falls back to zlib via `qCompress`)
 
 ### Debian/Ubuntu
 
 ```bash
-sudo apt install clang cmake lld ninja-build ccache qt6-base-dev libqt6sql6-sqlite
+sudo apt install clang cmake lld ninja-build ccache \
+  qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite
 ```
 
 ## Building
@@ -68,11 +71,13 @@ is not available). Subsequent runs are incremental.
 | Optimized release build (default) | `.scripts/build.sh` |
 | Debug build (keeps `qDebug`/`qWarning` output) | `.scripts/build.sh --debug` |
 | Build + run unit tests | `.scripts/build.sh --tests --run-tests` |
-| Fast dev iteration (no reports/archive) | `.scripts/build.sh --debug --tests --run-tests --fast` |
 | Profile-guided optimization (two passes) | `.scripts/build.sh --pgo` |
 | Sanitizers (ASan/UBSan) | `.scripts/build.sh --sanitize` |
 | Strict checks: warnings-as-errors, clang-tidy, clang-format | `.scripts/build.sh --maintenance` |
 | Apply safe clang-tidy + format fixes | `.scripts/build.sh --maintenance --apply-fixes --format-apply` |
+| Force Clang/LLD toolchain for a release build | `.scripts/build.sh --clang` |
+| Source archive into `.backups/*.tar.gz` (off by default) | `.scripts/build.sh --archive` |
+| Source/UI reports into `.backups/reports/` (off by default) | `.scripts/build.sh --reports` |
 | Build then install (auto-elevates with sudo/doas if needed) | `.scripts/build.sh --install` |
 | Force a clean reconfigure | `.scripts/build.sh --clean` |
 | Force Make instead of Ninja | `.scripts/build.sh --make` |
@@ -88,10 +93,9 @@ Run `.scripts/build.sh --help` for the full option list.
   so multiple build flavors can coexist without clobbering each other.
 - Reuses the existing build directory for incremental rebuilds; pass
   `--clean` to start from scratch.
-- After a successful release build, writes a source archive to
-  `.backups/*.tar.gz` and assembles source/UI reports under
-  `.backups/reports/` — disable with `--no-archive`, `--no-reports`, or
-  the combined `--fast` shorthand.
+- Source archives (`.backups/*.tar.gz`) and source/UI reports
+  (`.backups/reports/`) are off by default. Pass `--archive` and/or
+  `--reports` to opt in.
 - With `--install`, runs `cmake --install` against the build directory,
   honoring `DESTDIR` and re-invoking under `sudo`/`doas` when the
   configured prefix isn't writable by the current user.
@@ -120,8 +124,9 @@ sudo cmake --install .
 
 This installs:
 - `kartend` binary to `/usr/local/bin/`
-- Desktop entry to `/usr/local/share/applications/`
-- Icon to `/usr/local/share/pixmaps/`
+- Desktop entry to `/usr/local/share/applications/io.github.EtherAura.Kartend.desktop`
+- SVG icon to `/usr/local/share/icons/hicolor/scalable/apps/io.github.EtherAura.Kartend.svg`
+- AppStream metainfo to `/usr/local/share/metainfo/io.github.EtherAura.Kartend.metainfo.xml`
 
 To install to a custom location:
 
@@ -137,39 +142,47 @@ Or run directly from the build directory without installing:
 
 ## Uninstalling
 
-CMake does not provide a built-in uninstall target by default, but it does
-write an `install_manifest.txt` file in your build directory listing every
-installed file.
-
-To uninstall a system-wide install:
+The build script handles this directly:
 
 ```bash
-cd build/ninja-release
-sudo sh -c 'while IFS= read -r f; do rm -f -- "$f"; done < install_manifest.txt'
+.scripts/build.sh --uninstall
 ```
 
-If you installed with a custom prefix (e.g. `--prefix /opt/kartend`), run the
-same command from the corresponding build directory that generated that install.
+This finds the most recent build directory with an `install_manifest.txt`
+and runs the `uninstall` CMake target, auto-elevating with `sudo` or `doas`
+when the install prefix isn't writable. `DESTDIR` is honored.
 
-## Getting Started
+Manually, from any build directory that produced an install:
 
-New to Kartend? See [docs/usage.md](docs/usage.md) for a first-run
-walkthrough (adding a collection, browsing, launching, organizing
-subcollections).
+```bash
+sudo cmake --build build/ninja-release --target uninstall
+```
 
-Hitting a snag? See [docs/troubleshooting.md](docs/troubleshooting.md) for
-fixes to common issues (empty collections, missing artwork, launcher
-problems, performance tuning).
+## Documentation
+
+The end-user **guide** at [docs/guide/](docs/guide/Home.md) covers every
+feature: collections, view modes, launchers, artwork, video previews,
+playlists, attract mode, theming, the settings dialog, the CLI, and
+more.
+
+Quick jumps:
+
+- [Getting Started](docs/guide/Getting-Started.md) — first launch, first
+  collection
+- [Configuration Reference](docs/guide/Configuration-Reference.md) —
+  every INI key, type, default
+- [Troubleshooting](docs/guide/Troubleshooting.md) — fixes for common
+  issues
+- [Input & Controls](docs/guide/Input-and-Controls.md) — keyboard,
+  mouse, gamepad reference
+
+Configuration is stored in `~/.config/kartend/kartend.cfg` (INI format).
+Collections can be configured via the Settings Dialog or by editing
+the file directly.
 
 ## Testing
 
 See [docs/testing.md](docs/testing.md) for unit test documentation.
-
-## Configuration
-
-See [docs/configuration.md](docs/configuration.md) for detailed configuration documentation.
-
-Configuration is stored in `~/.config/kartend/kartend.cfg` (INI format). Collections can be configured via the Settings Dialog or by editing the file directly.
 
 ## Keyboard Shortcuts
 
@@ -194,9 +207,9 @@ Defaults — all navigation keys are user-rebindable in **Settings → General**
 | `Ctrl + -`       | Decrease grid width                             |
 | `F5`             | Refresh current view                            |
 | `Ctrl + F5`      | Rescan collection (force re-read from disk)     |
-| `F8`             | Toggle metadata sidebar                         |
-| `F9`             | Toggle menu bar                                 |
-| `F10`            | Toggle toolbar                                  |
+| `F8`             | Toggle toolbar                                  |
+| `F9`             | Toggle details pane (metadata sidebar)          |
+| `F10`            | Toggle menu bar                                 |
 | `F11`            | Toggle fullscreen                               |
 
 ### Application

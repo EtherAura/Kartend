@@ -19,6 +19,7 @@
 #include "collectionutils.h"
 #include "errorutils.h"
 #include "pathutils.h"
+#include "queryhelpers.h"
 #include "querymanagerhelpers.h"
 #include "querymanagersql.h"
 #include "uiconstants.h"
@@ -63,7 +64,7 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
 
   QStringList uuids = collectCollectionUuids(ctx, allCollections);
   if (uuids.isEmpty()) {
-    // Kartend-vlm7: an empty playlist is a valid state — show "0 items" rather
+    // an empty playlist is a valid state — show "0 items" rather
     // than raising a "no valid uuids" error. The scope is empty by definition;
     // there's nothing to query.
     if (ctx.config.isPlaylist) {
@@ -78,7 +79,7 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
   }
   const QString trimmedFilter = filter.trimmed();
 
-  // Kartend-vlm7: refresh the playlist scope temp table when it's stale so the
+  // refresh the playlist scope temp table when it's stale so the
   // EXISTS clause appended below filters against the right (uuid, path) set.
   if (ctx.config.isPlaylist && !ensurePlaylistScopePopulated(ctx.config.playlistId)) {
     auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
@@ -132,7 +133,7 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
     // dedup — same path can appear in multiple collections (e.g. with
     // showAllSubcollectionItems=true), which would otherwise leave blank
     // placeholder tiles at the tail when count > distinct rows
-    // (bd Kartend-m9s).
+    //.
     if (useTempTable) {
       sql = "SELECT COUNT(DISTINCT path) FROM items_fts "
             "WHERE items_fts MATCH ? AND EXISTS " +
@@ -173,7 +174,7 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
     }
   }
 
-  // Kartend-vlm7: narrow to playlist members. Composing this as an EXISTS
+  // narrow to playlist members. Composing this as an EXISTS
   // clause keeps it orthogonal to the existing filter / FTS / temp-table
   // logic so we don't fork the SQL builder.
   if (ctx.config.isPlaylist) {
@@ -214,7 +215,7 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
     //
     // Random sort mode ALWAYS requires a cache because SQL ORDER BY RANDOM()
     // with OFFSET cannot provide consistent results across paginated requests.
-    // Playlists (Kartend-vlm7) skip the sorted_items_cache in v1 — its hash
+    // Playlists skip the sorted_items_cache in v1 — its hash
     // collides with non-playlist queries over the same source uuids; revisit
     // when we add a playlist-aware cache key.
     const bool isRandomSort = (ctx.sortMode == SortMode::Random);
@@ -365,7 +366,7 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
   QStringList uuids = collectCollectionUuids(ctx, allCollections);
   CollectionDirMaps dirMaps = buildDirectoryMaps(ctx, allCollections);
 
-  // Kartend-vlm7: empty playlist short-circuits — there's nothing to find.
+  // empty playlist short-circuits — there's nothing to find.
   if (ctx.config.isPlaylist && uuids.isEmpty()) {
     emit visualIndexForPathLoaded(-1, filePath);
     return;
@@ -376,7 +377,7 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
   }
 
   // Try sorted cache first (fast path)
-  // Kartend-vlm7: cache is bypassed for playlists (see fetchItemsRange).
+  // cache is bypassed for playlists (see fetchItemsRange).
   if (!ctx.config.isPlaylist && hasSortedItemsCache()) {
     const QByteArray currentHash = computeSortCacheHash(uuids, QString(), ctx.sortMode);
     if (currentHash == m_sortedItemsCacheHash) {
@@ -412,46 +413,15 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
     }
   }
 
-  // Slow path: query with ROW_NUMBER to find position
-  // Build ORDER BY clause based on sort mode
-  QString orderClause;
-  switch (ctx.sortMode) {
-  case SortMode::NameDescending:
-    orderClause = "ORDER BY name COLLATE NOCASE DESC";
-    break;
-  case SortMode::DateDescending:
-    orderClause = "ORDER BY last_modified DESC, name COLLATE NOCASE";
-    break;
-  case SortMode::DateAscending:
-    orderClause = "ORDER BY last_modified ASC, name COLLATE NOCASE";
-    break;
-  case SortMode::SizeDescending:
-    orderClause = "ORDER BY file_size DESC, name COLLATE NOCASE";
-    break;
-  case SortMode::SizeAscending:
-    orderClause = "ORDER BY file_size ASC, name COLLATE NOCASE";
-    break;
-  case SortMode::CollectionAscending:
-    orderClause = "ORDER BY collection_uuid, name COLLATE NOCASE";
-    break;
-  case SortMode::CollectionDescending:
-    orderClause = "ORDER BY collection_uuid DESC, name COLLATE NOCASE";
-    break;
-  case SortMode::NameAscending:
-  case SortMode::ArtworkFirst:
-  case SortMode::ArtworkLast:
-  case SortMode::Random:
-  default:
-    orderClause = "ORDER BY name COLLATE NOCASE";
-    break;
-  }
+  // Slow path: query with ROW_NUMBER to find position. Build ORDER BY clause
+  // (bare column names, no LIMIT/OFFSET — pagination is via the outer
+  // `WHERE rn = ?` filter, not SQL OFFSET).
+  const QString orderClause =
+      QueryHelpers::orderByForSortMode(ctx.sortMode, /*useSortPrefix=*/false,
+                                        /*withLimitOffset=*/false);
 
   // Build WHERE clause for UUIDs
-  QString uuidPlaceholders;
-  for (int i = 0; i < uuids.size(); ++i) {
-    if (i > 0) uuidPlaceholders += ", ";
-    uuidPlaceholders += "?";
-  }
+  const QString uuidPlaceholders = QueryHelpers::placeholderList(uuids.size());
 
   // Use window function to get row number for matching path.
   // IMPORTANT: Use GROUP BY path to deduplicate paths that appear in multiple
@@ -459,7 +429,7 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
   // path, name doesn't work because the same path can have different
   // collection_uuid values. GROUP BY path ensures exactly one row per unique
   // path, matching COUNT(DISTINCT path) used by fetchItemCount.
-  // Kartend-vlm7: narrow the inner subquery to playlist members so the
+  // narrow the inner subquery to playlist members so the
   // ROW_NUMBER mapping matches what fetchItemsRange returns.
   const QString playlistClause =
       ctx.config.isPlaylist

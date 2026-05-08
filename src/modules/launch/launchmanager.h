@@ -23,20 +23,20 @@ struct LaunchManagerSetup {
   QList<CollectionConfig> *collections = nullptr;
 
   /// Invoked after a successful launch with (collectionUuid, filePath).
-  /// Used by Kartend-7vi to record per-item play_count + last_played without
+  /// Used by to record per-item play_count + last_played without
   /// LaunchManager taking a hard dependency on DatabaseManager (so launch
   /// unit tests don't pull the database module into their link). Optional —
   /// no-op when null.
   std::function<void(const QString &collectionUuid, const QString &filePath)> onLaunched;
 
   /// Invoked when a runtime-tracked child process exits with the elapsed
-  /// session duration in seconds (Kartend-qxv → Kartend-7vi). Only fires
+  /// session duration in seconds (→). Only fires
   /// when runtime detection is enabled and the child reached the started
   /// state. Optional.
   std::function<void(const QString &collectionUuid, const QString &filePath, qint64 seconds)>
       onPlaySessionEnded;
 
-  /// Resolves the per-item launcher override (Kartend-dnx4). Called before
+  /// Resolves the per-item launcher override. Called before
   /// the multi-launcher chooser dialog appears. Returns the unified launcher
   /// index (0 = primary, 1..N = additionalLaunchers[0..N-1]) when an override
   /// is set, or a negative value to fall through to the chooser / collection
@@ -64,7 +64,7 @@ public:
   void setupReferences(const LaunchManagerSetup &setup);
 
   /// Launches a media item using the specified collection's launcher config.
-  /// When the collection has more than one launcher (Kartend-bdl), a chooser
+  /// When the collection has more than one launcher, a chooser
   /// dialog is shown unless `launcherIndex` is provided. Pass `launcherIndex`
   /// >= 0 to bypass the chooser and use a specific launcher directly (used by
   /// callers that have already resolved the user's pick).
@@ -76,7 +76,7 @@ public:
   /// validate that the launcher exists/is executable (use validateLauncherPath
   /// for that); it only constructs and validates the argument semantics.
   /// `collectionName` is used solely for diagnostic messages and `%collection%`
-  /// substitution. Kartend-bdl.
+  /// substitution.
   [[nodiscard]] static ErrorUtils::Result<LaunchCommand>
   buildLaunchCommand(const LauncherConfig &launcher, const QString &collectionName,
                      const QString &filePath);
@@ -122,17 +122,17 @@ public:
                                                      const QString &extension);
 
   /// True while a runtime-tracked child process is currently running.
-  /// Always false when runtime detection is disabled. Kartend-qxv.
-  [[nodiscard]] bool isRuntimeChildRunning() const { return m_trackedChild != nullptr; }
+  /// Always false when runtime detection is disabled.
+  [[nodiscard]] bool isRuntimeChildRunning() const { return m_trackedChild; }
 
 signals:
-  /// Emitted when a runtime-tracked child process starts (Kartend-qxv).
+  /// Emitted when a runtime-tracked child process starts.
   /// `displayName` is a human-readable label (typically the file basename)
   /// suitable for showing in a "Now Playing" overlay.
   void runtimeStarted(const QString &filePath, const QString &displayName);
 
   /// Emitted when a runtime-tracked child process finishes for any reason —
-  /// normal exit, crash, or failure to start (Kartend-qxv).
+  /// normal exit, crash, or failure to start.
   void runtimeFinished(const QString &filePath);
 
 private:
@@ -149,11 +149,11 @@ private:
 
   /// The currently-tracked child process when runtime detection is enabled.
   /// Only one tracked child at a time — a second launch attempt while one is
-  /// already running is rejected. Kartend-qxv.
+  /// already running is rejected.
   QPointer<QProcess> m_trackedChild;
   QString m_trackedFilePath;
   /// Collection UUID + start timestamp captured at runtimeStarted so the
-  /// session duration can be accumulated on runtimeFinished (Kartend-7vi).
+  /// session duration can be accumulated on runtimeFinished.
   QString m_trackedCollectionUuid;
   QDateTime m_trackedStartTime;
 
@@ -162,18 +162,18 @@ private:
   [[nodiscard]] bool runtimeDetectionEnabled() const;
 
   /// Spawns `cmd` as a tracked child QProcess and emits runtimeStarted /
-  /// runtimeFinished. Returns true on a successful start. Kartend-qxv.
+  /// runtimeFinished. Returns true on a successful start.
   bool launchTracked(const QString &launcherPath, const LaunchCommand &cmd, const QString &filePath,
                      const QString &collectionUuid);
 
   /// Resolves the collection UUID for a given collection index using the
   /// collection name + expanded media directory. Returns empty when index is
-  /// out of range. Used to key usage-stat updates (Kartend-7vi).
+  /// out of range. Used to key usage-stat updates.
   [[nodiscard]] QString resolveCollectionUuid(int collectionIndex) const;
 
   /// Best-effort: increments play_count + last_played for the item via the
   /// DatabaseManager. Silently noops when the DB is unreachable so launches
-  /// never block on stats tracking. Kartend-7vi.
+  /// never block on stats tracking.
   void recordSuccessfulLaunch(const QString &filePath, const QString &collectionUuid);
 };
 

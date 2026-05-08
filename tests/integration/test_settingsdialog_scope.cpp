@@ -63,14 +63,14 @@ void TestSettingsDialogScope::testScopeChangeSignalDoesNotFireForSameValue() {
   QVERIFY(combo);
 
   // Setting to the already-active index must not re-emit. onSettingsScopeChanged
-  // guards against churn so dependent UI (Kartend-c06 field gating) stays stable.
+  // guards against churn so dependent UI (field gating) stays stable.
   combo->setCurrentIndex(0);
   QCOMPARE(spy.count(), 0);
 }
 
 namespace {
 
-// Kartend-c06: list of widget object names that should be disabled whenever
+// list of widget object names that should be disabled whenever
 // the active Settings Mode is anything other than `Current`. Mirrors the
 // gatedFields[] array in SettingsDialog::applyScopeFieldGating().
 const char *const kGatedFieldNames[] = {

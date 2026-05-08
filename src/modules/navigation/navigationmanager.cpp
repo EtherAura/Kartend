@@ -4,13 +4,14 @@
 #include "artworkmanager.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
+#include "detailspane.h"
+#include "detailspanemanager.h"
 #include "errordialog.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "loadingoverlay.h"
 #include "loggingcategories.h"
-#include "detailspane.h"
 #include "navigationstackmanager.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
@@ -18,9 +19,7 @@
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "detailspanemanager.h"
 #include "timerutils.h"
-#include "ui_mainwindow.h"
 #include "uiconstants.h"
 #include <algorithm>
 #include <QApplication>
@@ -260,7 +259,7 @@ auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const -> bool
   // child view to silently truncate at whatever offset has been loaded.
   // Until the optimization can guarantee a fully materialized parent list,
   // fall through to the standard DB count + on-demand range pipeline, which
-  // is fast (~10ms per page in practice). See bd Kartend-w9c.
+  // is fast (~10ms per page in practice). See bd.
   return false;
 }
 

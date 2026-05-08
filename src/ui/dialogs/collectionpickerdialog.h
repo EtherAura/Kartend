@@ -12,8 +12,8 @@ class QTreeWidget;
 class QTreeWidgetItem;
 QT_END_NAMESPACE
 
-/// Modal multi-select picker for collection indices (Kartend-f5i9 /
-/// Kartend-gzmk). Shows the collection list as a checkable QTreeWidget that
+/// Modal multi-select picker for collection indices.
+/// Shows the collection list as a checkable QTreeWidget that
 /// mirrors the parent/child hierarchy. Cascading is bidirectional: toggling a
 /// parent flips all descendants, and a parent shows the partial state when
 /// its descendants disagree (Qt::ItemIsAutoTristate).

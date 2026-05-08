@@ -44,7 +44,7 @@ private slots:
   void testClearStaleCollections_removesInvalid();
   void testClearStaleCollections_keepsValid();
 
-  // Corrupted-input recovery (Kartend-9c9)
+  // Corrupted-input recovery
   void testInitialize_missingFile();
   void testInitialize_emptyFile();
   void testInitialize_truncatedJson();
@@ -235,7 +235,7 @@ void TestSessionManager::testClearStaleCollections_keepsValid() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Corrupted-input recovery (Kartend-9c9)
+// Corrupted-input recovery
 // ─────────────────────────────────────────────────────────────────────────────
 
 namespace {

@@ -309,6 +309,9 @@ void ArtworkManager::trackWidget(ItemWidget *widget) {
         return;
       }
       QMutexLocker locker(&m_dataMutex);
+      // clang-analyzer can't see through qobject_cast + the early return above
+      // and warns about a null deref; the guard makes it impossible.
+      // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
       loadedArtwork.removeAll(widgetPtr);
       widgetToArtworkPath.remove(widgetPtr);
       for (int i = pendingArtwork.size() - 1; i >= 0; --i) {
@@ -455,7 +458,7 @@ void ArtworkManager::clearWidgetReferences() {
     pendingArtwork.clear();
     m_silentlyCachedPaths.clear();
     m_allArtworkPaths.clear();
-    // Kartend-1v6: drop any per-item artwork-type overrides when widgets are
+    // drop any per-item artwork-type overrides when widgets are
     // torn down — a fresh collection or post-search rebuild should start
     // every item back on its primary artwork.
     m_artworkTypeOverrides.clear();
@@ -467,7 +470,7 @@ void ArtworkManager::clearWidgetReferences() {
   }
 }
 
-// ─── Per-item artwork-type override (Kartend-1v6) ─────────────────────────
+// ─── Per-item artwork-type override ─────────────────────────
 
 QString ArtworkManager::artworkTypeOverrideFor(const QString &fullPath) const {
   // No mutex: m_artworkTypeOverrides is touched only on the main thread by
@@ -498,7 +501,7 @@ void ArtworkManager::cycleArtworkType(ItemWidget *widget, const QString &fullPat
   // type whose subdirectory has a matching file. Custom types are not
   // included yet — they only resolve via per-item DB overrides which would
   // require an async query and a manual link the user has already created
-  // (Kartend-yf1's sidebar gallery is the discoverability path for those).
+  // ('s sidebar gallery is the discoverability path for those).
   const QString fileName = QFileInfo(fullPath).fileName();
   const QString baseName = QFileInfo(fullPath).completeBaseName();
   QStringList available;

@@ -7,6 +7,7 @@ finish-args:
   - --share=ipc
   - --socket=fallback-x11
   - --socket=wayland
+  - --socket=pulseaudio
   - --device=dri
   - --filesystem=home
   - --filesystem=/media
@@ -15,11 +16,12 @@ modules:
   - name: kartend
     buildsystem: cmake-ninja
     config-opts:
-      - -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - -DCMAKE_BUILD_TYPE=Release
       - -DCMAKE_INSTALL_PREFIX=/app
-      - -DBUILD_TESTS=OFF
-      - -DENABLE_CCACHE=OFF
-      - -DMAINTENANCE=OFF
+      - -DKARTEND_BUILD_TESTS=OFF
+      - -DKARTEND_ENABLE_CCACHE=OFF
+      - -DKARTEND_MAINTENANCE=OFF
+      - -DKARTEND_PORTABLE_RELEASE=ON
     sources:
       - type: dir
         path: .

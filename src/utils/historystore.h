@@ -9,10 +9,10 @@
 class QSqlDatabase;
 
 /// Read/write helpers for the chronological launch-history log
-/// (Kartend-fse). Each successful launch appends one row to `launch_history`;
+/// Each successful launch appends one row to `launch_history`;
 /// the table is intentionally append-only so the dialog can show "I launched
 /// X, then Y, then X again" instead of the deduped aggregate that lives on
-/// the `items` table (Kartend-7vi).
+/// the `items` table.
 ///
 /// Rows are keyed only by their auto-incrementing id — (collection_uuid,
 /// path) is duplicated across entries on purpose. trimToMaxEntries deletes

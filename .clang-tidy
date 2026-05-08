@@ -7,8 +7,23 @@ Checks: "-*,clang-analyzer-*,bugprone-*,performance-*,modernize-*,readability-*,
 # Only analyze project headers, not Qt or system headers
 HeaderFilterRegex: '.*/src/.*'
 
-# Warnings as errors for specific critical checks (none for now)
-WarningsAsErrors: ''
+# Warnings as errors for specific critical checks. Each subcheck listed here
+# has been verified to have ZERO findings in the current baseline so a
+# regression triggers the maintenance CI gate.
+#
+# Promotion criteria: bugprone-* / clang-analyzer-* subchecks where the
+# findings are real correctness/safety issues (not stylistic). Add new
+# entries only after running `.scripts/build.sh --maintenance` and
+# confirming the subcheck reports zero hits in build/ninja-maintenance/
+# logs/clang-tidy.log.
+#
+# clang-analyzer-* notes:
+#  - core/cplusplus/deadcode/security/unix verified zero on current tree.
+#  - optin.* (notably optin.performance.Padding) deliberately excluded —
+#    256 stylistic struct-padding hits, opt-in for a reason; not promotion
+#    material.
+#  - osx.* not relevant.
+WarningsAsErrors: 'bugprone-unchecked-optional-access,bugprone-integer-division,clang-analyzer-core.*,clang-analyzer-cplusplus.*,clang-analyzer-deadcode.*,clang-analyzer-security.*,clang-analyzer-unix.*'
 
 # Apply fixes when running with --fix (conservative)
 FormatStyle: 'file'

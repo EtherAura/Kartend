@@ -15,11 +15,17 @@ Build modes (mutually exclusive):
   --pgo-use         Configure/build PGO use pass only
 
 Build options:
-  --tests           Configure with -DBUILD_TESTS=ON
+  --tests           Configure with -DKARTEND_BUILD_TESTS=ON
   --run-tests       Run ctest after a successful build (requires --tests)
   --install         Run `cmake --install` after a successful build (honors DESTDIR;
                     auto-elevates with sudo or doas when the install prefix
                     isn't writable by the current user)
+  --uninstall       Run the `uninstall` target on the most recent build dir
+                    (reads install_manifest.txt; auto-elevates with sudo/doas
+                    when needed)
+  --prefix=PATH     Set CMAKE_INSTALL_PREFIX (default: CMake/system default,
+                    typically /usr/local)
+  --jobs=N          Override parallelism for the build step (default: nproc)
   --ninja           Force Ninja generator (if available)
   --make            Force Unix Makefiles generator
   --incremental     Reuse existing build directory (don't rm -rf it) (default)
@@ -28,6 +34,9 @@ Build options:
   --reports         Assemble source/UI reports into .backups/reports
   --keep-builds     Don't prune other build directories
   --no-ccache       Disable ccache launcher even if installed
+  --clang           Force Clang/LLD toolchain for release builds (default:
+                    use the system compiler; maintenance and PGO modes
+                    require Clang and set this implicitly)
 
 Maintenance-only:
   --apply-fixes      Apply safe clang-tidy fixes (requires --maintenance)
@@ -59,7 +68,11 @@ generator_preference="auto"  # auto|ninja|make
 incremental_build=true
 make_archive=false
 make_reports=false
-for arg in "${@:-}"; do
+force_clang=false
+uninstall_only=false
+install_prefix=""
+build_jobs=""
+for arg in "$@"; do
   case "$arg" in
     -h|--help) usage; exit 0 ;;
     --debug)       debug_build=true ;;
@@ -72,6 +85,9 @@ for arg in "${@:-}"; do
     --tests)       build_tests=true ;;
     --run-tests)   run_tests=true ;;
     --install)     install_after_build=true ;;
+    --uninstall)   uninstall_only=true ;;
+    --prefix=*)    install_prefix="${arg#--prefix=}" ;;
+    --jobs=*)      build_jobs="${arg#--jobs=}" ;;
     --ninja)       generator_preference="ninja" ;;
     --make)        generator_preference="make" ;;
     --incremental) incremental_build=true ;;
@@ -83,9 +99,24 @@ for arg in "${@:-}"; do
     --pgo)         pgo_build=true ;;
     --keep-builds) keep_builds=true ;;
     --no-ccache)   use_ccache=false ;;
-    *) ;;
+    --clang)       force_clang=true ;;
+    *)
+      printf 'Error: unknown option: %s\n' "$arg" >&2
+      usage >&2
+      exit 2
+      ;;
   esac
 done
+
+# --jobs=N validation; default to nproc.
+if [ -n "$build_jobs" ]; then
+  if ! [[ "$build_jobs" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Error: --jobs requires a positive integer (got '$build_jobs')." >&2
+    exit 2
+  fi
+else
+  build_jobs="$(nproc)"
+fi
 if ($debug_build && $sanitize_build) || ($maintenance_build && $sanitize_build); then
   echo "Error: --sanitize is mutually exclusive with --debug/--maintenance."
   exit 1
@@ -132,7 +163,7 @@ if $format_check && ! $maintenance_build; then
 fi
 
 if $run_tests && ! $build_tests; then
-  echo "Error: --run-tests requires --tests (BUILD_TESTS=ON)."
+  echo "Error: --run-tests requires --tests (KARTEND_BUILD_TESTS=ON)."
   exit 1
 fi
 
@@ -162,6 +193,75 @@ setup_colors
 ccache_available=false
 if $use_ccache && command -v ccache >/dev/null 2>&1; then
   ccache_available=true
+fi
+
+# Common cmake args injected after every cmake_args= declaration. Currently
+# only --prefix; add future cross-cutting args here.
+extra_cmake_args=()
+if [ -n "$install_prefix" ]; then
+  extra_cmake_args+=(-DCMAKE_INSTALL_PREFIX="$install_prefix")
+fi
+
+# --uninstall: standalone path. Pick the most recent build dir under build/
+# that has an install_manifest.txt and run the uninstall target. Auto-elevate
+# with sudo/doas if needed.
+if $uninstall_only; then
+  shopt -s nullglob
+  candidates=()
+  for d in "$root_dir"/build/*/; do
+    [ -f "$d/install_manifest.txt" ] && candidates+=("$d")
+  done
+  shopt -u nullglob
+  if [ "${#candidates[@]}" -eq 0 ]; then
+    echo "Error: no build dir with install_manifest.txt under $root_dir/build/." >&2
+    echo "Hint: run --install first to produce a manifest." >&2
+    exit 1
+  fi
+  # Newest by mtime of install_manifest.txt.
+  uninstall_dir=""
+  newest_ts=0
+  for d in "${candidates[@]}"; do
+    ts="$(stat -c '%Y' "$d/install_manifest.txt" 2>/dev/null || echo 0)"
+    if [ "$ts" -gt "$newest_ts" ]; then
+      newest_ts="$ts"
+      uninstall_dir="${d%/}"
+    fi
+  done
+  echo "Uninstalling from: ${uninstall_dir#"$root_dir/"}"
+  manifest="$uninstall_dir/install_manifest.txt"
+  # Probe whether any target file's parent directory needs elevation.
+  needs_elevation=false
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    target="${DESTDIR:-}$f"
+    if [ -e "$target" ] || [ -L "$target" ]; then
+      parent="$(dirname "$target")"
+      if [ ! -w "$parent" ]; then
+        needs_elevation=true
+        break
+      fi
+    fi
+  done <"$manifest"
+
+  if $needs_elevation; then
+    if command -v sudo >/dev/null 2>&1; then
+      [ -w /dev/tty ] && printf '\r\033[2K' >/dev/tty || true
+      sudo -v </dev/tty >/dev/tty 2>/dev/tty || true
+      sudo -E cmake --build "$uninstall_dir" --target uninstall
+    elif command -v doas >/dev/null 2>&1; then
+      [ -w /dev/tty ] && printf '\r\033[2K' >/dev/tty || true
+      if [ -n "${DESTDIR:-}" ]; then
+        doas env "DESTDIR=$DESTDIR" cmake --build "$uninstall_dir" --target uninstall </dev/tty
+      else
+        doas cmake --build "$uninstall_dir" --target uninstall </dev/tty
+      fi
+    else
+      cmake --build "$uninstall_dir" --target uninstall
+    fi
+  else
+    cmake --build "$uninstall_dir" --target uninstall
+  fi
+  exit 0
 fi
 
 # Output helpers
@@ -520,39 +620,40 @@ assemble_reports() {
   done
 }
 
-# Sanitize/translate GCC-only flags in compile_commands.json for Clang-based tools
+# Sanitize/translate GCC-only flags in compile_commands.json for Clang-based
+# tools. Requires jq — the previous sed fallback was a fragile pile of regexes
+# that could silently produce malformed JSON on edge cases (escaped quotes,
+# multiline command strings, the `arguments` array form, etc.). Better to fail
+# loudly with a clear remediation than to silently corrupt the compdb.
 sanitize_compdb() {
   local in="$1" out="$2"
   mkdir -p "$(dirname "$out")"
-  cp "$in" "$out"
-  if command -v jq >/dev/null 2>&1; then
-    jq '
-      map(
-        if has("arguments") then
-          .arguments = (.arguments
-            | map(
-                if . == "-mno-direct-extern-access" then "-fno-direct-access-external-data"
-                elif . == "-mdirect-extern-access" then "-fdirect-access-external-data"
-                else . end
-              )
-          )
-        else . end
-      )
-      | map(
-        if has("command") then
-          .command = (.command
-            | gsub("(^|[[:space:]])-mno-direct-extern-access([[:space:]]|$)"; " -fno-direct-access-external-data ")
-            | gsub("(^|[[:space:]])-mdirect-extern-access([[:space:]]|$)"; " -fdirect-access-external-data ")
-          )
-        else . end
-      )
-    ' "$in" > "$out.tmp" && mv "$out.tmp" "$out"
-  else
-    sed -E -i 's/(^| )-mno-direct-extern-access( |$)/ -fno-direct-access-external-data /g' "$out"
-    sed -E -i 's/(^| )-mdirect-extern-access( |$)/ -fdirect-access-external-data /g' "$out"
-    sed -E -i 's/,\s*"-mno-direct-extern-access"/,"-fno-direct-access-external-data"/g' "$out" || true
-    sed -E -i 's/,\s*"-mdirect-extern-access"/,"-fdirect-access-external-data"/g' "$out" || true
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "Error: jq is required to sanitize compile_commands.json for clang-based tools." >&2
+    echo "  Install it (Arch: 'pacman -S jq', Debian/Ubuntu: 'apt install jq', macOS: 'brew install jq')." >&2
+    return 1
   fi
+  jq '
+    map(
+      if has("arguments") then
+        .arguments = (.arguments
+          | map(
+              if . == "-mno-direct-extern-access" then "-fno-direct-access-external-data"
+              elif . == "-mdirect-extern-access" then "-fdirect-access-external-data"
+              else . end
+            )
+        )
+      else . end
+    )
+    | map(
+      if has("command") then
+        .command = (.command
+          | gsub("(^|[[:space:]])-mno-direct-extern-access([[:space:]]|$)"; " -fno-direct-access-external-data ")
+          | gsub("(^|[[:space:]])-mdirect-extern-access([[:space:]]|$)"; " -fdirect-access-external-data ")
+        )
+      else . end
+    )
+  ' "$in" > "$out.tmp" && mv "$out.tmp" "$out"
 }
 
 # Optional tool runners
@@ -758,15 +859,18 @@ if $maintenance_build; then
     -B "$build_dir"
     "${generator_args[@]}"
     -DCMAKE_BUILD_TYPE=Release
-    -DMAINTENANCE=ON
+    -DKARTEND_MAINTENANCE=ON
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
     -DCMAKE_C_COMPILER=clang
     -DCMAKE_CXX_COMPILER=clang++
     "-DBUILD_DATE=$TS_HUMAN"
-    -DBUILD_TESTS=OFF
+    -DKARTEND_BUILD_TESTS=OFF
   )
+  if [ ${#extra_cmake_args[@]} -gt 0 ]; then
+    cmake_args+=("${extra_cmake_args[@]}")
+  fi
   if $build_tests; then
-    cmake_args+=(-DBUILD_TESTS=ON)
+    cmake_args+=(-DKARTEND_BUILD_TESTS=ON)
   fi
   if $ccache_available; then
     cmake_args+=(
@@ -775,10 +879,10 @@ if $maintenance_build; then
     )
   fi
   if ! $use_ccache; then
-    cmake_args+=(-DENABLE_CCACHE=OFF)
+    cmake_args+=(-DKARTEND_ENABLE_CCACHE=OFF)
   fi
   run_step "Configure" "$logs_dir/cmake_configure.log" "$cmake_bin" "${cmake_args[@]}"
-  run_step "Build" "$logs_dir/cmake_build.log" "$cmake_bin" --build "$build_dir" -j"$(nproc)"
+  run_step "Build" "$logs_dir/cmake_build.log" "$cmake_bin" --build "$build_dir" -j"$build_jobs"
   if $run_tests; then
     run_step "Run tests" "$logs_dir/ctest.log" run_ctest "$build_dir"
   fi
@@ -808,11 +912,19 @@ EOF
   if $apply_fixes; then
     fix_checks="readability-braces-around-statements,modernize-use-nullptr,modernize-use-override,readability-implicit-bool-conversion"
     run_optional "clang-tidy (apply fixes)" "$logs_dir/clang-tidy-fixes.log" do_clang_tidy_apply_fixes "$COMPDB_FILE" "$root_dir/src" "$fix_checks"
-    run_step "Rebuild after clang-tidy fixes" "$logs_dir/cmake_build_after_fixes.log" "$cmake_bin" --build "$build_dir" -j"$(nproc)"
+    run_step "Rebuild after clang-tidy fixes" "$logs_dir/cmake_build_after_fixes.log" "$cmake_bin" --build "$build_dir" -j"$build_jobs"
   fi
 
   checks="-*,clang-analyzer-*,modernize-*,performance-*,readability-*,-readability-static-accessed-through-instance,google-*"
-  run_quality_check "clang-tidy analysis" "$logs_dir/clang-tidy.log" do_clang_tidy "$COMPDB_FILE" "$root_dir/src" "$checks"
+  TIDY_PROMOTED_FAILED=false
+  if ! run_quality_check "clang-tidy analysis" "$logs_dir/clang-tidy.log" do_clang_tidy "$COMPDB_FILE" "$root_dir/src" "$checks"; then
+    # do_clang_tidy returns non-zero only when WarningsAsErrors-promoted
+    # checks (.clang-tidy:WarningsAsErrors) trigger. The remaining advisory
+    # warnings exit clang-tidy 0 so they don't fall into this branch.
+    if grep -qE 'error:.*\[(bugprone|clang-analyzer)' "$logs_dir/clang-tidy.log"; then
+      TIDY_PROMOTED_FAILED=true
+    fi
+  fi
   # IWYU is quality check; detect failure and suggestions for end-of-run notice
   if ! run_quality_check "IWYU analysis" "$logs_dir/iwyu.log" do_iwyu "$COMPDB_FILE" "$root_dir/src"; then
     IWYU_FAILED=true
@@ -834,7 +946,7 @@ EOF
   run_optional "Heuristic duplicate checks" "$logs_dir/dup-heuristics.log" bash -lc "grep -R --line-number -E \"QString .* = .*replace|completeBaseName|replace\\('_',' ')\" src || true"
 
   # Raw Qt logging guard: prefer qC* (categorized) over qDebug/qWarning/qInfo/qCritical.
-  # Kartend-v3v: keep src/ free of raw logging sites so categories remain the single control point.
+  # Keep src/ free of raw logging sites so categories remain the single control point.
   run_quality_check "Raw Qt logging guard" "$logs_dir/raw-qlogging.log" bash -lc "grep -R --line-number -E '\\bq(Debug|Warning|Info|Critical)\\s*\\(\\s*\\)' src || true"
   if [ -s "$logs_dir/raw-qlogging.log" ]; then
     RAW_QLOG_WARNED=true
@@ -903,6 +1015,25 @@ EOF
   if [ "$CLANG_FORMAT_ISSUES" = true ]; then
     rel_clang_format="${logs_dir#"$root_dir/"}/clang-format.log"
     step_final "Notice: clang-format reported formatting issues. See ${rel_clang_format}"
+  fi
+  if [ "${TIDY_PROMOTED_FAILED:-false}" = true ]; then
+    rel_clang_tidy="${logs_dir#"$root_dir/"}/clang-tidy.log"
+    step_final "Notice: clang-tidy promoted-error checks fired. See ${rel_clang_tidy}"
+  fi
+
+  # When --format-check was explicitly requested (e.g. CI), fail hard on
+  # clang-format drift OR on any clang-tidy WarningsAsErrors-promoted
+  # finding. The promoted set in .clang-tidy:WarningsAsErrors covers only
+  # bugprone/clang-analyzer subchecks that are verified-clean in the current
+  # baseline; other tidy categories remain advisory until
+  # their baselines are cleared.
+  if [ "$format_check" = true ] && [ "$CLANG_FORMAT_ISSUES" = true ]; then
+    err_msg "clang-format check failed: formatting drift detected. Run '.scripts/build.sh --maintenance --format-apply' locally and recommit."
+    exit 1
+  fi
+  if [ "$format_check" = true ] && [ "${TIDY_PROMOTED_FAILED:-false}" = true ]; then
+    err_msg "clang-tidy check failed: a promoted bugprone-* / clang-analyzer-* check fired. See build/ninja-maintenance/logs/clang-tidy.log and either fix the finding or scope WarningsAsErrors more narrowly."
+    exit 1
   fi
   exit 0
 fi
@@ -1074,12 +1205,15 @@ if $pgo_build; then
     "-DBUILD_DATE=$TS_HUMAN"
     -DCMAKE_C_COMPILER=clang
     -DCMAKE_CXX_COMPILER=clang++
-    -DUSE_PGO=ON
-    -DPGO_GENERATE=ON
-    -DBUILD_TESTS=OFF
+    -DKARTEND_USE_PGO=ON
+    -DKARTEND_PGO_GENERATE=ON
+    -DKARTEND_BUILD_TESTS=OFF
   )
+  if [ ${#extra_cmake_args[@]} -gt 0 ]; then
+    cmake_args+=("${extra_cmake_args[@]}")
+  fi
   if $build_tests; then
-    cmake_args+=(-DBUILD_TESTS=ON)
+    cmake_args+=(-DKARTEND_BUILD_TESTS=ON)
   fi
   if $ccache_available; then
     cmake_args+=(
@@ -1088,7 +1222,7 @@ if $pgo_build; then
     )
   fi
   if ! $use_ccache; then
-    cmake_args+=(-DENABLE_CCACHE=OFF)
+    cmake_args+=(-DKARTEND_ENABLE_CCACHE=OFF)
   fi
   run_step "Configure PGO generate" "$logs_dir/configure.log" cmake "${cmake_args[@]}"
   run_step "Build PGO generate" "$logs_dir/build.log" cmake --build "$build_dir"
@@ -1116,12 +1250,15 @@ if $pgo_build; then
     "-DBUILD_DATE=$TS_HUMAN"
     -DCMAKE_C_COMPILER=clang
     -DCMAKE_CXX_COMPILER=clang++
-    -DUSE_PGO=ON
-    -DPGO_USE=ON
-    -DBUILD_TESTS=OFF
+    -DKARTEND_USE_PGO=ON
+    -DKARTEND_PGO_USE=ON
+    -DKARTEND_BUILD_TESTS=OFF
   )
+  if [ ${#extra_cmake_args[@]} -gt 0 ]; then
+    cmake_args+=("${extra_cmake_args[@]}")
+  fi
   if $build_tests; then
-    cmake_args+=(-DBUILD_TESTS=ON)
+    cmake_args+=(-DKARTEND_BUILD_TESTS=ON)
   fi
   if $ccache_available; then
     cmake_args+=(
@@ -1130,7 +1267,7 @@ if $pgo_build; then
     )
   fi
   if ! $use_ccache; then
-    cmake_args+=(-DENABLE_CCACHE=OFF)
+    cmake_args+=(-DKARTEND_ENABLE_CCACHE=OFF)
   fi
   run_step "Configure PGO use" "$logs_dir/configure2.log" cmake "${cmake_args[@]}"
   run_step "Build PGO use" "$logs_dir/build2.log" cmake --build "$build_dir"
@@ -1211,10 +1348,14 @@ if ! $pgo_build; then
     "-DCMAKE_BUILD_TYPE=$cmake_build_type"
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
     "-DBUILD_DATE=$TS_HUMAN"
-    -DBUILD_TESTS=OFF
+    -DKARTEND_BUILD_TESTS=OFF
+    -DKARTEND_LINKER_MAP=ON
   )
+  if [ ${#extra_cmake_args[@]} -gt 0 ]; then
+    cmake_args+=("${extra_cmake_args[@]}")
+  fi
   if $build_tests; then
-    cmake_args+=(-DBUILD_TESTS=ON)
+    cmake_args+=(-DKARTEND_BUILD_TESTS=ON)
   fi
   if $ccache_available; then
     cmake_args+=(
@@ -1223,28 +1364,32 @@ if ! $pgo_build; then
     )
   fi
   if ! $use_ccache; then
-    cmake_args+=(-DENABLE_CCACHE=OFF)
+    cmake_args+=(-DKARTEND_ENABLE_CCACHE=OFF)
   fi
-  if [ "$build_type" = "release" ] || [ "$build_type" = "relwithdebinfo" ]; then
+  if $force_clang && { [ "$build_type" = "release" ] || [ "$build_type" = "relwithdebinfo" ]; }; then
+    if ! command -v clang >/dev/null 2>&1 || ! command -v clang++ >/dev/null 2>&1; then
+      echo "Error: --clang requested but clang/clang++ not found in PATH." >&2
+      exit 1
+    fi
     cmake_args+=(-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++)
   fi
   if $pgo_generate || $pgo_use; then
-    cmake_args+=(-DUSE_PGO=ON)
+    cmake_args+=(-DKARTEND_USE_PGO=ON)
     if $pgo_generate; then
-      cmake_args+=(-DPGO_GENERATE=ON)
+      cmake_args+=(-DKARTEND_PGO_GENERATE=ON)
     elif $pgo_use; then
-      cmake_args+=(-DPGO_USE=ON)
+      cmake_args+=(-DKARTEND_PGO_USE=ON)
     fi
   fi
 
   if [ "$build_type" = "sanitize" ]; then
-    cmake_args+=(-DENABLE_SANITIZERS=ON)
+    cmake_args+=(-DKARTEND_ENABLE_SANITIZERS=ON)
   fi
 
   # Configure
   run_step "Configure" "$logs_dir/cmake_configure.log" "$cmake_bin" "${cmake_args[@]}"
   # Build
-  run_step "Build" "$logs_dir/cmake_build.log" "$cmake_bin" --build "$build_dir" -j"$(nproc)"
+  run_step "Build" "$logs_dir/cmake_build.log" "$cmake_bin" --build "$build_dir" -j"$build_jobs"
 
   if $run_tests; then
     run_step "Run tests" "$logs_dir/ctest.log" run_ctest "$build_dir"

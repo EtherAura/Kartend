@@ -19,6 +19,7 @@
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "detailspanemanager.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
 #include "loadingoverlay.h"
@@ -26,7 +27,6 @@
 #include "navigationmanager.h"
 #include "scrollmanager.h"
 #include "settingsmanager.h"
-#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "titlefilter.h"
 #include "ui_mainwindow.h"
@@ -70,10 +70,9 @@ void MainWindow::connectDatabaseManager() {
   // hook available — by the time itemsLoaded fires, the index points at the
   // collection the user is now viewing, and the popup's title-pattern toggle
   // needs to mirror that collection's flag.
-  QObject::connect(getDatabaseManager(), &DatabaseManager::itemsLoaded, this,
-                   [this](const QStringList &, const QHash<QString, QString> &) {
-                     refreshFilterToolbar();
-                   });
+  QObject::connect(
+      getDatabaseManager(), &DatabaseManager::itemsLoaded, this,
+      [this](const QStringList &, const QHash<QString, QString> &) { refreshFilterToolbar(); });
 
   // Update loading overlay with scan progress during initial collection loading
   QObject::connect(getDatabaseManager(), &DatabaseManager::scanProgress, this,
@@ -192,12 +191,12 @@ void MainWindow::connectDatabaseManager() {
                    &MainWindow::rebuildHierarchyCache);
 
   // Keep the sidebar's no-selection collection summary fresh after scans
-  // finish or settings edits land (Kartend-3mn). cachedCountsUpdated covers
+  // finish or settings edits land. cachedCountsUpdated covers
   // item-count changes that arrive without a full scan (e.g., manual deletes).
   if (getDetailsPaneManager()) {
-    QObject::connect(getDatabaseManager(), &DatabaseManager::collectionScanCompleted,
-                     getDetailsPaneManager(),
-                     [this](const QString &) { getDetailsPaneManager()->refreshCollectionSummary(); });
+    QObject::connect(
+        getDatabaseManager(), &DatabaseManager::collectionScanCompleted, getDetailsPaneManager(),
+        [this](const QString &) { getDetailsPaneManager()->refreshCollectionSummary(); });
     QObject::connect(getDatabaseManager(), &DatabaseManager::cachedCountsUpdated,
                      getDetailsPaneManager(), &DetailsPaneManager::refreshCollectionSummary);
     QObject::connect(getSettingsManager(), &SettingsManager::collectionsModified,
@@ -247,7 +246,7 @@ void MainWindow::connectScrollManager() {
       getInteractionManager()->applyImmediateViewportPositioningForSelection(index);
     }
   });
-  // Kartend-3ile: yield sidebar viewport space when entering CoverFlow,
+  // yield sidebar viewport space when entering CoverFlow,
   // restore the persisted per-collection state when leaving.
   QObject::connect(getScrollManager(), &ScrollManager::coverFlowActiveChanged, this,
                    [this](bool active) {
@@ -255,7 +254,7 @@ void MainWindow::connectScrollManager() {
                        getDetailsPaneManager()->setExternallyHidden(active);
                      }
                    });
-  // Kartend-63e bug #7: lower the sidebar while the artwork preview overlay
+  // bug #7: lower the sidebar while the artwork preview overlay
   // is showing so the overlay (parented to the top-level window) stays on
   // top. Restored on hide.
   QObject::connect(getScrollManager(), &ScrollManager::artworkPreviewVisibilityChanged, this,
@@ -264,7 +263,7 @@ void MainWindow::connectScrollManager() {
                        getDetailsPaneManager()->setOverlayActive(visible);
                      }
                    });
-  // Kartend-3ile: cover-flow activates a card → land selection on it then
+  // cover-flow activates a card → land selection on it then
   // route through the existing launch path. Subcollection / virtual-folder
   // activations are handled by ScrollManager itself via subcollectionEntered
   // / virtualFolderEntered above so they don't reach this slot. The owning
@@ -328,7 +327,7 @@ void MainWindow::connectScrollManager() {
                      }
                    });
 
-  // Kartend-tof: refresh the top-bar "pos / total" label on selection and
+  // refresh the top-bar "pos / total" label on selection and
   // collection-size transitions. The filterChanged connection above already
   // calls updateItemPositionLabel via updateWindowTitleWithFilter; here we
   // also update on direct selection moves.
@@ -344,15 +343,17 @@ void MainWindow::connectScrollManager() {
 
 void MainWindow::connectSidebarManager() {
   QObject::connect(
-      getDetailsPaneManager(), &DetailsPaneManager::sidebarVisibilityChanged, this, [this](bool visible) {
-        if (visible && (getDetailsPaneManager()) && (getScrollManager()) && (getInteractionManager())) {
+      getDetailsPaneManager(), &DetailsPaneManager::sidebarVisibilityChanged, this,
+      [this](bool visible) {
+        if (visible && (getDetailsPaneManager()) && (getScrollManager()) &&
+            (getInteractionManager())) {
           int sel = getInteractionManager()->currentSelectedIndex();
           if (sel >= 0) {
             ItemWidget *widgetPtr = getScrollManager()->getActiveWidgets().value(sel, nullptr);
             getDetailsPaneManager()->updateSidebarMetadata(widgetPtr);
           }
         }
-        // Kartend-0p3w: push the "sidebar hidden AND would shrink" predicate
+        // push the "sidebar hidden AND would shrink" predicate
         // into ScrollManager so the upcoming metrics recompute picks the right
         // gridWidth / horizontalGridHeight pair. Overlay mode never shrinks
         // (the sidebar floats), so it stays on the primary values.
@@ -366,19 +367,20 @@ void MainWindow::connectSidebarManager() {
         });
       });
 
-  QObject::connect(getDetailsPaneManager(), &DetailsPaneManager::sidebarLayoutChanged, this, [this]() {
-    if (getScrollManager()) {
-      getScrollManager()->recalculateContainerMetrics();
-    }
-    if ((getDetailsPaneManager()) && (getScrollManager()) && (getInteractionManager()) &&
-        getDetailsPaneManager()->isSidebarVisible()) {
-      int sel = getInteractionManager()->currentSelectedIndex();
-      if (sel >= 0) {
-        ItemWidget *widgetPtr = getScrollManager()->getActiveWidgets().value(sel, nullptr);
-        getDetailsPaneManager()->updateSidebarMetadata(widgetPtr);
-      }
-    }
-  });
+  QObject::connect(
+      getDetailsPaneManager(), &DetailsPaneManager::sidebarLayoutChanged, this, [this]() {
+        if (getScrollManager()) {
+          getScrollManager()->recalculateContainerMetrics();
+        }
+        if ((getDetailsPaneManager()) && (getScrollManager()) && (getInteractionManager()) &&
+            getDetailsPaneManager()->isSidebarVisible()) {
+          int sel = getInteractionManager()->currentSelectedIndex();
+          if (sel >= 0) {
+            ItemWidget *widgetPtr = getScrollManager()->getActiveWidgets().value(sel, nullptr);
+            getDetailsPaneManager()->updateSidebarMetadata(widgetPtr);
+          }
+        }
+      });
 }
 
 void MainWindow::updateScrollManagerSidebarShrinking() {

@@ -15,15 +15,15 @@
 #include "applicationcontext.h"
 #include "artworkmanager.h"
 #include "collectionutils.h"
+#include "detailspane.h"
+#include "detailspanemanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
-#include "detailspane.h"
 #include "mousemanager.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
-#include "detailspanemanager.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
 
@@ -37,9 +37,10 @@ Q_DECLARE_LOGGING_CATEGORY(lcSelectionManager)
   } while (0)
 
 bool SelectionManager::checkAndFinalizeRestore(int index) {
-  if (m_restoringSelection && index == m_targetRestoreIndex) {
-    m_restoringSelection = false;
-    m_targetRestoreIndex = -1;
+  auto &restoreState = m_state->selectionRestore();
+  if (restoreState.restoring && index == restoreState.targetIndex) {
+    restoreState.restoring = false;
+    restoreState.targetIndex = -1;
     return true;
   }
   return false;
@@ -48,54 +49,45 @@ bool SelectionManager::checkAndFinalizeRestore(int index) {
 void SelectionManager::prepareForRestore(int targetIndex) {
   clearSelection();
 
-  m_restoringSelection = true;
-  m_targetRestoreIndex = targetIndex;
-  m_forceImmediateCenter = true;
+  auto &restoreState = m_state->selectionRestore();
+  restoreState.restoring = true;
+  restoreState.targetIndex = targetIndex;
+  restoreState.forceImmediateCenter = true;
 
-  // Request InteractionManager to configure scroll area properties
-  if (m_state) {
-    qint64 until = QDateTime::currentMSecsSinceEpoch() +
-                   UIConstants::Keyboard::ANIMATION_SETTLE_MS +
-                   UIConstants::Keyboard::ARROW_CENTER_EXTRA_SUPPRESS_AFTER_RESTORE_MS;
-    m_state->arrow().suppressArrowCenter = true;
-    m_state->arrow().suppressArrowCenterUntilMs = until;
-  }
+  qint64 until = QDateTime::currentMSecsSinceEpoch() +
+                 UIConstants::Keyboard::ANIMATION_SETTLE_MS +
+                 UIConstants::Keyboard::ARROW_CENTER_EXTRA_SUPPRESS_AFTER_RESTORE_MS;
+  m_state->arrow().suppressArrowCenter = true;
+  m_state->arrow().suppressArrowCenterUntilMs = until;
 
   emit requestStopScrollAnimations();
 }
 
 void SelectionManager::finalizeRestore() {
-  m_restoringSelection = false;
-  m_targetRestoreIndex = -1;
-  m_forceImmediateCenter = false;
+  auto &restoreState = m_state->selectionRestore();
+  restoreState.restoring = false;
+  restoreState.targetIndex = -1;
+  restoreState.forceImmediateCenter = false;
 
-  if (m_state) {
-    m_state->click().selectionSuppressed = false;
-    m_state->click().pendingSelectionIndex = -1;
-  }
+  m_state->click().selectionSuppressed = false;
+  m_state->click().pendingSelectionIndex = -1;
 }
 
 void SelectionManager::cancelPendingSelectionRestore() {
-  m_selectionRestoreToken++;
-  m_selectionRestorePending = false;
-  if (m_state) {
-    m_state->selectionRestore().restoreToken++;
-    m_state->selectionRestore().restorePending = false;
-    m_state->selectionRestore().userSelectionMade = true;
-  }
+  auto &restoreState = m_state->selectionRestore();
+  ++restoreState.restoreToken;
+  restoreState.restorePending = false;
+  restoreState.userSelectionMade = true;
 }
 
 void SelectionManager::resetSelectionRestoreState() {
   // Reset state for new navigation - clears pending restores and
   // userSelectionMade so that automatic restore can proceed for the new
   // collection
-  m_selectionRestoreToken++;
-  m_selectionRestorePending = false;
-  if (m_state) {
-    m_state->selectionRestore().restoreToken++;
-    m_state->selectionRestore().restorePending = false;
-    m_state->selectionRestore().userSelectionMade = false;
-  }
+  auto &restoreState = m_state->selectionRestore();
+  ++restoreState.restoreToken;
+  restoreState.restorePending = false;
+  restoreState.userSelectionMade = false;
 }
 
 void SelectionManager::processSingleClickSelection(int visualIndex, const QString &filePath) {

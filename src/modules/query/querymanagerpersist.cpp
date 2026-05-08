@@ -77,7 +77,7 @@ bool QueryManager::ensureCollectionScanned(int collectionIndex,
   emit scanStarting(collection.name, -1);
 
   // Stream scan results directly into DB inserts to reduce peak memory.
-  // Kartend-tvg: capture scan stats so we can emit the summary signal used
+  // capture scan stats so we can emit the summary signal used
   // by the settings dialog's "X of Y items added" confirmation.
   int itemsScanned = 0;
   int itemsApplied = 0;

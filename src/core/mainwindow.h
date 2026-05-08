@@ -83,7 +83,7 @@ public:
   QAction *m_viewActionList = nullptr;
   QAction *m_viewActionCoverFlow = nullptr;
   QAction *m_viewActionHorizontal = nullptr;
-  /// Single toolbar filter entry-point (Kartend-dd8 + Kartend-5h6 merged):
+  /// Single toolbar filter entry-point:
   /// hosts an InstantPopup menu containing the type-filter radio group and
   /// the per-collection title-pattern toggle + editor entry. Replaces the
   /// former separate typeFilterButton, titleFilterButton, and the
@@ -127,7 +127,7 @@ public:
   [[nodiscard]] PlaylistManager *getPlaylistManager() const;
   [[nodiscard]] DetailPageManager *getDetailPageManager() const;
 
-  /// Re-runs the playlist synthesis pass (Kartend-vlm7): drops any prior
+  /// Re-runs the playlist synthesis pass: drops any prior
   /// playlist-backed CollectionConfigs from m_collections, queries the live
   /// playlists table, appends a synthesized config per row, and rebuilds the
   /// hierarchy cache. Wired to PlaylistManager::playlistsChanged so adds/
@@ -136,27 +136,27 @@ public:
 
   void showStartupSplash();
 
-  /// Kartend-81o: applies the per-button visibility flags and custom-text
+  /// applies the per-button visibility flags and custom-text
   /// overrides from m_generalSettings to the items-page toolbar. Safe to call
   /// before any toolbar widget is constructed (each ui pointer is null-checked)
   /// and idempotent — invoked on startup and again after the user saves the
   /// Settings dialog.
   void applyToolbarCustomization();
 
-  /// Kartend-9v0o: pushes the global UI font (family + point size) from
+  /// pushes the global UI font (family + point size) from
   /// @p settings to QApplication. Empty family / 0 size means "leave the
   /// platform default in place." Idempotent — invoked on startup after
   /// settings load and again whenever the user changes the font in the
   /// Settings dialog. Honors the runtime text-zoom multiplier from
-  /// @p settings — see Kartend-7eff.
+  /// @p settings.
   static void applyGlobalUiFont(const GeneralSettings &settings);
 
-  /// Kartend-7eff: current runtime text-zoom multiplier, expressed as
+  /// current runtime text-zoom multiplier, expressed as
   /// percent (100 = unscaled). Read by every place that pushes a font size
   /// onto a widget — global UI font, item titles, sidebar labels — so a
   /// single Ctrl++ press scales literally every line of text in the app.
   static int textZoomPercent();
-  /// Kartend-7eff: set @p percent (clamped to [50, 300]), persist it to
+  /// set @p percent (clamped to [50, 300]), persist it to
   /// settings, and trigger a re-render of every widget that draws text:
   ///   • QApplication font (via applyGlobalUiFont)
   ///   • Active sidebar (re-runs applyAppearance for the current collection)
@@ -165,30 +165,30 @@ public:
   /// debounced by the existing scroll-layout pipeline.
   void applyTextZoom(int percent);
 
-  /// Kartend-7eff: helper that returns @p baseSize scaled by the active
+  /// helper that returns @p baseSize scaled by the active
   /// text-zoom multiplier. Returns @p baseSize unchanged when zoom is 100
   /// or @p baseSize is non-positive. Centralizes the rounding rule so
   /// every callsite (item widgets, sidebar, coverflow) computes the same
   /// scaled value for a given input.
   static int zoomedFontSize(int baseSize);
-  /// Kartend-7eff: lightweight setter used during startup to publish the
+  /// lightweight setter used during startup to publish the
   /// persisted multiplier into the static before any widget is built. Does
   /// NOT persist or trigger refreshes — applyTextZoom() is the runtime
   /// path that does both. Clamps @p percent to the same [50, 300] range
   /// applyTextZoom uses so a hand-edited config can't widen it later.
   static void primeTextZoomFromSettings(int percent);
 
-  /// Kartend-7eff: install Ctrl+= / Ctrl+- / Ctrl+0 application shortcuts
+  /// install Ctrl+= / Ctrl+- / Ctrl+0 application shortcuts
   /// for zoom in / out / reset. Called once from setupUI() after the
   /// managers are wired so applyTextZoom() can refresh them. Step size is
   /// 10 percentage points per press — enough to feel responsive without
   /// requiring many keystrokes to traverse the [50, 300] range.
   void setupTextZoomShortcuts();
-  /// Kartend-cjry: install Ctrl+K to toggle pause/resume on the sidebar's
+  /// install Ctrl+K to toggle pause/resume on the sidebar's
   /// preview video. The fullscreen artwork overlay handles its own K key
   /// internally because it grabs keyboard focus when shown.
   void setupVideoPauseShortcut();
-  /// Kartend-3m01: bind the toolbar volume slider to
+  /// bind the toolbar volume slider to
   /// VideoPreviewWidget::setGlobalVolume and persist on change.
   void setupPreviewVolumeSlider();
 
@@ -220,8 +220,8 @@ private:
   std::unique_ptr<MenuController> m_menuController;
   SplashOverlay *m_splashOverlay = nullptr;
   NowPlayingOverlay *m_nowPlayingOverlay = nullptr;
-  DetailPageOverlay *m_detailPageOverlay = nullptr; // Kartend-uve
-  TextZoomHud *m_textZoomHud = nullptr;             // Kartend-0w4i
+  DetailPageOverlay *m_detailPageOverlay = nullptr;
+  TextZoomHud *m_textZoomHud = nullptr;
   bool m_startupSplashHandled = false;
   bool m_windowWasInactive = false;
 
@@ -239,13 +239,13 @@ private:
   void setupManagerConnections();
   void updateWindowTitleWithFilter(int visible, int total);
   /// Refreshes the itemPositionLabel in the top bar with the current
-  /// selection position and total item count (Kartend-tof).
+  /// selection position and total item count.
   void updateItemPositionLabel();
 
   void connectDatabaseManager();
   void connectScrollManager();
   void connectSidebarManager();
-  /// Kartend-0p3w: pushes the "sidebar is hidden AND its mode would shrink the
+  /// pushes the "sidebar is hidden AND its mode would shrink the
   /// grid (Expand)" predicate to ScrollManager so the layout calculator picks
   /// the alternate per-collection grid sizes when applicable. Called whenever
   /// sidebar visibility changes, when navigating to a collection with a
@@ -256,8 +256,8 @@ private:
   void connectScrollBars() const;
   /// Wires the consolidated m_filterButton: builds its popup once, hooks
   /// settings persistence, and triggers a reload of the current view when
-  /// either the type filter (Kartend-dd8) or the title-exclusion toggle
-  /// (Kartend-5h6) changes.
+  /// either the type filter or the title-exclusion toggle
+  /// changes.
   void connectFilterToolbar();
   /// Rebuilds m_filterButton's popup from scratch — the type list comes from
   /// the live collection types (so deleted/retagged types vanish) and the
@@ -265,7 +265,7 @@ private:
   /// startup, on every collection switch, and after settings edits that may
   /// have added/removed type tags.
   void refreshFilterToolbar();
-  /// Kartend-5h6: opens the popup editor for the current collection's
+  /// opens the popup editor for the current collection's
   /// title-exclusion patterns. Returns immediately when no collection is
   /// active or when the user cancels.
   void showTitleFilterEditor();

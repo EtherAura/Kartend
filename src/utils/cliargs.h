@@ -9,13 +9,13 @@ namespace CliArgs {
 enum class KartConflictPolicy { Skip = 0, Overwrite, Merge };
 
 struct StartupOptions {
-  // Kartend-z3w: when non-empty, names a collection that overrides the
+  // when non-empty, names a collection that overrides the
   // persisted startupCollection setting for this launch. The startup logic
   // falls back to the default selection if the name doesn't match an
   // existing collection.
   QString collectionOverride;
 
-  // Kartend-w9c9: headless Kart operations.
+  // headless Kart operations.
   QString importKartPath;
   QString importDestDir;
   QString exportCollectionName;

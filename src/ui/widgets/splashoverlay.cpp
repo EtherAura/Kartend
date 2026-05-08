@@ -124,7 +124,8 @@ void SplashOverlay::setupUI() {
   textLayout->addWidget(m_versionLabel);
 }
 
-void SplashOverlay::showSplash(Reason reason) {
+void SplashOverlay::showSplash(Reason reason, const QString &titleOverride,
+                               const QString &subtitleOverride) {
   if (!parentWidget()) {
     return;
   }
@@ -133,7 +134,7 @@ void SplashOverlay::showSplash(Reason reason) {
   m_fadeAnimation->stop();
 
   m_active = true;
-  updateContent(reason);
+  updateContent(reason, titleOverride, subtitleOverride);
   updatePosition();
 
   if (auto *effect = qobject_cast<QGraphicsOpacityEffect *>(graphicsEffect())) {
@@ -181,14 +182,23 @@ void SplashOverlay::hideSplash(bool animated) {
   m_fadeAnimation->start();
 }
 
-void SplashOverlay::updateContent(Reason reason) {
+void SplashOverlay::updateContent(Reason reason, const QString &titleOverride,
+                                  const QString &subtitleOverride) {
   const QString displayName = appDisplayName();
+  const QString defaultTitle =
+      reason == Reason::Startup ? displayName : tr("Welcome back");
+  // Resume splash deliberately has no default subtitle — the title alone
+  // ("Welcome back") carries the message. Custom text added via settings
+  // shows it back; otherwise the label is hidden so the card sizes tightly.
+  const QString defaultSubtitle =
+      reason == Reason::Startup ? tr("Preparing your media collections") : QString();
   if (m_titleLabel) {
-    m_titleLabel->setText(reason == Reason::Startup ? displayName : tr("Welcome back"));
+    m_titleLabel->setText(titleOverride.isEmpty() ? defaultTitle : titleOverride);
   }
   if (m_subtitleLabel) {
-    m_subtitleLabel->setText(reason == Reason::Startup ? tr("Preparing your media collections")
-                                                       : tr("%1 is ready").arg(displayName));
+    const QString subtitle = subtitleOverride.isEmpty() ? defaultSubtitle : subtitleOverride;
+    m_subtitleLabel->setText(subtitle);
+    m_subtitleLabel->setVisible(!subtitle.isEmpty());
   }
   if (m_versionLabel) {
     const QString version = appVersion();

@@ -231,7 +231,7 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
   qCDebug(lcSearchDiag)
       << QString("setupVirtualScrolling: final m_totalItems=%1").arg(m_totalItems);
 
-  // Kartend-ks4n: when the collection has hideMissingArtwork enabled the
+  // when the collection has hideMissingArtwork enabled the
   // FilterManager needs the latest source data + context so its baseline
   // (no-search) filter excludes media items that have no artwork. Pushing
   // unconditionally is cheap and keeps the FilterManager state consistent
@@ -256,7 +256,7 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
 
   setupNormalVirtualScrolling();
 
-  // Kartend-3ile: refresh cover-flow card list and visibility on every
+  // refresh cover-flow card list and visibility on every
   // navigation entry so switching into a collection that uses cover flow
   // shows up correctly even though handleLayoutChange isn't called here.
   // Card-list rebuild is gated on the widget actually being in use so we

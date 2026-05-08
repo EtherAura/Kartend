@@ -34,17 +34,16 @@
 #include "artworkmanager.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
+#include "detailspane.h"
+#include "detailspanemanager.h"
 #include "gridutils.h"
 #include "itemwidget.h"
-#include "detailspane.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
-#include "scrolldatamanager.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
-#include "detailspanemanager.h"
 #include "timerutils.h"
 #include "uiconstants.h"
 
@@ -349,9 +348,7 @@ auto InteractionManager::titleForIndexInColl(int coll, int idx) const -> QString
     const int actualIdx = m_scrollManager->getFilteredIndex(idx);
     const int renderedSubCount = m_scrollManager->getSubcollectionCount();
     if (actualIdx >= 0 && actualIdx < renderedSubCount) {
-      int subIdx = m_scrollManager->getDataManager()
-                       ? m_scrollManager->getDataManager()->subcollectionIndexFromActual(actualIdx)
-                       : -1;
+      int subIdx = m_scrollManager->subcollectionIndexFromActual(actualIdx);
       if (m_collections && subIdx >= 0 && subIdx < m_collections->size()) {
         return (*m_collections)[subIdx].name;
       }
@@ -406,18 +403,32 @@ void InteractionManager::persistSelectionForIndex(int coll, int idx) {
 
 void InteractionManager::cancelPendingSelectionRestore() {
   if (m_selectionManager) {
+    // SelectionManager owns the canonical write path and updates
+    // m_state.selectionRestore() directly.
     m_selectionManager->cancelPendingSelectionRestore();
+    return;
   }
-  m_selectionRestoreToken++;
-  m_selectionRestorePending = false;
+  // Fallback: SelectionManager not wired (e.g. shutdown teardown). Still
+  // advance the canonical token so any in-flight restore observer sees
+  // cancellation.
+  auto &restoreState = m_state.selectionRestore();
+  ++restoreState.restoreToken;
+  restoreState.restorePending = false;
+  restoreState.userSelectionMade = true;
 }
 
 void InteractionManager::resetSelectionRestoreState() {
   if (m_selectionManager) {
     m_selectionManager->resetSelectionRestoreState();
+    return;
   }
-  m_selectionRestoreToken++;
-  m_selectionRestorePending = false;
+  // Fallback: see cancelPendingSelectionRestore() above. resetSelectionRestoreState
+  // does NOT set userSelectionMade — the new navigation should be free to
+  // auto-restore.
+  auto &restoreState = m_state.selectionRestore();
+  ++restoreState.restoreToken;
+  restoreState.restorePending = false;
+  restoreState.userSelectionMade = false;
 }
 
 void InteractionManager::stopScrollAnimations() {

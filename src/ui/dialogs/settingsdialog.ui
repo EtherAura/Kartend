@@ -84,7 +84,7 @@
                </size>
               </property>
               <property name="toolTip">
-               <string>Duplicate the selected collection (Kartend-f5i9)</string>
+               <string>Duplicate the selected collection</string>
               </property>
               <property name="text">
                <string/>
@@ -192,7 +192,7 @@
          <property name="currentIndex">
           <number>0</number>
          </property>
-         <!-- Configuration Tab (Kartend-gsla: artwork & launcher moved to dedicated tabs) -->
+         <!-- Configuration Tab: artwork & launcher have dedicated tabs -->
          <widget class="QWidget" name="configurationTab">
           <attribute name="title">
            <string>Configuration</string>
@@ -226,7 +226,7 @@
                 </item>
                 <item>
                  <widget class="QPushButton" name="editLinkedParentsButton">
-                  <property name="toolTip"><string>Manage additional parents this collection appears under in the tree (Kartend-gzmk)</string></property>
+                  <property name="toolTip"><string>Manage additional parents this collection appears under in the tree</string></property>
                   <property name="text"><string>Linked Parents...</string></property>
                  </widget>
                 </item>
@@ -331,7 +331,7 @@
            </item>
           </layout>
          </widget>
-         <!-- Artwork Tab (Kartend-gsla) -->
+         <!-- Artwork Tab -->
          <widget class="QWidget" name="artworkTab">
           <attribute name="title">
            <string>Artwork</string>
@@ -451,7 +451,7 @@
            </item>
           </layout>
          </widget>
-         <!-- Launcher Tab (Kartend-gsla) -->
+         <!-- Launcher Tab -->
          <widget class="QWidget" name="launcherTab">
           <attribute name="title">
            <string>Launcher</string>
@@ -963,7 +963,7 @@
                     <item>
                      <widget class="QRadioButton" name="backgroundVideoRadio">
                       <property name="text"><string>Video</string></property>
-                      <property name="toolTip"><string>Looping muted video as background (Kartend-vbs)</string></property>
+                      <property name="toolTip"><string>Looping muted video as background</string></property>
                      </widget>
                     </item>
                     <item>
@@ -1184,7 +1184,7 @@
                     <item>
                      <widget class="QCheckBox" name="vignetteEnabledCheckBox">
                       <property name="text"><string>Enable</string></property>
-                      <property name="toolTip"><string>Darken the corners of the items area to make titles pop over busy backgrounds (Kartend-qbp3)</string></property>
+                      <property name="toolTip"><string>Darken the corners of the items area to make titles pop over busy backgrounds</string></property>
                      </widget>
                     </item>
                     <item>
@@ -1255,7 +1255,7 @@
                <item><spacer name="appearanceListVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
               </layout>
              </widget>
-             <!-- Sub-tab: Toolbar (Kartend-guo5) -->
+             <!-- Sub-tab: Toolbar -->
              <widget class="QWidget" name="appearanceToolbarSubTab">
               <attribute name="title"><string>Header Logo</string></attribute>
               <layout class="QVBoxLayout" name="appearanceToolbarSubTabLayout">
@@ -1276,7 +1276,7 @@
                    <layout class="QHBoxLayout" name="headerLogoLayout">
                     <item>
                      <widget class="QLineEdit" name="headerLogoEdit">
-                      <property name="toolTip"><string>Path to a logo/banner image painted at the top of the items area (Kartend-guo5)</string></property>
+                      <property name="toolTip"><string>Path to a logo/banner image painted at the top of the items area</string></property>
                       <property name="placeholderText"><string>None</string></property>
                      </widget>
                     </item>
@@ -1302,7 +1302,7 @@
                <item><spacer name="appearanceToolbarVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
               </layout>
              </widget>
-             <!-- Sub-tab: Effects (Kartend-y25g, eq8r) -->
+             <!-- Sub-tab: Effects -->
              <widget class="QWidget" name="appearanceEffectsSubTab">
               <attribute name="title"><string>Effects</string></attribute>
               <layout class="QVBoxLayout" name="appearanceEffectsSubTabLayout">
@@ -1324,7 +1324,7 @@
                     <item>
                      <widget class="QCheckBox" name="wallpaperParallaxCheckBox">
                       <property name="text"><string>Enable</string></property>
-                      <property name="toolTip"><string>Tie the image background's vertical position to the items scroll offset (Kartend-y25g). Image bg only — video bgs are unaffected.</string></property>
+                      <property name="toolTip"><string>Tie the image background's vertical position to the items scroll offset. Image bg only — video bgs are unaffected.</string></property>
                      </widget>
                     </item>
                     <item>
@@ -1363,7 +1363,7 @@
                     <item>
                      <widget class="QCheckBox" name="toolbarBackdropBlurCheckBox">
                       <property name="text"><string>Enable</string></property>
-                      <property name="toolTip"><string>Use a blurred copy of the wallpaper as the toolbar background, mimicking macOS Vibrancy (Kartend-eq8r). Image bg only — no-op while a video bg is active.</string></property>
+                      <property name="toolTip"><string>Use a blurred copy of the wallpaper as the toolbar background, mimicking macOS Vibrancy. Image bg only — no-op while a video bg is active.</string></property>
                      </widget>
                     </item>
                     <item>
@@ -1483,7 +1483,7 @@
        </item>
       </layout>
      </widget>
-     <!-- Details-pane Tab (Kartend-b57 / Kartend-u2gx): top-level category.
+     <!-- Details-pane Tab: top-level category.
           Settings are per-collection — the row below shows which collection
           is being edited (driven by the Collections tab tree selection). -->
      <widget class="QWidget" name="sidebarTab">
@@ -1528,7 +1528,7 @@
           </item>
           <item row="1" column="1">
            <widget class="QComboBox" name="sidebarPositionComboBox">
-            <property name="toolTip"><string>Which edge of the items grid the details pane docks against. Right/Left are width-driven; Top/Bottom are height-driven and span the full width (Kartend-63e / Kartend-u2gx).</string></property>
+            <property name="toolTip"><string>Which edge of the items grid the details pane docks against. Right/Left are width-driven; Top/Bottom are height-driven and span the full width.</string></property>
             <item><property name="text"><string>Right</string></property></item>
             <item><property name="text"><string>Left</string></property></item>
             <item><property name="text"><string>Top</string></property></item>
@@ -1565,7 +1565,7 @@
           </item>
           <item row="3" column="1">
            <widget class="QSpinBox" name="sidebarHeightSpinBox">
-            <property name="toolTip"><string>Pane height in pixels — used when Position is Top or Bottom (Kartend-u2gx).</string></property>
+            <property name="toolTip"><string>Pane height in pixels — used when Position is Top or Bottom.</string></property>
             <property name="minimum"><number>120</number></property>
             <property name="maximum"><number>9999</number></property>
             <property name="suffix"><string> px</string></property>
@@ -1623,7 +1623,7 @@
            <layout class="QHBoxLayout" name="sidebarBackgroundLayout">
             <item>
              <widget class="QComboBox" name="sidebarBackgroundTypeComboBox">
-              <property name="toolTip"><string>Details-pane background mode (Kartend-63e)</string></property>
+              <property name="toolTip"><string>Details-pane background mode</string></property>
               <item><property name="text"><string>Color</string></property></item>
               <item><property name="text"><string>Image</string></property></item>
               <item><property name="text"><string>Pattern</string></property></item>
@@ -1690,7 +1690,7 @@
             <item>
              <widget class="QLineEdit" name="sidebarFontFamilyEdit">
               <property name="placeholderText"><string>Application Default</string></property>
-              <property name="toolTip"><string>Font family for the details pane's text. Empty inherits the application font (Kartend-ekaa).</string></property>
+              <property name="toolTip"><string>Font family for the details pane's text. Empty inherits the application font.</string></property>
              </widget>
             </item>
             <item>
@@ -1827,7 +1827,7 @@
      </widget>
      <widget class="QWidget" name="launchersTab">
       <attribute name="icon">
-       <iconset theme="input-gaming"/>
+       <iconset theme="system-run"/>
       </attribute>
       <attribute name="title">
        <string>Launchers</string>
@@ -1929,45 +1929,25 @@
                    </widget>
                   </item>
                   <item row="1" column="0">
-                   <widget class="QLabel" name="bootSplashLabel">
-                    <property name="text"><string>Boot Splash Screen:</string></property>
-                   </widget>
-                  </item>
-                  <item row="1" column="1">
-                   <widget class="QCheckBox" name="bootSplashCheckBox">
-                    <property name="toolTip"><string>Show the splash screen when Kartend starts</string></property>
-                   </widget>
-                  </item>
-                  <item row="2" column="0">
-                   <widget class="QLabel" name="resumeFocusSplashLabel">
-                    <property name="text"><string>Resume Focus Splash:</string></property>
-                   </widget>
-                  </item>
-                  <item row="2" column="1">
-                   <widget class="QCheckBox" name="resumeFocusSplashCheckBox">
-                    <property name="toolTip"><string>Show the splash screen when Kartend regains focus after being inactive</string></property>
-                   </widget>
-                  </item>
-                  <item row="3" column="0">
                    <widget class="QLabel" name="startupVideoEnabledLabel">
                     <property name="text"><string>Startup Video:</string></property>
                    </widget>
                   </item>
-                  <item row="3" column="1">
+                  <item row="1" column="1">
                    <widget class="QCheckBox" name="startupVideoEnabledCheckBox">
-                    <property name="toolTip"><string>Play a configurable video on application launch. Skippable via any key or click. (Kartend-y3ke)</string></property>
+                    <property name="toolTip"><string>Play a configurable video on application launch. Skippable via any key or click.</string></property>
                    </widget>
                   </item>
-                  <item row="4" column="0">
+                  <item row="2" column="0">
                    <widget class="QLabel" name="startupVideoPathLabel">
                     <property name="text"><string>Video File:</string></property>
                    </widget>
                   </item>
-                  <item row="4" column="1">
+                  <item row="2" column="1">
                    <layout class="QHBoxLayout" name="startupVideoPathLayout">
                     <item>
                      <widget class="QLineEdit" name="startupVideoPathLineEdit">
-                      <property name="toolTip"><string>Absolute path to the video file played on launch (e.g. .mp4, .webm). Empty disables the feature regardless of the checkbox above. (Kartend-y3ke)</string></property>
+                      <property name="toolTip"><string>Absolute path to the video file played on launch (e.g. .mp4, .webm). Empty disables the feature regardless of the checkbox above.</string></property>
                      </widget>
                     </item>
                     <item>
@@ -2340,6 +2320,103 @@
            </item>
           </layout>
          </widget>
+         <widget class="QWidget" name="splashSubTab">
+          <attribute name="title">
+           <string>Splash</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="splashSubTabLayout">
+           <item>
+            <widget class="QGroupBox" name="bootSplashGroupBox">
+             <property name="title"><string>Boot Splash</string></property>
+             <layout class="QFormLayout" name="bootSplashFormLayout">
+              <property name="horizontalSpacing"><number>8</number></property>
+              <property name="verticalSpacing"><number>6</number></property>
+              <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
+              <item row="0" column="0">
+               <widget class="QLabel" name="bootSplashLabel">
+                <property name="text"><string>Show on Startup:</string></property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QCheckBox" name="bootSplashCheckBox">
+                <property name="toolTip"><string>Show the splash screen when Kartend starts</string></property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="bootSplashTitleLabel">
+                <property name="text"><string>Title:</string></property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLineEdit" name="bootSplashTitleLineEdit">
+                <property name="placeholderText"><string>Kartend</string></property>
+                <property name="toolTip"><string>Title shown on the boot splash. Leave empty to use the application name.</string></property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="bootSplashSubtitleLabel">
+                <property name="text"><string>Subtitle:</string></property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QLineEdit" name="bootSplashSubtitleLineEdit">
+                <property name="placeholderText"><string>Preparing your media collections</string></property>
+                <property name="toolTip"><string>Subtitle shown on the boot splash. Leave empty to use the default.</string></property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="resumeFocusSplashGroupBox">
+             <property name="title"><string>Resume Focus Splash</string></property>
+             <layout class="QFormLayout" name="resumeFocusSplashFormLayout">
+              <property name="horizontalSpacing"><number>8</number></property>
+              <property name="verticalSpacing"><number>6</number></property>
+              <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
+              <item row="0" column="0">
+               <widget class="QLabel" name="resumeFocusSplashLabel">
+                <property name="text"><string>Show on Focus Return:</string></property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QCheckBox" name="resumeFocusSplashCheckBox">
+                <property name="toolTip"><string>Show the splash screen when Kartend regains focus after being inactive</string></property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="resumeFocusSplashTitleLabel">
+                <property name="text"><string>Title:</string></property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLineEdit" name="resumeFocusSplashTitleLineEdit">
+                <property name="placeholderText"><string>Welcome back</string></property>
+                <property name="toolTip"><string>Title shown on the resume-focus splash. Leave empty to use the default.</string></property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="resumeFocusSplashSubtitleLabel">
+                <property name="text"><string>Subtitle:</string></property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QLineEdit" name="resumeFocusSplashSubtitleLineEdit">
+                <property name="placeholderText"><string>(none)</string></property>
+                <property name="toolTip"><string>Optional subtitle shown under the resume-focus splash title. Leave empty for none.</string></property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="splashSubTabVerticalSpacer">
+             <property name="orientation"><enum>Qt::Orientation::Vertical</enum></property>
+             <property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
          <widget class="QWidget" name="fontsSubTab">
           <attribute name="title">
            <string>Fonts</string>
@@ -2604,7 +2681,7 @@
            <item>
             <widget class="QGroupBox" name="toolbarGroupBox">
              <property name="title">
-              <string>Toolbar Buttons (Kartend-81o)</string>
+              <string>Toolbar Buttons</string>
              </property>
              <layout class="QVBoxLayout" name="toolbarGroupBoxLayout">
               <item>
@@ -2634,7 +2711,7 @@
                   </item>
                   <item>
                    <widget class="QLineEdit" name="toolbarGridViewTextEdit">
-                    <property name="placeholderText"><string>⊞ (default)</string></property>
+                    <property name="placeholderText"><string>(default)</string></property>
                     <property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property>
                    </widget>
                   </item>
@@ -2654,7 +2731,7 @@
                   </item>
                   <item>
                    <widget class="QLineEdit" name="toolbarListViewTextEdit">
-                    <property name="placeholderText"><string>☰ (default)</string></property>
+                    <property name="placeholderText"><string>(default)</string></property>
                     <property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property>
                    </widget>
                   </item>
@@ -2674,7 +2751,7 @@
                   </item>
                   <item>
                    <widget class="QLineEdit" name="toolbarCoverFlowViewTextEdit">
-                    <property name="placeholderText"><string>◖◉◗ (default)</string></property>
+                    <property name="placeholderText"><string>(default)</string></property>
                     <property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property>
                    </widget>
                   </item>
@@ -2694,7 +2771,7 @@
                   </item>
                   <item>
                    <widget class="QLineEdit" name="toolbarHorizontalViewTextEdit">
-                    <property name="placeholderText"><string>⇆ (default)</string></property>
+                    <property name="placeholderText"><string>(default)</string></property>
                     <property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property>
                    </widget>
                   </item>
@@ -2714,7 +2791,7 @@
                   </item>
                   <item>
                    <widget class="QLineEdit" name="toolbarHideSubcollectionsTextEdit">
-                    <property name="placeholderText"><string>📁 (default)</string></property>
+                    <property name="placeholderText"><string>(default)</string></property>
                     <property name="toolTip"><string>Custom label or icon character; leave blank to keep the default.</string></property>
                    </widget>
                   </item>

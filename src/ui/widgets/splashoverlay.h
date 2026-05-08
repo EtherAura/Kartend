@@ -23,7 +23,9 @@ public:
   explicit SplashOverlay(QWidget *parent = nullptr);
   ~SplashOverlay() override;
 
-  void showSplash(Reason reason);
+  // Empty title/subtitle fall back to the built-in localized defaults.
+  void showSplash(Reason reason, const QString &titleOverride = {},
+                  const QString &subtitleOverride = {});
   void hideSplash(bool animated = true);
   [[nodiscard]] bool isActive() const { return m_active; }
 
@@ -35,7 +37,8 @@ protected:
 private:
   void setupUI();
   void updatePosition();
-  void updateContent(Reason reason);
+  void updateContent(Reason reason, const QString &titleOverride,
+                     const QString &subtitleOverride);
   [[nodiscard]] bool shouldDismissForEvent(QObject *watched, QEvent *event) const;
   [[nodiscard]] bool isObjectInOverlayWindow(QObject *watched) const;
 

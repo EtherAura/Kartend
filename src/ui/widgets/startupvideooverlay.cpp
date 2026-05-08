@@ -1,4 +1,4 @@
-// One-shot fullscreen startup video (Kartend-y3ke). Reuses VideoPreviewWidget's
+// One-shot fullscreen startup video. Reuses VideoPreviewWidget's
 // QVideoSink → QLabel rendering pattern to avoid the QVideoWidget Wayland
 // quirks documented in videopreviewwidget.cpp's banner. Distinct class from
 // VideoPreviewWidget because that one is built around looping muted preview
@@ -60,8 +60,7 @@ StartupVideoOverlay::StartupVideoOverlay(QWidget *parent) : QWidget(parent) {
           [this](const QVideoFrame &frame) { renderFrame(frame); });
   connect(m_player, &QMediaPlayer::mediaStatusChanged, this,
           [this](QMediaPlayer::MediaStatus status) {
-            if (status == QMediaPlayer::EndOfMedia ||
-                status == QMediaPlayer::InvalidMedia) {
+            if (status == QMediaPlayer::EndOfMedia || status == QMediaPlayer::InvalidMedia) {
               dismiss();
             }
           });
