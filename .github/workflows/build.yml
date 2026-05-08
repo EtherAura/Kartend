@@ -53,6 +53,12 @@ jobs:
           pulseaudio --start --exit-idle-time=-1 --daemonize \
             --load='module-null-sink sink_name=NullOutput' \
             --load='module-null-source source_name=NullInput' || true
+          # Verify the daemon actually came up — `|| true` above hid any
+          # failure, so without this check we'd never know if pulse silently
+          # failed and Qt's PulseAudio backend went back to its SIGILL path.
+          if command -v pactl >/dev/null 2>&1; then
+            pactl info || echo "::warning::pactl info failed; pulse daemon likely not running"
+          fi
           # Persist runtime dir for downstream steps in the same job.
           echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
 
@@ -105,6 +111,26 @@ jobs:
         run: |
           cd build/${{ matrix.build_type }}-${{ matrix.compiler }}
           ctest --output-on-failure
+
+      - name: Capture SIGILL backtrace under gdb
+        # Only for the (Release, gcc/clang) job that we've seen SIGILL on,
+        # and only if `Run Tests` failed. Re-runs the integration test
+        # binary under gdb -batch to print the faulting backtrace; ctest
+        # itself swallows it. Removable once the SIGILL is root-caused.
+        if: ${{ failure() && matrix.build_type == 'Release' }}
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          sudo apt-get install -y gdb
+          gdb -batch \
+            -ex 'set pagination off' \
+            -ex 'handle SIGILL stop print pass' \
+            -ex 'run' \
+            -ex 'thread apply all bt full' \
+            -ex 'info registers' \
+            -ex 'x/16i $pc-32' \
+            --args build/${{ matrix.build_type }}-${{ matrix.compiler }}/tests/integration/test_integration \
+            testFixtureBuildsWithoutTouchingRealConfig || true
 
   # Build with zstd explicitly disabled. Kart compression falls back to
   # qCompress (zlib), and test_kartreader.cpp's QSKIP("Built without zstd
@@ -286,6 +312,12 @@ jobs:
           pulseaudio --start --exit-idle-time=-1 --daemonize \
             --load='module-null-sink sink_name=NullOutput' \
             --load='module-null-source source_name=NullInput' || true
+          # Verify the daemon actually came up — `|| true` above hid any
+          # failure, so without this check we'd never know if pulse silently
+          # failed and Qt's PulseAudio backend went back to its SIGILL path.
+          if command -v pactl >/dev/null 2>&1; then
+            pactl info || echo "::warning::pactl info failed; pulse daemon likely not running"
+          fi
           # Persist runtime dir for downstream steps in the same job.
           echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
 
