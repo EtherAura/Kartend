@@ -8,9 +8,13 @@ int g_textZoomPercent = 100;
 
 namespace TextZoom {
 
-int percent() { return g_textZoomPercent; }
+int percent() {
+  return g_textZoomPercent;
+}
 
-void primeFromSettings(int p) { g_textZoomPercent = std::clamp(p, 50, 300); }
+void primeFromSettings(int p) {
+  g_textZoomPercent = std::clamp(p, 50, 300);
+}
 
 int setPercent(int p) {
   g_textZoomPercent = std::clamp(p, 50, 300);

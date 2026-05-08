@@ -37,8 +37,7 @@ protected:
 private:
   void setupUI();
   void updatePosition();
-  void updateContent(Reason reason, const QString &titleOverride,
-                     const QString &subtitleOverride);
+  void updateContent(Reason reason, const QString &titleOverride, const QString &subtitleOverride);
   [[nodiscard]] bool shouldDismissForEvent(QObject *watched, QEvent *event) const;
   [[nodiscard]] bool isObjectInOverlayWindow(QObject *watched) const;
 

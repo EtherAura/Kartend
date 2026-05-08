@@ -54,8 +54,7 @@ void SelectionManager::prepareForRestore(int targetIndex) {
   restoreState.targetIndex = targetIndex;
   restoreState.forceImmediateCenter = true;
 
-  qint64 until = QDateTime::currentMSecsSinceEpoch() +
-                 UIConstants::Keyboard::ANIMATION_SETTLE_MS +
+  qint64 until = QDateTime::currentMSecsSinceEpoch() + UIConstants::Keyboard::ANIMATION_SETTLE_MS +
                  UIConstants::Keyboard::ARROW_CENTER_EXTRA_SUPPRESS_AFTER_RESTORE_MS;
   m_state->arrow().suppressArrowCenter = true;
   m_state->arrow().suppressArrowCenterUntilMs = until;

@@ -102,6 +102,14 @@ protected:
 private:
   void renderFrame(const QVideoFrame &frame);
   void paintCurrentImageScaled();
+  // Lazy-construct the QMediaPlayer/QAudioOutput/QVideoSink chain. Deferred
+  // out of the constructor so widgets that are never asked to play (the
+  // common case in DetailsPane / CoverflowWidget when the user has no
+  // preview videos) don't spin up the QtMultimedia + PulseAudio backend
+  // at all — saves threads, avoids a TSan-flagged libpulsecommon race in
+  // tests, and dodges a Qt6 / gcc-Release SIGILL we hit on CI runners
+  // without a real audio device.
+  void ensureMediaPipeline();
 
   QMediaPlayer *m_player = nullptr;
   QAudioOutput *m_audioOutput = nullptr;

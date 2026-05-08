@@ -42,6 +42,15 @@ VideoPreviewWidget::VideoPreviewWidget(QWidget *parent) : QWidget(parent) {
   m_imageLabel->setScaledContents(false);
   layout->addWidget(m_imageLabel);
 
+  // QMediaPlayer / QAudioOutput / QVideoSink are constructed lazily on the
+  // first playVideo() call; see ensureMediaPipeline().
+  s_instances.append(this);
+}
+
+void VideoPreviewWidget::ensureMediaPipeline() {
+  if (m_player) {
+    return;
+  }
   m_player = new QMediaPlayer(this);
   m_audioOutput = new QAudioOutput(this);
   // Audio is unmuted by default; volume comes from s_globalVolume so a
@@ -56,8 +65,6 @@ VideoPreviewWidget::VideoPreviewWidget(QWidget *parent) : QWidget(parent) {
 
   connect(m_sink, &QVideoSink::videoFrameChanged, this,
           [this](const QVideoFrame &frame) { renderFrame(frame); });
-
-  s_instances.append(this);
 }
 
 VideoPreviewWidget::~VideoPreviewWidget() {
@@ -120,6 +127,7 @@ void VideoPreviewWidget::playVideo(const QString &filePath) {
     stop();
     return;
   }
+  ensureMediaPipeline();
   if (filePath == m_currentPath && m_player &&
       m_player->playbackState() == QMediaPlayer::PlayingState) {
     return;

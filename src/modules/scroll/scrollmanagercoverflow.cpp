@@ -18,9 +18,9 @@
 #include "databasemanager.h"
 #include "filtermanager.h"
 #include "itemartwork.h"
-#include "textzoom.h"
 #include "pathutils.h"
 #include "scrolldatamanager.h"
+#include "textzoom.h"
 #include "videoutils.h"
 
 #include <QBoxLayout>

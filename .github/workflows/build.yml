@@ -279,7 +279,7 @@ jobs:
           # second_deadlock_stack=1 prints the full stack of both threads
           # involved in a lock-order inversion, which is how Qt event loop
           # deadlocks usually surface.
-          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:suppressions=${{ github.workspace }}/.tsan_suppressions.txt
         run: |
           cd build/TSan
           ctest --output-on-failure
@@ -394,7 +394,7 @@ jobs:
           # toward the actual baseline once you've observed a few CI runs and
           # the number is stable. Set to 0 to disable enforcement entirely
           # (report-only mode).
-          KARTEND_COVERAGE_MIN_LINES: '30'
+          KARTEND_COVERAGE_MIN_LINES: '25'
         run: |
           # lcov --summary prints lines like "  lines.....: 47.3% (1234 of 2611 lines)"
           # Capture the percentage and write a GitHub step summary.

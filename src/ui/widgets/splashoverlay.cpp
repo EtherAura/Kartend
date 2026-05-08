@@ -185,8 +185,7 @@ void SplashOverlay::hideSplash(bool animated) {
 void SplashOverlay::updateContent(Reason reason, const QString &titleOverride,
                                   const QString &subtitleOverride) {
   const QString displayName = appDisplayName();
-  const QString defaultTitle =
-      reason == Reason::Startup ? displayName : tr("Welcome back");
+  const QString defaultTitle = reason == Reason::Startup ? displayName : tr("Welcome back");
   // Resume splash deliberately has no default subtitle — the title alone
   // ("Welcome back") carries the message. Custom text added via settings
   // shows it back; otherwise the label is hidden so the card sizes tightly.

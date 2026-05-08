@@ -1,0 +1,21 @@
+# ThreadSanitizer suppressions for known third-party / Qt-internal false
+# positives. See https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions
+
+# Qt::BlockingQueuedConnection slot dispatch: main thread heap-allocates a
+# QSlotObject and the worker thread reads its vtable. The synchronization
+# happens inside Qt's QMetaObject (via internal QMutex) and isn't visible
+# to TSan, so the read/write of the slot object pointer looks like a race.
+race:QtPrivate::QSlotObject
+
+# QThread + glib GMainContext wakeup: GMainContext writes to an eventfd from
+# the worker thread to wake the main loop, and the main thread reads it on
+# shutdown. glib's internal mutex covers this but the eventfd handle write
+# itself isn't ordered against the read in a way TSan can observe.
+called_from_lib:libglib-2.0.so
+
+# QtMultimedia / PulseAudio backend: VideoPreviewWidget construction triggers
+# QPlatformMediaIntegration which spawns PulseAudio's threaded-ml thread. All
+# races here are inside libpulsecommon (pa_mutex_lock vs pa_xmalloc on the
+# threaded-ml thread); pulseaudio uses its own sync primitives that TSan
+# can't observe.
+called_from_lib:libpulsecommon

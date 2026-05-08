@@ -528,7 +528,6 @@ void DetailsPaneManager::saveSidebarStateForCollection(int collectionIndex, bool
   }
 }
 
-
 // Persists the sidebar visibility state by collection name, forwarding to
 // index-based save
 void DetailsPaneManager::saveSidebarStateForCollection(const QString &collectionName,

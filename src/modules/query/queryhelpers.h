@@ -51,8 +51,8 @@ namespace QueryHelpers {
 // ArtworkFirst, ArtworkLast, Random) fall through to alphabetical ascending
 // since artwork-presence and randomness are handled by sorted_items_cache,
 // not by SQL ORDER BY.
-[[nodiscard]] auto orderByForSortMode(SortMode mode, bool useSortPrefix,
-                                       bool withLimitOffset) -> QString;
+[[nodiscard]] auto orderByForSortMode(SortMode mode, bool useSortPrefix, bool withLimitOffset)
+    -> QString;
 
 // Returns a comma-separated placeholder list for SQL `IN (...)` clauses.
 //

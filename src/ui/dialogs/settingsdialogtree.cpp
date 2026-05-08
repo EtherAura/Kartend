@@ -472,7 +472,7 @@ void SettingsDialog::updateParentCollectionComboBox(int currentIndex) {
 auto SettingsDialog::wouldCreateCircularReference(int childIndex, int potentialParentIndex) const
     -> bool {
   return CollectionUtils::wouldCreateCircularReference(childIndex, potentialParentIndex,
-                                                        collections);
+                                                       collections);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

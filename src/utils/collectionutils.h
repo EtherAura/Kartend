@@ -1262,7 +1262,7 @@ namespace CollectionUtils {
  * unit-tested without instantiating the full settings dialog.
  */
 [[nodiscard]] bool wouldCreateCircularReference(int childIndex, int potentialParentIndex,
-                                                 const QList<CollectionConfig> &collections);
+                                                const QList<CollectionConfig> &collections);
 
 [[nodiscard]] QList<int> directChildrenOf(int parentIndex,
                                           const QList<CollectionConfig> &collections);

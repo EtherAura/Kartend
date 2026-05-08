@@ -355,9 +355,9 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
     qCWarning(lcQueryManager)
         << "[QueryManager] fetchItemsRange: Random sort reached slow path unexpectedly";
   }
-  sql += QStringLiteral(" ") +
-         QueryHelpers::orderByForSortMode(ctx.sortMode, /*useSortPrefix=*/true,
-                                           /*withLimitOffset=*/true);
+  sql +=
+      QStringLiteral(" ") + QueryHelpers::orderByForSortMode(ctx.sortMode, /*useSortPrefix=*/true,
+                                                             /*withLimitOffset=*/true);
 
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange (slow path): offset=" << offset

@@ -373,8 +373,7 @@ void InteractionManager::selectItemByIndex(int index, bool allowHorizontalScroll
   } else {
     bool isCoverFlow = false;
     if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-      isCoverFlow =
-          ((*m_collections)[*m_currentCollectionIndex].viewType == ViewType::CoverFlow);
+      isCoverFlow = ((*m_collections)[*m_currentCollectionIndex].viewType == ViewType::CoverFlow);
     }
     if (isCoverFlow) {
       // Cover Flow renders CoverFlowCards instead of ItemWidgets, so the

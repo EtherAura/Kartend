@@ -5,6 +5,7 @@
 
 #include "applicationcontext.h"
 #include "artworkmanager.h"
+#include "detailspane.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "navigationstackmanager.h"
@@ -12,7 +13,6 @@
 #include "selectionrestoremanager.h"
 #include "settingsmanager.h"
 #include "timerutils.h"
-#include "detailspane.h"
 #include "uiconstants.h"
 
 #include <QApplication>

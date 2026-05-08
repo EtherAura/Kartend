@@ -159,7 +159,7 @@ private:
   [[nodiscard]] bool wheelEventBelongsToSidebar() const;
   [[nodiscard]] bool wheelEventCanProceed() const;
   [[nodiscard]] int computeWheelTargetScroll(int selectedIndex, const CollectionConfig &collection,
-                                              QScrollBar *axisScrollBar, bool horizontalView) const;
+                                             QScrollBar *axisScrollBar, bool horizontalView) const;
   void onWheelAnimationFinished();
 
   // Manager references

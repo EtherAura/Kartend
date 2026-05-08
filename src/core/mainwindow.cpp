@@ -142,8 +142,7 @@ void MainWindow::showStartupSplash() {
     videoOverlay->deleteLater();
   }
   if (m_generalSettings.bootSplashEnabled && m_splashOverlay) {
-    m_splashOverlay->showSplash(SplashOverlay::Reason::Startup,
-                                m_generalSettings.bootSplashTitle,
+    m_splashOverlay->showSplash(SplashOverlay::Reason::Startup, m_generalSettings.bootSplashTitle,
                                 m_generalSettings.bootSplashSubtitle);
   }
 }

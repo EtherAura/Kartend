@@ -231,8 +231,8 @@ void SelectionManager::updateFilePathForSelection(int index,
     } else if (!m_selectedFilePath.isEmpty()) {
       // No materialized ItemWidget (Cover Flow renders its own cards) — keep
       // m_currentItemContext fresh so the info-page overlay still works.
-      m_detailsPaneManager->updateSidebarMetadata(
-          m_selectedFilePath, QFileInfo(m_selectedFilePath).completeBaseName());
+      m_detailsPaneManager->updateSidebarMetadata(m_selectedFilePath,
+                                                  QFileInfo(m_selectedFilePath).completeBaseName());
     }
   }
 }

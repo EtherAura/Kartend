@@ -418,7 +418,7 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
   // `WHERE rn = ?` filter, not SQL OFFSET).
   const QString orderClause =
       QueryHelpers::orderByForSortMode(ctx.sortMode, /*useSortPrefix=*/false,
-                                        /*withLimitOffset=*/false);
+                                       /*withLimitOffset=*/false);
 
   // Build WHERE clause for UUIDs
   const QString uuidPlaceholders = QueryHelpers::placeholderList(uuids.size());

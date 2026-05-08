@@ -26,8 +26,8 @@ namespace FilterHelpers {
 // can be any case — the comparison is Qt::CaseInsensitive so callers don't
 // need to pre-lower it (and shouldn't, since per-item lowering allocates a
 // fresh QString per match in hot filter loops).
-[[nodiscard]] auto subcollectionNameMatches(const QString &subcollectionName,
-                                            const QString &needle) -> bool;
+[[nodiscard]] auto subcollectionNameMatches(const QString &subcollectionName, const QString &needle)
+    -> bool;
 
 // Resolves the display name for a media-item raw entry, mirroring
 // FilterManager::getDisplayNameForMediaItem semantics.

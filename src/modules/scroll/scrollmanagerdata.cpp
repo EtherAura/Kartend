@@ -24,13 +24,13 @@
 
 #include <QHash>
 
-#include <utility>
 #include <QLoggingCategory>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
+#include <utility>
 
 Q_DECLARE_LOGGING_CATEGORY(lcScrollManager)
 #define debugLog(msg)                                                                              \

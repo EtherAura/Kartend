@@ -126,7 +126,7 @@ QString selectionSessionKeyFor(const CollectionConfig &collection,
 }
 
 bool wouldCreateCircularReference(int childIndex, int potentialParentIndex,
-                                   const QList<CollectionConfig> &collections) {
+                                  const QList<CollectionConfig> &collections) {
   // Out-of-range or self-parenting: reject.
   if (childIndex < 0 || childIndex >= collections.size() || potentialParentIndex < 0 ||
       potentialParentIndex >= collections.size()) {

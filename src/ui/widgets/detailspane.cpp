@@ -1130,8 +1130,7 @@ void DetailsPane::setArtworkGallery(const QList<GalleryEntry> &entries) {
     if (!alreadyPresent) {
       const int insertAt =
           (!m_galleryEntries.isEmpty() && m_galleryEntries.first().isVideo) ? 1 : 0;
-      m_galleryEntries.insert(insertAt,
-                              {tr("Artwork"), m_primaryArtworkPath, /*isVideo=*/false});
+      m_galleryEntries.insert(insertAt, {tr("Artwork"), m_primaryArtworkPath, /*isVideo=*/false});
     }
   }
   if (m_galleryEntries.isEmpty()) {

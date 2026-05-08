@@ -108,6 +108,8 @@ void TestKartWriter::testRoundTripWithMultipleEntryKinds() {
   p.uuid = "x";
   p.name = "Multi";
   p.collectionConfig.name = "Multi";
+  p.preferredCompression =
+      KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd : KartFormat::Compression_Zlib;
   KartWriter::ItemSource it;
   it.mediaAbs = romP;
   it.artworkAbs = artP;
@@ -185,6 +187,8 @@ void TestKartWriter::testWriterEmitsProgress() {
   p.uuid = "x";
   p.name = "P";
   p.collectionConfig.name = "P";
+  p.preferredCompression =
+      KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd : KartFormat::Compression_Zlib;
   for (int i = 0; i < 3; ++i) {
     QByteArray data = QByteArray(512, static_cast<char>('a' + i));
     QString name = QString("rom%1.bin").arg(i);

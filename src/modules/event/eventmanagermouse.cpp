@@ -8,8 +8,8 @@
 #include <QLineEdit>
 #include <QMouseEvent>
 #include <QPointer>
-#include <QScrollArea>
 #include <QScopeGuard>
+#include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
 #include <QTimer>
@@ -64,8 +64,7 @@ bool EventManager::wheelEventCanProceed() const {
 }
 
 int EventManager::computeWheelTargetScroll(int selectedIndex, const CollectionConfig &collection,
-                                            QScrollBar *axisScrollBar,
-                                            bool horizontalView) const {
+                                           QScrollBar *axisScrollBar, bool horizontalView) const {
   // Calculate target scroll position so the new selection stays visible.
   // ScrollManager metrics override the per-collection defaults — both code
   // paths must agree on itemsPerRow / itemHeight / verticalSpacing.
@@ -120,8 +119,7 @@ void EventManager::onWheelAnimationFinished() {
       m_scrollManager->refreshSelectionOverlayState();
     }
   }
-  const int selectedIndex =
-      m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
+  const int selectedIndex = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
   if (m_scrollManager && selectedIndex >= 0) {
     m_scrollManager->updateSelectionForIndex(selectedIndex);
   }
@@ -204,8 +202,7 @@ bool EventManager::handleWheelEvent(QObject * /*obj*/, QEvent *event) {
     return true;
   }
 
-  const int selectedIndex =
-      m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
+  const int selectedIndex = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
   if (selectedIndex < 0) {
     event->accept();
     return true;
