@@ -145,11 +145,24 @@ Library (shell, root)
     └── Cheat Sheets
 ```
 
-The top-level "Library" shell is rarely worth the nesting cost — most
-users put each category at root and skip the wrapper. Reach for nested
-shells when you have ≥ 3 categories and want a single uncluttered root
-tile (e.g. on the splash / now-playing path where root tile count
-matters for how the toolbar wraps).
+A single top-level wrapper shell like `Library` above is more useful
+than it might first appear. Kartend has no built-in "home" view that
+renders every root collection as a tile grid — the tile area always
+shows whichever collection is currently active, and traversal between
+root collections happens through the sidebar / toolbar chrome rather
+than through the tile interface itself. Wrapping every category under
+one root shell gives you that missing home view: the wrapper *becomes*
+the canonical landing surface, with each category showing up as a
+tile you can navigate into and `Back` out of.
+
+Set the wrapper as your `startupCollection` (Settings → General, or
+INI: `[General] startupCollection=Library`) and Kartend boots straight
+into the home view.
+
+This is a workaround; first-class root traversal is tracked as a
+backlog feature. Until that lands, the wrapper-shell pattern is the
+recommended way to build a tile-based home page across all your
+categories.
 
 ## Alias parents and shells
 
