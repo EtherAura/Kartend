@@ -1,6 +1,7 @@
 // Manages selection restoration logic for collection navigation.
 #include "selectionrestoremanager.h"
 
+#include <memory>
 #include <QApplication>
 #include <QLineEdit>
 #include <QTimer>
@@ -229,11 +230,16 @@ void SelectionRestoreManager::scheduleSelectionRestore(int desiredIndex, int max
     QTimer::singleShot(UIConstants::Timing::SHORT_DELAY_MS, this, doRestore);
   } else {
     auto validator = createRestoreValidationLambda(scheduledCollectionIndex, token);
-    auto *conn = new QMetaObject::Connection();
+    // shared_ptr ownership instead of raw new/delete: if the signal never
+    // fires (ScrollManager or this destroyed first, guard expires, rapid
+    // re-navigation orphans the wait), Qt auto-disconnects and destroys the
+    // captured lambda, dropping the last shared_ptr ref and freeing the
+    // Connection. Lambda capture by value is required so the handle outlives
+    // the surrounding scope.
+    auto conn = std::make_shared<QMetaObject::Connection>();
     *conn = connect(m_scrollManager, &ScrollManager::virtualScrollSetupComplete, this,
                     [conn, doRestore, validator]() {
-                      disconnect(*conn);
-                      delete conn;
+                      QObject::disconnect(*conn);
                       if (validator()) {
                         doRestore();
                       }
