@@ -21,6 +21,7 @@ class QPropertyAnimation;
 QT_END_NAMESPACE
 
 class CollectionTreeWidget;
+class CollectionRemover;
 class DetailsPaneManager;
 class GamepadCaptureController;
 class ScrollManager;
@@ -33,6 +34,11 @@ class SettingsDialog : public QDialog {
   // keeps those pointers encapsulated while the helper exists to group
   // the gamepad code cohesively.
   friend class GamepadCaptureController;
+  // The collection-removal pipeline reaches into collections /
+  // m_workingCollections / the tree-index maps + several private helpers
+  // to run the seven-step removal flow. Friend-declared for the same
+  // reasons as the gamepad helper above.
+  friend class CollectionRemover;
 
 public:
   /// scope selector for Save actions in the settings dialog.
@@ -203,14 +209,7 @@ private:
   void saveGeneralSettingsFromUI();
   void performRecursiveImport(const QString &baseDir, bool isContentDir);
   void ensureRootCollectionExists();
-  // Helper methods for removeCollection refactoring
-  auto validateRemovalPreconditions() -> bool;
-  auto captureExpandedStates() -> QList<int>;
-  auto performCollectionRemoval(int index) -> void;
-  auto updateParentReferences(int removedIndex) -> void;
-  auto rebuildParentIndices() -> void;
-  auto restoreExpandedStates(const QList<int> &expandedBefore, int removedIndex) -> void;
-  auto selectTargetAfterRemoval(int parentIdx, int removedIndex) -> void;
+  // The 7-step removal pipeline lives on CollectionRemover now.
   // Helper methods for saveCollectionFromUI refactoring
   auto extractUIFieldValues() -> CollectionConfig;
   auto updateParentCollectionFromUI(CollectionConfig &collection, int index) -> void;
@@ -308,6 +307,12 @@ private:
   /// per-tick UI sync (line edits, detect buttons, sibling checkbox
   /// lock state). Parented to this dialog.
   GamepadCaptureController *m_gamepadCapture = nullptr;
+  /// Multi-step collection-removal pipeline — owns the seven discrete
+  /// steps (validate / capture-expanded / perform-removal /
+  /// update-parents / rebuild-indices / restore-expanded /
+  /// select-target) and the orchestrator that strings them together
+  /// with the user-confirm prompt. Parented to this dialog.
+  CollectionRemover *m_collectionRemover = nullptr;
 
   /// active scope for Save actions. Defaults to `Current` so
   /// legacy behavior is preserved until the user explicitly opts into a

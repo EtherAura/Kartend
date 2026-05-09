@@ -23,6 +23,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "collectionremover.h"
 #include "collectiontreewidget.h"
 #include "extensionutils.h"
 #include "gamepadcapturecontroller.h"
@@ -52,6 +53,9 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // setupConnections() runs so the Detect-button click handlers can
   // dispatch through it.
   m_gamepadCapture = new GamepadCaptureController(this);
+  // Multi-step collection-removal pipeline. Constructed before the
+  // tree's Remove button is wired up so removeCollection() can dispatch.
+  m_collectionRemover = new CollectionRemover(this);
 
   collectionTreeWidget = ui->collectionTreeWidget;
 
