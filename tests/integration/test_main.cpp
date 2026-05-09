@@ -21,7 +21,24 @@
 #include <QApplication>
 #include <QStandardPaths>
 #include <QTest>
+#include <QThreadPool>
 #include <QtPlugin>
+
+namespace {
+// QtConcurrent's global thread pool keeps idle worker threads alive between
+// tasks. When TSan runs the integration suite, those persistent threads
+// retain access history across test boundaries — combined with heap address
+// reuse for QArrayData/QHash buffers, that produces phantom data races
+// between worker threads of long-since-finished tests. Calling
+// waitForDone() between test scopes empties the pool so the next test gets
+// fresh thread IDs and a clean shadow-memory view.
+void drainGlobalThreadPool() {
+  auto *pool = QThreadPool::globalInstance();
+  pool->setExpiryTimeout(0);
+  pool->waitForDone();
+  pool->setExpiryTimeout(30'000);
+}
+} // namespace
 
 int main(int argc, char *argv[]) {
   // setTestModeEnabled BEFORE QApplication so any path lookups during Qt's
@@ -43,14 +60,17 @@ int main(int argc, char *argv[]) {
     TestMainWindowSmoke smoke;
     status |= QTest::qExec(&smoke, argc, argv);
   }
+  drainGlobalThreadPool();
   {
     TestSettingsDialogScope scope;
     status |= QTest::qExec(&scope, argc, argv);
   }
+  drainGlobalThreadPool();
   {
     TestApplySettingsDialog applySettings;
     status |= QTest::qExec(&applySettings, argc, argv);
   }
+  drainGlobalThreadPool();
   // ApplicationManager lifecycle tests build their own bare ApplicationManager
   // instances (no MainWindow), so they must run after the MainWindow-based
   // tests above to avoid SQL connection-name collisions on
@@ -60,25 +80,31 @@ int main(int argc, char *argv[]) {
     TestApplicationManagerLifecycle appLifecycle;
     status |= QTest::qExec(&appLifecycle, argc, argv);
   }
+  drainGlobalThreadPool();
   {
     TestNavigationManager nav;
     status |= QTest::qExec(&nav, argc, argv);
   }
+  drainGlobalThreadPool();
   {
     TestEventManagerDetailsPane emDp;
     status |= QTest::qExec(&emDp, argc, argv);
   }
+  drainGlobalThreadPool();
   {
     TestDetailsPaneCoverflow dpCf;
     status |= QTest::qExec(&dpCf, argc, argv);
   }
+  drainGlobalThreadPool();
   {
     TestSettingsDialogChanges sdCh;
     status |= QTest::qExec(&sdCh, argc, argv);
   }
+  drainGlobalThreadPool();
   {
     TestScrollManager sm;
     status |= QTest::qExec(&sm, argc, argv);
   }
+  drainGlobalThreadPool();
   return status;
 }

@@ -24,9 +24,16 @@ ApplicationManager::~ApplicationManager() {
   // Defensive: ensure the deferred cache initialize() task is finished before
   // m_cacheManager is destroyed. shutdown() handles this normally; this guard
   // covers paths where shutdown() is skipped (e.g. abnormal teardown).
-  if (m_cacheInitFuture.isRunning()) {
-    m_cacheInitFuture.waitForFinished();
-  }
+  //
+  // We unconditionally call waitForFinished() rather than gating on
+  // isRunning(): the latter is a plain atomic state read with no acquire
+  // fence, so even when the worker has logically finished, the main thread
+  // may not yet observe the worker's final QMutexLocker unlock inside the
+  // CacheManager being destroyed (TSan flags this as a race). waitForFinished
+  // takes the future's internal mutex, providing the happens-before edge
+  // that publishes the worker's last writes. On a default-constructed or
+  // already-finished future it is effectively a no-op.
+  m_cacheInitFuture.waitForFinished();
 }
 
 void ApplicationManager::initialize() {
@@ -92,9 +99,15 @@ void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
   // 0. Wait for the deferred cache initialize() task to complete before
   // touching the cache - prevents use-after-free if shutdown begins while
   // CacheManager::initialize() is still parsing the metadata file.
-  if (m_cacheInitFuture.isRunning()) {
-    m_cacheInitFuture.waitForFinished();
-  }
+  //
+  // Same reasoning as in the destructor: unconditionally call
+  // waitForFinished() so the future's internal mutex provides the
+  // happens-before edge into the worker's last writes (the timestamp
+  // hash inside CacheManager). isRunning() is a relaxed read and would
+  // let snapshotTimestampsForShutdown() below race with the worker's
+  // QHash::insert, surfacing as a memmove-vs-memmove TSan race in the
+  // implicitly-shared QArrayData buffer.
+  m_cacheInitFuture.waitForFinished();
 
   // 1. Cancel artwork loading first (non-blocking) to stop in-flight operations
   if (m_artworkManager) {
