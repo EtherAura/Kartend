@@ -1,0 +1,22 @@
+target_sources(${KARTEND_LIB_TARGET} PRIVATE
+  artworkpreviewoverlay.cpp
+  backdropbluroverlay.cpp
+  detailpageoverlay.cpp
+  headerlogooverlay.cpp
+  loadingoverlay.cpp
+  nowplayingoverlay.cpp
+  splashoverlay.cpp
+  startupvideooverlay.cpp
+  textzoomhud.cpp
+  vignetteoverlay.cpp
+  artworkpreviewoverlay.h
+  backdropbluroverlay.h
+  detailpageoverlay.h
+  headerlogooverlay.h
+  loadingoverlay.h
+  nowplayingoverlay.h
+  splashoverlay.h
+  startupvideooverlay.h
+  textzoomhud.h
+  vignetteoverlay.h
+)

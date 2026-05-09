@@ -10,7 +10,7 @@
 #include "artworkmanagerinternal.h"
 #include "cachemanager.h"
 #include "loggingcategories.h"
-#include "ui/widgets/itemwidget.h"
+#include "itemwidget.h"
 #include "uiconstants.h"
 
 #include <atomic>

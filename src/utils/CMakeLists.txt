@@ -1,48 +1,6 @@
-target_sources(${KARTEND_LIB_TARGET} PRIVATE
-  artworkutils.cpp
-  cliargs.cpp
-  collectionutils.cpp
-  configvalidation.cpp
-  dbmigrations.cpp
-  extensionutils.cpp
-  historystore.cpp
-  itemartwork.cpp
-  itemmetadata.cpp
-  loggingcategories.cpp
-  pathutils.cpp
-  settingsutils.cpp
-  textzoom.cpp
-  threadpoolutils.cpp
-  timerutils.cpp
-  titlefilter.cpp
-  usagestatsstore.cpp
-  videoutils.cpp
-  adaptivebatcher.h
-  applicationcontext.h
-  artworkutils.h
-  cliargs.h
-  collectiontypes.h
-  collectionutils.h
-  configvalidation.h
-  dbmigrations.h
-  errorutils.h
-  extensionutils.h
-  gridutils.h
-  historystore.h
-  loggingcategories.h
-  pathutils.h
-  propertyutils.h
-  searchutils.h
-  settingsutils.h
-  setuputils.h
-  stateutils.h
-  stringutils.h
-  textzoom.h
-  threadpoolutils.h
-  timerutils.h
-  titlefilter.h
-  videoutils.h
-  itemartwork.h
-  itemmetadata.h
-  usagestatsstore.h
-)
+add_subdirectory(app)
+add_subdirectory(db)
+add_subdirectory(fs)
+add_subdirectory(text)
+add_subdirectory(threading)
+add_subdirectory(view)

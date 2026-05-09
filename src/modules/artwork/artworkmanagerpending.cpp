@@ -11,7 +11,7 @@
 #include "propertyutils.h"
 #include "setuputils.h"
 #include "timerutils.h"
-#include "ui/widgets/itemwidget.h"
+#include "itemwidget.h"
 #include "uiconstants.h"
 
 #include <algorithm>

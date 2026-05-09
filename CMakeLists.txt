@@ -65,7 +65,8 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC_SEARCH_PATHS
   ${CMAKE_CURRENT_SOURCE_DIR}/src/core
   ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/dialogs
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/widgets
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/widgets/items
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/widgets/panes
 )
 
 # Qt6 required. 6.4 is the floor: project uses QTimeZone::utc() which was
@@ -255,9 +256,17 @@ target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
   ${SRC_DIR}/modules/detailspane
   ${SRC_DIR}/modules/viewport
   ${SRC_DIR}/ui
-  ${SRC_DIR}/ui/widgets
+  ${SRC_DIR}/ui/widgets/items
+  ${SRC_DIR}/ui/widgets/media
+  ${SRC_DIR}/ui/widgets/overlays
+  ${SRC_DIR}/ui/widgets/panes
   ${SRC_DIR}/ui/dialogs
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
 )
 
 target_compile_options(${KARTEND_LIB_TARGET} PRIVATE -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-lambda-capture)

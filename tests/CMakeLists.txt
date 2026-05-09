@@ -10,7 +10,12 @@ enable_testing()
 # Include directories
 set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 include_directories(
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/modules/query
   ${SRC_DIR}/modules/scroll
   ${SRC_DIR}/modules/interaction
@@ -51,9 +56,9 @@ add_executable(test_launchmanager
   ${SRC_DIR}/modules/launch/launchmanager.cpp
   ${SRC_DIR}/modules/launch/launchmanagerarchive.cpp
   ${SRC_DIR}/ui/dialogs/launcherchooserdialog.cpp
-  ${SRC_DIR}/utils/collectionutils.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
-  ${SRC_DIR}/utils/settingsutils.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
 )
 target_include_directories(test_launchmanager PRIVATE
   ${SRC_DIR}/ui/dialogs
@@ -68,7 +73,7 @@ add_test(NAME LaunchManager COMMAND test_launchmanager)
 # PathUtils tests
 add_executable(test_pathutils
   utils/test_pathutils.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
 )
 target_link_libraries(test_pathutils
   Qt6::Core
@@ -79,7 +84,7 @@ add_test(NAME PathUtils COMMAND test_pathutils)
 # VideoUtils tests
 add_executable(test_videoutils
   utils/test_videoutils.cpp
-  ${SRC_DIR}/utils/videoutils.cpp
+  ${SRC_DIR}/utils/view/videoutils.cpp
 )
 target_link_libraries(test_videoutils
   Qt6::Core
@@ -91,16 +96,19 @@ add_test(NAME VideoUtils COMMAND test_videoutils)
 add_executable(test_widgetpoolmanager
   modules/widgetpool/test_widgetpoolmanager.cpp
   ${SRC_DIR}/modules/widgetpool/widgetpoolmanager.cpp
-  ${SRC_DIR}/ui/widgets/itemwidget.cpp
-  ${SRC_DIR}/ui/widgets/itemwidgetindicator.cpp
-  ${SRC_DIR}/ui/widgets/itemwidgetlifecycle.cpp
-  ${SRC_DIR}/ui/widgets/itemwidgetpaint.cpp
-  ${SRC_DIR}/ui/widgets/itemwidgetplaceholder.cpp
-  ${SRC_DIR}/ui/widgets/itemwidgetsetters.cpp
+  ${SRC_DIR}/ui/widgets/items/itemwidget.cpp
+  ${SRC_DIR}/ui/widgets/items/itemwidgetindicator.cpp
+  ${SRC_DIR}/ui/widgets/items/itemwidgetlifecycle.cpp
+  ${SRC_DIR}/ui/widgets/items/itemwidgetpaint.cpp
+  ${SRC_DIR}/ui/widgets/items/itemwidgetplaceholder.cpp
+  ${SRC_DIR}/ui/widgets/items/itemwidgetsetters.cpp
 )
 target_include_directories(test_widgetpoolmanager PRIVATE
   ${SRC_DIR}/modules/widgetpool
-  ${SRC_DIR}/ui/widgets
+  ${SRC_DIR}/ui/widgets/items
+  ${SRC_DIR}/ui/widgets/media
+  ${SRC_DIR}/ui/widgets/overlays
+  ${SRC_DIR}/ui/widgets/panes
 )
 target_link_libraries(test_widgetpoolmanager
   Qt6::Core
@@ -112,10 +120,13 @@ add_test(NAME WidgetPoolManager COMMAND test_widgetpoolmanager)
 # EmptyStateWidget tests
 add_executable(test_emptystatewidget
   ui/widgets/test_emptystatewidget.cpp
-  ${SRC_DIR}/ui/widgets/emptystatewidget.cpp
+  ${SRC_DIR}/ui/widgets/items/emptystatewidget.cpp
 )
 target_include_directories(test_emptystatewidget PRIVATE
-  ${SRC_DIR}/ui/widgets
+  ${SRC_DIR}/ui/widgets/items
+  ${SRC_DIR}/ui/widgets/media
+  ${SRC_DIR}/ui/widgets/overlays
+  ${SRC_DIR}/ui/widgets/panes
 )
 target_link_libraries(test_emptystatewidget
   Qt6::Core
@@ -134,13 +145,18 @@ add_executable(test_cachemanager
   modules/cache/test_cachemanager.cpp
   ${SRC_DIR}/modules/cache/cachemanager.cpp
   ${SRC_DIR}/modules/cache/cachemanagerdisk.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
-  ${SRC_DIR}/utils/threadpoolutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/threading/threadpoolutils.cpp
 )
 target_include_directories(test_cachemanager PRIVATE
   ${SRC_DIR}/modules/cache
   ${SRC_DIR}/ui
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
 )
 target_link_libraries(test_cachemanager
   Qt6::Core
@@ -154,11 +170,16 @@ add_test(NAME CacheManager COMMAND test_cachemanager)
 add_executable(test_playlistmanager
   modules/playlist/test_playlistmanager.cpp
   ${SRC_DIR}/modules/playlist/playlistmanager.cpp
-  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
 )
 target_include_directories(test_playlistmanager PRIVATE
   ${SRC_DIR}/modules/playlist
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
 target_link_libraries(test_playlistmanager
@@ -172,13 +193,18 @@ add_test(NAME PlaylistManager COMMAND test_playlistmanager)
 add_executable(test_sessionmanager
   modules/session/test_sessionmanager.cpp
   ${SRC_DIR}/modules/session/sessionmanager.cpp
-  ${SRC_DIR}/utils/collectionutils.cpp
-  ${SRC_DIR}/utils/settingsutils.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
 )
 target_include_directories(test_sessionmanager PRIVATE
   ${SRC_DIR}/modules/session
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
 target_link_libraries(test_sessionmanager
@@ -204,16 +230,21 @@ add_executable(test_querymanager_cancel_scan
   ${SRC_DIR}/modules/query/querymanagerfetch.cpp
   ${SRC_DIR}/modules/query/queryhelpers.cpp
   ${SRC_DIR}/modules/session/sessionmanager.cpp
-  ${SRC_DIR}/utils/collectionutils.cpp
-  ${SRC_DIR}/utils/settingsutils.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
-  ${SRC_DIR}/utils/dbmigrations.cpp
-  ${SRC_DIR}/utils/loggingcategories.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/app/loggingcategories.cpp
 )
 target_include_directories(test_querymanager_cancel_scan PRIVATE
   ${SRC_DIR}/modules/query
   ${SRC_DIR}/modules/session
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
 target_link_libraries(test_querymanager_cancel_scan
@@ -234,7 +265,7 @@ add_executable(test_databasemanager
   ${SRC_DIR}/modules/database/databasemanager.cpp
   ${SRC_DIR}/modules/database/databasemanagerpaths.cpp
   ${SRC_DIR}/modules/database/databasemanagerworker.cpp
-  ${SRC_DIR}/utils/titlefilter.cpp
+  ${SRC_DIR}/utils/text/titlefilter.cpp
   ${SRC_DIR}/modules/query/querymanager.cpp
   ${SRC_DIR}/modules/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/query/querymanagerlifecycle.cpp
@@ -248,22 +279,27 @@ add_executable(test_databasemanager
   ${SRC_DIR}/modules/query/querymanagerfetch.cpp
   ${SRC_DIR}/modules/query/queryhelpers.cpp
   ${SRC_DIR}/modules/session/sessionmanager.cpp
-  ${SRC_DIR}/utils/collectionutils.cpp
-  ${SRC_DIR}/utils/settingsutils.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
-  ${SRC_DIR}/utils/dbmigrations.cpp
-  ${SRC_DIR}/utils/extensionutils.cpp
-  ${SRC_DIR}/utils/historystore.cpp
-  ${SRC_DIR}/utils/itemartwork.cpp
-  ${SRC_DIR}/utils/itemmetadata.cpp
-  ${SRC_DIR}/utils/loggingcategories.cpp
-  ${SRC_DIR}/utils/usagestatsstore.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
+  ${SRC_DIR}/utils/db/historystore.cpp
+  ${SRC_DIR}/utils/db/itemartwork.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+  ${SRC_DIR}/utils/app/loggingcategories.cpp
+  ${SRC_DIR}/utils/db/usagestatsstore.cpp
 )
 target_include_directories(test_databasemanager PRIVATE
   ${SRC_DIR}/modules/database
   ${SRC_DIR}/modules/query
   ${SRC_DIR}/modules/session
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
 target_link_libraries(test_databasemanager
@@ -287,29 +323,37 @@ add_executable(test_artworkmanager
   ${SRC_DIR}/modules/cache/cachemanager.cpp
   ${SRC_DIR}/modules/cache/cachemanagerdisk.cpp
   ${SRC_DIR}/modules/interaction/interactionstateholder.cpp
-  ${SRC_DIR}/ui/widgets/itemwidget.cpp
-  ${SRC_DIR}/ui/widgets/itemwidgetindicator.cpp
-  ${SRC_DIR}/ui/widgets/itemwidgetlifecycle.cpp
-  ${SRC_DIR}/ui/widgets/itemwidgetpaint.cpp
-  ${SRC_DIR}/ui/widgets/itemwidgetplaceholder.cpp
-  ${SRC_DIR}/ui/widgets/itemwidgetsetters.cpp
-  ${SRC_DIR}/utils/artworkutils.cpp
-  ${SRC_DIR}/utils/collectionutils.cpp
-  ${SRC_DIR}/utils/extensionutils.cpp
-  ${SRC_DIR}/utils/itemartwork.cpp
-  ${SRC_DIR}/utils/settingsutils.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
-  ${SRC_DIR}/utils/threadpoolutils.cpp
-  ${SRC_DIR}/utils/timerutils.cpp
-  ${SRC_DIR}/utils/loggingcategories.cpp
+  ${SRC_DIR}/ui/widgets/items/itemwidget.cpp
+  ${SRC_DIR}/ui/widgets/items/itemwidgetindicator.cpp
+  ${SRC_DIR}/ui/widgets/items/itemwidgetlifecycle.cpp
+  ${SRC_DIR}/ui/widgets/items/itemwidgetpaint.cpp
+  ${SRC_DIR}/ui/widgets/items/itemwidgetplaceholder.cpp
+  ${SRC_DIR}/ui/widgets/items/itemwidgetsetters.cpp
+  ${SRC_DIR}/utils/view/artworkutils.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
+  ${SRC_DIR}/utils/db/itemartwork.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/threading/threadpoolutils.cpp
+  ${SRC_DIR}/utils/threading/timerutils.cpp
+  ${SRC_DIR}/utils/app/loggingcategories.cpp
 )
 target_include_directories(test_artworkmanager PRIVATE
   ${SRC_DIR}
   ${SRC_DIR}/modules/artwork
   ${SRC_DIR}/modules/cache
   ${SRC_DIR}/modules/interaction
-  ${SRC_DIR}/ui/widgets
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/ui/widgets/items
+  ${SRC_DIR}/ui/widgets/media
+  ${SRC_DIR}/ui/widgets/overlays
+  ${SRC_DIR}/ui/widgets/panes
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
 target_link_libraries(test_artworkmanager
@@ -330,7 +374,7 @@ add_test(NAME StringUtils COMMAND test_stringutils)
 # CliArgs tests (--collection startup override)
 add_executable(test_cliargs
   utils/test_cliargs.cpp
-  ${SRC_DIR}/utils/cliargs.cpp
+  ${SRC_DIR}/utils/app/cliargs.cpp
 )
 target_include_directories(test_cliargs PRIVATE ${SRC_DIR}/utils)
 target_link_libraries(test_cliargs Qt6::Core Qt6::Test)
@@ -339,13 +383,18 @@ add_test(NAME CliArgs COMMAND test_cliargs)
 # TitleFilter tests (per-collection regex title cleanup)
 add_executable(test_titlefilter
   utils/test_titlefilter.cpp
-  ${SRC_DIR}/utils/titlefilter.cpp
-  ${SRC_DIR}/utils/collectionutils.cpp
-  ${SRC_DIR}/utils/settingsutils.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/text/titlefilter.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
 )
 target_include_directories(test_titlefilter PRIVATE
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
 target_link_libraries(test_titlefilter Qt6::Core Qt6::Widgets Qt6::Test)
@@ -354,12 +403,17 @@ add_test(NAME TitleFilter COMMAND test_titlefilter)
 # CollectionUtils tests (enum conversions, validation, UUID)
 add_executable(test_collectionutils
   utils/test_collectionutils.cpp
-  ${SRC_DIR}/utils/collectionutils.cpp
-  ${SRC_DIR}/utils/settingsutils.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
 )
 target_include_directories(test_collectionutils PRIVATE
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
 target_link_libraries(test_collectionutils Qt6::Core Qt6::Widgets Qt6::Test)
@@ -374,7 +428,12 @@ add_executable(test_keyboardmanager
 )
 target_include_directories(test_keyboardmanager PRIVATE
   ${SRC_DIR}/modules/keyboard
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
 target_link_libraries(test_keyboardmanager
@@ -402,10 +461,15 @@ add_test(NAME NavigationStackManager COMMAND test_navigationstackmanager)
 # DbMigrations tests (sqlite in-memory, no UI)
 add_executable(test_dbmigrations
   utils/test_dbmigrations.cpp
-  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
 )
 target_include_directories(test_dbmigrations PRIVATE
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
 )
 target_link_libraries(test_dbmigrations
   Qt6::Core
@@ -417,11 +481,16 @@ add_test(NAME DbMigrations COMMAND test_dbmigrations)
 # ItemMetadata storage round-trip tests
 add_executable(test_itemmetadata
   utils/test_itemmetadata.cpp
-  ${SRC_DIR}/utils/itemmetadata.cpp
-  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
 )
 target_include_directories(test_itemmetadata PRIVATE
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
 )
 target_link_libraries(test_itemmetadata
   Qt6::Core
@@ -433,12 +502,17 @@ add_test(NAME ItemMetadata COMMAND test_itemmetadata)
 # ItemArtwork storage + standard-type resolution tests
 add_executable(test_itemartwork
   utils/test_itemartwork.cpp
-  ${SRC_DIR}/utils/itemartwork.cpp
-  ${SRC_DIR}/utils/dbmigrations.cpp
-  ${SRC_DIR}/utils/extensionutils.cpp
+  ${SRC_DIR}/utils/db/itemartwork.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
 )
 target_include_directories(test_itemartwork PRIVATE
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
 )
 target_link_libraries(test_itemartwork
   Qt6::Core
@@ -450,11 +524,16 @@ add_test(NAME ItemArtwork COMMAND test_itemartwork)
 # UsageStatsStore tests
 add_executable(test_usagestatsstore
   utils/test_usagestatsstore.cpp
-  ${SRC_DIR}/utils/usagestatsstore.cpp
-  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/db/usagestatsstore.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
 )
 target_include_directories(test_usagestatsstore PRIVATE
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
 )
 target_link_libraries(test_usagestatsstore
   Qt6::Core
@@ -466,11 +545,16 @@ add_test(NAME UsageStatsStore COMMAND test_usagestatsstore)
 # HistoryStore tests
 add_executable(test_historystore
   utils/test_historystore.cpp
-  ${SRC_DIR}/utils/historystore.cpp
-  ${SRC_DIR}/utils/dbmigrations.cpp
+  ${SRC_DIR}/utils/db/historystore.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
 )
 target_include_directories(test_historystore PRIVATE
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
 )
 target_link_libraries(test_historystore
   Qt6::Core
@@ -483,15 +567,20 @@ add_test(NAME HistoryStore COMMAND test_historystore)
 add_executable(test_kartmanifest
   modules/kart/test_kartmanifest.cpp
   ${SRC_DIR}/modules/kart/kartmanifest.cpp
-  ${SRC_DIR}/utils/collectionutils.cpp
-  ${SRC_DIR}/utils/itemmetadata.cpp
-  ${SRC_DIR}/utils/dbmigrations.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
-  ${SRC_DIR}/utils/settingsutils.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
 )
 target_include_directories(test_kartmanifest PRIVATE
   ${SRC_DIR}/modules/kart
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
 target_link_libraries(test_kartmanifest
@@ -508,15 +597,20 @@ add_executable(test_kartreader
   ${SRC_DIR}/modules/kart/kartcompression.cpp
   ${SRC_DIR}/modules/kart/kartmanifest.cpp
   ${SRC_DIR}/modules/kart/kartreader.cpp
-  ${SRC_DIR}/utils/collectionutils.cpp
-  ${SRC_DIR}/utils/itemmetadata.cpp
-  ${SRC_DIR}/utils/dbmigrations.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
-  ${SRC_DIR}/utils/settingsutils.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
 )
 target_include_directories(test_kartreader PRIVATE
   ${SRC_DIR}/modules/kart
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
 target_link_libraries(test_kartreader
@@ -538,15 +632,20 @@ add_executable(test_kartwriter
   ${SRC_DIR}/modules/kart/kartmanifest.cpp
   ${SRC_DIR}/modules/kart/kartreader.cpp
   ${SRC_DIR}/modules/kart/kartwriter.cpp
-  ${SRC_DIR}/utils/collectionutils.cpp
-  ${SRC_DIR}/utils/itemmetadata.cpp
-  ${SRC_DIR}/utils/dbmigrations.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
-  ${SRC_DIR}/utils/settingsutils.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
 )
 target_include_directories(test_kartwriter PRIVATE
   ${SRC_DIR}/modules/kart
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
 target_link_libraries(test_kartwriter
@@ -566,15 +665,20 @@ add_executable(test_kartmerge
   modules/kart/test_kartmerge.cpp
   ${SRC_DIR}/modules/kart/kartmanifest.cpp
   ${SRC_DIR}/modules/kart/kartmerge.cpp
-  ${SRC_DIR}/utils/collectionutils.cpp
-  ${SRC_DIR}/utils/itemmetadata.cpp
-  ${SRC_DIR}/utils/dbmigrations.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
-  ${SRC_DIR}/utils/settingsutils.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
 )
 target_include_directories(test_kartmerge PRIVATE
   ${SRC_DIR}/modules/kart
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
 target_link_libraries(test_kartmerge
@@ -596,13 +700,18 @@ add_test(NAME SearchUtils COMMAND test_searchutils)
 add_executable(test_navigationhelpers
   modules/navigation/test_navigationhelpers.cpp
   ${SRC_DIR}/modules/navigation/navigationhelpers.cpp
-  ${SRC_DIR}/utils/collectionutils.cpp
-  ${SRC_DIR}/utils/settingsutils.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
 )
 target_include_directories(test_navigationhelpers PRIVATE
   ${SRC_DIR}/modules/navigation
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
 target_link_libraries(test_navigationhelpers
@@ -616,13 +725,18 @@ add_test(NAME NavigationHelpers COMMAND test_navigationhelpers)
 add_executable(test_searchhelpers
   modules/search/test_searchhelpers.cpp
   ${SRC_DIR}/modules/search/searchhelpers.cpp
-  ${SRC_DIR}/utils/collectionutils.cpp
-  ${SRC_DIR}/utils/settingsutils.cpp
-  ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
 )
 target_include_directories(test_searchhelpers PRIVATE
   ${SRC_DIR}/modules/search
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui
 )
 target_link_libraries(test_searchhelpers
@@ -667,7 +781,12 @@ add_executable(test_scrollhelpers
 )
 target_include_directories(test_scrollhelpers PRIVATE
   ${SRC_DIR}/modules/scroll
-  ${SRC_DIR}/utils
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
 )
 target_link_libraries(test_scrollhelpers
   Qt6::Core
