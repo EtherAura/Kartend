@@ -81,7 +81,11 @@ ctest --test-dir build/ninja-sanitize --output-on-failure
 
 ## Adding New Tests
 
-1. Create `tests/test_<classname>.cpp` with Qt Test structure:
+1. Create `tests/<area>/test_<classname>.cpp` mirroring the source location
+   (e.g. a test for `src/modules/cache/cachemanager.cpp` lives at
+   `tests/modules/cache/test_cachemanager.cpp`; a test for
+   `src/utils/pathutils.cpp` lives at `tests/utils/test_pathutils.cpp`).
+   Use the Qt Test structure:
 
 ```cpp
 #include <QTest>

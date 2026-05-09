@@ -23,7 +23,7 @@ include_directories(
 
 # GridLayoutCalculator tests
 add_executable(test_gridlayoutcalculator
-  test_gridlayoutcalculator.cpp
+  modules/scroll/test_gridlayoutcalculator.cpp
   ${SRC_DIR}/modules/scroll/gridlayoutcalculator.cpp
 )
 target_link_libraries(test_gridlayoutcalculator
@@ -35,7 +35,7 @@ add_test(NAME GridLayoutCalculator COMMAND test_gridlayoutcalculator)
 
 # InteractionStateHolder tests
 add_executable(test_interactionstateholder
-  test_interactionstateholder.cpp
+  modules/interaction/test_interactionstateholder.cpp
   ${SRC_DIR}/modules/interaction/interactionstateholder.cpp
 )
 target_link_libraries(test_interactionstateholder
@@ -47,7 +47,7 @@ add_test(NAME InteractionStateHolder COMMAND test_interactionstateholder)
 
 # LaunchManager tests (security validation)
 add_executable(test_launchmanager
-  test_launchmanager.cpp
+  modules/launch/test_launchmanager.cpp
   ${SRC_DIR}/modules/launch/launchmanager.cpp
   ${SRC_DIR}/modules/launch/launchmanagerarchive.cpp
   ${SRC_DIR}/ui/dialogs/launcherchooserdialog.cpp
@@ -67,7 +67,7 @@ add_test(NAME LaunchManager COMMAND test_launchmanager)
 
 # PathUtils tests
 add_executable(test_pathutils
-  test_pathutils.cpp
+  utils/test_pathutils.cpp
   ${SRC_DIR}/utils/pathutils.cpp
 )
 target_link_libraries(test_pathutils
@@ -78,7 +78,7 @@ add_test(NAME PathUtils COMMAND test_pathutils)
 
 # VideoUtils tests
 add_executable(test_videoutils
-  test_videoutils.cpp
+  utils/test_videoutils.cpp
   ${SRC_DIR}/utils/videoutils.cpp
 )
 target_link_libraries(test_videoutils
@@ -89,7 +89,7 @@ add_test(NAME VideoUtils COMMAND test_videoutils)
 
 # WidgetPoolManager tests
 add_executable(test_widgetpoolmanager
-  test_widgetpoolmanager.cpp
+  modules/widgetpool/test_widgetpoolmanager.cpp
   ${SRC_DIR}/modules/widgetpool/widgetpoolmanager.cpp
   ${SRC_DIR}/ui/widgets/itemwidget.cpp
   ${SRC_DIR}/ui/widgets/itemwidgetindicator.cpp
@@ -111,7 +111,7 @@ add_test(NAME WidgetPoolManager COMMAND test_widgetpoolmanager)
 
 # EmptyStateWidget tests
 add_executable(test_emptystatewidget
-  test_emptystatewidget.cpp
+  ui/widgets/test_emptystatewidget.cpp
   ${SRC_DIR}/ui/widgets/emptystatewidget.cpp
 )
 target_include_directories(test_emptystatewidget PRIVATE
@@ -125,13 +125,13 @@ target_link_libraries(test_emptystatewidget
 add_test(NAME EmptyStateWidget COMMAND test_emptystatewidget)
 
 # GridUtils tests
-add_executable(test_gridutils test_gridutils.cpp)
+add_executable(test_gridutils utils/test_gridutils.cpp)
 target_link_libraries(test_gridutils Qt6::Core Qt6::Gui Qt6::Test)
 add_test(NAME GridUtils COMMAND test_gridutils)
 
 # CacheManager tests
 add_executable(test_cachemanager
-  test_cachemanager.cpp
+  modules/cache/test_cachemanager.cpp
   ${SRC_DIR}/modules/cache/cachemanager.cpp
   ${SRC_DIR}/modules/cache/cachemanagerdisk.cpp
   ${SRC_DIR}/utils/pathutils.cpp
@@ -152,7 +152,7 @@ add_test(NAME CacheManager COMMAND test_cachemanager)
 
 # PlaylistManager tests
 add_executable(test_playlistmanager
-  test_playlistmanager.cpp
+  modules/playlist/test_playlistmanager.cpp
   ${SRC_DIR}/modules/playlist/playlistmanager.cpp
   ${SRC_DIR}/utils/dbmigrations.cpp
 )
@@ -170,7 +170,7 @@ add_test(NAME PlaylistManager COMMAND test_playlistmanager)
 
 # SessionManager tests
 add_executable(test_sessionmanager
-  test_sessionmanager.cpp
+  modules/session/test_sessionmanager.cpp
   ${SRC_DIR}/modules/session/sessionmanager.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/settingsutils.cpp
@@ -190,7 +190,7 @@ add_test(NAME SessionManager COMMAND test_sessionmanager)
 
 # QueryManager cancellation semantics test
 add_executable(test_querymanager_cancel_scan
-  test_querymanager_cancel_scan.cpp
+  modules/query/test_querymanager_cancel_scan.cpp
   ${SRC_DIR}/modules/query/querymanager.cpp
   ${SRC_DIR}/modules/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/query/querymanagerlifecycle.cpp
@@ -230,7 +230,7 @@ add_test(NAME QueryManagerCancelScan COMMAND test_querymanager_cancel_scan)
 # the databasemanager TUs. Validates worker-thread shutdown, SQL connection
 # cleanup, and thread-safe path-resolution helpers.
 add_executable(test_databasemanager
-  test_databasemanager.cpp
+  modules/database/test_databasemanager.cpp
   ${SRC_DIR}/modules/database/databasemanager.cpp
   ${SRC_DIR}/modules/database/databasemanagerpaths.cpp
   ${SRC_DIR}/modules/database/databasemanagerworker.cpp
@@ -277,7 +277,7 @@ add_test(NAME DatabaseManager COMMAND test_databasemanager)
 
 # ArtworkManager tests (cancellation, dedup, QPointer race)
 add_executable(test_artworkmanager
-  test_artworkmanager.cpp
+  modules/artwork/test_artworkmanager.cpp
   ${SRC_DIR}/modules/artwork/artworkmanager.cpp
   ${SRC_DIR}/modules/artwork/artworkmanagerbatch.cpp
   ${SRC_DIR}/modules/artwork/artworkmanagerprecache.cpp
@@ -323,13 +323,13 @@ target_link_libraries(test_artworkmanager
 add_test(NAME ArtworkManager COMMAND test_artworkmanager)
 
 # StringUtils tests (header-only)
-add_executable(test_stringutils test_stringutils.cpp)
+add_executable(test_stringutils utils/test_stringutils.cpp)
 target_link_libraries(test_stringutils Qt6::Core Qt6::Test)
 add_test(NAME StringUtils COMMAND test_stringutils)
 
 # CliArgs tests (--collection startup override)
 add_executable(test_cliargs
-  test_cliargs.cpp
+  utils/test_cliargs.cpp
   ${SRC_DIR}/utils/cliargs.cpp
 )
 target_include_directories(test_cliargs PRIVATE ${SRC_DIR}/utils)
@@ -338,7 +338,7 @@ add_test(NAME CliArgs COMMAND test_cliargs)
 
 # TitleFilter tests (per-collection regex title cleanup)
 add_executable(test_titlefilter
-  test_titlefilter.cpp
+  utils/test_titlefilter.cpp
   ${SRC_DIR}/utils/titlefilter.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/settingsutils.cpp
@@ -353,7 +353,7 @@ add_test(NAME TitleFilter COMMAND test_titlefilter)
 
 # CollectionUtils tests (enum conversions, validation, UUID)
 add_executable(test_collectionutils
-  test_collectionutils.cpp
+  utils/test_collectionutils.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/settingsutils.cpp
   ${SRC_DIR}/utils/pathutils.cpp
@@ -369,7 +369,7 @@ add_test(NAME CollectionUtils COMMAND test_collectionutils)
 # Only the selection-helper TU is linked; it has no dependencies on
 # ScrollManager / InteractionStateHolder / etc., keeping the test isolated.
 add_executable(test_keyboardmanager
-  test_keyboardmanager.cpp
+  modules/keyboard/test_keyboardmanager.cpp
   ${SRC_DIR}/modules/keyboard/keyboardmanagerselection.cpp
 )
 target_include_directories(test_keyboardmanager PRIVATE
@@ -387,7 +387,7 @@ add_test(NAME KeyboardManager COMMAND test_keyboardmanager)
 
 # NavigationStackManager tests (header-only data class powering NavigationManager)
 add_executable(test_navigationstackmanager
-  test_navigationstackmanager.cpp
+  modules/navigation/test_navigationstackmanager.cpp
   ${SRC_DIR}/modules/navigation/navigationstackmanager.h
 )
 target_include_directories(test_navigationstackmanager PRIVATE
@@ -401,7 +401,7 @@ add_test(NAME NavigationStackManager COMMAND test_navigationstackmanager)
 
 # DbMigrations tests (sqlite in-memory, no UI)
 add_executable(test_dbmigrations
-  test_dbmigrations.cpp
+  utils/test_dbmigrations.cpp
   ${SRC_DIR}/utils/dbmigrations.cpp
 )
 target_include_directories(test_dbmigrations PRIVATE
@@ -416,7 +416,7 @@ add_test(NAME DbMigrations COMMAND test_dbmigrations)
 
 # ItemMetadata storage round-trip tests
 add_executable(test_itemmetadata
-  test_itemmetadata.cpp
+  utils/test_itemmetadata.cpp
   ${SRC_DIR}/utils/itemmetadata.cpp
   ${SRC_DIR}/utils/dbmigrations.cpp
 )
@@ -432,7 +432,7 @@ add_test(NAME ItemMetadata COMMAND test_itemmetadata)
 
 # ItemArtwork storage + standard-type resolution tests
 add_executable(test_itemartwork
-  test_itemartwork.cpp
+  utils/test_itemartwork.cpp
   ${SRC_DIR}/utils/itemartwork.cpp
   ${SRC_DIR}/utils/dbmigrations.cpp
   ${SRC_DIR}/utils/extensionutils.cpp
@@ -449,7 +449,7 @@ add_test(NAME ItemArtwork COMMAND test_itemartwork)
 
 # UsageStatsStore tests
 add_executable(test_usagestatsstore
-  test_usagestatsstore.cpp
+  utils/test_usagestatsstore.cpp
   ${SRC_DIR}/utils/usagestatsstore.cpp
   ${SRC_DIR}/utils/dbmigrations.cpp
 )
@@ -465,7 +465,7 @@ add_test(NAME UsageStatsStore COMMAND test_usagestatsstore)
 
 # HistoryStore tests
 add_executable(test_historystore
-  test_historystore.cpp
+  utils/test_historystore.cpp
   ${SRC_DIR}/utils/historystore.cpp
   ${SRC_DIR}/utils/dbmigrations.cpp
 )
@@ -481,7 +481,7 @@ add_test(NAME HistoryStore COMMAND test_historystore)
 
 # KartManifest tests (JSON round-trip for the .kart packaging format)
 add_executable(test_kartmanifest
-  test_kartmanifest.cpp
+  modules/kart/test_kartmanifest.cpp
   ${SRC_DIR}/modules/kart/kartmanifest.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/itemmetadata.cpp
@@ -504,7 +504,7 @@ add_test(NAME KartManifest COMMAND test_kartmanifest)
 
 # KartReader tests (read + extract + sha256 verification)
 add_executable(test_kartreader
-  test_kartreader.cpp
+  modules/kart/test_kartreader.cpp
   ${SRC_DIR}/modules/kart/kartcompression.cpp
   ${SRC_DIR}/modules/kart/kartmanifest.cpp
   ${SRC_DIR}/modules/kart/kartreader.cpp
@@ -533,7 +533,7 @@ add_test(NAME KartReader COMMAND test_kartreader)
 
 # KartWriter tests (export collection + zstd compression)
 add_executable(test_kartwriter
-  test_kartwriter.cpp
+  modules/kart/test_kartwriter.cpp
   ${SRC_DIR}/modules/kart/kartcompression.cpp
   ${SRC_DIR}/modules/kart/kartmanifest.cpp
   ${SRC_DIR}/modules/kart/kartreader.cpp
@@ -563,7 +563,7 @@ add_test(NAME KartWriter COMMAND test_kartwriter)
 
 # KartMerge tests (merge policy + metadata persistence)
 add_executable(test_kartmerge
-  test_kartmerge.cpp
+  modules/kart/test_kartmerge.cpp
   ${SRC_DIR}/modules/kart/kartmanifest.cpp
   ${SRC_DIR}/modules/kart/kartmerge.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
@@ -587,14 +587,14 @@ target_link_libraries(test_kartmerge
 add_test(NAME KartMerge COMMAND test_kartmerge)
 
 # SearchUtils smoke tests (header-only enum/struct)
-add_executable(test_searchutils test_searchutils.cpp)
+add_executable(test_searchutils utils/test_searchutils.cpp)
 target_include_directories(test_searchutils PRIVATE ${SRC_DIR}/utils)
 target_link_libraries(test_searchutils Qt6::Core Qt6::Test)
 add_test(NAME SearchUtils COMMAND test_searchutils)
 
 # NavigationHelpers tests (pure helpers extracted)
 add_executable(test_navigationhelpers
-  test_navigationhelpers.cpp
+  modules/navigation/test_navigationhelpers.cpp
   ${SRC_DIR}/modules/navigation/navigationhelpers.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/settingsutils.cpp
@@ -614,7 +614,7 @@ add_test(NAME NavigationHelpers COMMAND test_navigationhelpers)
 
 # SearchHelpers tests (pure helpers extracted)
 add_executable(test_searchhelpers
-  test_searchhelpers.cpp
+  modules/search/test_searchhelpers.cpp
   ${SRC_DIR}/modules/search/searchhelpers.cpp
   ${SRC_DIR}/utils/collectionutils.cpp
   ${SRC_DIR}/utils/settingsutils.cpp
@@ -634,7 +634,7 @@ add_test(NAME SearchHelpers COMMAND test_searchhelpers)
 
 # MouseHelpers tests (pure helpers extracted)
 add_executable(test_mousehelpers
-  test_mousehelpers.cpp
+  modules/mouse/test_mousehelpers.cpp
   ${SRC_DIR}/modules/mouse/mousehelpers.cpp
 )
 target_include_directories(test_mousehelpers PRIVATE
@@ -648,7 +648,7 @@ add_test(NAME MouseHelpers COMMAND test_mousehelpers)
 
 # SelectionHelpers tests (pure helpers extracted)
 add_executable(test_selectionhelpers
-  test_selectionhelpers.cpp
+  modules/selection/test_selectionhelpers.cpp
   ${SRC_DIR}/modules/selection/selectionhelpers.cpp
 )
 target_include_directories(test_selectionhelpers PRIVATE
@@ -662,7 +662,7 @@ add_test(NAME SelectionHelpers COMMAND test_selectionhelpers)
 
 # ScrollHelpers tests (pure helpers extracted)
 add_executable(test_scrollhelpers
-  test_scrollhelpers.cpp
+  modules/scroll/test_scrollhelpers.cpp
   ${SRC_DIR}/modules/scroll/scrollhelpers.cpp
 )
 target_include_directories(test_scrollhelpers PRIVATE
@@ -678,7 +678,7 @@ add_test(NAME ScrollHelpers COMMAND test_scrollhelpers)
 
 # QueryHelpers tests (pure helpers extracted)
 add_executable(test_queryhelpers
-  test_queryhelpers.cpp
+  modules/query/test_queryhelpers.cpp
   ${SRC_DIR}/modules/query/queryhelpers.cpp
 )
 target_include_directories(test_queryhelpers PRIVATE
@@ -692,7 +692,7 @@ add_test(NAME QueryHelpers COMMAND test_queryhelpers)
 
 # FilterHelpers tests (pure helpers extracted)
 add_executable(test_filterhelpers
-  test_filterhelpers.cpp
+  modules/filter/test_filterhelpers.cpp
   ${SRC_DIR}/modules/filter/filterhelpers.cpp
 )
 target_include_directories(test_filterhelpers PRIVATE
@@ -708,7 +708,7 @@ add_test(NAME FilterHelpers COMMAND test_filterhelpers)
 # them — invoke with `ctest -L benchmark` to track regression. Walltime
 # numbers vary by hardware; compare against a stored baseline.
 add_executable(bench_filterhelpers
-  bench_filterhelpers.cpp
+  modules/filter/bench_filterhelpers.cpp
   ${SRC_DIR}/modules/filter/filterhelpers.cpp
 )
 target_include_directories(bench_filterhelpers PRIVATE

@@ -292,4 +292,4 @@ manifest if your library lives elsewhere.
 - Atomic file writes: see `architecture.md` —
   [Atomic File Writes](../architecture.md#atomic-file-writes) pattern
   used for `kartend.cfg` to avoid corruption on crash mid-write.
-- Fresh-install migration tests: `tests/test_dbmigrations.cpp`.
+- Fresh-install migration tests: `tests/utils/test_dbmigrations.cpp`.

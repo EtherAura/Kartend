@@ -220,4 +220,4 @@ based and cheap to extend.
      example below it.
 - Headless export entry point: `KartManager::exportKartCollection`.
 - Headless import entry point: `KartManager::importKartHeadless`.
-- Tests for arg parsing: `tests/test_cliargs.cpp`.
+- Tests for arg parsing: `tests/utils/test_cliargs.cpp`.
