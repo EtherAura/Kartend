@@ -897,6 +897,21 @@ target_link_libraries(test_eventhelpers
 )
 add_test(NAME EventHelpers COMMAND test_eventhelpers)
 
+# SettingsHelpers tests (pure helpers extracted from SettingsManager)
+add_executable(test_settingshelpers
+  modules/settings/test_settingshelpers.cpp
+  ${SRC_DIR}/modules/data/settings/settingshelpers.cpp
+)
+target_include_directories(test_settingshelpers PRIVATE
+  ${SRC_DIR}/modules/data/settings
+  ${SRC_DIR}/utils/app
+)
+target_link_libraries(test_settingshelpers
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME SettingsHelpers COMMAND test_settingshelpers)
+
 # SearchHelpers tests (pure helpers extracted)
 add_executable(test_searchhelpers
   modules/search/test_searchhelpers.cpp

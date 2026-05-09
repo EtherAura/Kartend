@@ -14,6 +14,7 @@
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsdialog.h"
+#include "settingshelpers.h"
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "uiconstants.h"
@@ -151,30 +152,12 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   // artwork-cycle modifier. Coerce hand-edited junk back to Shift
   // so the gesture is always reachable; allow only the single-modifier flags
   // we expose in the settings UI.
-  {
-    const int rawModifier =
-        s.value("artworkCycleModifier", static_cast<int>(Qt::ShiftModifier)).toInt();
-    switch (rawModifier) {
-    case static_cast<int>(Qt::ShiftModifier):
-    case static_cast<int>(Qt::ControlModifier):
-    case static_cast<int>(Qt::AltModifier):
-    case static_cast<int>(Qt::MetaModifier):
-      settings.artworkCycleModifier = rawModifier;
-      break;
-    default:
-      settings.artworkCycleModifier = static_cast<int>(Qt::ShiftModifier);
-      break;
-    }
-  }
+  settings.artworkCycleModifier = SettingsHelpers::coerceArtworkCycleModifier(
+      s.value("artworkCycleModifier", static_cast<int>(Qt::ShiftModifier)).toInt());
 
   // Sort preferences
-  const int sortModeRaw = s.value("sortMode", static_cast<int>(SortMode::NameAscending)).toInt();
-  if (sortModeRaw >= static_cast<int>(SortMode::NameAscending) &&
-      sortModeRaw <= static_cast<int>(SortMode::SizeAscending)) {
-    settings.sortMode = static_cast<SortMode>(sortModeRaw);
-  } else {
-    settings.sortMode = SortMode::NameAscending;
-  }
+  settings.sortMode = SettingsHelpers::coerceSortMode(
+      s.value("sortMode", static_cast<int>(SortMode::NameAscending)).toInt());
   settings.excludeSubfoldersFromSort = s.value("excludeSubfoldersFromSort", false).toBool();
   // collection categorization filters. Defaults are "no filter"
   // so an upgrading user sees all subcollections as before until they pick a
