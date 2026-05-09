@@ -19,6 +19,8 @@
 #include "itemwidget.h"
 #include "setuputils.h"
 
+class ArtworkWidgetRegistry;
+
 class QScrollArea;
 class QStackedWidget;
 class QWidget;
@@ -144,7 +146,6 @@ public:
 
 private:
   CacheManager *m_cacheManager;
-  void trackWidget(ItemWidget *widget);
   /// Applies processed artwork results to UI widgets on the GUI thread.
   void applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults);
   void collectUncachedAndApplyCached(const QList<ArtworkInfo> &items,
@@ -167,21 +168,16 @@ private:
   QTimer *m_persistentLoadTimer;
   QTimer *m_cacheTimer;
 
-  // Using QPointer to automatically detect deleted widgets and prevent crashes
-  // on dangling pointers during clearWidgetReferences()
-  QList<QPointer<ItemWidget>> loadedArtwork;
-  QHash<ItemWidget *, QString> widgetToArtworkPath;
-  QList<ArtworkInfo> pendingArtwork;
   /// Catalog of artwork file paths discovered for the active
   /// collection plus the silent-load progression state (cursor + the
   /// silently-cached / silent-pending sets) that consumes that list.
   /// Internal mutex; safe to call from any thread.
   ArtworkPathCatalog m_pathCatalog;
-  // per-item artwork-type override map. Key is the absolute
-  // media file path; value is the artwork type id ("" == primary/legacy).
-  // Cleared whenever the active widget set is torn down (collection change,
-  // pre-search restore) so a fresh navigation starts back on the primary.
-  QHash<QString, QString> m_artworkTypeOverrides;
+  /// Per-widget artwork bookkeeping (loaded set, widget→path map,
+  /// pending queue, per-item type overrides). Owns its own QMutex and
+  /// the destroyed-cleanup connections installed by track(). Parented
+  /// to this ArtworkManager so destruction order is well-defined.
+  ArtworkWidgetRegistry *m_widgetRegistry = nullptr;
 
   bool m_silentLoadingActive;
   int m_silentLoadBatchSize;
@@ -199,7 +195,6 @@ private:
   // Raw pointer so we can abandon it on shutdown without waiting.
   QThreadPool *m_artworkThreadPool = nullptr;
 
-  QMutex m_dataMutex;
   QMutex m_futureMutex;
   QList<QFuture<void>> m_futures;
   /// Checks if artwork loading should be skipped due to shutdown or invalid

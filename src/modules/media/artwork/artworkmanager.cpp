@@ -3,6 +3,7 @@
 #include "artworkmanager.h"
 #include "applicationcontext.h"
 #include "artworkutils.h"
+#include "artworkwidgetregistry.h"
 #include "cachemanager.h"
 #include "collectionutils.h"
 #include "extensionutils.h"
@@ -24,6 +25,7 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QImage>
 #include <QImageReader>
 #include <QJsonDocument>
@@ -139,6 +141,7 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
       std::clamp(base, UIConstants::Concurrency::WORKER_POOL_MIN_THREADS,
                  UIConstants::Concurrency::WORKER_POOL_MAX_THREADS));
 
+  m_widgetRegistry = new ArtworkWidgetRegistry(this);
   m_timerCoordinator = new TimerUtils::Coordinator(this);
 
   m_silentLoadTimer = new QTimer(this);
@@ -199,16 +202,11 @@ ArtworkManager::~ArtworkManager() {
     m_futures.clear();
   }
 
-  // During destruction, just clear the containers without touching widgets
-  // The widgets are owned by Qt's parent hierarchy and may already be destroyed
-  // Use mutex to ensure any in-flight operations that didn't see cancellation
-  // flag complete safely before we clear the containers
-  {
-    QMutexLocker locker(&m_dataMutex);
-    loadedArtwork.clear();
-    widgetToArtworkPath.clear();
-    pendingArtwork.clear();
-  }
+  // During destruction, just clear the containers without touching widgets.
+  // The widgets are owned by Qt's parent hierarchy and may already be
+  // destroyed. The registry's internal mutex ensures any in-flight operations
+  // that didn't see the cancellation flag complete safely before we clear.
+  m_widgetRegistry->clearAll();
   m_pathCatalog.clearAll();
 
   // Note: m_cacheTimer, m_silentLoadTimer, and m_timerCoordinator are
@@ -219,30 +217,19 @@ ArtworkManager::~ArtworkManager() {
 // Clears in-memory artwork widget/path/pending/silent cache state (blocks
 // widget signals)
 void ArtworkManager::clearArtworkWidgetState() {
-  {
-    QMutexLocker locker(&m_dataMutex);
-    // Skip widget signal blocking during app shutdown - widgets may already be
-    // destroyed
-    if (!QApplication::closingDown()) {
-      for (const auto &widget : loadedArtwork) {
-        if (widget) {
-          widget->blockSignals(true);
-        }
-      }
-    }
-    loadedArtwork.clear();
-    widgetToArtworkPath.clear();
-    pendingArtwork.clear();
+  // Skip widget signal blocking during app shutdown — the widgets may already
+  // be destroyed and reaching into them would race with their destructors.
+  if (QApplication::closingDown()) {
+    m_widgetRegistry->clearAll();
+  } else {
+    m_widgetRegistry->blockSignalsAndClearAll();
   }
   m_pathCatalog.clearAll();
 }
 
 // Clears in-memory artwork state for current context
 void ArtworkManager::clearLoadedArtworkState() {
-  {
-    QMutexLocker locker(&m_dataMutex);
-    loadedArtwork.clear();
-  }
+  m_widgetRegistry->clearLoadedOnly();
   m_pathCatalog.clearAll();
 }
 
@@ -301,36 +288,6 @@ void ArtworkManager::setupReferences(const ArtworkManagerSetup &setup) {
   currentCollectionIndex = setup.getCurrentCollectionIndex();
 }
 
-// Tracks a widget for lifecycle cleanup and de-duplicates tracking via a
-// property flag
-void ArtworkManager::trackWidget(ItemWidget *widget) {
-  if (!widget) {
-    return;
-  }
-  if (!widget->property(PropertyKeys::TrackedByArtwork).toBool()) {
-    widget->setProperty(PropertyKeys::TrackedByArtwork, true);
-    connect(widget, &QObject::destroyed, this, [this](QObject *obj) {
-      if (QApplication::closingDown()) {
-        return;
-      }
-      auto *widgetPtr = qobject_cast<ItemWidget *>(obj);
-      if (!widgetPtr) {
-        return;
-      }
-      QMutexLocker locker(&m_dataMutex);
-      // clang-analyzer can't see through qobject_cast + the early return above
-      // and warns about a null deref; the guard makes it impossible.
-      // NOLINTNEXTLINE(clang-analyzer-core.CallAndMessage)
-      loadedArtwork.removeAll(widgetPtr);
-      widgetToArtworkPath.remove(widgetPtr);
-      for (int i = pendingArtwork.size() - 1; i >= 0; --i) {
-        if (pendingArtwork[i].mediaItem == widgetPtr) {
-          pendingArtwork.removeAt(i);
-        }
-      }
-    });
-  }
-}
 // Checks if artwork loading should be skipped due to shutdown or invalid state
 auto ArtworkManager::shouldSkipArtworkLoading() -> bool {
   return QApplication::closingDown() || !stackedWidget ||
@@ -347,11 +304,7 @@ void ArtworkManager::cancelAllArtworkLoading() {
     token->store(true, std::memory_order_relaxed);
   }
 
-  {
-    QMutexLocker locker(&m_dataMutex);
-    loadedArtwork.clear();
-    pendingArtwork.clear();
-  }
+  m_widgetRegistry->clearLoadedAndPending();
   m_pathCatalog.clearSilentPendingOnly();
   // Wait 50ms for in-flight QtConcurrent operations to notice the
   // cancellation flag before resetting it for future operations.
@@ -375,11 +328,7 @@ auto ArtworkManager::getTimerCoordinator() const -> TimerUtils::Coordinator * {
 
 // Checks if a widget already has artwork loaded or pending
 auto ArtworkManager::hasArtworkForWidget(ItemWidget *widget) const -> bool {
-  if (!widget) {
-    return false;
-  }
-  // Check if widget has loaded/pending artwork in our tracking map
-  return widgetToArtworkPath.contains(widget);
+  return m_widgetRegistry->hasArtworkFor(widget);
 }
 
 // Updates visible widgets' artwork based on viewport and suppression policy
@@ -394,26 +343,21 @@ void ArtworkManager::updateViewportArtwork() {
     return;
   }
 
-  QList<ArtworkInfo> localPending;
-  {
-    QMutexLocker locker(&m_dataMutex);
-    if (!ui.itemScrollArea || !gridContainer || !stackedWidget ||
-        stackedWidget->currentWidget() != itemsPage || pendingArtwork.isEmpty()) {
-      return;
-    }
-    localPending = pendingArtwork;
+  if (!ui.itemScrollArea || !gridContainer || !stackedWidget ||
+      stackedWidget->currentWidget() != itemsPage) {
+    return;
+  }
+  QList<ArtworkInfo> localPending = m_widgetRegistry->takePending();
+  if (localPending.isEmpty()) {
+    return;
   }
 
   updateUserActivity();
 
   const Viewports vps = computeViewports(ui.itemScrollArea);
-  QPointer<ArtworkManager> guard(this);
-  auto isLoaded = [guard](ItemWidget *widget) -> bool {
-    if (!widget || !guard) {
-      return false;
-    }
-    QMutexLocker locker(&guard->m_dataMutex);
-    return guard->loadedArtwork.contains(QPointer<ItemWidget>(widget));
+  ArtworkWidgetRegistry *registry = m_widgetRegistry;
+  auto isLoaded = [registry](ItemWidget *widget) -> bool {
+    return registry->isLoaded(widget);
   };
   QList<ArtworkInfo> immediateItems;
   QList<ArtworkInfo> extendedItems;
@@ -421,10 +365,7 @@ void ArtworkManager::updateViewportArtwork() {
   std::tie(immediateItems, extendedItems, remainingItems) =
       partitionByViewport(localPending, gridContainer, vps, isLoaded);
 
-  {
-    QMutexLocker locker(&m_dataMutex);
-    pendingArtwork = remainingItems;
-  }
+  m_widgetRegistry->setPending(std::move(remainingItems));
 
   qint64 afterPartition = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
 
@@ -454,41 +395,26 @@ void ArtworkManager::clearWidgetReferences() {
     m_persistentLoadTimer->stop();
   }
 
-  {
-    QMutexLocker locker(&m_dataMutex);
-    for (const auto &widget : loadedArtwork) {
-      if (widget) {
-        widget->blockSignals(true);
-      }
-    }
-
-    loadedArtwork.clear();
-    widgetToArtworkPath.clear();
-    pendingArtwork.clear();
-    // drop any per-item artwork-type overrides when widgets are
-    // torn down — a fresh collection or post-search rebuild should start
-    // every item back on its primary artwork.
-    m_artworkTypeOverrides.clear();
-
-    m_silentLoadingActive = false;
-    m_continuousSilentLoad = false;
-    m_persistentSilentLoad = false;
-  }
+  m_widgetRegistry->blockSignalsAndClearAll();
+  // drop any per-item artwork-type overrides when widgets are torn down — a
+  // fresh collection or post-search rebuild should start every item back on
+  // its primary artwork.
+  m_widgetRegistry->clearArtworkTypeOverrides();
   m_pathCatalog.clearAll();
+
+  m_silentLoadingActive = false;
+  m_continuousSilentLoad = false;
+  m_persistentSilentLoad = false;
 }
 
 // ─── Per-item artwork-type override ─────────────────────────
 
 QString ArtworkManager::artworkTypeOverrideFor(const QString &fullPath) const {
-  // No mutex: m_artworkTypeOverrides is touched only on the main thread by
-  // contract (cycle requests come from the event filter, configureArtwork
-  // happens on widget creation in the main thread). Adding a lock here would
-  // be cargo-cult — see docs at the top of artworkmanager.h.
-  return m_artworkTypeOverrides.value(fullPath);
+  return m_widgetRegistry->artworkTypeOverrideFor(fullPath);
 }
 
 void ArtworkManager::clearArtworkTypeOverrides() {
-  m_artworkTypeOverrides.clear();
+  m_widgetRegistry->clearArtworkTypeOverrides();
 }
 
 void ArtworkManager::cycleArtworkType(ItemWidget *widget, const QString &fullPath,
@@ -525,7 +451,7 @@ void ArtworkManager::cycleArtworkType(ItemWidget *widget, const QString &fullPat
     return;
   }
 
-  const QString currentType = m_artworkTypeOverrides.value(fullPath);
+  const QString currentType = m_widgetRegistry->artworkTypeOverrideFor(fullPath);
   const QString nextType = ArtworkUtils::nextArtworkType(currentType, available);
 
   QString newArtworkPath;
@@ -538,13 +464,113 @@ void ArtworkManager::cycleArtworkType(ItemWidget *widget, const QString &fullPat
     return;
   }
 
-  if (nextType.isEmpty()) {
-    m_artworkTypeOverrides.remove(fullPath);
-  } else {
-    m_artworkTypeOverrides.insert(fullPath, nextType);
+  m_widgetRegistry->setArtworkTypeOverride(fullPath, nextType);
+  addPendingArtwork(widget, newArtworkPath);
+}
+
+namespace {
+// Scales an image to fit within a square box, accounting for device pixel
+// ratio so the result is crisp on HiDPI displays. Does NOT center the image
+// onto a square canvas — the caller does that if needed.
+auto scaleCenterToBox(const QImage &img, int targetSize, qreal dpr = 1.0) -> QImage {
+  if (img.isNull()) {
+    return {};
+  }
+  const int actualSize = qRound(targetSize * dpr);
+  QImage scaled = img.scaled(actualSize, actualSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+  scaled.setDevicePixelRatio(dpr);
+  return scaled;
+}
+} // namespace
+
+// Adds a pending artwork request, applying deferral logic based on container
+// state (active scroll / glide / arrow scroll). Cached artwork is applied
+// immediately even when deferred so freshly-recycled tiles never flash empty.
+void ArtworkManager::addPendingArtwork(ItemWidget *widget, const QString &artworkPath) {
+  if (!widget || artworkPath.isEmpty()) {
+    return;
+  }
+  if (!stackedWidget || stackedWidget->currentWidget() != itemsPage) {
+    return;
   }
 
-  addPendingArtwork(widget, newArtworkPath);
+  m_widgetRegistry->track(widget);
+
+  // Clear any stale state from previous widget use (e.g. after pool
+  // recycling). This is what lets a tile receive new artwork even when it
+  // was previously marked loaded with a different path.
+  const QString existingPath = m_widgetRegistry->pathFor(widget);
+  if (existingPath == artworkPath) {
+    if (m_widgetRegistry->isLoaded(widget)) {
+      return;
+    }
+    if (m_widgetRegistry->isPendingFor(widget, artworkPath)) {
+      return;
+    }
+  }
+  if (!existingPath.isEmpty() && existingPath != artworkPath) {
+    m_widgetRegistry->removeAllEntriesFor(widget);
+  }
+
+  bool shouldDefer = false;
+  if (m_state) {
+    const bool deferAll = m_state->artwork().deferAllArtwork;
+    const bool gliding = m_state->glideAnimating();
+    const bool arrowScrolling = m_state->arrow().arrowKeyScrolling;
+    const bool userScrolling = m_state->scroll().userScrollActive;
+    const bool allowDuringSelection = m_state->artwork().allowDuringSelection;
+    shouldDefer = (deferAll || gliding || arrowScrolling || userScrolling) && !allowDuringSelection;
+  }
+
+  // Always check cache first — even when deferring, cached artwork should be
+  // applied immediately so scrolling stays responsive.
+  QPixmap cached = ArtworkManager::getCachedPixmap(artworkPath);
+  if (!cached.isNull()) {
+    widget->setArtworkPixmap(cached);
+    m_widgetRegistry->markLoaded(widget, artworkPath);
+    return;
+  }
+
+  m_widgetRegistry->enqueuePending(
+      ArtworkInfo{.mediaItem = QPointer<ItemWidget>(widget), .artworkPath = artworkPath});
+
+  if (!shouldDefer) {
+    scheduleViewportUpdate();
+  }
+}
+
+// Clears all pending artwork entries and loaded state for a widget being
+// recycled back to the pool — prevents stale entries from blocking new
+// artwork.
+void ArtworkManager::clearPendingArtworkForWidget(ItemWidget *widget) {
+  m_widgetRegistry->removeAllEntriesFor(widget);
+}
+
+// Creates a centered, scaled artwork pixmap from an input pixmap, using the
+// system DPR for HiDPI correctness.
+auto ArtworkManager::createProcessedArtwork(const QPixmap &originalPixmap) -> QPixmap {
+  if (originalPixmap.isNull()) {
+    return {};
+  }
+  qreal dpr = 1.0;
+  if (QGuiApplication::primaryScreen()) {
+    dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
+  }
+  QImage centered = scaleCenterToBox(originalPixmap.toImage(), UIConstants::Artwork::BOX_SIZE, dpr);
+  if (centered.isNull()) {
+    return {};
+  }
+  QPixmap result = QPixmap::fromImage(centered);
+  result.setDevicePixelRatio(dpr);
+  return result;
+}
+
+auto ArtworkManager::getCachedPixmap(const QString &artworkPath) -> QPixmap {
+  if (artworkPath.isEmpty() || !m_cacheManager) {
+    return {};
+  }
+  // Avoid UI-thread disk I/O; the disk cache is consulted from worker threads.
+  return m_cacheManager->getArtworkFromMemoryOnly(artworkPath);
 }
 
 // Checks if artwork loading should be suppressed (e.g. during fast scrolling)

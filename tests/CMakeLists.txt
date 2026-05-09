@@ -443,9 +443,9 @@ add_executable(test_artworkmanager
   ${SRC_DIR}/modules/media/artwork/artworkmanager.cpp
   ${SRC_DIR}/modules/media/artwork/artworkmanagerbatch.cpp
   ${SRC_DIR}/modules/media/artwork/artworkmanagerprecache.cpp
-  ${SRC_DIR}/modules/media/artwork/artworkmanagerpending.cpp
   ${SRC_DIR}/modules/media/artwork/artworkpathcatalog.cpp
   ${SRC_DIR}/modules/media/artwork/artworksilentloading.cpp
+  ${SRC_DIR}/modules/media/artwork/artworkwidgetregistry.cpp
   ${SRC_DIR}/modules/data/cache/cachemanager.cpp
   ${SRC_DIR}/modules/data/cache/cachemanagerdisk.cpp
   ${SRC_DIR}/modules/input/interaction/interactionstateholder.cpp

@@ -8,6 +8,8 @@
 // to bring artworkmanager.cpp under 500 LOC.
 #include "artworkmanager.h"
 #include "artworkmanagerinternal.h"
+#include "artworkpathcatalog.h"
+#include "artworkwidgetregistry.h"
 #include "cachemanager.h"
 #include "loggingcategories.h"
 #include "itemwidget.h"
@@ -281,14 +283,8 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
       continue;
     }
 
-    {
-      QMutexLocker locker(&m_dataMutex);
-      widgetToArtworkPath[widget] = result.artworkPath;
-      if (!loadedArtwork.contains(widget)) {
-        loadedArtwork.append(widget);
-      }
-    }
-    trackWidget(widget);
+    m_widgetRegistry->markLoaded(widget, result.artworkPath);
+    m_widgetRegistry->track(widget);
     if (m_cacheManager) {
       if (result.loadedFromDiskCache) {
         // Avoid re-writing an already-persisted cache entry.

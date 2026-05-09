@@ -4,14 +4,9 @@
 #include "applicationcontext.h"
 #include "artworkmanager.h"
 #include "artworkmanagerinternal.h"
-#include "artworkutils.h"
+#include "artworkwidgetregistry.h"
 #include "cachemanager.h"
-#include "collectionutils.h"
-#include "extensionutils.h"
-#include "interactionstateholder.h"
-#include "propertyutils.h"
-#include "setuputils.h"
-#include "timerutils.h"
+#include "loggingcategories.h"
 #include "itemwidget.h"
 #include "uiconstants.h"
 
@@ -124,14 +119,8 @@ void ArtworkManager::collectUncachedAndApplyCached(const QList<ArtworkInfo> &ite
     QPixmap cached = ArtworkManager::getCachedPixmap(info.artworkPath);
     if (!cached.isNull()) {
       info.mediaItem->setArtworkPixmap(cached);
-      {
-        QMutexLocker locker(&m_dataMutex);
-        widgetToArtworkPath[info.mediaItem] = info.artworkPath;
-        if (!loadedArtwork.contains(info.mediaItem)) {
-          loadedArtwork.append(info.mediaItem);
-        }
-      }
-      trackWidget(info.mediaItem);
+      m_widgetRegistry->markLoaded(info.mediaItem, info.artworkPath);
+      m_widgetRegistry->track(info.mediaItem);
     } else {
       uncachedItems.append(info);
     }

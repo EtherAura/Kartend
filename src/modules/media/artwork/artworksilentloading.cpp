@@ -8,6 +8,7 @@
 #include "artworkmanager.h"
 #include "artworkpathcatalog.h"
 #include "artworkutils.h"
+#include "artworkwidgetregistry.h"
 #include "loggingcategories.h"
 #include "uiconstants.h"
 
@@ -110,10 +111,7 @@ void ArtworkManager::stopSilentLoading() {
   }
   m_persistentSilentLoad = false;
 
-  {
-    QMutexLocker locker(&m_dataMutex);
-    pendingArtwork.clear();
-  }
+  m_widgetRegistry->clearPendingOnly();
   m_pathCatalog.clearPathsAndPending();
 }
 
