@@ -36,8 +36,8 @@ void ArtworkManager::startEarlyDentryPrewarm(int collectionIndex) {
     return; // Only needed for flattened subcollection views
   }
 
-  const QStringList dirList =
-      ArtworkPathCatalog::collectArtworkDirs(collections, collectionIndex, /*includeDescendants=*/true);
+  const QStringList dirList = ArtworkPathCatalog::collectArtworkDirs(collections, collectionIndex,
+                                                                     /*includeDescendants=*/true);
   if (dirList.isEmpty()) {
     return;
   }
@@ -134,8 +134,8 @@ auto inCooldown(qint64 lastBatchCompletionTime) -> bool {
 constexpr int kMaxConcurrentSilentBatches = 2;
 } // namespace
 
-void ArtworkManager::onSilentPrecacheBatchComplete(
-    const QStringList &requestedPaths, const QList<ArtworkPrecacheResult> &results) {
+void ArtworkManager::onSilentPrecacheBatchComplete(const QStringList &requestedPaths,
+                                                   const QList<ArtworkPrecacheResult> &results) {
   // Always clear pending entries — even on decode failure — so a future
   // silent-load pass can retry.
   for (const QString &p : requestedPaths) {
@@ -237,8 +237,9 @@ void ArtworkManager::processContinuousSilentLoad() {
   }
 
   const int batchSize =
-      isUserIdle() ? m_silentLoadBatchSize
-                   : qMax(1, m_silentLoadBatchSize / UIConstants::Artwork::SILENT_LOAD_THROTTLE_DIVISOR);
+      isUserIdle()
+          ? m_silentLoadBatchSize
+          : qMax(1, m_silentLoadBatchSize / UIConstants::Artwork::SILENT_LOAD_THROTTLE_DIVISOR);
   const QStringList batch = m_pathCatalog.takeNextBatch(batchSize);
 
   if (!m_continuousSilentLoad) {

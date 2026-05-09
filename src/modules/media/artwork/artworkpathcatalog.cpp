@@ -8,8 +8,8 @@
 #include <functional>
 #include <QDir>
 #include <QMutexLocker>
-#include <QThreadPool>
 #include <QtConcurrent>
+#include <QThreadPool>
 
 void ArtworkPathCatalog::appendDirImagesNoLock(const QString &dirPath, QSet<QString> &processedDirs,
                                                QStringList &out) {

@@ -19,10 +19,10 @@
 #include <QPointer>
 #include <QScreen>
 #include <QSize>
+#include <QtConcurrent>
 #include <QThread>
 #include <QThreadPool>
 #include <QTimer>
-#include <QtConcurrent>
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcArtworkManager)
@@ -136,9 +136,9 @@ ArtworkLoadDispatcher::ArtworkLoadDispatcher(CacheManager *cacheManager, QObject
   const int base = idealThreads > 0 ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
                                     : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
   m_threadPool = new QThreadPool();
-  m_threadPool->setMaxThreadCount(
-      std::clamp(base, UIConstants::Concurrency::WORKER_POOL_MIN_THREADS,
-                 UIConstants::Concurrency::WORKER_POOL_MAX_THREADS));
+  m_threadPool->setMaxThreadCount(std::clamp(base,
+                                             UIConstants::Concurrency::WORKER_POOL_MIN_THREADS,
+                                             UIConstants::Concurrency::WORKER_POOL_MAX_THREADS));
 }
 
 ArtworkLoadDispatcher::~ArtworkLoadDispatcher() {
@@ -268,9 +268,8 @@ void ArtworkLoadDispatcher::cancelAll() {
   // in-flight tasks observe the OLD (permanently-cancelled) flag. Delay
   // chosen to be larger than typical thread-scheduling latency so the
   // existing tasks have a chance to notice cancellation.
-  QTimer::singleShot(50, this, [this]() {
-    m_cancellationToken = std::make_shared<std::atomic<bool>>(false);
-  });
+  QTimer::singleShot(
+      50, this, [this]() { m_cancellationToken = std::make_shared<std::atomic<bool>>(false); });
 }
 
 int ArtworkLoadDispatcher::runningFutureCount() const {

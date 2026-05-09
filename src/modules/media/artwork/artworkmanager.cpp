@@ -10,12 +10,12 @@
 #include "extensionutils.h"
 #include "interactionstateholder.h"
 #include "itemartwork.h"
+#include "itemwidget.h"
 #include "loggingcategories.h"
 #include "propertyutils.h"
 #include "setuputils.h"
 #include "threadpoolutils.h"
 #include "timerutils.h"
-#include "itemwidget.h"
 #include "uiconstants.h"
 
 #include <algorithm>
@@ -304,9 +304,7 @@ void ArtworkManager::updateViewportArtwork() {
 
   const Viewports vps = computeViewports(ui.itemScrollArea);
   ArtworkWidgetRegistry *registry = m_widgetRegistry;
-  auto isLoaded = [registry](ItemWidget *widget) -> bool {
-    return registry->isLoaded(widget);
-  };
+  auto isLoaded = [registry](ItemWidget *widget) -> bool { return registry->isLoaded(widget); };
   QList<ArtworkInfo> immediateItems;
   QList<ArtworkInfo> extendedItems;
   QList<ArtworkInfo> remainingItems;
@@ -680,31 +678,31 @@ void ArtworkManager::loadArtworkParallel(const QList<ArtworkInfo> &items, bool h
     }
     const int end = qMin(i + batchSize, uncachedItems.size());
     QList<ArtworkInfo> batch = uncachedItems.mid(i, end - i);
-    m_dispatcher->dispatchBatch(
-        std::move(batch), highPriority,
-        [self](const QList<ArtworkInfo::Result> &results, int batchItemCount, qint64 elapsedMs,
-               bool wasHighPriority) {
-          if (!self) {
-            return;
-          }
-          if (lcArtworkManager().isDebugEnabled()) {
-            int diskHits = 0;
-            for (const auto &r : results) {
-              if (r.loadedFromDiskCache) {
-                ++diskHits;
-              }
-            }
-            qCDebug(lcArtworkManager) << "Artwork batch done"
-                                      << "priority=" << (wasHighPriority ? "high" : "low")
-                                      << "requested=" << batchItemCount
-                                      << "produced=" << results.size() << "diskHits=" << diskHits
-                                      << "elapsedMs=" << elapsedMs;
-          }
-          self->applyResultsToUi(results);
-          if (wasHighPriority && !results.isEmpty()) {
-            self->m_adaptiveBatcher.observeBatch(batchItemCount, elapsedMs);
-          }
-        });
+    m_dispatcher->dispatchBatch(std::move(batch), highPriority,
+                                [self](const QList<ArtworkInfo::Result> &results,
+                                       int batchItemCount, qint64 elapsedMs, bool wasHighPriority) {
+                                  if (!self) {
+                                    return;
+                                  }
+                                  if (lcArtworkManager().isDebugEnabled()) {
+                                    int diskHits = 0;
+                                    for (const auto &r : results) {
+                                      if (r.loadedFromDiskCache) {
+                                        ++diskHits;
+                                      }
+                                    }
+                                    qCDebug(lcArtworkManager)
+                                        << "Artwork batch done"
+                                        << "priority=" << (wasHighPriority ? "high" : "low")
+                                        << "requested=" << batchItemCount
+                                        << "produced=" << results.size() << "diskHits=" << diskHits
+                                        << "elapsedMs=" << elapsedMs;
+                                  }
+                                  self->applyResultsToUi(results);
+                                  if (wasHighPriority && !results.isEmpty()) {
+                                    self->m_adaptiveBatcher.observeBatch(batchItemCount, elapsedMs);
+                                  }
+                                });
     ++batchCount;
   }
 
