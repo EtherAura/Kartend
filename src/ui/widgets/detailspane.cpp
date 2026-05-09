@@ -1016,7 +1016,6 @@ void DetailsPane::openCurrentManual() {
   QDesktopServices::openUrl(QUrl::fromLocalFile(m_manualPath));
 }
 
-
 QString DetailsPane::formatTags(const QString &raw) {
   // Accept either a JSON array string or a comma-separated list. We do not
   // pull in QJsonDocument here to keep this widget lightweight; the Details

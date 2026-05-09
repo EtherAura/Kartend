@@ -175,9 +175,9 @@ ArtworkManager::~ArtworkManager() {
   // helper's documentation.
   constexpr int kArtworkPoolDrainMs = 2000;
   if (!ThreadPoolUtils::shutdownWithBudget(m_artworkThreadPool, kArtworkPoolDrainMs)) {
-    qCWarning(lcArtworkManager)
-        << "ArtworkManager: artwork thread pool did not drain in" << kArtworkPoolDrainMs
-        << "ms during shutdown; abandoning pool to avoid blocking exit";
+    qCWarning(lcArtworkManager) << "ArtworkManager: artwork thread pool did not drain in"
+                                << kArtworkPoolDrainMs
+                                << "ms during shutdown; abandoning pool to avoid blocking exit";
   }
 
   TimerUtils::stopAndDisconnectTimers({m_cacheTimer, m_silentLoadTimer, m_persistentLoadTimer});
