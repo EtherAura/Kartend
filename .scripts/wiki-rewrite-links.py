@@ -1,15 +1,23 @@
 #!/usr/bin/env python3
-"""Rewrite out-of-wiki relative links to absolute GitHub URLs.
+"""Rewrite links in source markdown to GitHub Wiki conventions.
 
-The wiki is flat (single directory of .md files), so any link in
-docs/guide/*.md that escapes the guide directory (../foo or ../../bar)
-will 404 once published. This script rewrites those into absolute
-https://github.com/<repo>/{blob,tree}/main/<path> URLs, choosing
-blob vs tree based on whether the target exists as a directory in
-the source checkout.
+Two passes:
 
-Wiki-internal links like [Other-Page](Other-Page.md) are NOT touched —
-GitHub Wiki resolves those correctly on its own.
+1. Out-of-wiki relative links — anything starting with `../` (e.g.
+   `../building.md`, `../../src/utils/`). The wiki is flat (a single
+   directory of .md files) so these would 404. Rewrite to absolute
+   https://github.com/<repo>/{blob,tree}/main/<path> URLs; the
+   blob-vs-tree distinction is resolved by probing the source
+   checkout.
+
+2. Wiki-internal .md links — links of the form
+   `[text](Page-Name.md)` or `[text](Page-Name.md#anchor)`. GitHub
+   Wiki serves `.md`-suffixed paths as raw blobs instead of
+   rendered pages, so we strip the extension. Anchor fragments are
+   preserved.
+
+Pass 1 runs before pass 2 so absolute https://...readme.md URLs
+emitted by pass 1 are skipped by pass 2's negative-lookahead.
 
 Usage: wiki-rewrite-links.py <wiki-dir> <repo> <source-root>
 """
@@ -19,10 +27,18 @@ import re
 import sys
 from pathlib import Path
 
-LINK_RE = re.compile(r"(\]\()(\.\./[^)]+)(\))")
+# Pass 1: out-of-wiki relative links — `](../...)` or `](../../...)`.
+RELATIVE_LINK_RE = re.compile(r"(\]\()(\.\./[^)]+)(\))")
+
+# Pass 2: wiki-internal .md links. Match `](path.md)` and `](path.md#anchor)`
+# but skip absolute URLs (negative lookahead on http(s)://) so the URLs
+# emitted by pass 1 stay intact.
+INTERNAL_MD_RE = re.compile(
+    r"(\]\()(?!https?://)(?!#)([^)#]+)\.md(#[^)]*)?(\))"
+)
 
 
-def make_replacer(repo: str, src_root: Path, src_subdir: str = "docs/guide"):
+def make_relative_replacer(repo: str, src_root: Path, src_subdir: str = "docs/guide"):
     def replacer(match: re.Match) -> str:
         prefix, rel, suffix = match.groups()
         # Resolve relative to docs/guide/ (the source layout)
@@ -38,6 +54,12 @@ def make_replacer(repo: str, src_root: Path, src_subdir: str = "docs/guide"):
         return f"{prefix}https://github.com/{repo}/{kind}/main/{target}{suffix}"
 
     return replacer
+
+
+def strip_md_extension(match: re.Match) -> str:
+    """Drop the trailing .md from a wiki-internal link, preserving any anchor."""
+    prefix, path, anchor, suffix = match.groups()
+    return f"{prefix}{path}{anchor or ''}{suffix}"
 
 
 def main() -> int:
@@ -57,15 +79,19 @@ def main() -> int:
         print(f"error: source-root not found: {src_root}", file=sys.stderr)
         return 1
 
-    replacer = make_replacer(repo, src_root)
+    relative_replacer = make_relative_replacer(repo, src_root)
     changed = 0
     for md in sorted(wiki_dir.glob("*.md")):
         original = md.read_text()
-        rewritten = LINK_RE.sub(replacer, original)
+        # Pass 1: rewrite ../ relative links to absolute github.com URLs.
+        rewritten = RELATIVE_LINK_RE.sub(relative_replacer, original)
+        # Pass 2: strip .md from remaining wiki-internal links so the wiki
+        # serves them as rendered pages instead of raw markdown blobs.
+        rewritten = INTERNAL_MD_RE.sub(strip_md_extension, rewritten)
         if rewritten != original:
             md.write_text(rewritten)
             changed += 1
-    print(f"rewrote out-of-wiki links in {changed} file(s)")
+    print(f"rewrote links in {changed} file(s)")
     return 0
 
 
