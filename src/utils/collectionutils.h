@@ -16,7 +16,17 @@
 #include <QString>
 #include <QStringList>
 #include <QtCore/Qt>
-#include <uiconstants.h>
+// Pull only the four UIConstants sub-namespaces that this header actually
+// references in its inline bodies (Grid, Item, ListView, DetailsPane). The
+// umbrella <uiconstants.h> aggregates all 29 subheaders (~1015 LOC) — pulling
+// it here forced every one of the ~113 TUs that includes collectionutils.h to
+// reparse all 29 even though only these four are used. Subheaders are
+// self-contained (no includes themselves), so this is a pure preprocessor
+// cost cut with no behavioural change.
+#include <uiconstants/detailspane.h>
+#include <uiconstants/grid.h>
+#include <uiconstants/item.h>
+#include <uiconstants/listview.h>
 
 // Forward declaration for validation
 namespace ErrorUtils {
