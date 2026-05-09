@@ -42,32 +42,10 @@ void QueryManager::refreshWalView() {
   m_statementCache.clear();
 }
 
-// Gets or creates a prepared statement for the given SQL
-// Caches compiled statements to avoid repeated prepare() overhead
-// Uses LRU eviction when cache exceeds MAX_STATEMENT_CACHE_SIZE
+// Gets or creates a prepared statement for the given SQL — thin wrapper
+// over the PreparedStatementCache helper.
 auto QueryManager::getPreparedStatement(const QString &sql) -> QSqlQuery & {
-  if (QSqlQuery *cached = m_statementCache.object(sql)) {
-    // Fully reset before reuse.
-    // QSqlQuery may retain bound values / internal state across exec() calls.
-    // If the cached instance is reused for dynamic search SQL, SQLite can
-    // report "Parameter count mismatch" unless we reinitialize it.
-    cached->finish();
-    *cached = QSqlQuery(m_db);
-    cached->prepare(sql);
-    return *cached;
-  }
-
-  // Create new prepared statement and cache it (QCache takes ownership).
-  // Cost (1) is well below maxCost (MAX_STATEMENT_CACHE_SIZE=32), so the
-  // freshly-inserted entry is guaranteed to land in the cache rather than
-  // being deleted on insert. Reading the value back through the cache
-  // lookup keeps the lifetime contract explicit (and quiets the
-  // clang-analyzer-cplusplus.NewDelete false positive on `*query` after
-  // an insert that could *theoretically* evict the just-inserted item).
-  auto *query = new QSqlQuery(m_db);
-  query->prepare(sql);
-  m_statementCache.insert(sql, query, 1);
-  return *m_statementCache.object(sql);
+  return m_statementCache.get(sql);
 }
 
 // Clears statement cache - call when database connection changes
@@ -179,6 +157,7 @@ void QueryManager::initDatabase() {
   } else {
     m_db = QSqlDatabase::addDatabase("QSQLITE", m_connectionName);
   }
+  m_statementCache.setDatabase(m_db);
 
   QString dbPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
   if (!QDir().mkpath(dbPath)) {

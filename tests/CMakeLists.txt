@@ -256,6 +256,7 @@ add_test(NAME SessionManager COMMAND test_sessionmanager)
 # QueryManager cancellation semantics test
 add_executable(test_querymanager_cancel_scan
   modules/query/test_querymanager_cancel_scan.cpp
+  ${SRC_DIR}/modules/data/query/preparedstatementcache.cpp
   ${SRC_DIR}/modules/data/query/querymanager.cpp
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
@@ -299,6 +300,7 @@ add_test(NAME QueryManagerCancelScan COMMAND test_querymanager_cancel_scan)
 # Reuses the same query-stack source list as QueryManagerCancelScan.
 add_executable(test_querymanager_broken_symlinks
   modules/query/test_querymanager_broken_symlinks.cpp
+  ${SRC_DIR}/modules/data/query/preparedstatementcache.cpp
   ${SRC_DIR}/modules/data/query/querymanager.cpp
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
@@ -343,6 +345,7 @@ add_test(NAME QueryManagerBrokenSymlinks COMMAND test_querymanager_broken_symlin
 # Reuses the same query-stack source list as QueryManagerCancelScan.
 add_executable(test_querymanager_cross_collection_count
   modules/query/test_querymanager_cross_collection_count.cpp
+  ${SRC_DIR}/modules/data/query/preparedstatementcache.cpp
   ${SRC_DIR}/modules/data/query/querymanager.cpp
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
@@ -393,6 +396,7 @@ add_executable(test_databasemanager
   ${SRC_DIR}/modules/data/database/databaseschema.cpp
   ${SRC_DIR}/modules/data/database/filemapcache.cpp
   ${SRC_DIR}/utils/text/titlefilter.cpp
+  ${SRC_DIR}/modules/data/query/preparedstatementcache.cpp
   ${SRC_DIR}/modules/data/query/querymanager.cpp
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
   ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp

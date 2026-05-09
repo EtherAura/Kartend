@@ -47,9 +47,6 @@ QueryManager::QueryManager(SessionManager *sessionManager, const QString &connec
                            QObject *parent)
     : QObject(parent), m_scanCancellationToken(std::make_shared<std::atomic_bool>(false)),
       m_sessionManager(sessionManager), m_connectionName(connectionName) {
-  // Pointer-based cache with automatic LRU eviction.
-  m_statementCache.setMaxCost(MAX_STATEMENT_CACHE_SIZE);
-
   const int idealThreads = QThread::idealThreadCount();
   const int base = idealThreads > 0 ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
                                     : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;

@@ -3,9 +3,9 @@
 
 #include "collectionutils.h"
 #include "errorutils.h"
+#include "preparedstatementcache.h"
 #include <atomic>
 #include <memory>
-#include <QCache>
 #include <QDateTime>
 #include <QHash>
 #include <QObject>
@@ -161,11 +161,11 @@ private:
   QSqlDatabase m_db;
   QString m_connectionName;
 
-  // Prepared statement cache - maps SQL strings to prepared queries
-  // Reduces overhead by reusing compiled statements
-  // Limited to MAX_STATEMENT_CACHE_SIZE entries with LRU eviction
+  // LRU cache of prepared QSqlQuery statements bound to m_db. Reuses
+  // compiled statements across slot invocations; reset on every get() so
+  // stale bound values can't leak across reuse.
   static constexpr int MAX_STATEMENT_CACHE_SIZE = 32;
-  QCache<QString, QSqlQuery> m_statementCache;
+  PreparedStatementCache m_statementCache{MAX_STATEMENT_CACHE_SIZE};
 
   // Gets or creates a prepared statement for the given SQL
   [[nodiscard]] QSqlQuery &getPreparedStatement(const QString &sql);

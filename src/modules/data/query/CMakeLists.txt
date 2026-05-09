@@ -1,4 +1,5 @@
 target_sources(${KARTEND_LIB_TARGET} PRIVATE
+  preparedstatementcache.cpp
   queryhelpers.cpp
   querymanager.cpp
   querymanagercache.cpp
@@ -11,5 +12,6 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   querymanagerscan.cpp
   querymanagerscanandsave.cpp
   querymanagerstatichelpers.cpp
+  preparedstatementcache.h
   querymanager.h
 )
