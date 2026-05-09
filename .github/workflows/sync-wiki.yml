@@ -1,0 +1,96 @@
+name: Sync wiki
+
+# Mirrors docs/guide/*.md to the GitHub Wiki on every push to main.
+# The wiki is one-way: edits made via the GitHub Wiki web UI will be
+# overwritten by the next sync. docs/guide/ is the source of truth.
+#
+# _Sidebar.md / _Footer.md / _Header.md (wiki-special navigation pages)
+# are NOT propagated from source AND are protected from deletion in the
+# wiki, so wiki maintainers can hand-craft sidebar navigation without
+# losing it on each sync.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/guide/**'
+      - '.github/workflows/sync-wiki.yml'
+      - '.scripts/wiki-rewrite-links.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write  # Required to push to the .wiki.git repo via GITHUB_TOKEN.
+
+concurrency:
+  # Serialize wiki pushes — two concurrent runs would race on the
+  # single .wiki.git remote and one would force-fail the other.
+  group: sync-wiki
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+
+      - name: Safety check
+        run: |
+          if [[ ! -d docs/guide ]] || ! compgen -G 'docs/guide/*.md' > /dev/null; then
+            echo "::error::docs/guide/ is missing or empty; refusing to sync (would wipe the wiki)."
+            exit 1
+          fi
+
+      - name: Clone wiki
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git clone \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.wiki.git" \
+            wiki
+
+      - name: Mirror docs/guide → wiki
+        run: |
+          # Step 1: copy non-underscore-prefixed .md files from source to wiki.
+          # Underscore-prefixed names are wiki-special (_Sidebar, _Footer,
+          # _Header) and must be authored on the wiki side; we never push them
+          # from source.
+          for src in docs/guide/*.md; do
+            base=$(basename "$src")
+            case "$base" in
+              _*) continue ;;
+            esac
+            cp "$src" "wiki/$base"
+          done
+
+          # Step 2: prune wiki .md pages that no longer exist in source,
+          # again sparing the underscore-prefixed wiki-special pages.
+          for f in wiki/*.md; do
+            base=$(basename "$f")
+            case "$base" in
+              _*) continue ;;
+            esac
+            if [[ ! -f "docs/guide/$base" ]]; then
+              echo "removing wiki/$base (no longer in docs/guide/)"
+              rm "$f"
+            fi
+          done
+
+      - name: Rewrite out-of-wiki relative links
+        run: |
+          python3 .scripts/wiki-rewrite-links.py wiki "${{ github.repository }}" .
+
+      - name: Commit + push
+        working-directory: wiki
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki already up to date; nothing to commit."
+            exit 0
+          fi
+          git commit -m "Sync from docs/guide @ ${GITHUB_SHA::8}
+
+          Source: ${{ github.repository }}@${{ github.sha }}"
+          git push
