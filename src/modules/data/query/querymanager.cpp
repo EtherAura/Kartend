@@ -45,32 +45,12 @@ using namespace QueryManagerInternal;
 
 QueryManager::QueryManager(SessionManager *sessionManager, const QString &connectionName,
                            QObject *parent)
-    : QObject(parent), m_scanCancellationToken(std::make_shared<std::atomic_bool>(false)),
-      m_sessionManager(sessionManager), m_connectionName(connectionName) {
-  const int idealThreads = QThread::idealThreadCount();
-  const int base = idealThreads > 0 ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
-                                    : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
-  m_scanThreadPool = new QThreadPool();
-  m_scanThreadPool->setMaxThreadCount(
-      std::clamp(base, UIConstants::Concurrency::WORKER_POOL_MIN_THREADS,
-                 UIConstants::Concurrency::WORKER_POOL_MAX_THREADS));
-
+    : QObject(parent), m_sessionManager(sessionManager), m_connectionName(connectionName) {
   // Register ErrorContext for queued signal/slot connections
   qRegisterMetaType<ErrorUtils::ErrorContext>("ErrorUtils::ErrorContext");
 }
 
 QueryManager::~QueryManager() {
-  // Abandon the thread pool without waiting - process is exiting anyway.
-  // The pool itself is intentionally leaked (~QThreadPool blocks; let the OS
-  // clean it up). The pointer is *not* nulled out: requestCancelScan() may
-  // still be called from another thread (DatabaseManager teardown does this
-  // while m_workerThread is mid-quit), and a concurrent write to this field
-  // races with that read for no benefit — we're about to die anyway, the
-  // dangling pointer is never dereferenced after destruction completes.
-  if (m_scanThreadPool) {
-    m_scanThreadPool->clear();
-  }
-
   clearStatementCache();
   if (m_db.isValid()) {
     QString connectionName = m_db.connectionName();
@@ -81,21 +61,15 @@ QueryManager::~QueryManager() {
 }
 
 void QueryManager::requestCancelScan() {
-  if (m_scanCancellationToken) {
-    m_scanCancellationToken->store(true, std::memory_order_release);
-  }
-  // Drop any queued scan work that hasn't started yet.
-  if (m_scanThreadPool) {
-    m_scanThreadPool->clear();
-  }
+  m_scanWork.requestCancel();
 }
 
 bool QueryManager::isScanCancelled() const {
-  return m_scanCancellationToken && m_scanCancellationToken->load(std::memory_order_acquire);
+  return m_scanWork.isCancelled();
 }
 
 void QueryManager::resetScanCancellation() {
-  m_scanCancellationToken = std::make_shared<std::atomic_bool>(false);
+  m_scanWork.reset();
 }
 
 // Forces the connection to see the latest WAL commits from other connections.

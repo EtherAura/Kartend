@@ -212,13 +212,13 @@ bool QueryManager::stageFilesystemScan(const CollectionConfig &collection,
     scanTimer.start();
 
     const QString rootPath = dir.absolutePath();
-    const auto cancelToken = m_scanCancellationToken;
+    const auto cancelToken = m_scanWork.token();
     if (!cancelToken) {
       return false;
     }
     const std::atomic<bool> &cancelFlag = *cancelToken;
 
-    const int maxThreads = m_scanThreadPool ? std::max(1, m_scanThreadPool->maxThreadCount()) : 1;
+    const int maxThreads = m_scanWork.maxThreadCount();
     const int maxInFlight = std::max(1, maxThreads * 2);
 
     ScanCompletionQueue queue;
@@ -237,15 +237,11 @@ bool QueryManager::stageFilesystemScan(const CollectionConfig &collection,
       if (cancelFlag.load(std::memory_order_acquire)) {
         return;
       }
-      if (!m_scanThreadPool) {
-        return;
-      }
       {
         QMutexLocker locker(&queue.mutex);
         ++queue.inFlight;
       }
-      m_scanThreadPool->start(
-          new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, &queue));
+      m_scanWork.start(new DirectoryScanTask(dirPath, rootPath, nameFilters, cancelToken, &queue));
     };
 
     // Always scan the root directory.

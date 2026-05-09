@@ -4,8 +4,7 @@
 #include "collectionutils.h"
 #include "errorutils.h"
 #include "preparedstatementcache.h"
-#include <atomic>
-#include <memory>
+#include "scanworkcontroller.h"
 #include <QDateTime>
 #include <QHash>
 #include <QObject>
@@ -13,7 +12,6 @@
 #include <QSqlQuery>
 #include <QStringList>
 #include <QThread>
-#include <QThreadPool>
 
 class SessionManager;
 
@@ -151,12 +149,10 @@ private:
                                        const QList<CollectionConfig> &allCollections,
                                        const QString &filter);
 
-  // Per-scan cancellation token. Reset by swapping in a new token.
-  // This avoids old scan tasks resuming if cancellation is reset while
-  // worker tasks are still in-flight.
-  std::shared_ptr<std::atomic_bool> m_scanCancellationToken;
-  // Raw pointer so we can abandon on shutdown without waiting.
-  QThreadPool *m_scanThreadPool = nullptr;
+  // Owns the per-scan cancellation token + the dedicated worker pool that
+  // dispatches directory-walk tasks. Replaces the in-line m_scanCancellationToken
+  // and m_scanThreadPool that QueryManager used to manage directly.
+  ScanWorkController m_scanWork;
   SessionManager *m_sessionManager;
   QSqlDatabase m_db;
   QString m_connectionName;
