@@ -62,8 +62,7 @@ void DetailsPaneGalleryView::ensureSection() {
 
   m_editButton = new QPushButton(tr("Edit"), m_container);
   m_editButton->setCursor(Qt::PointingHandCursor);
-  m_editButton->setToolTip(
-      tr("Pick override files for any artwork type (standard or custom)."));
+  m_editButton->setToolTip(tr("Pick override files for any artwork type (standard or custom)."));
   m_editButton->setVisible(m_editEnabled);
   connect(m_editButton, &QPushButton::clicked, this, &DetailsPaneGalleryView::editRequested);
   titleRow->addWidget(m_editButton);
@@ -229,8 +228,7 @@ void DetailsPaneGalleryView::setEntries(const QList<DetailsPane::GalleryEntry> &
       }
     }
     if (!alreadyPresent) {
-      const int insertAt =
-          (!m_entries.isEmpty() && m_entries.first().isVideo) ? 1 : 0;
+      const int insertAt = (!m_entries.isEmpty() && m_entries.first().isVideo) ? 1 : 0;
       m_entries.insert(insertAt, {tr("Artwork"), primaryArtworkPath, /*isVideo=*/false});
     }
   }
