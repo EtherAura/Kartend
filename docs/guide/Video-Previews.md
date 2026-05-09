@@ -114,6 +114,31 @@ what differentiates "toggle video" from "cycle artwork". Modifier
 defaults to `Shift` and is set by `artworkCycleModifier` (see
 [Configuration Reference](Configuration-Reference.md#mouse)).
 
+## Still thumbnails for video tiles
+
+Anywhere a video preview appears as a non-playing thumbnail — the
+sidebar gallery's video tile, the Cover Flow off-center slots, the
+detail page's media strip — Kartend extracts a real frame from the
+video and uses it as a still. The frame is taken roughly **1 second
+in** (so a black opening frame doesn't become the thumbnail) and is
+cached in memory by absolute path; subsequent paints reuse the same
+frame instantly.
+
+Behavior:
+
+- While extraction is running you'll see a placeholder tile with a
+  `▶` glyph. The real frame swaps in as soon as the decoder hands it
+  back, with no further click required.
+- Extractions are serialized through one shared `QMediaPlayer` and
+  share the codec stack with sidebar / Cover Flow playback, so codec
+  availability is the same (see below).
+- A failed extraction (missing file, decoder error, timeout) is
+  cached as a null pixmap so Kartend doesn't retry endlessly. Restart
+  the app or force a re-scan if you replace a previously-bad video.
+
+There's no setting — extraction runs automatically whenever a still
+representation of a video is needed.
+
 ## Codec availability
 
 Video playback depends on Qt Multimedia's backend, which on Linux

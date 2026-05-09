@@ -19,6 +19,13 @@ Settings Dialog are saved immediately.
 > Environment variables like `$HOME` and `$XDG_*` are *not* expanded;
 > use `~` or absolute paths.
 
+> **Config-only keys** — most keys on this page have a matching
+> control in the [Settings Dialog](Settings-Dialog.md), but a handful
+> are intentionally hand-edit only. They're flagged inline below
+> with **(config-only)**. To change them, edit `kartend.cfg`
+> directly and restart Kartend. Today: `hideSubcollectionTiles`,
+> `listCollectionColumnWidth`, `listArtworkColumnWidth`.
+
 ## Conventions
 
 | Type | Format | Examples |
@@ -117,7 +124,7 @@ Button names are the SDL / Qt6::Gamepad standard labels (`A`, `B`, `X`,
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `collectionTypeFilter` | string | empty | Limit the visible collections to ones with this `type` value. |
-| `hideSubcollectionTiles` | bool | `false` | Hide subcollection tiles, show only direct media items. |
+| `hideSubcollectionTiles` | bool | `false` | Hide subcollection tiles, show only direct media items. **(config-only)** |
 
 ### View toggles (persistent)
 
@@ -155,8 +162,8 @@ visibility keys default to `true`; text overrides default to empty
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `listCollectionColumnWidth` | int | `150` | Width of the collection / icon column. |
-| `listArtworkColumnWidth` | int | `32` | Width of the artwork thumbnail column. |
+| `listCollectionColumnWidth` | int | `150` | Width of the collection / icon column. **(config-only)** |
+| `listArtworkColumnWidth` | int | `32` | Width of the artwork thumbnail column. **(config-only)** |
 
 ### Text, fonts, zoom
 

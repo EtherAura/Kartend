@@ -57,6 +57,15 @@ For very large collections, the **debounce delay** prevents searching
 on every keystroke. The debounce is small (sub-100 ms) so it's
 imperceptible.
 
+### Loading indicator
+
+While a search is computing on a large collection, a subtle
+semi-transparent overlay with a soft pulse fades in over the items
+grid. It hides as soon as the filtered set is ready. Pre-filter
+tiles fade behind the overlay so you don't see partial results
+flicker as the index narrows. The overlay has no setting — it
+appears whenever search needs more than a frame to settle.
+
 ## Sort
 
 A single global sort mode applies to all collections (lives in

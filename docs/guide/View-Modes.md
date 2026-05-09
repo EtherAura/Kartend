@@ -78,8 +78,8 @@ scroll appears only when columns overflow.
 | Font size | `listFontSize` | Default `11`. |
 | Row color | `listRowColor` | Hex. |
 | Alternate row color | `listAltRowColor` | Hex. Stripes every other row. |
-| Collection-icon column width | `[General] listCollectionColumnWidth` | Global, default `150`. |
-| Artwork column width | `[General] listArtworkColumnWidth` | Global, default `32`. |
+| Collection-icon column width | `[General] listCollectionColumnWidth` | Global, default `150`. Config-only — no Settings Dialog control. |
+| Artwork column width | `[General] listArtworkColumnWidth` | Global, default `32`. Config-only — no Settings Dialog control. |
 
 List view honors keyboard repeat tuned for fast scrolling: see
 `listKeyboardRepeatIntervalMs` (default `50`) and
@@ -205,6 +205,30 @@ once:
    [Settings Dialog](Settings-Dialog.md#apply-settings).
 
 ---
+
+## Selection indicator
+
+Across all view modes, the selected item is marked by a translucent
+**selection overlay** painted on top of the tile, tinted by
+`selectionColor` (per-collection, see
+[Themes & Appearance](Themes-and-Appearance.md#colors)). When you
+move selection — arrow keys, mouse click, gamepad, alphabetic jump
+— the overlay **glides** from the previous tile to the new one
+rather than jump-cutting. The animation is short (matching the
+scroll ease) so rapid keypresses still feel responsive.
+
+Specifics:
+
+- During click-and-hold scrolling the overlay is force-visible so
+  you can see where the cursor is even as the grid scrolls
+  underneath.
+- In Cover Flow the carousel itself moves the center slot; the
+  overlay is suppressed in favor of the carousel's depth/scale
+  cues.
+- The animation timing lives in `UIConstants` and is not a
+  user-tunable setting today. If you need the indicator to jump
+  instantly (e.g. for accessibility or recording), file a feature
+  request.
 
 ## Comparison table
 

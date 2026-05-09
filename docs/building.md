@@ -206,3 +206,76 @@ Maintenance build logs are written to `build/ninja-maintenance/logs/`:
 | `iwyu.log` | IWYU | Low - verify before applying |
 | `clang-format.log` | clang-format | Style only |
 
+## Reproducing CI Locally
+
+The full GitHub Actions pipeline (`build.yml`) can be run on your own
+machine via [`act`](https://github.com/nektos/act), which executes the
+workflow inside a Docker container that emulates a GitHub-hosted
+ubuntu-24.04 runner. This catches CI breakage before pushing and is
+much faster than waiting for a remote run.
+
+### Prerequisites
+
+- Docker (or Podman with a `docker` shim).
+- `act` **0.2.86 or newer** — earlier versions don't support the Node 24
+  runtime that `actions/cache@v5` requires. Distros tend to ship older
+  builds; install upstream if needed:
+
+  ```bash
+  curl -sL https://github.com/nektos/act/releases/download/v0.2.88/act_Linux_x86_64.tar.gz \
+    | tar -xz -C "$HOME/.local/bin" act
+  ```
+
+The repo ships an `.actrc` that pins:
+
+- The runner image (`ghcr.io/catthehacker/ubuntu:full-24.04`) so installed
+  packages, locale, and pre-shipped tooling match what `runs-on:
+  ubuntu-24.04` actually provides on GHA.
+- Container resource caps (`--cpus=4 --memory=16g`) matching GHA's
+  ubuntu-24.04 runner spec, so timing-dependent issues (TSan races,
+  flaky tests) surface at the same rate they do on CI.
+- Artifact server path (`/tmp/act-artifacts`) so `actions/cache@v5`
+  persists ccache state across `act` invocations.
+
+### Usage
+
+The wrapper script `.scripts/ci-local.sh` provides friendly subcommands:
+
+```bash
+.scripts/ci-local.sh                 # full pipeline, sequential (~1-1.5 hr first run)
+.scripts/ci-local.sh build           # all four matrix cells (Release/Debug × gcc/clang)
+.scripts/ci-local.sh build:rel:gcc   # one matrix cell
+.scripts/ci-local.sh no-zstd         # build-no-zstd job
+.scripts/ci-local.sh asan            # sanitizers (ASan/UBSan) job
+.scripts/ci-local.sh tsan            # thread-sanitizer job
+.scripts/ci-local.sh coverage        # coverage job
+.scripts/ci-local.sh tidy            # maintenance-check (clang-tidy/format/cppcheck/IWYU)
+.scripts/ci-local.sh list            # show available jobs
+.scripts/ci-local.sh shell           # interactive container with the build environment
+.scripts/ci-local.sh -- <act args>   # passthrough, e.g. -- -j build --verbose
+```
+
+The first `act` invocation pulls the ~17GB runner image (one-time);
+subsequent runs reuse it. With `--reuse` enabled (default in `.actrc`),
+apt-installed packages and the ccache volume survive between
+invocations, so a re-run of any single job typically takes minutes
+rather than tens of minutes.
+
+### Known divergences from real CI
+
+A few things deliberately don't reproduce locally and shouldn't worry
+you when they fail in `act`:
+
+- **`coverage` upload step**: `actions/upload-artifact@v7` sends a
+  `mime_type` field that act's mock artifact server doesn't recognize
+  (`Error decode request body: proto: ... unknown field "mime_type"`).
+  Coverage measurement, floor enforcement, and HTML generation succeed;
+  only the upload at the end fails. Real GHA uses GitHub's actual
+  artifact API — works fine there.
+- **Cross-runner ccache pollution**: GHA can schedule a build on one
+  Azure VM and run the cached artifact on another with a different CPU.
+  That class of failure (the AVX-512 SIGILL we saw historically) cannot
+  be reproduced with `act` because everything runs on your single host
+  CPU. Mitigated permanently by `KARTEND_PORTABLE_RELEASE=ON` in CI's
+  Release builds.
+

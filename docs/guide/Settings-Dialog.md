@@ -144,8 +144,10 @@ Field groups:
 | **List Row Height** | Pixels. |
 | **List Row Color / Alternate Row Color** | Stripe colors. |
 
-Column-width settings live globally (under the **General** tab) since
-they apply to the List view across all collections.
+Column widths (`listCollectionColumnWidth`, `listArtworkColumnWidth`)
+are global and apply to the List view across all collections, but
+they have no Settings Dialog control today — hand-edit `kartend.cfg`
+in `[General]`.
 
 ### Text & Fonts
 
@@ -170,12 +172,13 @@ collection. It groups:
 - **Gamepad** — D-pad / left-stick toggles, button bindings (live
   capture).
 - **Sorting** — sort mode, exclude-subfolders.
-- **Filtering** — collection type filter, hide subcollection tiles.
+- **Filtering** — collection type filter. (`hideSubcollectionTiles`
+  has no UI control today; hand-edit `[General] hideSubcollectionTiles`
+  in `kartend.cfg`.)
 - **View toggles** — show menu bar, show toolbar, fullscreen
   (persistent).
 - **Toolbar customization** — visibility & label per item-page toolbar
   control.
-- **List view column widths**.
 - **Typography** — global font family / size, UI text zoom percent,
   title tints.
 - **Splash screens** — boot, resume-focus, startup video.
@@ -187,6 +190,13 @@ collection. It groups:
 - **Startup collection** — name of the collection opened on launch.
 
 Each section is a fold-down so the tab stays scannable.
+
+> **Config-only globals** — a few `[General]` keys have no Settings
+> Dialog control and must be edited in `kartend.cfg` by hand:
+> `hideSubcollectionTiles`, `listCollectionColumnWidth`,
+> `listArtworkColumnWidth`. See
+> [Configuration Reference](Configuration-Reference.md) for full
+> descriptions.
 
 ## Scope selector
 
