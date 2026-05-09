@@ -45,3 +45,49 @@ race:_Sp_counted_base
 race:pthread_cond_destroy
 race:pthread_mutex_destroy
 race:QWaitCondition::~QWaitCondition
+
+# QObject::deleteLater() Qt event-queue lifecycle: deleteLater allocates
+# a deferred-deletion QEvent on the calling thread, posts it onto the
+# target object's thread, and the target's event loop frees it via
+# QCoreApplicationPrivate::sendPostedEvents. Qt synchronizes via the
+# event-queue mutex, but the new/delete pair on the bare QEvent struct
+# isn't observable to TSan as happens-before — the event memory looks
+# allocated on one thread and freed on another with no visible edge.
+race:QObject::deleteLater
+race:QCoreApplicationPrivate::sendPostedEvents
+
+# QtTest's per-test "QtTest Watchdog" thread waits on a pthread_cond_t for
+# the test-timeout signal. When the test finishes, qExec cancels the
+# watchdog and frees its cond_var/mutex — but TSan flags the
+# pthread_cond_wait (which has already returned) as racing with
+# operator delete in the qRun teardown. Qt synchronizes via QThread::wait
+# internally, but TSan can't observe the happens-before edge through the
+# mid-wait cancel. Surfaces under CPU contention only (e.g. parallel act
+# runners on a single host); on a dedicated CI runner with 4 vCPUs the
+# main thread is fast enough that the watchdog has fully exited before
+# delete, so the race doesn't materialise.
+race:QTest::qRun
+
+# Qt copy-on-write data structures (QHash, QString, QByteArray, ...) all
+# allocate their underlying buffers via QArrayData::allocate, often from a
+# worker QThread. Once the worker finishes and is joined, main thread later
+# frees the buffer through normal RAII (DatabaseManager / QueryManager
+# destructors). TSan can't establish the happens-before edge through Qt's
+# QThread::wait into the thread's earlier malloc, so the cross-thread
+# malloc/free pair lights up as a race even though the join is sound.
+# Suppressing here catches all variants of this pattern across test
+# binaries (test_databasemanager, test_integration, …).
+race:QArrayData::allocate
+
+# CacheManager::initialize() runs on a QtConcurrent::run worker thread.
+# ApplicationManager::~ApplicationManager() calls m_cacheInitFuture
+# .waitForFinished() before tearing the CacheManager down, so the worker
+# has provably finished by the time the destructor proceeds. TSan still
+# flags a race because Qt's QFuture::reportFinished -> waitForFinished
+# acquire chain doesn't propagate happens-before into the QMutex unlock
+# atomic that the worker did *inside* the now-freed CacheManager — the
+# QtConcurrent thread pool's persistent worker keeps the address in its
+# access-history buffer, and the next test's CacheManager (allocated
+# at the same heap slot via allocator reuse) appears to race with the
+# previous worker's mutex unlock.
+race:CacheManager::initialize

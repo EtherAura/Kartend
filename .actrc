@@ -1,0 +1,51 @@
+# act configuration for local CI runs.
+#
+# `act` parses .github/workflows/build.yml and runs each job inside a Docker
+# container that emulates a GitHub-hosted runner. Defaults below favour
+# fidelity to actual CI over speed/disk — the trade-off most people miss is
+# that "small image + apt-install everything" *seems* faithful but skips
+# nuances of the GHA runner image (timezone defaults, locale, default tools,
+# ImageMagick / fonts being preinstalled, sudoers tweaks, etc.).
+
+# Map ubuntu-24.04 to catthehacker's `full-24.04` image. ~17GB but mirrors
+# what `runs-on: ubuntu-24.04` actually launches: node, Python, Java, GH-CLI,
+# Docker-in-Docker, az CLI, kubectl, gcloud, plus the ~500 packages GHA
+# ships preinstalled. Our jobs only need a small subset, but anything that
+# accidentally relies on a preinstalled tool will behave the same locally.
+# (`act-24.04` is ~1.5GB and works for most jobs but skips a lot of this.)
+-P ubuntu-24.04=ghcr.io/catthehacker/ubuntu:full-24.04
+
+# Force x86_64 even on systems where Docker might pick a different arch by
+# default. Our CI is x86_64-only; matching that here means the same
+# instruction set, the same apt repositories, the same compiler defaults.
+--container-architecture linux/amd64
+
+# Cap container resources to match GHA-hosted ubuntu-24.04: 4 vCPUs / 16GB
+# RAM. Without this, parallel build/test steps will use as many cores as
+# your host has, which silently masks timing-dependent issues — flaky TSan
+# reports, CTest jobs that race differently, ccache thrash patterns. Match
+# CI's constraints to reproduce CI's behaviour.
+# NB: each --container-options line is a single Docker flag; .actrc splits
+# on whitespace so multi-word values inside one quoted string don't survive.
+--container-options --cpus=4
+--container-options --memory=16g
+
+# Persist `actions/cache@v5` content across `act` invocations. Without this,
+# every run starts from a cold ccache, which makes iterating on a failing
+# job painfully slow and hides "wait, why is this slow on CI but fast for
+# me?" issues. The directory is bind-mounted into act's internal cache
+# server; nothing else writes there.
+--artifact-server-path /tmp/act-artifacts
+
+# Reuse the runner container across `act` invocations. apt-installed
+# packages and (with the cache server above) ccache state survive, so
+# re-running `act -j build-no-zstd` is seconds instead of minutes.
+# Use `act --rm` for a from-scratch run when you want to validate "does
+# this still work on a clean GHA-hosted runner?" — that's the one case
+# where cold-start fidelity matters.
+--reuse
+
+# Default to the build workflow only. Without `-W`, act would also pick up
+# release.yml (tag-triggered) and try to drive its `softprops/action-gh-
+# release@v3` step, which doesn't make sense locally.
+-W .github/workflows/build.yml

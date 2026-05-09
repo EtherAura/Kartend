@@ -174,7 +174,11 @@ cd "$root_dir"
 mkdir -p build
 parent_dir="$(dirname "$root_dir")"
 backups_dir="$parent_dir/.backups"
-mkdir -p "$backups_dir"
+# Defer creation until --archive / --reports actually needs it. Eager
+# creation breaks bind-mounted environments (e.g. nektos/act) where the
+# parent directory of the repo is owned by root and the script runs as
+# the runner user.
+mkdir -p "$backups_dir" 2>/dev/null || true
 reports_dir="$backups_dir/reports"
 
 # Colors

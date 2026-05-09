@@ -1,0 +1,30 @@
+name: 'Install Kartend build dependencies'
+description: >-
+  Installs apt packages required for a Kartend CI job, using
+  awalsh128/cache-apt-pkgs-action so the .deb downloads are cached across
+  workflow runs. Each job specifies its own package list so we don't pay for
+  packages it doesn't need (e.g. coverage doesn't need libzstd-dev).
+
+inputs:
+  packages:
+    description: >-
+      Space-separated list of apt packages to install (e.g.
+      "cmake ninja-build qt6-base-dev libqt6sql6-sqlite").
+    required: true
+  cache-version:
+    description: >-
+      Bump to invalidate the apt cache when the runner image bumps a Qt /
+      compiler default to a version that needs different transitive deps.
+      The cache key is content-addressed on `packages` already, so this is
+      only needed for "same packages, different runner" cases.
+    required: false
+    default: '1'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install apt packages (with cache)
+      uses: awalsh128/cache-apt-pkgs-action@v1
+      with:
+        packages: ${{ inputs.packages }}
+        version: ${{ inputs.cache-version }}
