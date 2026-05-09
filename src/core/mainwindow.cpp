@@ -27,6 +27,7 @@
 #include "databasemanager.h"
 #include "detailpagemanager.h"
 #include "detailpageoverlay.h"
+#include "gridwidthdebouncer.h"
 #include "interactionmanager.h"
 #include "kartmanager.h"
 #include "kartreader.h"
@@ -582,8 +583,8 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 
   // Flush any pending grid-width persistence before shutdown so the final
   // user-adjusted width is not lost when closing immediately after changes.
-  if (m_gridWidthSaveDebouncer && m_gridWidthSaveDebouncer->isPending() && getSettingsManager()) {
-    m_gridWidthSaveDebouncer->triggerImmediate();
+  if (m_gridWidthDebouncer && m_gridWidthDebouncer->hasPendingSave() && getSettingsManager()) {
+    m_gridWidthDebouncer->flushPendingSave();
   }
 
   m_isShuttingDown = true;

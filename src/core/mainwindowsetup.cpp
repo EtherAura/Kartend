@@ -19,6 +19,7 @@
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "detailspane.h"
+#include "gridwidthdebouncer.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
 #include "kartmanager.h"
@@ -90,61 +91,37 @@ void MainWindow::setupUI() {
   setupUIReferences();
 
   // Debounced persistence + refresh for menu-driven grid width changes.
-  // This avoids writing settings repeatedly while the user holds +/-.
-  if (!m_gridWidthSaveDebouncer) {
-    m_gridWidthSaveDebouncer =
-        new TimerUtils::DebouncedTimer(UIConstants::Timing::LONG_DELAY_MS, this);
-    QObject::connect(m_gridWidthSaveDebouncer, &TimerUtils::DebouncedTimer::triggered, this,
-                     [this]() {
-                       if (m_isShuttingDown || QApplication::closingDown()) {
-                         return;
-                       }
-                       if (getSettingsManager()) {
-                         getSettingsManager()->saveCollections(m_collections);
-                       }
-                     });
-  }
-
-  if (!m_gridWidthPrecalcDebouncer) {
-    m_gridWidthPrecalcDebouncer =
-        new TimerUtils::DebouncedTimer(UIConstants::Timing::LONG_DELAY_MS, this);
-    QObject::connect(m_gridWidthPrecalcDebouncer, &TimerUtils::DebouncedTimer::triggered, this,
-                     [this]() {
-                       if (m_isShuttingDown || QApplication::closingDown()) {
-                         return;
-                       }
-                       if (!getScrollManager()) {
-                         return;
-                       }
-
-                       // Mark this generation as the active one for the final
-                       // stage.
-                       m_gridWidthActiveGeneration = m_gridWidthPendingGeneration;
-
-                       getScrollManager()->preCalculateLayout();
-                       getScrollManager()->forceVirtualViewUpdate();
-
-                       if (m_gridWidthFinalizeDebouncer) {
-                         m_gridWidthFinalizeDebouncer->trigger();
-                       }
-                     });
-  }
-
-  if (!m_gridWidthFinalizeDebouncer) {
-    m_gridWidthFinalizeDebouncer =
-        new TimerUtils::DebouncedTimer(UIConstants::Timing::MEDIUM_DELAY_MS, this);
-    QObject::connect(
-        m_gridWidthFinalizeDebouncer, &TimerUtils::DebouncedTimer::triggered, this, [this]() {
+  // The helper owns the three QTimers and the generation counters; the
+  // wired callbacks here add the shutdown-guard wrapping that the helper
+  // intentionally stays out of.
+  if (!m_gridWidthDebouncer) {
+    m_gridWidthDebouncer = new GridWidthDebouncer(this);
+    m_gridWidthDebouncer->wire(
+        [this]() {
           if (m_isShuttingDown || QApplication::closingDown()) {
             return;
           }
-          if (m_gridWidthActiveGeneration != m_gridWidthPendingGeneration) {
+          if (getSettingsManager()) {
+            getSettingsManager()->saveCollections(m_collections);
+          }
+        },
+        [this]() {
+          if (m_isShuttingDown || QApplication::closingDown()) {
             return;
           }
           if (!getScrollManager()) {
             return;
           }
-
+          getScrollManager()->preCalculateLayout();
+          getScrollManager()->forceVirtualViewUpdate();
+        },
+        [this]() {
+          if (m_isShuttingDown || QApplication::closingDown()) {
+            return;
+          }
+          if (!getScrollManager()) {
+            return;
+          }
           getScrollManager()->updateVirtualView();
           if (getArtworkManager()) {
             getArtworkManager()->updateViewportArtwork();
@@ -354,8 +331,8 @@ void MainWindow::adjustGridWidth(int delta) {
 
   // Persist the change (debounced) to avoid repeated disk writes when the user
   // holds the shortcut.
-  if (m_gridWidthSaveDebouncer) {
-    m_gridWidthSaveDebouncer->trigger();
+  if (m_gridWidthDebouncer) {
+    m_gridWidthDebouncer->triggerSave();
   } else if (getSettingsManager()) {
     getSettingsManager()->saveCollections(m_collections);
   }
@@ -365,9 +342,8 @@ void MainWindow::adjustGridWidth(int delta) {
     getScrollManager()->updateGridWidth(newWidth);
 
     // Coalesce expensive layout + artwork refresh for repeated adjustments.
-    ++m_gridWidthPendingGeneration;
-    if (m_gridWidthPrecalcDebouncer) {
-      m_gridWidthPrecalcDebouncer->trigger();
+    if (m_gridWidthDebouncer) {
+      m_gridWidthDebouncer->triggerPrecalc();
     }
   }
 }

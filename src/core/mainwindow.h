@@ -9,10 +9,6 @@
 #include <QMainWindow>
 #include <QTimer>
 
-namespace TimerUtils {
-class DebouncedTimer;
-}
-
 QT_BEGIN_NAMESPACE
 class QStackedWidget;
 class QWidget;
@@ -28,6 +24,7 @@ class QActionGroup;
 QT_END_NAMESPACE
 
 class Ui_MainWindow;
+class GridWidthDebouncer;
 class ApplicationManager;
 class ArtworkManager;
 class CacheManager;
@@ -225,13 +222,10 @@ private:
   bool m_startupSplashHandled = false;
   bool m_windowWasInactive = false;
 
-  // Coalesce rapid grid-width adjustments (menu shortcuts) into a single
-  // settings save + layout/artwork refresh chain.
-  TimerUtils::DebouncedTimer *m_gridWidthSaveDebouncer = nullptr;
-  TimerUtils::DebouncedTimer *m_gridWidthPrecalcDebouncer = nullptr;
-  TimerUtils::DebouncedTimer *m_gridWidthFinalizeDebouncer = nullptr;
-  int m_gridWidthPendingGeneration = 0;
-  int m_gridWidthActiveGeneration = 0;
+  // Three-stage debounced pipeline coalescing rapid grid-width adjustments
+  // (menu shortcuts) into a single settings save + layout/artwork refresh
+  // chain. Owns the QTimers and generation counters internally.
+  GridWidthDebouncer *m_gridWidthDebouncer = nullptr;
 
   std::unique_ptr<ApplicationManager> m_appManager;
   DetailsPane *m_MetadataSidebar = nullptr;
