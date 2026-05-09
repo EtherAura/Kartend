@@ -29,6 +29,7 @@
 #include <QScrollBar>
 #include <QString>
 #include <QStringList>
+#include <QThreadPool>
 #include <QTimer>
 #include <utility>
 

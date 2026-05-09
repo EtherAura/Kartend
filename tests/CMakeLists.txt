@@ -440,9 +440,8 @@ add_test(NAME DatabaseManager COMMAND test_databasemanager)
 # ArtworkManager tests (cancellation, dedup, QPointer race)
 add_executable(test_artworkmanager
   modules/artwork/test_artworkmanager.cpp
+  ${SRC_DIR}/modules/media/artwork/artworkloaddispatcher.cpp
   ${SRC_DIR}/modules/media/artwork/artworkmanager.cpp
-  ${SRC_DIR}/modules/media/artwork/artworkmanagerbatch.cpp
-  ${SRC_DIR}/modules/media/artwork/artworkmanagerprecache.cpp
   ${SRC_DIR}/modules/media/artwork/artworkpathcatalog.cpp
   ${SRC_DIR}/modules/media/artwork/artworksilentloading.cpp
   ${SRC_DIR}/modules/media/artwork/artworkwidgetregistry.cpp

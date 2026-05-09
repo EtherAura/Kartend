@@ -5,16 +5,20 @@
 // Path discovery + cursor + silent-cached / silent-pending sets live in
 // m_pathCatalog (ArtworkPathCatalog); this file owns only the timing,
 // activity-gating, and dispatch glue.
+#include "artworkloaddispatcher.h"
 #include "artworkmanager.h"
 #include "artworkpathcatalog.h"
 #include "artworkutils.h"
 #include "artworkwidgetregistry.h"
+#include "cachemanager.h"
 #include "loggingcategories.h"
 #include "uiconstants.h"
 
 #include <QApplication>
 #include <QDateTime>
 #include <QMutexLocker>
+#include <QPixmap>
+#include <QPointer>
 #include <QStackedWidget>
 #include <QStringList>
 #include <QThreadPool>
@@ -126,7 +130,37 @@ auto inCooldown(qint64 lastBatchCompletionTime) -> bool {
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
   return (now - lastBatchCompletionTime) < UIConstants::Artwork::SILENT_LOAD_COOLDOWN_MS;
 }
+
+constexpr int kMaxConcurrentSilentBatches = 2;
 } // namespace
+
+void ArtworkManager::onSilentPrecacheBatchComplete(
+    const QStringList &requestedPaths, const QList<ArtworkPrecacheResult> &results) {
+  // Always clear pending entries — even on decode failure — so a future
+  // silent-load pass can retry.
+  for (const QString &p : requestedPaths) {
+    m_pathCatalog.unmarkSilentPending(p);
+  }
+  for (const auto &r : results) {
+    if (r.image.isNull() || r.artworkPath.isEmpty()) {
+      continue;
+    }
+    QPixmap pixmap = QPixmap::fromImage(r.image);
+    if (pixmap.isNull()) {
+      continue;
+    }
+    pixmap.setDevicePixelRatio(r.image.devicePixelRatio());
+    if (m_cacheManager) {
+      if (r.loadedFromDiskCache) {
+        m_cacheManager->cacheArtworkInMemoryOnly(r.artworkPath, pixmap);
+      } else {
+        m_cacheManager->cacheArtwork(r.artworkPath, pixmap);
+      }
+    }
+    m_pathCatalog.markSilentlyCached(r.artworkPath);
+  }
+  m_lastBatchCompletionTime.store(QDateTime::currentMSecsSinceEpoch());
+}
 
 // Performs persistent low-frequency caching over the artwork list
 void ArtworkManager::processPersistentSilentLoad() {
@@ -141,23 +175,11 @@ void ArtworkManager::processPersistentSilentLoad() {
   if (inCooldown(m_lastBatchCompletionTime.load())) {
     return;
   }
-
   // Throttle: skip this tick if too many batches are already in-flight to
   // keep CPU usage from spiking during background precache.
-  {
-    QMutexLocker locker(&m_futureMutex);
-    int runningCount = 0;
-    for (const auto &f : m_futures) {
-      if (f.isRunning()) {
-        ++runningCount;
-      }
-    }
-    constexpr int kMaxConcurrentSilentBatches = 2;
-    if (runningCount >= kMaxConcurrentSilentBatches) {
-      return;
-    }
+  if (m_dispatcher->runningFutureCount() >= kMaxConcurrentSilentBatches) {
+    return;
   }
-
   if (!stackedWidget || stackedWidget->currentWidget() != itemsPage) {
     return;
   }
@@ -168,8 +190,16 @@ void ArtworkManager::processPersistentSilentLoad() {
   const int batchSize = isUserIdle() ? UIConstants::Artwork::PERSISTENT_SILENT_BATCH_IDLE
                                      : UIConstants::Artwork::PERSISTENT_SILENT_BATCH_ACTIVE;
   const QStringList batch = m_pathCatalog.takeNextBatch(batchSize);
-  const QStringList toPrecache = m_pathCatalog.filterAndMarkPending(batch);
-  dispatchAndTrackPrecacheBatch(toPrecache);
+  QStringList toPrecache = m_pathCatalog.filterAndMarkPending(batch);
+  QPointer<ArtworkManager> guard(this);
+  m_dispatcher->dispatchPrecacheBatch(
+      std::move(toPrecache),
+      [guard](const QStringList &requestedPaths, const QList<ArtworkPrecacheResult> &results,
+              int /*requestedCount*/, qint64 /*elapsedMs*/) {
+        if (guard) {
+          guard->onSilentPrecacheBatchComplete(requestedPaths, results);
+        }
+      });
 
   // Restart the continuous timer if the user is now idle and there's still
   // work to do — the persistent timer keeps drilling, but the continuous
@@ -192,21 +222,9 @@ void ArtworkManager::processContinuousSilentLoad() {
   if (inCooldown(m_lastBatchCompletionTime.load())) {
     return;
   }
-
-  {
-    QMutexLocker locker(&m_futureMutex);
-    int runningCount = 0;
-    for (const auto &f : m_futures) {
-      if (f.isRunning()) {
-        ++runningCount;
-      }
-    }
-    constexpr int kMaxConcurrentSilentBatches = 2;
-    if (runningCount >= kMaxConcurrentSilentBatches) {
-      return;
-    }
+  if (m_dispatcher->runningFutureCount() >= kMaxConcurrentSilentBatches) {
+    return;
   }
-
   if (!m_continuousSilentLoad || m_pathCatalog.isExhausted()) {
     stopSilentLoading();
     return;
@@ -226,8 +244,16 @@ void ArtworkManager::processContinuousSilentLoad() {
   if (!m_continuousSilentLoad) {
     return;
   }
-  const QStringList toPrecache = m_pathCatalog.filterAndMarkPending(batch);
-  dispatchAndTrackPrecacheBatch(toPrecache);
+  QStringList toPrecache = m_pathCatalog.filterAndMarkPending(batch);
+  QPointer<ArtworkManager> guard(this);
+  m_dispatcher->dispatchPrecacheBatch(
+      std::move(toPrecache),
+      [guard](const QStringList &requestedPaths, const QList<ArtworkPrecacheResult> &results,
+              int /*requestedCount*/, qint64 /*elapsedMs*/) {
+        if (guard) {
+          guard->onSilentPrecacheBatchComplete(requestedPaths, results);
+        }
+      });
 
   if (m_silentLoadTimer) {
     if (isUserIdle()) {

@@ -2,6 +2,7 @@
 // prioritization.
 #include "artworkmanager.h"
 #include "applicationcontext.h"
+#include "artworkloaddispatcher.h"
 #include "artworkutils.h"
 #include "artworkwidgetregistry.h"
 #include "cachemanager.h"
@@ -123,7 +124,6 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
       m_persistentLoadTimer(nullptr), m_cacheTimer(nullptr), m_silentLoadingActive(false),
       m_silentLoadBatchSize(UIConstants::Artwork::SILENT_LOAD_BATCH_SIZE_DEFAULT),
       m_lastUserActivity{QDateTime::currentMSecsSinceEpoch()}, m_lastBatchCompletionTime{0},
-      m_cancellationRequested(std::make_shared<std::atomic<bool>>(false)),
       m_continuousSilentLoad(false), m_persistentSilentLoad(false),
       m_adaptiveBatcher(AdaptiveBatcher::Config{
           UIConstants::Artwork::BATCH_HIGH, // initialBatchSize
@@ -133,15 +133,8 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
           0.3, // smoothingFactor
           10   // historySize
       }) {
-  const int idealThreads = QThread::idealThreadCount();
-  const int base = idealThreads > 0 ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
-                                    : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
-  m_artworkThreadPool = new QThreadPool();
-  m_artworkThreadPool->setMaxThreadCount(
-      std::clamp(base, UIConstants::Concurrency::WORKER_POOL_MIN_THREADS,
-                 UIConstants::Concurrency::WORKER_POOL_MAX_THREADS));
-
   m_widgetRegistry = new ArtworkWidgetRegistry(this);
+  m_dispatcher = new ArtworkLoadDispatcher(cacheManager, this);
   m_timerCoordinator = new TimerUtils::Coordinator(this);
 
   m_silentLoadTimer = new QTimer(this);
@@ -160,27 +153,12 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
   m_cacheTimer->start();
 }
 
-// Destructor stops timers, cancels futures, clears widget state, and releases
-// GUI pixmap resources
+// Destructor stops timers, cancels in-flight dispatch, and clears widget state.
 ArtworkManager::~ArtworkManager() {
-  // Set cancellation flag first to signal all in-flight operations to stop.
-  // QtConcurrent tasks capture this flag by shared_ptr value (not 'this'),
-  // so they remain safe to run after destruction begins; they early-return
-  // when the flag is observed.
-  if (m_cancellationRequested) {
-    m_cancellationRequested->store(true, std::memory_order_release);
-  }
-
-  // Bounded-wait teardown: give in-flight tasks a chance to notice
-  // cancellation before falling through to the abandon-the-pool fallback.
-  // Matches CacheManager's policy and centralizes the precondition (tasks
-  // must be cooperatively-cancellable, never capture 'this' raw) at the
-  // helper's documentation.
-  constexpr int kArtworkPoolDrainMs = 2000;
-  if (!ThreadPoolUtils::shutdownWithBudget(m_artworkThreadPool, kArtworkPoolDrainMs)) {
-    qCWarning(lcArtworkManager) << "ArtworkManager: artwork thread pool did not drain in"
-                                << kArtworkPoolDrainMs
-                                << "ms during shutdown; abandoning pool to avoid blocking exit";
+  // Tell the dispatcher to stop accepting new work; its destructor (run when
+  // Qt's parent-child cleanup tears it down below) will drain the pool.
+  if (m_dispatcher) {
+    m_dispatcher->cancelAll();
   }
 
   TimerUtils::stopAndDisconnectTimers({m_cacheTimer, m_silentLoadTimer, m_persistentLoadTimer});
@@ -189,29 +167,13 @@ ArtworkManager::~ArtworkManager() {
     disconnect(m_timerCoordinator, nullptr, nullptr, nullptr);
   }
 
-  {
-    QMutexLocker futureLock(&m_futureMutex);
-    for (auto &future : m_futures) {
-      if (future.isRunning()) {
-        future.cancel();
-        // Don't wait for futures - they will complete asynchronously.
-        // The cancellation flag ensures they exit quickly without
-        // performing expensive operations.
-      }
-    }
-    m_futures.clear();
-  }
-
-  // During destruction, just clear the containers without touching widgets.
-  // The widgets are owned by Qt's parent hierarchy and may already be
-  // destroyed. The registry's internal mutex ensures any in-flight operations
-  // that didn't see the cancellation flag complete safely before we clear.
   m_widgetRegistry->clearAll();
   m_pathCatalog.clearAll();
 
-  // Note: m_cacheTimer, m_silentLoadTimer, and m_timerCoordinator are
-  // parented to 'this', so Qt will automatically delete them when the
-  // ArtworkManager is destroyed. No explicit deletion needed.
+  // m_cacheTimer / m_silentLoadTimer / m_timerCoordinator / m_widgetRegistry
+  // / m_dispatcher are all parented to this, so Qt deletes them after we
+  // return. The dispatcher's destructor blocks on a bounded pool drain so no
+  // worker callback fires after this manager is gone.
 }
 
 // Clears in-memory artwork widget/path/pending/silent cache state (blocks
@@ -295,23 +257,9 @@ auto ArtworkManager::shouldSkipArtworkLoading() -> bool {
 }
 // Cancels all pending/loaded artwork state (for reload)
 void ArtworkManager::cancelAllArtworkLoading() {
-  // Set cancellation flag to stop in-flight operations.
-  // IMPORTANT: regenerate the token after a short delay so in-flight tasks keep
-  // observing a permanently-cancelled token. This prevents a slow I/O task from
-  // "resurrecting" after we flip the same atomic back to false.
-  const auto token = m_cancellationRequested;
-  if (token) {
-    token->store(true, std::memory_order_relaxed);
-  }
-
+  m_dispatcher->cancelAll();
   m_widgetRegistry->clearLoadedAndPending();
   m_pathCatalog.clearSilentPendingOnly();
-  // Wait 50ms for in-flight QtConcurrent operations to notice the
-  // cancellation flag before resetting it for future operations.
-  // This delay is chosen to be longer than typical thread scheduling
-  // latency but short enough to allow quick successive cancellations.
-  QTimer::singleShot(
-      50, this, [this]() { m_cancellationRequested = std::make_shared<std::atomic<bool>>(false); });
 }
 
 // Adds pending artwork request, applying deferral logic based on container
@@ -584,4 +532,185 @@ auto ArtworkManager::isArtworkSuppressed() const -> bool {
   return (gliding || arrowScrolling) && !allowDuringSelection;
 }
 
-// Filters items that are already cached and applies them immediately
+// ─── Batch-processing pipeline ────────────────────────────────
+// Filters items that are already cached and applies them immediately,
+// returning the rest for worker dispatch.
+
+namespace {
+// Picks the per-batch decode size: caller override wins, else the adaptive
+// batcher's current size, halved for low-priority work to leave headroom for
+// fast-arriving foreground requests.
+auto determineBatchSize(bool highPriority, int customBatchSize, const AdaptiveBatcher &batcher)
+    -> int {
+  if (customBatchSize > 0) {
+    return customBatchSize;
+  }
+  const int adaptive = batcher.currentBatchSize();
+  return highPriority ? adaptive : qMax(2, adaptive / 2);
+}
+} // namespace
+
+void ArtworkManager::collectUncachedAndApplyCached(const QList<ArtworkInfo> &items,
+                                                   QList<ArtworkInfo> &uncachedItems) {
+  for (const ArtworkInfo &info : items) {
+    if (info.mediaItem.isNull()) {
+      continue;
+    }
+
+    // Verify the widget's current identity still matches the artwork being
+    // delivered. Widgets are pooled and recycled across roles (item ↔
+    // subcollection ↔ virtual folder); without this check, a queued artwork
+    // load for the previous role can clobber the new role's pixmap.
+    QString widgetBaseName;
+    if (info.mediaItem->isSubcollection() || info.mediaItem->isVirtualFolder()) {
+      widgetBaseName = info.mediaItem->getItemName();
+    } else {
+      const QString widgetFilePath = info.mediaItem->getFilePath();
+      if (widgetFilePath.isEmpty()) {
+        continue;
+      }
+      widgetBaseName = QFileInfo(widgetFilePath).completeBaseName();
+    }
+    if (widgetBaseName.isEmpty()) {
+      continue;
+    }
+    const QString artworkBaseName = QFileInfo(info.artworkPath).completeBaseName();
+    if (widgetBaseName != artworkBaseName) {
+      continue;
+    }
+
+    QPixmap cached = ArtworkManager::getCachedPixmap(info.artworkPath);
+    if (!cached.isNull()) {
+      info.mediaItem->setArtworkPixmap(cached);
+      m_widgetRegistry->markLoaded(info.mediaItem, info.artworkPath);
+      m_widgetRegistry->track(info.mediaItem);
+    } else {
+      uncachedItems.append(info);
+    }
+  }
+}
+
+// Applies decoded artwork results to UI widgets on the GUI thread (run from
+// the dispatcher's main-thread completion handler).
+void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults) {
+  for (const auto &result : batchResults) {
+    if (result.widget.isNull() || result.image.isNull()) {
+      continue;
+    }
+    QPixmap pixmap = QPixmap::fromImage(result.image);
+    if (pixmap.isNull()) {
+      continue;
+    }
+    pixmap.setDevicePixelRatio(result.image.devicePixelRatio());
+    ItemWidget *const widget = result.widget.data();
+    if (!widget) {
+      continue;
+    }
+
+    // Widgets are pooled / recycled across item / subcollection / virtual
+    // folder roles. Without this stale-identity check, an in-flight artwork
+    // load queued for the previous role would clobber the new role's pixmap.
+    QString widgetBaseName;
+    if (widget->isSubcollection() || widget->isVirtualFolder()) {
+      widgetBaseName = widget->getItemName();
+    } else {
+      const QString widgetFilePath = widget->getFilePath();
+      if (widgetFilePath.isEmpty()) {
+        continue;
+      }
+      widgetBaseName = QFileInfo(widgetFilePath).completeBaseName();
+    }
+    if (widgetBaseName.isEmpty()) {
+      continue;
+    }
+    const QString artworkBaseName = QFileInfo(result.artworkPath).completeBaseName();
+    if (widgetBaseName != artworkBaseName) {
+      continue;
+    }
+
+    m_widgetRegistry->markLoaded(widget, result.artworkPath);
+    m_widgetRegistry->track(widget);
+    if (m_cacheManager) {
+      if (result.loadedFromDiskCache) {
+        m_cacheManager->cacheArtworkInMemoryOnly(result.artworkPath, pixmap);
+      } else {
+        m_cacheManager->cacheArtwork(result.artworkPath, pixmap);
+      }
+    }
+    if (!QApplication::closingDown()) {
+      widget->setArtworkPixmap(pixmap);
+      widget->update();
+    }
+  }
+}
+
+// Parallel artwork loading: split @p items into already-cached (applied
+// in-line) and uncached (dispatched to the worker pool in adaptive-sized
+// batches).
+void ArtworkManager::loadArtworkParallel(const QList<ArtworkInfo> &items, bool highPriority,
+                                         int customBatchSize) {
+  if (QApplication::closingDown()) {
+    return;
+  }
+  if (items.isEmpty() || shouldSkipArtworkLoading()) {
+    return;
+  }
+
+  QElapsedTimer perfTimer;
+  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
+    perfTimer.start();
+  }
+
+  const int batchSize = determineBatchSize(highPriority, customBatchSize, m_adaptiveBatcher);
+  QList<ArtworkInfo> uncachedItems;
+  uncachedItems.reserve(items.size());
+  collectUncachedAndApplyCached(items, uncachedItems);
+  if (QApplication::closingDown()) {
+    return;
+  }
+
+  const qint64 afterCollect =
+      qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") ? perfTimer.elapsed() : 0;
+  int batchCount = 0;
+
+  QPointer<ArtworkManager> self(this);
+  for (int i = 0; i < uncachedItems.size(); i += batchSize) {
+    if (QApplication::closingDown()) {
+      break;
+    }
+    const int end = qMin(i + batchSize, uncachedItems.size());
+    QList<ArtworkInfo> batch = uncachedItems.mid(i, end - i);
+    m_dispatcher->dispatchBatch(
+        std::move(batch), highPriority,
+        [self](const QList<ArtworkInfo::Result> &results, int batchItemCount, qint64 elapsedMs,
+               bool wasHighPriority) {
+          if (!self) {
+            return;
+          }
+          if (lcArtworkManager().isDebugEnabled()) {
+            int diskHits = 0;
+            for (const auto &r : results) {
+              if (r.loadedFromDiskCache) {
+                ++diskHits;
+              }
+            }
+            qCDebug(lcArtworkManager) << "Artwork batch done"
+                                      << "priority=" << (wasHighPriority ? "high" : "low")
+                                      << "requested=" << batchItemCount
+                                      << "produced=" << results.size() << "diskHits=" << diskHits
+                                      << "elapsedMs=" << elapsedMs;
+          }
+          self->applyResultsToUi(results);
+          if (wasHighPriority && !results.isEmpty()) {
+            self->m_adaptiveBatcher.observeBatch(batchItemCount, elapsedMs);
+          }
+        });
+    ++batchCount;
+  }
+
+  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && perfTimer.elapsed() > 5) {
+    qCDebug(lcPerfTrace) << "loadArtworkParallel: totalMs=" << perfTimer.elapsed()
+                         << "collectMs=" << afterCollect << "items=" << items.size()
+                         << "uncached=" << uncachedItems.size() << "batches=" << batchCount;
+  }
+}

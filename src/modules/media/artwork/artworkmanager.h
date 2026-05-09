@@ -2,23 +2,17 @@
 #define ARTWORKMANAGER_H
 
 #include <atomic>
-#include <memory>
-#include <QFuture>
-#include <QHash>
 #include <QImage>
-#include <QMutex>
 #include <QObject>
-#include <QPair>
 #include <QPixmap>
 #include <QPointer>
-#include <QSet>
-#include <QThreadPool>
 
 #include "adaptivebatcher.h"
 #include "artworkpathcatalog.h"
 #include "itemwidget.h"
 #include "setuputils.h"
 
+class ArtworkLoadDispatcher;
 class ArtworkWidgetRegistry;
 
 class QScrollArea;
@@ -45,6 +39,15 @@ struct ArtworkInfo {
     QImage image;
     bool loadedFromDiskCache = false;
   };
+};
+
+/// Decoded record from a silent-load precache batch. Lives at namespace scope
+/// so the dispatcher and ArtworkManager's main-thread handler can share it
+/// without creating a header cycle.
+struct ArtworkPrecacheResult {
+  QString artworkPath;
+  QImage image;
+  bool loadedFromDiskCache = false;
 };
 
 struct ApplicationContext;
@@ -150,9 +153,11 @@ private:
   void applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults);
   void collectUncachedAndApplyCached(const QList<ArtworkInfo> &items,
                                      QList<ArtworkInfo> &uncachedItems);
-  void dispatchAndTrackBatch(const QList<ArtworkInfo> &batch, bool highPriority);
-  void dispatchAndTrackPrecacheBatch(const QStringList &artworkPaths);
-  void pruneFinishedFutures();
+  /// Dispatcher-completion handler for silent-load precache batches. Runs on
+  /// the main thread; marks paths cached, writes pixmaps to the in-memory
+  /// cache, and stamps the last-batch completion timestamp.
+  void onSilentPrecacheBatchComplete(const QStringList &requestedPaths,
+                                     const QList<ArtworkPrecacheResult> &results);
 
   QList<CollectionConfig> *collections;
   int *currentCollectionIndex;
@@ -178,25 +183,22 @@ private:
   /// the destroyed-cleanup connections installed by track(). Parented
   /// to this ArtworkManager so destruction order is well-defined.
   ArtworkWidgetRegistry *m_widgetRegistry = nullptr;
+  /// Async batch dispatcher: owns the dedicated worker pool, the
+  /// in-flight QFuture set, and the cooperative cancellation token.
+  /// Parented to this ArtworkManager — its destructor drains the pool
+  /// before this destructor proceeds, so no callback can fire after.
+  ArtworkLoadDispatcher *m_dispatcher = nullptr;
 
   bool m_silentLoadingActive;
   int m_silentLoadBatchSize;
   std::atomic<qint64> m_lastUserActivity;
-  std::atomic<qint64> m_lastBatchCompletionTime;              // For silent load cooldown
-  std::shared_ptr<std::atomic<bool>> m_cancellationRequested; // For cooperative cancellation
+  std::atomic<qint64> m_lastBatchCompletionTime; // For silent load cooldown
   bool m_continuousSilentLoad;
   bool m_persistentSilentLoad;
 
   // Adaptive batching for performance-based batch sizing
   AdaptiveBatcher m_adaptiveBatcher;
 
-  // Dedicated pool for artwork processing to avoid contention with other
-  // QtConcurrent users (e.g., directory scans).
-  // Raw pointer so we can abandon it on shutdown without waiting.
-  QThreadPool *m_artworkThreadPool = nullptr;
-
-  QMutex m_futureMutex;
-  QList<QFuture<void>> m_futures;
   /// Checks if artwork loading should be skipped due to shutdown or invalid
   /// state.
   [[nodiscard]] bool shouldSkipArtworkLoading();
