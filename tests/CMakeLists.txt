@@ -38,6 +38,30 @@ target_link_libraries(test_gridlayoutcalculator
 )
 add_test(NAME GridLayoutCalculator COMMAND test_gridlayoutcalculator)
 
+# AnimationManager static helper tests (pure functions: duration calc,
+# target Y/X computation, visibility scroll target).
+add_executable(test_animationmanager
+  modules/animation/test_animationmanager.cpp
+  ${SRC_DIR}/modules/behavior/animation/animationhelpers.cpp
+)
+target_include_directories(test_animationmanager PRIVATE
+  ${SRC_DIR}/modules/behavior/animation
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_animationmanager
+  Qt6::Core
+  Qt6::Gui
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME AnimationManager COMMAND test_animationmanager)
+
 # InteractionStateHolder tests
 add_executable(test_interactionstateholder
   modules/interaction/test_interactionstateholder.cpp

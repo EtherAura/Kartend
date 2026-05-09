@@ -252,99 +252,10 @@ void AnimationManager::onHScrollAnimationFinished() {
   emit horizontalAnimationFinished();
 }
 
-// --- Duration Calculation ---
-
-int AnimationManager::computeVerticalCenterDuration(int distance, int itemHeight,
-                                                    int verticalSpacing, bool repeatActive,
-                                                    int durationMs) {
-  int stepSpan = qMax(1, itemHeight + verticalSpacing);
-  double rows = static_cast<double>(distance) / static_cast<double>(stepSpan);
-  rows = std::max(rows, 1.0);
-
-  // Use provided duration directly
-  int baseDuration = durationMs;
-  double raw = rows * static_cast<double>(baseDuration);
-
-  int duration = static_cast<int>(std::round(raw));
-  duration = qBound(baseDuration, duration, baseDuration);
-  return duration;
-}
-
-// --- Target Calculation ---
-
-int AnimationManager::computeTargetYForIndex(int index, int gridWidth, int itemHeight,
-                                             int verticalSpacing, int viewportHeight,
-                                             int scrollbarMax, int totalHeight, int logicalHeight,
-                                             int headerOffset) {
-  int itemY = GridUtils::computeItemY(index, gridWidth, itemHeight, verticalSpacing,
-                                      UIConstants::Grid::MARGINS);
-  // Add header offset for list view mode
-  itemY += headerOffset;
-  // Calculate target in logical space first (center the item)
-  int logicalTargetY = itemY + (itemHeight / 2) - (viewportHeight / 2);
-
-  // For clipped grids, convert logical scroll target to widget scroll position
-  // using viewport-aware interpolation for precise endpoint mapping
-  int targetY = logicalTargetY;
-  if (totalHeight > 0 && logicalHeight > totalHeight && viewportHeight > 0) {
-    int widgetMax = totalHeight - viewportHeight;
-    int logicalMax = logicalHeight - viewportHeight;
-    if (logicalMax > 0 && widgetMax > 0) {
-      // Clamp logical target to valid range before conversion
-      logicalTargetY = qBound(0, logicalTargetY, logicalMax);
-      // Convert: widgetScrollY = logicalScrollY * widgetMax / logicalMax
-      targetY = static_cast<int>(static_cast<double>(logicalTargetY) * widgetMax / logicalMax);
-    }
-  }
-
-  return qBound(0, targetY, scrollbarMax);
-}
-
-int AnimationManager::computeHorizontalTargetX(int itemX, int collectionItemWidth, int curX,
-                                               int viewportWidth, int margins, int scrollMax) {
-  int itemLeft = itemX;
-  int itemRight = itemX + collectionItemWidth;
-  int visibleLeft = curX;
-  int visibleRight = curX + viewportWidth;
-
-  int targetX = curX;
-
-  // Check if item is out of view on the left
-  if (itemLeft < visibleLeft + margins) {
-    targetX = itemLeft - margins;
-  }
-  // Check if item is out of view on the right
-  else if (itemRight > visibleRight - margins) {
-    targetX = itemRight - viewportWidth + margins;
-  }
-
-  return qBound(0, targetX, scrollMax);
-}
-
-int AnimationManager::computeDesiredYForVisibility(int itemY, int itemHeight, int curY,
-                                                   int viewportHeight, int margins,
-                                                   bool &needVertical) {
-  int itemTop = itemY;
-  int itemBottom = itemY + itemHeight;
-  int visibleTop = curY;
-  int visibleBottom = curY + viewportHeight;
-
-  needVertical = false;
-  int desiredY = curY;
-
-  // Check if item is above the visible area
-  if (itemTop < visibleTop + margins) {
-    desiredY = itemTop - margins;
-    needVertical = true;
-  }
-  // Check if item is below the visible area
-  else if (itemBottom > visibleBottom - margins) {
-    desiredY = itemBottom - viewportHeight + margins;
-    needVertical = true;
-  }
-
-  return desiredY;
-}
+// Pure-helper static methods (computeVerticalCenterDuration,
+// computeTargetYForIndex, computeHorizontalTargetX,
+// computeDesiredYForVisibility) live in animationhelpers.cpp so unit tests
+// can link them without pulling in ScrollManager / ArtworkManager / etc.
 
 // --- Ensure Visible Animation ---
 
