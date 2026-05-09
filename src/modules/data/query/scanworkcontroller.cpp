@@ -7,8 +7,7 @@
 #include <QThread>
 #include <QThreadPool>
 
-ScanWorkController::ScanWorkController()
-    : m_token(std::make_shared<std::atomic_bool>(false)) {
+ScanWorkController::ScanWorkController() : m_token(std::make_shared<std::atomic_bool>(false)) {
   const int idealThreads = QThread::idealThreadCount();
   const int base = idealThreads > 0 ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
                                     : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
