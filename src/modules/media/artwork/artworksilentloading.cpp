@@ -1,16 +1,18 @@
 // Silent (background) artwork loading methods for ArtworkManager.
-// Extracted from artworkmanager.cpp during LOC-reduction refactor.
-// These remain ArtworkManager members; this is a translation-unit split only.
+// Coordinates the idle-time precache state machine that walks the active
+// collection's full artwork list — driven by m_silentLoadTimer (continuous,
+// idle-throttled bursts) and m_persistentLoadTimer (slow background drip).
+// Path discovery + cursor + silent-cached / silent-pending sets live in
+// m_pathCatalog (ArtworkPathCatalog); this file owns only the timing,
+// activity-gating, and dispatch glue.
 #include "artworkmanager.h"
+#include "artworkpathcatalog.h"
 #include "artworkutils.h"
-#include "collectionutils.h"
 #include "loggingcategories.h"
 #include "uiconstants.h"
 
-#include <functional>
 #include <QApplication>
 #include <QDateTime>
-#include <QDir>
 #include <QMutexLocker>
 #include <QStackedWidget>
 #include <QStringList>
@@ -24,48 +26,17 @@ void ArtworkManager::startEarlyDentryPrewarm(int collectionIndex) {
   if (!collections || collectionIndex < 0 || collectionIndex >= collections->size()) {
     return;
   }
-
   const CollectionConfig &collection = (*collections)[collectionIndex];
   if (!collection.showAllSubcollectionItems) {
     return; // Only needed for flattened subcollection views
   }
 
-  // Collect all artwork directories for this collection and descendants
-  QSet<QString> allDirs;
-  std::function<void(int)> collectDirsRecursive = [&](int parentIdx) {
-    for (int i = 0; i < collections->size(); ++i) {
-      if ((*collections)[i].parentCollectionIndex == parentIdx) {
-        QString artDir = (*collections)[i].artworkDirectory;
-        if (!artDir.isEmpty()) {
-          allDirs.insert(QDir(artDir).absolutePath());
-        }
-        collectDirsRecursive(i);
-      }
-    }
-  };
-
-  // Add main collection directory
-  if (!collection.artworkDirectory.isEmpty()) {
-    allDirs.insert(QDir(collection.artworkDirectory).absolutePath());
-  }
-
-  // Collect subcollection directories
-  for (int i = 0; i < collections->size(); ++i) {
-    if ((*collections)[i].parentCollectionIndex == collectionIndex) {
-      QString artDir = (*collections)[i].artworkDirectory;
-      if (!artDir.isEmpty()) {
-        allDirs.insert(QDir(artDir).absolutePath());
-      }
-      collectDirsRecursive(i);
-    }
-  }
-
-  if (allDirs.isEmpty()) {
+  const QStringList dirList =
+      ArtworkPathCatalog::collectArtworkDirs(collections, collectionIndex, /*includeDescendants=*/true);
+  if (dirList.isEmpty()) {
     return;
   }
 
-  // Start parallel dentry warmup in background thread pool
-  QStringList dirList = allDirs.values();
   QThreadPool::globalInstance()->start([dirList]() {
     auto &cache = ArtworkUtils::DirectoryCache::instance();
     cache.prewarmDirectories(dirList);
@@ -73,7 +44,7 @@ void ArtworkManager::startEarlyDentryPrewarm(int collectionIndex) {
     qCDebug(lcPerfTrace) << "Early dentry prewarm complete: dirs=" << dirList.size();
   });
 
-  qCDebug(lcPerfTrace) << "Started early dentry prewarm: dirs=" << allDirs.size();
+  qCDebug(lcPerfTrace) << "Started early dentry prewarm: dirs=" << dirList.size();
 }
 
 // Starts silent loading when on items page
@@ -99,21 +70,15 @@ void ArtworkManager::preloadArtworkForCollection() {
   m_continuousSilentLoad = true;
 
   const CollectionConfig &collection = (*collections)[*currentCollectionIndex];
-  QString artworkDir = collection.artworkDirectory;
-
-  if (artworkDir.isEmpty()) {
+  if (collection.artworkDirectory.isEmpty()) {
     m_silentLoadingActive = false;
     return;
   }
 
-  buildArtworkPathsList();
-
-  {
-    QMutexLocker locker(&m_dataMutex);
-    if (m_allArtworkPaths.isEmpty()) {
-      m_silentLoadingActive = false;
-      return;
-    }
+  m_pathCatalog.buildFromCollection(collections, *currentCollectionIndex);
+  if (m_pathCatalog.isEmpty()) {
+    m_silentLoadingActive = false;
+    return;
   }
 
   if (m_silentLoadTimer && !m_silentLoadTimer->isActive()) {
@@ -143,42 +108,44 @@ void ArtworkManager::stopSilentLoading() {
   if (m_persistentLoadTimer && m_persistentLoadTimer->isActive()) {
     m_persistentLoadTimer->stop();
   }
-
   m_persistentSilentLoad = false;
 
-  QMutexLocker locker(&m_dataMutex);
-  pendingArtwork.clear();
-  m_allArtworkPaths.clear();
-  m_silentPendingPaths.clear();
-  m_silentLoadIndex = 0;
+  {
+    QMutexLocker locker(&m_dataMutex);
+    pendingArtwork.clear();
+  }
+  m_pathCatalog.clearPathsAndPending();
 }
+
+namespace {
+// Cooldown gate shared by both silent-loading entry points: returns true when
+// the caller should bail this tick because the previous batch hasn't had
+// enough idle time since completing.
+auto inCooldown(qint64 lastBatchCompletionTime) -> bool {
+  if (lastBatchCompletionTime <= 0) {
+    return false;
+  }
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
+  return (now - lastBatchCompletionTime) < UIConstants::Artwork::SILENT_LOAD_COOLDOWN_MS;
+}
+} // namespace
 
 // Performs persistent low-frequency caching over the artwork list
 void ArtworkManager::processPersistentSilentLoad() {
-  {
-    QMutexLocker locker(&m_dataMutex);
-    if (!m_persistentSilentLoad || m_silentLoadIndex >= m_allArtworkPaths.size()) {
-      if (m_persistentLoadTimer) {
-        m_persistentLoadTimer->stop();
-      }
-      m_persistentSilentLoad = false;
-      return;
+  if (!m_persistentSilentLoad || m_pathCatalog.isExhausted()) {
+    if (m_persistentLoadTimer) {
+      m_persistentLoadTimer->stop();
     }
+    m_persistentSilentLoad = false;
+    return;
   }
 
-  // Cooldown: wait a minimum time after the last batch completed
-  // This gives the CPU actual idle time between batches
-  {
-    qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
-    qint64 lastCompletion = m_lastBatchCompletionTime.load();
-    if (lastCompletion > 0 &&
-        (currentTime - lastCompletion) < UIConstants::Artwork::SILENT_LOAD_COOLDOWN_MS) {
-      return; // Still in cooldown period
-    }
+  if (inCooldown(m_lastBatchCompletionTime.load())) {
+    return;
   }
 
-  // Throttle: skip this tick if too many batches are already in-flight
-  // This prevents CPU saturation during background precaching
+  // Throttle: skip this tick if too many batches are already in-flight to
+  // keep CPU usage from spiking during background precache.
   {
     QMutexLocker locker(&m_futureMutex);
     int runningCount = 0;
@@ -189,7 +156,7 @@ void ArtworkManager::processPersistentSilentLoad() {
     }
     constexpr int kMaxConcurrentSilentBatches = 2;
     if (runningCount >= kMaxConcurrentSilentBatches) {
-      return; // Wait for existing batches to complete
+      return;
     }
   }
 
@@ -200,40 +167,20 @@ void ArtworkManager::processPersistentSilentLoad() {
     return;
   }
 
-  int batchSize = isUserIdle() ? UIConstants::Artwork::PERSISTENT_SILENT_BATCH_IDLE
-                               : UIConstants::Artwork::PERSISTENT_SILENT_BATCH_ACTIVE;
-  QStringList batch;
-  {
-    QMutexLocker locker(&m_dataMutex);
-    batchSize = qMin(batchSize, m_allArtworkPaths.size() - m_silentLoadIndex);
-    for (int i = 0; i < batchSize; ++i) {
-      batch.append(m_allArtworkPaths[m_silentLoadIndex++]);
-    }
-  }
-
-  QStringList toPrecache;
-  {
-    QMutexLocker locker(&m_dataMutex);
-    toPrecache.reserve(batch.size());
-    for (const QString &artworkPath : batch) {
-      if (m_silentlyCachedPaths.contains(artworkPath) ||
-          m_silentPendingPaths.contains(artworkPath)) {
-        continue;
-      }
-      m_silentPendingPaths.insert(artworkPath);
-      toPrecache.append(artworkPath);
-    }
-  }
+  const int batchSize = isUserIdle() ? UIConstants::Artwork::PERSISTENT_SILENT_BATCH_IDLE
+                                     : UIConstants::Artwork::PERSISTENT_SILENT_BATCH_ACTIVE;
+  const QStringList batch = m_pathCatalog.takeNextBatch(batchSize);
+  const QStringList toPrecache = m_pathCatalog.filterAndMarkPending(batch);
   dispatchAndTrackPrecacheBatch(toPrecache);
 
-  {
-    QMutexLocker locker(&m_dataMutex);
-    if (!m_silentLoadingActive && isUserIdle() && m_silentLoadIndex < m_allArtworkPaths.size()) {
-      m_silentLoadingActive = true;
-      m_continuousSilentLoad = true;
-      if (m_silentLoadTimer && !m_silentLoadTimer->isActive()) {
-        m_silentLoadTimer->start();
-      }
+  // Restart the continuous timer if the user is now idle and there's still
+  // work to do — the persistent timer keeps drilling, but the continuous
+  // timer is what drives faster bursts when we have idle CPU.
+  if (!m_silentLoadingActive && isUserIdle() && !m_pathCatalog.isExhausted()) {
+    m_silentLoadingActive = true;
+    m_continuousSilentLoad = true;
+    if (m_silentLoadTimer && !m_silentLoadTimer->isActive()) {
+      m_silentLoadTimer->start();
     }
   }
 }
@@ -244,19 +191,10 @@ void ArtworkManager::processContinuousSilentLoad() {
     return;
   }
 
-  // Cooldown: wait a minimum time after the last batch completed
-  // This gives the CPU actual idle time between batches
-  {
-    qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
-    qint64 lastCompletion = m_lastBatchCompletionTime.load();
-    if (lastCompletion > 0 &&
-        (currentTime - lastCompletion) < UIConstants::Artwork::SILENT_LOAD_COOLDOWN_MS) {
-      return; // Still in cooldown period
-    }
+  if (inCooldown(m_lastBatchCompletionTime.load())) {
+    return;
   }
 
-  // Throttle: skip this tick if too many batches are already in-flight
-  // This prevents CPU saturation during background precaching
   {
     QMutexLocker locker(&m_futureMutex);
     int runningCount = 0;
@@ -267,19 +205,14 @@ void ArtworkManager::processContinuousSilentLoad() {
     }
     constexpr int kMaxConcurrentSilentBatches = 2;
     if (runningCount >= kMaxConcurrentSilentBatches) {
-      return; // Wait for existing batches to complete
-    }
-  }
-
-  {
-    QMutexLocker locker(&m_dataMutex);
-    if (!m_continuousSilentLoad || m_silentLoadIndex >= m_allArtworkPaths.size()) {
-      locker.unlock();
-      stopSilentLoading();
       return;
     }
   }
 
+  if (!m_continuousSilentLoad || m_pathCatalog.isExhausted()) {
+    stopSilentLoading();
+    return;
+  }
   if (!stackedWidget || stackedWidget->currentWidget() != itemsPage) {
     return;
   }
@@ -287,39 +220,15 @@ void ArtworkManager::processContinuousSilentLoad() {
     return;
   }
 
-  int batchSize;
-  {
-    QMutexLocker locker(&m_dataMutex);
-    batchSize =
-        isUserIdle()
-            ? m_silentLoadBatchSize
-            : qMax(1, m_silentLoadBatchSize / UIConstants::Artwork::SILENT_LOAD_THROTTLE_DIVISOR);
-    batchSize = qMin(batchSize, m_allArtworkPaths.size() - m_silentLoadIndex);
-  }
+  const int batchSize =
+      isUserIdle() ? m_silentLoadBatchSize
+                   : qMax(1, m_silentLoadBatchSize / UIConstants::Artwork::SILENT_LOAD_THROTTLE_DIVISOR);
+  const QStringList batch = m_pathCatalog.takeNextBatch(batchSize);
 
-  QStringList batch;
-  {
-    QMutexLocker locker(&m_dataMutex);
-    batch = m_allArtworkPaths.mid(m_silentLoadIndex, batchSize);
-    m_silentLoadIndex += batchSize;
+  if (!m_continuousSilentLoad) {
+    return;
   }
-
-  QStringList toPrecache;
-  {
-    QMutexLocker locker(&m_dataMutex);
-    if (!m_continuousSilentLoad) {
-      return;
-    }
-    toPrecache.reserve(batch.size());
-    for (const QString &artworkPath : batch) {
-      if (m_silentlyCachedPaths.contains(artworkPath) ||
-          m_silentPendingPaths.contains(artworkPath)) {
-        continue;
-      }
-      m_silentPendingPaths.insert(artworkPath);
-      toPrecache.append(artworkPath);
-    }
-  }
+  const QStringList toPrecache = m_pathCatalog.filterAndMarkPending(batch);
   dispatchAndTrackPrecacheBatch(toPrecache);
 
   if (m_silentLoadTimer) {

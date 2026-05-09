@@ -15,6 +15,7 @@
 #include <QThreadPool>
 
 #include "adaptivebatcher.h"
+#include "artworkpathcatalog.h"
 #include "itemwidget.h"
 #include "setuputils.h"
 
@@ -121,8 +122,6 @@ public:
   [[nodiscard]] bool isSilentLoadingActive() const { return m_silentLoadingActive; }
   [[nodiscard]] bool hasArtworkForWidget(ItemWidget *widget) const;
   void updateViewportArtwork();
-  void buildArtworkPathsList();
-  void addSubcollectionArtworkPathsWithDedup(int parentIndex, QSet<QString> &processedDirectories);
   void initializeCache();
   void clearLoadedArtworkState();
 
@@ -173,9 +172,11 @@ private:
   QList<QPointer<ItemWidget>> loadedArtwork;
   QHash<ItemWidget *, QString> widgetToArtworkPath;
   QList<ArtworkInfo> pendingArtwork;
-  QSet<QString> m_silentlyCachedPaths;
-  QSet<QString> m_silentPendingPaths;
-  QStringList m_allArtworkPaths;
+  /// Catalog of artwork file paths discovered for the active
+  /// collection plus the silent-load progression state (cursor + the
+  /// silently-cached / silent-pending sets) that consumes that list.
+  /// Internal mutex; safe to call from any thread.
+  ArtworkPathCatalog m_pathCatalog;
   // per-item artwork-type override map. Key is the absolute
   // media file path; value is the artwork type id ("" == primary/legacy).
   // Cleared whenever the active widget set is torn down (collection change,
@@ -188,7 +189,6 @@ private:
   std::atomic<qint64> m_lastBatchCompletionTime;              // For silent load cooldown
   std::shared_ptr<std::atomic<bool>> m_cancellationRequested; // For cooperative cancellation
   bool m_continuousSilentLoad;
-  int m_silentLoadIndex;
   bool m_persistentSilentLoad;
 
   // Adaptive batching for performance-based batch sizing
@@ -202,7 +202,6 @@ private:
   QMutex m_dataMutex;
   QMutex m_futureMutex;
   QList<QFuture<void>> m_futures;
-  void appendArtworkFromDir(const QString &dirPath, QSet<QString> &processedDirectories);
   /// Checks if artwork loading should be skipped due to shutdown or invalid
   /// state.
   [[nodiscard]] bool shouldSkipArtworkLoading();

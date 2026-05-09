@@ -122,7 +122,7 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
       m_silentLoadBatchSize(UIConstants::Artwork::SILENT_LOAD_BATCH_SIZE_DEFAULT),
       m_lastUserActivity{QDateTime::currentMSecsSinceEpoch()}, m_lastBatchCompletionTime{0},
       m_cancellationRequested(std::make_shared<std::atomic<bool>>(false)),
-      m_continuousSilentLoad(false), m_silentLoadIndex(0), m_persistentSilentLoad(false),
+      m_continuousSilentLoad(false), m_persistentSilentLoad(false),
       m_adaptiveBatcher(AdaptiveBatcher::Config{
           UIConstants::Artwork::BATCH_HIGH, // initialBatchSize
           2,                                // minBatchSize
@@ -208,10 +208,8 @@ ArtworkManager::~ArtworkManager() {
     loadedArtwork.clear();
     widgetToArtworkPath.clear();
     pendingArtwork.clear();
-    m_silentlyCachedPaths.clear();
-    m_silentPendingPaths.clear();
-    m_allArtworkPaths.clear();
   }
+  m_pathCatalog.clearAll();
 
   // Note: m_cacheTimer, m_silentLoadTimer, and m_timerCoordinator are
   // parented to 'this', so Qt will automatically delete them when the
@@ -221,62 +219,65 @@ ArtworkManager::~ArtworkManager() {
 // Clears in-memory artwork widget/path/pending/silent cache state (blocks
 // widget signals)
 void ArtworkManager::clearArtworkWidgetState() {
-  QMutexLocker locker(&m_dataMutex);
-  // Skip widget signal blocking during app shutdown - widgets may already be
-  // destroyed
-  if (!QApplication::closingDown()) {
-    for (const auto &widget : loadedArtwork) {
-      if (widget) {
-        widget->blockSignals(true);
+  {
+    QMutexLocker locker(&m_dataMutex);
+    // Skip widget signal blocking during app shutdown - widgets may already be
+    // destroyed
+    if (!QApplication::closingDown()) {
+      for (const auto &widget : loadedArtwork) {
+        if (widget) {
+          widget->blockSignals(true);
+        }
       }
     }
+    loadedArtwork.clear();
+    widgetToArtworkPath.clear();
+    pendingArtwork.clear();
   }
-  loadedArtwork.clear();
-  widgetToArtworkPath.clear();
-  pendingArtwork.clear();
-  m_silentlyCachedPaths.clear();
-  m_silentPendingPaths.clear();
-  m_allArtworkPaths.clear();
+  m_pathCatalog.clearAll();
 }
 
 // Clears in-memory artwork state for current context
 void ArtworkManager::clearLoadedArtworkState() {
-  QMutexLocker locker(&m_dataMutex);
-  loadedArtwork.clear();
-  m_silentlyCachedPaths.clear();
-  m_silentPendingPaths.clear();
-  m_allArtworkPaths.clear();
-  m_silentLoadIndex = 0;
+  {
+    QMutexLocker locker(&m_dataMutex);
+    loadedArtwork.clear();
+  }
+  m_pathCatalog.clearAll();
 }
 
-// Appends artwork file paths from a directory using centralized filters and
-// dedupes directories
-void ArtworkManager::appendArtworkFromDir(const QString &dirPath,
-                                          QSet<QString> &processedDirectories) {
-  if (dirPath.isEmpty()) {
-    return;
+// Initializes persistent cache from disk
+void ArtworkManager::initializeCache() {
+  if (m_cacheManager) {
+    m_cacheManager->initialize();
   }
-  const QString normalized = QDir(dirPath).absolutePath();
-  if (processedDirectories.contains(normalized)) {
-    return;
-  }
+}
 
-  QDir dir(dirPath);
-  if (!dir.exists()) {
-    processedDirectories.insert(normalized);
-    return;
+// Loads artwork, processes it, and caches only in CacheManager to avoid
+// duplicate in-memory residency
+auto ArtworkManager::loadArtworkFromFile(const QString &artworkPath) -> QPixmap {
+  QPixmap cached = getCachedPixmap(artworkPath);
+  if (!cached.isNull()) {
+    return cached;
   }
+  if (!QFile::exists(artworkPath)) {
+    return {};
+  }
+  QPixmap pixmap(artworkPath);
+  if (pixmap.isNull()) {
+    return {};
+  }
+  QPixmap processedPixmap = ArtworkManager::createProcessedArtwork(pixmap);
+  if (!processedPixmap.isNull() && m_cacheManager) {
+    m_cacheManager->cacheArtwork(artworkPath, processedPixmap);
+  }
+  return processedPixmap;
+}
 
-  const QStringList exts = ExtensionUtils::imageFilters();
-  dir.setNameFilters(exts);
-  const QStringList files = dir.entryList(QDir::Files);
-  if (!files.isEmpty()) {
-    QMutexLocker locker(&m_dataMutex);
-    for (const QString &file : files) {
-      m_allArtworkPaths.append(dir.absoluteFilePath(file));
-    }
-  }
-  processedDirectories.insert(normalized);
+// Delegates to ArtworkUtils::findArtworkForFile for artwork path resolution
+auto ArtworkManager::findArtworkForFile(const QString &fileName, const QString &artworkDirectory)
+    -> QString {
+  return ArtworkUtils::findArtworkForFile(fileName, artworkDirectory);
 }
 
 // Sets references used by artwork updates and silent loading
@@ -350,8 +351,8 @@ void ArtworkManager::cancelAllArtworkLoading() {
     QMutexLocker locker(&m_dataMutex);
     loadedArtwork.clear();
     pendingArtwork.clear();
-    m_silentPendingPaths.clear();
   }
+  m_pathCatalog.clearSilentPendingOnly();
   // Wait 50ms for in-flight QtConcurrent operations to notice the
   // cancellation flag before resetting it for future operations.
   // This delay is chosen to be longer than typical thread scheduling
@@ -464,18 +465,16 @@ void ArtworkManager::clearWidgetReferences() {
     loadedArtwork.clear();
     widgetToArtworkPath.clear();
     pendingArtwork.clear();
-    m_silentlyCachedPaths.clear();
-    m_allArtworkPaths.clear();
     // drop any per-item artwork-type overrides when widgets are
     // torn down — a fresh collection or post-search rebuild should start
     // every item back on its primary artwork.
     m_artworkTypeOverrides.clear();
 
-    m_silentLoadIndex = 0;
     m_silentLoadingActive = false;
     m_continuousSilentLoad = false;
     m_persistentSilentLoad = false;
   }
+  m_pathCatalog.clearAll();
 }
 
 // ─── Per-item artwork-type override ─────────────────────────

@@ -196,11 +196,8 @@ void ArtworkManager::dispatchAndTrackPrecacheBatch(const QStringList &artworkPat
 
           // Always clear pending entries, even if decode failed, so future
           // silent load passes can retry.
-          {
-            QMutexLocker locker(&self->m_dataMutex);
-            for (const QString &p : artworkPaths) {
-              self->m_silentPendingPaths.remove(p);
-            }
+          for (const QString &p : artworkPaths) {
+            self->m_pathCatalog.unmarkSilentPending(p);
           }
 
           for (const auto &r : results) {
@@ -220,10 +217,7 @@ void ArtworkManager::dispatchAndTrackPrecacheBatch(const QStringList &artworkPat
                 self->m_cacheManager->cacheArtwork(r.artworkPath, pixmap);
               }
             }
-            {
-              QMutexLocker locker(&self->m_dataMutex);
-              self->m_silentlyCachedPaths.insert(r.artworkPath);
-            }
+            self->m_pathCatalog.markSilentlyCached(r.artworkPath);
           }
 
           // Record batch completion for cooldown enforcement
