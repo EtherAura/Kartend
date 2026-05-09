@@ -3,37 +3,47 @@
 
 #include <QDateTime>
 #include <QHash>
-#include <QMutex>
 #include <QObject>
 #include <QSqlDatabase>
 #include <QStringList>
-#include <QTimer>
 
 #include "collectionutils.h"
 #include "errorutils.h"
+#include "filemapcache.h"
 #include "historystore.h"
 #include "itemartwork.h"
 #include "itemmetadata.h"
 #include "usagestatsstore.h"
 
+class CachedCountsService;
+class QueryManager;
+class QThread;
 class SessionManager;
 
 /**
  * @brief Coordinates database operations via a dedicated worker thread.
  *
- * Threading Model:
- * - Main thread only: All public methods (loadItems, fetchItemCount, etc.)
- * - Worker thread: QueryManager executes actual SQL queries
- * - Communication: Signals/slots with Qt::QueuedConnection for thread safety
+ * Owns the main-thread SQLite connection, two QueryManager workers (one for
+ * queries, one for scans) on dedicated QThreads, and three helpers that carry
+ * the responsibilities the class previously held inline:
+ *   - DatabaseSchema: opens the connection, applies pragmas, builds tables and
+ *     indexes (pure functions, no state).
+ *   - FileMapCache: thread-safe owner of the path-to-{artworkDir,mediaDir,
+ *     collectionIndex} hashes plus the relative-path resolver.
+ *   - CachedCountsService: debounced async cached-count refresh.
  *
- * Thread-safe operations:
- * - resolveFilePath(), resolveRelativeFilePath() - read-only, no shared mutable
- * state
- * - Signal emissions are queued to main thread automatically
+ * Threading model:
+ *   - Main thread only: every public method on this class.
+ *   - Worker thread: QueryManager executes the actual SQL.
+ *   - Communication: signals/slots with Qt::QueuedConnection.
  *
- * NOT thread-safe (main thread only):
- * - initDatabase(), loadAllCollections(), loadItems()
- * - All setup and configuration methods
+ * Thread-safe (any thread):
+ *   - resolveFilePath(), resolveRelativeFilePath(),
+ *     getCollectionIndexForFile(), findArtworkDirectoryForFile() — read-only,
+ *     guarded by FileMapCache's internal mutex.
+ *
+ * Not thread-safe (main thread only):
+ *   - initDatabase(), loadAllCollections(), loadItems(), every Save/Record API.
  */
 class DatabaseManager : public QObject {
   Q_OBJECT
@@ -116,57 +126,24 @@ public:
   // Usage statistics
   // ──────────────────────────────────────────────────────────────────────────
 
-  /// Loads play_count/last_played/total_play_seconds for a single item via the
-  /// main-thread connection. Returns a default-initialized struct on missing
-  /// row or DB error (errors logged), so the sidebar can degrade silently.
   [[nodiscard]] UsageStatsStore::ItemUsageStats loadItemUsageStats(const QString &collectionUuid,
                                                                    const QString &path) const;
-
-  /// Increments play_count and stamps last_played for the given item.
-  /// Best-effort: failures are logged; the launch path does not block on this.
   void recordItemLaunch(const QString &collectionUuid, const QString &path);
-
-  /// Adds `seconds` to the item's cumulative total_play_seconds. Called when
-  /// runtime detection reports a tracked process exit. Negative
-  /// or zero durations are dropped.
   void recordItemPlaySession(const QString &collectionUuid, const QString &path, qint64 seconds);
-
-  /// Whole-library aggregate counters used by the Statistics dialog header.
   [[nodiscard]] UsageStatsStore::AggregateStats loadAggregateUsageStats() const;
-
-  /// Top items by play_count (descending). `limit` is clamped server-side to
-  /// [1, 1000] so callers can pass user-driven values without sanitizing.
   [[nodiscard]] QList<UsageStatsStore::ItemUsageRow> loadTopPlayedItems(int limit) const;
-
-  /// Most recently launched items (descending last_played). `limit` clamped.
   [[nodiscard]] QList<UsageStatsStore::ItemUsageRow> loadRecentlyPlayedItems(int limit) const;
-
-  /// Per-collection breakdown keyed on collection_uuid. Includes uuids whose
-  /// CollectionConfig may have been deleted, so totals match the aggregate.
   [[nodiscard]] QHash<QString, UsageStatsStore::CollectionUsage> loadUsageByCollection() const;
-
-  /// Resets every usage column to zero/NULL across the entire library.
-  /// Returns true on success.
   bool resetAllUsageStats();
 
   // ──────────────────────────────────────────────────────────────────────────
   // Launch history
   // ──────────────────────────────────────────────────────────────────────────
 
-  /// Appends a row to launch_history and trims down to `maxEntries` (when
-  /// > 0). Best-effort: failures are logged but never block the launch path.
-  /// Pass `name` when the caller already knows the user-visible title;
-  /// HistoryStore falls back to the path's basename otherwise.
   void recordHistoryEntry(const QString &collectionUuid, const QString &path, const QString &name,
                           int maxEntries);
-
-  /// Most recent history entries first. `limit` is clamped to [1, 100000].
   [[nodiscard]] QList<HistoryStore::HistoryEntry> loadRecentHistory(int limit) const;
-
-  /// Total number of rows in launch_history. Used by the dialog header.
   [[nodiscard]] qint64 historyEntryCount() const;
-
-  /// Wipes the launch_history table. Returns true on success.
   bool clearHistory();
 
 signals:
@@ -180,33 +157,13 @@ signals:
                         const QHash<QString, int> &fileToCollectionIndex);
   void visualIndexForPathLoaded(int visualIndex, const QString &filePath);
   void errorOccurred(const ErrorUtils::ErrorContext &error);
-
-  // Emitted after cached counts have been recomputed and persisted.
   void cachedCountsUpdated();
-
-  /// Emitted during collection scanning to report progress.
-  /// @param current The 1-based index of the collection being scanned
-  /// @param total The total number of collections to scan
-  /// @param collectionName The name of the collection being scanned
   void scanProgress(int current, int total, const QString &collectionName);
-
-  /// Emitted when a long-running scan is starting
   void scanStarting(const QString &collectionName, int estimatedItems);
-
-  /// Emitted periodically during scan with items processed so far
   void scanItemsProgress(int itemsProcessed, int totalItems);
-
-  /// Emitted when a collection rescan has been applied to the database.
-  /// Consumers can refresh counts without blocking the UI.
   void collectionScanCompleted(const QString &collectionUuid);
-
-  /// Forwarded from QueryManager; carries per-scan item totals so callers can
-  /// display an "X of Y items added" summary after a scan completes.
   void collectionScanSummary(const QString &collectionUuid, int itemsScanned, int itemsApplied,
                              bool success);
-
-  /// Emitted when collection cache has been invalidated (async operation
-  /// complete)
   void cacheInvalidated(const QString &collectionUuid);
 
   // Internal signals to trigger worker
@@ -215,7 +172,6 @@ signals:
                         const QList<CollectionConfig> &allCollections);
   void requestLoadItemsWithSubcollections(const CollectionContext &context,
                                           const QList<CollectionConfig> &allCollections);
-  void requestUpdateCachedCounts(quint64 generation, const QStringList &collectionUuids);
   void requestFetchItemCount(const CollectionContext &context,
                              const QList<CollectionConfig> &allCollections, const QString &filter,
                              int requestToken);
@@ -250,62 +206,22 @@ private slots:
                                 const QHash<QString, QString> &fileToArtworkDir,
                                 const QHash<QString, QString> &fileToMediaDir,
                                 const QHash<QString, int> &fileToCollectionIndex);
-  void onWorkerCachedCountsComputed(quint64 generation, qint64 globalCount,
-                                    const QHash<QString, qint64> &directCountsByUuid);
-  void dispatchCachedCountsUpdate();
 
 private:
-  class QueryManager *m_worker;
-  class QueryManager *m_scanWorker = nullptr;
-  SessionManager *m_sessionManager;
-  class QThread *m_workerThread;
-  class QThread *m_scanThread = nullptr;
-
-  bool needsRescan(int collectionIndex, const CollectionConfig &collection);
-  static QStringList scanMediaDirectory(const CollectionConfig &collection,
-                                        QHash<QString, QDateTime> &timestamps);
-  QStringList loadItemsFromDatabaseByUuid(const QString &collectionUuid);
-  QStringList loadOrScanCollection(int collectionIndex, const CollectionConfig &collection,
-                                   QHash<QString, QDateTime> &timestamps);
-  void saveItemsToDatabase(int collectionIndex, const QStringList &filePaths,
-                           const QHash<QString, QDateTime> &timestamps,
-                           const CollectionConfig &collection);
-  static int getCharacterSortPriority(const QString &text);
-  static void sortFiles(QStringList &allFilePaths);
   [[nodiscard]] qint64 countCollectionByUuid(const QString &collectionUuid) const;
-  [[nodiscard]] qint64 countGlobal(const QList<CollectionConfig> &allCollections);
   void clearCollectionFromDatabaseByUuid(const QString &collectionUuid);
+
+  SessionManager *m_sessionManager;
+  QueryManager *m_worker = nullptr;
+  QueryManager *m_scanWorker = nullptr;
+  QThread *m_workerThread = nullptr;
+  QThread *m_scanThread = nullptr;
 
   QSqlDatabase m_db;
   QString m_connectionName;
 
-  // Debounced async cached-count update state.
-  QTimer *m_cachedCountsUpdateTimer = nullptr;
-  quint64 m_cachedCountsGeneration = 0;
-  quint64 m_inFlightCachedCountsGeneration = 0;
-  QList<CollectionConfig> m_pendingCountsCollections;
-  QStringList m_pendingCountsUuids;
-  QList<CollectionConfig> m_inFlightCountsCollections;
-  QStringList m_inFlightCountsUuids;
-
-  mutable QMutex m_dataMutex; // Protects m_fileToArtworkDir,
-                              // m_fileToCollectionIndex, m_fileToMediaDir
-  QHash<QString, QString> m_fileToArtworkDir;
-  QHash<QString, int> m_fileToCollectionIndex;
-  QHash<QString, QString> m_fileToMediaDir; // Maps file paths to their media directories
-
-  // Cache for resolving relative entries (e.g. "subdir/game.rom" or "game.rom")
-  // to a known absolute path without repeatedly scanning the full fileNames
-  // map. Built from the latest onWorkerItemsLoaded() payload.
-  QHash<QString, QString> m_relativeToFullPath;
-
-  static void
-  appendFileMapsAndListCanonical(int collectionIndex, const CollectionConfig &expandedCollection,
-                                 const QString &mappingArtworkDir, const QStringList &filePaths,
-                                 QStringList &allFilePaths, QHash<QString, QString> &allFileNames,
-                                 QHash<QString, QString> &fileToArtworkDir,
-                                 QHash<QString, QString> &fileToMediaDir,
-                                 QHash<QString, int> &fileToCollectionIndex, bool dedup);
+  FileMapCache m_fileMapCache;
+  CachedCountsService *m_cachedCounts = nullptr;
 };
 
 #endif

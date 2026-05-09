@@ -262,9 +262,10 @@ add_test(NAME QueryManagerCancelScan COMMAND test_querymanager_cancel_scan)
 # cleanup, and thread-safe path-resolution helpers.
 add_executable(test_databasemanager
   modules/database/test_databasemanager.cpp
+  ${SRC_DIR}/modules/data/database/cachedcountsservice.cpp
   ${SRC_DIR}/modules/data/database/databasemanager.cpp
-  ${SRC_DIR}/modules/data/database/databasemanagerpaths.cpp
-  ${SRC_DIR}/modules/data/database/databasemanagerworker.cpp
+  ${SRC_DIR}/modules/data/database/databaseschema.cpp
+  ${SRC_DIR}/modules/data/database/filemapcache.cpp
   ${SRC_DIR}/utils/text/titlefilter.cpp
   ${SRC_DIR}/modules/data/query/querymanager.cpp
   ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
