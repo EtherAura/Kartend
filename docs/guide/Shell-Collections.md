@@ -16,18 +16,20 @@ into a few high-level categories, each containing several "real"
 collections:
 
 ```
-Games (shell)
-├── SNES               (RetroArch, snes9x core)
-├── PlayStation 1      (RetroArch, beetle-psx core)
-└── N64                (RetroArch, mupen64plus core)
+Video (shell)
+├── Films               (mpv)
+├── TV Shows            (mpv, --no-resume-playback)
+└── Documentaries       (mpv)
 
-Movies (shell)
-├── Films              (mpv)
-└── TV                 (mpv, --no-resume-playback)
+Audio (shell)
+├── Albums              (mpv --no-video)
+├── Audiobooks          (mpv --no-video --save-position-on-quit)
+└── Podcasts            (mpv --no-video)
 
-Manuals (shell)
-├── User Guides        (xdg-open, .pdf)
-└── Service Manuals    (xdg-open, .pdf)
+Reference (shell)
+├── Manuals             (xdg-open, .pdf)
+├── Cheat Sheets        (xdg-open, .pdf)
+└── Reports             (xdg-open, .pdf)
 ```
 
 Each shell renders at the root of the sidebar tree as a tile that opens
@@ -37,21 +39,21 @@ down, in the leaf collections it contains.
 
 ## When *not* to use one
 
-If your goal is just to filter the visible set of collections by genre
-or platform, the **collection type** field on each collection plus the
-[type filter](Search-Sort-Filter.md#type-filter) is usually a better
-fit — it preserves a flat sidebar and lets a single collection appear
-in multiple categorical views.
+If your goal is just to filter the visible set of collections by a tag
+like genre or category, the **collection type** field on each
+collection plus the [type filter](Search-Sort-Filter.md#type-filter)
+is usually a better fit — it preserves a flat sidebar and lets a
+single collection appear in multiple categorical views.
 
 Reach for a shell when you want the *navigation* to mirror the
-hierarchy: when a user opens "Games" they see SNES / PS1 / N64 as
-tiles, not the union of every game in the library.
+hierarchy: when a user opens "Video" they see Films / TV Shows /
+Documentaries as tiles, not the union of every video in the library.
 
 ## Creating one
 
 1. Open the **Settings Dialog** with `Ctrl + ,` and click **Add
    Collection**.
-2. On the **Basic** tab, give it a name (e.g. `Games`).
+2. On the **Basic** tab, give it a name (e.g. `Video`).
 3. Skip the **Paths & Extensions** and **Launcher** tabs entirely —
    leave everything blank.
 4. Drag your existing collections under it in the tree on the left, or
@@ -72,26 +74,26 @@ A shell collection looks like any other in `kartend.cfg` — the absence
 of `mediaDirectory` and `launcherPath` is what makes it a shell:
 
 ```ini
-[Games]
-name=Games
-type=Games
-collectionIcon=~/Pictures/icons/games.png
+[Video]
+name=Video
+type=Video
+collectionIcon=~/Pictures/icons/video.png
 
-[Games > SNES]
-name=SNES
+[Video > Films]
+name=Films
 parentCollectionIndex=0
-mediaDirectory=~/ROMs/SNES
-launcherPath=/usr/bin/retroarch
-launchParameters=-L ~/.config/retroarch/cores/snes9x_libretro.so
-extensions=sfc,smc,zip
+mediaDirectory=~/Videos/Films
+launcherPath=/usr/bin/mpv
+launchParameters=--fullscreen
+extensions=mkv,mp4,avi,webm
 
-[Games > PlayStation 1]
-name=PlayStation 1
+[Video > TV Shows]
+name=TV Shows
 parentCollectionIndex=0
-mediaDirectory=~/ROMs/PSX
-launcherPath=/usr/bin/retroarch
-launchParameters=-L ~/.config/retroarch/cores/mednafen_psx_hw_libretro.so
-extensions=cue,chd,pbp
+mediaDirectory=~/Videos/TV
+launcherPath=/usr/bin/mpv
+launchParameters=--fullscreen --no-resume-playback
+extensions=mkv,mp4,avi
 ```
 
 Subcollections reference their parent by index (`parentCollectionIndex`)
@@ -132,12 +134,12 @@ two levels covers almost every library:
 
 ```
 Library (shell, root)
-├── Games (shell)
-│   ├── SNES
-│   └── PS1
-├── Movies (shell)
+├── Video (shell)
 │   ├── Films
-│   └── TV
+│   └── TV Shows
+├── Audio (shell)
+│   ├── Albums
+│   └── Audiobooks
 └── Reference (shell)
     ├── Manuals
     └── Cheat Sheets
@@ -153,8 +155,8 @@ matters for how the toolbar wraps).
 
 A shell collection can be the [alias parent](Collections.md#linked-parents)
 of a collection that already lives elsewhere — useful when one
-collection naturally belongs in two categories. Example: a `Demos`
-collection lives under `Games`, but you alias-parent it under `Misc`
+collection naturally belongs in two categories. Example: a `Concerts`
+collection lives under `Video`, but you alias-parent it under `Audio`
 too so it shows up in both shells without duplicating the media.
 
 The aliasing is one-way: changes to the aliased collection (rename,
@@ -169,4 +171,4 @@ parent only severs the link, not the original.
 | Do shells appear in launch history? | No — there's nothing to launch. |
 | Do shells appear in the Statistics dialog? | The aggregate row sums their descendants. The shell row itself shows zero plays. |
 | Do shells survive `.kart` export? | Yes — exporting a shell exports its descendants too. See [Backup & Sharing](Backup-and-Sharing.md). |
-| Can I make a shell the **startup collection**? | Yes — `startupCollection=Games` is valid; Kartend opens that shell on launch and you navigate down with `Enter`. |
+| Can I make a shell the **startup collection**? | Yes — `startupCollection=Video` is valid; Kartend opens that shell on launch and you navigate down with `Enter`. |

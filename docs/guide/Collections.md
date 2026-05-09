@@ -36,8 +36,8 @@ A collection can also have no media directory of its own — a
 [shell collection](Shell-Collections.md) used to group other
 collections under a named category. Shells render their children as
 tiles, open the matching subcollection on `Enter`, and are the
-canonical way to build top-level categories like `Games` containing
-SNES / PS1 / N64.
+canonical way to build top-level categories like `Video` containing
+Films / TV Shows / Documentaries.
 
 ## Adding, renaming, duplicating, deleting
 

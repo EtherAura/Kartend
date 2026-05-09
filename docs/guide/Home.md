@@ -18,7 +18,7 @@ and want to dig into a feature, the index below is grouped by purpose.
   alias parents, type metadata, reparenting, duplication, deletion
 - **[Shell Collections](Shell-Collections.md)** — collections without
   media of their own, used to group other collections into top-level
-  categories like `Games` → SNES / PS1 / N64
+  categories like `Video` → Films / TV Shows / Documentaries
 
 ### Browsing & navigating
 

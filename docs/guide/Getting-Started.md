@@ -16,8 +16,8 @@ has, at minimum:
 
 - a **name** (the label shown in the UI)
 - usually a **media directory** (the folder of items to display) plus a
-  **launcher** that opens an item (`xdg-open`, `mpv`, `retroarch`, your
-  own shell script…) — but neither is strictly required: a
+  **launcher** that opens an item (`xdg-open`, `mpv`, your own shell
+  script…) — but neither is strictly required: a
   [shell collection](Shell-Collections.md) with no media of its own can
   exist purely to group other collections under a named category
 
