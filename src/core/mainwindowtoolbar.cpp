@@ -1,17 +1,14 @@
-// Toolbar wiring + appearance and the user-facing keyboard shortcuts that
-// drive it (text zoom, preview-video pause, view-mode picker, search-mode
-// action, preview volume slider). Extracted from mainwindow.cpp so that file
-// can stay focused on coordination + lifecycle.
+// User-facing keyboard shortcuts and preview-volume binding that hang off the
+// items-page toolbar (text zoom in/out/reset, Ctrl+K preview-video pause,
+// volume slider). The toolbar's own stateful widgets — layout-picker, search-
+// mode action, filter button + popup — live on ToolbarController; this file
+// is the home for the cross-cutting shortcuts that aren't a toolbar widget
+// of their own.
 
 #include <QAction>
-#include <QActionGroup>
 #include <QKeySequence>
-#include <QLineEdit>
-#include <QMenu>
-#include <QPushButton>
 #include <QSignalBlocker>
 #include <QSlider>
-#include <QToolButton>
 
 #include <algorithm>
 
@@ -22,6 +19,7 @@
 #include "settingsmanager.h"
 #include "textzoom.h"
 #include "textzoomhud.h"
+#include "toolbarcontroller.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
 #include "videopreviewwidget.h"
@@ -72,82 +70,14 @@ void MainWindow::setupVideoPauseShortcut() {
   });
 }
 
-void MainWindow::setupViewModeButton() {
-  if (!m_viewModeButton) {
-    return;
-  }
-  // keep the toolbar layout-picker visually in lockstep with the
-  // View → Layout menu by mounting a popup of text-only entries (Grid / List /
-  // Cover Flow / Horizontal). The four legacy individual icon buttons used to
-  // do this — collapsed here into a single Breeze-icon button so the toolbar
-  // doesn't carry one slot per layout.
-  auto *menu = new QMenu(m_viewModeButton);
-  auto *group = new QActionGroup(menu);
-  group->setExclusive(true);
-
-  auto addEntry = [&](const QString &text, ViewType type) {
-    QAction *action = menu->addAction(text);
-    action->setCheckable(true);
-    group->addAction(action);
-    connect(action, &QAction::triggered, this, [this, type]() { setViewType(type); });
-    return action;
-  };
-  m_viewActionGrid = addEntry(tr("&Grid"), ViewType::Grid);
-  m_viewActionList = addEntry(tr("&List"), ViewType::List);
-  m_viewActionCoverFlow = addEntry(tr("&Cover Flow"), ViewType::CoverFlow);
-  m_viewActionHorizontal = addEntry(tr("&Horizontal"), ViewType::Horizontal);
-
-  m_viewModeButton->setMenu(menu);
-  m_viewModeButton->setIcon(
-      UIConstants::Icons::fromTheme({UIConstants::Icons::VIEW_PICKER, "view-list-icons"}));
-  m_viewModeButton->setIconSize(QSize(18, 18));
-}
-
 void MainWindow::syncViewModeButton(ViewType viewType) {
-  const auto setChecked = [](QAction *action, bool on) {
-    if (action) {
-      QSignalBlocker blocker(action);
-      action->setChecked(on);
-    }
-  };
-  setChecked(m_viewActionGrid, viewType == ViewType::Grid);
-  setChecked(m_viewActionList, viewType == ViewType::List);
-  setChecked(m_viewActionCoverFlow, viewType == ViewType::CoverFlow);
-  setChecked(m_viewActionHorizontal, viewType == ViewType::Horizontal);
-  if (m_viewModeButton) {
-    QString tip;
-    switch (viewType) {
-    case ViewType::Grid:
-      tip = tr("Layout: Grid (click to change)");
-      break;
-    case ViewType::List:
-      tip = tr("Layout: List (click to change)");
-      break;
-    case ViewType::CoverFlow:
-      tip = tr("Layout: Cover Flow (click to change)");
-      break;
-    case ViewType::Horizontal:
-      tip = tr("Layout: Horizontal (click to change)");
-      break;
-    }
-    m_viewModeButton->setToolTip(tip);
+  if (m_toolbarController) {
+    m_toolbarController->syncViewModeButton(viewType);
   }
 }
 
-void MainWindow::setupSearchModeAction() {
-  if (!searchBar) {
-    return;
-  }
-  // The search-mode toggle lives inside the QLineEdit (LeadingPosition) rather
-  // than as a sibling QPushButton — keeps the toolbar tighter and gives the
-  // search field a familiar magnifier-glass affordance. The triggered() signal
-  // is wired later in connectSearchComponents() once InteractionManager is
-  // alive.
-  m_searchModeAction = searchBar->addAction(
-      UIConstants::Icons::fromTheme(UIConstants::Icons::SEARCH), QLineEdit::LeadingPosition);
-  if (m_searchModeAction) {
-    m_searchModeAction->setToolTip(tr("Toggle search scope"));
-  }
+void MainWindow::setViewTypeFromToolbar(ViewType viewType) {
+  setViewType(viewType);
 }
 
 void MainWindow::setupPreviewVolumeSlider() {
@@ -209,23 +139,7 @@ void MainWindow::applyTextZoom(int percent) {
 }
 
 void MainWindow::applyToolbarCustomization() {
-  if (!ui) {
-    return;
-  }
-  const auto &gs = m_generalSettings;
-
-  // The legacy per-view-button visibility flags (toolbarShowGridViewButton et
-  // al.) and the hide-subcollections / search-mode flags are kept in
-  // GeneralSettings for backward compat, but the underlying buttons have been
-  // removed (single viewModeButton, in-field search action, single
-  // filterButton). Only the consolidated filter button and the search bar
-  // remain user-toggleable from this codepath; the filter button stays on
-  // when *either* legacy flag (type or title) is on so existing settings
-  // don't accidentally hide it.
-  if (ui->filterButton) {
-    ui->filterButton->setVisible(gs.toolbarShowTypeFilter || gs.toolbarShowTitleFilter);
-  }
-  if (ui->searchBar) {
-    ui->searchBar->setVisible(gs.toolbarShowSearchBar);
+  if (m_toolbarController) {
+    m_toolbarController->applyToolbarCustomization(m_generalSettings);
   }
 }

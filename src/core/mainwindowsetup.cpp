@@ -26,6 +26,7 @@
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "menucontroller.h"
+#include "toolbarcontroller.h"
 #include "navigationmanager.h"
 #include "playlistmanager.h"
 #include "propertyutils.h"
@@ -162,16 +163,25 @@ void MainWindow::setupUIReferences() {
   m_mainContentWidget = ui->m_mainContentWidget;
   m_mainHorizontalLayout = ui->m_mainHorizontalLayout;
   searchBar = ui->searchBar;
-  m_viewModeButton = ui->viewModeButton;
-  setupViewModeButton();
-  setupSearchModeAction();
-  // Single consolidated filter button (replaces typeFilterButton +
-  // titleFilterButton + hideSubcollectionsButton).
-  m_filterButton = ui->filterButton;
-  if (m_filterButton) {
-    m_filterButton->setIcon(
+
+  // Hand the toolbar's stateful Qt widgets (layout-picker / filter button /
+  // search-bar inline action) over to the controller, then run its setup
+  // pass. The controller owns every QAction it creates from here on.
+  if (!m_toolbarController) {
+    m_toolbarController = new ToolbarController(this);
+  }
+  ToolbarController::Setup tcSetup;
+  tcSetup.mainWindow = this;
+  tcSetup.viewModeButton = ui->viewModeButton;
+  tcSetup.filterButton = ui->filterButton;
+  tcSetup.searchBar = ui->searchBar;
+  m_toolbarController->initialize(tcSetup);
+  m_toolbarController->setupViewModeButton();
+  m_toolbarController->setupSearchModeAction();
+  if (ui->filterButton) {
+    ui->filterButton->setIcon(
         UIConstants::Icons::fromTheme({UIConstants::Icons::FILTER, "view-filter"}));
-    m_filterButton->setIconSize(QSize(18, 18));
+    ui->filterButton->setIconSize(QSize(18, 18));
   }
   m_MetadataSidebar = ui->detailsPaneWidget;
 
@@ -226,7 +236,8 @@ void MainWindow::initializeAppContext() {
   m_appContext.ui.gridContainer = gridContainer;
   m_appContext.ui.menubar = ui->menubar;
   m_appContext.ui.searchBar = searchBar;
-  m_appContext.ui.searchModeAction = m_searchModeAction;
+  m_appContext.ui.searchModeAction =
+      m_toolbarController ? m_toolbarController->searchModeAction() : nullptr;
   m_appContext.ui.sidebar = m_MetadataSidebar;
   m_appContext.ui.loadingLabel = ui->loadingLabel;
   m_appContext.ui.loadingOverlay = m_loadingOverlay;

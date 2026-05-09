@@ -17,14 +17,12 @@ class QHBoxLayout;
 class QScrollArea;
 class QLineEdit;
 class QPushButton;
-class QToolButton;
 class QLabel;
-class QAction;
-class QActionGroup;
 QT_END_NAMESPACE
 
 class Ui_MainWindow;
 class GridWidthDebouncer;
+class ToolbarController;
 class ApplicationManager;
 class ArtworkManager;
 class CacheManager;
@@ -68,27 +66,6 @@ public:
   QGridLayout *itemGrid;
   QHBoxLayout *m_mainHorizontalLayout;
   QLineEdit *searchBar;
-  /// Search-mode toggle exposed as an action embedded inside the QLineEdit
-  /// (QLineEdit::addAction at LeadingPosition). Replaces the standalone
-  /// searchModeButton.
-  QAction *m_searchModeAction = nullptr;
-  /// Single layout-picker QToolButton with InstantPopup menu listing the
-  /// view types as text entries. Replaces the four legacy view buttons
-  /// (grid/list/cover-flow/horizontal).
-  QToolButton *m_viewModeButton = nullptr;
-  QAction *m_viewActionGrid = nullptr;
-  QAction *m_viewActionList = nullptr;
-  QAction *m_viewActionCoverFlow = nullptr;
-  QAction *m_viewActionHorizontal = nullptr;
-  /// Single toolbar filter entry-point:
-  /// hosts an InstantPopup menu containing the type-filter radio group and
-  /// the per-collection title-pattern toggle + editor entry. Replaces the
-  /// former separate typeFilterButton, titleFilterButton, and the
-  /// hideSubcollectionsButton.
-  QToolButton *m_filterButton = nullptr;
-  /// Checkable menu entry mirroring CollectionConfig::titleExclusionEnabled
-  /// for the active collection. Lives inside m_filterButton's popup.
-  QAction *m_titleFilterEnabledAction = nullptr;
   EmptyStateWidget *loadingLabel;
   LoadingOverlay *m_loadingOverlay = nullptr;
 
@@ -133,12 +110,15 @@ public:
 
   void showStartupSplash();
 
-  /// applies the per-button visibility flags and custom-text
-  /// overrides from m_generalSettings to the items-page toolbar. Safe to call
-  /// before any toolbar widget is constructed (each ui pointer is null-checked)
-  /// and idempotent — invoked on startup and again after the user saves the
-  /// Settings dialog.
+  /// Apply per-button visibility flags and custom-text overrides from
+  /// m_generalSettings to the items-page toolbar. Idempotent — invoked on
+  /// startup and again after the user saves the Settings dialog.
+  /// Delegates to the ToolbarController.
   void applyToolbarCustomization();
+  /// Public escape hatch the toolbar controller calls when the user picks a
+  /// new view type from the layout-picker popup. Forwards to the private
+  /// setViewType() that does the actual settings save + refresh cascade.
+  void setViewTypeFromToolbar(ViewType viewType);
 
   /// pushes the global UI font (family + point size) from
   /// @p settings to QApplication. Empty family / 0 size means "leave the
@@ -189,19 +169,10 @@ public:
   /// VideoPreviewWidget::setGlobalVolume and persist on change.
   void setupPreviewVolumeSlider();
 
-  /// Build the layout-picker popup menu attached to m_viewModeButton. The menu
-  /// holds checkable text entries (Grid / List / Cover Flow / Horizontal) wired
-  /// to setViewType. Replaces the four standalone view buttons.
-  void setupViewModeButton();
-  /// Reflects @p viewType onto m_viewModeButton: ticks the matching menu
-  /// action and refreshes the button's tooltip + theme icon. Called from
-  /// setViewType() and updateWindowTitleForCollection().
+  /// Reflect @p viewType onto the toolbar layout-picker. Called from
+  /// setViewType() and updateWindowTitleForCollection(). Delegates to the
+  /// ToolbarController.
   void syncViewModeButton(ViewType viewType);
-  /// Creates the search-mode QAction with the kde-breeze "search" icon and
-  /// adds it to the searchBar QLineEdit at LeadingPosition. Wires the
-  /// triggered() signal to InteractionManager::toggleSearchMode (deferred
-  /// until the manager exists). Replaces the standalone searchModeButton.
-  void setupSearchModeAction();
 
 protected:
   bool event(QEvent *event) override;
@@ -227,6 +198,12 @@ private:
   // chain. Owns the QTimers and generation counters internally.
   GridWidthDebouncer *m_gridWidthDebouncer = nullptr;
 
+  // Owns the items-page toolbar's stateful Qt widgets (layout-picker,
+  // search-mode QAction inside the search field, filter button + popup) and
+  // the setup / sync / refresh logic that drives them. Parented to this
+  // MainWindow.
+  ToolbarController *m_toolbarController = nullptr;
+
   std::unique_ptr<ApplicationManager> m_appManager;
   DetailsPane *m_MetadataSidebar = nullptr;
 
@@ -248,21 +225,15 @@ private:
   void updateScrollManagerSidebarShrinking();
   void connectSearchComponents();
   void connectScrollBars() const;
-  /// Wires the consolidated m_filterButton: builds its popup once, hooks
-  /// settings persistence, and triggers a reload of the current view when
-  /// either the type filter or the title-exclusion toggle
-  /// changes.
+  /// Wire and refresh the toolbar's filter button. Idempotent — installs
+  /// the QMenu::triggered handler the first time and rebuilds the action
+  /// list on every call. Delegates to the ToolbarController.
   void connectFilterToolbar();
-  /// Rebuilds m_filterButton's popup from scratch — the type list comes from
-  /// the live collection types (so deleted/retagged types vanish) and the
-  /// title-pattern toggle reflects the active collection's state. Called on
-  /// startup, on every collection switch, and after settings edits that may
-  /// have added/removed type tags.
+  /// Rebuild the filter button popup from the current collection set.
+  /// Called on startup, on every collection switch, and after settings
+  /// edits that may have added or removed type tags. Delegates to the
+  /// ToolbarController.
   void refreshFilterToolbar();
-  /// opens the popup editor for the current collection's
-  /// title-exclusion patterns. Returns immediately when no collection is
-  /// active or when the user cancels.
-  void showTitleFilterEditor();
 
   // UI Setup Methods
   void setupUI();

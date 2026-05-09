@@ -22,6 +22,7 @@
 #include "detailspanemanager.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
+#include "toolbarcontroller.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "navigationmanager.h"
@@ -422,217 +423,24 @@ void MainWindow::updateScrollManagerSidebarShrinking() {
 }
 
 void MainWindow::connectSearchComponents() {
-  // Search-mode toggle lives inside the QLineEdit as a QAction (set up in
-  // MainWindow::setupSearchModeAction). Wire it to InteractionManager's
-  // existing toggle slot so the cycling behavior remains identical to the
-  // legacy QPushButton.
-  if ((m_searchModeAction) && (getInteractionManager())) {
-    QObject::connect(m_searchModeAction, &QAction::triggered, getInteractionManager(),
-                     &InteractionManager::toggleSearchMode);
+  // Search-mode toggle lives inside the QLineEdit as a QAction owned by the
+  // ToolbarController. Wire it to InteractionManager's existing toggle slot
+  // so the cycling behavior remains identical to the legacy QPushButton.
+  if (m_toolbarController && m_toolbarController->searchModeAction() && getInteractionManager()) {
+    QObject::connect(m_toolbarController->searchModeAction(), &QAction::triggered,
+                     getInteractionManager(), &InteractionManager::toggleSearchMode);
   }
-  // The four legacy view-type buttons have been replaced by m_viewModeButton's
-  // popup menu (wired up in MainWindow::setupViewModeButton).
 }
 
 void MainWindow::refreshFilterToolbar() {
-  if (!m_filterButton) {
-    return;
+  if (m_toolbarController) {
+    m_toolbarController->refreshFilterToolbar();
   }
-  // Rebuild the popup from scratch: the type list comes from the live
-  // collection set (so retagged/deleted types vanish on the next refresh) and
-  // the title-pattern checkable mirrors the active collection's flag, which
-  // changes per-view.
-  QMenu *menu = m_filterButton->menu();
-  if (!menu) {
-    menu = new QMenu(m_filterButton);
-    m_filterButton->setMenu(menu);
-    QObject::connect(menu, &QMenu::triggered, this, [this](QAction *action) {
-      if (!action) {
-        return;
-      }
-      const QString role = action->property("filterRole").toString();
-      if (role == QLatin1String("type")) {
-        const QString chosen = action->data().toString();
-        if (m_generalSettings.collectionTypeFilter == chosen) {
-          return;
-        }
-        m_generalSettings.collectionTypeFilter = chosen;
-        if (getSettingsManager()) {
-          getSettingsManager()->saveGeneralSettings(m_generalSettings);
-        }
-        if (getNavigationManager() && currentCollectionIndex >= 0) {
-          getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-        }
-      } else if (role == QLatin1String("title-toggle")) {
-        if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
-          return;
-        }
-        CollectionConfig &c = m_collections[currentCollectionIndex];
-        const bool checked = action->isChecked();
-        if (c.titleExclusionEnabled == checked) {
-          return;
-        }
-        c.titleExclusionEnabled = checked;
-        if (getSettingsManager()) {
-          getSettingsManager()->saveCollections(m_collections);
-        }
-        if (getNavigationManager()) {
-          getNavigationManager()->safeReloadCollection(currentCollectionIndex);
-        }
-      } else if (role == QLatin1String("title-edit")) {
-        showTitleFilterEditor();
-      }
-    });
-  } else {
-    menu->clear();
-  }
-  // Wiped on clear() — null the cached pointer so we don't dereference a
-  // dangling QAction the next time refresh runs without rebuilding the
-  // section.
-  m_titleFilterEnabledAction = nullptr;
-
-  // Type filter section — only emitted when at least one collection actually
-  // declares a type tag. QActionGroup gives radio-button semantics so the
-  // <All types> sentinel and concrete types are mutually exclusive. Ownership
-  // is the menu so the group dies with the next clear().
-  const QStringList allTypes = CollectionUtils::collectAllCollectionTypes(m_collections);
-  if (!allTypes.isEmpty()) {
-    auto *typeGroup = new QActionGroup(menu);
-    typeGroup->setExclusive(true);
-
-    const QString previous = m_generalSettings.collectionTypeFilter;
-    bool matchedPrevious = previous.isEmpty();
-
-    QAction *allAction = menu->addAction(tr("<All types>"));
-    allAction->setCheckable(true);
-    allAction->setData(QString());
-    allAction->setProperty("filterRole", QStringLiteral("type"));
-    typeGroup->addAction(allAction);
-    if (previous.isEmpty()) {
-      allAction->setChecked(true);
-    }
-
-    for (const QString &type : allTypes) {
-      QAction *action = menu->addAction(type);
-      action->setCheckable(true);
-      action->setData(type);
-      action->setProperty("filterRole", QStringLiteral("type"));
-      typeGroup->addAction(action);
-      if (type == previous) {
-        action->setChecked(true);
-        matchedPrevious = true;
-      }
-    }
-
-    // If the previously-selected type no longer exists (collection deleted or
-    // retagged), fall back to <All types> and clear the persisted filter so
-    // the toolbar reflects reality.
-    if (!matchedPrevious) {
-      allAction->setChecked(true);
-      m_generalSettings.collectionTypeFilter.clear();
-      if (getSettingsManager()) {
-        getSettingsManager()->saveGeneralSettings(m_generalSettings);
-      }
-    }
-
-    menu->addSeparator();
-  }
-
-  // Title-pattern section — always present so the user can edit patterns
-  // even on collections that haven't enabled the toggle yet. Mirror the
-  // active collection's flag onto the checkable entry.
-  QAction *toggleAction = menu->addAction(tr("Apply title patterns"));
-  toggleAction->setCheckable(true);
-  toggleAction->setProperty("filterRole", QStringLiteral("title-toggle"));
-  bool toggleOn = false;
-  if (currentCollectionIndex >= 0 && currentCollectionIndex < m_collections.size()) {
-    const CollectionConfig &c = m_collections[currentCollectionIndex];
-    toggleOn = c.titleExclusionEnabled && !c.titleExclusionPatterns.isEmpty();
-  }
-  {
-    QSignalBlocker blocker(toggleAction);
-    toggleAction->setChecked(toggleOn);
-  }
-  m_titleFilterEnabledAction = toggleAction;
-
-  QAction *editAction = menu->addAction(tr("Edit title patterns…"));
-  editAction->setProperty("filterRole", QStringLiteral("title-edit"));
 }
 
 void MainWindow::connectFilterToolbar() {
-  // Single setup pass: refresh wires the QMenu::triggered handler the first
-  // time it runs, and every subsequent call just rebuilds the action list
-  // (handler stays on the menu).
-  refreshFilterToolbar();
-}
-
-void MainWindow::showTitleFilterEditor() {
-  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_collections.size()) {
-    return;
-  }
-  CollectionConfig &c = m_collections[currentCollectionIndex];
-
-  // Modal popup-style dialog. A QDialog with a QPlainTextEdit lets the user
-  // see and edit the full pattern list at once; QMenu-with-widget would
-  // dismiss on focus loss while the user is editing a long regex.
-  QDialog dialog(this);
-  dialog.setWindowTitle(tr("Filter — %1").arg(c.name));
-  dialog.setModal(true);
-  auto *layout = new QVBoxLayout(&dialog);
-
-  auto *label =
-      new QLabel(tr("Filter patterns (regex) — one per line. Each pattern is removed from item "
-                    "titles in order. Examples:\n  \\s*\\(USA\\)$\n  \\s*\\[!\\]\n  "
-                    "\\s*\\(Rev \\d+\\)"),
-                 &dialog);
-  label->setWordWrap(true);
-  layout->addWidget(label);
-
-  auto *editor = new QPlainTextEdit(&dialog);
-  editor->setPlainText(c.titleExclusionPatterns.join(QLatin1Char('\n')));
-  editor->setPlaceholderText(tr("\\s*\\(USA\\)$"));
-  layout->addWidget(editor, 1);
-
-  auto *buttons = new QDialogButtonBox(QDialogButtonBox::Apply | QDialogButtonBox::Cancel, &dialog);
-  layout->addWidget(buttons);
-  dialog.resize(420, 280);
-
-  QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-  QObject::connect(buttons->button(QDialogButtonBox::Apply), &QPushButton::clicked, &dialog,
-                   &QDialog::accept);
-
-  if (dialog.exec() != QDialog::Accepted) {
-    return;
-  }
-
-  // Split, trim, and drop empty lines so a stray newline can't smuggle a
-  // pattern that matches everything (empty regex is technically valid and
-  // would erase the whole title).
-  QStringList parsed;
-  const QStringList rawLines = editor->toPlainText().split(QLatin1Char('\n'));
-  parsed.reserve(rawLines.size());
-  for (const QString &line : rawLines) {
-    const QString trimmed = line.trimmed();
-    if (!trimmed.isEmpty()) {
-      parsed.append(trimmed);
-    }
-  }
-  if (parsed == c.titleExclusionPatterns) {
-    return; // Nothing actually changed; skip the reload.
-  }
-  c.titleExclusionPatterns = parsed;
-  // Auto-enable when the user adds the first pattern from an empty list, so
-  // applying immediately does the visible thing. Honor the existing toggle
-  // otherwise so a user who explicitly disabled cleanup keeps it off.
-  if (!parsed.isEmpty() && !c.titleExclusionEnabled) {
-    c.titleExclusionEnabled = true;
-  }
-  if (getSettingsManager()) {
-    getSettingsManager()->saveCollections(m_collections);
-  }
-  refreshFilterToolbar();
-  if (getNavigationManager() && currentCollectionIndex >= 0) {
-    getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+  if (m_toolbarController) {
+    m_toolbarController->connectFilterToolbar();
   }
 }
 
