@@ -2,6 +2,7 @@
 #define GAMEPADMANAGER_H
 
 #include "setuputils.h"
+#include <atomic>
 #include <QObject>
 
 QT_BEGIN_NAMESPACE
@@ -66,10 +67,15 @@ private:
   const bool *m_isShuttingDown = nullptr;
 
   // Current digital input state (D-pad OR derived from left stick).
-  bool m_up = false;
-  bool m_down = false;
-  bool m_left = false;
-  bool m_right = false;
+  // Threading invariant: today both Qt6Gamepad and SDL2 paths write these on
+  // the main thread (Qt signals delivered to main; SDL polled by a main-thread
+  // QTimer), and updateDirectionFromInputs() reads them only from the same
+  // path. std::atomic with seq_cst ops guards against a future move of SDL
+  // polling onto a dedicated thread, where plain `bool` would be a data race.
+  std::atomic<bool> m_up{false};
+  std::atomic<bool> m_down{false};
+  std::atomic<bool> m_left{false};
+  std::atomic<bool> m_right{false};
 
   // Left stick axes.
   double m_axisX = 0.0;

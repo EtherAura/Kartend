@@ -51,6 +51,28 @@ SettingsManager::~SettingsManager() = default;
 // separately)
 void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
+
+  // Mirror saveCollections()/saveGeneralSettings() write-side path validation
+  // on read so a hand-edited config can't sneak shell metacharacters or null
+  // bytes into a path that's later passed to QProcess / QFile.
+  auto sanitizeLoadedPath = [](const QString &value, const QString &fieldName) -> QString {
+    if (value.isEmpty()) {
+      return value;
+    }
+    auto security = PathUtils::validatePathSecurity(value);
+    if (security.isError()) {
+      ErrorUtils::logError(
+          ErrorUtils::ErrorContext::warning(
+              ErrorUtils::ErrorCode::InvalidFilePath,
+              QString("Refusing to load insecure %1").arg(fieldName),
+              "SettingsManager::loadGeneralSettings")
+              .withDetails(QString("Value: %1, Reason: %2")
+                               .arg(value, security.error().message)));
+      return QString();
+    }
+    return value;
+  };
+
   s.beginGroup("General");
   settings.rememberSelection = s.value("rememberSelection", true).toBool();
   settings.wrapNavigation = s.value("wrapNavigation", false).toBool();
@@ -98,7 +120,8 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   // startup video. Stored even when disabled so the user can
   // keep a path configured and toggle it off temporarily.
   settings.startupVideoEnabled = s.value("startupVideoEnabled", false).toBool();
-  settings.startupVideoPath = s.value("startupVideoPath", QString()).toString();
+  settings.startupVideoPath =
+      sanitizeLoadedPath(s.value("startupVideoPath", QString()).toString(), "startupVideoPath");
 
   // Controls: keyboard bindings
   settings.keyNavLeft = s.value("keyNavLeft", static_cast<int>(Qt::Key_Left)).toInt();
@@ -246,8 +269,10 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
     LauncherPreset preset;
     preset.id = s.value("id").toString();
     preset.name = s.value("name").toString();
-    preset.launcherPath = s.value("launcherPath").toString();
-    preset.corePath = s.value("corePath").toString();
+    preset.launcherPath = sanitizeLoadedPath(s.value("launcherPath").toString(),
+                                              QString("Launchers[%1].launcherPath").arg(i));
+    preset.corePath = sanitizeLoadedPath(s.value("corePath").toString(),
+                                          QString("Launchers[%1].corePath").arg(i));
     preset.launchParameters = s.value("launchParameters").toString();
     // Drop entries with no id — they can't be referenced and would shadow
     // valid presets if a hand-edit accidentally cleared the field.

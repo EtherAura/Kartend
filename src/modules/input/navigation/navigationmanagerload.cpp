@@ -428,6 +428,13 @@ void NavigationManager::onMediaLibraryError(const ErrorUtils::ErrorContext &erro
   QWidget *parentWidget = m_gridContainer ? m_gridContainer->window() : nullptr;
   ErrorDialog::showError(parentWidget, error);
 
+  // Drop the previous error widget so rapid load failures don't accumulate
+  // children on m_gridContainer.
+  if (m_errorWidget) {
+    m_errorWidget->deleteLater();
+    m_errorWidget = nullptr;
+  }
+
   auto *errorWidget = new QWidget(m_gridContainer);
   errorWidget->setObjectName("noItemsWidget");
 
@@ -446,6 +453,7 @@ void NavigationManager::onMediaLibraryError(const ErrorUtils::ErrorContext &erro
 
   errorWidget->show();
   errorWidget->raise();
+  m_errorWidget = errorWidget;
 
   if (m_databaseManager) {
     m_databaseManager->updateCachedCounts((*m_collections));

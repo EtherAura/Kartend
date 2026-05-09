@@ -14,6 +14,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonParseError>
 #include <QSaveFile>
 #include <QStandardPaths>
 
@@ -67,8 +68,14 @@ void SessionManager::initialize() {
 
   if (metadataFile.open(QIODevice::ReadOnly)) {
     QByteArray data = metadataFile.readAll();
-    QJsonDocument doc = QJsonDocument::fromJson(data);
-    if (!doc.isNull() && doc.isObject()) {
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    if (doc.isNull() || !doc.isObject()) {
+      qCWarning(lcSessionManager) << "Failed to parse session metadata at" << metadataPath
+                                  << "- error:" << parseError.errorString()
+                                  << "offset:" << parseError.offset
+                                  << "(session state will reset)";
+    } else {
       QJsonObject root = doc.object();
       readCollectionsData(root);
       readGlobalData(root);

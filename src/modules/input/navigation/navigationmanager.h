@@ -10,6 +10,7 @@
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QPointer>
 #include <QStringList>
 #include <QTimer>
 
@@ -205,6 +206,9 @@ private:
   LoadingOverlay *m_loadingOverlay = nullptr;
   QScrollArea *m_itemScrollArea = nullptr;
   QWidget *m_gridContainer = nullptr;
+  // Recreated on each onMediaLibraryError() call; QPointer because the
+  // Qt parent (m_gridContainer) owns it and may delete it during teardown.
+  QPointer<QWidget> m_errorWidget;
   // lazy-created on first collection that requests a video
   // background. Parented to the items viewport so its lifetime mirrors the
   // scroll area's. Hidden + decoder-released when the active collection

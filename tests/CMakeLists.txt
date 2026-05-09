@@ -507,6 +507,26 @@ target_include_directories(test_collectionutils PRIVATE
 target_link_libraries(test_collectionutils Qt6::Core Qt6::Widgets Qt6::Test)
 add_test(NAME CollectionUtils COMMAND test_collectionutils)
 
+# ConfigValidation tests (schema + cross-collection diagnostics)
+add_executable(test_configvalidation
+  utils/test_configvalidation.cpp
+  ${SRC_DIR}/utils/fs/configvalidation.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+)
+target_include_directories(test_configvalidation PRIVATE
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_configvalidation Qt6::Core Qt6::Widgets Qt6::Test)
+add_test(NAME ConfigValidation COMMAND test_configvalidation)
+
 # KeyboardManager tests (static selection helpers)
 # Only the selection-helper TU is linked; it has no dependencies on
 # ScrollManager / InteractionStateHolder / etc., keeping the test isolated.
