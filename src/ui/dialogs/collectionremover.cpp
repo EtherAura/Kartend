@@ -4,8 +4,8 @@
 // declaration in settingsdialog.h.
 #include "collectionremover.h"
 
-#include "collectionutils.h"
 #include "collectiontreewidget.h"
+#include "collectionutils.h"
 #include "mainwindow.h"
 #include "settingsdialog.h"
 
@@ -34,8 +34,8 @@ QList<int> CollectionRemover::captureExpandedStates() {
   if (!m_host) {
     return expandedBefore;
   }
-  for (auto it = m_host->collectionIndexToItem.begin();
-       it != m_host->collectionIndexToItem.end(); ++it) {
+  for (auto it = m_host->collectionIndexToItem.begin(); it != m_host->collectionIndexToItem.end();
+       ++it) {
     if (it.value() && it.value()->isExpanded()) {
       expandedBefore.append(it.key());
     }
@@ -155,7 +155,7 @@ void CollectionRemover::run() {
   }
 
   // Remove descendants first (in reverse order to maintain indices).
-  std::sort(descendants.begin(), descendants.end(), std::greater<int>());
+  std::sort(descendants.begin(), descendants.end(), std::greater<>());
   for (int descIndex : descendants) {
     performRemovalAt(descIndex);
   }
