@@ -134,11 +134,13 @@ add_executable(test_cachemanager
   test_cachemanager.cpp
   ${SRC_DIR}/modules/cache/cachemanager.cpp
   ${SRC_DIR}/modules/cache/cachemanagerdisk.cpp
+  ${SRC_DIR}/utils/pathutils.cpp
   ${SRC_DIR}/utils/threadpoolutils.cpp
 )
 target_include_directories(test_cachemanager PRIVATE
   ${SRC_DIR}/modules/cache
   ${SRC_DIR}/ui
+  ${SRC_DIR}/utils
 )
 target_link_libraries(test_cachemanager
   Qt6::Core

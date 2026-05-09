@@ -3,6 +3,7 @@
 #include "sessionmanager.h"
 #include "collectionutils.h"
 #include "errorutils.h"
+#include "pathutils.h"
 #include "uiconstants.h"
 
 #include <algorithm>
@@ -205,7 +206,13 @@ auto SessionManager::atomicWriteFile(const QString &filePath, const QByteArray &
     return false;
   }
 
-  return file.commit();
+  if (!file.commit()) {
+    return false;
+  }
+
+  // fsync the parent directory so the rename is durable across crash/power loss
+  PathUtils::syncDirectory(parentDir);
+  return true;
 }
 
 void SessionManager::saveToDisk() {

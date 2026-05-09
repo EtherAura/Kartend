@@ -54,6 +54,11 @@ private slots:
   void testValidatePathSecurity_newlines();
   void testValidatePathSecurity_backslash();
 
+  // syncDirectory tests
+  void testSyncDirectory_existingDir();
+  void testSyncDirectory_emptyPath();
+  void testSyncDirectory_nonExistentDir();
+
 private:
   QTemporaryDir m_tempDir;
 };
@@ -275,6 +280,34 @@ void TestPathUtils::testValidatePathSecurity_newlines() {
 void TestPathUtils::testValidatePathSecurity_backslash() {
   auto result = PathUtils::validatePathSecurity("/path/with\\backslash");
   QVERIFY2(result.isError(), "Path with backslash should fail");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// syncDirectory tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestPathUtils::testSyncDirectory_existingDir() {
+  // Sync of a real directory should succeed (or be a no-op on non-POSIX).
+  QVERIFY2(PathUtils::syncDirectory(m_tempDir.path()),
+           "Sync of an existing directory should succeed");
+}
+
+void TestPathUtils::testSyncDirectory_emptyPath() {
+#if defined(Q_OS_UNIX)
+  QVERIFY2(!PathUtils::syncDirectory(QString()), "Empty path should fail on POSIX");
+#else
+  QVERIFY2(PathUtils::syncDirectory(QString()), "Empty path is a no-op on non-POSIX");
+#endif
+}
+
+void TestPathUtils::testSyncDirectory_nonExistentDir() {
+#if defined(Q_OS_UNIX)
+  QVERIFY2(!PathUtils::syncDirectory("/nonexistent/path/abcxyz"),
+           "Non-existent path should fail on POSIX");
+#else
+  QVERIFY2(PathUtils::syncDirectory("/nonexistent/path/abcxyz"),
+           "Non-existent path is a no-op on non-POSIX");
+#endif
 }
 
 QTEST_MAIN(TestPathUtils)

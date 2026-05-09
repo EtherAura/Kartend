@@ -28,6 +28,12 @@ tryValidateAndExpandPath(const QString &path, const QString &collectionName = QS
 /// Returns success if path is safe, or an error context describing the issue.
 [[nodiscard]] ErrorUtils::Result<void> validatePathSecurity(const QString &path);
 
+// Flushes the parent directory's metadata to disk so that a recently-renamed
+// or newly-created file survives a crash or power loss. POSIX-only; no-op on
+// other platforms (NTFS journals directory metadata, no portable equivalent).
+// Returns true if the sync succeeded or the platform has nothing to do.
+bool syncDirectory(const QString &dirPath);
+
 } // namespace PathUtils
 
 #endif

@@ -1,6 +1,7 @@
 // Sibling TU: disk-persistence methods for CacheManager.
 #include "cachemanager.h"
 #include "errorutils.h"
+#include "pathutils.h"
 #include "uiconstants.h"
 
 #include <limits>
@@ -160,7 +161,11 @@ void CacheManager::writeTimestamps(const QHash<QString, qint64> &dirtyTimestamps
                                           "CacheManager::writeTimestamps")
             .withDetails(
                 QString("Path: %1, Error: %2").arg(metadataPath, metadataFile.errorString())));
+    return;
   }
+
+  // fsync the parent directory so the rename is durable across crash/power loss
+  PathUtils::syncDirectory(QFileInfo(metadataPath).absolutePath());
 }
 // Saves persistent cache to disk with canonical hierarchical keys and without
 // leaf aliases

@@ -1,8 +1,15 @@
 // Provides file path normalization, extension handling, and path manipulation.
 #include "pathutils.h"
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
+
+#if defined(Q_OS_UNIX)
+#include <cerrno>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
@@ -124,6 +131,34 @@ Result<void> validatePathSecurity(const QString &path) {
   }
 
   return Result<void>::success();
+}
+
+bool syncDirectory(const QString &dirPath) {
+#if defined(Q_OS_UNIX)
+  if (dirPath.isEmpty()) {
+    return false;
+  }
+  const QByteArray native = QFile::encodeName(dirPath);
+  const int fd = ::open(native.constData(), O_RDONLY
+#ifdef O_DIRECTORY
+                                                | O_DIRECTORY
+#endif
+#ifdef O_CLOEXEC
+                                                | O_CLOEXEC
+#endif
+  );
+  if (fd < 0) {
+    return false;
+  }
+  const int rc = ::fsync(fd);
+  ::close(fd);
+  // EINVAL: filesystem doesn't support directory fsync (e.g. some tmpfs).
+  // Treat that as success — the rename is still durable on supported FSes.
+  return rc == 0 || errno == EINVAL;
+#else
+  Q_UNUSED(dirPath);
+  return true;
+#endif
 }
 
 } // namespace PathUtils
