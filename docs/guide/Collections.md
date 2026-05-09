@@ -14,13 +14,13 @@ If you've never built one, start with the
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| **Name** | yes | Display label and the INI section header. Renaming updates references. |
+| **Name** | yes | Display label and the INI section header. Renaming updates references. The *only* strictly required field. |
 | **Type** | no | Free-form tag (e.g. `Games`, `Movies`, `PDFs`). Used by the [collection-type filter](Search-Sort-Filter.md#type-filter). |
-| **Media Directory** | yes (or be a parent only) | Folder of items. Supports `~`. |
+| **Media Directory** | no | Folder of items. Supports `~`. Omitted on [shell collections](Shell-Collections.md) that exist purely to group other collections. |
 | **Artwork Directory** | no | Folder of cover images matched by base filename. See [Artwork](Artwork.md). |
 | **Video Directory** | no | Folder of preview videos for the sidebar. See [Video Previews](Video-Previews.md). |
 | **Manual Directory** | no | Folder of manuals / docs for items. See [Item Metadata](Item-Metadata.md#manual-files). |
-| **Launcher Path** | yes (unless parent only) | Executable that opens an item. See [Launchers](Launchers.md). |
+| **Launcher Path** | no | Executable that opens an item. Required when the collection has its own media; omitted on shell collections. See [Launchers](Launchers.md). |
 | **Extensions** | no | Comma-separated allow-list. Empty = accept any file. |
 | **Parent Collection** | no | Makes this collection a subcollection. |
 | **Linked Parents** | no | Additional alias parents. See below. |
@@ -32,9 +32,12 @@ If you've never built one, start with the
 > **Paths & Extensions**, **Launcher**, **Appearance**, **Sidebar**,
 > **Colors**, **Text & Fonts**, **List View**.
 
-A collection can also be **parent-only** — a hub for subcollections with
-no media directory of its own. Parent-only collections render their
-children as tiles and open the matching subcollection on `Enter`.
+A collection can also have no media directory of its own — a
+[shell collection](Shell-Collections.md) used to group other
+collections under a named category. Shells render their children as
+tiles, open the matching subcollection on `Enter`, and are the
+canonical way to build top-level categories like `Games` containing
+SNES / PS1 / N64.
 
 ## Adding, renaming, duplicating, deleting
 

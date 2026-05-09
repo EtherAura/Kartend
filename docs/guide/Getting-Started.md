@@ -15,11 +15,11 @@ A **collection** is the unit Kartend organizes around. Every collection
 has, at minimum:
 
 - a **name** (the label shown in the UI)
-- a **media directory** (the folder of items to display) *or* a parent
-  to nest under (a parent-only collection acts as a hub for
-  subcollections)
-- a **launcher** (the executable that opens an item — `xdg-open`, `mpv`,
-  `retroarch`, your own shell script…)
+- usually a **media directory** (the folder of items to display) plus a
+  **launcher** that opens an item (`xdg-open`, `mpv`, `retroarch`, your
+  own shell script…) — but neither is strictly required: a
+  [shell collection](Shell-Collections.md) with no media of its own can
+  exist purely to group other collections under a named category
 
 Optionally a collection also has an **artwork directory**, a **video
 directory** for previews, and any number of per-collection appearance
