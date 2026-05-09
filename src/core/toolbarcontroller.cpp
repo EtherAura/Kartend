@@ -258,8 +258,7 @@ void ToolbarController::refreshFilterToolbar() {
   bool toggleOn = false;
   if (m_mainWindow->currentCollectionIndex >= 0 &&
       m_mainWindow->currentCollectionIndex < m_mainWindow->m_collections.size()) {
-    const CollectionConfig &c =
-        m_mainWindow->m_collections[m_mainWindow->currentCollectionIndex];
+    const CollectionConfig &c = m_mainWindow->m_collections[m_mainWindow->currentCollectionIndex];
     toggleOn = c.titleExclusionEnabled && !c.titleExclusionPatterns.isEmpty();
   }
   {
@@ -303,8 +302,7 @@ void ToolbarController::showTitleFilterEditor() {
   editor->setPlaceholderText(tr("\\s*\\(USA\\)$"));
   layout->addWidget(editor, 1);
 
-  auto *buttons =
-      new QDialogButtonBox(QDialogButtonBox::Apply | QDialogButtonBox::Cancel, &dialog);
+  auto *buttons = new QDialogButtonBox(QDialogButtonBox::Apply | QDialogButtonBox::Cancel, &dialog);
   layout->addWidget(buttons);
   dialog.resize(420, 280);
 
