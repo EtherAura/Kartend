@@ -11,6 +11,7 @@
 #include <QTimer>
 
 #include "animationmanager.h"
+#include "interactionhelpers.h"
 #include "keyboardmanager.h"
 #include "mousemanager.h"
 #include "scrollmanager.h"
@@ -193,34 +194,19 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
   // Vertical scrolling
   int currentIndex = std::max(0, currentSelectedIndex());
 
-  // List and CoverFlow move by 1 item per step instead of gridWidth.
-  bool singleStep = false;
+  ViewType viewType = ViewType::Grid;
   if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-    const ViewType vt = (*m_collections)[*m_currentCollectionIndex].viewType;
-    singleStep = (vt == ViewType::List) || (vt == ViewType::CoverFlow);
+    viewType = (*m_collections)[*m_currentCollectionIndex].viewType;
   }
-  int stepSize = singleStep ? 1 : gridWidth;
-  int nextIndex = currentIndex + (direction * stepSize);
+  const int stepSize = InteractionHelpers::stepSizeForViewType(viewType, gridWidth);
 
-  bool wrap = m_generalSettings ? m_generalSettings->wrapNavigation : false;
-  bool didWrap = false;
+  const bool wrap = m_generalSettings ? m_generalSettings->wrapNavigation : false;
+  const auto step =
+      InteractionHelpers::computeVerticalHoldStep(currentIndex, direction, stepSize, totalItems, wrap);
+  int nextIndex = step.nextIndex;
+  const bool didWrap = step.didWrap;
 
-  if (wrap) {
-    if (nextIndex < 0) {
-      nextIndex = (totalItems + (nextIndex % totalItems)) % totalItems;
-      didWrap = true;
-    } else if (nextIndex >= totalItems) {
-      nextIndex = nextIndex % totalItems;
-      didWrap = true;
-    }
-  } else {
-    nextIndex = std::max(nextIndex, 0);
-    if (nextIndex >= totalItems) {
-      nextIndex = totalItems - 1;
-    }
-  }
-
-  if (nextIndex == currentIndex) {
+  if (nextIndex < 0 || nextIndex == currentIndex) {
     return;
   }
 

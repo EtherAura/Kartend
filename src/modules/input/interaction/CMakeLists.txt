@@ -1,5 +1,6 @@
 target_sources(${KARTEND_LIB_TARGET} PRIVATE
   arrownavigationhandler.cpp
+  interactionhelpers.cpp
   interactionmanager.cpp
   interactionmanagercontextmenu.cpp
   interactionmanagerenter.cpp
@@ -10,6 +11,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   interactionmanagerwiring.cpp
   interactionstateholder.cpp
   arrownavigationhandler.h
+  interactionhelpers.h
   interactionmanager.h
   interactionstateholder.h
 )

@@ -867,6 +867,21 @@ target_link_libraries(test_navigationhelpers
 )
 add_test(NAME NavigationHelpers COMMAND test_navigationhelpers)
 
+# InteractionHelpers tests (pure helpers extracted)
+add_executable(test_interactionhelpers
+  modules/interaction/test_interactionhelpers.cpp
+  ${SRC_DIR}/modules/input/interaction/interactionhelpers.cpp
+)
+target_include_directories(test_interactionhelpers PRIVATE
+  ${SRC_DIR}/modules/input/interaction
+  ${SRC_DIR}/utils/app
+)
+target_link_libraries(test_interactionhelpers
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME InteractionHelpers COMMAND test_interactionhelpers)
+
 # SearchHelpers tests (pure helpers extracted)
 add_executable(test_searchhelpers
   modules/search/test_searchhelpers.cpp

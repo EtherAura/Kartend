@@ -23,6 +23,7 @@
 #include "arrownavigationhandler.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
+#include "interactionhelpers.h"
 #include "keyboardmanager.h"
 #include "launchmanager.h"
 #include "mousemanager.h"
@@ -143,7 +144,9 @@ auto InteractionManager::handleEnterOnItem(int currentSelection, int /*totalItem
     // launcher list, not the empty/single-launcher playlist config. The
     // fallback to the current collection only matters for ordinary collections
     // where the file→collection map hasn't been populated yet.
-    const int ownerIdx = (cIdx >= 0 ? cIdx : *m_currentCollectionIndex);
+    const int ownerIdx = InteractionHelpers::resolveOwnerIndex(
+        cIdx, m_currentCollectionIndex ? *m_currentCollectionIndex : -1,
+        m_collections ? m_collections->size() : 0);
     // Expand-mode: first activation expands the artwork preview; only the
     // second activation on the same selection launches.
     if (maybeExpandInsteadOfLaunch(path, ownerIdx, currentSelection)) {
@@ -276,10 +279,9 @@ void InteractionManager::onArtworkPreviewLaunchRequested(const QString &filePath
     return;
   }
   const int cIdx = (m_databaseManager ? m_databaseManager->getCollectionIndexForFile(path) : -1);
-  int ownerIdx = cIdx;
-  if (ownerIdx < 0 && m_currentCollectionIndex) {
-    ownerIdx = *m_currentCollectionIndex;
-  }
+  const int ownerIdx = InteractionHelpers::resolveOwnerIndex(
+      cIdx, m_currentCollectionIndex ? *m_currentCollectionIndex : -1,
+      m_collections ? m_collections->size() : 0);
   if (ownerIdx < 0) {
     return;
   }
@@ -305,11 +307,9 @@ void InteractionManager::onMediaPreviewRequested(ItemWidget *widget, int visualI
   }
 
   const int cIdx = m_databaseManager ? m_databaseManager->getCollectionIndexForFile(filePath) : -1;
-  int ownerIdx = cIdx;
-  if (ownerIdx < 0 && m_currentCollectionIndex) {
-    ownerIdx = *m_currentCollectionIndex;
-  }
-  if (ownerIdx < 0 || ownerIdx >= m_collections->size()) {
+  const int ownerIdx = InteractionHelpers::resolveOwnerIndex(
+      cIdx, m_currentCollectionIndex ? *m_currentCollectionIndex : -1, m_collections->size());
+  if (ownerIdx < 0) {
     return;
   }
 
@@ -344,11 +344,9 @@ void InteractionManager::onArtworkTypeCycleRequested(ItemWidget *widget, int vis
   }
 
   const int cIdx = m_databaseManager ? m_databaseManager->getCollectionIndexForFile(filePath) : -1;
-  int ownerIdx = cIdx;
-  if (ownerIdx < 0 && m_currentCollectionIndex) {
-    ownerIdx = *m_currentCollectionIndex;
-  }
-  if (ownerIdx < 0 || ownerIdx >= m_collections->size()) {
+  const int ownerIdx = InteractionHelpers::resolveOwnerIndex(
+      cIdx, m_currentCollectionIndex ? *m_currentCollectionIndex : -1, m_collections->size());
+  if (ownerIdx < 0) {
     return;
   }
 
