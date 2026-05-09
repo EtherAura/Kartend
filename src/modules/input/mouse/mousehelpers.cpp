@@ -41,4 +41,26 @@ auto verticalScrollDirection(int selectedItemCenterY, int viewportTopY, int view
   return 0;
 }
 
+auto computeHorizontalCandidate(int previousSelection, int targetSelection, int gridWidth)
+    -> HorizontalCandidate {
+  HorizontalCandidate result;
+  if (previousSelection < 0 || targetSelection < 0 || previousSelection == targetSelection) {
+    return result;
+  }
+  if (gridWidth <= 0) {
+    return result;
+  }
+
+  const int previousRow = previousSelection / gridWidth;
+  const int currentRow = targetSelection / gridWidth;
+  if (previousRow != currentRow) {
+    return result;
+  }
+
+  result.direction = (targetSelection > previousSelection) ? 1 : -1;
+  result.startIndex = targetSelection;
+  result.eligible = true;
+  return result;
+}
+
 } // namespace MouseHelpers

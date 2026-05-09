@@ -5,6 +5,7 @@
 #include "loggingcategories.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
+#include "searchhelpers.h"
 #include "searchmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
@@ -270,27 +271,10 @@ void SearchManager::scheduleSearchBarRefocusIfNeeded() {
 // responsiveness Slow typing (> 300ms between keystrokes) = longer debounce to
 // avoid premature searches
 void SearchManager::updateAdaptiveDebounce() {
-  qint64 now = QDateTime::currentMSecsSinceEpoch();
-
-  if (m_lastKeystrokeTime > 0) {
-    qint64 timeSinceLastKeystroke = now - m_lastKeystrokeTime;
-
-    // Clamp to reasonable range for calculation
-    int keystrokeInterval = static_cast<int>(
-        std::clamp(timeSinceLastKeystroke, static_cast<qint64>(50), static_cast<qint64>(500)));
-
-    // Map keystroke interval to debounce delay:
-    // Fast typing (50-100ms between keys) -> short debounce (80-120ms)
-    // Slow typing (300-500ms between keys) -> long debounce (180-250ms)
-    // Formula: debounce = MIN + (interval - 50) * (MAX - MIN) / (500 - 50)
-    int range = MAX_ADAPTIVE_DEBOUNCE_MS - MIN_ADAPTIVE_DEBOUNCE_MS;
-    int debounce = MIN_ADAPTIVE_DEBOUNCE_MS + ((keystrokeInterval - 50) * range) / 450;
-
-    m_adaptiveDebounceMs = std::clamp(debounce, MIN_ADAPTIVE_DEBOUNCE_MS, MAX_ADAPTIVE_DEBOUNCE_MS);
-  } else {
-    // First keystroke - use default
-    m_adaptiveDebounceMs = UIConstants::Search::TYPING_DEBOUNCE_MS;
-  }
-
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
+  const qint64 gap = (m_lastKeystrokeTime > 0) ? (now - m_lastKeystrokeTime) : 0;
+  m_adaptiveDebounceMs = SearchHelpers::computeAdaptiveDebounceMs(
+      gap, MIN_ADAPTIVE_DEBOUNCE_MS, MAX_ADAPTIVE_DEBOUNCE_MS,
+      UIConstants::Search::TYPING_DEBOUNCE_MS);
   m_lastKeystrokeTime = now;
 }

@@ -39,6 +39,26 @@ namespace MouseHelpers {
                                            int viewportBottomY, int viewportCenterY, int rowHeight)
     -> int;
 
+// Result of a horizontal click-hold candidate computation.
+// `eligible` is true iff the previous and target selections lie on the same
+// grid row and differ — that's the case where click-hold can advance
+// horizontally instead of stepping rows.
+struct HorizontalCandidate {
+  bool eligible = false;
+  int direction = 0;   // -1 = leftward, +1 = rightward, 0 = none
+  int startIndex = -1; // First index after the user crossed onto the new row
+};
+
+// Computes whether a click-hold should enter horizontal-advance mode based
+// on the previous and target selection indices. Returns an "ineligible"
+// result (eligible=false, direction=0, startIndex=-1) for any of:
+//   - either index is negative
+//   - prev == target (no movement)
+//   - gridWidth <= 0 (defensive)
+//   - prev and target are on different grid rows
+[[nodiscard]] auto computeHorizontalCandidate(int previousSelection, int targetSelection,
+                                              int gridWidth) -> HorizontalCandidate;
+
 } // namespace MouseHelpers
 
 #endif // MOUSEHELPERS_H

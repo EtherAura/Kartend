@@ -32,6 +32,15 @@ private slots:
   void verticalAboveCenterReturnsMinusOne();
   void verticalBelowCenterReturnsPlusOne();
   void verticalAtCenterReturnsZero();
+
+  // computeHorizontalCandidate
+  void horizontalCandidateNoMovementIsIneligible();
+  void horizontalCandidateNegativeIndicesIneligible();
+  void horizontalCandidateZeroGridWidthIneligible();
+  void horizontalCandidateDifferentRowIneligible();
+  void horizontalCandidateRightwardSameRowEligible();
+  void horizontalCandidateLeftwardSameRowEligible();
+  void horizontalCandidateLastColumnFirstColumnNextRowIsDifferentRow();
 };
 
 // --------------------------- wheel angle ------------------------------------
@@ -147,6 +156,68 @@ void TestMouseHelpers::verticalAtCenterReturnsZero() {
                                                  /*center=*/300,
                                                  /*rowHeight=*/50),
            0);
+}
+
+// --------------------------- computeHorizontalCandidate ---------------------
+
+void TestMouseHelpers::horizontalCandidateNoMovementIsIneligible() {
+  const auto c = MouseHelpers::computeHorizontalCandidate(/*prev=*/3, /*target=*/3,
+                                                          /*gridWidth=*/5);
+  QVERIFY(!c.eligible);
+  QCOMPARE(c.direction, 0);
+  QCOMPARE(c.startIndex, -1);
+}
+
+void TestMouseHelpers::horizontalCandidateNegativeIndicesIneligible() {
+  const auto a = MouseHelpers::computeHorizontalCandidate(/*prev=*/-1, /*target=*/3,
+                                                          /*gridWidth=*/5);
+  QVERIFY(!a.eligible);
+  const auto b = MouseHelpers::computeHorizontalCandidate(/*prev=*/3, /*target=*/-1,
+                                                          /*gridWidth=*/5);
+  QVERIFY(!b.eligible);
+}
+
+void TestMouseHelpers::horizontalCandidateZeroGridWidthIneligible() {
+  const auto a = MouseHelpers::computeHorizontalCandidate(/*prev=*/3, /*target=*/4,
+                                                          /*gridWidth=*/0);
+  QVERIFY(!a.eligible);
+  const auto b = MouseHelpers::computeHorizontalCandidate(/*prev=*/3, /*target=*/4,
+                                                          /*gridWidth=*/-2);
+  QVERIFY(!b.eligible);
+}
+
+void TestMouseHelpers::horizontalCandidateDifferentRowIneligible() {
+  // gridWidth=5: prev row 0 (idx 3), target row 1 (idx 7) -> not same row.
+  const auto c = MouseHelpers::computeHorizontalCandidate(/*prev=*/3, /*target=*/7,
+                                                          /*gridWidth=*/5);
+  QVERIFY(!c.eligible);
+  QCOMPARE(c.direction, 0);
+}
+
+void TestMouseHelpers::horizontalCandidateRightwardSameRowEligible() {
+  // gridWidth=5: prev=2 (row 0), target=4 (row 0).
+  const auto c = MouseHelpers::computeHorizontalCandidate(/*prev=*/2, /*target=*/4,
+                                                          /*gridWidth=*/5);
+  QVERIFY(c.eligible);
+  QCOMPARE(c.direction, 1);
+  QCOMPARE(c.startIndex, 4);
+}
+
+void TestMouseHelpers::horizontalCandidateLeftwardSameRowEligible() {
+  // gridWidth=5: prev=8 (row 1), target=6 (row 1).
+  const auto c = MouseHelpers::computeHorizontalCandidate(/*prev=*/8, /*target=*/6,
+                                                          /*gridWidth=*/5);
+  QVERIFY(c.eligible);
+  QCOMPARE(c.direction, -1);
+  QCOMPARE(c.startIndex, 6);
+}
+
+void TestMouseHelpers::horizontalCandidateLastColumnFirstColumnNextRowIsDifferentRow() {
+  // gridWidth=5: idx 4 = row 0, last column. idx 5 = row 1, first column.
+  // The "wrap to next row" case must NOT be eligible for horizontal hold.
+  const auto c = MouseHelpers::computeHorizontalCandidate(/*prev=*/4, /*target=*/5,
+                                                          /*gridWidth=*/5);
+  QVERIFY(!c.eligible);
 }
 
 QTEST_APPLESS_MAIN(TestMouseHelpers)

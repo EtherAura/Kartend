@@ -126,26 +126,11 @@ void MouseManager::onClickHoldTimerTimeout() {
 
 void MouseManager::updateClickHoldHorizontalCandidate(int previousSelection, int targetSelection,
                                                       int gridWidth) {
-  m_clickHoldHorizontalEligible = false;
-  m_mouseHoldHorizontalDirection = 0;
-  m_mouseHoldHorizontalStartIndex = -1;
-
-  if (previousSelection < 0 || targetSelection < 0 || previousSelection == targetSelection) {
-    return;
-  }
-  if (gridWidth <= 0) {
-    return;
-  }
-
-  const int previousRow = previousSelection / gridWidth;
-  const int currentRow = targetSelection / gridWidth;
-  if (previousRow != currentRow) {
-    return;
-  }
-
-  m_mouseHoldHorizontalDirection = (targetSelection > previousSelection) ? 1 : -1;
-  m_mouseHoldHorizontalStartIndex = targetSelection;
-  m_clickHoldHorizontalEligible = true;
+  const auto cand =
+      MouseHelpers::computeHorizontalCandidate(previousSelection, targetSelection, gridWidth);
+  m_clickHoldHorizontalEligible = cand.eligible;
+  m_mouseHoldHorizontalDirection = cand.direction;
+  m_mouseHoldHorizontalStartIndex = cand.startIndex;
 }
 
 void MouseManager::clearHorizontalCandidate() {

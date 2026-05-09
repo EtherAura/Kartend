@@ -32,6 +32,19 @@ namespace SearchHelpers {
 [[nodiscard]] auto buildSearchModeCycle(const SearchContext &ctx, bool isRoot)
     -> QVector<SearchMode>;
 
+// Computes the adaptive debounce delay (ms) for the search input given the
+// gap (ms) since the previous keystroke and the configured min/max/default
+// debounces. Reflects the SearchManager logic:
+//
+// - timeSinceLastKeystrokeMs <= 0  -> default debounce (first keystroke)
+// - otherwise: clamp gap to [50, 500], map linearly into [min, max].
+//   Fast typing (50ms) -> min. Slow typing (>=500ms) -> max.
+//
+// The formula matches SearchManager::updateAdaptiveDebounce so changes to
+// either side stay in lockstep and tests catch a drift.
+[[nodiscard]] auto computeAdaptiveDebounceMs(qint64 timeSinceLastKeystrokeMs, int minDebounceMs,
+                                              int maxDebounceMs, int defaultDebounceMs) -> int;
+
 // Pure version of SearchManager::allowAllFor.
 //
 // Decides whether the AllCollections mode should be available given the

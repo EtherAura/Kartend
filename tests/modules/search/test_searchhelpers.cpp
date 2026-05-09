@@ -56,6 +56,13 @@ private slots:
   void allowAllForNonRootWithSubsTrue();
   void allowAllForNonRootLeafTrue();
   void allowAllForRootWithoutLookupReturnsFalse();
+
+  // computeAdaptiveDebounceMs
+  void adaptiveDebounceFirstKeystrokeUsesDefault();
+  void adaptiveDebounceVeryFastTypingClampsToMin();
+  void adaptiveDebounceVerySlowTypingClampsToMax();
+  void adaptiveDebounceMidIntervalLandsBetween();
+  void adaptiveDebounceNegativeGapTreatedAsFirstKeystroke();
 };
 
 // --------------------------- buildSearchModeCycle (root) --------------------
@@ -189,6 +196,54 @@ void TestSearchHelpers::allowAllForRootWithoutLookupReturnsFalse() {
                                 makeCollection("Music")};
   SearchHelpers::HasDirectItemsLookup empty;
   QVERIFY(!SearchHelpers::allowAllFor(cs[0], 0, /*hasSubs=*/false, cs, empty));
+}
+
+// --------------------------- computeAdaptiveDebounceMs ----------------------
+
+void TestSearchHelpers::adaptiveDebounceFirstKeystrokeUsesDefault() {
+  // gap=0 means "no prior keystroke" -> default debounce, regardless of
+  // min/max.
+  QCOMPARE(SearchHelpers::computeAdaptiveDebounceMs(/*gap=*/0, /*min=*/80,
+                                                     /*max=*/250, /*default=*/150),
+           150);
+}
+
+void TestSearchHelpers::adaptiveDebounceVeryFastTypingClampsToMin() {
+  // gap=10ms is below the 50ms clamp floor -> treated as 50ms gap, which maps
+  // to min debounce.
+  QCOMPARE(SearchHelpers::computeAdaptiveDebounceMs(/*gap=*/10, /*min=*/80,
+                                                     /*max=*/250, /*default=*/150),
+           80);
+  QCOMPARE(SearchHelpers::computeAdaptiveDebounceMs(/*gap=*/50, /*min=*/80,
+                                                     /*max=*/250, /*default=*/150),
+           80);
+}
+
+void TestSearchHelpers::adaptiveDebounceVerySlowTypingClampsToMax() {
+  // gap=2000ms exceeds the 500ms clamp ceiling -> treated as 500ms gap, max
+  // debounce.
+  QCOMPARE(SearchHelpers::computeAdaptiveDebounceMs(/*gap=*/2000, /*min=*/80,
+                                                     /*max=*/250, /*default=*/150),
+           250);
+  QCOMPARE(SearchHelpers::computeAdaptiveDebounceMs(/*gap=*/500, /*min=*/80,
+                                                     /*max=*/250, /*default=*/150),
+           250);
+}
+
+void TestSearchHelpers::adaptiveDebounceMidIntervalLandsBetween() {
+  // gap=275 is the midpoint between 50 and 500. The mapping is linear, so the
+  // result should land at the midpoint of [80, 250] = 165.
+  QCOMPARE(SearchHelpers::computeAdaptiveDebounceMs(/*gap=*/275, /*min=*/80,
+                                                     /*max=*/250, /*default=*/150),
+           165);
+}
+
+void TestSearchHelpers::adaptiveDebounceNegativeGapTreatedAsFirstKeystroke() {
+  // Defensive: clock skew or test injection of negative gap shouldn't break
+  // the math. Falls through to "first keystroke" branch.
+  QCOMPARE(SearchHelpers::computeAdaptiveDebounceMs(/*gap=*/-50, /*min=*/80,
+                                                     /*max=*/250, /*default=*/150),
+           150);
 }
 
 QTEST_APPLESS_MAIN(TestSearchHelpers)

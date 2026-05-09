@@ -1,6 +1,20 @@
 #include "searchhelpers.h"
 
+#include <algorithm>
+
 namespace SearchHelpers {
+
+auto computeAdaptiveDebounceMs(qint64 timeSinceLastKeystrokeMs, int minDebounceMs,
+                                int maxDebounceMs, int defaultDebounceMs) -> int {
+  if (timeSinceLastKeystrokeMs <= 0) {
+    return defaultDebounceMs;
+  }
+  const int keystrokeInterval = static_cast<int>(
+      std::clamp(timeSinceLastKeystrokeMs, static_cast<qint64>(50), static_cast<qint64>(500)));
+  const int range = maxDebounceMs - minDebounceMs;
+  const int debounce = minDebounceMs + ((keystrokeInterval - 50) * range) / 450;
+  return std::clamp(debounce, minDebounceMs, maxDebounceMs);
+}
 
 auto buildSearchModeCycle(const SearchContext &ctx, bool isRoot) -> QVector<SearchMode> {
   QVector<SearchMode> cycle;
