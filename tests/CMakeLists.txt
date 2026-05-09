@@ -134,6 +134,7 @@ add_test(NAME VideoUtils COMMAND test_videoutils)
 add_executable(test_widgetpoolmanager
   modules/widgetpool/test_widgetpoolmanager.cpp
   ${SRC_DIR}/modules/behavior/widgetpool/widgetpoolmanager.cpp
+  ${SRC_DIR}/ui/widgets/items/itemplaceholderrenderer.cpp
   ${SRC_DIR}/ui/widgets/items/itemwidget.cpp
   ${SRC_DIR}/ui/widgets/items/itemwidgetindicator.cpp
   ${SRC_DIR}/ui/widgets/items/itemwidgetlifecycle.cpp
@@ -448,6 +449,7 @@ add_executable(test_artworkmanager
   ${SRC_DIR}/modules/data/cache/cachemanager.cpp
   ${SRC_DIR}/modules/data/cache/cachemanagerdisk.cpp
   ${SRC_DIR}/modules/input/interaction/interactionstateholder.cpp
+  ${SRC_DIR}/ui/widgets/items/itemplaceholderrenderer.cpp
   ${SRC_DIR}/ui/widgets/items/itemwidget.cpp
   ${SRC_DIR}/ui/widgets/items/itemwidgetindicator.cpp
   ${SRC_DIR}/ui/widgets/items/itemwidgetlifecycle.cpp
