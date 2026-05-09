@@ -2,6 +2,7 @@
 // Extracted from navigationmanager.cpp during LOC-reduction refactor.
 // These remain NavigationManager members; pure translation-unit split.
 #include "interactionmanager.h"
+#include "navigationhelpers.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
@@ -124,35 +125,28 @@ void NavigationManager::goBackFromVirtualFolder() {
   }
 
   // Go up one level
-  int lastSlash = config.currentSubfolder.lastIndexOf('/');
-  if (lastSlash > 0) {
-    config.currentSubfolder = config.currentSubfolder.left(lastSlash);
-  } else {
-    config.currentSubfolder.clear();
-  }
+  config.currentSubfolder = NavigationHelpers::parentSubfolderPath(config.currentSubfolder);
 
   // Reload to show parent folder
   safeReloadCollection(*m_currentCollectionIndex);
 }
 
 void NavigationManager::onBreadcrumbLinkClicked(const QString &link) {
-  if (link.startsWith("collection:")) {
-    // Navigate to parent collection
-    bool ok = false;
-    int targetIndex = link.mid(11).toInt(&ok); // Skip "collection:" prefix
-    if (ok && targetIndex >= 0 && targetIndex < (*m_collections).size()) {
+  const NavigationHelpers::BreadcrumbLink parsed = NavigationHelpers::parseBreadcrumbLink(link);
+  using Kind = NavigationHelpers::BreadcrumbLink::Kind;
+
+  if (parsed.kind == Kind::Collection) {
+    if (parsed.collectionIndex < (*m_collections).size()) {
       // Clear current subfolder before navigating to parent
       if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < (*m_collections).size()) {
         (*m_collections)[*m_currentCollectionIndex].currentSubfolder.clear();
       }
       goBackToCollections();
     }
-  } else if (link.startsWith("subfolder:")) {
-    // Navigate to a specific subfolder level
-    QString targetPath = link.mid(10); // Skip "subfolder:" prefix
+  } else if (parsed.kind == Kind::Subfolder) {
     if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < (*m_collections).size()) {
       CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
-      if (config.currentSubfolder != targetPath) {
+      if (config.currentSubfolder != parsed.subfolderPath) {
         if (m_interactionManager) {
           m_interactionManager->saveCurrentSelection();
         }
@@ -164,11 +158,10 @@ void NavigationManager::onBreadcrumbLinkClicked(const QString &link) {
           m_itemScrollArea->verticalScrollBar()->setValue(0);
         }
       }
-      config.currentSubfolder = targetPath;
+      config.currentSubfolder = parsed.subfolderPath;
       safeReloadCollection(*m_currentCollectionIndex);
     }
-  } else if (link == "root:") {
-    // Navigate back to root of current collection (clear subfolder)
+  } else if (parsed.kind == Kind::Root) {
     if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < (*m_collections).size()) {
       CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
       if (!config.currentSubfolder.isEmpty()) {

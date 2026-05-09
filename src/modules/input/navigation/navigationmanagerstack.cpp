@@ -8,6 +8,7 @@
 #include "detailspane.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
+#include "navigationhelpers.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "selectionrestoremanager.h"
@@ -47,17 +48,8 @@ auto NavigationManager::performNavigationStackCleanup() -> void {
 // Finds the visual index of a subcollection within its parent
 auto NavigationManager::findSubcollectionVisualIndex(int targetCollectionIndex,
                                                      int previousIndex) const -> int {
-  if (targetCollectionIndex < 0 || targetCollectionIndex >= (*m_collections).size()) {
-    return -1;
-  }
-
-  QList<int> subcollections;
-  for (int i = 0; i < (*m_collections).size(); ++i) {
-    if ((*m_collections)[i].parentCollectionIndex == targetCollectionIndex) {
-      subcollections.append(i);
-    }
-  }
-  return subcollections.indexOf(previousIndex);
+  return NavigationHelpers::findSubcollectionVisualIndex(targetCollectionIndex, previousIndex,
+                                                         *m_collections);
 }
 
 // Schedules the navigation return with proper timing and selection restoration
@@ -111,19 +103,8 @@ auto NavigationManager::handleNavigationFallback() -> void {
   m_stackManager->clear(); // Ensure depth is reset
   int previousIndex = (*m_currentCollectionIndex);
 
-  int fallbackIndex = (*m_currentCollectionIndex);
-  if (fallbackIndex < 0 || fallbackIndex >= (*m_collections).size()) {
-    fallbackIndex = -1;
-    for (int i = 0; i < (*m_collections).size(); ++i) {
-      if ((*m_collections)[i].parentCollectionIndex == -1) {
-        fallbackIndex = i;
-        break;
-      }
-    }
-    if (fallbackIndex < 0 && !(*m_collections).isEmpty()) {
-      fallbackIndex = 0;
-    }
-  }
+  const int fallbackIndex = NavigationHelpers::chooseFallbackCollectionIndex(
+      (*m_currentCollectionIndex), *m_collections);
 
   if (fallbackIndex >= 0) {
     bool shared = areItemsShared(previousIndex, fallbackIndex);

@@ -72,4 +72,81 @@ auto calculateSelectionIndex(int collectionIndex, const QList<CollectionConfig> 
   return selIdx;
 }
 
+auto findSubcollectionVisualIndex(int targetCollectionIndex, int previousIndex,
+                                  const QList<CollectionConfig> &collections) -> int {
+  if (targetCollectionIndex < 0 || targetCollectionIndex >= collections.size()) {
+    return -1;
+  }
+  int visual = -1;
+  for (int i = 0; i < collections.size(); ++i) {
+    if (collections[i].parentCollectionIndex == targetCollectionIndex) {
+      ++visual;
+      if (i == previousIndex) {
+        return visual;
+      }
+    }
+  }
+  return -1;
+}
+
+auto chooseFallbackCollectionIndex(int currentIndex, const QList<CollectionConfig> &collections)
+    -> int {
+  if (collections.isEmpty()) {
+    return -1;
+  }
+  if (currentIndex >= 0 && currentIndex < collections.size()) {
+    return currentIndex;
+  }
+  for (int i = 0; i < collections.size(); ++i) {
+    if (collections[i].parentCollectionIndex == -1) {
+      return i;
+    }
+  }
+  return 0;
+}
+
+auto parseBreadcrumbLink(const QString &link) -> BreadcrumbLink {
+  BreadcrumbLink result;
+  if (link == QStringLiteral("root:")) {
+    result.kind = BreadcrumbLink::Kind::Root;
+    return result;
+  }
+  static constexpr QLatin1String kCollectionPrefix("collection:");
+  static constexpr QLatin1String kSubfolderPrefix("subfolder:");
+  if (link.startsWith(kCollectionPrefix)) {
+    bool ok = false;
+    const int idx = link.mid(kCollectionPrefix.size()).toInt(&ok);
+    if (ok && idx >= 0) {
+      result.kind = BreadcrumbLink::Kind::Collection;
+      result.collectionIndex = idx;
+    }
+    return result;
+  }
+  if (link.startsWith(kSubfolderPrefix)) {
+    result.kind = BreadcrumbLink::Kind::Subfolder;
+    result.subfolderPath = link.mid(kSubfolderPrefix.size());
+    return result;
+  }
+  return result;
+}
+
+auto parentSubfolderPath(const QString &currentSubfolder) -> QString {
+  if (currentSubfolder.isEmpty()) {
+    return {};
+  }
+  // Trim a single trailing slash (treat "Action/" same as "Action").
+  QString trimmed = currentSubfolder;
+  while (trimmed.endsWith(QLatin1Char('/'))) {
+    trimmed.chop(1);
+  }
+  if (trimmed.isEmpty()) {
+    return {};
+  }
+  const int lastSlash = trimmed.lastIndexOf(QLatin1Char('/'));
+  if (lastSlash <= 0) {
+    return {};
+  }
+  return trimmed.left(lastSlash);
+}
+
 } // namespace NavigationHelpers
