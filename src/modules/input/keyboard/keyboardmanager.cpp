@@ -13,6 +13,7 @@
 #include "applicationcontext.h"
 #include "collectionutils.h"
 #include "interactionstateholder.h"
+#include "keyboardhelpers.h"
 #include "scrollmanager.h"
 #include "uiconstants.h"
 
@@ -104,16 +105,7 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
       m_generalSettings ? m_generalSettings->keyConfirm : static_cast<int>(Qt::Key_Return);
 
   auto isConfirmKey = [&](int k) -> bool {
-    if (k == confirmKey) {
-      return true;
-    }
-    if (confirmKey == static_cast<int>(Qt::Key_Return) && k == Qt::Key_Enter) {
-      return true;
-    }
-    if (confirmKey == static_cast<int>(Qt::Key_Enter) && k == Qt::Key_Return) {
-      return true;
-    }
-    return false;
+    return KeyboardHelpers::isConfirmKey(k, confirmKey);
   };
 
   // Handle search bar focused state
@@ -170,60 +162,19 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
       }
     }
 
-    // Step of 1 in non-grid views: List walks one item per arrow regardless
-    // of axis, and CoverFlow collapses all four arrows to a
-    // single-step carousel shift.
-    bool singleStep = false;
-    bool isHorizontalView = false;
+    ViewType viewType = ViewType::Grid;
     if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-      const ViewType vt = (*m_collections)[*m_currentCollectionIndex].viewType;
-      singleStep = (vt == ViewType::List) || (vt == ViewType::CoverFlow);
-      isHorizontalView = (vt == ViewType::Horizontal);
+      viewType = (*m_collections)[*m_currentCollectionIndex].viewType;
     }
 
-    int direction = 0;
-    bool vertical = false;
-    if (isHorizontalView) {
-      // in Horizontal mode the visible meaning of the arrow
-      // keys is preserved (Down moves to the next item in the column;
-      // Right moves one column over) but the *step size* swaps sides:
-      // Up/Down step by 1, Left/Right step by gridWidth (= items per
-      // column). The vertical-wrap path expects direction == ±gridWidth,
-      // so Left/Right map to vertical=true to pick up the column-wrap
-      // behavior; Up/Down map to vertical=false for linear wrap.
-      if (key == navLeftKey) {
-        direction = -gridWidth;
-        vertical = true;
-      } else if (key == navRightKey) {
-        direction = gridWidth;
-        vertical = true;
-      } else if (key == navUpKey) {
-        direction = -1;
-        vertical = false;
-      } else if (key == navDownKey) {
-        direction = 1;
-        vertical = false;
-      }
-    } else if (key == navLeftKey) {
-      direction = -1;
-      vertical = false;
-    } else if (key == navRightKey) {
-      direction = 1;
-      vertical = false;
-    } else if (key == navUpKey) {
-      // List/CoverFlow move by 1; grid moves by gridWidth.
-      direction = singleStep ? -1 : -gridWidth;
-      vertical = true;
-    } else if (key == navDownKey) {
-      direction = singleStep ? 1 : gridWidth;
-      vertical = true;
-    }
+    const auto arrow = KeyboardHelpers::computeArrowDirection(
+        key, navLeftKey, navRightKey, navUpKey, navDownKey, viewType, gridWidth);
 
-    if (direction != 0) {
+    if (arrow.valid && arrow.direction != 0) {
       m_pendingNavigationKey = static_cast<Qt::Key>(key);
       m_pendingNavigationKeyAtMs = QDateTime::currentMSecsSinceEpoch();
       m_hasPendingNavigationKey = true;
-      emit requestSelectionMove(direction, vertical);
+      emit requestSelectionMove(arrow.direction, arrow.vertical);
       return true;
     }
   }

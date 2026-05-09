@@ -12,6 +12,7 @@
 #include "applicationcontext.h"
 #include "collectionutils.h"
 #include "interactionstateholder.h"
+#include "keyboardhelpers.h"
 #include "scrollmanager.h"
 #include "uiconstants.h"
 
@@ -45,12 +46,11 @@ void KeyboardManager::beginHoldRepeat() {
   }
   // scale the key-repeat cadence by the global scroll-velocity
   // multiplier. Higher multiplier → shorter interval → more items/second
-  // while the arrow key is held. Guard against zero-division and clamp the
-  // effective interval to at least 10ms to avoid saturating the event loop.
+  // while the arrow key is held. Helper guards against zero-division and
+  // clamps the effective interval to at least 10ms to avoid saturating the
+  // event loop.
   const double velocityMult = m_generalSettings ? m_generalSettings->scrollVelocityMultiplier : 1.0;
-  if (velocityMult > 0.0 && velocityMult != 1.0) {
-    baseInterval = qMax(10, static_cast<int>(baseInterval / velocityMult + 0.5));
-  }
+  baseInterval = KeyboardHelpers::scaleRepeatInterval(baseInterval, velocityMult, 10);
   int verticalInterval = baseInterval;
   int horizontalInterval = baseInterval / 2;
   constexpr qint64 kSuppressArrowCenterHoldMs = 60000; // 60s safeguard window

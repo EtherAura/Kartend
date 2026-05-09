@@ -912,6 +912,21 @@ target_link_libraries(test_settingshelpers
 )
 add_test(NAME SettingsHelpers COMMAND test_settingshelpers)
 
+# KeyboardHelpers tests (pure helpers extracted from KeyboardManager)
+add_executable(test_keyboardhelpers
+  modules/keyboard/test_keyboardhelpers.cpp
+  ${SRC_DIR}/modules/input/keyboard/keyboardhelpers.cpp
+)
+target_include_directories(test_keyboardhelpers PRIVATE
+  ${SRC_DIR}/modules/input/keyboard
+  ${SRC_DIR}/utils/app
+)
+target_link_libraries(test_keyboardhelpers
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME KeyboardHelpers COMMAND test_keyboardhelpers)
+
 # SearchHelpers tests (pure helpers extracted)
 add_executable(test_searchhelpers
   modules/search/test_searchhelpers.cpp
