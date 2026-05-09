@@ -1,6 +1,7 @@
 // Cover-flow view mode implementation.
 
 #include "coverflowwidget.h"
+#include "uiconstants.h"
 #include "videopreviewwidget.h"
 #include "videothumbnailextractor.h"
 
@@ -54,6 +55,7 @@ QPixmap loadAndScale(const QString &path, int targetSize) {
   }
   QImageReader reader(path);
   reader.setAutoTransform(true);
+  reader.setAllocationLimit(UIConstants::Artwork::MAX_DECODE_MB);
   // Cap the decoded size so very large source images don't waste memory.
   QSize bounded(targetSize * 2, targetSize * 2);
   if (reader.size().isValid() && reader.size().width() > bounded.width()) {
@@ -287,6 +289,7 @@ QPixmap CoverFlowWidget::galleryThumbPixmap(int entryIdx, int size) {
   // Artwork entry: load + scale to thumb size, with caching.
   QImageReader reader(entry.path);
   reader.setAutoTransform(true);
+  reader.setAllocationLimit(UIConstants::Artwork::MAX_DECODE_MB);
   reader.setScaledSize(QSize(size * 2, size * 2));
   QImage img = reader.read();
   QPixmap pm;

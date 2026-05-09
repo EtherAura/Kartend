@@ -10,6 +10,10 @@ namespace UIConstants {
 namespace Artwork {
 /// Target size for artwork scaling (pixels)
 inline constexpr int BOX_SIZE = 400;
+/// Max megabytes a single QImageReader decode may allocate. Qt 6's default is
+/// 128 MB; we pin explicitly so future Qt changes can't relax the cap, and
+/// size it for legitimate hi-res scans (~6000×6000 RGBA ≈ 144 MB).
+inline constexpr int MAX_DECODE_MB = 256;
 /// Batch size for high-priority (visible) artwork loading
 inline constexpr int BATCH_HIGH = 10;
 /// Batch size for low-priority (prefetch) artwork loading

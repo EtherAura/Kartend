@@ -39,6 +39,15 @@ bool LaunchManager::isArchiveFile(const QString &filePath) {
 
 auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QString &targetExtension)
     -> ErrorUtils::Result<QString> {
+  // Validate archivePath at the same gate as media files in
+  // buildLaunchCommand. QProcess argument lists prevent shell injection, but
+  // unvalidated paths still leak into log output and violate the project's
+  // path-security model.
+  auto archiveValidation = PathUtils::validatePathSecurity(archivePath);
+  if (archiveValidation.isError()) {
+    return archiveValidation.error();
+  }
+
   // Create a persistent temp directory for extractions
   // Using a subdirectory in the standard temp location that won't auto-delete
   QString tempBasePath = QStandardPaths::writableLocation(QStandardPaths::TempLocation);

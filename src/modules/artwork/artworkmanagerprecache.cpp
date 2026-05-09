@@ -55,6 +55,7 @@ auto loadAndProcessImage(const QString &path) -> QImage {
 
   QImageReader reader(path);
   reader.setAutoTransform(true);
+  reader.setAllocationLimit(UIConstants::Artwork::MAX_DECODE_MB);
   // Preserve aspect ratio while decoding near the target size.
   const QSize originalSize = reader.size();
   if (originalSize.isValid()) {
