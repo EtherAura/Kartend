@@ -4,6 +4,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   collectiontreewidget.cpp
   customfieldsdialog.cpp
   errordialog.cpp
+  gamepadcapturecontroller.cpp
   itemartworklinksdialog.cpp
   kartmergedialog.cpp
   kartprogressdialog.cpp
@@ -13,7 +14,6 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   settingsdialogbrowse.cpp
   settingsdialogchecks.cpp
   settingsdialogform.cpp
-  settingsdialoggamepad.cpp
   settingsdialoggeneral.cpp
   settingsdialoglaunchers.cpp
   settingsdialoglinks.cpp
@@ -28,6 +28,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   collectiontreewidget.h
   customfieldsdialog.h
   errordialog.h
+  gamepadcapturecontroller.h
   itemartworklinksdialog.h
   kartmergedialog.h
   kartprogressdialog.h

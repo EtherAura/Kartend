@@ -30,6 +30,7 @@
 
 #include "attractmanager.h"
 #include "extensionutils.h"
+#include "gamepadcapturecontroller.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
 #include "mainwindow.h"
@@ -512,7 +513,9 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   // detector can compare the live presets against the saved baseline.
   loadLauncherPresetsToUI();
 
-  updateGamepadCaptureUi();
+  if (m_gamepadCapture) {
+    m_gamepadCapture->refreshUi();
+  }
 }
 
 void SettingsDialog::saveGeneralSettingsFromUI() {

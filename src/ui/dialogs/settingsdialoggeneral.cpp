@@ -22,6 +22,7 @@
 
 #include "errorutils.h"
 #include "extensionutils.h"
+#include "gamepadcapturecontroller.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
 #include "mainwindow.h"
@@ -620,16 +621,20 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     connect(ui->gamepadToggleSidebarButtonLineEdit, &QLineEdit::textChanged, this, markChanged);
   }
   if (ui->detectGamepadConfirmButtonButton) {
-    connect(ui->detectGamepadConfirmButtonButton, &QPushButton::clicked, this,
-            [this]() { startGamepadButtonCapture(GamepadCaptureTarget::Confirm); });
+    connect(ui->detectGamepadConfirmButtonButton, &QPushButton::clicked, this, [this]() {
+      if (m_gamepadCapture) m_gamepadCapture->start(GamepadCaptureController::Target::Confirm);
+    });
   }
   if (ui->detectGamepadBackButtonButton) {
-    connect(ui->detectGamepadBackButtonButton, &QPushButton::clicked, this,
-            [this]() { startGamepadButtonCapture(GamepadCaptureTarget::Back); });
+    connect(ui->detectGamepadBackButtonButton, &QPushButton::clicked, this, [this]() {
+      if (m_gamepadCapture) m_gamepadCapture->start(GamepadCaptureController::Target::Back);
+    });
   }
   if (ui->detectGamepadToggleSidebarButtonButton) {
-    connect(ui->detectGamepadToggleSidebarButtonButton, &QPushButton::clicked, this,
-            [this]() { startGamepadButtonCapture(GamepadCaptureTarget::ToggleSidebar); });
+    connect(ui->detectGamepadToggleSidebarButtonButton, &QPushButton::clicked, this, [this]() {
+      if (m_gamepadCapture)
+        m_gamepadCapture->start(GamepadCaptureController::Target::ToggleSidebar);
+    });
   }
   if (ui->gamepadUseDpadCheckBox) {
     connect(ui->gamepadUseDpadCheckBox, &QCheckBox::toggled, this, markChanged);

@@ -7,7 +7,6 @@
 #include <QHash>
 #include <QList>
 #include <QMessageBox>
-#include <QMetaObject>
 #include <QMouseEvent>
 #include <QTreeWidgetItem>
 
@@ -23,11 +22,17 @@ QT_END_NAMESPACE
 
 class CollectionTreeWidget;
 class DetailsPaneManager;
+class GamepadCaptureController;
 class ScrollManager;
 class NavigationManager;
 
 class SettingsDialog : public QDialog {
   Q_OBJECT
+  // The gamepad capture state machine reaches into the line-edit / detect
+  // button widgets on ui to apply per-tick UI sync. Friend declaration
+  // keeps those pointers encapsulated while the helper exists to group
+  // the gamepad code cohesively.
+  friend class GamepadCaptureController;
 
 public:
   /// scope selector for Save actions in the settings dialog.
@@ -145,12 +150,6 @@ private slots:
   void onEditLinkedParents();
 
 private:
-  enum class GamepadCaptureTarget { None, Confirm, Back, ToggleSidebar };
-
-  void startGamepadButtonCapture(GamepadCaptureTarget target);
-  void stopGamepadButtonCapture();
-  void onGamepadCaptureButtonPressed(const QString &buttonName);
-  void updateGamepadCaptureUi();
 
   void updateCollectionTreeWidget();
   void expandPathToCollection(int collectionIndex);
@@ -304,8 +303,11 @@ private:
   /// changes
   QSet<int> m_rescanRequired;
 
-  GamepadCaptureTarget m_gamepadCaptureTarget = GamepadCaptureTarget::None;
-  QMetaObject::Connection m_gamepadCaptureConnection;
+  /// Gamepad button-capture state machine — owns the active capture
+  /// target, the GamepadManager binding-capture connection, and the
+  /// per-tick UI sync (line edits, detect buttons, sibling checkbox
+  /// lock state). Parented to this dialog.
+  GamepadCaptureController *m_gamepadCapture = nullptr;
 
   /// active scope for Save actions. Defaults to `Current` so
   /// legacy behavior is preserved until the user explicitly opts into a

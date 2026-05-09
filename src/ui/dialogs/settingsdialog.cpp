@@ -25,6 +25,7 @@
 
 #include "collectiontreewidget.h"
 #include "extensionutils.h"
+#include "gamepadcapturecontroller.h"
 #include "gamepadmanager.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
@@ -46,6 +47,11 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   ui->setupUi(this);
   setWindowTitle(tr("Settings"));
   setModal(true);
+
+  // Gamepad button-capture state machine. Constructed before
+  // setupConnections() runs so the Detect-button click handlers can
+  // dispatch through it.
+  m_gamepadCapture = new GamepadCaptureController(this);
 
   collectionTreeWidget = ui->collectionTreeWidget;
 
@@ -136,7 +142,9 @@ SettingsDialog::~SettingsDialog() {
 }
 
 void SettingsDialog::accept() {
-  stopGamepadButtonCapture();
+  if (m_gamepadCapture) {
+    m_gamepadCapture->stop();
+  }
   if (!resolveUnsavedChanges(tr("closing the dialog"), true)) {
     return;
   }
@@ -169,7 +177,9 @@ void SettingsDialog::accept() {
 }
 
 void SettingsDialog::reject() {
-  stopGamepadButtonCapture();
+  if (m_gamepadCapture) {
+    m_gamepadCapture->stop();
+  }
   if (!resolveUnsavedChanges(tr("closing the dialog"), true)) {
     return;
   }
