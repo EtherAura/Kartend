@@ -23,6 +23,7 @@
 
 #include "artworkpreviewoverlay.h"
 #include "detailspane.h"
+#include "detailspanegalleryview.h"
 #include "detailspaneresizegrip.h"
 #include "extensionutils.h"
 #include "itemwidget.h"
@@ -101,6 +102,16 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
   connect(m_resizeGrip, &DetailsPaneResizeGrip::heightDragged, this, &DetailsPane::heightDragged);
   connect(m_resizeGrip, &DetailsPaneResizeGrip::heightCommitted, this,
           &DetailsPane::heightCommitted);
+
+  // Vertical-dock media gallery view. Lazy-builds its widgets on the first
+  // setEntries() call. Forwards its public events (Edit click + overlay
+  // visibility transitions) as DetailsPane signals.
+  m_galleryView = new DetailsPaneGalleryView(this);
+  m_galleryView->setHost(this);
+  connect(m_galleryView, &DetailsPaneGalleryView::editRequested, this,
+          &DetailsPane::editArtworkRequested);
+  connect(m_galleryView, &DetailsPaneGalleryView::overlayVisibilityChanged, this,
+          &DetailsPane::galleryOverlayVisibilityChanged);
 
   // center the artwork-section header, artwork preview, video
   // preview, and item-name label/value. Everything else stays flush-left
@@ -279,8 +290,8 @@ void DetailsPane::setFileInfoRowsVisible(bool visible) {
 void DetailsPane::renderCollectionSummary() {
   setArtworkSectionVisible(false);
   setFileInfoRowsVisible(false);
-  if (m_galleryContainer) {
-    m_galleryContainer->hide();
+  if (m_galleryView) {
+    m_galleryView->hideSection();
   }
   ui->titleLabel->setText(tr("Collection Information"));
   ui->itemNameLabel->setText(tr("Collection:"));
@@ -428,7 +439,7 @@ void DetailsPane::applyTabVisibility() {
     // (setArtworkGallery / setExtendedMetadata / setUsageStats /
     // setManualFile) will repopulate and re-show on the manager's
     // tab-change re-push, so this avoids a flash of stale rows.
-    if (m_galleryContainer) m_galleryContainer->hide();
+    if (m_galleryView) m_galleryView->hideSection();
     if (m_detailsContainer) m_detailsContainer->hide();
     // Prefer the canonical metadata title when one is known; fall back to
     // the raw filename-derived itemName.
@@ -456,7 +467,7 @@ void DetailsPane::applyTabVisibility() {
                                                            : m_currentItemName);
     setArtworkSectionVisible(false);
     setFileInfoRowsVisible(true);
-    if (m_galleryContainer) m_galleryContainer->hide();
+    if (m_galleryView) m_galleryView->hideSection();
     if (m_detailsContainer) m_detailsContainer->hide();
     break;
   }
@@ -485,21 +496,6 @@ int DetailsPane::currentGalleryThumbSize() const {
   // Vertical dock uses the .ui's compact constant. Horizontal dock has its
   // own dedicated gallery inside m_horizontalView and ignores this.
   return UIConstants::Metadata::GALLERY_THUMB_SIZE;
-}
-
-void DetailsPane::applyGalleryThumbSize() {
-  if (!m_galleryLayout) {
-    return;
-  }
-  const int thumbSize = currentGalleryThumbSize();
-  const int padding = UIConstants::Metadata::GALLERY_THUMB_PADDING;
-  const int iconSize = thumbSize - (padding * 2);
-  for (int i = 0; i < m_galleryLayout->count(); ++i) {
-    if (auto *btn = qobject_cast<QToolButton *>(m_galleryLayout->itemAt(i)->widget())) {
-      btn->setFixedSize(thumbSize, thumbSize);
-      btn->setIconSize(QSize(iconSize, iconSize));
-    }
-  }
 }
 
 void DetailsPane::applyDockOrientation() {

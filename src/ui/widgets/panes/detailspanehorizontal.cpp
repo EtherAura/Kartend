@@ -16,6 +16,7 @@
 
 #include "collectionutils.h"
 #include "detailspane.h"
+#include "detailspanegalleryview.h"
 #include "ui_detailspane.h"
 #include "uiconstants.h"
 #include "videopreviewwidget.h"
@@ -106,7 +107,7 @@ void DetailsPane::setupHorizontalView() {
   m_hEditButton = new QPushButton(tr("Edit"), m_horizontalView);
   m_hEditButton->setCursor(Qt::PointingHandCursor);
   m_hEditButton->setToolTip(tr("Pick override files for any artwork type (standard or custom)."));
-  m_hEditButton->setVisible(m_galleryEditEnabled);
+  m_hEditButton->setVisible(m_galleryView && m_galleryView->isEditEnabled());
   connect(m_hEditButton, &QPushButton::clicked, this, &DetailsPane::editArtworkRequested);
   outer->addWidget(m_hEditButton);
 
@@ -136,11 +137,17 @@ void DetailsPane::rebuildHorizontalGallery() {
   bool addedThumb = false;
 
   // The primary "{artworkDirectory}/{baseName}.{ext}" file is synthesized
-  // into m_galleryEntries by setArtworkGallery, so it iterates through here
-  // alongside the typed-subdirectory thumbs — no special prepend needed,
-  // and the click handler below wires it to the preview overlay just like
-  // any other entry.
-  for (const GalleryEntry &entry : m_galleryEntries) {
+  // into the gallery's entry list by setArtworkGallery, so it iterates
+  // through here alongside the typed-subdirectory thumbs — no special
+  // prepend needed, and the click handler below wires it to the preview
+  // overlay just like any other entry.
+  if (!m_galleryView) {
+    if (m_hGalleryHost) {
+      m_hGalleryHost->setVisible(false);
+    }
+    return;
+  }
+  for (const GalleryEntry &entry : m_galleryView->entries()) {
     if (entry.isVideo) continue; // Live preview tile handles video.
     // Path-keyed cache to avoid re-decoding on every selection change. On
     // miss, decode synchronously (the gallery is small — typically 5-10
@@ -167,8 +174,9 @@ void DetailsPane::rebuildHorizontalGallery() {
     btn->setToolTip(entry.label);
     btn->setAccessibleName(entry.label);
     const GalleryEntry capturedEntry = entry;
-    connect(btn, &QToolButton::clicked, this,
-            [this, capturedEntry]() { openGalleryPreview(capturedEntry); });
+    connect(btn, &QToolButton::clicked, this, [this, capturedEntry]() {
+      if (m_galleryView) m_galleryView->openPreview(capturedEntry);
+    });
     m_hGalleryLayout->addWidget(btn);
     addedThumb = true;
   }
@@ -223,7 +231,8 @@ void DetailsPane::updateHorizontalView() {
   // Edit button is item-only chrome — gating on the collection's
   // artwork-edit permission only matters when the gallery is visible.
   if (m_hEditButton) {
-    m_hEditButton->setVisible(isItemTab && m_galleryEditEnabled);
+    const bool editEnabled = m_galleryView && m_galleryView->isEditEnabled();
+    m_hEditButton->setVisible(isItemTab && editEnabled);
   }
 
   // Live video preview tile — Item-tab only.

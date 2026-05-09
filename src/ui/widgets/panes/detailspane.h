@@ -19,6 +19,7 @@
 #include "usagestatsstore.h"
 
 class ArtworkPreviewOverlay;
+class DetailsPaneGalleryView;
 class DetailsPaneResizeGrip;
 class VideoPreviewWidget;
 QT_BEGIN_NAMESPACE
@@ -30,6 +31,12 @@ QT_END_NAMESPACE
 
 class DetailsPane : public QWidget {
   Q_OBJECT
+  // The vertical-dock gallery row's helper reaches into ui->contentWidget /
+  // ui->artworkDisplay and m_videoPreview to build + anchor its section.
+  // Tightly coupled by design; the helper exists to group the gallery's
+  // setup/rebuild state cohesively.
+  friend class DetailsPaneGalleryView;
+
 public:
   explicit DetailsPane(QWidget *parent = nullptr);
   ~DetailsPane();
@@ -247,6 +254,9 @@ private:
   void ensureDetailsSection();
   void clearDetailsSection();
   void appendDetailRow(const QString &label, const QString &value, bool wrap = false);
+  /// Per-item media gallery row (vertical-dock) with section construction,
+  /// thumb building, and the click-to-preview overlay. Owned, not borrowed.
+  DetailsPaneGalleryView *m_galleryView = nullptr;
   Ui::DetailsPane *ui;
   VideoPreviewWidget *m_videoPreview = nullptr;
   QTimer *m_videoStartTimer = nullptr;
@@ -313,21 +323,6 @@ private:
   void ensureManualButton();
   void openCurrentManual();
 
-  // Artwork gallery. Lazy-built on first non-empty
-  // setArtworkGallery() call. Sits between the artwork preview pane and the
-  // file information section so all visual artwork stays clustered at the
-  // top of the sidebar.
-  QWidget *m_galleryContainer = nullptr;
-  QHBoxLayout *m_galleryLayout = nullptr;
-  /// Wraps the thumbnail row so the section title + edit button can stay
-  /// visible while the thumbs are hidden.
-  QWidget *m_galleryThumbsHost = nullptr;
-  QPushButton *m_galleryEditButton = nullptr;
-  bool m_galleryEditEnabled = false;
-  /// cached entries from the most recent setArtworkGallery
-  /// call. Used to rebuild the horizontal-view gallery whenever the user
-  /// switches dock orientation, without callers having to re-push the list.
-  QList<GalleryEntry> m_galleryEntries;
   /// cached item name from the most recent setMetadata call.
   /// The .ui's itemNameValue holds the same string but the horizontal view
   /// reads from this so it doesn't matter whether the vertical labels have
@@ -367,13 +362,6 @@ private:
   QHash<QString, QPixmap> m_galleryPixmapCache;
   QStringList m_galleryPixmapCacheOrder;
   static constexpr int m_galleryPixmapCacheCap = 32;
-  // Owned-on-demand preview overlay reparented to the top-level window so it
-  // can cover the full UI rather than just the narrow sidebar. nullptr until
-  // the first thumbnail is clicked.
-  ArtworkPreviewOverlay *m_galleryOverlay = nullptr;
-  void ensureGallerySection();
-  void clearGallerySection();
-  void openGalleryPreview(const GalleryEntry &entry);
 
   // Collection-summary state. The summary is cached on the
   // widget so every existing clearMetadata() call site can fall through to
@@ -398,11 +386,6 @@ private:
   int m_activeSidebarFontPointSize = 0;
 
   void renderCollectionSummary();
-  /// Builds the small placeholder shown for video tiles while their frame
-  /// is being extracted (and as a permanent fallback when extraction
-  /// fails). Renders a play triangle on a muted-tile background sized to
-  /// `iconSize`.
-  [[nodiscard]] QPixmap makeVideoPlaceholder(int iconSize) const;
 };
 
 #endif
