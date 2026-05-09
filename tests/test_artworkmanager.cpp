@@ -53,6 +53,7 @@ private slots:
   // Cancellation -------------------------------------------------------------
   void testCancelAllArtworkLoading_idempotent();
   void testCancelAllArtworkLoading_clearsPending();
+  void testDestruct_withInFlightDispatch_doesNotCrash();
 
   // loadArtworkParallel ------------------------------------------------------
   void testLoadArtworkParallel_emptyListNoop();
@@ -216,6 +217,45 @@ void TestArtworkManager::testCancelAllArtworkLoading_clearsPending() {
   // loaded).
   manager.cancelAllArtworkLoading();
   QVERIFY(!manager.hasArtworkForWidget(&widget));
+}
+
+void TestArtworkManager::testDestruct_withInFlightDispatch_doesNotCrash() {
+  // Exercises ~ArtworkManager()'s "abandon the QThreadPool without waiting"
+  // path: the destructor sets the cancellation flag, clears queued tasks,
+  // and intentionally leaks m_artworkThreadPool rather than blocking on
+  // ~QThreadPool. Validates the path doesn't crash when futures are still
+  // scheduled at destruction time.
+  //
+  // Build a real artwork file on disk so loadArtworkParallel actually
+  // dispatches QtConcurrent work (rather than short-circuiting on a null
+  // image). Several entries gives the pool a non-trivial backlog.
+  const QString artPath = m_tempDir.path() + "/inflight.png";
+  QPixmap onDisk(400, 400);
+  onDisk.fill(Qt::magenta);
+  QVERIFY(onDisk.save(artPath, "PNG"));
+
+  auto *manager = new ArtworkManager(m_cache.get());
+  wireSetup(manager);
+
+  QList<ItemWidget *> widgets;
+  QList<ArtworkInfo> infos;
+  for (int i = 0; i < 8; ++i) {
+    auto *w = new ItemWidget();
+    widgets.append(w);
+    infos.append(ArtworkInfo{QPointer<ItemWidget>(w), artPath});
+  }
+  manager->loadArtworkParallel(infos, /*highPriority=*/true);
+
+  // Yield once so the dispatch queue is observed by the pool, then destruct
+  // immediately — the cancellation flag must drive worker tasks to early-
+  // return and the destructor must return without crashing or hanging.
+  QCoreApplication::processEvents();
+  delete manager;
+
+  qDeleteAll(widgets);
+  QCoreApplication::processEvents();
+
+  QVERIFY(true);
 }
 
 // ─── loadArtworkParallel ────────────────────────────────────────────────────

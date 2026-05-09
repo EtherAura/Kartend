@@ -134,6 +134,7 @@ add_executable(test_cachemanager
   test_cachemanager.cpp
   ${SRC_DIR}/modules/cache/cachemanager.cpp
   ${SRC_DIR}/modules/cache/cachemanagerdisk.cpp
+  ${SRC_DIR}/utils/threadpoolutils.cpp
 )
 target_include_directories(test_cachemanager PRIVATE
   ${SRC_DIR}/modules/cache
@@ -296,6 +297,7 @@ add_executable(test_artworkmanager
   ${SRC_DIR}/utils/itemartwork.cpp
   ${SRC_DIR}/utils/settingsutils.cpp
   ${SRC_DIR}/utils/pathutils.cpp
+  ${SRC_DIR}/utils/threadpoolutils.cpp
   ${SRC_DIR}/utils/timerutils.cpp
   ${SRC_DIR}/utils/loggingcategories.cpp
 )

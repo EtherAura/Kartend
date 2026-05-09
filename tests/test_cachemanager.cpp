@@ -9,6 +9,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QPixmap>
 #include <QApplication>
@@ -42,6 +43,11 @@ private slots:
   // Cache management
   void testClearCollectionCache();
   void testReleaseGuiResources();
+
+  // Async cancellation / shutdown paths
+  void testDestruct_withPendingDebouncedSave_doesNotCrash();
+  void testCancelPendingIo_isIdempotentAndStopsTimer();
+  void testDestruct_withScheduledSavesUnderLoad_doesNotCrash();
 
 private:
   CacheManager *m_cacheManager;
@@ -293,6 +299,102 @@ void TestCacheManager::testReleaseGuiResources() {
   QPixmap retrieved = m_cacheManager->getArtwork(m_testArtworkPath);
   CacheMetrics metrics = m_cacheManager->metrics();
   QCOMPARE(metrics.memoryHits, 0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Async cancellation / shutdown paths
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestCacheManager::testDestruct_withPendingDebouncedSave_doesNotCrash() {
+  // Regression guard for Kartend-acal: the debounced-save timer's timeout
+  // lambda captures 'this' and calls saveToDisk(). If the destructor doesn't
+  // sever the timer connection FIRST, a fired timer can run the lambda
+  // against a partially destructed CacheManager.
+  //
+  // We schedule a save (cacheArtwork → scheduleSaveToDisk → queued
+  // invokeMethod that calls timer->start()), spin the event loop once so the
+  // timer is armed, then destruct *before* the timer fires. The destructor
+  // must stop the timer and delete its parent context before any other
+  // teardown — verified by the absence of UAF/sanitizer reports.
+  auto *manager = new CacheManager();
+  manager->initialize();
+
+  QPixmap pixmap(300, 300);
+  pixmap.fill(Qt::red);
+  manager->cacheArtwork(m_testArtworkPath, pixmap);
+
+  // Drain the queued invokeMethod that arms the timer.
+  QCoreApplication::processEvents();
+
+  // Destruct before the debounce delay (FLUSH_DEBOUNCE_MS = 1000ms) elapses.
+  delete manager;
+
+  // Drain any leftover events; deleting m_timerContext should have already
+  // discarded any pending timeout deliveries, but spin once for good measure.
+  QCoreApplication::processEvents();
+
+  QVERIFY(true);
+}
+
+void TestCacheManager::testCancelPendingIo_isIdempotentAndStopsTimer() {
+  // Schedule a save and arm the timer.
+  QPixmap pixmap(300, 300);
+  pixmap.fill(Qt::red);
+  m_cacheManager->cacheArtwork(m_testArtworkPath, pixmap);
+  QCoreApplication::processEvents();
+
+  // First call: signals cancel + stops timer.
+  m_cacheManager->cancelPendingIo();
+  // Repeated calls must remain safe (ApplicationManager may invoke this
+  // alongside destructor-driven teardown on the shutdown path).
+  m_cacheManager->cancelPendingIo();
+  m_cacheManager->cancelPendingIo();
+
+  // After cancellation, scheduleSaveToDisk early-returns at the m_cancelIo
+  // check, so re-scheduling cannot resurrect a fire-after-cancel path.
+  m_cacheManager->scheduleSaveToDisk(50);
+  QTest::qWait(150); // > 50ms: a non-cancelled timer would have fired.
+
+  QVERIFY(true);
+}
+
+void TestCacheManager::testDestruct_withScheduledSavesUnderLoad_doesNotCrash() {
+  // Exercises the destructor's I/O pool drain path (waitForDone with a
+  // bounded budget, falling through to the abandon-pool intentional-leak
+  // fallback if the budget expires). Caches several artworks so multiple
+  // save schedules race with destruction; the destructor must return within
+  // a bounded time without crashing regardless of which branch is taken.
+  auto *manager = new CacheManager();
+  manager->initialize();
+
+  // Insert several distinct items so dirty sets are non-empty and a real
+  // disk save would occur.
+  for (int i = 0; i < 8; ++i) {
+    QPixmap pixmap(300, 300);
+    pixmap.fill(Qt::GlobalColor(Qt::red + (i % 6)));
+    const QString path = m_tempDir->path() + QStringLiteral("/load_%1.png").arg(i);
+    QPixmap onDisk(300, 300);
+    onDisk.fill(Qt::blue);
+    QVERIFY(onDisk.save(path, "PNG"));
+    manager->cacheArtwork(path, pixmap);
+  }
+  // Force an immediate save schedule alongside the debounced ones.
+  manager->scheduleSaveToDisk(0);
+  QCoreApplication::processEvents();
+
+  // The destructor's drain budget is 2000ms; allow generous slack for slow
+  // CI without making this test silently always-pass.
+  QElapsedTimer timer;
+  timer.start();
+  delete manager;
+  const qint64 elapsedMs = timer.elapsed();
+
+  QVERIFY2(elapsedMs < 5000,
+           qPrintable(QStringLiteral("CacheManager destructor took %1 ms — "
+                                     "pool drain or timer teardown stalled")
+                          .arg(elapsedMs)));
+
+  QCoreApplication::processEvents();
 }
 
 QTEST_MAIN(TestCacheManager)

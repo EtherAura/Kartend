@@ -12,6 +12,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   pathutils.cpp
   settingsutils.cpp
   textzoom.cpp
+  threadpoolutils.cpp
   timerutils.cpp
   titlefilter.cpp
   usagestatsstore.cpp
@@ -37,6 +38,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   stateutils.h
   stringutils.h
   textzoom.h
+  threadpoolutils.h
   timerutils.h
   titlefilter.h
   videoutils.h

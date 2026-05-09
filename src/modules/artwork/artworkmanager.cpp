@@ -11,6 +11,7 @@
 #include "loggingcategories.h"
 #include "propertyutils.h"
 #include "setuputils.h"
+#include "threadpoolutils.h"
 #include "timerutils.h"
 #include "ui/widgets/itemwidget.h"
 #include "uiconstants.h"
@@ -159,17 +160,24 @@ ArtworkManager::ArtworkManager(CacheManager *cacheManager, QObject *parent)
 // Destructor stops timers, cancels futures, clears widget state, and releases
 // GUI pixmap resources
 ArtworkManager::~ArtworkManager() {
-  // Set cancellation flag first to signal all in-flight operations to stop
+  // Set cancellation flag first to signal all in-flight operations to stop.
+  // QtConcurrent tasks capture this flag by shared_ptr value (not 'this'),
+  // so they remain safe to run after destruction begins; they early-return
+  // when the flag is observed.
   if (m_cancellationRequested) {
     m_cancellationRequested->store(true, std::memory_order_release);
   }
 
-  // Abandon the thread pool without waiting - process is exiting anyway.
-  // ~QThreadPool() would block waiting for running tasks to complete.
-  if (m_artworkThreadPool) {
-    m_artworkThreadPool->clear();
-    // Intentionally NOT deleting - that would block. Let OS clean up.
-    m_artworkThreadPool = nullptr;
+  // Bounded-wait teardown: give in-flight tasks a chance to notice
+  // cancellation before falling through to the abandon-the-pool fallback.
+  // Matches CacheManager's policy and centralizes the precondition (tasks
+  // must be cooperatively-cancellable, never capture 'this' raw) at the
+  // helper's documentation.
+  constexpr int kArtworkPoolDrainMs = 2000;
+  if (!ThreadPoolUtils::shutdownWithBudget(m_artworkThreadPool, kArtworkPoolDrainMs)) {
+    qCWarning(lcArtworkManager)
+        << "ArtworkManager: artwork thread pool did not drain in" << kArtworkPoolDrainMs
+        << "ms during shutdown; abandoning pool to avoid blocking exit";
   }
 
   TimerUtils::stopAndDisconnectTimers({m_cacheTimer, m_silentLoadTimer, m_persistentLoadTimer});

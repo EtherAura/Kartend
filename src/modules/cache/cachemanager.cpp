@@ -2,6 +2,7 @@
 // persistence.
 #include "cachemanager.h"
 #include "errorutils.h"
+#include "threadpoolutils.h"
 #include "uiconstants.h"
 
 #include <limits>
@@ -83,38 +84,33 @@ CacheManager::CacheManager() {
 }
 
 CacheManager::~CacheManager() {
-  m_cancelIo->store(true, std::memory_order_release);
-
-  // Cooperative shutdown: signal cancel, drop queued tasks, then wait
-  // briefly for any in-flight task to notice the flag (the disk-I/O
-  // lambda checks cancelFlag at the start and inside its inner loop,
-  // so it returns within milliseconds in the common case). If it
-  // doesn't drain in time, fall back to the abandon-the-pool path
-  // rather than blocking shutdown.
-  if (m_ioThreadPool) {
-    m_ioThreadPool->clear();
-    constexpr int kShutdownDrainMs = 2000;
-    if (m_ioThreadPool->waitForDone(kShutdownDrainMs)) {
-      delete m_ioThreadPool;
-    } else {
-      qCWarning(lcCacheManager) << "CacheManager: I/O thread pool did not drain in"
-                                << kShutdownDrainMs
-                                << "ms during shutdown; abandoning pool to avoid blocking exit";
-      // Intentional leak: deleting now would call ~QThreadPool which
-      // blocks until all running tasks finish. The OS reaps memory at
-      // process exit. The .lsan_suppressions.txt entry covers this
-      // path; remove the suppression once the slow path is no longer
-      // possible (e.g. all cache I/O made strictly cancellable).
-    }
-    m_ioThreadPool = nullptr;
-  }
-
+  // Sever the timer→lambda connection FIRST. The lambda captures 'this' and
+  // calls saveToDisk(); if it fired later in the destructor (e.g. while the
+  // I/O pool drain spins the event loop), it would run against a
+  // half-destructed CacheManager. Stopping the timer and deleting its parent
+  // context here disconnects the lambda before any other teardown.
   if (m_debouncedSaveTimer) {
     m_debouncedSaveTimer->stop();
   }
   delete m_timerContext;
   m_timerContext = nullptr;
   m_debouncedSaveTimer = nullptr;
+
+  m_cancelIo->store(true, std::memory_order_release);
+
+  // Cooperative shutdown: m_cancelIo is set above; the disk-I/O lambda
+  // captures m_cancelIo by shared_ptr value and checks it at the start and
+  // inside its inner loop, so tasks return within milliseconds in the
+  // common case. If they don't drain within the budget, the helper
+  // intentionally leaks the pool — the OS reaps memory at process exit.
+  // The .lsan_suppressions.txt entry covers this path; remove the
+  // suppression once all cache I/O is strictly cancellable.
+  constexpr int kShutdownDrainMs = 2000;
+  if (!ThreadPoolUtils::shutdownWithBudget(m_ioThreadPool, kShutdownDrainMs)) {
+    qCWarning(lcCacheManager) << "CacheManager: I/O thread pool did not drain in"
+                              << kShutdownDrainMs
+                              << "ms during shutdown; abandoning pool to avoid blocking exit";
+  }
 }
 
 auto CacheManager::snapshotTimestampsForShutdown() const -> QHash<QString, qint64> {

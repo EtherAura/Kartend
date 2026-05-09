@@ -11,6 +11,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QSqlDatabase>
 #include <QStandardPaths>
@@ -32,6 +33,7 @@ private slots:
   void testConstructDestruct_doesNotCrash();
   void testRepeatedConstructDestruct_doesNotLeakConnection();
   void testDestructAfterInitDatabase_closesConnectionCleanly();
+  void testDestructDuringActiveScan_returnsWithinBoundedTime();
 
   // Path resolution (thread-safe, no DB needed) -----------------------------
   void testResolveFilePath_absolutePathPassthrough();
@@ -104,6 +106,71 @@ void TestDatabaseManager::testDestructAfterInitDatabase_closesConnectionCleanly(
   }
   QVERIFY2(!QSqlDatabase::contains(connName),
            "Destructor did not remove the SQL connection after a re-init");
+}
+
+void TestDatabaseManager::testDestructDuringActiveScan_returnsWithinBoundedTime() {
+  // Kicks off a scan against a populated media directory, then destructs
+  // mid-flight. The destructor calls requestCancelScan() on both worker and
+  // scan QueryManagers, then quit()+wait(SHUTDOWN_WAIT_MS=2000ms) on each
+  // QThread, falling through to an intentional thread-leak rather than
+  // qFatal-on-running-QThread if the budget expires. Either branch must
+  // return within a reasonable wall-clock bound.
+  m_session = std::make_unique<SessionManager>();
+
+  // Build a media directory large enough that a scan does meaningful work.
+  QTemporaryDir mediaDir;
+  QVERIFY2(mediaDir.isValid(), "Failed to create temporary media directory");
+  const QDir dir(mediaDir.path());
+  constexpr int fileCount = 1500;
+  for (int i = 0; i < fileCount; ++i) {
+    const QString fileName = QStringLiteral("file_%1.bin").arg(i, 6, 10, QChar('0'));
+    QFile f(dir.filePath(fileName));
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("x");
+    f.close();
+  }
+
+  CollectionConfig collection;
+  collection.name = QStringLiteral("DestructDuringScan");
+  collection.mediaDirectory = mediaDir.path();
+  collection.includeContentSubfolders = false;
+  collection.extensions = {QStringLiteral("bin")};
+
+  QList<CollectionConfig> allCollections;
+  allCollections.append(collection);
+
+  CollectionContext ctx;
+  ctx.currentIndex = 0;
+  ctx.config = collection;
+
+  auto *db = new DatabaseManager(m_session.get());
+  // Trigger a scan via the public API; this dispatches to the worker thread
+  // through queued connections.
+  db->fetchItemCount(ctx, allCollections, QString());
+
+  // Yield once so the queued request has a chance to land on the worker
+  // thread before we tear DatabaseManager down. We deliberately do *not*
+  // wait for completion — the goal is to destruct mid-scan.
+  QCoreApplication::processEvents();
+
+  // Destruction must return within the per-thread 2000ms budget × 2 threads,
+  // plus connection teardown slack. 6000ms is generous on slow CI.
+  QElapsedTimer timer;
+  timer.start();
+  delete db;
+  const qint64 elapsedMs = timer.elapsed();
+
+  QVERIFY2(elapsedMs < 6000,
+           qPrintable(QStringLiteral(
+                          "DatabaseManager destructor took %1 ms during active "
+                          "scan — bounded-wait fallback may be regressing")
+                          .arg(elapsedMs)));
+
+  // The connection must be cleaned up regardless of whether the worker
+  // threads were waited or leaked.
+  QVERIFY2(!QSqlDatabase::contains(QStringLiteral("kartend_main")),
+           "DatabaseManager destructor did not remove the SQL connection "
+           "after a mid-scan teardown");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
