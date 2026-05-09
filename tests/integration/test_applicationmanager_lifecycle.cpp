@@ -17,6 +17,7 @@
 #include <QSet>
 #include <QStandardPaths>
 #include <QTest>
+#include <QThreadPool>
 
 namespace {
 
@@ -30,6 +31,18 @@ void ensureSandbox() {
 }
 
 } // namespace
+
+void TestApplicationManagerLifecycle::cleanup() {
+  // Mirror of test_main.cpp's drainGlobalThreadPool() applied between test
+  // methods within this suite. setExpiryTimeout(0) + waitForDone() forces
+  // idle workers to exit so the next test starts with fresh threads;
+  // restore the default 30s timeout afterwards so it doesn't leak into
+  // other suites.
+  auto *pool = QThreadPool::globalInstance();
+  pool->setExpiryTimeout(0);
+  pool->waitForDone();
+  pool->setExpiryTimeout(30'000);
+}
 
 void TestApplicationManagerLifecycle::testBareConstructDestructIsSafe() {
   ensureSandbox();

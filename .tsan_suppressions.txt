@@ -79,6 +79,23 @@ race:QTest::qRun
 # binaries (test_databasemanager, test_integration, …).
 race:QArrayData::allocate
 
+# Queued-connection arg lifecycle across the event-queue boundary: when
+# DatabaseManager emits a queued signal carrying CollectionConfig /
+# CollectionContext / QList<CollectionConfig> args, main thread allocates
+# them via QMetaType::create (operator new + copy ctor) into the
+# QMetaCallEvent payload and the worker thread consumes them via
+# QMetaType::destroy (~QList → QArrayDataPointer::deref → operator
+# delete) after dispatching the slot. Qt synchronises post/consume
+# through the event-queue mutex inside QCoreApplication::sendPostedEvents,
+# but TSan can't observe the edge through libQt6Core's stripped frames so
+# both sides look like an unsynchronised malloc/free pair on the same
+# heap slot. Surfaces under test_databasemanager's destruct-mid-scan test,
+# which is specifically designed to exercise teardown while the worker
+# is still draining queued events.
+race:QMetaCallEvent
+race:QArrayDataPointer<CollectionConfig>::deref
+race:QArrayDataPointer<CollectionContext>::deref
+
 # CacheManager::initialize() runs on a QtConcurrent::run worker thread.
 # ApplicationManager::~ApplicationManager() calls m_cacheInitFuture
 # .waitForFinished() before tearing the CacheManager down, so the worker
