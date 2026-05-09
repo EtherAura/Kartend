@@ -23,6 +23,7 @@
 #include "databasemanager.h"
 #include "detailspane.h"
 #include "detailspanemanager.h"
+#include "eventhelpers.h"
 #include "gridlayoutcalculator.h"
 #include "gridutils.h"
 #include "interactionstateholder.h"
@@ -92,10 +93,8 @@ int EventManager::computeWheelTargetScroll(int selectedIndex, const CollectionCo
     targetPos = GridLayoutCalculator::calculateCenterScrollTarget(
         selectedIndex, viewport.width(), axisScrollBar->maximum(), metrics);
   } else {
-    int itemY = GridUtils::computeItemY(selectedIndex, gridWidth, itemHeight, vSpacing, margins);
-    itemY += headerOffset; // list view header
-
-    const int logicalTargetY = itemY - (viewport.height() - itemHeight) / 2;
+    const int logicalTargetY = EventHelpers::computeLogicalCenteredScrollY(
+        selectedIndex, gridWidth, itemHeight, vSpacing, margins, headerOffset, viewport.height());
     targetPos = logicalTargetY;
     if (m_viewportManager && m_viewportManager->getScrollScale() > 1.0) {
       targetPos = m_viewportManager->toWidgetScrollY(logicalTargetY);

@@ -20,6 +20,7 @@
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "detailspanemanager.h"
+#include "eventhelpers.h"
 #include "gridlayoutcalculator.h"
 #include "gridutils.h"
 #include "interactionstateholder.h"
@@ -147,38 +148,25 @@ bool EventManager::isRestoringSelection() const {
 }
 
 bool EventManager::handleActivityEvent(QEvent *event) {
-  bool activityEvent = false;
-  switch (event->type()) {
-  case QEvent::MouseMove:
-  case QEvent::MouseButtonPress:
-  case QEvent::MouseButtonRelease:
-  case QEvent::KeyPress:
-  case QEvent::KeyRelease:
-  case QEvent::Wheel:
-    activityEvent = true;
-    if (m_artworkManager) {
-      m_artworkManager->updateUserActivity();
-    }
-    break;
-  default:
-    break;
+  if (!EventHelpers::isActivityEvent(event->type())) {
+    return false;
   }
 
-  if (activityEvent) {
-    qint64 now = QDateTime::currentMSecsSinceEpoch();
-    qint64 last = m_state ? m_state->lastUiActivityMs() : 0;
-    if (last > 0 && (now - last) >= UIConstants::Timing::USER_IDLE_THRESHOLD_MS) {
-      if (m_state) {
-        m_state->click().armFirstClickDelay = true;
-      }
-    }
-    if (m_state) {
-      m_state->setLastUiActivityMs(now);
-    }
-    emit activityDetected();
+  if (m_artworkManager) {
+    m_artworkManager->updateUserActivity();
   }
 
-  return activityEvent;
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
+  const qint64 last = m_state ? m_state->lastUiActivityMs() : 0;
+  if (m_state && EventHelpers::shouldArmFirstClickDelay(
+                     last, now, UIConstants::Timing::USER_IDLE_THRESHOLD_MS)) {
+    m_state->click().armFirstClickDelay = true;
+  }
+  if (m_state) {
+    m_state->setLastUiActivityMs(now);
+  }
+  emit activityDetected();
+  return true;
 }
 
 bool EventManager::handleMouseButtonPress(QObject *obj, QEvent *event) {

@@ -882,6 +882,21 @@ target_link_libraries(test_interactionhelpers
 )
 add_test(NAME InteractionHelpers COMMAND test_interactionhelpers)
 
+# EventHelpers tests (pure helpers extracted from EventManager)
+add_executable(test_eventhelpers
+  modules/event/test_eventhelpers.cpp
+  ${SRC_DIR}/modules/behavior/event/eventhelpers.cpp
+)
+target_include_directories(test_eventhelpers PRIVATE
+  ${SRC_DIR}/modules/behavior/event
+  ${SRC_DIR}/utils/view
+)
+target_link_libraries(test_eventhelpers
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME EventHelpers COMMAND test_eventhelpers)
+
 # SearchHelpers tests (pure helpers extracted)
 add_executable(test_searchhelpers
   modules/search/test_searchhelpers.cpp
