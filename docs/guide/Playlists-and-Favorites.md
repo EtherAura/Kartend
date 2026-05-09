@@ -119,7 +119,7 @@ Two formats:
   "items": [
     {
       "source_collection_uuid": "abcd-1234",
-      "source_path": "/home/me/games/snes/cool-game.sfc"
+      "source_path": "/home/me/Videos/Films/a-film.mkv"
     },
     ...
   ]
@@ -133,8 +133,8 @@ sessions; it's how playlist items survive collection rename.
 
 ```m3u
 #EXTM3U
-/home/me/games/snes/cool-game.sfc
-/home/me/games/genesis/another-game.bin
+/home/me/Videos/Films/a-film.mkv
+/home/me/Music/Albums/another-album.flac
 ```
 
 Standard M3U. Will play in any media player but loses the collection
@@ -172,8 +172,8 @@ When you launch Kartend, you land directly on the playlist.
 
 ### Cross-collection "currently playing" list
 
-Create a playlist `Currently Playing`. Add the games you're actively
-playing. Drop them when you finish.
+Create a playlist `Currently Playing`. Add the items you're actively
+working through. Drop them when you finish.
 
 Pair with a custom field (`status=in progress`) to mark items
 individually so you can recover the list state from custom fields if

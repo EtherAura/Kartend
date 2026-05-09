@@ -208,7 +208,7 @@ without learning the sidebar's mechanics.
 
 ## Recipes
 
-### Tag completed games
+### Tag completed items
 
 Right-click each completed item → **Edit custom fields…** → add
 `status=completed`, `completed_date=2025-04-12`, `notes=loved the
@@ -229,22 +229,22 @@ extensions=epub,mobi
 Items get translation PDFs linked automatically by base-filename match.
 Override on a per-item basis if needed via right-click.
 
-### Override a single game's launcher to use a different emulator
+### Override a single item's launcher to use a different player
 
-The collection uses Snes9x by default. For one specific game (a
-poorly-emulated title that runs better in bsnes):
+The collection uses `mpv` by default. For one specific file (a video
+that plays better in `vlc`):
 
-1. Add `bsnes` as an additional launcher (Settings → Launcher).
-2. Right-click the problem game → **Always launch with… → bsnes**.
+1. Add `vlc` as an additional launcher (Settings → Launcher).
+2. Right-click the problem item → **Always launch with… → vlc**.
 
-That game launches in bsnes; everything else stays on Snes9x.
+That item launches in `vlc`; everything else stays on `mpv`.
 
 ### Add per-item screenshots without scraping
 
 ```ini
-[Game Boy]
-mediaDirectory=~/games/gb
-artworkDirectory=~/games/gb/_art
+[Films]
+mediaDirectory=~/Videos/Films
+artworkDirectory=~/Videos/Films/_art
 customArtworkTypes=my-screenshot
 ```
 

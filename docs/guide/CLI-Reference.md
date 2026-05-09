@@ -43,11 +43,11 @@ for the full list.
 ### Open Kartend straight into a specific collection
 
 ```bash
-kartend --collection "Game Boy"
-kartend -c "SNES"
+kartend --collection "Films"
+kartend -c "Albums"
 ```
 
-Equivalent to setting `[General] startupCollection=Game Boy`, but
+Equivalent to setting `[General] startupCollection=Films`, but
 applies for one launch only without modifying the config file.
 
 If the named collection doesn't exist, Kartend logs a warning and
@@ -56,7 +56,7 @@ falls back to the configured default.
 ### Headless: export a collection
 
 ```bash
-kartend --export-kart "Game Boy" --export-out ~/backups/gb.kart
+kartend --export-kart "Films" --export-out ~/backups/films.kart
 ```
 
 Both flags required. Exit `0` on success; `2` on failure (collection
@@ -73,8 +73,8 @@ Default destination: `~/imported-kart`. Default conflict policy:
 `skip`. Override with `--to` and `--on-conflict`:
 
 ```bash
-kartend --import-kart ~/backups/gb.kart \
-        --to ~/games/gb \
+kartend --import-kart ~/backups/films.kart \
+        --to ~/Videos/Films \
         --on-conflict overwrite
 ```
 
@@ -137,7 +137,7 @@ A daily-cron invocation produces a dated tree of `.kart` exports.
 set -euo pipefail
 
 for k in ~/restore/*.kart; do
-  kartend --import-kart "$k" --to "$HOME/games" --on-conflict skip
+  kartend --import-kart "$k" --to "$HOME/Media" --on-conflict skip
 done
 ```
 
@@ -151,8 +151,8 @@ collection:
 
 ```desktop
 [Desktop Entry]
-Name=Kartend — SNES
-Exec=kartend --collection "SNES"
+Name=Kartend — Films
+Exec=kartend --collection "Films"
 Icon=io.github.EtherAura.Kartend
 Type=Application
 Categories=Utility;Qt;

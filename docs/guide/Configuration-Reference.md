@@ -389,7 +389,7 @@ manually.
 | `playlistId` | UUID of the underlying playlist row. |
 | `playlistReservedKind` | Empty for user playlists, `favorites` for the built-in favorites playlist. |
 
-## Example: a complete game-emulation collection
+## Example: a complete media collection
 
 ```ini
 [General]
@@ -399,18 +399,17 @@ attractModeIdleTimeoutSec=180
 historyEnabled=true
 runtimeDetectionEnabled=true
 
-[Game Boy Advance]
-name=Game Boy Advance
-type=Games
-mediaDirectory=~/games/gba/roms
-artworkDirectory=~/games/gba/boxart
-videoDirectory=~/games/gba/videos
-extensions=gba,zip
-launcherPath=/usr/bin/retroarch
-corePath=/usr/lib/libretro/mgba_libretro.so
+[Films]
+name=Films
+type=Video
+mediaDirectory=~/Videos/Films
+artworkDirectory=~/Videos/Films/_covers
+videoDirectory=~/Videos/Films/_previews
+extensions=mkv,mp4,zip
+launcherPath=/usr/bin/mpv
 launchParameters=--fullscreen
 extractArchives=true
-extractedExtension=gba
+extractedExtension=mkv
 
 gridWidth=8
 itemWidth=180
@@ -418,7 +417,7 @@ itemHeight=240
 horizontalSpacing=12
 verticalSpacing=16
 backgroundType=image
-backgroundImage=~/games/gba/wallpaper.jpg
+backgroundImage=~/Pictures/wallpapers/films.jpg
 wallpaperParallax=true
 parallaxStrength=40
 vignetteEnabled=true

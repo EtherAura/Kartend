@@ -17,9 +17,9 @@ For every item file Kartend looks in the collection's `videoDirectory`
 for a video whose base filename matches:
 
 ```
-mediaDirectory/My Game (USA).sfc
-videoDirectory/My Game (USA).mp4   ← matches
-videoDirectory/My Game (USA).webm  ← also matches
+mediaDirectory/A Film (US).mkv
+videoDirectory/A Film (US).mp4   ← matches
+videoDirectory/A Film (US).webm  ← also matches
 ```
 
 Same matching rules as artwork — case-sensitive on case-sensitive
@@ -177,16 +177,16 @@ Video previews can be large. Some practical advice:
 A typical setup:
 
 ```
-~/games/snes/                 ← media
-~/games/snes/_covers/         ← artwork
-~/games/snes/_videos/         ← video previews (one per game)
+~/Videos/Films/                 ← media
+~/Videos/Films/_covers/         ← artwork
+~/Videos/Films/_previews/       ← video previews (one per item)
 ```
 
 ```ini
-[SNES]
-mediaDirectory=~/games/snes
-artworkDirectory=~/games/snes/_covers
-videoDirectory=~/games/snes/_videos
+[Films]
+mediaDirectory=~/Videos/Films
+artworkDirectory=~/Videos/Films/_covers
+videoDirectory=~/Videos/Films/_previews
 ```
 
 ## Format and decoding gotchas

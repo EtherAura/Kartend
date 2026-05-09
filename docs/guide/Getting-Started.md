@@ -48,7 +48,7 @@ See [File Locations](File-Locations.md) for the full layout.
 
 1. Open the **Settings Dialog** with `Ctrl + ,` (or **File → Settings**).
 2. Click **Add Collection** in the tree on the left.
-3. On the **Basic** tab, give it a **Name** (e.g. `Movies`, `SNES`,
+3. On the **Basic** tab, give it a **Name** (e.g. `Films`, `Albums`,
    `Manuals`).
 4. Switch to the **Paths & Extensions** tab and fill in:
    - **Media Directory** — the folder containing the files to display.
@@ -56,7 +56,7 @@ See [File Locations](File-Locations.md) for the full layout.
    - **Artwork Directory** — folder containing cover images that match
      the media filenames (more below).
    - **Extensions** — comma-separated list of file extensions to scan
-     (e.g. `pdf,epub` or `sfc,smc,zip`). Leave blank to accept every
+     (e.g. `pdf,epub` or `mkv,mp4,webm`). Leave blank to accept every
      file in the directory.
 5. Switch to the **Launcher** tab and set:
    - **Launcher Path** — the executable that opens an item
@@ -64,7 +64,7 @@ See [File Locations](File-Locations.md) for the full layout.
    - **Launch Parameters** *(optional)* — extra arguments to pass before
      the file path (e.g. `--fs` for fullscreen).
    - **Core Path** *(RetroArch only)* — the libretro core `.so`. See
-     [Launchers](Launchers.md) for emulator-specific examples.
+     [Launchers](Launchers.md) for launcher-specific examples.
 6. Click **Save**. Kartend scans the media directory and populates the
    grid.
 

@@ -1,15 +1,15 @@
 # Launchers
 
 A **launcher** is the executable Kartend hands an item to when you
-press `Enter` (or double-click). It can be `xdg-open`, `mpv`, your
-favorite emulator, a wrapper script, or anything else that takes a
-file path on the command line.
+press `Enter` (or double-click). It can be `xdg-open`, `mpv`, a libretro
+runtime, a wrapper script, or anything else that takes a file path on
+the command line.
 
 Each collection has at minimum one launcher (the **primary**) and can
 add any number of **additional launchers** for the same library — useful
-when one set of items can be opened with multiple tools (an SNES ROM
-that you sometimes run in `snes9x` and sometimes in `bsnes`, for
-example). Configurations can be saved as **presets** and reused across
+when one set of items can be opened with multiple tools (a video file
+that you sometimes run in `mpv` and sometimes in `vlc`, for example).
+Configurations can be saved as **presets** and reused across
 collections, and individual items can override the default choice via
 right-click.
 
@@ -95,15 +95,15 @@ launcherPath=/usr/bin/mpv
 launchParameters=--fs --really-quiet
 
 # RetroArch + libretro core
-[Game Boy Advance]
+[Retro Library]
 launcherPath=/usr/bin/retroarch
-corePath=/usr/lib/libretro/mgba_libretro.so
+corePath=/usr/lib/libretro/some_libretro.so
 launchParameters=--fullscreen
 
-# Standalone emulator (no core)
-[PlayStation 3]
-launcherPath=/usr/bin/rpcs3
-launchParameters=--no-gui
+# Standalone wrapper (no core)
+[Audiobooks]
+launcherPath=/usr/bin/mpv
+launchParameters=--no-video --save-position-on-quit
 ```
 
 ## Additional launchers
@@ -113,9 +113,9 @@ the primary. They appear in the multi-launcher chooser dialog and let
 you pick at launch time which one to use.
 
 ```ini
-[SNES]
-launcherPath=/usr/bin/snes9x
-launcherName=Snes9x
+[Films]
+launcherPath=/usr/bin/mpv
+launcherName=mpv
 
 # additionalLaunchers is serialized; one row per additional entry.
 # In practice this is managed via the Settings → Launcher tab.
@@ -140,10 +140,10 @@ pre-selection in the chooser dialog and the launcher used for items
 without a per-item override.
 
 ```ini
-[SNES]
-launcherPath=/usr/bin/snes9x
-launcherName=Snes9x
-defaultLauncherIndex=1   ; bsnes (additional[0]) is the default instead
+[Films]
+launcherPath=/usr/bin/mpv
+launcherName=mpv
+defaultLauncherIndex=1   ; vlc (additional[0]) is the default instead
 ```
 
 The Settings tab gives you a **Default Launcher** dropdown that lists
@@ -239,7 +239,7 @@ options on the **Paths & Extensions** tab:
 | Setting | INI key | Notes |
 |---------|---------|-------|
 | Extract Archives | `extractArchives` | Boolean toggle |
-| Extracted Extension | `extractedExtension` | Which extension inside the archive to launch (e.g. `nes`, `sfc`) |
+| Extracted Extension | `extractedExtension` | Which extension inside the archive to launch (e.g. `pdf`, `cbz`) |
 
 When enabled and the selected item is an archive (`.zip`, `.7z`, …),
 Kartend extracts to a temporary directory under `~/.cache/kartend/`,
@@ -287,9 +287,9 @@ validation, executable check, process start) and the reason.
 
 ## Recipes
 
-### Run an item in a terminal emulator
+### Run an item in a terminal
 
-If your launcher is CLI-only, wrap it:
+If your launcher is CLI-only, wrap it in a terminal:
 
 ```bash
 #!/bin/sh
@@ -297,17 +297,17 @@ If your launcher is CLI-only, wrap it:
 exec konsole -e /usr/bin/some-cli-tool "$1"
 ```
 
-### Pick an emulator based on filename
+### Pick a launcher based on filename
 
-If the same collection has files for two emulators (e.g. `.gba` and
-`.nds` mixed), use a dispatcher script as the launcher:
+If the same collection has files of different types (e.g. `.pdf` and
+`.cbz` mixed), use a dispatcher script as the launcher:
 
 ```bash
 #!/bin/sh
-# /usr/local/bin/kartend-multi-emu
+# /usr/local/bin/kartend-multi-launcher
 case "$1" in
-  *.gba) exec /usr/bin/mgba-qt "$1" ;;
-  *.nds) exec /usr/bin/melonDS "$1" ;;
+  *.pdf) exec /usr/bin/okular "$1" ;;
+  *.cbz) exec /usr/bin/krita "$1" ;;
   *)     exec xdg-open "$1" ;;
 esac
 ```
@@ -328,7 +328,7 @@ argument you'd need a wrapper script.
 
 ```ini
 launcherPath=/home/me/builds/retroarch
-corePath=/home/me/builds/cores/snes9x_libretro.so
+corePath=/home/me/builds/cores/some_libretro.so
 launchParameters=--fullscreen --verbose
 ```
 
@@ -341,7 +341,7 @@ launchParameters=--fullscreen --verbose
 | Launcher opens but the file doesn't load | Launcher expects the file at a non-final position | Use a wrapper script that re-arranges arguments. |
 | Item with `&` or spaces in name fails | (Unlikely — should work. Check the launcher's own escape rules.) | Confirm the launcher's CLI handles special characters; wrap if not. |
 | RetroArch launches without a core | `corePath` empty or filename doesn't contain "retroarch" | Set `corePath`; verify the launcher path includes "retroarch". |
-| Archive launches the `.zip` instead of the contained ROM | `extractArchives=false` or `extractedExtension` wrong | Enable extraction and set the right extension. |
+| Archive launches the `.zip` instead of the contained file | `extractArchives=false` or `extractedExtension` wrong | Enable extraction and set the right extension. |
 | "Always launch with…" missing from menu | Collection only has one launcher | Add at least one additional launcher. |
 
 ## For developers

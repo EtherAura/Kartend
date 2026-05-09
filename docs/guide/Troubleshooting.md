@@ -75,7 +75,7 @@ a soft reload (re-renders without re-scanning).
 
 | Cause | Fix |
 |---|---|
-| Filename mismatch | Artwork is matched by base filename (case-sensitive on case-sensitive filesystems). `game.sfc` needs `game.png` (or `.jpg` / `.jpeg` / `.webp`) in the artwork directory. |
+| Filename mismatch | Artwork is matched by base filename (case-sensitive on case-sensitive filesystems). `a-film.mkv` needs `a-film.png` (or `.jpg` / `.jpeg` / `.webp`) in the artwork directory. |
 | Wrong artwork directory | Settings → Paths → **Artwork Directory**. |
 | Unsupported image format | Convert to `png`, `jpg`, `jpeg`, or `webp`. |
 | Artwork in nested folders | Enable `includeArtworkSubfolders=true`. |
@@ -99,8 +99,8 @@ script that composes folder-art montages.
 ### Sidebar gallery shows empty / placeholder slots
 
 - Standard artwork types only auto-discover when the file is suffix-
-  matched (`game-boxfront.png`, `game-screenshot.png`, etc.). If you
-  have just one image per item, only the unsuffixed slot fills.
+  matched (`a-film-boxfront.png`, `a-film-screenshot.png`, etc.). If
+  you have just one image per item, only the unsuffixed slot fills.
 - Custom artwork types never auto-discover; populate via right-click →
   **Edit artwork links…**.
 - The video tile shows only when the item has a matching file in
@@ -134,18 +134,18 @@ Recipes](Launchers.md#recipes).
 
 ### RetroArch launches without a core
 
-Use both `launcherPath` (the emulator binary) and `corePath` (the
-loadable libretro core, e.g. `mgba_libretro.so`). Kartend will pass
-`-L <corePath> <fileName>` to the launcher.
+Use both `launcherPath` (the RetroArch binary) and `corePath` (the
+loadable libretro core `.so`). Kartend will pass `-L <corePath>
+<fileName>` to the launcher.
 
 The launcher path must contain `retroarch` (case-insensitive) for the
-`-L` injection to apply: `/usr/bin/retroarch`, `~/bin/retroarch.AppImage`,
-etc. Other emulators ignore `corePath`.
+`-L` injection to apply: `/usr/bin/retroarch`,
+`~/bin/retroarch.AppImage`, etc. Other launchers ignore `corePath`.
 
 ### Archive items launch the `.zip` instead of the contained file
 
 Enable `extractArchives=true` and set `extractedExtension` to the file
-type inside the archive (e.g. `nes`, `sfc`). Kartend extracts to a
+type inside the archive (e.g. `pdf`, `cbz`). Kartend extracts to a
 temp dir under `~/.cache/kartend/`, finds the matching file, and
 launches that.
 
@@ -189,8 +189,8 @@ The item has no matching file in `videoDirectory`. Drop a video file
 named the same as the media file (different extension):
 
 ```
-mediaDirectory/My Game.sfc
-videoDirectory/My Game.mp4
+mediaDirectory/A Film.mkv
+videoDirectory/A Film.mp4
 ```
 
 See [Video Previews](Video-Previews.md).

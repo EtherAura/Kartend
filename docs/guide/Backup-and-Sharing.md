@@ -61,7 +61,7 @@ The exported file is named `<collection-name>.kart` by default.
 ### From the command line
 
 ```bash
-kartend --export-kart "Game Boy" --export-out ~/backups/gb.kart
+kartend --export-kart "Films" --export-out ~/backups/films.kart
 ```
 
 | Flag | Description |
@@ -77,7 +77,7 @@ argument errors. Useful in cron jobs / backup scripts.
 # Daily backup to a dated archive
 DATE=$(date +%Y-%m-%d)
 mkdir -p ~/backups/kartend
-for collection in "Game Boy" "SNES" "Movies"; do
+for collection in "Films" "Albums" "Manuals"; do
   kartend --export-kart "$collection" \
           --export-out ~/backups/kartend/${collection// /_}-$DATE.kart
 done
@@ -113,8 +113,8 @@ moving between machines with different paths.
 ### From the command line
 
 ```bash
-kartend --import-kart ~/backups/snes.kart \
-        --to ~/games/snes \
+kartend --import-kart ~/backups/films.kart \
+        --to ~/Videos/Films \
         --on-conflict overwrite
 ```
 
@@ -155,9 +155,9 @@ appears:
 │ The package contains collections with the same name as     │
 │ existing ones:                                             │
 │                                                            │
-│   ☑ Game Boy            [ Skip ▾ ]                         │
-│   ☑ Sega Genesis        [ Overwrite ▾ ]                    │
-│   ☐ Game Gear           [ — / new — ]                      │
+│   ☑ Films               [ Skip ▾ ]                         │
+│   ☑ Albums              [ Overwrite ▾ ]                    │
+│   ☐ Audiobooks          [ — / new — ]                      │
 │                                                            │
 │         [ Cancel ]              [ Continue ]               │
 └────────────────────────────────────────────────────────────┘
@@ -219,12 +219,13 @@ On the source:
 
 ```bash
 # Export each collection
-for c in "Game Boy" "SNES" "Movies"; do
+for c in "Films" "Albums" "Manuals"; do
   kartend --export-kart "$c" --export-out ~/$c.kart
 done
 # Copy media + artwork directories separately (rsync / external drive)
-rsync -avh ~/games/ user@new-machine:/home/user/games/
-rsync -avh ~/movies/ user@new-machine:/home/user/movies/
+rsync -avh ~/Videos/  user@new-machine:/home/user/Videos/
+rsync -avh ~/Music/   user@new-machine:/home/user/Music/
+rsync -avh ~/Documents/ user@new-machine:/home/user/Documents/
 # Copy the .kart files
 scp ~/*.kart user@new-machine:~/
 ```
@@ -233,7 +234,7 @@ On the target:
 
 ```bash
 for k in ~/*.kart; do
-  kartend --import-kart "$k" --to ~/games  # or wherever
+  kartend --import-kart "$k" --to ~/Media  # or wherever
 done
 ```
 
@@ -250,7 +251,7 @@ of the media directory:
 
 ```bash
 kartend --export-kart "My Curated Set" --export-out my-set.kart
-tar czf my-set-media.tar.gz ~/games/curated/
+tar czf my-set-media.tar.gz ~/Media/curated/
 # Send my-set.kart + my-set-media.tar.gz to the friend.
 ```
 

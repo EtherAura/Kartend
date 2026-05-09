@@ -49,14 +49,14 @@ The first base-filename match within the entire artwork tree wins.
 ## Artwork types
 
 Beyond the single "tile face" image, Kartend supports multiple artwork
-*types* per item — analogous to how scrapers like LaunchBox or
-EmulationStation organize covers, screenshots, marquees, and so on.
+*types* per item — covers, posters, screenshots, marquees, and the
+like.
 
 Standard types Kartend looks for at scan time:
 
 | Type id | Conventional filename suffix |
 |---------|------------------------------|
-| `boxfront` | `Game (USA)-boxfront.png` |
+| `boxfront` | `A Title-boxfront.png` |
 | `boxback` | `…-boxback.png` |
 | `cartridge` | `…-cartridge.png` |
 | `screenshot` | `…-screenshot.png` |
@@ -80,8 +80,8 @@ Beyond the standard list, you can declare your own artwork types per
 collection:
 
 ```ini
-[Game Boy]
-customArtworkTypes=manual,strategy-guide,catalog
+[Manuals]
+customArtworkTypes=cover,quick-reference,catalog
 ```
 
 > **Where to find this** — Settings Dialog → **Paths & Extensions** tab
@@ -169,15 +169,15 @@ Workflow:
 
 ```bash
 .scripts/subfolder_art_generator.py \
-  --media ~/Games/SNES \
-  --artwork ~/Games/SNES/_covers \
-  --output ~/Games/SNES/_folder-art
+  --media ~/Videos/Films \
+  --artwork ~/Videos/Films/_covers \
+  --output ~/Videos/Films/_folder-art
 ```
 
 Then point the collection at the new folder:
 
 ```ini
-artworkDirectory=~/Games/SNES/_folder-art
+artworkDirectory=~/Videos/Films/_folder-art
 includeArtworkSubfolders=true
 ```
 
@@ -190,7 +190,7 @@ The **header logo** is a per-collection branding image painted at the
 top of the items grid — independent of any per-item artwork. Set:
 
 ```ini
-headerLogoImage=~/banners/snes-logo.png
+headerLogoImage=~/banners/films-logo.png
 headerLogoPosition=topcenter   ; topleft / topcenter / topright
 ```
 
@@ -242,27 +242,27 @@ extensions=mkv,mp4,webm
 ### Per-item folder structure (artwork lives next to media)
 
 ```
-~/Games/SNES/Game (USA)/
-~/Games/SNES/Game (USA)/Game (USA).sfc
-~/Games/SNES/Game (USA)/cover.png
-~/Games/SNES/Game (USA)/screenshot.png
+~/Videos/Films/A Film/
+~/Videos/Films/A Film/A Film.mkv
+~/Videos/Films/A Film/cover.png
+~/Videos/Films/A Film/poster.png
 ```
 
 ```ini
-[SNES]
-mediaDirectory=~/Games/SNES
-artworkDirectory=~/Games/SNES
+[Films]
+mediaDirectory=~/Videos/Films
+artworkDirectory=~/Videos/Films
 includeArtworkSubfolders=true
-extensions=sfc,smc
+extensions=mkv,mp4
 ```
 
 ### Multiple artwork types in a flat directory
 
 ```
-~/Games/SNES/_art/Game (USA).png
-~/Games/SNES/_art/Game (USA)-boxback.png
-~/Games/SNES/_art/Game (USA)-screenshot.png
-~/Games/SNES/_art/Game (USA)-marquee.png
+~/Videos/Films/_art/A Film.png
+~/Videos/Films/_art/A Film-poster.png
+~/Videos/Films/_art/A Film-screenshot.png
+~/Videos/Films/_art/A Film-banner.png
 ```
 
 The first one (no suffix) is the tile face; the suffixed images all

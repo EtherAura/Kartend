@@ -45,7 +45,7 @@ The fastest path. Any hex color works.
 
 ```ini
 backgroundType=image
-backgroundImage=~/themes/snes-wallpaper.jpg
+backgroundImage=~/themes/films-wallpaper.jpg
 wallpaperParallax=true
 parallaxStrength=40
 ```
@@ -127,8 +127,8 @@ Distinct from:
   the global app icon shown in your application menu and window
   decorations.
 
-Use the header logo for collection-level branding (e.g. a SNES logo
-across the top of the SNES collection).
+Use the header logo for collection-level branding (e.g. a "Films" logo
+across the top of the Films collection).
 
 ## Tile titles
 

@@ -232,10 +232,10 @@ Mirrors the CI sanitizer job. Useful for chasing intermittent leaks.
 Qt's logging messages have a convention:
 
 ```
-qWarning: kartend.scanflow: scan started for collection "Game Boy" (uuid=...)
+qWarning: kartend.scanflow: scan started for collection "Films" (uuid=...)
 qDebug: kartend.scanflow: enumerated 412 candidate files in 18ms
 qWarning: kartend.databasemanager: SQL retry 1/3 after timeout
-qCritical: kartend.launchmanager: launcher path no longer exists: /usr/bin/old-emulator
+qCritical: kartend.launchmanager: launcher path no longer exists: /usr/bin/old-player
 ```
 
 - **Severity** prefixes (`qWarning`, `qDebug`, etc.) reflect Qt's

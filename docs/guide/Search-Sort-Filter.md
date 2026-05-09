@@ -24,7 +24,7 @@ and returns focus to the grid.
 | Live | Filters as you type, debounced |
 | Scope | Current collection only — does not search across the library |
 | Subcollections | Searched too if `showAllSubcollectionItems=true`; otherwise just direct items |
-| Title cleanup | Search runs against the **displayed** name (after `titleExclusionPatterns` strips), so `Game (USA)` displayed as `Game` matches `game` search |
+| Title cleanup | Search runs against the **displayed** name (after `titleExclusionPatterns` strips), so `A Film (US)` displayed as `A Film` matches `a film` search |
 
 Press `Enter` while in the search bar to move focus to the filtered
 grid; selection lands on the first match. From there `Ctrl+A` selects
@@ -119,7 +119,7 @@ You can hold any of them constant and toggle the others.
 
 ### Type filter
 
-Each collection has a free-form `type` tag (e.g. `Games`, `Movies`,
+Each collection has a free-form `type` tag (e.g. `Video`, `Audio`,
 `Documents`). The **collection type filter** restricts the visible
 collections to ones whose type matches.
 
@@ -129,7 +129,7 @@ Where to set:
   type from the radio list.
 - Settings → General → **Collection Type Filter** — type any value (or
   pick one already in use).
-- INI: `[General] collectionTypeFilter=Games`.
+- INI: `[General] collectionTypeFilter=Video`.
 
 The filter affects which collections appear as tiles when you're at the
 root or inside a parent. It does not affect already-open collections'
@@ -146,26 +146,27 @@ type filter to make the app behave like a flat library:
 
 ```ini
 [General]
-collectionTypeFilter=Games
+collectionTypeFilter=Video
 hideSubcollectionTiles=true
 ```
 
-That setup hides the genre / sub-genre folders and shows just games,
-across all "Games"-typed collections.
+That setup hides the genre / sub-genre folders and shows just videos,
+across all "Video"-typed collections.
 
 ### Title pattern exclusion
 
 Per-collection regex patterns stripped from displayed item titles.
-Useful for ROM region tags, version markers, language codes:
+Useful for region tags, version markers, language codes embedded in
+filenames:
 
 ```ini
-[Game Boy Advance]
-titleExclusionPatterns=\s*\(USA\),\s*\(Europe\),\s*\[!\],\s*\(Rev \d+\)
+[Films]
+titleExclusionPatterns=\s*\(US\),\s*\(EU\),\s*\[!\],\s*\(Rev \d+\)
 titleExclusionEnabled=true
 ```
 
-`Game (USA) [!] (Rev 1).gba` displays as `Game`. The underlying file is
-unchanged; only the tile text and search index use the cleaned name.
+`A Film (US) [!] (Rev 1).mkv` displays as `A Film`. The underlying file
+is unchanged; only the tile text and search index use the cleaned name.
 
 | Setting | INI key | Notes |
 |---------|---------|-------|
@@ -259,11 +260,11 @@ hide-from-view today.)
 ```ini
 [General]
 sortMode=Random
-collectionTypeFilter=Games
+collectionTypeFilter=Video
 hideSubcollectionTiles=true
 ```
 
-Boots into a random ordering of games. Combine with attract mode for
+Boots into a random ordering of videos. Combine with attract mode for
 a screensaver-like cycle.
 
 ### Show only items with backdrop artwork

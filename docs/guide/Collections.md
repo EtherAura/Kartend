@@ -15,7 +15,7 @@ If you've never built one, start with the
 | Field | Required | Notes |
 |-------|----------|-------|
 | **Name** | yes | Display label and the INI section header. Renaming updates references. The *only* strictly required field. |
-| **Type** | no | Free-form tag (e.g. `Games`, `Movies`, `PDFs`). Used by the [collection-type filter](Search-Sort-Filter.md#type-filter). |
+| **Type** | no | Free-form tag (e.g. `Video`, `Audio`, `Documents`). Used by the [collection-type filter](Search-Sort-Filter.md#type-filter). |
 | **Media Directory** | no | Folder of items. Supports `~`. Omitted on [shell collections](Shell-Collections.md) that exist purely to group other collections. |
 | **Artwork Directory** | no | Folder of cover images matched by base filename. See [Artwork](Artwork.md). |
 | **Video Directory** | no | Folder of preview videos for the sidebar. See [Video Previews](Video-Previews.md). |
@@ -116,11 +116,11 @@ duplicating its config or items.
 Use it for cross-cutting groupings:
 
 ```ini
-[Sega Saturn Favorites]
-mediaDirectory=~/games/saturn/favorites
-parentCollectionIndex=2          ; primary: under "Games"
-additionalParentNames=Favorites  ; also appears under "Favorites"
-launcherPath=/usr/bin/yabasanshiro
+[Concert Recordings]
+mediaDirectory=~/Videos/Concerts
+parentCollectionIndex=2          ; primary: under "Video"
+additionalParentNames=Audio      ; also appears under "Audio"
+launcherPath=/usr/bin/mpv
 ```
 
 > **Where to find this** — Settings Dialog → **Basic** tab → **Linked
@@ -139,19 +139,19 @@ Each collection has a **Type** — a free-form text tag. It's purely a
 classification you choose:
 
 ```ini
-[Game Boy]
-type=Games
+[Films]
+type=Video
 
-[Movies]
-type=Films
+[Albums]
+type=Audio
 
 [Manuals]
 type=Documents
 ```
 
 Then the global **collection type filter** (toolbar → filter button →
-Type, or `[General] collectionTypeFilter=Games`) shows only collections
-whose `type` matches. Useful for switching modes ("show me only games,
+Type, or `[General] collectionTypeFilter=Video`) shows only collections
+whose `type` matches. Useful for switching modes ("show me only video,
 hide everything else") without rearranging the hierarchy.
 
 Pair with **Hide Subcollection Tiles** (`hideSubcollectionTiles=true`)
@@ -164,10 +164,10 @@ filter mechanics.
 ## Folder browsing (treating subfolders as collections)
 
 If your media folder has its own internal hierarchy — say,
-`~/Games/SNES/Action/`, `~/Games/SNES/RPG/` — you don't need to create
-a Kartend subcollection for each subfolder. Enable **Include Content
-Subfolders** (`includeContentSubfolders=true`) and Kartend renders
-folders as virtual collection tiles right alongside media items.
+`~/Videos/Films/Action/`, `~/Videos/Films/Drama/` — you don't need to
+create a Kartend subcollection for each subfolder. Enable **Include
+Content Subfolders** (`includeContentSubfolders=true`) and Kartend
+renders folders as virtual collection tiles right alongside media items.
 
 Related toggles (all per-collection, on the **Paths & Extensions** tab):
 
