@@ -19,6 +19,7 @@
 #include "usagestatsstore.h"
 
 class ArtworkPreviewOverlay;
+class DetailsPaneResizeGrip;
 class VideoPreviewWidget;
 QT_BEGIN_NAMESPACE
 class QHBoxLayout;
@@ -270,21 +271,18 @@ private:
   DetailsPanePattern m_bgPattern = DetailsPanePattern::Crosshatch;
   int m_patternIntensity = 50; // 0–100 % alpha multiplier for pattern lines
   QColor m_patternColor;
-  /// width drag state. WidthLocked false enables a draggable
-  /// grip on the inner edge; while m_widthDragging is true, mouseMove
-  /// emits widthDragged() and mouseRelease emits widthCommitted().
-  /// m_heightDragging is the Top/Bottom equivalent — same lock
-  /// flag governs both, and only one of the two is ever active at once
-  /// because the active edge is determined by m_position.
+  /// Width-lock + dock position state. The lock flag toggles the resize
+  /// grip on/off and the position drives both the grip's active edge and
+  /// the paint code that draws the handle band. The grip controller below
+  /// owns the live drag bookkeeping; isDragging() answers paint code that
+  /// needs to skip the handle highlight mid-drag.
   bool m_widthLocked = true;
   DetailsPanePosition m_position = DetailsPanePosition::Right;
-  bool m_widthDragging = false;
-  int m_dragStartWidth = 0;
-  int m_dragStartX = 0;
-  bool m_heightDragging = false;
-  int m_dragStartHeight = 0;
-  int m_dragStartY = 0;
-  [[nodiscard]] bool isOnGrip(const QPoint &posInWidget) const;
+  /// Owns the resize-grip state machine: hit-test, drag bookkeeping, and
+  /// cursor changes. Parented to this widget. Forwards widthDragged /
+  /// widthCommitted / heightDragged / heightCommitted as DetailsPane
+  /// signals via wired connections in setupUI().
+  DetailsPaneResizeGrip *m_resizeGrip = nullptr;
 
   /// tabs. The tab bar is created programmatically and inserted
   /// at the top of mainLayout so the .ui file stays unchanged.

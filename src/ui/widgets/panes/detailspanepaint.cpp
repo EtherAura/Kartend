@@ -18,6 +18,7 @@
 
 #include "collectionutils.h"
 #include "detailspane.h"
+#include "detailspaneresizegrip.h"
 #include "itemwidget.h"
 #include "textzoom.h"
 #include "ui_detailspane.h"
@@ -32,6 +33,10 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection) {
   // on the first paint after a position change.
   m_widthLocked = collection.sidebarWidthLocked;
   m_position = collection.sidebarPosition;
+  if (m_resizeGrip) {
+    m_resizeGrip->setLocked(m_widthLocked);
+    m_resizeGrip->setPosition(m_position);
+  }
   // flip the inner content layout direction + scrollbar policy
   // to match the active dock edge. Done before setActiveTab so the wrappers
   // and chrome state are in place when applyTabVisibility runs.
@@ -222,7 +227,7 @@ void DetailsPane::paintEvent(QPaintEvent *event) {
   // scrollbar lives right next to the grip — bump it to a 2px band and
   // overlay a short central tick so the handle reads as a deliberate
   // affordance rather than a stray highlight pixel.
-  if (!m_widthLocked && !m_widthDragging && !m_heightDragging) {
+  if (!m_widthLocked && m_resizeGrip && !m_resizeGrip->isDragging()) {
     QColor edgeColor = palette().color(QPalette::Highlight);
     edgeColor.setAlpha(180);
     QColor tickColor = edgeColor;

@@ -23,6 +23,7 @@
 
 #include "artworkpreviewoverlay.h"
 #include "detailspane.h"
+#include "detailspaneresizegrip.h"
 #include "extensionutils.h"
 #include "itemwidget.h"
 #include "mainwindow.h"
@@ -90,6 +91,16 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
   }
 
   setupTabBar();
+
+  // The grip controller owns every piece of state the previous in-line
+  // implementation kept on DetailsPane (drag flags + start positions).
+  // Lock state and dock position are kept in sync by applyAppearance.
+  m_resizeGrip = new DetailsPaneResizeGrip(this, this);
+  connect(m_resizeGrip, &DetailsPaneResizeGrip::widthDragged, this, &DetailsPane::widthDragged);
+  connect(m_resizeGrip, &DetailsPaneResizeGrip::widthCommitted, this, &DetailsPane::widthCommitted);
+  connect(m_resizeGrip, &DetailsPaneResizeGrip::heightDragged, this, &DetailsPane::heightDragged);
+  connect(m_resizeGrip, &DetailsPaneResizeGrip::heightCommitted, this,
+          &DetailsPane::heightCommitted);
 
   // center the artwork-section header, artwork preview, video
   // preview, and item-name label/value. Everything else stays flush-left
