@@ -16,20 +16,20 @@ include_directories(
   ${SRC_DIR}/utils/text
   ${SRC_DIR}/utils/threading
   ${SRC_DIR}/utils/view
-  ${SRC_DIR}/modules/query
-  ${SRC_DIR}/modules/scroll
-  ${SRC_DIR}/modules/interaction
-  ${SRC_DIR}/modules/launch
-  ${SRC_DIR}/modules/filter
-  ${SRC_DIR}/modules/cache
-  ${SRC_DIR}/modules/session
+  ${SRC_DIR}/modules/data/query
+  ${SRC_DIR}/modules/input/scroll
+  ${SRC_DIR}/modules/input/interaction
+  ${SRC_DIR}/modules/behavior/launch
+  ${SRC_DIR}/modules/behavior/filter
+  ${SRC_DIR}/modules/data/cache
+  ${SRC_DIR}/modules/data/session
   ${SRC_DIR}/ui
 )
 
 # GridLayoutCalculator tests
 add_executable(test_gridlayoutcalculator
   modules/scroll/test_gridlayoutcalculator.cpp
-  ${SRC_DIR}/modules/scroll/gridlayoutcalculator.cpp
+  ${SRC_DIR}/modules/input/scroll/gridlayoutcalculator.cpp
 )
 target_link_libraries(test_gridlayoutcalculator
   Qt6::Core
@@ -41,7 +41,7 @@ add_test(NAME GridLayoutCalculator COMMAND test_gridlayoutcalculator)
 # InteractionStateHolder tests
 add_executable(test_interactionstateholder
   modules/interaction/test_interactionstateholder.cpp
-  ${SRC_DIR}/modules/interaction/interactionstateholder.cpp
+  ${SRC_DIR}/modules/input/interaction/interactionstateholder.cpp
 )
 target_link_libraries(test_interactionstateholder
   Qt6::Core
@@ -53,8 +53,8 @@ add_test(NAME InteractionStateHolder COMMAND test_interactionstateholder)
 # LaunchManager tests (security validation)
 add_executable(test_launchmanager
   modules/launch/test_launchmanager.cpp
-  ${SRC_DIR}/modules/launch/launchmanager.cpp
-  ${SRC_DIR}/modules/launch/launchmanagerarchive.cpp
+  ${SRC_DIR}/modules/behavior/launch/launchmanager.cpp
+  ${SRC_DIR}/modules/behavior/launch/launchmanagerarchive.cpp
   ${SRC_DIR}/ui/dialogs/launcherchooserdialog.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
@@ -95,7 +95,7 @@ add_test(NAME VideoUtils COMMAND test_videoutils)
 # WidgetPoolManager tests
 add_executable(test_widgetpoolmanager
   modules/widgetpool/test_widgetpoolmanager.cpp
-  ${SRC_DIR}/modules/widgetpool/widgetpoolmanager.cpp
+  ${SRC_DIR}/modules/behavior/widgetpool/widgetpoolmanager.cpp
   ${SRC_DIR}/ui/widgets/items/itemwidget.cpp
   ${SRC_DIR}/ui/widgets/items/itemwidgetindicator.cpp
   ${SRC_DIR}/ui/widgets/items/itemwidgetlifecycle.cpp
@@ -104,7 +104,7 @@ add_executable(test_widgetpoolmanager
   ${SRC_DIR}/ui/widgets/items/itemwidgetsetters.cpp
 )
 target_include_directories(test_widgetpoolmanager PRIVATE
-  ${SRC_DIR}/modules/widgetpool
+  ${SRC_DIR}/modules/behavior/widgetpool
   ${SRC_DIR}/ui/widgets/items
   ${SRC_DIR}/ui/widgets/media
   ${SRC_DIR}/ui/widgets/overlays
@@ -143,13 +143,13 @@ add_test(NAME GridUtils COMMAND test_gridutils)
 # CacheManager tests
 add_executable(test_cachemanager
   modules/cache/test_cachemanager.cpp
-  ${SRC_DIR}/modules/cache/cachemanager.cpp
-  ${SRC_DIR}/modules/cache/cachemanagerdisk.cpp
+  ${SRC_DIR}/modules/data/cache/cachemanager.cpp
+  ${SRC_DIR}/modules/data/cache/cachemanagerdisk.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
   ${SRC_DIR}/utils/threading/threadpoolutils.cpp
 )
 target_include_directories(test_cachemanager PRIVATE
-  ${SRC_DIR}/modules/cache
+  ${SRC_DIR}/modules/data/cache
   ${SRC_DIR}/ui
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
@@ -169,11 +169,11 @@ add_test(NAME CacheManager COMMAND test_cachemanager)
 # PlaylistManager tests
 add_executable(test_playlistmanager
   modules/playlist/test_playlistmanager.cpp
-  ${SRC_DIR}/modules/playlist/playlistmanager.cpp
+  ${SRC_DIR}/modules/data/playlist/playlistmanager.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
 )
 target_include_directories(test_playlistmanager PRIVATE
-  ${SRC_DIR}/modules/playlist
+  ${SRC_DIR}/modules/data/playlist
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -192,13 +192,13 @@ add_test(NAME PlaylistManager COMMAND test_playlistmanager)
 # SessionManager tests
 add_executable(test_sessionmanager
   modules/session/test_sessionmanager.cpp
-  ${SRC_DIR}/modules/session/sessionmanager.cpp
+  ${SRC_DIR}/modules/data/session/sessionmanager.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
 )
 target_include_directories(test_sessionmanager PRIVATE
-  ${SRC_DIR}/modules/session
+  ${SRC_DIR}/modules/data/session
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -217,19 +217,19 @@ add_test(NAME SessionManager COMMAND test_sessionmanager)
 # QueryManager cancellation semantics test
 add_executable(test_querymanager_cancel_scan
   modules/query/test_querymanager_cancel_scan.cpp
-  ${SRC_DIR}/modules/query/querymanager.cpp
-  ${SRC_DIR}/modules/query/querymanagerstatichelpers.cpp
-  ${SRC_DIR}/modules/query/querymanagerlifecycle.cpp
-  ${SRC_DIR}/modules/query/querymanagerfetchrange.cpp
-  ${SRC_DIR}/modules/query/querymanagerscan.cpp
-  ${SRC_DIR}/modules/query/querymanagerpersist.cpp
-  ${SRC_DIR}/modules/query/querymanagerscanandsave.cpp
-  ${SRC_DIR}/modules/query/querymanagerconnection.cpp
-  ${SRC_DIR}/modules/query/querymanagercache.cpp
-  ${SRC_DIR}/modules/query/querymanagerload.cpp
-  ${SRC_DIR}/modules/query/querymanagerfetch.cpp
-  ${SRC_DIR}/modules/query/queryhelpers.cpp
-  ${SRC_DIR}/modules/session/sessionmanager.cpp
+  ${SRC_DIR}/modules/data/query/querymanager.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerpersist.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerscanandsave.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
+  ${SRC_DIR}/modules/data/query/querymanagercache.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerload.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerfetch.cpp
+  ${SRC_DIR}/modules/data/query/queryhelpers.cpp
+  ${SRC_DIR}/modules/data/session/sessionmanager.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
@@ -237,8 +237,8 @@ add_executable(test_querymanager_cancel_scan
   ${SRC_DIR}/utils/app/loggingcategories.cpp
 )
 target_include_directories(test_querymanager_cancel_scan PRIVATE
-  ${SRC_DIR}/modules/query
-  ${SRC_DIR}/modules/session
+  ${SRC_DIR}/modules/data/query
+  ${SRC_DIR}/modules/data/session
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -262,23 +262,23 @@ add_test(NAME QueryManagerCancelScan COMMAND test_querymanager_cancel_scan)
 # cleanup, and thread-safe path-resolution helpers.
 add_executable(test_databasemanager
   modules/database/test_databasemanager.cpp
-  ${SRC_DIR}/modules/database/databasemanager.cpp
-  ${SRC_DIR}/modules/database/databasemanagerpaths.cpp
-  ${SRC_DIR}/modules/database/databasemanagerworker.cpp
+  ${SRC_DIR}/modules/data/database/databasemanager.cpp
+  ${SRC_DIR}/modules/data/database/databasemanagerpaths.cpp
+  ${SRC_DIR}/modules/data/database/databasemanagerworker.cpp
   ${SRC_DIR}/utils/text/titlefilter.cpp
-  ${SRC_DIR}/modules/query/querymanager.cpp
-  ${SRC_DIR}/modules/query/querymanagerstatichelpers.cpp
-  ${SRC_DIR}/modules/query/querymanagerlifecycle.cpp
-  ${SRC_DIR}/modules/query/querymanagerfetchrange.cpp
-  ${SRC_DIR}/modules/query/querymanagerscan.cpp
-  ${SRC_DIR}/modules/query/querymanagerpersist.cpp
-  ${SRC_DIR}/modules/query/querymanagerscanandsave.cpp
-  ${SRC_DIR}/modules/query/querymanagerconnection.cpp
-  ${SRC_DIR}/modules/query/querymanagercache.cpp
-  ${SRC_DIR}/modules/query/querymanagerload.cpp
-  ${SRC_DIR}/modules/query/querymanagerfetch.cpp
-  ${SRC_DIR}/modules/query/queryhelpers.cpp
-  ${SRC_DIR}/modules/session/sessionmanager.cpp
+  ${SRC_DIR}/modules/data/query/querymanager.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerpersist.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerscanandsave.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
+  ${SRC_DIR}/modules/data/query/querymanagercache.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerload.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerfetch.cpp
+  ${SRC_DIR}/modules/data/query/queryhelpers.cpp
+  ${SRC_DIR}/modules/data/session/sessionmanager.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
@@ -291,9 +291,9 @@ add_executable(test_databasemanager
   ${SRC_DIR}/utils/db/usagestatsstore.cpp
 )
 target_include_directories(test_databasemanager PRIVATE
-  ${SRC_DIR}/modules/database
-  ${SRC_DIR}/modules/query
-  ${SRC_DIR}/modules/session
+  ${SRC_DIR}/modules/data/database
+  ${SRC_DIR}/modules/data/query
+  ${SRC_DIR}/modules/data/session
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -314,15 +314,15 @@ add_test(NAME DatabaseManager COMMAND test_databasemanager)
 # ArtworkManager tests (cancellation, dedup, QPointer race)
 add_executable(test_artworkmanager
   modules/artwork/test_artworkmanager.cpp
-  ${SRC_DIR}/modules/artwork/artworkmanager.cpp
-  ${SRC_DIR}/modules/artwork/artworkmanagerbatch.cpp
-  ${SRC_DIR}/modules/artwork/artworkmanagerprecache.cpp
-  ${SRC_DIR}/modules/artwork/artworkmanagerpaths.cpp
-  ${SRC_DIR}/modules/artwork/artworkmanagerpending.cpp
-  ${SRC_DIR}/modules/artwork/artworksilentloading.cpp
-  ${SRC_DIR}/modules/cache/cachemanager.cpp
-  ${SRC_DIR}/modules/cache/cachemanagerdisk.cpp
-  ${SRC_DIR}/modules/interaction/interactionstateholder.cpp
+  ${SRC_DIR}/modules/media/artwork/artworkmanager.cpp
+  ${SRC_DIR}/modules/media/artwork/artworkmanagerbatch.cpp
+  ${SRC_DIR}/modules/media/artwork/artworkmanagerprecache.cpp
+  ${SRC_DIR}/modules/media/artwork/artworkmanagerpaths.cpp
+  ${SRC_DIR}/modules/media/artwork/artworkmanagerpending.cpp
+  ${SRC_DIR}/modules/media/artwork/artworksilentloading.cpp
+  ${SRC_DIR}/modules/data/cache/cachemanager.cpp
+  ${SRC_DIR}/modules/data/cache/cachemanagerdisk.cpp
+  ${SRC_DIR}/modules/input/interaction/interactionstateholder.cpp
   ${SRC_DIR}/ui/widgets/items/itemwidget.cpp
   ${SRC_DIR}/ui/widgets/items/itemwidgetindicator.cpp
   ${SRC_DIR}/ui/widgets/items/itemwidgetlifecycle.cpp
@@ -341,9 +341,9 @@ add_executable(test_artworkmanager
 )
 target_include_directories(test_artworkmanager PRIVATE
   ${SRC_DIR}
-  ${SRC_DIR}/modules/artwork
-  ${SRC_DIR}/modules/cache
-  ${SRC_DIR}/modules/interaction
+  ${SRC_DIR}/modules/media/artwork
+  ${SRC_DIR}/modules/data/cache
+  ${SRC_DIR}/modules/input/interaction
   ${SRC_DIR}/ui/widgets/items
   ${SRC_DIR}/ui/widgets/media
   ${SRC_DIR}/ui/widgets/overlays
@@ -424,10 +424,10 @@ add_test(NAME CollectionUtils COMMAND test_collectionutils)
 # ScrollManager / InteractionStateHolder / etc., keeping the test isolated.
 add_executable(test_keyboardmanager
   modules/keyboard/test_keyboardmanager.cpp
-  ${SRC_DIR}/modules/keyboard/keyboardmanagerselection.cpp
+  ${SRC_DIR}/modules/input/keyboard/keyboardmanagerselection.cpp
 )
 target_include_directories(test_keyboardmanager PRIVATE
-  ${SRC_DIR}/modules/keyboard
+  ${SRC_DIR}/modules/input/keyboard
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -447,10 +447,10 @@ add_test(NAME KeyboardManager COMMAND test_keyboardmanager)
 # NavigationStackManager tests (header-only data class powering NavigationManager)
 add_executable(test_navigationstackmanager
   modules/navigation/test_navigationstackmanager.cpp
-  ${SRC_DIR}/modules/navigation/navigationstackmanager.h
+  ${SRC_DIR}/modules/input/navigation/navigationstackmanager.h
 )
 target_include_directories(test_navigationstackmanager PRIVATE
-  ${SRC_DIR}/modules/navigation
+  ${SRC_DIR}/modules/input/navigation
 )
 target_link_libraries(test_navigationstackmanager
   Qt6::Core
@@ -566,7 +566,7 @@ add_test(NAME HistoryStore COMMAND test_historystore)
 # KartManifest tests (JSON round-trip for the .kart packaging format)
 add_executable(test_kartmanifest
   modules/kart/test_kartmanifest.cpp
-  ${SRC_DIR}/modules/kart/kartmanifest.cpp
+  ${SRC_DIR}/modules/data/kart/kartmanifest.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
   ${SRC_DIR}/utils/db/itemmetadata.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
@@ -574,7 +574,7 @@ add_executable(test_kartmanifest
   ${SRC_DIR}/utils/app/settingsutils.cpp
 )
 target_include_directories(test_kartmanifest PRIVATE
-  ${SRC_DIR}/modules/kart
+  ${SRC_DIR}/modules/data/kart
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -594,9 +594,9 @@ add_test(NAME KartManifest COMMAND test_kartmanifest)
 # KartReader tests (read + extract + sha256 verification)
 add_executable(test_kartreader
   modules/kart/test_kartreader.cpp
-  ${SRC_DIR}/modules/kart/kartcompression.cpp
-  ${SRC_DIR}/modules/kart/kartmanifest.cpp
-  ${SRC_DIR}/modules/kart/kartreader.cpp
+  ${SRC_DIR}/modules/data/kart/kartcompression.cpp
+  ${SRC_DIR}/modules/data/kart/kartmanifest.cpp
+  ${SRC_DIR}/modules/data/kart/kartreader.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
   ${SRC_DIR}/utils/db/itemmetadata.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
@@ -604,7 +604,7 @@ add_executable(test_kartreader
   ${SRC_DIR}/utils/app/settingsutils.cpp
 )
 target_include_directories(test_kartreader PRIVATE
-  ${SRC_DIR}/modules/kart
+  ${SRC_DIR}/modules/data/kart
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -628,10 +628,10 @@ add_test(NAME KartReader COMMAND test_kartreader)
 # KartWriter tests (export collection + zstd compression)
 add_executable(test_kartwriter
   modules/kart/test_kartwriter.cpp
-  ${SRC_DIR}/modules/kart/kartcompression.cpp
-  ${SRC_DIR}/modules/kart/kartmanifest.cpp
-  ${SRC_DIR}/modules/kart/kartreader.cpp
-  ${SRC_DIR}/modules/kart/kartwriter.cpp
+  ${SRC_DIR}/modules/data/kart/kartcompression.cpp
+  ${SRC_DIR}/modules/data/kart/kartmanifest.cpp
+  ${SRC_DIR}/modules/data/kart/kartreader.cpp
+  ${SRC_DIR}/modules/data/kart/kartwriter.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
   ${SRC_DIR}/utils/db/itemmetadata.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
@@ -639,7 +639,7 @@ add_executable(test_kartwriter
   ${SRC_DIR}/utils/app/settingsutils.cpp
 )
 target_include_directories(test_kartwriter PRIVATE
-  ${SRC_DIR}/modules/kart
+  ${SRC_DIR}/modules/data/kart
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -663,8 +663,8 @@ add_test(NAME KartWriter COMMAND test_kartwriter)
 # KartMerge tests (merge policy + metadata persistence)
 add_executable(test_kartmerge
   modules/kart/test_kartmerge.cpp
-  ${SRC_DIR}/modules/kart/kartmanifest.cpp
-  ${SRC_DIR}/modules/kart/kartmerge.cpp
+  ${SRC_DIR}/modules/data/kart/kartmanifest.cpp
+  ${SRC_DIR}/modules/data/kart/kartmerge.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
   ${SRC_DIR}/utils/db/itemmetadata.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
@@ -672,7 +672,7 @@ add_executable(test_kartmerge
   ${SRC_DIR}/utils/app/settingsutils.cpp
 )
 target_include_directories(test_kartmerge PRIVATE
-  ${SRC_DIR}/modules/kart
+  ${SRC_DIR}/modules/data/kart
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -699,13 +699,13 @@ add_test(NAME SearchUtils COMMAND test_searchutils)
 # NavigationHelpers tests (pure helpers extracted)
 add_executable(test_navigationhelpers
   modules/navigation/test_navigationhelpers.cpp
-  ${SRC_DIR}/modules/navigation/navigationhelpers.cpp
+  ${SRC_DIR}/modules/input/navigation/navigationhelpers.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
 )
 target_include_directories(test_navigationhelpers PRIVATE
-  ${SRC_DIR}/modules/navigation
+  ${SRC_DIR}/modules/input/navigation
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -724,13 +724,13 @@ add_test(NAME NavigationHelpers COMMAND test_navigationhelpers)
 # SearchHelpers tests (pure helpers extracted)
 add_executable(test_searchhelpers
   modules/search/test_searchhelpers.cpp
-  ${SRC_DIR}/modules/search/searchhelpers.cpp
+  ${SRC_DIR}/modules/behavior/search/searchhelpers.cpp
   ${SRC_DIR}/utils/app/collectionutils.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
 )
 target_include_directories(test_searchhelpers PRIVATE
-  ${SRC_DIR}/modules/search
+  ${SRC_DIR}/modules/behavior/search
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -749,10 +749,10 @@ add_test(NAME SearchHelpers COMMAND test_searchhelpers)
 # MouseHelpers tests (pure helpers extracted)
 add_executable(test_mousehelpers
   modules/mouse/test_mousehelpers.cpp
-  ${SRC_DIR}/modules/mouse/mousehelpers.cpp
+  ${SRC_DIR}/modules/input/mouse/mousehelpers.cpp
 )
 target_include_directories(test_mousehelpers PRIVATE
-  ${SRC_DIR}/modules/mouse
+  ${SRC_DIR}/modules/input/mouse
 )
 target_link_libraries(test_mousehelpers
   Qt6::Core
@@ -763,10 +763,10 @@ add_test(NAME MouseHelpers COMMAND test_mousehelpers)
 # SelectionHelpers tests (pure helpers extracted)
 add_executable(test_selectionhelpers
   modules/selection/test_selectionhelpers.cpp
-  ${SRC_DIR}/modules/selection/selectionhelpers.cpp
+  ${SRC_DIR}/modules/input/selection/selectionhelpers.cpp
 )
 target_include_directories(test_selectionhelpers PRIVATE
-  ${SRC_DIR}/modules/selection
+  ${SRC_DIR}/modules/input/selection
 )
 target_link_libraries(test_selectionhelpers
   Qt6::Core
@@ -777,10 +777,10 @@ add_test(NAME SelectionHelpers COMMAND test_selectionhelpers)
 # ScrollHelpers tests (pure helpers extracted)
 add_executable(test_scrollhelpers
   modules/scroll/test_scrollhelpers.cpp
-  ${SRC_DIR}/modules/scroll/scrollhelpers.cpp
+  ${SRC_DIR}/modules/input/scroll/scrollhelpers.cpp
 )
 target_include_directories(test_scrollhelpers PRIVATE
-  ${SRC_DIR}/modules/scroll
+  ${SRC_DIR}/modules/input/scroll
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
@@ -798,10 +798,10 @@ add_test(NAME ScrollHelpers COMMAND test_scrollhelpers)
 # QueryHelpers tests (pure helpers extracted)
 add_executable(test_queryhelpers
   modules/query/test_queryhelpers.cpp
-  ${SRC_DIR}/modules/query/queryhelpers.cpp
+  ${SRC_DIR}/modules/data/query/queryhelpers.cpp
 )
 target_include_directories(test_queryhelpers PRIVATE
-  ${SRC_DIR}/modules/query
+  ${SRC_DIR}/modules/data/query
 )
 target_link_libraries(test_queryhelpers
   Qt6::Core
@@ -812,10 +812,10 @@ add_test(NAME QueryHelpers COMMAND test_queryhelpers)
 # FilterHelpers tests (pure helpers extracted)
 add_executable(test_filterhelpers
   modules/filter/test_filterhelpers.cpp
-  ${SRC_DIR}/modules/filter/filterhelpers.cpp
+  ${SRC_DIR}/modules/behavior/filter/filterhelpers.cpp
 )
 target_include_directories(test_filterhelpers PRIVATE
-  ${SRC_DIR}/modules/filter
+  ${SRC_DIR}/modules/behavior/filter
 )
 target_link_libraries(test_filterhelpers
   Qt6::Core
@@ -828,10 +828,10 @@ add_test(NAME FilterHelpers COMMAND test_filterhelpers)
 # numbers vary by hardware; compare against a stored baseline.
 add_executable(bench_filterhelpers
   modules/filter/bench_filterhelpers.cpp
-  ${SRC_DIR}/modules/filter/filterhelpers.cpp
+  ${SRC_DIR}/modules/behavior/filter/filterhelpers.cpp
 )
 target_include_directories(bench_filterhelpers PRIVATE
-  ${SRC_DIR}/modules/filter
+  ${SRC_DIR}/modules/behavior/filter
 )
 target_link_libraries(bench_filterhelpers
   Qt6::Core

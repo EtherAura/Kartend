@@ -1,0 +1,6 @@
+add_subdirectory(artwork)
+add_subdirectory(attract)
+add_subdirectory(detailpage)
+add_subdirectory(detailspane)
+add_subdirectory(overlay)
+add_subdirectory(viewport)

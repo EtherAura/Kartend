@@ -227,34 +227,34 @@ target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
   ${CMAKE_CURRENT_BINARY_DIR}
   ${SRC_DIR}
   ${SRC_DIR}/core
-  ${SRC_DIR}/modules/animation
-  ${SRC_DIR}/modules/application
-  ${SRC_DIR}/modules/artwork
-  ${SRC_DIR}/modules/attract
-  ${SRC_DIR}/modules/cache
-  ${SRC_DIR}/modules/database
-  ${SRC_DIR}/modules/detailpage
-  ${SRC_DIR}/modules/event
-  ${SRC_DIR}/modules/gamepad
-  ${SRC_DIR}/modules/interaction
-  ${SRC_DIR}/modules/kart
-  ${SRC_DIR}/modules/keyboard
-  ${SRC_DIR}/modules/launch
-  ${SRC_DIR}/modules/mouse
-  ${SRC_DIR}/modules/navigation
-  ${SRC_DIR}/modules/overlay
-  ${SRC_DIR}/modules/playlist
-  ${SRC_DIR}/modules/query
-  ${SRC_DIR}/modules/restore
-  ${SRC_DIR}/modules/filter
-  ${SRC_DIR}/modules/widgetpool
-  ${SRC_DIR}/modules/scroll
-  ${SRC_DIR}/modules/search
-  ${SRC_DIR}/modules/selection
-  ${SRC_DIR}/modules/session
-  ${SRC_DIR}/modules/settings
-  ${SRC_DIR}/modules/detailspane
-  ${SRC_DIR}/modules/viewport
+  ${SRC_DIR}/modules/behavior/animation
+  ${SRC_DIR}/modules/behavior/application
+  ${SRC_DIR}/modules/behavior/event
+  ${SRC_DIR}/modules/behavior/filter
+  ${SRC_DIR}/modules/behavior/launch
+  ${SRC_DIR}/modules/behavior/search
+  ${SRC_DIR}/modules/behavior/widgetpool
+  ${SRC_DIR}/modules/data/cache
+  ${SRC_DIR}/modules/data/database
+  ${SRC_DIR}/modules/data/kart
+  ${SRC_DIR}/modules/data/playlist
+  ${SRC_DIR}/modules/data/query
+  ${SRC_DIR}/modules/data/restore
+  ${SRC_DIR}/modules/data/session
+  ${SRC_DIR}/modules/data/settings
+  ${SRC_DIR}/modules/input/gamepad
+  ${SRC_DIR}/modules/input/interaction
+  ${SRC_DIR}/modules/input/keyboard
+  ${SRC_DIR}/modules/input/mouse
+  ${SRC_DIR}/modules/input/navigation
+  ${SRC_DIR}/modules/input/scroll
+  ${SRC_DIR}/modules/input/selection
+  ${SRC_DIR}/modules/media/artwork
+  ${SRC_DIR}/modules/media/attract
+  ${SRC_DIR}/modules/media/detailpage
+  ${SRC_DIR}/modules/media/detailspane
+  ${SRC_DIR}/modules/media/overlay
+  ${SRC_DIR}/modules/media/viewport
   ${SRC_DIR}/ui
   ${SRC_DIR}/ui/widgets/items
   ${SRC_DIR}/ui/widgets/media

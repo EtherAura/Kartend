@@ -1,0 +1,7 @@
+add_subdirectory(gamepad)
+add_subdirectory(interaction)
+add_subdirectory(keyboard)
+add_subdirectory(mouse)
+add_subdirectory(navigation)
+add_subdirectory(scroll)
+add_subdirectory(selection)
