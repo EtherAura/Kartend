@@ -3,6 +3,7 @@
 #include "itemwidget.h"
 #include "propertyutils.h"
 
+#include <algorithm>
 #include <QApplication>
 #include <QMutexLocker>
 
@@ -73,12 +74,9 @@ bool ArtworkWidgetRegistry::isPendingFor(ItemWidget *widget, const QString &path
     return false;
   }
   QMutexLocker locker(&m_mutex);
-  for (const auto &info : m_pending) {
-    if (info.mediaItem == widget && info.artworkPath == path) {
-      return true;
-    }
-  }
-  return false;
+  return std::ranges::any_of(m_pending, [&](const ArtworkInfo &info) {
+    return info.mediaItem == widget && info.artworkPath == path;
+  });
 }
 
 QList<ArtworkInfo> ArtworkWidgetRegistry::takePending() {
