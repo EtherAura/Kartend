@@ -224,7 +224,11 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
     constexpr int PROGRESS_REPORT_INTERVAL = 500;
     int itemsScanned = 0;
 
-    QDirIterator iterator(dir.absolutePath(), nameFilters, QDir::Files,
+    // QDir::System is required so symlinks whose targets are temporarily
+    // unreachable (e.g. external/btrfs mount not ready at app start) are still
+    // listed — without it Qt classifies them as Unknown and drops them, which
+    // then causes deleteMissingItemsByUuidUsingScannedItems to prune their rows.
+    QDirIterator iterator(dir.absolutePath(), nameFilters, QDir::Files | QDir::System,
                           QDirIterator::NoIteratorFlags);
     while (iterator.hasNext()) {
       if (isScanCancelled()) {
@@ -237,7 +241,16 @@ QStringList QueryManager::scanMediaDirectory(const CollectionConfig &collection,
       const QString relativePath = iterator.fileName();
       const QFileInfo info = iterator.fileInfo();
       filePaths.append(relativePath);
-      timestamps[relativePath] = info.lastModified();
+      // QFileInfo::lastModified follows symlinks; broken/unreachable targets
+      // return invalid, which round-trips through QDateTime::toString as a
+      // null QString and trips the NOT NULL items.last_modified constraint.
+      // Fall back to epoch so the row persists; the next scan against a
+      // reachable target overwrites this via the upsert clause.
+      QDateTime mtime = info.lastModified();
+      if (!mtime.isValid()) {
+        mtime = QDateTime::fromSecsSinceEpoch(0);
+      }
+      timestamps[relativePath] = mtime;
 
       ++itemsScanned;
       if (itemsScanned % PROGRESS_REPORT_INTERVAL == 0) {

@@ -172,7 +172,9 @@ bool QueryManager::stageFilesystemScan(const CollectionConfig &collection,
     constexpr int SCAN_PROGRESS_INTERVAL = 500;
     int scanned = 0;
 
-    QDirIterator iterator(dir.absolutePath(), nameFilters, QDir::Files,
+    // QDir::System keeps symlinks visible when their targets are temporarily
+    // unreachable; see querymanagerscan.cpp scanMediaDirectory for context.
+    QDirIterator iterator(dir.absolutePath(), nameFilters, QDir::Files | QDir::System,
                           QDirIterator::NoIteratorFlags);
     while (iterator.hasNext()) {
       if (isScanCancelled()) {
@@ -183,7 +185,13 @@ bool QueryManager::stageFilesystemScan(const CollectionConfig &collection,
       const QString relativePath = iterator.fileName();
       const QFileInfo info = iterator.fileInfo();
       batchPaths.append(relativePath);
-      batchTimestamps[relativePath] = info.lastModified();
+      // See querymanagerscan.cpp scanMediaDirectory for why broken-symlink
+      // mtimes need an epoch fallback (NOT NULL constraint).
+      QDateTime mtime = info.lastModified();
+      if (!mtime.isValid()) {
+        mtime = QDateTime::fromSecsSinceEpoch(0);
+      }
+      batchTimestamps[relativePath] = mtime;
 
       ++scanned;
       if (scanned % SCAN_PROGRESS_INTERVAL == 0) {

@@ -259,7 +259,10 @@ public:
     // Scan this directory (non-recursively) but emit bounded chunks so a single
     // huge folder cannot allocate an unbounded QStringList/QHash in memory.
     QDir rootDir(m_rootPath);
-    QDirIterator iterator(m_dirPath, m_nameFilters, QDir::Files, QDirIterator::NoIteratorFlags);
+    // QDir::System keeps symlinks visible when their targets are temporarily
+    // unreachable; see querymanagerscan.cpp scanMediaDirectory for context.
+    QDirIterator iterator(m_dirPath, m_nameFilters, QDir::Files | QDir::System,
+                          QDirIterator::NoIteratorFlags);
 
     auto pushChunk = [&](DirectoryScanResult &&chunk) {
       if (!m_queue) {
@@ -296,8 +299,14 @@ public:
       const QString relativePath = rootDir.relativeFilePath(filePath);
       const QFileInfo info = iterator.fileInfo();
 
+      // See querymanagerscan.cpp scanMediaDirectory for why broken-symlink
+      // mtimes need an epoch fallback (NOT NULL constraint).
+      QDateTime mtime = info.lastModified();
+      if (!mtime.isValid()) {
+        mtime = QDateTime::fromSecsSinceEpoch(0);
+      }
       chunk.relativePaths.append(relativePath);
-      chunk.timestamps.insert(relativePath, info.lastModified());
+      chunk.timestamps.insert(relativePath, mtime);
 
       if (chunk.relativePaths.size() >= UIConstants::Database::SCAN_DIR_RESULT_CHUNK_SIZE) {
         pushChunk(std::move(chunk));
