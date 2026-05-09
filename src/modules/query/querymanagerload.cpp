@@ -40,6 +40,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 using QueryManagerInternal::buildFtsPrefixQuery;
 
 void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollections) {
+  assertOwnerThread();
   if (!ensureDatabaseAvailable("QueryManager::loadAllCollections")) {
     // Emit safe default so listeners (UI item count, etc.) don't hang.
     emit itemsLoaded({}, {}, {}, {}, {});
@@ -89,6 +90,7 @@ void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollecti
 
 void QueryManager::loadItems(const CollectionContext &context,
                              const QList<CollectionConfig> &allCollections) {
+  assertOwnerThread();
   if (!ensureDatabaseAvailable("QueryManager::loadItems")) {
     // Emit safe default so listeners don't hang awaiting itemsLoaded.
     emit itemsLoaded({}, {}, {}, {}, {});
@@ -166,6 +168,7 @@ void QueryManager::loadItems(const CollectionContext &context,
 
 void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
                                                const QList<CollectionConfig> &allCollections) {
+  assertOwnerThread();
   if (!ensureDatabaseAvailable("QueryManager::loadItemsWithSubcollections")) {
     // Emit safe default so listeners don't hang awaiting itemsLoaded.
     emit itemsLoaded({}, {}, {}, {}, {});
@@ -285,6 +288,7 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
 }
 
 void QueryManager::updateCachedCounts(quint64 generation, const QStringList &collectionUuids) {
+  assertOwnerThread();
   if (!ensureDatabaseAvailable("QueryManager::updateCachedCounts")) {
     emit cachedCountsComputed(generation, 0, {});
     return;

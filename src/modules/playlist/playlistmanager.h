@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QSqlDatabase>
 #include <QString>
+#include <QThread>
 
 #include "errorutils.h"
 
@@ -166,6 +167,19 @@ signals:
   void playlistsChanged();
 
 private:
+  // Thread-affinity guard. PlaylistManager owns a QSqlDatabase that Qt's SQL
+  // drivers explicitly forbid sharing across threads. Every public method
+  // (load*, *Playlist, *Item, import/export, ensureFavoritesPlaylist) must
+  // be invoked on the main thread that owns this object. Compiles out in
+  // release; fail-fast in debug. Mirrors QueryManager::assertOwnerThread()
+  // and InteractionStateHolder::assertOwnerThread().
+  void assertOwnerThread() const {
+    Q_ASSERT_X(thread() == QThread::currentThread(), "PlaylistManager",
+               "PlaylistManager method invoked from a non-owner thread; the "
+               "playlist QSqlDatabase is dedicated to the main thread — push "
+               "the call back via a queued connection or signal.");
+  }
+
   QSqlDatabase m_db;
   QString m_connectionName;
   QString m_favoritesId; // Cached id of the reserved favorites playlist.

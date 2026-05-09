@@ -253,12 +253,14 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
 void QueryManager::fetchItemCount(const CollectionContext &context,
                                   const QList<CollectionConfig> &allCollections,
                                   const QString &filter) {
+  assertOwnerThread();
   emit itemCountLoaded(fetchItemCountImpl(context, allCollections, filter));
 }
 
 void QueryManager::fetchItemCountWithToken(const CollectionContext &context,
                                            const QList<CollectionConfig> &allCollections,
                                            const QString &filter, int requestToken) {
+  assertOwnerThread();
   qCDebug(lcSearchDiag) << "[QueryManager] fetchItemCountWithToken: ENTRY token=" << requestToken
                         << "filter='" << filter << "'";
   const int count = fetchItemCountImpl(context, allCollections, filter);
@@ -269,6 +271,7 @@ void QueryManager::fetchItemCountWithToken(const CollectionContext &context,
 
 void QueryManager::ensureScannedForContext(const CollectionContext &context,
                                            const QList<CollectionConfig> &allCollections) {
+  assertOwnerThread();
   if (!ensureDatabaseAvailable("QueryManager::ensureScannedForContext")) {
     return;
   }
@@ -340,6 +343,7 @@ void QueryManager::ensureScannedForContext(const CollectionContext &context,
 void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
                                            const QList<CollectionConfig> &allCollections,
                                            const QString &filePath) {
+  assertOwnerThread();
   if (filePath.isEmpty()) {
     emit visualIndexForPathLoaded(-1, filePath);
     return;

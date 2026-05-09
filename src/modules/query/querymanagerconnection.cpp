@@ -173,6 +173,7 @@ auto QueryManager::ensureDatabaseAvailable(const char *callerContext) -> bool {
 }
 
 void QueryManager::initDatabase() {
+  assertOwnerThread();
   if (QSqlDatabase::contains(m_connectionName)) {
     m_db = QSqlDatabase::database(m_connectionName);
   } else {
@@ -355,6 +356,7 @@ bool QueryManager::isItemsFtsReadyFromDb() {
 }
 
 void QueryManager::ensureItemsFtsReady() {
+  assertOwnerThread();
   if (!ensureDatabaseAvailable("QueryManager::ensureItemsFtsReady")) {
     return;
   }

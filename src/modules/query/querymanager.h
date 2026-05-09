@@ -12,6 +12,7 @@
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStringList>
+#include <QThread>
 #include <QThreadPool>
 
 class SessionManager;
@@ -134,6 +135,18 @@ public:
   void refreshWalView();
 
 private:
+  // Thread-affinity guard. QueryManager owns a QSqlDatabase that Qt's SQL
+  // drivers explicitly forbid sharing across threads. Every slot must be
+  // invoked on the worker thread that owns this object. Compiles out in
+  // release; fail-fast in debug. Matches the pattern in
+  // InteractionStateHolder::assertOwnerThread().
+  void assertOwnerThread() const {
+    Q_ASSERT_X(thread() == QThread::currentThread(), "QueryManager",
+               "QueryManager slot invoked from a non-owner thread; SQL "
+               "connections are not thread-safe — slots must run on the "
+               "worker thread (use Qt::QueuedConnection from main).");
+  }
+
   [[nodiscard]] int fetchItemCountImpl(const CollectionContext &context,
                                        const QList<CollectionConfig> &allCollections,
                                        const QString &filter);

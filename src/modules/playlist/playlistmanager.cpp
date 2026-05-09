@@ -37,6 +37,7 @@ PlaylistManager::PlaylistManager(QObject *parent)
     : QObject(parent), m_connectionName(QStringLiteral("kartend_playlists_main")) {}
 
 PlaylistManager::~PlaylistManager() {
+  assertOwnerThread();
   if (m_db.isValid()) {
     QString name = m_db.connectionName();
     m_db.close();
@@ -46,6 +47,7 @@ PlaylistManager::~PlaylistManager() {
 }
 
 bool PlaylistManager::initialize() {
+  assertOwnerThread();
   if (m_db.isOpen()) {
     return true;
   }
@@ -129,6 +131,7 @@ bool PlaylistManager::initialize() {
 ErrorUtils::Result<QString> PlaylistManager::createPlaylist(const QString &name,
                                                             const QString &parentCollectionUuid,
                                                             const QString &reservedKind) {
+  assertOwnerThread();
   if (!m_db.isOpen()) {
     return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
                                "PlaylistManager::createPlaylist");
@@ -166,6 +169,7 @@ ErrorUtils::Result<QString> PlaylistManager::createPlaylist(const QString &name,
 }
 
 bool PlaylistManager::renamePlaylist(const QString &id, const QString &newName) {
+  assertOwnerThread();
   if (!m_db.isOpen() || id.isEmpty() || newName.trimmed().isEmpty()) {
     return false;
   }
@@ -186,6 +190,7 @@ bool PlaylistManager::renamePlaylist(const QString &id, const QString &newName) 
 }
 
 bool PlaylistManager::deletePlaylist(const QString &id) {
+  assertOwnerThread();
   if (!m_db.isOpen() || id.isEmpty()) {
     return false;
   }
@@ -223,6 +228,7 @@ bool PlaylistManager::deletePlaylist(const QString &id) {
 
 bool PlaylistManager::addItem(const QString &playlistId, const QString &sourceCollectionUuid,
                               const QString &sourcePath) {
+  assertOwnerThread();
   if (!m_db.isOpen() || playlistId.isEmpty() || sourcePath.isEmpty()) {
     return false;
   }
@@ -277,6 +283,7 @@ bool PlaylistManager::addItem(const QString &playlistId, const QString &sourceCo
 
 bool PlaylistManager::removeItem(const QString &playlistId, const QString &sourceCollectionUuid,
                                  const QString &sourcePath) {
+  assertOwnerThread();
   if (!m_db.isOpen() || playlistId.isEmpty()) {
     return false;
   }
@@ -368,6 +375,7 @@ bool PlaylistManager::removeItem(const QString &playlistId, const QString &sourc
 }
 
 QList<PlaylistRow> PlaylistManager::loadAll() const {
+  assertOwnerThread();
   QList<PlaylistRow> result;
   if (!m_db.isOpen()) {
     return result;
@@ -396,6 +404,7 @@ QList<PlaylistRow> PlaylistManager::loadAll() const {
 }
 
 QList<PlaylistItemRef> PlaylistManager::loadItems(const QString &playlistId) const {
+  assertOwnerThread();
   QList<PlaylistItemRef> result;
   if (!m_db.isOpen() || playlistId.isEmpty()) {
     return result;
@@ -425,6 +434,7 @@ QList<PlaylistItemRef> PlaylistManager::loadItems(const QString &playlistId) con
 
 bool PlaylistManager::containsItem(const QString &playlistId, const QString &sourceCollectionUuid,
                                    const QString &sourcePath) const {
+  assertOwnerThread();
   if (!m_db.isOpen() || playlistId.isEmpty()) {
     return false;
   }
@@ -439,6 +449,7 @@ bool PlaylistManager::containsItem(const QString &playlistId, const QString &sou
 }
 
 QString PlaylistManager::ensureFavoritesPlaylist(const QString &defaultName) {
+  assertOwnerThread();
   if (!m_favoritesId.isEmpty()) {
     return m_favoritesId;
   }
@@ -503,6 +514,7 @@ PlaylistRow loadPlaylistRow(QSqlDatabase &db, const QString &id) {
 
 ErrorUtils::Result<int> PlaylistManager::exportToJson(const QString &playlistId,
                                                       const QString &outPath) const {
+  assertOwnerThread();
   if (!m_db.isOpen()) {
     return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
                                "PlaylistManager::exportToJson");
@@ -562,6 +574,7 @@ ErrorUtils::Result<int> PlaylistManager::exportToJson(const QString &playlistId,
 
 ErrorUtils::Result<int> PlaylistManager::exportToM3U(const QString &playlistId,
                                                      const QString &outPath) const {
+  assertOwnerThread();
   if (!m_db.isOpen()) {
     return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
                                "PlaylistManager::exportToM3U");
@@ -596,6 +609,7 @@ ErrorUtils::Result<int> PlaylistManager::exportToM3U(const QString &playlistId,
 
 ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPath,
                                                             const QString &nameOverride) {
+  assertOwnerThread();
   if (!m_db.isOpen()) {
     return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
                                "PlaylistManager::importFromJson");
@@ -656,6 +670,7 @@ ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPat
 ErrorUtils::Result<QString> PlaylistManager::importFromM3U(const QString &inPath,
                                                            const QString &playlistName,
                                                            int *outSkipped) {
+  assertOwnerThread();
   if (outSkipped) {
     *outSkipped = 0;
   }

@@ -35,6 +35,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 void QueryManager::fetchItemsRange(const CollectionContext &context,
                                    const QList<CollectionConfig> &allCollections, int offset,
                                    int limit, const QString &filter) {
+  assertOwnerThread();
   if (!ensureDatabaseAvailable("QueryManager::fetchItemsRange")) {
     emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(),
                           QHash<QString, QString>(), QHash<QString, QString>(),

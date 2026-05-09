@@ -239,6 +239,7 @@ QStringList QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionU
 }
 
 void QueryManager::invalidateCollectionCache(const QString &collectionUuid) {
+  assertOwnerThread();
   // Cancel any ongoing scan before clearing cache to prevent lock conflicts
   requestCancelScan();
 
