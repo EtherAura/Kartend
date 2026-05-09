@@ -13,6 +13,7 @@
 #include "itemmetadata.h"
 #include "kartcompression.h"
 #include "kartformat.h"
+#include "pathutils.h"
 
 namespace KartWriter {
 
@@ -227,6 +228,7 @@ ErrorUtils::Result<void> Writer::writeKart(const QString &outPath, const WriterP
                                            "KartWriter::writeKart")
         .withDetails(out.errorString());
   }
+  PathUtils::syncDirectory(QFileInfo(outPath).absolutePath());
   return {};
 }
 

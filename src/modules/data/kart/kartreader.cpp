@@ -6,9 +6,11 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
+#include <QSet>
 
 #include "kartcompression.h"
 #include "kartformat.h"
+#include "pathutils.h"
 
 namespace KartReader {
 
@@ -163,6 +165,8 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
   result.manifest = manifestRes.value();
   result.destDir = destAbs;
 
+  QSet<QString> dirsToSync;
+
   while (!f.atEnd()) {
     if (m_cancel.loadRelaxed()) {
       return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::OperationCancelled,
@@ -247,6 +251,7 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
                                              "KartReader::extractTo")
           .withDetails(out.errorString());
     }
+    dirsToSync.insert(fi.absolutePath());
 
     ExtractedFile ef;
     ef.relPath = relPath;
@@ -258,6 +263,10 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
     if (totalSize > 0) {
       emit progress(static_cast<double>(f.pos()) / static_cast<double>(totalSize));
     }
+  }
+
+  for (const QString &dir : dirsToSync) {
+    PathUtils::syncDirectory(dir);
   }
 
   return result;
