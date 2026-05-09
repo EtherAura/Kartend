@@ -7,6 +7,7 @@
 #include "interactionstateholder.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
+#include "viewporthelpers.h"
 #include "viewportmanager.h"
 
 #include "gridutils.h"
@@ -209,17 +210,15 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
 }
 
 bool ViewportManager::computeForceImmediate(bool immediate) const {
-  // Query SelectionManager as the source of truth for restore state
-  bool restoringSelection = m_selectionManager && m_selectionManager->isRestoringSelection();
-  return immediate || m_forceImmediateCenter || m_isWrappingNavigation || restoringSelection ||
-         m_instantPositioning || m_wrapSequenceActive;
+  const bool restoringSelection =
+      m_selectionManager && m_selectionManager->isRestoringSelection();
+  return ViewportHelpers::computeForceImmediate(immediate, m_forceImmediateCenter,
+                                                m_isWrappingNavigation, restoringSelection,
+                                                m_instantPositioning, m_wrapSequenceActive);
 }
 
 int ViewportManager::computeSmallThreshold(int currentRow) const {
-  constexpr int kSmallThresholdSameRow = 8;
-  constexpr int kSmallThresholdOtherRow = 2;
-  return (m_lastSelectedRow >= 0 && m_lastSelectedRow == currentRow) ? kSmallThresholdSameRow
-                                                                     : kSmallThresholdOtherRow;
+  return ViewportHelpers::smallMovementThreshold(m_lastSelectedRow, currentRow);
 }
 
 bool ViewportManager::handleSmallMovementEarlyReturn(int /*distance*/, bool clickScroll, int index,

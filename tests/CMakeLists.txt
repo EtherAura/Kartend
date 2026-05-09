@@ -38,6 +38,20 @@ target_link_libraries(test_gridlayoutcalculator
 )
 add_test(NAME GridLayoutCalculator COMMAND test_gridlayoutcalculator)
 
+# ViewportHelpers tests (small-movement threshold, force-immediate combine)
+add_executable(test_viewporthelpers
+  modules/viewport/test_viewporthelpers.cpp
+  ${SRC_DIR}/modules/media/viewport/viewporthelpers.cpp
+)
+target_include_directories(test_viewporthelpers PRIVATE
+  ${SRC_DIR}/modules/media/viewport
+)
+target_link_libraries(test_viewporthelpers
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME ViewportHelpers COMMAND test_viewporthelpers)
+
 # AnimationManager static helper tests (pure functions: duration calc,
 # target Y/X computation, visibility scroll target).
 add_executable(test_animationmanager
