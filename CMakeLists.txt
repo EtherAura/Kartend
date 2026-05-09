@@ -397,12 +397,12 @@ endif()
 if (UNIX AND NOT APPLE)
   include(GNUInstallDirs)
   install(TARGETS kartend RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-  install(FILES src/assets/${KARTEND_APP_ID}.desktop
+  install(FILES packaging/${KARTEND_APP_ID}.desktop
           DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
   install(FILES src/assets/icon.svg
           DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps
           RENAME ${KARTEND_APP_ID}.svg)
-  install(FILES src/assets/${KARTEND_APP_ID}.metainfo.xml
+  install(FILES packaging/${KARTEND_APP_ID}.metainfo.xml
           DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/metainfo)
 endif()
 

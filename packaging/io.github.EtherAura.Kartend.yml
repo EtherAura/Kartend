@@ -24,4 +24,4 @@ modules:
       - -DKARTEND_PORTABLE_RELEASE=ON
     sources:
       - type: dir
-        path: .
+        path: ..

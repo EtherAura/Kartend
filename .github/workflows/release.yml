@@ -45,22 +45,22 @@ jobs:
           fi
 
           # PKGBUILD pkgver=
-          PKGVER="$(awk -F= '/^pkgver=/ { print $2; exit }' PKGBUILD)"
+          PKGVER="$(awk -F= '/^pkgver=/ { print $2; exit }' packaging/PKGBUILD)"
           if [ "$PKGVER" != "$TAG_VERSION" ]; then
-            echo "::error file=PKGBUILD::pkgver is '$PKGVER', expected '$TAG_VERSION'"
+            echo "::error file=packaging/PKGBUILD::pkgver is '$PKGVER', expected '$TAG_VERSION'"
             fail=1
           fi
 
-          # ebuild filename — must be exactly kartend-<version>.ebuild
-          if [ ! -f "kartend-${TAG_VERSION}.ebuild" ]; then
-            echo "::error::Expected ebuild file kartend-${TAG_VERSION}.ebuild not found (existing: $(ls kartend-*.ebuild 2>/dev/null || echo none))"
+          # ebuild filename — must be exactly packaging/kartend-<version>.ebuild
+          if [ ! -f "packaging/kartend-${TAG_VERSION}.ebuild" ]; then
+            echo "::error::Expected ebuild file packaging/kartend-${TAG_VERSION}.ebuild not found (existing: $(ls packaging/kartend-*.ebuild 2>/dev/null || echo none))"
             fail=1
           fi
 
           # AppStream metainfo — most-recent <release> entry must match
-          METAINFO_VERSION="$(awk 'match($0, /<release[[:space:]]+version="([^"]+)"/, a) { print a[1]; exit }' src/assets/io.github.EtherAura.Kartend.metainfo.xml)"
+          METAINFO_VERSION="$(awk 'match($0, /<release[[:space:]]+version="([^"]+)"/, a) { print a[1]; exit }' packaging/io.github.EtherAura.Kartend.metainfo.xml)"
           if [ "$METAINFO_VERSION" != "$TAG_VERSION" ]; then
-            echo "::error file=src/assets/io.github.EtherAura.Kartend.metainfo.xml::most-recent <release> version is '$METAINFO_VERSION', expected '$TAG_VERSION'"
+            echo "::error file=packaging/io.github.EtherAura.Kartend.metainfo.xml::most-recent <release> version is '$METAINFO_VERSION', expected '$TAG_VERSION'"
             fail=1
           fi
 
@@ -110,18 +110,18 @@ jobs:
 
           # Switch source URL to the release-page asset (no-op if already there).
           # The URL is line-anchored so a stray match elsewhere can't be touched.
-          sed -i -E 's|^source=\("\$\{pkgname\}-\$\{pkgver\}\.tar\.gz::\$\{url\}/archive/v\$\{pkgver\}\.tar\.gz"\)$|source=("${pkgname}-${pkgver}.tar.gz::${url}/releases/download/v${pkgver}/Kartend-${pkgver}.tar.gz")|' PKGBUILD
+          sed -i -E 's|^source=\("\$\{pkgname\}-\$\{pkgver\}\.tar\.gz::\$\{url\}/archive/v\$\{pkgver\}\.tar\.gz"\)$|source=("${pkgname}-${pkgver}.tar.gz::${url}/releases/download/v${pkgver}/Kartend-${pkgver}.tar.gz")|' packaging/PKGBUILD
 
           # Replace the sha256sums(...) line with the freshly computed hash.
-          sed -i -E "s|^sha256sums=\\('[^']*'\\)|sha256sums=('${SHA256}')|" PKGBUILD
+          sed -i -E "s|^sha256sums=\\('[^']*'\\)|sha256sums=('${SHA256}')|" packaging/PKGBUILD
 
-          if git diff --quiet PKGBUILD; then
-            echo "PKGBUILD already up to date for v${{ steps.version.outputs.version }}"
+          if git diff --quiet packaging/PKGBUILD; then
+            echo "packaging/PKGBUILD already up to date for v${{ steps.version.outputs.version }}"
             exit 0
           fi
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add PKGBUILD
+          git add packaging/PKGBUILD
           git commit -m "chore(packaging): update PKGBUILD sha256 for v${{ steps.version.outputs.version }}"
           git push origin "$DEFAULT_BRANCH"

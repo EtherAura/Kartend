@@ -9,9 +9,10 @@
 #
 # Effects (all local — no commit, no push, no tag):
 #   - VERSION                                    overwritten
-#   - PKGBUILD                                   pkgver= updated
-#   - kartend-<old>.ebuild  →  kartend-<new>.ebuild  (git mv if tracked)
-#   - src/assets/io.github.EtherAura.Kartend.metainfo.xml
+#   - packaging/PKGBUILD                         pkgver= updated
+#   - packaging/kartend-<old>.ebuild  →  packaging/kartend-<new>.ebuild
+#                                                (git mv if tracked)
+#   - packaging/io.github.EtherAura.Kartend.metainfo.xml
 #                                                <release version="<new>"
 #                                                date="<today UTC>"/> inserted
 #                                                at the top of <releases>
@@ -65,11 +66,11 @@ echo "Bumping $OLD_VERSION → $NEW_VERSION"
 echo "$NEW_VERSION" > VERSION
 
 # 2. PKGBUILD pkgver=
-sed -i -E "s/^pkgver=.*/pkgver=${NEW_VERSION}/" PKGBUILD
+sed -i -E "s/^pkgver=.*/pkgver=${NEW_VERSION}/" packaging/PKGBUILD
 
 # 3. ebuild rename (use git mv if tracked, plain mv otherwise)
-OLD_EBUILD="kartend-${OLD_VERSION}.ebuild"
-NEW_EBUILD="kartend-${NEW_VERSION}.ebuild"
+OLD_EBUILD="packaging/kartend-${OLD_VERSION}.ebuild"
+NEW_EBUILD="packaging/kartend-${NEW_VERSION}.ebuild"
 if [ -f "$OLD_EBUILD" ]; then
   if git ls-files --error-unmatch "$OLD_EBUILD" >/dev/null 2>&1; then
     git mv "$OLD_EBUILD" "$NEW_EBUILD"
@@ -81,7 +82,7 @@ fi
 # 4. AppStream metainfo: insert a new <release> entry at the top of <releases>.
 # The existing entries below stay untouched (full release history is the
 # AppStream convention).
-METAINFO="src/assets/io.github.EtherAura.Kartend.metainfo.xml"
+METAINFO="packaging/io.github.EtherAura.Kartend.metainfo.xml"
 TODAY="$(date -u +%Y-%m-%d)"
 if [ -f "$METAINFO" ]; then
   # Insert immediately after the <releases> opening tag. Indentation matches
@@ -129,7 +130,7 @@ cat <<EOF
 
 Files changed:
   VERSION
-  PKGBUILD
+  packaging/PKGBUILD
   ${NEW_EBUILD}  (renamed from ${OLD_EBUILD})
   ${METAINFO}
 
