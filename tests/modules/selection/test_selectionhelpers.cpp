@@ -28,6 +28,30 @@ private slots:
   void isNewRow_currentNegative_newPositive_returnsTrue();
   void isNewRow_sameRow_returnsFalse();
   void isNewRow_differentRow_returnsTrue();
+
+  // hopDirection
+  void hopDirection_targetGreater_returnsPositiveOne();
+  void hopDirection_targetLess_returnsNegativeOne();
+  void hopDirection_targetEqual_returnsZero();
+
+  // hopStepCount
+  void hopStepCount_sameIndex_returnsZero();
+  void hopStepCount_returnsAbsoluteDelta();
+
+  // hopIntermediateIndex
+  void hopIntermediateIndex_zeroSpan_returnsMinusOne();
+  void hopIntermediateIndex_outOfRangeStep_returnsMinusOne();
+  void hopIntermediateIndex_forwardWalk_advancesByOnePerStep();
+  void hopIntermediateIndex_backwardWalk_advancesByOnePerStep();
+  void hopIntermediateIndex_finalStep_returnsTarget();
+
+  // isRowChangePendingValid
+  void rowChangePending_negativeIndex_returnsFalse();
+  void rowChangePending_nonPositiveInterval_returnsFalse();
+  void rowChangePending_withinWindow_returnsTrue();
+  void rowChangePending_atBoundary_returnsTrue();
+  void rowChangePending_pastWindow_returnsFalse();
+  void rowChangePending_negativeDelta_returnsFalse();
 };
 
 void TestSelectionHelpers::shouldTreatAsNewRow_zeroGridWidth_returnsFalse() {
@@ -117,6 +141,92 @@ void TestSelectionHelpers::isNewRow_sameRow_returnsFalse() {
 void TestSelectionHelpers::isNewRow_differentRow_returnsTrue() {
   QVERIFY(SelectionHelpers::isNewRow(2, 8, 6));
   QVERIFY(SelectionHelpers::isNewRow(11, 5, 6));
+}
+
+// ------------------------------ hopDirection -------------------------------
+
+void TestSelectionHelpers::hopDirection_targetGreater_returnsPositiveOne() {
+  QCOMPARE(SelectionHelpers::hopDirection(2, 5), 1);
+}
+
+void TestSelectionHelpers::hopDirection_targetLess_returnsNegativeOne() {
+  QCOMPARE(SelectionHelpers::hopDirection(5, 2), -1);
+}
+
+void TestSelectionHelpers::hopDirection_targetEqual_returnsZero() {
+  QCOMPARE(SelectionHelpers::hopDirection(3, 3), 0);
+}
+
+// ------------------------------ hopStepCount -------------------------------
+
+void TestSelectionHelpers::hopStepCount_sameIndex_returnsZero() {
+  QCOMPARE(SelectionHelpers::hopStepCount(4, 4), 0);
+}
+
+void TestSelectionHelpers::hopStepCount_returnsAbsoluteDelta() {
+  QCOMPARE(SelectionHelpers::hopStepCount(2, 7), 5);
+  QCOMPARE(SelectionHelpers::hopStepCount(7, 2), 5);
+}
+
+// ------------------------------ hopIntermediateIndex -----------------------
+
+void TestSelectionHelpers::hopIntermediateIndex_zeroSpan_returnsMinusOne() {
+  QCOMPARE(SelectionHelpers::hopIntermediateIndex(3, 3, 1), -1);
+  QCOMPARE(SelectionHelpers::hopIntermediateIndex(3, 3, 0), -1);
+}
+
+void TestSelectionHelpers::hopIntermediateIndex_outOfRangeStep_returnsMinusOne() {
+  // Span 4 (from=2, to=6) -> valid steps are 1..4. 0 and 5 are invalid.
+  QCOMPARE(SelectionHelpers::hopIntermediateIndex(2, 6, 0), -1);
+  QCOMPARE(SelectionHelpers::hopIntermediateIndex(2, 6, 5), -1);
+  QCOMPARE(SelectionHelpers::hopIntermediateIndex(2, 6, -1), -1);
+}
+
+void TestSelectionHelpers::hopIntermediateIndex_forwardWalk_advancesByOnePerStep() {
+  QCOMPARE(SelectionHelpers::hopIntermediateIndex(2, 6, 1), 3);
+  QCOMPARE(SelectionHelpers::hopIntermediateIndex(2, 6, 2), 4);
+  QCOMPARE(SelectionHelpers::hopIntermediateIndex(2, 6, 3), 5);
+}
+
+void TestSelectionHelpers::hopIntermediateIndex_backwardWalk_advancesByOnePerStep() {
+  QCOMPARE(SelectionHelpers::hopIntermediateIndex(6, 2, 1), 5);
+  QCOMPARE(SelectionHelpers::hopIntermediateIndex(6, 2, 2), 4);
+  QCOMPARE(SelectionHelpers::hopIntermediateIndex(6, 2, 3), 3);
+}
+
+void TestSelectionHelpers::hopIntermediateIndex_finalStep_returnsTarget() {
+  QCOMPARE(SelectionHelpers::hopIntermediateIndex(2, 6, 4), 6);
+  QCOMPARE(SelectionHelpers::hopIntermediateIndex(6, 2, 4), 2);
+}
+
+// ------------------------------ isRowChangePendingValid --------------------
+
+void TestSelectionHelpers::rowChangePending_negativeIndex_returnsFalse() {
+  QVERIFY(!SelectionHelpers::isRowChangePendingValid(-1, 1000, 1100, 500));
+}
+
+void TestSelectionHelpers::rowChangePending_nonPositiveInterval_returnsFalse() {
+  QVERIFY(!SelectionHelpers::isRowChangePendingValid(3, 1000, 1100, 0));
+  QVERIFY(!SelectionHelpers::isRowChangePendingValid(3, 1000, 1100, -50));
+}
+
+void TestSelectionHelpers::rowChangePending_withinWindow_returnsTrue() {
+  // delta = 100, interval = 500 -> within.
+  QVERIFY(SelectionHelpers::isRowChangePendingValid(3, 1000, 1100, 500));
+}
+
+void TestSelectionHelpers::rowChangePending_atBoundary_returnsTrue() {
+  // delta == interval is inclusive (the production check uses <=).
+  QVERIFY(SelectionHelpers::isRowChangePendingValid(3, 1000, 1500, 500));
+}
+
+void TestSelectionHelpers::rowChangePending_pastWindow_returnsFalse() {
+  QVERIFY(!SelectionHelpers::isRowChangePendingValid(3, 1000, 1501, 500));
+}
+
+void TestSelectionHelpers::rowChangePending_negativeDelta_returnsFalse() {
+  // Clock skew (now < pending) — guard against returning a stale-but-tiny-delta true.
+  QVERIFY(!SelectionHelpers::isRowChangePendingValid(3, 2000, 1500, 500));
 }
 
 QTEST_APPLESS_MAIN(TestSelectionHelpers)

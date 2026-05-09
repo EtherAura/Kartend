@@ -28,4 +28,35 @@ auto isNewRow(int currentSelection, int newSelection, int gridWidth) -> bool {
   return currentRow != targetRow;
 }
 
+auto hopDirection(int fromIndex, int toIndex) -> int {
+  if (toIndex > fromIndex) {
+    return 1;
+  }
+  if (toIndex < fromIndex) {
+    return -1;
+  }
+  return 0;
+}
+
+auto hopStepCount(int fromIndex, int toIndex) -> int {
+  return std::abs(toIndex - fromIndex);
+}
+
+auto hopIntermediateIndex(int fromIndex, int toIndex, int stepIndex) -> int {
+  const int total = hopStepCount(fromIndex, toIndex);
+  if (total == 0 || stepIndex < 1 || stepIndex > total) {
+    return -1;
+  }
+  return fromIndex + (stepIndex * hopDirection(fromIndex, toIndex));
+}
+
+auto isRowChangePendingValid(int pendingIndex, qint64 pendingMs, qint64 nowMs,
+                             int doubleClickIntervalMs) -> bool {
+  if (pendingIndex < 0 || doubleClickIntervalMs <= 0) {
+    return false;
+  }
+  const qint64 delta = nowMs - pendingMs;
+  return delta >= 0 && delta <= doubleClickIntervalMs;
+}
+
 } // namespace SelectionHelpers

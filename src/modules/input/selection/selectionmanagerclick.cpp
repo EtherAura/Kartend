@@ -22,6 +22,7 @@
 #include "mousemanager.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
+#include "selectionhelpers.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "uiconstants.h"
@@ -125,7 +126,8 @@ void SelectionManager::processSingleClickSelection(int visualIndex, const QStrin
 
   const int pendingIndex = m_state ? m_state->click().rowChangeFirstClickIndex : -1;
   const qint64 pendingMs = m_state ? m_state->click().rowChangeFirstClickMs : 0;
-  const bool pendingValid = (pendingIndex >= 0 && (nowMs - pendingMs) <= dcInterval);
+  const bool pendingValid =
+      SelectionHelpers::isRowChangePendingValid(pendingIndex, pendingMs, nowMs, dcInterval);
 
   const int fromIndex = m_selectedItemIndex;
   const bool canAnimateHoriz = shouldAnimateHorizontalHop(fromIndex, visualIndex, gridWidth);
@@ -155,8 +157,7 @@ void SelectionManager::runHorizontalHopAnimation(int start, int target, qint64 n
   }
   const int gen = m_state->nextHorizAnimGen();
   m_state->setHorizAnimActive(true);
-  const int step = (target > start) ? 1 : -1;
-  const int steps = qAbs(target - start);
+  const int steps = SelectionHelpers::hopStepCount(start, target);
   constexpr int kPerHopMs = 12;
   if (m_scrollManager) {
     m_scrollManager->updateSelectionForIndex(start);
@@ -164,14 +165,14 @@ void SelectionManager::runHorizontalHopAnimation(int start, int target, qint64 n
   // Animate horizontal selection by stepping through intermediate indices -
   // each hop scheduled at fixed intervals creates smooth left/right movement
   for (int i = 1; i <= steps; ++i) {
-    QTimer::singleShot(i * kPerHopMs, this, [this, gen, i, step, start, target]() {
+    QTimer::singleShot(i * kPerHopMs, this, [this, gen, i, start, target]() {
       if (!m_state || m_state->horizAnimGen() != gen) {
         return;
       }
       if (!m_scrollManager) {
         return;
       }
-      int nextIdx = start + (i * step);
+      const int nextIdx = SelectionHelpers::hopIntermediateIndex(start, target, i);
       if (nextIdx != target) {
         m_selectedItemIndex = nextIdx;
         m_scrollManager->updateSelectionForIndex(nextIdx);
