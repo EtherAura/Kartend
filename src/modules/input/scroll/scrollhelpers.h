@@ -34,6 +34,41 @@ namespace ScrollHelpers {
 [[nodiscard]] auto effectiveAlignment(HorizontalAlignment requested, bool isFiltered,
                                       int totalItems, int itemsPerRow) -> HorizontalAlignment;
 
+// Picks the database range-chunk size for prefetching as the user drags the
+// scrollbar. showAllSubcollectionItems with very large flattened lists
+// switches to the larger chunk so we issue fewer DB round-trips.
+[[nodiscard]] auto chunkSizeFor(bool showAllSubcollectionItems, int totalItems,
+                                int largeThreshold, int defaultChunk, int largeChunk) -> int;
+
+// Result of the slider-position prefetch math. `chunkStart` and `chunkSize`
+// are passed straight to ItemWidgetFactory::prefetchRangeAt; `valid` is
+// false when the inputs were degenerate (no item height, no items-per-row,
+// non-positive chunk constants) and the caller should skip prefetching.
+struct SliderPrefetchPlan {
+  int chunkStart = 0;
+  int chunkSize = 0;
+  bool valid = false;
+};
+
+// Computes the chunk-aligned media offset to prefetch when the scrollbar
+// slider is at `sliderValue` for a grid with the given metrics.
+//
+// Inputs:
+//   sliderValue           - vertical scrollbar value in pixels
+//   itemHeight            - row height in pixels (must be > 0)
+//   itemsPerRow           - row width (must be > 0)
+//   subcollectionCount    - number of subcollection tiles preceding media
+//   virtualFolderCount    - number of virtual-folder tiles preceding media
+//   showAllSubcollectionItems / totalItems / large-threshold / chunk sizes
+//                         - delegated to chunkSizeFor for chunk picking.
+//
+// The plan's `chunkStart` is clamped to a non-negative multiple of chunkSize.
+[[nodiscard]] auto computeSliderPrefetchPlan(int sliderValue, int itemHeight, int itemsPerRow,
+                                              int subcollectionCount, int virtualFolderCount,
+                                              bool showAllSubcollectionItems, int totalItems,
+                                              int largeThreshold, int defaultChunk,
+                                              int largeChunk) -> SliderPrefetchPlan;
+
 } // namespace ScrollHelpers
 
 #endif // SCROLLHELPERS_H

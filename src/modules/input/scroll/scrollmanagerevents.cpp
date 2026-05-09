@@ -8,6 +8,7 @@
 #include "itemwidgetfactory.h"
 #include "scrolldatamanager.h"
 #include "scrolleventhandler.h"
+#include "scrollhelpers.h"
 #include "scrollmanager.h"
 #include "selectionoverlaymanager.h"
 #include "selectionstatetracker.h"
@@ -145,28 +146,20 @@ void ScrollManager::onSliderMoved(int position) {
     return;
   }
 
-  // Calculate which row the slider position corresponds to
-  int targetRow = position / m_metrics.itemHeight;
-  int targetIndex = targetRow * m_metrics.itemsPerRow;
+  const int subcollectionCount = m_dataManager ? m_dataManager->subcollectionCount() : 0;
+  const int virtualFolderCount = m_dataManager ? m_dataManager->virtualFolderCount() : 0;
 
-  // Calculate the media index offset (accounting for subcollections/virtual
-  // folders)
-  int subcollectionCount = m_dataManager ? m_dataManager->subcollectionCount() : 0;
-  int virtualFolderCount = m_dataManager ? m_dataManager->virtualFolderCount() : 0;
-  int prefixCount = subcollectionCount + virtualFolderCount;
-  int mediaIndex = qMax(0, targetIndex - prefixCount);
+  const auto plan = ScrollHelpers::computeSliderPrefetchPlan(
+      position, m_metrics.itemHeight, m_metrics.itemsPerRow, subcollectionCount, virtualFolderCount,
+      m_context.config.showAllSubcollectionItems, m_totalItems,
+      UIConstants::Database::RANGE_CHUNK_LARGE_THRESHOLD,
+      UIConstants::Database::RANGE_CHUNK_SIZE_DEFAULT,
+      UIConstants::Database::RANGE_CHUNK_SIZE_LARGE);
 
-  // Align to chunk boundary for efficient database queries
-  int chunkSize = m_context.config.showAllSubcollectionItems &&
-                          m_totalItems > UIConstants::Database::RANGE_CHUNK_LARGE_THRESHOLD
-                      ? UIConstants::Database::RANGE_CHUNK_SIZE_LARGE
-                      : UIConstants::Database::RANGE_CHUNK_SIZE_DEFAULT;
-  int chunkStart = (mediaIndex / chunkSize) * chunkSize;
-
-  // Request the chunk at the target position to prefetch data
-  if (m_widgetFactory) {
-    m_widgetFactory->prefetchRangeAt(chunkStart, chunkSize);
+  if (!plan.valid) {
+    return;
   }
+  m_widgetFactory->prefetchRangeAt(plan.chunkStart, plan.chunkSize);
 }
 
 void ScrollManager::onSubcollectionDoubleClicked(int subcollectionIndex) {

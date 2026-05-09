@@ -25,6 +25,25 @@ private slots:
   void effectiveAlignment_filteredFewItems_returnsCenter();
   void effectiveAlignment_filteredManyItems_returnsRequested();
   void effectiveAlignment_filteredBoundary_returnsRequested();
+
+  // chunkSizeFor
+  void chunkSize_defaultsWhenShowAllSubcollectionsOff();
+  void chunkSize_defaultsBelowLargeThreshold();
+  void chunkSize_switchesToLargeAboveThreshold();
+  void chunkSize_atThresholdReturnsDefault();
+
+  // computeSliderPrefetchPlan — guards
+  void prefetch_invalidWhenItemHeightNonPositive();
+  void prefetch_invalidWhenItemsPerRowNonPositive();
+  void prefetch_invalidWhenChunkConstantsNonPositive();
+
+  // computeSliderPrefetchPlan — math
+  void prefetch_zeroSliderClampsToZeroChunkStart();
+  void prefetch_negativeSliderClampsToZero();
+  void prefetch_subtractsPrefixFromTargetIndex();
+  void prefetch_alignsChunkStartToChunkBoundary();
+  void prefetch_clampsNegativeMediaIndexAtZero();
+  void prefetch_usesLargeChunkAboveThreshold();
 };
 
 void TestScrollHelpers::movementDirection_negativePrev_returnsFalse() {
@@ -121,6 +140,117 @@ void TestScrollHelpers::effectiveAlignment_filteredBoundary_returnsRequested() {
   QCOMPARE(
       ScrollHelpers::effectiveAlignment(HorizontalAlignment::Right, true, 6, 8),
       HorizontalAlignment::Right);
+}
+
+// ------------------------------ chunkSizeFor --------------------------------
+
+void TestScrollHelpers::chunkSize_defaultsWhenShowAllSubcollectionsOff() {
+  // showAll=false -> always default chunk regardless of totalItems
+  QCOMPARE(ScrollHelpers::chunkSizeFor(false, 999999, 5000, 100, 1000), 100);
+}
+
+void TestScrollHelpers::chunkSize_defaultsBelowLargeThreshold() {
+  QCOMPARE(ScrollHelpers::chunkSizeFor(true, 4000, 5000, 100, 1000), 100);
+}
+
+void TestScrollHelpers::chunkSize_switchesToLargeAboveThreshold() {
+  QCOMPARE(ScrollHelpers::chunkSizeFor(true, 5001, 5000, 100, 1000), 1000);
+  QCOMPARE(ScrollHelpers::chunkSizeFor(true, 50000, 5000, 100, 1000), 1000);
+}
+
+void TestScrollHelpers::chunkSize_atThresholdReturnsDefault() {
+  // Strict > comparison: totalItems == threshold stays on default.
+  QCOMPARE(ScrollHelpers::chunkSizeFor(true, 5000, 5000, 100, 1000), 100);
+}
+
+// ------------------------------ computeSliderPrefetchPlan — guards ----------
+
+void TestScrollHelpers::prefetch_invalidWhenItemHeightNonPositive() {
+  const auto plan = ScrollHelpers::computeSliderPrefetchPlan(
+      /*sliderValue=*/100, /*itemHeight=*/0, /*itemsPerRow=*/4,
+      /*subcollectionCount=*/0, /*virtualFolderCount=*/0,
+      /*showAll=*/false, /*totalItems=*/100,
+      /*largeThreshold=*/5000, /*defaultChunk=*/100, /*largeChunk=*/1000);
+  QVERIFY(!plan.valid);
+}
+
+void TestScrollHelpers::prefetch_invalidWhenItemsPerRowNonPositive() {
+  const auto plan =
+      ScrollHelpers::computeSliderPrefetchPlan(100, 50, 0, 0, 0, false, 100, 5000, 100, 1000);
+  QVERIFY(!plan.valid);
+  const auto neg =
+      ScrollHelpers::computeSliderPrefetchPlan(100, 50, -1, 0, 0, false, 100, 5000, 100, 1000);
+  QVERIFY(!neg.valid);
+}
+
+void TestScrollHelpers::prefetch_invalidWhenChunkConstantsNonPositive() {
+  const auto def =
+      ScrollHelpers::computeSliderPrefetchPlan(100, 50, 4, 0, 0, false, 100, 5000, 0, 1000);
+  QVERIFY(!def.valid);
+  const auto large =
+      ScrollHelpers::computeSliderPrefetchPlan(100, 50, 4, 0, 0, false, 100, 5000, 100, 0);
+  QVERIFY(!large.valid);
+}
+
+// ------------------------------ computeSliderPrefetchPlan — math ------------
+
+void TestScrollHelpers::prefetch_zeroSliderClampsToZeroChunkStart() {
+  const auto plan =
+      ScrollHelpers::computeSliderPrefetchPlan(0, 50, 4, 0, 0, false, 100, 5000, 100, 1000);
+  QVERIFY(plan.valid);
+  QCOMPARE(plan.chunkStart, 0);
+  QCOMPARE(plan.chunkSize, 100);
+}
+
+void TestScrollHelpers::prefetch_negativeSliderClampsToZero() {
+  // Defensive: a negative slider shouldn't compute a negative row.
+  const auto plan =
+      ScrollHelpers::computeSliderPrefetchPlan(-200, 50, 4, 0, 0, false, 100, 5000, 100, 1000);
+  QVERIFY(plan.valid);
+  QCOMPARE(plan.chunkStart, 0);
+}
+
+void TestScrollHelpers::prefetch_subtractsPrefixFromTargetIndex() {
+  // sliderValue=2500, itemHeight=50 -> row=50. itemsPerRow=4 -> targetIndex=200.
+  // subcollections=3, virtualFolders=2 -> prefix=5. mediaIndex = 195.
+  // chunk=100 -> chunkStart = (195 / 100) * 100 = 100.
+  const auto plan = ScrollHelpers::computeSliderPrefetchPlan(2500, 50, 4, 3, 2, false, 100, 5000,
+                                                              100, 1000);
+  QVERIFY(plan.valid);
+  QCOMPARE(plan.chunkSize, 100);
+  QCOMPARE(plan.chunkStart, 100);
+}
+
+void TestScrollHelpers::prefetch_alignsChunkStartToChunkBoundary() {
+  // sliderValue=1000, itemHeight=10 -> row=100. itemsPerRow=10 -> targetIndex=1000.
+  // No prefix. mediaIndex=1000. chunk=300 -> chunkStart=(1000/300)*300=900.
+  const auto plan = ScrollHelpers::computeSliderPrefetchPlan(1000, 10, 10, 0, 0, false, 100, 5000,
+                                                              300, 1000);
+  QVERIFY(plan.valid);
+  QCOMPARE(plan.chunkSize, 300);
+  QCOMPARE(plan.chunkStart, 900);
+}
+
+void TestScrollHelpers::prefetch_clampsNegativeMediaIndexAtZero() {
+  // Slider near top with prefix > targetIndex -> mediaIndex would be negative.
+  // Helper clamps to 0, chunkStart=0.
+  // sliderValue=50, itemHeight=50 -> row=1, targetIndex=4 (itemsPerRow=4).
+  // prefix = subcollections=10 + virtualFolders=0 = 10. raw mediaIndex = 4-10 = -6.
+  const auto plan =
+      ScrollHelpers::computeSliderPrefetchPlan(50, 50, 4, 10, 0, false, 100, 5000, 100, 1000);
+  QVERIFY(plan.valid);
+  QCOMPARE(plan.chunkStart, 0);
+}
+
+void TestScrollHelpers::prefetch_usesLargeChunkAboveThreshold() {
+  // showAll=true and totalItems > threshold -> largeChunk wins.
+  // sliderValue=10000, itemHeight=50 -> row=200. itemsPerRow=4 -> targetIndex=800.
+  // No prefix. mediaIndex=800. largeChunk=1000 -> chunkStart=(800/1000)*1000=0.
+  const auto plan = ScrollHelpers::computeSliderPrefetchPlan(10000, 50, 4, 0, 0, true, 50000, 5000,
+                                                              100, 1000);
+  QVERIFY(plan.valid);
+  QCOMPARE(plan.chunkSize, 1000);
+  QCOMPARE(plan.chunkStart, 0);
 }
 
 QTEST_APPLESS_MAIN(TestScrollHelpers)
