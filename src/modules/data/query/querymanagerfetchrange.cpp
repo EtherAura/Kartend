@@ -272,39 +272,31 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
 
   QString sql;
   if (useFts) {
-    // Query items through items_fts rowids so date/size metadata remains
-    // available while filtering with FTS.
-    // Use GROUP BY path to deduplicate paths that appear in multiple
-    // collections.
+    // (collection_uuid, path) is the item identity — keep both columns and
+    // emit one row per matching item so same-named files across
+    // subcollections render as distinct tiles. The downstream pipeline
+    // re-keys by absolute path (mediaDir/path) which stays unique.
     if (useTempTable) {
-      sql = "SELECT path, MIN(collection_uuid) as collection_uuid, "
-            "MIN(name) as sort_name, MAX(last_modified) as sort_last_modified, "
-            "MIN(file_size) as sort_file_size FROM items "
+      sql = "SELECT path, collection_uuid, name as sort_name, "
+            "last_modified as sort_last_modified, file_size as sort_file_size FROM items "
             "WHERE id IN (SELECT rowid FROM items_fts WHERE items_fts MATCH ?) AND EXISTS " +
             uuidClause;
     } else {
-      sql = "SELECT path, MIN(collection_uuid) as collection_uuid, "
-            "MIN(name) as sort_name, MAX(last_modified) as sort_last_modified, "
-            "MIN(file_size) as sort_file_size FROM items "
+      sql = "SELECT path, collection_uuid, name as sort_name, "
+            "last_modified as sort_last_modified, file_size as sort_file_size FROM items "
             "WHERE id IN (SELECT rowid FROM items_fts WHERE items_fts MATCH ?) AND "
             "collection_uuid IN " +
             uuidClause;
     }
   } else {
-    // Use GROUP BY path to deduplicate paths that appear in multiple
-    // collections (e.g., when showAllSubcollectionItems=true).
-    // MIN(collection_uuid) picks one arbitrarily. This ensures the result count
-    // matches COUNT(DISTINCT path).
     if (useTempTable) {
-      sql = "SELECT path, MIN(collection_uuid) as collection_uuid, "
-            "MIN(name) as sort_name, MAX(last_modified) as sort_last_modified, "
-            "MIN(file_size) as sort_file_size FROM items "
+      sql = "SELECT path, collection_uuid, name as sort_name, "
+            "last_modified as sort_last_modified, file_size as sort_file_size FROM items "
             "WHERE EXISTS " +
             uuidClause;
     } else {
-      sql = "SELECT path, MIN(collection_uuid) as collection_uuid, "
-            "MIN(name) as sort_name, MAX(last_modified) as sort_last_modified, "
-            "MIN(file_size) as sort_file_size FROM items "
+      sql = "SELECT path, collection_uuid, name as sort_name, "
+            "last_modified as sort_last_modified, file_size as sort_file_size FROM items "
             "WHERE collection_uuid IN " +
             uuidClause;
     }
@@ -333,16 +325,11 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
     }
   }
 
-  // same playlist EXISTS clause as fetchItemCountImpl. Layered
-  // before GROUP BY so the dedup-by-path semantics still apply.
+  // same playlist EXISTS clause as fetchItemCountImpl.
   if (isPlaylist) {
     sql += " AND EXISTS (SELECT 1 FROM query_playlist_scope p "
            "WHERE p.uuid = collection_uuid AND p.path = path)";
   }
-
-  // Add GROUP BY path to deduplicate paths (required since we use
-  // MIN(collection_uuid))
-  sql += " GROUP BY path";
 
   // Apply sort order based on sortMode
   // NOTE: Random sort should never reach the slow path - it's handled by

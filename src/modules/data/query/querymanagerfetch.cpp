@@ -127,27 +127,24 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
 
   QString sql;
   if (useFts) {
-    // Query FTS table directly - the FTS table contains name,
-    // path, and collection_uuid so we can filter directly.
-    // Use COUNT(DISTINCT path) to match fetchItemsRange's GROUP BY path
-    // dedup — same path can appear in multiple collections (e.g. with
-    // showAllSubcollectionItems=true), which would otherwise leave blank
-    // placeholder tiles at the tail when count > distinct rows
-    //.
+    // (collection_uuid, path) is the item identity (UNIQUE(collection_uuid,
+    // path) on the items table), so COUNT(*) counts each subcollection's
+    // copy of a same-named file separately. fetchItemsRange has the same
+    // semantics so counts and rendered tiles stay in sync.
     if (useTempTable) {
-      sql = "SELECT COUNT(DISTINCT path) FROM items_fts "
+      sql = "SELECT COUNT(*) FROM items_fts "
             "WHERE items_fts MATCH ? AND EXISTS " +
             uuidClause;
     } else {
-      sql = "SELECT COUNT(DISTINCT path) FROM items_fts "
+      sql = "SELECT COUNT(*) FROM items_fts "
             "WHERE items_fts MATCH ? AND collection_uuid IN " +
             uuidClause;
     }
   } else {
     if (useTempTable) {
-      sql = "SELECT COUNT(DISTINCT path) FROM items WHERE EXISTS " + uuidClause;
+      sql = "SELECT COUNT(*) FROM items WHERE EXISTS " + uuidClause;
     } else {
-      sql = "SELECT COUNT(DISTINCT path) FROM items WHERE collection_uuid IN " + uuidClause;
+      sql = "SELECT COUNT(*) FROM items WHERE collection_uuid IN " + uuidClause;
     }
   }
 
@@ -427,12 +424,22 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
   // Build WHERE clause for UUIDs
   const QString uuidPlaceholders = QueryHelpers::placeholderList(uuids.size());
 
-  // Use window function to get row number for matching path.
-  // IMPORTANT: Use GROUP BY path to deduplicate paths that appear in multiple
-  // collections (e.g., when showAllSubcollectionItems=true). SELECT DISTINCT
-  // path, name doesn't work because the same path can have different
-  // collection_uuid values. GROUP BY path ensures exactly one row per unique
-  // path, matching COUNT(DISTINCT path) used by fetchItemCount.
+  // Convert the absolute filePath back to (collection_uuid, relative path).
+  // (collection_uuid, path) is the item identity, so we need both to
+  // disambiguate same-named files in different subcollections.
+  QString relPath;
+  QString matchedUuid;
+  for (auto it = dirMaps.uuidToMediaDir.begin(); it != dirMaps.uuidToMediaDir.end(); ++it) {
+    if (filePath.startsWith(it.value())) {
+      relPath = filePath.mid(it.value().length());
+      if (relPath.startsWith('/')) {
+        relPath = relPath.mid(1);
+      }
+      matchedUuid = it.key();
+      break;
+    }
+  }
+
   // narrow the inner subquery to playlist members so the
   // ROW_NUMBER mapping matches what fetchItemsRange returns.
   const QString playlistClause =
@@ -441,12 +448,20 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
                            "collection_uuid AND p.path = path)")
           : QString();
 
-  QString sql = QString("SELECT rn FROM ("
-                        "  SELECT path, ROW_NUMBER() OVER (%1) - 1 as rn "
-                        "  FROM (SELECT path, name, last_modified, file_size FROM items WHERE "
-                        "collection_uuid IN (%2)%3 GROUP BY path)"
-                        ") WHERE path = ?")
-                    .arg(orderClause, uuidPlaceholders, playlistClause);
+  // Inner subquery enumerates every (collection_uuid, path) row in sort
+  // order; outer WHERE matches both keys when the uuid is known so the
+  // selection landing on a duplicate-named file resolves to the right tile.
+  const QString outerWhere = matchedUuid.isEmpty()
+                                 ? QStringLiteral("path = ?")
+                                 : QStringLiteral("path = ? AND collection_uuid = ?");
+
+  QString sql =
+      QString("SELECT rn FROM ("
+              "  SELECT path, collection_uuid, ROW_NUMBER() OVER (%1) - 1 as rn "
+              "  FROM (SELECT path, collection_uuid, name, last_modified, file_size FROM items "
+              "WHERE collection_uuid IN (%2)%3)"
+              ") WHERE %4")
+          .arg(orderClause, uuidPlaceholders, playlistClause, outerWhere);
 
   QSqlQuery query(m_db);
   query.prepare(sql);
@@ -456,30 +471,19 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
     query.bindValue(bindPos++, uuid);
   }
 
-  // Convert full path to relative for database lookup
-  QString relPath;
-  for (auto it = dirMaps.uuidToMediaDir.begin(); it != dirMaps.uuidToMediaDir.end(); ++it) {
-    if (filePath.startsWith(it.value())) {
-      relPath = filePath.mid(it.value().length());
-      if (relPath.startsWith('/')) {
-        relPath = relPath.mid(1);
-      }
-      break;
-    }
-  }
-
   if (relPath.isEmpty()) {
     // Try the full path as-is
     query.bindValue(bindPos++, filePath);
   } else {
     query.bindValue(bindPos++, relPath);
   }
+  if (!matchedUuid.isEmpty()) {
+    query.bindValue(bindPos++, matchedUuid);
+  }
 
-  // Debug: count how many distinct paths the subquery produces (should match
-  // fetchItemCount)
-  QString countSql = QString("SELECT COUNT(DISTINCT path) FROM items WHERE "
-                             "collection_uuid IN (%1)")
-                         .arg(uuidPlaceholders);
+  // Debug: count rows the subquery enumerates (should match fetchItemCount)
+  QString countSql =
+      QString("SELECT COUNT(*) FROM items WHERE collection_uuid IN (%1)").arg(uuidPlaceholders);
   QSqlQuery countQuery(m_db);
   countQuery.prepare(countSql);
   int countBindPos = 0;

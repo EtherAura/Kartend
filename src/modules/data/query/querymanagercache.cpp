@@ -337,80 +337,66 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
         (needsCollectionJoin || needsItemsTable) ? " AND i.name LIKE ?" : " AND name LIKE ?";
   }
 
+  // (collection_uuid, path) is the item identity — emit one row per item so
+  // same-named files across subcollections produce distinct cache entries.
   if (useFts) {
     // FTS-backed select: filter rowids via items_fts MATCH then resolve to
-    // items rows for collection joining / dedup. Mirrors the slow path's
-    // FTS branch in fetchItemsRange so cache size matches count.
+    // items rows for collection joining. Mirrors fetchItemsRange's FTS branch
+    // so cache size matches count.
     if (needsCollectionJoin || needsItemsTable) {
       if (useTempTable) {
-        sql = "SELECT i.path, MIN(i.collection_uuid) as collection_uuid FROM "
-              "items i "
+        sql = "SELECT i.path, i.collection_uuid FROM items i "
               "JOIN items_fts f ON f.rowid = i.id "
               "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
               "WHERE f MATCH ? AND EXISTS "
-              "(SELECT 1 FROM query_uuids WHERE query_uuids.uuid = "
-              "i.collection_uuid) GROUP BY i.path";
+              "(SELECT 1 FROM query_uuids WHERE query_uuids.uuid = i.collection_uuid)";
       } else {
-        sql = "SELECT i.path, MIN(i.collection_uuid) as collection_uuid FROM "
-              "items i "
+        sql = "SELECT i.path, i.collection_uuid FROM items i "
               "JOIN items_fts f ON f.rowid = i.id "
               "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
               "WHERE f MATCH ? AND i.collection_uuid IN " +
-              buildUuidInClause(uuids.size()) + " GROUP BY i.path";
+              buildUuidInClause(uuids.size());
       }
     } else {
       if (useTempTable) {
-        sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM "
-              "items_fts "
+        sql = "SELECT path, collection_uuid FROM items_fts "
               "WHERE items_fts MATCH ? AND EXISTS "
-              "(SELECT 1 FROM query_uuids WHERE query_uuids.uuid = "
-              "collection_uuid) GROUP BY path";
+              "(SELECT 1 FROM query_uuids WHERE query_uuids.uuid = collection_uuid)";
       } else {
-        sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM "
-              "items_fts "
+        sql = "SELECT path, collection_uuid FROM items_fts "
               "WHERE items_fts MATCH ? AND collection_uuid IN " +
-              buildUuidInClause(uuids.size()) + " GROUP BY path";
+              buildUuidInClause(uuids.size());
       }
     }
   } else if (needsCollectionJoin || needsItemsTable) {
     // Join with collections to get collection name for sorting.
-    // Use GROUP BY path to deduplicate paths that appear in multiple
-    // collections (e.g., when showAllSubcollectionItems=true).
-    // MIN(collection_uuid) picks one arbitrarily. This ensures cache size
-    // matches COUNT(DISTINCT path).
     if (useTempTable) {
-      sql = "SELECT i.path, MIN(i.collection_uuid) as collection_uuid FROM "
-            "items i "
+      sql = "SELECT i.path, i.collection_uuid FROM items i "
             "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
             "WHERE EXISTS (SELECT 1 FROM query_uuids WHERE query_uuids.uuid = "
             "i.collection_uuid)" +
-            filterClause + " GROUP BY i.path";
+            filterClause;
     } else {
-      sql = "SELECT i.path, MIN(i.collection_uuid) as collection_uuid FROM "
-            "items i "
+      sql = "SELECT i.path, i.collection_uuid FROM items i "
             "LEFT JOIN collections c ON i.collection_uuid = c.uuid "
             "WHERE i.collection_uuid IN " +
-            buildUuidInClause(uuids.size()) + filterClause + " GROUP BY i.path";
+            buildUuidInClause(uuids.size()) + filterClause;
     }
   } else {
-    // Use GROUP BY path to deduplicate - MIN picks one collection_uuid per
-    // unique path
     if (useTempTable) {
-      sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM items "
+      sql = "SELECT path, collection_uuid FROM items "
             "WHERE EXISTS (SELECT 1 FROM query_uuids WHERE query_uuids.uuid = "
             "collection_uuid)" +
-            filterClause + " GROUP BY path";
+            filterClause;
     } else {
-      sql = "SELECT path, MIN(collection_uuid) as collection_uuid FROM items "
+      sql = "SELECT path, collection_uuid FROM items "
             "WHERE collection_uuid IN " +
-            buildUuidInClause(uuids.size()) + filterClause + " GROUP BY path";
+            buildUuidInClause(uuids.size()) + filterClause;
     }
   }
 
-  // Apply sort order based on sortMode
-  // For name sorting, we can sort by path directly (same filename)
-  // For collection sorting, we use MIN(c.name) since we're grouping
-  // For random sorting, we skip ORDER BY and shuffle in memory
+  // Apply sort order based on sortMode. No GROUP BY anymore, so reference
+  // the per-row columns directly instead of MIN/MAX aggregates.
   const bool isRandomSort = (sortMode == SortMode::Random);
   if (!isRandomSort) {
     switch (sortMode) {
@@ -418,22 +404,22 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
       sql += " ORDER BY path COLLATE NOCASE DESC";
       break;
     case SortMode::DateDescending:
-      sql += " ORDER BY MAX(i.last_modified) DESC, path COLLATE NOCASE";
+      sql += " ORDER BY i.last_modified DESC, path COLLATE NOCASE";
       break;
     case SortMode::DateAscending:
-      sql += " ORDER BY MIN(i.last_modified) ASC, path COLLATE NOCASE";
+      sql += " ORDER BY i.last_modified ASC, path COLLATE NOCASE";
       break;
     case SortMode::SizeDescending:
-      sql += " ORDER BY MAX(i.file_size) DESC, path COLLATE NOCASE";
+      sql += " ORDER BY i.file_size DESC, path COLLATE NOCASE";
       break;
     case SortMode::SizeAscending:
-      sql += " ORDER BY MIN(i.file_size) ASC, path COLLATE NOCASE";
+      sql += " ORDER BY i.file_size ASC, path COLLATE NOCASE";
       break;
     case SortMode::CollectionAscending:
-      sql += " ORDER BY MIN(c.name) COLLATE NOCASE, path COLLATE NOCASE";
+      sql += " ORDER BY c.name COLLATE NOCASE, path COLLATE NOCASE";
       break;
     case SortMode::CollectionDescending:
-      sql += " ORDER BY MIN(c.name) COLLATE NOCASE DESC, path COLLATE NOCASE";
+      sql += " ORDER BY c.name COLLATE NOCASE DESC, path COLLATE NOCASE";
       break;
     default:
       sql += " ORDER BY path COLLATE NOCASE";
