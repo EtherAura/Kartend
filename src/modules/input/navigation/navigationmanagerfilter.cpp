@@ -75,11 +75,22 @@ void NavigationManager::filterItemsAllCollections(const QString &searchText) {
   }
 
   const int idx = (*m_currentCollectionIndex);
-  if (idx < 0 || idx >= (*m_collections).size()) {
-    return;
+  CollectionContext context;
+  if (idx >= 0 && idx < (*m_collections).size()) {
+    context = getOrBuildExpandedContext(idx);
+  } else {
+    // Root / Home view (no collection selected): build a context that has
+    // no host collection but is still suitable for the cross-collection
+    // query path. queryIncludeAllCollections = true tells the worker to
+    // span every collection; isRootView keeps back-navigation honest so
+    // clearing search returns to the Home tile view.
+    context.currentIndex = -1;
+    context.isRootView = true;
+    if (m_generalSettings) {
+      context.sortMode = m_generalSettings->sortMode;
+      context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+    }
   }
-
-  CollectionContext context = getOrBuildExpandedContext(idx);
   context.queryIncludeAllCollections = true;
   context.hasSubcollectionOverride = true;
   context.subcollectionOverride = {};

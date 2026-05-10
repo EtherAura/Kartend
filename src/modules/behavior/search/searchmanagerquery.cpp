@@ -65,6 +65,18 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
       m_searchItemsLoadedConn = QMetaObject::Connection();
     }
 
+    // Root / Home view clear: rebuild the synthetic Home tile view rather
+    // than trying to restore pre-search state (none was saved — there was
+    // no host collection to snapshot).
+    if (collIndex < 0 && m_preSearchInRootView && navMgr()) {
+      navMgr()->loadRootView();
+      m_preSearchInRootView = false;
+      emit requestScrollbarRecovery();
+      m_searchActive = false;
+      m_preSearchTotalItems = -1;
+      return;
+    }
+
     if (collIndex >= 0) {
       // If we have saved pre-search state, just restore it instead of reloading
       if (scrollMgr() && scrollMgr()->hasPreSearchState()) {
@@ -133,6 +145,7 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
     m_preSearchCollectionIndex = collIndex;
     m_preSearchMode = m_currentSearchMode;
     m_preSearchSelectedIndex = currentSelectedIndex;
+    m_preSearchInRootView = (collIndex < 0 && navMgr() && navMgr()->isInRootView());
     if (m_preSearchSelectedIndex < 0 && settingsMgr() && collIndex >= 0) {
       m_preSearchSelectedIndex = settingsMgr()->getLastSelectedItem(collIndex);
     }
@@ -180,6 +193,19 @@ void SearchManager::performDebouncedSearch() {
   }
 
   const int collIndex = (m_currentCollectionIndex ? *m_currentCollectionIndex : -1);
+
+  // Root / Home view: no collection is selected (collIndex == -1) but
+  // search must still work. Route directly to the cross-collection query
+  // pipeline — the only mode that makes sense without a host collection.
+  if (collIndex < 0 && navMgr() && navMgr()->isInRootView()) {
+    qCDebug(lcSearchDiag) << "dispatch filterItemsAllCollections (root view)";
+    if (scrollMgr()) {
+      scrollMgr()->showSearchLoadingOverlay();
+    }
+    navMgr()->filterItemsAllCollections(trimmed);
+    return;
+  }
+
   if (collIndex < 0 || !m_collections || collIndex >= m_collections->size()) {
     return;
   }

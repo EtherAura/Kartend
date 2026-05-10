@@ -275,6 +275,13 @@ void NavigationManager::loadRootView() {
     m_searchBar->blockSignals(false);
   }
 
+  // Pin the search-mode toggle to AllCollections — the only meaningful
+  // scope when no host collection is selected. SearchManager's cycle
+  // handles the root-view case.
+  if (interactionMgr()) {
+    interactionMgr()->initializeSearchModeForCurrentCollection();
+  }
+
   if (m_stackedWidget && m_itemsPage) {
     m_stackedWidget->setCurrentWidget(m_itemsPage);
   }

@@ -199,6 +199,12 @@ SearchContext SearchManager::computeSearchContext() const {
 
 QVector<SearchMode> SearchManager::buildSearchModeCycle(const SearchContext &ctx) const {
   const int collIndex = ((m_currentCollectionIndex) ? *m_currentCollectionIndex : -1);
+  // Synthetic Home view: only the cross-collection scope is meaningful.
+  // Pin the cycle to a single AllCollections entry so the mode toggle
+  // doesn't cycle into modes that need a host collection.
+  if (collIndex < 0 && navMgr() && navMgr()->isInRootView()) {
+    return {SearchMode::AllCollections};
+  }
   const bool valid = ((m_collections) && collIndex >= 0 && collIndex < m_collections->size());
   const bool isRoot = valid ? ((*m_collections)[collIndex].parentCollectionIndex == -1) : false;
   return SearchHelpers::buildSearchModeCycle(ctx, isRoot);

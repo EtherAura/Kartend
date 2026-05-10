@@ -141,6 +141,10 @@ private:
   SearchMode m_preSearchMode = SearchMode::CurrentCollection;
   int m_preSearchSelectedIndex = -1;
   int m_preSearchTotalItems = -1;
+  /// Set when search starts from the synthetic Home view (no host
+  /// collection). On clear, route back to loadRootView() instead of
+  /// the per-collection pre-search restore path.
+  bool m_preSearchInRootView = false;
 
   // Adaptive debounce: tracks keystroke timing to adjust debounce delay
   qint64 m_lastKeystrokeTime = 0;

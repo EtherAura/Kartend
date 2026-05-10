@@ -124,6 +124,12 @@ public slots:
   // shown as a tile grid with no host collection of its own. No DB query;
   // tiles come from the in-memory collection list.
   void loadRootView();
+
+  /// True when the synthetic Home view (one tile per root collection,
+  /// currentCollectionIndex == -1) is currently active. Search routing
+  /// uses this to detect "no collection selected" and divert to
+  /// cross-collection search instead of no-op'ing.
+  [[nodiscard]] bool isInRootView() const { return m_inRootView; }
   void goBackToCollections();
   void filterItems(const QString &searchText);
   void filterItemsCurrentAndSubcollections(const QString &searchText);
