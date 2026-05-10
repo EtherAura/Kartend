@@ -518,7 +518,7 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   // hydrate the launcher-presets list from the loaded general
   // settings. Done after m_originalGeneralSettings is captured so the change
   // detector can compare the live presets against the saved baseline.
-  loadLauncherPresetsToUI();
+  ui->launcherPresetsPanel->refresh();
 
   if (m_gamepadCapture) {
     m_gamepadCapture->refreshUi();

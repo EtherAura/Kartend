@@ -11,6 +11,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   kartprogressdialog.cpp
   launcherchooserdialog.cpp
   launchereditordialog.cpp
+  launcherpresetspanel.cpp
   settingsdialog.cpp
   settingsdialogbrowse.cpp
   settingsdialogchecks.cpp
@@ -18,7 +19,6 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   settingsdialoggeneral.cpp
   settingsdialoglaunchers.cpp
   settingsdialoglinks.cpp
-  settingsdialogpresets.cpp
   settingsdialogremove.cpp
   settingsdialogsetup.cpp
   settingsdialogtree.cpp
@@ -36,9 +36,11 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   kartprogressdialog.h
   launcherchooserdialog.h
   launchereditordialog.h
+  launcherpresetspanel.h
   settingsdialog.h
   settingsformbinding.h
   shortcutsdialog.h
   statisticsdialog.h
+  launcherpresetspanel.ui
   settingsdialog.ui
 )

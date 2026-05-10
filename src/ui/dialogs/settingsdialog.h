@@ -123,12 +123,6 @@ private slots:
   /// Reflect the active row in the default-launcher combo so the
   /// edit/remove buttons enable/disable in lockstep with the selection.
   void onAdditionalLauncherSelectionChanged();
-  /// Add/Edit/Remove handlers for the global Launcher Presets
-  /// list on the new "Launchers" tab.
-  void onAddLauncherPreset();
-  void onEditLauncherPreset();
-  void onRemoveLauncherPreset();
-  void onLauncherPresetSelectionChanged();
   void browseMediaDir();
   void browseArtworkDir();
   void browseVideoDir();
@@ -224,12 +218,6 @@ private:
   [[nodiscard]] auto checkLinkedParentsChanges() const -> bool;
   void rebuildDefaultLauncherCombo(int preferredIndex);
   void updateAdditionalLauncherButtonsState();
-  // launcher-presets tab helpers. Preset edits live in
-  // m_generalSettings.launcherPresets (already loaded at dialog open time)
-  // and are flushed via the standard saveGeneralSettings() path.
-  void loadLauncherPresetsToUI();
-  void refreshLauncherPresetsList();
-  void updateLauncherPresetButtonsState();
   // Helper methods for hasUnsavedChanges refactoring
   auto checkBasicFieldChanges() const -> bool;
   auto checkExtensionChanges() const -> bool;

@@ -30,6 +30,7 @@
 #include "gamepadmanager.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
+#include "launcherpresetspanel.h"
 #include "mainwindow.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
@@ -56,6 +57,16 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // Multi-step collection-removal pipeline. Constructed before the
   // tree's Remove button is wired up so removeCollection() can dispatch.
   m_collectionRemover = new CollectionRemover(this);
+
+  // The presets list itself is hydrated by loadGeneralSettingsToUI(); the
+  // pointer install here is one-shot because m_generalSettings lives for the
+  // dialog's lifetime. The panel mutates the list in place and signals back
+  // so checkForChanges() picks up preset edits without other panels going
+  // through the panel API to read presets (settingsdialoglaunchers.cpp still
+  // reads m_generalSettings.launcherPresets directly for its presets combo).
+  ui->launcherPresetsPanel->setPresets(&m_generalSettings.launcherPresets);
+  connect(ui->launcherPresetsPanel, &LauncherPresetsPanel::presetsChanged, this,
+          &SettingsDialog::checkForChanges);
 
   collectionTreeWidget = ui->collectionTreeWidget;
 
