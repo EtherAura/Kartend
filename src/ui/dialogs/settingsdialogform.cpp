@@ -30,6 +30,7 @@
 
 #include "attractmanager.h"
 #include "extensionutils.h"
+#include "fontspanel.h"
 #include "gamepadcapturecontroller.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
@@ -374,10 +375,10 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   SettingsFormBinding::loadInto(ui->titleSaturationSpinBox, m_generalSettings.titleTintSaturation);
   SettingsFormBinding::loadInto(ui->titleLightnessSpinBox, m_generalSettings.titleTintLightness);
   SettingsFormBinding::loadInto(ui->baseColorEdit, m_generalSettings.titleBaseColor);
-  // global UI font controls
-  SettingsFormBinding::loadInto(ui->globalUiFontFamilyEdit, m_generalSettings.globalUiFontFamily);
-  SettingsFormBinding::loadInto(ui->globalUiFontSizeSpinBox,
-                                m_generalSettings.globalUiFontPointSize);
+  // Global application-font fields are owned by FontsPanel (re-hydrate it
+  // from the same m_generalSettings so the form fields reflect the working
+  // copy, not whatever the panel last cached).
+  ui->fontsPanel->refresh();
   SettingsFormBinding::loadInto(ui->attractModeCheckBox, m_generalSettings.attractModeEnabled);
   SettingsFormBinding::loadInto(ui->attractIdleTimeoutSpinBox,
                                 m_generalSettings.attractModeIdleTimeoutSec);

@@ -26,6 +26,7 @@
 #include "collectionremover.h"
 #include "collectiontreewidget.h"
 #include "extensionutils.h"
+#include "fontspanel.h"
 #include "gamepadcapturecontroller.h"
 #include "gamepadmanager.h"
 #include "interactionmanager.h"
@@ -73,6 +74,23 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // routed to checkForChanges. The panel handles its own pickers and
   // position-driven width-vs-height visibility internally.
   connect(ui->sidebarPanel, &SidebarPanel::changed, this, &SettingsDialog::checkForChanges);
+
+  // Application-font panel: live-save semantics — panel mutates the
+  // pointed-to GeneralSettings and emits changed(); we mirror to mainWindow,
+  // persist via SettingsManager, and apply the font to the running app, all
+  // without going through the deferred-save path.
+  ui->fontsPanel->setSettings(&m_generalSettings);
+  connect(ui->fontsPanel, &FontsPanel::changed, this, [this]() {
+    // QObject::parent() — explicit because the enclosing constructor's
+    // own `parent` argument is in scope and shadows the member function.
+    auto *mainWindow = qobject_cast<MainWindow *>(QObject::parent());
+    if (!mainWindow || !mainWindow->getSettingsManager()) {
+      return;
+    }
+    mainWindow->m_generalSettings = m_generalSettings;
+    mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
+    MainWindow::applyGlobalUiFont(mainWindow->m_generalSettings);
+  });
 
   collectionTreeWidget = ui->collectionTreeWidget;
 

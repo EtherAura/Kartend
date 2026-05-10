@@ -277,53 +277,9 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     connect(ui->customFontEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
   }
 
-  // global UI font controls. Saved + applied immediately so the
-  // change is visible while the dialog is still open (matches the "live save"
-  // pattern of every checkbox above).
-  auto persistGlobalUiFont = [this]() {
-    auto *mainWindow = qobject_cast<MainWindow *>(parent());
-    if (!mainWindow || !mainWindow->getSettingsManager()) {
-      return;
-    }
-    mainWindow->m_generalSettings.globalUiFontFamily =
-        ui->globalUiFontFamilyEdit ? ui->globalUiFontFamilyEdit->text().trimmed() : QString();
-    mainWindow->m_generalSettings.globalUiFontPointSize =
-        ui->globalUiFontSizeSpinBox ? ui->globalUiFontSizeSpinBox->value() : 0;
-    mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
-    m_generalSettings = mainWindow->m_generalSettings;
-    MainWindow::applyGlobalUiFont(mainWindow->m_generalSettings);
-  };
-
-  if (ui->browseGlobalUiFontButton && ui->globalUiFontFamilyEdit) {
-    connect(ui->browseGlobalUiFontButton, &QPushButton::clicked, this,
-            [this, persistGlobalUiFont]() {
-              bool ok = false;
-              QFont currentFont = QApplication::font();
-              const QString currentFamily = ui->globalUiFontFamilyEdit->text().trimmed();
-              if (!currentFamily.isEmpty()) {
-                currentFont.setFamily(currentFamily);
-              }
-              if (ui->globalUiFontSizeSpinBox && ui->globalUiFontSizeSpinBox->value() > 0) {
-                currentFont.setPointSize(ui->globalUiFontSizeSpinBox->value());
-              }
-              const QFont chosen =
-                  QFontDialog::getFont(&ok, currentFont, this, tr("Select Application Font"));
-              if (ok) {
-                ui->globalUiFontFamilyEdit->setText(chosen.family());
-                if (ui->globalUiFontSizeSpinBox && chosen.pointSize() > 0) {
-                  ui->globalUiFontSizeSpinBox->setValue(chosen.pointSize());
-                }
-                persistGlobalUiFont();
-              }
-            });
-  }
-  if (ui->globalUiFontFamilyEdit) {
-    connect(ui->globalUiFontFamilyEdit, &QLineEdit::editingFinished, this, persistGlobalUiFont);
-  }
-  if (ui->globalUiFontSizeSpinBox) {
-    connect(ui->globalUiFontSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            [persistGlobalUiFont](int /*value*/) { persistGlobalUiFont(); });
-  }
+  // Global application-font controls (family + size + picker) live in
+  // FontsPanel now; the panel emits changed() and SettingsDialog handles
+  // the live-save mirror in its constructor.
 
   connect(ui->baseColorEdit, &QLineEdit::editingFinished, this, [this]() {
     auto *mainWindow = qobject_cast<MainWindow *>(parent());

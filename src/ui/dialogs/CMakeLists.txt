@@ -5,6 +5,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   collectiontreewidget.cpp
   customfieldsdialog.cpp
   errordialog.cpp
+  fontspanel.cpp
   gamepadcapturecontroller.cpp
   itemartworklinksdialog.cpp
   kartmergedialog.cpp
@@ -31,6 +32,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   collectiontreewidget.h
   customfieldsdialog.h
   errordialog.h
+  fontspanel.h
   gamepadcapturecontroller.h
   itemartworklinksdialog.h
   kartmergedialog.h
@@ -43,6 +45,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   shortcutsdialog.h
   sidebarpanel.h
   statisticsdialog.h
+  fontspanel.ui
   launcherpresetspanel.ui
   settingsdialog.ui
   sidebarpanel.ui
