@@ -63,12 +63,10 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
     auto security = PathUtils::validatePathSecurity(value);
     if (security.isError()) {
       ErrorUtils::logError(
-          ErrorUtils::ErrorContext::warning(
-              ErrorUtils::ErrorCode::InvalidFilePath,
-              QString("Refusing to load insecure %1").arg(fieldName),
-              "SettingsManager::loadGeneralSettings")
-              .withDetails(QString("Value: %1, Reason: %2")
-                               .arg(value, security.error().message)));
+          ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::InvalidFilePath,
+                                            QString("Refusing to load insecure %1").arg(fieldName),
+                                            "SettingsManager::loadGeneralSettings")
+              .withDetails(QString("Value: %1, Reason: %2").arg(value, security.error().message)));
       return QString();
     }
     return value;
@@ -167,6 +165,7 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.listCollectionColumnWidth = s.value("listCollectionColumnWidth", 150).toInt();
   settings.listArtworkColumnWidth = s.value("listArtworkColumnWidth", 32).toInt();
   settings.startupCollection = s.value("startupCollection", QString()).toString();
+  settings.useHomeView = s.value("useHomeView", false).toBool();
 
   // Attract mode
   settings.attractModeEnabled = s.value("attractModeEnabled", false).toBool();
@@ -253,9 +252,9 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
     preset.id = s.value("id").toString();
     preset.name = s.value("name").toString();
     preset.launcherPath = sanitizeLoadedPath(s.value("launcherPath").toString(),
-                                              QString("Launchers[%1].launcherPath").arg(i));
+                                             QString("Launchers[%1].launcherPath").arg(i));
     preset.corePath = sanitizeLoadedPath(s.value("corePath").toString(),
-                                          QString("Launchers[%1].corePath").arg(i));
+                                         QString("Launchers[%1].corePath").arg(i));
     preset.launchParameters = s.value("launchParameters").toString();
     // Drop entries with no id — they can't be referenced and would shadow
     // valid presets if a hand-edit accidentally cleared the field.
@@ -327,6 +326,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.listCollectionColumnWidth = settings.listCollectionColumnWidth;
   m_generalSettings.listArtworkColumnWidth = settings.listArtworkColumnWidth;
   m_generalSettings.startupCollection = settings.startupCollection;
+  m_generalSettings.useHomeView = settings.useHomeView;
 
   // Attract mode
   m_generalSettings.attractModeEnabled = settings.attractModeEnabled;
@@ -433,6 +433,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("listCollectionColumnWidth", m_generalSettings.listCollectionColumnWidth);
   s.setValue("listArtworkColumnWidth", m_generalSettings.listArtworkColumnWidth);
   s.setValue("startupCollection", m_generalSettings.startupCollection);
+  s.setValue("useHomeView", m_generalSettings.useHomeView);
   s.setValue("attractModeEnabled", m_generalSettings.attractModeEnabled);
   s.setValue("attractModeIdleTimeoutSec", m_generalSettings.attractModeIdleTimeoutSec);
   s.setValue("runtimeDetectionEnabled", m_generalSettings.runtimeDetectionEnabled);

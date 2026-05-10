@@ -826,7 +826,13 @@ struct CollectionContext {
   QString collectionTypeFilter;
   bool hideSubcollectionTiles = false;
 
-  [[nodiscard]] bool isValid() const { return currentIndex >= 0; }
+  // Synthetic "Home" view that renders every root collection (parent == -1) as
+  // a tile grid with no host collection of its own. When set, currentIndex is
+  // -1 and the tile list comes from subcollectionOverride. No media items are
+  // queried.
+  bool isRootView = false;
+
+  [[nodiscard]] bool isValid() const { return currentIndex >= 0 || isRootView; }
 };
 
 struct GeneralSettings {
@@ -949,6 +955,12 @@ struct GeneralSettings {
   // root-collection selection. If the named collection no longer exists, falls
   // back to the default behavior.
   QString startupCollection;
+
+  // Use a synthetic "Home" view at startup that shows one tile per root
+  // collection. Takes priority over startupCollection when both are set.
+  // `Back` from any root-level collection returns to the home view instead
+  // of routing to the first root collection.
+  bool useHomeView = false;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Attract mode / autoscroll

@@ -49,6 +49,7 @@ Settings Dialog are saved immediately.
 | `wrapNavigation` | bool | `false` | Wrap selection at grid edges. |
 | `selectItemOnHover` | bool | `false` | Auto-select when the pointer enters a tile. |
 | `startupCollection` | string | empty | Open this collection on launch. Empty = first root collection. |
+| `useHomeView` | bool | `false` | Open a synthetic Home view at startup that shows one tile per root collection. Takes effect when `startupCollection` is empty. `Back` from any root-level collection returns here. See [Shell Collections](Shell-Collections.md#nesting-shells). |
 
 ### Performance & caching
 

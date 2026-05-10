@@ -146,23 +146,25 @@ Library (shell, root)
 ```
 
 A single top-level wrapper shell like `Library` above is more useful
-than it might first appear. Kartend has no built-in "home" view that
-renders every root collection as a tile grid — the tile area always
-shows whichever collection is currently active, and traversal between
-root collections happens through the sidebar / toolbar chrome rather
-than through the tile interface itself. Wrapping every category under
-one root shell gives you that missing home view: the wrapper *becomes*
-the canonical landing surface, with each category showing up as a
-tile you can navigate into and `Back` out of.
+than it might first appear. The tile area always shows whichever
+collection is currently active, so wrapping every category under one
+root shell gives you a tile-based home view: the wrapper *becomes* the
+canonical landing surface, with each category showing up as a tile you
+can navigate into and `Back` out of.
 
 Set the wrapper as your `startupCollection` (Settings → General, or
 INI: `[General] startupCollection=Library`) and Kartend boots straight
 into the home view.
 
-This is a workaround; first-class root traversal is tracked as a
-backlog feature. Until that lands, the wrapper-shell pattern is the
-recommended way to build a tile-based home page across all your
-categories.
+If you'd rather not maintain a wrapper collection at all, the same
+landing experience is available built-in: enable **Settings → General
+→ Use Home View** (`[General] useHomeView=true`). Kartend boots into a
+synthetic tile grid containing one tile per root collection, and `Back`
+from any root-level collection returns there. The wrapper-shell pattern
+remains useful when you want a real collection at the top with its own
+appearance overrides (background, header logo, layout knobs); the
+built-in Home view is preferable when you want zero collection
+bookkeeping.
 
 ## Alias parents and shells
 

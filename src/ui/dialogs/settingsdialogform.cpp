@@ -421,6 +421,7 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->startupCollectionComboBox->setCurrentIndex(idx >= 0 ? idx : 0);
     ui->startupCollectionComboBox->blockSignals(false);
   }
+  SettingsFormBinding::loadInto(ui->useHomeViewCheckBox, m_generalSettings.useHomeView);
   // Note: customFontEdit is now loaded per-collection in loadCollectionFields()
 
   auto setKeyEdit = [](QKeySequenceEdit *edit, int key) {
@@ -601,6 +602,9 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     if (ui->startupCollectionComboBox) {
       mainWindow->m_generalSettings.startupCollection =
           ui->startupCollectionComboBox->currentData().toString();
+    }
+    if (ui->useHomeViewCheckBox) {
+      mainWindow->m_generalSettings.useHomeView = ui->useHomeViewCheckBox->isChecked();
     }
     // Note: customFontFamily is now saved per-collection, not in general
     // settings

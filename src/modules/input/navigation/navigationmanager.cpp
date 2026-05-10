@@ -182,6 +182,11 @@ auto NavigationManager::showCollectionItems(int collectionIndex) -> bool {
     return false;
   }
 
+  // Leaving the synthetic Home view: tile-click on a root collection routes
+  // through here, so clear the flag before the regular collection-load path
+  // re-establishes a real currentCollectionIndex.
+  m_inRootView = false;
+
   // Invalidate cached expanded context when changing collections
   m_cachedExpandedContextIndex = -1;
 

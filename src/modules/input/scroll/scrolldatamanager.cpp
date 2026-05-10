@@ -47,7 +47,12 @@ void ScrollDataManager::initializeSubcollections(const CollectionContext &contex
                                                  const CollectionHierarchyCache *hierarchyCache) {
   m_subcollections.clear();
 
-  if (!collections || context.currentIndex < 0) {
+  if (!collections) {
+    return;
+  }
+  // The synthetic Home view has no host collection (currentIndex == -1) and
+  // populates its tile list entirely from subcollectionOverride.
+  if (context.currentIndex < 0 && !context.isRootView) {
     return;
   }
 

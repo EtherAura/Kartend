@@ -1929,21 +1929,31 @@
                    </widget>
                   </item>
                   <item row="1" column="0">
+                   <widget class="QLabel" name="useHomeViewLabel">
+                    <property name="text"><string>Use Home View:</string></property>
+                   </widget>
+                  </item>
+                  <item row="1" column="1">
+                   <widget class="QCheckBox" name="useHomeViewCheckBox">
+                    <property name="toolTip"><string>Open a synthetic Home view at startup that shows one tile per root collection. Overrides Startup Collection when no specific collection is selected. Back from any root-level collection returns here.</string></property>
+                   </widget>
+                  </item>
+                  <item row="2" column="0">
                    <widget class="QLabel" name="startupVideoEnabledLabel">
                     <property name="text"><string>Startup Video:</string></property>
                    </widget>
                   </item>
-                  <item row="1" column="1">
+                  <item row="2" column="1">
                    <widget class="QCheckBox" name="startupVideoEnabledCheckBox">
                     <property name="toolTip"><string>Play a configurable video on application launch. Skippable via any key or click.</string></property>
                    </widget>
                   </item>
-                  <item row="2" column="0">
+                  <item row="3" column="0">
                    <widget class="QLabel" name="startupVideoPathLabel">
                     <property name="text"><string>Video File:</string></property>
                    </widget>
                   </item>
-                  <item row="2" column="1">
+                  <item row="3" column="1">
                    <layout class="QHBoxLayout" name="startupVideoPathLayout">
                     <item>
                      <widget class="QLineEdit" name="startupVideoPathLineEdit">

@@ -103,8 +103,18 @@ auto NavigationManager::handleNavigationFallback() -> void {
   m_stackManager->clear(); // Ensure depth is reset
   int previousIndex = (*m_currentCollectionIndex);
 
-  const int fallbackIndex = NavigationHelpers::chooseFallbackCollectionIndex(
-      (*m_currentCollectionIndex), *m_collections);
+  // Home-view escape: if the user opted into the synthetic root view, an
+  // empty stack from a parent==-1 collection routes back to home rather than
+  // re-entering the first root collection.
+  if (m_generalSettings && m_generalSettings->useHomeView && previousIndex >= 0 &&
+      previousIndex < (*m_collections).size() &&
+      (*m_collections)[previousIndex].parentCollectionIndex == -1) {
+    loadRootView();
+    return;
+  }
+
+  const int fallbackIndex =
+      NavigationHelpers::chooseFallbackCollectionIndex((*m_currentCollectionIndex), *m_collections);
 
   if (fallbackIndex >= 0) {
     bool shared = areItemsShared(previousIndex, fallbackIndex);
@@ -127,6 +137,11 @@ auto NavigationManager::handleNavigationFallback() -> void {
 // stray timer callbacks
 void NavigationManager::goBackToCollections() {
   if (!parent()) {
+    return;
+  }
+  // Synthetic Home view is the top of the navigation hierarchy — Back is a
+  // no-op here so the user isn't kicked back into a single root collection.
+  if (m_inRootView) {
     return;
   }
   if ((parent()) && (m_interactionManager)) {

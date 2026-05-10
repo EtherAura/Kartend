@@ -38,6 +38,36 @@ target_link_libraries(test_gridlayoutcalculator
 )
 add_test(NAME GridLayoutCalculator COMMAND test_gridlayoutcalculator)
 
+# ScrollDataManager tests (synthetic Home view tile population — Kartend-83iu)
+add_executable(test_scrolldatamanager
+  modules/scroll/test_scrolldatamanager.cpp
+  ${SRC_DIR}/modules/input/scroll/scrolldatamanager.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/view/artworkutils.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
+  ${SRC_DIR}/utils/app/loggingcategories.cpp
+)
+target_include_directories(test_scrolldatamanager PRIVATE
+  ${SRC_DIR}/modules/input/scroll
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_scrolldatamanager
+  Qt6::Core
+  Qt6::Concurrent
+  Qt6::Gui
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME ScrollDataManager COMMAND test_scrolldatamanager)
+
 # ViewportHelpers tests (small-movement threshold, force-immediate combine)
 add_executable(test_viewporthelpers
   modules/viewport/test_viewporthelpers.cpp

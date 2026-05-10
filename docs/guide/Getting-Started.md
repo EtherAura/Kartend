@@ -169,6 +169,28 @@ A collection can also have **Linked Parents** — alias references that
 make it appear under multiple parents simultaneously without copying it.
 See [Collections](Collections.md#linked-parents).
 
+### A tile-grid home across all your collections
+
+By default, Kartend always opens *some* collection on launch — there is
+no built-in landing page that shows every root collection as a tile
+grid. Two ways to get one:
+
+- **Built-in home view** — set **Settings → General → Use home view**
+  (INI: `[General] useHomeView=true`). Kartend boots into a synthetic
+  tile grid containing one tile per root collection. `Enter` opens a
+  collection; `Escape` from any root-level collection returns to the
+  home view.
+- **Wrapper shell collection** — create a single shell at the root
+  named e.g. `Library` and put every category under it. Set it as your
+  startup collection (`[General] startupCollection=Library`). The
+  wrapper *becomes* the home view. See
+  [Shell Collections](Shell-Collections.md) for layout examples.
+
+Both produce a tile grid you can navigate into and `Back` out of. The
+built-in home view requires no config changes to your collections; the
+wrapper shell gives you per-collection appearance overrides on the home
+page itself (background, header logo, layout knobs).
+
 ## 6. Tune the look
 
 Per-collection appearance — tile size, spacing, fonts, colors,

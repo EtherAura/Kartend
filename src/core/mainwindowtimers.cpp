@@ -104,9 +104,20 @@ void MainWindow::setupInitialTimersWithCollections() {
   // Defer collection loading until after the main window is fully shown -
   // allows Qt to complete layout calculations before populating the grid
   QTimer::singleShot(0, this, [this]() {
+    // Synthetic home view takes priority when explicitly requested AND the
+    // user hasn't pinned a specific startup collection. A specific collection
+    // wins so a CLI override (--collection) or per-launch override still works.
+    const QString startupName = m_generalSettings.startupCollection.trimmed();
+    if (m_generalSettings.useHomeView && startupName.isEmpty()) {
+      if (getNavigationManager()) {
+        m_suppressStartupScanOverlays = true;
+        getNavigationManager()->loadRootView();
+      }
+      return;
+    }
+
     int rootIndex = -1;
     // Honor the configured startup collection, if set and still present.
-    const QString startupName = m_generalSettings.startupCollection.trimmed();
     if (!startupName.isEmpty()) {
       for (int i = 0; i < m_collections.size(); ++i) {
         if (m_collections[i].name == startupName) {

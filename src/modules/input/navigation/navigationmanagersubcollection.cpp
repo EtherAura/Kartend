@@ -1,6 +1,8 @@
 // Subcollection / virtual-folder navigation methods for NavigationManager.
 // Extracted from navigationmanager.cpp during LOC-reduction refactor.
 // These remain NavigationManager members; pure translation-unit split.
+#include "detailspanemanager.h"
+#include "emptystatewidget.h"
 #include "interactionmanager.h"
 #include "navigationhelpers.h"
 #include "navigationmanager.h"
@@ -11,9 +13,11 @@
 #include "uiconstants.h"
 
 #include <QDateTime>
+#include <QLabel>
 #include <QLineEdit>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QStackedWidget>
 #include <QString>
 #include <QTimer>
 
@@ -218,6 +222,92 @@ void NavigationManager::loadCurrentAndSubcollections() {
       m_scrollManager->applyFilter(currentSearchText);
     }
   });
+}
+
+// Renders the synthetic "Home" view: one tile per root collection
+// (parentCollectionIndex == -1), no host collection, no DB query, no items.
+// See Kartend-83iu.
+void NavigationManager::loadRootView() {
+  if (!m_collections || !m_currentCollectionIndex || !m_scrollManager) {
+    return;
+  }
+
+  if (m_interactionManager) {
+    m_interactionManager->stopRepeat();
+    if (*m_currentCollectionIndex >= 0) {
+      m_interactionManager->cancelPendingSelectionRestore();
+    }
+  }
+  persistCurrentSelection();
+  performNavigationStackCleanup();
+  m_stackManager->clear();
+  m_scrollManager->cleanup();
+
+  *m_currentCollectionIndex = -1;
+  m_inRootView = true;
+  m_isInitialStartupLoad = false;
+  m_cachedExpandedContextIndex = -1;
+
+  QList<int> rootIndices;
+  for (int i = 0; i < (*m_collections).size(); ++i) {
+    if ((*m_collections)[i].parentCollectionIndex == -1) {
+      rootIndices.append(i);
+    }
+  }
+
+  CollectionContext context;
+  context.isRootView = true;
+  context.currentIndex = -1;
+  context.hasSubcollectionOverride = true;
+  context.subcollectionOverride = rootIndices;
+  context.suppressVirtualFolders = true;
+  if (m_generalSettings) {
+    context.sortMode = m_generalSettings->sortMode;
+    context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
+  }
+
+  m_hasItemsQueryContext = true;
+  m_itemsQueryContext = context;
+  m_itemsQueryFilter.clear();
+
+  if (m_searchBar) {
+    m_searchBar->blockSignals(true);
+    m_searchBar->clear();
+    m_searchBar->blockSignals(false);
+  }
+
+  if (m_stackedWidget && m_itemsPage) {
+    m_stackedWidget->setCurrentWidget(m_itemsPage);
+  }
+
+  if (auto *titleLabel =
+          m_itemsPage ? m_itemsPage->findChild<QLabel *>("itemsTitleLabel") : nullptr) {
+    titleLabel->setText(tr("Home"));
+  }
+  if (auto *subfolderLabel =
+          m_itemsPage ? m_itemsPage->findChild<QLabel *>("subfolderPathLabel") : nullptr) {
+    subfolderLabel->setVisible(false);
+  }
+
+  // No items, only tiles. setupVirtualScrolling with totalCount=0 routes the
+  // ScrollManager through the tile-only render path; the override list in the
+  // context populates the visible tiles.
+  m_scrollManager->setupVirtualScrolling(0, context);
+
+  if (rootIndices.isEmpty() && m_loadingLabel) {
+    m_loadingLabel->showMessage(tr("No collections yet"),
+                                tr("Add a collection in Settings to populate the home view."),
+                                QStringLiteral("📭"));
+  }
+
+  if (m_detailsPaneManager) {
+    m_detailsPaneManager->applySidebarStateForCollection(-1);
+  }
+
+  if (m_interactionManager) {
+    m_interactionManager->setNavigationInProgress(false);
+  }
+  if (m_refreshTitleCounts) m_refreshTitleCounts();
 }
 
 // Loads the aggregated view across all collections and reapplies any active

@@ -90,6 +90,11 @@ private slots:
   void circularRef_unrelatedSubtree_isAllowed();
   void circularRef_topLevelReparent_isAllowed();
   void circularRef_existingDataCycle_isBounded();
+
+  // CollectionContext::isValid + synthetic-root mode (Kartend-83iu)
+  void context_isValid_defaultIsInvalid();
+  void context_isValid_realCollectionIsValid();
+  void context_isValid_rootViewWithNoIndexIsValid();
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -719,6 +724,28 @@ void TestCollectionUtils::circularRef_existingDataCycle_isBounded() {
   // 1↔2 cycle while walking up. Must detect and return true within bounded
   // time (test would hang otherwise).
   QVERIFY(CollectionUtils::wouldCreateCircularReference(0, 1, cs));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CollectionContext::isValid + synthetic root-view mode (Kartend-83iu)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestCollectionUtils::context_isValid_defaultIsInvalid() {
+  CollectionContext ctx;
+  QVERIFY(!ctx.isValid());
+}
+
+void TestCollectionUtils::context_isValid_realCollectionIsValid() {
+  CollectionContext ctx;
+  ctx.currentIndex = 0;
+  QVERIFY(ctx.isValid());
+}
+
+void TestCollectionUtils::context_isValid_rootViewWithNoIndexIsValid() {
+  CollectionContext ctx;
+  ctx.currentIndex = -1;
+  ctx.isRootView = true;
+  QVERIFY(ctx.isValid());
 }
 
 QTEST_APPLESS_MAIN(TestCollectionUtils)
