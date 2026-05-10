@@ -34,7 +34,7 @@ Q_LOGGING_CATEGORY(lcSettingsManager, "kartend.settingsmanager")
 
 // Construct settings manager and initialize QSettings.
 SettingsManager::SettingsManager(const ApplicationContext *ctx, QObject *parent)
-    : QObject(parent), m_ctx(ctx) {
+    : ISettingsManager(parent), m_ctx(ctx) {
   QString configPath = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
   QDir configDir(configPath);
   if (!configDir.exists() && !configDir.mkpath(".")) {
