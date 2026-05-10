@@ -46,33 +46,6 @@
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
-namespace {
-
-// Dirty-check helpers: return true when @p widget exists and its current
-// value differs from @p orig. Each helper bakes in the widget's "current
-// value" accessor so callers don't have to spell it out. Reduces the
-// settingsdialog check*Changes() functions from OR-chains of
-// `(ui->X && ui->X->method() != originalConfig.field)` cargo to
-// readable per-field checks.
-
-inline bool lineChanged(const QLineEdit *w, const QString &orig) {
-  return w && w->text() != orig;
-}
-inline bool lineTrimmedChanged(const QLineEdit *w, const QString &orig) {
-  return w && w->text().trimmed() != orig;
-}
-inline bool checkboxChanged(const QCheckBox *w, bool orig) {
-  return w && w->isChecked() != orig;
-}
-inline bool spinIntChanged(const QSpinBox *w, int orig) {
-  return w && w->value() != orig;
-}
-template <typename EnumT> bool comboEnumChanged(const QComboBox *w, EnumT orig) {
-  return w && w->currentIndex() != static_cast<int>(orig);
-}
-
-} // namespace
-
 auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   if (currentCollectionIndex < 0 || currentCollectionIndex >= m_workingCollections.size()) {
     return {};
