@@ -42,6 +42,7 @@
 #include "settingsformbinding.h"
 #include "settingsmanager.h"
 #include "splashpanel.h"
+#include "toolbarpanel.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 #include "videothumbnailextractor.h"
@@ -439,43 +440,8 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->artworkCycleModifierComboBox->setCurrentIndex(comboIdx >= 0 ? comboIdx : 0);
   }
 
-  // load toolbar customization controls.
-  auto setToolbarCheck = [](QCheckBox *box, bool value) {
-    if (!box) {
-      return;
-    }
-    QSignalBlocker blocker(box);
-    box->setChecked(value);
-  };
-  auto setToolbarText = [](QLineEdit *edit, const QString &value) {
-    if (!edit) {
-      return;
-    }
-    QSignalBlocker blocker(edit);
-    edit->setText(value);
-  };
-  setToolbarCheck(ui->toolbarGridViewVisibleCheckBox, m_generalSettings.toolbarShowGridViewButton);
-  setToolbarCheck(ui->toolbarListViewVisibleCheckBox, m_generalSettings.toolbarShowListViewButton);
-  setToolbarCheck(ui->toolbarCoverFlowViewVisibleCheckBox,
-                  m_generalSettings.toolbarShowCoverFlowViewButton);
-  setToolbarCheck(ui->toolbarHorizontalViewVisibleCheckBox,
-                  m_generalSettings.toolbarShowHorizontalViewButton);
-  setToolbarCheck(ui->toolbarHideSubcollectionsVisibleCheckBox,
-                  m_generalSettings.toolbarShowHideSubcollectionsButton);
-  setToolbarCheck(ui->toolbarTypeFilterVisibleCheckBox, m_generalSettings.toolbarShowTypeFilter);
-  setToolbarCheck(ui->toolbarTitleFilterVisibleCheckBox, m_generalSettings.toolbarShowTitleFilter);
-  setToolbarCheck(ui->toolbarSearchModeVisibleCheckBox,
-                  m_generalSettings.toolbarShowSearchModeButton);
-  setToolbarCheck(ui->toolbarSearchBarVisibleCheckBox, m_generalSettings.toolbarShowSearchBar);
-  setToolbarText(ui->toolbarGridViewTextEdit, m_generalSettings.toolbarGridViewButtonText);
-  setToolbarText(ui->toolbarListViewTextEdit, m_generalSettings.toolbarListViewButtonText);
-  setToolbarText(ui->toolbarCoverFlowViewTextEdit,
-                 m_generalSettings.toolbarCoverFlowViewButtonText);
-  setToolbarText(ui->toolbarHorizontalViewTextEdit,
-                 m_generalSettings.toolbarHorizontalViewButtonText);
-  setToolbarText(ui->toolbarHideSubcollectionsTextEdit,
-                 m_generalSettings.toolbarHideSubcollectionsButtonText);
-  setToolbarText(ui->toolbarTitleFilterTextEdit, m_generalSettings.toolbarTitleFilterText);
+  // Toolbar customization fields owned by ToolbarPanel.
+  ui->toolbarPanel->refresh();
 
   // Store original general settings for change detection
   m_originalGeneralSettings = m_generalSettings;
@@ -661,44 +627,34 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     // any preset add/edit/remove the user just performed.
     mainWindow->m_generalSettings.launcherPresets = m_generalSettings.launcherPresets;
 
-    // pull customizable-toolbar fields off the dialog controls.
-    SettingsFormBinding::saveFrom(ui->toolbarGridViewVisibleCheckBox,
-                                  mainWindow->m_generalSettings.toolbarShowGridViewButton);
-    SettingsFormBinding::saveFrom(ui->toolbarListViewVisibleCheckBox,
-                                  mainWindow->m_generalSettings.toolbarShowListViewButton);
-    SettingsFormBinding::saveFrom(ui->toolbarCoverFlowViewVisibleCheckBox,
-                                  mainWindow->m_generalSettings.toolbarShowCoverFlowViewButton);
-    SettingsFormBinding::saveFrom(ui->toolbarHorizontalViewVisibleCheckBox,
-                                  mainWindow->m_generalSettings.toolbarShowHorizontalViewButton);
-    SettingsFormBinding::saveFrom(
-        ui->toolbarHideSubcollectionsVisibleCheckBox,
-        mainWindow->m_generalSettings.toolbarShowHideSubcollectionsButton);
-    SettingsFormBinding::saveFrom(ui->toolbarTypeFilterVisibleCheckBox,
-                                  mainWindow->m_generalSettings.toolbarShowTypeFilter);
-    SettingsFormBinding::saveFrom(ui->toolbarTitleFilterVisibleCheckBox,
-                                  mainWindow->m_generalSettings.toolbarShowTitleFilter);
-    SettingsFormBinding::saveFrom(ui->toolbarSearchModeVisibleCheckBox,
-                                  mainWindow->m_generalSettings.toolbarShowSearchModeButton);
-    SettingsFormBinding::saveFrom(ui->toolbarSearchBarVisibleCheckBox,
-                                  mainWindow->m_generalSettings.toolbarShowSearchBar);
-    SettingsFormBinding::saveFrom(ui->toolbarGridViewTextEdit,
-                                  mainWindow->m_generalSettings.toolbarGridViewButtonText,
-                                  /*trim=*/false);
-    SettingsFormBinding::saveFrom(ui->toolbarListViewTextEdit,
-                                  mainWindow->m_generalSettings.toolbarListViewButtonText,
-                                  /*trim=*/false);
-    SettingsFormBinding::saveFrom(ui->toolbarCoverFlowViewTextEdit,
-                                  mainWindow->m_generalSettings.toolbarCoverFlowViewButtonText,
-                                  /*trim=*/false);
-    SettingsFormBinding::saveFrom(ui->toolbarHorizontalViewTextEdit,
-                                  mainWindow->m_generalSettings.toolbarHorizontalViewButtonText,
-                                  /*trim=*/false);
-    SettingsFormBinding::saveFrom(ui->toolbarHideSubcollectionsTextEdit,
-                                  mainWindow->m_generalSettings.toolbarHideSubcollectionsButtonText,
-                                  /*trim=*/false);
-    SettingsFormBinding::saveFrom(ui->toolbarTitleFilterTextEdit,
-                                  mainWindow->m_generalSettings.toolbarTitleFilterText,
-                                  /*trim=*/false);
+    // Toolbar customization fields owned by ToolbarPanel — already in
+    // m_generalSettings via writeBack(); copy to mainWindow's struct.
+    mainWindow->m_generalSettings.toolbarShowGridViewButton =
+        m_generalSettings.toolbarShowGridViewButton;
+    mainWindow->m_generalSettings.toolbarShowListViewButton =
+        m_generalSettings.toolbarShowListViewButton;
+    mainWindow->m_generalSettings.toolbarShowCoverFlowViewButton =
+        m_generalSettings.toolbarShowCoverFlowViewButton;
+    mainWindow->m_generalSettings.toolbarShowHorizontalViewButton =
+        m_generalSettings.toolbarShowHorizontalViewButton;
+    mainWindow->m_generalSettings.toolbarShowHideSubcollectionsButton =
+        m_generalSettings.toolbarShowHideSubcollectionsButton;
+    mainWindow->m_generalSettings.toolbarShowTypeFilter = m_generalSettings.toolbarShowTypeFilter;
+    mainWindow->m_generalSettings.toolbarShowTitleFilter = m_generalSettings.toolbarShowTitleFilter;
+    mainWindow->m_generalSettings.toolbarShowSearchModeButton =
+        m_generalSettings.toolbarShowSearchModeButton;
+    mainWindow->m_generalSettings.toolbarShowSearchBar = m_generalSettings.toolbarShowSearchBar;
+    mainWindow->m_generalSettings.toolbarGridViewButtonText =
+        m_generalSettings.toolbarGridViewButtonText;
+    mainWindow->m_generalSettings.toolbarListViewButtonText =
+        m_generalSettings.toolbarListViewButtonText;
+    mainWindow->m_generalSettings.toolbarCoverFlowViewButtonText =
+        m_generalSettings.toolbarCoverFlowViewButtonText;
+    mainWindow->m_generalSettings.toolbarHorizontalViewButtonText =
+        m_generalSettings.toolbarHorizontalViewButtonText;
+    mainWindow->m_generalSettings.toolbarHideSubcollectionsButtonText =
+        m_generalSettings.toolbarHideSubcollectionsButtonText;
+    mainWindow->m_generalSettings.toolbarTitleFilterText = m_generalSettings.toolbarTitleFilterText;
 
     mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
     m_generalSettings = mainWindow->m_generalSettings;

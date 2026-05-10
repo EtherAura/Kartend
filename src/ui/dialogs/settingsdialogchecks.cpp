@@ -622,75 +622,35 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
           m_originalGeneralSettings.attractModeAdvanceSelectionRandom) {
     return true;
   }
-  // customizable toolbar fields.
-  if (ui->toolbarGridViewVisibleCheckBox &&
-      ui->toolbarGridViewVisibleCheckBox->isChecked() !=
-          m_originalGeneralSettings.toolbarShowGridViewButton) {
-    return true;
-  }
-  if (ui->toolbarListViewVisibleCheckBox &&
-      ui->toolbarListViewVisibleCheckBox->isChecked() !=
-          m_originalGeneralSettings.toolbarShowListViewButton) {
-    return true;
-  }
-  if (ui->toolbarCoverFlowViewVisibleCheckBox &&
-      ui->toolbarCoverFlowViewVisibleCheckBox->isChecked() !=
-          m_originalGeneralSettings.toolbarShowCoverFlowViewButton) {
-    return true;
-  }
-  if (ui->toolbarHorizontalViewVisibleCheckBox &&
-      ui->toolbarHorizontalViewVisibleCheckBox->isChecked() !=
-          m_originalGeneralSettings.toolbarShowHorizontalViewButton) {
-    return true;
-  }
-  if (ui->toolbarHideSubcollectionsVisibleCheckBox &&
-      ui->toolbarHideSubcollectionsVisibleCheckBox->isChecked() !=
-          m_originalGeneralSettings.toolbarShowHideSubcollectionsButton) {
-    return true;
-  }
-  if (ui->toolbarTypeFilterVisibleCheckBox && ui->toolbarTypeFilterVisibleCheckBox->isChecked() !=
-                                                  m_originalGeneralSettings.toolbarShowTypeFilter) {
-    return true;
-  }
-  if (ui->toolbarTitleFilterVisibleCheckBox &&
-      ui->toolbarTitleFilterVisibleCheckBox->isChecked() !=
-          m_originalGeneralSettings.toolbarShowTitleFilter) {
-    return true;
-  }
-  if (ui->toolbarSearchModeVisibleCheckBox &&
-      ui->toolbarSearchModeVisibleCheckBox->isChecked() !=
-          m_originalGeneralSettings.toolbarShowSearchModeButton) {
-    return true;
-  }
-  if (ui->toolbarSearchBarVisibleCheckBox && ui->toolbarSearchBarVisibleCheckBox->isChecked() !=
-                                                 m_originalGeneralSettings.toolbarShowSearchBar) {
-    return true;
-  }
-  if (ui->toolbarGridViewTextEdit &&
-      ui->toolbarGridViewTextEdit->text() != m_originalGeneralSettings.toolbarGridViewButtonText) {
-    return true;
-  }
-  if (ui->toolbarListViewTextEdit &&
-      ui->toolbarListViewTextEdit->text() != m_originalGeneralSettings.toolbarListViewButtonText) {
-    return true;
-  }
-  if (ui->toolbarCoverFlowViewTextEdit &&
-      ui->toolbarCoverFlowViewTextEdit->text() !=
-          m_originalGeneralSettings.toolbarCoverFlowViewButtonText) {
-    return true;
-  }
-  if (ui->toolbarHorizontalViewTextEdit &&
-      ui->toolbarHorizontalViewTextEdit->text() !=
-          m_originalGeneralSettings.toolbarHorizontalViewButtonText) {
-    return true;
-  }
-  if (ui->toolbarHideSubcollectionsTextEdit &&
-      ui->toolbarHideSubcollectionsTextEdit->text() !=
-          m_originalGeneralSettings.toolbarHideSubcollectionsButtonText) {
-    return true;
-  }
-  if (ui->toolbarTitleFilterTextEdit &&
-      ui->toolbarTitleFilterTextEdit->text() != m_originalGeneralSettings.toolbarTitleFilterText) {
+  // Customizable toolbar fields owned by ToolbarPanel — struct compare.
+  if (m_generalSettings.toolbarShowGridViewButton !=
+          m_originalGeneralSettings.toolbarShowGridViewButton ||
+      m_generalSettings.toolbarShowListViewButton !=
+          m_originalGeneralSettings.toolbarShowListViewButton ||
+      m_generalSettings.toolbarShowCoverFlowViewButton !=
+          m_originalGeneralSettings.toolbarShowCoverFlowViewButton ||
+      m_generalSettings.toolbarShowHorizontalViewButton !=
+          m_originalGeneralSettings.toolbarShowHorizontalViewButton ||
+      m_generalSettings.toolbarShowHideSubcollectionsButton !=
+          m_originalGeneralSettings.toolbarShowHideSubcollectionsButton ||
+      m_generalSettings.toolbarShowTypeFilter != m_originalGeneralSettings.toolbarShowTypeFilter ||
+      m_generalSettings.toolbarShowTitleFilter !=
+          m_originalGeneralSettings.toolbarShowTitleFilter ||
+      m_generalSettings.toolbarShowSearchModeButton !=
+          m_originalGeneralSettings.toolbarShowSearchModeButton ||
+      m_generalSettings.toolbarShowSearchBar != m_originalGeneralSettings.toolbarShowSearchBar ||
+      m_generalSettings.toolbarGridViewButtonText !=
+          m_originalGeneralSettings.toolbarGridViewButtonText ||
+      m_generalSettings.toolbarListViewButtonText !=
+          m_originalGeneralSettings.toolbarListViewButtonText ||
+      m_generalSettings.toolbarCoverFlowViewButtonText !=
+          m_originalGeneralSettings.toolbarCoverFlowViewButtonText ||
+      m_generalSettings.toolbarHorizontalViewButtonText !=
+          m_originalGeneralSettings.toolbarHorizontalViewButtonText ||
+      m_generalSettings.toolbarHideSubcollectionsButtonText !=
+          m_originalGeneralSettings.toolbarHideSubcollectionsButtonText ||
+      m_generalSettings.toolbarTitleFilterText !=
+          m_originalGeneralSettings.toolbarTitleFilterText) {
     return true;
   }
   // artwork-cycle modifier dropdown.

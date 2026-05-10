@@ -545,22 +545,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
             &SettingsDialog::checkForChanges);
   }
 
-  // customizable toolbar fields — every change marks the dialog
-  // dirty so the user gets the standard Save / Discard / Cancel prompt.
-  for (auto *box : {ui->toolbarGridViewVisibleCheckBox, ui->toolbarListViewVisibleCheckBox,
-                    ui->toolbarHideSubcollectionsVisibleCheckBox,
-                    ui->toolbarTypeFilterVisibleCheckBox, ui->toolbarTitleFilterVisibleCheckBox,
-                    ui->toolbarSearchModeVisibleCheckBox, ui->toolbarSearchBarVisibleCheckBox}) {
-    if (box) {
-      connect(box, &QCheckBox::toggled, this, &SettingsDialog::checkForChanges);
-    }
-  }
-  for (auto *edit : {ui->toolbarGridViewTextEdit, ui->toolbarListViewTextEdit,
-                     ui->toolbarHideSubcollectionsTextEdit, ui->toolbarTitleFilterTextEdit}) {
-    if (edit) {
-      connect(edit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
-    }
-  }
+  // Toolbar-customization connections owned by ToolbarPanel.
 
   // configuration backup — Export saves the live config to a
   // named .cfg in the Kartend config directory; the Load combo lists every

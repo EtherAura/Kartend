@@ -40,6 +40,7 @@
 #include "settingsmanager.h"
 #include "sidebarpanel.h"
 #include "splashpanel.h"
+#include "toolbarpanel.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
@@ -112,6 +113,11 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // saveGeneralSettingsFromUI like the other deferred general fields.
   ui->attractPanel->setSettings(&m_generalSettings);
   connect(ui->attractPanel, &AttractPanel::changed, this, &SettingsDialog::checkForChanges);
+
+  // Toolbar (items-page button visibility + text overrides) panel: same
+  // deferred-save shape as AttractPanel.
+  ui->toolbarPanel->setSettings(&m_generalSettings);
+  connect(ui->toolbarPanel, &ToolbarPanel::changed, this, &SettingsDialog::checkForChanges);
 
   collectionTreeWidget = ui->collectionTreeWidget;
 
