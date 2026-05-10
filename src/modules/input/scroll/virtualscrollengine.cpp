@@ -156,12 +156,14 @@ void VirtualScrollEngine::removeUnneededWidgets(const QSet<int> &needed) {
 }
 
 void VirtualScrollEngine::updateArtworkIfAllowed() {
-  if (!QApplication::closingDown() && m_owner->m_artworkManager) {
-    const bool suppressArtwork = m_owner->m_state && m_owner->m_state->artwork().suppressArtwork;
-    const bool allowDuringSelection =
-        m_owner->m_state && m_owner->m_state->artwork().allowDuringSelection;
+  ArtworkManager *art = m_owner->m_ctx ? m_owner->m_ctx->artworkManager() : nullptr;
+  InteractionStateHolder *state =
+      m_owner->m_ctx ? m_owner->m_ctx->interactionState() : nullptr;
+  if (!QApplication::closingDown() && art) {
+    const bool suppressArtwork = state && state->artwork().suppressArtwork;
+    const bool allowDuringSelection = state && state->artwork().allowDuringSelection;
     if (!suppressArtwork || allowDuringSelection) {
-      m_owner->m_artworkManager->updateViewportArtwork();
+      art->updateViewportArtwork();
     }
   }
 }
@@ -247,8 +249,8 @@ void VirtualScrollEngine::handleLayoutChange() {
 
   // Clear user scroll state after layout change - scroll position changes
   // during resize should not block subsequent programmatic centering
-  if (m_owner->m_state) {
-    m_owner->m_state->scroll().userScrollActive = false;
+  if (auto *state = m_owner->m_ctx ? m_owner->m_ctx->interactionState() : nullptr) {
+    state->scroll().userScrollActive = false;
   }
 }
 
@@ -503,7 +505,8 @@ void VirtualScrollEngine::ensureWidgetForIndex(int visualIndex) {
 }
 
 void VirtualScrollEngine::reconfigureArtworkForActiveWidgets() {
-  if (!m_owner->m_widgetFactory || !m_owner->m_artworkManager) {
+  ArtworkManager *art = m_owner->m_ctx ? m_owner->m_ctx->artworkManager() : nullptr;
+  if (!m_owner->m_widgetFactory || !art) {
     return;
   }
 
@@ -519,7 +522,7 @@ void VirtualScrollEngine::reconfigureArtworkForActiveWidgets() {
       continue;
     }
     // Skip if widget already has artwork loaded or pending
-    if (m_owner->m_artworkManager->hasArtworkForWidget(widget)) {
+    if (art->hasArtworkForWidget(widget)) {
       ++skipped;
       continue;
     }
@@ -536,7 +539,7 @@ void VirtualScrollEngine::reconfigureArtworkForActiveWidgets() {
   qCDebug(lcPerfTrace) << "reconfigureArtworkForActiveWidgets: reconfigured=" << reconfigured
                        << "skipped=" << skipped;
   // Trigger viewport update to load the newly-configured artwork
-  m_owner->m_artworkManager->scheduleViewportUpdate();
+  art->scheduleViewportUpdate();
 }
 
 // Returns the virtual folder path for a visual index, or empty string if not a
@@ -560,8 +563,9 @@ auto VirtualScrollEngine::filePathForVisualIndex(int visualIndex) const -> QStri
     return {};
   }
 
-  if (!m_owner->m_databaseManager) {
+  DatabaseManager *db = m_owner->m_ctx ? m_owner->m_ctx->databaseManager() : nullptr;
+  if (!db) {
     return {};
   }
-  return m_owner->m_databaseManager->resolveFilePath(rawEntry, m_owner->m_context);
+  return db->resolveFilePath(rawEntry, m_owner->m_context);
 }

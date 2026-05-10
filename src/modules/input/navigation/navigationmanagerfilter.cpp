@@ -106,7 +106,7 @@ auto NavigationManager::collectionHasDescendantWithMedia(int parentIndex) const 
 
 // Forces a full rescan of the collection by clearing cached data first
 void NavigationManager::forceRescanCollection(int collectionIndex) {
-  if (!m_collections || !m_databaseManager || collectionIndex < 0 ||
+  if (!m_collections || !databaseMgr() || collectionIndex < 0 ||
       collectionIndex >= (*m_collections).size()) {
     return;
   }
@@ -132,7 +132,7 @@ void NavigationManager::forceRescanCollection(int collectionIndex) {
 
   // Connect one-shot handler to proceed after cache invalidation completes
   m_cacheInvalidatedConnection =
-      QObject::connect(m_databaseManager, &DatabaseManager::cacheInvalidated, this,
+      QObject::connect(databaseMgr(), &DatabaseManager::cacheInvalidated, this,
                        [this](const QString & /*invalidatedUuid*/) {
                          // Disconnect immediately to ensure one-shot behavior
                          QObject::disconnect(m_cacheInvalidatedConnection);
@@ -154,7 +154,7 @@ void NavigationManager::forceRescanCollection(int collectionIndex) {
                        });
 
   // Initiate async cache invalidation
-  m_databaseManager->invalidateCollectionCache(uuid);
+  databaseMgr()->invalidateCollectionCache(uuid);
 }
 
 // Safely reloads the specified collection and recenters the horizontal
@@ -182,7 +182,7 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
       qCDebug(lcSearchDiag) << "safeReloadCollection firing idx=" << pendingIndex;
       qCWarning(lcScanFlow) << "safeReloadCollection timer FIRING idx=" << pendingIndex;
 
-      if (!m_collections || !m_databaseManager || !m_currentCollectionIndex || pendingIndex < 0 ||
+      if (!m_collections || !databaseMgr() || !m_currentCollectionIndex || pendingIndex < 0 ||
           pendingIndex >= (*m_collections).size()) {
         return;
       }
@@ -230,8 +230,8 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
 
       // Delay centering until items are loaded and layout is calculated.
       QTimer::singleShot(UIConstants::Timing::VIEWPORT_DELAY_MS, this, [this]() {
-        if (m_scrollManager && m_currentCollectionIndex && m_collections) {
-          m_scrollManager->centerHorizontalScrollbar((*m_currentCollectionIndex), (*m_collections));
+        if (scrollMgr() && m_currentCollectionIndex && m_collections) {
+          scrollMgr()->centerHorizontalScrollbar((*m_currentCollectionIndex), (*m_collections));
         }
       });
     });
@@ -244,22 +244,22 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
     persistCurrentSelection();
     // We're about to rebuild the items view. Clear any stale selection-restore
     // suppression so automatic restore can re-apply the selection rectangle.
-    if (m_interactionManager) {
-      m_interactionManager->resetSelectionRestoreState();
+    if (interactionMgr()) {
+      interactionMgr()->resetSelectionRestoreState();
     }
 
-    if (m_artworkManager) {
-      if (auto *coord = m_artworkManager->getTimerCoordinator()) {
+    if (artworkMgr()) {
+      if (auto *coord = artworkMgr()->getTimerCoordinator()) {
         coord->stopAllTimers();
       }
     }
 
-    if (m_scrollManager) {
-      m_scrollManager->cleanup();
+    if (scrollMgr()) {
+      scrollMgr()->cleanup();
     }
 
-    if (m_artworkManager) {
-      m_artworkManager->cancelAllArtworkLoading();
+    if (artworkMgr()) {
+      artworkMgr()->cancelAllArtworkLoading();
     }
   }
 

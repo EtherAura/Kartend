@@ -16,18 +16,12 @@
 #include "itemartwork.h"
 #include "videoutils.h"
 
-SETUP_GETTER_DEF_MGR_SAME(DetailPageManagerSetup, DetailsPaneManager *, DetailsPaneManager,
-                          detailsPaneManager)
-SETUP_GETTER_DEF_MGR_SAME(DetailPageManagerSetup, DatabaseManager *, DatabaseManager,
-                          databaseManager)
-
 DetailPageManager::DetailPageManager(QObject *parent) : QObject(parent) {}
 DetailPageManager::~DetailPageManager() = default;
 
 void DetailPageManager::setupReferences(const DetailPageManagerSetup &setup) {
+  m_ctx = setup.ctx;
   m_overlay = setup.overlay;
-  m_detailsPaneManager = setup.getDetailsPaneManager();
-  m_databaseManager = setup.getDatabaseManager();
 
   if (m_overlay) {
     // QDesktopServices is the same hand-off the sidebar uses for manuals so
@@ -41,33 +35,35 @@ void DetailPageManager::setupReferences(const DetailPageManagerSetup &setup) {
 }
 
 void DetailPageManager::showForCurrentSelection() {
-  if (!m_overlay || !m_detailsPaneManager) {
+  DetailsPaneManager *detailsPane = m_ctx ? m_ctx->detailsPaneManager() : nullptr;
+  DatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
+  if (!m_overlay || !detailsPane) {
     return;
   }
-  const auto &ctx = m_detailsPaneManager->currentItemContext();
-  if (!ctx.isValid()) {
+  const auto &itemCtx = detailsPane->currentItemContext();
+  if (!itemCtx.isValid()) {
     // No selection (or the sidebar hasn't resolved one yet): silently ignore
     // so the user can mash the key without seeing an error.
     return;
   }
 
   DetailPageOverlay::Payload payload;
-  payload.filePath = ctx.filePath;
-  payload.itemName = ctx.itemName;
+  payload.filePath = itemCtx.filePath;
+  payload.itemName = itemCtx.itemName;
 
-  const QString baseName = QFileInfo(ctx.filePath).completeBaseName();
+  const QString baseName = QFileInfo(itemCtx.filePath).completeBaseName();
 
   // ── Metadata + manual + usage ────────────────────────────────────────
-  if (m_databaseManager && !ctx.uuid.isEmpty()) {
-    payload.metadata = m_databaseManager->loadItemMetadata(ctx.uuid, ctx.filePath);
-    payload.usage = m_databaseManager->loadItemUsageStats(ctx.uuid, ctx.filePath);
+  if (db && !itemCtx.uuid.isEmpty()) {
+    payload.metadata = db->loadItemMetadata(itemCtx.uuid, itemCtx.filePath);
+    payload.usage = db->loadItemUsageStats(itemCtx.uuid, itemCtx.filePath);
     // Title falls back to the metadata's scraped title when the sidebar
     // received a file-stem-derived itemName but the DB has a real title.
     if (!payload.metadata.title.isEmpty()) {
       payload.itemName = payload.metadata.title;
     }
-    payload.manualPath =
-        ItemMetadataStore::resolveManualFile(payload.metadata.manualPath, baseName, ctx.manualDir);
+    payload.manualPath = ItemMetadataStore::resolveManualFile(payload.metadata.manualPath, baseName,
+                                                              itemCtx.manualDir);
   }
 
   // ── Artwork tiles (every standard type + any custom override the user
@@ -75,8 +71,8 @@ void DetailPageManager::showForCurrentSelection() {
   // build so the same set of artworks shows up here. ───────────────────
   QHash<QString, QString> overridesByType;
   QStringList customOrder;
-  if (m_databaseManager && !ctx.uuid.isEmpty()) {
-    const auto rows = m_databaseManager->loadItemArtwork(ctx.uuid, ctx.filePath);
+  if (db && !itemCtx.uuid.isEmpty()) {
+    const auto rows = db->loadItemArtwork(itemCtx.uuid, itemCtx.filePath);
     for (const auto &row : rows) {
       overridesByType.insert(row.artworkType, row.manualPath);
       if (!ItemArtworkStore::isStandardType(row.artworkType)) {
@@ -86,8 +82,8 @@ void DetailPageManager::showForCurrentSelection() {
   }
 
   auto pushArtwork = [&](const QString &type, const QString &label) {
-    const QString resolved = ItemArtworkStore::resolveArtworkPath(overridesByType.value(type),
-                                                                  baseName, ctx.artworkDir, type);
+    const QString resolved = ItemArtworkStore::resolveArtworkPath(
+        overridesByType.value(type), baseName, itemCtx.artworkDir, type);
     if (!resolved.isEmpty()) {
       payload.artwork.append({label, resolved});
     }
@@ -105,9 +101,9 @@ void DetailPageManager::showForCurrentSelection() {
   // expects, so without this the hero pane would be empty for the common
   // case. Prepend so it's the first thing shown; only added when no typed
   // artwork already covered the same file.
-  if (!ctx.artworkDir.isEmpty()) {
+  if (!itemCtx.artworkDir.isEmpty()) {
     const QString fallback =
-        ArtworkUtils::findArtworkForFile(QFileInfo(ctx.filePath).fileName(), ctx.artworkDir);
+        ArtworkUtils::findArtworkForFile(QFileInfo(itemCtx.filePath).fileName(), itemCtx.artworkDir);
     if (!fallback.isEmpty()) {
       bool alreadyListed = false;
       for (const auto &entry : payload.artwork) {
@@ -125,15 +121,15 @@ void DetailPageManager::showForCurrentSelection() {
   // Prepend the video tile so the gallery follows the video-first ordering
   // the sidebar uses. Mirrors DetailsPaneManager::updateSidebarMetadata's
   // video lookup; an empty videoDir or missing file just yields no tile.
-  if (!ctx.videoDir.isEmpty()) {
-    const QString videoPath = VideoUtils::findVideoForFile(ctx.filePath, ctx.videoDir);
+  if (!itemCtx.videoDir.isEmpty()) {
+    const QString videoPath = VideoUtils::findVideoForFile(itemCtx.filePath, itemCtx.videoDir);
     if (!videoPath.isEmpty()) {
       payload.artwork.prepend({tr("Video"), videoPath, /*isVideo=*/true});
     }
   }
 
   // ── File info ────────────────────────────────────────────────────────
-  QFileInfo info(ctx.filePath);
+  QFileInfo info(itemCtx.filePath);
   if (info.exists()) {
     payload.fileSize = info.size();
     payload.fileModified = info.lastModified().toString(QStringLiteral("yyyy-MM-dd HH:mm"));

@@ -36,15 +36,11 @@ Q_LOGGING_CATEGORY(lcDetailsPaneManager, "kartend.detailspanemanager")
     }                                                                                              \
   } while (0)
 
-// DetailsPaneManagerSetup getter definitions
+// DetailsPaneManagerSetup getter definitions (non-manager fields only — sibling
+// managers are read directly from ctx at runtime).
 SETUP_GETTER_DEF_UI_SAME(DetailsPaneManagerSetup, DetailsPane *, Sidebar, sidebar)
 SETUP_GETTER_DEF_UI_SAME(DetailsPaneManagerSetup, QWidget *, ItemsPage, itemsPage)
 SETUP_GETTER_DEF_UI(DetailsPaneManagerSetup, QScrollArea *, ScrollArea, scrollArea, itemScrollArea)
-SETUP_GETTER_DEF_MGR_SAME(DetailsPaneManagerSetup, SettingsManager *, SettingsManager,
-                          settingsManager)
-SETUP_GETTER_DEF_MGR_SAME(DetailsPaneManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_MGR_SAME(DetailsPaneManagerSetup, DatabaseManager *, DatabaseManager,
-                          databaseManager)
 SETUP_GETTER_DEF_COL_SAME(DetailsPaneManagerSetup, QList<CollectionConfig> *, Collections,
                           collections)
 
@@ -53,15 +49,13 @@ DetailsPaneManager::DetailsPaneManager(QObject *parent)
       m_mainHorizontalLayout(nullptr), m_itemScrollArea(nullptr), m_currentCollectionIndex(-1) {}
 
 void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
+  m_ctx = setup.ctx;
   m_DetailsPane = setup.getSidebar();
   m_itemsPage = setup.getItemsPage();
   m_mainHorizontalLayout = setup.mainLayout;
   m_outerLayout = setup.outerLayout;
   m_mainContentWidget = setup.contentWidget;
   m_itemScrollArea = setup.getScrollArea();
-  m_settingsManager = setup.getSettingsManager();
-  m_artworkManager = setup.getArtworkManager();
-  m_databaseManager = setup.getDatabaseManager();
   m_collections = setup.getCollections();
 
   // Wire the per-item artwork-link editor. The sidebar
@@ -100,8 +94,8 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
         return;
       }
       (*m_collections)[m_currentCollectionIndex].sidebarWidth = width;
-      if (m_settingsManager) {
-        m_settingsManager->saveCollections(*m_collections);
+      if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
+        sm->saveCollections(*m_collections);
       }
     });
     // height-drag handlers for Top/Bottom dock. Mirror the width
@@ -127,8 +121,8 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
         return;
       }
       (*m_collections)[m_currentCollectionIndex].sidebarHeight = height;
-      if (m_settingsManager) {
-        m_settingsManager->saveCollections(*m_collections);
+      if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
+        sm->saveCollections(*m_collections);
       }
     });
     // tabs: persist the user's tab choice per collection, then re-push the
@@ -142,8 +136,8 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
         return;
       }
       (*m_collections)[m_currentCollectionIndex].sidebarActiveTab = tab;
-      if (m_settingsManager) {
-        m_settingsManager->saveCollections(*m_collections);
+      if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
+        sm->saveCollections(*m_collections);
       }
       if (!m_currentItemFilePath.isEmpty()) {
         updateSidebarMetadata(m_currentItemFilePath, m_currentItemName);
@@ -252,9 +246,9 @@ void DetailsPaneManager::refreshCollectionSummary() {
     summary.parentName = (*m_collections)[collection.parentCollectionIndex].name;
   }
 
-  if (m_databaseManager) {
+  if (auto *db = m_ctx ? m_ctx->databaseManager() : nullptr; db) {
     summary.itemCount =
-        m_databaseManager->countCollectionRecursive(m_currentCollectionIndex, *m_collections);
+        db->countCollectionRecursive(m_currentCollectionIndex, *m_collections);
     // UUID keying must match how DatabaseManager computes it elsewhere:
     // validateAndExpandPath without a raw fallback. Mismatched casing or
     // a missing-directory empty-string here would make last_scanned silently
@@ -262,7 +256,7 @@ void DetailsPaneManager::refreshCollectionSummary() {
     const QString uuidMediaDir =
         PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
     const QString uuid = CollectionUtils::computeCollectionUuid(collection.name, uuidMediaDir);
-    summary.lastScanned = m_databaseManager->loadCollectionLastScanned(uuid);
+    summary.lastScanned = db->loadCollectionLastScanned(uuid);
   }
 
   m_DetailsPane->setCollectionSummary(summary);
@@ -500,8 +494,8 @@ void DetailsPaneManager::updateSidebarLayout(int currentCollectionIndex) {
     saveSidebarStateForCollection(currentCollectionIndex, m_sidebarVisible);
   }
 
-  if (m_artworkManager) {
-    if (auto *timerCoordinator = m_artworkManager->getTimerCoordinator()) {
+  if (auto *art = m_ctx ? m_ctx->artworkManager() : nullptr) {
+    if (auto *timerCoordinator = art->getTimerCoordinator()) {
       timerCoordinator->scheduleLayoutUpdate();
     }
   }
@@ -523,8 +517,8 @@ void DetailsPaneManager::saveSidebarStateForCollection(int collectionIndex, bool
     return;
   }
   (*m_collections)[collectionIndex].sidebarVisible = visible;
-  if (m_settingsManager) {
-    m_settingsManager->saveCollections(*m_collections);
+  if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
+    sm->saveCollections(*m_collections);
   }
 }
 

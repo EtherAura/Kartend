@@ -86,6 +86,11 @@ InteractionManager::~InteractionManager() {
   if (qApp) {
     qApp->removeEventFilter(this);
   }
+  // Mark teardown so slots like onKeyboardStopRepeat can short-circuit
+  // when sub-manager destruction emits late stopRepeat / cleanup signals
+  // (e.g. ~GamepadManager → KeyboardManager::stopRepeat fires after the
+  // arrow handler unique_ptr has already been freed by member destruction).
+  m_destroying = true;
   stopRepeat();
   clearSelection();
 }
@@ -93,8 +98,8 @@ InteractionManager::~InteractionManager() {
 // Wires references, installs event filters, and initializes search UI
 auto InteractionManager::resolveDoubleClickIndexCandidate() const -> int {
   int idx = currentSelectedIndex();
-  if (idx < 0 && m_scrollManager) {
-    const auto &active = m_scrollManager->getActiveWidgets();
+  if (idx < 0 && scrollMgr()) {
+    const auto &active = scrollMgr()->getActiveWidgets();
     for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
       if (it.value() && it.value()->isSelected()) {
         return it.key();
@@ -106,8 +111,8 @@ auto InteractionManager::resolveDoubleClickIndexCandidate() const -> int {
 
 // Helper: derive file path for a given visual index via ScrollManager
 auto InteractionManager::derivePathFromIndex(int idx) const -> QString {
-  if (m_scrollManager && idx >= 0) {
-    return m_scrollManager->filePathForVisualIndex(idx);
+  if (scrollMgr() && idx >= 0) {
+    return scrollMgr()->filePathForVisualIndex(idx);
   }
   return {};
 }
@@ -117,8 +122,8 @@ auto InteractionManager::resolveOwnerForPath(const QString &path) const -> int {
   if (path.isEmpty()) {
     return -1;
   }
-  if (m_databaseManager) {
-    return m_databaseManager->getCollectionIndexForFile(path);
+  if (databaseMgr()) {
+    return databaseMgr()->getCollectionIndexForFile(path);
   }
   if (m_currentCollectionIndex) {
     return *m_currentCollectionIndex;
@@ -130,8 +135,8 @@ auto InteractionManager::resolveOwnerForPath(const QString &path) const -> int {
 auto InteractionManager::getFallbackCollectionIndex() const -> int {
   QString selectedPath = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
   if (!selectedPath.isEmpty()) {
-    if (m_databaseManager) {
-      int owner = m_databaseManager->getCollectionIndexForFile(selectedPath);
+    if (databaseMgr()) {
+      int owner = databaseMgr()->getCollectionIndexForFile(selectedPath);
       if (owner >= 0) {
         return owner;
       }
@@ -265,8 +270,8 @@ auto InteractionManager::forceImmediateCenter() const -> bool {
 // Returns the active grid width; prefers ScrollManager's current context to
 // handle nested/filtered views
 auto InteractionManager::getCurrentGridWidth() const -> int {
-  if (m_scrollManager) {
-    int currentWidth = m_scrollManager->getCurrentGridWidth();
+  if (scrollMgr()) {
+    int currentWidth = scrollMgr()->getCurrentGridWidth();
     if (currentWidth > 0) {
       return currentWidth;
     }
@@ -294,8 +299,8 @@ void InteractionManager::setPendingSelectionIfNeeded(bool condition, int newSele
 void InteractionManager::updateSelectionStateAfterMove(int newSelection) {
   QList<int> subs = getSubcollections(*m_currentCollectionIndex);
   updateFilePathForSelection(newSelection, subs);
-  if (m_scrollManager) {
-    m_scrollManager->updateSelectionForIndex(newSelection);
+  if (scrollMgr()) {
+    scrollMgr()->updateSelectionForIndex(newSelection);
   }
   selectItemByIndex(newSelection, true);
 }
@@ -337,12 +342,12 @@ void InteractionManager::applyImmediateViewportPositioningForSelection(int targe
 
 void InteractionManager::selectItemByIndex(int index, bool allowHorizontalScroll) {
   Q_UNUSED(allowHorizontalScroll);
-  if (!m_scrollManager || !m_itemScrollArea ||
+  if (!scrollMgr() || !m_itemScrollArea ||
       !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     return;
   }
 
-  const QStringList &filePaths = m_scrollManager->getFilePaths();
+  const QStringList &filePaths = scrollMgr()->getFilePaths();
   QList<int> subcollections = getSubcollections(*m_currentCollectionIndex);
   int totalItems = subcollections.size() + filePaths.size();
   if (index < 0 || index >= totalItems) {
@@ -390,10 +395,10 @@ void InteractionManager::selectItemByIndex(int index, bool allowHorizontalScroll
   }
 
   const int selected = currentSelectedIndex();
-  if (m_scrollManager) {
-    m_scrollManager->updateSelectionForIndex(selected);
+  if (scrollMgr()) {
+    scrollMgr()->updateSelectionForIndex(selected);
     if (m_state.scroll().clickHoldAdvancing) {
-      m_scrollManager->refreshSelectionOverlayState();
+      scrollMgr()->refreshSelectionOverlayState();
     }
   }
   emit selectionChanged(selected);
@@ -423,8 +428,8 @@ void InteractionManager::persistSuppressedSelectionAndMaybeCenter(int index,
   // Defer artwork update to allow selection animation to start smoothly
   // before triggering potentially expensive artwork loading operations
   QTimer::singleShot(UIConstants::Timing::SHORT_DELAY_MS, this, [this]() {
-    if (!QApplication::closingDown() && m_artworkManager) {
-      m_artworkManager->updateViewportArtwork();
+    if (!QApplication::closingDown() && artworkMgr()) {
+      artworkMgr()->updateViewportArtwork();
     }
   });
 }
@@ -450,7 +455,7 @@ void InteractionManager::clearSelectionAndFocus() {
 }
 
 void InteractionManager::trySelectWidget(int index, const QList<int> &subcollections, int attempt) {
-  if ((!m_scrollManager) || currentSelectedIndex() != index || QApplication::closingDown()) {
+  if ((!scrollMgr()) || currentSelectedIndex() != index || QApplication::closingDown()) {
     return;
   }
   constexpr int kMaxSelectAttempts = 10;
@@ -472,7 +477,7 @@ void InteractionManager::trySelectWidget(int index, const QList<int> &subcollect
     updateFilePathForSelection(index, subcollections);
     handleSuccessfulSelection(index);
   } else {
-    m_scrollManager->updateVirtualView();
+    scrollMgr()->updateVirtualView();
     QApplication::processEvents();
     constexpr int kSelectRetryBaseMs = 30;
     constexpr int kSelectRetryStepMs = 30;

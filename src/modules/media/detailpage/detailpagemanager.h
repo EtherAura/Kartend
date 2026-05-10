@@ -20,14 +20,9 @@ struct ApplicationContext;
  * and pushes the assembled payload to the overlay.
  */
 struct DetailPageManagerSetup {
-  ApplicationContext *ctx = nullptr;
+  const ApplicationContext *ctx = nullptr;
 
   DetailPageOverlay *overlay = nullptr;
-  DetailsPaneManager *detailsPaneManager = nullptr;
-  DatabaseManager *databaseManager = nullptr;
-
-  SETUP_GETTER_DECL(DetailsPaneManager *, DetailsPaneManager)
-  SETUP_GETTER_DECL(DatabaseManager *, DatabaseManager)
 };
 
 class DetailPageManager : public QObject {
@@ -51,9 +46,10 @@ public:
   [[nodiscard]] DetailPageOverlay *overlay() const { return m_overlay; }
 
 private:
+  // ctx is the single source of truth for sibling managers (DetailsPaneManager,
+  // DatabaseManager) — never cache them as direct fields.
+  const ApplicationContext *m_ctx = nullptr;
   DetailPageOverlay *m_overlay = nullptr;
-  DetailsPaneManager *m_detailsPaneManager = nullptr;
-  DatabaseManager *m_databaseManager = nullptr;
 };
 
 #endif // DETAILPAGEMANAGER_H

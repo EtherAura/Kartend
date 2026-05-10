@@ -38,9 +38,9 @@ void ViewportManager::ensureHorizontallyVisible(int index) {
   // a no-op — the item's column always fits in the viewport's height, and the
   // long-axis scrolling is handled by centerItemVertically (which dispatches
   // to the horizontal scrollbar in this mode).
-  if (m_scrollManager && m_scrollManager->getMetrics().isHorizontal) {
-    if (m_scrollManager) {
-      m_scrollManager->updateVirtualView();
+  if (scrollMgr() && scrollMgr()->getMetrics().isHorizontal) {
+    if (scrollMgr()) {
+      scrollMgr()->updateVirtualView();
     }
     return;
   }
@@ -56,7 +56,7 @@ void ViewportManager::ensureHorizontallyVisible(int index) {
     return;
   }
 
-  int hSpacing = (m_scrollManager) ? m_scrollManager->getEffectiveHorizontalSpacing()
+  int hSpacing = (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing()
                                    : collection.horizontalSpacing;
   int margins = UIConstants::Grid::MARGINS;
   int itemX = GridUtils::computeItemX(index, gridWidth, collection.itemWidth, hSpacing, margins);
@@ -74,27 +74,27 @@ void ViewportManager::ensureHorizontallyVisible(int index) {
   }
 
   if (targetX == curX) {
-    if (m_scrollManager) {
-      m_scrollManager->updateVirtualView();
+    if (scrollMgr()) {
+      scrollMgr()->updateVirtualView();
     }
     return;
   }
 
-  bool hold = m_state ? m_state->scroll().horizHoldActive : false;
+  bool hold = state() ? state()->scroll().horizHoldActive : false;
 
-  if (m_animationManager) {
-    m_animationManager->initHorizontalAnimIfNeeded(hScrollBar);
+  if (animMgr()) {
+    animMgr()->initHorizontalAnimIfNeeded(hScrollBar);
 
     if (hold) {
       int startX = hScrollBar->value();
-      m_animationManager->animateHorizontalHold(hScrollBar, startX, targetX);
+      animMgr()->animateHorizontalHold(hScrollBar, startX, targetX);
     } else {
-      m_animationManager->animateHorizontalSmooth(hScrollBar, curX, targetX);
+      animMgr()->animateHorizontalSmooth(hScrollBar, curX, targetX);
     }
   }
 
-  if (m_scrollManager) {
-    m_scrollManager->updateVirtualView();
+  if (scrollMgr()) {
+    scrollMgr()->updateVirtualView();
   }
 }
 
@@ -103,13 +103,13 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
     return;
   }
 
-  if (m_state && m_state->click().deferCenterOnClick && !m_physicalKeyDown) {
+  if (state() && state()->click().deferCenterOnClick && !m_physicalKeyDown) {
     return;
   }
 
   // in Horizontal view, "ensure visible" defers to the
   // horizontal-axis centering path — the only scroll axis there.
-  if (m_scrollManager && m_scrollManager->getMetrics().isHorizontal) {
+  if (scrollMgr() && scrollMgr()->getMetrics().isHorizontal) {
     Q_UNUSED(allowHorizontalScroll);
     centerItemVertically(index, /*immediate=*/true);
     return;
@@ -125,8 +125,8 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
   int vSpacing = collection.verticalSpacing;
   int hSpacing = collection.horizontalSpacing;
 
-  if (m_scrollManager) {
-    const auto &metrics = m_scrollManager->getMetrics();
+  if (scrollMgr()) {
+    const auto &metrics = scrollMgr()->getMetrics();
     gridWidth = metrics.itemsPerRow;
     itemHeight = metrics.itemHeight;
     itemWidth = metrics.itemWidth;
@@ -150,8 +150,8 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
   int logicalItemY = GridUtils::computeItemY(index, gridWidth, itemHeight, vSpacing, margins);
 
   // Account for header offset in list mode
-  if (m_scrollManager) {
-    const auto &metrics = m_scrollManager->getMetrics();
+  if (scrollMgr()) {
+    const auto &metrics = scrollMgr()->getMetrics();
     if (metrics.headerOffset > 0) {
       logicalItemY += metrics.headerOffset;
     }
@@ -168,8 +168,8 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
 
   // For clipped grids, convert to logical scroll position for visibility check
   int logicalCurY = curY;
-  if (m_scrollManager) {
-    const auto &metrics = m_scrollManager->getMetrics();
+  if (scrollMgr()) {
+    const auto &metrics = scrollMgr()->getMetrics();
     if (metrics.isClipped) {
       logicalCurY = metrics.toLogicalScrollY(curY, viewportHeight);
     }
@@ -218,25 +218,25 @@ void ViewportManager::ensureItemVisible(int index, bool allowHorizontalScroll) {
   }
 
   // Stop any running animation and update start position
-  if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
-    m_animationManager->verticalAnimation()->stop();
+  if (animMgr() && animMgr()->isVerticalAnimRunning()) {
+    animMgr()->verticalAnimation()->stop();
     startVal = vScrollBar->value();
   }
 
   startEnsureVisibleVAnim(vScrollBar, startVal, endVal, isCurrentlyRepeating);
   m_lastSelectedRow = GridUtils::computeItemRow(index, gridWidth);
-  if (m_selectionManager) {
-    m_selectionManager->setLastSelectedRow(m_lastSelectedRow);
+  if (selectionMgr()) {
+    selectionMgr()->setLastSelectedRow(m_lastSelectedRow);
   }
 }
 
 void ViewportManager::updateViewAndRowAfterVisibility(int index, int gridWidth) {
-  if (m_scrollManager) {
-    m_scrollManager->updateVirtualView();
+  if (scrollMgr()) {
+    scrollMgr()->updateVirtualView();
   }
   m_lastSelectedRow = GridUtils::computeItemRow(index, gridWidth);
-  if (m_selectionManager) {
-    m_selectionManager->setLastSelectedRow(m_lastSelectedRow);
+  if (selectionMgr()) {
+    selectionMgr()->setLastSelectedRow(m_lastSelectedRow);
   }
 }
 
@@ -256,7 +256,7 @@ bool ViewportManager::shouldExitEnsureItemVisible(int index) const {
 
 void ViewportManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar, int startVal, int endVal,
                                               bool isRepeating) {
-  if (!m_animationManager) {
+  if (!animMgr()) {
     return;
   }
 
@@ -267,7 +267,7 @@ void ViewportManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar, int startV
     vSpacing = (*m_collections)[*m_currentCollectionIndex].verticalSpacing;
   }
 
-  m_animationManager->startEnsureVisibleVAnim(vScrollBar, startVal, endVal, itemHeight, vSpacing,
+  animMgr()->startEnsureVisibleVAnim(vScrollBar, startVal, endVal, itemHeight, vSpacing,
                                               isRepeating);
 }
 
@@ -294,12 +294,12 @@ void ViewportManager::applyImmediateViewportPositioningForSelection(int targetIn
   // in Horizontal mode, snap the horizontal scrollbar so the
   // wrapped selection is centered along the long axis. Vertical position is
   // unused (column always visible).
-  if (m_scrollManager && m_scrollManager->getMetrics().isHorizontal) {
+  if (scrollMgr() && scrollMgr()->getMetrics().isHorizontal) {
     QScrollBar *hScrollBar = m_itemScrollArea->horizontalScrollBar();
     if (!hScrollBar) {
       return;
     }
-    const auto &metrics = m_scrollManager->getMetrics();
+    const auto &metrics = scrollMgr()->getMetrics();
     int viewportW = m_itemScrollArea->viewport()->width();
     if (viewportW <= 0) {
       return;
@@ -321,8 +321,8 @@ void ViewportManager::applyImmediateViewportPositioningForSelection(int targetIn
     int itemHeight = UIConstants::ListView::DEFAULT_ROW_HEIGHT;
     int headerOffset = 0;
 
-    if (m_scrollManager) {
-      const auto &metrics = m_scrollManager->getMetrics();
+    if (scrollMgr()) {
+      const auto &metrics = scrollMgr()->getMetrics();
       gridWidth = metrics.itemsPerRow > 0 ? metrics.itemsPerRow : 1;
       rowHeight = metrics.itemHeight + metrics.verticalSpacing;
       itemHeight = metrics.itemHeight;
@@ -349,15 +349,15 @@ void ViewportManager::applyImmediateViewportPositioningForSelection(int targetIn
         int targetY = itemY + (itemHeight / 2) - (viewportH / 2);
         targetY = qBound(0, targetY, qMax(0, targetY));
         AnimationManager::stopArrowKeyAnimationIfRunning(verticalScrollBar);
-        if (m_state) {
-          m_state->scroll().programmaticScroll = true;
+        if (state()) {
+          state()->scroll().programmaticScroll = true;
         }
-        if (m_scrollManager) {
-          m_scrollManager->refreshSelectionOverlayState();
+        if (scrollMgr()) {
+          scrollMgr()->refreshSelectionOverlayState();
         }
         verticalScrollBar->setValue(targetY);
-        QPointer<ScrollManager> scrollMgrPtr = m_scrollManager;
-        QPointer<InteractionStateHolder> statePtr = m_state;
+        QPointer<ScrollManager> scrollMgrPtr = scrollMgr();
+        QPointer<InteractionStateHolder> statePtr = state();
         // Defer clearing ProgrammaticScroll flag until after Qt processes
         // the setValue() - ensures scroll restoration completes atomically.
         // Use QPointer so the lambda is lifetime-safe if either object is
@@ -386,10 +386,10 @@ void ViewportManager::applyImmediateViewportPositioningForSelection(int targetIn
 
 void ViewportManager::applyImmediateCenterSuppression() {
   m_forceImmediateCenter = true;
-  if (m_state) {
-    m_state->arrow().suppressArrowCenter = true;
-    m_state->scroll().userScrollActive = false;
-    m_state->arrow().suppressArrowCenterUntilMs =
+  if (state()) {
+    state()->arrow().suppressArrowCenter = true;
+    state()->scroll().userScrollActive = false;
+    state()->arrow().suppressArrowCenterUntilMs =
         QDateTime::currentMSecsSinceEpoch() + UIConstants::Keyboard::ANIMATION_SETTLE_MS;
   }
 }

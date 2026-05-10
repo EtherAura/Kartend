@@ -41,15 +41,7 @@ Q_LOGGING_CATEGORY(lcEventManager, "kartend.eventmanager")
     }                                                                                              \
   } while (0)
 
-// EventManagerSetup getter definitions
-SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, AnimationManager *, AnimationManager, animationManager)
-SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, ViewportManager *, ViewportManager, viewportManager)
-SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, SelectionManager *, SelectionManager, selectionManager)
-SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, DatabaseManager *, DatabaseManager, databaseManager)
-SETUP_GETTER_DEF_MGR_SAME(EventManagerSetup, DetailsPaneManager *, DetailsPaneManager,
-                          detailsPaneManager)
+// EventManagerSetup getter definitions (non-manager fields only).
 SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
 SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QWidget *, GridContainer, gridContainer)
 SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QStackedWidget *, StackedWidget, stackedWidget)
@@ -59,8 +51,6 @@ SETUP_GETTER_DEF_UI_SAME(EventManagerSetup, QLineEdit *, SearchBar, searchBar)
 SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, QList<CollectionConfig> *, Collections, collections)
 SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, GeneralSettings *, GeneralSettings, generalSettings)
-SETUP_GETTER_DEF_MGR_CTX_ONLY(EventManagerSetup, InteractionStateHolder *, InteractionState,
-                              interactionState)
 
 EventManager::EventManager(QObject *parent) : QObject(parent) {
   m_hoverScrollTimer.setSingleShot(true);
@@ -70,16 +60,7 @@ EventManager::EventManager(QObject *parent) : QObject(parent) {
 EventManager::~EventManager() = default;
 
 void EventManager::setupReferences(const EventManagerSetup &setup) {
-  m_scrollManager = setup.getScrollManager();
-  m_keyboardManager = setup.getKeyboardManager();
-  m_mouseManager = setup.getMouseManager();
-  m_animationManager = setup.getAnimationManager();
-  m_viewportManager = setup.getViewportManager();
-  m_selectionManager = setup.getSelectionManager();
-  m_artworkManager = setup.getArtworkManager();
-  m_databaseManager = setup.getDatabaseManager();
-  m_detailsPaneManager = setup.getDetailsPaneManager();
-  m_state = setup.getInteractionState();
+  m_ctx = setup.ctx;
   m_generalSettings = setup.getGeneralSettings();
   m_itemScrollArea = setup.getItemScrollArea();
   m_gridContainer = setup.getGridContainer();
@@ -141,8 +122,8 @@ bool EventManager::filterEvent(QObject *obj, QEvent *event) {
 
 bool EventManager::isRestoringSelection() const {
   // Query SelectionManager as the single source of truth
-  if (m_selectionManager) {
-    return m_selectionManager->isRestoringSelection();
+  if (selectionMgr()) {
+    return selectionMgr()->isRestoringSelection();
   }
   return false;
 }
@@ -152,18 +133,18 @@ bool EventManager::handleActivityEvent(QEvent *event) {
     return false;
   }
 
-  if (m_artworkManager) {
-    m_artworkManager->updateUserActivity();
+  if (artworkMgr()) {
+    artworkMgr()->updateUserActivity();
   }
 
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
-  const qint64 last = m_state ? m_state->lastUiActivityMs() : 0;
-  if (m_state && EventHelpers::shouldArmFirstClickDelay(
+  const qint64 last = state() ? state()->lastUiActivityMs() : 0;
+  if (state() && EventHelpers::shouldArmFirstClickDelay(
                      last, now, UIConstants::Timing::USER_IDLE_THRESHOLD_MS)) {
-    m_state->click().armFirstClickDelay = true;
+    state()->click().armFirstClickDelay = true;
   }
-  if (m_state) {
-    m_state->setLastUiActivityMs(now);
+  if (state()) {
+    state()->setLastUiActivityMs(now);
   }
   emit activityDetected();
   return true;
@@ -172,15 +153,15 @@ bool EventManager::handleActivityEvent(QEvent *event) {
 bool EventManager::handleMouseButtonPress(QObject *obj, QEvent *event) {
   if ((obj && qobject_cast<QScrollBar *>(obj)) ||
       qobject_cast<QScrollBar *>(obj ? obj->parent() : nullptr)) {
-    if (m_viewportManager) {
-      m_viewportManager->setContinuousScrollActive(true);
+    if (viewportMgr()) {
+      viewportMgr()->setContinuousScrollActive(true);
     }
     // Clear continuous scroll state after user finishes scrollbar interaction -
     // allows time for the drag/click to complete before re-enabling
     // auto-centering
     QTimer::singleShot(UIConstants::Mouse::CONTINUOUS_SCROLL_IDLE_MS, this, [this]() {
-      if (m_viewportManager) {
-        m_viewportManager->setContinuousScrollActive(false);
+      if (viewportMgr()) {
+        viewportMgr()->setContinuousScrollActive(false);
       }
     });
     emit requestStopRepeat(true);
@@ -195,18 +176,18 @@ bool EventManager::handleMouseButtonRelease(QObject *obj, QEvent *event) {
   Q_UNUSED(obj);
   auto *mouseReleaseEvent = static_cast<QMouseEvent *>(event);
   if (mouseReleaseEvent && mouseReleaseEvent->button() == Qt::LeftButton) {
-    if (m_mouseManager) {
-      m_mouseManager->setLeftMouseDown(false);
-      m_mouseManager->stopClickHoldTimer();
-      if (m_mouseManager->isMouseHoldScrolling()) {
-        m_mouseManager->stopMouseHoldScrolling();
+    if (mouseMgr()) {
+      mouseMgr()->setLeftMouseDown(false);
+      mouseMgr()->stopClickHoldTimer();
+      if (mouseMgr()->isMouseHoldScrolling()) {
+        mouseMgr()->stopMouseHoldScrolling();
       }
     }
-    if (m_state) {
-      m_state->click().clickHoldRowChange = false;
-      m_state->click().deferCenterOnClick = false;
-      m_state->click().deferredCenterIndex = -1;
-      m_state->scroll().clickScroll = false;
+    if (state()) {
+      state()->click().clickHoldRowChange = false;
+      state()->click().deferCenterOnClick = false;
+      state()->click().deferredCenterIndex = -1;
+      state()->scroll().clickScroll = false;
     }
   }
   return false;
@@ -221,9 +202,9 @@ bool EventManager::handleKeyPressEvent(QObject *obj, QEvent *event) {
   }
 
   // Delegate to KeyboardManager for key handling
-  if (m_keyboardManager) {
+  if (keyboardMgr()) {
     const bool searchBarFocused = (m_searchBar) && m_searchBar->hasFocus();
-    const bool handled = m_keyboardManager->handleKeyPress(keyEvent, searchBarFocused);
+    const bool handled = keyboardMgr()->handleKeyPress(keyEvent, searchBarFocused);
     if (handled) {
       event->accept();
       return true;
@@ -246,8 +227,8 @@ bool EventManager::handleKeyReleaseEvent(QObject *obj, QEvent *event) {
   }
 
   // Delegate to KeyboardManager for key release handling
-  if (m_keyboardManager) {
-    const bool handled = m_keyboardManager->handleKeyRelease(keyEvent);
+  if (keyboardMgr()) {
+    const bool handled = keyboardMgr()->handleKeyRelease(keyEvent);
     if (handled) {
       event->accept();
       return true;
@@ -259,8 +240,8 @@ bool EventManager::handleKeyReleaseEvent(QObject *obj, QEvent *event) {
 
 int EventManager::getCurrentGridWidth() const {
   // Prefer ScrollManager's value for filtered/nested views
-  if (m_scrollManager) {
-    int width = m_scrollManager->getCurrentGridWidth();
+  if (scrollMgr()) {
+    int width = scrollMgr()->getCurrentGridWidth();
     if (width > 0) {
       return width;
     }
@@ -270,8 +251,8 @@ int EventManager::getCurrentGridWidth() const {
 
 QList<int> EventManager::getSubcollections(int parentIndex) const {
   // Delegate to SelectionManager which owns the canonical implementation
-  if (m_selectionManager) {
-    return m_selectionManager->getSubcollections(parentIndex);
+  if (selectionMgr()) {
+    return selectionMgr()->getSubcollections(parentIndex);
   }
   // Fallback to O(n) scan
   if (!m_collections) {

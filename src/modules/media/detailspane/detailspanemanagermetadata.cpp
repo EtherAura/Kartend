@@ -42,6 +42,7 @@ void DetailsPaneManager::updateSidebarMetadata(ItemWidget *selectedItem) {
 }
 
 void DetailsPaneManager::updateSidebarMetadata(const QString &filePath, const QString &itemName) {
+  DatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   if (!m_DetailsPane || filePath.isEmpty()) {
     if (m_DetailsPane) {
       m_DetailsPane->clearMetadata();
@@ -87,8 +88,8 @@ void DetailsPaneManager::updateSidebarMetadata(const QString &filePath, const QS
   // DB mutex a second time for the same path.
   QString metaUuid;
   int owningIndex = -1;
-  if (m_databaseManager) {
-    owningIndex = m_databaseManager->getCollectionIndexForFile(filePath);
+  if (db) {
+    owningIndex = db->getCollectionIndexForFile(filePath);
     if (owningIndex >= 0 && m_collections && owningIndex < m_collections->size()) {
       const CollectionConfig &owning = (*m_collections)[owningIndex];
       const QString owningMediaDir =
@@ -156,18 +157,18 @@ void DetailsPaneManager::updateSidebarMetadata(const QString &filePath, const QS
 
   // Extended metadata + manual file.
   ItemMetadataStore::ItemMetadata loadedMetadata;
-  if (m_databaseManager && !metaUuid.isEmpty()) {
-    loadedMetadata = m_databaseManager->loadItemMetadata(metaUuid, filePath);
+  if (db && !metaUuid.isEmpty()) {
+    loadedMetadata = db->loadItemMetadata(metaUuid, filePath);
   }
-  if (m_databaseManager) {
+  if (db) {
     m_DetailsPane->setExtendedMetadata(loadedMetadata);
   }
 
   // Usage statistics. Append play count / last played / time
   // played to the Details section. Loaded after setExtendedMetadata so the
   // section's row layout is already in place; setUsageStats only appends.
-  if (m_databaseManager && !metaUuid.isEmpty()) {
-    const auto usage = m_databaseManager->loadItemUsageStats(metaUuid, filePath);
+  if (db && !metaUuid.isEmpty()) {
+    const auto usage = db->loadItemUsageStats(metaUuid, filePath);
     m_DetailsPane->setUsageStats(usage);
   }
 
@@ -182,10 +183,10 @@ void DetailsPaneManager::updateSidebarMetadata(const QString &filePath, const QS
   // (non-standard) types only resolve via a stored override. An empty list
   // hides the gallery section.
   QList<DetailsPane::GalleryEntry> galleryEntries;
-  if (m_databaseManager && !metaUuid.isEmpty()) {
+  if (db && !metaUuid.isEmpty()) {
     QHash<QString, QString> overridesByType;
     QStringList customOrder;
-    const auto rows = m_databaseManager->loadItemArtwork(metaUuid, filePath);
+    const auto rows = db->loadItemArtwork(metaUuid, filePath);
     for (const auto &row : rows) {
       overridesByType.insert(row.artworkType, row.manualPath);
       if (!ItemArtworkStore::isStandardType(row.artworkType)) {
@@ -247,7 +248,8 @@ void DetailsPaneManager::updateSidebarMetadata(const QString &filePath, const QS
 }
 
 void DetailsPaneManager::openArtworkLinksDialog() {
-  if (!m_DetailsPane || !m_databaseManager || !m_collections) {
+  DatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
+  if (!m_DetailsPane || !db || !m_collections) {
     return;
   }
   if (m_currentItemFilePath.isEmpty() || m_currentItemUuid.isEmpty()) {
@@ -272,7 +274,7 @@ void DetailsPaneManager::openArtworkLinksDialog() {
   // unable to see them. We render those as extra "custom" rows.
   QHash<QString, QString> originalOverrides;
   QStringList allCustomTypes = customTypes;
-  const auto rows = m_databaseManager->loadItemArtwork(m_currentItemUuid, m_currentItemFilePath);
+  const auto rows = db->loadItemArtwork(m_currentItemUuid, m_currentItemFilePath);
   for (const auto &row : rows) {
     originalOverrides.insert(row.artworkType, row.manualPath);
     if (!ItemArtworkStore::isStandardType(row.artworkType) &&
@@ -312,14 +314,14 @@ void DetailsPaneManager::openArtworkLinksDialog() {
     artwork.path = m_currentItemFilePath;
     artwork.artworkType = it.key();
     artwork.manualPath = it.value();
-    m_databaseManager->saveItemArtwork(artwork);
+    db->saveItemArtwork(artwork);
   }
   for (auto it = originalOverrides.constBegin(); it != originalOverrides.constEnd(); ++it) {
     if (visitedTypes.contains(it.key())) {
       continue;
     }
     // Was set, now cleared.
-    m_databaseManager->removeItemArtwork(m_currentItemUuid, m_currentItemFilePath, it.key());
+    db->removeItemArtwork(m_currentItemUuid, m_currentItemFilePath, it.key());
   }
 
   // Refresh the gallery inline using the cached owner context — we don't
@@ -330,7 +332,7 @@ void DetailsPaneManager::openArtworkLinksDialog() {
     QHash<QString, QString> overridesByType;
     QStringList customOrder;
     const auto refreshedRows =
-        m_databaseManager->loadItemArtwork(m_currentItemUuid, m_currentItemFilePath);
+        db->loadItemArtwork(m_currentItemUuid, m_currentItemFilePath);
     for (const auto &row : refreshedRows) {
       overridesByType.insert(row.artworkType, row.manualPath);
       if (!ItemArtworkStore::isStandardType(row.artworkType)) {

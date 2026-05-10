@@ -47,17 +47,9 @@ class VignetteOverlay;
  * from an ApplicationContext via the ctx pointer.
  */
 struct NavigationManagerSetup {
-  // Optional: shared context for common fields
+  // Sibling managers (and InteractionStateHolder) are read directly from ctx
+  // at runtime; never duplicated here.
   const ApplicationContext *ctx = nullptr;
-
-  // Manager dependencies (can be overridden or taken from ctx)
-  InteractionManager *interactionManager = nullptr;
-  SettingsManager *settingsManager = nullptr;
-  DetailsPaneManager *detailsPaneManager = nullptr;
-  ScrollManager *scrollManager = nullptr;
-  DatabaseManager *databaseManager = nullptr;
-  SessionManager *sessionManager = nullptr;
-  ArtworkManager *artworkManager = nullptr;
 
   // UI elements (can be overridden or taken from ctx)
   DetailsPane *sidebar = nullptr;
@@ -79,15 +71,6 @@ struct NavigationManagerSetup {
   std::function<bool()> isShuttingDown;
   std::function<void()> refreshTitleCounts;
 
-  // Manager accessors that check ctx fallback
-  SETUP_GETTER_INLINE_MGR_SAME(InteractionManager *, InteractionManager, interactionManager)
-  SETUP_GETTER_INLINE_MGR_SAME(SettingsManager *, SettingsManager, settingsManager)
-  SETUP_GETTER_INLINE_MGR_SAME(DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
-  SETUP_GETTER_INLINE_MGR_SAME(ScrollManager *, ScrollManager, scrollManager)
-  SETUP_GETTER_INLINE_MGR_SAME(DatabaseManager *, DatabaseManager, databaseManager)
-  SETUP_GETTER_INLINE_MGR_SAME(SessionManager *, SessionManager, sessionManager)
-  SETUP_GETTER_INLINE_MGR_SAME(ArtworkManager *, ArtworkManager, artworkManager)
-
   // UI element accessors that check ctx fallback
   SETUP_GETTER_INLINE_UI_SAME(QScrollArea *, ItemScrollArea, itemScrollArea)
   SETUP_GETTER_INLINE_UI_SAME(QWidget *, GridContainer, gridContainer)
@@ -103,7 +86,6 @@ struct NavigationManagerSetup {
   SETUP_GETTER_INLINE_COL_SAME(int *, CurrentCollectionIndex, currentCollectionIndex)
   SETUP_GETTER_INLINE_COL_SAME(const CollectionHierarchyCache *, HierarchyCache, hierarchyCache)
   SETUP_GETTER_INLINE_COL_SAME(GeneralSettings *, GeneralSettings, generalSettings)
-  SETUP_GETTER_INLINE_MGR_CTX_ONLY(InteractionStateHolder *, InteractionState, interactionState)
 };
 
 class NavigationManager : public QObject {
@@ -179,14 +161,33 @@ private:
   [[nodiscard]] auto getSubcollections(int parentIndex) const -> QList<int>;
   [[nodiscard]] auto getAllDescendantCollections(int parentIndex) const -> QList<int>;
 
-  InteractionManager *m_interactionManager = nullptr;
-  InteractionStateHolder *m_state = nullptr;
-  SettingsManager *m_settingsManager = nullptr;
-  DetailsPaneManager *m_detailsPaneManager = nullptr;
-  ScrollManager *m_scrollManager = nullptr;
-  DatabaseManager *m_databaseManager = nullptr;
-  SessionManager *m_sessionManager = nullptr;
-  ArtworkManager *m_artworkManager = nullptr;
+  // ctx is the single source of truth for sibling managers + state.
+  const ApplicationContext *m_ctx = nullptr;
+  [[nodiscard]] InteractionManager *interactionMgr() const {
+    return m_ctx ? m_ctx->interactionManager() : nullptr;
+  }
+  [[nodiscard]] InteractionStateHolder *state() const {
+    return m_ctx ? m_ctx->interactionState() : nullptr;
+  }
+  [[nodiscard]] SettingsManager *settingsMgr() const {
+    return m_ctx ? m_ctx->settingsManager() : nullptr;
+  }
+  [[nodiscard]] DetailsPaneManager *detailsPaneMgr() const {
+    return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
+  }
+  [[nodiscard]] ScrollManager *scrollMgr() const {
+    return m_ctx ? m_ctx->scrollManager() : nullptr;
+  }
+  [[nodiscard]] DatabaseManager *databaseMgr() const {
+    return m_ctx ? m_ctx->databaseManager() : nullptr;
+  }
+  [[nodiscard]] SessionManager *sessionMgr() const {
+    return m_ctx ? m_ctx->sessionManager() : nullptr;
+  }
+  [[nodiscard]] ArtworkManager *artworkMgr() const {
+    return m_ctx ? m_ctx->artworkManager() : nullptr;
+  }
+
   DetailsPane *m_MetadataSidebar = nullptr;
   int *m_currentCollectionIndex = nullptr;
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;

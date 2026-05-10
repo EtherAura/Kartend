@@ -23,21 +23,11 @@ struct ViewportManagerSetup {
   const GeneralSettings *generalSettings = nullptr;
 
   QScrollArea *itemScrollArea = nullptr;
-  ScrollManager *scrollManager = nullptr;
-  SelectionManager *selectionManager = nullptr;
-  AnimationManager *animationManager = nullptr;
-  ArtworkManager *artworkManager = nullptr;
-  InteractionStateHolder *interactionState = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
   const bool *isShuttingDown = nullptr;
 
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
-  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
-  SETUP_GETTER_DECL(SelectionManager *, SelectionManager)
-  SETUP_GETTER_DECL(AnimationManager *, AnimationManager)
-  SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
-  SETUP_GETTER_DECL(InteractionStateHolder *, InteractionState)
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
   SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
   SETUP_GETTER_DECL(const bool *, IsShuttingDown)
@@ -159,14 +149,28 @@ private:
   int m_lastSelectedRow = -1;
   bool m_deferredCenterPending = false;
 
-  // Manager references
+  // ctx is the single source of truth for sibling managers + state. Inline
+  // accessors below are the canonical read path; never cache sibling-manager
+  // pointers as direct fields.
+  const ApplicationContext *m_ctx = nullptr;
+  [[nodiscard]] ScrollManager *scrollMgr() const {
+    return m_ctx ? m_ctx->scrollManager() : nullptr;
+  }
+  [[nodiscard]] SelectionManager *selectionMgr() const {
+    return m_ctx ? m_ctx->selectionManager() : nullptr;
+  }
+  [[nodiscard]] AnimationManager *animMgr() const {
+    return m_ctx ? m_ctx->animationManager() : nullptr;
+  }
+  [[nodiscard]] ArtworkManager *artworkMgr() const {
+    return m_ctx ? m_ctx->artworkManager() : nullptr;
+  }
+  [[nodiscard]] InteractionStateHolder *state() const {
+    return m_ctx ? m_ctx->interactionState() : nullptr;
+  }
+
   const GeneralSettings *m_generalSettings = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
-  ScrollManager *m_scrollManager = nullptr;
-  SelectionManager *m_selectionManager = nullptr;
-  AnimationManager *m_animationManager = nullptr;
-  ArtworkManager *m_artworkManager = nullptr;
-  InteractionStateHolder *m_state = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   int *m_currentCollectionIndex = nullptr;
   const bool *m_isShuttingDown = nullptr;

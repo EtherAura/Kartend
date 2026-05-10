@@ -55,13 +55,18 @@ Q_DECLARE_LOGGING_CATEGORY(lcScrollManager)
   } while (0)
 
 void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
+  m_ctx = setup.ctx;
   m_generalSettings = setup.getGeneralSettings();
-  m_state = setup.getInteractionState();
   m_gridContainer = setup.getGridContainer();
   m_mediaScrollArea = setup.getMediaScrollArea();
-  m_artworkManager = setup.getArtworkManager();
   m_collections = setup.getCollections();
   m_hierarchyCache = setup.getHierarchyCache();
+
+  // Snapshot sibling-manager pointers for setter-based handoff to helpers.
+  // These mirror ctx and are not stored as ScrollManager member fields.
+  ArtworkManager *artwork = m_ctx ? m_ctx->artworkManager() : nullptr;
+  InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
+  DatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
 
   // Apply persisted column widths from settings via display manager.
   if (m_selectionDisplay) {
@@ -72,7 +77,7 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
     m_selectionDisplay->setActiveWidgets(&m_activeWidgets);
     m_selectionDisplay->setSelectionCoordinator(m_selectionCoordinator.get());
     m_selectionDisplay->setArrowKeyScrollHelper(m_arrowKeyScrollHelper.get());
-    m_selectionDisplay->setInteractionState(m_state);
+    m_selectionDisplay->setInteractionState(state);
     m_selectionDisplay->setArrowKeyViewUpdateTimer(m_arrowKeyViewUpdateTimer);
     m_selectionDisplay->setEnsureWidgetCallback([this](int idx) { ensureWidgetForIndex(idx); });
     m_selectionDisplay->setItemPositionCallback([this](int idx) { return getItemPosition(idx); });
@@ -102,7 +107,7 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
 
   // Configure item widget factory with dependencies
   if (m_widgetFactory) {
-    m_widgetFactory->setArtworkManager(m_artworkManager);
+    m_widgetFactory->setArtworkManager(artwork);
     m_widgetFactory->setCollections(m_collections);
     m_widgetFactory->setCollectionColumnWidth(
         m_selectionDisplay ? m_selectionDisplay->collectionColumnWidth() : 150);
@@ -113,14 +118,18 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
     m_selectionDisplay->setWidgetFactory(m_widgetFactory.get());
   }
 
-  // Configure search loading overlay with scroll area viewport
-  if (m_dataSource && m_mediaScrollArea) {
-    m_dataSource->setSearchOverlayParent(m_mediaScrollArea->viewport());
+  // Configure search loading overlay with scroll area viewport, and hand off
+  // the database pointer pulled from ctx.
+  if (m_dataSource) {
+    m_dataSource->setDatabaseManager(db);
+    if (m_mediaScrollArea) {
+      m_dataSource->setSearchOverlayParent(m_mediaScrollArea->viewport());
+    }
   }
   // Configure arrow key scroll helper with dependencies
   if (m_arrowKeyScrollHelper) {
     m_arrowKeyScrollHelper->setScrollArea(m_mediaScrollArea);
-    m_arrowKeyScrollHelper->setInteractionState(m_state);
+    m_arrowKeyScrollHelper->setInteractionState(state);
     m_arrowKeyScrollHelper->setScrollEventHandler(m_scrollEventHandler.get());
     m_arrowKeyScrollHelper->setGeneralSettings(m_generalSettings);
   }
@@ -271,7 +280,8 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
 
   // If we have a pending selection restore, query the database now that
   // the context and data are set up
-  if (!m_pendingRestoreFilePath.isEmpty() && m_databaseManager && m_collections) {
-    m_databaseManager->fetchVisualIndexForPath(m_context, *m_collections, m_pendingRestoreFilePath);
+  if (DatabaseManager *dbm = m_ctx ? m_ctx->databaseManager() : nullptr;
+      !m_pendingRestoreFilePath.isEmpty() && dbm && m_collections) {
+    dbm->fetchVisualIndexForPath(m_context, *m_collections, m_pendingRestoreFilePath);
   }
 }

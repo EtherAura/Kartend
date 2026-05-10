@@ -1,6 +1,7 @@
 // Handles config file I/O, collection settings, and the settings dialog
 // interface.
 #include "settingsmanager.h"
+#include "applicationcontext.h"
 #include "artworkmanager.h"
 #include "cachemanager.h"
 #include "collectionutils.h"
@@ -32,10 +33,8 @@ Q_LOGGING_CATEGORY(lcSettingsManager, "kartend.settingsmanager")
 #define debugLog(msg) qCDebug(lcSettingsManager) << msg
 
 // Construct settings manager and initialize QSettings.
-SettingsManager::SettingsManager(SessionManager *sessionManager, ArtworkManager *artworkManager,
-                                 CacheManager *cacheManager, QObject *parent)
-    : QObject(parent), m_sessionManager(sessionManager), m_artworkManager(artworkManager),
-      m_cacheManager(cacheManager) {
+SettingsManager::SettingsManager(const ApplicationContext *ctx, QObject *parent)
+    : QObject(parent), m_ctx(ctx) {
   QString configPath = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
   QDir configDir(configPath);
   if (!configDir.exists() && !configDir.mkpath(".")) {
@@ -523,18 +522,19 @@ void SettingsManager::setLastSelectedItem(int collectionIndex, int itemIndex) {
 
 auto SettingsManager::getLastSelectedItem(int collectionIndex) const -> int {
   auto *mainWindow = qobject_cast<MainWindow *>(parent());
+  SessionManager *session = m_ctx ? m_ctx->sessionManager() : nullptr;
   if ((mainWindow) && collectionIndex >= 0 && collectionIndex < mainWindow->m_collections.size()) {
     const CollectionConfig &cfg = mainWindow->m_collections[collectionIndex];
     const bool subfolderActive = !cfg.currentSubfolder.trimmed().isEmpty();
     QString hierarchicalName = CollectionUtils::hierarchicalNameFor(cfg, mainWindow->m_collections);
     int persistentIndex = -1;
-    if (m_sessionManager) {
+    if (session) {
       if (subfolderActive) {
         const QString sessionKey =
             CollectionUtils::selectionSessionKeyFor(cfg, mainWindow->m_collections);
-        persistentIndex = m_sessionManager->getLastSelectedIndex(sessionKey);
+        persistentIndex = session->getLastSelectedIndex(sessionKey);
       } else {
-        persistentIndex = m_sessionManager->getLastSelectedIndex(hierarchicalName);
+        persistentIndex = session->getLastSelectedIndex(hierarchicalName);
       }
     }
     if (persistentIndex >= 0) {
@@ -543,8 +543,8 @@ auto SettingsManager::getLastSelectedItem(int collectionIndex) const -> int {
 
     if (!subfolderActive) {
       QString collectionName = cfg.name;
-      if (m_sessionManager) {
-        persistentIndex = m_sessionManager->getLastSelectedIndex(collectionName);
+      if (session) {
+        persistentIndex = session->getLastSelectedIndex(collectionName);
       }
       if (persistentIndex >= 0) {
         return persistentIndex;

@@ -29,30 +29,15 @@ template <typename T> class QList;
 struct ArrowNavigationHandlerSetup {
   const ApplicationContext *ctx = nullptr;
 
-  // Manager dependencies (can be overridden or taken from ctx)
-  KeyboardManager *keyboardManager = nullptr;
-  ScrollManager *scrollManager = nullptr;
-  AnimationManager *animationManager = nullptr;
-  ViewportManager *viewportManager = nullptr;
-  SelectionManager *selectionManager = nullptr;
-
-  // UI elements
+  // Sibling managers come from ctx; only non-manager fields stay here.
   QScrollArea *itemScrollArea = nullptr;
   QWidget *gridContainer = nullptr;
   QStackedWidget *stackedWidget = nullptr;
   QWidget *itemsPage = nullptr;
-
-  // State references
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
   GeneralSettings *generalSettings = nullptr;
 
-  // Getters with ctx fallback
-  SETUP_GETTER_DECL(KeyboardManager *, KeyboardManager)
-  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
-  SETUP_GETTER_DECL(AnimationManager *, AnimationManager)
-  SETUP_GETTER_DECL(ViewportManager *, ViewportManager)
-  SETUP_GETTER_DECL(SelectionManager *, SelectionManager)
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
   SETUP_GETTER_DECL(QWidget *, GridContainer)
   SETUP_GETTER_DECL(QStackedWidget *, StackedWidget)
@@ -60,7 +45,6 @@ struct ArrowNavigationHandlerSetup {
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
   SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
   SETUP_GETTER_DECL(GeneralSettings *, GeneralSettings)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
 };
 
 /**
@@ -126,13 +110,27 @@ private:
   [[nodiscard]] int getTotalItems() const;
   [[nodiscard]] bool isWrapEnabled() const;
 
-  // Manager references
-  KeyboardManager *m_keyboardManager = nullptr;
-  ScrollManager *m_scrollManager = nullptr;
-  AnimationManager *m_animationManager = nullptr;
-  ViewportManager *m_viewportManager = nullptr;
-  SelectionManager *m_selectionManager = nullptr;
-  InteractionStateHolder *m_state = nullptr;
+  // ctx is the single source of truth for sibling managers + state.
+  const ApplicationContext *m_ctx = nullptr;
+  [[nodiscard]] KeyboardManager *keyboardMgr() const {
+    return m_ctx ? m_ctx->keyboardManager() : nullptr;
+  }
+  [[nodiscard]] ScrollManager *scrollMgr() const {
+    return m_ctx ? m_ctx->scrollManager() : nullptr;
+  }
+  [[nodiscard]] AnimationManager *animMgr() const {
+    return m_ctx ? m_ctx->animationManager() : nullptr;
+  }
+  [[nodiscard]] ViewportManager *viewportMgr() const {
+    return m_ctx ? m_ctx->viewportManager() : nullptr;
+  }
+  [[nodiscard]] SelectionManager *selectionMgr() const {
+    return m_ctx ? m_ctx->selectionManager() : nullptr;
+  }
+  [[nodiscard]] InteractionStateHolder *state() const {
+    return m_ctx ? m_ctx->interactionState() : nullptr;
+  }
+
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
   QWidget *m_gridContainer = nullptr;
   QStackedWidget *m_stackedWidget = nullptr;

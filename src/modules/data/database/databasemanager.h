@@ -19,6 +19,7 @@ class CachedCountsService;
 class QueryManager;
 class QThread;
 class SessionManager;
+struct ApplicationContext;
 
 /**
  * @brief Coordinates database operations via a dedicated worker thread.
@@ -48,7 +49,7 @@ class SessionManager;
 class DatabaseManager : public QObject {
   Q_OBJECT
 public:
-  explicit DatabaseManager(SessionManager *sessionManager, QObject *parent = nullptr);
+  explicit DatabaseManager(const ApplicationContext *ctx, QObject *parent = nullptr);
   ~DatabaseManager() override;
 
   void initDatabase();
@@ -211,7 +212,8 @@ private:
   [[nodiscard]] qint64 countCollectionByUuid(const QString &collectionUuid) const;
   void clearCollectionFromDatabaseByUuid(const QString &collectionUuid);
 
-  SessionManager *m_sessionManager;
+  // ctx is the single source of truth for sibling managers (SessionManager).
+  const ApplicationContext *m_ctx = nullptr;
   QueryManager *m_worker = nullptr;
   QueryManager *m_scanWorker = nullptr;
   QThread *m_workerThread = nullptr;

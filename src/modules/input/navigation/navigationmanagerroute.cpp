@@ -40,12 +40,12 @@ auto NavigationManager::validateAndPrepareNavigation(int collectionIndex) -> boo
   bool hasSub = false;
   bool hasItems = false;
   if (!getHasSubAndItems(collectionIndex, hasSub, hasItems)) {
-    if ((parent()) && (m_interactionManager)) {
+    if ((parent()) && (interactionMgr())) {
       // Clear navigation progress flag early when validation fails -
       // prevents navigation from being blocked indefinitely
       QTimer::singleShot(UIConstants::Navigation::PROGRESS_CLEAR_EARLY_MS, this, [this]() {
-        if (parent() && m_interactionManager) {
-          m_interactionManager->setNavigationInProgress(false);
+        if (parent() && interactionMgr()) {
+          interactionMgr()->setNavigationInProgress(false);
         }
       });
     }
@@ -57,9 +57,9 @@ auto NavigationManager::validateAndPrepareNavigation(int collectionIndex) -> boo
 auto NavigationManager::handleSubcollectionNavigation(int collectionIndex, int previousIndex)
     -> void {
   Q_UNUSED(previousIndex)
-  if (m_scrollManager) {
-    m_scrollManager->updateContextForSubcollection(collectionIndex);
-    m_scrollManager->applySubcollectionFilter(collectionIndex);
+  if (scrollMgr()) {
+    scrollMgr()->updateContextForSubcollection(collectionIndex);
+    scrollMgr()->applySubcollectionFilter(collectionIndex);
   }
 
   // Delegate selection restore to SelectionRestoreManager
@@ -69,8 +69,8 @@ auto NavigationManager::handleSubcollectionNavigation(int collectionIndex, int p
 }
 
 auto NavigationManager::handleRegularNavigation(int collectionIndex) -> void {
-  if (m_scrollManager) {
-    m_scrollManager->clearFilter();
+  if (scrollMgr()) {
+    scrollMgr()->clearFilter();
   }
 }
 
@@ -81,8 +81,8 @@ auto NavigationManager::finalizeNavigation(int collectionIndex) -> void {
   }
   // Delay horizontal centering until layout has settled after navigation
   QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this, [this]() {
-    if (m_scrollManager && m_currentCollectionIndex && m_collections) {
-      m_scrollManager->centerHorizontalScrollbar((*m_currentCollectionIndex), (*m_collections));
+    if (scrollMgr() && m_currentCollectionIndex && m_collections) {
+      scrollMgr()->centerHorizontalScrollbar((*m_currentCollectionIndex), (*m_collections));
     }
   });
   if (m_refreshTitleCounts) m_refreshTitleCounts();
@@ -95,8 +95,8 @@ auto NavigationManager::finalizeNavigation(int collectionIndex) -> void {
   // Clear navigation progress flag after all animations complete -
   // allows user input to be processed again
   QTimer::singleShot(UIConstants::Navigation::PROGRESS_CLEAR_MS, this, [this]() {
-    if (parent() && m_interactionManager) {
-      m_interactionManager->setNavigationInProgress(false);
+    if (parent() && interactionMgr()) {
+      interactionMgr()->setNavigationInProgress(false);
     }
   });
 }
@@ -150,11 +150,11 @@ auto NavigationManager::prepareNonSharedNavigation(int collectionIndex) -> void 
   applyUiPoliciesForCollection(collectionIndex);
   applyCollectionSettingsOnly(collectionIndex);
 
-  if (m_scrollManager) {
-    m_scrollManager->primeLayoutFor((*m_collections)[collectionIndex]);
+  if (scrollMgr()) {
+    scrollMgr()->primeLayoutFor((*m_collections)[collectionIndex]);
   }
-  if (m_interactionManager) {
-    m_interactionManager->initializeSearchModeForCurrentCollection();
+  if (interactionMgr()) {
+    interactionMgr()->initializeSearchModeForCurrentCollection();
   }
 
   updateItemsPageTitle(collectionIndex);
@@ -164,16 +164,16 @@ auto NavigationManager::prepareNonSharedNavigation(int collectionIndex) -> void 
     m_itemsPage->window()->activateWindow();
   }
 
-  if (m_detailsPaneManager) {
-    m_detailsPaneManager->applySidebarStateForCollection((*m_currentCollectionIndex));
+  if (detailsPaneMgr()) {
+    detailsPaneMgr()->applySidebarStateForCollection((*m_currentCollectionIndex));
   }
 
   if ((m_searchBar) && m_searchBar->text().trimmed().isEmpty()) {
     m_searchBar->clear();
   }
 
-  if (m_scrollManager) {
-    m_scrollManager->clearFilter();
+  if (scrollMgr()) {
+    scrollMgr()->clearFilter();
   }
 }
 

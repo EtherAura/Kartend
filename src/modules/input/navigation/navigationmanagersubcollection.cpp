@@ -23,16 +23,16 @@
 
 void NavigationManager::onSubcollectionEntered(int subcollectionIndex) {
   if (subcollectionIndex >= 0 && subcollectionIndex < (*m_collections).size()) {
-    if (m_state) {
+    if (state()) {
       qint64 now = QDateTime::currentMSecsSinceEpoch();
-      m_state->click().suppressDoubleClickUntilMs =
+      state()->click().suppressDoubleClickUntilMs =
           now + UIConstants::Selection::DOUBLE_CLICK_SUPPRESS_AFTER_ENTER_MS;
     }
 
-    if ((*m_currentCollectionIndex) >= 0 && (m_interactionManager)) {
-      int currentSelection = m_interactionManager->currentSelectedIndex();
+    if ((*m_currentCollectionIndex) >= 0 && (interactionMgr())) {
+      int currentSelection = interactionMgr()->currentSelectedIndex();
       if (currentSelection >= 0) {
-        m_settingsManager->setLastSelectedItem((*m_currentCollectionIndex), currentSelection);
+        settingsMgr()->setLastSelectedItem((*m_currentCollectionIndex), currentSelection);
       }
     }
 
@@ -40,7 +40,7 @@ void NavigationManager::onSubcollectionEntered(int subcollectionIndex) {
       m_stackManager->push(*m_currentCollectionIndex);
     }
 
-    m_settingsManager->setLastSelectedItem(subcollectionIndex, -1);
+    settingsMgr()->setLastSelectedItem(subcollectionIndex, -1);
 
     bool success = showCollectionItems(subcollectionIndex);
     if (!success) {
@@ -52,14 +52,14 @@ void NavigationManager::onSubcollectionEntered(int subcollectionIndex) {
     // Delay horizontal centering until subcollection layout stabilizes
     QTimer::singleShot(
         UIConstants::Navigation::SUBCOLLECTION_SCROLL_CENTER_DELAY_MS, this, [this]() {
-          m_scrollManager->centerHorizontalScrollbar((*m_currentCollectionIndex), (*m_collections));
+          scrollMgr()->centerHorizontalScrollbar((*m_currentCollectionIndex), (*m_collections));
         });
 
     // Clear double-click suppression after navigation animation completes
     QTimer::singleShot(UIConstants::Selection::DOUBLE_CLICK_SUPPRESS_CLEAR_DELAY_MS, this,
                        [this]() {
-                         if (m_state) {
-                           m_state->click().suppressDoubleClickUntilMs = 0;
+                         if (state()) {
+                           state()->click().suppressDoubleClickUntilMs = 0;
                          }
                        });
   }
@@ -72,12 +72,12 @@ void NavigationManager::onVirtualFolderEntered(const QString &folderPath) {
 
   // Persist the currently selected folder tile in the parent scope so that
   // leaving the subfolder restores selection back to the entered folder.
-  if (m_interactionManager) {
-    m_interactionManager->saveCurrentSelection();
+  if (interactionMgr()) {
+    interactionMgr()->saveCurrentSelection();
   }
 
-  if (m_interactionManager) {
-    m_interactionManager->stopScrollAnimations();
+  if (interactionMgr()) {
+    interactionMgr()->stopScrollAnimations();
   }
 
   // Update the current subfolder path in the collection config
@@ -107,12 +107,12 @@ void NavigationManager::goBackFromVirtualFolder() {
 
   // Persist the current selection within this virtual subfolder scope before
   // changing currentSubfolder so re-entry can restore it.
-  if (m_interactionManager) {
-    m_interactionManager->saveCurrentSelection();
+  if (interactionMgr()) {
+    interactionMgr()->saveCurrentSelection();
   }
 
-  if (m_interactionManager) {
-    m_interactionManager->stopScrollAnimations();
+  if (interactionMgr()) {
+    interactionMgr()->stopScrollAnimations();
   }
 
   CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
@@ -151,11 +151,11 @@ void NavigationManager::onBreadcrumbLinkClicked(const QString &link) {
     if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < (*m_collections).size()) {
       CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
       if (config.currentSubfolder != parsed.subfolderPath) {
-        if (m_interactionManager) {
-          m_interactionManager->saveCurrentSelection();
+        if (interactionMgr()) {
+          interactionMgr()->saveCurrentSelection();
         }
-        if (m_interactionManager) {
-          m_interactionManager->stopScrollAnimations();
+        if (interactionMgr()) {
+          interactionMgr()->stopScrollAnimations();
         }
         m_forceTopOnNextItemsViewLoad = true;
         if (m_itemScrollArea && m_itemScrollArea->verticalScrollBar()) {
@@ -169,11 +169,11 @@ void NavigationManager::onBreadcrumbLinkClicked(const QString &link) {
     if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < (*m_collections).size()) {
       CollectionConfig &config = (*m_collections)[*m_currentCollectionIndex];
       if (!config.currentSubfolder.isEmpty()) {
-        if (m_interactionManager) {
-          m_interactionManager->saveCurrentSelection();
+        if (interactionMgr()) {
+          interactionMgr()->saveCurrentSelection();
         }
-        if (m_interactionManager) {
-          m_interactionManager->stopScrollAnimations();
+        if (interactionMgr()) {
+          interactionMgr()->stopScrollAnimations();
         }
         m_forceTopOnNextItemsViewLoad = true;
         if (m_itemScrollArea && m_itemScrollArea->verticalScrollBar()) {
@@ -217,9 +217,9 @@ void NavigationManager::loadCurrentAndSubcollections() {
   // Delay filter reapplication until item count query completes -
   // ensures filter operates on the updated item list
   QTimer::singleShot(UIConstants::Artwork::FILTER_REAPPLY_DELAY_MS, this, [this]() {
-    if (m_searchBar && !m_searchBar->text().trimmed().isEmpty() && m_scrollManager) {
+    if (m_searchBar && !m_searchBar->text().trimmed().isEmpty() && scrollMgr()) {
       const QString currentSearchText = m_searchBar->text().trimmed();
-      m_scrollManager->applyFilter(currentSearchText);
+      scrollMgr()->applyFilter(currentSearchText);
     }
   });
 }
@@ -227,20 +227,20 @@ void NavigationManager::loadCurrentAndSubcollections() {
 // Renders the synthetic "Home" view: one tile per root collection
 // (parentCollectionIndex == -1), no host collection, no DB query, no items.
 void NavigationManager::loadRootView() {
-  if (!m_collections || !m_currentCollectionIndex || !m_scrollManager) {
+  if (!m_collections || !m_currentCollectionIndex || !scrollMgr()) {
     return;
   }
 
-  if (m_interactionManager) {
-    m_interactionManager->stopRepeat();
+  if (interactionMgr()) {
+    interactionMgr()->stopRepeat();
     if (*m_currentCollectionIndex >= 0) {
-      m_interactionManager->cancelPendingSelectionRestore();
+      interactionMgr()->cancelPendingSelectionRestore();
     }
   }
   persistCurrentSelection();
   performNavigationStackCleanup();
   m_stackManager->clear();
-  m_scrollManager->cleanup();
+  scrollMgr()->cleanup();
 
   *m_currentCollectionIndex = -1;
   m_inRootView = true;
@@ -295,7 +295,7 @@ void NavigationManager::loadRootView() {
   // No items, only tiles. setupVirtualScrolling with totalCount=0 routes the
   // ScrollManager through the tile-only render path; the override list in the
   // context populates the visible tiles.
-  m_scrollManager->setupVirtualScrolling(0, context);
+  scrollMgr()->setupVirtualScrolling(0, context);
 
   if (rootIndices.isEmpty() && m_loadingLabel) {
     m_loadingLabel->showMessage(tr("No collections yet"),
@@ -303,12 +303,12 @@ void NavigationManager::loadRootView() {
                                 QStringLiteral("📭"));
   }
 
-  if (m_detailsPaneManager) {
-    m_detailsPaneManager->applySidebarStateForCollection(-1);
+  if (detailsPaneMgr()) {
+    detailsPaneMgr()->applySidebarStateForCollection(-1);
   }
 
-  if (m_interactionManager) {
-    m_interactionManager->setNavigationInProgress(false);
+  if (interactionMgr()) {
+    interactionMgr()->setNavigationInProgress(false);
   }
   if (m_refreshTitleCounts) m_refreshTitleCounts();
 }

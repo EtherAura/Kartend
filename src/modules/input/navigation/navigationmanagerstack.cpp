@@ -33,15 +33,15 @@ Q_DECLARE_LOGGING_CATEGORY(lcNavigationManager)
   } while (0)
 
 auto NavigationManager::performNavigationStackCleanup() -> void {
-  if (m_interactionManager) {
-    m_interactionManager->clearSelectionAndFocus();
+  if (interactionMgr()) {
+    interactionMgr()->clearSelectionAndFocus();
   }
   if (m_MetadataSidebar) {
     m_MetadataSidebar->clearMetadata();
   }
-  m_artworkManager->stopSilentLoading();
-  if (m_artworkManager->getTimerCoordinator()) {
-    m_artworkManager->getTimerCoordinator()->stopAllTimers();
+  artworkMgr()->stopSilentLoading();
+  if (artworkMgr()->getTimerCoordinator()) {
+    artworkMgr()->getTimerCoordinator()->stopAllTimers();
   }
 }
 
@@ -61,16 +61,16 @@ auto NavigationManager::scheduleNavigationReturn(int targetCollectionIndex,
                      [this, targetCollectionIndex, subcollectionVisualIndex]() {
                        showCollectionItems(targetCollectionIndex);
 
-                       if (m_interactionManager) {
-                         m_interactionManager->setNavigationInProgress(false);
+                       if (interactionMgr()) {
+                         interactionMgr()->setNavigationInProgress(false);
                        }
 
-                       if (subcollectionVisualIndex >= 0 && m_interactionManager) {
+                       if (subcollectionVisualIndex >= 0 && interactionMgr()) {
                          // Delay selection restore until layout is stable after navigation
                          QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this,
                                             [this, subcollectionVisualIndex]() {
-                                              if (m_interactionManager) {
-                                                m_interactionManager->beginSelectionRestore(
+                                              if (interactionMgr()) {
+                                                interactionMgr()->beginSelectionRestore(
                                                     subcollectionVisualIndex);
                                               }
                                             });
@@ -86,11 +86,11 @@ auto NavigationManager::handleNavigationStackPop() -> void {
   performNavigationStackCleanup();
 
   bool shared = areItemsShared(previousIndex, targetCollectionIndex);
-  if (m_scrollManager) {
+  if (scrollMgr()) {
     if (shared) {
-      m_scrollManager->cleanupActiveWidgets();
+      scrollMgr()->cleanupActiveWidgets();
     } else {
-      m_scrollManager->cleanup();
+      scrollMgr()->cleanup();
     }
   }
 
@@ -118,18 +118,18 @@ auto NavigationManager::handleNavigationFallback() -> void {
 
   if (fallbackIndex >= 0) {
     bool shared = areItemsShared(previousIndex, fallbackIndex);
-    if (m_scrollManager) {
+    if (scrollMgr()) {
       if (shared) {
-        m_scrollManager->cleanupActiveWidgets();
+        scrollMgr()->cleanupActiveWidgets();
       } else {
-        m_scrollManager->cleanup();
+        scrollMgr()->cleanup();
       }
     }
     showCollectionItems(fallbackIndex);
   }
 
-  if (m_interactionManager) {
-    m_interactionManager->setNavigationInProgress(false);
+  if (interactionMgr()) {
+    interactionMgr()->setNavigationInProgress(false);
   }
 }
 
@@ -144,8 +144,8 @@ void NavigationManager::goBackToCollections() {
   if (m_inRootView) {
     return;
   }
-  if ((parent()) && (m_interactionManager)) {
-    m_interactionManager->stopRepeat();
+  if ((parent()) && (interactionMgr())) {
+    interactionMgr()->stopRepeat();
   }
 
   persistCurrentSelection();

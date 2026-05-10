@@ -30,14 +30,7 @@ Q_LOGGING_CATEGORY(lcSearchManager, "kartend.searchmanager")
     }                                                                                              \
   } while (0)
 
-// SearchManagerSetup getter definitions
-SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, DatabaseManager *, DatabaseManager, databaseManager)
-SETUP_GETTER_DEF_MGR_CTX_ONLY(SearchManagerSetup, InteractionStateHolder *, InteractionState,
-                              interactionState)
-SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, NavigationManager *, NavigationManager,
-                          navigationManager)
-SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_MGR_SAME(SearchManagerSetup, SettingsManager *, SettingsManager, settingsManager)
+// SearchManagerSetup getter definitions (non-manager fields only).
 SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QLineEdit *, SearchBar, searchBar)
 SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QAction *, SearchModeAction, searchModeAction)
 SETUP_GETTER_DEF_UI_SAME(SearchManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
@@ -58,11 +51,7 @@ SearchManager::SearchManager(QObject *parent) : QObject(parent) {
 SearchManager::~SearchManager() = default;
 
 void SearchManager::setupReferences(const SearchManagerSetup &setup) {
-  m_state = setup.getInteractionState();
-  m_databaseManager = setup.getDatabaseManager();
-  m_navigationManager = setup.getNavigationManager();
-  m_scrollManager = setup.getScrollManager();
-  m_settingsManager = setup.getSettingsManager();
+  m_ctx = setup.ctx;
   m_hierarchyCache = setup.getHierarchyCache();
   if (setup.ctx) {
     m_generalSettings = setup.ctx->collection.generalSettings;
@@ -223,7 +212,7 @@ bool SearchManager::hasDirectItemsForIndex(int idx) const {
   const CollectionConfig &collCfg = (*m_collections)[idx];
 
   // Check database via ScrollManager's reference if available
-  if (m_scrollManager) {
+  if (scrollMgr()) {
     // For now, use filesystem check as fallback
   }
 

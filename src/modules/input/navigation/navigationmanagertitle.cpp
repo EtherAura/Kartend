@@ -207,8 +207,8 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
                         << "bgIdx=" << m_backgroundCountRefreshCollectionIndex << "curIdx=" << idx;
 
   if (m_backgroundCountRefreshInProgress && m_backgroundCountRefreshCollectionIndex == idx &&
-      m_scrollManager) {
-    const int currentViewItems = m_scrollManager->getTotalItems();
+      scrollMgr()) {
+    const int currentViewItems = scrollMgr()->getTotalItems();
     qCWarning(lcScanFlow) << "bgRefresh path: currentViewItems=" << currentViewItems
                           << "count=" << count;
     // Background scan completed. If the view already has items and count is the
@@ -218,15 +218,15 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
       m_backgroundCountRefreshInProgress = false;
       m_backgroundCountRefreshCollectionIndex = -1;
 
-      m_scrollManager->updateMediaItemCount(count);
-      if (m_artworkManager && m_artworkManager->getTimerCoordinator()) {
-        m_artworkManager->getTimerCoordinator()->scheduleViewportUpdate();
+      scrollMgr()->updateMediaItemCount(count);
+      if (artworkMgr() && artworkMgr()->getTimerCoordinator()) {
+        artworkMgr()->getTimerCoordinator()->scheduleViewportUpdate();
       }
       if (m_refreshTitleCounts) {
         m_refreshTitleCounts();
       }
-      if (m_databaseManager && m_collections) {
-        m_databaseManager->updateCachedCounts((*m_collections));
+      if (databaseMgr() && m_collections) {
+        databaseMgr()->updateCachedCounts((*m_collections));
       }
       return;
     }
@@ -294,8 +294,8 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   if (totalItems == 0) {
     qCDebug(lcSearchDiag) << "onItemCountLoaded: totalItems==0, calling handleEmptyContent";
     // Hide search loading overlay even when no results
-    if (m_scrollManager) {
-      m_scrollManager->hideSearchLoadingOverlay();
+    if (scrollMgr()) {
+      scrollMgr()->hideSearchLoadingOverlay();
     }
     handleEmptyContent();
     return;
@@ -326,18 +326,18 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
     selIdx = 0;
   }
 
-  if (m_scrollManager) {
+  if (scrollMgr()) {
     // Pre-set scroll position to avoid visual jump
     if (searchActive) {
-      m_scrollManager->setInitialScrollIndex(0);
+      scrollMgr()->setInitialScrollIndex(0);
     } else if (selIdx >= 0) {
-      m_scrollManager->setInitialScrollIndex(selIdx);
+      scrollMgr()->setInitialScrollIndex(selIdx);
     }
     qCWarning(lcScanFlow) << "Calling setupVirtualScrolling: totalItems=" << totalItems;
-    m_scrollManager->setupVirtualScrolling(totalItems, context);
+    scrollMgr()->setupVirtualScrolling(totalItems, context);
 
     // Hide search loading overlay once filtered results are ready
-    m_scrollManager->hideSearchLoadingOverlay();
+    scrollMgr()->hideSearchLoadingOverlay();
   }
 
   // Resume rendering on the items page
@@ -351,18 +351,18 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   }
 
   // Update artwork for visible items
-  if (m_artworkManager) {
-    m_artworkManager->updateViewportArtwork();
+  if (artworkMgr()) {
+    artworkMgr()->updateViewportArtwork();
   }
-  if (m_artworkManager && m_artworkManager->getTimerCoordinator()) {
-    m_artworkManager->getTimerCoordinator()->scheduleViewportUpdate();
+  if (artworkMgr() && artworkMgr()->getTimerCoordinator()) {
+    artworkMgr()->getTimerCoordinator()->scheduleViewportUpdate();
   }
 
   // Restore selection if needed
-  bool pendingRestore = m_state ? m_state->selectionRestore().restorePending : false;
+  bool pendingRestore = state() ? state()->selectionRestore().restorePending : false;
   // Also skip if there's a pending path-based restore (from sort change)
-  bool pendingPathRestore = m_scrollManager && m_scrollManager->hasPendingSelectionRestoreByPath();
-  if (selIdx >= 0 && m_interactionManager && !pendingRestore && !pendingPathRestore) {
+  bool pendingPathRestore = scrollMgr() && scrollMgr()->hasPendingSelectionRestoreByPath();
+  if (selIdx >= 0 && interactionMgr() && !pendingRestore && !pendingPathRestore) {
     scheduleSelectionRestore(selIdx, UIConstants::Selection::RESTORE_STEPS,
                              UIConstants::Selection::RESTORE_STEP_DELAY_MS,
                              UIConstants::Selection::RESTORE_MAX_DELAY_MS);

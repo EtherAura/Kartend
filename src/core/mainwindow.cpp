@@ -75,7 +75,7 @@ MainWindow::MainWindow(QWidget *parent)
       m_mainHorizontalLayout(nullptr), searchBar(nullptr), loadingLabel(nullptr),
       currentCollectionIndex(-1), m_MetadataSidebar(nullptr) {
   m_appManager = std::make_unique<ApplicationManager>(this);
-  m_appManager->initialize();
+  m_appManager->initialize(&m_appContext);
 
   ui->setupUi(this);
   setupUI();
@@ -406,24 +406,10 @@ void MainWindow::setupManagerConnections() {
 
   loadingLabel = ui->loadingLabel;
 
-  // CRITICAL: Set interactionState BEFORE setupReferences so sub-managers
-  // can access it via ctx during their own setupReferences calls
-  m_appContext.managers.interactionState = &getInteractionManager()->state();
-
-  // Set up InteractionManager (its sub-managers will now get valid
-  // interactionState)
+  // ctx is already fully populated by initializeAppContext() — InteractionManager
+  // and its owned sub-managers were registered eagerly so every setupReferences()
+  // call below can resolve siblings exclusively through ctx.
   getInteractionManager()->setupReferences(setup);
-
-  // Register InteractionManager's owned sub-managers in ApplicationContext
-  // This enables sub-managers to access siblings directly via ctx
-  m_appContext.managers.animationManager = getInteractionManager()->animationManager();
-  m_appContext.managers.selectionManager = getInteractionManager()->selectionManager();
-  m_appContext.managers.viewportManager = getInteractionManager()->viewportManager();
-  m_appContext.managers.mouseManager = getInteractionManager()->mouseManager();
-  m_appContext.managers.keyboardManager = getInteractionManager()->keyboardManager();
-  m_appContext.managers.eventManager = getInteractionManager()->eventManager();
-  m_appContext.managers.searchManager = getInteractionManager()->searchManager();
-  m_appContext.managers.launchManager = getInteractionManager()->launchManager();
 
   // when runtime detection is enabled, the LaunchManager spawns
   // a tracked QProcess and emits started/finished signals. Show a "Now

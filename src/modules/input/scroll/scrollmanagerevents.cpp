@@ -1,7 +1,7 @@
 // Scroll event handling and double-click slots extracted from
-// scrollmanager.cpp. All remain ScrollManager members and
-// access existing class state (m_scrollTimer, m_arrowKeyViewUpdateTimer,
-// m_scrollEventHandler, m_arrowKeyScrollHelper, m_state, etc.).
+// scrollmanager.cpp. All remain ScrollManager members and access existing
+// class state.
+#include "applicationcontext.h"
 #include "arrowkeyscrollhelper.h"
 #include "artworkmanager.h"
 #include "interactionstateholder.h"
@@ -45,7 +45,8 @@ void ScrollManager::onScrollChanged() {
   }
   m_processingScrollChange = true;
 
-  if (m_state && m_state->scroll().programmaticScroll) {
+  InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
+  if (state && state->scroll().programmaticScroll) {
     handleProgrammaticScroll();
     m_processingScrollChange = false;
     return;
@@ -77,8 +78,8 @@ void ScrollManager::handleUserScroll() {
     m_prewarmIdleTimer->trigger();
   }
 
-  if (m_state) {
-    m_state->scroll().userScrollActive = true;
+  if (auto *state = m_ctx ? m_ctx->interactionState() : nullptr) {
+    state->scroll().userScrollActive = true;
   }
 
   // Stop any running arrow key scroll animation
@@ -88,16 +89,17 @@ void ScrollManager::handleUserScroll() {
 }
 
 void ScrollManager::setupScrollSuppression() {
-  if (!m_state) {
+  InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
+  if (!state) {
     return;
   }
 
-  m_state->arrow().suppressArrowCenter = true;
+  state->arrow().suppressArrowCenter = true;
   qint64 until =
       QDateTime::currentMSecsSinceEpoch() + UIConstants::Mouse::WHEEL_SUPPRESS_ARROW_CENTER_MS;
-  m_state->arrow().suppressArrowCenterUntilMs = until;
+  state->arrow().suppressArrowCenterUntilMs = until;
 
-  InteractionStateHolder *statePtr = m_state;
+  InteractionStateHolder *statePtr = state;
   // Clear arrow center suppression after the suppression window expires -
   // checks timestamp to avoid clearing if another suppress was scheduled
   QTimer::singleShot(UIConstants::Keyboard::ARROW_CENTER_CLEAR_CHECK_DELAY_MS, this, [statePtr]() {
@@ -117,14 +119,14 @@ void ScrollManager::finalizeScrollChanges() {
   // to be processed with the flag still set. After clearing, trigger
   // artwork update since it was deferred during scrolling.
   QTimer::singleShot(UIConstants::Mouse::USER_SCROLL_ACTIVE_CLEAR_DELAY_MS, this, [this]() {
-    if (m_state) {
-      m_state->scroll().userScrollActive = false;
+    if (auto *state = m_ctx ? m_ctx->interactionState() : nullptr) {
+      state->scroll().userScrollActive = false;
     }
     // Trigger artwork update now that user scroll is
     // complete - artwork loading was deferred while
     // userScrollActive was true
-    if (m_artworkManager) {
-      m_artworkManager->updateViewportArtwork();
+    if (auto *art = m_ctx ? m_ctx->artworkManager() : nullptr) {
+      art->updateViewportArtwork();
     }
   });
 

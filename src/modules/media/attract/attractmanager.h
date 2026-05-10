@@ -13,26 +13,23 @@ QT_END_NAMESPACE
 
 struct ApplicationContext;
 struct GeneralSettings;
-class ScrollManager;
-class SelectionManager;
 
 /**
  * @brief Setup struct for AttractManager dependencies.
  *
- * Follows the same pattern as other manager setup structs, with ctx fallback.
+ * Sibling managers (ScrollManager, SelectionManager) are resolved at runtime
+ * through ctx — they are not duplicated as setup-struct fields. Non-manager
+ * widget / collection-state references are still pulled into direct member
+ * fields by setupReferences for fast, repeated access.
  */
 struct AttractManagerSetup {
   const ApplicationContext *ctx = nullptr;
 
   QScrollArea *itemScrollArea = nullptr;
-  ScrollManager *scrollManager = nullptr;
-  SelectionManager *selectionManager = nullptr;
   const GeneralSettings *generalSettings = nullptr;
   const bool *isShuttingDown = nullptr;
 
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
-  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
-  SETUP_GETTER_DECL(SelectionManager *, SelectionManager)
   SETUP_GETTER_DECL(const GeneralSettings *, GeneralSettings)
   SETUP_GETTER_DECL(const bool *, IsShuttingDown)
 };
@@ -110,10 +107,11 @@ private:
   void resetIdleTimer();
   void startAdvanceSelectionTimerIfEnabled();
 
-  // Manager references (borrowed, not owned)
+  // ctx is the single source of truth for sibling managers — never cache
+  // them as direct fields. UI / collection-state pointers below are still
+  // cached for repeated access.
+  const ApplicationContext *m_ctx = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
-  ScrollManager *m_scrollManager = nullptr;
-  SelectionManager *m_selectionManager = nullptr;
   const GeneralSettings *m_generalSettings = nullptr;
   const bool *m_isShuttingDown = nullptr;
 

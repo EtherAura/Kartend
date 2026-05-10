@@ -68,19 +68,19 @@ auto InteractionManager::processEnterOrReturnKey(int totalItems) -> bool {
   // misclassified as subcollections, navigating into the wrong child and
   // "clearing the search and breaking the view."
   const int actualIndex =
-      m_scrollManager ? m_scrollManager->getFilteredIndex(currentSelection) : currentSelection;
-  const int renderedSubCount = m_scrollManager ? m_scrollManager->getSubcollectionCount() : 0;
+      scrollMgr() ? scrollMgr()->getFilteredIndex(currentSelection) : currentSelection;
+  const int renderedSubCount = scrollMgr() ? scrollMgr()->getSubcollectionCount() : 0;
   if (actualIndex >= 0 && actualIndex < renderedSubCount) {
     const int subCollIdx =
-        m_scrollManager ? m_scrollManager->subcollectionIndexFromActual(actualIndex) : -1;
+        scrollMgr() ? scrollMgr()->subcollectionIndexFromActual(actualIndex) : -1;
     if (subCollIdx >= 0) {
       return handleEnterOnSubcollection(actualIndex, subCollIdx);
     }
   }
 
   // Check if this is a virtual folder
-  if (m_scrollManager) {
-    QString folderPath = m_scrollManager->virtualFolderPathForVisualIndex(currentSelection);
+  if (scrollMgr()) {
+    QString folderPath = scrollMgr()->virtualFolderPathForVisualIndex(currentSelection);
     if (!folderPath.isEmpty()) {
       return handleEnterOnVirtualFolder(folderPath);
     }
@@ -92,18 +92,18 @@ auto InteractionManager::processEnterOrReturnKey(int totalItems) -> bool {
 auto InteractionManager::handleEnterOnSubcollection(int subActualIndex, int subCollIdx) -> bool {
   saveCurrentSelection();
   const int subIdx = subCollIdx;
-  if (m_navigationManager) {
+  if (navMgr()) {
     if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < m_collections->size()) {
-      m_navigationManager->stackManager()->push(*m_currentCollectionIndex);
+      navMgr()->stackManager()->push(*m_currentCollectionIndex);
     }
     clearSelectionAndFocus();
-    if (m_detailsPaneManager) {
-      m_detailsPaneManager->updateSidebarMetadata(nullptr);
+    if (detailsPaneMgr()) {
+      detailsPaneMgr()->updateSidebarMetadata(nullptr);
     }
-    const bool success = m_navigationManager->showCollectionItems(subIdx);
+    const bool success = navMgr()->showCollectionItems(subIdx);
     if (!success) {
       // Undo the push if navigation failed
-      (void)m_navigationManager->stackManager()->pop();
+      (void)navMgr()->stackManager()->pop();
       selectItemByIndex(subActualIndex, true);
       if (m_itemsPage) {
         m_itemsPage->setFocus();
@@ -113,8 +113,8 @@ auto InteractionManager::handleEnterOnSubcollection(int subActualIndex, int subC
       // animations complete and layout is stable
       constexpr int kHorizontalCenterDelayMs = 600;
       QTimer::singleShot(kHorizontalCenterDelayMs, this, [this]() {
-        if (!QApplication::closingDown() && m_scrollManager) {
-          m_scrollManager->centerHorizontalScrollbar(*m_currentCollectionIndex, *m_collections);
+        if (!QApplication::closingDown() && scrollMgr()) {
+          scrollMgr()->centerHorizontalScrollbar(*m_currentCollectionIndex, *m_collections);
         }
       });
     }
@@ -123,20 +123,20 @@ auto InteractionManager::handleEnterOnSubcollection(int subActualIndex, int subC
 }
 
 auto InteractionManager::handleEnterOnVirtualFolder(const QString &folderPath) -> bool {
-  if (m_navigationManager) {
-    m_navigationManager->onVirtualFolderEntered(folderPath);
+  if (navMgr()) {
+    navMgr()->onVirtualFolderEntered(folderPath);
   }
   return true;
 }
 
 auto InteractionManager::handleEnterOnItem(int currentSelection, int /*totalItems*/) -> bool {
   QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
-  if (path.isEmpty() && (m_scrollManager)) {
-    path = m_scrollManager->filePathForVisualIndex(currentSelection);
+  if (path.isEmpty() && (scrollMgr())) {
+    path = scrollMgr()->filePathForVisualIndex(currentSelection);
   }
   if (!path.isEmpty()) {
     const int cIdx =
-        ((m_databaseManager) ? m_databaseManager->getCollectionIndexForFile(path) : -1);
+        ((databaseMgr()) ? databaseMgr()->getCollectionIndexForFile(path) : -1);
     // when the user is browsing a playlist, getCollectionIndexForFile
     // returns the *source* collection (the one whose items table row holds this
     // path), not the playlist's synthetic index — so the launcher chooser and
@@ -179,8 +179,8 @@ auto InteractionManager::isItemOffscreen(int selection, int gridWidth) const -> 
   // Convert widget scroll position to logical for visibility check in clipped
   // grids
   int logicalVisibleTop = vbar->value();
-  if (m_scrollManager) {
-    const auto &metrics = m_scrollManager->getMetrics();
+  if (scrollMgr()) {
+    const auto &metrics = scrollMgr()->getMetrics();
     if (metrics.isClipped) {
       logicalVisibleTop = metrics.toLogicalScrollY(vbar->value(), viewportH);
     }
@@ -234,24 +234,24 @@ auto InteractionManager::maybeExpandInsteadOfLaunch(const QString &filePath, int
   // → fall through to launch and clear. If the user dismissed the overlay
   // by clicking outside (without changing selection), treat the next
   // activation as a fresh first-stage expand.
-  if (m_state.expandedItemIndex() == activationIndex && activationIndex >= 0 && m_scrollManager &&
-      m_scrollManager->isArtworkPreviewVisible()) {
+  if (m_state.expandedItemIndex() == activationIndex && activationIndex >= 0 && scrollMgr() &&
+      scrollMgr()->isArtworkPreviewVisible()) {
     m_state.clearExpandedItem();
-    m_scrollManager->hideArtworkPreview();
+    scrollMgr()->hideArtworkPreview();
     return false;
   }
   // First activation: expand into a video-first preview.
   // The overlay falls back to artwork when no video is found, preserving
   // the original expand-mode behavior for collections without
   // videoDirectory configured.
-  if (!m_scrollManager) {
+  if (!scrollMgr()) {
     return false;
   }
   const QString artworkDir =
       SettingsUtils::expandConfigVariables(artworkOwner.artworkDirectory, artworkOwner.name);
   const QString videoDir =
       SettingsUtils::expandConfigVariables(artworkOwner.videoDirectory, artworkOwner.name);
-  m_scrollManager->showMediaPreview(filePath, artworkDir, videoDir);
+  scrollMgr()->showMediaPreview(filePath, artworkDir, videoDir);
   m_state.setExpandedItemIndex(activationIndex);
   return true;
 }
@@ -268,17 +268,17 @@ void InteractionManager::onArtworkPreviewLaunchRequested(const QString &filePath
   if (path.isEmpty() && m_selectionManager) {
     path = m_selectionManager->selectedFilePath();
   }
-  if (path.isEmpty() && m_scrollManager) {
-    path = m_scrollManager->filePathForVisualIndex(currentSelectedIndex());
+  if (path.isEmpty() && scrollMgr()) {
+    path = scrollMgr()->filePathForVisualIndex(currentSelectedIndex());
   }
-  if (m_scrollManager) {
-    m_scrollManager->hideArtworkPreview();
+  if (scrollMgr()) {
+    scrollMgr()->hideArtworkPreview();
   }
   m_state.clearExpandedItem();
   if (path.isEmpty()) {
     return;
   }
-  const int cIdx = (m_databaseManager ? m_databaseManager->getCollectionIndexForFile(path) : -1);
+  const int cIdx = (databaseMgr() ? databaseMgr()->getCollectionIndexForFile(path) : -1);
   const int ownerIdx = InteractionHelpers::resolveOwnerIndex(
       cIdx, m_currentCollectionIndex ? *m_currentCollectionIndex : -1,
       m_collections ? m_collections->size() : 0);
@@ -294,19 +294,19 @@ void InteractionManager::onMediaPreviewRequested(ItemWidget *widget, int visualI
   // its owning collection, then opens a video-first preview overlay. Does
   // *not* set m_state.expandedItemIndex — middle-click is a peek that
   // dismisses on Escape / click-outside, not a first-stage launch.
-  if (!widget || !m_collections || !m_scrollManager) {
+  if (!widget || !m_collections || !scrollMgr()) {
     return;
   }
 
   QString filePath = widget->getFilePath();
   if (filePath.isEmpty()) {
-    filePath = m_scrollManager->filePathForVisualIndex(visualIndex);
+    filePath = scrollMgr()->filePathForVisualIndex(visualIndex);
   }
   if (filePath.isEmpty()) {
     return;
   }
 
-  const int cIdx = m_databaseManager ? m_databaseManager->getCollectionIndexForFile(filePath) : -1;
+  const int cIdx = databaseMgr() ? databaseMgr()->getCollectionIndexForFile(filePath) : -1;
   const int ownerIdx = InteractionHelpers::resolveOwnerIndex(
       cIdx, m_currentCollectionIndex ? *m_currentCollectionIndex : -1, m_collections->size());
   if (ownerIdx < 0) {
@@ -321,7 +321,7 @@ void InteractionManager::onMediaPreviewRequested(ItemWidget *widget, int visualI
       SettingsUtils::expandConfigVariables(owner.artworkDirectory, owner.name);
   const QString videoDir = SettingsUtils::expandConfigVariables(owner.videoDirectory, owner.name);
 
-  m_scrollManager->showMediaPreview(filePath, artworkDir, videoDir);
+  scrollMgr()->showMediaPreview(filePath, artworkDir, videoDir);
 }
 
 void InteractionManager::onArtworkTypeCycleRequested(ItemWidget *widget, int visualIndex) {
@@ -331,24 +331,24 @@ void InteractionManager::onArtworkTypeCycleRequested(ItemWidget *widget, int vis
   // resolution pattern from onMediaPreviewRequested so a subcollection's
   // configured artwork directory wins over the viewing parent in
   // showAllSubcollectionItems mode.
-  if (!widget || !m_collections || !m_artworkManager || !m_scrollManager) {
+  if (!widget || !m_collections || !artworkMgr() || !scrollMgr()) {
     return;
   }
 
   QString filePath = widget->getFilePath();
   if (filePath.isEmpty()) {
-    filePath = m_scrollManager->filePathForVisualIndex(visualIndex);
+    filePath = scrollMgr()->filePathForVisualIndex(visualIndex);
   }
   if (filePath.isEmpty()) {
     return;
   }
 
-  const int cIdx = m_databaseManager ? m_databaseManager->getCollectionIndexForFile(filePath) : -1;
+  const int cIdx = databaseMgr() ? databaseMgr()->getCollectionIndexForFile(filePath) : -1;
   const int ownerIdx = InteractionHelpers::resolveOwnerIndex(
       cIdx, m_currentCollectionIndex ? *m_currentCollectionIndex : -1, m_collections->size());
   if (ownerIdx < 0) {
     return;
   }
 
-  m_artworkManager->cycleArtworkType(widget, filePath, ownerIdx);
+  artworkMgr()->cycleArtworkType(widget, filePath, ownerIdx);
 }

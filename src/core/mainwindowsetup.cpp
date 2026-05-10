@@ -245,7 +245,8 @@ void MainWindow::initializeAppContext() {
   m_appContext.ui.loadingLabel = ui->loadingLabel;
   m_appContext.ui.loadingOverlay = m_loadingOverlay;
 
-  // Manager references (for setup structs to use via ctx)
+  // Top-level managers — registered eagerly so ctx is fully populated before
+  // any manager's setupReferences() runs.
   m_appContext.managers.scrollManager = getScrollManager();
   m_appContext.managers.artworkManager = getArtworkManager();
   m_appContext.managers.settingsManager = getSettingsManager();
@@ -256,6 +257,23 @@ void MainWindow::initializeAppContext() {
   m_appContext.managers.navigationManager = getNavigationManager();
   m_appContext.managers.interactionManager = getInteractionManager();
   m_appContext.managers.playlistManager = getPlaylistManager();
+  m_appContext.managers.cacheManager = getCacheManager();
+
+  // InteractionManager-owned sub-managers exist as soon as InteractionManager
+  // is constructed (its ctor allocates them via std::make_unique). Register
+  // them here, before any setupReferences() runs, so dependents can resolve
+  // siblings exclusively through ctx.
+  if (auto *im = getInteractionManager()) {
+    m_appContext.managers.animationManager = im->animationManager();
+    m_appContext.managers.selectionManager = im->selectionManager();
+    m_appContext.managers.viewportManager = im->viewportManager();
+    m_appContext.managers.mouseManager = im->mouseManager();
+    m_appContext.managers.keyboardManager = im->keyboardManager();
+    m_appContext.managers.eventManager = im->eventManager();
+    m_appContext.managers.searchManager = im->searchManager();
+    m_appContext.managers.launchManager = im->launchManager();
+    m_appContext.managers.interactionState = &im->state();
+  }
 }
 
 void MainWindow::createMenuBar() {
@@ -406,9 +424,6 @@ void MainWindow::setupSidebar() {
     // needed.
     setup.outerLayout = ui->itemsPageLayout;
     setup.contentWidget = m_mainContentWidget;
-    setup.settingsManager = getSettingsManager();
-    setup.artworkManager = getArtworkManager();
-    setup.databaseManager = getDatabaseManager();
 
     getDetailsPaneManager()->setupReferences(setup);
 
@@ -491,7 +506,6 @@ void MainWindow::setupEventFilters() {
   setup.ctx = &m_appContext;
 
   getScrollManager()->setupReferences(setup);
-  getScrollManager()->setDatabaseManager(getDatabaseManager());
 
   if (ui->itemScrollArea) {
     ui->itemScrollArea->installEventFilter(getInteractionManager());

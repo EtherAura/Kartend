@@ -20,7 +20,6 @@ struct KeyboardManagerSetup {
   const ApplicationContext *ctx = nullptr;
   const GeneralSettings *generalSettings = nullptr;
 
-  ScrollManager *scrollManager = nullptr;
   QWidget *gridContainer = nullptr;
   QWidget *itemsPage = nullptr;
   QScrollArea *itemScrollArea = nullptr;
@@ -29,7 +28,6 @@ struct KeyboardManagerSetup {
   QList<CollectionConfig> *collections = nullptr;
   int *currentCollectionIndex = nullptr;
 
-  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
   SETUP_GETTER_DECL(QWidget *, GridContainer)
   SETUP_GETTER_DECL(QWidget *, ItemsPage)
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
@@ -37,7 +35,6 @@ struct KeyboardManagerSetup {
   SETUP_GETTER_DECL(QLineEdit *, SearchBar)
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
   SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
 };
 
 /**
@@ -165,10 +162,10 @@ private:
   Qt::Key m_pendingNavigationKey = Qt::Key_unknown;
   qint64 m_pendingNavigationKeyAtMs = 0;
 
-  // Manager references
+  // ctx is the single source of truth for sibling managers (ScrollManager,
+  // InteractionStateHolder) — never cache them as direct fields.
+  const ApplicationContext *m_ctx = nullptr;
   const GeneralSettings *m_generalSettings = nullptr;
-  InteractionStateHolder *m_state = nullptr;
-  ScrollManager *m_scrollManager = nullptr;
   QWidget *m_gridContainer = nullptr;
   QWidget *m_itemsPage = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;

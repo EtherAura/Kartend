@@ -140,7 +140,7 @@ auto main(int argc, char *argv[]) -> int {
         return 2;
       }
       const QString outPath = parser.value(exportOutOption);
-      SettingsManager headlessSettings(nullptr, nullptr, nullptr, nullptr);
+      SettingsManager headlessSettings(nullptr, nullptr);
       QList<CollectionConfig> collections;
       headlessSettings.loadCollections(collections);
       int idx = -1;

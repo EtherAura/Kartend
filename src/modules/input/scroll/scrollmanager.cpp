@@ -248,8 +248,8 @@ void ScrollManager::releaseWidget(ItemWidget *widget) {
   }
   // Clear artwork state before returning widget to pool - prevents stale
   // pending entries from blocking new artwork when the widget is recycled
-  if (m_artworkManager) {
-    m_artworkManager->clearPendingArtworkForWidget(widget);
+  if (auto *art = m_ctx ? m_ctx->artworkManager() : nullptr) {
+    art->clearPendingArtworkForWidget(widget);
   }
   if (m_widgetFactory) {
     int visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1;
@@ -433,13 +433,6 @@ auto ScrollManager::getSubcollectionName(int subcollectionIndex) const -> QStrin
   return (*m_collections)[subcollectionIndex].name;
 }
 
-void ScrollManager::setDatabaseManager(DatabaseManager *manager) {
-  m_databaseManager = manager;
-  if (m_dataSource) {
-    m_dataSource->setDatabaseManager(manager);
-  }
-}
-
 void ScrollManager::setPendingSelectionRestoreByPath(const QString &filePath) {
   // Just store the path - we'll query the database after the collection reloads
   // (in setupVirtualScrolling) when the context and data are ready
@@ -526,8 +519,8 @@ auto ScrollManager::getTotalItems() const -> int {
 }
 
 void ScrollManager::notifyUserActivity() {
-  if (m_artworkManager) {
-    m_artworkManager->updateUserActivity();
+  if (auto *art = m_ctx ? m_ctx->artworkManager() : nullptr) {
+    art->updateUserActivity();
   }
 }
 

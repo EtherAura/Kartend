@@ -157,6 +157,32 @@ struct ApplicationContext {
            *collection.currentCollectionIndex >= 0 &&
            *collection.currentCollectionIndex < collection.collections->size();
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Manager accessors — terse, ctx-scoped reads. After ctx is fully populated
+  // (initializeAppContext), these are the canonical access path for sibling
+  // managers; managers should not cache sibling-manager pointers as fields.
+  // ─────────────────────────────────────────────────────────────────────────
+  [[nodiscard]] ScrollManager *scrollManager() const { return managers.scrollManager; }
+  [[nodiscard]] ArtworkManager *artworkManager() const { return managers.artworkManager; }
+  [[nodiscard]] SettingsManager *settingsManager() const { return managers.settingsManager; }
+  [[nodiscard]] SessionManager *sessionManager() const { return managers.sessionManager; }
+  [[nodiscard]] DetailsPaneManager *detailsPaneManager() const { return managers.detailsPaneManager; }
+  [[nodiscard]] DetailPageManager *detailPageManager() const { return managers.detailPageManager; }
+  [[nodiscard]] DatabaseManager *databaseManager() const { return managers.databaseManager; }
+  [[nodiscard]] NavigationManager *navigationManager() const { return managers.navigationManager; }
+  [[nodiscard]] AnimationManager *animationManager() const { return managers.animationManager; }
+  [[nodiscard]] SelectionManager *selectionManager() const { return managers.selectionManager; }
+  [[nodiscard]] ViewportManager *viewportManager() const { return managers.viewportManager; }
+  [[nodiscard]] InteractionManager *interactionManager() const { return managers.interactionManager; }
+  [[nodiscard]] MouseManager *mouseManager() const { return managers.mouseManager; }
+  [[nodiscard]] KeyboardManager *keyboardManager() const { return managers.keyboardManager; }
+  [[nodiscard]] EventManager *eventManager() const { return managers.eventManager; }
+  [[nodiscard]] SearchManager *searchManager() const { return managers.searchManager; }
+  [[nodiscard]] LaunchManager *launchManager() const { return managers.launchManager; }
+  [[nodiscard]] CacheManager *cacheManager() const { return managers.cacheManager; }
+  [[nodiscard]] PlaylistManager *playlistManager() const { return managers.playlistManager; }
+  [[nodiscard]] InteractionStateHolder *interactionState() const { return managers.interactionState; }
 };
 
 #endif // APPLICATIONCONTEXT_H

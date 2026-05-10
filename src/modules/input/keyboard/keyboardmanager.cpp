@@ -26,8 +26,8 @@ Q_LOGGING_CATEGORY(lcKeyboardManager, "kartend.keyboardmanager")
     }                                                                                              \
   } while (0)
 
-// KeyboardManagerSetup getter definitions
-SETUP_GETTER_DEF_MGR_SAME(KeyboardManagerSetup, ScrollManager *, ScrollManager, scrollManager)
+// KeyboardManagerSetup getter definitions (non-manager fields only — sibling
+// managers + InteractionStateHolder are read directly from ctx at runtime).
 SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QWidget *, GridContainer, gridContainer)
 SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QWidget *, ItemsPage, itemsPage)
 SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
@@ -36,8 +36,6 @@ SETUP_GETTER_DEF_UI_SAME(KeyboardManagerSetup, QLineEdit *, SearchBar, searchBar
 SETUP_GETTER_DEF_COL_SAME(KeyboardManagerSetup, QList<CollectionConfig> *, Collections, collections)
 SETUP_GETTER_DEF_COL_SAME(KeyboardManagerSetup, int *, CurrentCollectionIndex,
                           currentCollectionIndex)
-SETUP_GETTER_DEF_MGR_CTX_ONLY(KeyboardManagerSetup, InteractionStateHolder *, InteractionState,
-                              interactionState)
 
 KeyboardManager::KeyboardManager(QObject *parent) : QObject(parent) {
   initTimers();
@@ -73,9 +71,8 @@ void KeyboardManager::cleanupTimers() {
 }
 
 void KeyboardManager::setupReferences(const KeyboardManagerSetup &setup) {
+  m_ctx = setup.ctx;
   m_generalSettings = setup.generalSettings;
-  m_state = setup.getInteractionState();
-  m_scrollManager = setup.getScrollManager();
   m_gridContainer = setup.getGridContainer();
   m_itemsPage = setup.getItemsPage();
   m_itemScrollArea = setup.getItemScrollArea();
@@ -155,8 +152,8 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
       (key == navLeftKey || key == navRightKey || key == navUpKey || key == navDownKey);
   if (isNavKey) {
     int gridWidth = 1;
-    if (m_scrollManager) {
-      gridWidth = m_scrollManager->getCurrentGridWidth();
+    if (auto *scroll = m_ctx ? m_ctx->scrollManager() : nullptr) {
+      gridWidth = scroll->getCurrentGridWidth();
       if (gridWidth <= 0) {
         gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
       }
@@ -266,20 +263,20 @@ bool KeyboardManager::handleKeyRelease(QKeyEvent *event) {
   }
 
   m_physicalKeyDown = false;
-  if (m_state) {
-    m_state->scroll().horizHoldActive = false;
+  if (auto *state = m_ctx ? m_ctx->interactionState() : nullptr) {
+    state->scroll().horizHoldActive = false;
   }
 
   return false;
 }
 
 void KeyboardManager::prepareKeyNavigationState() {
-  if (m_state) {
-    m_state->scroll().userFreeScroll = false;
-    m_state->setHorizAnimActive(false);
-    m_state->nextHorizAnimGen();
-    m_state->click().clickForceAnim = false;
-    m_state->click().suppressInitialClickCenter = false;
+  if (auto *state = m_ctx ? m_ctx->interactionState() : nullptr) {
+    state->scroll().userFreeScroll = false;
+    state->setHorizAnimActive(false);
+    state->nextHorizAnimGen();
+    state->click().clickForceAnim = false;
+    state->click().suppressInitialClickCenter = false;
   }
   m_physicalKeyDown = true;
 }

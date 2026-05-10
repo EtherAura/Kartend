@@ -62,16 +62,16 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex) -> void
   // (gridWidthSidebarHidden) is in play when the sidebar is hidden in Expand
   // mode, and the navigation-time live-apply has to respect that or it'll
   // briefly flash to the primary value before the sidebar restores the alt.
-  const bool sidebarShrinkingActive = m_scrollManager->sidebarShrinkingActive();
+  const bool sidebarShrinkingActive = scrollMgr()->sidebarShrinkingActive();
   const int effectiveTargetWidth =
       CollectionUtils::effectiveGridWidth(collection, sidebarShrinkingActive);
-  if (effectiveTargetWidth != m_scrollManager->getCurrentGridWidth()) {
-    m_scrollManager->updateGridWidth(effectiveTargetWidth);
+  if (effectiveTargetWidth != scrollMgr()->getCurrentGridWidth()) {
+    scrollMgr()->updateGridWidth(effectiveTargetWidth);
   }
   // live-apply the per-collection horizontal items-per-column
   // setting. updateHorizontalGridHeight no-ops when the active view isn't
   // Horizontal, so this is safe to call unconditionally.
-  m_scrollManager->updateHorizontalGridHeight(
+  scrollMgr()->updateHorizontalGridHeight(
       CollectionUtils::effectiveHorizontalGridHeight(collection, sidebarShrinkingActive));
 
   SettingsUtils::applyHorizontalScrollbarSetting(m_itemScrollArea, collectionIndex,
@@ -81,8 +81,8 @@ auto NavigationManager::applyCollectionSettingsOnly(int collectionIndex) -> void
   applyBackgroundForCollection(collectionIndex);
   applyPrimaryColorForCollection(collectionIndex);
 
-  if (m_detailsPaneManager) {
-    m_detailsPaneManager->applySidebarStateForCollection(collectionIndex);
+  if (detailsPaneMgr()) {
+    detailsPaneMgr()->applySidebarStateForCollection(collectionIndex);
   }
 }
 
@@ -400,25 +400,25 @@ void NavigationManager::restoreSelectionForCurrentCollection() {
   if ((!parent()) || QApplication::closingDown()) {
     return;
   }
-  if ((!m_scrollManager) || (!m_interactionManager)) {
+  if ((!scrollMgr()) || (!interactionMgr())) {
     return;
   }
   int coll = (*m_currentCollectionIndex);
   if (coll < 0 || coll >= (*m_collections).size()) {
     return;
   }
-  int total = m_scrollManager->getTotalItems();
+  int total = scrollMgr()->getTotalItems();
   if (total <= 0) {
     return;
   }
   int desired = -1;
-  if (m_settingsManager) {
-    desired = m_settingsManager->getLastSelectedItem(coll);
+  if (settingsMgr()) {
+    desired = settingsMgr()->getLastSelectedItem(coll);
   }
   if (desired < 0 || desired >= total) {
     desired = 0;
   }
-  if (m_interactionManager->currentSelectedIndex() == desired) {
+  if (interactionMgr()->currentSelectedIndex() == desired) {
     return;
   }
 
@@ -431,13 +431,13 @@ void NavigationManager::persistCurrentSelection() {
   if (diagEnabled) {
     qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: ENTRY";
   }
-  if ((!m_interactionManager) || (!m_settingsManager) || (!m_currentCollectionIndex) ||
+  if ((!interactionMgr()) || (!settingsMgr()) || (!m_currentCollectionIndex) ||
       (!m_collections)) {
     if (diagEnabled) {
       qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: "
                                "missing deps"
-                            << "interaction=" << static_cast<bool>(m_interactionManager)
-                            << "settings=" << static_cast<bool>(m_settingsManager)
+                            << "interaction=" << static_cast<bool>(interactionMgr())
+                            << "settings=" << static_cast<bool>(settingsMgr())
                             << "collIndex=" << static_cast<bool>(m_currentCollectionIndex)
                             << "collections=" << static_cast<bool>(m_collections);
     }
@@ -452,7 +452,7 @@ void NavigationManager::persistCurrentSelection() {
     }
     return;
   }
-  int sel = m_interactionManager->currentSelectedIndex();
+  int sel = interactionMgr()->currentSelectedIndex();
   if (sel < 0) {
     if (diagEnabled) {
       qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: "
@@ -460,11 +460,11 @@ void NavigationManager::persistCurrentSelection() {
     }
     // Still try to cache viewport even without selection for fast startup
   } else {
-    m_settingsManager->setLastSelectedItem(coll, sel);
+    settingsMgr()->setLastSelectedItem(coll, sel);
   }
 
   // Also cache the current viewport for instant startup
-  if (m_scrollManager && m_sessionManager && m_generalSettings &&
+  if (scrollMgr() && sessionMgr() && m_generalSettings &&
       m_generalSettings->rememberSelection) {
     int startIndex = 0;
     int totalItems = 0;
@@ -472,7 +472,7 @@ void NavigationManager::persistCurrentSelection() {
     QHash<QString, QString> fileNames;
     QHash<QString, QString> artworkPaths;
 
-    if (m_scrollManager->getCurrentViewportForCache(startIndex, totalItems, filePaths, fileNames,
+    if (scrollMgr()->getCurrentViewportForCache(startIndex, totalItems, filePaths, fileNames,
                                                     artworkPaths)) {
       const CollectionConfig &cfg = (*m_collections)[coll];
       const QString collectionKey = CollectionUtils::hierarchicalNameFor(cfg, *m_collections);
@@ -482,7 +482,7 @@ void NavigationManager::persistCurrentSelection() {
                               << collectionKey << "startIndex=" << startIndex
                               << "totalItems=" << totalItems << "filePaths=" << filePaths.size();
       }
-      m_sessionManager->setCachedViewport(collectionKey, startIndex, totalItems, filePaths,
+      sessionMgr()->setCachedViewport(collectionKey, startIndex, totalItems, filePaths,
                                           fileNames, artworkPaths);
     } else if (diagEnabled) {
       qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: "
@@ -491,8 +491,8 @@ void NavigationManager::persistCurrentSelection() {
   } else if (diagEnabled) {
     qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: "
                              "cannot cache viewport"
-                          << "scrollManager=" << static_cast<bool>(m_scrollManager)
-                          << "sessionManager=" << static_cast<bool>(m_sessionManager)
+                          << "scrollManager=" << static_cast<bool>(scrollMgr())
+                          << "sessionManager=" << static_cast<bool>(sessionMgr())
                           << "generalSettings=" << static_cast<bool>(m_generalSettings)
                           << "rememberSelection="
                           << (m_generalSettings ? m_generalSettings->rememberSelection : false);
@@ -500,10 +500,10 @@ void NavigationManager::persistCurrentSelection() {
 }
 
 void NavigationManager::applyUiPoliciesForCollection(int collectionIndex) {
-  if (m_detailsPaneManager) {
-    m_detailsPaneManager->applySidebarStateForCollection(collectionIndex);
+  if (detailsPaneMgr()) {
+    detailsPaneMgr()->applySidebarStateForCollection(collectionIndex);
   }
-  if (m_settingsManager && m_itemScrollArea && m_collections) {
+  if (settingsMgr() && m_itemScrollArea && m_collections) {
     SettingsUtils::applyHorizontalScrollbarSetting(m_itemScrollArea, collectionIndex,
                                                    *m_collections);
     SettingsUtils::applyVerticalScrollbarSetting(m_itemScrollArea, collectionIndex, *m_collections);

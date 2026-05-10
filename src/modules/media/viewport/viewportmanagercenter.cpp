@@ -47,12 +47,12 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
   // selection along the scroll axis" entry point) but we drive the
   // horizontal scrollbar with a simpler animation path. Vertical centering
   // is unnecessary because the column always fits in the viewport.
-  if (m_scrollManager && m_scrollManager->getMetrics().isHorizontal) {
+  if (scrollMgr() && scrollMgr()->getMetrics().isHorizontal) {
     QScrollBar *hScrollBar = m_itemScrollArea->horizontalScrollBar();
     if (!hScrollBar) {
       return;
     }
-    const auto &metrics = m_scrollManager->getMetrics();
+    const auto &metrics = scrollMgr()->getMetrics();
     int viewportWidth = m_itemScrollArea->viewport()->width();
     if (viewportWidth <= 0 || metrics.itemsPerRow <= 0) {
       return;
@@ -69,16 +69,16 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
     if (forceImmediate || qAbs(targetX - curX) <= 1) {
       setProgrammaticScrollGuarded(true);
       hScrollBar->setValue(targetX);
-      if (m_scrollManager) {
+      if (scrollMgr()) {
         if (m_isWrappingNavigation) {
-          m_scrollManager->cleanupActiveWidgets();
+          scrollMgr()->cleanupActiveWidgets();
         }
-        m_scrollManager->updateVirtualView();
-        int idxDyn = (m_state && m_state->isSelectionSuppressed())
-                         ? m_state->pendingSelectionIndex()
+        scrollMgr()->updateVirtualView();
+        int idxDyn = (state() && state()->isSelectionSuppressed())
+                         ? state()->pendingSelectionIndex()
                          : index;
         if (idxDyn >= 0) {
-          m_scrollManager->updateSelectionForIndex(idxDyn);
+          scrollMgr()->updateSelectionForIndex(idxDyn);
         }
       }
       setProgrammaticScrollGuarded(false);
@@ -91,26 +91,26 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
     // wheel-style animation (configurable scrollAnimationDurationMs +
     // OutCubic). animateHorizontalSmooth's hardcoded 140ms felt jerky on
     // click, while wheel scrolling already used the longer chained variant.
-    if (m_animationManager) {
+    if (animMgr()) {
       auto onFinished = [this]() {
-        if (m_state) {
-          m_state->scroll().programmaticScroll = false;
+        if (state()) {
+          state()->scroll().programmaticScroll = false;
         }
-        if (m_scrollManager) {
-          m_scrollManager->refreshSelectionOverlayState();
-          m_scrollManager->updateVirtualView();
+        if (scrollMgr()) {
+          scrollMgr()->refreshSelectionOverlayState();
+          scrollMgr()->updateVirtualView();
         }
       };
       setProgrammaticScrollGuarded(true);
-      m_animationManager->startWheelScrollAnimationHorizontal(hScrollBar, curX, targetX,
+      animMgr()->startWheelScrollAnimationHorizontal(hScrollBar, curX, targetX,
                                                               onFinished);
     }
-    if (m_scrollManager) {
-      m_scrollManager->updateVirtualView();
+    if (scrollMgr()) {
+      scrollMgr()->updateVirtualView();
     }
     m_lastSelectedRow = colIndex;
-    if (m_selectionManager) {
-      m_selectionManager->setLastSelectedRow(colIndex);
+    if (selectionMgr()) {
+      selectionMgr()->setLastSelectedRow(colIndex);
     }
     return;
   }
@@ -121,8 +121,8 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
   int itemHeight = collection.itemHeight;
   int vSpacing = collection.verticalSpacing;
 
-  if (m_scrollManager) {
-    const auto &metrics = m_scrollManager->getMetrics();
+  if (scrollMgr()) {
+    const auto &metrics = scrollMgr()->getMetrics();
     gridWidth = metrics.itemsPerRow;
     itemHeight = metrics.itemHeight;
     vSpacing = metrics.verticalSpacing;
@@ -141,16 +141,16 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
     return;
   }
 
-  bool clickScroll = m_state ? m_state->scroll().clickScroll : false;
-  bool clickHoldAdv = m_state ? m_state->scroll().clickHoldAdvancing : false;
-  bool forceClickAnim = m_state ? m_state->click().clickForceAnim : false;
+  bool clickScroll = state() ? state()->scroll().clickScroll : false;
+  bool clickHoldAdv = state() ? state()->scroll().clickHoldAdvancing : false;
+  bool forceClickAnim = state() ? state()->click().clickForceAnim : false;
 
   // Get metrics from ScrollManager for very large collections
   int totalHeight = 0;
   int logicalHeight = 0;
   int headerOffset = 0;
-  if (m_scrollManager) {
-    const auto &metrics = m_scrollManager->getMetrics();
+  if (scrollMgr()) {
+    const auto &metrics = scrollMgr()->getMetrics();
     totalHeight = metrics.totalHeight;
     logicalHeight = metrics.logicalHeight;
     headerOffset = metrics.headerOffset;
@@ -173,8 +173,8 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
 
   bool useSmooth = forceClickAnim ||
                    (m_continuousScrollActive && !m_instantPositioning && !m_wrapSequenceActive) ||
-                   (m_state && m_state->scroll().clickContinuous) ||
-                   (m_state && m_state->scroll().keyContinuous);
+                   (state() && state()->scroll().clickContinuous) ||
+                   (state() && state()->scroll().keyContinuous);
 
   if (!forceImmediate && distance <= smallThreshold) {
     if (handleSmallMovementEarlyReturn(distance, clickScroll, index, currentRow)) {
@@ -187,10 +187,10 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
     return;
   }
 
-  if (m_animationManager) {
-    m_animationManager->ensureVAnimCreated(verticalScrollBar);
+  if (animMgr()) {
+    animMgr()->ensureVAnimCreated(verticalScrollBar);
 
-    if (m_animationManager->handleExistingVerticalAnimIfRunning(
+    if (animMgr()->handleExistingVerticalAnimIfRunning(
             verticalScrollBar, targetY, clickScroll, clickHoldAdv, curY, distance)) {
       return;
     }
@@ -203,15 +203,15 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
                                     forceClickAnim);
   }
 
-  if (m_animationManager) {
-    m_animationManager->configureAndStartVerticalAnimation(verticalScrollBar, curY, targetY,
+  if (animMgr()) {
+    animMgr()->configureAndStartVerticalAnimation(verticalScrollBar, curY, targetY,
                                                            duration, clickScroll, clickHoldAdv);
   }
 }
 
 bool ViewportManager::computeForceImmediate(bool immediate) const {
   const bool restoringSelection =
-      m_selectionManager && m_selectionManager->isRestoringSelection();
+      selectionMgr() && selectionMgr()->isRestoringSelection();
   return ViewportHelpers::computeForceImmediate(immediate, m_forceImmediateCenter,
                                                 m_isWrappingNavigation, restoringSelection,
                                                 m_instantPositioning, m_wrapSequenceActive);
@@ -223,24 +223,24 @@ int ViewportManager::computeSmallThreshold(int currentRow) const {
 
 bool ViewportManager::handleSmallMovementEarlyReturn(int /*distance*/, bool clickScroll, int index,
                                                      int currentRow) {
-  if (m_scrollManager) {
-    m_scrollManager->updateVirtualView();
+  if (scrollMgr()) {
+    scrollMgr()->updateVirtualView();
     int idxDyn =
-        (m_state && m_state->isSelectionSuppressed()) ? m_state->pendingSelectionIndex() : index;
+        (state() && state()->isSelectionSuppressed()) ? state()->pendingSelectionIndex() : index;
     if (idxDyn >= 0) {
-      m_scrollManager->updateSelectionForIndex(idxDyn);
+      scrollMgr()->updateSelectionForIndex(idxDyn);
     }
   }
-  if (clickScroll && m_state) {
-    m_state->scroll().clickScroll = false;
+  if (clickScroll && state()) {
+    state()->scroll().clickScroll = false;
   }
-  if (m_state) {
-    m_state->arrow().suppressArrowCenter = false;
+  if (state()) {
+    state()->arrow().suppressArrowCenter = false;
   }
   m_instantPositioning = false;
   m_lastSelectedRow = currentRow;
-  if (m_selectionManager) {
-    m_selectionManager->setLastSelectedRow(currentRow);
+  if (selectionMgr()) {
+    selectionMgr()->setLastSelectedRow(currentRow);
   }
   return true;
 }
@@ -249,29 +249,29 @@ bool ViewportManager::shouldDeferCenterNow(bool immediate, int index) const {
   if (immediate) {
     return false;
   }
-  if (!m_state || !m_state->click().deferCenterOnClick) {
+  if (!state() || !state()->click().deferCenterOnClick) {
     return false;
   }
-  int defIdx = m_state->click().deferredCenterIndex;
+  int defIdx = state()->click().deferredCenterIndex;
   return (defIdx < 0 || defIdx == index);
 }
 
 bool ViewportManager::shouldEarlyReturnUserScroll(bool forceImmediate) const {
-  return (m_state && m_state->scroll().userScrollActive) && !forceImmediate;
+  return (state() && state()->scroll().userScrollActive) && !forceImmediate;
 }
 
 bool ViewportManager::handlePendingInitialCenterIfNeeded(QScrollBar *verticalScrollBar, int index,
                                                          int targetYUnbounded, bool immediate) {
   Q_UNUSED(targetYUnbounded);
   if (verticalScrollBar->maximum() == 0 && !immediate) {
-    if (m_state && !m_state->click().pendingInitialCenter) {
-      m_state->click().pendingInitialCenter = true;
+    if (state() && !state()->click().pendingInitialCenter) {
+      state()->click().pendingInitialCenter = true;
       // Defer centering until scrollbar has a valid range - happens during
       // initial layout when content height isn't calculated yet
       QTimer::singleShot(UIConstants::DetailsPane::INITIAL_CENTER_SCROLL_DELAY_MS, this,
                          [this, index]() {
-                           if (m_state) {
-                             m_state->click().pendingInitialCenter = false;
+                           if (state()) {
+                             state()->click().pendingInitialCenter = false;
                            }
                            if (!QApplication::closingDown()) {
                              centerItemVertically(index, false);
@@ -288,22 +288,22 @@ void ViewportManager::adjustForForceClickZeroDistance(QScrollBar *verticalScroll
                                                       bool /*forceClickAnim*/) {
   if (targetY == curY) {
     int adjust = (targetY > 0 ? -1 : 1);
-    if (m_state) {
-      m_state->scroll().programmaticScroll = true;
+    if (state()) {
+      state()->scroll().programmaticScroll = true;
     }
-    if (m_scrollManager) {
-      m_scrollManager->refreshSelectionOverlayState();
+    if (scrollMgr()) {
+      scrollMgr()->refreshSelectionOverlayState();
     }
     int startVal = qBound(0, targetY + adjust, verticalScrollBar->maximum());
     verticalScrollBar->setValue(startVal);
     // Defer clearing ProgrammaticScroll flag until after Qt processes the
     // setValue() - ensures the scroll event handler sees the flag is set
     QTimer::singleShot(0, this, [this]() {
-      if (m_state) {
-        m_state->scroll().programmaticScroll = false;
+      if (state()) {
+        state()->scroll().programmaticScroll = false;
       }
-      if (m_scrollManager) {
-        m_scrollManager->refreshSelectionOverlayState();
+      if (scrollMgr()) {
+        scrollMgr()->refreshSelectionOverlayState();
       }
     });
     curY = startVal;
@@ -333,7 +333,7 @@ bool ViewportManager::handleImmediateCenterForEnsureVisible(int index) {
   if (gridWidth <= 0 || viewportHeight <= 0) {
     return false;
   }
-  int hSpacing = (m_scrollManager) ? m_scrollManager->getEffectiveHorizontalSpacing()
+  int hSpacing = (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing()
                                    : collection.horizontalSpacing;
   int margins = UIConstants::Grid::MARGINS;
   int itemX = GridUtils::computeItemX(index, gridWidth, collection.itemWidth, hSpacing, margins);
@@ -352,17 +352,17 @@ bool ViewportManager::handleImmediateCenterForEnsureVisible(int index) {
                                                hScrollBar->maximum());
   vScrollBar->setValue(targetY);
   hScrollBar->setValue(targetX);
-  if (m_scrollManager) {
+  if (scrollMgr()) {
     // When wrapping, clear all widgets to prevent stale artwork from showing
     // at wrong positions after the large scroll jump
     if (m_isWrappingNavigation) {
-      m_scrollManager->cleanupActiveWidgets();
+      scrollMgr()->cleanupActiveWidgets();
     }
-    m_scrollManager->updateVirtualView();
+    scrollMgr()->updateVirtualView();
   }
   m_lastSelectedRow = GridUtils::computeItemRow(index, gridWidth);
-  if (m_selectionManager) {
-    m_selectionManager->setLastSelectedRow(m_lastSelectedRow);
+  if (selectionMgr()) {
+    selectionMgr()->setLastSelectedRow(m_lastSelectedRow);
   }
   m_forceImmediateCenter = false;
   m_deferredCenterPending = false;
@@ -383,8 +383,8 @@ bool ViewportManager::maybeHandleImmediateCenter(bool distanceSmall, bool useSmo
 
 bool ViewportManager::handleImmediateCenterPath(QScrollBar *verticalScrollBar, int targetY,
                                                 int index, int currentRow) {
-  if (m_animationManager) {
-    m_animationManager->stopActiveVerticalAnims(verticalScrollBar);
+  if (animMgr()) {
+    animMgr()->stopActiveVerticalAnims(verticalScrollBar);
   }
   setProgrammaticScrollGuarded(true);
   setScrollValueAndUpdateSelection(verticalScrollBar, targetY, index);

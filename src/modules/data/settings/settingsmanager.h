@@ -16,6 +16,7 @@ class SessionManager;
 class ArtworkManager;
 class CacheManager;
 class DatabaseManager;
+struct ApplicationContext;
 
 struct SettingsDialogContext {
   QWidget *parent = nullptr;
@@ -33,8 +34,7 @@ struct SettingsDialogContext {
 class SettingsManager : public QObject {
   Q_OBJECT
 public:
-  explicit SettingsManager(SessionManager *sessionManager, ArtworkManager *artworkManager,
-                           CacheManager *cacheManager, QObject *parent = nullptr);
+  explicit SettingsManager(const ApplicationContext *ctx, QObject *parent = nullptr);
   ~SettingsManager();
 
   void loadCollections(QList<CollectionConfig> &collections);
@@ -80,9 +80,9 @@ private slots:
                                bool success);
 
 private:
-  SessionManager *m_sessionManager = nullptr;
-  ArtworkManager *m_artworkManager = nullptr;
-  CacheManager *m_cacheManager = nullptr;
+  // ctx is the single source of truth for sibling managers (SessionManager,
+  // ArtworkManager, CacheManager).
+  const ApplicationContext *m_ctx = nullptr;
   GeneralSettings m_generalSettings;
 
   // UUIDs of collections the user just added through the settings

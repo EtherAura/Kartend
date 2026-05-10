@@ -58,19 +58,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcInteractionManager)
   } while (0)
 
 void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
-  // Manager dependencies - use accessors that check context fallback
-  m_scrollManager = setup.getScrollManager();
-  m_detailsPaneManager = setup.getDetailsPaneManager();
-  m_detailPageManager = setup.getDetailPageManager();
-  m_settingsManager = setup.getSettingsManager();
-  m_databaseManager = setup.getDatabaseManager();
-  m_navigationManager = setup.getNavigationManager();
-  // the only consumer is the context menu, so we just read the
-  // pointer directly from the shared ApplicationContext rather than adding a
-  // dedicated setup field.
-  m_playlistManager = (setup.ctx ? setup.ctx->managers.playlistManager : nullptr);
-  m_sessionManager = setup.getSessionManager();
-  m_artworkManager = setup.getArtworkManager();
+  m_ctx = setup.ctx;
 
   // UI elements - use accessors that check context fallback
   m_itemScrollArea = setup.getItemScrollArea();
@@ -92,14 +80,10 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     connectSearchManagerSignals();
   }
 
-  // Setup SelectionManager with its dependencies
-  // Pass ctx and any overrides - getters handle fallback to ctx
+  // Setup SelectionManager with its dependencies. Sibling managers come from ctx.
   if (m_selectionManager) {
     SelectionManagerSetup selectionSetup;
     selectionSetup.ctx = setup.ctx;
-    // Override managers that are owned by InteractionManager
-    selectionSetup.animationManager = m_animationManager.get();
-    selectionSetup.viewportManager = m_viewportManager.get();
     m_selectionManager->setupReferences(selectionSetup);
     connectSelectionManagerSignals();
   }
@@ -127,22 +111,22 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
 
   // Setup navigation handlers with state callbacks and signal connections
   setupArrowNavigationHandler(setup);
-  setupAlphabeticNavigationHandler();
+  setupAlphabeticNavigationHandler(setup);
 
-  // Setup AnimationManager with its dependencies
+  // Setup AnimationManager with its dependencies. Sibling managers come from ctx.
   if (m_animationManager) {
     AnimationManagerSetup animSetup;
     animSetup.ctx = setup.ctx;
     animSetup.generalSettings = m_generalSettings;
+    animSetup.itemScrollArea = m_itemScrollArea;
     m_animationManager->setupReferences(animSetup);
     connectAnimationManagerSignals();
   }
 
-  // Setup MouseManager with its dependencies
+  // Setup MouseManager with its dependencies. Sibling managers come from ctx.
   if (m_mouseManager) {
     MouseManagerSetup mouseSetup;
     mouseSetup.ctx = setup.ctx;
-    mouseSetup.selectionManager = m_selectionManager.get();
     mouseSetup.generalSettings = m_generalSettings;
     m_mouseManager->setupReferences(mouseSetup);
     connectMouseManagerSignals();
@@ -197,37 +181,29 @@ void InteractionManager::setupReferences(const InteractionManagerSetup &setup) {
     m_launchManager->setupReferences(launchSetup);
   }
 
-  // Setup ViewportManager with its dependencies
+  // Setup ViewportManager with its dependencies. Sibling managers come from ctx.
   if (m_viewportManager) {
     ViewportManagerSetup viewportSetup;
     viewportSetup.ctx = setup.ctx;
     viewportSetup.generalSettings = m_generalSettings;
-    viewportSetup.selectionManager = m_selectionManager.get();
-    viewportSetup.animationManager = m_animationManager.get();
     m_viewportManager->setupReferences(viewportSetup);
     connectViewportManagerSignals();
   }
 
-  // Setup EventManager with its dependencies using struct pattern
+  // Setup EventManager with its dependencies. Sibling managers come from ctx.
   if (m_eventManager) {
     EventManagerSetup eventSetup;
     eventSetup.ctx = setup.ctx;
-    eventSetup.keyboardManager = m_keyboardManager.get();
-    eventSetup.mouseManager = m_mouseManager.get();
-    eventSetup.animationManager = m_animationManager.get();
-    eventSetup.viewportManager = m_viewportManager.get();
-    eventSetup.selectionManager = m_selectionManager.get();
     m_eventManager->setupReferences(eventSetup);
     connectEventManagerSignals();
   }
 
-  // Setup AttractManager with its dependencies
+  // Setup AttractManager with its dependencies. Sibling managers come from ctx;
+  // only non-manager fields stay on the setup struct.
   if (m_attractManager) {
     AttractManagerSetup attractSetup;
     attractSetup.ctx = setup.ctx;
     attractSetup.itemScrollArea = m_itemScrollArea;
-    attractSetup.scrollManager = m_scrollManager;
-    attractSetup.selectionManager = m_selectionManager.get();
     attractSetup.generalSettings = m_generalSettings;
     attractSetup.isShuttingDown = m_isShuttingDown;
     m_attractManager->setupReferences(attractSetup);
@@ -252,11 +228,6 @@ void InteractionManager::setupArrowNavigationHandler(const InteractionManagerSet
 
   ArrowNavigationHandlerSetup arrowSetup;
   arrowSetup.ctx = setup.ctx;
-  // Override with owned managers
-  arrowSetup.keyboardManager = m_keyboardManager.get();
-  arrowSetup.animationManager = m_animationManager.get();
-  arrowSetup.viewportManager = m_viewportManager.get();
-  arrowSetup.selectionManager = m_selectionManager.get();
   m_arrowHandler->setupReferences(arrowSetup);
 
   // Set callbacks for accessing InteractionManager state
@@ -283,13 +254,12 @@ void InteractionManager::setupArrowNavigationHandler(const InteractionManagerSet
   });
 }
 
-void InteractionManager::setupAlphabeticNavigationHandler() {
+void InteractionManager::setupAlphabeticNavigationHandler(const InteractionManagerSetup &setup) {
   if (!m_alphabeticHandler) {
     return;
   }
 
-  m_alphabeticHandler->setScrollManager(m_scrollManager);
-  m_alphabeticHandler->setSelectionManager(m_selectionManager.get());
+  m_alphabeticHandler->setContext(setup.ctx);
 
   // Connect handler signals - scroll first, then select, since the target
   // widget may not exist until the viewport is scrolled to show it
@@ -303,8 +273,8 @@ void InteractionManager::setupAlphabeticNavigationHandler() {
               m_viewportManager->centerItemVertically(index, true);
             }
             // Update virtual view to materialize widgets at new scroll position
-            if (m_scrollManager) {
-              m_scrollManager->updateVirtualView();
+            if (scrollMgr()) {
+              scrollMgr()->updateVirtualView();
             }
             // Now select the item (widget should exist after scroll + update)
             selectItemByIndex(index, true);

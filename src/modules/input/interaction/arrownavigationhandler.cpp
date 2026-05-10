@@ -15,17 +15,7 @@
 #include <QStackedWidget>
 #include <QTimer>
 
-// ArrowNavigationHandlerSetup getter definitions
-SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, KeyboardManager *, KeyboardManager,
-                          keyboardManager)
-SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, ScrollManager *, ScrollManager,
-                          scrollManager)
-SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, AnimationManager *, AnimationManager,
-                          animationManager)
-SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, ViewportManager *, ViewportManager,
-                          viewportManager)
-SETUP_GETTER_DEF_MGR_SAME(ArrowNavigationHandlerSetup, SelectionManager *, SelectionManager,
-                          selectionManager)
+// ArrowNavigationHandlerSetup getter definitions (non-manager fields only).
 SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
 SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QWidget *, GridContainer, gridContainer)
 SETUP_GETTER_DEF_UI_SAME(ArrowNavigationHandlerSetup, QStackedWidget *, StackedWidget,
@@ -37,19 +27,13 @@ SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, int *, CurrentCollectionI
                           currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(ArrowNavigationHandlerSetup, GeneralSettings *, GeneralSettings,
                           generalSettings)
-SETUP_GETTER_DEF_MGR_CTX_ONLY(ArrowNavigationHandlerSetup, InteractionStateHolder *,
-                              InteractionState, interactionState)
 
 ArrowNavigationHandler::ArrowNavigationHandler(QObject *parent) : QObject(parent) {}
 
 ArrowNavigationHandler::~ArrowNavigationHandler() = default;
 
 void ArrowNavigationHandler::setupReferences(const ArrowNavigationHandlerSetup &setup) {
-  m_keyboardManager = setup.getKeyboardManager();
-  m_scrollManager = setup.getScrollManager();
-  m_animationManager = setup.getAnimationManager();
-  m_viewportManager = setup.getViewportManager();
-  m_selectionManager = setup.getSelectionManager();
+  m_ctx = setup.ctx;
   m_itemScrollArea = setup.getItemScrollArea();
   m_gridContainer = setup.getGridContainer();
   m_stackedWidget = setup.getStackedWidget();
@@ -57,22 +41,21 @@ void ArrowNavigationHandler::setupReferences(const ArrowNavigationHandlerSetup &
   m_collections = setup.getCollections();
   m_currentCollectionIndex = setup.getCurrentCollectionIndex();
   m_generalSettings = setup.getGeneralSettings();
-  m_state = setup.getInteractionState();
 }
 
 void ArrowNavigationHandler::handleArrowKeyNavigation(int direction, bool vertical) {
-  if (!m_scrollManager || !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+  if (!scrollMgr() || !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     return;
   }
 
   // User initiated navigation - cancel any pending automatic restore
   // to prevent it from overriding this explicit user choice
-  if (m_selectionManager) {
-    m_selectionManager->cancelPendingSelectionRestore();
+  if (selectionMgr()) {
+    selectionMgr()->cancelPendingSelectionRestore();
   }
 
-  if (m_keyboardManager) {
-    m_keyboardManager->prepareKeyNavigationState();
+  if (keyboardMgr()) {
+    keyboardMgr()->prepareKeyNavigationState();
   }
 
   const int totalItems = getTotalItems();
@@ -81,11 +64,11 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction, bool vertic
   }
 
   // Clear user scroll state to ensure centering isn't blocked
-  if (m_state) {
-    m_state->scroll().userScrollActive = false;
-    m_state->artwork().suppressArtwork = true;
-    m_state->artwork().allowDuringSelection = true;
-    m_state->scroll().userFreeScroll = false;
+  if (state()) {
+    state()->scroll().userScrollActive = false;
+    state()->artwork().suppressArtwork = true;
+    state()->artwork().allowDuringSelection = true;
+    state()->scroll().userFreeScroll = false;
   }
 
   const int gridWidth = getCurrentGridWidth();
@@ -96,11 +79,11 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction, bool vertic
       m_isItemOffscreen ? m_isItemOffscreen(currentSelection, gridWidth) : false;
 
   const bool wrapEnabled = isWrapEnabled();
-  if (m_viewportManager) {
-    m_viewportManager->setIsWrappingNavigation(false);
+  if (viewportMgr()) {
+    viewportMgr()->setIsWrappingNavigation(false);
   }
-  if (m_keyboardManager) {
-    m_keyboardManager->setWrapSequenceActive(false);
+  if (keyboardMgr()) {
+    keyboardMgr()->setWrapSequenceActive(false);
   }
 
   bool didWrap = false;
@@ -114,21 +97,21 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction, bool vertic
                                              vertical, gridWidth, didWrap, horizontalLayout);
 
   if (didWrap) {
-    if (m_viewportManager) {
-      m_viewportManager->setIsWrappingNavigation(true);
+    if (viewportMgr()) {
+      viewportMgr()->setIsWrappingNavigation(true);
     }
-    if (m_keyboardManager) {
-      m_keyboardManager->setWrapSequenceActive(true);
+    if (keyboardMgr()) {
+      keyboardMgr()->setWrapSequenceActive(true);
     }
   }
 
   const bool isNewRow = SelectionManager::isNewRow(currentSelection, newSelection, gridWidth);
 
-  const bool isWrapping = m_viewportManager ? m_viewportManager->isWrappingNavigation() : false;
+  const bool isWrapping = viewportMgr() ? viewportMgr()->isWrappingNavigation() : false;
   const bool forceImmediate = offscreenBefore || isWrapping;
 
-  if (forceImmediate && m_viewportManager) {
-    m_viewportManager->applyImmediateCenterSuppression();
+  if (forceImmediate && viewportMgr()) {
+    viewportMgr()->applyImmediateCenterSuppression();
   }
 
   if (!vertical && !isNewRow && m_itemScrollArea) {
@@ -136,15 +119,15 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction, bool vertic
   }
 
   // Update selection state and notify managers
-  if (m_state) {
-    m_state->beginSelectionSuppression(newSelection);
+  if (state()) {
+    state()->beginSelectionSuppression(newSelection);
   }
 
-  if (m_selectionManager) {
-    m_selectionManager->setSelectedIndex(newSelection);
+  if (selectionMgr()) {
+    selectionMgr()->setSelectedIndex(newSelection);
   }
-  if (m_scrollManager) {
-    m_scrollManager->updateSelectionForIndex(newSelection);
+  if (scrollMgr()) {
+    scrollMgr()->updateSelectionForIndex(newSelection);
   }
 
   // Request full selection update from parent (includes file path update)
@@ -152,12 +135,12 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction, bool vertic
 
   performVisibilityForKeyMove(isNewRow, newSelection);
 
-  if (m_keyboardManager) {
+  if (keyboardMgr()) {
     Qt::Key physicalKey = Qt::Key_unknown;
-    if (m_keyboardManager->consumePendingNavigationKey(physicalKey)) {
-      m_keyboardManager->finalizeKeyRepeatForKey(physicalKey, direction, vertical);
+    if (keyboardMgr()->consumePendingNavigationKey(physicalKey)) {
+      keyboardMgr()->finalizeKeyRepeatForKey(physicalKey, direction, vertical);
     } else {
-      m_keyboardManager->finalizeKeyRepeat(nullptr, direction, vertical);
+      keyboardMgr()->finalizeKeyRepeat(nullptr, direction, vertical);
     }
   }
 
@@ -165,51 +148,51 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction, bool vertic
 }
 
 void ArrowNavigationHandler::handleRepeatStep() {
-  if (!m_keyboardManager || !m_keyboardManager->isRepeating() ||
-      !m_keyboardManager->isPhysicalKeyDown() || m_keyboardManager->repeatDelta() == 0) {
-    if (m_keyboardManager) {
-      m_keyboardManager->stopRepeat();
+  if (!keyboardMgr() || !keyboardMgr()->isRepeating() ||
+      !keyboardMgr()->isPhysicalKeyDown() || keyboardMgr()->repeatDelta() == 0) {
+    if (keyboardMgr()) {
+      keyboardMgr()->stopRepeat();
     }
     return;
   }
 
-  if (!m_scrollManager || !m_collections || !m_currentCollectionIndex) {
-    if (m_keyboardManager) {
-      m_keyboardManager->stopRepeat();
+  if (!scrollMgr() || !m_collections || !m_currentCollectionIndex) {
+    if (keyboardMgr()) {
+      keyboardMgr()->stopRepeat();
     }
     return;
   }
 
   if (!m_stackedWidget || !m_itemsPage || m_stackedWidget->currentWidget() != m_itemsPage) {
-    if (m_keyboardManager) {
-      m_keyboardManager->stopRepeat();
+    if (keyboardMgr()) {
+      keyboardMgr()->stopRepeat();
     }
     return;
   }
 
   if (!CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
-    if (m_keyboardManager) {
-      m_keyboardManager->stopRepeat();
+    if (keyboardMgr()) {
+      keyboardMgr()->stopRepeat();
     }
     return;
   }
 
   const int totalItems = getTotalItems();
   if (totalItems <= 0) {
-    if (m_keyboardManager) {
-      m_keyboardManager->stopRepeat();
+    if (keyboardMgr()) {
+      keyboardMgr()->stopRepeat();
     }
     return;
   }
 
   // Clear user scroll state to ensure centering isn't blocked
-  if (m_state) {
-    m_state->scroll().userScrollActive = false;
-    m_state->scroll().userFreeScroll = false;
+  if (state()) {
+    state()->scroll().userScrollActive = false;
+    state()->scroll().userFreeScroll = false;
   }
 
-  const int direction = m_keyboardManager->repeatDelta();
-  const bool repeatVertical = m_keyboardManager->repeatVertical();
+  const int direction = keyboardMgr()->repeatDelta();
+  const bool repeatVertical = keyboardMgr()->repeatVertical();
   const bool horizontal = !repeatVertical;
 
   const int currentSelection = std::max(0, getCurrentSelection());
@@ -230,14 +213,14 @@ void ArrowNavigationHandler::handleRepeatStep() {
     return;
   }
 
-  if (didWrap || m_keyboardManager->isWrapSequenceActive()) {
-    if (m_viewportManager) {
-      m_viewportManager->setForceImmediateCenter(true);
+  if (didWrap || keyboardMgr()->isWrapSequenceActive()) {
+    if (viewportMgr()) {
+      viewportMgr()->setForceImmediateCenter(true);
     }
-    m_keyboardManager->setWrapSequenceActive(true);
-    m_keyboardManager->setContinuousScrollActive(false);
+    keyboardMgr()->setWrapSequenceActive(true);
+    keyboardMgr()->setContinuousScrollActive(false);
   } else {
-    m_keyboardManager->setContinuousScrollActive(true);
+    keyboardMgr()->setContinuousScrollActive(true);
   }
 
   const bool rowChanged =
@@ -247,54 +230,54 @@ void ArrowNavigationHandler::handleRepeatStep() {
           : false;
 
   // Set pending selection for suppressed updates
-  if ((horizontal || rowChanged) && m_state) {
-    m_state->beginSelectionSuppression(newSelection);
+  if ((horizontal || rowChanged) && state()) {
+    state()->beginSelectionSuppression(newSelection);
   }
 
-  if (m_selectionManager) {
-    m_selectionManager->setSelectedIndex(newSelection);
+  if (selectionMgr()) {
+    selectionMgr()->setSelectedIndex(newSelection);
   }
 
   // Update scroll state
-  if (m_scrollManager) {
-    m_scrollManager->updateSelectionForIndex(newSelection);
+  if (scrollMgr()) {
+    scrollMgr()->updateSelectionForIndex(newSelection);
   }
 
   emit requestFullSelectionUpdate(newSelection);
 
   if (horizontal && !rowChanged) {
-    if (m_viewportManager) {
-      m_viewportManager->ensureHorizontallyVisible(newSelection);
+    if (viewportMgr()) {
+      viewportMgr()->ensureHorizontallyVisible(newSelection);
     }
     return;
   }
 
   // In list mode, every move is a row change since there's 1 item per row
-  if (m_viewportManager) {
-    m_viewportManager->centerItemVertically(newSelection, false);
+  if (viewportMgr()) {
+    viewportMgr()->centerItemVertically(newSelection, false);
   }
 }
 
 void ArrowNavigationHandler::handleStopRepeat(bool suppressRecentering) {
   // Stop horizontal animation if running
-  if (m_animationManager && m_animationManager->isHorizontalAnimRunning()) {
-    m_animationManager->horizontalAnimation()->stop();
+  if (animMgr() && animMgr()->isHorizontalAnimRunning()) {
+    animMgr()->horizontalAnimation()->stop();
   }
 
   // Apply pending selection if suppressed
-  if (m_state && m_state->isSelectionSuppressed()) {
-    int pending = m_state->click().pendingSelectionIndex;
+  if (state() && state()->isSelectionSuppressed()) {
+    int pending = state()->click().pendingSelectionIndex;
     if (pending >= 0) {
       emit requestFullSelectionUpdate(pending);
     }
-    m_state->endSelectionSuppression();
+    state()->endSelectionSuppression();
   }
 
   // Update continuous scroll state
-  if (m_keyboardManager && !m_keyboardManager->isPhysicalKeyDown()) {
-    bool animRunning = (m_animationManager && m_animationManager->isVerticalAnimRunning());
-    if (m_viewportManager) {
-      m_viewportManager->setContinuousScrollActive(animRunning);
+  if (keyboardMgr() && !keyboardMgr()->isPhysicalKeyDown()) {
+    bool animRunning = (animMgr() && animMgr()->isVerticalAnimRunning());
+    if (viewportMgr()) {
+      viewportMgr()->setContinuousScrollActive(animRunning);
     }
   }
 
@@ -305,9 +288,9 @@ void ArrowNavigationHandler::handleStopRepeat(bool suppressRecentering) {
     // stops
     QTimer::singleShot(UIConstants::Mouse::STOP_REPEAT_RECENTER_DELAY_MS, this, [this]() {
       bool stillActive =
-          m_keyboardManager
-              ? m_keyboardManager->isContinuousScrollActive()
-              : (m_viewportManager ? m_viewportManager->continuousScrollActive() : false);
+          keyboardMgr()
+              ? keyboardMgr()->isContinuousScrollActive()
+              : (viewportMgr() ? viewportMgr()->continuousScrollActive() : false);
       const int sel = getCurrentSelection();
       if (!QApplication::closingDown() && sel >= 0 && !stillActive) {
         emit requestRecenter();
@@ -317,7 +300,7 @@ void ArrowNavigationHandler::handleStopRepeat(bool suppressRecentering) {
 }
 
 void ArrowNavigationHandler::performVisibilityForKeyMove(bool isNewRow, int newSelection) {
-  if (!m_viewportManager) {
+  if (!viewportMgr()) {
     return;
   }
 
@@ -336,9 +319,9 @@ void ArrowNavigationHandler::performVisibilityForKeyMove(bool isNewRow, int newS
     return;
   }
   if (isListMode || isNewRow) {
-    m_viewportManager->centerItemVertically(newSelection, false);
+    viewportMgr()->centerItemVertically(newSelection, false);
   } else {
-    m_viewportManager->ensureHorizontallyVisible(newSelection);
+    viewportMgr()->ensureHorizontallyVisible(newSelection);
   }
 }
 
@@ -353,11 +336,11 @@ int ArrowNavigationHandler::getCurrentSelection() const {
   if (m_getCurrentSelection) {
     return m_getCurrentSelection();
   }
-  return m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
+  return selectionMgr() ? selectionMgr()->currentSelectedIndex() : -1;
 }
 
 int ArrowNavigationHandler::getTotalItems() const {
-  return m_scrollManager ? m_scrollManager->getTotalItems() : 0;
+  return scrollMgr() ? scrollMgr()->getTotalItems() : 0;
 }
 
 bool ArrowNavigationHandler::isWrapEnabled() const {

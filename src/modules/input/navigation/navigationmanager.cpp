@@ -48,15 +48,7 @@ NavigationManager::NavigationManager(QObject *parent)
 NavigationManager::~NavigationManager() = default;
 
 void NavigationManager::setupReferences(const NavigationManagerSetup &setup) {
-  // Manager dependencies - use accessors that check context fallback
-  m_interactionManager = setup.getInteractionManager();
-  m_state = setup.getInteractionState();
-  m_settingsManager = setup.getSettingsManager();
-  m_detailsPaneManager = setup.getDetailsPaneManager();
-  m_scrollManager = setup.getScrollManager();
-  m_databaseManager = setup.getDatabaseManager();
-  m_sessionManager = setup.getSessionManager();
-  m_artworkManager = setup.getArtworkManager();
+  m_ctx = setup.ctx;
 
   // UI elements - use accessors that check context fallback
   m_MetadataSidebar = setup.getSidebar();
@@ -78,14 +70,10 @@ void NavigationManager::setupReferences(const NavigationManagerSetup &setup) {
   m_isShuttingDown = setup.isShuttingDown;
   m_refreshTitleCounts = setup.refreshTitleCounts;
 
-  // Setup SelectionRestoreManager
+  // Setup SelectionRestoreManager. Sibling managers come from ctx.
   if (m_selectionRestoreManager) {
     SelectionRestoreManagerSetup restoreSetup;
     restoreSetup.ctx = setup.ctx;
-    restoreSetup.interactionManager = m_interactionManager;
-    restoreSetup.scrollManager = m_scrollManager;
-    restoreSetup.sessionManager = m_sessionManager;
-    restoreSetup.settingsManager = m_settingsManager;
     restoreSetup.isShuttingDown = m_isShuttingDown;
     m_selectionRestoreManager->setupReferences(restoreSetup);
   }
@@ -113,8 +101,8 @@ void NavigationManager::navigateWithSharedItems(int collectionIndex) {
 
   int previousIndex = (*m_currentCollectionIndex);
 
-  if (m_interactionManager) {
-    m_interactionManager->clearSelectionAndFocus();
+  if (interactionMgr()) {
+    interactionMgr()->clearSelectionAndFocus();
   }
   if (m_MetadataSidebar) {
     m_MetadataSidebar->clearMetadata();
@@ -122,8 +110,8 @@ void NavigationManager::navigateWithSharedItems(int collectionIndex) {
 
   (*m_currentCollectionIndex) = collectionIndex;
 
-  if (m_interactionManager) {
-    m_interactionManager->initializeSearchModeForCurrentCollection();
+  if (interactionMgr()) {
+    interactionMgr()->initializeSearchModeForCurrentCollection();
   }
 
   updateItemsPageTitle(collectionIndex);
@@ -152,28 +140,28 @@ auto NavigationManager::initializeNavigationState() -> void {
     }
   }
 
-  if ((parent()) && (m_interactionManager)) {
-    m_interactionManager->stopRepeat();
+  if ((parent()) && (interactionMgr())) {
+    interactionMgr()->stopRepeat();
     if (!isStartupNavigation) {
-      m_interactionManager->setNavigationInProgress(true);
+      interactionMgr()->setNavigationInProgress(true);
     }
-    if (m_state) {
-      m_state->click().rowChangeFirstClickIndex = -1;
-      m_state->click().rowChangeFirstClickMs = 0;
-      m_state->click().doubleClickPending = false;
-      m_state->click().doubleClickPendingIndex = -1;
-      m_state->click().clickDeferralActive = false;
-      m_state->click().clickDeferralIndex = -1;
-      m_state->click().deferCenterOnClick = false;
-      m_state->click().deferredCenterIndex = -1;
-      m_state->click().selectionSuppressed = false;
-      m_state->click().pendingSelectionIndex = -1;
+    if (state()) {
+      state()->click().rowChangeFirstClickIndex = -1;
+      state()->click().rowChangeFirstClickMs = 0;
+      state()->click().doubleClickPending = false;
+      state()->click().doubleClickPendingIndex = -1;
+      state()->click().clickDeferralActive = false;
+      state()->click().clickDeferralIndex = -1;
+      state()->click().deferCenterOnClick = false;
+      state()->click().deferredCenterIndex = -1;
+      state()->click().selectionSuppressed = false;
+      state()->click().pendingSelectionIndex = -1;
     }
   }
   // Reset restore state for new navigation - clears any pending restores
   // and allows automatic restore to proceed (userSelectionMade = false)
-  if (m_interactionManager) {
-    m_interactionManager->resetSelectionRestoreState();
+  if (interactionMgr()) {
+    interactionMgr()->resetSelectionRestoreState();
   }
 }
 
@@ -200,13 +188,13 @@ auto NavigationManager::showCollectionItems(int collectionIndex) -> bool {
     m_isInitialStartupLoad = false;
   }
 
-  if ((parent()) && (m_interactionManager)) {
-    m_interactionManager->stopRepeat();
+  if ((parent()) && (interactionMgr())) {
+    interactionMgr()->stopRepeat();
     // Only cancel pending restore when navigating FROM an existing collection
     // On initial startup (*m_currentCollectionIndex < 0), allow restore to
     // proceed
     if (*m_currentCollectionIndex >= 0) {
-      m_interactionManager->cancelPendingSelectionRestore();
+      interactionMgr()->cancelPendingSelectionRestore();
     }
   }
 
@@ -225,15 +213,15 @@ auto NavigationManager::showCollectionItems(int collectionIndex) -> bool {
 // Temporarily suppresses arrow-key centering for a scroll area using
 // InteractionStateHolder and time window
 auto NavigationManager::setSuppressArrowCenter(QScrollArea *scrollArea, int settleMs) -> void {
-  if (!scrollArea || !m_state) {
+  if (!scrollArea || !state()) {
     return;
   }
-  m_state->suppressArrowCenterFor(settleMs);
+  state()->suppressArrowCenterFor(settleMs);
   // Clear arrow center suppression after settle period expires -
   // allows navigation animations to complete before centering resumes
   QTimer::singleShot(UIConstants::Keyboard::ARROW_CENTER_CLEAR_AFTER_SET_MS, this, [this]() {
-    if (m_state) {
-      m_state->clearArrowCenterSuppression();
+    if (state()) {
+      state()->clearArrowCenterSuppression();
     }
   });
 }
@@ -270,21 +258,21 @@ auto NavigationManager::areItemsShared(int fromIndex, int toIndex) const -> bool
 
 // Performs common navigation cleanup operations
 void NavigationManager::onViewportChanged() {
-  if ((m_interactionManager) && m_interactionManager->isWheelScrolling() && m_stackedWidget &&
+  if ((interactionMgr()) && interactionMgr()->isWheelScrolling() && m_stackedWidget &&
       m_stackedWidget->currentWidget() == m_itemsPage) {
     // Delay viewport update during wheel scrolling to batch rapid events -
     // reduces CPU load from frequent artwork updates during fast scrolling
     QTimer::singleShot(UIConstants::Timing::SHORT_DELAY_MS, this, [this]() {
-      if (m_scrollManager) {
-        m_scrollManager->updateVirtualView();
+      if (scrollMgr()) {
+        scrollMgr()->updateVirtualView();
       }
-      if (m_artworkManager) {
-        m_artworkManager->updateViewportArtwork();
+      if (artworkMgr()) {
+        artworkMgr()->updateViewportArtwork();
       }
     });
   } else {
-    if (m_artworkManager) {
-      if (auto *coord = m_artworkManager->getTimerCoordinator()) {
+    if (artworkMgr()) {
+      if (auto *coord = artworkMgr()->getTimerCoordinator()) {
         coord->scheduleViewportUpdate();
       }
     }
@@ -311,7 +299,7 @@ auto NavigationManager::getHasSubAndItems(int collectionIndex, bool &hasSub, boo
   }
 
   QString mediaDir =
-      (m_settingsManager)
+      (settingsMgr())
           ? SettingsUtils::expandConfigVariables(collection.mediaDirectory, collection.name)
           : collection.mediaDirectory;
   if (!mediaDir.trimmed().isEmpty()) {
@@ -407,18 +395,18 @@ auto NavigationManager::getAllDescendantCollections(int parentIndex) const -> QL
 }
 
 void NavigationManager::prepareForNonSharedNavigationHelper() {
-  if (m_interactionManager) {
-    m_interactionManager->clearSelectionAndFocus();
+  if (interactionMgr()) {
+    interactionMgr()->clearSelectionAndFocus();
   }
   if (m_MetadataSidebar) {
     m_MetadataSidebar->clearMetadata();
   }
-  m_artworkManager->stopSilentLoading();
-  if (m_artworkManager->getTimerCoordinator()) {
-    m_artworkManager->getTimerCoordinator()->stopAllTimers();
+  artworkMgr()->stopSilentLoading();
+  if (artworkMgr()->getTimerCoordinator()) {
+    artworkMgr()->getTimerCoordinator()->stopAllTimers();
   }
-  if (m_scrollManager) {
-    m_scrollManager->cleanup();
+  if (scrollMgr()) {
+    scrollMgr()->cleanup();
   }
 }
 
@@ -426,8 +414,8 @@ void NavigationManager::suspendItemsPageRendering() {
   if (m_itemScrollArea) {
     m_itemScrollArea->setUpdatesEnabled(false);
   }
-  if (m_state) {
-    m_state->artwork().suppressArtwork = true;
+  if (state()) {
+    state()->artwork().suppressArtwork = true;
   }
   if (m_gridContainer) {
     m_gridContainer->setUpdatesEnabled(false);
@@ -443,7 +431,7 @@ void NavigationManager::resumeItemsPageRendering() {
   if (m_itemScrollArea) {
     m_itemScrollArea->setUpdatesEnabled(true);
   }
-  if (m_state) {
-    m_state->artwork().suppressArtwork = false;
+  if (state()) {
+    state()->artwork().suppressArtwork = false;
   }
 }

@@ -21,12 +21,9 @@ Q_LOGGING_CATEGORY(lcAnimationManager, "kartend.animationmanager")
     }                                                                                              \
   } while (0)
 
-// AnimationManagerSetup getter definitions
+// AnimationManagerSetup getter definitions (non-manager fields only — sibling
+// managers are read directly from ctx at runtime).
 SETUP_GETTER_DEF_UI_SAME(AnimationManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_MGR_SAME(AnimationManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_MGR_SAME(AnimationManagerSetup, ArtworkManager *, ArtworkManager, artworkManager)
-SETUP_GETTER_DEF_MGR_CTX_ONLY(AnimationManagerSetup, InteractionStateHolder *, InteractionState,
-                              interactionState)
 
 AnimationManager::AnimationManager(QObject *parent) : QObject(parent) {}
 
@@ -40,11 +37,9 @@ AnimationManager::~AnimationManager() {
 }
 
 void AnimationManager::setupReferences(const AnimationManagerSetup &setup) {
+  m_ctx = setup.ctx;
   m_generalSettings = setup.generalSettings;
   m_itemScrollArea = setup.getItemScrollArea();
-  m_scrollManager = setup.getScrollManager();
-  m_artworkManager = setup.getArtworkManager();
-  m_state = setup.getInteractionState();
 }
 
 // --- Vertical Animation ---
@@ -58,6 +53,7 @@ void AnimationManager::ensureVAnimCreated(QScrollBar *vScrollBar) {
 void AnimationManager::configureAndStartVerticalAnimation(QScrollBar *vScrollBar, int curY,
                                                           int targetY, int duration,
                                                           bool clickScroll, bool clickHoldAdv) {
+  InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
   ensureVAnimCreated(vScrollBar);
 
   m_vScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
@@ -81,8 +77,8 @@ void AnimationManager::configureAndStartVerticalAnimation(QScrollBar *vScrollBar
   connect(m_vScrollAnim, &QPropertyAnimation::finished, this,
           &AnimationManager::onVScrollAnimationFinished);
 
-  if (m_state) {
-    m_state->scroll().programmaticScroll = true;
+  if (state) {
+    state->scroll().programmaticScroll = true;
   }
   emit requestSelectionOverlayRefresh();
   m_vScrollAnim->start();
@@ -122,18 +118,19 @@ bool AnimationManager::handleExistingVerticalAnimIfRunning(QScrollBar *verticalS
 }
 
 void AnimationManager::setProgrammaticScrollGuarded(bool enable) {
-  if (!m_state) {
+  InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
+  if (!state) {
     return;
   }
   if (enable) {
-    m_state->scroll().programmaticScroll = true;
+    state->scroll().programmaticScroll = true;
     emit requestSelectionOverlayRefresh();
   } else {
     // Defer clearing ProgrammaticScroll flag until after Qt processes
     // pending events - ensures the property change takes effect atomically
     QTimer::singleShot(0, this, [this]() {
-      if (m_state) {
-        m_state->scroll().programmaticScroll = false;
+      if (auto *s = m_ctx ? m_ctx->interactionState() : nullptr) {
+        s->scroll().programmaticScroll = false;
         emit requestSelectionOverlayRefresh();
       }
     });
@@ -153,8 +150,8 @@ void AnimationManager::updateVirtualViewAndSelectionDuringVAnim(bool clickScroll
 
 void AnimationManager::onVScrollAnimationFinished() {
   emit requestVirtualViewUpdate();
-  if (m_state) {
-    m_state->scroll().programmaticScroll = false;
+  if (auto *state = m_ctx ? m_ctx->interactionState() : nullptr) {
+    state->scroll().programmaticScroll = false;
     emit requestSelectionOverlayRefresh();
   }
   emit verticalAnimationFinished();
@@ -193,16 +190,16 @@ void AnimationManager::animateHorizontalHold(QScrollBar *hScrollBar, int startX,
   // Signal to set GlideAnimating property on grid container
   emit requestGlideAnimationStart();
 
-  if (m_state) {
-    m_state->scroll().programmaticScroll = true;
+  if (auto *state = m_ctx ? m_ctx->interactionState() : nullptr) {
+    state->scroll().programmaticScroll = true;
     emit requestSelectionOverlayRefresh();
   }
   m_hScrollAnim->start();
   // Clear ProgrammaticScroll flag in next event loop iteration - the
   // animation is now running and the flag served its purpose during setup
   QTimer::singleShot(0, this, [this]() {
-    if (m_state) {
-      m_state->scroll().programmaticScroll = false;
+    if (auto *s = m_ctx ? m_ctx->interactionState() : nullptr) {
+      s->scroll().programmaticScroll = false;
       emit requestSelectionOverlayRefresh();
     }
   });
@@ -284,8 +281,8 @@ void AnimationManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar, int start
   connect(m_vScrollAnim, &QPropertyAnimation::finished, this,
           &AnimationManager::onVScrollAnimationFinished);
 
-  if (m_state) {
-    m_state->scroll().programmaticScroll = true;
+  if (auto *state = m_ctx ? m_ctx->interactionState() : nullptr) {
+    state->scroll().programmaticScroll = true;
   }
   m_vScrollAnim->start();
 }

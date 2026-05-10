@@ -35,8 +35,8 @@ void InteractionManager::connectSearchManagerSignals() {
   connect(m_searchManager.get(), &SearchManager::requestClearSelection, this,
           &InteractionManager::clearSelection);
   connect(m_searchManager.get(), &SearchManager::requestSelectionRestore, this, [this](int index) {
-    if (m_navigationManager) {
-      m_navigationManager->scheduleSelectionRestore(index, UIConstants::Selection::RESTORE_STEPS,
+    if (navMgr()) {
+      navMgr()->scheduleSelectionRestore(index, UIConstants::Selection::RESTORE_STEPS,
                                                     UIConstants::Selection::RESTORE_STEP_DELAY_MS,
                                                     UIConstants::Selection::RESTORE_MAX_DELAY_MS);
     }
@@ -78,8 +78,8 @@ void InteractionManager::connectKeyboardManagerSignals() {
   connect(m_keyboardManager.get(), &KeyboardManager::requestJumpToEdge, this,
           &InteractionManager::handleJumpToEdge);
   connect(m_keyboardManager.get(), &KeyboardManager::requestEnterAction, this, [this]() {
-    if (m_scrollManager) {
-      const int totalItems = m_scrollManager->getTotalItems();
+    if (scrollMgr()) {
+      const int totalItems = scrollMgr()->getTotalItems();
       processEnterOrReturnKey(totalItems);
     }
   });
@@ -110,8 +110,8 @@ void InteractionManager::connectKeyboardManagerSignals() {
   connect(m_keyboardManager.get(), &KeyboardManager::stopRepeatRequested, this,
           &InteractionManager::onKeyboardStopRepeat);
   connect(m_keyboardManager.get(), &KeyboardManager::requestHomeView, this, [this]() {
-    if (m_navigationManager) {
-      m_navigationManager->loadRootView();
+    if (navMgr()) {
+      navMgr()->loadRootView();
     }
   });
 }
@@ -154,16 +154,16 @@ void InteractionManager::connectGamepadManagerSignals() {
             handleArrowKeyNavigation(effectiveDirection, effectiveVertical);
           });
   connect(m_gamepadManager.get(), &GamepadManager::requestEnterAction, this, [this]() {
-    if (m_scrollManager) {
-      const int totalItems = m_scrollManager->getTotalItems();
+    if (scrollMgr()) {
+      const int totalItems = scrollMgr()->getTotalItems();
       processEnterOrReturnKey(totalItems);
     }
   });
   connect(m_gamepadManager.get(), &GamepadManager::requestEscapeAction, this,
           [this]() { (void)handleEscapeKey(); });
   connect(m_gamepadManager.get(), &GamepadManager::requestToggleSidebarAction, this, [this]() {
-    if (m_detailsPaneManager) {
-      m_detailsPaneManager->toggleSidebar();
+    if (detailsPaneMgr()) {
+      detailsPaneMgr()->toggleSidebar();
     }
   });
   connect(m_gamepadManager.get(), &GamepadManager::requestScrollAnimationStop, this, [this]() {
@@ -175,38 +175,38 @@ void InteractionManager::connectGamepadManagerSignals() {
 
 void InteractionManager::connectAnimationManagerSignals() {
   connect(m_animationManager.get(), &AnimationManager::requestVirtualViewUpdate, this, [this]() {
-    if (m_scrollManager) {
-      m_scrollManager->updateVirtualView();
+    if (scrollMgr()) {
+      scrollMgr()->updateVirtualView();
     }
   });
   connect(m_animationManager.get(), &AnimationManager::requestSelectionUpdate, this, [this]() {
-    if (m_scrollManager) {
+    if (scrollMgr()) {
       int idxDyn = m_state.isSelectionSuppressed() ? m_state.pendingSelectionIndex()
                                                    : currentSelectedIndex();
       if (idxDyn >= 0) {
-        m_scrollManager->updateSelectionForIndex(idxDyn);
+        scrollMgr()->updateSelectionForIndex(idxDyn);
       }
     }
   });
   connect(m_animationManager.get(), &AnimationManager::requestSelectionOverlayRefresh, this,
           [this]() {
-            if (m_scrollManager) {
-              m_scrollManager->refreshSelectionOverlayState();
+            if (scrollMgr()) {
+              scrollMgr()->refreshSelectionOverlayState();
             }
           });
   connect(m_animationManager.get(), &AnimationManager::requestGlideAnimationStart, this, [this]() {
     if (m_gridContainer) {
       m_state.setGlideAnimating(true);
-      if (m_scrollManager) {
-        m_scrollManager->refreshSelectionOverlayState();
+      if (scrollMgr()) {
+        scrollMgr()->refreshSelectionOverlayState();
       }
     }
   });
   connect(m_animationManager.get(), &AnimationManager::horizontalAnimationFinished, this, [this]() {
     if (m_gridContainer) {
       m_state.setGlideAnimating(false);
-      if (m_scrollManager) {
-        m_scrollManager->refreshSelectionOverlayState();
+      if (scrollMgr()) {
+        scrollMgr()->refreshSelectionOverlayState();
       }
     }
   });
@@ -251,16 +251,16 @@ void InteractionManager::connectMouseManagerSignals() {
         m_selectionManager->setSelectedIndex(index);
       }
       updateFilePathForSelection(index, subs);
-      if (m_scrollManager) {
-        m_scrollManager->updateSelectionForIndex(index);
+      if (scrollMgr()) {
+        scrollMgr()->updateSelectionForIndex(index);
       }
       selectItemByIndex(index, true);
     }
   });
   connect(m_mouseManager.get(), &MouseManager::requestOverlayVisibility, this,
           [this](bool visible) {
-            if (m_scrollManager) {
-              m_scrollManager->setForceSelectionOverlayVisible(visible);
+            if (scrollMgr()) {
+              scrollMgr()->setForceSelectionOverlayVisible(visible);
             }
           });
   connect(m_mouseManager.get(), &MouseManager::requestScrollAreaProperty, this,
@@ -276,10 +276,10 @@ void InteractionManager::connectMouseManagerSignals() {
 void InteractionManager::connectViewportManagerSignals() {
   connect(m_viewportManager.get(), &ViewportManager::requestSelectionUpdate, this,
           [this](int idxDyn) {
-            if (m_scrollManager) {
+            if (scrollMgr()) {
               int idx = (idxDyn >= 0) ? idxDyn : currentSelectedIndex();
               if (idx >= 0) {
-                m_scrollManager->updateSelectionForIndex(idx);
+                scrollMgr()->updateSelectionForIndex(idx);
               }
             }
           });
@@ -331,7 +331,7 @@ void InteractionManager::connectEventManagerSignals() {
                   m_selectionManager->handleWidgetSelectionByIndex(visualIndex, clickPos, event);
               if (clickedIndex >= 0 && m_mouseManager) {
                 const int gridWidth = getCurrentGridWidth();
-                const int totalItems = m_scrollManager ? m_scrollManager->getTotalItems() : 0;
+                const int totalItems = scrollMgr() ? scrollMgr()->getTotalItems() : 0;
                 m_mouseManager->updateClickHoldHorizontalCandidate(previousSelection, clickedIndex,
                                                                    gridWidth);
                 m_mouseManager->startClickHoldTimer(clickPos, clickedIndex, gridWidth, totalItems);

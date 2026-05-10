@@ -18,9 +18,21 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include "applicationcontext.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "sessionmanager.h"
+
+namespace {
+/// Builds a minimal ApplicationContext for tests — only sessionManager is
+/// populated since DatabaseManager is the only consumer of ctx in the
+/// tested surface. Returned by value; tests pass its address to the ctor.
+ApplicationContext makeCtxWithSession(SessionManager *session) {
+  ApplicationContext ctx;
+  ctx.managers.sessionManager = session;
+  return ctx;
+}
+} // namespace
 
 class TestDatabaseManager : public QObject {
   Q_OBJECT
@@ -67,7 +79,7 @@ void TestDatabaseManager::testConstructDestruct_doesNotCrash() {
   // pool dirty.
   m_session = std::make_unique<SessionManager>();
   {
-    DatabaseManager db(m_session.get());
+    auto appCtx = makeCtxWithSession(m_session.get()); DatabaseManager db(&appCtx);
     Q_UNUSED(db);
   }
   // If we get here, the destructor returned within its bounded wait without
@@ -83,7 +95,7 @@ void TestDatabaseManager::testRepeatedConstructDestruct_doesNotLeakConnection() 
 
   const QString connName = QStringLiteral("kartend_main");
   for (int i = 0; i < 3; ++i) {
-    DatabaseManager db(m_session.get());
+    auto appCtx = makeCtxWithSession(m_session.get()); DatabaseManager db(&appCtx);
     Q_UNUSED(db);
   }
 
@@ -97,7 +109,7 @@ void TestDatabaseManager::testDestructAfterInitDatabase_closesConnectionCleanly(
   m_session = std::make_unique<SessionManager>();
   const QString connName = QStringLiteral("kartend_main");
   {
-    DatabaseManager db(m_session.get());
+    auto appCtx = makeCtxWithSession(m_session.get()); DatabaseManager db(&appCtx);
     // Constructor already calls initDatabase(); calling it again exercises
     // the close+reopen path.
     db.initDatabase();
@@ -143,7 +155,8 @@ void TestDatabaseManager::testDestructDuringActiveScan_returnsWithinBoundedTime(
   ctx.currentIndex = 0;
   ctx.config = collection;
 
-  auto *db = new DatabaseManager(m_session.get());
+  auto dbCtx = makeCtxWithSession(m_session.get());
+  auto *db = new DatabaseManager(&dbCtx);
   // Trigger a scan via the public API; this dispatches to the worker thread
   // through queued connections.
   db->fetchItemCount(ctx, allCollections, QString());
@@ -179,7 +192,7 @@ void TestDatabaseManager::testDestructDuringActiveScan_returnsWithinBoundedTime(
 
 void TestDatabaseManager::testResolveFilePath_absolutePathPassthrough() {
   m_session = std::make_unique<SessionManager>();
-  DatabaseManager db(m_session.get());
+  auto appCtx = makeCtxWithSession(m_session.get()); DatabaseManager db(&appCtx);
 
   CollectionContext ctx;
   ctx.currentIndex = 0;
@@ -191,7 +204,7 @@ void TestDatabaseManager::testResolveFilePath_absolutePathPassthrough() {
 
 void TestDatabaseManager::testResolveRelativeFilePath_emptyMapReturnsEmpty() {
   m_session = std::make_unique<SessionManager>();
-  DatabaseManager db(m_session.get());
+  auto appCtx = makeCtxWithSession(m_session.get()); DatabaseManager db(&appCtx);
 
   // No mapping available -> empty string (caller treats as "not resolvable").
   QHash<QString, QString> emptyMap;
@@ -201,7 +214,7 @@ void TestDatabaseManager::testResolveRelativeFilePath_emptyMapReturnsEmpty() {
 
 void TestDatabaseManager::testResolveRelativeFilePath_resolvesViaMap() {
   m_session = std::make_unique<SessionManager>();
-  DatabaseManager db(m_session.get());
+  auto appCtx = makeCtxWithSession(m_session.get()); DatabaseManager db(&appCtx);
 
   QHash<QString, QString> fileNames;
   fileNames.insert(QStringLiteral("/abs/path/to/foo.bin"),

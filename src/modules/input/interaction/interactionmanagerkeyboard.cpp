@@ -84,11 +84,11 @@ void InteractionManager::handleJumpToEdge(bool toEnd) {
   if (restoringSelection || m_navigationInProgress) {
     return;
   }
-  if (!m_scrollManager) {
+  if (!scrollMgr()) {
     return;
   }
 
-  const int totalItems = m_scrollManager->getTotalItems();
+  const int totalItems = scrollMgr()->getTotalItems();
   if (totalItems <= 0) {
     return;
   }
@@ -135,9 +135,9 @@ void InteractionManager::handleJumpToEdge(bool toEnd) {
   }
 
   // Update virtual view and selection overlay
-  if (m_scrollManager) {
-    m_scrollManager->updateVirtualView();
-    m_scrollManager->updateSelectionForIndex(targetIndex);
+  if (scrollMgr()) {
+    scrollMgr()->updateVirtualView();
+    scrollMgr()->updateSelectionForIndex(targetIndex);
   }
 
   emit selectionChanged(targetIndex);
@@ -152,6 +152,9 @@ void InteractionManager::onKeyboardRepeatStep() {
 
 // KeyboardManager callback: handles cleanup when key hold stops
 void InteractionManager::onKeyboardStopRepeat(bool suppressRecentering) {
+  if (m_destroying) {
+    return;
+  }
   if (m_arrowHandler) {
     m_arrowHandler->handleStopRepeat(suppressRecentering);
   }
@@ -181,8 +184,8 @@ auto InteractionManager::handleGlobalKeyPress(QKeyEvent *event) -> bool {
     if (m_searchBar && m_searchBar->hasFocus()) {
       return false;
     }
-    if (m_navigationManager) {
-      m_navigationManager->loadRootView();
+    if (navMgr()) {
+      navMgr()->loadRootView();
       return true;
     }
   }
@@ -212,7 +215,7 @@ auto InteractionManager::handleSlashKey() -> bool {
 // to the grid.
 auto InteractionManager::handleEscapeKey() -> bool {
   // First check if artwork preview overlay is open - close it and return
-  if (m_scrollManager && m_scrollManager->hideArtworkPreview()) {
+  if (scrollMgr() && scrollMgr()->hideArtworkPreview()) {
     // Also clear expand-mode state so the next activation expands again.
     m_state.clearExpandedItem();
     return true;
@@ -221,10 +224,10 @@ auto InteractionManager::handleEscapeKey() -> bool {
   // handle Escape, but the app-wide event filter consumes the key first via
   // KeyboardManager → requestEscapeAction; route the dismiss here so the
   // overlay closes regardless of which path the key takes.
-  if (m_detailPageManager) {
-    if (auto *overlay = m_detailPageManager->overlay()) {
+  if (detailPageMgr()) {
+    if (auto *overlay = detailPageMgr()->overlay()) {
       if (overlay->isActive()) {
-        m_detailPageManager->hideOverlay();
+        detailPageMgr()->hideOverlay();
         return true;
       }
     }
@@ -256,8 +259,8 @@ auto InteractionManager::handleEscapeKey() -> bool {
 
     // First check if we're in a virtual subfolder - go back one level
     if (!cfg.currentSubfolder.isEmpty()) {
-      if (m_navigationManager) {
-        m_navigationManager->goBackFromVirtualFolder();
+      if (navMgr()) {
+        navMgr()->goBackFromVirtualFolder();
       }
       return true;
     }
@@ -265,18 +268,18 @@ auto InteractionManager::handleEscapeKey() -> bool {
     // Then check if we're in a subcollection - go to parent
     if (cfg.isSubcollection && cfg.parentCollectionIndex >= 0 &&
         cfg.parentCollectionIndex < m_collections->size()) {
-      if (m_navigationManager) {
+      if (navMgr()) {
         constexpr int kRestoreAttempts = UIConstants::Selection::RESTORE_STEPS;
         constexpr int kRestoreIntervalMs = UIConstants::Selection::RESTORE_STEP_DELAY_MS;
         constexpr int kRestoreTimeoutMs = UIConstants::Selection::RESTORE_MAX_DELAY_MS;
         const int parent = cfg.parentCollectionIndex;
-        m_navigationManager->showCollectionItems(parent);
+        navMgr()->showCollectionItems(parent);
         int sel = -1;
-        if (m_settingsManager) {
-          sel = m_settingsManager->getLastSelectedItem(parent);
+        if (settingsMgr()) {
+          sel = settingsMgr()->getLastSelectedItem(parent);
         }
         if (sel >= 0) {
-          m_navigationManager->scheduleSelectionRestore(sel, kRestoreAttempts, kRestoreIntervalMs,
+          navMgr()->scheduleSelectionRestore(sel, kRestoreAttempts, kRestoreIntervalMs,
                                                         kRestoreTimeoutMs);
         }
       }

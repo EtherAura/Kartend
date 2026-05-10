@@ -18,7 +18,7 @@ class DatabaseManager;
 struct ApplicationContext;
 
 struct DetailsPaneManagerSetup {
-  ApplicationContext *ctx = nullptr;
+  const ApplicationContext *ctx = nullptr;
 
   DetailsPane *sidebar = nullptr;
   QWidget *itemsPage = nullptr;
@@ -32,17 +32,11 @@ struct DetailsPaneManagerSetup {
   /// it in `outerLayout`.
   QWidget *contentWidget = nullptr;
   QScrollArea *scrollArea = nullptr;
-  SettingsManager *settingsManager = nullptr;
-  ArtworkManager *artworkManager = nullptr;
-  DatabaseManager *databaseManager = nullptr;
   QList<CollectionConfig> *collections = nullptr;
 
   SETUP_GETTER_DECL(DetailsPane *, Sidebar)
   SETUP_GETTER_DECL(QWidget *, ItemsPage)
   SETUP_GETTER_DECL(QScrollArea *, ScrollArea)
-  SETUP_GETTER_DECL(SettingsManager *, SettingsManager)
-  SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
-  SETUP_GETTER_DECL(DatabaseManager *, DatabaseManager)
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
 };
 
@@ -130,9 +124,9 @@ private:
   /// the pane's insertion index in `m_outerLayout`.
   QWidget *m_mainContentWidget = nullptr;
   QScrollArea *m_itemScrollArea;
-  SettingsManager *m_settingsManager = nullptr;
-  ArtworkManager *m_artworkManager = nullptr;
-  DatabaseManager *m_databaseManager = nullptr;
+  // ctx is the single source of truth for sibling managers (SettingsManager,
+  // ArtworkManager, DatabaseManager).
+  const ApplicationContext *m_ctx = nullptr;
   QList<CollectionConfig> *m_collections = nullptr;
   bool m_sidebarVisible = false;
   /// separate from m_sidebarVisible because this flag is

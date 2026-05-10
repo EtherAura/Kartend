@@ -50,10 +50,10 @@ bool EventManager::wheelEventBelongsToSidebar() const {
   // the source of truth — when the sidebar's QScrollArea has nothing to scroll,
   // Qt propagates the wheel up past it and `obj` would point at an ancestor
   // like the items page, so an obj-based check would miss it.
-  if (!m_detailsPaneManager) {
+  if (!detailsPaneMgr()) {
     return false;
   }
-  QWidget *sidebar = m_detailsPaneManager->sidebarWidget();
+  QWidget *sidebar = detailsPaneMgr()->sidebarWidget();
   return sidebar && sidebar->isVisible() &&
          sidebar->rect().contains(sidebar->mapFromGlobal(QCursor::pos()));
 }
@@ -70,12 +70,12 @@ int EventManager::computeWheelTargetScroll(int selectedIndex, const CollectionCo
   // ScrollManager metrics override the per-collection defaults — both code
   // paths must agree on itemsPerRow / itemHeight / verticalSpacing.
   int gridWidth = CollectionUtils::effectiveGridWidth(
-      collection, m_scrollManager ? m_scrollManager->sidebarShrinkingActive() : false);
+      collection, scrollMgr() ? scrollMgr()->sidebarShrinkingActive() : false);
   int itemHeight = collection.itemHeight;
   int vSpacing = collection.verticalSpacing;
   int headerOffset = 0;
-  if (m_scrollManager) {
-    const auto &metrics = m_scrollManager->getMetrics();
+  if (scrollMgr()) {
+    const auto &metrics = scrollMgr()->getMetrics();
     gridWidth = metrics.itemsPerRow;
     itemHeight = metrics.itemHeight;
     vSpacing = metrics.verticalSpacing;
@@ -86,46 +86,46 @@ int EventManager::computeWheelTargetScroll(int selectedIndex, const CollectionCo
   const QRect viewport = m_itemScrollArea->viewport()->rect();
   int targetPos = 0;
 
-  if (horizontalView && m_scrollManager) {
+  if (horizontalView && scrollMgr()) {
     // itemsPerRow means items-per-column in horizontal view; derive the
     // column index from selectedIndex / itemsPerCol and center it.
-    const auto &metrics = m_scrollManager->getMetrics();
+    const auto &metrics = scrollMgr()->getMetrics();
     targetPos = GridLayoutCalculator::calculateCenterScrollTarget(
         selectedIndex, viewport.width(), axisScrollBar->maximum(), metrics);
   } else {
     const int logicalTargetY = EventHelpers::computeLogicalCenteredScrollY(
         selectedIndex, gridWidth, itemHeight, vSpacing, margins, headerOffset, viewport.height());
     targetPos = logicalTargetY;
-    if (m_viewportManager && m_viewportManager->getScrollScale() > 1.0) {
-      targetPos = m_viewportManager->toWidgetScrollY(logicalTargetY);
+    if (viewportMgr() && viewportMgr()->getScrollScale() > 1.0) {
+      targetPos = viewportMgr()->toWidgetScrollY(logicalTargetY);
     }
   }
   return qBound(0, targetPos, axisScrollBar->maximum());
 }
 
 void EventManager::onWheelAnimationFinished() {
-  if (m_mouseManager) {
-    m_mouseManager->setWheelScrolling(false);
+  if (mouseMgr()) {
+    mouseMgr()->setWheelScrolling(false);
   }
-  if (m_viewportManager) {
-    m_viewportManager->setContinuousScrollActive(false);
+  if (viewportMgr()) {
+    viewportMgr()->setContinuousScrollActive(false);
   }
-  if (m_state) {
-    m_state->scroll().userScrollActive = false;
-    m_state->scroll().programmaticScroll = false;
-    m_state->clearArrowCenterSuppression();
-    if (m_scrollManager) {
-      m_scrollManager->refreshSelectionOverlayState();
+  if (state()) {
+    state()->scroll().userScrollActive = false;
+    state()->scroll().programmaticScroll = false;
+    state()->clearArrowCenterSuppression();
+    if (scrollMgr()) {
+      scrollMgr()->refreshSelectionOverlayState();
     }
   }
-  const int selectedIndex = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
-  if (m_scrollManager && selectedIndex >= 0) {
-    m_scrollManager->updateSelectionForIndex(selectedIndex);
+  const int selectedIndex = selectionMgr() ? selectionMgr()->currentSelectedIndex() : -1;
+  if (scrollMgr() && selectedIndex >= 0) {
+    scrollMgr()->updateSelectionForIndex(selectedIndex);
   }
   // Selection might have scrolled outside the viewport during chained wheel
   // events; bring it back in before signaling the scroll-ended consumers.
-  if (m_viewportManager && selectedIndex >= 0) {
-    m_viewportManager->ensureItemVisible(selectedIndex, false);
+  if (viewportMgr() && selectedIndex >= 0) {
+    viewportMgr()->ensureItemVisible(selectedIndex, false);
   }
   emit wheelScrollEnded();
 }
@@ -174,10 +174,10 @@ bool EventManager::handleWheelEvent(QObject * /*obj*/, QEvent *event) {
 
   const int currentPos = axisScrollBar->value();
 
-  if (m_state) {
-    m_state->scroll().userScrollActive = true;
-    m_state->scroll().programmaticScroll = true;
-    m_state->suppressArrowCenterFor(UIConstants::Mouse::WHEEL_SUPPRESS_ARROW_CENTER_MS);
+  if (state()) {
+    state()->scroll().userScrollActive = true;
+    state()->scroll().programmaticScroll = true;
+    state()->suppressArrowCenterFor(UIConstants::Mouse::WHEEL_SUPPRESS_ARROW_CENTER_MS);
     // refreshSelectionOverlayState is intentionally skipped here — too frequent
     // during rapid wheel events. Animation completion refreshes it.
   }
@@ -185,23 +185,23 @@ bool EventManager::handleWheelEvent(QObject * /*obj*/, QEvent *event) {
   if (applyWheelSelectionDelta(wheelSteps)) {
     // Wrap detected: bail out of animation and let updateVirtualView re-paint
     // the new visible page.
-    if (m_mouseManager) {
-      m_mouseManager->setWheelScrolling(false);
+    if (mouseMgr()) {
+      mouseMgr()->setWheelScrolling(false);
     }
-    if (m_viewportManager) {
-      m_viewportManager->setContinuousScrollActive(false);
+    if (viewportMgr()) {
+      viewportMgr()->setContinuousScrollActive(false);
     }
-    if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
-      m_animationManager->verticalAnimation()->stop();
+    if (animMgr() && animMgr()->isVerticalAnimRunning()) {
+      animMgr()->verticalAnimation()->stop();
     }
-    if (m_scrollManager) {
-      m_scrollManager->updateVirtualView();
+    if (scrollMgr()) {
+      scrollMgr()->updateVirtualView();
     }
     event->accept();
     return true;
   }
 
-  const int selectedIndex = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
+  const int selectedIndex = selectionMgr() ? selectionMgr()->currentSelectedIndex() : -1;
   if (selectedIndex < 0) {
     event->accept();
     return true;
@@ -210,30 +210,30 @@ bool EventManager::handleWheelEvent(QObject * /*obj*/, QEvent *event) {
   const int targetPos =
       computeWheelTargetScroll(selectedIndex, collection, axisScrollBar, horizontalView);
 
-  if (m_mouseManager) {
-    m_mouseManager->setWheelScrolling(true);
+  if (mouseMgr()) {
+    mouseMgr()->setWheelScrolling(true);
   }
-  if (m_viewportManager) {
-    m_viewportManager->setContinuousScrollActive(true);
+  if (viewportMgr()) {
+    viewportMgr()->setContinuousScrollActive(true);
   }
 
-  if (m_animationManager) {
+  if (animMgr()) {
     auto onFinished = [this]() { onWheelAnimationFinished(); };
     if (horizontalView) {
-      m_animationManager->startWheelScrollAnimationHorizontal(axisScrollBar, currentPos, targetPos,
+      animMgr()->startWheelScrollAnimationHorizontal(axisScrollBar, currentPos, targetPos,
                                                               onFinished);
     } else {
-      m_animationManager->startWheelScrollAnimation(axisScrollBar, currentPos, targetPos,
+      animMgr()->startWheelScrollAnimation(axisScrollBar, currentPos, targetPos,
                                                     onFinished);
     }
   }
 
   // Defer virtual view update one event-loop tick so the scroll position
   // settles before recalculating visible items.
-  if (m_scrollManager) {
+  if (scrollMgr()) {
     QTimer::singleShot(0, this, [this]() {
-      if (m_scrollManager) {
-        m_scrollManager->updateVirtualView();
+      if (scrollMgr()) {
+        scrollMgr()->updateVirtualView();
       }
     });
   }
@@ -256,9 +256,9 @@ bool EventManager::handleMouseDoubleClick(QObject *obj, QEvent *event) {
 
   // If the double-clicked widget represents a subcollection or virtual folder,
   // allow the widget to handle the event so its signal is emitted.
-  if (m_scrollManager && m_currentCollectionIndex && *m_currentCollectionIndex >= 0) {
+  if (scrollMgr() && m_currentCollectionIndex && *m_currentCollectionIndex >= 0) {
     int visualIndex = -1;
-    const auto &active = m_scrollManager->getActiveWidgets();
+    const auto &active = scrollMgr()->getActiveWidgets();
     for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
       if (it.value() == widget) {
         visualIndex = it.key();
@@ -267,14 +267,14 @@ bool EventManager::handleMouseDoubleClick(QObject *obj, QEvent *event) {
     }
     if (visualIndex >= 0) {
       // Convert visual index to actual index (accounts for filtering)
-      int actualIndex = m_scrollManager->getFilteredIndex(visualIndex);
+      int actualIndex = scrollMgr()->getFilteredIndex(visualIndex);
       // Use the *rendered* prefix counts: during search, the visible
       // subcollection list is filtered down (often to zero) and virtual
       // folders are suppressed. The hierarchy-cache subs list is the wrong
       // source of truth and would mis-classify media items as
       // subcollections, causing double-click to silently no-op.
-      int subCount = m_scrollManager->getSubcollectionCount();
-      int folderCount = m_scrollManager->getVirtualFolderCount();
+      int subCount = scrollMgr()->getSubcollectionCount();
+      int folderCount = scrollMgr()->getVirtualFolderCount();
       // Pass through if it's a subcollection or virtual folder
       if (actualIndex >= 0 && actualIndex < subCount + folderCount) {
         return false;
@@ -289,8 +289,8 @@ bool EventManager::handleMouseDoubleClick(QObject *obj, QEvent *event) {
   }
 
   int collIdx = -1;
-  if (m_databaseManager) {
-    collIdx = m_databaseManager->getCollectionIndexForFile(path);
+  if (databaseMgr()) {
+    collIdx = databaseMgr()->getCollectionIndexForFile(path);
   } else if (m_currentCollectionIndex) {
     collIdx = *m_currentCollectionIndex;
   }
@@ -309,11 +309,11 @@ ItemWidget *EventManager::itemWidgetForObject(QObject *obj) const {
 }
 
 int EventManager::visualIndexForWidget(ItemWidget *widget) const {
-  if (!widget || !m_scrollManager) {
+  if (!widget || !scrollMgr()) {
     return -1;
   }
 
-  const auto &active = m_scrollManager->getActiveWidgets();
+  const auto &active = scrollMgr()->getActiveWidgets();
   for (auto it = active.constBegin(); it != active.constEnd(); ++it) {
     if (it.value() == widget) {
       return it.key();
@@ -332,7 +332,7 @@ bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {
     clearPendingHoverScroll();
     return false;
   }
-  if (!m_scrollManager || !m_selectionManager || !m_itemScrollArea || !m_gridContainer) {
+  if (!scrollMgr() || !selectionMgr() || !m_itemScrollArea || !m_gridContainer) {
     clearPendingHoverScroll();
     return false;
   }
@@ -374,23 +374,23 @@ bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {
 
   const bool samePendingHover =
       m_pendingHoverScrollWidget == widget && m_pendingHoverScrollIndex == visualIndex;
-  const bool alreadySelected = visualIndex == m_selectionManager->currentSelectedIndex();
+  const bool alreadySelected = visualIndex == selectionMgr()->currentSelectedIndex();
   if (alreadySelected && !samePendingHover) {
     clearPendingHoverScroll();
     return false;
   }
 
   if (!alreadySelected) {
-    if (m_state) {
+    if (state()) {
       const qint64 hoverScrollSuppressedUntil =
           QDateTime::currentMSecsSinceEpoch() + UIConstants::Mouse::HOVER_SCROLL_DELAY_MS;
-      m_state->arrow().suppressArrowCenterUntilMs =
-          qMax(m_state->arrow().suppressArrowCenterUntilMs, hoverScrollSuppressedUntil);
+      state()->arrow().suppressArrowCenterUntilMs =
+          qMax(state()->arrow().suppressArrowCenterUntilMs, hoverScrollSuppressedUntil);
     }
 
-    m_selectionManager->selectItemByHover(visualIndex);
-    if (m_detailsPaneManager && m_detailsPaneManager->isSidebarVisible()) {
-      m_detailsPaneManager->updateSidebarMetadata(widget);
+    selectionMgr()->selectItemByHover(visualIndex);
+    if (detailsPaneMgr() && detailsPaneMgr()->isSidebarVisible()) {
+      detailsPaneMgr()->updateSidebarMetadata(widget);
     }
   }
 
@@ -406,8 +406,8 @@ bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {
   m_pendingHoverScrollWidget = widget;
   m_pendingHoverScrollGlobalPos = currentGlobalPos;
   m_pendingHoverScrollIndex = visualIndex;
-  if (m_state) {
-    m_state->scroll().hoverScrollPending = true;
+  if (state()) {
+    state()->scroll().hoverScrollPending = true;
   }
   m_hoverScrollTimer.start(UIConstants::Mouse::HOVER_SCROLL_DELAY_MS);
   return false;
@@ -418,8 +418,8 @@ void EventManager::clearPendingHoverScroll() {
   m_pendingHoverScrollWidget.clear();
   m_pendingHoverScrollGlobalPos = {};
   m_pendingHoverScrollIndex = -1;
-  if (m_state) {
-    m_state->scroll().hoverScrollPending = false;
+  if (state()) {
+    state()->scroll().hoverScrollPending = false;
   }
 }
 
@@ -429,12 +429,12 @@ void EventManager::commitPendingHoverScroll() {
   const QPoint stagedGlobalPos = m_pendingHoverScrollGlobalPos;
 
   if (!widget || visualIndex < 0 || !m_generalSettings || !m_generalSettings->selectItemOnHover ||
-      !m_selectionManager || !m_scrollManager || !widget->isVisible()) {
+      !selectionMgr() || !scrollMgr() || !widget->isVisible()) {
     clearPendingHoverScroll();
     return;
   }
   if (visualIndexForWidget(widget) != visualIndex ||
-      visualIndex != m_selectionManager->currentSelectedIndex()) {
+      visualIndex != selectionMgr()->currentSelectedIndex()) {
     clearPendingHoverScroll();
     return;
   }
@@ -450,9 +450,9 @@ void EventManager::commitPendingHoverScroll() {
     return;
   }
 
-  if (m_state) {
+  if (state()) {
     const qint64 remainingSuppressionMs =
-        m_state->arrow().suppressArrowCenterUntilMs - QDateTime::currentMSecsSinceEpoch();
+        state()->arrow().suppressArrowCenterUntilMs - QDateTime::currentMSecsSinceEpoch();
     if (remainingSuppressionMs > 0) {
       const int retryDelayMs =
           qMax(1, static_cast<int>(qMin<qint64>(remainingSuppressionMs + 1,
@@ -463,7 +463,7 @@ void EventManager::commitPendingHoverScroll() {
     // Hover-scroll's own arrow-center suppression has expired; force-clear so
     // the centering call below is not blocked by a stale flag (the bool half
     // of the suppression state can outlive its timestamp via earlier paths).
-    m_state->clearArrowCenterSuppression();
+    state()->clearArrowCenterSuppression();
   }
 
   clearPendingHoverScroll();
@@ -477,13 +477,13 @@ void EventManager::commitPendingHoverScroll() {
   // scrolling silently did nothing. Calling centerItemVertically
   // is the same canonical centering API arrow-key navigation uses, so it is
   // not gated on overlay animation state.
-  if (m_viewportManager) {
-    m_viewportManager->centerItemVertically(visualIndex, false);
+  if (viewportMgr()) {
+    viewportMgr()->centerItemVertically(visualIndex, false);
   }
-  if (m_scrollManager) {
+  if (scrollMgr()) {
     // Refresh selection overlay/widget state in case the viewport scroll
     // exposes/recycles widgets at the new selection's row.
-    m_scrollManager->updateSelectionForIndex(visualIndex);
+    scrollMgr()->updateSelectionForIndex(visualIndex);
   }
 
   // After centering, schedule a deferred poll to check whether the viewport
@@ -495,8 +495,8 @@ void EventManager::commitPendingHoverScroll() {
 }
 
 void EventManager::pollCursorForContinuousHoverScroll() {
-  if (!m_generalSettings || !m_generalSettings->selectItemOnHover || !m_selectionManager ||
-      !m_scrollManager || !m_itemScrollArea || !m_gridContainer) {
+  if (!m_generalSettings || !m_generalSettings->selectItemOnHover || !selectionMgr() ||
+      !scrollMgr() || !m_itemScrollArea || !m_gridContainer) {
     return;
   }
   if (QApplication::activeModalWidget() || !m_stackedWidget || !m_itemsPage ||
@@ -548,29 +548,29 @@ void EventManager::pollCursorForContinuousHoverScroll() {
 
   // Only continue if this is a different item from current selection -
   // if the viewport didn't expose a new row, stop continuous scrolling.
-  const int currentSelection = m_selectionManager->currentSelectedIndex();
+  const int currentSelection = selectionMgr()->currentSelectedIndex();
   if (visualIndex == currentSelection) {
     return;
   }
 
   // Select the new item immediately (same as handleHoverSelection)
-  if (m_state) {
+  if (state()) {
     const qint64 hoverScrollSuppressedUntil =
         QDateTime::currentMSecsSinceEpoch() + UIConstants::Mouse::HOVER_SCROLL_CONTINUE_DELAY_MS;
-    m_state->arrow().suppressArrowCenterUntilMs =
-        qMax(m_state->arrow().suppressArrowCenterUntilMs, hoverScrollSuppressedUntil);
+    state()->arrow().suppressArrowCenterUntilMs =
+        qMax(state()->arrow().suppressArrowCenterUntilMs, hoverScrollSuppressedUntil);
   }
-  m_selectionManager->selectItemByHover(visualIndex);
-  if (m_detailsPaneManager && m_detailsPaneManager->isSidebarVisible()) {
-    m_detailsPaneManager->updateSidebarMetadata(widget);
+  selectionMgr()->selectItemByHover(visualIndex);
+  if (detailsPaneMgr() && detailsPaneMgr()->isSidebarVisible()) {
+    detailsPaneMgr()->updateSidebarMetadata(widget);
   }
 
   // Stage a new hover-scroll cycle with the shorter continue delay
   m_pendingHoverScrollWidget = widget;
   m_pendingHoverScrollGlobalPos = globalPos;
   m_pendingHoverScrollIndex = visualIndex;
-  if (m_state) {
-    m_state->scroll().hoverScrollPending = true;
+  if (state()) {
+    state()->scroll().hoverScrollPending = true;
   }
   m_hoverScrollTimer.start(UIConstants::Mouse::HOVER_SCROLL_CONTINUE_DELAY_MS);
 }
@@ -662,9 +662,9 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
     }
   }
 
-  if (m_mouseManager) {
-    m_mouseManager->setLeftMouseDown(true);
-    m_mouseManager->clearHorizontalCandidate();
+  if (mouseMgr()) {
+    mouseMgr()->setLeftMouseDown(true);
+    mouseMgr()->clearHorizontalCandidate();
   }
 
   bool target = (obj == m_itemScrollArea || obj == m_itemScrollArea->viewport() ||
@@ -680,14 +680,14 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
     }
   }
 
-  if (!m_scrollManager) {
+  if (!scrollMgr()) {
     emit clearSelectionRequested();
     event->accept();
     return true;
   }
 
   auto [chosen, visualIndex] =
-      MouseManager::findBestWidgetForClick(clickPos, m_scrollManager, m_gridContainer);
+      MouseManager::findBestWidgetForClick(clickPos, scrollMgr(), m_gridContainer);
   if (chosen && visualIndex >= 0) {
     emit widgetClicked(chosen, visualIndex, clickPos, mouseEvent);
     event->accept();
@@ -699,7 +699,7 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
 }
 
 bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
-  if (wheelSteps == 0 || !m_scrollManager ||
+  if (wheelSteps == 0 || !scrollMgr() ||
       !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     return false;
   }
@@ -715,10 +715,10 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
   // route both gridWidth and horizontalGridHeight reads through
   // the effective-value helpers so the alt fields kick in when sidebar is
   // hidden in Expand mode.
-  const bool shrink = m_scrollManager->sidebarShrinkingActive();
+  const bool shrink = scrollMgr()->sidebarShrinkingActive();
   int gridWidth = CollectionUtils::effectiveGridWidth(collection, shrink);
   if (collection.viewType == ViewType::Horizontal) {
-    const auto &metrics = m_scrollManager->getMetrics();
+    const auto &metrics = scrollMgr()->getMetrics();
     if (metrics.itemsPerRow > 0) {
       gridWidth = metrics.itemsPerRow;
     } else {
@@ -732,12 +732,12 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
     return false;
   }
 
-  int totalItems = m_scrollManager->getTotalItems();
+  int totalItems = scrollMgr()->getTotalItems();
   if (totalItems <= 0) {
     return false;
   }
 
-  int currentSelection = m_selectionManager ? m_selectionManager->currentSelectedIndex() : -1;
+  int currentSelection = selectionMgr() ? selectionMgr()->currentSelectedIndex() : -1;
   if (currentSelection < 0) {
     currentSelection = 0;
   }
@@ -800,29 +800,29 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
     return wrapTriggered;
   }
 
-  if (m_viewportManager) {
+  if (viewportMgr()) {
     if (wrapTriggered) {
-      m_viewportManager->setForceImmediateCenter(true);
-      m_viewportManager->setWrapSequenceActive(true);
-      m_viewportManager->setContinuousScrollActive(false);
+      viewportMgr()->setForceImmediateCenter(true);
+      viewportMgr()->setWrapSequenceActive(true);
+      viewportMgr()->setContinuousScrollActive(false);
     } else {
-      m_viewportManager->setContinuousScrollActive(true);
+      viewportMgr()->setContinuousScrollActive(true);
     }
   }
 
-  if (m_selectionManager) {
-    m_selectionManager->setSelectedIndex(newSelection);
+  if (selectionMgr()) {
+    selectionMgr()->setSelectedIndex(newSelection);
     QList<int> subs = getSubcollections(*m_currentCollectionIndex);
-    m_selectionManager->updateFilePathForSelection(newSelection, subs);
+    selectionMgr()->updateFilePathForSelection(newSelection, subs);
   }
-  if (m_scrollManager) {
-    m_scrollManager->updateSelectionForIndex(newSelection);
+  if (scrollMgr()) {
+    scrollMgr()->updateSelectionForIndex(newSelection);
   }
 
-  if (wrapTriggered && m_viewportManager) {
-    m_viewportManager->applyImmediateViewportPositioningForSelection(newSelection);
-    if (m_scrollManager) {
-      m_scrollManager->updateVirtualView();
+  if (wrapTriggered && viewportMgr()) {
+    viewportMgr()->applyImmediateViewportPositioningForSelection(newSelection);
+    if (scrollMgr()) {
+      scrollMgr()->updateVirtualView();
     }
   }
 
@@ -830,8 +830,8 @@ bool EventManager::applyWheelSelectionDelta(int wheelSteps) {
   // does not emit selectionChanged. Without this notify, listeners wired to
   // SelectionManager::selectionChanged (e.g. the toolbar's itemPositionLabel
   // via InteractionManager forwarding) stay frozen during wheel navigation.
-  if (m_selectionManager) {
-    m_selectionManager->notifySelectionChanged();
+  if (selectionMgr()) {
+    selectionMgr()->notifySelectionChanged();
   }
 
   return wrapTriggered;

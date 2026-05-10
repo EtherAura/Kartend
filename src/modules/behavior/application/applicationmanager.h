@@ -23,6 +23,7 @@ class KartManager;
 }
 
 struct CollectionConfig;
+struct ApplicationContext;
 template <typename T> class QList;
 
 class ApplicationManager : public QObject {
@@ -32,7 +33,10 @@ public:
   explicit ApplicationManager(QObject *parent = nullptr);
   ~ApplicationManager() override;
 
-  void initialize();
+  /// Constructs all managers and registers each into ctx as it is created so
+  /// later managers (which read siblings through ctx) see a fully-populated
+  /// context when their constructors run.
+  void initialize(ApplicationContext *ctx);
   void shutdown(const QList<CollectionConfig> &collections);
 
   // Getters

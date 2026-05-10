@@ -12,6 +12,7 @@
 
 #include "scrollmanager.h"
 
+#include "applicationcontext.h"
 #include "artworkutils.h"
 #include "collectionutils.h"
 #include "coverflowwidget.h"
@@ -207,6 +208,7 @@ void ScrollManager::resolveAndPushCoverFlowVideo(int visualIndex) {
   if (!m_coverFlowWidget || !m_dataManager) {
     return;
   }
+  DatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   // Only media items have preview videos — subcollection / virtual-folder
   // cards never carry one.
   const bool filtered = m_filterManager && m_filterManager->isFiltered();
@@ -218,7 +220,7 @@ void ScrollManager::resolveAndPushCoverFlowVideo(int visualIndex) {
   const int mediaIdx = m_dataManager->mediaIndexFromActual(actualIndex);
   const QString rawEntry = m_dataManager->rawFilePath(mediaIdx);
   const QString fullPath =
-      m_databaseManager ? m_databaseManager->resolveFilePath(rawEntry, m_context) : rawEntry;
+      db ? db->resolveFilePath(rawEntry, m_context) : rawEntry;
   if (fullPath.isEmpty()) {
     m_coverFlowWidget->setVideoPathForIndex(visualIndex, QString());
     return;
@@ -228,8 +230,8 @@ void ScrollManager::resolveAndPushCoverFlowVideo(int visualIndex) {
   // even though the active context is the parent.
   QString videoDirectory = m_context.config.videoDirectory;
   QString videoExpansionName = m_context.config.name;
-  if (m_databaseManager) {
-    const int owningIndex = m_databaseManager->getCollectionIndexForFile(fullPath);
+  if (db) {
+    const int owningIndex = db->getCollectionIndexForFile(fullPath);
     if (owningIndex >= 0 && m_collections && owningIndex < m_collections->size()) {
       const CollectionConfig &owning = (*m_collections)[owningIndex];
       if (!owning.videoDirectory.trimmed().isEmpty()) {
@@ -254,6 +256,7 @@ void ScrollManager::resolveAndPushCoverFlowGallery(int visualIndex) {
   if (!m_coverFlowWidget || !m_dataManager) {
     return;
   }
+  DatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   const bool filtered = m_filterManager && m_filterManager->isFiltered();
   const int actualIndex = filtered ? m_filterManager->getActualIndex(visualIndex) : visualIndex;
   // Subcollection / virtual-folder cards have no per-item artwork variants
@@ -265,7 +268,7 @@ void ScrollManager::resolveAndPushCoverFlowGallery(int visualIndex) {
   const int mediaIdx = m_dataManager->mediaIndexFromActual(actualIndex);
   const QString rawEntry = m_dataManager->rawFilePath(mediaIdx);
   const QString fullPath =
-      m_databaseManager ? m_databaseManager->resolveFilePath(rawEntry, m_context) : rawEntry;
+      db ? db->resolveFilePath(rawEntry, m_context) : rawEntry;
   if (fullPath.isEmpty()) {
     m_coverFlowWidget->setGalleryForIndex(visualIndex, {});
     return;
@@ -278,8 +281,8 @@ void ScrollManager::resolveAndPushCoverFlowGallery(int visualIndex) {
   QString artworkExpansionName = m_context.config.name;
   QString videoExpansionName = m_context.config.name;
   QString collectionUuid;
-  if (m_databaseManager) {
-    const int owningIndex = m_databaseManager->getCollectionIndexForFile(fullPath);
+  if (db) {
+    const int owningIndex = db->getCollectionIndexForFile(fullPath);
     if (owningIndex >= 0 && m_collections && owningIndex < m_collections->size()) {
       const CollectionConfig &owning = (*m_collections)[owningIndex];
       if (!owning.artworkDirectory.trimmed().isEmpty()) {
@@ -316,8 +319,8 @@ void ScrollManager::resolveAndPushCoverFlowGallery(int visualIndex) {
   // an override row.
   QHash<QString, QString> overridesByType;
   QStringList customOrder;
-  if (m_databaseManager && !collectionUuid.isEmpty()) {
-    const auto rows = m_databaseManager->loadItemArtwork(collectionUuid, fullPath);
+  if (db && !collectionUuid.isEmpty()) {
+    const auto rows = db->loadItemArtwork(collectionUuid, fullPath);
     for (const auto &row : rows) {
       overridesByType.insert(row.artworkType, row.manualPath);
       if (!ItemArtworkStore::isStandardType(row.artworkType)) {
@@ -344,7 +347,7 @@ void ScrollManager::resolveAndPushCoverFlowGallery(int visualIndex) {
   // image is what every other card in the carousel renders by default,
   // so it deserves a slot in the gallery so the user can return to it
   // after browsing variants.
-  const QString primaryArtwork = resolveCardArtworkPath(fullPath, m_context, m_databaseManager);
+  const QString primaryArtwork = resolveCardArtworkPath(fullPath, m_context, db);
   if (!primaryArtwork.isEmpty()) {
     entries.append({QObject::tr("Cover"), primaryArtwork, /*isVideo=*/false});
     seenPaths.insert(primaryArtwork);
@@ -372,6 +375,7 @@ void ScrollManager::rebuildCoverFlowCards() {
   if (!m_coverFlowWidget || !m_dataManager) {
     return;
   }
+  DatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   // Walk the same visual-index space the rest of the system uses: when a
   // filter is active (search text, type filter, hideMissingArtwork, etc.)
   // selection-side code addresses items by *filtered* index, so the
@@ -410,11 +414,11 @@ void ScrollManager::rebuildCoverFlowCards() {
       // subdirectories — and any collection whose artworkDir mirrors its
       // mediaDir tree — drop straight to placeholder.
       const QString fullPath =
-          m_databaseManager ? m_databaseManager->resolveFilePath(rawEntry, m_context) : rawEntry;
+          db ? db->resolveFilePath(rawEntry, m_context) : rawEntry;
       const QString fileName = QFileInfo(fullPath).fileName();
       card.title = m_dataManager->fileNames().value(fullPath.isEmpty() ? rawEntry : fullPath,
                                                     QFileInfo(fileName).completeBaseName());
-      card.artworkPath = resolveCardArtworkPath(fullPath, m_context, m_databaseManager);
+      card.artworkPath = resolveCardArtworkPath(fullPath, m_context, db);
     }
     cards.append(card);
   }

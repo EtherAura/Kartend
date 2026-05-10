@@ -46,8 +46,8 @@ Q_DECLARE_LOGGING_CATEGORY(lcNavigationManager)
 void NavigationManager::onCollectionSelected(int collectionIndex) {
   // Start dentry prewarm early - while DB query runs, we warm the filesystem
   // cache so artwork lookups are fast when widgets appear
-  if (m_artworkManager) {
-    m_artworkManager->startEarlyDentryPrewarm(collectionIndex);
+  if (artworkMgr()) {
+    artworkMgr()->startEarlyDentryPrewarm(collectionIndex);
   }
 
   m_stackManager->clear();
@@ -141,8 +141,8 @@ auto NavigationManager::handleEmptyContent() -> void {
     resumeItemsPageRendering();
     if (m_refreshTitleCounts) m_refreshTitleCounts();
   }
-  if ((parent()) && (m_interactionManager)) {
-    m_interactionManager->setNavigationInProgress(false);
+  if ((parent()) && (interactionMgr())) {
+    interactionMgr()->setNavigationInProgress(false);
   }
 }
 
@@ -171,12 +171,12 @@ auto NavigationManager::setupCollectionContext(const QStringList &filePaths,
 }
 
 auto NavigationManager::lookupRememberedSelectionIndex(int totalItems) const -> int {
-  if (!m_sessionManager || !m_collections || !m_currentCollectionIndex) {
+  if (!sessionMgr() || !m_collections || !m_currentCollectionIndex) {
     return -1;
   }
   return NavigationHelpers::lookupRememberedSelectionIndex(
       *m_currentCollectionIndex, *m_collections, totalItems,
-      [this](const QString &key) { return m_sessionManager->getLastSelectedIndex(key); });
+      [this](const QString &key) { return sessionMgr()->getLastSelectedIndex(key); });
 }
 
 // Calculates the appropriate selection index for restoration
@@ -188,7 +188,7 @@ auto NavigationManager::calculateSelectionIndex(int totalItems) const -> int {
   return NavigationHelpers::calculateSelectionIndex(
       *m_currentCollectionIndex, *m_collections, totalItems, searchActive,
       m_generalSettings->rememberSelection, [this](const QString &key) {
-        return m_sessionManager ? m_sessionManager->getLastSelectedIndex(key) : -1;
+        return sessionMgr() ? sessionMgr()->getLastSelectedIndex(key) : -1;
       });
 }
 
@@ -216,8 +216,8 @@ auto NavigationManager::schedulePostLoadOperations() -> void {
   // Background precaching disabled - only load visible viewport items
   // to minimize CPU usage when idle
 
-  if (m_databaseManager) {
-    m_databaseManager->updateCachedCounts((*m_collections));
+  if (databaseMgr()) {
+    databaseMgr()->updateCachedCounts((*m_collections));
   }
 
   // After a rescan, delay title refresh to allow main thread database to see
@@ -235,8 +235,8 @@ auto NavigationManager::schedulePostLoadOperations() -> void {
   // Clear navigation progress flag after viewport settles -
   // allows user input to be processed again after load completes
   QTimer::singleShot(UIConstants::Timing::VIEWPORT_DELAY_MS, this, [this]() {
-    if (parent() && m_interactionManager) {
-      m_interactionManager->setNavigationInProgress(false);
+    if (parent() && interactionMgr()) {
+      interactionMgr()->setNavigationInProgress(false);
     }
   });
 }

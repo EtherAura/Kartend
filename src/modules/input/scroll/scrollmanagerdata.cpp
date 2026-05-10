@@ -384,7 +384,7 @@ void ScrollManager::setupNormalVirtualScrolling() {
 
   // Configure widget factory with current context and metrics
   if (m_widgetFactory) {
-    m_widgetFactory->setDatabaseManager(m_databaseManager);
+    m_widgetFactory->setDatabaseManager(m_ctx ? m_ctx->databaseManager() : nullptr);
     m_widgetFactory->setParentWidget(m_virtualContainer);
     m_widgetFactory->setCollectionContext(m_context);
     m_widgetFactory->setMetrics(m_metrics.itemWidth, m_metrics.itemHeight);
@@ -450,8 +450,8 @@ void ScrollManager::cleanup() {
 
   // Clear artwork widget references FIRST - prevents stale widget pointers
   // from causing incorrect artwork or crashes when widgets are destroyed
-  if (m_artworkManager) {
-    m_artworkManager->clearWidgetReferences();
+  if (auto *art = m_ctx ? m_ctx->artworkManager() : nullptr) {
+    art->clearWidgetReferences();
   }
 
   // Clear cached artwork paths - no longer valid for new collection

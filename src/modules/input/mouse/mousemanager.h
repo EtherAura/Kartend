@@ -25,22 +25,17 @@ struct ApplicationContext;
 struct MouseManagerSetup {
   const ApplicationContext *ctx = nullptr;
 
-  ScrollManager *scrollManager = nullptr;
-  SelectionManager *selectionManager = nullptr;
   QScrollArea *itemScrollArea = nullptr;
   QWidget *gridContainer = nullptr;
   const QVector<CollectionConfig> *collections = nullptr;
   const int *currentCollectionIndex = nullptr;
   GeneralSettings *generalSettings = nullptr;
 
-  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
-  SETUP_GETTER_DECL(SelectionManager *, SelectionManager)
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
   SETUP_GETTER_DECL(QWidget *, GridContainer)
   SETUP_GETTER_DECL(const QVector<CollectionConfig> *, Collections)
   SETUP_GETTER_DECL(const int *, CurrentCollectionIndex)
   SETUP_GETTER_DECL(GeneralSettings *, GeneralSettings)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
 };
 
 /// Manages mouse hold scrolling behavior for click-and-hold navigation.
@@ -146,10 +141,8 @@ private:
   /// Computes vertical scroll direction based on selected item position
   [[nodiscard]] int computeVerticalDirection(int selectedItemIndex, int gridWidth) const;
 
-  // References (not owned)
-  ScrollManager *m_scrollManager = nullptr;
-  SelectionManager *m_selectionManager = nullptr;
-  InteractionStateHolder *m_state = nullptr;
+  // ctx is the single source of truth for sibling managers + state.
+  const ApplicationContext *m_ctx = nullptr;
   QScrollArea *m_itemScrollArea = nullptr;
   QWidget *m_gridContainer = nullptr;
   const QVector<CollectionConfig> *m_collections = nullptr;

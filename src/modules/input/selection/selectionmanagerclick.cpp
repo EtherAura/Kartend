@@ -38,7 +38,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcSelectionManager)
   } while (0)
 
 bool SelectionManager::checkAndFinalizeRestore(int index) {
-  auto &restoreState = m_state->selectionRestore();
+  auto &restoreState = state()->selectionRestore();
   if (restoreState.restoring && index == restoreState.targetIndex) {
     restoreState.restoring = false;
     restoreState.targetIndex = -1;
@@ -50,31 +50,31 @@ bool SelectionManager::checkAndFinalizeRestore(int index) {
 void SelectionManager::prepareForRestore(int targetIndex) {
   clearSelection();
 
-  auto &restoreState = m_state->selectionRestore();
+  auto &restoreState = state()->selectionRestore();
   restoreState.restoring = true;
   restoreState.targetIndex = targetIndex;
   restoreState.forceImmediateCenter = true;
 
   qint64 until = QDateTime::currentMSecsSinceEpoch() + UIConstants::Keyboard::ANIMATION_SETTLE_MS +
                  UIConstants::Keyboard::ARROW_CENTER_EXTRA_SUPPRESS_AFTER_RESTORE_MS;
-  m_state->arrow().suppressArrowCenter = true;
-  m_state->arrow().suppressArrowCenterUntilMs = until;
+  state()->arrow().suppressArrowCenter = true;
+  state()->arrow().suppressArrowCenterUntilMs = until;
 
   emit requestStopScrollAnimations();
 }
 
 void SelectionManager::finalizeRestore() {
-  auto &restoreState = m_state->selectionRestore();
+  auto &restoreState = state()->selectionRestore();
   restoreState.restoring = false;
   restoreState.targetIndex = -1;
   restoreState.forceImmediateCenter = false;
 
-  m_state->click().selectionSuppressed = false;
-  m_state->click().pendingSelectionIndex = -1;
+  state()->click().selectionSuppressed = false;
+  state()->click().pendingSelectionIndex = -1;
 }
 
 void SelectionManager::cancelPendingSelectionRestore() {
-  auto &restoreState = m_state->selectionRestore();
+  auto &restoreState = state()->selectionRestore();
   ++restoreState.restoreToken;
   restoreState.restorePending = false;
   restoreState.userSelectionMade = true;
@@ -84,14 +84,14 @@ void SelectionManager::resetSelectionRestoreState() {
   // Reset state for new navigation - clears pending restores and
   // userSelectionMade so that automatic restore can proceed for the new
   // collection
-  auto &restoreState = m_state->selectionRestore();
+  auto &restoreState = state()->selectionRestore();
   ++restoreState.restoreToken;
   restoreState.restorePending = false;
   restoreState.userSelectionMade = false;
 }
 
 void SelectionManager::processSingleClickSelection(int visualIndex, const QString &filePath) {
-  if ((!m_scrollManager) || (!m_collections) || (!m_currentCollectionIndex)) {
+  if ((!scrollMgr()) || (!m_collections) || (!m_currentCollectionIndex)) {
     return;
   }
   int gridWidth = getCurrentGridWidth();
@@ -100,16 +100,16 @@ void SelectionManager::processSingleClickSelection(int visualIndex, const QStrin
   }
 
   // Clear user scroll state so centering isn't blocked
-  if (m_state) {
-    m_state->scroll().userScrollActive = false;
+  if (state()) {
+    state()->scroll().userScrollActive = false;
   }
 
   qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
   int dcInterval = QApplication::doubleClickInterval();
 
-  if (m_state) {
-    m_state->setHorizAnimActive(false);
-    m_state->nextHorizAnimGen();
+  if (state()) {
+    state()->setHorizAnimActive(false);
+    state()->nextHorizAnimGen();
   }
 
   if (filePath.isEmpty()) {
@@ -117,15 +117,15 @@ void SelectionManager::processSingleClickSelection(int visualIndex, const QStrin
   } else {
     m_selectedFilePath = filePath;
   }
-  if (m_viewportManager) {
-    m_viewportManager->setPhysicalKeyDown(false);
-    m_viewportManager->setRepeating(false);
-    m_viewportManager->setWrapSequenceActive(false);
+  if (viewportMgr()) {
+    viewportMgr()->setPhysicalKeyDown(false);
+    viewportMgr()->setRepeating(false);
+    viewportMgr()->setWrapSequenceActive(false);
   }
   emit requestStopRepeat();
 
-  const int pendingIndex = m_state ? m_state->click().rowChangeFirstClickIndex : -1;
-  const qint64 pendingMs = m_state ? m_state->click().rowChangeFirstClickMs : 0;
+  const int pendingIndex = state() ? state()->click().rowChangeFirstClickIndex : -1;
+  const qint64 pendingMs = state() ? state()->click().rowChangeFirstClickMs : 0;
   const bool pendingValid =
       SelectionHelpers::isRowChangePendingValid(pendingIndex, pendingMs, nowMs, dcInterval);
 
@@ -145,40 +145,40 @@ void SelectionManager::processSingleClickSelection(int visualIndex, const QStrin
     handleSameRowClickSelection(visualIndex, skipCenter, nowMs);
   }
 
-  if (m_state) {
-    m_state->setClickSeriesLastMs(nowMs);
+  if (state()) {
+    state()->setClickSeriesLastMs(nowMs);
   }
   emit requestFocusItemsPage();
 }
 
 void SelectionManager::runHorizontalHopAnimation(int start, int target, qint64 nowMs) {
-  if (!m_state) {
+  if (!state()) {
     return;
   }
-  const int gen = m_state->nextHorizAnimGen();
-  m_state->setHorizAnimActive(true);
+  const int gen = state()->nextHorizAnimGen();
+  state()->setHorizAnimActive(true);
   const int steps = SelectionHelpers::hopStepCount(start, target);
   constexpr int kPerHopMs = 12;
-  if (m_scrollManager) {
-    m_scrollManager->updateSelectionForIndex(start);
+  if (scrollMgr()) {
+    scrollMgr()->updateSelectionForIndex(start);
   }
   // Animate horizontal selection by stepping through intermediate indices -
   // each hop scheduled at fixed intervals creates smooth left/right movement
   for (int i = 1; i <= steps; ++i) {
     QTimer::singleShot(i * kPerHopMs, this, [this, gen, i, start, target]() {
-      if (!m_state || m_state->horizAnimGen() != gen) {
+      if (!state() || state()->horizAnimGen() != gen) {
         return;
       }
-      if (!m_scrollManager) {
+      if (!scrollMgr()) {
         return;
       }
       const int nextIdx = SelectionHelpers::hopIntermediateIndex(start, target, i);
       if (nextIdx != target) {
         m_selectedItemIndex = nextIdx;
-        m_scrollManager->updateSelectionForIndex(nextIdx);
+        scrollMgr()->updateSelectionForIndex(nextIdx);
       } else {
-        if (m_state) {
-          m_state->setHorizAnimActive(false);
+        if (state()) {
+          state()->setHorizAnimActive(false);
         }
         m_selectedItemIndex = target;
         selectItemByIndex(target, true);
@@ -186,52 +186,52 @@ void SelectionManager::runHorizontalHopAnimation(int start, int target, qint64 n
       }
     });
   }
-  if (m_state) {
-    m_state->setClickSeriesLastMs(nowMs);
-    m_state->click().rowChangeFirstClickIndex = -1;
-    m_state->click().rowChangeFirstClickMs = 0;
+  if (state()) {
+    state()->setClickSeriesLastMs(nowMs);
+    state()->click().rowChangeFirstClickIndex = -1;
+    state()->click().rowChangeFirstClickMs = 0;
   }
   emit requestFocusItemsPage();
 }
 
 void SelectionManager::handleNewRowClickSelection(int visualIndex, qint64 nowMs) {
-  if (m_state) {
-    m_state->click().selectionSuppressed = true;
-    m_state->click().pendingSelectionIndex = visualIndex;
-    m_state->click().deferCenterOnClick = false;
-    m_state->click().deferredCenterIndex = -1;
+  if (state()) {
+    state()->click().selectionSuppressed = true;
+    state()->click().pendingSelectionIndex = visualIndex;
+    state()->click().deferCenterOnClick = false;
+    state()->click().deferredCenterIndex = -1;
   }
   m_selectedItemIndex = visualIndex;
   QList<int> subs = getSubcollections(*m_currentCollectionIndex);
   updateFilePathForSelection(visualIndex, subs);
-  if (m_scrollManager) {
-    m_scrollManager->updateSelectionForIndex(visualIndex);
+  if (scrollMgr()) {
+    scrollMgr()->updateSelectionForIndex(visualIndex);
   }
   selectItemByIndex(visualIndex, true);
   emit requestCenterVertically(visualIndex, false);
-  if (m_state) {
-    m_state->click().rowChangeFirstClickIndex = visualIndex;
-    m_state->click().rowChangeFirstClickMs = nowMs;
+  if (state()) {
+    state()->click().rowChangeFirstClickIndex = visualIndex;
+    state()->click().rowChangeFirstClickMs = nowMs;
   }
 }
 
 void SelectionManager::handleSameRowClickSelection(int visualIndex, bool skipCenter,
                                                    qint64 /*nowMs*/) {
-  if (m_state) {
-    m_state->click().deferCenterOnClick = false;
-    m_state->click().deferredCenterIndex = -1;
+  if (state()) {
+    state()->click().deferCenterOnClick = false;
+    state()->click().deferredCenterIndex = -1;
     // Clear any stale row-change suppression state to prevent ViewportManager
     // from using the old pendingSelectionIndex when centering
-    m_state->click().selectionSuppressed = false;
-    m_state->click().pendingSelectionIndex = -1;
+    state()->click().selectionSuppressed = false;
+    state()->click().pendingSelectionIndex = -1;
   }
   selectItemByIndex(visualIndex, true);
   if (!skipCenter) {
     emit requestCenterVertically(visualIndex, false);
   }
-  if (m_state) {
-    m_state->click().rowChangeFirstClickIndex = -1;
-    m_state->click().rowChangeFirstClickMs = 0;
+  if (state()) {
+    state()->click().rowChangeFirstClickIndex = -1;
+    state()->click().rowChangeFirstClickMs = 0;
   }
 }
 
@@ -240,7 +240,7 @@ int SelectionManager::handleWidgetSelectionByIndex(int visualIndex, const QPoint
   Q_UNUSED(clickPos);
   Q_UNUSED(originalEvent);
 
-  if (visualIndex < 0 || !m_scrollManager) {
+  if (visualIndex < 0 || !scrollMgr()) {
     return -1;
   }
 
@@ -249,7 +249,7 @@ int SelectionManager::handleWidgetSelectionByIndex(int visualIndex, const QPoint
   cancelPendingSelectionRestore();
 
   // Get the file path for this index
-  QString filePath = m_scrollManager->filePathForVisualIndex(visualIndex);
+  QString filePath = scrollMgr()->filePathForVisualIndex(visualIndex);
 
   processSingleClickSelection(visualIndex, filePath);
   return visualIndex;
@@ -260,7 +260,7 @@ int SelectionManager::handleWidgetSelection(ItemWidget *widget, const QPoint &cl
   Q_UNUSED(clickPos);
   Q_UNUSED(originalEvent);
 
-  if (!widget || !m_scrollManager) {
+  if (!widget || !scrollMgr()) {
     return -1;
   }
 
@@ -272,7 +272,7 @@ int SelectionManager::handleWidgetSelection(ItemWidget *widget, const QPoint &cl
   // which is called from selectItemByIndex during processSingleClickSelection
 
   int visualIndex = -1;
-  const auto &activeWidgets = m_scrollManager->getActiveWidgets();
+  const auto &activeWidgets = scrollMgr()->getActiveWidgets();
   for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd(); ++it) {
     if (it.value() == widget) {
       visualIndex = it.key();
@@ -299,8 +299,8 @@ void SelectionManager::beginFullSelectionRestore(int targetIndex) {
   emit requestStopScrollAnimations();
 
   applySelectionStateForIndex(targetIndex);
-  if (m_viewportManager) {
-    m_viewportManager->applyImmediateViewportPositioningForSelection(targetIndex);
+  if (viewportMgr()) {
+    viewportMgr()->applyImmediateViewportPositioningForSelection(targetIndex);
   }
   selectItemByIndex(targetIndex, false);
 
@@ -312,10 +312,10 @@ void SelectionManager::beginFullSelectionRestore(int targetIndex) {
   // Finalize restore state
   finalizeRestore();
 
-  if ((m_detailsPaneManager) && m_detailsPaneManager->isSidebarVisible()) {
+  if ((detailsPaneMgr()) && detailsPaneMgr()->isSidebarVisible()) {
     ItemWidget *widget = widgetForIndex(targetIndex);
     if (widget) {
-      m_detailsPaneManager->updateSidebarMetadata(widget);
+      detailsPaneMgr()->updateSidebarMetadata(widget);
     }
     scheduleSidebarMetadataUpdateIfVisible(
         targetIndex, 0, UIConstants::Selection::METADATA_SIDEBAR_UPDATE_DELAY_MS);
@@ -326,17 +326,17 @@ void SelectionManager::applySelectionStateForIndex(int idx) {
   m_selectedItemIndex = idx;
   QList<int> subs = getSubcollections(*m_currentCollectionIndex);
   updateFilePathForSelection(idx, subs);
-  if (m_scrollManager) {
-    m_scrollManager->updateVirtualView();
-    m_scrollManager->updateSelectionForIndex(idx);
+  if (scrollMgr()) {
+    scrollMgr()->updateVirtualView();
+    scrollMgr()->updateSelectionForIndex(idx);
   }
 }
 
 void SelectionManager::finalizeRestoreFlagsAndFocus() {
-  if (m_viewportManager) {
-    m_viewportManager->setPhysicalKeyDown(false);
-    m_viewportManager->setRepeating(false);
-    m_viewportManager->setWrapSequenceActive(false);
+  if (viewportMgr()) {
+    viewportMgr()->setPhysicalKeyDown(false);
+    viewportMgr()->setRepeating(false);
+    viewportMgr()->setWrapSequenceActive(false);
   }
   // Only set focus to items page if search bar doesn't currently have focus
   bool searchBarHasFocus = (m_searchBar) && m_searchBar->hasFocus();
@@ -346,25 +346,25 @@ void SelectionManager::finalizeRestoreFlagsAndFocus() {
   // Clear arrow center suppression after restore completes - ensures the
   // selection is fully visible before allowing subsequent centering operations
   QTimer::singleShot(UIConstants::Keyboard::ARROW_CENTER_CLEAR_AFTER_RESTORE_MS, this, [this]() {
-    if (m_state) {
-      m_state->clearArrowCenterSuppression();
+    if (state()) {
+      state()->clearArrowCenterSuppression();
     }
   });
 }
 
 void SelectionManager::scheduleSidebarMetadataUpdateIfVisible(int targetIndex, int initialDelayMs,
                                                               int secondaryDelayMs) {
-  if (!m_detailsPaneManager || !m_detailsPaneManager->isSidebarVisible()) {
+  if (!detailsPaneMgr() || !detailsPaneMgr()->isSidebarVisible()) {
     return;
   }
 
   auto updateSidebar = [this, targetIndex]() {
-    if (!m_detailsPaneManager || !m_detailsPaneManager->isSidebarVisible()) {
+    if (!detailsPaneMgr() || !detailsPaneMgr()->isSidebarVisible()) {
       return;
     }
     ItemWidget *widget = widgetForIndex(targetIndex);
     if (widget) {
-      m_detailsPaneManager->updateSidebarMetadata(widget);
+      detailsPaneMgr()->updateSidebarMetadata(widget);
     }
   };
 

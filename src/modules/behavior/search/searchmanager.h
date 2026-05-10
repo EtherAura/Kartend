@@ -27,10 +27,8 @@ struct ApplicationContext;
 struct SearchManagerSetup {
   const ApplicationContext *ctx = nullptr;
 
-  DatabaseManager *databaseManager = nullptr;
-  NavigationManager *navigationManager = nullptr;
-  ScrollManager *scrollManager = nullptr;
-  SettingsManager *settingsManager = nullptr;
+  // UI / collection-state references — sibling managers are read directly from
+  // ctx at runtime, never duplicated here.
   QLineEdit *searchBar = nullptr;
   QAction *searchModeAction = nullptr;
   QScrollArea *itemScrollArea = nullptr;
@@ -41,11 +39,6 @@ struct SearchManagerSetup {
   int *currentCollectionIndex = nullptr;
   const CollectionHierarchyCache *hierarchyCache = nullptr;
 
-  SETUP_GETTER_DECL(DatabaseManager *, DatabaseManager)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
-  SETUP_GETTER_DECL(NavigationManager *, NavigationManager)
-  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
-  SETUP_GETTER_DECL(SettingsManager *, SettingsManager)
   SETUP_GETTER_DECL(QLineEdit *, SearchBar)
   SETUP_GETTER_DECL(QAction *, SearchModeAction)
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
@@ -109,11 +102,24 @@ signals:
 private:
   void scheduleSearchBarRefocusIfNeeded();
 
-  InteractionStateHolder *m_state = nullptr;
-  DatabaseManager *m_databaseManager = nullptr;
-  NavigationManager *m_navigationManager = nullptr;
-  ScrollManager *m_scrollManager = nullptr;
-  SettingsManager *m_settingsManager = nullptr;
+  // ctx is the single source of truth for sibling managers + state.
+  const ApplicationContext *m_ctx = nullptr;
+  [[nodiscard]] InteractionStateHolder *state() const {
+    return m_ctx ? m_ctx->interactionState() : nullptr;
+  }
+  [[nodiscard]] DatabaseManager *databaseMgr() const {
+    return m_ctx ? m_ctx->databaseManager() : nullptr;
+  }
+  [[nodiscard]] NavigationManager *navMgr() const {
+    return m_ctx ? m_ctx->navigationManager() : nullptr;
+  }
+  [[nodiscard]] ScrollManager *scrollMgr() const {
+    return m_ctx ? m_ctx->scrollManager() : nullptr;
+  }
+  [[nodiscard]] SettingsManager *settingsMgr() const {
+    return m_ctx ? m_ctx->settingsManager() : nullptr;
+  }
+
   GeneralSettings *m_generalSettings = nullptr;
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   QLineEdit *m_searchBar = nullptr;

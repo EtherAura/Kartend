@@ -18,6 +18,7 @@
 #include "loggingcategories.h"
 #include "pathutils.h"
 #include "querymanager.h"
+#include "applicationcontext.h"
 #include "sessionmanager.h"
 #include "titlefilter.h"
 #include "uiconstants.h"
@@ -28,9 +29,8 @@ Q_LOGGING_CATEGORY(lcDatabaseManager, "kartend.databasemanager")
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
-DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent)
-    : QObject(parent), m_sessionManager(sessionManager),
-      m_connectionName(QStringLiteral("kartend_main")) {
+DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
+    : QObject(parent), m_ctx(ctx), m_connectionName(QStringLiteral("kartend_main")) {
   qRegisterMetaType<CollectionConfig>("CollectionConfig");
   qRegisterMetaType<CollectionContext>("CollectionContext");
   qRegisterMetaType<QList<CollectionConfig>>("QList<CollectionConfig>");
@@ -38,19 +38,21 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
 
   initDatabase();
 
+  SessionManager *session = m_ctx ? m_ctx->sessionManager() : nullptr;
+
   // NOTE: QThreads are intentionally NOT parented to DatabaseManager. If they
   // were, ~QObject would auto-delete them mid-run during shutdown, and
   // ~QThread qFatals when destroyed while running. The destructor handles
   // bounded shutdown explicitly.
   m_workerThread = new QThread();
-  m_worker = new QueryManager(m_sessionManager, QStringLiteral("kartend_query_worker"));
+  m_worker = new QueryManager(session, QStringLiteral("kartend_query_worker"));
   m_worker->moveToThread(m_workerThread);
   connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
 
   // Dedicated scan worker (separate thread + separate DB connection) so
   // long scans don't block query operations and UI updates.
   m_scanThread = new QThread();
-  m_scanWorker = new QueryManager(m_sessionManager, QStringLiteral("kartend_scan_worker"));
+  m_scanWorker = new QueryManager(session, QStringLiteral("kartend_scan_worker"));
   m_scanWorker->moveToThread(m_scanThread);
   connect(m_scanThread, &QThread::finished, m_scanWorker, &QObject::deleteLater);
 
@@ -97,8 +99,8 @@ DatabaseManager::DatabaseManager(SessionManager *sessionManager, QObject *parent
 
   // Cached-counts service: bridges a debounced main-thread refresh request to
   // QueryManager::updateCachedCounts and back to SessionManager + UI.
-  m_cachedCounts = new CachedCountsService(m_sessionManager, UIConstants::Timing::SHORT_DELAY_MS,
-                                           this);
+  m_cachedCounts =
+      new CachedCountsService(session, UIConstants::Timing::SHORT_DELAY_MS, this);
   connect(m_cachedCounts, &CachedCountsService::dispatchToWorker, m_worker,
           &QueryManager::updateCachedCounts);
   connect(m_worker, &QueryManager::cachedCountsComputed, m_cachedCounts,
@@ -375,10 +377,11 @@ void DatabaseManager::clearCollectionFromDatabaseByUuid(const QString &collectio
 }
 
 void DatabaseManager::updateCachedCounts(const QList<CollectionConfig> &allCollections) {
-  if (!m_db.isOpen() || !m_sessionManager || !m_cachedCounts) {
+  SessionManager *session = m_ctx ? m_ctx->sessionManager() : nullptr;
+  if (!m_db.isOpen() || !session || !m_cachedCounts) {
     return;
   }
-  m_sessionManager->clearStaleCollections(allCollections);
+  session->clearStaleCollections(allCollections);
 
   const int collectionCount = allCollections.size();
   QStringList uuids;

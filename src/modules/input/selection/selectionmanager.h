@@ -28,14 +28,8 @@ struct ApplicationContext;
 struct SelectionManagerSetup {
   const ApplicationContext *ctx = nullptr;
 
-  ScrollManager *scrollManager = nullptr;
-  DetailsPaneManager *detailsPaneManager = nullptr;
-  SessionManager *sessionManager = nullptr;
-  SettingsManager *settingsManager = nullptr;
-  NavigationManager *navigationManager = nullptr;
-  AnimationManager *animationManager = nullptr;
-  ViewportManager *viewportManager = nullptr;
-  ArtworkManager *artworkManager = nullptr;
+  // UI / collection-state references — sibling managers are read directly from
+  // ctx at runtime, never duplicated here.
   DetailsPane *sidebar = nullptr;
   QWidget *itemsPage = nullptr;
   QWidget *gridContainer = nullptr;
@@ -45,15 +39,6 @@ struct SelectionManagerSetup {
   const CollectionHierarchyCache *hierarchyCache = nullptr;
   QLineEdit *searchBar = nullptr;
 
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
-  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
-  SETUP_GETTER_DECL(DetailsPaneManager *, DetailsPaneManager)
-  SETUP_GETTER_DECL(SessionManager *, SessionManager)
-  SETUP_GETTER_DECL(SettingsManager *, SettingsManager)
-  SETUP_GETTER_DECL(NavigationManager *, NavigationManager)
-  SETUP_GETTER_DECL(AnimationManager *, AnimationManager)
-  SETUP_GETTER_DECL(ViewportManager *, ViewportManager)
-  SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
   SETUP_GETTER_DECL(DetailsPane *, Sidebar)
   SETUP_GETTER_DECL(QWidget *, ItemsPage)
   SETUP_GETTER_DECL(QWidget *, GridContainer)
@@ -216,16 +201,37 @@ private:
   // Selection restore state lives in InteractionStateHolder (m_state) — the
   // single source of truth. Accessors above proxy through it.
 
-  // Manager references
-  InteractionStateHolder *m_state = nullptr;
-  ScrollManager *m_scrollManager = nullptr;
-  DetailsPaneManager *m_detailsPaneManager = nullptr;
-  SessionManager *m_sessionManager = nullptr;
-  SettingsManager *m_settingsManager = nullptr;
-  NavigationManager *m_navigationManager = nullptr;
-  AnimationManager *m_animationManager = nullptr;
-  ViewportManager *m_viewportManager = nullptr;
-  ArtworkManager *m_artworkManager = nullptr;
+  // ctx is the single source of truth for sibling managers + state. Inline
+  // accessors below are the canonical read path.
+  const ApplicationContext *m_ctx = nullptr;
+  [[nodiscard]] InteractionStateHolder *state() const {
+    return m_ctx ? m_ctx->interactionState() : nullptr;
+  }
+  [[nodiscard]] ScrollManager *scrollMgr() const {
+    return m_ctx ? m_ctx->scrollManager() : nullptr;
+  }
+  [[nodiscard]] DetailsPaneManager *detailsPaneMgr() const {
+    return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
+  }
+  [[nodiscard]] SessionManager *sessionMgr() const {
+    return m_ctx ? m_ctx->sessionManager() : nullptr;
+  }
+  [[nodiscard]] SettingsManager *settingsMgr() const {
+    return m_ctx ? m_ctx->settingsManager() : nullptr;
+  }
+  [[nodiscard]] NavigationManager *navMgr() const {
+    return m_ctx ? m_ctx->navigationManager() : nullptr;
+  }
+  [[nodiscard]] AnimationManager *animMgr() const {
+    return m_ctx ? m_ctx->animationManager() : nullptr;
+  }
+  [[nodiscard]] ViewportManager *viewportMgr() const {
+    return m_ctx ? m_ctx->viewportManager() : nullptr;
+  }
+  [[nodiscard]] ArtworkManager *artworkMgr() const {
+    return m_ctx ? m_ctx->artworkManager() : nullptr;
+  }
+
   DetailsPane *m_MetadataSidebar = nullptr;
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   QLineEdit *m_searchBar = nullptr;

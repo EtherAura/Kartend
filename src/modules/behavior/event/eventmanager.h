@@ -39,18 +39,8 @@ struct ApplicationContext;
 struct EventManagerSetup {
   const ApplicationContext *ctx = nullptr;
 
-  // Manager dependencies (can be overridden or taken from ctx)
-  ScrollManager *scrollManager = nullptr;
-  KeyboardManager *keyboardManager = nullptr;
-  MouseManager *mouseManager = nullptr;
-  AnimationManager *animationManager = nullptr;
-  ViewportManager *viewportManager = nullptr;
-  SelectionManager *selectionManager = nullptr;
-  ArtworkManager *artworkManager = nullptr;
-  DatabaseManager *databaseManager = nullptr;
-  DetailsPaneManager *detailsPaneManager = nullptr;
-
-  // UI elements (can be overridden or taken from ctx)
+  // UI / collection-state references — sibling managers and InteractionStateHolder
+  // are read directly from ctx at runtime, never duplicated here.
   QScrollArea *itemScrollArea = nullptr;
   QWidget *gridContainer = nullptr;
   QStackedWidget *stackedWidget = nullptr;
@@ -61,16 +51,6 @@ struct EventManagerSetup {
   int *currentCollectionIndex = nullptr;
   GeneralSettings *generalSettings = nullptr;
 
-  // Accessors with ctx fallback
-  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
-  [[nodiscard]] KeyboardManager *getKeyboardManager() const { return keyboardManager; }
-  [[nodiscard]] MouseManager *getMouseManager() const { return mouseManager; }
-  SETUP_GETTER_DECL(AnimationManager *, AnimationManager)
-  SETUP_GETTER_DECL(ViewportManager *, ViewportManager)
-  SETUP_GETTER_DECL(SelectionManager *, SelectionManager)
-  SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
-  SETUP_GETTER_DECL(DatabaseManager *, DatabaseManager)
-  SETUP_GETTER_DECL(DetailsPaneManager *, DetailsPaneManager)
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
   SETUP_GETTER_DECL(QWidget *, GridContainer)
   SETUP_GETTER_DECL(QStackedWidget *, StackedWidget)
@@ -80,7 +60,6 @@ struct EventManagerSetup {
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
   SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
   SETUP_GETTER_DECL(GeneralSettings *, GeneralSettings)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
 };
 
 /**
@@ -162,17 +141,39 @@ private:
                                              QScrollBar *axisScrollBar, bool horizontalView) const;
   void onWheelAnimationFinished();
 
-  // Manager references
-  ScrollManager *m_scrollManager = nullptr;
-  KeyboardManager *m_keyboardManager = nullptr;
-  MouseManager *m_mouseManager = nullptr;
-  AnimationManager *m_animationManager = nullptr;
-  ViewportManager *m_viewportManager = nullptr;
-  SelectionManager *m_selectionManager = nullptr;
-  ArtworkManager *m_artworkManager = nullptr;
-  DatabaseManager *m_databaseManager = nullptr;
-  DetailsPaneManager *m_detailsPaneManager = nullptr;
-  InteractionStateHolder *m_state = nullptr;
+  // ctx is the single source of truth for sibling managers + state. Inline
+  // accessors below are the canonical read path.
+  const ApplicationContext *m_ctx = nullptr;
+  [[nodiscard]] ScrollManager *scrollMgr() const {
+    return m_ctx ? m_ctx->scrollManager() : nullptr;
+  }
+  [[nodiscard]] KeyboardManager *keyboardMgr() const {
+    return m_ctx ? m_ctx->keyboardManager() : nullptr;
+  }
+  [[nodiscard]] MouseManager *mouseMgr() const {
+    return m_ctx ? m_ctx->mouseManager() : nullptr;
+  }
+  [[nodiscard]] AnimationManager *animMgr() const {
+    return m_ctx ? m_ctx->animationManager() : nullptr;
+  }
+  [[nodiscard]] ViewportManager *viewportMgr() const {
+    return m_ctx ? m_ctx->viewportManager() : nullptr;
+  }
+  [[nodiscard]] SelectionManager *selectionMgr() const {
+    return m_ctx ? m_ctx->selectionManager() : nullptr;
+  }
+  [[nodiscard]] ArtworkManager *artworkMgr() const {
+    return m_ctx ? m_ctx->artworkManager() : nullptr;
+  }
+  [[nodiscard]] DatabaseManager *databaseMgr() const {
+    return m_ctx ? m_ctx->databaseManager() : nullptr;
+  }
+  [[nodiscard]] DetailsPaneManager *detailsPaneMgr() const {
+    return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
+  }
+  [[nodiscard]] InteractionStateHolder *state() const {
+    return m_ctx ? m_ctx->interactionState() : nullptr;
+  }
   GeneralSettings *m_generalSettings = nullptr;
 
   // UI references

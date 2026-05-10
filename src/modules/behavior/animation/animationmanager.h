@@ -21,13 +21,8 @@ struct AnimationManagerSetup {
   const GeneralSettings *generalSettings = nullptr;
 
   QScrollArea *itemScrollArea = nullptr;
-  ScrollManager *scrollManager = nullptr;
-  ArtworkManager *artworkManager = nullptr;
 
   SETUP_GETTER_DECL(QScrollArea *, ItemScrollArea)
-  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
-  SETUP_GETTER_DECL(ArtworkManager *, ArtworkManager)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
 };
 
 /// Handles scroll animation creation, configuration, and execution for
@@ -162,11 +157,10 @@ private slots:
   void onHScrollAnimationFinished();
 
 private:
+  // ctx is the single source of truth for sibling managers + state.
+  const ApplicationContext *m_ctx = nullptr;
   const GeneralSettings *m_generalSettings = nullptr;
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
-  ScrollManager *m_scrollManager = nullptr;
-  ArtworkManager *m_artworkManager = nullptr;
-  InteractionStateHolder *m_state = nullptr;
 
   QPropertyAnimation *m_vScrollAnim = nullptr;
   QPropertyAnimation *m_hScrollAnim = nullptr;

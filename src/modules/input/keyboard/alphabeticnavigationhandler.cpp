@@ -1,5 +1,6 @@
 // Handles alphabetic navigation via PageUp/PageDown keys.
 #include "alphabeticnavigationhandler.h"
+#include "applicationcontext.h"
 #include "filtermanager.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
@@ -9,16 +10,18 @@
 AlphabeticNavigationHandler::AlphabeticNavigationHandler(QObject *parent) : QObject(parent) {}
 
 auto AlphabeticNavigationHandler::navigateToNextLetter(bool forward) -> int {
-  if (!m_scrollManager || !m_selectionManager) {
+  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  SelectionManager *selection = m_ctx ? m_ctx->selectionManager() : nullptr;
+  if (!scroll || !selection) {
     return -1;
   }
 
-  const int totalItems = m_scrollManager->getTotalItems();
+  const int totalItems = scroll->getTotalItems();
   if (totalItems <= 0) {
     return -1;
   }
 
-  const int currentIndex = m_selectionManager->currentSelectedIndex();
+  const int currentIndex = selection->currentSelectedIndex();
   if (currentIndex < 0 || currentIndex >= totalItems) {
     // If no valid selection, start from beginning or end
     const int startIndex = forward ? 0 : (totalItems - 1);
@@ -46,37 +49,38 @@ auto AlphabeticNavigationHandler::getFirstCharForIndex(int visualIndex) const ->
 }
 
 auto AlphabeticNavigationHandler::getDisplayNameForIndex(int visualIndex) const -> QString {
-  if (!m_scrollManager) {
+  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  if (!scroll) {
     return QString();
   }
 
-  const int totalItems = m_scrollManager->getTotalItems();
+  const int totalItems = scroll->getTotalItems();
   if (visualIndex < 0 || visualIndex >= totalItems) {
     return QString();
   }
 
   // Get the subcollection count to determine if this is a subcollection or file
-  const int subcollectionCount = m_scrollManager->getSubcollectionCount();
-  const int virtualFolderCount = m_scrollManager->getVirtualFolderCount();
+  const int subcollectionCount = scroll->getSubcollectionCount();
+  const int virtualFolderCount = scroll->getVirtualFolderCount();
   const int prefixCount = subcollectionCount + virtualFolderCount;
 
   if (visualIndex < subcollectionCount) {
     // This is a subcollection - get its name
-    return m_scrollManager->getSubcollectionName(visualIndex);
+    return scroll->getSubcollectionName(visualIndex);
   } else if (visualIndex < prefixCount) {
     // This is a virtual folder
-    const QString folderPath = m_scrollManager->virtualFolderPathForVisualIndex(visualIndex);
+    const QString folderPath = scroll->virtualFolderPathForVisualIndex(visualIndex);
     return QFileInfo(folderPath).fileName();
   }
 
   // This is a file - get from file paths/names
-  const QString filePath = m_scrollManager->filePathForVisualIndex(visualIndex);
+  const QString filePath = scroll->filePathForVisualIndex(visualIndex);
   if (filePath.isEmpty()) {
     return QString();
   }
 
   // Try to get display name from file names hash
-  const auto &fileNames = m_scrollManager->getFileNames();
+  const auto &fileNames = scroll->getFileNames();
   const QString displayName = fileNames.value(filePath);
   if (!displayName.isEmpty()) {
     return displayName;

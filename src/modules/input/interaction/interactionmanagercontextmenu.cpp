@@ -48,10 +48,10 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
   if (isMediaItem && !filePath.isEmpty()) {
     QAction *launchAction = menu.addAction(tr("Launch"));
     QObject::connect(launchAction, &QAction::triggered, this, [this, filePath]() {
-      if (!m_databaseManager || !m_currentCollectionIndex) {
+      if (!databaseMgr() || !m_currentCollectionIndex) {
         return;
       }
-      const int cIdx = m_databaseManager->getCollectionIndexForFile(filePath);
+      const int cIdx = databaseMgr()->getCollectionIndexForFile(filePath);
       const int ownerIdx = (cIdx >= 0 ? cIdx : *m_currentCollectionIndex);
       launchItemWithCollection(filePath, ownerIdx);
     });
@@ -61,8 +61,8 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
   if (isSubcollection || isVirtualFolder) {
     QAction *openAction = menu.addAction(tr("Open"));
     QObject::connect(openAction, &QAction::triggered, this, [this]() {
-      if (m_scrollManager) {
-        const int totalItems = m_scrollManager->getTotalItems();
+      if (scrollMgr()) {
+        const int totalItems = scrollMgr()->getTotalItems();
         processEnterOrReturnKey(totalItems);
       }
     });
@@ -73,21 +73,21 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
   // --- Toggle sidebar (properties) action ---
   QAction *propertiesAction = menu.addAction(tr("Properties"));
   QObject::connect(propertiesAction, &QAction::triggered, this, [this]() {
-    if (m_detailsPaneManager) {
-      m_detailsPaneManager->toggleSidebar();
+    if (detailsPaneMgr()) {
+      detailsPaneMgr()->toggleSidebar();
     }
   });
 
   // --- Refresh action (soft reload of current collection) ---
   QAction *refreshAction = menu.addAction(tr("Refresh"));
   QObject::connect(refreshAction, &QAction::triggered, this, [this]() {
-    if (m_navigationManager && m_currentCollectionIndex && *m_currentCollectionIndex >= 0) {
-      m_navigationManager->safeReloadCollection(*m_currentCollectionIndex);
+    if (navMgr() && m_currentCollectionIndex && *m_currentCollectionIndex >= 0) {
+      navMgr()->safeReloadCollection(*m_currentCollectionIndex);
     }
   });
 
   // --- Edit custom fields (, media items only) ---
-  if (isMediaItem && !filePath.isEmpty() && m_databaseManager && m_collections &&
+  if (isMediaItem && !filePath.isEmpty() && databaseMgr() && m_collections &&
       m_currentCollectionIndex) {
     menu.addSeparator();
     QAction *customFieldsAction = menu.addAction(tr("Edit custom fields..."));
@@ -114,7 +114,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
     // Only offer "Clear" when a manual_path override actually exists for the
     // selected item; querying the DB here keeps the menu honest about what
     // it can do (vs. always offering an action that may no-op).
-    int owningIndex = m_databaseManager->getCollectionIndexForFile(filePath);
+    int owningIndex = databaseMgr()->getCollectionIndexForFile(filePath);
     if (owningIndex < 0) {
       owningIndex = *m_currentCollectionIndex;
     }
@@ -125,7 +125,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       const QString uuid = CollectionUtils::computeCollectionUuid(owning.name, expandedMediaDir);
       if (!uuid.isEmpty()) {
         const ItemMetadataStore::ItemMetadata md =
-            m_databaseManager->loadItemMetadata(uuid, filePath);
+            databaseMgr()->loadItemMetadata(uuid, filePath);
         if (!md.manualPath.isEmpty()) {
           QAction *clearManualAction = menu.addAction(tr("Clear manual override"));
           QObject::connect(clearManualAction, &QAction::triggered, this,
@@ -147,7 +147,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
           launcherNames << owning.launcherDisplayName(i);
         }
         const int currentOverride =
-            uuid.isEmpty() ? -1 : m_databaseManager->loadItemMetadata(uuid, filePath).launcherIndex;
+            uuid.isEmpty() ? -1 : databaseMgr()->loadItemMetadata(uuid, filePath).launcherIndex;
         const int defaultIndex =
             currentOverride >= 0 && currentOverride < launcherCount
                 ? currentOverride
@@ -180,7 +180,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
   // The playlist itself is identified via the synthesized CollectionConfig at
   // m_currentCollectionIndex (isPlaylist=true) so the surrounding code keeps
   // treating playlists as ordinary virtual collections.
-  if (m_playlistManager && m_collections && m_currentCollectionIndex && m_databaseManager) {
+  if (playlistMgr() && m_collections && m_currentCollectionIndex && databaseMgr()) {
     const bool insideCollection =
         CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections);
     const bool insidePlaylist =
@@ -191,7 +191,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       // built during the items range fetch). Add-to-playlist needs the uuid to
       // store a stable (uuid, path) reference that survives item id
       // renumbering across rescans.
-      int owningIdx = m_databaseManager->getCollectionIndexForFile(filePath);
+      int owningIdx = databaseMgr()->getCollectionIndexForFile(filePath);
       if (owningIdx < 0 && !insidePlaylist) {
         owningIdx = *m_currentCollectionIndex;
       }
@@ -209,31 +209,31 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       // the "Add to playlist" submenu and locating the favorites entry, since
       // starring is the most common per-item playlist action. The label flips
       // based on current membership so a single click is always meaningful.
-      const QString favouritesId = m_playlistManager->ensureFavoritesPlaylist();
+      const QString favouritesId = playlistMgr()->ensureFavoritesPlaylist();
       if (!favouritesId.isEmpty() && !srcUuid.isEmpty()) {
         const bool alreadyFavorite =
-            m_playlistManager->containsItem(favouritesId, srcUuid, filePath);
+            playlistMgr()->containsItem(favouritesId, srcUuid, filePath);
         QAction *favAction =
             menu.addAction(alreadyFavorite ? tr("Remove from Favorites") : tr("Add to Favorites"));
         QObject::connect(
             favAction, &QAction::triggered, this,
             [this, favouritesId, srcUuid, filePath, alreadyFavorite]() {
-              if (!m_playlistManager) {
+              if (!playlistMgr()) {
                 return;
               }
               if (alreadyFavorite) {
-                m_playlistManager->removeItem(favouritesId, srcUuid, filePath);
+                playlistMgr()->removeItem(favouritesId, srcUuid, filePath);
               } else {
-                m_playlistManager->addItem(favouritesId, srcUuid, filePath);
+                playlistMgr()->addItem(favouritesId, srcUuid, filePath);
               }
               // When the user is currently inside the favorites
               // playlist, the count just changed — reload so the
               // grid drops/appends the affected tile right away
               // rather than waiting for the next manual refresh.
-              if (m_navigationManager && m_currentCollectionIndex &&
+              if (navMgr() && m_currentCollectionIndex &&
                   CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections) &&
                   (*m_collections)[*m_currentCollectionIndex].playlistId == favouritesId) {
-                m_navigationManager->safeReloadCollection(*m_currentCollectionIndex);
+                navMgr()->safeReloadCollection(*m_currentCollectionIndex);
               }
             });
       }
@@ -251,7 +251,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       QObject::connect(importAction, &QAction::triggered, this,
                        [this]() { importPlaylistFromFile(); });
 
-      const QList<PlaylistRow> playlists = m_playlistManager->loadAll();
+      const QList<PlaylistRow> playlists = playlistMgr()->loadAll();
       if (!playlists.isEmpty()) {
         addToMenu->addSeparator();
         // The chooser silently no-ops when the (uuid, path) pair is already in
@@ -274,13 +274,13 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
         QAction *removeAction = menu.addAction(tr("Remove from playlist"));
         QObject::connect(removeAction, &QAction::triggered, this,
                          [this, playlistId, srcUuid, filePath]() {
-                           if (m_playlistManager) {
-                             m_playlistManager->removeItem(playlistId, srcUuid, filePath);
+                           if (playlistMgr()) {
+                             playlistMgr()->removeItem(playlistId, srcUuid, filePath);
                              // playlistsChanged → MainWindow re-syncs the
                              // CollectionConfigs; the safeReload below picks
                              // up the new (smaller) item count.
-                             if (m_navigationManager && m_currentCollectionIndex) {
-                               m_navigationManager->safeReloadCollection(*m_currentCollectionIndex);
+                             if (navMgr() && m_currentCollectionIndex) {
+                               navMgr()->safeReloadCollection(*m_currentCollectionIndex);
                              }
                            }
                          });
@@ -334,7 +334,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
 }
 
 void InteractionManager::addItemToNewPlaylist(const QString &srcUuid, const QString &filePath) {
-  if (!m_playlistManager) {
+  if (!playlistMgr()) {
     return;
   }
   bool ok = false;
@@ -344,27 +344,27 @@ void InteractionManager::addItemToNewPlaylist(const QString &srcUuid, const QStr
   if (!ok || name.trimmed().isEmpty()) {
     return;
   }
-  auto created = m_playlistManager->createPlaylist(name);
+  auto created = playlistMgr()->createPlaylist(name);
   if (created.isError()) {
     return;
   }
   const QString &newId = created.value();
   if (!filePath.isEmpty()) {
-    m_playlistManager->addItem(newId, srcUuid, filePath);
+    playlistMgr()->addItem(newId, srcUuid, filePath);
   }
 }
 
 void InteractionManager::addItemToPlaylist(const QString &playlistId, const QString &srcUuid,
                                            const QString &filePath) {
-  if (!m_playlistManager || playlistId.isEmpty() || filePath.isEmpty()) {
+  if (!playlistMgr() || playlistId.isEmpty() || filePath.isEmpty()) {
     return;
   }
-  m_playlistManager->addItem(playlistId, srcUuid, filePath);
+  playlistMgr()->addItem(playlistId, srcUuid, filePath);
 }
 
 void InteractionManager::renamePlaylistDialog(const QString &playlistId,
                                               const QString &currentName) {
-  if (!m_playlistManager || playlistId.isEmpty()) {
+  if (!playlistMgr() || playlistId.isEmpty()) {
     return;
   }
   bool ok = false;
@@ -374,12 +374,12 @@ void InteractionManager::renamePlaylistDialog(const QString &playlistId,
   if (!ok || newName.trimmed().isEmpty() || newName == currentName) {
     return;
   }
-  m_playlistManager->renamePlaylist(playlistId, newName);
+  playlistMgr()->renamePlaylist(playlistId, newName);
 }
 
 void InteractionManager::deletePlaylistConfirm(const QString &playlistId,
                                                const QString &currentName) {
-  if (!m_playlistManager || playlistId.isEmpty()) {
+  if (!playlistMgr() || playlistId.isEmpty()) {
     return;
   }
   // Confirm because the operation cascades to playlist_items and there's no
@@ -393,23 +393,23 @@ void InteractionManager::deletePlaylistConfirm(const QString &playlistId,
   if (choice != QMessageBox::Yes) {
     return;
   }
-  if (m_playlistManager->deletePlaylist(playlistId) && m_navigationManager) {
+  if (playlistMgr()->deletePlaylist(playlistId) && navMgr()) {
     // Pop back to the parent so the now-deleted playlist isn't left visible
     // mid-fetch. The synthesized CollectionConfig will be removed on the
     // next resync triggered by playlistsChanged.
-    m_navigationManager->safeReloadCollection(0);
+    navMgr()->safeReloadCollection(0);
   }
 }
 
 void InteractionManager::editCustomFields(const QString &filePath, const QString &itemName) {
-  if (!m_databaseManager || !m_collections || !m_currentCollectionIndex) {
+  if (!databaseMgr() || !m_collections || !m_currentCollectionIndex) {
     return;
   }
   // The owning collection of the file may differ from the displayed one in
   // showAllSubcollectionItems mode; mirror DetailsPaneManager and prefer the
   // file's resolved collection so the metadata row's UUID matches across
   // navigation modes.
-  int owningIndex = m_databaseManager->getCollectionIndexForFile(filePath);
+  int owningIndex = databaseMgr()->getCollectionIndexForFile(filePath);
   if (owningIndex < 0) {
     owningIndex = *m_currentCollectionIndex;
   }
@@ -424,7 +424,7 @@ void InteractionManager::editCustomFields(const QString &filePath, const QString
     return;
   }
 
-  ItemMetadataStore::ItemMetadata metadata = m_databaseManager->loadItemMetadata(uuid, filePath);
+  ItemMetadataStore::ItemMetadata metadata = databaseMgr()->loadItemMetadata(uuid, filePath);
   metadata.collectionUuid = uuid;
   metadata.path = filePath;
 
@@ -440,24 +440,24 @@ void InteractionManager::editCustomFields(const QString &filePath, const QString
   // whether to overwrite. Existing rows from a scraper keep their source
   // until the user touches them via this dialog.
   metadata.source = QStringLiteral("user");
-  if (!m_databaseManager->saveItemMetadata(metadata)) {
+  if (!databaseMgr()->saveItemMetadata(metadata)) {
     return;
   }
 
   // Refresh the sidebar so the new fields render immediately.
-  if (m_detailsPaneManager) {
-    m_detailsPaneManager->updateSidebarMetadata(
+  if (detailsPaneMgr()) {
+    detailsPaneMgr()->updateSidebarMetadata(
         m_selectionManager ? m_selectionManager->selectedWidget() : nullptr);
   }
 }
 
 void InteractionManager::setItemManualPath(const QString &filePath, const QString &manualPath) {
-  if (!m_databaseManager || !m_collections || !m_currentCollectionIndex) {
+  if (!databaseMgr() || !m_collections || !m_currentCollectionIndex) {
     return;
   }
   // Resolve the owning collection the same way editCustomFields does so the
   // (uuid, path) key matches across showAllSubcollectionItems navigation.
-  int owningIndex = m_databaseManager->getCollectionIndexForFile(filePath);
+  int owningIndex = databaseMgr()->getCollectionIndexForFile(filePath);
   if (owningIndex < 0) {
     owningIndex = *m_currentCollectionIndex;
   }
@@ -472,30 +472,30 @@ void InteractionManager::setItemManualPath(const QString &filePath, const QStrin
     return;
   }
 
-  ItemMetadataStore::ItemMetadata metadata = m_databaseManager->loadItemMetadata(uuid, filePath);
+  ItemMetadataStore::ItemMetadata metadata = databaseMgr()->loadItemMetadata(uuid, filePath);
   metadata.collectionUuid = uuid;
   metadata.path = filePath;
   metadata.manualPath = manualPath;
   // User-driven edit: stamp the source so future scrapers know this row was
   // touched by the user (matches editCustomFields behavior).
   metadata.source = QStringLiteral("user");
-  if (!m_databaseManager->saveItemMetadata(metadata)) {
+  if (!databaseMgr()->saveItemMetadata(metadata)) {
     return;
   }
-  if (m_detailsPaneManager) {
-    m_detailsPaneManager->updateSidebarMetadata(
+  if (detailsPaneMgr()) {
+    detailsPaneMgr()->updateSidebarMetadata(
         m_selectionManager ? m_selectionManager->selectedWidget() : nullptr);
   }
 }
 
 void InteractionManager::setItemLauncherOverride(const QString &filePath, int launcherIndex) {
-  if (!m_databaseManager || !m_collections || !m_currentCollectionIndex) {
+  if (!databaseMgr() || !m_collections || !m_currentCollectionIndex) {
     return;
   }
   // Mirror setItemManualPath's owner-resolution so the (uuid, path) key
   // matches across showAllSubcollectionItems navigation. Negative indices
   // mean "clear the override".
-  int owningIndex = m_databaseManager->getCollectionIndexForFile(filePath);
+  int owningIndex = databaseMgr()->getCollectionIndexForFile(filePath);
   if (owningIndex < 0) {
     owningIndex = *m_currentCollectionIndex;
   }
@@ -510,7 +510,7 @@ void InteractionManager::setItemLauncherOverride(const QString &filePath, int la
     return;
   }
 
-  ItemMetadataStore::ItemMetadata metadata = m_databaseManager->loadItemMetadata(uuid, filePath);
+  ItemMetadataStore::ItemMetadata metadata = databaseMgr()->loadItemMetadata(uuid, filePath);
   metadata.collectionUuid = uuid;
   metadata.path = filePath;
   // Clamp incoming overrides into the visible launcher range so a stale UI
@@ -518,18 +518,18 @@ void InteractionManager::setItemLauncherOverride(const QString &filePath, int la
   metadata.launcherIndex =
       launcherIndex < 0 ? -1 : std::clamp(launcherIndex, 0, owning.launcherCount() - 1);
   metadata.source = QStringLiteral("user");
-  if (!m_databaseManager->saveItemMetadata(metadata)) {
+  if (!databaseMgr()->saveItemMetadata(metadata)) {
     return;
   }
-  if (m_detailsPaneManager) {
-    m_detailsPaneManager->updateSidebarMetadata(
+  if (detailsPaneMgr()) {
+    detailsPaneMgr()->updateSidebarMetadata(
         m_selectionManager ? m_selectionManager->selectedWidget() : nullptr);
   }
 }
 
 void InteractionManager::exportPlaylistToFile(const QString &playlistId, const QString &currentName,
                                               bool asJson) {
-  if (!m_playlistManager || playlistId.isEmpty()) {
+  if (!playlistMgr() || playlistId.isEmpty()) {
     return;
   }
   const QString defaultExt = asJson ? QStringLiteral(".json") : QStringLiteral(".m3u");
@@ -556,8 +556,8 @@ void InteractionManager::exportPlaylistToFile(const QString &playlistId, const Q
     outPath += defaultExt;
   }
 
-  auto result = asJson ? m_playlistManager->exportToJson(playlistId, outPath)
-                       : m_playlistManager->exportToM3U(playlistId, outPath);
+  auto result = asJson ? playlistMgr()->exportToJson(playlistId, outPath)
+                       : playlistMgr()->exportToM3U(playlistId, outPath);
   if (result.isError()) {
     QMessageBox::warning(QApplication::activeWindow(), tr("Export Failed"), result.error().message);
     return;
@@ -567,7 +567,7 @@ void InteractionManager::exportPlaylistToFile(const QString &playlistId, const Q
 }
 
 void InteractionManager::importPlaylistFromFile() {
-  if (!m_playlistManager) {
+  if (!playlistMgr()) {
     return;
   }
   const QString chosen = QFileDialog::getOpenFileName(
@@ -583,7 +583,7 @@ void InteractionManager::importPlaylistFromFile() {
   // least try the path-per-line parser instead of failing out.
   const bool isJson = chosen.endsWith(QStringLiteral(".json"), Qt::CaseInsensitive);
   if (isJson) {
-    auto result = m_playlistManager->importFromJson(chosen);
+    auto result = playlistMgr()->importFromJson(chosen);
     if (result.isError()) {
       QMessageBox::warning(QApplication::activeWindow(), tr("Import Failed"),
                            result.error().message);
@@ -593,7 +593,7 @@ void InteractionManager::importPlaylistFromFile() {
 
   int skipped = 0;
   auto result =
-      m_playlistManager->importFromM3U(chosen, QFileInfo(chosen).completeBaseName(), &skipped);
+      playlistMgr()->importFromM3U(chosen, QFileInfo(chosen).completeBaseName(), &skipped);
   if (result.isError()) {
     QMessageBox::warning(QApplication::activeWindow(), tr("Import Failed"), result.error().message);
     return;

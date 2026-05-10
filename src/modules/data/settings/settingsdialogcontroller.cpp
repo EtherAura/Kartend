@@ -6,6 +6,7 @@
 // (compareNonReloadFields, compareReloadFields, updateViewingFlags,
 // updateWindowTitle, applyScrollbarSettings, refreshSidebar,
 // handleScrollBranch, detectChanges).
+#include "applicationcontext.h"
 #include "artworkmanager.h"
 #include "cachemanager.h"
 #include "collectionutils.h"
@@ -341,8 +342,10 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
     return;
   }
 
-  if (m_artworkManager->getTimerCoordinator()) {
-    m_artworkManager->getTimerCoordinator()->stopAllTimers();
+  ArtworkManager *art = m_ctx ? m_ctx->artworkManager() : nullptr;
+  CacheManager *cache = m_ctx ? m_ctx->cacheManager() : nullptr;
+  if (art && art->getTimerCoordinator()) {
+    art->getTimerCoordinator()->stopAllTimers();
   }
 
   collections = newCollections;
@@ -419,14 +422,14 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
 
   if (needsReload) {
     handleReloadRequired(collections, newCollections, originalCollections, viewingCollectionIndex,
-                         detailsPaneManager, scrollManager, navigationManager, m_artworkManager,
-                         m_cacheManager, currentCollectionIndex);
+                         detailsPaneManager, scrollManager, navigationManager, art, cache,
+                         currentCollectionIndex);
   } else {
     handleLayoutChanges(parent, collections, viewingCollectionIndex, titleChangedForView,
                         scrollbarChangedForView, sidebarModeChangedForView, gridWidthChangedForView,
                         spacingChangedForView, alignmentChangedForView, fontSizeChangedForView,
-                        hideTitlesChangedForView, detailsPaneManager, scrollManager,
-                        m_artworkManager, currentCollectionIndex);
+                        hideTitlesChangedForView, detailsPaneManager, scrollManager, art,
+                        currentCollectionIndex);
 
     // If only appearance changed, still refresh widgets to show new colors
     if (appearanceChangedForView && scrollManager) {

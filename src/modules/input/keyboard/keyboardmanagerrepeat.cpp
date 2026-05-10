@@ -30,6 +30,8 @@ void KeyboardManager::beginHoldRepeat() {
     return;
   }
 
+  InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
+
   // Check if we're in list mode for faster repeat intervals
   bool isListMode = false;
   if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
@@ -67,22 +69,19 @@ void KeyboardManager::beginHoldRepeat() {
   m_repeating = true;
   m_repeatInterval = m_repeatVertical ? verticalInterval : horizontalInterval;
 
-  if (m_state) {
-    m_state->scroll().horizHoldActive = !m_repeatVertical;
-    m_state->scroll().keyContinuous = true;
+  if (state) {
+    state->scroll().horizHoldActive = !m_repeatVertical;
+    state->scroll().keyContinuous = true;
   }
   m_continuousScrollActive = true;
 
-  if (m_state) {
-    m_state->arrow().arrowKeyScrolling = true;
-  }
-
-  if (m_state) {
-    m_state->artwork().suppressArtwork = true;
-    m_state->artwork().allowDuringSelection = true;
+  if (state) {
+    state->arrow().arrowKeyScrolling = true;
+    state->artwork().suppressArtwork = true;
+    state->artwork().allowDuringSelection = true;
     if (!m_repeatVertical) {
-      m_state->arrow().suppressArrowCenter = true;
-      m_state->arrow().suppressArrowCenterUntilMs =
+      state->arrow().suppressArrowCenter = true;
+      state->arrow().suppressArrowCenterUntilMs =
           QDateTime::currentMSecsSinceEpoch() + kSuppressArrowCenterHoldMs;
     }
   }
@@ -91,10 +90,13 @@ void KeyboardManager::beginHoldRepeat() {
 }
 
 void KeyboardManager::stopRepeat(bool suppressRecentering) {
+  InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
+  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+
   if (m_isShuttingDown || QApplication::closingDown()) {
     clearRepeatState();
-    if (m_state) {
-      m_state->scroll().keyContinuous = false;
+    if (state) {
+      state->scroll().keyContinuous = false;
     }
     return;
   }
@@ -108,29 +110,26 @@ void KeyboardManager::stopRepeat(bool suppressRecentering) {
 
   clearRepeatState();
 
-  if (m_state) {
-    m_state->scroll().horizHoldActive = false;
-    m_state->scroll().keyContinuous = false;
-    m_state->click().armFirstClickDelay = false;
-    m_state->click().pendingInitialCenter = false;
-  }
-
-  if (m_state) {
-    m_state->arrow().arrowKeyScrolling = false;
-    m_state->setGlideAnimating(false);
-    if (m_scrollManager) {
-      m_scrollManager->refreshSelectionOverlayState();
+  if (state) {
+    state->scroll().horizHoldActive = false;
+    state->scroll().keyContinuous = false;
+    state->click().armFirstClickDelay = false;
+    state->click().pendingInitialCenter = false;
+    state->arrow().arrowKeyScrolling = false;
+    state->setGlideAnimating(false);
+    if (scroll) {
+      scroll->refreshSelectionOverlayState();
     }
   }
 
-  if (m_scrollManager) {
-    m_scrollManager->setForceSelectionOverlayVisible(false);
+  if (scroll) {
+    scroll->setForceSelectionOverlayVisible(false);
   }
 
-  if (m_state) {
-    m_state->artwork().suppressArtwork = false;
-    m_state->artwork().allowDuringSelection = true;
-    m_state->clearArrowCenterSuppression();
+  if (state) {
+    state->artwork().suppressArtwork = false;
+    state->artwork().allowDuringSelection = true;
+    state->clearArrowCenterSuppression();
   }
 
   emit stopRepeatRequested(suppressRecentering);
@@ -152,7 +151,8 @@ void KeyboardManager::onRepeatStep() {
     stopRepeat();
     return;
   }
-  if (!m_scrollManager || !m_collections || !m_currentCollectionIndex) {
+  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  if (!scroll || !m_collections || !m_currentCollectionIndex) {
     stopRepeat();
     return;
   }

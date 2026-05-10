@@ -140,16 +140,16 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
     }
   }
 
-  if ((m_detailsPaneManager) && m_detailsPaneManager->isSidebarVisible()) {
+  if ((detailsPaneMgr()) && detailsPaneMgr()->isSidebarVisible()) {
     ItemWidget *widget = nullptr;
     if (m_selectionManager) {
       widget = m_selectionManager->widgetForIndex(targetIndex);
-    } else if (m_scrollManager) {
-      const auto &active = m_scrollManager->getActiveWidgets();
+    } else if (scrollMgr()) {
+      const auto &active = scrollMgr()->getActiveWidgets();
       widget = active.value(targetIndex, nullptr);
     }
     if (widget) {
-      m_detailsPaneManager->updateSidebarMetadata(widget);
+      detailsPaneMgr()->updateSidebarMetadata(widget);
     }
     constexpr int kMetadataSidebarUpdateDelayMs = 120;
     scheduleSidebarMetadataUpdateIfVisible(targetIndex, 0, kMetadataSidebarUpdateDelayMs);
@@ -162,9 +162,9 @@ void InteractionManager::applySelectionStateForIndex(int idx) {
   }
   QList<int> subs = getSubcollections(*m_currentCollectionIndex);
   updateFilePathForSelection(idx, subs);
-  if (m_scrollManager) {
-    m_scrollManager->updateVirtualView();
-    m_scrollManager->updateSelectionForIndex(idx);
+  if (scrollMgr()) {
+    scrollMgr()->updateVirtualView();
+    scrollMgr()->updateSelectionForIndex(idx);
   }
 }
 
@@ -196,16 +196,16 @@ void InteractionManager::scheduleSidebarMetadataUpdateIfVisible(int targetIndex,
       if (!guard) {
         return;
       }
-      if (!guard->m_detailsPaneManager || !guard->m_scrollManager) {
+      if (!guard->detailsPaneMgr() || !guard->scrollMgr()) {
         return;
       }
-      if (!guard->m_detailsPaneManager->isSidebarVisible()) {
+      if (!guard->detailsPaneMgr()->isSidebarVisible()) {
         return;
       }
       ItemWidget *itemWidget =
-          guard->m_scrollManager->getActiveWidgets().value(targetIndex, nullptr);
+          guard->scrollMgr()->getActiveWidgets().value(targetIndex, nullptr);
       if (itemWidget) {
-        guard->m_detailsPaneManager->updateSidebarMetadata(itemWidget);
+        guard->detailsPaneMgr()->updateSidebarMetadata(itemWidget);
       }
     });
   };
@@ -229,7 +229,7 @@ struct ResetClearedFlag {
 // Schedules repeated attempts plus a layout-complete hook to restore vertical
 // scrollbar visibility after clearing search
 void InteractionManager::scheduleScrollbarRecovery() {
-  if (!m_itemScrollArea || !m_scrollManager || !m_collections || !m_currentCollectionIndex) {
+  if (!m_itemScrollArea || !scrollMgr() || !m_collections || !m_currentCollectionIndex) {
     return;
   }
   int idx = *m_currentCollectionIndex;
@@ -246,10 +246,10 @@ void InteractionManager::scheduleScrollbarRecovery() {
     if (!guard) {
       return;
     }
-    if (!guard->m_scrollManager || !guard->m_itemScrollArea) {
+    if (!guard->scrollMgr() || !guard->m_itemScrollArea) {
       return;
     }
-    guard->m_scrollManager->recalculateContainerMetrics();
+    guard->scrollMgr()->recalculateContainerMetrics();
     if (guard->m_viewportManager) {
       guard->m_viewportManager->ensureVerticalScrollbarPolicy();
     }
@@ -268,7 +268,7 @@ void InteractionManager::scheduleScrollbarRecovery() {
 
   if (!m_scrollbarRecoveryConn) {
     m_scrollbarRecoveryConn = QObject::connect(
-        m_scrollManager, &ScrollManager::virtualScrollSetupComplete, this, [guard]() {
+        scrollMgr(), &ScrollManager::virtualScrollSetupComplete, this, [guard]() {
           if (!guard) {
             return;
           }
@@ -334,8 +334,8 @@ void InteractionManager::handleSuccessfulSelection(int index) {
   bool immediate =
       (m_viewportManager && m_viewportManager->forceImmediateCenter()) || restoringMatch;
   centerItemVertically(index, immediate);
-  if (m_scrollManager) {
-    m_scrollManager->updateVirtualView();
+  if (scrollMgr()) {
+    scrollMgr()->updateVirtualView();
   }
 }
 
@@ -344,11 +344,11 @@ auto InteractionManager::titleForIndexInColl(int coll, int idx) const -> QString
   // discriminator matches what the user sees during search (when the visible
   // sub list is filtered). Other collections fall back to the hierarchy cache.
   const bool isCurrent = m_currentCollectionIndex && coll == *m_currentCollectionIndex;
-  if (isCurrent && m_scrollManager) {
-    const int actualIdx = m_scrollManager->getFilteredIndex(idx);
-    const int renderedSubCount = m_scrollManager->getSubcollectionCount();
+  if (isCurrent && scrollMgr()) {
+    const int actualIdx = scrollMgr()->getFilteredIndex(idx);
+    const int renderedSubCount = scrollMgr()->getSubcollectionCount();
     if (actualIdx >= 0 && actualIdx < renderedSubCount) {
-      int subIdx = m_scrollManager->subcollectionIndexFromActual(actualIdx);
+      int subIdx = scrollMgr()->subcollectionIndexFromActual(actualIdx);
       if (m_collections && subIdx >= 0 && subIdx < m_collections->size()) {
         return (*m_collections)[subIdx].name;
       }
@@ -365,8 +365,8 @@ auto InteractionManager::titleForIndexInColl(int coll, int idx) const -> QString
     }
   }
   QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
-  if (path.isEmpty() && (m_scrollManager)) {
-    path = m_scrollManager->filePathForVisualIndex(idx);
+  if (path.isEmpty() && (scrollMgr())) {
+    path = scrollMgr()->filePathForVisualIndex(idx);
   }
   if (!path.isEmpty()) {
     return QFileInfo(path).completeBaseName().replace('_', ' ').simplified();
@@ -375,28 +375,28 @@ auto InteractionManager::titleForIndexInColl(int coll, int idx) const -> QString
 }
 
 void InteractionManager::persistSelectionForIndex(int coll, int idx) {
-  if (!m_settingsManager || !CollectionUtils::isValidIndex(coll, m_collections)) {
+  if (!settingsMgr() || !CollectionUtils::isValidIndex(coll, m_collections)) {
     return;
   }
-  m_settingsManager->setLastSelectedItem(coll, idx);
+  settingsMgr()->setLastSelectedItem(coll, idx);
   // Use a stable session key that also scopes by virtual subfolder (if active).
   QString sessionKey =
       CollectionUtils::selectionSessionKeyFor((*m_collections)[coll], *m_collections);
   QString title;
   QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
-  if (path.isEmpty() && (m_scrollManager)) {
-    path = m_scrollManager->filePathForVisualIndex(idx);
+  if (path.isEmpty() && (scrollMgr())) {
+    path = scrollMgr()->filePathForVisualIndex(idx);
   }
   if (!path.isEmpty()) {
     title = QFileInfo(path).completeBaseName().replace('_', ' ').simplified();
   }
-  if (m_sessionManager) {
-    m_sessionManager->setLastSelected(sessionKey, idx, title);
+  if (sessionMgr()) {
+    sessionMgr()->setLastSelected(sessionKey, idx, title);
   }
   // Defer artwork update to allow UI state to settle after selection save
   QTimer::singleShot(UIConstants::Timing::SHORT_DELAY_MS, this, [this]() {
-    if (!QApplication::closingDown() && m_artworkManager) {
-      m_artworkManager->updateViewportArtwork();
+    if (!QApplication::closingDown() && artworkMgr()) {
+      artworkMgr()->updateViewportArtwork();
     }
   });
 }

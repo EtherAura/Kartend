@@ -1,6 +1,7 @@
 // Search/filter/pre-search-state methods extracted from scrollmanager.cpp.
 // Operate on raw aliases (m_filterManager, m_dataManager,
 // m_preSearchStateManager) into m_dataSource.
+#include "applicationcontext.h"
 #include "datasourcemanager.h"
 #include "filtermanager.h"
 #include "presearchstatemanager.h"
@@ -69,8 +70,8 @@ void ScrollManager::restorePreSearchState() {
   auto getPositionFunc = [this](int index) -> QPoint { return getItemPosition(index); };
 
   m_preSearchStateManager->restoreState(m_activeWidgets, m_virtualContainer, m_widgetPool.get(),
-                                        m_artworkManager, getPositionFunc, m_metrics.itemWidth,
-                                        m_metrics.itemHeight);
+                                        m_ctx ? m_ctx->artworkManager() : nullptr, getPositionFunc,
+                                        m_metrics.itemWidth, m_metrics.itemHeight);
 }
 
 auto ScrollManager::hasPreSearchState() const -> bool {

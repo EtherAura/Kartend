@@ -1,5 +1,6 @@
 #include "test_applicationmanager_lifecycle.h"
 
+#include "applicationcontext.h"
 #include "applicationmanager.h"
 #include "artworkmanager.h"
 #include "cachemanager.h"
@@ -72,7 +73,7 @@ void TestApplicationManagerLifecycle::testGettersReturnNullBeforeInitialize() {
 void TestApplicationManagerLifecycle::testInitializeWiresAllManagers() {
   ensureSandbox();
   ApplicationManager manager;
-  manager.initialize();
+  ApplicationContext appCtx; manager.initialize(&appCtx);
 
   // Each getter must return a distinct, non-null pointer. Aliased managers
   // would indicate a wiring bug where ApplicationManager hands out the same
@@ -98,7 +99,7 @@ void TestApplicationManagerLifecycle::testInitializeWiresAllManagers() {
 void TestApplicationManagerLifecycle::testManagersAreParentedToApplicationManager() {
   ensureSandbox();
   ApplicationManager manager;
-  manager.initialize();
+  ApplicationContext appCtx; manager.initialize(&appCtx);
 
   // Every manager constructed with ApplicationManager as Qt parent should
   // report it via QObject::parent(). CacheManager is intentionally
@@ -126,7 +127,7 @@ void TestApplicationManagerLifecycle::testManagersAreParentedToApplicationManage
 void TestApplicationManagerLifecycle::testShutdownAfterInitializeIsSafe() {
   ensureSandbox();
   ApplicationManager manager;
-  manager.initialize();
+  ApplicationContext appCtx; manager.initialize(&appCtx);
 
   // shutdown() with an empty collection list exercises every conditional
   // branch (`if (m_artworkManager)`, snapshotting, settings save, cache
@@ -150,6 +151,6 @@ void TestApplicationManagerLifecycle::testDestructAfterInitializeWithoutShutdown
   // destructor must wait for the deferred task before letting CacheManager
   // be destroyed (otherwise the worker would dereference a freed cache).
   ApplicationManager manager;
-  manager.initialize();
+  ApplicationContext appCtx; manager.initialize(&appCtx);
   // Intentionally no shutdown() call — block scope ends and dtor runs.
 }

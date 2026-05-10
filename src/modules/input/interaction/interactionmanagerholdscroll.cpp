@@ -55,12 +55,12 @@ void InteractionManager::stopRepeat(bool suppressRecentering) {
   if (m_gridContainer) {
     m_state.arrow().arrowKeyScrolling = false;
     m_state.setGlideAnimating(false);
-    if (m_scrollManager) {
-      m_scrollManager->refreshSelectionOverlayState();
+    if (scrollMgr()) {
+      scrollMgr()->refreshSelectionOverlayState();
     }
   }
-  if (m_scrollManager) {
-    m_scrollManager->setForceSelectionOverlayVisible(false);
+  if (scrollMgr()) {
+    scrollMgr()->setForceSelectionOverlayVisible(false);
   }
 
   if (m_itemScrollArea) {
@@ -108,14 +108,14 @@ auto InteractionManager::isWheelScrolling() const -> bool {
 // Advances selection during mouse-hold scrolling (called via MouseManager
 // signal)
 void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal) {
-  if (!m_scrollManager || !m_collections || !m_currentCollectionIndex) {
+  if (!scrollMgr() || !m_collections || !m_currentCollectionIndex) {
     if (m_mouseManager) {
       m_mouseManager->stopMouseHoldScrolling();
     }
     return;
   }
 
-  int totalItems = m_scrollManager->getTotalItems();
+  int totalItems = scrollMgr()->getTotalItems();
   if (totalItems <= 0) {
     if (m_mouseManager) {
       m_mouseManager->stopMouseHoldScrolling();

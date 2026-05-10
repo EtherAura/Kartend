@@ -122,7 +122,6 @@ public:
   void refreshSelectionOverlayState();
   void setForceSelectionOverlayVisible(bool force);
   [[nodiscard]] QString getSubcollectionName(int subcollectionIndex) const;
-  void setDatabaseManager(DatabaseManager *manager);
   void recenterVirtualContainer();
   [[nodiscard]] HorizontalAlignment getCurrentAlignment() const;
   void applyFilter(const QString &searchText);
@@ -319,11 +318,13 @@ public:
   [[nodiscard]] int subcollectionIndexFromActual(int actualIndex) const;
 
 private:
+  // ctx is the single source of truth for sibling managers (ArtworkManager,
+  // DatabaseManager, InteractionStateHolder) — never cache them as direct
+  // fields.
+  const ApplicationContext *m_ctx = nullptr;
   const GeneralSettings *m_generalSettings = nullptr;
-  InteractionStateHolder *m_state = nullptr;
   QWidget *m_gridContainer = nullptr;
   QScrollArea *m_mediaScrollArea = nullptr;
-  ArtworkManager *m_artworkManager = nullptr;
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
   QWidget *m_virtualContainer = nullptr;
   QHash<int, ItemWidget *> m_activeWidgets;
@@ -335,7 +336,6 @@ private:
   int m_totalItems = 0;
   qint64 m_lastScrollTime = 0;
   bool m_isMutating = false;
-  DatabaseManager *m_databaseManager = nullptr;
   bool m_destroying = false;
   // cached sidebar-hidden-and-shrinking predicate, fed by
   // MainWindow on sidebar-visibility changes. Read by VirtualScrollEngine when

@@ -26,25 +26,17 @@ struct GeneralSettings;
 struct SelectionRestoreManagerSetup {
   const ApplicationContext *ctx = nullptr;
 
-  InteractionManager *interactionManager = nullptr;
-  ScrollManager *scrollManager = nullptr;
-  SessionManager *sessionManager = nullptr;
-  SettingsManager *settingsManager = nullptr;
+  // Sibling managers come from ctx; only non-manager fields stay here.
   QLineEdit *searchBar = nullptr;
   int *currentCollectionIndex = nullptr;
   QList<CollectionConfig> *collections = nullptr;
   GeneralSettings *generalSettings = nullptr;
   std::function<bool()> isShuttingDown;
 
-  SETUP_GETTER_DECL(InteractionManager *, InteractionManager)
-  SETUP_GETTER_DECL(ScrollManager *, ScrollManager)
-  SETUP_GETTER_DECL(SessionManager *, SessionManager)
-  SETUP_GETTER_DECL(SettingsManager *, SettingsManager)
   SETUP_GETTER_DECL(QLineEdit *, SearchBar)
   SETUP_GETTER_DECL(int *, CurrentCollectionIndex)
   SETUP_GETTER_DECL(QList<CollectionConfig> *, Collections)
   SETUP_GETTER_DECL(GeneralSettings *, GeneralSettings)
-  SETUP_GETTER_DECL_CTX_ONLY(InteractionStateHolder *, InteractionState)
 };
 
 /**
@@ -144,12 +136,23 @@ private:
   [[nodiscard]] std::function<void()> createSelectionRestoreLambda(int collectionIndex, int selIdx,
                                                                    int token);
 
-  // Manager references
-  InteractionManager *m_interactionManager = nullptr;
-  InteractionStateHolder *m_state = nullptr;
-  ScrollManager *m_scrollManager = nullptr;
-  SessionManager *m_sessionManager = nullptr;
-  SettingsManager *m_settingsManager = nullptr;
+  // ctx is the single source of truth for sibling managers + state.
+  const ApplicationContext *m_ctx = nullptr;
+  [[nodiscard]] InteractionManager *interactionMgr() const {
+    return m_ctx ? m_ctx->interactionManager() : nullptr;
+  }
+  [[nodiscard]] InteractionStateHolder *state() const {
+    return m_ctx ? m_ctx->interactionState() : nullptr;
+  }
+  [[nodiscard]] ScrollManager *scrollMgr() const {
+    return m_ctx ? m_ctx->scrollManager() : nullptr;
+  }
+  [[nodiscard]] SessionManager *sessionMgr() const {
+    return m_ctx ? m_ctx->sessionManager() : nullptr;
+  }
+  [[nodiscard]] SettingsManager *settingsMgr() const {
+    return m_ctx ? m_ctx->settingsManager() : nullptr;
+  }
 
   // UI references
   QLineEdit *m_searchBar = nullptr;

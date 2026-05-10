@@ -10,6 +10,7 @@
 class ScrollManager;
 class SelectionManager;
 class FilterManager;
+struct ApplicationContext;
 
 /**
  * @brief Handles alphabetic navigation via PageUp/PageDown keys.
@@ -28,9 +29,8 @@ public:
   explicit AlphabeticNavigationHandler(QObject *parent = nullptr);
   ~AlphabeticNavigationHandler() override = default;
 
-  // Dependencies
-  void setScrollManager(ScrollManager *manager) { m_scrollManager = manager; }
-  void setSelectionManager(SelectionManager *manager) { m_selectionManager = manager; }
+  // Dependencies — siblings are resolved through ctx, never cached.
+  void setContext(const ApplicationContext *ctx) { m_ctx = ctx; }
 
   /**
    * @brief Navigate to the next letter (PageDown) or previous letter (PageUp).
@@ -79,8 +79,7 @@ private:
    */
   [[nodiscard]] static QChar getAdjacentLetter(QChar current, bool forward);
 
-  ScrollManager *m_scrollManager = nullptr;
-  SelectionManager *m_selectionManager = nullptr;
+  const ApplicationContext *m_ctx = nullptr;
 };
 
 #endif // ALPHABETICNAVIGATIONHANDLER_H

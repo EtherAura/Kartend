@@ -25,14 +25,7 @@ Q_LOGGING_CATEGORY(lcSelectionRestoreManager, "kartend.selectionrestoremanager")
     }                                                                                              \
   } while (0)
 
-SETUP_GETTER_DEF_MGR_SAME(SelectionRestoreManagerSetup, InteractionManager *, InteractionManager,
-                          interactionManager)
-SETUP_GETTER_DEF_MGR_SAME(SelectionRestoreManagerSetup, ScrollManager *, ScrollManager,
-                          scrollManager)
-SETUP_GETTER_DEF_MGR_SAME(SelectionRestoreManagerSetup, SessionManager *, SessionManager,
-                          sessionManager)
-SETUP_GETTER_DEF_MGR_SAME(SelectionRestoreManagerSetup, SettingsManager *, SettingsManager,
-                          settingsManager)
+// Non-manager fields only — sibling managers are read directly from ctx.
 SETUP_GETTER_DEF_UI_SAME(SelectionRestoreManagerSetup, QLineEdit *, SearchBar, searchBar)
 SETUP_GETTER_DEF_COL_SAME(SelectionRestoreManagerSetup, int *, CurrentCollectionIndex,
                           currentCollectionIndex)
@@ -40,19 +33,13 @@ SETUP_GETTER_DEF_COL_SAME(SelectionRestoreManagerSetup, QList<CollectionConfig> 
                           collections)
 SETUP_GETTER_DEF_COL_SAME(SelectionRestoreManagerSetup, GeneralSettings *, GeneralSettings,
                           generalSettings)
-SETUP_GETTER_DEF_MGR_CTX_ONLY(SelectionRestoreManagerSetup, InteractionStateHolder *,
-                              InteractionState, interactionState)
 
 SelectionRestoreManager::SelectionRestoreManager(QObject *parent) : QObject(parent) {}
 
 SelectionRestoreManager::~SelectionRestoreManager() = default;
 
 void SelectionRestoreManager::setupReferences(const SelectionRestoreManagerSetup &setup) {
-  m_interactionManager = setup.getInteractionManager();
-  m_state = setup.getInteractionState();
-  m_scrollManager = setup.getScrollManager();
-  m_sessionManager = setup.getSessionManager();
-  m_settingsManager = setup.getSettingsManager();
+  m_ctx = setup.ctx;
   m_searchBar = setup.getSearchBar();
   m_currentCollectionIndex = setup.getCurrentCollectionIndex();
   m_collections = setup.getCollections();
@@ -66,15 +53,15 @@ auto SelectionRestoreManager::shouldRestoreSelection() const -> bool {
   }
   const bool remember = m_generalSettings->rememberSelection;
   const bool searchActive = (m_searchBar && !m_searchBar->text().trimmed().isEmpty());
-  return remember && !searchActive && m_scrollManager && m_interactionManager;
+  return remember && !searchActive && scrollMgr() && interactionMgr();
 }
 
 auto SelectionRestoreManager::getSelectionRestoreIndex(int collectionIndex) const -> int {
-  if (!m_scrollManager || !m_collections) {
+  if (!scrollMgr() || !m_collections) {
     return -1;
   }
 
-  int total = m_scrollManager->getTotalItems();
+  int total = scrollMgr()->getTotalItems();
   if (total <= 0) {
     return -1;
   }
@@ -88,14 +75,14 @@ auto SelectionRestoreManager::getSelectionRestoreIndex(int collectionIndex) cons
 
   QString hierarchicalName = CollectionUtils::hierarchicalNameFor(cfg, *m_collections);
   int selIdx = -1;
-  if (m_sessionManager) {
+  if (sessionMgr()) {
     if (subfolderActive) {
       const QString sessionKey = CollectionUtils::selectionSessionKeyFor(cfg, *m_collections);
-      selIdx = m_sessionManager->getLastSelectedIndex(sessionKey);
+      selIdx = sessionMgr()->getLastSelectedIndex(sessionKey);
     } else {
-      selIdx = m_sessionManager->getLastSelectedIndex(hierarchicalName);
+      selIdx = sessionMgr()->getLastSelectedIndex(hierarchicalName);
       if (selIdx < 0) {
-        selIdx = m_sessionManager->getLastSelectedIndex(cfg.name);
+        selIdx = sessionMgr()->getLastSelectedIndex(cfg.name);
       }
     }
   }
@@ -112,18 +99,18 @@ auto SelectionRestoreManager::validateSelectionRestoreContext() const -> bool {
   if (m_isShuttingDown && m_isShuttingDown()) {
     return false;
   }
-  if (!m_scrollManager || !m_interactionManager) {
+  if (!scrollMgr() || !interactionMgr()) {
     return false;
   }
   return true;
 }
 
 auto SelectionRestoreManager::initializeSelectionRestoreToken() const -> int {
-  if (!m_state) {
+  if (!state()) {
     return 0;
   }
-  m_state->selectionRestore().restorePending = true;
-  return ++m_state->selectionRestore().restoreToken;
+  state()->selectionRestore().restorePending = true;
+  return ++state()->selectionRestore().restoreToken;
 }
 
 auto SelectionRestoreManager::createRestoreValidationLambda(int scheduledCollectionIndex,
@@ -139,17 +126,17 @@ auto SelectionRestoreManager::createRestoreValidationLambda(int scheduledCollect
       debugLog("[SelectionRestore] validator: collection mismatch - current="
                << (m_currentCollectionIndex ? *m_currentCollectionIndex : -1)
                << "scheduled=" << scheduledCollectionIndex);
-      if (m_state) {
-        m_state->selectionRestore().restorePending = false;
+      if (state()) {
+        state()->selectionRestore().restorePending = false;
       }
       return false;
     }
-    if (!m_state || m_state->selectionRestore().restoreToken != token) {
+    if (!state() || state()->selectionRestore().restoreToken != token) {
       debugLog("[SelectionRestore] validator: token mismatch - state token="
-               << (m_state ? m_state->selectionRestore().restoreToken : -999)
+               << (state() ? state()->selectionRestore().restoreToken : -999)
                << "expected=" << token);
-      if (m_state) {
-        m_state->selectionRestore().restorePending = false;
+      if (state()) {
+        state()->selectionRestore().restorePending = false;
       }
       return false;
     }
@@ -171,7 +158,7 @@ auto SelectionRestoreManager::executeSelectionRestore(int desiredIndex,
     return;
   }
 
-  int total = m_scrollManager->getTotalItems();
+  int total = scrollMgr()->getTotalItems();
   debugLog("[SelectionRestore] total items=" << total);
   if (desiredIndex >= 0 && desiredIndex < total) {
     QPointer<const SelectionRestoreManager> guard(this);
@@ -181,14 +168,14 @@ auto SelectionRestoreManager::executeSelectionRestore(int desiredIndex,
                        [guard, desiredIndex, validator]() {
                          debugLog("[SelectionRestore] timer fired, calling beginSelectionRestore");
                          if (guard && validator()) {
-                           guard->m_interactionManager->beginSelectionRestore(desiredIndex);
+                           guard->interactionMgr()->beginSelectionRestore(desiredIndex);
                          } else {
                            debugLog("[SelectionRestore] timer: guard or validator failed");
                          }
                        });
   }
-  if (m_state) {
-    m_state->selectionRestore().restorePending = false;
+  if (state()) {
+    state()->selectionRestore().restorePending = false;
   }
 }
 
@@ -205,8 +192,8 @@ void SelectionRestoreManager::scheduleSelectionRestore(int desiredIndex, int max
   }
 
   if (desiredIndex < 0) {
-    if (m_interactionManager) {
-      m_interactionManager->cancelPendingSelectionRestore();
+    if (interactionMgr()) {
+      interactionMgr()->cancelPendingSelectionRestore();
     }
     return;
   }
@@ -225,7 +212,7 @@ void SelectionRestoreManager::scheduleSelectionRestore(int desiredIndex, int max
     }
   };
 
-  if (m_scrollManager->getTotalItems() > 0) {
+  if (scrollMgr()->getTotalItems() > 0) {
     // Items already loaded - short delay allows layout to settle
     QTimer::singleShot(UIConstants::Timing::SHORT_DELAY_MS, this, doRestore);
   } else {
@@ -237,7 +224,7 @@ void SelectionRestoreManager::scheduleSelectionRestore(int desiredIndex, int max
     // Connection. Lambda capture by value is required so the handle outlives
     // the surrounding scope.
     auto conn = std::make_shared<QMetaObject::Connection>();
-    *conn = connect(m_scrollManager, &ScrollManager::virtualScrollSetupComplete, this,
+    *conn = connect(scrollMgr(), &ScrollManager::virtualScrollSetupComplete, this,
                     [conn, doRestore, validator]() {
                       QObject::disconnect(*conn);
                       if (validator()) {
@@ -262,20 +249,20 @@ auto SelectionRestoreManager::createSelectionRestoreLambda(int collectionIndex, 
                                                            int token) -> std::function<void()> {
   QPointer<SelectionRestoreManager> guard(this);
   return [guard, collectionIndex, selIdx, token]() {
-    if (!guard || !guard->m_state) {
+    if (!guard || !guard->state()) {
       return;
     }
     if (!guard->m_currentCollectionIndex || *guard->m_currentCollectionIndex != collectionIndex) {
       return;
     }
-    if (guard->m_state->selectionRestore().restoreToken != token) {
+    if (guard->state()->selectionRestore().restoreToken != token) {
       return;
     }
-    if (!guard->m_interactionManager || !guard->m_scrollManager) {
+    if (!guard->interactionMgr() || !guard->scrollMgr()) {
       return;
     }
-    if (guard->m_interactionManager->currentSelectedIndex() != selIdx) {
-      guard->m_interactionManager->beginSelectionRestore(selIdx);
+    if (guard->interactionMgr()->currentSelectedIndex() != selIdx) {
+      guard->interactionMgr()->beginSelectionRestore(selIdx);
     }
   };
 }
@@ -300,28 +287,28 @@ void SelectionRestoreManager::handleSubcollectionRestore(int collectionIndex) {
     return;
   }
 
-  if (!m_state) {
+  if (!state()) {
     return;
   }
 
-  int token = ++m_state->selectionRestore().restoreToken;
+  int token = ++state()->selectionRestore().restoreToken;
 
   // Delay restore to allow filter application and widget materialization -
   // subcollection filter needs time to update virtual view before selection
   QPointer<SelectionRestoreManager> guard(this);
   QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this,
                      [guard, selIdx, collectionIndex, token]() {
-                       if (!guard || !guard->m_interactionManager || !guard->m_state) {
+                       if (!guard || !guard->interactionMgr() || !guard->state()) {
                          return;
                        }
                        if (!guard->m_currentCollectionIndex ||
                            *guard->m_currentCollectionIndex != collectionIndex) {
                          return;
                        }
-                       if (guard->m_state->selectionRestore().restoreToken != token) {
+                       if (guard->state()->selectionRestore().restoreToken != token) {
                          return;
                        }
-                       guard->m_interactionManager->beginSelectionRestore(selIdx);
+                       guard->interactionMgr()->beginSelectionRestore(selIdx);
                      });
 
   scheduleSelectionRestoreVerification(collectionIndex, selIdx, token);

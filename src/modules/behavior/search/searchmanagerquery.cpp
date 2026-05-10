@@ -30,7 +30,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcSearchManager)
   } while (0)
 
 void SearchManager::onSearchTextChanged(const QString &text, int currentSelectedIndex) {
-  if (!m_navigationManager) {
+  if (!navMgr()) {
     return;
   }
 
@@ -67,7 +67,7 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
 
     if (collIndex >= 0) {
       // If we have saved pre-search state, just restore it instead of reloading
-      if (m_scrollManager && m_scrollManager->hasPreSearchState()) {
+      if (scrollMgr() && scrollMgr()->hasPreSearchState()) {
         if (m_preSearchMode == SearchMode::CurrentCollection) {
           // CurrentCollection searches are DB-backed (count + on-demand
           // ranges), so the scroll data backing the search view is different
@@ -87,27 +87,27 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
           }
 
           const int totalItems = (m_preSearchTotalItems >= 0) ? m_preSearchTotalItems
-                                                              : m_scrollManager->getTotalItems();
-          m_scrollManager->setupVirtualScrolling(totalItems, context);
-          m_scrollManager->restorePreSearchState();
+                                                              : scrollMgr()->getTotalItems();
+          scrollMgr()->setupVirtualScrolling(totalItems, context);
+          scrollMgr()->restorePreSearchState();
 
           // Restore selection manually since NavigationManager isn't driving
           // this restoration path.
           int sel = m_preSearchSelectedIndex;
-          if (sel < 0 && m_settingsManager && collIndex >= 0) {
-            sel = m_settingsManager->getLastSelectedItem(collIndex);
+          if (sel < 0 && settingsMgr() && collIndex >= 0) {
+            sel = settingsMgr()->getLastSelectedItem(collIndex);
           }
           if (sel >= 0) {
             emit requestSelectionRestore(sel);
           }
         } else {
           // Other modes use in-memory filter, so clearFilter restores directly.
-          m_scrollManager->clearFilter();
+          scrollMgr()->clearFilter();
           // For pre-search state restoration, we need to restore selection
           // manually since onItemsLoaded won't be called.
           int sel = m_preSearchSelectedIndex;
-          if (sel < 0 && m_settingsManager && collIndex >= 0) {
-            sel = m_settingsManager->getLastSelectedItem(collIndex);
+          if (sel < 0 && settingsMgr() && collIndex >= 0) {
+            sel = settingsMgr()->getLastSelectedItem(collIndex);
           }
           if (sel >= 0) {
             emit requestSelectionRestore(sel);
@@ -117,7 +117,7 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
         // For other modes, safeReloadCollection triggers onItemsLoaded which
         // handles selection restore via calculateSelectionIndex - don't emit
         // requestSelectionRestore here to avoid duplicate/racing restores
-        m_navigationManager->filterItems(QString());
+        navMgr()->filterItems(QString());
       }
       initializeSearchModeForCurrentCollection();
     }
@@ -133,8 +133,8 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
     m_preSearchCollectionIndex = collIndex;
     m_preSearchMode = m_currentSearchMode;
     m_preSearchSelectedIndex = currentSelectedIndex;
-    if (m_preSearchSelectedIndex < 0 && m_settingsManager && collIndex >= 0) {
-      m_preSearchSelectedIndex = m_settingsManager->getLastSelectedItem(collIndex);
+    if (m_preSearchSelectedIndex < 0 && settingsMgr() && collIndex >= 0) {
+      m_preSearchSelectedIndex = settingsMgr()->getLastSelectedItem(collIndex);
     }
     // Save scroll view state for fast restoration when search is cleared.
     // Only CurrentCollection uses the pre-search restore path: it reloads via
@@ -143,9 +143,9 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
     // data backing (and the subcollection/virtual-folder tile composition), so
     // they take the full reload path on clear instead. See bd.
     const bool canUsePreSearchState = (m_currentSearchMode == SearchMode::CurrentCollection);
-    if (m_scrollManager && canUsePreSearchState) {
-      m_preSearchTotalItems = m_scrollManager->getTotalItems();
-      m_scrollManager->savePreSearchState();
+    if (scrollMgr() && canUsePreSearchState) {
+      m_preSearchTotalItems = scrollMgr()->getTotalItems();
+      scrollMgr()->savePreSearchState();
     }
     emit requestClearSelection();
   }
@@ -160,7 +160,7 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
 }
 
 void SearchManager::performDebouncedSearch() {
-  if (!m_navigationManager || !m_searchBar) {
+  if (!navMgr() || !m_searchBar) {
     return;
   }
 
@@ -203,10 +203,10 @@ void SearchManager::performDebouncedSearch() {
     // be incomplete. Use the DB-backed count + range pipeline.
     qCDebug(lcSearchDiag) << "dispatch filterItems(CurrentCollection)";
     // Show loading overlay while DB query is processing
-    if (m_scrollManager) {
-      m_scrollManager->showSearchLoadingOverlay();
+    if (scrollMgr()) {
+      scrollMgr()->showSearchLoadingOverlay();
     }
-    m_navigationManager->filterItems(trimmed);
+    navMgr()->filterItems(trimmed);
     break;
   }
   case SearchMode::CurrentAndSubcollections: {
@@ -216,10 +216,10 @@ void SearchManager::performDebouncedSearch() {
     // The DB-backed path uses FTS/LIKE and returns the full result set.
     // See bd.
     qCDebug(lcSearchDiag) << "dispatch filterItemsCurrentAndSubcollections";
-    if (m_scrollManager) {
-      m_scrollManager->showSearchLoadingOverlay();
+    if (scrollMgr()) {
+      scrollMgr()->showSearchLoadingOverlay();
     }
-    m_navigationManager->filterItemsCurrentAndSubcollections(trimmed);
+    navMgr()->filterItemsCurrentAndSubcollections(trimmed);
     break;
   }
   case SearchMode::AllCollections: {
@@ -227,10 +227,10 @@ void SearchManager::performDebouncedSearch() {
     // memory.
     qCDebug(lcSearchDiag) << "dispatch filterItemsAllCollections";
     // Show loading overlay while DB query is processing
-    if (m_scrollManager) {
-      m_scrollManager->showSearchLoadingOverlay();
+    if (scrollMgr()) {
+      scrollMgr()->showSearchLoadingOverlay();
     }
-    m_navigationManager->filterItemsAllCollections(trimmed);
+    navMgr()->filterItemsAllCollections(trimmed);
     break;
   }
   }
@@ -241,7 +241,7 @@ void SearchManager::scheduleSearchBarRefocusIfNeeded() {
     return;
   }
   // Don't refocus if user intentionally cleared search with Escape key
-  if (m_state && m_state->search().clearedByEscape) {
+  if (state() && state()->search().clearedByEscape) {
     return;
   }
   // Attempt refocus at multiple intervals to handle race conditions where

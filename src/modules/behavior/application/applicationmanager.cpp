@@ -2,6 +2,7 @@
 // order.
 #include "applicationmanager.h"
 
+#include "applicationcontext.h"
 #include "artworkmanager.h"
 #include "cachemanager.h"
 #include "collectionutils.h"
@@ -36,10 +37,16 @@ ApplicationManager::~ApplicationManager() {
   m_cacheInitFuture.waitForFinished();
 }
 
-void ApplicationManager::initialize() {
+void ApplicationManager::initialize(ApplicationContext *ctx) {
   // 1. Create CacheManager and SessionManager instances (fast, no I/O)
   m_cacheManager = std::make_unique<CacheManager>();
   m_sessionManager = std::make_unique<SessionManager>(this);
+
+  // Register early so subsequent managers can read siblings through ctx.
+  if (ctx) {
+    ctx->managers.cacheManager = m_cacheManager.get();
+    ctx->managers.sessionManager = m_sessionManager.get();
+  }
 
   // 2. Initialize session synchronously (needed for selection restore at
   // startup). Session file is small (~160KB) and loads quickly.
@@ -57,13 +64,22 @@ void ApplicationManager::initialize() {
   // 4. ArtworkManager (needs CacheManager - but can work without timestamps
   // loaded)
   m_artworkManager = std::make_unique<ArtworkManager>(m_cacheManager.get(), this);
+  if (ctx) {
+    ctx->managers.artworkManager = m_artworkManager.get();
+  }
 
-  // 5. SettingsManager (needs SessionManager, ArtworkManager, CacheManager)
-  m_settingsManager = std::make_unique<SettingsManager>(
-      m_sessionManager.get(), m_artworkManager.get(), m_cacheManager.get(), this);
+  // 5. SettingsManager — reads SessionManager, ArtworkManager, CacheManager
+  // through ctx (which is already populated above).
+  m_settingsManager = std::make_unique<SettingsManager>(ctx, this);
+  if (ctx) {
+    ctx->managers.settingsManager = m_settingsManager.get();
+  }
 
-  // 6. DatabaseManager (needs SessionManager)
-  m_databaseManager = std::make_unique<DatabaseManager>(m_sessionManager.get(), this);
+  // 6. DatabaseManager — reads SessionManager through ctx.
+  m_databaseManager = std::make_unique<DatabaseManager>(ctx, this);
+  if (ctx) {
+    ctx->managers.databaseManager = m_databaseManager.get();
+  }
 
   // 6b. PlaylistManager — opens its own main-thread connection
   // on the same media.db. Construction is fast; initialize() does the I/O and
@@ -71,9 +87,9 @@ void ApplicationManager::initialize() {
   // CollectionConfigs can be appended to m_collections in the same setup pass.
   m_playlistManager = std::make_unique<PlaylistManager>(this);
 
-  // 7. ScrollManager
+  // 7. ScrollManager — DatabaseManager is now resolved through ApplicationContext
+  // during ScrollManager::setupReferences().
   m_scrollManager = std::make_unique<ScrollManager>(this);
-  m_scrollManager->setDatabaseManager(m_databaseManager.get());
 
   // 8. DetailsPaneManager
   m_detailsPaneManager = std::make_unique<DetailsPaneManager>(this);

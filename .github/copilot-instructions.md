@@ -113,12 +113,15 @@ src/
 
 Additional helper managers owned by their parent feature module (not top-level): `WidgetPoolManager`, `FilterManager`, `SelectionRestoreManager`, `SelectionOverlayManager`, `SearchLoadingOverlay`, `NavigationStackManager`.
 
-**Sub-manager registration:** InteractionManager's owned sub-managers are registered in `ApplicationContext` after setup, enabling sibling access via ctx:
+**Sub-manager registration:** InteractionManager's owned sub-managers are registered in `ApplicationContext` eagerly — *before* any `setupReferences()` runs — by `MainWindow::initializeAppContext()`. The unique_ptrs are constructed in InteractionManager's ctor, so they're addressable as soon as InteractionManager itself exists. Registering them up front is the precondition that lets every manager's setupReferences read siblings exclusively through `ctx->managers.*`.
+
 ```cpp
-// In MainWindow::setupManagerConnections(), after InteractionManager setup:
-m_appContext.animationManager = getInteractionManager()->animationManager();
-m_appContext.selectionManager = getInteractionManager()->selectionManager();
-// ... etc
+// In MainWindow::initializeAppContext(), as soon as InteractionManager is constructed:
+if (auto *im = getInteractionManager()) {
+  m_appContext.managers.animationManager = im->animationManager();
+  m_appContext.managers.selectionManager = im->selectionManager();
+  // ... and so on for every owned sub-manager
+}
 ```
 
 | Manager | Owner | Key Signals |
@@ -229,21 +232,43 @@ State structs from `stateutils.h`:
 
 ### Adding Manager Dependencies
 
-Use dedicated `*Setup` structs for dependency injection:
+`ApplicationContext` is the single source of truth for sibling-manager pointers. Managers must NOT cache sibling-manager pointers as direct member fields. Read them through `m_ctx` at the point of use — typically via thin private inline accessors.
+
 ```cpp
-// In header: define setup struct with needed pointers
+// Header: setup struct only carries ctx + non-manager refs (UI widgets,
+// collection-state pointers, callbacks). Sibling managers are NEVER fields.
 struct ScrollManagerSetup {
+  const ApplicationContext *ctx = nullptr;
   QWidget *gridContainer = nullptr;
-  ArtworkManager *artworkManager = nullptr;
-  // ...
+  // ... non-manager refs only
 };
 
-// In implementation: store references
+class ScrollManager : public QObject {
+private:
+  // ctx is the single source of truth for sibling managers.
+  const ApplicationContext *m_ctx = nullptr;
+
+  // Optional: per-manager inline accessors keep call sites concise.
+  [[nodiscard]] ArtworkManager *artworkMgr() const {
+    return m_ctx ? m_ctx->artworkManager() : nullptr;
+  }
+};
+
+// Implementation: setupReferences stores ctx, then non-manager fields.
 void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
+  m_ctx = setup.ctx;
   m_gridContainer = setup.gridContainer;
-  m_artworkManager = setup.artworkManager;
+}
+
+// Use ctx at call sites (snapshot for repeated reads in a function).
+void ScrollManager::doWork() {
+  if (auto *art = artworkMgr()) {
+    art->scheduleViewportUpdate();
+  }
 }
 ```
+
+`MainWindow::initializeAppContext()` populates `ctx->managers.*` for every top-level manager *and* the InteractionManager-owned sub-managers BEFORE any `setupReferences()` runs. This is required so each manager's setupReferences sees a fully-populated context. Top-level managers that need siblings at construction time (DatabaseManager, SettingsManager) take `const ApplicationContext *ctx` in their constructor; `ApplicationManager::initialize(ApplicationContext *)` populates ctx incrementally as it constructs each manager so later constructors see the earlier ones.
 
 Setup calls are wired in `MainWindow::setupManagers()` and related methods.
 

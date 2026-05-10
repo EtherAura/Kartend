@@ -26,9 +26,8 @@ Q_LOGGING_CATEGORY(lcMouseManager, "kartend.mousemanager")
     }                                                                                              \
   } while (0)
 
-// MouseManagerSetup getter definitions
-SETUP_GETTER_DEF_MGR_SAME(MouseManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_MGR_SAME(MouseManagerSetup, SelectionManager *, SelectionManager, selectionManager)
+// MouseManagerSetup getter definitions (non-manager fields only — sibling
+// managers + InteractionStateHolder are read directly from ctx at runtime).
 SETUP_GETTER_DEF_UI_SAME(MouseManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
 SETUP_GETTER_DEF_UI_SAME(MouseManagerSetup, QWidget *, GridContainer, gridContainer)
 SETUP_GETTER_DEF_COL_SAME(MouseManagerSetup, const QVector<CollectionConfig> *, Collections,
@@ -36,8 +35,6 @@ SETUP_GETTER_DEF_COL_SAME(MouseManagerSetup, const QVector<CollectionConfig> *, 
 SETUP_GETTER_DEF_COL_SAME(MouseManagerSetup, const int *, CurrentCollectionIndex,
                           currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(MouseManagerSetup, GeneralSettings *, GeneralSettings, generalSettings)
-SETUP_GETTER_DEF_MGR_CTX_ONLY(MouseManagerSetup, InteractionStateHolder *, InteractionState,
-                              interactionState)
 
 MouseManager::MouseManager(QObject *parent) : QObject(parent) {}
 
@@ -51,9 +48,7 @@ MouseManager::~MouseManager() {
 }
 
 void MouseManager::setupReferences(const MouseManagerSetup &setup) {
-  m_scrollManager = setup.getScrollManager();
-  m_selectionManager = setup.getSelectionManager();
-  m_state = setup.getInteractionState();
+  m_ctx = setup.ctx;
   m_itemScrollArea = setup.getItemScrollArea();
   m_gridContainer = setup.getGridContainer();
   m_collections = setup.getCollections();
@@ -145,7 +140,9 @@ void MouseManager::startMouseHoldScrolling(const QPoint &clickPos, int selectedI
                                            int gridWidth, int totalItems) {
   Q_UNUSED(clickPos);
 
-  if (!m_scrollManager || !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
+  if (!scroll || !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     return;
   }
   if (totalItems <= 0 || gridWidth <= 0 || selectedItemIndex < 0) {
@@ -171,8 +168,8 @@ void MouseManager::startMouseHoldScrolling(const QPoint &clickPos, int selectedI
   m_clickHoldHorizontalEligible = false;
   m_mouseHoldHorizontalDirection = 0;
   m_mouseHoldHorizontalStartIndex = -1;
-  if (m_state) {
-    m_state->scroll().horizHoldActive = false;
+  if (state) {
+    state->scroll().horizHoldActive = false;
   }
 
   // Compute vertical direction
@@ -199,11 +196,11 @@ void MouseManager::startMouseHoldScrolling(const QPoint &clickPos, int selectedI
   m_mouseHoldTimer->start(interval);
 
   // Signal that hold scrolling started
-  if (m_state) {
-    m_state->artwork().suppressArtwork = true;
-    m_state->artwork().allowDuringSelection = true;
-    m_state->scroll().clickScroll = true;
-    m_state->scroll().clickHoldAdvancing = true;
+  if (state) {
+    state->artwork().suppressArtwork = true;
+    state->artwork().allowDuringSelection = true;
+    state->scroll().clickScroll = true;
+    state->scroll().clickHoldAdvancing = true;
   }
   emit requestOverlayVisibility(true);
   emit holdScrollingStarted(false);
@@ -253,12 +250,12 @@ bool MouseManager::tryStartHorizontalClickHold(int totalItems, int selectedItemI
   m_mouseHoldTimer->start(interval);
 
   // Signal properties
-  if (m_state) {
-    m_state->artwork().suppressArtwork = true;
-    m_state->artwork().allowDuringSelection = true;
-    m_state->scroll().horizHoldActive = true;
-    m_state->scroll().clickScroll = true;
-    m_state->scroll().clickHoldAdvancing = true;
+  if (auto *state = m_ctx ? m_ctx->interactionState() : nullptr) {
+    state->artwork().suppressArtwork = true;
+    state->artwork().allowDuringSelection = true;
+    state->scroll().horizHoldActive = true;
+    state->scroll().clickScroll = true;
+    state->scroll().clickHoldAdvancing = true;
   }
   emit requestOverlayVisibility(true);
   emit holdScrollingStarted(true);
@@ -281,10 +278,10 @@ void MouseManager::stopMouseHoldScrolling() {
   m_mouseHoldHorizontalStartIndex = -1;
 
   // Signal property changes
-  if (m_state) {
-    m_state->scroll().clickScroll = false;
-    m_state->scroll().clickHoldAdvancing = false;
-    m_state->scroll().horizHoldActive = false;
+  if (auto *state = m_ctx ? m_ctx->interactionState() : nullptr) {
+    state->scroll().clickScroll = false;
+    state->scroll().clickHoldAdvancing = false;
+    state->scroll().horizHoldActive = false;
   }
   emit requestOverlayVisibility(false);
 
@@ -321,12 +318,13 @@ int MouseManager::computeVerticalDirection(int selectedItemIndex, int gridWidth)
 }
 
 void MouseManager::onMouseHoldScrollStep() {
-  if (!m_mouseHoldScrolling || !m_scrollManager) {
+  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  if (!m_mouseHoldScrolling || !scroll) {
     stopMouseHoldScrolling();
     return;
   }
 
-  int totalItems = m_scrollManager->getTotalItems();
+  int totalItems = scroll->getTotalItems();
   if (totalItems <= 0 || m_cachedGridWidth <= 0) {
     stopMouseHoldScrolling();
     return;

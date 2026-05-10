@@ -17,12 +17,9 @@
 Q_LOGGING_CATEGORY(lcAttractManager, "kartend.attractmanager")
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Setup struct getters (ctx fallback pattern)
+// Setup struct getters (ctx fallback pattern, non-manager fields only)
 // ─────────────────────────────────────────────────────────────────────────────
 SETUP_GETTER_DEF_UI_SAME(AttractManagerSetup, QScrollArea *, ItemScrollArea, itemScrollArea)
-SETUP_GETTER_DEF_MGR_SAME(AttractManagerSetup, ScrollManager *, ScrollManager, scrollManager)
-SETUP_GETTER_DEF_MGR_SAME(AttractManagerSetup, SelectionManager *, SelectionManager,
-                          selectionManager)
 SETUP_GETTER_DEF_COL_SAME(AttractManagerSetup, const bool *, IsShuttingDown, isShuttingDown)
 SETUP_GETTER_DEF_COL_SAME(AttractManagerSetup, const GeneralSettings *, GeneralSettings,
                           generalSettings)
@@ -46,9 +43,8 @@ AttractManager::AttractManager(QObject *parent)
 AttractManager::~AttractManager() = default;
 
 void AttractManager::setupReferences(const AttractManagerSetup &setup) {
+  m_ctx = setup.ctx;
   m_itemScrollArea = setup.getItemScrollArea();
-  m_scrollManager = setup.getScrollManager();
-  m_selectionManager = setup.getSelectionManager();
   m_generalSettings = setup.getGeneralSettings();
   m_isShuttingDown = setup.getIsShuttingDown();
 
@@ -210,7 +206,8 @@ void AttractManager::startAttract() {
 
   // In Horizontal view the long axis is X, so attract drives the horizontal
   // scrollbar; otherwise the vertical one.
-  const bool isHorizontal = m_scrollManager && m_scrollManager->getMetrics().isHorizontal;
+  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  const bool isHorizontal = scroll && scroll->getMetrics().isHorizontal;
   QScrollBar *bar = isHorizontal ? m_itemScrollArea->horizontalScrollBar()
                                  : m_itemScrollArea->verticalScrollBar();
   const bool scrollable = bar && bar->maximum() > 0;
@@ -278,7 +275,8 @@ void AttractManager::onScrollTick() {
   }
 
   // Pick the bar that runs along the long axis of the current view.
-  const bool isHorizontal = m_scrollManager && m_scrollManager->getMetrics().isHorizontal;
+  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  const bool isHorizontal = scroll && scroll->getMetrics().isHorizontal;
   QScrollBar *bar = isHorizontal ? m_itemScrollArea->horizontalScrollBar()
                                  : m_itemScrollArea->verticalScrollBar();
   if (!bar) {
@@ -325,8 +323,8 @@ void AttractManager::onScrollTick() {
   bar->setValue(next);
 
   // Keep virtual scrolling view up to date
-  if (m_scrollManager) {
-    m_scrollManager->updateVirtualView();
+  if (scroll) {
+    scroll->updateVirtualView();
   }
 }
 
@@ -356,16 +354,18 @@ void AttractManager::onAdvanceSelectionTick() {
     m_advanceSelectionTimer->stop();
     return;
   }
-  if (!m_scrollManager || !m_selectionManager) {
+  ScrollManager *scroll = m_ctx ? m_ctx->scrollManager() : nullptr;
+  SelectionManager *selection = m_ctx ? m_ctx->selectionManager() : nullptr;
+  if (!scroll || !selection) {
     return;
   }
 
-  const int total = m_scrollManager->getTotalItems();
+  const int total = scroll->getTotalItems();
   if (total <= 0) {
     return;
   }
 
-  const int current = m_selectionManager->currentSelectedIndex();
+  const int current = selection->currentSelectedIndex();
   int next;
   if (m_generalSettings->attractModeAdvanceSelectionRandom) {
     // Bias the random pick toward the current scroll direction so selection

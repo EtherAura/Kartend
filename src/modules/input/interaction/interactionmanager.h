@@ -238,6 +238,9 @@ public:
 
 private:
   bool m_navigationInProgress = false;
+  // Set true at the top of the destructor so slots can short-circuit when
+  // late signals fire during sub-manager teardown.
+  bool m_destroying = false;
   InteractionStateHolder m_state;
 
   // Selection restore tokens (restoreToken / restorePending) live in
@@ -334,18 +337,37 @@ private:
   // Attract mode delegation (owned helper)
   std::unique_ptr<AttractManager> m_attractManager;
 
-  ScrollManager *m_scrollManager = nullptr;
-  DetailsPaneManager *m_detailsPaneManager = nullptr;
-  DetailPageManager *m_detailPageManager = nullptr;
-  SettingsManager *m_settingsManager = nullptr;
-  DatabaseManager *m_databaseManager = nullptr;
-  NavigationManager *m_navigationManager = nullptr;
-  // PlaylistManager pointer is sourced from the shared ApplicationContext at
-  // setupReferences time; the context-menu code is its only
-  // current consumer. Borrowed reference, owned by ApplicationManager.
-  class PlaylistManager *m_playlistManager = nullptr;
-  SessionManager *m_sessionManager = nullptr;
-  ArtworkManager *m_artworkManager = nullptr;
+  // ctx is the single source of truth for sibling managers. Inline accessors
+  // below are the canonical read path; never cache sibling-manager pointers
+  // as direct fields.
+  const ApplicationContext *m_ctx = nullptr;
+  [[nodiscard]] ScrollManager *scrollMgr() const {
+    return m_ctx ? m_ctx->scrollManager() : nullptr;
+  }
+  [[nodiscard]] DetailsPaneManager *detailsPaneMgr() const {
+    return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
+  }
+  [[nodiscard]] DetailPageManager *detailPageMgr() const {
+    return m_ctx ? m_ctx->detailPageManager() : nullptr;
+  }
+  [[nodiscard]] SettingsManager *settingsMgr() const {
+    return m_ctx ? m_ctx->settingsManager() : nullptr;
+  }
+  [[nodiscard]] DatabaseManager *databaseMgr() const {
+    return m_ctx ? m_ctx->databaseManager() : nullptr;
+  }
+  [[nodiscard]] NavigationManager *navMgr() const {
+    return m_ctx ? m_ctx->navigationManager() : nullptr;
+  }
+  [[nodiscard]] class PlaylistManager *playlistMgr() const {
+    return m_ctx ? m_ctx->playlistManager() : nullptr;
+  }
+  [[nodiscard]] SessionManager *sessionMgr() const {
+    return m_ctx ? m_ctx->sessionManager() : nullptr;
+  }
+  [[nodiscard]] ArtworkManager *artworkMgr() const {
+    return m_ctx ? m_ctx->artworkManager() : nullptr;
+  }
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
   QWidget *m_gridContainer = nullptr;
   QStackedWidget *m_stackedWidget = nullptr;
@@ -372,7 +394,7 @@ private:
 
   // Setup helpers (split from setupReferences)
   void setupArrowNavigationHandler(const InteractionManagerSetup &setup);
-  void setupAlphabeticNavigationHandler();
+  void setupAlphabeticNavigationHandler(const InteractionManagerSetup &setup);
   void installEventFilters();
 
   void applySelectionStateForIndex(int idx);

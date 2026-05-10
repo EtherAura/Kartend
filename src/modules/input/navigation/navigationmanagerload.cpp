@@ -47,7 +47,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcNavigationManager)
   } while (0)
 
 auto NavigationManager::loadCollectionData(int collectionIndex) -> void {
-  if (!m_databaseManager || !m_collections || !m_currentCollectionIndex) {
+  if (!databaseMgr() || !m_collections || !m_currentCollectionIndex) {
     return;
   }
 
@@ -116,7 +116,7 @@ auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &con
                              "tryUseCachedCountForStartup: SKIP - not initial startup";
     return false;
   }
-  if (!m_sessionManager || !m_generalSettings || !m_generalSettings->rememberSelection) {
+  if (!sessionMgr() || !m_generalSettings || !m_generalSettings->rememberSelection) {
     qCDebug(lcSearchDiag) << "[NavigationManager] tryUseCachedCountForStartup: "
                              "SKIP - no sessionManager or rememberSelection disabled";
     return false;
@@ -131,7 +131,7 @@ auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &con
   // Look up cached viewport with file paths for instant rendering
   const CollectionConfig &cfg = (*m_collections)[context.currentIndex];
   const QString collectionKey = CollectionUtils::hierarchicalNameFor(cfg, *m_collections);
-  SessionManager::CachedViewport cachedVp = m_sessionManager->getCachedViewport(collectionKey);
+  SessionManager::CachedViewport cachedVp = sessionMgr()->getCachedViewport(collectionKey);
 
   if (!cachedVp.isValid()) {
     qCDebug(lcSearchDiag) << "[NavigationManager] tryUseCachedCountForStartup: "
@@ -186,13 +186,13 @@ auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &con
   }
 
   // Set up virtual scrolling immediately with cached count
-  if (m_scrollManager) {
-    m_scrollManager->setInitialScrollIndex(selIdx);
-    m_scrollManager->setupVirtualScrolling(totalItems, minimalContext);
+  if (scrollMgr()) {
+    scrollMgr()->setInitialScrollIndex(selIdx);
+    scrollMgr()->setupVirtualScrolling(totalItems, minimalContext);
 
     // Inject cached items directly into scroll manager for instant display
     // Including cached artwork paths for instant artwork resolution
-    m_scrollManager->injectCachedItems(cachedVp.startIndex, cachedVp.filePaths, cachedVp.fileNames,
+    scrollMgr()->injectCachedItems(cachedVp.startIndex, cachedVp.filePaths, cachedVp.fileNames,
                                        cachedVp.artworkPaths);
   }
 
@@ -206,15 +206,15 @@ auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &con
   }
 
   // Update artwork for visible items - use paths directly from cache
-  if (m_artworkManager) {
-    m_artworkManager->updateViewportArtwork();
+  if (artworkMgr()) {
+    artworkMgr()->updateViewportArtwork();
   }
-  if (m_artworkManager && m_artworkManager->getTimerCoordinator()) {
-    m_artworkManager->getTimerCoordinator()->scheduleViewportUpdate();
+  if (artworkMgr() && artworkMgr()->getTimerCoordinator()) {
+    artworkMgr()->getTimerCoordinator()->scheduleViewportUpdate();
   }
 
   // Schedule selection restore
-  if (selIdx >= 0 && m_interactionManager) {
+  if (selIdx >= 0 && interactionMgr()) {
     scheduleSelectionRestore(selIdx, UIConstants::Selection::RESTORE_STEPS,
                              UIConstants::Selection::RESTORE_STEP_DELAY_MS,
                              UIConstants::Selection::RESTORE_MAX_DELAY_MS);
@@ -318,7 +318,7 @@ CollectionContext NavigationManager::buildExpandedContextForIndex(int collection
 
 void NavigationManager::requestItemCountForContext(const CollectionContext &context,
                                                    const QString &filter) {
-  if (!m_databaseManager || !m_collections) {
+  if (!databaseMgr() || !m_collections) {
     return;
   }
   m_hasItemsQueryContext = true;
@@ -342,7 +342,7 @@ void NavigationManager::requestItemCountForContext(const CollectionContext &cont
   ++m_itemCountRequestToken;
   qCWarning(lcScanFlow) << "requestItemCountForContext: newToken=" << m_itemCountRequestToken
                         << "collIdx=" << context.currentIndex << "filter='" << filter << "'";
-  m_databaseManager->fetchItemCount(m_itemsQueryContext, (*m_collections), m_itemsQueryFilter,
+  databaseMgr()->fetchItemCount(m_itemsQueryContext, (*m_collections), m_itemsQueryFilter,
                                     m_itemCountRequestToken);
 }
 
@@ -366,32 +366,32 @@ void NavigationManager::onItemsLoaded(const QStringList &filePaths,
   int totalItems = subcollections.size() + filePaths.size();
   int selIdx = calculateSelectionIndex(totalItems);
 
-  if (m_scrollManager) {
+  if (scrollMgr()) {
     // Pre-set scroll position to avoid visual jump where list briefly
     // shows at position 0 then jumps to remembered position
     if (selIdx >= 0) {
-      m_scrollManager->setInitialScrollIndex(selIdx);
+      scrollMgr()->setInitialScrollIndex(selIdx);
     }
-    m_scrollManager->setupVirtualScrolling(totalItems, context);
+    scrollMgr()->setupVirtualScrolling(totalItems, context);
   }
 
   resumeItemsPageRendering();
 
-  if (m_artworkManager) {
-    m_artworkManager->updateViewportArtwork();
+  if (artworkMgr()) {
+    artworkMgr()->updateViewportArtwork();
   }
-  if (m_artworkManager && m_artworkManager->getTimerCoordinator()) {
-    m_artworkManager->getTimerCoordinator()->scheduleViewportUpdate();
+  if (artworkMgr() && artworkMgr()->getTimerCoordinator()) {
+    artworkMgr()->getTimerCoordinator()->scheduleViewportUpdate();
   }
 
-  bool pendingRestore = m_state ? m_state->selectionRestore().restorePending : false;
+  bool pendingRestore = state() ? state()->selectionRestore().restorePending : false;
   // Also skip if there's a pending path-based restore (from sort change)
-  bool pendingPathRestore = m_scrollManager && m_scrollManager->hasPendingSelectionRestoreByPath();
+  bool pendingPathRestore = scrollMgr() && scrollMgr()->hasPendingSelectionRestoreByPath();
   debugLog("[SelectionRestore] onItemsLoaded: selIdx="
            << selIdx << "totalItems=" << totalItems << "pendingRestore=" << pendingRestore
            << "pendingPathRestore=" << pendingPathRestore
            << "collectionIndex=" << (*m_currentCollectionIndex));
-  if (selIdx >= 0 && (m_interactionManager) && !pendingRestore && !pendingPathRestore) {
+  if (selIdx >= 0 && (interactionMgr()) && !pendingRestore && !pendingPathRestore) {
     if (lcNavigationManager().isDebugEnabled()) {
       int depth = computeCollectionDepth((*m_currentCollectionIndex));
       debugLog("[SelectionRestore] depth=" << depth << "for collection"
@@ -455,8 +455,8 @@ void NavigationManager::onMediaLibraryError(const ErrorUtils::ErrorContext &erro
   errorWidget->raise();
   m_errorWidget = errorWidget;
 
-  if (m_databaseManager) {
-    m_databaseManager->updateCachedCounts((*m_collections));
+  if (databaseMgr()) {
+    databaseMgr()->updateCachedCounts((*m_collections));
   }
   if (m_refreshTitleCounts) m_refreshTitleCounts();
 }
@@ -464,7 +464,7 @@ void NavigationManager::onMediaLibraryError(const ErrorUtils::ErrorContext &erro
 void NavigationManager::onBackgroundCollectionScanCompleted(const QString &collectionUuid) {
   qCWarning(lcScanFlow) << "onBackgroundCollectionScanCompleted: uuid=" << collectionUuid;
 
-  if (!m_databaseManager || !m_collections || !m_currentCollectionIndex) {
+  if (!databaseMgr() || !m_collections || !m_currentCollectionIndex) {
     qCWarning(lcScanFlow) << "Early return: missing deps";
     return;
   }
@@ -565,11 +565,11 @@ void NavigationManager::onItemsRangeLoaded(int offset, const QStringList &filePa
     return;
   }
   m_pendingRangeGenerations.remove(offset);
-  if (m_scrollManager) {
+  if (scrollMgr()) {
     qCDebug(lcSearchDiag) << QString("onItemsRangeLoaded: forward offset=%1 paths=%2")
                                  .arg(offset)
                                  .arg(filePaths.size());
-    m_scrollManager->receiveItemsRange(offset, filePaths, fileNames, fileToArtworkDir);
+    scrollMgr()->receiveItemsRange(offset, filePaths, fileNames, fileToArtworkDir);
   }
 }
 
@@ -597,5 +597,5 @@ void NavigationManager::fetchItemsRange(int offset, int limit) {
                                .arg(filter)
                                .arg(m_itemsViewGeneration);
 
-  m_databaseManager->fetchItemsRange(context, *m_collections, offset, limit, filter);
+  databaseMgr()->fetchItemsRange(context, *m_collections, offset, limit, filter);
 }
