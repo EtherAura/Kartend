@@ -22,6 +22,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "appearanceeffectspanel.h"
 #include "appearancelistpanel.h"
 #include "appearancetitlespanel.h"
 #include "appearancetoolbarpanel.h"
@@ -317,20 +318,9 @@ void SettingsDialog::loadCollectionToUI(int index) {
   }
 
   // wallpaper parallax
-  if (ui->wallpaperParallaxCheckBox) {
-    ui->wallpaperParallaxCheckBox->setChecked(config.wallpaperParallax);
-  }
-  if (ui->parallaxStrengthSpinBox) {
-    ui->parallaxStrengthSpinBox->setValue(config.parallaxStrength);
-  }
+  ui->appearanceEffectsPanel->load(config);
 
   // toolbar backdrop blur
-  if (ui->toolbarBackdropBlurCheckBox) {
-    ui->toolbarBackdropBlurCheckBox->setChecked(config.toolbarBackdropBlur);
-  }
-  if (ui->backdropBlurRadiusSpinBox) {
-    ui->backdropBlurRadiusSpinBox->setValue(config.backdropBlurRadius);
-  }
 
   updateParentCollectionComboBox(index);
   updateFieldVisibility();
@@ -356,10 +346,7 @@ void SettingsDialog::clearCollectionUI() {
   ui->appearanceToolbarPanel->clear();
   if (ui->vignetteEnabledCheckBox) ui->vignetteEnabledCheckBox->setChecked(false);
   if (ui->vignetteIntensitySpinBox) ui->vignetteIntensitySpinBox->setValue(60);
-  if (ui->wallpaperParallaxCheckBox) ui->wallpaperParallaxCheckBox->setChecked(false);
-  if (ui->parallaxStrengthSpinBox) ui->parallaxStrengthSpinBox->setValue(30);
-  if (ui->toolbarBackdropBlurCheckBox) ui->toolbarBackdropBlurCheckBox->setChecked(false);
-  if (ui->backdropBlurRadiusSpinBox) ui->backdropBlurRadiusSpinBox->setValue(12);
+  ui->appearanceEffectsPanel->clear();
 
   ui->subfoldersPanel->clear();
   if (ui->hideMissingArtworkCheckBox) ui->hideMissingArtworkCheckBox->setChecked(false);

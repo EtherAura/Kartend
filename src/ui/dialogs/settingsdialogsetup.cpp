@@ -289,22 +289,7 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->vignetteIntensitySpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->wallpaperParallaxCheckBox) {
-    connect(ui->wallpaperParallaxCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->parallaxStrengthSpinBox) {
-    connect(ui->parallaxStrengthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->toolbarBackdropBlurCheckBox) {
-    connect(ui->toolbarBackdropBlurCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->backdropBlurRadiusSpinBox) {
-    connect(ui->backdropBlurRadiusSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
+  // Parallax + backdrop blur connections live on AppearanceEffectsPanel.
 }
 
 void SettingsDialog::setupSpacingConnections() {

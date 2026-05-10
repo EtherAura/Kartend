@@ -22,6 +22,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "appearanceeffectspanel.h"
 #include "appearancelistpanel.h"
 #include "appearancetitlespanel.h"
 #include "appearancetoolbarpanel.h"
@@ -187,21 +188,8 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
     config.vignetteIntensity = ui->vignetteIntensitySpinBox->value();
   }
 
-  // wallpaper parallax
-  if (ui->wallpaperParallaxCheckBox) {
-    config.wallpaperParallax = ui->wallpaperParallaxCheckBox->isChecked();
-  }
-  if (ui->parallaxStrengthSpinBox) {
-    config.parallaxStrength = ui->parallaxStrengthSpinBox->value();
-  }
-
-  // toolbar backdrop blur
-  if (ui->toolbarBackdropBlurCheckBox) {
-    config.toolbarBackdropBlur = ui->toolbarBackdropBlurCheckBox->isChecked();
-  }
-  if (ui->backdropBlurRadiusSpinBox) {
-    config.backdropBlurRadius = ui->backdropBlurRadiusSpinBox->value();
-  }
+  // Effects (parallax + backdrop blur) handled by AppearanceEffectsPanel.
+  ui->appearanceEffectsPanel->save(config);
 
   return config;
 }
@@ -322,10 +310,7 @@ auto SettingsDialog::checkColorChanges() const -> bool {
          ui->appearanceToolbarPanel->hasChanges(o) ||
          checkboxChanged(ui->vignetteEnabledCheckBox, o.vignetteEnabled) ||
          spinIntChanged(ui->vignetteIntensitySpinBox, o.vignetteIntensity) ||
-         checkboxChanged(ui->wallpaperParallaxCheckBox, o.wallpaperParallax) ||
-         spinIntChanged(ui->parallaxStrengthSpinBox, o.parallaxStrength) ||
-         checkboxChanged(ui->toolbarBackdropBlurCheckBox, o.toolbarBackdropBlur) ||
-         spinIntChanged(ui->backdropBlurRadiusSpinBox, o.backdropBlurRadius);
+         ui->appearanceEffectsPanel->hasChanges(o);
 }
 
 // Checks list mode field changes

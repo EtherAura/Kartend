@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AppearanceEffectsPanel</class>
+ <widget class="QWidget" name="AppearanceEffectsPanel">
+  <layout class="QVBoxLayout" name="rootLayout">
+   <property name="leftMargin"><number>0</number></property>
+   <property name="topMargin"><number>0</number></property>
+   <property name="rightMargin"><number>0</number></property>
+   <property name="bottomMargin"><number>0</number></property>
+   <property name="spacing"><number>8</number></property>
+   <item>
+    <widget class="QGroupBox" name="appearanceParallaxGroupBox">
+     <property name="title"><string>Wallpaper Parallax</string></property>
+     <layout class="QFormLayout" name="appearanceParallaxFormLayout">
+      <property name="horizontalSpacing"><number>8</number></property>
+      <property name="verticalSpacing"><number>6</number></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_wallpaperParallax"><property name="text"><string>Wallpaper Parallax:</string></property></widget></item>
+      <item row="0" column="1">
+       <layout class="QHBoxLayout" name="wallpaperParallaxLayout">
+        <item><widget class="QCheckBox" name="wallpaperParallaxCheckBox"><property name="text"><string>Enable</string></property><property name="toolTip"><string>Tie the image background's vertical position to the items scroll offset. Image bg only — video bgs are unaffected.</string></property></widget></item>
+        <item><widget class="QLabel" name="label_parallaxStrength"><property name="text"><string>Strength:</string></property></widget></item>
+        <item><widget class="QSpinBox" name="parallaxStrengthSpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>0 = bg locked (no parallax movement); 100 = bg moves in lockstep with content. 30 is a subtle default.</string></property><property name="minimum"><number>0</number></property><property name="maximum"><number>100</number></property><property name="value"><number>30</number></property></widget></item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="appearanceToolbarBlurGroupBox">
+     <property name="title"><string>Toolbar Blur</string></property>
+     <layout class="QFormLayout" name="appearanceEffectsFormLayout">
+      <property name="horizontalSpacing"><number>8</number></property>
+      <property name="verticalSpacing"><number>6</number></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_toolbarBackdropBlur"><property name="text"><string>Toolbar Blur:</string></property></widget></item>
+      <item row="0" column="1">
+       <layout class="QHBoxLayout" name="toolbarBackdropBlurLayout">
+        <item><widget class="QCheckBox" name="toolbarBackdropBlurCheckBox"><property name="text"><string>Enable</string></property><property name="toolTip"><string>Use a blurred copy of the wallpaper as the toolbar background, mimicking macOS Vibrancy. Image bg only — no-op while a video bg is active.</string></property></widget></item>
+        <item><widget class="QLabel" name="label_backdropBlurRadius"><property name="text"><string>Radius:</string></property></widget></item>
+        <item><widget class="QSpinBox" name="backdropBlurRadiusSpinBox"><property name="minimumWidth"><number>110</number></property><property name="toolTip"><string>Blur radius (4 = barely perceptible; 32 = source becomes unreadable).</string></property><property name="minimum"><number>4</number></property><property name="maximum"><number>32</number></property><property name="value"><number>12</number></property></widget></item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item><spacer name="appearanceEffectsVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
