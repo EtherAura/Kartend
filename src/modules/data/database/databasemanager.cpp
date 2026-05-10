@@ -4,6 +4,7 @@
 // split (databasemanager{,paths,worker}.cpp) used to scatter.
 #include "databasemanager.h"
 
+#include <atomic>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -29,8 +30,23 @@ Q_LOGGING_CATEGORY(lcDatabaseManager, "kartend.databasemanager")
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
+namespace {
+/// Monotonic counter that suffixes Qt SQL connection names so multiple
+/// DatabaseManager instances (e.g. one per integration-test fixture) don't
+/// collide in QSqlDatabase's process-global connection registry.
+std::atomic<quint64> g_connectionInstanceId{0};
+} // namespace
+
 DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
-    : QObject(parent), m_ctx(ctx), m_connectionName(QStringLiteral("kartend_main")) {
+    : QObject(parent), m_ctx(ctx) {
+  // Per-instance suffix on every Qt SQL connection name so concurrent
+  // DatabaseManagers (e.g. parallel test fixtures, future split DB modes)
+  // don't collide in QSqlDatabase's process-global connection registry.
+  const quint64 instanceId = g_connectionInstanceId.fetch_add(1, std::memory_order_relaxed);
+  m_connectionName = QStringLiteral("kartend_main_%1").arg(instanceId);
+  const QString queryWorkerName = QStringLiteral("kartend_query_worker_%1").arg(instanceId);
+  const QString scanWorkerName = QStringLiteral("kartend_scan_worker_%1").arg(instanceId);
+
   qRegisterMetaType<CollectionConfig>("CollectionConfig");
   qRegisterMetaType<CollectionContext>("CollectionContext");
   qRegisterMetaType<QList<CollectionConfig>>("QList<CollectionConfig>");
@@ -45,14 +61,14 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
   // ~QThread qFatals when destroyed while running. The destructor handles
   // bounded shutdown explicitly.
   m_workerThread = new QThread();
-  m_worker = new QueryManager(session, QStringLiteral("kartend_query_worker"));
+  m_worker = new QueryManager(session, queryWorkerName);
   m_worker->moveToThread(m_workerThread);
   connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
 
   // Dedicated scan worker (separate thread + separate DB connection) so
   // long scans don't block query operations and UI updates.
   m_scanThread = new QThread();
-  m_scanWorker = new QueryManager(session, QStringLiteral("kartend_scan_worker"));
+  m_scanWorker = new QueryManager(session, scanWorkerName);
   m_scanWorker->moveToThread(m_scanThread);
   connect(m_scanThread, &QThread::finished, m_scanWorker, &QObject::deleteLater);
 

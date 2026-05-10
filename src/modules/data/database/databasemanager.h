@@ -53,6 +53,12 @@ public:
   ~DatabaseManager() override;
 
   void initDatabase();
+
+  /// Qt SQL connection name used by the main-thread connection. Suffixed
+  /// per-instance so multiple DatabaseManagers can coexist without
+  /// colliding in QSqlDatabase's process-global connection registry. Tests
+  /// query this to verify connection cleanup without hardcoding the suffix.
+  [[nodiscard]] QString connectionName() const { return m_connectionName; }
   void loadAllCollections(const QList<CollectionConfig> &allCollections);
   void loadItems(const CollectionContext &context, const QList<CollectionConfig> &allCollections);
   void loadItemsWithSubcollections(const CollectionContext &context,

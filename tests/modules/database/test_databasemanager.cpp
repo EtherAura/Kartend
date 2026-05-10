@@ -90,26 +90,33 @@ void TestDatabaseManager::testConstructDestruct_doesNotCrash() {
 void TestDatabaseManager::testRepeatedConstructDestruct_doesNotLeakConnection() {
   // The destructor calls QSqlDatabase::removeDatabase(connectionName).
   // Repeated construct/destruct cycles must not accumulate stale entries
-  // in the connection pool.
+  // in the connection pool. Connection names are suffixed per-instance, so
+  // the leak check captures each manager's name before destruct and
+  // verifies it's been removed from the registry afterwards.
   m_session = std::make_unique<SessionManager>();
 
-  const QString connName = QStringLiteral("kartend_main");
+  QStringList connNames;
   for (int i = 0; i < 3; ++i) {
-    auto appCtx = makeCtxWithSession(m_session.get()); DatabaseManager db(&appCtx);
-    Q_UNUSED(db);
+    auto appCtx = makeCtxWithSession(m_session.get());
+    DatabaseManager db(&appCtx);
+    connNames.append(db.connectionName());
   }
 
-  // After all destructors have run, the connection must not still be
-  // registered.
-  QVERIFY2(!QSqlDatabase::contains(connName),
-           "DatabaseManager destructor leaked the SQL connection registration");
+  for (const QString &connName : connNames) {
+    QVERIFY2(!QSqlDatabase::contains(connName),
+             qPrintable(QStringLiteral("DatabaseManager destructor leaked the "
+                                       "SQL connection registration: %1")
+                            .arg(connName)));
+  }
 }
 
 void TestDatabaseManager::testDestructAfterInitDatabase_closesConnectionCleanly() {
   m_session = std::make_unique<SessionManager>();
-  const QString connName = QStringLiteral("kartend_main");
+  QString connName;
   {
-    auto appCtx = makeCtxWithSession(m_session.get()); DatabaseManager db(&appCtx);
+    auto appCtx = makeCtxWithSession(m_session.get());
+    DatabaseManager db(&appCtx);
+    connName = db.connectionName();
     // Constructor already calls initDatabase(); calling it again exercises
     // the close+reopen path.
     db.initDatabase();
@@ -157,6 +164,7 @@ void TestDatabaseManager::testDestructDuringActiveScan_returnsWithinBoundedTime(
 
   auto dbCtx = makeCtxWithSession(m_session.get());
   auto *db = new DatabaseManager(&dbCtx);
+  const QString connName = db->connectionName();
   // Trigger a scan via the public API; this dispatches to the worker thread
   // through queued connections.
   db->fetchItemCount(ctx, allCollections, QString());
@@ -181,7 +189,7 @@ void TestDatabaseManager::testDestructDuringActiveScan_returnsWithinBoundedTime(
 
   // The connection must be cleaned up regardless of whether the worker
   // threads were waited or leaked.
-  QVERIFY2(!QSqlDatabase::contains(QStringLiteral("kartend_main")),
+  QVERIFY2(!QSqlDatabase::contains(connName),
            "DatabaseManager destructor did not remove the SQL connection "
            "after a mid-scan teardown");
 }

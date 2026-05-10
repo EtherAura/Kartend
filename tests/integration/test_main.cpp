@@ -72,10 +72,9 @@ int main(int argc, char *argv[]) {
   }
   drainGlobalThreadPool();
   // ApplicationManager lifecycle tests build their own bare ApplicationManager
-  // instances (no MainWindow), so they must run after the MainWindow-based
-  // tests above to avoid SQL connection-name collisions on
-  // "kartend_main" — DatabaseManager removes the connection in its dtor, so
-  // sequencing is sufficient.
+  // instances (no MainWindow). DatabaseManager now suffixes its Qt SQL
+  // connection names per-instance, so this suite no longer needs to be
+  // ordered relative to the MainWindow-based tests above.
   {
     TestApplicationManagerLifecycle appLifecycle;
     status |= QTest::qExec(&appLifecycle, argc, argv);
