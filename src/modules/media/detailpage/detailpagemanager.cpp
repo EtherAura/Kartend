@@ -102,8 +102,8 @@ void DetailPageManager::showForCurrentSelection() {
   // case. Prepend so it's the first thing shown; only added when no typed
   // artwork already covered the same file.
   if (!itemCtx.artworkDir.isEmpty()) {
-    const QString fallback =
-        ArtworkUtils::findArtworkForFile(QFileInfo(itemCtx.filePath).fileName(), itemCtx.artworkDir);
+    const QString fallback = ArtworkUtils::findArtworkForFile(
+        QFileInfo(itemCtx.filePath).fileName(), itemCtx.artworkDir);
     if (!fallback.isEmpty()) {
       bool alreadyListed = false;
       for (const auto &entry : payload.artwork) {

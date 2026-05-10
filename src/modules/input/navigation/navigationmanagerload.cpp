@@ -193,7 +193,7 @@ auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &con
     // Inject cached items directly into scroll manager for instant display
     // Including cached artwork paths for instant artwork resolution
     scrollMgr()->injectCachedItems(cachedVp.startIndex, cachedVp.filePaths, cachedVp.fileNames,
-                                       cachedVp.artworkPaths);
+                                   cachedVp.artworkPaths);
   }
 
   // Show the items page
@@ -343,7 +343,7 @@ void NavigationManager::requestItemCountForContext(const CollectionContext &cont
   qCWarning(lcScanFlow) << "requestItemCountForContext: newToken=" << m_itemCountRequestToken
                         << "collIdx=" << context.currentIndex << "filter='" << filter << "'";
   databaseMgr()->fetchItemCount(m_itemsQueryContext, (*m_collections), m_itemsQueryFilter,
-                                    m_itemCountRequestToken);
+                                m_itemCountRequestToken);
 }
 
 void NavigationManager::onItemsLoaded(const QStringList &filePaths,

@@ -124,8 +124,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
           PathUtils::validateAndExpandPath(owning.mediaDirectory, owning.name);
       const QString uuid = CollectionUtils::computeCollectionUuid(owning.name, expandedMediaDir);
       if (!uuid.isEmpty()) {
-        const ItemMetadataStore::ItemMetadata md =
-            databaseMgr()->loadItemMetadata(uuid, filePath);
+        const ItemMetadataStore::ItemMetadata md = databaseMgr()->loadItemMetadata(uuid, filePath);
         if (!md.manualPath.isEmpty()) {
           QAction *clearManualAction = menu.addAction(tr("Clear manual override"));
           QObject::connect(clearManualAction, &QAction::triggered, this,
@@ -211,8 +210,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       // based on current membership so a single click is always meaningful.
       const QString favouritesId = playlistMgr()->ensureFavoritesPlaylist();
       if (!favouritesId.isEmpty() && !srcUuid.isEmpty()) {
-        const bool alreadyFavorite =
-            playlistMgr()->containsItem(favouritesId, srcUuid, filePath);
+        const bool alreadyFavorite = playlistMgr()->containsItem(favouritesId, srcUuid, filePath);
         QAction *favAction =
             menu.addAction(alreadyFavorite ? tr("Remove from Favorites") : tr("Add to Favorites"));
         QObject::connect(

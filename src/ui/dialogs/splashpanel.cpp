@@ -39,7 +39,8 @@ void SplashPanel::refresh() {
   if (!m_model || !m_model->generalSettings) {
     return;
   }
-  SettingsFormBinding::loadInto(ui->bootSplashCheckBox, m_model->generalSettings->bootSplashEnabled);
+  SettingsFormBinding::loadInto(ui->bootSplashCheckBox,
+                                m_model->generalSettings->bootSplashEnabled);
   SettingsFormBinding::loadInto(ui->resumeFocusSplashCheckBox,
                                 m_model->generalSettings->resumeFocusSplashEnabled);
   SettingsFormBinding::loadInto(ui->bootSplashTitleLineEdit,

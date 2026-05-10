@@ -431,8 +431,7 @@ void NavigationManager::persistCurrentSelection() {
   if (diagEnabled) {
     qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: ENTRY";
   }
-  if ((!interactionMgr()) || (!settingsMgr()) || (!m_currentCollectionIndex) ||
-      (!m_collections)) {
+  if ((!interactionMgr()) || (!settingsMgr()) || (!m_currentCollectionIndex) || (!m_collections)) {
     if (diagEnabled) {
       qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: "
                                "missing deps"
@@ -464,8 +463,7 @@ void NavigationManager::persistCurrentSelection() {
   }
 
   // Also cache the current viewport for instant startup
-  if (scrollMgr() && sessionMgr() && m_generalSettings &&
-      m_generalSettings->rememberSelection) {
+  if (scrollMgr() && sessionMgr() && m_generalSettings && m_generalSettings->rememberSelection) {
     int startIndex = 0;
     int totalItems = 0;
     QStringList filePaths;
@@ -473,7 +471,7 @@ void NavigationManager::persistCurrentSelection() {
     QHash<QString, QString> artworkPaths;
 
     if (scrollMgr()->getCurrentViewportForCache(startIndex, totalItems, filePaths, fileNames,
-                                                    artworkPaths)) {
+                                                artworkPaths)) {
       const CollectionConfig &cfg = (*m_collections)[coll];
       const QString collectionKey = CollectionUtils::hierarchicalNameFor(cfg, *m_collections);
       if (diagEnabled) {
@@ -482,8 +480,8 @@ void NavigationManager::persistCurrentSelection() {
                               << collectionKey << "startIndex=" << startIndex
                               << "totalItems=" << totalItems << "filePaths=" << filePaths.size();
       }
-      sessionMgr()->setCachedViewport(collectionKey, startIndex, totalItems, filePaths,
-                                          fileNames, artworkPaths);
+      sessionMgr()->setCachedViewport(collectionKey, startIndex, totalItems, filePaths, fileNames,
+                                      artworkPaths);
     } else if (diagEnabled) {
       qCDebug(lcSearchDiag) << "[NavigationManager] persistCurrentSelection: "
                                "getCurrentViewportForCache returned false";

@@ -39,8 +39,7 @@ void LauncherPresetsPanel::refresh() {
   ui->launcherPresetsList->clear();
   if (m_presets) {
     for (const LauncherPreset &preset : std::as_const(*m_presets)) {
-      const QString label =
-          preset.name.trimmed().isEmpty() ? tr("(unnamed preset)") : preset.name;
+      const QString label = preset.name.trimmed().isEmpty() ? tr("(unnamed preset)") : preset.name;
       ui->launcherPresetsList->addItem(label);
     }
   }

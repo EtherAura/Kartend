@@ -21,8 +21,8 @@ namespace EventHelpers {
 // - lastActivityMs <= 0 is treated as "no prior activity recorded": no arm.
 // - thresholdMs <= 0 is treated as "feature off": no arm.
 // - Negative deltas (clock skew) collapse to false.
-[[nodiscard]] auto shouldArmFirstClickDelay(qint64 lastActivityMs, qint64 nowMs,
-                                            qint64 thresholdMs) -> bool;
+[[nodiscard]] auto shouldArmFirstClickDelay(qint64 lastActivityMs, qint64 nowMs, qint64 thresholdMs)
+    -> bool;
 
 // Computes the logical (pre-scroll-scale-bounds) target scroll Y so the row
 // containing `selectedIndex` is vertically centered in the viewport.
@@ -41,8 +41,8 @@ namespace EventHelpers {
 // [0, scrollMax] (qBound style) since clamping needs the per-axis maximum
 // which is a Qt-side value.
 [[nodiscard]] auto computeLogicalCenteredScrollY(int selectedIndex, int gridWidth, int itemHeight,
-                                                 int verticalSpacing, int margins,
-                                                 int headerOffset, int viewportHeight) -> int;
+                                                 int verticalSpacing, int margins, int headerOffset,
+                                                 int viewportHeight) -> int;
 
 } // namespace EventHelpers
 

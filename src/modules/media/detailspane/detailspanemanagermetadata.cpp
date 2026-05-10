@@ -331,8 +331,7 @@ void DetailsPaneManager::openArtworkLinksDialog() {
     QList<DetailsPane::GalleryEntry> galleryEntries;
     QHash<QString, QString> overridesByType;
     QStringList customOrder;
-    const auto refreshedRows =
-        db->loadItemArtwork(m_currentItemUuid, m_currentItemFilePath);
+    const auto refreshedRows = db->loadItemArtwork(m_currentItemUuid, m_currentItemFilePath);
     for (const auto &row : refreshedRows) {
       overridesByType.insert(row.artworkType, row.manualPath);
       if (!ItemArtworkStore::isStandardType(row.artworkType)) {

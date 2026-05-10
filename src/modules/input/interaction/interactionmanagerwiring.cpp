@@ -37,8 +37,8 @@ void InteractionManager::connectSearchManagerSignals() {
   connect(m_searchManager.get(), &SearchManager::requestSelectionRestore, this, [this](int index) {
     if (navMgr()) {
       navMgr()->scheduleSelectionRestore(index, UIConstants::Selection::RESTORE_STEPS,
-                                                    UIConstants::Selection::RESTORE_STEP_DELAY_MS,
-                                                    UIConstants::Selection::RESTORE_MAX_DELAY_MS);
+                                         UIConstants::Selection::RESTORE_STEP_DELAY_MS,
+                                         UIConstants::Selection::RESTORE_MAX_DELAY_MS);
     }
   });
   connect(m_searchManager.get(), &SearchManager::requestScrollbarRecovery, this,

@@ -12,6 +12,7 @@
 #include <QThread>
 #include <QTimer>
 
+#include "applicationcontext.h"
 #include "cachedcountsservice.h"
 #include "collectionutils.h"
 #include "databaseschema.h"
@@ -19,7 +20,6 @@
 #include "loggingcategories.h"
 #include "pathutils.h"
 #include "querymanager.h"
-#include "applicationcontext.h"
 #include "sessionmanager.h"
 #include "titlefilter.h"
 #include "uiconstants.h"
@@ -115,13 +115,13 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
 
   // Cached-counts service: bridges a debounced main-thread refresh request to
   // QueryManager::updateCachedCounts and back to SessionManager + UI.
-  m_cachedCounts =
-      new CachedCountsService(session, UIConstants::Timing::SHORT_DELAY_MS, this);
+  m_cachedCounts = new CachedCountsService(session, UIConstants::Timing::SHORT_DELAY_MS, this);
   connect(m_cachedCounts, &CachedCountsService::dispatchToWorker, m_worker,
           &QueryManager::updateCachedCounts);
   connect(m_worker, &QueryManager::cachedCountsComputed, m_cachedCounts,
           &CachedCountsService::onWorkerComputed);
-  connect(m_cachedCounts, &CachedCountsService::updated, this, &DatabaseManager::cachedCountsUpdated);
+  connect(m_cachedCounts, &CachedCountsService::updated, this,
+          &DatabaseManager::cachedCountsUpdated);
 
   m_workerThread->start();
   m_scanThread->start();
@@ -312,8 +312,8 @@ QString DatabaseManager::resolveFilePath(const QString &rawEntry,
   return m_fileMapCache.resolveFilePath(rawEntry, context);
 }
 
-QString DatabaseManager::resolveRelativeFilePath(
-    const QString &rawFileName, const QHash<QString, QString> &fileNames) const {
+QString DatabaseManager::resolveRelativeFilePath(const QString &rawFileName,
+                                                 const QHash<QString, QString> &fileNames) const {
   return m_fileMapCache.resolveRelativeFilePath(rawFileName, fileNames);
 }
 
@@ -332,8 +332,9 @@ qint64 DatabaseManager::countCollectionByUuid(const QString &collectionUuid) con
   return countQuery.value(0).toLongLong();
 }
 
-qint64 DatabaseManager::countCollectionRecursive(int collectionIndex,
-                                                 const QList<CollectionConfig> &allCollections) const {
+qint64
+DatabaseManager::countCollectionRecursive(int collectionIndex,
+                                          const QList<CollectionConfig> &allCollections) const {
   if (!CollectionUtils::isValidIndex(collectionIndex, &allCollections)) {
     return 0;
   }
@@ -403,8 +404,8 @@ void DatabaseManager::updateCachedCounts(const QList<CollectionConfig> &allColle
   QStringList uuids;
   uuids.reserve(collectionCount);
   for (int i = 0; i < collectionCount; ++i) {
-    const QString expandedMediaDir = PathUtils::validateAndExpandPath(
-        allCollections[i].mediaDirectory, allCollections[i].name);
+    const QString expandedMediaDir =
+        PathUtils::validateAndExpandPath(allCollections[i].mediaDirectory, allCollections[i].name);
     const QString uuid =
         CollectionUtils::computeCollectionUuid(allCollections[i].name, expandedMediaDir);
     uuids.append(uuid);
@@ -432,8 +433,8 @@ QDateTime DatabaseManager::loadCollectionLastScanned(const QString &collectionUu
 
 // ─── ItemMetadataStore facades ────────────────────────────────────────────────
 
-ItemMetadataStore::ItemMetadata
-DatabaseManager::loadItemMetadata(const QString &collectionUuid, const QString &path) const {
+ItemMetadataStore::ItemMetadata DatabaseManager::loadItemMetadata(const QString &collectionUuid,
+                                                                  const QString &path) const {
   auto result = ItemMetadataStore::load(const_cast<QSqlDatabase &>(m_db), collectionUuid, path);
   if (result.isError()) {
     ErrorUtils::logError(result.error());
@@ -457,8 +458,8 @@ bool DatabaseManager::saveItemMetadata(const ItemMetadataStore::ItemMetadata &me
 
 // ─── ItemArtworkStore facades ─────────────────────────────────────────────────
 
-QList<ItemArtworkStore::ItemArtwork>
-DatabaseManager::loadItemArtwork(const QString &collectionUuid, const QString &path) const {
+QList<ItemArtworkStore::ItemArtwork> DatabaseManager::loadItemArtwork(const QString &collectionUuid,
+                                                                      const QString &path) const {
   auto result =
       ItemArtworkStore::loadAllForItem(const_cast<QSqlDatabase &>(m_db), collectionUuid, path);
   if (result.isError()) {
@@ -491,8 +492,8 @@ bool DatabaseManager::removeItemArtwork(const QString &collectionUuid, const QSt
 
 // ─── UsageStatsStore facades ──────────────────────────────────────────────────
 
-UsageStatsStore::ItemUsageStats
-DatabaseManager::loadItemUsageStats(const QString &collectionUuid, const QString &path) const {
+UsageStatsStore::ItemUsageStats DatabaseManager::loadItemUsageStats(const QString &collectionUuid,
+                                                                    const QString &path) const {
   auto result =
       UsageStatsStore::loadForItem(const_cast<QSqlDatabase &>(m_db), collectionUuid, path);
   if (result.isError()) {

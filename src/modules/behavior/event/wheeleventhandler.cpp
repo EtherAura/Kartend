@@ -203,7 +203,8 @@ bool WheelEventHandler::handleEvent(QObject * /*obj*/, QEvent *event) {
     return true;
   }
 
-  const int targetPos = computeTargetScroll(selectedIndex, collection, axisScrollBar, horizontalView);
+  const int targetPos =
+      computeTargetScroll(selectedIndex, collection, axisScrollBar, horizontalView);
 
   if (mouseMgr()) {
     mouseMgr()->setWheelScrolling(true);

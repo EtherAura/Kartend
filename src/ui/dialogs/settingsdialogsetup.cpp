@@ -18,10 +18,10 @@
 #include <QPixmapCache>
 #include <QPushButton>
 #include <QScrollArea>
-#include <QSpinBox>
 #include <QScrollBar>
 #include <QSet>
 #include <QSignalBlocker>
+#include <QSpinBox>
 #include <QTimer>
 #include <QToolTip>
 #include <QTreeWidget>

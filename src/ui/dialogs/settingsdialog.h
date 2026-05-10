@@ -5,13 +5,13 @@
 #include "collectionremover.h"
 #include "collectionutils.h"
 #include "settingsmodel.h"
+#include <memory>
 #include <QDialog>
 #include <QHash>
 #include <QList>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QTreeWidgetItem>
-#include <memory>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {

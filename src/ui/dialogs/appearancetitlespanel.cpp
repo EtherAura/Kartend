@@ -34,8 +34,7 @@ void AppearanceTitlesPanel::setModel(SettingsModel *model) {
 
 void AppearanceTitlesPanel::load() {
   if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 ||
-      *m_model->currentIndex >= m_model->workingCollections->size()) {
+      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
     return;
   }
   const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
@@ -55,8 +54,7 @@ void AppearanceTitlesPanel::clear() {
 
 void AppearanceTitlesPanel::save() const {
   if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 ||
-      *m_model->currentIndex >= m_model->workingCollections->size()) {
+      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
     return;
   }
   CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];

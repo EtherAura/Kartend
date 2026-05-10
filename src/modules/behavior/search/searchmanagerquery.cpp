@@ -98,8 +98,8 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
             context.excludeSubfoldersFromSort = m_generalSettings->excludeSubfoldersFromSort;
           }
 
-          const int totalItems = (m_preSearchTotalItems >= 0) ? m_preSearchTotalItems
-                                                              : scrollMgr()->getTotalItems();
+          const int totalItems =
+              (m_preSearchTotalItems >= 0) ? m_preSearchTotalItems : scrollMgr()->getTotalItems();
           scrollMgr()->setupVirtualScrolling(totalItems, context);
           scrollMgr()->restorePreSearchState();
 

@@ -424,8 +424,7 @@ void MainWindow::connectDatabaseManager() {
                    &MainWindow::onCollectionScanCompletedStartup);
   QObject::connect(db, &DatabaseManager::collectionScanCompleted, this,
                    &MainWindow::onCollectionScanCompletedOverlay);
-  QObject::connect(db, &DatabaseManager::scanItemsProgress, this,
-                   &MainWindow::onScanItemsProgress);
+  QObject::connect(db, &DatabaseManager::scanItemsProgress, this, &MainWindow::onScanItemsProgress);
 
   // SettingsManager → MainWindow / DetailsPaneManager
   QObject::connect(settings, &SettingsManager::collectionsModified, this,
@@ -477,8 +476,7 @@ void MainWindow::connectScrollManager() {
                    &MainWindow::onListColumnWidthChanged);
   QObject::connect(scroll, &ScrollManager::listArtworkColumnWidthChanged, this,
                    &MainWindow::onListArtworkColumnWidthChanged);
-  QObject::connect(scroll, &ScrollManager::filterChanged, this,
-                   &MainWindow::onScrollFilterChanged);
+  QObject::connect(scroll, &ScrollManager::filterChanged, this, &MainWindow::onScrollFilterChanged);
 
   // ArtworkManager::TimerCoordinator → MainWindow
   if (artwork) {

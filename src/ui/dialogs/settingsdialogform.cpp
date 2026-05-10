@@ -243,7 +243,8 @@ void SettingsDialog::updateDeleteButtonState() {
     // Enable delete when there's a valid collection selected
     bool hasSelection =
         currentTreeItem && m_treeManager && m_treeManager->contains(currentTreeItem);
-    ui->collectionsTreeShell->removeCollectionButton()->setEnabled(hasSelection && !collections.isEmpty());
+    ui->collectionsTreeShell->removeCollectionButton()->setEnabled(hasSelection &&
+                                                                   !collections.isEmpty());
   }
 }
 

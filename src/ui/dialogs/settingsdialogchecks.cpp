@@ -12,12 +12,12 @@
 #include <QFontDialog>
 #include <QInputDialog>
 #include <QMessageBox>
-#include <QSpinBox>
 #include <QPixmapCache>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSet>
 #include <QSignalBlocker>
+#include <QSpinBox>
 #include <QTimer>
 #include <QToolTip>
 #include <QTreeWidget>

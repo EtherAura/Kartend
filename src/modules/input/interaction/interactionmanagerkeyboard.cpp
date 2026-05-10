@@ -280,7 +280,7 @@ auto InteractionManager::handleEscapeKey() -> bool {
         }
         if (sel >= 0) {
           navMgr()->scheduleSelectionRestore(sel, kRestoreAttempts, kRestoreIntervalMs,
-                                                        kRestoreTimeoutMs);
+                                             kRestoreTimeoutMs);
         }
       }
     } else {

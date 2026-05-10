@@ -95,8 +95,7 @@ public:
 
   virtual void recordHistoryEntry(const QString &collectionUuid, const QString &path,
                                   const QString &name, int maxEntries) = 0;
-  [[nodiscard]] virtual QList<HistoryStore::HistoryEntry>
-  loadRecentHistory(int limit) const = 0;
+  [[nodiscard]] virtual QList<HistoryStore::HistoryEntry> loadRecentHistory(int limit) const = 0;
   [[nodiscard]] virtual qint64 historyEntryCount() const = 0;
   virtual bool clearHistory() = 0;
 

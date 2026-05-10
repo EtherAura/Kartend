@@ -45,8 +45,7 @@ AppearanceColorsPanel::AppearanceColorsPanel(QWidget *parent)
           [this](const QString &) { emit changed(); });
   connect(ui->listAltRowColorEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { emit changed(); });
-  connect(ui->vignetteEnabledCheckBox, &QCheckBox::toggled, this,
-          [this](bool) { emit changed(); });
+  connect(ui->vignetteEnabledCheckBox, &QCheckBox::toggled, this, [this](bool) { emit changed(); });
   connect(ui->vignetteIntensitySpinBox, onSpin, this, [this](int) { emit changed(); });
 
   // Global title-tint spin boxes → write through to GeneralSettings pointee +
@@ -95,8 +94,7 @@ void AppearanceColorsPanel::setModel(SettingsModel *model) {
 
 void AppearanceColorsPanel::load() {
   if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 ||
-      *m_model->currentIndex >= m_model->workingCollections->size()) {
+      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
     return;
   }
   const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
@@ -136,8 +134,7 @@ void AppearanceColorsPanel::clear() {
 
 void AppearanceColorsPanel::save() const {
   if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 ||
-      *m_model->currentIndex >= m_model->workingCollections->size()) {
+      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
     return;
   }
   CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];

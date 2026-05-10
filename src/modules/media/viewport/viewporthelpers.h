@@ -29,8 +29,8 @@ namespace ViewportHelpers {
 // - instantPositioning (initial positioning)
 // - wrapSequenceActive (active wrap sequence)
 [[nodiscard]] auto computeForceImmediate(bool immediate, bool forceImmediateCenter,
-                                          bool isWrappingNavigation, bool restoringSelection,
-                                          bool instantPositioning, bool wrapSequenceActive) -> bool;
+                                         bool isWrappingNavigation, bool restoringSelection,
+                                         bool instantPositioning, bool wrapSequenceActive) -> bool;
 
 } // namespace ViewportHelpers
 

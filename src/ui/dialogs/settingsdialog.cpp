@@ -371,7 +371,8 @@ void SettingsDialog::setupButtonConnections() {
 
   connect(ui->buttonBox, &QDialogButtonBox::rejected, this, &SettingsDialog::reject);
 
-  connect(ui->collectionsTreeShell->addCollectionButton(), &QPushButton::clicked, this, &SettingsDialog::addCollection);
+  connect(ui->collectionsTreeShell->addCollectionButton(), &QPushButton::clicked, this,
+          &SettingsDialog::addCollection);
   connect(ui->collectionsTreeShell->removeCollectionButton(), &QPushButton::clicked, this,
           &SettingsDialog::removeCollection);
   if (ui->collectionsTreeShell->duplicateCollectionButton()) {
@@ -385,8 +386,10 @@ void SettingsDialog::setupButtonConnections() {
   // wire the Settings Mode selector. Default is `Current` to
   // preserve legacy single-collection save behavior.
   if (ui->collectionsTreeShell->settingsScopeComboBox()) {
-    ui->collectionsTreeShell->settingsScopeComboBox()->setCurrentIndex(static_cast<int>(m_settingsScope));
-    connect(ui->collectionsTreeShell->settingsScopeComboBox(), QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+    ui->collectionsTreeShell->settingsScopeComboBox()->setCurrentIndex(
+        static_cast<int>(m_settingsScope));
+    connect(ui->collectionsTreeShell->settingsScopeComboBox(),
+            QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::onSettingsScopeChanged);
   }
   connect(ui->launcherPanel->browseLauncherButton(), &QPushButton::clicked, this,

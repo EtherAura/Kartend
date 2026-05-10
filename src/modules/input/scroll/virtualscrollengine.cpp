@@ -157,8 +157,7 @@ void VirtualScrollEngine::removeUnneededWidgets(const QSet<int> &needed) {
 
 void VirtualScrollEngine::updateArtworkIfAllowed() {
   ArtworkManager *art = m_owner->m_ctx ? m_owner->m_ctx->artworkManager() : nullptr;
-  InteractionStateHolder *state =
-      m_owner->m_ctx ? m_owner->m_ctx->interactionState() : nullptr;
+  InteractionStateHolder *state = m_owner->m_ctx ? m_owner->m_ctx->interactionState() : nullptr;
   if (!QApplication::closingDown() && art) {
     const bool suppressArtwork = state && state->artwork().suppressArtwork;
     const bool allowDuringSelection = state && state->artwork().allowDuringSelection;

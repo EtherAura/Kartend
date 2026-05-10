@@ -247,8 +247,7 @@ void DetailsPaneManager::refreshCollectionSummary() {
   }
 
   if (auto *db = m_ctx ? m_ctx->databaseManager() : nullptr; db) {
-    summary.itemCount =
-        db->countCollectionRecursive(m_currentCollectionIndex, *m_collections);
+    summary.itemCount = db->countCollectionRecursive(m_currentCollectionIndex, *m_collections);
     // UUID keying must match how DatabaseManager computes it elsewhere:
     // validateAndExpandPath without a raw fallback. Mismatched casing or
     // a missing-directory empty-string here would make last_scanned silently

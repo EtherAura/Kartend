@@ -37,8 +37,8 @@ namespace ScrollHelpers {
 // Picks the database range-chunk size for prefetching as the user drags the
 // scrollbar. showAllSubcollectionItems with very large flattened lists
 // switches to the larger chunk so we issue fewer DB round-trips.
-[[nodiscard]] auto chunkSizeFor(bool showAllSubcollectionItems, int totalItems,
-                                int largeThreshold, int defaultChunk, int largeChunk) -> int;
+[[nodiscard]] auto chunkSizeFor(bool showAllSubcollectionItems, int totalItems, int largeThreshold,
+                                int defaultChunk, int largeChunk) -> int;
 
 // Result of the slider-position prefetch math. `chunkStart` and `chunkSize`
 // are passed straight to ItemWidgetFactory::prefetchRangeAt; `valid` is
@@ -64,10 +64,10 @@ struct SliderPrefetchPlan {
 //
 // The plan's `chunkStart` is clamped to a non-negative multiple of chunkSize.
 [[nodiscard]] auto computeSliderPrefetchPlan(int sliderValue, int itemHeight, int itemsPerRow,
-                                              int subcollectionCount, int virtualFolderCount,
-                                              bool showAllSubcollectionItems, int totalItems,
-                                              int largeThreshold, int defaultChunk,
-                                              int largeChunk) -> SliderPrefetchPlan;
+                                             int subcollectionCount, int virtualFolderCount,
+                                             bool showAllSubcollectionItems, int totalItems,
+                                             int largeThreshold, int defaultChunk, int largeChunk)
+    -> SliderPrefetchPlan;
 
 } // namespace ScrollHelpers
 

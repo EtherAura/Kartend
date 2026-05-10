@@ -131,7 +131,6 @@ private:
   [[nodiscard]] ItemWidget *itemWidgetForObject(QObject *obj) const;
   [[nodiscard]] int visualIndexForWidget(ItemWidget *widget) const;
 
-
   // ctx is the single source of truth for sibling managers + state. Inline
   // accessors below are the canonical read path.
   const ApplicationContext *m_ctx = nullptr;
@@ -141,9 +140,7 @@ private:
   [[nodiscard]] KeyboardManager *keyboardMgr() const {
     return m_ctx ? m_ctx->keyboardManager() : nullptr;
   }
-  [[nodiscard]] MouseManager *mouseMgr() const {
-    return m_ctx ? m_ctx->mouseManager() : nullptr;
-  }
+  [[nodiscard]] MouseManager *mouseMgr() const { return m_ctx ? m_ctx->mouseManager() : nullptr; }
   [[nodiscard]] AnimationManager *animMgr() const {
     return m_ctx ? m_ctx->animationManager() : nullptr;
   }

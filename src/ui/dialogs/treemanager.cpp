@@ -218,8 +218,8 @@ void TreeManager::populateLinkedAppearances() {
           (c.parentCollectionIndex >= 0 && c.parentCollectionIndex < live.size())
               ? live[c.parentCollectionIndex].name
               : QObject::tr("(root)");
-      linkedItem->setToolTip(0,
-                             QObject::tr("Linked appearance — primary parent: %1").arg(primaryName));
+      linkedItem->setToolTip(
+          0, QObject::tr("Linked appearance — primary parent: %1").arg(primaryName));
       // Strip edit/drag/drop — linked items are read-only mirrors.
       Qt::ItemFlags flags = linkedItem->flags();
       flags &= ~(Qt::ItemIsEditable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);

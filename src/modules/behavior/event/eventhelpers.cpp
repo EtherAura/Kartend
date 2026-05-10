@@ -32,7 +32,8 @@ auto computeLogicalCenteredScrollY(int selectedIndex, int gridWidth, int itemHei
   if (viewportHeight <= 0) {
     return 0;
   }
-  int itemY = GridUtils::computeItemY(selectedIndex, gridWidth, itemHeight, verticalSpacing, margins);
+  int itemY =
+      GridUtils::computeItemY(selectedIndex, gridWidth, itemHeight, verticalSpacing, margins);
   itemY += headerOffset;
   return itemY - (viewportHeight - itemHeight) / 2;
 }

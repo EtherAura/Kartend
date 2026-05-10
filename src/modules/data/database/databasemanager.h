@@ -90,8 +90,7 @@ public:
   /// connection. Returns an invalid QDateTime when the row is
   /// missing or the query fails — callers use that as the "never scanned"
   /// signal.
-  [[nodiscard]] QDateTime
-  loadCollectionLastScanned(const QString &collectionUuid) const override;
+  [[nodiscard]] QDateTime loadCollectionLastScanned(const QString &collectionUuid) const override;
 
   /// Loads extended metadata for the given (collectionUuid, path) using the
   /// main-thread connection. Returns an empty `ItemMetadata` (with the keys

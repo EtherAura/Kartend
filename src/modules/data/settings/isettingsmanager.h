@@ -46,14 +46,12 @@ public:
   virtual void setLastSelectedItem(int collectionIndex, int itemIndex) = 0;
   [[nodiscard]] virtual int getLastSelectedItem(int collectionIndex) const = 0;
 
-  virtual void
-  handleReloadRequired(const QList<CollectionConfig> &collections,
-                       const QList<CollectionConfig> &newCollections,
-                       const QList<CollectionConfig> &originalCollections,
-                       int viewingCollectionIndex, DetailsPaneManager *detailsPaneManager,
-                       ScrollManager *scrollManager, NavigationManager *navigationManager,
-                       ArtworkManager *artworkManager, CacheManager *cacheManager,
-                       int currentCollectionIndex) = 0;
+  virtual void handleReloadRequired(
+      const QList<CollectionConfig> &collections, const QList<CollectionConfig> &newCollections,
+      const QList<CollectionConfig> &originalCollections, int viewingCollectionIndex,
+      DetailsPaneManager *detailsPaneManager, ScrollManager *scrollManager,
+      NavigationManager *navigationManager, ArtworkManager *artworkManager,
+      CacheManager *cacheManager, int currentCollectionIndex) = 0;
 
   virtual void handleLayoutChanges(QWidget *parent, const QList<CollectionConfig> &collections,
                                    int viewingCollectionIndex, bool titleChangedForView,

@@ -26,11 +26,11 @@
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "menucontroller.h"
-#include "toolbarcontroller.h"
 #include "navigationmanager.h"
 #include "playlistmanager.h"
 #include "propertyutils.h"
 #include "scrollmanager.h"
+#include "toolbarcontroller.h"
 
 #include "detailpageoverlay.h"
 #include "detailspanemanager.h"
@@ -44,9 +44,9 @@
 #include "stringutils.h"
 #include "textzoomhud.h"
 #include "timerutils.h"
-#include "videothumbnailextractor.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
+#include "videothumbnailextractor.h"
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcMainWindow)

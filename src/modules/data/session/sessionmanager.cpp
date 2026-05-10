@@ -73,8 +73,7 @@ void SessionManager::initialize() {
     if (doc.isNull() || !doc.isObject()) {
       qCWarning(lcSessionManager) << "Failed to parse session metadata at" << metadataPath
                                   << "- error:" << parseError.errorString()
-                                  << "offset:" << parseError.offset
-                                  << "(session state will reset)";
+                                  << "offset:" << parseError.offset << "(session state will reset)";
     } else {
       QJsonObject root = doc.object();
       readCollectionsData(root);

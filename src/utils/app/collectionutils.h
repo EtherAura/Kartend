@@ -842,7 +842,7 @@ struct GeneralSettings {
   // selection without requiring a click. Kept as a global interaction preference
   // because it changes input semantics application-wide.
   bool selectItemOnHover = false;
-  int pixmapCacheSizeMB = 50;             // Default 50MB, user configurable
+  int pixmapCacheSizeMB = 50; // Default 50MB, user configurable
   // Hard cap per video-thumbnail extraction. If the decoder hasn't produced a
   // frame in this window, the request is abandoned and a null pixmap is cached
   // so the queue advances. Tunable for slow systems where the default 4s can

@@ -61,7 +61,7 @@ namespace SelectionHelpers {
 // `doubleClickIntervalMs <= 0` is treated as no window (false).
 // Negative deltas (clock skew, wrap) collapse to false.
 [[nodiscard]] auto isRowChangePendingValid(int pendingIndex, qint64 pendingMs, qint64 nowMs,
-                                            int doubleClickIntervalMs) -> bool;
+                                           int doubleClickIntervalMs) -> bool;
 
 } // namespace SelectionHelpers
 

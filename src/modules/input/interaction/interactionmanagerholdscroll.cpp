@@ -201,8 +201,8 @@ void InteractionManager::onMouseHoldScrollStep(int direction, bool isHorizontal)
   const int stepSize = InteractionHelpers::stepSizeForViewType(viewType, gridWidth);
 
   const bool wrap = m_generalSettings ? m_generalSettings->wrapNavigation : false;
-  const auto step =
-      InteractionHelpers::computeVerticalHoldStep(currentIndex, direction, stepSize, totalItems, wrap);
+  const auto step = InteractionHelpers::computeVerticalHoldStep(currentIndex, direction, stepSize,
+                                                                totalItems, wrap);
   int nextIndex = step.nextIndex;
   const bool didWrap = step.didWrap;
 

@@ -148,8 +148,8 @@ void ArrowNavigationHandler::handleArrowKeyNavigation(int direction, bool vertic
 }
 
 void ArrowNavigationHandler::handleRepeatStep() {
-  if (!keyboardMgr() || !keyboardMgr()->isRepeating() ||
-      !keyboardMgr()->isPhysicalKeyDown() || keyboardMgr()->repeatDelta() == 0) {
+  if (!keyboardMgr() || !keyboardMgr()->isRepeating() || !keyboardMgr()->isPhysicalKeyDown() ||
+      keyboardMgr()->repeatDelta() == 0) {
     if (keyboardMgr()) {
       keyboardMgr()->stopRepeat();
     }
@@ -287,10 +287,9 @@ void ArrowNavigationHandler::handleStopRepeat(bool suppressRecentering) {
     // Delay re-centering to allow scroll animations to settle after key repeat
     // stops
     QTimer::singleShot(UIConstants::Mouse::STOP_REPEAT_RECENTER_DELAY_MS, this, [this]() {
-      bool stillActive =
-          keyboardMgr()
-              ? keyboardMgr()->isContinuousScrollActive()
-              : (viewportMgr() ? viewportMgr()->continuousScrollActive() : false);
+      bool stillActive = keyboardMgr()
+                             ? keyboardMgr()->isContinuousScrollActive()
+                             : (viewportMgr() ? viewportMgr()->continuousScrollActive() : false);
       const int sel = getCurrentSelection();
       if (!QApplication::closingDown() && sel >= 0 && !stillActive) {
         emit requestRecenter();

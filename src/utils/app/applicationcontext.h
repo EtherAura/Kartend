@@ -167,14 +167,18 @@ struct ApplicationContext {
   [[nodiscard]] ArtworkManager *artworkManager() const { return managers.artworkManager; }
   [[nodiscard]] ISettingsManager *settingsManager() const { return managers.settingsManager; }
   [[nodiscard]] SessionManager *sessionManager() const { return managers.sessionManager; }
-  [[nodiscard]] DetailsPaneManager *detailsPaneManager() const { return managers.detailsPaneManager; }
+  [[nodiscard]] DetailsPaneManager *detailsPaneManager() const {
+    return managers.detailsPaneManager;
+  }
   [[nodiscard]] DetailPageManager *detailPageManager() const { return managers.detailPageManager; }
   [[nodiscard]] IDatabaseManager *databaseManager() const { return managers.databaseManager; }
   [[nodiscard]] NavigationManager *navigationManager() const { return managers.navigationManager; }
   [[nodiscard]] AnimationManager *animationManager() const { return managers.animationManager; }
   [[nodiscard]] SelectionManager *selectionManager() const { return managers.selectionManager; }
   [[nodiscard]] ViewportManager *viewportManager() const { return managers.viewportManager; }
-  [[nodiscard]] InteractionManager *interactionManager() const { return managers.interactionManager; }
+  [[nodiscard]] InteractionManager *interactionManager() const {
+    return managers.interactionManager;
+  }
   [[nodiscard]] MouseManager *mouseManager() const { return managers.mouseManager; }
   [[nodiscard]] KeyboardManager *keyboardManager() const { return managers.keyboardManager; }
   [[nodiscard]] EventManager *eventManager() const { return managers.eventManager; }
@@ -182,7 +186,9 @@ struct ApplicationContext {
   [[nodiscard]] LaunchManager *launchManager() const { return managers.launchManager; }
   [[nodiscard]] CacheManager *cacheManager() const { return managers.cacheManager; }
   [[nodiscard]] PlaylistManager *playlistManager() const { return managers.playlistManager; }
-  [[nodiscard]] InteractionStateHolder *interactionState() const { return managers.interactionState; }
+  [[nodiscard]] InteractionStateHolder *interactionState() const {
+    return managers.interactionState;
+  }
 };
 
 #endif // APPLICATIONCONTEXT_H

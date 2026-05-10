@@ -12,8 +12,8 @@ auto smallMovementThreshold(int lastSelectedRow, int currentRow) -> int {
 }
 
 auto computeForceImmediate(bool immediate, bool forceImmediateCenter, bool isWrappingNavigation,
-                            bool restoringSelection, bool instantPositioning,
-                            bool wrapSequenceActive) -> bool {
+                           bool restoringSelection, bool instantPositioning,
+                           bool wrapSequenceActive) -> bool {
   return immediate || forceImmediateCenter || isWrappingNavigation || restoringSelection ||
          instantPositioning || wrapSequenceActive;
 }

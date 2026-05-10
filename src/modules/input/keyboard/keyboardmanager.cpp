@@ -101,9 +101,7 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
   const int confirmKey =
       m_generalSettings ? m_generalSettings->keyConfirm : static_cast<int>(Qt::Key_Return);
 
-  auto isConfirmKey = [&](int k) -> bool {
-    return KeyboardHelpers::isConfirmKey(k, confirmKey);
-  };
+  auto isConfirmKey = [&](int k) -> bool { return KeyboardHelpers::isConfirmKey(k, confirmKey); };
 
   // Handle search bar focused state
   if (searchBarFocused) {

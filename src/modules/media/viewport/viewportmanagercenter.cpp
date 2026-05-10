@@ -102,8 +102,7 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
         }
       };
       setProgrammaticScrollGuarded(true);
-      animMgr()->startWheelScrollAnimationHorizontal(hScrollBar, curX, targetX,
-                                                              onFinished);
+      animMgr()->startWheelScrollAnimationHorizontal(hScrollBar, curX, targetX, onFinished);
     }
     if (scrollMgr()) {
       scrollMgr()->updateVirtualView();
@@ -190,8 +189,8 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
   if (animMgr()) {
     animMgr()->ensureVAnimCreated(verticalScrollBar);
 
-    if (animMgr()->handleExistingVerticalAnimIfRunning(
-            verticalScrollBar, targetY, clickScroll, clickHoldAdv, curY, distance)) {
+    if (animMgr()->handleExistingVerticalAnimIfRunning(verticalScrollBar, targetY, clickScroll,
+                                                       clickHoldAdv, curY, distance)) {
       return;
     }
   }
@@ -204,14 +203,13 @@ void ViewportManager::centerItemVertically(int index, bool immediate) {
   }
 
   if (animMgr()) {
-    animMgr()->configureAndStartVerticalAnimation(verticalScrollBar, curY, targetY,
-                                                           duration, clickScroll, clickHoldAdv);
+    animMgr()->configureAndStartVerticalAnimation(verticalScrollBar, curY, targetY, duration,
+                                                  clickScroll, clickHoldAdv);
   }
 }
 
 bool ViewportManager::computeForceImmediate(bool immediate) const {
-  const bool restoringSelection =
-      selectionMgr() && selectionMgr()->isRestoringSelection();
+  const bool restoringSelection = selectionMgr() && selectionMgr()->isRestoringSelection();
   return ViewportHelpers::computeForceImmediate(immediate, m_forceImmediateCenter,
                                                 m_isWrappingNavigation, restoringSelection,
                                                 m_instantPositioning, m_wrapSequenceActive);
@@ -333,8 +331,8 @@ bool ViewportManager::handleImmediateCenterForEnsureVisible(int index) {
   if (gridWidth <= 0 || viewportHeight <= 0) {
     return false;
   }
-  int hSpacing = (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing()
-                                   : collection.horizontalSpacing;
+  int hSpacing =
+      (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing() : collection.horizontalSpacing;
   int margins = UIConstants::Grid::MARGINS;
   int itemX = GridUtils::computeItemX(index, gridWidth, collection.itemWidth, hSpacing, margins);
   int itemY = GridUtils::computeItemY(index, gridWidth, collection.itemHeight,

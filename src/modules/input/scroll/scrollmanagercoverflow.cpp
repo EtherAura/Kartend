@@ -219,8 +219,7 @@ void ScrollManager::resolveAndPushCoverFlowVideo(int visualIndex) {
   }
   const int mediaIdx = m_dataManager->mediaIndexFromActual(actualIndex);
   const QString rawEntry = m_dataManager->rawFilePath(mediaIdx);
-  const QString fullPath =
-      db ? db->resolveFilePath(rawEntry, m_context) : rawEntry;
+  const QString fullPath = db ? db->resolveFilePath(rawEntry, m_context) : rawEntry;
   if (fullPath.isEmpty()) {
     m_coverFlowWidget->setVideoPathForIndex(visualIndex, QString());
     return;
@@ -267,8 +266,7 @@ void ScrollManager::resolveAndPushCoverFlowGallery(int visualIndex) {
   }
   const int mediaIdx = m_dataManager->mediaIndexFromActual(actualIndex);
   const QString rawEntry = m_dataManager->rawFilePath(mediaIdx);
-  const QString fullPath =
-      db ? db->resolveFilePath(rawEntry, m_context) : rawEntry;
+  const QString fullPath = db ? db->resolveFilePath(rawEntry, m_context) : rawEntry;
   if (fullPath.isEmpty()) {
     m_coverFlowWidget->setGalleryForIndex(visualIndex, {});
     return;
@@ -413,8 +411,7 @@ void ScrollManager::rebuildCoverFlowCards() {
       // relative directory from. Without this step, raw entries with
       // subdirectories — and any collection whose artworkDir mirrors its
       // mediaDir tree — drop straight to placeholder.
-      const QString fullPath =
-          db ? db->resolveFilePath(rawEntry, m_context) : rawEntry;
+      const QString fullPath = db ? db->resolveFilePath(rawEntry, m_context) : rawEntry;
       const QString fileName = QFileInfo(fullPath).fileName();
       card.title = m_dataManager->fileNames().value(fullPath.isEmpty() ? rawEntry : fullPath,
                                                     QFileInfo(fileName).completeBaseName());

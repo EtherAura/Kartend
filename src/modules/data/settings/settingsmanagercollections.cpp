@@ -113,10 +113,9 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     auto security = PathUtils::validatePathSecurity(value);
     if (security.isError()) {
       ErrorUtils::logError(
-          ErrorUtils::ErrorContext::warning(
-              ErrorUtils::ErrorCode::InvalidFilePath,
-              QString("Refusing to load insecure %1").arg(fieldName),
-              "SettingsManager::loadCollections")
+          ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::InvalidFilePath,
+                                            QString("Refusing to load insecure %1").arg(fieldName),
+                                            "SettingsManager::loadCollections")
               .withDetails(QString("Collection: %1, Value: %2, Reason: %3")
                                .arg(collectionName, value, security.error().message)));
       return QString();
@@ -155,11 +154,10 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
       settings.setArrayIndex(i);
       LauncherConfig launcher;
       launcher.name = settings.value("name").toString();
-      const QString launcherFieldId =
-          QString("additionalLaunchers[%1].launcherPath").arg(i);
+      const QString launcherFieldId = QString("additionalLaunchers[%1].launcherPath").arg(i);
       const QString coreFieldId = QString("additionalLaunchers[%1].corePath").arg(i);
       launcher.launcherPath = sanitizeLoadedPath(settings.value("launcherPath").toString(),
-                                                  launcherFieldId, config.name);
+                                                 launcherFieldId, config.name);
       launcher.corePath =
           sanitizeLoadedPath(settings.value("corePath").toString(), coreFieldId, config.name);
       launcher.launchParameters = settings.value("launchParameters").toString();
@@ -183,15 +181,15 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     settings.endArray();
     config.defaultLauncherIndex = settings.value("defaultLauncherIndex", 0).toInt();
     config.mediaDirectory = sanitizeLoadedPath(settings.value("mediaDirectory").toString(),
-                                                "mediaDirectory", config.name);
+                                               "mediaDirectory", config.name);
     config.artworkDirectory = sanitizeLoadedPath(settings.value("artworkDirectory").toString(),
-                                                  "artworkDirectory", config.name);
+                                                 "artworkDirectory", config.name);
     config.videoDirectory = sanitizeLoadedPath(settings.value("videoDirectory").toString(),
-                                                "videoDirectory", config.name);
+                                               "videoDirectory", config.name);
     config.manualDirectory = sanitizeLoadedPath(settings.value("manualDirectory").toString(),
-                                                 "manualDirectory", config.name);
+                                                "manualDirectory", config.name);
     config.placeholderArtwork = sanitizeLoadedPath(settings.value("placeholderArtwork").toString(),
-                                                    "placeholderArtwork", config.name);
+                                                   "placeholderArtwork", config.name);
     config.includeContentSubfolders = settings.value("includeContentSubfolders", false).toBool();
     config.includeArtworkSubfolders = settings.value("includeArtworkSubfolders", false).toBool();
     config.showAllSubfolderItems = settings.value("showAllSubfolderItems", false).toBool();
@@ -315,16 +313,16 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     }
     config.backgroundColor = settings.value("backgroundColor").toString();
     config.backgroundImage = sanitizeLoadedPath(settings.value("backgroundImage").toString(),
-                                                 "backgroundImage", config.name);
+                                                "backgroundImage", config.name);
     config.backgroundVideo = sanitizeLoadedPath(settings.value("backgroundVideo").toString(),
-                                                 "backgroundVideo", config.name);
+                                                "backgroundVideo", config.name);
     config.primaryColor = settings.value("primaryColor").toString();
     config.tileColor = settings.value("tileColor").toString();
     config.selectionColor = settings.value("selectionColor").toString();
 
     // header logo
     config.headerLogoImage = sanitizeLoadedPath(settings.value("headerLogoImage").toString(),
-                                                 "headerLogoImage", config.name);
+                                                "headerLogoImage", config.name);
     config.headerLogoPosition = CollectionUtils::stringToHeaderLogoPosition(
         settings.value("headerLogoPosition", "topcenter").toString());
 

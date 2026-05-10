@@ -53,8 +53,8 @@ struct ArrowDirection {
 //
 // `gridWidth` must be > 0; if not, the helper returns invalid.
 [[nodiscard]] auto computeArrowDirection(int eventKey, int navLeftKey, int navRightKey,
-                                          int navUpKey, int navDownKey, ViewType viewType,
-                                          int gridWidth) -> ArrowDirection;
+                                         int navUpKey, int navDownKey, ViewType viewType,
+                                         int gridWidth) -> ArrowDirection;
 
 } // namespace KeyboardHelpers
 

@@ -89,9 +89,7 @@ private:
   [[nodiscard]] AnimationManager *animMgr() const {
     return m_ctx ? m_ctx->animationManager() : nullptr;
   }
-  [[nodiscard]] MouseManager *mouseMgr() const {
-    return m_ctx ? m_ctx->mouseManager() : nullptr;
-  }
+  [[nodiscard]] MouseManager *mouseMgr() const { return m_ctx ? m_ctx->mouseManager() : nullptr; }
   [[nodiscard]] DetailsPaneManager *detailsPaneMgr() const {
     return m_ctx ? m_ctx->detailsPaneManager() : nullptr;
   }

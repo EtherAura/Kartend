@@ -56,8 +56,8 @@ void ViewportManager::ensureHorizontallyVisible(int index) {
     return;
   }
 
-  int hSpacing = (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing()
-                                   : collection.horizontalSpacing;
+  int hSpacing =
+      (scrollMgr()) ? scrollMgr()->getEffectiveHorizontalSpacing() : collection.horizontalSpacing;
   int margins = UIConstants::Grid::MARGINS;
   int itemX = GridUtils::computeItemX(index, gridWidth, collection.itemWidth, hSpacing, margins);
 
@@ -268,7 +268,7 @@ void ViewportManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar, int startV
   }
 
   animMgr()->startEnsureVisibleVAnim(vScrollBar, startVal, endVal, itemHeight, vSpacing,
-                                              isRepeating);
+                                     isRepeating);
 }
 
 void ViewportManager::ensureVerticalScrollbarPolicy() {

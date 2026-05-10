@@ -32,8 +32,7 @@ void AppearanceToolbarPanel::setModel(SettingsModel *model) {
 
 void AppearanceToolbarPanel::load() {
   if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 ||
-      *m_model->currentIndex >= m_model->workingCollections->size()) {
+      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
     return;
   }
   const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
@@ -49,8 +48,7 @@ void AppearanceToolbarPanel::clear() {
 
 void AppearanceToolbarPanel::save() const {
   if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
-      *m_model->currentIndex < 0 ||
-      *m_model->currentIndex >= m_model->workingCollections->size()) {
+      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
     return;
   }
   CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];

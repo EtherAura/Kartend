@@ -5,7 +5,7 @@
 namespace SearchHelpers {
 
 auto computeAdaptiveDebounceMs(qint64 timeSinceLastKeystrokeMs, int minDebounceMs,
-                                int maxDebounceMs, int defaultDebounceMs) -> int {
+                               int maxDebounceMs, int defaultDebounceMs) -> int {
   if (timeSinceLastKeystrokeMs <= 0) {
     return defaultDebounceMs;
   }

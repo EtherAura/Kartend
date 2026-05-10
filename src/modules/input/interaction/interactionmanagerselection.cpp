@@ -202,8 +202,7 @@ void InteractionManager::scheduleSidebarMetadataUpdateIfVisible(int targetIndex,
       if (!guard->detailsPaneMgr()->isSidebarVisible()) {
         return;
       }
-      ItemWidget *itemWidget =
-          guard->scrollMgr()->getActiveWidgets().value(targetIndex, nullptr);
+      ItemWidget *itemWidget = guard->scrollMgr()->getActiveWidgets().value(targetIndex, nullptr);
       if (itemWidget) {
         guard->detailsPaneMgr()->updateSidebarMetadata(itemWidget);
       }
@@ -267,8 +266,8 @@ void InteractionManager::scheduleScrollbarRecovery() {
   QTimer::singleShot(UIConstants::Navigation::SCROLLBAR_RECOVERY_ATTEMPT_3_MS, this, attempt);
 
   if (!m_scrollbarRecoveryConn) {
-    m_scrollbarRecoveryConn = QObject::connect(
-        scrollMgr(), &ScrollManager::virtualScrollSetupComplete, this, [guard]() {
+    m_scrollbarRecoveryConn =
+        QObject::connect(scrollMgr(), &ScrollManager::virtualScrollSetupComplete, this, [guard]() {
           if (!guard) {
             return;
           }

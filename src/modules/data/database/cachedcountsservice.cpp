@@ -32,7 +32,7 @@ void CachedCountsService::onTimerFired() {
 }
 
 void CachedCountsService::onWorkerComputed(quint64 generation, qint64 globalCount,
-                                            const QHash<QString, qint64> &directCountsByUuid) {
+                                           const QHash<QString, qint64> &directCountsByUuid) {
   if (!m_sessionManager) {
     return;
   }

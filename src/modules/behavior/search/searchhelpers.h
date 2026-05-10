@@ -43,7 +43,7 @@ namespace SearchHelpers {
 // The formula matches SearchManager::updateAdaptiveDebounce so changes to
 // either side stay in lockstep and tests catch a drift.
 [[nodiscard]] auto computeAdaptiveDebounceMs(qint64 timeSinceLastKeystrokeMs, int minDebounceMs,
-                                              int maxDebounceMs, int defaultDebounceMs) -> int;
+                                             int maxDebounceMs, int defaultDebounceMs) -> int;
 
 // Pure version of SearchManager::allowAllFor.
 //

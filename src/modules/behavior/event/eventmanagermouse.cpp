@@ -238,4 +238,3 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
   event->accept();
   return true;
 }
-

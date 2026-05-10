@@ -25,8 +25,8 @@ bool openConnection(QSqlDatabase &db, const QString &dbPath) {
   }
   db.setDatabaseName(dbPath + "/media.db");
   if (!db.open()) {
-    auto err = ErrorContext::critical(ErrorCode::DatabaseConnectionFailed, "Failed to open database",
-                                      "DatabaseSchema::openConnection")
+    auto err = ErrorContext::critical(ErrorCode::DatabaseConnectionFailed,
+                                      "Failed to open database", "DatabaseSchema::openConnection")
                    .withDetails(db.lastError().text());
     ErrorUtils::logError(err);
     return false;
@@ -78,10 +78,10 @@ void createTables(QSqlDatabase &db) {
                                    "uuid TEXT DEFAULT ''"
                                    ")";
   if (!query.exec(collectionsTable)) {
-    auto err = ErrorContext::critical(ErrorCode::DatabaseQueryFailed,
-                                      "Failed to create collections table",
-                                      "DatabaseSchema::createTables")
-                   .withDetails(query.lastError().text());
+    auto err =
+        ErrorContext::critical(ErrorCode::DatabaseQueryFailed, "Failed to create collections table",
+                               "DatabaseSchema::createTables")
+            .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
   }
 
@@ -102,9 +102,10 @@ void createTables(QSqlDatabase &db) {
       "FOREIGN KEY(collection_id) REFERENCES collections(id) ON DELETE CASCADE"
       ")";
   if (!query.exec(itemsTable)) {
-    auto err = ErrorContext::critical(ErrorCode::DatabaseQueryFailed,
-                                      "Failed to create items table", "DatabaseSchema::createTables")
-                   .withDetails(query.lastError().text());
+    auto err =
+        ErrorContext::critical(ErrorCode::DatabaseQueryFailed, "Failed to create items table",
+                               "DatabaseSchema::createTables")
+            .withDetails(query.lastError().text());
     ErrorUtils::logError(err);
   }
 

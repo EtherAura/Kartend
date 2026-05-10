@@ -135,8 +135,7 @@ auto InteractionManager::handleEnterOnItem(int currentSelection, int /*totalItem
     path = scrollMgr()->filePathForVisualIndex(currentSelection);
   }
   if (!path.isEmpty()) {
-    const int cIdx =
-        ((databaseMgr()) ? databaseMgr()->getCollectionIndexForFile(path) : -1);
+    const int cIdx = ((databaseMgr()) ? databaseMgr()->getCollectionIndexForFile(path) : -1);
     // when the user is browsing a playlist, getCollectionIndexForFile
     // returns the *source* collection (the one whose items table row holds this
     // path), not the playlist's synthetic index — so the launcher chooser and

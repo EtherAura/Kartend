@@ -24,11 +24,11 @@
 
 #include "appearanceeffectspanel.h"
 #include "appearancelayoutpanel.h"
-#include "collectiontreewidget.h"
 #include "appearancelistpanel.h"
 #include "appearancetitlespanel.h"
 #include "appearancetoolbarpanel.h"
 #include "artworktabpanel.h"
+#include "collectiontreewidget.h"
 #include "configurationpanel.h"
 #include "extensionutils.h"
 #include "interactionmanager.h"

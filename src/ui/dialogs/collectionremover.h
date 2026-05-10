@@ -44,8 +44,7 @@ public:
   // ── UI helpers (delegate to dialog's existing private members) ───────
   virtual void expandPathToCollection(int index) = 0;
   virtual void loadCollectionToUI(int index) = 0;
-  virtual void propagateCollectionNameChange(const QString &oldName,
-                                             const QString &newName) = 0;
+  virtual void propagateCollectionNameChange(const QString &oldName, const QString &newName) = 0;
   virtual void updateCollectionTreeWidget() = 0;
   virtual void clearCollectionUI() = 0;
   virtual void ensureRootCollectionExists() = 0;
@@ -74,8 +73,7 @@ class CollectionRemover : public QObject {
   Q_OBJECT
 
 public:
-  CollectionRemover(SettingsModel *model, CollectionRemoverHost *host,
-                    QObject *parent = nullptr);
+  CollectionRemover(SettingsModel *model, CollectionRemoverHost *host, QObject *parent = nullptr);
 
   /// Run the full removal flow for whatever the host's selection points at.
   /// No-op when the precondition check fails. Pops the user-confirm dialog,
