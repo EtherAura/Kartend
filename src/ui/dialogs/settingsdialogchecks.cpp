@@ -656,6 +656,11 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
       ui->pixmapCacheSpinBox->value() != m_originalGeneralSettings.pixmapCacheSizeMB) {
     return true;
   }
+  if (ui->videoThumbnailTimeoutSpinBox &&
+      ui->videoThumbnailTimeoutSpinBox->value() !=
+          m_originalGeneralSettings.videoThumbnailExtractionTimeoutMs) {
+    return true;
+  }
   if (ui->keyboardSpeedSpinBox &&
       ui->keyboardSpeedSpinBox->value() != m_originalGeneralSettings.keyboardRepeatIntervalMs) {
     return true;

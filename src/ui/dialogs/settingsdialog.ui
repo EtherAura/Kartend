@@ -2265,6 +2265,22 @@
                     <property name="value"><number>500</number></property>
                    </widget>
                   </item>
+                  <item row="4" column="0">
+                   <widget class="QLabel" name="videoThumbnailTimeoutLabel">
+                    <property name="text"><string>Video Thumbnail Timeout:</string></property>
+                   </widget>
+                  </item>
+                  <item row="4" column="1">
+                   <widget class="QSpinBox" name="videoThumbnailTimeoutSpinBox">
+                    <property name="minimumWidth"><number>110</number></property>
+                    <property name="toolTip"><string>How long to wait for a single video thumbnail to decode before giving up. Increase on slow systems where legitimate videos miss the default 4s window. Range: 1000–30000 ms.</string></property>
+                    <property name="minimum"><number>1000</number></property>
+                    <property name="maximum"><number>30000</number></property>
+                    <property name="singleStep"><number>500</number></property>
+                    <property name="value"><number>4000</number></property>
+                    <property name="suffix"><string> ms</string></property>
+                   </widget>
+                  </item>
                  </layout>
                 </widget>
                </item>

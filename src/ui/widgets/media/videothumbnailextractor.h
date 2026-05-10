@@ -47,6 +47,12 @@ public:
   /// next event loop tick so callers can connect first.
   void requestFrame(const QString &videoPath);
 
+  /// Reconfigure the per-extraction timeout. Used by the settings dialog so
+  /// users on slow systems can extend the default 4s window. Applies to the
+  /// next extraction; an in-flight request keeps its current timer interval.
+  /// @p ms is clamped to [1000, 30000] to mirror the settings-loader bounds.
+  void setExtractionTimeoutMs(int ms);
+
 signals:
   /// Emitted when extraction completes for @p videoPath. @p pixmap is null
   /// on failure (file missing, decoder error, timeout).
@@ -72,6 +78,7 @@ private:
   QQueue<QString> m_queue;
   QString m_currentPath;
   bool m_seekedForCurrent = false;
+  int m_timeoutMs = 4000;
   QTimer *m_timeoutTimer = nullptr;
 };
 

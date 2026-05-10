@@ -16,9 +16,6 @@ namespace {
 // fall back to a quarter of their duration in onMediaStatusChanged.
 constexpr int kSeekPositionMs = 1000;
 
-// Hard cap per-extraction so a stuck decode never blocks the queue. The
-// timer fires in finishCurrent({}) which advances to the next request.
-constexpr int kExtractionTimeoutMs = 4000;
 } // namespace
 
 VideoThumbnailExtractor *VideoThumbnailExtractor::instance() {
@@ -59,8 +56,19 @@ void VideoThumbnailExtractor::ensureMediaPipeline() {
 
   m_timeoutTimer = new QTimer(this);
   m_timeoutTimer->setSingleShot(true);
-  m_timeoutTimer->setInterval(kExtractionTimeoutMs);
+  m_timeoutTimer->setInterval(m_timeoutMs);
   connect(m_timeoutTimer, &QTimer::timeout, this, [this]() { finishCurrent({}); });
+}
+
+void VideoThumbnailExtractor::setExtractionTimeoutMs(int ms) {
+  m_timeoutMs = qBound(1000, ms, 30000);
+  // The pipeline may not have been built yet; ensureMediaPipeline() reads
+  // m_timeoutMs at construction time, so deferred extractors pick up the
+  // value automatically. Update an existing timer in-place so a user nudging
+  // the spinbox sees the change on the next request.
+  if (m_timeoutTimer) {
+    m_timeoutTimer->setInterval(m_timeoutMs);
+  }
 }
 
 VideoThumbnailExtractor::~VideoThumbnailExtractor() {

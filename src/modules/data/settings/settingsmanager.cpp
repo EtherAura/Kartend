@@ -78,6 +78,12 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.pixmapCacheSizeMB = s.value("pixmapCacheSizeMB", 50).toInt();
   // Clamp to reasonable range: 10MB - 500MB
   settings.pixmapCacheSizeMB = qBound(10, settings.pixmapCacheSizeMB, 500);
+  settings.videoThumbnailExtractionTimeoutMs =
+      s.value("videoThumbnailExtractionTimeoutMs", 4000).toInt();
+  // Clamp to keep slow-system tuning useful while preventing the queue from
+  // stalling indefinitely on a misconfigured value.
+  settings.videoThumbnailExtractionTimeoutMs =
+      qBound(1000, settings.videoThumbnailExtractionTimeoutMs, 30000);
   // Load timing settings (direct ms/count values)
   settings.keyboardRepeatIntervalMs = s.value("keyboardRepeatIntervalMs", 260).toInt();
   settings.keyboardRepeatDelayMs = s.value("keyboardRepeatDelayMs", 260).toInt();
@@ -276,6 +282,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.wrapNavigation = settings.wrapNavigation;
   m_generalSettings.selectItemOnHover = settings.selectItemOnHover;
   m_generalSettings.pixmapCacheSizeMB = qBound(10, settings.pixmapCacheSizeMB, 500);
+  m_generalSettings.videoThumbnailExtractionTimeoutMs =
+      qBound(1000, settings.videoThumbnailExtractionTimeoutMs, 30000);
   m_generalSettings.keyboardRepeatIntervalMs = settings.keyboardRepeatIntervalMs;
   m_generalSettings.keyboardRepeatDelayMs = settings.keyboardRepeatDelayMs;
   m_generalSettings.clickHoldDelayMs = settings.clickHoldDelayMs;
@@ -388,6 +396,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("wrapNavigation", m_generalSettings.wrapNavigation);
   s.setValue("selectItemOnHover", m_generalSettings.selectItemOnHover);
   s.setValue("pixmapCacheSizeMB", m_generalSettings.pixmapCacheSizeMB);
+  s.setValue("videoThumbnailExtractionTimeoutMs",
+             m_generalSettings.videoThumbnailExtractionTimeoutMs);
   s.setValue("keyboardRepeatIntervalMs", m_generalSettings.keyboardRepeatIntervalMs);
   s.setValue("keyboardRepeatDelayMs", m_generalSettings.keyboardRepeatDelayMs);
   s.setValue("clickHoldDelayMs", m_generalSettings.clickHoldDelayMs);

@@ -843,6 +843,11 @@ struct GeneralSettings {
   // because it changes input semantics application-wide.
   bool selectItemOnHover = false;
   int pixmapCacheSizeMB = 50;             // Default 50MB, user configurable
+  // Hard cap per video-thumbnail extraction. If the decoder hasn't produced a
+  // frame in this window, the request is abandoned and a null pixmap is cached
+  // so the queue advances. Tunable for slow systems where the default 4s can
+  // miss legitimate videos. Bounds enforced at load/save: 1000-30000 ms.
+  int videoThumbnailExtractionTimeoutMs = 4000;
   int keyboardRepeatIntervalMs = 260;     // Grid view keyboard repeat interval in ms
   int keyboardRepeatDelayMs = 260;        // Initial delay before keyboard repeat starts
   int clickHoldDelayMs = 500;             // Click-hold activation delay in ms

@@ -41,6 +41,7 @@
 #include "settingsmanager.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
+#include "videothumbnailextractor.h"
 
 void SettingsDialog::revertCurrentCollectionEdits() {
   if (currentCollectionIndex < 0 || currentCollectionIndex >= m_workingCollections.size()) {
@@ -372,6 +373,8 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   SettingsFormBinding::loadInto(ui->historyEnabledCheckBox, m_generalSettings.historyEnabled);
   SettingsFormBinding::loadInto(ui->historyMaxEntriesSpinBox, m_generalSettings.historyMaxEntries);
   SettingsFormBinding::loadInto(ui->pixmapCacheSpinBox, m_generalSettings.pixmapCacheSizeMB);
+  SettingsFormBinding::loadInto(ui->videoThumbnailTimeoutSpinBox,
+                                m_generalSettings.videoThumbnailExtractionTimeoutMs);
   SettingsFormBinding::loadInto(ui->keyboardSpeedSpinBox,
                                 m_generalSettings.keyboardRepeatIntervalMs);
   SettingsFormBinding::loadInto(ui->keyboardRepeatDelaySpinBox,
@@ -553,6 +556,11 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
       mainWindow->m_generalSettings.pixmapCacheSizeMB = newCacheSize;
       // Apply immediately (in KB)
       QPixmapCache::setCacheLimit(newCacheSize * 1024);
+    }
+    if (ui->videoThumbnailTimeoutSpinBox) {
+      int newTimeout = ui->videoThumbnailTimeoutSpinBox->value();
+      mainWindow->m_generalSettings.videoThumbnailExtractionTimeoutMs = newTimeout;
+      VideoThumbnailExtractor::instance()->setExtractionTimeoutMs(newTimeout);
     }
     SettingsFormBinding::saveFrom(ui->keyboardSpeedSpinBox,
                                   mainWindow->m_generalSettings.keyboardRepeatIntervalMs);

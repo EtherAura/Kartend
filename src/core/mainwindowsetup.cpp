@@ -44,6 +44,7 @@
 #include "stringutils.h"
 #include "textzoomhud.h"
 #include "timerutils.h"
+#include "videothumbnailextractor.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
 
@@ -155,6 +156,9 @@ void MainWindow::setupUIReferences() {
   // Apply user-configured pixmap cache size (in KB, settings stores MB)
   int cacheSizeKB = m_generalSettings.pixmapCacheSizeMB * 1024;
   QPixmapCache::setCacheLimit(cacheSizeKB);
+
+  VideoThumbnailExtractor::instance()->setExtractionTimeoutMs(
+      m_generalSettings.videoThumbnailExtractionTimeoutMs);
 
   stackedWidget = ui->stackedWidget;
   itemsPage = ui->itemsPage;

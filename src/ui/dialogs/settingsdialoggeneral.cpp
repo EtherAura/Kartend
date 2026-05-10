@@ -706,6 +706,10 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     connect(ui->pixmapCacheSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
   }
+  if (ui->videoThumbnailTimeoutSpinBox) {
+    connect(ui->videoThumbnailTimeoutSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &SettingsDialog::checkForChanges);
+  }
   if (ui->keyboardSpeedSpinBox) {
     connect(ui->keyboardSpeedSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
