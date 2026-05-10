@@ -39,155 +39,9 @@
       </attribute>
       <layout class="QVBoxLayout" name="collectionsTabLayout">
        <item>
-        <widget class="QGroupBox" name="collectionGroupBox">
-         <layout class="QVBoxLayout" name="collectionLayout">
-          <item>
-           <layout class="QHBoxLayout" name="collectionButtonLayout">
-            <item>
-             <widget class="QPushButton" name="addCollectionButton">
-              <property name="maximumSize">
-               <size>
-                <width>30</width>
-                <height>30</height>
-               </size>
-              </property>
-              <property name="text">
-               <string/>
-              </property>
-              <property name="icon">
-               <iconset theme="document-new"/>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QPushButton" name="removeCollectionButton">
-              <property name="maximumSize">
-               <size>
-                <width>30</width>
-                <height>30</height>
-               </size>
-              </property>
-              <property name="text">
-               <string/>
-              </property>
-              <property name="icon">
-               <iconset theme="edit-delete"/>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QPushButton" name="duplicateCollectionButton">
-              <property name="maximumSize">
-               <size>
-                <width>30</width>
-                <height>30</height>
-               </size>
-              </property>
-              <property name="toolTip">
-               <string>Duplicate the selected collection</string>
-              </property>
-              <property name="text">
-               <string/>
-              </property>
-              <property name="icon">
-               <iconset theme="edit-copy"/>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <spacer name="collectionSpacer">
-              <property name="orientation">
-               <enum>Qt::Orientation::Horizontal</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>40</width>
-                <height>20</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
-            <item>
-             <widget class="QLabel" name="settingsScopeLabel">
-              <property name="text">
-               <string>Mode:</string>
-              </property>
-              <property name="toolTip">
-               <string>Choose which collections future Save actions apply to</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QComboBox" name="settingsScopeComboBox">
-              <property name="toolTip">
-               <string>Settings Mode controls the scope of Save: just the selected collection, the selected collection plus its subcollections, or every collection</string>
-              </property>
-              <item>
-               <property name="text">
-                <string>Current collection</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>Current + subcollections</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>All collections</string>
-               </property>
-              </item>
-             </widget>
-            </item>
-            <item>
-             <widget class="QPushButton" name="saveCollectionButton">
-              <property name="maximumSize">
-               <size>
-                <width>30</width>
-                <height>30</height>
-               </size>
-              </property>
-              <property name="toolTip">
-               <string>Save current collection settings</string>
-              </property>
-              <property name="text">
-               <string/>
-              </property>
-              <property name="icon">
-               <iconset theme="document-save"/>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-          <item>
-           <widget class="CollectionTreeWidget" name="collectionTreeWidget">
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>120</height>
-             </size>
-            </property>
-            <property name="rootIsDecorated">
-             <bool>true</bool>
-            </property>
-            <property name="itemsExpandable">
-             <bool>true</bool>
-            </property>
-            <property name="animated">
-             <bool>true</bool>
-            </property>
-            <column>
-             <property name="text">
-              <string>Collections</string>
-             </property>
-            </column>
-           </widget>
-          </item>
-         </layout>
-        </widget>
+        <widget class="CollectionsTreeShell" name="collectionsTreeShell" native="true"/>
        </item>
-       <item>
+              <item>
         <widget class="QTabWidget" name="collectionConfigTabWidget">
          <property name="currentIndex">
           <number>0</number>
@@ -515,9 +369,10 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>CollectionTreeWidget</class>
-   <extends>QTreeWidget</extends>
-   <header>collectiontreewidget.h</header>
+   <class>CollectionsTreeShell</class>
+   <extends>QWidget</extends>
+   <header>collectionstreeshell.h</header>
+   <container>1</container>
   </customwidget>
   <customwidget>
    <class>LauncherPresetsPanel</class>

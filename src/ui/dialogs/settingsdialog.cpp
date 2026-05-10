@@ -208,7 +208,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
       ui->controlsPanel->useLeftStickCheckBox(),
   });
 
-  collectionTreeWidget = ui->collectionTreeWidget;
+  collectionTreeWidget = ui->collectionsTreeShell->collectionTreeWidget();
 
   installEventFilter(this);
   if (collectionTreeWidget) {
@@ -346,11 +346,11 @@ void SettingsDialog::setupButtonConnections() {
 
   connect(ui->buttonBox, &QDialogButtonBox::rejected, this, &SettingsDialog::reject);
 
-  connect(ui->addCollectionButton, &QPushButton::clicked, this, &SettingsDialog::addCollection);
-  connect(ui->removeCollectionButton, &QPushButton::clicked, this,
+  connect(ui->collectionsTreeShell->addCollectionButton(), &QPushButton::clicked, this, &SettingsDialog::addCollection);
+  connect(ui->collectionsTreeShell->removeCollectionButton(), &QPushButton::clicked, this,
           &SettingsDialog::removeCollection);
-  if (ui->duplicateCollectionButton) {
-    connect(ui->duplicateCollectionButton, &QPushButton::clicked, this,
+  if (ui->collectionsTreeShell->duplicateCollectionButton()) {
+    connect(ui->collectionsTreeShell->duplicateCollectionButton(), &QPushButton::clicked, this,
             &SettingsDialog::duplicateCollection);
   }
   if (ui->configurationPanel->editLinkedParentsButton()) {
@@ -359,9 +359,9 @@ void SettingsDialog::setupButtonConnections() {
   }
   // wire the Settings Mode selector. Default is `Current` to
   // preserve legacy single-collection save behavior.
-  if (ui->settingsScopeComboBox) {
-    ui->settingsScopeComboBox->setCurrentIndex(static_cast<int>(m_settingsScope));
-    connect(ui->settingsScopeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+  if (ui->collectionsTreeShell->settingsScopeComboBox()) {
+    ui->collectionsTreeShell->settingsScopeComboBox()->setCurrentIndex(static_cast<int>(m_settingsScope));
+    connect(ui->collectionsTreeShell->settingsScopeComboBox(), QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::onSettingsScopeChanged);
   }
   connect(ui->launcherPanel->browseLauncherButton(), &QPushButton::clicked, this,

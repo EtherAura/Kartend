@@ -24,6 +24,7 @@
 
 #include "appearanceeffectspanel.h"
 #include "appearancelayoutpanel.h"
+#include "collectiontreewidget.h"
 #include "appearancelistpanel.h"
 #include "appearancetitlespanel.h"
 #include "appearancetoolbarpanel.h"

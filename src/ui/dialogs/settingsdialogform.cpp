@@ -173,7 +173,7 @@ void SettingsDialog::updateSaveButtonStyle() {
   // The button also stays enabled so the user can click Save; when there are
   // no changes we detach the glow and disable the button.
   const bool dirty = hasUnsavedChanges();
-  QPushButton *btn = ui->saveCollectionButton;
+  QPushButton *btn = ui->collectionsTreeShell->saveCollectionButton();
   btn->setEnabled(dirty);
 
   if (dirty) {
@@ -224,10 +224,10 @@ void SettingsDialog::updateSaveButtonStyle() {
 }
 
 void SettingsDialog::updateDeleteButtonState() {
-  if (ui->removeCollectionButton) {
+  if (ui->collectionsTreeShell->removeCollectionButton()) {
     // Enable delete when there's a valid collection selected
     bool hasSelection = currentTreeItem && itemToCollectionIndex.contains(currentTreeItem);
-    ui->removeCollectionButton->setEnabled(hasSelection && !collections.isEmpty());
+    ui->collectionsTreeShell->removeCollectionButton()->setEnabled(hasSelection && !collections.isEmpty());
   }
 }
 

@@ -45,7 +45,7 @@
 #include "uiconstants.h"
 
 void SettingsDialog::setupBasicUIConnections() {
-  connect(ui->saveCollectionButton, &QPushButton::clicked, this, [this]() {
+  connect(ui->collectionsTreeShell->saveCollectionButton(), &QPushButton::clicked, this, [this]() {
     if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
       return;
     }
