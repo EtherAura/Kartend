@@ -26,7 +26,7 @@ class AnimationManager;
 class ViewportManager;
 class SelectionManager;
 class ArtworkManager;
-class DatabaseManager;
+class IDatabaseManager;
 class DetailsPaneManager;
 class InteractionStateHolder;
 class HoverScrollHandler;
@@ -156,7 +156,7 @@ private:
   [[nodiscard]] ArtworkManager *artworkMgr() const {
     return m_ctx ? m_ctx->artworkManager() : nullptr;
   }
-  [[nodiscard]] DatabaseManager *databaseMgr() const {
+  [[nodiscard]] IDatabaseManager *databaseMgr() const {
     return m_ctx ? m_ctx->databaseManager() : nullptr;
   }
   [[nodiscard]] DetailsPaneManager *detailsPaneMgr() const {

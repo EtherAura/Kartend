@@ -24,11 +24,11 @@ class EmptyStateWidget;
 // Forward declarations for managers
 class ScrollManager;
 class ArtworkManager;
-class SettingsManager;
+class ISettingsManager;
 class SessionManager;
 class DetailsPaneManager;
 class DetailPageManager;
-class DatabaseManager;
+class IDatabaseManager;
 class NavigationManager;
 class AnimationManager;
 class SelectionManager;
@@ -114,11 +114,11 @@ struct ApplicationContext {
   struct ManagerRefs {
     ScrollManager *scrollManager = nullptr;
     ArtworkManager *artworkManager = nullptr;
-    SettingsManager *settingsManager = nullptr;
+    ISettingsManager *settingsManager = nullptr;
     SessionManager *sessionManager = nullptr;
     DetailsPaneManager *detailsPaneManager = nullptr;
     DetailPageManager *detailPageManager = nullptr;
-    DatabaseManager *databaseManager = nullptr;
+    IDatabaseManager *databaseManager = nullptr;
     NavigationManager *navigationManager = nullptr;
     AnimationManager *animationManager = nullptr;
     SelectionManager *selectionManager = nullptr;
@@ -165,11 +165,11 @@ struct ApplicationContext {
   // ─────────────────────────────────────────────────────────────────────────
   [[nodiscard]] ScrollManager *scrollManager() const { return managers.scrollManager; }
   [[nodiscard]] ArtworkManager *artworkManager() const { return managers.artworkManager; }
-  [[nodiscard]] SettingsManager *settingsManager() const { return managers.settingsManager; }
+  [[nodiscard]] ISettingsManager *settingsManager() const { return managers.settingsManager; }
   [[nodiscard]] SessionManager *sessionManager() const { return managers.sessionManager; }
   [[nodiscard]] DetailsPaneManager *detailsPaneManager() const { return managers.detailsPaneManager; }
   [[nodiscard]] DetailPageManager *detailPageManager() const { return managers.detailPageManager; }
-  [[nodiscard]] DatabaseManager *databaseManager() const { return managers.databaseManager; }
+  [[nodiscard]] IDatabaseManager *databaseManager() const { return managers.databaseManager; }
   [[nodiscard]] NavigationManager *navigationManager() const { return managers.navigationManager; }
   [[nodiscard]] AnimationManager *animationManager() const { return managers.animationManager; }
   [[nodiscard]] SelectionManager *selectionManager() const { return managers.selectionManager; }

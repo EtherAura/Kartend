@@ -9,7 +9,9 @@
 #include "databasemanager.h"
 #include "detailpagemanager.h"
 #include "detailspanemanager.h"
+#include "idatabasemanager.h"
 #include "interactionmanager.h"
+#include "isettingsmanager.h"
 #include "kartmanager.h"
 #include "navigationmanager.h"
 #include "playlistmanager.h"
@@ -18,6 +20,19 @@
 #include "settingsmanager.h"
 
 #include <QtConcurrent>
+
+namespace {
+ApplicationManager::DatabaseManagerFactory g_databaseManagerFactory;
+ApplicationManager::SettingsManagerFactory g_settingsManagerFactory;
+} // namespace
+
+void ApplicationManager::setDatabaseManagerFactory(DatabaseManagerFactory factory) {
+  g_databaseManagerFactory = std::move(factory);
+}
+
+void ApplicationManager::setSettingsManagerFactory(SettingsManagerFactory factory) {
+  g_settingsManagerFactory = std::move(factory);
+}
 
 ApplicationManager::ApplicationManager(QObject *parent) : QObject(parent) {}
 
@@ -70,13 +85,15 @@ void ApplicationManager::initialize(ApplicationContext *ctx) {
 
   // 5. SettingsManager — reads SessionManager, ArtworkManager, CacheManager
   // through ctx (which is already populated above).
-  m_settingsManager = std::make_unique<SettingsManager>(ctx, this);
+  m_settingsManager = g_settingsManagerFactory ? g_settingsManagerFactory(ctx, this)
+                                               : std::make_unique<SettingsManager>(ctx, this);
   if (ctx) {
     ctx->managers.settingsManager = m_settingsManager.get();
   }
 
   // 6. DatabaseManager — reads SessionManager through ctx.
-  m_databaseManager = std::make_unique<DatabaseManager>(ctx, this);
+  m_databaseManager = g_databaseManagerFactory ? g_databaseManagerFactory(ctx, this)
+                                               : std::make_unique<DatabaseManager>(ctx, this);
   if (ctx) {
     ctx->managers.databaseManager = m_databaseManager.get();
   }
@@ -184,7 +201,7 @@ CacheManager *ApplicationManager::getCacheManager() const {
   return m_cacheManager.get();
 }
 
-DatabaseManager *ApplicationManager::getDatabaseManager() const {
+IDatabaseManager *ApplicationManager::getDatabaseManager() const {
   return m_databaseManager.get();
 }
 
@@ -212,7 +229,7 @@ SessionManager *ApplicationManager::getSessionManager() const {
   return m_sessionManager.get();
 }
 
-SettingsManager *ApplicationManager::getSettingsManager() const {
+ISettingsManager *ApplicationManager::getSettingsManager() const {
   return m_settingsManager.get();
 }
 

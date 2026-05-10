@@ -21,7 +21,7 @@ DataSourceManager::DataSourceManager(QObject *parent)
 
 DataSourceManager::~DataSourceManager() = default;
 
-void DataSourceManager::setDatabaseManager(DatabaseManager *manager) {
+void DataSourceManager::setDatabaseManager(IDatabaseManager *manager) {
   if (m_filterManager) {
     m_filterManager->setDatabaseManager(manager);
   }

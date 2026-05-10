@@ -563,7 +563,7 @@ auto VirtualScrollEngine::filePathForVisualIndex(int visualIndex) const -> QStri
     return {};
   }
 
-  DatabaseManager *db = m_owner->m_ctx ? m_owner->m_ctx->databaseManager() : nullptr;
+  IDatabaseManager *db = m_owner->m_ctx ? m_owner->m_ctx->databaseManager() : nullptr;
   if (!db) {
     return {};
   }

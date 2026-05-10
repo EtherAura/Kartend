@@ -174,7 +174,7 @@ void ScrollManager::applyCoverFlowVisibility() {
 // resolve to empty here will be picked up on the next rebuild after the
 // cache populates (rebuildCoverFlowCards runs on each receiveItemsRange).
 static QString resolveCardArtworkPath(const QString &fullPath, const CollectionContext &context,
-                                      DatabaseManager *db) {
+                                      IDatabaseManager *db) {
   if (fullPath.isEmpty()) {
     return {};
   }
@@ -208,7 +208,7 @@ void ScrollManager::resolveAndPushCoverFlowVideo(int visualIndex) {
   if (!m_coverFlowWidget || !m_dataManager) {
     return;
   }
-  DatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
+  IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   // Only media items have preview videos — subcollection / virtual-folder
   // cards never carry one.
   const bool filtered = m_filterManager && m_filterManager->isFiltered();
@@ -256,7 +256,7 @@ void ScrollManager::resolveAndPushCoverFlowGallery(int visualIndex) {
   if (!m_coverFlowWidget || !m_dataManager) {
     return;
   }
-  DatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
+  IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   const bool filtered = m_filterManager && m_filterManager->isFiltered();
   const int actualIndex = filtered ? m_filterManager->getActualIndex(visualIndex) : visualIndex;
   // Subcollection / virtual-folder cards have no per-item artwork variants
@@ -375,7 +375,7 @@ void ScrollManager::rebuildCoverFlowCards() {
   if (!m_coverFlowWidget || !m_dataManager) {
     return;
   }
-  DatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
+  IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   // Walk the same visual-index space the rest of the system uses: when a
   // filter is active (search text, type filter, hideMissingArtwork, etc.)
   // selection-side code addresses items by *filtered* index, so the

@@ -24,10 +24,10 @@ QT_END_NAMESPACE
 
 class InteractionManager;
 class InteractionStateHolder;
-class SettingsManager;
+class ISettingsManager;
 class DetailsPaneManager;
 class ScrollManager;
-class DatabaseManager;
+class IDatabaseManager;
 class SessionManager;
 class ArtworkManager;
 class DetailsPane;
@@ -175,7 +175,7 @@ private:
   [[nodiscard]] InteractionStateHolder *state() const {
     return m_ctx ? m_ctx->interactionState() : nullptr;
   }
-  [[nodiscard]] SettingsManager *settingsMgr() const {
+  [[nodiscard]] ISettingsManager *settingsMgr() const {
     return m_ctx ? m_ctx->settingsManager() : nullptr;
   }
   [[nodiscard]] DetailsPaneManager *detailsPaneMgr() const {
@@ -184,7 +184,7 @@ private:
   [[nodiscard]] ScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }
-  [[nodiscard]] DatabaseManager *databaseMgr() const {
+  [[nodiscard]] IDatabaseManager *databaseMgr() const {
     return m_ctx ? m_ctx->databaseManager() : nullptr;
   }
   [[nodiscard]] SessionManager *sessionMgr() const {

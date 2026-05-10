@@ -15,7 +15,7 @@ class InteractionManager;
 class InteractionStateHolder;
 class ScrollManager;
 class SessionManager;
-class SettingsManager;
+class ISettingsManager;
 struct ApplicationContext;
 struct CollectionConfig;
 struct GeneralSettings;
@@ -150,7 +150,7 @@ private:
   [[nodiscard]] SessionManager *sessionMgr() const {
     return m_ctx ? m_ctx->sessionManager() : nullptr;
   }
-  [[nodiscard]] SettingsManager *settingsMgr() const {
+  [[nodiscard]] ISettingsManager *settingsMgr() const {
     return m_ctx ? m_ctx->settingsManager() : nullptr;
   }
 

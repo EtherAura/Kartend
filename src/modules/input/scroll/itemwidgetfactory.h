@@ -10,7 +10,7 @@
 class ItemWidget;
 class QWidget;
 class ArtworkManager;
-class DatabaseManager;
+class IDatabaseManager;
 class WidgetPoolManager;
 
 /**
@@ -29,7 +29,7 @@ public:
   // Dependencies
   void setWidgetPool(WidgetPoolManager *pool) { m_widgetPool = pool; }
   void setArtworkManager(ArtworkManager *manager) { m_artworkManager = manager; }
-  void setDatabaseManager(DatabaseManager *manager) { m_databaseManager = manager; }
+  void setDatabaseManager(IDatabaseManager *manager) { m_databaseManager = manager; }
   void setParentWidget(QWidget *parent) { m_parentWidget = parent; }
 
   // Context for widget creation
@@ -163,7 +163,7 @@ private:
 
   WidgetPoolManager *m_widgetPool = nullptr;
   ArtworkManager *m_artworkManager = nullptr;
-  DatabaseManager *m_databaseManager = nullptr;
+  IDatabaseManager *m_databaseManager = nullptr;
   QWidget *m_parentWidget = nullptr;
 
   CollectionContext m_context;

@@ -17,11 +17,11 @@ class QScrollArea;
 class QStackedWidget;
 QT_END_NAMESPACE
 
-class DatabaseManager;
+class IDatabaseManager;
 class InteractionStateHolder;
 class NavigationManager;
 class ScrollManager;
-class SettingsManager;
+class ISettingsManager;
 struct ApplicationContext;
 
 struct SearchManagerSetup {
@@ -107,7 +107,7 @@ private:
   [[nodiscard]] InteractionStateHolder *state() const {
     return m_ctx ? m_ctx->interactionState() : nullptr;
   }
-  [[nodiscard]] DatabaseManager *databaseMgr() const {
+  [[nodiscard]] IDatabaseManager *databaseMgr() const {
     return m_ctx ? m_ctx->databaseManager() : nullptr;
   }
   [[nodiscard]] NavigationManager *navMgr() const {
@@ -116,7 +116,7 @@ private:
   [[nodiscard]] ScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }
-  [[nodiscard]] SettingsManager *settingsMgr() const {
+  [[nodiscard]] ISettingsManager *settingsMgr() const {
     return m_ctx ? m_ctx->settingsManager() : nullptr;
   }
 

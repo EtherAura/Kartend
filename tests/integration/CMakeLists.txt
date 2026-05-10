@@ -37,6 +37,8 @@ set(INTEGRATION_TEST_HEADERS
   test_detailspane_coverflow.h
   test_settingsdialog_changes.h
   test_scrollmanager.h
+  mocks/mockdatabasemanager.h
+  mocks/mocksettingsmanager.h
 )
 
 add_executable(test_integration

@@ -16,7 +16,7 @@ QT_BEGIN_NAMESPACE
 class QWidget;
 QT_END_NAMESPACE
 
-class SettingsManager;
+class ISettingsManager;
 
 namespace KartWriter {
 class Writer;
@@ -25,7 +25,7 @@ class Writer;
 namespace kart {
 
 struct KartManagerSetup {
-  SettingsManager *settingsManager = nullptr;
+  ISettingsManager *settingsManager = nullptr;
   std::function<QList<CollectionConfig> *()> getCollections;
   std::function<QList<LauncherPreset>()> getLauncherPresets;
   std::function<QWidget *()> getParentWindow;

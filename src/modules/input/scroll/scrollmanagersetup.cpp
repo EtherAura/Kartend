@@ -66,7 +66,7 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   // These mirror ctx and are not stored as ScrollManager member fields.
   ArtworkManager *artwork = m_ctx ? m_ctx->artworkManager() : nullptr;
   InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
-  DatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
+  IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
 
   // Apply persisted column widths from settings via display manager.
   if (m_selectionDisplay) {
@@ -280,7 +280,7 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
 
   // If we have a pending selection restore, query the database now that
   // the context and data are set up
-  if (DatabaseManager *dbm = m_ctx ? m_ctx->databaseManager() : nullptr;
+  if (IDatabaseManager *dbm = m_ctx ? m_ctx->databaseManager() : nullptr;
       !m_pendingRestoreFilePath.isEmpty() && dbm && m_collections) {
     dbm->fetchVisualIndexForPath(m_context, *m_collections, m_pendingRestoreFilePath);
   }

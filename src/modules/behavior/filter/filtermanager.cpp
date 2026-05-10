@@ -8,7 +8,7 @@
 
 FilterManager::FilterManager(QObject *parent) : QObject(parent) {}
 
-void FilterManager::setDatabaseManager(DatabaseManager *manager) {
+void FilterManager::setDatabaseManager(IDatabaseManager *manager) {
   m_databaseManager = manager;
 }
 

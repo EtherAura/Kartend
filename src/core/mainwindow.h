@@ -27,11 +27,11 @@ class ApplicationManager;
 class ArtworkManager;
 class CacheManager;
 class InteractionManager;
-class DatabaseManager;
+class IDatabaseManager;
 class NavigationManager;
 class PlaylistManager;
 class SessionManager;
-class SettingsManager;
+class ISettingsManager;
 class DetailsPaneManager;
 class ScrollManager;
 class ItemWidget;
@@ -89,8 +89,8 @@ public:
 
   // Delegated Getters
   [[nodiscard]] DetailsPaneManager *getDetailsPaneManager() const;
-  [[nodiscard]] SettingsManager *getSettingsManager() const;
-  [[nodiscard]] DatabaseManager *getDatabaseManager() const;
+  [[nodiscard]] ISettingsManager *getSettingsManager() const;
+  [[nodiscard]] IDatabaseManager *getDatabaseManager() const;
   [[nodiscard]] ScrollManager *getScrollManager() const;
   [[nodiscard]] NavigationManager *getNavigationManager() const;
   [[nodiscard]] InteractionManager *getInteractionManager() const;

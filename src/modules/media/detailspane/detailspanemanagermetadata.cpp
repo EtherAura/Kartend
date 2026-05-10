@@ -42,7 +42,7 @@ void DetailsPaneManager::updateSidebarMetadata(ItemWidget *selectedItem) {
 }
 
 void DetailsPaneManager::updateSidebarMetadata(const QString &filePath, const QString &itemName) {
-  DatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
+  IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   if (!m_DetailsPane || filePath.isEmpty()) {
     if (m_DetailsPane) {
       m_DetailsPane->clearMetadata();
@@ -248,7 +248,7 @@ void DetailsPaneManager::updateSidebarMetadata(const QString &filePath, const QS
 }
 
 void DetailsPaneManager::openArtworkLinksDialog() {
-  DatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
+  IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   if (!m_DetailsPane || !db || !m_collections) {
     return;
   }

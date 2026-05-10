@@ -9,7 +9,7 @@
 #include <QString>
 #include <QStringList>
 
-class DatabaseManager;
+class IDatabaseManager;
 
 /**
  * @brief Manages search filtering and subcollection filtering for the scroll
@@ -46,7 +46,7 @@ public:
   // Dependency injection
   // ─────────────────────────────────────────────────────────────────────────
 
-  void setDatabaseManager(DatabaseManager *manager);
+  void setDatabaseManager(IDatabaseManager *manager);
   void setCollections(const QList<CollectionConfig> *collections);
   void setHierarchyCache(const CollectionHierarchyCache *cache);
 
@@ -148,7 +148,7 @@ private:
                                                     const QSet<int> &targetCollections) const;
 
   // Dependencies
-  DatabaseManager *m_databaseManager = nullptr;
+  IDatabaseManager *m_databaseManager = nullptr;
   const QList<CollectionConfig> *m_collections = nullptr;
   const CollectionHierarchyCache *m_hierarchyCache = nullptr;
 

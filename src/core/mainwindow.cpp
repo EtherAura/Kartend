@@ -705,10 +705,10 @@ void MainWindow::resyncPlaylistCollections() {
 DetailsPaneManager *MainWindow::getDetailsPaneManager() const {
   return m_appManager->getDetailsPaneManager();
 }
-SettingsManager *MainWindow::getSettingsManager() const {
+ISettingsManager *MainWindow::getSettingsManager() const {
   return m_appManager->getSettingsManager();
 }
-DatabaseManager *MainWindow::getDatabaseManager() const {
+IDatabaseManager *MainWindow::getDatabaseManager() const {
   return m_appManager->getDatabaseManager();
 }
 ScrollManager *MainWindow::getScrollManager() const {

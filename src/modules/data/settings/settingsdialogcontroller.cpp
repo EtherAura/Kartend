@@ -286,7 +286,7 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   DetailsPaneManager *detailsPaneManager = context.detailsPaneManager;
   ScrollManager *scrollManager = context.scrollManager;
   NavigationManager *navigationManager = context.navigationManager;
-  DatabaseManager *databaseManager = context.databaseManager;
+  IDatabaseManager *databaseManager = context.databaseManager;
 
   int viewingCollectionIndex = currentCollectionIndex;
   QList<CollectionConfig> originalCollections = collections;

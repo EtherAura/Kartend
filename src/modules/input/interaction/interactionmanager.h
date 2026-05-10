@@ -34,9 +34,9 @@ class ArrowNavigationHandler;
 class AlphabeticNavigationHandler;
 
 class ItemWidget;
-class DatabaseManager;
+class IDatabaseManager;
 class NavigationManager;
-class SettingsManager;
+class ISettingsManager;
 class DetailsPaneManager;
 class DetailPageManager;
 class ScrollManager;
@@ -58,8 +58,8 @@ struct InteractionManagerSetup {
   ScrollManager *scrollManager = nullptr;
   DetailsPaneManager *detailsPaneManager = nullptr;
   DetailPageManager *detailPageManager = nullptr;
-  SettingsManager *settingsManager = nullptr;
-  DatabaseManager *databaseManager = nullptr;
+  ISettingsManager *settingsManager = nullptr;
+  IDatabaseManager *databaseManager = nullptr;
   NavigationManager *navigationManager = nullptr;
   SessionManager *sessionManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
@@ -85,8 +85,8 @@ struct InteractionManagerSetup {
   SETUP_GETTER_INLINE_MGR_SAME(ScrollManager *, ScrollManager, scrollManager)
   SETUP_GETTER_INLINE_MGR_SAME(DetailsPaneManager *, DetailsPaneManager, detailsPaneManager)
   SETUP_GETTER_INLINE_MGR_SAME(DetailPageManager *, DetailPageManager, detailPageManager)
-  SETUP_GETTER_INLINE_MGR_SAME(SettingsManager *, SettingsManager, settingsManager)
-  SETUP_GETTER_INLINE_MGR_SAME(DatabaseManager *, DatabaseManager, databaseManager)
+  SETUP_GETTER_INLINE_MGR_SAME(ISettingsManager *, SettingsManager, settingsManager)
+  SETUP_GETTER_INLINE_MGR_SAME(IDatabaseManager *, DatabaseManager, databaseManager)
   SETUP_GETTER_INLINE_MGR_SAME(NavigationManager *, NavigationManager, navigationManager)
   SETUP_GETTER_INLINE_MGR_SAME(SessionManager *, SessionManager, sessionManager)
   SETUP_GETTER_INLINE_MGR_SAME(ArtworkManager *, ArtworkManager, artworkManager)
@@ -350,10 +350,10 @@ private:
   [[nodiscard]] DetailPageManager *detailPageMgr() const {
     return m_ctx ? m_ctx->detailPageManager() : nullptr;
   }
-  [[nodiscard]] SettingsManager *settingsMgr() const {
+  [[nodiscard]] ISettingsManager *settingsMgr() const {
     return m_ctx ? m_ctx->settingsManager() : nullptr;
   }
-  [[nodiscard]] DatabaseManager *databaseMgr() const {
+  [[nodiscard]] IDatabaseManager *databaseMgr() const {
     return m_ctx ? m_ctx->databaseManager() : nullptr;
   }
   [[nodiscard]] NavigationManager *navMgr() const {

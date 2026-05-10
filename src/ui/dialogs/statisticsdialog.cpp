@@ -33,10 +33,10 @@ constexpr int RECENT_LIST_LIMIT = 50;
 constexpr int HISTORY_LIST_LIMIT = 1000;
 } // namespace
 
-StatisticsDialog::StatisticsDialog(DatabaseManager *databaseManager,
+StatisticsDialog::StatisticsDialog(IDatabaseManager *databaseManager,
                                    const QList<CollectionConfig> *collections,
                                    bool runtimeDetectionEnabled, GeneralSettings *generalSettings,
-                                   SettingsManager *settingsManager, QWidget *parent)
+                                   ISettingsManager *settingsManager, QWidget *parent)
     : QDialog(parent), m_databaseManager(databaseManager), m_collections(collections),
       m_runtimeDetectionEnabled(runtimeDetectionEnabled), m_generalSettings(generalSettings),
       m_settingsManager(settingsManager) {

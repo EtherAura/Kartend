@@ -11,7 +11,7 @@ class ScrollManager;
 class NavigationManager;
 class ArtworkManager;
 class CacheManager;
-class DatabaseManager;
+class IDatabaseManager;
 
 struct SettingsDialogContext {
   QWidget *parent = nullptr;
@@ -23,7 +23,7 @@ struct SettingsDialogContext {
   // needed so the dialog controller can subscribe to post-scan summary
   // signals and display the "X of Y items added" confirmation box when a
   // newly-added collection finishes its first scan.
-  DatabaseManager *databaseManager = nullptr;
+  IDatabaseManager *databaseManager = nullptr;
 };
 
 /**

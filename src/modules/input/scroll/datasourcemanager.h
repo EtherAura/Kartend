@@ -8,7 +8,7 @@ class FilterManager;
 class ScrollDataManager;
 class PreSearchStateManager;
 class SearchLoadingOverlay;
-class DatabaseManager;
+class IDatabaseManager;
 class QWidget;
 
 /**
@@ -53,7 +53,7 @@ public:
 
   /// Forwards a database-manager pointer to FilterManager. ScrollManager
   /// receives the database manager later than its sub-managers are constructed.
-  void setDatabaseManager(DatabaseManager *manager);
+  void setDatabaseManager(IDatabaseManager *manager);
   /// Sets the parent widget for the search loading overlay (typically the
   /// scroll-area viewport).
   void setSearchOverlayParent(QWidget *parent);

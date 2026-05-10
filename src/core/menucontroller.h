@@ -17,11 +17,11 @@ QT_END_NAMESPACE
 
 class Ui_MainWindow;
 class NavigationManager;
-class SettingsManager;
+class ISettingsManager;
 class DetailsPaneManager;
 class ScrollManager;
 class ArtworkManager;
-class DatabaseManager;
+class IDatabaseManager;
 class InteractionManager;
 
 /// Context struct for menu action callbacks.
@@ -32,11 +32,11 @@ struct MenuControllerContext {
 
   // Manager getters (safer than raw pointers - allows null checks)
   std::function<NavigationManager *()> getNavigationManager;
-  std::function<SettingsManager *()> getSettingsManager;
+  std::function<ISettingsManager *()> getSettingsManager;
   std::function<DetailsPaneManager *()> getDetailsPaneManager;
   std::function<ScrollManager *()> getScrollManager;
   std::function<ArtworkManager *()> getArtworkManager;
-  std::function<DatabaseManager *()> getDatabaseManager;
+  std::function<IDatabaseManager *()> getDatabaseManager;
   std::function<InteractionManager *()> getInteractionManager;
 
   // State accessors
@@ -180,7 +180,7 @@ private:
   // Forward-declares avoid a hard include of usagestatsstore.h here; the
   // real include is in menucontroller.cpp.
   void populateLaunchEntriesIntoMenu(QMenu *menu, const QList<UsageStatsStore::ItemUsageRow> &rows,
-                                     DatabaseManager *db);
+                                     IDatabaseManager *db);
 
   // Mirror menu-bar visibility onto the toolbar hamburger button so the user
   // always has menu access whether the menu bar is hidden by F11 or F10.

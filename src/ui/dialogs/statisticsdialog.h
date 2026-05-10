@@ -16,9 +16,9 @@ class QTabWidget;
 class QTreeWidget;
 QT_END_NAMESPACE
 
-class DatabaseManager;
+class IDatabaseManager;
 struct GeneralSettings;
-class SettingsManager;
+class ISettingsManager;
 
 /// Aggregate usage-statistics dialog.
 ///
@@ -34,9 +34,9 @@ class SettingsManager;
 class StatisticsDialog : public QDialog {
   Q_OBJECT
 public:
-  StatisticsDialog(DatabaseManager *databaseManager, const QList<CollectionConfig> *collections,
+  StatisticsDialog(IDatabaseManager *databaseManager, const QList<CollectionConfig> *collections,
                    bool runtimeDetectionEnabled, GeneralSettings *generalSettings,
-                   SettingsManager *settingsManager, QWidget *parent = nullptr);
+                   ISettingsManager *settingsManager, QWidget *parent = nullptr);
 
 private:
   void setupUI();
@@ -56,7 +56,7 @@ private:
   /// something readable.
   [[nodiscard]] QString labelForCollectionUuid(const QString &uuid) const;
 
-  DatabaseManager *m_databaseManager = nullptr;
+  IDatabaseManager *m_databaseManager = nullptr;
   const QList<CollectionConfig> *m_collections = nullptr;
   bool m_runtimeDetectionEnabled = false;
   /// the dialog drives historyEnabled (live toggle on the
@@ -64,7 +64,7 @@ private:
   /// caller didn't wire them — the tab still renders its rows but the
   /// toggle is hidden.
   GeneralSettings *m_generalSettings = nullptr;
-  SettingsManager *m_settingsManager = nullptr;
+  ISettingsManager *m_settingsManager = nullptr;
 
   QLabel *m_totalItemsValue = nullptr;
   QLabel *m_totalLaunchesValue = nullptr;

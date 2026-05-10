@@ -515,11 +515,11 @@ void MenuController::setupStatisticsAction() {
   // contained alongside the dialog. Lives in the Help menu next to Shortcuts.
   m_statisticsAction = new QAction(tr("Usage Statistics…"), this);
   if (!connectGlobalAction(m_statisticsAction, [this]() {
-        DatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
+        IDatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
         QList<CollectionConfig> *collections =
             m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
         GeneralSettings *settings = m_ctx.getGeneralSettings ? m_ctx.getGeneralSettings() : nullptr;
-        SettingsManager *settingsMgr =
+        ISettingsManager *settingsMgr =
             m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr;
         const bool runtimeOn = settings && settings->runtimeDetectionEnabled;
         StatisticsDialog dialog(db, collections, runtimeOn, settings, settingsMgr,
@@ -657,7 +657,7 @@ void MenuController::setupActionOpenRandomItem() {
     // from a synthetic collection (playlist, aggregator) hands its
     // empty-launcher CollectionConfig to LaunchManager and trips "No
     // launcher configured".
-    DatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
+    IDatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
     const int sourceIndex = db ? db->getCollectionIndexForFile(path) : -1;
     const int ownerIndex = (sourceIndex >= 0) ? sourceIndex : viewingIndex;
 
@@ -713,7 +713,7 @@ void MenuController::rebuildRecentMenu() {
   QMenu *menu = m_ctx.ui->menuRecent;
   menu->clear();
 
-  DatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
+  IDatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
   if (!db) {
     QAction *empty = menu->addAction(tr("(no recent items)"));
     empty->setEnabled(false);
@@ -749,7 +749,7 @@ void MenuController::rebuildMostLaunchedMenu() {
   QMenu *menu = m_ctx.ui->menuMostLaunched;
   menu->clear();
 
-  DatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
+  IDatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
   if (!db) {
     QAction *empty = menu->addAction(tr("(no launched items)"));
     empty->setEnabled(false);
@@ -772,7 +772,7 @@ void MenuController::rebuildMostLaunchedMenu() {
 
 void MenuController::populateLaunchEntriesIntoMenu(QMenu *menu,
                                                    const QList<UsageStatsStore::ItemUsageRow> &rows,
-                                                   DatabaseManager *db) {
+                                                   IDatabaseManager *db) {
   if (!menu) return;
 
   const CollectionHierarchyCache *cache =
