@@ -15,6 +15,7 @@
 set(INTEGRATION_TEST_SOURCES
   test_main.cpp
   mainwindowfixture.cpp
+  mocks/mockedmainwindowfixture.cpp
   test_mainwindow_smoke.cpp
   test_settingsdialog_scope.cpp
   test_applysettingsdialog.cpp
@@ -38,6 +39,7 @@ set(INTEGRATION_TEST_HEADERS
   test_settingsdialog_changes.h
   test_scrollmanager.h
   mocks/mockdatabasemanager.h
+  mocks/mockedmainwindowfixture.h
   mocks/mocksettingsmanager.h
 )
 
@@ -61,6 +63,7 @@ target_link_libraries(test_integration
 # so the test binary needs visibility of the kartend_lib autogen include path.
 target_include_directories(test_integration PRIVATE
   ${CMAKE_BINARY_DIR}/${KARTEND_LIB_TARGET}_autogen/include
+  ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 # AUTOMOC/AUTOUIC are inherited from the top-level CMakeLists.txt

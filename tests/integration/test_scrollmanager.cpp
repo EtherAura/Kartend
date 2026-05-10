@@ -1,14 +1,19 @@
 #include "test_scrollmanager.h"
 
 #include "mainwindow.h"
-#include "mainwindowfixture.h"
+#include "mocks/mockdatabasemanager.h"
+#include "mocks/mockedmainwindowfixture.h"
 #include "scrollmanager.h"
 
 #include <QStringList>
 #include <QTest>
 
 void TestScrollManager::getTotalItems_isZeroOnFreshFixture() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
+  // Sanity check: confirm the factory hooks actually substituted the mock.
+  // Without this, a regression that broke the factory plumbing would leave
+  // tests silently exercising the real SQLite-backed DatabaseManager.
+  QVERIFY(qobject_cast<KartendTest::MockDatabaseManager *>(fixture.window()->getDatabaseManager()));
   ScrollManager *sm = fixture.window()->getScrollManager();
   QVERIFY(sm);
   // No collections have been loaded into the fixture's MainWindow, so
@@ -18,7 +23,7 @@ void TestScrollManager::getTotalItems_isZeroOnFreshFixture() {
 }
 
 void TestScrollManager::getCurrentGridWidth_returnsPositive() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   ScrollManager *sm = fixture.window()->getScrollManager();
   QVERIFY(sm);
   // Even without a collection loaded, getCurrentGridWidth falls back to
@@ -29,7 +34,7 @@ void TestScrollManager::getCurrentGridWidth_returnsPositive() {
 }
 
 void TestScrollManager::sidebarShrinkingActive_roundTripsThroughSetter() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   ScrollManager *sm = fixture.window()->getScrollManager();
   QVERIFY(sm);
 
@@ -41,14 +46,14 @@ void TestScrollManager::sidebarShrinkingActive_roundTripsThroughSetter() {
 }
 
 void TestScrollManager::hasPendingSelectionRestoreByPath_isFalseInitially() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   ScrollManager *sm = fixture.window()->getScrollManager();
   QVERIFY(sm);
   QVERIFY(!sm->hasPendingSelectionRestoreByPath());
 }
 
 void TestScrollManager::hasPendingSelectionRestoreByPath_flipsAfterSet() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   ScrollManager *sm = fixture.window()->getScrollManager();
   QVERIFY(sm);
 
@@ -62,7 +67,7 @@ void TestScrollManager::hasPendingSelectionRestoreByPath_flipsAfterSet() {
 }
 
 void TestScrollManager::hasPreSearchState_isFalseBeforeSave() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   ScrollManager *sm = fixture.window()->getScrollManager();
   QVERIFY(sm);
   // savePreSearchState must be called explicitly before hasPreSearchState
@@ -71,7 +76,7 @@ void TestScrollManager::hasPreSearchState_isFalseBeforeSave() {
 }
 
 void TestScrollManager::filterChange_clearOnEmptyStateIsSafe() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   ScrollManager *sm = fixture.window()->getScrollManager();
   QVERIFY(sm);
   // clearFilter() on a manager that never applied a filter must be a
@@ -84,14 +89,14 @@ void TestScrollManager::filterChange_clearOnEmptyStateIsSafe() {
 }
 
 void TestScrollManager::getFilePaths_isEmptyOnFreshFixture() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   ScrollManager *sm = fixture.window()->getScrollManager();
   QVERIFY(sm);
   QVERIFY(sm->getFilePaths().isEmpty());
 }
 
 void TestScrollManager::willNeedVerticalScrollbar_returnsBoolWithoutCrash() {
-  KartendTest::MainWindowFixture fixture;
+  KartendTest::MockedMainWindowFixture fixture;
   ScrollManager *sm = fixture.window()->getScrollManager();
   QVERIFY(sm);
   // With zero items the scrollbar shouldn't be needed; this also exercises
