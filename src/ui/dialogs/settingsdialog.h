@@ -30,11 +30,6 @@ class SidebarPanel;
 
 class SettingsDialog : public QDialog {
   Q_OBJECT
-  // The gamepad capture state machine reaches into the line-edit / detect
-  // button widgets on ui to apply per-tick UI sync. Friend declaration
-  // keeps those pointers encapsulated while the helper exists to group
-  // the gamepad code cohesively.
-  friend class GamepadCaptureController;
   // The collection-removal pipeline reaches into collections /
   // m_workingCollections / the tree-index maps + several private helpers
   // to run the seven-step removal flow. Friend-declared for the same

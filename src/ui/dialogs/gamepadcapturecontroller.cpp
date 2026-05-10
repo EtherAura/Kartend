@@ -4,8 +4,8 @@
 #include "interactionmanager.h"
 #include "mainwindow.h"
 #include "settingsdialog.h"
-#include "ui_settingsdialog.h"
 
+#include <QCheckBox>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
@@ -23,6 +23,11 @@ GamepadManager *resolveGamepadManager(QObject *parent) {
 
 GamepadCaptureController::GamepadCaptureController(SettingsDialog *host)
     : QObject(host), m_host(host) {}
+
+void GamepadCaptureController::setWidgets(const Bindings &bindings) {
+  m_bindings = bindings;
+  refreshUi();
+}
 
 void GamepadCaptureController::start(Target target) {
   GamepadManager *gamepad = resolveGamepadManager(m_host ? m_host->parent() : nullptr);
@@ -62,74 +67,61 @@ void GamepadCaptureController::stop() {
 }
 
 void GamepadCaptureController::onButtonPressed(const QString &buttonName) {
-  if (!m_host) {
-    return;
-  }
-  Ui::SettingsDialog *ui = m_host->ui;
-  if (m_target == Target::Confirm) {
-    if (ui->gamepadConfirmButtonLineEdit) {
-      ui->gamepadConfirmButtonLineEdit->setText(buttonName);
-    }
-  } else if (m_target == Target::Back) {
-    if (ui->gamepadBackButtonLineEdit) {
-      ui->gamepadBackButtonLineEdit->setText(buttonName);
-    }
-  } else if (m_target == Target::ToggleSidebar) {
-    if (ui->gamepadToggleSidebarButtonLineEdit) {
-      ui->gamepadToggleSidebarButtonLineEdit->setText(buttonName);
-    }
+  if (m_target == Target::Confirm && m_bindings.confirmEdit) {
+    m_bindings.confirmEdit->setText(buttonName);
+  } else if (m_target == Target::Back && m_bindings.backEdit) {
+    m_bindings.backEdit->setText(buttonName);
+  } else if (m_target == Target::ToggleSidebar && m_bindings.toggleSidebarEdit) {
+    m_bindings.toggleSidebarEdit->setText(buttonName);
   }
 
   stop();
-  m_host->checkForChanges();
+  // No explicit dirty-check call: setText() above triggered QLineEdit::
+  // textChanged on the bound edit, which runs through ControlsPanel::
+  // writeBack and emits ControlsPanel::changed — the host dialog wires that
+  // signal to checkForChanges already.
 }
 
 void GamepadCaptureController::refreshUi() {
-  if (!m_host) {
-    return;
-  }
-  Ui::SettingsDialog *ui = m_host->ui;
   const bool capturingConfirm = (m_target == Target::Confirm);
   const bool capturingBack = (m_target == Target::Back);
   const bool capturingToggleSidebar = (m_target == Target::ToggleSidebar);
   const bool capturingAny = capturingConfirm || capturingBack || capturingToggleSidebar;
 
-  if (ui->detectGamepadConfirmButtonButton) {
-    ui->detectGamepadConfirmButtonButton->setText(capturingConfirm ? tr("Press button...")
-                                                                   : tr("Detect..."));
-    ui->detectGamepadConfirmButtonButton->setEnabled(!capturingBack && !capturingToggleSidebar);
-  }
-  if (ui->detectGamepadBackButtonButton) {
-    ui->detectGamepadBackButtonButton->setText(capturingBack ? tr("Press button...")
+  if (m_bindings.detectConfirmButton) {
+    m_bindings.detectConfirmButton->setText(capturingConfirm ? tr("Press button...")
                                                              : tr("Detect..."));
-    ui->detectGamepadBackButtonButton->setEnabled(!capturingConfirm && !capturingToggleSidebar);
+    m_bindings.detectConfirmButton->setEnabled(!capturingBack && !capturingToggleSidebar);
   }
-  if (ui->detectGamepadToggleSidebarButtonButton) {
-    ui->detectGamepadToggleSidebarButtonButton->setText(
-        capturingToggleSidebar ? tr("Press button...") : tr("Detect..."));
-    ui->detectGamepadToggleSidebarButtonButton->setEnabled(!capturingConfirm && !capturingBack);
+  if (m_bindings.detectBackButton) {
+    m_bindings.detectBackButton->setText(capturingBack ? tr("Press button...") : tr("Detect..."));
+    m_bindings.detectBackButton->setEnabled(!capturingConfirm && !capturingToggleSidebar);
+  }
+  if (m_bindings.detectToggleSidebarButton) {
+    m_bindings.detectToggleSidebarButton->setText(capturingToggleSidebar ? tr("Press button...")
+                                                                         : tr("Detect..."));
+    m_bindings.detectToggleSidebarButton->setEnabled(!capturingConfirm && !capturingBack);
   }
 
-  if (ui->gamepadConfirmButtonLineEdit) {
-    ui->gamepadConfirmButtonLineEdit->setPlaceholderText(capturingConfirm ? tr("Press any button")
-                                                                          : QString());
+  if (m_bindings.confirmEdit) {
+    m_bindings.confirmEdit->setPlaceholderText(capturingConfirm ? tr("Press any button")
+                                                                : QString());
   }
-  if (ui->gamepadBackButtonLineEdit) {
-    ui->gamepadBackButtonLineEdit->setPlaceholderText(capturingBack ? tr("Press any button")
-                                                                    : QString());
+  if (m_bindings.backEdit) {
+    m_bindings.backEdit->setPlaceholderText(capturingBack ? tr("Press any button") : QString());
   }
-  if (ui->gamepadToggleSidebarButtonLineEdit) {
-    ui->gamepadToggleSidebarButtonLineEdit->setPlaceholderText(
-        capturingToggleSidebar ? tr("Press any button") : QString());
+  if (m_bindings.toggleSidebarEdit) {
+    m_bindings.toggleSidebarEdit->setPlaceholderText(capturingToggleSidebar ? tr("Press any button")
+                                                                            : QString());
   }
 
   // While capturing, prevent the sibling D-Pad / left-stick checkboxes
   // from being changed — toggling them mid-capture would be confusing
   // because the capture state machine doesn't react to those events.
-  if (ui->gamepadUseDpadCheckBox) {
-    ui->gamepadUseDpadCheckBox->setEnabled(!capturingAny);
+  if (m_bindings.useDpadCheckBox) {
+    m_bindings.useDpadCheckBox->setEnabled(!capturingAny);
   }
-  if (ui->gamepadUseLeftStickCheckBox) {
-    ui->gamepadUseLeftStickCheckBox->setEnabled(!capturingAny);
+  if (m_bindings.useLeftStickCheckBox) {
+    m_bindings.useLeftStickCheckBox->setEnabled(!capturingAny);
   }
 }

@@ -306,66 +306,8 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     }
   });
 
-  auto markChanged = [this]() { checkForChanges(); };
-  if (ui->keyNavUpEdit) {
-    connect(ui->keyNavUpEdit, &QKeySequenceEdit::keySequenceChanged, this, markChanged);
-  }
-  if (ui->keyNavDownEdit) {
-    connect(ui->keyNavDownEdit, &QKeySequenceEdit::keySequenceChanged, this, markChanged);
-  }
-  if (ui->keyNavLeftEdit) {
-    connect(ui->keyNavLeftEdit, &QKeySequenceEdit::keySequenceChanged, this, markChanged);
-  }
-  if (ui->keyNavRightEdit) {
-    connect(ui->keyNavRightEdit, &QKeySequenceEdit::keySequenceChanged, this, markChanged);
-  }
-  if (ui->keyConfirmEdit) {
-    connect(ui->keyConfirmEdit, &QKeySequenceEdit::keySequenceChanged, this, markChanged);
-  }
-  if (ui->keyBackEdit) {
-    connect(ui->keyBackEdit, &QKeySequenceEdit::keySequenceChanged, this, markChanged);
-  }
-  if (ui->keySearchEdit) {
-    connect(ui->keySearchEdit, &QKeySequenceEdit::keySequenceChanged, this, markChanged);
-  }
-  if (ui->keyHomeViewEdit) {
-    connect(ui->keyHomeViewEdit, &QKeySequenceEdit::keySequenceChanged, this, markChanged);
-  }
-
-  if (ui->gamepadConfirmButtonLineEdit) {
-    connect(ui->gamepadConfirmButtonLineEdit, &QLineEdit::textChanged, this, markChanged);
-  }
-  if (ui->gamepadBackButtonLineEdit) {
-    connect(ui->gamepadBackButtonLineEdit, &QLineEdit::textChanged, this, markChanged);
-  }
-  if (ui->gamepadToggleSidebarButtonLineEdit) {
-    connect(ui->gamepadToggleSidebarButtonLineEdit, &QLineEdit::textChanged, this, markChanged);
-  }
-  if (ui->detectGamepadConfirmButtonButton) {
-    connect(ui->detectGamepadConfirmButtonButton, &QPushButton::clicked, this, [this]() {
-      if (m_gamepadCapture) m_gamepadCapture->start(GamepadCaptureController::Target::Confirm);
-    });
-  }
-  if (ui->detectGamepadBackButtonButton) {
-    connect(ui->detectGamepadBackButtonButton, &QPushButton::clicked, this, [this]() {
-      if (m_gamepadCapture) m_gamepadCapture->start(GamepadCaptureController::Target::Back);
-    });
-  }
-  if (ui->detectGamepadToggleSidebarButtonButton) {
-    connect(ui->detectGamepadToggleSidebarButtonButton, &QPushButton::clicked, this, [this]() {
-      if (m_gamepadCapture)
-        m_gamepadCapture->start(GamepadCaptureController::Target::ToggleSidebar);
-    });
-  }
-  if (ui->gamepadUseDpadCheckBox) {
-    connect(ui->gamepadUseDpadCheckBox, &QCheckBox::toggled, this, markChanged);
-  }
-  if (ui->gamepadUseLeftStickCheckBox) {
-    connect(ui->gamepadUseLeftStickCheckBox, &QCheckBox::toggled, this, markChanged);
-  }
-  if (ui->artworkCycleModifierComboBox) {
-    connect(ui->artworkCycleModifierComboBox, &QComboBox::currentIndexChanged, this, markChanged);
-  }
+  // Keyboard / Gamepad / Mouse connections (including detect-button →
+  // GamepadCaptureController dispatch) live on ControlsPanel now.
 
   // Startup video / home-view / selection-display / input-timing /
   // performance-history connections all live in GeneralSettingsPanel now.

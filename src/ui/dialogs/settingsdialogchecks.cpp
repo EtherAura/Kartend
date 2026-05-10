@@ -605,9 +605,22 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
           m_originalGeneralSettings.toolbarTitleFilterText) {
     return true;
   }
-  // artwork-cycle modifier dropdown.
-  if (ui->artworkCycleModifierComboBox && ui->artworkCycleModifierComboBox->currentData().toInt() !=
-                                              m_originalGeneralSettings.artworkCycleModifier) {
+  // ControlsPanel-owned fields (Keyboard / Gamepad / Mouse) — struct compare.
+  if (m_generalSettings.keyNavUp != m_originalGeneralSettings.keyNavUp ||
+      m_generalSettings.keyNavDown != m_originalGeneralSettings.keyNavDown ||
+      m_generalSettings.keyNavLeft != m_originalGeneralSettings.keyNavLeft ||
+      m_generalSettings.keyNavRight != m_originalGeneralSettings.keyNavRight ||
+      m_generalSettings.keyConfirm != m_originalGeneralSettings.keyConfirm ||
+      m_generalSettings.keyBack != m_originalGeneralSettings.keyBack ||
+      m_generalSettings.keySearch != m_originalGeneralSettings.keySearch ||
+      m_generalSettings.keyHomeView != m_originalGeneralSettings.keyHomeView ||
+      m_generalSettings.gamepadUseDpad != m_originalGeneralSettings.gamepadUseDpad ||
+      m_generalSettings.gamepadUseLeftStick != m_originalGeneralSettings.gamepadUseLeftStick ||
+      m_generalSettings.gamepadConfirmButton != m_originalGeneralSettings.gamepadConfirmButton ||
+      m_generalSettings.gamepadBackButton != m_originalGeneralSettings.gamepadBackButton ||
+      m_generalSettings.gamepadToggleSidebarButton !=
+          m_originalGeneralSettings.gamepadToggleSidebarButton ||
+      m_generalSettings.artworkCycleModifier != m_originalGeneralSettings.artworkCycleModifier) {
     return true;
   }
   if (m_generalSettings.useHomeView != m_originalGeneralSettings.useHomeView ||

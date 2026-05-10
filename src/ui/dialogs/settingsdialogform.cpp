@@ -356,51 +356,8 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   }
   // Note: customFontEdit is now loaded per-collection in loadCollectionFields()
 
-  auto setKeyEdit = [](QKeySequenceEdit *edit, int key) {
-    if (!edit) {
-      return;
-    }
-    edit->blockSignals(true);
-    edit->setKeySequence(QKeySequence(key));
-    edit->blockSignals(false);
-  };
-
-  setKeyEdit(ui->keyNavUpEdit, m_generalSettings.keyNavUp);
-  setKeyEdit(ui->keyNavDownEdit, m_generalSettings.keyNavDown);
-  setKeyEdit(ui->keyNavLeftEdit, m_generalSettings.keyNavLeft);
-  setKeyEdit(ui->keyNavRightEdit, m_generalSettings.keyNavRight);
-  setKeyEdit(ui->keyConfirmEdit, m_generalSettings.keyConfirm);
-  setKeyEdit(ui->keyBackEdit, m_generalSettings.keyBack);
-  setKeyEdit(ui->keySearchEdit, m_generalSettings.keySearch);
-  setKeyEdit(ui->keyHomeViewEdit, m_generalSettings.keyHomeView);
-
-  SettingsFormBinding::loadInto(ui->gamepadUseDpadCheckBox, m_generalSettings.gamepadUseDpad);
-  SettingsFormBinding::loadInto(ui->gamepadUseLeftStickCheckBox,
-                                m_generalSettings.gamepadUseLeftStick);
-  SettingsFormBinding::loadInto(ui->gamepadConfirmButtonLineEdit,
-                                m_generalSettings.gamepadConfirmButton);
-  SettingsFormBinding::loadInto(ui->gamepadBackButtonLineEdit, m_generalSettings.gamepadBackButton);
-  SettingsFormBinding::loadInto(ui->gamepadToggleSidebarButtonLineEdit,
-                                m_generalSettings.gamepadToggleSidebarButton);
-
-  // artwork-cycle modifier dropdown. Populated lazily on first
-  // load so a freshly opened dialog reflects whatever the user picked last
-  // session. Order matches the order users tend to reach for: Shift first,
-  // Meta last (Win/Cmd is the most likely to clash with a global shortcut).
-  if (ui->artworkCycleModifierComboBox) {
-    QSignalBlocker blocker(ui->artworkCycleModifierComboBox);
-    if (ui->artworkCycleModifierComboBox->count() == 0) {
-      ui->artworkCycleModifierComboBox->addItem(tr("Shift"), static_cast<int>(Qt::ShiftModifier));
-      ui->artworkCycleModifierComboBox->addItem(tr("Ctrl"), static_cast<int>(Qt::ControlModifier));
-      ui->artworkCycleModifierComboBox->addItem(tr("Alt"), static_cast<int>(Qt::AltModifier));
-      ui->artworkCycleModifierComboBox->addItem(tr("Meta (Win/Cmd)"),
-                                                static_cast<int>(Qt::MetaModifier));
-    }
-    int comboIdx =
-        ui->artworkCycleModifierComboBox->findData(m_generalSettings.artworkCycleModifier);
-    ui->artworkCycleModifierComboBox->setCurrentIndex(comboIdx >= 0 ? comboIdx : 0);
-  }
-
+  // Keyboard / Gamepad / Mouse fields owned by ControlsPanel.
+  ui->controlsPanel->refresh();
   // Toolbar customization fields owned by ToolbarPanel.
   ui->toolbarPanel->refresh();
 
@@ -505,73 +462,23 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     // Note: customFontFamily is now saved per-collection, not in general
     // settings
 
-    auto singleKeyFromEdit = [](QKeySequenceEdit *edit, int fallbackKey) -> int {
-      if (!edit) {
-        return fallbackKey;
-      }
-      const QKeySequence seq = edit->keySequence();
-      if (seq.isEmpty()) {
-        return fallbackKey;
-      }
-      const auto combo = seq[0];
-      const int keyOnly = static_cast<int>(combo.key());
-      return (keyOnly != 0) ? keyOnly : fallbackKey;
-    };
-
-    mainWindow->m_generalSettings.keyNavUp =
-        singleKeyFromEdit(ui->keyNavUpEdit, mainWindow->m_generalSettings.keyNavUp);
-    mainWindow->m_generalSettings.keyNavDown =
-        singleKeyFromEdit(ui->keyNavDownEdit, mainWindow->m_generalSettings.keyNavDown);
-    mainWindow->m_generalSettings.keyNavLeft =
-        singleKeyFromEdit(ui->keyNavLeftEdit, mainWindow->m_generalSettings.keyNavLeft);
-    mainWindow->m_generalSettings.keyNavRight =
-        singleKeyFromEdit(ui->keyNavRightEdit, mainWindow->m_generalSettings.keyNavRight);
-    mainWindow->m_generalSettings.keyConfirm =
-        singleKeyFromEdit(ui->keyConfirmEdit, mainWindow->m_generalSettings.keyConfirm);
-    mainWindow->m_generalSettings.keyBack =
-        singleKeyFromEdit(ui->keyBackEdit, mainWindow->m_generalSettings.keyBack);
-    mainWindow->m_generalSettings.keySearch =
-        singleKeyFromEdit(ui->keySearchEdit, mainWindow->m_generalSettings.keySearch);
-    // Pass 0 as the fallback so clearing the field actually unbinds the
-    // shortcut — the rest of the keybinds revert to their previous value
-    // because they have meaningful defaults; Home has no default.
-    mainWindow->m_generalSettings.keyHomeView = singleKeyFromEdit(ui->keyHomeViewEdit, 0);
-
-    SettingsFormBinding::saveFrom(ui->gamepadUseDpadCheckBox,
-                                  mainWindow->m_generalSettings.gamepadUseDpad);
-    SettingsFormBinding::saveFrom(ui->gamepadUseLeftStickCheckBox,
-                                  mainWindow->m_generalSettings.gamepadUseLeftStick);
-    if (ui->gamepadConfirmButtonLineEdit) {
-      const QString v = ui->gamepadConfirmButtonLineEdit->text().trimmed();
-      if (!v.isEmpty()) {
-        mainWindow->m_generalSettings.gamepadConfirmButton = v;
-      }
-    }
-    if (ui->gamepadBackButtonLineEdit) {
-      const QString v = ui->gamepadBackButtonLineEdit->text().trimmed();
-      if (!v.isEmpty()) {
-        mainWindow->m_generalSettings.gamepadBackButton = v;
-      }
-    }
-    if (ui->gamepadToggleSidebarButtonLineEdit) {
-      const QString v = ui->gamepadToggleSidebarButtonLineEdit->text().trimmed();
-      if (!v.isEmpty()) {
-        mainWindow->m_generalSettings.gamepadToggleSidebarButton = v;
-      }
-    }
-    if (ui->artworkCycleModifierComboBox) {
-      const int rawModifier = ui->artworkCycleModifierComboBox->currentData().toInt();
-      switch (rawModifier) {
-      case static_cast<int>(Qt::ShiftModifier):
-      case static_cast<int>(Qt::ControlModifier):
-      case static_cast<int>(Qt::AltModifier):
-      case static_cast<int>(Qt::MetaModifier):
-        mainWindow->m_generalSettings.artworkCycleModifier = rawModifier;
-        break;
-      default:
-        break; // leave the existing value untouched on a stale combo entry
-      }
-    }
+    // Keyboard / Gamepad / Mouse fields owned by ControlsPanel — already
+    // in m_generalSettings via writeBack(); copy to mainWindow's struct.
+    mainWindow->m_generalSettings.keyNavUp = m_generalSettings.keyNavUp;
+    mainWindow->m_generalSettings.keyNavDown = m_generalSettings.keyNavDown;
+    mainWindow->m_generalSettings.keyNavLeft = m_generalSettings.keyNavLeft;
+    mainWindow->m_generalSettings.keyNavRight = m_generalSettings.keyNavRight;
+    mainWindow->m_generalSettings.keyConfirm = m_generalSettings.keyConfirm;
+    mainWindow->m_generalSettings.keyBack = m_generalSettings.keyBack;
+    mainWindow->m_generalSettings.keySearch = m_generalSettings.keySearch;
+    mainWindow->m_generalSettings.keyHomeView = m_generalSettings.keyHomeView;
+    mainWindow->m_generalSettings.gamepadUseDpad = m_generalSettings.gamepadUseDpad;
+    mainWindow->m_generalSettings.gamepadUseLeftStick = m_generalSettings.gamepadUseLeftStick;
+    mainWindow->m_generalSettings.gamepadConfirmButton = m_generalSettings.gamepadConfirmButton;
+    mainWindow->m_generalSettings.gamepadBackButton = m_generalSettings.gamepadBackButton;
+    mainWindow->m_generalSettings.gamepadToggleSidebarButton =
+        m_generalSettings.gamepadToggleSidebarButton;
+    mainWindow->m_generalSettings.artworkCycleModifier = m_generalSettings.artworkCycleModifier;
     // launcher presets live on the dialog's m_generalSettings
     // (mutated directly by the Launchers tab) — copy them onto the main
     // window's settings before persisting so the saved snapshot includes

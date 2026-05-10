@@ -26,6 +26,7 @@
 #include "attractpanel.h"
 #include "collectionremover.h"
 #include "collectiontreewidget.h"
+#include "controlspanel.h"
 #include "extensionutils.h"
 #include "fontspanel.h"
 #include "gamepadcapturecontroller.h"
@@ -127,6 +128,23 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   ui->generalSettingsPanel->setSettings(&m_generalSettings);
   connect(ui->generalSettingsPanel, &GeneralSettingsPanel::changed, this,
           &SettingsDialog::checkForChanges);
+
+  // Controls panel (Keyboard / Gamepad / Mouse). Bind the gamepad-capture
+  // controller's widget pointers to the panel's own gamepad widgets so the
+  // controller doesn't need friend access to ui_settingsdialog.h anymore.
+  ui->controlsPanel->setSettings(&m_generalSettings);
+  connect(ui->controlsPanel, &ControlsPanel::changed, this, &SettingsDialog::checkForChanges);
+  ui->controlsPanel->installGamepadCaptureController(m_gamepadCapture);
+  m_gamepadCapture->setWidgets({
+      ui->controlsPanel->gamepadConfirmLineEdit(),
+      ui->controlsPanel->gamepadBackLineEdit(),
+      ui->controlsPanel->gamepadToggleSidebarLineEdit(),
+      ui->controlsPanel->detectConfirmButton(),
+      ui->controlsPanel->detectBackButton(),
+      ui->controlsPanel->detectToggleSidebarButton(),
+      ui->controlsPanel->useDpadCheckBox(),
+      ui->controlsPanel->useLeftStickCheckBox(),
+  });
 
   collectionTreeWidget = ui->collectionTreeWidget;
 

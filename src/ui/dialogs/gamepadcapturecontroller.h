@@ -5,26 +5,47 @@
 #include <QObject>
 
 class SettingsDialog;
+class QCheckBox;
+class QLineEdit;
+class QPushButton;
 class QString;
 
 /// Owns the SettingsDialog's gamepad button-capture state machine: the
 /// active capture target, the GamepadManager binding-capture connection,
 /// and the per-tick UI sync (button labels, line-edit placeholders, lock
-/// state of the sibling checkboxes while a capture is in flight).
+/// state of the sibling D-Pad / left-stick checkboxes while a capture is
+/// in flight).
 ///
-/// Coupling: takes its host SettingsDialog at construction time. The
-/// helper reaches into the host's ui->* widgets to apply line-edit
-/// updates and button label/enable transitions, and into MainWindow ->
-/// InteractionManager -> GamepadManager to begin/end the capture pass.
-/// Friend-declared in SettingsDialog so the line-edit + button widgets
-/// stay encapsulated.
+/// Coupling: takes its host SettingsDialog at construction so it can find
+/// MainWindow → InteractionManager → GamepadManager and re-trigger the
+/// dialog's checkForChanges. Widgets are bound explicitly via
+/// setWidgets(); the panel that owns them (ControlsPanel) hands them
+/// across.
 class GamepadCaptureController : public QObject {
   Q_OBJECT
 
 public:
   enum class Target { None, Confirm, Back, ToggleSidebar };
 
+  /// Widget bag passed across the panel/controller boundary. Members may
+  /// be null during the brief construction window before setWidgets() runs;
+  /// the controller no-ops on null entries.
+  struct Bindings {
+    QLineEdit *confirmEdit = nullptr;
+    QLineEdit *backEdit = nullptr;
+    QLineEdit *toggleSidebarEdit = nullptr;
+    QPushButton *detectConfirmButton = nullptr;
+    QPushButton *detectBackButton = nullptr;
+    QPushButton *detectToggleSidebarButton = nullptr;
+    QCheckBox *useDpadCheckBox = nullptr;
+    QCheckBox *useLeftStickCheckBox = nullptr;
+  };
+
   explicit GamepadCaptureController(SettingsDialog *host);
+
+  /// Install widget pointers. Triggers a refresh so the buttons reflect
+  /// the current target state.
+  void setWidgets(const Bindings &bindings);
 
   /// Begin capturing for @p target. Calling with the same target as the
   /// active capture toggles it off (matches the prior in-line behavior).
@@ -46,6 +67,7 @@ private:
   void onButtonPressed(const QString &buttonName);
 
   SettingsDialog *m_host;
+  Bindings m_bindings;
   Target m_target = Target::None;
   QMetaObject::Connection m_captureConnection;
 };
