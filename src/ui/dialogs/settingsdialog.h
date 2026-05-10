@@ -120,15 +120,10 @@ private slots:
   /// edit/remove buttons enable/disable in lockstep with the selection.
   void onAdditionalLauncherSelectionChanged();
   void browseMediaDir();
-  void browseArtworkDir();
-  void browseVideoDir();
-  void browseManualDir();
-  void browsePlaceholderArtwork();
   void checkForChanges();
   void onContentDirectoryChanged();
   void onGridWidthChanged(int value);
   void onRecursiveImportContent();
-  void onRecursiveImportArtwork();
   /// react to user changes in the Settings Mode combo box.
   void onSettingsScopeChanged(int comboIndex);
   /// builds the tree's right-click context menu (Rename /

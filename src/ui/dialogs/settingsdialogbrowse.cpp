@@ -22,6 +22,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "artworktabpanel.h"
 #include "extensionutils.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
@@ -68,36 +69,6 @@ void SettingsDialog::browseMediaDir() {
   }
 }
 
-void SettingsDialog::browseArtworkDir() {
-  QString dirName = QFileDialog::getExistingDirectory(this, tr("Select Artwork Directory"), "");
-  if (!dirName.isEmpty() && ui->artworkDirLineEdit) {
-    ui->artworkDirLineEdit->setText(dirName);
-  }
-}
-
-void SettingsDialog::browseVideoDir() {
-  QString dirName = QFileDialog::getExistingDirectory(this, tr("Select Video Directory"), "");
-  if (!dirName.isEmpty() && ui->videoDirLineEdit) {
-    ui->videoDirLineEdit->setText(dirName);
-  }
-}
-
-void SettingsDialog::browseManualDir() {
-  QString dirName = QFileDialog::getExistingDirectory(this, tr("Select Manual Directory"), "");
-  if (!dirName.isEmpty() && ui->manualDirLineEdit) {
-    ui->manualDirLineEdit->setText(dirName);
-  }
-}
-
-void SettingsDialog::browsePlaceholderArtwork() {
-  QString fileName = QFileDialog::getOpenFileName(
-      this, tr("Select Placeholder Artwork"), "",
-      tr("Image Files (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;All Files (*)"));
-  if (!fileName.isEmpty() && ui->placeholderArtworkLineEdit) {
-    ui->placeholderArtworkLineEdit->setText(fileName);
-  }
-}
-
 void SettingsDialog::onRecursiveImportContent() {
   if (!ui->mediaDirLineEdit) {
     return;
@@ -109,19 +80,6 @@ void SettingsDialog::onRecursiveImportContent() {
     return;
   }
   performRecursiveImport(baseDir, true);
-}
-
-void SettingsDialog::onRecursiveImportArtwork() {
-  if (!ui->artworkDirLineEdit) {
-    return;
-  }
-  QString baseDir = ui->artworkDirLineEdit->text().trimmed();
-  if (baseDir.isEmpty()) {
-    QMessageBox::warning(this, tr("Recursive Import"),
-                         tr("Please specify an artwork directory first."));
-    return;
-  }
-  performRecursiveImport(baseDir, false);
 }
 
 void SettingsDialog::performRecursiveImport(const QString &baseDir, bool isContentDir) {
@@ -268,24 +226,10 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->mediaDirLineEdit) {
     ui->mediaDirLineEdit->setText(config.mediaDirectory);
   }
-  if (ui->artworkDirLineEdit) {
-    ui->artworkDirLineEdit->setText(config.artworkDirectory);
-  }
-  if (ui->videoDirLineEdit) {
-    ui->videoDirLineEdit->setText(config.videoDirectory);
-  }
-  if (ui->manualDirLineEdit) {
-    ui->manualDirLineEdit->setText(config.manualDirectory);
-  }
-  if (ui->placeholderArtworkLineEdit) {
-    ui->placeholderArtworkLineEdit->setText(config.placeholderArtwork);
-  }
+  ui->artworkPanel->load(config);
   ui->subfoldersPanel->load(config);
   if (ui->fileExtensionsLineEdit) {
     ui->fileExtensionsLineEdit->setText(config.extensions.join(", "));
-  }
-  if (ui->customArtworkTypesLineEdit) {
-    ui->customArtworkTypesLineEdit->setText(config.customArtworkTypes.join(", "));
   }
   if (ui->collectionTypeComboBox) {
     // rebuild the dropdown from the union of types currently in
@@ -454,12 +398,8 @@ void SettingsDialog::clearCollectionUI() {
   clearAdditionalLaunchersUI();
   clearLinkedParentsUI();
   if (ui->mediaDirLineEdit) ui->mediaDirLineEdit->clear();
-  if (ui->artworkDirLineEdit) ui->artworkDirLineEdit->clear();
-  if (ui->videoDirLineEdit) ui->videoDirLineEdit->clear();
-  if (ui->manualDirLineEdit) ui->manualDirLineEdit->clear();
-  if (ui->placeholderArtworkLineEdit) ui->placeholderArtworkLineEdit->clear();
+  ui->artworkPanel->clear();
   if (ui->fileExtensionsLineEdit) ui->fileExtensionsLineEdit->clear();
-  if (ui->customArtworkTypesLineEdit) ui->customArtworkTypesLineEdit->clear();
   if (ui->collectionTypeComboBox) {
     QSignalBlocker blocker(ui->collectionTypeComboBox);
     ui->collectionTypeComboBox->clear();

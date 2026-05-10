@@ -337,117 +337,8 @@
            <string>Artwork</string>
           </attribute>
           <layout class="QVBoxLayout" name="artworkTabLayout">
-           <property name="spacing"><number>8</number></property>
            <item>
-            <widget class="QGroupBox" name="artworkDirsGroupBox">
-             <property name="title"><string>Asset Directories</string></property>
-             <layout class="QFormLayout" name="artworkDirsFormLayout">
-              <property name="horizontalSpacing"><number>8</number></property>
-              <property name="verticalSpacing"><number>6</number></property>
-              <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
-              <item row="0" column="0">
-               <widget class="QLabel" name="label_artworkDir">
-                <property name="text"><string>Artwork:</string></property>
-               </widget>
-              </item>
-              <item row="0" column="1">
-               <layout class="QHBoxLayout" name="artworkDirLayout">
-                <item>
-                 <widget class="QLineEdit" name="artworkDirLineEdit"/>
-                </item>
-                <item>
-                 <widget class="QPushButton" name="browseArtworkDirButton">
-                  <property name="text"><string>Browse</string></property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="label_videoDir">
-                <property name="text"><string>Video:</string></property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <layout class="QHBoxLayout" name="videoDirLayout">
-                <item>
-                 <widget class="QLineEdit" name="videoDirLineEdit">
-                  <property name="toolTip"><string>Directory containing per-item preview videos. Files are matched by base name (e.g. SuperMario.mp4 for SuperMario.smc).</string></property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QPushButton" name="browseVideoDirButton">
-                  <property name="text"><string>Browse</string></property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
-              <item row="2" column="0">
-               <widget class="QLabel" name="label_manualDir">
-                <property name="text"><string>Manual:</string></property>
-               </widget>
-              </item>
-              <item row="2" column="1">
-               <layout class="QHBoxLayout" name="manualDirLayout">
-                <item>
-                 <widget class="QLineEdit" name="manualDirLineEdit">
-                  <property name="toolTip"><string>Directory containing per-item manual files (PDF, EPUB, TXT, etc.). Files are matched by base name (e.g. SuperMario.pdf for SuperMario.smc). Per-item overrides can be set via the right-click menu.</string></property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QPushButton" name="browseManualDirButton">
-                  <property name="text"><string>Browse</string></property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
-             </layout>
-            </widget>
-           </item>
-           <item>
-            <widget class="QGroupBox" name="artworkCustomGroupBox">
-             <property name="title"><string>Customization</string></property>
-             <layout class="QFormLayout" name="artworkCustomFormLayout">
-              <property name="horizontalSpacing"><number>8</number></property>
-              <property name="verticalSpacing"><number>6</number></property>
-              <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
-              <item row="0" column="0">
-               <widget class="QLabel" name="label_placeholderArtwork">
-                <property name="text"><string>Placeholder Artwork:</string></property>
-               </widget>
-              </item>
-              <item row="0" column="1">
-               <layout class="QHBoxLayout" name="placeholderArtworkLayout">
-                <item>
-                 <widget class="QLineEdit" name="placeholderArtworkLineEdit">
-                  <property name="toolTip"><string>Image shown for collection items when no matching artwork is found</string></property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QPushButton" name="browsePlaceholderArtworkButton">
-                  <property name="text"><string>Browse</string></property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="label_customArtworkTypes">
-                <property name="text"><string>Custom Artwork Types:</string></property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QLineEdit" name="customArtworkTypesLineEdit">
-                <property name="toolTip"><string>Comma-separated list of user-defined artwork type ids beyond the standard set (box, screenshot, title, marquee, fanart, logo). Custom types only resolve via per-item manual links from the sidebar — they are NOT auto-discovered from artwork subdirectories.</string></property>
-                <property name="placeholderText"><string>e.g. cabinet, flyer, character_select</string></property>
-               </widget>
-              </item>
-             </layout>
-            </widget>
-           </item>
-           <item>
-            <spacer name="artworkVerticalSpacer">
-             <property name="orientation"><enum>Qt::Orientation::Vertical</enum></property>
-             <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
-            </spacer>
+            <widget class="ArtworkTabPanel" name="artworkPanel" native="true"/>
            </item>
           </layout>
          </widget>
@@ -1678,6 +1569,12 @@
    <class>SubfoldersPanel</class>
    <extends>QWidget</extends>
    <header>subfolderspanel.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ArtworkTabPanel</class>
+   <extends>QWidget</extends>
+   <header>artworktabpanel.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

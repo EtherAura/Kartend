@@ -23,6 +23,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "artworktabpanel.h"
 #include "attractpanel.h"
 #include "collectionremover.h"
 #include "collectiontreewidget.h"
@@ -84,6 +85,9 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // Subfolders panel: per-collection load/save; visibility of the dependent
   // options is internal to the panel.
   connect(ui->subfoldersPanel, &SubfoldersPanel::changed, this, &SettingsDialog::checkForChanges);
+
+  // Artwork tab: per-collection asset directories + custom artwork types.
+  connect(ui->artworkPanel, &ArtworkTabPanel::changed, this, &SettingsDialog::checkForChanges);
 
   // Application-font panel: live-save semantics — panel mutates the
   // pointed-to GeneralSettings and emits changed(); we mirror to mainWindow,
@@ -310,19 +314,8 @@ void SettingsDialog::setupButtonConnections() {
   connect(ui->browseLauncherButton, &QPushButton::clicked, this, &SettingsDialog::browseLauncher);
   connect(ui->browseCoreButton, &QPushButton::clicked, this, &SettingsDialog::browseCore);
   connect(ui->browseMediaDirButton, &QPushButton::clicked, this, &SettingsDialog::browseMediaDir);
-  connect(ui->browseArtworkDirButton, &QPushButton::clicked, this,
-          &SettingsDialog::browseArtworkDir);
-  if (ui->browseVideoDirButton) {
-    connect(ui->browseVideoDirButton, &QPushButton::clicked, this, &SettingsDialog::browseVideoDir);
-  }
-  if (ui->browseManualDirButton) {
-    connect(ui->browseManualDirButton, &QPushButton::clicked, this,
-            &SettingsDialog::browseManualDir);
-  }
-  if (ui->browsePlaceholderArtworkButton) {
-    connect(ui->browsePlaceholderArtworkButton, &QPushButton::clicked, this,
-            &SettingsDialog::browsePlaceholderArtwork);
-  }
+  // Artwork-tab browse buttons (artwork dir, video dir, manual dir,
+  // placeholder artwork) live on ArtworkTabPanel now.
   // browseStartupVideoButton + browseHomeViewIconButton handlers live in
   // GeneralSettingsPanel now.
   if (ui->recursiveImportContentButton) {
@@ -378,16 +371,8 @@ void SettingsDialog::applyScopeFieldGating() {
       ui->mediaDirLineEdit,
       ui->browseMediaDirButton,
       ui->recursiveImportContentButton,
-      ui->artworkDirLineEdit,
-      ui->browseArtworkDirButton,
-      ui->videoDirLineEdit,
-      ui->browseVideoDirButton,
-      ui->manualDirLineEdit,
-      ui->browseManualDirButton,
-      ui->placeholderArtworkLineEdit,
-      ui->browsePlaceholderArtworkButton,
+      ui->artworkPanel,
       ui->fileExtensionsLineEdit,
-      ui->customArtworkTypesLineEdit,
       ui->launcherLineEdit,
       ui->browseLauncherButton,
       ui->coreLineEdit,

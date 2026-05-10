@@ -1,5 +1,6 @@
 target_sources(${KARTEND_LIB_TARGET} PRIVATE
   applysettingsdialog.cpp
+  artworktabpanel.cpp
   attractpanel.cpp
   collectionpickerdialog.cpp
   collectionremover.cpp
@@ -33,6 +34,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   subfolderspanel.cpp
   toolbarpanel.cpp
   applysettingsdialog.h
+  artworktabpanel.h
   attractpanel.h
   collectionpickerdialog.h
   collectionremover.h
@@ -57,6 +59,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   statisticsdialog.h
   subfolderspanel.h
   toolbarpanel.h
+  artworktabpanel.ui
   attractpanel.ui
   controlspanel.ui
   fontspanel.ui

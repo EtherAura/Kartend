@@ -208,23 +208,9 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->mediaDirLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::onContentDirectoryChanged);
   }
-  if (ui->artworkDirLineEdit) {
-    connect(ui->artworkDirLineEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
-  }
-  // video / manual directories were missing dirty wiring; the
-  // settings save reads them but the save icon stayed dim until any other
-  // field changed too.
-  if (ui->videoDirLineEdit) {
-    connect(ui->videoDirLineEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
-  }
-  if (ui->manualDirLineEdit) {
-    connect(ui->manualDirLineEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
-  }
-  if (ui->placeholderArtworkLineEdit) {
-    connect(ui->placeholderArtworkLineEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
-  }
+  // Asset-directory + placeholder-artwork text edits live on ArtworkTabPanel
+  // now; the panel emits changed() routed to checkForChanges via the
+  // dialog's constructor wiring.
   // collection type combo (free-form, editable). currentTextChanged
   // covers both selection and free typing; currentIndexChanged alone misses
   // the user typing a brand-new label.
@@ -237,10 +223,7 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->fileExtensionsLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->customArtworkTypesLineEdit) {
-    connect(ui->customArtworkTypesLineEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
-  }
+  // customArtworkTypesLineEdit lives on ArtworkTabPanel.
   if (ui->gridWidthSpinBox) {
     connect(ui->gridWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::onGridWidthChanged);

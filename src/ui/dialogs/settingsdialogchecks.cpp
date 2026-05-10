@@ -22,6 +22,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "artworktabpanel.h"
 #include "extensionutils.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
@@ -102,15 +103,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
                                              : config.type;
   config.mediaDirectory =
       (ui->mediaDirLineEdit) ? ui->mediaDirLineEdit->text() : config.mediaDirectory;
-  config.artworkDirectory =
-      (ui->artworkDirLineEdit) ? ui->artworkDirLineEdit->text() : config.artworkDirectory;
-  config.videoDirectory =
-      (ui->videoDirLineEdit) ? ui->videoDirLineEdit->text() : config.videoDirectory;
-  config.manualDirectory =
-      (ui->manualDirLineEdit) ? ui->manualDirLineEdit->text() : config.manualDirectory;
-  config.placeholderArtwork = (ui->placeholderArtworkLineEdit)
-                                  ? ui->placeholderArtworkLineEdit->text()
-                                  : config.placeholderArtwork;
+  ui->artworkPanel->save(config);
   ui->subfoldersPanel->save(config);
   config.itemWidth = (ui->itemWidthSpinBox) ? ui->itemWidthSpinBox->value() : config.itemWidth;
   config.itemHeight = (ui->itemHeightSpinBox) ? ui->itemHeightSpinBox->value() : config.itemHeight;
@@ -121,18 +114,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
       (ui->fileExtensionsLineEdit)
           ? ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text())
           : config.extensions;
-  if (ui->customArtworkTypesLineEdit) {
-    QStringList parsed = ui->customArtworkTypesLineEdit->text().split(',', Qt::SkipEmptyParts);
-    QStringList cleaned;
-    cleaned.reserve(parsed.size());
-    for (QString &type : parsed) {
-      type = type.trimmed();
-      if (!type.isEmpty() && !cleaned.contains(type)) {
-        cleaned.append(type);
-      }
-    }
-    config.customArtworkTypes = cleaned;
-  }
+  // customArtworkTypes parsing handled inside ArtworkTabPanel::save above.
   config.gridWidth = (ui->gridWidthSpinBox) ? ui->gridWidthSpinBox->value() : config.gridWidth;
   config.horizontalGridHeight = (ui->horizontalGridHeightSpinBox)
                                     ? ui->horizontalGridHeightSpinBox->value()
@@ -318,11 +300,7 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
          checkboxChanged(ui->expandModeCheckBox, o.expandMode) ||
 
          // Directories
-         lineChanged(ui->mediaDirLineEdit, o.mediaDirectory) ||
-         lineChanged(ui->artworkDirLineEdit, o.artworkDirectory) ||
-         lineChanged(ui->videoDirLineEdit, o.videoDirectory) ||
-         lineChanged(ui->manualDirLineEdit, o.manualDirectory) ||
-         lineChanged(ui->placeholderArtworkLineEdit, o.placeholderArtwork) ||
+         lineChanged(ui->mediaDirLineEdit, o.mediaDirectory) || ui->artworkPanel->hasChanges(o) ||
 
          // Grid metrics
          spinIntChanged(ui->gridWidthSpinBox, o.gridWidth) ||
@@ -351,20 +329,8 @@ auto SettingsDialog::checkExtensionChanges() const -> bool {
   if (currentExtensions != originalCollection.extensions) {
     return true;
   }
-  if (ui->customArtworkTypesLineEdit) {
-    QStringList parsed = ui->customArtworkTypesLineEdit->text().split(',', Qt::SkipEmptyParts);
-    QStringList cleaned;
-    cleaned.reserve(parsed.size());
-    for (QString &type : parsed) {
-      type = type.trimmed();
-      if (!type.isEmpty() && !cleaned.contains(type)) {
-        cleaned.append(type);
-      }
-    }
-    if (cleaned != originalCollection.customArtworkTypes) {
-      return true;
-    }
-  }
+  // customArtworkTypes dirty-check is handled inside ArtworkTabPanel::
+  // hasChanges; no per-field UI read needed here.
   return false;
 }
 

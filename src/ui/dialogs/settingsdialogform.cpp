@@ -264,17 +264,9 @@ void SettingsDialog::updateFieldVisibility() {
   ui->label_fileExtensions->setVisible(hasContentDir);
   ui->fileExtensionsLineEdit->setVisible(hasContentDir);
 
-  // Artwork directory is always visible - shell collections can set artwork
-  // for subcollections that inherit from the parent
-  ui->label_artworkDir->setVisible(true);
-  ui->artworkDirLineEdit->setVisible(true);
-  ui->browseArtworkDirButton->setVisible(true);
-  ui->label_videoDir->setVisible(true);
-  ui->videoDirLineEdit->setVisible(true);
-  ui->browseVideoDirButton->setVisible(true);
-  ui->label_placeholderArtwork->setVisible(true);
-  ui->placeholderArtworkLineEdit->setVisible(true);
-  ui->browsePlaceholderArtworkButton->setVisible(true);
+  // ArtworkTabPanel widgets are always visible — collections inherit
+  // artwork directories from a parent even when they have no content of
+  // their own.
 
   if (hasContentDir) {
     updateUIForLauncherType(ui->launcherLineEdit->text());
