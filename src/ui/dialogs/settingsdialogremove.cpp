@@ -1,12 +1,13 @@
 // Sibling translation unit for SettingsDialog: collection removal.
 // The seven-step pipeline + the orchestrator that strings them together
 // live on CollectionRemover; this TU forwards the public slot the
-// dialog's button connect uses and implements the small set of
-// CollectionRemoverHost selection/expansion adapters that don't already
-// have a same-named SettingsDialog method.
+// dialog's button connect uses and implements the CollectionRemoverHost
+// selection/expansion adapters by delegating to TreeManager for the
+// tree-state queries.
 #include "collectionremover.h"
 #include "collectiontreewidget.h"
 #include "settingsdialog.h"
+#include "treemanager.h"
 
 #include <QTreeWidgetItem>
 
@@ -19,18 +20,17 @@ void SettingsDialog::removeCollection() {
 // ── CollectionRemoverHost: selection adapters ────────────────────────────
 
 int SettingsDialog::selectedCollectionIndex() const {
-  if (!currentTreeItem || !itemToCollectionIndex.contains(currentTreeItem)) {
+  if (!currentTreeItem || !m_treeManager || !m_treeManager->contains(currentTreeItem)) {
     return -1;
   }
-  return itemToCollectionIndex.value(currentTreeItem);
+  return m_treeManager->indexOf(currentTreeItem);
 }
 
 bool SettingsDialog::hasSelection() const {
-  if (!currentTreeItem || !itemToCollectionIndex.contains(currentTreeItem)) {
+  if (!currentTreeItem || !m_treeManager || !m_treeManager->contains(currentTreeItem)) {
     return false;
   }
-  const int index = itemToCollectionIndex.value(currentTreeItem);
-  return CollectionUtils::isValidIndex(index, &collections);
+  return CollectionUtils::isValidIndex(m_treeManager->indexOf(currentTreeItem), &collections);
 }
 
 void SettingsDialog::selectCollection(int index) {
@@ -39,14 +39,14 @@ void SettingsDialog::selectCollection(int index) {
     currentCollectionIndex = -1;
     return;
   }
-  if (!collectionIndexToItem.contains(index)) {
+  QTreeWidgetItem *item = m_treeManager ? m_treeManager->itemAt(index) : nullptr;
+  if (!item) {
     currentCollectionIndex = index;
     return;
   }
-  QTreeWidgetItem *item = collectionIndexToItem.value(index);
   currentTreeItem = item;
   currentCollectionIndex = index;
-  if (collectionTreeWidget && item) {
+  if (collectionTreeWidget) {
     collectionTreeWidget->setCurrentItem(item);
     item->setSelected(true);
   }
@@ -61,7 +61,11 @@ void SettingsDialog::clearSelection() {
 
 QList<int> SettingsDialog::expandedCollectionIndices() const {
   QList<int> result;
-  for (auto it = collectionIndexToItem.begin(); it != collectionIndexToItem.end(); ++it) {
+  if (!m_treeManager) {
+    return result;
+  }
+  const auto &indexToItem = m_treeManager->indexToItem();
+  for (auto it = indexToItem.begin(); it != indexToItem.end(); ++it) {
     if (it.value() && it.value()->isExpanded()) {
       result.append(it.key());
     }
@@ -70,8 +74,7 @@ QList<int> SettingsDialog::expandedCollectionIndices() const {
 }
 
 void SettingsDialog::expandCollectionAtIndex(int index) {
-  QTreeWidgetItem *item = collectionIndexToItem.value(index, nullptr);
-  if (item) {
+  if (auto *item = m_treeManager ? m_treeManager->itemAt(index) : nullptr) {
     item->setExpanded(true);
   }
 }

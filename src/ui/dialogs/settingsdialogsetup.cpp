@@ -41,6 +41,7 @@
 #include "settingsdialog.h"
 #include "settingsmanager.h"
 #include "subfolderspanel.h"
+#include "treemanager.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
@@ -72,8 +73,8 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
   // Check if database-affecting fields changed before saving
   // These fields affect the UUID or database content and require a rescan
   QString newName = originalCollection.name;
-  if (collectionIndexToItem.contains(editedIndex) && collectionIndexToItem[editedIndex]) {
-    newName = collectionIndexToItem[editedIndex]->text(0);
+  if (auto *item = m_treeManager ? m_treeManager->itemAt(editedIndex) : nullptr) {
+    newName = item->text(0);
   }
   QString newMediaDir = ui->configurationPanel->mediaDirLineEdit()
                             ? ui->configurationPanel->mediaDirLineEdit()->text().trimmed()
@@ -137,12 +138,9 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
   // edited collection
   updateCollectionTreeWidget();
   expandPathToCollection(editedIndex);
-  if (collectionIndexToItem.contains(editedIndex)) {
-    QTreeWidgetItem *item = collectionIndexToItem[editedIndex];
-    if (item) {
-      collectionTreeWidget->setCurrentItem(item);
-      item->setSelected(true);
-    }
+  if (auto *item = m_treeManager ? m_treeManager->itemAt(editedIndex) : nullptr) {
+    collectionTreeWidget->setCurrentItem(item);
+    item->setSelected(true);
   }
   loadCollectionToUI(editedIndex);
 }
@@ -264,7 +262,7 @@ void SettingsDialog::setupTreeWidgetConnections() {
     return wouldCreateCircularReference(childIndex, parentIndex);
   });
   collectionTreeWidget->setItemToIndex([this](const QTreeWidgetItem *item) {
-    return itemToCollectionIndex.value(const_cast<QTreeWidgetItem *>(item), -1);
+    return m_treeManager ? m_treeManager->indexOf(const_cast<QTreeWidgetItem *>(item)) : -1;
   });
   connect(collectionTreeWidget, &CollectionTreeWidget::treeRearranged, this,
           &SettingsDialog::onTreeRearranged);

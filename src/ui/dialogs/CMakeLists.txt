@@ -37,6 +37,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   settingsdialogsetup.cpp
   settingsdialogtree.cpp
   shortcutsdialog.cpp
+  treemanager.cpp
   sidebarpanel.cpp
   splashpanel.cpp
   statisticsdialog.cpp
@@ -72,6 +73,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   settingsdialog.h
   settingsformbinding.h
   settingsmodel.h
+  treemanager.h
   shortcutsdialog.h
   sidebarpanel.h
   splashpanel.h

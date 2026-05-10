@@ -11,6 +11,7 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QTreeWidgetItem>
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -28,6 +29,7 @@ class GamepadCaptureController;
 class ScrollManager;
 class NavigationManager;
 class SidebarPanel;
+class TreeManager;
 
 class SettingsDialog : public QDialog, public CollectionRemoverHost {
   Q_OBJECT
@@ -137,18 +139,8 @@ private slots:
 private:
   void updateCollectionTreeWidget() override;
   void expandPathToCollection(int index) override;
-  void populateTreeWidget();
-  QTreeWidgetItem *createTreeItem(int collectionIndex, QTreeWidgetItem *parent = nullptr);
-  /// tree-population pass that walks every collection's
-  /// additionalParentNames and creates italicised mirror items under each
-  /// resolved parent. Called after the primary tree is fully populated so
-  /// the parent rows it attaches to are guaranteed to exist.
-  void populateLinkedAppearances();
-  /// keep stale link references from breaking the tree when a
-  /// collection is renamed or removed. Walks every other collection and
-  /// rewrites/removes name entries in additionalParentNames to match.
-  /// @param oldName  current name of the affected collection
-  /// @param newName  new name after rename — pass empty to remove the entry
+  /// CollectionRemoverHost override — thunks through to m_treeManager so the
+  /// remover sees one consistent name-propagation path.
   void propagateCollectionNameChange(const QString &oldName, const QString &newName) override;
   void setupConnections();
   void setupButtonConnections();
@@ -173,10 +165,6 @@ private:
   /// collection.
   void updateParentCollectionComboBox(int currentIndex);
   [[nodiscard]] bool wouldCreateCircularReference(int childIndex, int potentialParentIndex) const;
-  /// recursively expand or collapse @p item and every
-  /// descendant under it (used by the context menu's "Expand subtree"
-  /// / "Collapse subtree" entries).
-  void setSubtreeExpanded(QTreeWidgetItem *item, bool expanded);
   void emitGridWidthChanged();
   void updateFieldVisibility();
   void updateExtractArchivesVisibility();
@@ -237,18 +225,13 @@ private:
   Ui::SettingsDialog *ui;
   CollectionTreeWidget *collectionTreeWidget;
   QTreeWidgetItem *currentTreeItem;
-  QHash<QTreeWidgetItem *, int> itemToCollectionIndex;
-  /// Primary appearance per collection — the one that owns the row's name
-  /// edit, drag handle, and parent linkage. Most settings-dialog code paths
-  /// (expandPathToCollection, onTreeRearranged, removeCollection, ...) act
-  /// on the primary item only. See collectionIndexToLinkedItems for alias
-  /// appearances that hang off the same QTreeWidget.
-  QHash<int, QTreeWidgetItem *> collectionIndexToItem;
-  /// per-collection list of linked-appearance QTreeWidgetItems.
-  /// Empty for collections with no additionalParentNames. Linked items are
-  /// italicised, non-editable, non-draggable, and exist purely to mirror
-  /// the collection under additional parents in the visible tree.
-  QHash<int, QList<QTreeWidgetItem *>> collectionIndexToLinkedItems;
+  /// Owns the tree-population state (item↔collection index maps,
+  /// linked-appearance mirrors) and the pure tree-domain operations
+  /// (rebuild, expand-path, name propagation, subtree expand). Constructed
+  /// after collectionTreeWidget is wired so it can take a non-owning
+  /// pointer to it. Slots that wire user gestures still live on the dialog
+  /// — they read this manager for tree state.
+  std::unique_ptr<TreeManager> m_treeManager;
   QList<CollectionConfig> collections;
   int originalCurrentCollectionIndex;
   CollectionConfig originalCollection;

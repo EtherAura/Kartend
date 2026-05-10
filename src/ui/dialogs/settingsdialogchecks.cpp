@@ -42,6 +42,7 @@
 #include "settingsmanager.h"
 #include "sidebarpanel.h"
 #include "subfolderspanel.h"
+#include "treemanager.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
@@ -78,9 +79,8 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
     config = m_workingCollections[currentCollectionIndex];
   }
 
-  if (collectionIndexToItem.contains(currentCollectionIndex) &&
-      (collectionIndexToItem[currentCollectionIndex])) {
-    QString treeName = collectionIndexToItem[currentCollectionIndex]->text(0);
+  if (auto *item = m_treeManager ? m_treeManager->itemAt(currentCollectionIndex) : nullptr) {
+    QString treeName = item->text(0);
     if (!treeName.isEmpty()) {
       config.name = treeName;
     }
@@ -188,11 +188,8 @@ auto SettingsDialog::checkExtensionChanges() const -> bool {
 // Checks tree name changes
 auto SettingsDialog::checkTreeNameChanges() const -> bool {
   QString currentTreeName = originalCollection.name;
-  if (collectionIndexToItem.contains(currentCollectionIndex)) {
-    QTreeWidgetItem *item = collectionIndexToItem[currentCollectionIndex];
-    if (item) {
-      currentTreeName = item->text(0);
-    }
+  if (auto *item = m_treeManager ? m_treeManager->itemAt(currentCollectionIndex) : nullptr) {
+    currentTreeName = item->text(0);
   }
   return currentTreeName != originalCollection.name;
 }

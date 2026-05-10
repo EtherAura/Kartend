@@ -55,6 +55,7 @@
 #include "splashpanel.h"
 #include "subfolderspanel.h"
 #include "toolbarpanel.h"
+#include "treemanager.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
@@ -220,6 +221,8 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   });
 
   collectionTreeWidget = ui->collectionsTreeShell->collectionTreeWidget();
+  m_treeManager =
+      std::make_unique<TreeManager>(collectionTreeWidget, &collections, &m_workingCollections);
 
   installEventFilter(this);
   if (collectionTreeWidget) {
@@ -244,9 +247,9 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   if (currentCollectionIndex >= 0 && currentCollectionIndex < m_workingCollections.size()) {
     loadCollectionToUI(currentCollectionIndex);
     originalCollection = m_workingCollections[currentCollectionIndex];
-    if (collectionIndexToItem.contains(currentCollectionIndex)) {
-      collectionTreeWidget->setCurrentItem(collectionIndexToItem[currentCollectionIndex]);
-      currentTreeItem = collectionIndexToItem[currentCollectionIndex];
+    if (auto *item = m_treeManager ? m_treeManager->itemAt(currentCollectionIndex) : nullptr) {
+      collectionTreeWidget->setCurrentItem(item);
+      currentTreeItem = item;
     }
   }
 

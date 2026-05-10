@@ -41,6 +41,7 @@
 #include "settingsmanager.h"
 #include "sidebarpanel.h"
 #include "subfolderspanel.h"
+#include "treemanager.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
@@ -186,13 +187,10 @@ void SettingsDialog::performRecursiveImport(const QString &baseDir, bool isConte
   expandPathToCollection(currentCollectionIndex);
 
   // Reselect current collection
-  if (collectionIndexToItem.contains(currentCollectionIndex)) {
-    QTreeWidgetItem *item = collectionIndexToItem[currentCollectionIndex];
-    if (item) {
-      collectionTreeWidget->setCurrentItem(item);
-      item->setSelected(true);
-      item->setExpanded(true);
-    }
+  if (auto *item = m_treeManager ? m_treeManager->itemAt(currentCollectionIndex) : nullptr) {
+    collectionTreeWidget->setCurrentItem(item);
+    item->setSelected(true);
+    item->setExpanded(true);
   }
 
   emit collectionSaved(collections);

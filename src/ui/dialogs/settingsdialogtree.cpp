@@ -22,180 +22,28 @@
 #include "mainwindow.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
+#include "treemanager.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
 void SettingsDialog::updateCollectionTreeWidget() {
-  if (!collectionTreeWidget) {
+  if (!m_treeManager) {
     return;
   }
-  collectionTreeWidget->clear();
-  itemToCollectionIndex.clear();
-  collectionIndexToItem.clear();
-  collectionIndexToLinkedItems.clear();
-  populateTreeWidget();
-  populateLinkedAppearances();
-  // Enable delete button when a collection is selected
+  m_treeManager->rebuild();
+  // Enable delete button when a collection is selected.
   updateDeleteButtonState();
 }
 
-void SettingsDialog::expandPathToCollection(int collectionIndex) {
-  if (!CollectionUtils::isValidIndex(collectionIndex, &collections)) {
-    return;
-  }
-  if (!collectionIndexToItem.contains(collectionIndex)) {
-    return;
-  }
-
-  QList<int> pathIndices;
-  int currentIndex = collectionIndex;
-  while (CollectionUtils::isValidIndex(currentIndex, &collections)) {
-    pathIndices.prepend(currentIndex);
-    const CollectionConfig &config = collections[currentIndex];
-    currentIndex = config.parentCollectionIndex;
-  }
-  for (int i = 0; i < pathIndices.size() - 1; ++i) {
-    int index = pathIndices[i];
-    if (collectionIndexToItem.contains(index)) {
-      QTreeWidgetItem *item = collectionIndexToItem[index];
-      if (item) {
-        item->setExpanded(true);
-      }
-    }
-  }
-}
-
-void SettingsDialog::populateTreeWidget() {
-  for (int i = 0; i < collections.size(); ++i) {
-    if (collections[i].parentCollectionIndex == -1) {
-      createTreeItem(i);
-    }
-  }
-
-  bool foundSubcollection = true;
-  int maxIterations = collections.size();
-  int iteration = 0;
-
-  while (foundSubcollection && iteration < maxIterations) {
-    foundSubcollection = false;
-    iteration++;
-
-    for (int i = 0; i < collections.size(); ++i) {
-      if (collectionIndexToItem.contains(i)) {
-        continue;
-      }
-      int parentIndex = collections[i].parentCollectionIndex;
-      if (parentIndex >= 0 && parentIndex < collections.size()) {
-        if (collectionIndexToItem.contains(parentIndex)) {
-          QTreeWidgetItem *parentItem = collectionIndexToItem[parentIndex];
-          createTreeItem(i, parentItem);
-          foundSubcollection = true;
-        }
-      }
-    }
-  }
-
-  for (int i = 0; i < collections.size(); ++i) {
-    if (!collectionIndexToItem.contains(i)) {
-      collections[i].parentCollectionIndex = -1;
-      collections[i].isSubcollection = false;
-      createTreeItem(i);
-    }
-  }
-}
-
-auto SettingsDialog::createTreeItem(int collectionIndex, QTreeWidgetItem *parent)
-    -> QTreeWidgetItem * {
-  QTreeWidgetItem *item =
-      (parent) ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(collectionTreeWidget);
-  item->setText(0, collections[collectionIndex].name);
-  item->setFlags(item->flags() | Qt::ItemIsEditable);
-  // Qt::UserRole flag distinguishes the canonical row (false)
-  // from linked-appearance mirrors (true). Most slots branch on this flag.
-  item->setData(0, Qt::UserRole, false);
-  itemToCollectionIndex[item] = collectionIndex;
-  collectionIndexToItem[collectionIndex] = item;
-  return item;
-}
-
-void SettingsDialog::populateLinkedAppearances() {
-  // Build a name → index map once so each link resolves in O(1).
-  QHash<QString, int> nameToIndex;
-  nameToIndex.reserve(collections.size());
-  for (int i = 0; i < collections.size(); ++i) {
-    nameToIndex.insert(collections[i].name, i);
-  }
-
-  for (int i = 0; i < collections.size(); ++i) {
-    const CollectionConfig &c = collections[i];
-    if (c.additionalParentNames.isEmpty()) {
-      continue;
-    }
-    // Track parents already mirrored so a stutter in the name list (the
-    // user listed the same parent twice) doesn't render two identical
-    // appearances.
-    QSet<int> alreadyMirrored;
-    for (const QString &parentName : c.additionalParentNames) {
-      const int parentIdx = nameToIndex.value(parentName, -1);
-      if (parentIdx < 0 || parentIdx == i) {
-        continue;
-      }
-      if (parentIdx == c.parentCollectionIndex) {
-        continue;
-      }
-      if (alreadyMirrored.contains(parentIdx)) {
-        continue;
-      }
-      QTreeWidgetItem *parentItem = collectionIndexToItem.value(parentIdx);
-      if (!parentItem) {
-        continue;
-      }
-      auto *linkedItem = new QTreeWidgetItem(parentItem);
-      linkedItem->setText(0, c.name);
-      // Italic font marks the alias visually; tooltip points to the
-      // canonical home so the user always knows where the row "lives".
-      QFont font = linkedItem->font(0);
-      font.setItalic(true);
-      linkedItem->setFont(0, font);
-      const QString primaryName =
-          (c.parentCollectionIndex >= 0 && c.parentCollectionIndex < collections.size())
-              ? collections[c.parentCollectionIndex].name
-              : tr("(root)");
-      linkedItem->setToolTip(0, tr("Linked appearance — primary parent: %1").arg(primaryName));
-      // Strip edit/drag/drop — linked items are read-only mirrors.
-      Qt::ItemFlags flags = linkedItem->flags();
-      flags &= ~(Qt::ItemIsEditable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
-      linkedItem->setFlags(flags);
-      linkedItem->setData(0, Qt::UserRole, true);
-
-      itemToCollectionIndex[linkedItem] = i;
-      collectionIndexToLinkedItems[i].append(linkedItem);
-      alreadyMirrored.insert(parentIdx);
-    }
+void SettingsDialog::expandPathToCollection(int index) {
+  if (m_treeManager) {
+    m_treeManager->expandPathTo(index);
   }
 }
 
 void SettingsDialog::propagateCollectionNameChange(const QString &oldName, const QString &newName) {
-  if (oldName == newName) {
-    return;
-  }
-  for (int i = 0; i < collections.size(); ++i) {
-    QStringList &names = collections[i].additionalParentNames;
-    if (!names.contains(oldName)) {
-      continue;
-    }
-    if (newName.isEmpty()) {
-      names.removeAll(oldName);
-    } else {
-      for (QString &n : names) {
-        if (n == oldName) {
-          n = newName;
-        }
-      }
-    }
-    if (i < m_workingCollections.size()) {
-      m_workingCollections[i].additionalParentNames = names;
-    }
+  if (m_treeManager) {
+    m_treeManager->propagateNameChange(oldName, newName);
   }
 }
 
@@ -210,11 +58,11 @@ void SettingsDialog::onTreeItemSelectionChanged() {
   }
 
   QTreeWidgetItem *item = selectedItems.first();
-  if (!itemToCollectionIndex.contains(item)) {
+  if (!m_treeManager || !m_treeManager->contains(item)) {
     return;
   }
 
-  int newIndex = itemToCollectionIndex[item];
+  int newIndex = m_treeManager->indexOf(item);
   if (newIndex == currentCollectionIndex) {
     return;
   }
@@ -222,18 +70,16 @@ void SettingsDialog::onTreeItemSelectionChanged() {
   const int previousIndex = currentCollectionIndex;
   if (previousIndex >= 0 && previousIndex < m_workingCollections.size() &&
       !resolveUnsavedChanges(tr("switching collections"), true)) {
-    if (collectionIndexToItem.contains(previousIndex)) {
+    if (auto *previousItem = m_treeManager->itemAt(previousIndex)) {
       QSignalBlocker blocker(collectionTreeWidget);
-      if (auto *previousItem = collectionIndexToItem[previousIndex]) {
-        collectionTreeWidget->setCurrentItem(previousItem);
-        previousItem->setSelected(true);
-      }
+      collectionTreeWidget->setCurrentItem(previousItem);
+      previousItem->setSelected(true);
     }
     return;
   }
 
-  if (collectionIndexToItem.contains(newIndex)) {
-    item = collectionIndexToItem[newIndex];
+  if (auto *primary = m_treeManager->itemAt(newIndex)) {
+    item = primary;
   }
 
   if (collectionTreeWidget && item) {
@@ -256,7 +102,7 @@ void SettingsDialog::onTreeItemSelectionChanged() {
 }
 
 void SettingsDialog::onTreeItemChanged(QTreeWidgetItem *item, int column) {
-  if (column != 0 || !itemToCollectionIndex.contains(item)) {
+  if (column != 0 || !m_treeManager || !m_treeManager->contains(item)) {
     return;
   }
   // rename only fires for the canonical row. Linked mirrors
@@ -265,7 +111,7 @@ void SettingsDialog::onTreeItemChanged(QTreeWidgetItem *item, int column) {
   if (item->data(0, Qt::UserRole).toBool()) {
     return;
   }
-  int collectionIndex = itemToCollectionIndex[item];
+  int collectionIndex = m_treeManager->indexOf(item);
   if (!CollectionUtils::isValidIndex(collectionIndex, &collections) ||
       !CollectionUtils::isValidIndex(collectionIndex, &m_workingCollections)) {
     return;
@@ -281,7 +127,7 @@ void SettingsDialog::onTreeItemChanged(QTreeWidgetItem *item, int column) {
     // rename in-place propagates to linked mirrors so they
     // don't drift, and rewrites references in other collections'
     // additionalParentNames so links survive the rename.
-    for (QTreeWidgetItem *linked : collectionIndexToLinkedItems.value(collectionIndex)) {
+    for (QTreeWidgetItem *linked : m_treeManager->linkedItemsFor(collectionIndex)) {
       if (linked) {
         linked->setText(0, newName);
       }
@@ -366,12 +212,9 @@ void SettingsDialog::addCollection() {
   updateCollectionTreeWidget();
   expandPathToCollection(newIndex);
 
-  if (collectionIndexToItem.contains(newIndex)) {
-    QTreeWidgetItem *item = collectionIndexToItem[newIndex];
-    if (item) {
-      collectionTreeWidget->setCurrentItem(item);
-      item->setSelected(true);
-    }
+  if (auto *item = m_treeManager ? m_treeManager->itemAt(newIndex) : nullptr) {
+    collectionTreeWidget->setCurrentItem(item);
+    item->setSelected(true);
   }
 
   loadCollectionToUI(newIndex);
@@ -684,12 +527,9 @@ void SettingsDialog::duplicateCollection() {
 
   updateCollectionTreeWidget();
   expandPathToCollection(newIndex);
-  if (collectionIndexToItem.contains(newIndex)) {
-    QTreeWidgetItem *item = collectionIndexToItem[newIndex];
-    if (item) {
-      collectionTreeWidget->setCurrentItem(item);
-      item->setSelected(true);
-    }
+  if (auto *item = m_treeManager ? m_treeManager->itemAt(newIndex) : nullptr) {
+    collectionTreeWidget->setCurrentItem(item);
+    item->setSelected(true);
   }
 
   loadCollectionToUI(newIndex);
@@ -797,16 +637,6 @@ void SettingsDialog::copySettingsFromOtherCollection() {
 // tree context menu + drag-drop reparenting resync.
 // ─────────────────────────────────────────────────────────────────────────────
 
-void SettingsDialog::setSubtreeExpanded(QTreeWidgetItem *item, bool expanded) {
-  if (!item) {
-    return;
-  }
-  item->setExpanded(expanded);
-  for (int i = 0; i < item->childCount(); ++i) {
-    setSubtreeExpanded(item->child(i), expanded);
-  }
-}
-
 void SettingsDialog::onTreeContextMenuRequested(const QPoint &pos) {
   if (!collectionTreeWidget) {
     return;
@@ -872,10 +702,12 @@ void SettingsDialog::onTreeContextMenuRequested(const QPoint &pos) {
       }
       copySettingsFromOtherCollection();
     });
-    connect(expandSubAction, &QAction::triggered, this,
-            [this, target]() { setSubtreeExpanded(target, true); });
-    connect(collapseSubAction, &QAction::triggered, this,
-            [this, target]() { setSubtreeExpanded(target, false); });
+    connect(expandSubAction, &QAction::triggered, this, [this, target]() {
+      if (m_treeManager) m_treeManager->setSubtreeExpanded(target, true);
+    });
+    connect(collapseSubAction, &QAction::triggered, this, [this, target]() {
+      if (m_treeManager) m_treeManager->setSubtreeExpanded(target, false);
+    });
     connect(expandAllAction, &QAction::triggered, collectionTreeWidget, &QTreeWidget::expandAll);
     connect(collapseAllAction, &QAction::triggered, collectionTreeWidget,
             &QTreeWidget::collapseAll);
@@ -905,7 +737,7 @@ void SettingsDialog::onTreeRearranged() {
       return;
     }
     const bool isLinked = item->data(0, Qt::UserRole).toBool();
-    int idx = itemToCollectionIndex.value(item, -1);
+    int idx = m_treeManager ? m_treeManager->indexOf(item) : -1;
     if (!isLinked && CollectionUtils::isValidIndex(idx, &collections)) {
       collections[idx].parentCollectionIndex = parentIdx;
       collections[idx].isSubcollection = (parentIdx >= 0);

@@ -44,6 +44,7 @@
 #include "settingsmanager.h"
 #include "splashpanel.h"
 #include "toolbarpanel.h"
+#include "treemanager.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 #include "videothumbnailextractor.h"
@@ -58,10 +59,8 @@ void SettingsDialog::revertCurrentCollectionEdits() {
     collections[currentCollectionIndex] = originalCollection;
   }
 
-  if (collectionIndexToItem.contains(currentCollectionIndex)) {
-    if (auto *item = collectionIndexToItem[currentCollectionIndex]) {
-      item->setText(0, originalCollection.name);
-    }
+  if (auto *item = m_treeManager ? m_treeManager->itemAt(currentCollectionIndex) : nullptr) {
+    item->setText(0, originalCollection.name);
   }
 
   loadCollectionToUI(currentCollectionIndex);
@@ -226,7 +225,8 @@ void SettingsDialog::updateSaveButtonStyle() {
 void SettingsDialog::updateDeleteButtonState() {
   if (ui->collectionsTreeShell->removeCollectionButton()) {
     // Enable delete when there's a valid collection selected
-    bool hasSelection = currentTreeItem && itemToCollectionIndex.contains(currentTreeItem);
+    bool hasSelection =
+        currentTreeItem && m_treeManager && m_treeManager->contains(currentTreeItem);
     ui->collectionsTreeShell->removeCollectionButton()->setEnabled(hasSelection && !collections.isEmpty());
   }
 }
