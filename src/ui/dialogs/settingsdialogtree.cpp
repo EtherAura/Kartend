@@ -438,13 +438,13 @@ void SettingsDialog::ensureRootCollectionExists() {
 }
 
 void SettingsDialog::updateParentCollectionComboBox(int currentIndex) {
-  if (!ui->parentCollectionComboBox) {
+  if (!ui->configurationPanel->parentCollectionComboBox()) {
     return;
   }
 
-  QSignalBlocker blocker(ui->parentCollectionComboBox);
-  ui->parentCollectionComboBox->clear();
-  ui->parentCollectionComboBox->addItem("None");
+  QSignalBlocker blocker(ui->configurationPanel->parentCollectionComboBox());
+  ui->configurationPanel->parentCollectionComboBox()->clear();
+  ui->configurationPanel->parentCollectionComboBox()->addItem("None");
   m_parentCollectionMapping.clear();
   m_parentCollectionMapping.append(-1);
 
@@ -455,7 +455,7 @@ void SettingsDialog::updateParentCollectionComboBox(int currentIndex) {
     if (wouldCreateCircularReference(currentIndex, i)) {
       continue;
     }
-    ui->parentCollectionComboBox->addItem(collections[i].name);
+    ui->configurationPanel->parentCollectionComboBox()->addItem(collections[i].name);
     m_parentCollectionMapping.append(i);
   }
 
@@ -466,7 +466,7 @@ void SettingsDialog::updateParentCollectionComboBox(int currentIndex) {
   if (targetDropdownIndex < 0) {
     targetDropdownIndex = 0;
   }
-  ui->parentCollectionComboBox->setCurrentIndex(targetDropdownIndex);
+  ui->configurationPanel->parentCollectionComboBox()->setCurrentIndex(targetDropdownIndex);
 }
 
 auto SettingsDialog::wouldCreateCircularReference(int childIndex, int potentialParentIndex) const

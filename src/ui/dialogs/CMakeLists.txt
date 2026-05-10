@@ -5,6 +5,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   collectionpickerdialog.cpp
   collectionremover.cpp
   collectiontreewidget.cpp
+  configurationpanel.cpp
   controlspanel.cpp
   customfieldsdialog.cpp
   errordialog.cpp
@@ -39,6 +40,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   collectionpickerdialog.h
   collectionremover.h
   collectiontreewidget.h
+  configurationpanel.h
   controlspanel.h
   customfieldsdialog.h
   errordialog.h
@@ -61,6 +63,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   toolbarpanel.h
   artworktabpanel.ui
   attractpanel.ui
+  configurationpanel.ui
   controlspanel.ui
   fontspanel.ui
   generalsettingspanel.ui

@@ -71,10 +71,12 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
   if (collectionIndexToItem.contains(editedIndex) && collectionIndexToItem[editedIndex]) {
     newName = collectionIndexToItem[editedIndex]->text(0);
   }
-  QString newMediaDir = ui->mediaDirLineEdit ? ui->mediaDirLineEdit->text().trimmed()
-                                             : originalCollection.mediaDirectory;
-  QString newExtensions = ui->fileExtensionsLineEdit ? ui->fileExtensionsLineEdit->text().trimmed()
-                                                     : originalCollection.extensions.join(", ");
+  QString newMediaDir = ui->configurationPanel->mediaDirLineEdit()
+                            ? ui->configurationPanel->mediaDirLineEdit()->text().trimmed()
+                            : originalCollection.mediaDirectory;
+  QString newExtensions = ui->configurationPanel->fileExtensionsLineEdit()
+                              ? ui->configurationPanel->fileExtensionsLineEdit()->text().trimmed()
+                              : originalCollection.extensions.join(", ");
   bool newIncludeSubfolders = ui->subfoldersPanel
                                   ? ui->subfoldersPanel->isContentSubfoldersIncluded()
                                   : originalCollection.includeContentSubfolders;
@@ -200,30 +202,14 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->extractedExtensionLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->expandModeCheckBox) {
-    connect(ui->expandModeCheckBox, &QCheckBox::toggled, this, &SettingsDialog::checkForChanges);
-  }
-  if (ui->mediaDirLineEdit) {
-    connect(ui->mediaDirLineEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
-    connect(ui->mediaDirLineEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::onContentDirectoryChanged);
-  }
-  // Asset-directory + placeholder-artwork text edits live on ArtworkTabPanel
-  // now; the panel emits changed() routed to checkForChanges via the
-  // dialog's constructor wiring.
-  // collection type combo (free-form, editable). currentTextChanged
-  // covers both selection and free typing; currentIndexChanged alone misses
-  // the user typing a brand-new label.
-  if (ui->collectionTypeComboBox) {
-    connect(ui->collectionTypeComboBox, &QComboBox::currentTextChanged, this,
-            &SettingsDialog::checkForChanges);
-  }
-  // Content/Artwork subfolders connections live on SubfoldersPanel.
-  if (ui->fileExtensionsLineEdit) {
-    connect(ui->fileExtensionsLineEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
-  }
-  // customArtworkTypesLineEdit lives on ArtworkTabPanel.
+  // Configuration-tab data field connections (mediaDir, type, extensions,
+  // expandMode, showAllSubcollectionItems) live on ConfigurationPanel.
+  // Asset-directory + placeholder-artwork edits live on ArtworkTabPanel.
+  // Subfolders edits live on SubfoldersPanel.
+  // The mediaDir edit additionally feeds onContentDirectoryChanged for the
+  // launcher-type heuristic — wire that here against the panel's accessor.
+  connect(ui->configurationPanel->mediaDirLineEdit(), &QLineEdit::textChanged, this,
+          &SettingsDialog::onContentDirectoryChanged);
   if (ui->gridWidthSpinBox) {
     connect(ui->gridWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::onGridWidthChanged);
@@ -242,10 +228,7 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->horizontalGridHeightSidebarHiddenSpinBox,
             QOverload<int>::of(&QSpinBox::valueChanged), this, &SettingsDialog::checkForChanges);
   }
-  if (ui->showAllSubcollectionItemsCheckBox) {
-    connect(ui->showAllSubcollectionItemsCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
+  // showAllSubcollectionItemsCheckBox connection lives on ConfigurationPanel.
   if (ui->horizontalAlignmentComboBox) {
     connect(ui->horizontalAlignmentComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &SettingsDialog::checkForChanges);
@@ -254,8 +237,9 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->viewTypeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->parentCollectionComboBox) {
-    connect(ui->parentCollectionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+  if (ui->configurationPanel->parentCollectionComboBox()) {
+    connect(ui->configurationPanel->parentCollectionComboBox(),
+            QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::checkForChanges);
   }
   // Sidebar / Details Pane fields are wired internally by SidebarPanel; the

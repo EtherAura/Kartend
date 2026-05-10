@@ -231,7 +231,7 @@ void SettingsDialog::updateDeleteButtonState() {
 }
 
 void SettingsDialog::updateUIForLauncherType(const QString &launcherPath) {
-  bool hasContentDir = !ui->mediaDirLineEdit->text().trimmed().isEmpty();
+  bool hasContentDir = !ui->configurationPanel->mediaDirLineEdit()->text().trimmed().isEmpty();
   bool usesLibretroCore = LauncherUtils::usesLibretroCore(launcherPath);
   bool showCore = hasContentDir && usesLibretroCore;
   ui->coreLineEdit->setVisible(showCore);
@@ -254,15 +254,14 @@ void SettingsDialog::onContentDirectoryChanged() {
 }
 
 void SettingsDialog::updateFieldVisibility() {
-  bool hasContentDir = !ui->mediaDirLineEdit->text().trimmed().isEmpty();
+  bool hasContentDir = !ui->configurationPanel->mediaDirLineEdit()->text().trimmed().isEmpty();
 
   ui->label_launcher->setVisible(hasContentDir);
   ui->launcherLineEdit->setVisible(hasContentDir);
   ui->browseLauncherButton->setVisible(hasContentDir);
   ui->label_launchParams->setVisible(hasContentDir);
   ui->launchParamsLineEdit->setVisible(hasContentDir);
-  ui->label_fileExtensions->setVisible(hasContentDir);
-  ui->fileExtensionsLineEdit->setVisible(hasContentDir);
+  ui->configurationPanel->fileExtensionsLineEdit()->setVisible(hasContentDir);
 
   // ArtworkTabPanel widgets are always visible — collections inherit
   // artwork directories from a parent even when they have no content of

@@ -93,16 +93,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.extractedExtension = (ui->extractedExtensionLineEdit)
                                   ? ui->extractedExtensionLineEdit->text()
                                   : config.extractedExtension;
-  config.expandMode =
-      (ui->expandModeCheckBox) ? ui->expandModeCheckBox->isChecked() : config.expandMode;
-  // read free-form type label from the editable combobox. Use
-  // currentText() rather than currentIndex() so a freshly typed value (not
-  // yet committed via Enter) round-trips, and trim whitespace so accidental
-  // padding doesn't fragment the type set.
-  config.type = (ui->collectionTypeComboBox) ? ui->collectionTypeComboBox->currentText().trimmed()
-                                             : config.type;
-  config.mediaDirectory =
-      (ui->mediaDirLineEdit) ? ui->mediaDirLineEdit->text() : config.mediaDirectory;
+  ui->configurationPanel->save(config);
   ui->artworkPanel->save(config);
   ui->subfoldersPanel->save(config);
   config.itemWidth = (ui->itemWidthSpinBox) ? ui->itemWidthSpinBox->value() : config.itemWidth;
@@ -110,11 +101,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.fontSize = (ui->fontSizeSpinBox) ? ui->fontSizeSpinBox->value() : config.fontSize;
   config.cornerRadius =
       (ui->cornerRadiusSpinBox) ? ui->cornerRadiusSpinBox->value() : config.cornerRadius;
-  config.extensions =
-      (ui->fileExtensionsLineEdit)
-          ? ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text())
-          : config.extensions;
-  // customArtworkTypes parsing handled inside ArtworkTabPanel::save above.
+  // extensions + customArtworkTypes parsing handled inside their panels' save().
   config.gridWidth = (ui->gridWidthSpinBox) ? ui->gridWidthSpinBox->value() : config.gridWidth;
   config.horizontalGridHeight = (ui->horizontalGridHeightSpinBox)
                                     ? ui->horizontalGridHeightSpinBox->value()
@@ -126,9 +113,6 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
       (ui->horizontalGridHeightSidebarHiddenSpinBox)
           ? ui->horizontalGridHeightSidebarHiddenSpinBox->value()
           : config.horizontalGridHeightSidebarHidden;
-  config.showAllSubcollectionItems = (ui->showAllSubcollectionItemsCheckBox)
-                                         ? ui->showAllSubcollectionItemsCheckBox->isChecked()
-                                         : config.showAllSubcollectionItems;
   config.horizontalAlignment =
       (ui->horizontalAlignmentComboBox)
           ? static_cast<HorizontalAlignment>(ui->horizontalAlignmentComboBox->currentIndex())
@@ -244,8 +228,8 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
 
 // Updates parent collection settings from UI
 auto SettingsDialog::updateParentCollectionFromUI(CollectionConfig &collection, int index) -> void {
-  if (ui->parentCollectionComboBox) {
-    int dropdownIndex = ui->parentCollectionComboBox->currentIndex();
+  if (ui->configurationPanel->parentCollectionComboBox()) {
+    int dropdownIndex = ui->configurationPanel->parentCollectionComboBox()->currentIndex();
     if (dropdownIndex >= 0 && dropdownIndex < m_parentCollectionMapping.size()) {
       int newParentIndex = m_parentCollectionMapping[dropdownIndex];
       if (newParentIndex >= 0 && newParentIndex < m_workingCollections.size() &&
@@ -279,8 +263,7 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
   const bool defaultLauncherChanged =
       ui->defaultLauncherComboBox && ui->defaultLauncherComboBox->count() > 0 &&
       ui->defaultLauncherComboBox->currentIndex() != o.defaultLauncherIndex;
-  const bool typeChanged =
-      ui->collectionTypeComboBox && ui->collectionTypeComboBox->currentText().trimmed() != o.type;
+  // type comparison is handled inside ConfigurationPanel::hasChanges below.
   const bool hSpacingChanged =
       ui->horizontalSpacingSpinBox &&
       spacingUiToInternal(ui->horizontalSpacingSpinBox->value()) != o.horizontalSpacing;
@@ -288,8 +271,9 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ui->verticalSpacingSpinBox &&
       spacingUiToInternal(ui->verticalSpacingSpinBox->value()) != o.verticalSpacing;
 
-  return launcherNameChanged || additionalChanged || defaultLauncherChanged || typeChanged ||
-         hSpacingChanged || vSpacingChanged || ui->sidebarPanel->hasChanges(o) ||
+  return launcherNameChanged || additionalChanged || defaultLauncherChanged || hSpacingChanged ||
+         vSpacingChanged || ui->sidebarPanel->hasChanges(o) ||
+         ui->configurationPanel->hasChanges(o) || ui->artworkPanel->hasChanges(o) ||
 
          // Launcher / archive paths
          lineChanged(ui->launcherLineEdit, o.launcherPath) ||
@@ -297,10 +281,6 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
          lineChanged(ui->launchParamsLineEdit, o.launchParameters) ||
          checkboxChanged(ui->extractArchivesCheckBox, o.extractArchives) ||
          lineChanged(ui->extractedExtensionLineEdit, o.extractedExtension) ||
-         checkboxChanged(ui->expandModeCheckBox, o.expandMode) ||
-
-         // Directories
-         lineChanged(ui->mediaDirLineEdit, o.mediaDirectory) || ui->artworkPanel->hasChanges(o) ||
 
          // Grid metrics
          spinIntChanged(ui->gridWidthSpinBox, o.gridWidth) ||
@@ -308,7 +288,6 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
          spinIntChanged(ui->gridWidthSidebarHiddenSpinBox, o.gridWidthSidebarHidden) ||
          spinIntChanged(ui->horizontalGridHeightSidebarHiddenSpinBox,
                         o.horizontalGridHeightSidebarHidden) ||
-         checkboxChanged(ui->showAllSubcollectionItemsCheckBox, o.showAllSubcollectionItems) ||
          comboEnumChanged(ui->horizontalAlignmentComboBox, o.horizontalAlignment) ||
 
          // View / titles / folders / typography
@@ -320,17 +299,11 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
          spinIntChanged(ui->cornerRadiusSpinBox, o.cornerRadius);
 }
 
-// Checks extension list changes
+// Extension + customArtworkTypes dirty checks live in ConfigurationPanel /
+// ArtworkTabPanel respectively (covered by checkBasicFieldChanges via the
+// panels' own hasChanges() methods). Kept as an empty stub so the
+// hasUnsavedChanges() callsite stays unchanged for now.
 auto SettingsDialog::checkExtensionChanges() const -> bool {
-  QStringList currentExtensions =
-      (ui->fileExtensionsLineEdit)
-          ? ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text())
-          : originalCollection.extensions;
-  if (currentExtensions != originalCollection.extensions) {
-    return true;
-  }
-  // customArtworkTypes dirty-check is handled inside ArtworkTabPanel::
-  // hasChanges; no per-field UI read needed here.
   return false;
 }
 
@@ -348,8 +321,9 @@ auto SettingsDialog::checkTreeNameChanges() const -> bool {
 
 // Checks parent collection changes
 auto SettingsDialog::checkParentCollectionChanges() const -> bool {
-  int dropdownIndex =
-      (ui->parentCollectionComboBox) ? ui->parentCollectionComboBox->currentIndex() : -1;
+  int dropdownIndex = (ui->configurationPanel->parentCollectionComboBox())
+                          ? ui->configurationPanel->parentCollectionComboBox()->currentIndex()
+                          : -1;
   int currentParentIndex = -1;
   if (dropdownIndex >= 0 && dropdownIndex < m_parentCollectionMapping.size()) {
     currentParentIndex = m_parentCollectionMapping[dropdownIndex];

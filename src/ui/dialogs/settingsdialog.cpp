@@ -27,6 +27,7 @@
 #include "attractpanel.h"
 #include "collectionremover.h"
 #include "collectiontreewidget.h"
+#include "configurationpanel.h"
 #include "controlspanel.h"
 #include "extensionutils.h"
 #include "fontspanel.h"
@@ -88,6 +89,13 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
 
   // Artwork tab: per-collection asset directories + custom artwork types.
   connect(ui->artworkPanel, &ArtworkTabPanel::changed, this, &SettingsDialog::checkForChanges);
+
+  // Configuration tab: per-collection identity / paths / type / extensions /
+  // expand-mode / show-all-subcollection-items. Cross-cutting widgets
+  // (parent combo, linked-parents button, recursive-import button, browse-
+  // media-dir button) remain wired by the host below.
+  connect(ui->configurationPanel, &ConfigurationPanel::changed, this,
+          &SettingsDialog::checkForChanges);
 
   // Application-font panel: live-save semantics — panel mutates the
   // pointed-to GeneralSettings and emits changed(); we mirror to mainWindow,
@@ -300,8 +308,8 @@ void SettingsDialog::setupButtonConnections() {
     connect(ui->duplicateCollectionButton, &QPushButton::clicked, this,
             &SettingsDialog::duplicateCollection);
   }
-  if (ui->editLinkedParentsButton) {
-    connect(ui->editLinkedParentsButton, &QPushButton::clicked, this,
+  if (ui->configurationPanel->editLinkedParentsButton()) {
+    connect(ui->configurationPanel->editLinkedParentsButton(), &QPushButton::clicked, this,
             &SettingsDialog::onEditLinkedParents);
   }
   // wire the Settings Mode selector. Default is `Current` to
@@ -313,13 +321,14 @@ void SettingsDialog::setupButtonConnections() {
   }
   connect(ui->browseLauncherButton, &QPushButton::clicked, this, &SettingsDialog::browseLauncher);
   connect(ui->browseCoreButton, &QPushButton::clicked, this, &SettingsDialog::browseCore);
-  connect(ui->browseMediaDirButton, &QPushButton::clicked, this, &SettingsDialog::browseMediaDir);
+  connect(ui->configurationPanel->browseMediaDirButton(), &QPushButton::clicked, this,
+          &SettingsDialog::browseMediaDir);
   // Artwork-tab browse buttons (artwork dir, video dir, manual dir,
   // placeholder artwork) live on ArtworkTabPanel now.
   // browseStartupVideoButton + browseHomeViewIconButton handlers live in
   // GeneralSettingsPanel now.
-  if (ui->recursiveImportContentButton) {
-    connect(ui->recursiveImportContentButton, &QPushButton::clicked, this,
+  if (ui->configurationPanel->recursiveImportContentButton()) {
+    connect(ui->configurationPanel->recursiveImportContentButton(), &QPushButton::clicked, this,
             &SettingsDialog::onRecursiveImportContent);
   }
 }
@@ -367,12 +376,12 @@ void SettingsDialog::applyScopeFieldGating() {
   // exclusions in settingsdialogtree.cpp.
   const bool enabled = (m_settingsScope == SettingsScope::Current);
   QWidget *const gatedFields[] = {
-      ui->parentCollectionComboBox,
-      ui->mediaDirLineEdit,
-      ui->browseMediaDirButton,
-      ui->recursiveImportContentButton,
+      ui->configurationPanel->parentCollectionComboBox(),
+      ui->configurationPanel->mediaDirLineEdit(),
+      ui->configurationPanel->browseMediaDirButton(),
+      ui->configurationPanel->recursiveImportContentButton(),
       ui->artworkPanel,
-      ui->fileExtensionsLineEdit,
+      ui->configurationPanel->fileExtensionsLineEdit(),
       ui->launcherLineEdit,
       ui->browseLauncherButton,
       ui->coreLineEdit,
@@ -387,7 +396,7 @@ void SettingsDialog::applyScopeFieldGating() {
       ui->extractArchivesCheckBox,
       ui->extractedExtensionLineEdit,
       ui->subfoldersPanel,
-      ui->showAllSubcollectionItemsCheckBox,
+      ui->configurationPanel,
   };
   for (QWidget *w : gatedFields) {
     if (w) {

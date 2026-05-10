@@ -22,14 +22,15 @@ void SettingsDialog::clearLinkedParentsUI() {
 }
 
 void SettingsDialog::updateLinkedParentsButtonLabel() {
-  if (!ui->editLinkedParentsButton) {
+  if (!ui->configurationPanel->editLinkedParentsButton()) {
     return;
   }
   const int count = m_workingAdditionalParentNames.size();
   if (count == 0) {
-    ui->editLinkedParentsButton->setText(tr("Linked Parents..."));
+    ui->configurationPanel->editLinkedParentsButton()->setText(tr("Linked Parents..."));
   } else {
-    ui->editLinkedParentsButton->setText(tr("Linked Parents (%1)...").arg(count));
+    ui->configurationPanel->editLinkedParentsButton()->setText(
+        tr("Linked Parents (%1)...").arg(count));
   }
 }
 

@@ -64,16 +64,16 @@ void SettingsDialog::browseCore() {
 
 void SettingsDialog::browseMediaDir() {
   QString dirName = QFileDialog::getExistingDirectory(this, tr("Select Media Directory"), "");
-  if (!dirName.isEmpty() && ui->mediaDirLineEdit) {
-    ui->mediaDirLineEdit->setText(dirName);
+  if (!dirName.isEmpty() && ui->configurationPanel->mediaDirLineEdit()) {
+    ui->configurationPanel->mediaDirLineEdit()->setText(dirName);
   }
 }
 
 void SettingsDialog::onRecursiveImportContent() {
-  if (!ui->mediaDirLineEdit) {
+  if (!ui->configurationPanel->mediaDirLineEdit()) {
     return;
   }
-  QString baseDir = ui->mediaDirLineEdit->text().trimmed();
+  QString baseDir = ui->configurationPanel->mediaDirLineEdit()->text().trimmed();
   if (baseDir.isEmpty()) {
     QMessageBox::warning(this, tr("Recursive Import"),
                          tr("Please specify a content directory first."));
@@ -220,31 +220,17 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->extractedExtensionLineEdit) {
     ui->extractedExtensionLineEdit->setText(config.extractedExtension);
   }
-  if (ui->expandModeCheckBox) {
-    ui->expandModeCheckBox->setChecked(config.expandMode);
-  }
-  if (ui->mediaDirLineEdit) {
-    ui->mediaDirLineEdit->setText(config.mediaDirectory);
+  ui->configurationPanel->load(config);
+  // Populate the type combo from the union of types in use across the
+  // working list so the user can pick anything they've already tagged. The
+  // combo stays editable so free-form values still survive a round-trip.
+  {
+    QStringList types{QString()};
+    types += CollectionUtils::collectAllCollectionTypes(m_workingCollections);
+    ui->configurationPanel->setKnownTypes(types, config.type);
   }
   ui->artworkPanel->load(config);
   ui->subfoldersPanel->load(config);
-  if (ui->fileExtensionsLineEdit) {
-    ui->fileExtensionsLineEdit->setText(config.extensions.join(", "));
-  }
-  if (ui->collectionTypeComboBox) {
-    // rebuild the dropdown from the union of types currently in
-    // use across the working list so the user sees everything they've already
-    // tagged. Editable=true means free-form values still survive a round-trip
-    // even if they aren't in the dropdown.
-    QSignalBlocker blocker(ui->collectionTypeComboBox);
-    ui->collectionTypeComboBox->clear();
-    QStringList types = CollectionUtils::collectAllCollectionTypes(m_workingCollections);
-    ui->collectionTypeComboBox->addItem(QString());
-    for (const QString &t : types) {
-      ui->collectionTypeComboBox->addItem(t);
-    }
-    ui->collectionTypeComboBox->setEditText(config.type);
-  }
   if (ui->gridWidthSpinBox) {
     ui->gridWidthSpinBox->setValue(config.gridWidth);
   }
@@ -257,9 +243,6 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->horizontalGridHeightSidebarHiddenSpinBox) {
     ui->horizontalGridHeightSidebarHiddenSpinBox->setValue(
         config.horizontalGridHeightSidebarHidden);
-  }
-  if (ui->showAllSubcollectionItemsCheckBox) {
-    ui->showAllSubcollectionItemsCheckBox->setChecked(config.showAllSubcollectionItems);
   }
   if (ui->horizontalAlignmentComboBox) {
     ui->horizontalAlignmentComboBox->setCurrentIndex(static_cast<int>(config.horizontalAlignment));
@@ -397,14 +380,8 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->launcherNameLineEdit) ui->launcherNameLineEdit->clear();
   clearAdditionalLaunchersUI();
   clearLinkedParentsUI();
-  if (ui->mediaDirLineEdit) ui->mediaDirLineEdit->clear();
+  ui->configurationPanel->clear();
   ui->artworkPanel->clear();
-  if (ui->fileExtensionsLineEdit) ui->fileExtensionsLineEdit->clear();
-  if (ui->collectionTypeComboBox) {
-    QSignalBlocker blocker(ui->collectionTypeComboBox);
-    ui->collectionTypeComboBox->clear();
-    ui->collectionTypeComboBox->setEditText(QString());
-  }
   if (ui->backgroundValueEdit) ui->backgroundValueEdit->clear();
   if (ui->primaryColorEdit) ui->primaryColorEdit->clear();
   if (ui->tileColorEdit) ui->tileColorEdit->clear();
@@ -422,8 +399,6 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->backdropBlurRadiusSpinBox) ui->backdropBlurRadiusSpinBox->setValue(12);
 
   ui->subfoldersPanel->clear();
-  if (ui->showAllSubcollectionItemsCheckBox)
-    ui->showAllSubcollectionItemsCheckBox->setChecked(false);
   if (ui->hideTitlesCheckBox) ui->hideTitlesCheckBox->setChecked(false);
   if (ui->hideSubcollectionTitlesCheckBox) ui->hideSubcollectionTitlesCheckBox->setChecked(false);
   if (ui->hideMissingArtworkCheckBox) ui->hideMissingArtworkCheckBox->setChecked(false);
@@ -445,7 +420,8 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->horizontalAlignmentComboBox) ui->horizontalAlignmentComboBox->setCurrentIndex(0);
   ui->sidebarPanel->clear();
   if (ui->viewTypeComboBox) ui->viewTypeComboBox->setCurrentIndex(0);
-  if (ui->parentCollectionComboBox) ui->parentCollectionComboBox->clear();
+  if (ui->configurationPanel->parentCollectionComboBox())
+    ui->configurationPanel->parentCollectionComboBox()->clear();
 
   if (ui->backgroundColorRadio) ui->backgroundColorRadio->setChecked(true);
 
