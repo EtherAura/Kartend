@@ -30,6 +30,7 @@
 #include "scrollmanager.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
+#include "sidebarpanel.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
@@ -359,72 +360,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->horizontalAlignmentComboBox) {
     ui->horizontalAlignmentComboBox->setCurrentIndex(static_cast<int>(config.horizontalAlignment));
   }
-  if (ui->sidebarModeComboBox) {
-    ui->sidebarModeComboBox->setCurrentIndex(static_cast<int>(config.sidebarMode));
-  }
-  // sidebar enhancements.
-  if (ui->sidebarPositionComboBox) {
-    ui->sidebarPositionComboBox->setCurrentIndex(static_cast<int>(config.sidebarPosition));
-  }
-  if (ui->sidebarWidthSpinBox) {
-    ui->sidebarWidthSpinBox->setValue(config.sidebarWidth);
-  }
-  // pane height for Top/Bottom dock. Same form panel — visibility
-  // is toggled by updateSidebarModeVisibility() based on Position.
-  if (ui->sidebarHeightSpinBox) {
-    ui->sidebarHeightSpinBox->setValue(config.sidebarHeight);
-  }
-  if (ui->sidebarWidthLockedCheckBox) {
-    ui->sidebarWidthLockedCheckBox->setChecked(config.sidebarWidthLocked);
-  }
-  if (ui->sidebarBackgroundTypeComboBox) {
-    ui->sidebarBackgroundTypeComboBox->setCurrentIndex(
-        static_cast<int>(config.sidebarBackgroundType));
-  }
-  if (ui->sidebarBackgroundValueEdit) {
-    if (config.sidebarBackgroundType == DetailsPaneBackgroundType::Image) {
-      ui->sidebarBackgroundValueEdit->setText(config.sidebarBackgroundImage);
-    } else {
-      ui->sidebarBackgroundValueEdit->setText(config.sidebarBackgroundColor);
-    }
-  }
-  if (ui->sidebarPatternIntensitySpinBox) {
-    ui->sidebarPatternIntensitySpinBox->setValue(config.sidebarPatternIntensity);
-  }
-  if (ui->sidebarPatternColorEdit) {
-    ui->sidebarPatternColorEdit->setText(config.sidebarPatternColor);
-  }
-  if (ui->sidebarTextColorEdit) {
-    ui->sidebarTextColorEdit->setText(config.sidebarTextColor);
-  }
-  if (ui->sidebarAccentColorEdit) {
-    ui->sidebarAccentColorEdit->setText(config.sidebarAccentColor);
-  }
-  if (ui->sidebarHeaderBgEdit) {
-    ui->sidebarHeaderBgEdit->setText(config.sidebarHeaderBgColor);
-  }
-  if (ui->sidebarSectionBgEdit) {
-    ui->sidebarSectionBgEdit->setText(config.sidebarSectionBgColor);
-  }
-  if (ui->sidebarHeaderBgOpacitySpinBox) {
-    ui->sidebarHeaderBgOpacitySpinBox->setValue(config.sidebarHeaderBgOpacity);
-  }
-  if (ui->sidebarSectionBgOpacitySpinBox) {
-    ui->sidebarSectionBgOpacitySpinBox->setValue(config.sidebarSectionBgOpacity);
-  }
-  // per-collection sidebar font override.
-  if (ui->sidebarFontFamilyEdit) {
-    ui->sidebarFontFamilyEdit->setText(config.sidebarFontFamily);
-  }
-  if (ui->sidebarFontSizeSpinBox) {
-    ui->sidebarFontSizeSpinBox->setValue(config.sidebarFontPointSize);
-  }
-  if (ui->sidebarActiveTabComboBox) {
-    ui->sidebarActiveTabComboBox->setCurrentIndex(static_cast<int>(config.sidebarActiveTab));
-  }
-  if (ui->sidebarActiveCollectionLabel) {
-    ui->sidebarActiveCollectionLabel->setText(tr("Editing: %1").arg(config.name));
-  }
+  ui->sidebarPanel->load(config);
   if (ui->viewTypeComboBox) {
     ui->viewTypeComboBox->setCurrentIndex(static_cast<int>(config.viewType));
   }
@@ -436,12 +372,6 @@ void SettingsDialog::loadCollectionToUI(int index) {
   }
   if (ui->verticalSpacingSpinBox) {
     ui->verticalSpacingSpinBox->setValue(spacingInternalToUi(config.verticalSpacing));
-  }
-  if (ui->hideHorizontalScrollbarCheckBox) {
-    ui->hideHorizontalScrollbarCheckBox->setChecked(config.hideHorizontalScrollbar);
-  }
-  if (ui->hideVerticalScrollbarCheckBox) {
-    ui->hideVerticalScrollbarCheckBox->setChecked(config.hideVerticalScrollbar);
   }
   if (ui->hideTitlesCheckBox) {
     ui->hideTitlesCheckBox->setChecked(config.hideTitles);
@@ -598,8 +528,6 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->includeArtworkSubfoldersCheckBox) ui->includeArtworkSubfoldersCheckBox->setChecked(false);
   if (ui->showAllSubcollectionItemsCheckBox)
     ui->showAllSubcollectionItemsCheckBox->setChecked(false);
-  if (ui->hideHorizontalScrollbarCheckBox) ui->hideHorizontalScrollbarCheckBox->setChecked(false);
-  if (ui->hideVerticalScrollbarCheckBox) ui->hideVerticalScrollbarCheckBox->setChecked(false);
   if (ui->hideTitlesCheckBox) ui->hideTitlesCheckBox->setChecked(false);
   if (ui->hideSubcollectionTitlesCheckBox) ui->hideSubcollectionTitlesCheckBox->setChecked(false);
   if (ui->hideMissingArtworkCheckBox) ui->hideMissingArtworkCheckBox->setChecked(false);
@@ -619,32 +547,9 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->cornerRadiusSpinBox) ui->cornerRadiusSpinBox->setValue(0);
 
   if (ui->horizontalAlignmentComboBox) ui->horizontalAlignmentComboBox->setCurrentIndex(0);
-  if (ui->sidebarModeComboBox) ui->sidebarModeComboBox->setCurrentIndex(0);
-  // sidebar enhancements: clear/reset on no-selection.
-  if (ui->sidebarPositionComboBox) ui->sidebarPositionComboBox->setCurrentIndex(0);
-  if (ui->sidebarWidthSpinBox)
-    ui->sidebarWidthSpinBox->setValue(UIConstants::DetailsPane::FIXED_WIDTH);
-  if (ui->sidebarHeightSpinBox)
-    ui->sidebarHeightSpinBox->setValue(UIConstants::DetailsPane::FIXED_HEIGHT);
-  if (ui->sidebarWidthLockedCheckBox) ui->sidebarWidthLockedCheckBox->setChecked(true);
-  if (ui->sidebarBackgroundTypeComboBox) ui->sidebarBackgroundTypeComboBox->setCurrentIndex(0);
-  if (ui->sidebarBackgroundValueEdit) ui->sidebarBackgroundValueEdit->clear();
-  if (ui->sidebarPatternIntensitySpinBox) ui->sidebarPatternIntensitySpinBox->setValue(50);
-  if (ui->sidebarPatternColorEdit) ui->sidebarPatternColorEdit->clear();
-  if (ui->sidebarTextColorEdit) ui->sidebarTextColorEdit->clear();
-  if (ui->sidebarAccentColorEdit) ui->sidebarAccentColorEdit->clear();
-  if (ui->sidebarHeaderBgEdit) ui->sidebarHeaderBgEdit->clear();
-  if (ui->sidebarSectionBgEdit) ui->sidebarSectionBgEdit->clear();
-  if (ui->sidebarHeaderBgOpacitySpinBox) ui->sidebarHeaderBgOpacitySpinBox->setValue(200);
-  if (ui->sidebarSectionBgOpacitySpinBox) ui->sidebarSectionBgOpacitySpinBox->setValue(170);
-  if (ui->sidebarFontFamilyEdit) ui->sidebarFontFamilyEdit->clear();
-  if (ui->sidebarFontSizeSpinBox) ui->sidebarFontSizeSpinBox->setValue(0);
-  if (ui->sidebarActiveTabComboBox) ui->sidebarActiveTabComboBox->setCurrentIndex(0);
+  ui->sidebarPanel->clear();
   if (ui->viewTypeComboBox) ui->viewTypeComboBox->setCurrentIndex(0);
   if (ui->parentCollectionComboBox) ui->parentCollectionComboBox->clear();
-  if (ui->sidebarActiveCollectionLabel) {
-    ui->sidebarActiveCollectionLabel->setText(tr("Editing: (no collection selected)"));
-  }
 
   if (ui->backgroundColorRadio) ui->backgroundColorRadio->setChecked(true);
   if (ui->subfolderOptionsWidget) ui->subfolderOptionsWidget->setVisible(false);

@@ -36,6 +36,7 @@
 #include "scrollmanager.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
+#include "sidebarpanel.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
@@ -67,6 +68,11 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   ui->launcherPresetsPanel->setPresets(&m_generalSettings.launcherPresets);
   connect(ui->launcherPresetsPanel, &LauncherPresetsPanel::presetsChanged, this,
           &SettingsDialog::checkForChanges);
+
+  // Sidebar (Details Pane) panel: emits changed() on any field mutation,
+  // routed to checkForChanges. The panel handles its own pickers and
+  // position-driven width-vs-height visibility internally.
+  connect(ui->sidebarPanel, &SidebarPanel::changed, this, &SettingsDialog::checkForChanges);
 
   collectionTreeWidget = ui->collectionTreeWidget;
 

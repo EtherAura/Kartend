@@ -26,6 +26,7 @@ class DetailsPaneManager;
 class GamepadCaptureController;
 class ScrollManager;
 class NavigationManager;
+class SidebarPanel;
 
 class SettingsDialog : public QDialog {
   Q_OBJECT
@@ -151,7 +152,6 @@ private slots:
   void onEditLinkedParents();
 
 private:
-
   void updateCollectionTreeWidget();
   void expandPathToCollection(int collectionIndex);
   void populateTreeWidget();
@@ -198,7 +198,6 @@ private:
   void updateFieldVisibility();
   void updateExtractArchivesVisibility();
   void onExtractArchivesToggled(bool checked);
-  void updateSidebarModeVisibility();
   void updateGridWidthLimits();
   void loadGeneralSettingsToUI();
   void saveGeneralSettingsFromUI();

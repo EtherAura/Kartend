@@ -282,9 +282,6 @@ void SettingsDialog::updateFieldVisibility() {
   // Archive Handling stays visible regardless of content dir / launcher type
   // so the user can toggle the option freely.
   updateExtractArchivesVisibility();
-
-  ui->label_sidebarMode->setVisible(true);
-  ui->sidebarModeComboBox->setVisible(true);
 }
 
 void SettingsDialog::updateExtractArchivesVisibility() {
@@ -307,23 +304,6 @@ void SettingsDialog::updateExtractArchivesVisibility() {
 void SettingsDialog::onExtractArchivesToggled(bool checked) {
   Q_UNUSED(checked)
   updateExtractArchivesVisibility();
-}
-
-void SettingsDialog::updateSidebarModeVisibility() {
-  ui->label_sidebarMode->setVisible(true);
-  ui->sidebarModeComboBox->setVisible(true);
-
-  // width-vs-height field visibility tracks the position combo.
-  // Right/Left expose Width; Top/Bottom expose Height. The lock checkbox
-  // governs both directions so it stays visible regardless.
-  if (ui->sidebarPositionComboBox) {
-    const auto pos = static_cast<DetailsPanePosition>(ui->sidebarPositionComboBox->currentIndex());
-    const bool horizontalDock = CollectionUtils::isDetailsPaneHorizontal(pos);
-    if (ui->label_sidebarWidth) ui->label_sidebarWidth->setVisible(!horizontalDock);
-    if (ui->sidebarWidthSpinBox) ui->sidebarWidthSpinBox->setVisible(!horizontalDock);
-    if (ui->label_sidebarHeight) ui->label_sidebarHeight->setVisible(horizontalDock);
-    if (ui->sidebarHeightSpinBox) ui->sidebarHeightSpinBox->setVisible(horizontalDock);
-  }
 }
 
 void SettingsDialog::updateGridWidthLimits() {

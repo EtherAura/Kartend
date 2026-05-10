@@ -30,6 +30,7 @@
 #include "scrollmanager.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
+#include "sidebarpanel.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
@@ -163,75 +164,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
       (ui->horizontalAlignmentComboBox)
           ? static_cast<HorizontalAlignment>(ui->horizontalAlignmentComboBox->currentIndex())
           : config.horizontalAlignment;
-  config.sidebarMode = (ui->sidebarModeComboBox)
-                           ? static_cast<DetailsPaneMode>(ui->sidebarModeComboBox->currentIndex())
-                           : config.sidebarMode;
-  // sidebar enhancements.
-  if (ui->sidebarPositionComboBox) {
-    config.sidebarPosition =
-        static_cast<DetailsPanePosition>(ui->sidebarPositionComboBox->currentIndex());
-  }
-  if (ui->sidebarWidthSpinBox) {
-    config.sidebarWidth = ui->sidebarWidthSpinBox->value();
-  }
-  if (ui->sidebarHeightSpinBox) {
-    config.sidebarHeight = ui->sidebarHeightSpinBox->value();
-  }
-  if (ui->sidebarWidthLockedCheckBox) {
-    config.sidebarWidthLocked = ui->sidebarWidthLockedCheckBox->isChecked();
-  }
-  if (ui->sidebarBackgroundTypeComboBox) {
-    config.sidebarBackgroundType =
-        static_cast<DetailsPaneBackgroundType>(ui->sidebarBackgroundTypeComboBox->currentIndex());
-  }
-  if (ui->sidebarBackgroundValueEdit) {
-    const QString value = ui->sidebarBackgroundValueEdit->text().trimmed();
-    if (config.sidebarBackgroundType == DetailsPaneBackgroundType::Image) {
-      config.sidebarBackgroundImage = value;
-      config.sidebarBackgroundColor.clear();
-    } else {
-      // Pattern mode also stores the bg base color in sidebarBackgroundColor;
-      // the value field doubles for that. The pattern stroke color comes
-      // from sidebarPatternColorEdit below.
-      config.sidebarBackgroundColor = value;
-      config.sidebarBackgroundImage.clear();
-    }
-  }
-  if (ui->sidebarPatternIntensitySpinBox) {
-    config.sidebarPatternIntensity = ui->sidebarPatternIntensitySpinBox->value();
-  }
-  if (ui->sidebarPatternColorEdit) {
-    config.sidebarPatternColor = ui->sidebarPatternColorEdit->text().trimmed();
-  }
-  if (ui->sidebarTextColorEdit) {
-    config.sidebarTextColor = ui->sidebarTextColorEdit->text().trimmed();
-  }
-  if (ui->sidebarAccentColorEdit) {
-    config.sidebarAccentColor = ui->sidebarAccentColorEdit->text().trimmed();
-  }
-  if (ui->sidebarHeaderBgEdit) {
-    config.sidebarHeaderBgColor = ui->sidebarHeaderBgEdit->text().trimmed();
-  }
-  if (ui->sidebarSectionBgEdit) {
-    config.sidebarSectionBgColor = ui->sidebarSectionBgEdit->text().trimmed();
-  }
-  if (ui->sidebarHeaderBgOpacitySpinBox) {
-    config.sidebarHeaderBgOpacity = ui->sidebarHeaderBgOpacitySpinBox->value();
-  }
-  if (ui->sidebarSectionBgOpacitySpinBox) {
-    config.sidebarSectionBgOpacity = ui->sidebarSectionBgOpacitySpinBox->value();
-  }
-  // per-collection sidebar font override.
-  if (ui->sidebarFontFamilyEdit) {
-    config.sidebarFontFamily = ui->sidebarFontFamilyEdit->text().trimmed();
-  }
-  if (ui->sidebarFontSizeSpinBox) {
-    config.sidebarFontPointSize = ui->sidebarFontSizeSpinBox->value();
-  }
-  if (ui->sidebarActiveTabComboBox) {
-    config.sidebarActiveTab =
-        static_cast<DetailsPaneTab>(ui->sidebarActiveTabComboBox->currentIndex());
-  }
+  ui->sidebarPanel->save(config);
   config.viewType = (ui->viewTypeComboBox)
                         ? static_cast<ViewType>(ui->viewTypeComboBox->currentIndex())
                         : config.viewType;
@@ -244,12 +177,6 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.verticalSpacing = (ui->verticalSpacingSpinBox)
                                ? spacingUiToInternal(ui->verticalSpacingSpinBox->value())
                                : config.verticalSpacing;
-  config.hideHorizontalScrollbar = (ui->hideHorizontalScrollbarCheckBox)
-                                       ? ui->hideHorizontalScrollbarCheckBox->isChecked()
-                                       : config.hideHorizontalScrollbar;
-  config.hideVerticalScrollbar = (ui->hideVerticalScrollbarCheckBox)
-                                     ? ui->hideVerticalScrollbarCheckBox->isChecked()
-                                     : config.hideVerticalScrollbar;
   config.hideTitles =
       (ui->hideTitlesCheckBox) ? ui->hideTitlesCheckBox->isChecked() : config.hideTitles;
   config.hideSubcollectionTitles = (ui->hideSubcollectionTitlesCheckBox)
@@ -373,9 +300,10 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
 
   // Special cases: launcher dirty-check, additional-launchers list, default
   // launcher index (only valid when combobox has entries), the
-  // collection-type combobox (compares trimmed currentText, not index), the
-  // sidebar background value (compares against image OR color depending on
-  // the type), and the spacing fields (apply spacingUiToInternal first).
+  // collection-type combobox (compares trimmed currentText, not index), and
+  // the spacing fields (apply spacingUiToInternal first). Sidebar / details-
+  // pane fields delegate to SidebarPanel::hasChanges, which handles its own
+  // image-vs-color background-value special case.
   const bool launcherNameChanged =
       ui->launcherNameLineEdit && ui->launcherNameLineEdit->text().trimmed() != o.launcherName;
   const bool additionalChanged = m_workingAdditionalLaunchers != o.additionalLaunchers;
@@ -384,11 +312,6 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ui->defaultLauncherComboBox->currentIndex() != o.defaultLauncherIndex;
   const bool typeChanged =
       ui->collectionTypeComboBox && ui->collectionTypeComboBox->currentText().trimmed() != o.type;
-  const QString sidebarBgOrig = o.sidebarBackgroundType == DetailsPaneBackgroundType::Image
-                                    ? o.sidebarBackgroundImage
-                                    : o.sidebarBackgroundColor;
-  const bool sidebarBgValueChanged =
-      lineTrimmedChanged(ui->sidebarBackgroundValueEdit, sidebarBgOrig);
   const bool hSpacingChanged =
       ui->horizontalSpacingSpinBox &&
       spacingUiToInternal(ui->horizontalSpacingSpinBox->value()) != o.horizontalSpacing;
@@ -397,7 +320,7 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       spacingUiToInternal(ui->verticalSpacingSpinBox->value()) != o.verticalSpacing;
 
   return launcherNameChanged || additionalChanged || defaultLauncherChanged || typeChanged ||
-         sidebarBgValueChanged || hSpacingChanged || vSpacingChanged ||
+         hSpacingChanged || vSpacingChanged || ui->sidebarPanel->hasChanges(o) ||
 
          // Launcher / archive paths
          lineChanged(ui->launcherLineEdit, o.launcherPath) ||
@@ -423,30 +346,9 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
          checkboxChanged(ui->showAllSubcollectionItemsCheckBox, o.showAllSubcollectionItems) ||
          comboEnumChanged(ui->horizontalAlignmentComboBox, o.horizontalAlignment) ||
 
-         // Sidebar geometry + background
-         comboEnumChanged(ui->sidebarModeComboBox, o.sidebarMode) ||
-         comboEnumChanged(ui->sidebarPositionComboBox, o.sidebarPosition) ||
-         spinIntChanged(ui->sidebarWidthSpinBox, o.sidebarWidth) ||
-         spinIntChanged(ui->sidebarHeightSpinBox, o.sidebarHeight) ||
-         checkboxChanged(ui->sidebarWidthLockedCheckBox, o.sidebarWidthLocked) ||
-         comboEnumChanged(ui->sidebarBackgroundTypeComboBox, o.sidebarBackgroundType) ||
-         lineTrimmedChanged(ui->sidebarPatternColorEdit, o.sidebarPatternColor) ||
-         spinIntChanged(ui->sidebarPatternIntensitySpinBox, o.sidebarPatternIntensity) ||
-         lineTrimmedChanged(ui->sidebarTextColorEdit, o.sidebarTextColor) ||
-         lineTrimmedChanged(ui->sidebarAccentColorEdit, o.sidebarAccentColor) ||
-         lineTrimmedChanged(ui->sidebarHeaderBgEdit, o.sidebarHeaderBgColor) ||
-         lineTrimmedChanged(ui->sidebarSectionBgEdit, o.sidebarSectionBgColor) ||
-         spinIntChanged(ui->sidebarHeaderBgOpacitySpinBox, o.sidebarHeaderBgOpacity) ||
-         spinIntChanged(ui->sidebarSectionBgOpacitySpinBox, o.sidebarSectionBgOpacity) ||
-         lineTrimmedChanged(ui->sidebarFontFamilyEdit, o.sidebarFontFamily) ||
-         spinIntChanged(ui->sidebarFontSizeSpinBox, o.sidebarFontPointSize) ||
-         comboEnumChanged(ui->sidebarActiveTabComboBox, o.sidebarActiveTab) ||
-
-         // View / scrollbars / titles / folders / typography
+         // View / titles / folders / typography
          comboEnumChanged(ui->viewTypeComboBox, o.viewType) ||
          checkboxChanged(ui->hideMissingArtworkCheckBox, o.hideMissingArtwork) ||
-         checkboxChanged(ui->hideHorizontalScrollbarCheckBox, o.hideHorizontalScrollbar) ||
-         checkboxChanged(ui->hideVerticalScrollbarCheckBox, o.hideVerticalScrollbar) ||
          checkboxChanged(ui->hideTitlesCheckBox, o.hideTitles) ||
          checkboxChanged(ui->hideSubcollectionTitlesCheckBox, o.hideSubcollectionTitles) ||
          checkboxChanged(ui->includeContentSubfoldersCheckBox, o.includeContentSubfolders) ||
