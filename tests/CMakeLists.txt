@@ -459,6 +459,7 @@ add_executable(test_databasemanager
   ${SRC_DIR}/modules/data/database/databasemanager.cpp
   ${SRC_DIR}/modules/data/database/databaseschema.cpp
   ${SRC_DIR}/modules/data/database/filemapcache.cpp
+  ${SRC_DIR}/modules/data/database/idatabasemanager.h
   ${SRC_DIR}/utils/text/titlefilter.cpp
   ${SRC_DIR}/modules/data/query/preparedstatementcache.cpp
   ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp

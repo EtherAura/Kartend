@@ -1,19 +1,10 @@
 #ifndef DATABASEMANAGER_H
 #define DATABASEMANAGER_H
 
-#include <QDateTime>
-#include <QHash>
-#include <QObject>
 #include <QSqlDatabase>
-#include <QStringList>
 
-#include "collectionutils.h"
-#include "errorutils.h"
 #include "filemapcache.h"
-#include "historystore.h"
-#include "itemartwork.h"
-#include "itemmetadata.h"
-#include "usagestatsstore.h"
+#include "idatabasemanager.h"
 
 class CachedCountsService;
 class QueryManager;
@@ -46,133 +37,120 @@ struct ApplicationContext;
  * Not thread-safe (main thread only):
  *   - initDatabase(), loadAllCollections(), loadItems(), every Save/Record API.
  */
-class DatabaseManager : public QObject {
+class DatabaseManager : public IDatabaseManager {
   Q_OBJECT
 public:
   explicit DatabaseManager(const ApplicationContext *ctx, QObject *parent = nullptr);
   ~DatabaseManager() override;
 
-  void initDatabase();
+  void initDatabase() override;
 
   /// Qt SQL connection name used by the main-thread connection. Suffixed
   /// per-instance so multiple DatabaseManagers can coexist without
   /// colliding in QSqlDatabase's process-global connection registry. Tests
   /// query this to verify connection cleanup without hardcoding the suffix.
-  [[nodiscard]] QString connectionName() const { return m_connectionName; }
-  void loadAllCollections(const QList<CollectionConfig> &allCollections);
-  void loadItems(const CollectionContext &context, const QList<CollectionConfig> &allCollections);
+  [[nodiscard]] QString connectionName() const override { return m_connectionName; }
+  void loadAllCollections(const QList<CollectionConfig> &allCollections) override;
+  void loadItems(const CollectionContext &context,
+                 const QList<CollectionConfig> &allCollections) override;
   void loadItemsWithSubcollections(const CollectionContext &context,
-                                   const QList<CollectionConfig> &allCollections);
-  void updateCachedCounts(const QList<CollectionConfig> &allCollections);
+                                   const QList<CollectionConfig> &allCollections) override;
+  void updateCachedCounts(const QList<CollectionConfig> &allCollections) override;
 
   void fetchItemCount(const CollectionContext &context,
                       const QList<CollectionConfig> &allCollections,
-                      const QString &filter = QString(), int requestToken = 0);
+                      const QString &filter = QString(), int requestToken = 0) override;
   void fetchItemsRange(const CollectionContext &context,
                        const QList<CollectionConfig> &allCollections, int offset, int limit,
-                       const QString &filter = QString());
+                       const QString &filter = QString()) override;
 
   /// Finds the visual index of a specific file path in the current sorted
   /// order. Used to restore selection after sort mode changes.
   void fetchVisualIndexForPath(const CollectionContext &context,
                                const QList<CollectionConfig> &allCollections,
-                               const QString &filePath);
+                               const QString &filePath) override;
 
   // Clears cached items for a collection to force a fresh rescan
-  void invalidateCollectionCache(const QString &collectionUuid);
+  void invalidateCollectionCache(const QString &collectionUuid) override;
 
-  [[nodiscard]] int getCollectionIndexForFile(const QString &filePath) const;
-  [[nodiscard]] QString findArtworkDirectoryForFile(const QString &filePath) const;
+  [[nodiscard]] int getCollectionIndexForFile(const QString &filePath) const override;
+  [[nodiscard]] QString findArtworkDirectoryForFile(const QString &filePath) const override;
 
   // File path resolution for relative paths in showAllSubcollectionItems mode
   [[nodiscard]] QString resolveFilePath(const QString &rawEntry,
-                                        const CollectionContext &context) const;
-  [[nodiscard]] QString resolveRelativeFilePath(const QString &rawFileName,
-                                                const QHash<QString, QString> &fileNames) const;
+                                        const CollectionContext &context) const override;
+  [[nodiscard]] QString
+  resolveRelativeFilePath(const QString &rawFileName,
+                          const QHash<QString, QString> &fileNames) const override;
   [[nodiscard]] qint64
   countCollectionRecursive(int collectionIndex,
-                           const QList<CollectionConfig> &allCollections) const;
+                           const QList<CollectionConfig> &allCollections) const override;
 
   /// Reads `collections.last_scanned` for the given UUID via the main-thread
   /// connection. Returns an invalid QDateTime when the row is
   /// missing or the query fails — callers use that as the "never scanned"
   /// signal.
-  [[nodiscard]] QDateTime loadCollectionLastScanned(const QString &collectionUuid) const;
+  [[nodiscard]] QDateTime
+  loadCollectionLastScanned(const QString &collectionUuid) const override;
 
   /// Loads extended metadata for the given (collectionUuid, path) using the
   /// main-thread connection. Returns an empty `ItemMetadata` (with the keys
   /// preserved) when no row exists. Errors are logged via ErrorUtils and an
   /// empty struct is returned so the sidebar can degrade gracefully.
-  [[nodiscard]] ItemMetadataStore::ItemMetadata loadItemMetadata(const QString &collectionUuid,
-                                                                 const QString &path) const;
+  [[nodiscard]] ItemMetadataStore::ItemMetadata
+  loadItemMetadata(const QString &collectionUuid, const QString &path) const override;
 
   /// Persists extended metadata via the main-thread connection. Used by
   /// user-driven editors (e.g. custom fields dialog,). Returns
   /// true on success; logs the structured error and returns false otherwise.
-  bool saveItemMetadata(const ItemMetadataStore::ItemMetadata &metadata);
+  bool saveItemMetadata(const ItemMetadataStore::ItemMetadata &metadata) override;
 
   /// Loads every artwork row stored for (collectionUuid, path) using the
   /// main-thread connection. Returns an empty list when the
   /// item has no rows or on database failures (errors are logged), so
   /// callers can degrade silently to subdirectory auto-discovery.
-  [[nodiscard]] QList<ItemArtworkStore::ItemArtwork> loadItemArtwork(const QString &collectionUuid,
-                                                                     const QString &path) const;
+  [[nodiscard]] QList<ItemArtworkStore::ItemArtwork>
+  loadItemArtwork(const QString &collectionUuid, const QString &path) const override;
 
   /// Persists a single artwork override row via the main-thread connection
   /// Used by the per-item manual-link dialog. Returns true
   /// on success; logs the structured error and returns false otherwise.
-  bool saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwork);
+  bool saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwork) override;
 
   /// Removes a single artwork override row via the main-thread connection
   /// Used by the per-item manual-link dialog when the user
   /// clears an override. Succeeds even when no matching row exists.
   bool removeItemArtwork(const QString &collectionUuid, const QString &path,
-                         const QString &artworkType);
+                         const QString &artworkType) override;
 
   // ──────────────────────────────────────────────────────────────────────────
   // Usage statistics
   // ──────────────────────────────────────────────────────────────────────────
 
-  [[nodiscard]] UsageStatsStore::ItemUsageStats loadItemUsageStats(const QString &collectionUuid,
-                                                                   const QString &path) const;
-  void recordItemLaunch(const QString &collectionUuid, const QString &path);
-  void recordItemPlaySession(const QString &collectionUuid, const QString &path, qint64 seconds);
-  [[nodiscard]] UsageStatsStore::AggregateStats loadAggregateUsageStats() const;
-  [[nodiscard]] QList<UsageStatsStore::ItemUsageRow> loadTopPlayedItems(int limit) const;
-  [[nodiscard]] QList<UsageStatsStore::ItemUsageRow> loadRecentlyPlayedItems(int limit) const;
-  [[nodiscard]] QHash<QString, UsageStatsStore::CollectionUsage> loadUsageByCollection() const;
-  bool resetAllUsageStats();
+  [[nodiscard]] UsageStatsStore::ItemUsageStats
+  loadItemUsageStats(const QString &collectionUuid, const QString &path) const override;
+  void recordItemLaunch(const QString &collectionUuid, const QString &path) override;
+  void recordItemPlaySession(const QString &collectionUuid, const QString &path,
+                             qint64 seconds) override;
+  [[nodiscard]] UsageStatsStore::AggregateStats loadAggregateUsageStats() const override;
+  [[nodiscard]] QList<UsageStatsStore::ItemUsageRow> loadTopPlayedItems(int limit) const override;
+  [[nodiscard]] QList<UsageStatsStore::ItemUsageRow>
+  loadRecentlyPlayedItems(int limit) const override;
+  [[nodiscard]] QHash<QString, UsageStatsStore::CollectionUsage>
+  loadUsageByCollection() const override;
+  bool resetAllUsageStats() override;
 
   // ──────────────────────────────────────────────────────────────────────────
   // Launch history
   // ──────────────────────────────────────────────────────────────────────────
 
   void recordHistoryEntry(const QString &collectionUuid, const QString &path, const QString &name,
-                          int maxEntries);
-  [[nodiscard]] QList<HistoryStore::HistoryEntry> loadRecentHistory(int limit) const;
-  [[nodiscard]] qint64 historyEntryCount() const;
-  bool clearHistory();
+                          int maxEntries) override;
+  [[nodiscard]] QList<HistoryStore::HistoryEntry> loadRecentHistory(int limit) const override;
+  [[nodiscard]] qint64 historyEntryCount() const override;
+  bool clearHistory() override;
 
 signals:
-  void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);
-  void itemCountLoaded(int count);
-  void itemCountLoadedWithToken(int count, int requestToken);
-  void itemsRangeLoaded(int offset, const QStringList &filePaths,
-                        const QHash<QString, QString> &fileNames,
-                        const QHash<QString, QString> &fileToArtworkDir,
-                        const QHash<QString, QString> &fileToMediaDir,
-                        const QHash<QString, int> &fileToCollectionIndex);
-  void visualIndexForPathLoaded(int visualIndex, const QString &filePath);
-  void errorOccurred(const ErrorUtils::ErrorContext &error);
-  void cachedCountsUpdated();
-  void scanProgress(int current, int total, const QString &collectionName);
-  void scanStarting(const QString &collectionName, int estimatedItems);
-  void scanItemsProgress(int itemsProcessed, int totalItems);
-  void collectionScanCompleted(const QString &collectionUuid);
-  void collectionScanSummary(const QString &collectionUuid, int itemsScanned, int itemsApplied,
-                             bool success);
-  void cacheInvalidated(const QString &collectionUuid);
-
   // Internal signals to trigger worker
   void requestLoadAllCollections(const QList<CollectionConfig> &allCollections);
   void requestLoadItems(const CollectionContext &context,
@@ -199,7 +177,7 @@ signals:
 
 public slots:
   /// Request cancellation of any in-progress scan
-  void cancelScan();
+  void cancelScan() override;
 
 private slots:
   void onWorkerItemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames,

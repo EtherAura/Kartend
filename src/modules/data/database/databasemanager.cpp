@@ -38,7 +38,7 @@ std::atomic<quint64> g_connectionInstanceId{0};
 } // namespace
 
 DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
-    : QObject(parent), m_ctx(ctx) {
+    : IDatabaseManager(parent), m_ctx(ctx) {
   // Per-instance suffix on every Qt SQL connection name so concurrent
   // DatabaseManagers (e.g. parallel test fixtures, future split DB modes)
   // don't collide in QSqlDatabase's process-global connection registry.

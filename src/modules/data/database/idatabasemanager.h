@@ -1,0 +1,127 @@
+#ifndef IDATABASEMANAGER_H
+#define IDATABASEMANAGER_H
+
+#include <QDateTime>
+#include <QHash>
+#include <QObject>
+#include <QStringList>
+
+#include "collectionutils.h"
+#include "errorutils.h"
+#include "historystore.h"
+#include "itemartwork.h"
+#include "itemmetadata.h"
+#include "usagestatsstore.h"
+
+/**
+ * @brief Abstract interface to the database layer.
+ *
+ * Exposes the full main-thread API plus the externally-observable signal
+ * contract of DatabaseManager so that callers can be wired against either the
+ * real (SQLite-backed) implementation or a test double.
+ *
+ * Thread-safe accessors (resolveFilePath, resolveRelativeFilePath,
+ * getCollectionIndexForFile, findArtworkDirectoryForFile) keep the same
+ * any-thread guarantee as the concrete class — implementers must preserve it.
+ */
+class IDatabaseManager : public QObject {
+  Q_OBJECT
+public:
+  using QObject::QObject;
+  ~IDatabaseManager() override = default;
+
+  virtual void initDatabase() = 0;
+
+  [[nodiscard]] virtual QString connectionName() const = 0;
+
+  virtual void loadAllCollections(const QList<CollectionConfig> &allCollections) = 0;
+  virtual void loadItems(const CollectionContext &context,
+                         const QList<CollectionConfig> &allCollections) = 0;
+  virtual void loadItemsWithSubcollections(const CollectionContext &context,
+                                           const QList<CollectionConfig> &allCollections) = 0;
+  virtual void updateCachedCounts(const QList<CollectionConfig> &allCollections) = 0;
+
+  virtual void fetchItemCount(const CollectionContext &context,
+                              const QList<CollectionConfig> &allCollections,
+                              const QString &filter = QString(), int requestToken = 0) = 0;
+  virtual void fetchItemsRange(const CollectionContext &context,
+                               const QList<CollectionConfig> &allCollections, int offset, int limit,
+                               const QString &filter = QString()) = 0;
+
+  virtual void fetchVisualIndexForPath(const CollectionContext &context,
+                                       const QList<CollectionConfig> &allCollections,
+                                       const QString &filePath) = 0;
+
+  virtual void invalidateCollectionCache(const QString &collectionUuid) = 0;
+
+  [[nodiscard]] virtual int getCollectionIndexForFile(const QString &filePath) const = 0;
+  [[nodiscard]] virtual QString findArtworkDirectoryForFile(const QString &filePath) const = 0;
+
+  [[nodiscard]] virtual QString resolveFilePath(const QString &rawEntry,
+                                                const CollectionContext &context) const = 0;
+  [[nodiscard]] virtual QString
+  resolveRelativeFilePath(const QString &rawFileName,
+                          const QHash<QString, QString> &fileNames) const = 0;
+  [[nodiscard]] virtual qint64
+  countCollectionRecursive(int collectionIndex,
+                           const QList<CollectionConfig> &allCollections) const = 0;
+
+  [[nodiscard]] virtual QDateTime
+  loadCollectionLastScanned(const QString &collectionUuid) const = 0;
+
+  [[nodiscard]] virtual ItemMetadataStore::ItemMetadata
+  loadItemMetadata(const QString &collectionUuid, const QString &path) const = 0;
+  virtual bool saveItemMetadata(const ItemMetadataStore::ItemMetadata &metadata) = 0;
+
+  [[nodiscard]] virtual QList<ItemArtworkStore::ItemArtwork>
+  loadItemArtwork(const QString &collectionUuid, const QString &path) const = 0;
+  virtual bool saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwork) = 0;
+  virtual bool removeItemArtwork(const QString &collectionUuid, const QString &path,
+                                 const QString &artworkType) = 0;
+
+  [[nodiscard]] virtual UsageStatsStore::ItemUsageStats
+  loadItemUsageStats(const QString &collectionUuid, const QString &path) const = 0;
+  virtual void recordItemLaunch(const QString &collectionUuid, const QString &path) = 0;
+  virtual void recordItemPlaySession(const QString &collectionUuid, const QString &path,
+                                     qint64 seconds) = 0;
+  [[nodiscard]] virtual UsageStatsStore::AggregateStats loadAggregateUsageStats() const = 0;
+  [[nodiscard]] virtual QList<UsageStatsStore::ItemUsageRow>
+  loadTopPlayedItems(int limit) const = 0;
+  [[nodiscard]] virtual QList<UsageStatsStore::ItemUsageRow>
+  loadRecentlyPlayedItems(int limit) const = 0;
+  [[nodiscard]] virtual QHash<QString, UsageStatsStore::CollectionUsage>
+  loadUsageByCollection() const = 0;
+  virtual bool resetAllUsageStats() = 0;
+
+  virtual void recordHistoryEntry(const QString &collectionUuid, const QString &path,
+                                  const QString &name, int maxEntries) = 0;
+  [[nodiscard]] virtual QList<HistoryStore::HistoryEntry>
+  loadRecentHistory(int limit) const = 0;
+  [[nodiscard]] virtual qint64 historyEntryCount() const = 0;
+  virtual bool clearHistory() = 0;
+
+signals:
+  void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);
+  void itemCountLoaded(int count);
+  void itemCountLoadedWithToken(int count, int requestToken);
+  void itemsRangeLoaded(int offset, const QStringList &filePaths,
+                        const QHash<QString, QString> &fileNames,
+                        const QHash<QString, QString> &fileToArtworkDir,
+                        const QHash<QString, QString> &fileToMediaDir,
+                        const QHash<QString, int> &fileToCollectionIndex);
+  void visualIndexForPathLoaded(int visualIndex, const QString &filePath);
+  void errorOccurred(const ErrorUtils::ErrorContext &error);
+  void cachedCountsUpdated();
+  void scanProgress(int current, int total, const QString &collectionName);
+  void scanStarting(const QString &collectionName, int estimatedItems);
+  void scanItemsProgress(int itemsProcessed, int totalItems);
+  void collectionScanCompleted(const QString &collectionUuid);
+  void collectionScanSummary(const QString &collectionUuid, int itemsScanned, int itemsApplied,
+                             bool success);
+  void cacheInvalidated(const QString &collectionUuid);
+
+public slots:
+  virtual void cancelScan() = 0;
+};
+
+#endif
