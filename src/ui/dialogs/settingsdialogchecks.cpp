@@ -23,6 +23,7 @@
 #include <set>
 
 #include "appearancelistpanel.h"
+#include "appearancetitlespanel.h"
 #include "appearancetoolbarpanel.h"
 #include "artworktabpanel.h"
 #include "configurationpanel.h"
@@ -92,7 +93,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   ui->subfoldersPanel->save(config);
   config.itemWidth = (ui->itemWidthSpinBox) ? ui->itemWidthSpinBox->value() : config.itemWidth;
   config.itemHeight = (ui->itemHeightSpinBox) ? ui->itemHeightSpinBox->value() : config.itemHeight;
-  config.fontSize = (ui->fontSizeSpinBox) ? ui->fontSizeSpinBox->value() : config.fontSize;
+  ui->appearanceTitlesPanel->save(config);
   config.cornerRadius =
       (ui->cornerRadiusSpinBox) ? ui->cornerRadiusSpinBox->value() : config.cornerRadius;
   // extensions + customArtworkTypes parsing handled inside their panels' save().
@@ -124,11 +125,6 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.verticalSpacing = (ui->verticalSpacingSpinBox)
                                ? spacingUiToInternal(ui->verticalSpacingSpinBox->value())
                                : config.verticalSpacing;
-  config.hideTitles =
-      (ui->hideTitlesCheckBox) ? ui->hideTitlesCheckBox->isChecked() : config.hideTitles;
-  config.hideSubcollectionTitles = (ui->hideSubcollectionTitlesCheckBox)
-                                       ? ui->hideSubcollectionTitlesCheckBox->isChecked()
-                                       : config.hideSubcollectionTitles;
 
   // Background settings
   if (ui->backgroundImageRadio && ui->backgroundColorRadio) {
@@ -178,8 +174,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
                                                      : config.listAltRowColor;
 
   // Custom font family (per-collection)
-  config.customFontFamily =
-      (ui->customFontEdit) ? ui->customFontEdit->text().trimmed() : config.customFontFamily;
+  // customFontFamily handled inside AppearanceTitlesPanel::save above.
 
   // header logo
   ui->appearanceToolbarPanel->save(config);
@@ -272,9 +267,7 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
          // View / titles / folders / typography
          comboEnumChanged(ui->viewTypeComboBox, o.viewType) ||
          checkboxChanged(ui->hideMissingArtworkCheckBox, o.hideMissingArtwork) ||
-         checkboxChanged(ui->hideTitlesCheckBox, o.hideTitles) ||
-         checkboxChanged(ui->hideSubcollectionTitlesCheckBox, o.hideSubcollectionTitles) ||
-         ui->subfoldersPanel->hasChanges(o) || spinIntChanged(ui->fontSizeSpinBox, o.fontSize) ||
+         ui->appearanceTitlesPanel->hasChanges(o) || ui->subfoldersPanel->hasChanges(o) ||
          spinIntChanged(ui->cornerRadiusSpinBox, o.cornerRadius);
 }
 
@@ -338,10 +331,11 @@ auto SettingsDialog::checkColorChanges() const -> bool {
 // Checks list mode field changes
 auto SettingsDialog::checkListModeChanges() const -> bool {
   const CollectionConfig &o = originalCollection;
+  // customFont dirty-check moved into AppearanceTitlesPanel::hasChanges,
+  // counted under checkBasicFieldChanges. Only list row colors remain here.
   return ui->appearanceListPanel->hasChanges(o) ||
          lineTrimmedChanged(ui->listRowColorEdit, o.listRowColor) ||
-         lineTrimmedChanged(ui->listAltRowColorEdit, o.listAltRowColor) ||
-         lineTrimmedChanged(ui->customFontEdit, o.customFontFamily);
+         lineTrimmedChanged(ui->listAltRowColorEdit, o.listAltRowColor);
 }
 
 // Checks background field changes

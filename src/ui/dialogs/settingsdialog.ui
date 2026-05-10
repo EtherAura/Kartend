@@ -460,73 +460,7 @@
              <widget class="QWidget" name="appearanceTitlesSubTab">
               <attribute name="title"><string>Titles</string></attribute>
               <layout class="QVBoxLayout" name="appearanceTitlesSubTabLayout">
-               <property name="spacing"><number>8</number></property>
-               <item>
-                <widget class="QGroupBox" name="appearanceTitlesFontGroupBox">
-                 <property name="title"><string>Font</string></property>
-                 <layout class="QFormLayout" name="appearanceTitlesFontFormLayout">
-                  <property name="horizontalSpacing"><number>8</number></property>
-                  <property name="verticalSpacing"><number>6</number></property>
-                  <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
-                  <item row="0" column="0">
-                   <widget class="QLabel" name="label_titles">
-                    <property name="text"><string>Font Size:</string></property>
-                   </widget>
-                  </item>
-                  <item row="0" column="1">
-                   <widget class="QSpinBox" name="fontSizeSpinBox">
-                    <property name="minimumWidth"><number>110</number></property>
-                    <property name="toolTip"><string>Font size for item titles</string></property>
-                    <property name="minimum"><number>8</number></property>
-                    <property name="maximum"><number>72</number></property>
-                    <property name="value"><number>12</number></property>
-                   </widget>
-                  </item>
-                  <item row="1" column="0">
-                   <widget class="QLabel" name="label_customFont">
-                    <property name="text"><string>Custom Font:</string></property>
-                   </widget>
-                  </item>
-                  <item row="1" column="1">
-                   <layout class="QHBoxLayout" name="customFontLayout">
-                    <item>
-                     <widget class="QLineEdit" name="customFontEdit">
-                      <property name="toolTip"><string>Custom font family for item titles (leave empty for system default)</string></property>
-                      <property name="placeholderText"><string>System Default</string></property>
-                     </widget>
-                    </item>
-                    <item>
-                     <widget class="QPushButton" name="browseFontButton">
-                      <property name="text"><string>Browse...</string></property>
-                      <property name="toolTip"><string>Select a font family</string></property>
-                     </widget>
-                    </item>
-                   </layout>
-                  </item>
-                 </layout>
-                </widget>
-               </item>
-               <item>
-                <widget class="QGroupBox" name="appearanceTitlesVisibilityGroupBox">
-                 <property name="title"><string>Visibility</string></property>
-                 <layout class="QVBoxLayout" name="appearanceTitlesVisibilityLayout">
-                  <property name="spacing"><number>6</number></property>
-                  <item>
-                   <widget class="QCheckBox" name="hideTitlesCheckBox">
-                    <property name="toolTip"><string>Hide titles for this collection</string></property>
-                    <property name="text"><string>Hide Titles</string></property>
-                   </widget>
-                  </item>
-                  <item>
-                   <widget class="QCheckBox" name="hideSubcollectionTitlesCheckBox">
-                    <property name="toolTip"><string>Hide titles for subcollections</string></property>
-                    <property name="text"><string>Hide Subcollection Titles</string></property>
-                   </widget>
-                  </item>
-                 </layout>
-                </widget>
-               </item>
-               <item><spacer name="appearanceTitlesVerticalSpacer"><property name="orientation"><enum>Qt::Orientation::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>4</height></size></property></spacer></item>
+               <item><widget class="AppearanceTitlesPanel" name="appearanceTitlesPanel" native="true"/></item>
               </layout>
              </widget>
              <!-- Sub-tab: Colors -->
@@ -1228,6 +1162,12 @@
    <class>AppearanceToolbarPanel</class>
    <extends>QWidget</extends>
    <header>appearancetoolbarpanel.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>AppearanceTitlesPanel</class>
+   <extends>QWidget</extends>
+   <header>appearancetitlespanel.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

@@ -218,13 +218,8 @@ void SettingsDialog::setupFormFieldConnections() {
   }
   // Sidebar / Details Pane fields are wired internally by SidebarPanel; the
   // dialog observes the panel's changed() signal in the constructor.
-  if (ui->hideTitlesCheckBox) {
-    connect(ui->hideTitlesCheckBox, &QCheckBox::toggled, this, &SettingsDialog::checkForChanges);
-  }
-  if (ui->hideSubcollectionTitlesCheckBox) {
-    connect(ui->hideSubcollectionTitlesCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
+  // hideTitles + hideSubcollectionTitles connections live on
+  // AppearanceTitlesPanel.
   if (ui->hideMissingArtworkCheckBox) {
     connect(ui->hideMissingArtworkCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);
@@ -237,9 +232,9 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->itemHeightSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->fontSizeSpinBox) {
-    connect(ui->fontSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
+  // fontSize connection lives on AppearanceTitlesPanel.
+  if (false) {
+    // dummy block
   }
   if (ui->cornerRadiusSpinBox) {
     connect(ui->cornerRadiusSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
@@ -392,11 +387,7 @@ void SettingsDialog::setupUIConstraints() {
     ui->gridWidthSpinBox->setMaximum(UIConstants::Grid::MAX_WIDTH);
     ui->gridWidthSpinBox->setSingleStep(1);
   }
-  if (ui->fontSizeSpinBox) {
-    ui->fontSizeSpinBox->setMinimum(UIConstants::Item::MIN_FONT_SIZE);
-    ui->fontSizeSpinBox->setMaximum(UIConstants::Item::MAX_FONT_SIZE);
-    ui->fontSizeSpinBox->setSingleStep(1);
-  }
+  // fontSizeSpinBox bounds set inside AppearanceTitlesPanel.ui.
   if (ui->cornerRadiusSpinBox) {
     ui->cornerRadiusSpinBox->setMinimum(UIConstants::Item::MIN_CORNER_RADIUS);
     ui->cornerRadiusSpinBox->setMaximum(UIConstants::Item::MAX_CORNER_RADIUS);

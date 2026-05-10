@@ -23,6 +23,7 @@
 #include <set>
 
 #include "appearancelistpanel.h"
+#include "appearancetitlespanel.h"
 #include "appearancetoolbarpanel.h"
 #include "artworktabpanel.h"
 #include "configurationpanel.h"
@@ -247,20 +248,12 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->verticalSpacingSpinBox) {
     ui->verticalSpacingSpinBox->setValue(spacingInternalToUi(config.verticalSpacing));
   }
-  if (ui->hideTitlesCheckBox) {
-    ui->hideTitlesCheckBox->setChecked(config.hideTitles);
-  }
-  if (ui->hideSubcollectionTitlesCheckBox) {
-    ui->hideSubcollectionTitlesCheckBox->setChecked(config.hideSubcollectionTitles);
-  }
+  ui->appearanceTitlesPanel->load(config);
   if (ui->itemWidthSpinBox) {
     ui->itemWidthSpinBox->setValue(config.itemWidth);
   }
   if (ui->itemHeightSpinBox) {
     ui->itemHeightSpinBox->setValue(config.itemHeight);
-  }
-  if (ui->fontSizeSpinBox) {
-    ui->fontSizeSpinBox->setValue(config.fontSize);
   }
   if (ui->cornerRadiusSpinBox) {
     ui->cornerRadiusSpinBox->setValue(config.cornerRadius);
@@ -311,9 +304,6 @@ void SettingsDialog::loadCollectionToUI(int index) {
   }
 
   // Custom font family (per-collection)
-  if (ui->customFontEdit) {
-    ui->customFontEdit->setText(config.customFontFamily);
-  }
 
   // header logo
   ui->appearanceToolbarPanel->load(config);
@@ -362,7 +352,7 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->selectionColorEdit) ui->selectionColorEdit->clear();
   if (ui->listRowColorEdit) ui->listRowColorEdit->clear();
   if (ui->listAltRowColorEdit) ui->listAltRowColorEdit->clear();
-  if (ui->customFontEdit) ui->customFontEdit->clear();
+  ui->appearanceTitlesPanel->clear();
   ui->appearanceToolbarPanel->clear();
   if (ui->vignetteEnabledCheckBox) ui->vignetteEnabledCheckBox->setChecked(false);
   if (ui->vignetteIntensitySpinBox) ui->vignetteIntensitySpinBox->setValue(60);
@@ -372,8 +362,6 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->backdropBlurRadiusSpinBox) ui->backdropBlurRadiusSpinBox->setValue(12);
 
   ui->subfoldersPanel->clear();
-  if (ui->hideTitlesCheckBox) ui->hideTitlesCheckBox->setChecked(false);
-  if (ui->hideSubcollectionTitlesCheckBox) ui->hideSubcollectionTitlesCheckBox->setChecked(false);
   if (ui->hideMissingArtworkCheckBox) ui->hideMissingArtworkCheckBox->setChecked(false);
 
   if (ui->gridWidthSpinBox) ui->gridWidthSpinBox->setValue(UIConstants::Grid::DEFAULT_WIDTH);
@@ -387,7 +375,6 @@ void SettingsDialog::clearCollectionUI() {
     ui->verticalSpacingSpinBox->setValue(spacingInternalToUi(UIConstants::Grid::SPACING));
   if (ui->itemWidthSpinBox) ui->itemWidthSpinBox->setValue(200);
   if (ui->itemHeightSpinBox) ui->itemHeightSpinBox->setValue(300);
-  if (ui->fontSizeSpinBox) ui->fontSizeSpinBox->setValue(12);
   if (ui->cornerRadiusSpinBox) ui->cornerRadiusSpinBox->setValue(0);
 
   if (ui->horizontalAlignmentComboBox) ui->horizontalAlignmentComboBox->setCurrentIndex(0);

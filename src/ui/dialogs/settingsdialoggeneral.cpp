@@ -92,24 +92,8 @@ void SettingsDialog::setupGeneralSettingsConnections() {
   // now applied on Save only — consistent with the rest of the dialog's
   // deferred-save fields.
 
-  // Browse font button for per-collection custom font
-  connect(ui->browseFontButton, &QPushButton::clicked, this, [this]() {
-    bool ok;
-    QFont currentFont = QApplication::font();
-    // Initialize font size from the font size spinbox (grid mode font size)
-    if (ui->fontSizeSpinBox) {
-      currentFont.setPointSize(ui->fontSizeSpinBox->value());
-    }
-    QString currentFamily = ui->customFontEdit->text().trimmed();
-    if (!currentFamily.isEmpty()) {
-      currentFont.setFamily(currentFamily);
-    }
-    QFont font = QFontDialog::getFont(&ok, currentFont, this, tr("Select Font"));
-    if (ok) {
-      ui->customFontEdit->setText(font.family());
-      checkForChanges();
-    }
-  });
+  // Browse font button for per-collection custom font lives on
+  // AppearanceTitlesPanel.
 
   connect(ui->browseColorButton, &QPushButton::clicked, this, [this]() {
     QColor currentColor = Qt::white;
@@ -131,10 +115,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     }
   });
 
-  // Connect customFontEdit to change tracking (per-collection setting)
-  if (ui->customFontEdit) {
-    connect(ui->customFontEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
-  }
+  // customFontEdit textChanged routing lives on AppearanceTitlesPanel.
 
   // Global application-font controls (family + size + picker) live in
   // FontsPanel now; the panel emits changed() and SettingsDialog handles
