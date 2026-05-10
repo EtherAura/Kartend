@@ -23,6 +23,7 @@
 #include <set>
 
 #include "appearancelistpanel.h"
+#include "appearancetoolbarpanel.h"
 #include "artworktabpanel.h"
 #include "configurationpanel.h"
 #include "extensionutils.h"
@@ -181,13 +182,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
       (ui->customFontEdit) ? ui->customFontEdit->text().trimmed() : config.customFontFamily;
 
   // header logo
-  if (ui->headerLogoEdit) {
-    config.headerLogoImage = ui->headerLogoEdit->text().trimmed();
-  }
-  if (ui->headerLogoPositionComboBox) {
-    config.headerLogoPosition =
-        static_cast<HeaderLogoPosition>(ui->headerLogoPositionComboBox->currentIndex());
-  }
+  ui->appearanceToolbarPanel->save(config);
 
   // vignette
   if (ui->vignetteEnabledCheckBox) {
@@ -331,8 +326,7 @@ auto SettingsDialog::checkColorChanges() const -> bool {
   return lineTrimmedChanged(ui->primaryColorEdit, o.primaryColor) ||
          lineTrimmedChanged(ui->tileColorEdit, o.tileColor) ||
          lineTrimmedChanged(ui->selectionColorEdit, o.selectionColor) ||
-         lineTrimmedChanged(ui->headerLogoEdit, o.headerLogoImage) ||
-         comboEnumChanged(ui->headerLogoPositionComboBox, o.headerLogoPosition) ||
+         ui->appearanceToolbarPanel->hasChanges(o) ||
          checkboxChanged(ui->vignetteEnabledCheckBox, o.vignetteEnabled) ||
          spinIntChanged(ui->vignetteIntensitySpinBox, o.vignetteIntensity) ||
          checkboxChanged(ui->wallpaperParallaxCheckBox, o.wallpaperParallax) ||

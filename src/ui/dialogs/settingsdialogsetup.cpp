@@ -284,13 +284,8 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->backgroundVideoRadio, &QRadioButton::toggled, this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->headerLogoEdit) {
-    connect(ui->headerLogoEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
-  }
-  if (ui->headerLogoPositionComboBox) {
-    connect(ui->headerLogoPositionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &SettingsDialog::checkForChanges);
-  }
+  // headerLogoEdit + headerLogoPositionComboBox connections live on
+  // AppearanceToolbarPanel.
   if (ui->vignetteEnabledCheckBox) {
     connect(ui->vignetteEnabledCheckBox, &QCheckBox::toggled, this,
             &SettingsDialog::checkForChanges);

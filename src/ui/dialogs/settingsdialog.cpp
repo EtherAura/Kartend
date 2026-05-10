@@ -25,6 +25,7 @@
 #include <set>
 
 #include "appearancelistpanel.h"
+#include "appearancetoolbarpanel.h"
 #include "artworktabpanel.h"
 #include "attractpanel.h"
 #include "collectionremover.h"
@@ -108,6 +109,8 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // Appearance > List Mode sub-sub-tab: per-collection list font size + row
   // height. Other appearance sub-sub-tabs land as separate panels.
   connect(ui->appearanceListPanel, &AppearanceListPanel::changed, this,
+          &SettingsDialog::checkForChanges);
+  connect(ui->appearanceToolbarPanel, &AppearanceToolbarPanel::changed, this,
           &SettingsDialog::checkForChanges);
 
   // Application-font panel: live-save semantics — panel mutates the

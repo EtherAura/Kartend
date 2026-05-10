@@ -23,6 +23,7 @@
 #include <set>
 
 #include "appearancelistpanel.h"
+#include "appearancetoolbarpanel.h"
 #include "artworktabpanel.h"
 #include "configurationpanel.h"
 #include "extensionutils.h"
@@ -315,12 +316,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
   }
 
   // header logo
-  if (ui->headerLogoEdit) {
-    ui->headerLogoEdit->setText(config.headerLogoImage);
-  }
-  if (ui->headerLogoPositionComboBox) {
-    ui->headerLogoPositionComboBox->setCurrentIndex(static_cast<int>(config.headerLogoPosition));
-  }
+  ui->appearanceToolbarPanel->load(config);
 
   // vignette
   if (ui->vignetteEnabledCheckBox) {
@@ -367,8 +363,7 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->listRowColorEdit) ui->listRowColorEdit->clear();
   if (ui->listAltRowColorEdit) ui->listAltRowColorEdit->clear();
   if (ui->customFontEdit) ui->customFontEdit->clear();
-  if (ui->headerLogoEdit) ui->headerLogoEdit->clear();
-  if (ui->headerLogoPositionComboBox) ui->headerLogoPositionComboBox->setCurrentIndex(1);
+  ui->appearanceToolbarPanel->clear();
   if (ui->vignetteEnabledCheckBox) ui->vignetteEnabledCheckBox->setChecked(false);
   if (ui->vignetteIntensitySpinBox) ui->vignetteIntensitySpinBox->setValue(60);
   if (ui->wallpaperParallaxCheckBox) ui->wallpaperParallaxCheckBox->setChecked(false);
