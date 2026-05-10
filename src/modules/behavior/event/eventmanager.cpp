@@ -23,6 +23,7 @@
 #include "eventhelpers.h"
 #include "gridlayoutcalculator.h"
 #include "gridutils.h"
+#include "hoverscrollhandler.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "keyboardmanager.h"
@@ -31,6 +32,7 @@
 #include "selectionmanager.h"
 #include "uiconstants.h"
 #include "viewportmanager.h"
+#include "wheeleventhandler.h"
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcEventManager, "kartend.eventmanager")
@@ -52,9 +54,16 @@ SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, QList<CollectionConfig> *, Collecti
 SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, int *, CurrentCollectionIndex, currentCollectionIndex)
 SETUP_GETTER_DEF_COL_SAME(EventManagerSetup, GeneralSettings *, GeneralSettings, generalSettings)
 
-EventManager::EventManager(QObject *parent) : QObject(parent) {
-  m_hoverScrollTimer.setSingleShot(true);
-  connect(&m_hoverScrollTimer, &QTimer::timeout, this, &EventManager::commitPendingHoverScroll);
+EventManager::EventManager(QObject *parent)
+    : QObject(parent), m_hoverScroll(std::make_unique<HoverScrollHandler>(this)),
+      m_wheelHandler(std::make_unique<WheelEventHandler>(this)) {
+  // Forward wheel-handler start/end signals so external listeners
+  // (toolbar, attract mode) keep their existing subscription to the
+  // EventManager surface.
+  connect(m_wheelHandler.get(), &WheelEventHandler::scrollStarted, this,
+          &EventManager::wheelScrollStarted);
+  connect(m_wheelHandler.get(), &WheelEventHandler::scrollEnded, this,
+          &EventManager::wheelScrollEnded);
 }
 
 EventManager::~EventManager() = default;
@@ -70,6 +79,27 @@ void EventManager::setupReferences(const EventManagerSetup &setup) {
   m_searchBar = setup.getSearchBar();
   m_collections = setup.getCollections();
   m_currentCollectionIndex = setup.getCurrentCollectionIndex();
+
+  HoverScrollHandler::Setup hoverSetup;
+  hoverSetup.ctx = setup.ctx;
+  hoverSetup.itemScrollArea = m_itemScrollArea;
+  hoverSetup.gridContainer = m_gridContainer;
+  hoverSetup.stackedWidget = m_stackedWidget;
+  hoverSetup.itemsPage = m_itemsPage;
+  hoverSetup.collections = m_collections;
+  hoverSetup.currentCollectionIndex = m_currentCollectionIndex;
+  hoverSetup.generalSettings = m_generalSettings;
+  m_hoverScroll->setupReferences(hoverSetup);
+
+  WheelEventHandler::Setup wheelSetup;
+  wheelSetup.ctx = setup.ctx;
+  wheelSetup.itemScrollArea = m_itemScrollArea;
+  wheelSetup.stackedWidget = m_stackedWidget;
+  wheelSetup.itemsPage = m_itemsPage;
+  wheelSetup.collections = m_collections;
+  wheelSetup.currentCollectionIndex = m_currentCollectionIndex;
+  wheelSetup.generalSettings = m_generalSettings;
+  m_wheelHandler->setupReferences(wheelSetup);
 }
 
 void EventManager::installEventFilters() {

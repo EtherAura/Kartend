@@ -3,11 +3,11 @@
 
 #include "collectionutils.h"
 #include "setuputils.h"
+#include <memory>
 #include <QObject>
 #include <QPoint>
 #include <QPointer>
 #include <QScrollArea>
-#include <QTimer>
 
 QT_BEGIN_NAMESPACE
 class QEvent;
@@ -29,6 +29,8 @@ class ArtworkManager;
 class DatabaseManager;
 class DetailsPaneManager;
 class InteractionStateHolder;
+class HoverScrollHandler;
+class WheelEventHandler;
 struct ApplicationContext;
 
 /**
@@ -126,20 +128,9 @@ private:
   // Helper methods
   [[nodiscard]] int getCurrentGridWidth() const;
   [[nodiscard]] QList<int> getSubcollections(int parentIndex) const;
-  [[nodiscard]] bool applyWheelSelectionDelta(int wheelSteps);
   [[nodiscard]] ItemWidget *itemWidgetForObject(QObject *obj) const;
   [[nodiscard]] int visualIndexForWidget(ItemWidget *widget) const;
-  void commitPendingHoverScroll();
-  void clearPendingHoverScroll();
-  void pollCursorForContinuousHoverScroll();
 
-  // Wheel-event helpers (extracted from handleWheelEvent so the top-level
-  // dispatcher reads as a clear sequence instead of a 200-line method).
-  [[nodiscard]] bool wheelEventBelongsToSidebar() const;
-  [[nodiscard]] bool wheelEventCanProceed() const;
-  [[nodiscard]] int computeWheelTargetScroll(int selectedIndex, const CollectionConfig &collection,
-                                             QScrollBar *axisScrollBar, bool horizontalView) const;
-  void onWheelAnimationFinished();
 
   // ctx is the single source of truth for sibling managers + state. Inline
   // accessors below are the canonical read path.
@@ -186,12 +177,13 @@ private:
   QList<CollectionConfig> *m_collections = nullptr;
   int *m_currentCollectionIndex = nullptr;
 
-  // Reentrancy guard for wheel event handling
-  bool m_processingWheelEvent = false;
-  QPointer<ItemWidget> m_pendingHoverScrollWidget;
-  QPoint m_pendingHoverScrollGlobalPos;
-  int m_pendingHoverScrollIndex = -1;
-  QTimer m_hoverScrollTimer;
+  // Hover-to-select state machine. Owns its dwell timer + pending widget
+  // pointer so EventManager only forwards Enter / MouseMove events into it.
+  std::unique_ptr<HoverScrollHandler> m_hoverScroll;
+  // Wheel-scroll state machine. Owns its reentrancy guard, animation
+  // handoff, and selection-delta math so EventManager only forwards
+  // QEvent::Wheel into it.
+  std::unique_ptr<WheelEventHandler> m_wheelHandler;
 };
 
 #endif // EVENTMANAGER_H

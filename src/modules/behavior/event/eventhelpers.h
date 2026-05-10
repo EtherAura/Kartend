@@ -27,7 +27,7 @@ namespace EventHelpers {
 // Computes the logical (pre-scroll-scale-bounds) target scroll Y so the row
 // containing `selectedIndex` is vertically centered in the viewport.
 //
-// Inputs map to the values EventManager::computeWheelTargetScroll already
+// Inputs map to the values WheelEventHandler::computeTargetScroll already
 // derives from collection config / ScrollManager metrics:
 //   gridWidth        - itemsPerRow
 //   itemHeight       - row height in pixels
