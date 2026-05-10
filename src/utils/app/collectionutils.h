@@ -926,6 +926,10 @@ struct GeneralSettings {
   // for the current selection. Default I = "info"; ignored while the search
   // bar has focus so typing "i" in the filter still works.
   int keyItemDetails = Qt::Key_I;
+  // Jumps directly to the synthetic Home view from any nesting depth. Default
+  // 0 = unbound so an upgrading install picks up no surprise shortcut; only
+  // honored when useHomeView is enabled.
+  int keyHomeView = 0;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Controls: Gamepad bindings
@@ -961,6 +965,13 @@ struct GeneralSettings {
   // `Back` from any root-level collection returns to the home view instead
   // of routing to the first root collection.
   bool useHomeView = false;
+
+  // Optional override for the synthetic Home view's title label and toolbar
+  // button. Empty homeViewLabel falls back to the localized "Home" string.
+  // homeViewIcon is an absolute path; when set, the toolbar Home button uses
+  // it instead of the themed icon.
+  QString homeViewLabel;
+  QString homeViewIcon;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Attract mode / autoscroll

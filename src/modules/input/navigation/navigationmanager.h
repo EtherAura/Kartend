@@ -140,7 +140,7 @@ public slots:
   void loadAllCollectionsView();
   // Renders the synthetic "Home" view: every root collection (parent == -1)
   // shown as a tile grid with no host collection of its own. No DB query;
-  // tiles come from the in-memory collection list. See Kartend-83iu.
+  // tiles come from the in-memory collection list.
   void loadRootView();
   void goBackToCollections();
   void filterItems(const QString &searchText);
@@ -301,7 +301,6 @@ private:
 
   // Set while the synthetic "Home" view (all root collections as tiles) is
   // active. While true, *m_currentCollectionIndex is -1 and Back is a no-op.
-  // See loadRootView() / Kartend-83iu.
   bool m_inRootView = false;
 
   // Tracks if this is the first load after startup (for cached count fast-path)

@@ -175,6 +175,17 @@ auto InteractionManager::handleGlobalKeyPress(QKeyEvent *event) -> bool {
   if (event->key() == backKey) {
     return handleEscapeKey();
   }
+
+  if (m_generalSettings && m_generalSettings->useHomeView && m_generalSettings->keyHomeView != 0 &&
+      event->key() == m_generalSettings->keyHomeView) {
+    if (m_searchBar && m_searchBar->hasFocus()) {
+      return false;
+    }
+    if (m_navigationManager) {
+      m_navigationManager->loadRootView();
+      return true;
+    }
+  }
   return false;
 }
 

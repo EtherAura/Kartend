@@ -816,5 +816,17 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
                                               m_originalGeneralSettings.artworkCycleModifier) {
     return true;
   }
+  if (ui->useHomeViewCheckBox &&
+      ui->useHomeViewCheckBox->isChecked() != m_originalGeneralSettings.useHomeView) {
+    return true;
+  }
+  if (ui->homeViewLabelLineEdit && ui->homeViewLabelLineEdit->text().trimmed() !=
+                                       m_originalGeneralSettings.homeViewLabel.trimmed()) {
+    return true;
+  }
+  if (ui->homeViewIconLineEdit && ui->homeViewIconLineEdit->text().trimmed() !=
+                                      m_originalGeneralSettings.homeViewIcon.trimmed()) {
+    return true;
+  }
   return false;
 }

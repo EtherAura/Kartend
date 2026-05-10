@@ -422,6 +422,8 @@ void SettingsDialog::loadGeneralSettingsToUI() {
     ui->startupCollectionComboBox->blockSignals(false);
   }
   SettingsFormBinding::loadInto(ui->useHomeViewCheckBox, m_generalSettings.useHomeView);
+  SettingsFormBinding::loadInto(ui->homeViewLabelLineEdit, m_generalSettings.homeViewLabel);
+  SettingsFormBinding::loadInto(ui->homeViewIconLineEdit, m_generalSettings.homeViewIcon);
   // Note: customFontEdit is now loaded per-collection in loadCollectionFields()
 
   auto setKeyEdit = [](QKeySequenceEdit *edit, int key) {
@@ -440,6 +442,7 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   setKeyEdit(ui->keyConfirmEdit, m_generalSettings.keyConfirm);
   setKeyEdit(ui->keyBackEdit, m_generalSettings.keyBack);
   setKeyEdit(ui->keySearchEdit, m_generalSettings.keySearch);
+  setKeyEdit(ui->keyHomeViewEdit, m_generalSettings.keyHomeView);
 
   SettingsFormBinding::loadInto(ui->gamepadUseDpadCheckBox, m_generalSettings.gamepadUseDpad);
   SettingsFormBinding::loadInto(ui->gamepadUseLeftStickCheckBox,
@@ -606,6 +609,12 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     if (ui->useHomeViewCheckBox) {
       mainWindow->m_generalSettings.useHomeView = ui->useHomeViewCheckBox->isChecked();
     }
+    if (ui->homeViewLabelLineEdit) {
+      mainWindow->m_generalSettings.homeViewLabel = ui->homeViewLabelLineEdit->text().trimmed();
+    }
+    if (ui->homeViewIconLineEdit) {
+      mainWindow->m_generalSettings.homeViewIcon = ui->homeViewIconLineEdit->text().trimmed();
+    }
     // Note: customFontFamily is now saved per-collection, not in general
     // settings
 
@@ -636,6 +645,10 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
         singleKeyFromEdit(ui->keyBackEdit, mainWindow->m_generalSettings.keyBack);
     mainWindow->m_generalSettings.keySearch =
         singleKeyFromEdit(ui->keySearchEdit, mainWindow->m_generalSettings.keySearch);
+    // Pass 0 as the fallback so clearing the field actually unbinds the
+    // shortcut — the rest of the keybinds revert to their previous value
+    // because they have meaningful defaults; Home has no default.
+    mainWindow->m_generalSettings.keyHomeView = singleKeyFromEdit(ui->keyHomeViewEdit, 0);
 
     SettingsFormBinding::saveFrom(ui->gamepadUseDpadCheckBox,
                                   mainWindow->m_generalSettings.gamepadUseDpad);

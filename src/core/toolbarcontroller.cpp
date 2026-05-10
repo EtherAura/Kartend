@@ -32,6 +32,7 @@ void ToolbarController::initialize(const Setup &setup) {
   m_mainWindow = setup.mainWindow;
   m_viewModeButton = setup.viewModeButton;
   m_filterButton = setup.filterButton;
+  m_homeButton = setup.homeButton;
   m_searchBar = setup.searchBar;
 }
 
@@ -132,6 +133,38 @@ void ToolbarController::applyToolbarCustomization(const GeneralSettings &gs) {
   if (m_searchBar) {
     m_searchBar->setVisible(gs.toolbarShowSearchBar);
   }
+  refreshHomeButton(gs);
+}
+
+void ToolbarController::setupHomeButton() {
+  if (!m_homeButton || !m_mainWindow) {
+    return;
+  }
+  MainWindow *mw = m_mainWindow;
+  QObject::connect(m_homeButton, &QToolButton::clicked, this, [mw]() {
+    if (mw && mw->getNavigationManager()) {
+      mw->getNavigationManager()->loadRootView();
+    }
+  });
+}
+
+void ToolbarController::refreshHomeButton(const GeneralSettings &gs) {
+  if (!m_homeButton) {
+    return;
+  }
+  m_homeButton->setVisible(gs.useHomeView);
+  QIcon icon;
+  const QString customPath = gs.homeViewIcon.trimmed();
+  if (!customPath.isEmpty()) {
+    icon = QIcon(customPath);
+  }
+  if (icon.isNull()) {
+    icon = UIConstants::Icons::fromTheme({"go-home", "user-home", "go-home-symbolic"});
+  }
+  m_homeButton->setIcon(icon);
+  m_homeButton->setIconSize(QSize(18, 18));
+  const QString label = gs.homeViewLabel.trimmed();
+  m_homeButton->setToolTip(label.isEmpty() ? tr("Home") : label);
 }
 
 void ToolbarController::connectFilterToolbar() {

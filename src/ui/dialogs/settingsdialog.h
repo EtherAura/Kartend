@@ -135,6 +135,7 @@ private slots:
   void browseManualDir();
   void browsePlaceholderArtwork();
   void browseStartupVideo();
+  void browseHomeViewIcon();
   void checkForChanges();
   void onContentDirectoryChanged();
   void onGridWidthChanged(int value);

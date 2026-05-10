@@ -120,6 +120,9 @@ signals:
   /// Suppressed while the search bar has focus so typed letters still
   /// reach the filter.
   void requestItemDetails();
+  /// Jump to the synthetic Home view. Bound to GeneralSettings::keyHomeView
+  /// when useHomeView is enabled and the binding is non-zero.
+  void requestHomeView();
   void requestSearchModeToggle();
   void requestSearchBarFocus();
   void requestScrollAnimationStop();

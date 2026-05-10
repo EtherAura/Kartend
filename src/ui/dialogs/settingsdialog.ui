@@ -1939,21 +1939,51 @@
                    </widget>
                   </item>
                   <item row="2" column="0">
+                   <widget class="QLabel" name="homeViewLabelLabel">
+                    <property name="text"><string>Home View Label:</string></property>
+                   </widget>
+                  </item>
+                  <item row="2" column="1">
+                   <widget class="QLineEdit" name="homeViewLabelLineEdit">
+                    <property name="toolTip"><string>Title shown at the top of the synthetic Home view and as the toolbar Home button's tooltip. Empty falls back to &quot;Home&quot;.</string></property>
+                    <property name="placeholderText"><string>Home</string></property>
+                   </widget>
+                  </item>
+                  <item row="3" column="0">
+                   <widget class="QLabel" name="homeViewIconLabel">
+                    <property name="text"><string>Home View Icon:</string></property>
+                   </widget>
+                  </item>
+                  <item row="3" column="1">
+                   <layout class="QHBoxLayout" name="homeViewIconLayout">
+                    <item>
+                     <widget class="QLineEdit" name="homeViewIconLineEdit">
+                      <property name="toolTip"><string>Absolute path to a custom icon for the toolbar Home button. Empty falls back to the themed go-home icon.</string></property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QPushButton" name="browseHomeViewIconButton">
+                      <property name="text"><string>Browse</string></property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </item>
+                  <item row="4" column="0">
                    <widget class="QLabel" name="startupVideoEnabledLabel">
                     <property name="text"><string>Startup Video:</string></property>
                    </widget>
                   </item>
-                  <item row="2" column="1">
+                  <item row="4" column="1">
                    <widget class="QCheckBox" name="startupVideoEnabledCheckBox">
                     <property name="toolTip"><string>Play a configurable video on application launch. Skippable via any key or click.</string></property>
                    </widget>
                   </item>
-                  <item row="3" column="0">
+                  <item row="5" column="0">
                    <widget class="QLabel" name="startupVideoPathLabel">
                     <property name="text"><string>Video File:</string></property>
                    </widget>
                   </item>
-                  <item row="3" column="1">
+                  <item row="5" column="1">
                    <layout class="QHBoxLayout" name="startupVideoPathLayout">
                     <item>
                      <widget class="QLineEdit" name="startupVideoPathLineEdit">
@@ -2960,6 +2990,20 @@
               </item>
               <item row="6" column="1">
                <widget class="QKeySequenceEdit" name="keySearchEdit"/>
+              </item>
+              <item row="7" column="0">
+               <widget class="QLabel" name="keyHomeViewLabel">
+                 <property name="minimumSize"><size><width>160</width><height>0</height></size></property>
+                <property name="text">
+                 <string>Home View:</string>
+                </property>
+                <property name="toolTip">
+                 <string>Jump to the synthetic Home view from any depth. Only honored when Use Home View is enabled.</string>
+                </property>
+               </widget>
+              </item>
+              <item row="7" column="1">
+               <widget class="QKeySequenceEdit" name="keyHomeViewEdit"/>
               </item>
              </layout>
             </widget>

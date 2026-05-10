@@ -114,6 +114,37 @@
             </widget>
            </item>
            <item>
+            <widget class="QToolButton" name="homeButton">
+             <property name="minimumSize">
+              <size>
+               <width>34</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>40</width>
+               <height>30</height>
+              </size>
+             </property>
+             <property name="toolTip">
+              <string>Home</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="toolButtonStyle">
+              <enum>Qt::ToolButtonIconOnly</enum>
+             </property>
+             <property name="focusPolicy">
+              <enum>Qt::NoFocus</enum>
+             </property>
+             <property name="visible">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QLabel" name="itemsTitleLabel">
              <property name="font">
               <font>

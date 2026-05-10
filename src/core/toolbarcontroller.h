@@ -29,6 +29,7 @@ public:
     MainWindow *mainWindow = nullptr;
     QToolButton *viewModeButton = nullptr;
     QToolButton *filterButton = nullptr;
+    QToolButton *homeButton = nullptr;
     QLineEdit *searchBar = nullptr;
   };
 
@@ -50,6 +51,15 @@ public:
   /// LeadingPosition. Wiring the triggered() signal to InteractionManager
   /// happens later (in the wiring pass) once that manager exists.
   void setupSearchModeAction();
+
+  /// Wire the home button's clicked() signal to NavigationManager::loadRootView.
+  /// Idempotent — safe to call after the navigation manager is alive.
+  void setupHomeButton();
+
+  /// Refresh the home button's icon and visibility from the current settings:
+  /// visible iff useHomeView is on, icon is the user's homeViewIcon path
+  /// (falling back to the themed go-home icon).
+  void refreshHomeButton(const GeneralSettings &gs);
 
   /// Apply the per-button visibility flags from @p gs to the toolbar's
   /// remaining user-toggleable widgets (filter button + search bar).
@@ -78,6 +88,7 @@ private:
   MainWindow *m_mainWindow = nullptr;
   QToolButton *m_viewModeButton = nullptr;
   QToolButton *m_filterButton = nullptr;
+  QToolButton *m_homeButton = nullptr;
   QLineEdit *m_searchBar = nullptr;
 
   QAction *m_searchModeAction = nullptr;

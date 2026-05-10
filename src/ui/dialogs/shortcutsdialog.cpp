@@ -111,6 +111,9 @@ void ShortcutsDialog::populateContent() {
   addShortcut(navSection, keyText(settings.keyAlphabeticForward),
               tr("Jump to next letter (alphabetic)"));
   addShortcut(navSection, keyText(settings.keyItemDetails), tr("Open item detail page"));
+  if (settings.useHomeView && settings.keyHomeView != 0) {
+    addShortcut(navSection, keyText(settings.keyHomeView), tr("Jump to Home view"));
+  }
 
   auto *searchSection = addSection(m_leftColumnLayout, tr("Search"));
   addShortcut(searchSection, keyText(settings.keySearch),

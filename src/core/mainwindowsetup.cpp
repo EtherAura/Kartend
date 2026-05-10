@@ -174,10 +174,13 @@ void MainWindow::setupUIReferences() {
   tcSetup.mainWindow = this;
   tcSetup.viewModeButton = ui->viewModeButton;
   tcSetup.filterButton = ui->filterButton;
+  tcSetup.homeButton = ui->homeButton;
   tcSetup.searchBar = ui->searchBar;
   m_toolbarController->initialize(tcSetup);
   m_toolbarController->setupViewModeButton();
   m_toolbarController->setupSearchModeAction();
+  m_toolbarController->setupHomeButton();
+  m_toolbarController->refreshHomeButton(m_generalSettings);
   if (ui->filterButton) {
     ui->filterButton->setIcon(
         UIConstants::Icons::fromTheme({UIConstants::Icons::FILTER, "view-filter"}));

@@ -226,7 +226,6 @@ void NavigationManager::loadCurrentAndSubcollections() {
 
 // Renders the synthetic "Home" view: one tile per root collection
 // (parentCollectionIndex == -1), no host collection, no DB query, no items.
-// See Kartend-83iu.
 void NavigationManager::loadRootView() {
   if (!m_collections || !m_currentCollectionIndex || !m_scrollManager) {
     return;
@@ -282,7 +281,11 @@ void NavigationManager::loadRootView() {
 
   if (auto *titleLabel =
           m_itemsPage ? m_itemsPage->findChild<QLabel *>("itemsTitleLabel") : nullptr) {
-    titleLabel->setText(tr("Home"));
+    QString label;
+    if (m_generalSettings) {
+      label = m_generalSettings->homeViewLabel.trimmed();
+    }
+    titleLabel->setText(label.isEmpty() ? tr("Home") : label);
   }
   if (auto *subfolderLabel =
           m_itemsPage ? m_itemsPage->findChild<QLabel *>("subfolderPathLabel") : nullptr) {

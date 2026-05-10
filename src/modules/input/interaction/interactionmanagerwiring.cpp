@@ -109,6 +109,11 @@ void InteractionManager::connectKeyboardManagerSignals() {
           &InteractionManager::onKeyboardRepeatStep);
   connect(m_keyboardManager.get(), &KeyboardManager::stopRepeatRequested, this,
           &InteractionManager::onKeyboardStopRepeat);
+  connect(m_keyboardManager.get(), &KeyboardManager::requestHomeView, this, [this]() {
+    if (m_navigationManager) {
+      m_navigationManager->loadRootView();
+    }
+  });
 }
 
 void InteractionManager::connectGamepadManagerSignals() {

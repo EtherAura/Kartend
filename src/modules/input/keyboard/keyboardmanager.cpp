@@ -218,6 +218,12 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
     return true;
   }
 
+  if (m_generalSettings && m_generalSettings->useHomeView && m_generalSettings->keyHomeView != 0 &&
+      key == m_generalSettings->keyHomeView) {
+    emit requestHomeView();
+    return true;
+  }
+
   return false;
 }
 

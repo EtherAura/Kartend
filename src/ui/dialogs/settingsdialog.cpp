@@ -233,6 +233,10 @@ void SettingsDialog::setupButtonConnections() {
     connect(ui->browseStartupVideoButton, &QPushButton::clicked, this,
             &SettingsDialog::browseStartupVideo);
   }
+  if (ui->browseHomeViewIconButton) {
+    connect(ui->browseHomeViewIconButton, &QPushButton::clicked, this,
+            &SettingsDialog::browseHomeViewIcon);
+  }
   if (ui->recursiveImportContentButton) {
     connect(ui->recursiveImportContentButton, &QPushButton::clicked, this,
             &SettingsDialog::onRecursiveImportContent);

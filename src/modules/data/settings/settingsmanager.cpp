@@ -138,6 +138,7 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.keyJumpLast = s.value("keyJumpLast", static_cast<int>(Qt::Key_End)).toInt();
   // detail-page key (opens DetailPageOverlay).
   settings.keyItemDetails = s.value("keyItemDetails", static_cast<int>(Qt::Key_I)).toInt();
+  settings.keyHomeView = s.value("keyHomeView", 0).toInt();
 
   // Controls: gamepad bindings
   settings.gamepadUseDpad = s.value("gamepadUseDpad", true).toBool();
@@ -166,6 +167,8 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.listArtworkColumnWidth = s.value("listArtworkColumnWidth", 32).toInt();
   settings.startupCollection = s.value("startupCollection", QString()).toString();
   settings.useHomeView = s.value("useHomeView", false).toBool();
+  settings.homeViewLabel = s.value("homeViewLabel", QString()).toString();
+  settings.homeViewIcon = s.value("homeViewIcon", QString()).toString();
 
   // Attract mode
   settings.attractModeEnabled = s.value("attractModeEnabled", false).toBool();
@@ -312,6 +315,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.keyJumpFirst = settings.keyJumpFirst;
   m_generalSettings.keyJumpLast = settings.keyJumpLast;
   m_generalSettings.keyItemDetails = settings.keyItemDetails;
+  m_generalSettings.keyHomeView = settings.keyHomeView;
   m_generalSettings.gamepadUseDpad = settings.gamepadUseDpad;
   m_generalSettings.gamepadUseLeftStick = settings.gamepadUseLeftStick;
   m_generalSettings.gamepadConfirmButton = settings.gamepadConfirmButton;
@@ -327,6 +331,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.listArtworkColumnWidth = settings.listArtworkColumnWidth;
   m_generalSettings.startupCollection = settings.startupCollection;
   m_generalSettings.useHomeView = settings.useHomeView;
+  m_generalSettings.homeViewLabel = settings.homeViewLabel.trimmed();
+  m_generalSettings.homeViewIcon = settings.homeViewIcon.trimmed();
 
   // Attract mode
   m_generalSettings.attractModeEnabled = settings.attractModeEnabled;
@@ -419,6 +425,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("keyJumpFirst", m_generalSettings.keyJumpFirst);
   s.setValue("keyJumpLast", m_generalSettings.keyJumpLast);
   s.setValue("keyItemDetails", m_generalSettings.keyItemDetails);
+  s.setValue("keyHomeView", m_generalSettings.keyHomeView);
   s.setValue("gamepadUseDpad", m_generalSettings.gamepadUseDpad);
   s.setValue("gamepadUseLeftStick", m_generalSettings.gamepadUseLeftStick);
   s.setValue("gamepadConfirmButton", m_generalSettings.gamepadConfirmButton);
@@ -434,6 +441,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("listArtworkColumnWidth", m_generalSettings.listArtworkColumnWidth);
   s.setValue("startupCollection", m_generalSettings.startupCollection);
   s.setValue("useHomeView", m_generalSettings.useHomeView);
+  s.setValue("homeViewLabel", m_generalSettings.homeViewLabel);
+  s.setValue("homeViewIcon", m_generalSettings.homeViewIcon);
   s.setValue("attractModeEnabled", m_generalSettings.attractModeEnabled);
   s.setValue("attractModeIdleTimeoutSec", m_generalSettings.attractModeIdleTimeoutSec);
   s.setValue("runtimeDetectionEnabled", m_generalSettings.runtimeDetectionEnabled);

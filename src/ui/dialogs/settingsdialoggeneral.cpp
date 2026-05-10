@@ -610,6 +610,9 @@ void SettingsDialog::setupGeneralSettingsConnections() {
   if (ui->keySearchEdit) {
     connect(ui->keySearchEdit, &QKeySequenceEdit::keySequenceChanged, this, markChanged);
   }
+  if (ui->keyHomeViewEdit) {
+    connect(ui->keyHomeViewEdit, &QKeySequenceEdit::keySequenceChanged, this, markChanged);
+  }
 
   if (ui->gamepadConfirmButtonLineEdit) {
     connect(ui->gamepadConfirmButtonLineEdit, &QLineEdit::textChanged, this, markChanged);
@@ -655,6 +658,17 @@ void SettingsDialog::setupGeneralSettingsConnections() {
   }
   if (ui->startupVideoPathLineEdit) {
     connect(ui->startupVideoPathLineEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->useHomeViewCheckBox) {
+    connect(ui->useHomeViewCheckBox, &QCheckBox::toggled, this, &SettingsDialog::checkForChanges);
+  }
+  if (ui->homeViewLabelLineEdit) {
+    connect(ui->homeViewLabelLineEdit, &QLineEdit::textChanged, this,
+            &SettingsDialog::checkForChanges);
+  }
+  if (ui->homeViewIconLineEdit) {
+    connect(ui->homeViewIconLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
   }
 
