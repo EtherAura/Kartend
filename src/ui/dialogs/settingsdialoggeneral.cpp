@@ -95,25 +95,11 @@ void SettingsDialog::setupGeneralSettingsConnections() {
   // Browse font button for per-collection custom font lives on
   // AppearanceTitlesPanel.
 
-  connect(ui->browseColorButton, &QPushButton::clicked, this, [this]() {
-    QColor currentColor = Qt::white;
-    if (!m_generalSettings.titleBaseColor.isEmpty()) {
-      currentColor = QColor(m_generalSettings.titleBaseColor);
-    }
-    QColor color = QColorDialog::getColor(currentColor, this, tr("Select Base Color"));
-    if (color.isValid()) {
-      ui->baseColorEdit->setText(color.name());
-      // Save immediately like checkbox settings
-      auto *mainWindow = qobject_cast<MainWindow *>(parent());
-      if (mainWindow && mainWindow->getSettingsManager()) {
-        mainWindow->m_generalSettings.titleBaseColor = color.name();
-        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
-        m_generalSettings = mainWindow->m_generalSettings;
-        // Apply to ItemWidget immediately
-        ItemWidget::setTitleBaseColor(color.name());
-      }
-    }
-  });
+  // Background type radios + value edit, palette pickers (base / primary /
+  // tile / selection), list-row pickers, title-tint spin boxes, and the
+  // baseColor live-save with ItemWidget side-effect — all live on
+  // AppearanceColorsPanel now. Host wires baseColorChanged() / changed() in
+  // the constructor.
 
   // customFontEdit textChanged routing lives on AppearanceTitlesPanel.
 
@@ -121,170 +107,11 @@ void SettingsDialog::setupGeneralSettingsConnections() {
   // FontsPanel now; the panel emits changed() and SettingsDialog handles
   // the live-save mirror in its constructor.
 
-  connect(ui->baseColorEdit, &QLineEdit::editingFinished, this, [this]() {
-    auto *mainWindow = qobject_cast<MainWindow *>(parent());
-    if (mainWindow && mainWindow->getSettingsManager()) {
-      QString baseColor = ui->baseColorEdit->text().trimmed();
-      if (baseColor != mainWindow->m_generalSettings.titleBaseColor) {
-        mainWindow->m_generalSettings.titleBaseColor = baseColor;
-        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
-        m_generalSettings = mainWindow->m_generalSettings;
-        ItemWidget::setTitleBaseColor(baseColor);
-      }
-    }
-  });
-
-  // Background type radio buttons - update button text based on selection
-  connect(ui->backgroundColorRadio, &QRadioButton::toggled, this, [this](bool checked) {
-    if (checked) {
-      ui->browseBackgroundButton->setText(tr("Pick..."));
-      ui->browseBackgroundButton->setToolTip(tr("Select background color"));
-      ui->backgroundValueEdit->setPlaceholderText(tr("Default"));
-      ui->backgroundValueEdit->setToolTip(tr("Background color (hex format like #FF5500)"));
-    }
-  });
-
-  connect(ui->backgroundImageRadio, &QRadioButton::toggled, this, [this](bool checked) {
-    if (checked) {
-      ui->browseBackgroundButton->setText(tr("Browse..."));
-      ui->browseBackgroundButton->setToolTip(tr("Select background image"));
-      ui->backgroundValueEdit->setPlaceholderText(tr("None"));
-      ui->backgroundValueEdit->setToolTip(tr("Path to background image file"));
-    }
-  });
-
-  if (ui->backgroundVideoRadio) {
-    connect(ui->backgroundVideoRadio, &QRadioButton::toggled, this, [this](bool checked) {
-      if (checked) {
-        ui->browseBackgroundButton->setText(tr("Browse..."));
-        ui->browseBackgroundButton->setToolTip(tr("Select background video"));
-        ui->backgroundValueEdit->setPlaceholderText(tr("None"));
-        ui->backgroundValueEdit->setToolTip(tr("Path to a looping muted background video"));
-      }
-    });
-  }
-
-  // Background picker button - opens color dialog or file dialog based on radio
-  // selection
-  connect(ui->browseBackgroundButton, &QPushButton::clicked, this, [this]() {
-    if (ui->backgroundVideoRadio && ui->backgroundVideoRadio->isChecked()) {
-      // Video file picker
-      QString currentPath = ui->backgroundValueEdit->text().trimmed();
-      QString startDir =
-          currentPath.isEmpty() ? QDir::homePath() : QFileInfo(currentPath).absolutePath();
-      QString filePath = QFileDialog::getOpenFileName(
-          this, tr("Select Background Video"), startDir,
-          tr("Videos (*.mp4 *.webm *.mkv *.mov *.avi *.m4v);;All Files (*)"));
-      if (!filePath.isEmpty()) {
-        ui->backgroundValueEdit->setText(filePath);
-      }
-      return;
-    }
-    if (ui->backgroundColorRadio->isChecked()) {
-      // Color picker
-      QColor currentColor = Qt::white;
-      QString currentValue = ui->backgroundValueEdit->text().trimmed();
-      if (!currentValue.isEmpty()) {
-        currentColor = QColor(currentValue);
-      }
-      QColor color = QColorDialog::getColor(currentColor, this, tr("Select Background Color"));
-      if (color.isValid()) {
-        ui->backgroundValueEdit->setText(color.name());
-      }
-    } else {
-      // Image file picker
-      QString currentPath = ui->backgroundValueEdit->text().trimmed();
-      QString startDir =
-          currentPath.isEmpty() ? QDir::homePath() : QFileInfo(currentPath).absolutePath();
-      QString filePath = QFileDialog::getOpenFileName(
-          this, tr("Select Background Image"), startDir,
-          tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;All Files (*)"));
-      if (!filePath.isEmpty()) {
-        ui->backgroundValueEdit->setText(filePath);
-      }
-    }
-  });
-
-  // Primary color picker button
-  connect(ui->browsePrimaryColorButton, &QPushButton::clicked, this, [this]() {
-    QColor currentColor = Qt::gray;
-    QString currentValue = ui->primaryColorEdit->text().trimmed();
-    if (!currentValue.isEmpty() && QColor::isValidColorName(currentValue)) {
-      currentColor = QColor(currentValue);
-    }
-    QColor color = QColorDialog::getColor(currentColor, this, tr("Select Primary Color"));
-    if (color.isValid()) {
-      ui->primaryColorEdit->setText(color.name());
-    }
-  });
-
-  // Tile color picker button
-  connect(ui->browseTileColorButton, &QPushButton::clicked, this, [this]() {
-    QColor currentColor = Qt::gray;
-    QString currentValue = ui->tileColorEdit->text().trimmed();
-    if (!currentValue.isEmpty() && QColor::isValidColorName(currentValue)) {
-      currentColor = QColor(currentValue);
-    }
-    QColor color = QColorDialog::getColor(currentColor, this, tr("Select Tile Color"));
-    if (color.isValid()) {
-      ui->tileColorEdit->setText(color.name());
-    }
-  });
-
-  // Selection color picker button
-  connect(ui->browseSelectionColorButton, &QPushButton::clicked, this, [this]() {
-    QColor currentColor = Qt::gray;
-    QString currentValue = ui->selectionColorEdit->text().trimmed();
-    if (!currentValue.isEmpty() && QColor::isValidColorName(currentValue)) {
-      currentColor = QColor(currentValue);
-    }
-    QColor color = QColorDialog::getColor(currentColor, this, tr("Select Selection Color"));
-    if (color.isValid()) {
-      ui->selectionColorEdit->setText(color.name());
-    }
-  });
-
-  // List mode row color picker button
-  connect(ui->browseListRowColorButton, &QPushButton::clicked, this, [this]() {
-    QColor currentColor = Qt::gray;
-    QString currentValue = ui->listRowColorEdit->text().trimmed();
-    if (!currentValue.isEmpty() && QColor::isValidColorName(currentValue)) {
-      currentColor = QColor(currentValue);
-    }
-    QColor color = QColorDialog::getColor(currentColor, this, tr("Select Row Color"));
-    if (color.isValid()) {
-      ui->listRowColorEdit->setText(color.name());
-    }
-  });
-
-  // Header logo file picker lives on AppearanceToolbarPanel.
-
-  // List mode alternate row color picker button
-  connect(ui->browseListAltRowColorButton, &QPushButton::clicked, this, [this]() {
-    QColor currentColor = Qt::gray;
-    QString currentValue = ui->listAltRowColorEdit->text().trimmed();
-    if (!currentValue.isEmpty() && QColor::isValidColorName(currentValue)) {
-      currentColor = QColor(currentValue);
-    }
-    QColor color = QColorDialog::getColor(currentColor, this, tr("Select Alternate Row Color"));
-    if (color.isValid()) {
-      ui->listAltRowColorEdit->setText(color.name());
-    }
-  });
-
   // Keyboard / Gamepad / Mouse connections (including detect-button →
   // GamepadCaptureController dispatch) live on ControlsPanel now.
 
   // Startup video / home-view / selection-display / input-timing /
   // performance-history connections all live in GeneralSettingsPanel now.
-  if (ui->titleSaturationSpinBox) {
-    connect(ui->titleSaturationSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->titleLightnessSpinBox) {
-    connect(ui->titleLightnessSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
 
   // Toolbar-customization connections owned by ToolbarPanel.
 

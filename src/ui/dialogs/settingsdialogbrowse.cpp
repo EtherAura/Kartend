@@ -225,62 +225,15 @@ void SettingsDialog::loadCollectionToUI(int index) {
   ui->sidebarPanel->load(config);
   ui->appearanceTitlesPanel->load(config);
 
-  // Background settings
-  if (ui->backgroundColorRadio && ui->backgroundImageRadio) {
-    if (config.backgroundType == BackgroundType::Video && ui->backgroundVideoRadio) {
-      ui->backgroundVideoRadio->setChecked(true);
-    } else if (config.backgroundType == BackgroundType::Image) {
-      ui->backgroundImageRadio->setChecked(true);
-    } else {
-      ui->backgroundColorRadio->setChecked(true);
-    }
-  }
-  if (ui->backgroundValueEdit) {
-    if (config.backgroundType == BackgroundType::Video) {
-      ui->backgroundValueEdit->setText(config.backgroundVideo);
-    } else if (config.backgroundType == BackgroundType::Image) {
-      ui->backgroundValueEdit->setText(config.backgroundImage);
-    } else {
-      ui->backgroundValueEdit->setText(config.backgroundColor);
-    }
-  }
-
-  // Primary color setting
-  if (ui->primaryColorEdit) {
-    ui->primaryColorEdit->setText(config.primaryColor);
-  }
-
-  // Tile color setting
-  if (ui->tileColorEdit) {
-    ui->tileColorEdit->setText(config.tileColor);
-  }
-
-  // Selection color setting
-  if (ui->selectionColorEdit) {
-    ui->selectionColorEdit->setText(config.selectionColor);
-  }
+  // Background / palette / list-row colors / vignette owned by
+  // AppearanceColorsPanel.
+  ui->appearanceColorsPanel->load(config);
 
   // List mode settings
   ui->appearanceListPanel->load(config);
-  if (ui->listRowColorEdit) {
-    ui->listRowColorEdit->setText(config.listRowColor);
-  }
-  if (ui->listAltRowColorEdit) {
-    ui->listAltRowColorEdit->setText(config.listAltRowColor);
-  }
-
-  // Custom font family (per-collection)
 
   // header logo
   ui->appearanceToolbarPanel->load(config);
-
-  // vignette
-  if (ui->vignetteEnabledCheckBox) {
-    ui->vignetteEnabledCheckBox->setChecked(config.vignetteEnabled);
-  }
-  if (ui->vignetteIntensitySpinBox) {
-    ui->vignetteIntensitySpinBox->setValue(config.vignetteIntensity);
-  }
 
   // wallpaper parallax
   ui->appearanceEffectsPanel->load(config);
@@ -301,16 +254,9 @@ void SettingsDialog::clearCollectionUI() {
   clearLinkedParentsUI();
   ui->configurationPanel->clear();
   ui->artworkPanel->clear();
-  if (ui->backgroundValueEdit) ui->backgroundValueEdit->clear();
-  if (ui->primaryColorEdit) ui->primaryColorEdit->clear();
-  if (ui->tileColorEdit) ui->tileColorEdit->clear();
-  if (ui->selectionColorEdit) ui->selectionColorEdit->clear();
-  if (ui->listRowColorEdit) ui->listRowColorEdit->clear();
-  if (ui->listAltRowColorEdit) ui->listAltRowColorEdit->clear();
+  ui->appearanceColorsPanel->clear();
   ui->appearanceTitlesPanel->clear();
   ui->appearanceToolbarPanel->clear();
-  if (ui->vignetteEnabledCheckBox) ui->vignetteEnabledCheckBox->setChecked(false);
-  if (ui->vignetteIntensitySpinBox) ui->vignetteIntensitySpinBox->setValue(60);
   ui->appearanceEffectsPanel->clear();
 
   ui->subfoldersPanel->clear();
@@ -318,8 +264,6 @@ void SettingsDialog::clearCollectionUI() {
   ui->sidebarPanel->clear();
   if (ui->configurationPanel->parentCollectionComboBox())
     ui->configurationPanel->parentCollectionComboBox()->clear();
-
-  if (ui->backgroundColorRadio) ui->backgroundColorRadio->setChecked(true);
 
   m_isLoading = false;
 }

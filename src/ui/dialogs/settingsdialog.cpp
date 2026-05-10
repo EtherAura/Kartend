@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <functional>
 #include <QAbstractItemView>
+#include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDir>
@@ -24,6 +25,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "appearancecolorspanel.h"
 #include "appearanceeffectspanel.h"
 #include "appearancelayoutpanel.h"
 #include "appearancelistpanel.h"
@@ -121,6 +123,24 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
           &SettingsDialog::checkForChanges);
   connect(ui->appearanceLayoutPanel, &AppearanceLayoutPanel::changed, this,
           &SettingsDialog::checkForChanges);
+
+  // Appearance > Colors sub-sub-tab: per-collection background / palette /
+  // list-row colors / vignette plus three global title-tint fields. Pointer
+  // install gives the panel a handle on m_generalSettings so it can refresh
+  // / writeBack the title fields. baseColorChanged() is the live-save signal
+  // — host mirrors to mainWindow + saves + applies ItemWidget side effect
+  // immediately to preserve the picker's instant-feedback UX.
+  ui->appearanceColorsPanel->setSettings(&m_generalSettings);
+  connect(ui->appearanceColorsPanel, &AppearanceColorsPanel::changed, this,
+          &SettingsDialog::checkForChanges);
+  connect(ui->appearanceColorsPanel, &AppearanceColorsPanel::baseColorChanged, this,
+          [this](const QString &c) {
+            auto *mainWindow = qobject_cast<MainWindow *>(QObject::parent());
+            if (!mainWindow || !mainWindow->getSettingsManager()) return;
+            mainWindow->m_generalSettings.titleBaseColor = c;
+            mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
+            ItemWidget::setTitleBaseColor(c);
+          });
 
   // Application-font panel: live-save semantics — panel mutates the
   // pointed-to GeneralSettings and emits changed(); we mirror to mainWindow,

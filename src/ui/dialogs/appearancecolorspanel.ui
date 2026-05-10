@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AppearanceColorsPanel</class>
+ <widget class="QWidget" name="AppearanceColorsPanel">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>620</width>
+    <height>520</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="appearanceColorsSubTabLayout">
+   <property name="spacing"><number>8</number></property>
+   <item>
+    <widget class="QGroupBox" name="appearanceBackgroundGroupBox">
+     <property name="title"><string>Background</string></property>
+     <layout class="QFormLayout" name="appearanceBackgroundFormLayout">
+      <property name="horizontalSpacing"><number>8</number></property>
+      <property name="verticalSpacing"><number>6</number></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_background">
+        <property name="text"><string>Background:</string></property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <layout class="QHBoxLayout" name="backgroundLayout">
+        <item>
+         <widget class="QRadioButton" name="backgroundColorRadio">
+          <property name="text"><string>Color</string></property>
+          <property name="checked"><bool>true</bool></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QRadioButton" name="backgroundImageRadio">
+          <property name="text"><string>Image</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QRadioButton" name="backgroundVideoRadio">
+          <property name="text"><string>Video</string></property>
+          <property name="toolTip"><string>Looping muted video as background</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLineEdit" name="backgroundValueEdit">
+          <property name="toolTip"><string>Background color (hex format like #FF5500), image path, or video path</string></property>
+          <property name="placeholderText"><string>Default</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="browseBackgroundButton">
+          <property name="text"><string>Pick...</string></property>
+          <property name="toolTip"><string>Select background color or image</string></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="appearancePaletteGroupBox">
+     <property name="title"><string>Item Colors</string></property>
+     <layout class="QFormLayout" name="appearancePaletteFormLayout">
+      <property name="horizontalSpacing"><number>8</number></property>
+      <property name="verticalSpacing"><number>6</number></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_baseColor">
+        <property name="text"><string>Base Color:</string></property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <layout class="QHBoxLayout" name="baseColorLayout">
+        <item>
+         <widget class="QLineEdit" name="baseColorEdit">
+          <property name="toolTip"><string>Base color for title text (hex format like #FF5500, leave empty for system highlight)</string></property>
+          <property name="placeholderText"><string>System Highlight</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="browseColorButton">
+          <property name="text"><string>Pick...</string></property>
+          <property name="toolTip"><string>Select a base color</string></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_primaryColor">
+        <property name="text"><string>Primary Color:</string></property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <layout class="QHBoxLayout" name="primaryColorLayout">
+        <item>
+         <widget class="QLineEdit" name="primaryColorEdit">
+          <property name="toolTip"><string>Primary UI color for toolbar and menubar (hex format like #FF5500)</string></property>
+          <property name="placeholderText"><string>System Default</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="browsePrimaryColorButton">
+          <property name="text"><string>Pick...</string></property>
+          <property name="toolTip"><string>Select primary UI color</string></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_tileColor">
+        <property name="text"><string>Tile Color:</string></property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <layout class="QHBoxLayout" name="tileColorLayout">
+        <item>
+         <widget class="QLineEdit" name="tileColorEdit">
+          <property name="toolTip"><string>Color for item tiles and placeholders (hex format like #FF5500)</string></property>
+          <property name="placeholderText"><string>System Default</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="browseTileColorButton">
+          <property name="text"><string>Pick...</string></property>
+          <property name="toolTip"><string>Select tile color</string></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="label_selectionColor">
+        <property name="text"><string>Selection Color:</string></property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <layout class="QHBoxLayout" name="selectionColorLayout">
+        <item>
+         <widget class="QLineEdit" name="selectionColorEdit">
+          <property name="toolTip"><string>Color for selection rectangle and glide animation border (hex format like #FF5500)</string></property>
+          <property name="placeholderText"><string>System Default</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="browseSelectionColorButton">
+          <property name="text"><string>Pick...</string></property>
+          <property name="toolTip"><string>Select selection color</string></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="appearanceTitleTintGroupBox">
+     <property name="title"><string>Title Tinting</string></property>
+     <layout class="QFormLayout" name="appearanceTitleTintFormLayout">
+      <property name="horizontalSpacing"><number>8</number></property>
+      <property name="verticalSpacing"><number>6</number></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_textAppearance">
+        <property name="text"><string>Title Saturation:</string></property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QSpinBox" name="titleSaturationSpinBox">
+        <property name="minimumWidth"><number>110</number></property>
+        <property name="toolTip"><string>Title text color saturation (0-255)</string></property>
+        <property name="minimum"><number>0</number></property>
+        <property name="maximum"><number>255</number></property>
+        <property name="value"><number>180</number></property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_titleLightness">
+        <property name="text"><string>Title Lightness:</string></property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QSpinBox" name="titleLightnessSpinBox">
+        <property name="minimumWidth"><number>110</number></property>
+        <property name="toolTip"><string>Title text color lightness (0-255, lower is darker)</string></property>
+        <property name="minimum"><number>0</number></property>
+        <property name="maximum"><number>255</number></property>
+        <property name="value"><number>60</number></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="appearanceListRowsGroupBox">
+     <property name="title"><string>List Row Colors</string></property>
+     <layout class="QFormLayout" name="appearanceListRowsFormLayout">
+      <property name="horizontalSpacing"><number>8</number></property>
+      <property name="verticalSpacing"><number>6</number></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_listRowColor">
+        <property name="text"><string>List Row Color:</string></property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <layout class="QHBoxLayout" name="listRowColorLayout">
+        <item>
+         <widget class="QLineEdit" name="listRowColorEdit">
+          <property name="toolTip"><string>Primary row background color (hex format like #FF5500)</string></property>
+          <property name="placeholderText"><string>System Default</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="browseListRowColorButton">
+          <property name="text"><string>Pick...</string></property>
+          <property name="toolTip"><string>Select row color</string></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_listAltRowColor">
+        <property name="text"><string>List Alt Row Color:</string></property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <layout class="QHBoxLayout" name="listAltRowColorLayout">
+        <item>
+         <widget class="QLineEdit" name="listAltRowColorEdit">
+          <property name="toolTip"><string>Alternate row background color (hex format like #FF5500)</string></property>
+          <property name="placeholderText"><string>System Default</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="browseListAltRowColorButton">
+          <property name="text"><string>Pick...</string></property>
+          <property name="toolTip"><string>Select alternate row color</string></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="appearanceVignetteGroupBox">
+     <property name="title"><string>Vignette</string></property>
+     <layout class="QFormLayout" name="appearanceVignetteFormLayout">
+      <property name="horizontalSpacing"><number>8</number></property>
+      <property name="verticalSpacing"><number>6</number></property>
+      <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_vignette">
+        <property name="text"><string>Vignette:</string></property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <layout class="QHBoxLayout" name="vignetteLayout">
+        <item>
+         <widget class="QCheckBox" name="vignetteEnabledCheckBox">
+          <property name="text"><string>Enable</string></property>
+          <property name="toolTip"><string>Darken the corners of the items area to make titles pop over busy backgrounds</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_vignetteIntensity">
+          <property name="text"><string>Intensity:</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="vignetteIntensitySpinBox">
+          <property name="minimumWidth"><number>110</number></property>
+          <property name="toolTip"><string>Corner darkness 0-100 (0 = no effect, 100 = pitch black at the corners)</string></property>
+          <property name="minimum"><number>0</number></property>
+          <property name="maximum"><number>100</number></property>
+          <property name="value"><number>60</number></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <spacer name="appearanceColorsVerticalSpacer">
+     <property name="orientation"><enum>Qt::Orientation::Vertical</enum></property>
+     <property name="sizeHint" stdset="0">
+      <size><width>20</width><height>4</height></size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

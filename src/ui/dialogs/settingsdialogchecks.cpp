@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <functional>
 #include <QAbstractItemView>
+#include <QCheckBox>
 #include <QColorDialog>
 #include <QDir>
 #include <QFileDialog>
@@ -11,6 +12,7 @@
 #include <QFontDialog>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QSpinBox>
 #include <QPixmapCache>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -97,66 +99,18 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   ui->appearanceTitlesPanel->save(config);
   ui->sidebarPanel->save(config);
 
-  // Background settings
-  if (ui->backgroundImageRadio && ui->backgroundColorRadio) {
-    if (ui->backgroundVideoRadio && ui->backgroundVideoRadio->isChecked()) {
-      config.backgroundType = BackgroundType::Video;
-    } else if (ui->backgroundImageRadio->isChecked()) {
-      config.backgroundType = BackgroundType::Image;
-    } else {
-      config.backgroundType = BackgroundType::Color;
-    }
-  }
-  if (ui->backgroundValueEdit) {
-    QString value = ui->backgroundValueEdit->text().trimmed();
-    // Only the field matching the active type holds a value; the other two
-    // are cleared so an old value can't bleed back when the user toggles.
-    if (config.backgroundType == BackgroundType::Video) {
-      config.backgroundVideo = value;
-      config.backgroundColor.clear();
-      config.backgroundImage.clear();
-    } else if (config.backgroundType == BackgroundType::Image) {
-      config.backgroundImage = value;
-      config.backgroundColor.clear();
-      config.backgroundVideo.clear();
-    } else {
-      config.backgroundColor = value;
-      config.backgroundImage.clear();
-      config.backgroundVideo.clear();
-    }
-  }
-
-  // Primary color setting
-  config.primaryColor =
-      (ui->primaryColorEdit) ? ui->primaryColorEdit->text().trimmed() : config.primaryColor;
-
-  // Tile color setting
-  config.tileColor = (ui->tileColorEdit) ? ui->tileColorEdit->text().trimmed() : config.tileColor;
-
-  // Selection color setting
-  config.selectionColor =
-      (ui->selectionColorEdit) ? ui->selectionColorEdit->text().trimmed() : config.selectionColor;
+  // Background / palette / list-row colors / vignette owned by
+  // AppearanceColorsPanel.
+  ui->appearanceColorsPanel->save(config);
 
   // List mode settings (font size + row height owned by AppearanceListPanel).
   ui->appearanceListPanel->save(config);
-  config.listRowColor =
-      (ui->listRowColorEdit) ? ui->listRowColorEdit->text().trimmed() : config.listRowColor;
-  config.listAltRowColor = (ui->listAltRowColorEdit) ? ui->listAltRowColorEdit->text().trimmed()
-                                                     : config.listAltRowColor;
 
   // Custom font family (per-collection)
   // customFontFamily handled inside AppearanceTitlesPanel::save above.
 
   // header logo
   ui->appearanceToolbarPanel->save(config);
-
-  // vignette
-  if (ui->vignetteEnabledCheckBox) {
-    config.vignetteEnabled = ui->vignetteEnabledCheckBox->isChecked();
-  }
-  if (ui->vignetteIntensitySpinBox) {
-    config.vignetteIntensity = ui->vignetteIntensitySpinBox->value();
-  }
 
   // Effects (parallax + backdrop blur) handled by AppearanceEffectsPanel.
   ui->appearanceEffectsPanel->save(config);
@@ -262,63 +216,26 @@ auto SettingsDialog::checkDimensionChanges() const -> bool {
   return false;
 }
 
-// Checks color field changes
+// Checks color field changes — palette / list-row colors / vignette / header-
+// logo / parallax+blur. Background type/value are part of AppearanceColorsPanel
+// too (collapsed under hasChanges).
 auto SettingsDialog::checkColorChanges() const -> bool {
   const CollectionConfig &o = originalCollection;
-  // / qbp3 / y25g / eq8r: theme-adjacent fields (logo, vignette,
-  // parallax, blur) are tracked here so hasUnsavedChanges() picks them up.
-  return lineTrimmedChanged(ui->primaryColorEdit, o.primaryColor) ||
-         lineTrimmedChanged(ui->tileColorEdit, o.tileColor) ||
-         lineTrimmedChanged(ui->selectionColorEdit, o.selectionColor) ||
+  return ui->appearanceColorsPanel->hasChanges(o) ||
          ui->appearanceToolbarPanel->hasChanges(o) ||
-         checkboxChanged(ui->vignetteEnabledCheckBox, o.vignetteEnabled) ||
-         spinIntChanged(ui->vignetteIntensitySpinBox, o.vignetteIntensity) ||
          ui->appearanceEffectsPanel->hasChanges(o);
 }
 
 // Checks list mode field changes
 auto SettingsDialog::checkListModeChanges() const -> bool {
   const CollectionConfig &o = originalCollection;
-  // customFont dirty-check moved into AppearanceTitlesPanel::hasChanges,
-  // counted under checkBasicFieldChanges. Only list row colors remain here.
-  return ui->appearanceListPanel->hasChanges(o) ||
-         lineTrimmedChanged(ui->listRowColorEdit, o.listRowColor) ||
-         lineTrimmedChanged(ui->listAltRowColorEdit, o.listAltRowColor);
+  return ui->appearanceListPanel->hasChanges(o);
 }
 
-// Checks background field changes
+// Background type/value dirty check rolled into checkColorChanges via
+// AppearanceColorsPanel::hasChanges. Kept as a stub so the hasUnsavedChanges()
+// callsite stays unchanged.
 auto SettingsDialog::checkBackgroundChanges() const -> bool {
-  const CollectionConfig &originalConfig = originalCollection;
-  // Check background type — must include the Video radio so
-  // toggling between Color/Image/Video correctly dirties the dialog.
-  if (ui->backgroundImageRadio && ui->backgroundColorRadio) {
-    BackgroundType currentType = BackgroundType::Color;
-    if (ui->backgroundVideoRadio && ui->backgroundVideoRadio->isChecked()) {
-      currentType = BackgroundType::Video;
-    } else if (ui->backgroundImageRadio->isChecked()) {
-      currentType = BackgroundType::Image;
-    }
-    if (currentType != originalConfig.backgroundType) {
-      return true;
-    }
-  }
-  // Check background value against the field matching the active type.
-  if (ui->backgroundValueEdit) {
-    QString currentValue = ui->backgroundValueEdit->text().trimmed();
-    if (ui->backgroundVideoRadio && ui->backgroundVideoRadio->isChecked()) {
-      if (currentValue != originalConfig.backgroundVideo) {
-        return true;
-      }
-    } else if (ui->backgroundImageRadio && ui->backgroundImageRadio->isChecked()) {
-      if (currentValue != originalConfig.backgroundImage) {
-        return true;
-      }
-    } else {
-      if (currentValue != originalConfig.backgroundColor) {
-        return true;
-      }
-    }
-  }
   return false;
 }
 
@@ -385,17 +302,11 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
           m_originalGeneralSettings.listClickHoldRepeatIntervalMs) {
     return true;
   }
-  // Check text appearance settings (saturation, lightness, base color)
-  if (ui->titleSaturationSpinBox &&
-      ui->titleSaturationSpinBox->value() != m_originalGeneralSettings.titleTintSaturation) {
-    return true;
-  }
-  if (ui->titleLightnessSpinBox &&
-      ui->titleLightnessSpinBox->value() != m_originalGeneralSettings.titleTintLightness) {
-    return true;
-  }
-  if (ui->baseColorEdit &&
-      ui->baseColorEdit->text().trimmed() != m_originalGeneralSettings.titleBaseColor) {
+  // Title-tint fields owned by AppearanceColorsPanel — struct compare against
+  // the original snapshot since the panel keeps m_generalSettings live.
+  if (m_generalSettings.titleTintSaturation != m_originalGeneralSettings.titleTintSaturation ||
+      m_generalSettings.titleTintLightness != m_originalGeneralSettings.titleTintLightness ||
+      m_generalSettings.titleBaseColor != m_originalGeneralSettings.titleBaseColor) {
     return true;
   }
   // Attract-mode fields owned by AttractPanel — struct compare against the

@@ -7,6 +7,7 @@
 #include "ui_settingsdialog.h"
 
 #include <QComboBox>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
 #include <QSignalBlocker>

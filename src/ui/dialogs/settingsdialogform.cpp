@@ -334,10 +334,9 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   ui->attractPanel->refresh();
   ui->generalSettingsPanel->refresh();
   // Title-tint fields physically live in the per-collection appearance tab
-  // even though they edit GeneralSettings; keep loading them inline.
-  SettingsFormBinding::loadInto(ui->titleSaturationSpinBox, m_generalSettings.titleTintSaturation);
-  SettingsFormBinding::loadInto(ui->titleLightnessSpinBox, m_generalSettings.titleTintLightness);
-  SettingsFormBinding::loadInto(ui->baseColorEdit, m_generalSettings.titleBaseColor);
+  // even though they edit GeneralSettings; owned by AppearanceColorsPanel
+  // which observes &m_generalSettings.
+  ui->appearanceColorsPanel->refresh();
   // Populate the panel's startup-collection combo with the live collection
   // names so the user can pick one.
   if (mainWindow) {
@@ -438,21 +437,14 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
         m_generalSettings.attractModeAdvanceSelectionIntervalSec;
     mainWindow->m_generalSettings.attractModeAdvanceSelectionRandom =
         m_generalSettings.attractModeAdvanceSelectionRandom;
-    if (ui->titleSaturationSpinBox) {
-      mainWindow->m_generalSettings.titleTintSaturation = ui->titleSaturationSpinBox->value();
-      // Apply to ItemWidget static settings
-      ItemWidget::setTitleTintSaturation(ui->titleSaturationSpinBox->value());
-    }
-    if (ui->titleLightnessSpinBox) {
-      mainWindow->m_generalSettings.titleTintLightness = ui->titleLightnessSpinBox->value();
-      // Apply to ItemWidget static settings
-      ItemWidget::setTitleTintLightness(ui->titleLightnessSpinBox->value());
-    }
-    if (ui->baseColorEdit) {
-      mainWindow->m_generalSettings.titleBaseColor = ui->baseColorEdit->text().trimmed();
-      // Apply to ItemWidget static settings
-      ItemWidget::setTitleBaseColor(ui->baseColorEdit->text().trimmed());
-    }
+    // Title-tint fields: AppearanceColorsPanel keeps m_generalSettings live;
+    // copy struct fields to mainWindow and apply ItemWidget side effects.
+    mainWindow->m_generalSettings.titleTintSaturation = m_generalSettings.titleTintSaturation;
+    ItemWidget::setTitleTintSaturation(m_generalSettings.titleTintSaturation);
+    mainWindow->m_generalSettings.titleTintLightness = m_generalSettings.titleTintLightness;
+    ItemWidget::setTitleTintLightness(m_generalSettings.titleTintLightness);
+    mainWindow->m_generalSettings.titleBaseColor = m_generalSettings.titleBaseColor;
+    ItemWidget::setTitleBaseColor(m_generalSettings.titleBaseColor);
     // Note: customFontFamily is now saved per-collection, not in general
     // settings
 

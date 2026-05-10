@@ -18,6 +18,7 @@
 #include <QPixmapCache>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSpinBox>
 #include <QScrollBar>
 #include <QSet>
 #include <QSignalBlocker>
@@ -203,55 +204,11 @@ void SettingsDialog::setupFormFieldConnections() {
   // AppearanceTitlesPanel.
   // hideMissingArtwork / itemWidth / itemHeight / fontSize / cornerRadius
   // connections all live on AppearanceLayoutPanel + AppearanceTitlesPanel.
-  // Color field connections
-  if (ui->primaryColorEdit) {
-    connect(ui->primaryColorEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
-  }
-  if (ui->tileColorEdit) {
-    connect(ui->tileColorEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
-  }
-  if (ui->selectionColorEdit) {
-    connect(ui->selectionColorEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
-  }
+  // Color field connections (palette / list-row colors / background /
+  // vignette) live on AppearanceColorsPanel.
   // List font size + row height connections live on AppearanceListPanel.
-  if (ui->listRowColorEdit) {
-    connect(ui->listRowColorEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
-  }
-  if (ui->listAltRowColorEdit) {
-    connect(ui->listAltRowColorEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
-  }
-  // Background field connections
-  if (ui->backgroundValueEdit) {
-    connect(ui->backgroundValueEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->backgroundColorRadio) {
-    connect(ui->backgroundColorRadio, &QRadioButton::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->backgroundImageRadio) {
-    connect(ui->backgroundImageRadio, &QRadioButton::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
-  // backgroundVideoRadio + the appearance-effects cluster
-  // (header logo, vignette, parallax, toolbar backdrop blur) all persist
-  // into CollectionConfig but were never wired to the dirty state.
-  if (ui->backgroundVideoRadio) {
-    connect(ui->backgroundVideoRadio, &QRadioButton::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
   // headerLogoEdit + headerLogoPositionComboBox connections live on
   // AppearanceToolbarPanel.
-  if (ui->vignetteEnabledCheckBox) {
-    connect(ui->vignetteEnabledCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->vignetteIntensitySpinBox) {
-    connect(ui->vignetteIntensitySpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
   // Parallax + backdrop blur connections live on AppearanceEffectsPanel.
 }
 
