@@ -23,6 +23,7 @@
 #include <set>
 
 #include "appearanceeffectspanel.h"
+#include "appearancelayoutpanel.h"
 #include "appearancelistpanel.h"
 #include "appearancetitlespanel.h"
 #include "appearancetoolbarpanel.h"
@@ -92,40 +93,9 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   ui->configurationPanel->save(config);
   ui->artworkPanel->save(config);
   ui->subfoldersPanel->save(config);
-  config.itemWidth = (ui->itemWidthSpinBox) ? ui->itemWidthSpinBox->value() : config.itemWidth;
-  config.itemHeight = (ui->itemHeightSpinBox) ? ui->itemHeightSpinBox->value() : config.itemHeight;
+  ui->appearanceLayoutPanel->save(config);
   ui->appearanceTitlesPanel->save(config);
-  config.cornerRadius =
-      (ui->cornerRadiusSpinBox) ? ui->cornerRadiusSpinBox->value() : config.cornerRadius;
-  // extensions + customArtworkTypes parsing handled inside their panels' save().
-  config.gridWidth = (ui->gridWidthSpinBox) ? ui->gridWidthSpinBox->value() : config.gridWidth;
-  config.horizontalGridHeight = (ui->horizontalGridHeightSpinBox)
-                                    ? ui->horizontalGridHeightSpinBox->value()
-                                    : config.horizontalGridHeight;
-  config.gridWidthSidebarHidden = (ui->gridWidthSidebarHiddenSpinBox)
-                                      ? ui->gridWidthSidebarHiddenSpinBox->value()
-                                      : config.gridWidthSidebarHidden;
-  config.horizontalGridHeightSidebarHidden =
-      (ui->horizontalGridHeightSidebarHiddenSpinBox)
-          ? ui->horizontalGridHeightSidebarHiddenSpinBox->value()
-          : config.horizontalGridHeightSidebarHidden;
-  config.horizontalAlignment =
-      (ui->horizontalAlignmentComboBox)
-          ? static_cast<HorizontalAlignment>(ui->horizontalAlignmentComboBox->currentIndex())
-          : config.horizontalAlignment;
   ui->sidebarPanel->save(config);
-  config.viewType = (ui->viewTypeComboBox)
-                        ? static_cast<ViewType>(ui->viewTypeComboBox->currentIndex())
-                        : config.viewType;
-  config.hideMissingArtwork = (ui->hideMissingArtworkCheckBox)
-                                  ? ui->hideMissingArtworkCheckBox->isChecked()
-                                  : config.hideMissingArtwork;
-  config.horizontalSpacing = (ui->horizontalSpacingSpinBox)
-                                 ? spacingUiToInternal(ui->horizontalSpacingSpinBox->value())
-                                 : config.horizontalSpacing;
-  config.verticalSpacing = (ui->verticalSpacingSpinBox)
-                               ? spacingUiToInternal(ui->verticalSpacingSpinBox->value())
-                               : config.verticalSpacing;
 
   // Background settings
   if (ui->backgroundImageRadio && ui->backgroundColorRadio) {
@@ -234,29 +204,23 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ui->launcherPanel->defaultLauncherComboBox()->currentIndex() != o.defaultLauncherIndex;
   // type comparison is handled inside ConfigurationPanel::hasChanges below.
   const bool hSpacingChanged =
-      ui->horizontalSpacingSpinBox &&
-      spacingUiToInternal(ui->horizontalSpacingSpinBox->value()) != o.horizontalSpacing;
+      ui->appearanceLayoutPanel->horizontalSpacingSpinBox() &&
+      spacingUiToInternal(ui->appearanceLayoutPanel->horizontalSpacingSpinBox()->value()) !=
+          o.horizontalSpacing;
   const bool vSpacingChanged =
-      ui->verticalSpacingSpinBox &&
-      spacingUiToInternal(ui->verticalSpacingSpinBox->value()) != o.verticalSpacing;
+      ui->appearanceLayoutPanel->verticalSpacingSpinBox() &&
+      spacingUiToInternal(ui->appearanceLayoutPanel->verticalSpacingSpinBox()->value()) !=
+          o.verticalSpacing;
 
   return additionalChanged || defaultLauncherChanged || hSpacingChanged || vSpacingChanged ||
          ui->sidebarPanel->hasChanges(o) || ui->configurationPanel->hasChanges(o) ||
          ui->artworkPanel->hasChanges(o) || ui->launcherPanel->hasChanges(o) ||
 
-         // Grid metrics
-         spinIntChanged(ui->gridWidthSpinBox, o.gridWidth) ||
-         spinIntChanged(ui->horizontalGridHeightSpinBox, o.horizontalGridHeight) ||
-         spinIntChanged(ui->gridWidthSidebarHiddenSpinBox, o.gridWidthSidebarHidden) ||
-         spinIntChanged(ui->horizontalGridHeightSidebarHiddenSpinBox,
-                        o.horizontalGridHeightSidebarHidden) ||
-         comboEnumChanged(ui->horizontalAlignmentComboBox, o.horizontalAlignment) ||
+         // Layout / grid / view fields delegate to AppearanceLayoutPanel.
+         ui->appearanceLayoutPanel->hasChanges(o) ||
 
-         // View / titles / folders / typography
-         comboEnumChanged(ui->viewTypeComboBox, o.viewType) ||
-         checkboxChanged(ui->hideMissingArtworkCheckBox, o.hideMissingArtwork) ||
-         ui->appearanceTitlesPanel->hasChanges(o) || ui->subfoldersPanel->hasChanges(o) ||
-         spinIntChanged(ui->cornerRadiusSpinBox, o.cornerRadius);
+         // Titles / folders.
+         ui->appearanceTitlesPanel->hasChanges(o) || ui->subfoldersPanel->hasChanges(o);
 }
 
 // Extension + customArtworkTypes dirty checks live in ConfigurationPanel /
@@ -293,10 +257,9 @@ auto SettingsDialog::checkParentCollectionChanges() const -> bool {
 
 // Checks dimension changes
 auto SettingsDialog::checkDimensionChanges() const -> bool {
-  return (ui->itemWidthSpinBox->value() != originalCollection.itemWidth ||
-          ui->itemHeightSpinBox->value() != originalCollection.itemHeight ||
-          (ui->cornerRadiusSpinBox &&
-           ui->cornerRadiusSpinBox->value() != originalCollection.cornerRadius));
+  // Item dimensions live on AppearanceLayoutPanel; rolled into
+  // checkBasicFieldChanges via the panel's own hasChanges().
+  return false;
 }
 
 // Checks color field changes

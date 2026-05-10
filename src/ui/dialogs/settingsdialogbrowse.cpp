@@ -23,6 +23,7 @@
 #include <set>
 
 #include "appearanceeffectspanel.h"
+#include "appearancelayoutpanel.h"
 #include "appearancelistpanel.h"
 #include "appearancetitlespanel.h"
 #include "appearancetoolbarpanel.h"
@@ -220,45 +221,9 @@ void SettingsDialog::loadCollectionToUI(int index) {
   }
   ui->artworkPanel->load(config);
   ui->subfoldersPanel->load(config);
-  if (ui->gridWidthSpinBox) {
-    ui->gridWidthSpinBox->setValue(config.gridWidth);
-  }
-  if (ui->horizontalGridHeightSpinBox) {
-    ui->horizontalGridHeightSpinBox->setValue(config.horizontalGridHeight);
-  }
-  if (ui->gridWidthSidebarHiddenSpinBox) {
-    ui->gridWidthSidebarHiddenSpinBox->setValue(config.gridWidthSidebarHidden);
-  }
-  if (ui->horizontalGridHeightSidebarHiddenSpinBox) {
-    ui->horizontalGridHeightSidebarHiddenSpinBox->setValue(
-        config.horizontalGridHeightSidebarHidden);
-  }
-  if (ui->horizontalAlignmentComboBox) {
-    ui->horizontalAlignmentComboBox->setCurrentIndex(static_cast<int>(config.horizontalAlignment));
-  }
+  ui->appearanceLayoutPanel->load(config);
   ui->sidebarPanel->load(config);
-  if (ui->viewTypeComboBox) {
-    ui->viewTypeComboBox->setCurrentIndex(static_cast<int>(config.viewType));
-  }
-  if (ui->hideMissingArtworkCheckBox) {
-    ui->hideMissingArtworkCheckBox->setChecked(config.hideMissingArtwork);
-  }
-  if (ui->horizontalSpacingSpinBox) {
-    ui->horizontalSpacingSpinBox->setValue(spacingInternalToUi(config.horizontalSpacing));
-  }
-  if (ui->verticalSpacingSpinBox) {
-    ui->verticalSpacingSpinBox->setValue(spacingInternalToUi(config.verticalSpacing));
-  }
   ui->appearanceTitlesPanel->load(config);
-  if (ui->itemWidthSpinBox) {
-    ui->itemWidthSpinBox->setValue(config.itemWidth);
-  }
-  if (ui->itemHeightSpinBox) {
-    ui->itemHeightSpinBox->setValue(config.itemHeight);
-  }
-  if (ui->cornerRadiusSpinBox) {
-    ui->cornerRadiusSpinBox->setValue(config.cornerRadius);
-  }
 
   // Background settings
   if (ui->backgroundColorRadio && ui->backgroundImageRadio) {
@@ -349,24 +314,8 @@ void SettingsDialog::clearCollectionUI() {
   ui->appearanceEffectsPanel->clear();
 
   ui->subfoldersPanel->clear();
-  if (ui->hideMissingArtworkCheckBox) ui->hideMissingArtworkCheckBox->setChecked(false);
-
-  if (ui->gridWidthSpinBox) ui->gridWidthSpinBox->setValue(UIConstants::Grid::DEFAULT_WIDTH);
-  if (ui->horizontalGridHeightSpinBox) ui->horizontalGridHeightSpinBox->setValue(0);
-  if (ui->gridWidthSidebarHiddenSpinBox) ui->gridWidthSidebarHiddenSpinBox->setValue(0);
-  if (ui->horizontalGridHeightSidebarHiddenSpinBox)
-    ui->horizontalGridHeightSidebarHiddenSpinBox->setValue(0);
-  if (ui->horizontalSpacingSpinBox)
-    ui->horizontalSpacingSpinBox->setValue(spacingInternalToUi(UIConstants::Grid::SPACING));
-  if (ui->verticalSpacingSpinBox)
-    ui->verticalSpacingSpinBox->setValue(spacingInternalToUi(UIConstants::Grid::SPACING));
-  if (ui->itemWidthSpinBox) ui->itemWidthSpinBox->setValue(200);
-  if (ui->itemHeightSpinBox) ui->itemHeightSpinBox->setValue(300);
-  if (ui->cornerRadiusSpinBox) ui->cornerRadiusSpinBox->setValue(0);
-
-  if (ui->horizontalAlignmentComboBox) ui->horizontalAlignmentComboBox->setCurrentIndex(0);
+  ui->appearanceLayoutPanel->clear();
   ui->sidebarPanel->clear();
-  if (ui->viewTypeComboBox) ui->viewTypeComboBox->setCurrentIndex(0);
   if (ui->configurationPanel->parentCollectionComboBox())
     ui->configurationPanel->parentCollectionComboBox()->clear();
 

@@ -27,6 +27,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "appearancelayoutpanel.h"
 #include "collectiontreewidget.h"
 #include "configurationpanel.h"
 #include "extensionutils.h"
@@ -47,7 +48,7 @@ void SettingsDialog::setupBasicUIConnections() {
     if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
       return;
     }
-    if (!ui->gridWidthSpinBox) {
+    if (!ui->appearanceLayoutPanel->gridWidthSpinBox()) {
       return;
     }
 
@@ -57,7 +58,7 @@ void SettingsDialog::setupBasicUIConnections() {
 }
 
 void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
-  int newGridWidth = ui->gridWidthSpinBox->value();
+  int newGridWidth = ui->appearanceLayoutPanel->gridWidthSpinBox()->value();
   bool isActive =
       (editedIndex == originalCurrentCollectionIndex && originalCurrentCollectionIndex >= 0 &&
        originalCurrentCollectionIndex < collections.size());
@@ -184,33 +185,13 @@ void SettingsDialog::setupFormFieldConnections() {
   // launcher-type heuristic — wire that here against the panel's accessor.
   connect(ui->configurationPanel->mediaDirLineEdit(), &QLineEdit::textChanged, this,
           &SettingsDialog::onContentDirectoryChanged);
-  if (ui->gridWidthSpinBox) {
-    connect(ui->gridWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::onGridWidthChanged);
-  }
-  if (ui->horizontalGridHeightSpinBox) {
-    // feeds the same change-detection path as gridWidth so the
-    // dialog enables Save when only this field is touched.
-    connect(ui->horizontalGridHeightSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->gridWidthSidebarHiddenSpinBox) {
-    connect(ui->gridWidthSidebarHiddenSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->horizontalGridHeightSidebarHiddenSpinBox) {
-    connect(ui->horizontalGridHeightSidebarHiddenSpinBox,
-            QOverload<int>::of(&QSpinBox::valueChanged), this, &SettingsDialog::checkForChanges);
-  }
+  // gridWidthSpinBox needs the special onGridWidthChanged handler that emits
+  // the per-edit gridWidthChanged signal — wire that against the panel's
+  // accessor. Other layout fields' change connections live on
+  // AppearanceLayoutPanel.
+  connect(ui->appearanceLayoutPanel->gridWidthSpinBox(),
+          QOverload<int>::of(&QSpinBox::valueChanged), this, &SettingsDialog::onGridWidthChanged);
   // showAllSubcollectionItemsCheckBox connection lives on ConfigurationPanel.
-  if (ui->horizontalAlignmentComboBox) {
-    connect(ui->horizontalAlignmentComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &SettingsDialog::checkForChanges);
-  }
-  if (ui->viewTypeComboBox) {
-    connect(ui->viewTypeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
   if (ui->configurationPanel->parentCollectionComboBox()) {
     connect(ui->configurationPanel->parentCollectionComboBox(),
             QOverload<int>::of(&QComboBox::currentIndexChanged), this,
@@ -220,26 +201,8 @@ void SettingsDialog::setupFormFieldConnections() {
   // dialog observes the panel's changed() signal in the constructor.
   // hideTitles + hideSubcollectionTitles connections live on
   // AppearanceTitlesPanel.
-  if (ui->hideMissingArtworkCheckBox) {
-    connect(ui->hideMissingArtworkCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->itemWidthSpinBox) {
-    connect(ui->itemWidthSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->itemHeightSpinBox) {
-    connect(ui->itemHeightSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  // fontSize connection lives on AppearanceTitlesPanel.
-  if (false) {
-    // dummy block
-  }
-  if (ui->cornerRadiusSpinBox) {
-    connect(ui->cornerRadiusSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
+  // hideMissingArtwork / itemWidth / itemHeight / fontSize / cornerRadius
+  // connections all live on AppearanceLayoutPanel + AppearanceTitlesPanel.
   // Color field connections
   if (ui->primaryColorEdit) {
     connect(ui->primaryColorEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
@@ -293,22 +256,17 @@ void SettingsDialog::setupFormFieldConnections() {
 }
 
 void SettingsDialog::setupSpacingConnections() {
-  if (ui->horizontalSpacingSpinBox) {
-    connect(ui->horizontalSpacingSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-    connect(ui->horizontalSpacingSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            [this]() { handleSpacingChanged(); });
-  }
-  if (ui->verticalSpacingSpinBox) {
-    connect(ui->verticalSpacingSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-    connect(ui->verticalSpacingSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            [this]() { handleSpacingChanged(); });
-  }
+  // Spacing field changed() emission lives on AppearanceLayoutPanel; only the
+  // spacing-changed signal emission that drives the live preview stays here.
+  connect(ui->appearanceLayoutPanel->horizontalSpacingSpinBox(),
+          QOverload<int>::of(&QSpinBox::valueChanged), this, [this]() { handleSpacingChanged(); });
+  connect(ui->appearanceLayoutPanel->verticalSpacingSpinBox(),
+          QOverload<int>::of(&QSpinBox::valueChanged), this, [this]() { handleSpacingChanged(); });
 }
 
 void SettingsDialog::handleSpacingChanged() {
-  if (!ui->horizontalSpacingSpinBox || !ui->verticalSpacingSpinBox) {
+  if (!ui->appearanceLayoutPanel->horizontalSpacingSpinBox() ||
+      !ui->appearanceLayoutPanel->verticalSpacingSpinBox()) {
     return;
   }
   if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
@@ -318,9 +276,10 @@ void SettingsDialog::handleSpacingChanged() {
     return;
   }
   if (currentCollectionIndex == originalCurrentCollectionIndex) {
-    emit spacingChanged(currentCollectionIndex,
-                        spacingUiToInternal(ui->horizontalSpacingSpinBox->value()),
-                        spacingUiToInternal(ui->verticalSpacingSpinBox->value()));
+    emit spacingChanged(
+        currentCollectionIndex,
+        spacingUiToInternal(ui->appearanceLayoutPanel->horizontalSpacingSpinBox()->value()),
+        spacingUiToInternal(ui->appearanceLayoutPanel->verticalSpacingSpinBox()->value()));
   }
 }
 
@@ -355,27 +314,25 @@ void SettingsDialog::setupTreeWidgetConnections() {
 }
 
 void SettingsDialog::setupUIConstraints() {
-  if (ui->horizontalSpacingSpinBox) {
-    ui->horizontalSpacingSpinBox->setMinimum(
+  if (ui->appearanceLayoutPanel->horizontalSpacingSpinBox()) {
+    ui->appearanceLayoutPanel->horizontalSpacingSpinBox()->setMinimum(
         spacingInternalToUi(UIConstants::Viewport::SPACING_MIN));
-    ui->horizontalSpacingSpinBox->setMaximum(
+    ui->appearanceLayoutPanel->horizontalSpacingSpinBox()->setMaximum(
         spacingInternalToUi(UIConstants::Viewport::SPACING_MAX));
-    ui->horizontalSpacingSpinBox->setSingleStep(1);
+    ui->appearanceLayoutPanel->horizontalSpacingSpinBox()->setSingleStep(1);
   }
-  if (ui->verticalSpacingSpinBox) {
-    ui->verticalSpacingSpinBox->setMinimum(spacingInternalToUi(UIConstants::Viewport::SPACING_MIN));
-    ui->verticalSpacingSpinBox->setMaximum(spacingInternalToUi(UIConstants::Viewport::SPACING_MAX));
-    ui->verticalSpacingSpinBox->setSingleStep(1);
+  if (ui->appearanceLayoutPanel->verticalSpacingSpinBox()) {
+    ui->appearanceLayoutPanel->verticalSpacingSpinBox()->setMinimum(
+        spacingInternalToUi(UIConstants::Viewport::SPACING_MIN));
+    ui->appearanceLayoutPanel->verticalSpacingSpinBox()->setMaximum(
+        spacingInternalToUi(UIConstants::Viewport::SPACING_MAX));
+    ui->appearanceLayoutPanel->verticalSpacingSpinBox()->setSingleStep(1);
   }
-  if (ui->gridWidthSpinBox) {
-    ui->gridWidthSpinBox->setMinimum(UIConstants::Grid::MIN_WIDTH);
-    ui->gridWidthSpinBox->setMaximum(UIConstants::Grid::MAX_WIDTH);
-    ui->gridWidthSpinBox->setSingleStep(1);
+  if (ui->appearanceLayoutPanel->gridWidthSpinBox()) {
+    ui->appearanceLayoutPanel->gridWidthSpinBox()->setMinimum(UIConstants::Grid::MIN_WIDTH);
+    ui->appearanceLayoutPanel->gridWidthSpinBox()->setMaximum(UIConstants::Grid::MAX_WIDTH);
+    ui->appearanceLayoutPanel->gridWidthSpinBox()->setSingleStep(1);
   }
   // fontSizeSpinBox bounds set inside AppearanceTitlesPanel.ui.
-  if (ui->cornerRadiusSpinBox) {
-    ui->cornerRadiusSpinBox->setMinimum(UIConstants::Item::MIN_CORNER_RADIUS);
-    ui->cornerRadiusSpinBox->setMaximum(UIConstants::Item::MAX_CORNER_RADIUS);
-    ui->cornerRadiusSpinBox->setSingleStep(1);
-  }
+  // cornerRadiusSpinBox bounds set inside AppearanceLayoutPanel.ui.
 }

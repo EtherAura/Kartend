@@ -305,12 +305,12 @@ void SettingsDialog::onExtractArchivesToggled(bool checked) {
 }
 
 void SettingsDialog::updateGridWidthLimits() {
-  if (!ui->gridWidthSpinBox) {
+  if (!ui->appearanceLayoutPanel->gridWidthSpinBox()) {
     return;
   }
-  int preservedValue = ui->gridWidthSpinBox->value();
-  ui->gridWidthSpinBox->setMaximum(UIConstants::Grid::MAX_WIDTH);
-  ui->gridWidthSpinBox->setValue(preservedValue);
+  int preservedValue = ui->appearanceLayoutPanel->gridWidthSpinBox()->value();
+  ui->appearanceLayoutPanel->gridWidthSpinBox()->setMaximum(UIConstants::Grid::MAX_WIDTH);
+  ui->appearanceLayoutPanel->gridWidthSpinBox()->setValue(preservedValue);
 }
 
 void SettingsDialog::onGridWidthChanged(int value) {

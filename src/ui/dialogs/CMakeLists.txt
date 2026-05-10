@@ -1,6 +1,7 @@
 target_sources(${KARTEND_LIB_TARGET} PRIVATE
   applysettingsdialog.cpp
   appearanceeffectspanel.cpp
+  appearancelayoutpanel.cpp
   appearancelistpanel.cpp
   appearancetitlespanel.cpp
   appearancetoolbarpanel.cpp
@@ -41,6 +42,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   toolbarpanel.cpp
   applysettingsdialog.h
   appearanceeffectspanel.h
+  appearancelayoutpanel.h
   appearancelistpanel.h
   appearancetitlespanel.h
   appearancetoolbarpanel.h
@@ -72,6 +74,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   subfolderspanel.h
   toolbarpanel.h
   appearanceeffectspanel.ui
+  appearancelayoutpanel.ui
   appearancelistpanel.ui
   appearancetitlespanel.ui
   appearancetoolbarpanel.ui

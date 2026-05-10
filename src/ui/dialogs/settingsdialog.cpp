@@ -25,6 +25,7 @@
 #include <set>
 
 #include "appearanceeffectspanel.h"
+#include "appearancelayoutpanel.h"
 #include "appearancelistpanel.h"
 #include "appearancetitlespanel.h"
 #include "appearancetoolbarpanel.h"
@@ -117,6 +118,8 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   connect(ui->appearanceTitlesPanel, &AppearanceTitlesPanel::changed, this,
           &SettingsDialog::checkForChanges);
   connect(ui->appearanceEffectsPanel, &AppearanceEffectsPanel::changed, this,
+          &SettingsDialog::checkForChanges);
+  connect(ui->appearanceLayoutPanel, &AppearanceLayoutPanel::changed, this,
           &SettingsDialog::checkForChanges);
 
   // Application-font panel: live-save semantics — panel mutates the
