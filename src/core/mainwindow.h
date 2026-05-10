@@ -235,6 +235,42 @@ private:
   /// ToolbarController.
   void refreshFilterToolbar();
 
+  // Wiring slot handlers — each method below is the named target of one
+  // signal/slot connection in mainwindowwiring.cpp. Extracted from inline
+  // lambdas so the manager graph can be read as a flat table of
+  // {sender, signal, receiver, slot} edges. Order roughly mirrors the order
+  // connections are made in connectDatabaseManager / connectScrollManager /
+  // connectSidebarManager.
+  //
+  // DatabaseManager edges
+  void releaseStartupOverlaySuppressionIfIdle(int /*count*/);
+  void refreshTitleCountsIfActive();
+  void refreshFilterToolbarOnItemsLoaded(const QStringList & /*paths*/,
+                                         const QHash<QString, QString> & /*names*/);
+  void onScanProgress(int current, int total, const QString &name);
+  void onScanStarting(const QString &name, int estimatedItems);
+  void onCollectionScanCompletedStartup(const QString &uuid);
+  void onCollectionScanCompletedOverlay(const QString &uuid);
+  void onScanItemsProgress(int itemsProcessed, int totalItems);
+  void refreshCollectionSummaryOnScanCompleted(const QString &uuid);
+  // ScrollManager edges
+  void onSortModeChangeRequested(SortMode sortMode);
+  void onSelectItemByIndex(int index);
+  void onCoverFlowActiveChanged(bool active);
+  void onArtworkPreviewVisibilityChanged(bool visible);
+  void onCoverFlowItemActivated(int index);
+  void onListColumnWidthChanged(int width);
+  void onListArtworkColumnWidthChanged(int width);
+  void onScrollFilterChanged(int visible, int total);
+  // ArtworkManager TimerCoordinator edges
+  void onArtworkViewportUpdateRequested();
+  void onArtworkLayoutUpdateRequested();
+  // InteractionManager edge
+  void onInteractionSelectionChanged(int index);
+  // DetailsPaneManager edges
+  void onSidebarVisibilityChanged(bool visible);
+  void onSidebarLayoutChanged();
+
   // UI Setup Methods
   void setupUI();
   void setupUIReferences();
