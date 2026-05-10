@@ -73,9 +73,20 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // setupConnections() runs so the Detect-button click handlers can
   // dispatch through it.
   m_gamepadCapture = new GamepadCaptureController(this);
+
+  // Wire the SettingsModel pointer aggregate at the editable data fields
+  // owned by this dialog. Done before constructing CollectionRemover so the
+  // remover sees a fully-populated model.
+  m_model.collections = &collections;
+  m_model.workingCollections = &m_workingCollections;
+  m_model.originalCollection = &originalCollection;
+  m_model.generalSettings = &m_generalSettings;
+  m_model.originalGeneralSettings = &m_originalGeneralSettings;
+  m_model.collectionSaved = &m_collectionSaved;
+
   // Multi-step collection-removal pipeline. Constructed before the
   // tree's Remove button is wired up so removeCollection() can dispatch.
-  m_collectionRemover = new CollectionRemover(this);
+  m_collectionRemover = new CollectionRemover(&m_model, this, this);
 
   // The presets list itself is hydrated by loadGeneralSettingsToUI(); the
   // pointer install here is one-shot because m_generalSettings lives for the

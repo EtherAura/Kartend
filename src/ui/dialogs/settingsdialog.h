@@ -2,7 +2,9 @@
 #define SETTINGSDIALOG_H
 
 #include "applysettingsdialog.h"
+#include "collectionremover.h"
 #include "collectionutils.h"
+#include "settingsmodel.h"
 #include <QDialog>
 #include <QHash>
 #include <QList>
@@ -21,20 +23,14 @@ class QPropertyAnimation;
 QT_END_NAMESPACE
 
 class CollectionTreeWidget;
-class CollectionRemover;
 class DetailsPaneManager;
 class GamepadCaptureController;
 class ScrollManager;
 class NavigationManager;
 class SidebarPanel;
 
-class SettingsDialog : public QDialog {
+class SettingsDialog : public QDialog, public CollectionRemoverHost {
   Q_OBJECT
-  // The collection-removal pipeline reaches into collections /
-  // m_workingCollections / the tree-index maps + several private helpers
-  // to run the seven-step removal flow. Friend-declared for the same
-  // reasons as the gamepad helper above.
-  friend class CollectionRemover;
 
 public:
   /// scope selector for Save actions in the settings dialog.
@@ -139,8 +135,8 @@ private slots:
   void onEditLinkedParents();
 
 private:
-  void updateCollectionTreeWidget();
-  void expandPathToCollection(int collectionIndex);
+  void updateCollectionTreeWidget() override;
+  void expandPathToCollection(int index) override;
   void populateTreeWidget();
   QTreeWidgetItem *createTreeItem(int collectionIndex, QTreeWidgetItem *parent = nullptr);
   /// tree-population pass that walks every collection's
@@ -153,7 +149,7 @@ private:
   /// rewrites/removes name entries in additionalParentNames to match.
   /// @param oldName  current name of the affected collection
   /// @param newName  new name after rename — pass empty to remove the entry
-  void propagateCollectionNameChange(const QString &oldName, const QString &newName);
+  void propagateCollectionNameChange(const QString &oldName, const QString &newName) override;
   void setupConnections();
   void setupButtonConnections();
   void setupBasicUIConnections();
@@ -167,11 +163,11 @@ private:
   [[nodiscard]] static auto spacingInternalToUi(int spacing) -> int;
   [[nodiscard]] static auto spacingUiToInternal(int spacing) -> int;
   void setupGeneralSettingsConnections();
-  void loadCollectionToUI(int index);
-  void clearCollectionUI();
+  void loadCollectionToUI(int index) override;
+  void clearCollectionUI() override;
   void saveCollectionFromUI(int index);
-  void updateSaveButtonStyle();
-  void updateDeleteButtonState();
+  void updateSaveButtonStyle() override;
+  void updateDeleteButtonState() override;
   void updateUIForLauncherType(const QString &launcherPath);
   /// Populates and selects the parent collection combo box for the active
   /// collection.
@@ -189,7 +185,7 @@ private:
   void loadGeneralSettingsToUI();
   void saveGeneralSettingsFromUI();
   void performRecursiveImport(const QString &baseDir, bool isContentDir);
-  void ensureRootCollectionExists();
+  void ensureRootCollectionExists() override;
   // The 7-step removal pipeline lives on CollectionRemover now.
   // Helper methods for saveCollectionFromUI refactoring
   auto extractUIFieldValues() -> CollectionConfig;
@@ -301,6 +297,33 @@ private:
   QPropertyAnimation *m_saveButtonGlowAnim = nullptr;
 
   bool eventFilter(QObject *obj, QEvent *event) override;
+
+  /// Non-owning aggregate of the dialog's editable data fields. Initialized
+  /// in the constructor body once the underlying members exist; handed to
+  /// CollectionRemover so the removal pipeline can mutate the data without
+  /// reaching back into private dialog internals.
+  SettingsModel m_model;
+
+  // ── CollectionRemoverHost implementation ─────────────────────────────
+  // Thin adapters that forward to the dialog's tree-state fields and
+  // private UI helpers. Marked private — callers reach them via the
+  // CollectionRemoverHost* slot only.
+  [[nodiscard]] int selectedCollectionIndex() const override;
+  [[nodiscard]] bool hasSelection() const override;
+  void selectCollection(int index) override;
+  void clearSelection() override;
+  [[nodiscard]] QList<int> expandedCollectionIndices() const override;
+  void expandCollectionAtIndex(int index) override;
+  [[nodiscard]] QWidget *dialogWidget() override { return this; }
+  void emitCollectionSaved(const QList<CollectionConfig> &collections) override {
+    emit collectionSaved(collections);
+  }
+  // The remaining host overrides (expandPathToCollection, loadCollectionToUI,
+  // propagateCollectionNameChange, updateCollectionTreeWidget,
+  // clearCollectionUI, ensureRootCollectionExists, updateSaveButtonStyle,
+  // updateDeleteButtonState) are the dialog's own private members declared
+  // above; the `override` keyword is added on each declaration to make the
+  // host wiring explicit.
 };
 
 #endif

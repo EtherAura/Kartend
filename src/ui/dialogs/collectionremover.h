@@ -3,8 +3,61 @@
 
 #include <QList>
 #include <QObject>
+#include <QString>
 
-class SettingsDialog;
+class QWidget;
+struct CollectionConfig;
+struct SettingsModel;
+
+/// Narrow surface CollectionRemover uses to call back into its
+/// SettingsDialog host. Replaces the prior `friend class CollectionRemover`
+/// declaration on SettingsDialog — only this interface is reachable from
+/// the remover, so changes to the dialog's private internals can't
+/// silently leak into the removal pipeline. Method names are chosen to
+/// avoid colliding with SettingsDialog's existing field names so the
+/// dialog can implement this interface without an internal rename pass.
+class CollectionRemoverHost {
+public:
+  virtual ~CollectionRemoverHost() = default;
+
+  // ── Selection ─────────────────────────────────────────────────────────
+  /// Collection index for the currently-selected tree item, or -1 when no
+  /// valid item is selected.
+  [[nodiscard]] virtual int selectedCollectionIndex() const = 0;
+  /// True when a tree item is selected AND maps to a valid collection index.
+  [[nodiscard]] virtual bool hasSelection() const = 0;
+  /// Mark the given index as the active collection in the tree widget. Pass
+  /// -1 to clear. Updates the dialog's currentTreeItem and
+  /// currentCollectionIndex as side effects.
+  virtual void selectCollection(int index) = 0;
+  /// Clear both currentTreeItem and currentCollectionIndex without touching
+  /// the tree widget's selection — used after `clearCollectionUI()` when the
+  /// last collection has just been removed.
+  virtual void clearSelection() = 0;
+
+  // ── Expansion ─────────────────────────────────────────────────────────
+  /// Indices whose tree items report `isExpanded() == true`.
+  [[nodiscard]] virtual QList<int> expandedCollectionIndices() const = 0;
+  /// Re-expand the tree item at `index` if one exists.
+  virtual void expandCollectionAtIndex(int index) = 0;
+
+  // ── UI helpers (delegate to dialog's existing private members) ───────
+  virtual void expandPathToCollection(int index) = 0;
+  virtual void loadCollectionToUI(int index) = 0;
+  virtual void propagateCollectionNameChange(const QString &oldName,
+                                             const QString &newName) = 0;
+  virtual void updateCollectionTreeWidget() = 0;
+  virtual void clearCollectionUI() = 0;
+  virtual void ensureRootCollectionExists() = 0;
+  virtual void updateSaveButtonStyle() = 0;
+  virtual void updateDeleteButtonState() = 0;
+
+  /// QWidget parent for QMessageBox prompts (typically the dialog itself).
+  [[nodiscard]] virtual QWidget *dialogWidget() = 0;
+
+  /// Re-emits SettingsDialog::collectionSaved on the host's behalf.
+  virtual void emitCollectionSaved(const QList<CollectionConfig> &collections) = 0;
+};
 
 /// Owns the SettingsDialog's collection-removal pipeline. The flow has
 /// seven discrete steps that previously lived as private methods on the
@@ -13,38 +66,32 @@ class SettingsDialog;
 /// orchestrator that strings them together with the user-confirm prompt
 /// and post-removal tree refresh.
 ///
-/// Coupling: takes the host SettingsDialog and reaches back into its
-/// collections / m_workingCollections / currentTreeItem / tree-index
-/// maps and several private helper methods (clearCollectionUI,
-/// loadCollectionToUI, ensureRootCollectionExists,
-/// updateCollectionTreeWidget, propagateCollectionNameChange,
-/// expandPathToCollection, updateSaveButtonStyle, updateDeleteButtonState)
-/// — friend-declared so the dialog's state stays encapsulated.
+/// Decoupling: the remover operates on a `SettingsModel` (data) plus a
+/// `CollectionRemoverHost` (tree state + UI helpers). No friend access into
+/// SettingsDialog — the dialog implements the host interface and hands
+/// itself + the model in at construction.
 class CollectionRemover : public QObject {
   Q_OBJECT
 
 public:
-  explicit CollectionRemover(SettingsDialog *host);
+  CollectionRemover(SettingsModel *model, CollectionRemoverHost *host,
+                    QObject *parent = nullptr);
 
-  /// Run the full removal flow for whatever the dialog's currentTreeItem
-  /// points at. No-op when the precondition check fails (no item selected,
-  /// invalid index). Pops the user-confirm dialog, removes descendants
-  /// first, scrubs link references to the vanishing names, refreshes the
-  /// tree widget, and selects a sensible follow-on collection. Re-emits
-  /// SettingsDialog::collectionSaved through the host.
+  /// Run the full removal flow for whatever the host's selection points at.
+  /// No-op when the precondition check fails. Pops the user-confirm dialog,
+  /// removes descendants first, scrubs link references to the vanishing
+  /// names, refreshes the tree widget, and selects a sensible follow-on
+  /// collection. Re-emits SettingsDialog::collectionSaved through the host.
   void run();
 
 private:
-  // Pipeline steps. Returning bool / value where the orchestrator needs
-  // a result; returning void where the step purely mutates host state.
-  [[nodiscard]] bool validatePreconditions();
-  [[nodiscard]] QList<int> captureExpandedStates();
   void performRemovalAt(int index);
   void rebuildParentIndices();
   void restoreExpandedStates(const QList<int> &expandedBefore, int removedIndex);
   void selectTargetAfter(int parentIdx, int removedIndex);
 
-  SettingsDialog *m_host;
+  SettingsModel *m_model;
+  CollectionRemoverHost *m_host;
 };
 
 #endif // COLLECTIONREMOVER_H

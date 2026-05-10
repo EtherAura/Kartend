@@ -71,6 +71,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   launchertabpanel.h
   settingsdialog.h
   settingsformbinding.h
+  settingsmodel.h
   shortcutsdialog.h
   sidebarpanel.h
   splashpanel.h
