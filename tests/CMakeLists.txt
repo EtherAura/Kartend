@@ -182,6 +182,7 @@ add_test(NAME GridUtils COMMAND test_gridutils)
 # CacheManager tests
 add_executable(test_cachemanager
   modules/cache/test_cachemanager.cpp
+  ${SRC_DIR}/modules/data/cache/cachediskstorage.cpp
   ${SRC_DIR}/modules/data/cache/cachemanager.cpp
   ${SRC_DIR}/modules/data/cache/cachemanagerdisk.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
@@ -454,6 +455,7 @@ add_executable(test_artworkmanager
   ${SRC_DIR}/modules/media/artwork/artworkpathcatalog.cpp
   ${SRC_DIR}/modules/media/artwork/artworksilentloading.cpp
   ${SRC_DIR}/modules/media/artwork/artworkwidgetregistry.cpp
+  ${SRC_DIR}/modules/data/cache/cachediskstorage.cpp
   ${SRC_DIR}/modules/data/cache/cachemanager.cpp
   ${SRC_DIR}/modules/data/cache/cachemanagerdisk.cpp
   ${SRC_DIR}/modules/input/interaction/interactionstateholder.cpp

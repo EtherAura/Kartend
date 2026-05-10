@@ -1,21 +1,18 @@
 #ifndef CACHEMANAGER_H
 #define CACHEMANAGER_H
 
-#include <atomic>
 #include <memory>
 #include <QCache>
 #include <QHash>
 #include <QImage>
-#include <QJsonObject>
-#include <QList>
 #include <QMutex>
 #include <QObject>
-#include <QPair>
 #include <QPixmap>
 #include <QSet>
 #include <QString>
-#include <QThreadPool>
 #include <QTimer>
+
+#include "cachediskstorage.h"
 
 // Statistics for monitoring cache performance
 struct CacheMetrics {
@@ -89,13 +86,6 @@ public:
   void logMetrics() const;
 
 private:
-  static QString getCacheDirectory();
-  static QString getArtworkCachePath(const QString &artworkPath);
-
-  void readTimestamps(const QJsonObject &root);
-  static void writeTimestamps(const QHash<QString, qint64> &dirtyTimestamps,
-                              const QString &metadataPath);
-
   mutable QMutex m_mutex;
   QCache<QString, QPixmap> artworkCache;
   QHash<QString, qint64> fileTimestamps;
@@ -103,14 +93,12 @@ private:
   QSet<QString> dirtyArtwork;
   CacheMetrics m_metrics;
 
-  // Dedicated sequential pool for disk cache writes.
-  // Avoids UI hitches and reduces contention with other QtConcurrent users.
-  // Raw pointer so we can abandon it on shutdown without waiting.
-  QThreadPool *m_ioThreadPool = nullptr;
-
-  // Cancellation flag for in-flight/queued I/O tasks (used during shutdown).
-  // Shared pointer so lambdas can safely check after CacheManager destruction.
-  std::shared_ptr<std::atomic_bool> m_cancelIo = std::make_shared<std::atomic_bool>(false);
+  /// Disk persistence helper — owns the cache directory layout, the
+  /// path-hashing scheme, JSON metadata read/write, and the dedicated
+  /// single-thread worker pool that runs the async PNG encodes +
+  /// metadata writes. CacheManager keeps the in-memory state and
+  /// orchestrates when to flush; the helper handles the actual disk I/O.
+  std::unique_ptr<CacheDiskStorage> m_diskStorage;
 
   // Debounced save timer plumbing (keeps frequent cache changes from causing
   // repeated PNG encodes and metadata writes during active scrolling).

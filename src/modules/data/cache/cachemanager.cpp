@@ -1,24 +1,17 @@
 // Manages in-memory pixmap cache with LRU eviction and optional disk
 // persistence.
 #include "cachemanager.h"
-#include "errorutils.h"
-#include "threadpoolutils.h"
 #include "uiconstants.h"
 
 #include <limits>
 #include <QApplication>
-#include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
-#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QSaveFile>
+#include <QGuiApplication>
 #include <QScreen>
-#include <QStandardPaths>
 
 namespace {
 
@@ -56,19 +49,15 @@ Q_LOGGING_CATEGORY(lcCacheManager, "kartend.cachemanager")
     }                                                                                              \
   } while (0)
 
-CacheManager::CacheManager() {
+CacheManager::CacheManager() : m_diskStorage(std::make_unique<CacheDiskStorage>()) {
   constexpr qint64 BYTES_PER_KB = 1024;
   const qint64 maxBytes = static_cast<qint64>(UIConstants::Cache::PIXMAP_CACHE_KB) * BYTES_PER_KB;
   const qint64 maxInt = static_cast<qint64>(std::numeric_limits<int>::max());
   artworkCache.setMaxCost(maxBytes > maxInt ? std::numeric_limits<int>::max()
                                             : static_cast<int>(maxBytes));
 
-  m_ioThreadPool = new QThreadPool();
-  m_ioThreadPool->setMaxThreadCount(1);
-
-  // Timer context lives with CacheManager lifetime.
-  // CacheManager is created on the main thread
-  // (ApplicationManager::initialize).
+  // Timer context lives with CacheManager lifetime. CacheManager is
+  // created on the main thread (ApplicationManager::initialize).
   m_timerContext = new QObject();
   m_debouncedSaveTimer = new QTimer(m_timerContext);
   m_debouncedSaveTimer->setSingleShot(true);
@@ -76,7 +65,7 @@ CacheManager::CacheManager() {
     if (QApplication::closingDown()) {
       return;
     }
-    if (m_cancelIo->load(std::memory_order_acquire)) {
+    if (m_diskStorage->isCancelled()) {
       return;
     }
     saveToDisk();
@@ -87,8 +76,7 @@ CacheManager::~CacheManager() {
   // Sever the timer→lambda connection FIRST. The lambda captures 'this' and
   // calls saveToDisk(); if it fired later in the destructor (e.g. while the
   // I/O pool drain spins the event loop), it would run against a
-  // half-destructed CacheManager. Stopping the timer and deleting its parent
-  // context here disconnects the lambda before any other teardown.
+  // half-destructed CacheManager.
   if (m_debouncedSaveTimer) {
     m_debouncedSaveTimer->stop();
   }
@@ -96,17 +84,14 @@ CacheManager::~CacheManager() {
   m_timerContext = nullptr;
   m_debouncedSaveTimer = nullptr;
 
-  m_cancelIo->store(true, std::memory_order_release);
-
-  // Cooperative shutdown: m_cancelIo is set above; the disk-I/O lambda
-  // captures m_cancelIo by shared_ptr value and checks it at the start and
-  // inside its inner loop, so tasks return within milliseconds in the
-  // common case. If they don't drain within the budget, the helper
-  // intentionally leaks the pool — the OS reaps memory at process exit.
-  // The .lsan_suppressions.txt entry covers this path; remove the
-  // suppression once all cache I/O is strictly cancellable.
+  // Cooperative shutdown: cancel + bounded drain. The disk-I/O lambda
+  // captured the cancellation token by shared_ptr value, so in-flight
+  // tasks return within milliseconds in the common case. If they don't
+  // drain within the budget, CacheDiskStorage abandons the pool (the
+  // OS reaps at process exit; .lsan_suppressions.txt covers this path).
+  m_diskStorage->cancel();
   constexpr int kShutdownDrainMs = 2000;
-  if (!ThreadPoolUtils::shutdownWithBudget(m_ioThreadPool, kShutdownDrainMs)) {
+  if (!m_diskStorage->drainWithBudget(kShutdownDrainMs)) {
     qCWarning(lcCacheManager) << "CacheManager: I/O thread pool did not drain in"
                               << kShutdownDrainMs
                               << "ms during shutdown; abandoning pool to avoid blocking exit";
@@ -120,29 +105,25 @@ auto CacheManager::snapshotTimestampsForShutdown() const -> QHash<QString, qint6
 
 void CacheManager::saveTimestampsSnapshotToDiskForShutdown(
     const QHash<QString, qint64> &timestampsCopy) {
-  // Write-only operation: safe to call from a worker thread.
-  // On shutdown, write all timestamps (full save, not incremental).
-  QString metadataPath = getCacheDirectory() + QStringLiteral("/metadata/artwork_cache.json");
-  writeTimestamps(timestampsCopy, metadataPath);
+  // Write-only operation: safe to call from a worker thread. On shutdown,
+  // write all timestamps (full save, not incremental).
+  CacheDiskStorage::writeTimestamps(timestampsCopy);
 }
 
 void CacheManager::cancelPendingIo() {
-  // Signal cancellation to any in-flight tasks
-  m_cancelIo->store(true, std::memory_order_release);
+  // Signal cancellation to any in-flight tasks.
+  m_diskStorage->cancel();
 
-  // Stop the debounced save timer to prevent new tasks from starting
+  // Stop the debounced save timer to prevent new tasks from starting.
   if (m_debouncedSaveTimer) {
     m_debouncedSaveTimer->stop();
   }
 
-  // Clear queued tasks but DON'T wait for running ones - they check the
-  // cancellation flag and will exit quickly. Blocking here can cause
-  // multi-minute shutdown delays when a large image write batch is in progress.
-  if (m_ioThreadPool) {
-    m_ioThreadPool->clear();
-  }
-  // Note: We intentionally skip waitForDone() to avoid blocking shutdown.
-  // The in-flight task will see m_cancelIo and stop writing images.
+  // Clear queued tasks but DON'T wait for running ones — they check the
+  // cancellation token and will exit quickly. Blocking here can cause
+  // multi-minute shutdown delays when a large image write batch is in
+  // progress.
+  m_diskStorage->clearQueue();
 }
 
 // Releases GUI resources and resets in-memory accounting totals
@@ -150,54 +131,6 @@ void CacheManager::releaseGuiResources() {
   QMutexLocker locker(&m_mutex);
   artworkCache.clear();
   dirtyArtwork.clear();
-}
-
-// Returns cache directory path, creating subdirs if needed
-auto CacheManager::getCacheDirectory() -> QString {
-  QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) +
-                     QStringLiteral("/kartend");
-  QDir dir(cacheDir);
-  const QString artworkDirPath = cacheDir + QStringLiteral("/artwork");
-  const QString metadataDirPath = cacheDir + QStringLiteral("/metadata");
-  static bool loggedMkpathFailure = false;
-
-  if (!dir.exists("artwork") && !dir.mkpath(artworkDirPath)) {
-    if (!loggedMkpathFailure) {
-      loggedMkpathFailure = true;
-      ErrorUtils::logError(
-          ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
-                                            "Failed to create artwork cache directory",
-                                            "CacheManager::getCacheDirectory")
-              .withDetails(QString("Path: %1").arg(artworkDirPath)));
-    }
-  }
-  if (!dir.exists("metadata") && !dir.mkpath(metadataDirPath)) {
-    if (!loggedMkpathFailure) {
-      loggedMkpathFailure = true;
-      ErrorUtils::logError(
-          ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
-                                            "Failed to create cache metadata directory",
-                                            "CacheManager::getCacheDirectory")
-              .withDetails(QString("Path: %1").arg(metadataDirPath)));
-    }
-  }
-  return cacheDir;
-}
-
-// Returns on-disk cache path for a given artwork file path
-auto CacheManager::getArtworkCachePath(const QString &artworkPath) -> QString {
-  QByteArray hash = QCryptographicHash::hash(artworkPath.toUtf8(), QCryptographicHash::Md5);
-  return CacheManager::getCacheDirectory() + QStringLiteral("/artwork/") + hash.toHex() +
-         QStringLiteral(".png");
-}
-
-// Processes timestamps section from JSON
-auto CacheManager::readTimestamps(const QJsonObject &root) -> void {
-  QJsonObject timestamps = root["timestamps"].toObject();
-  for (auto it = timestamps.begin(); it != timestamps.end(); ++it) {
-    QDateTime dateTime = QDateTime::fromString(it.value().toString(), Qt::ISODate);
-    fileTimestamps[it.key()] = dateTime.isValid() ? dateTime.toMSecsSinceEpoch() : 0;
-  }
 }
 
 // Initializes persistent cache metadata from disk
@@ -215,7 +148,7 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
     if (fileInfo.exists() && fileTimestamps.contains(artworkPath) &&
         fileTimestamps[artworkPath] != fileInfo.lastModified().toMSecsSinceEpoch()) {
       // Cache invalidation - file changed on disk
-      QString cachePath = CacheManager::getArtworkCachePath(artworkPath);
+      QString cachePath = CacheDiskStorage::artworkCachePath(artworkPath);
       QFile::remove(cachePath);
       artworkCache.remove(artworkPath);
       fileTimestamps.remove(artworkPath);
@@ -233,7 +166,7 @@ auto CacheManager::getArtwork(const QString &artworkPath) -> QPixmap {
     return {};
   }
 
-  QString cachePath = CacheManager::getArtworkCachePath(artworkPath);
+  QString cachePath = CacheDiskStorage::artworkCachePath(artworkPath);
   if (QFile::exists(cachePath)) {
     QPixmap cachedPixmap(cachePath);
     if (!cachedPixmap.isNull()) {
@@ -281,7 +214,7 @@ auto CacheManager::getArtworkFromMemoryOnly(const QString &artworkPath) -> QPixm
         fileTimestamps[artworkPath] != fileInfo.lastModified().toMSecsSinceEpoch()) {
       // Cache invalidation - file changed on disk.
       // Note: This may touch the filesystem, but avoids large image reads.
-      const QString cachePath = CacheManager::getArtworkCachePath(artworkPath);
+      const QString cachePath = CacheDiskStorage::artworkCachePath(artworkPath);
       QFile::remove(cachePath);
       artworkCache.remove(artworkPath);
       fileTimestamps.remove(artworkPath);
@@ -327,13 +260,13 @@ auto CacheManager::tryLoadArtworkImageFromDiskCache(const QString &artworkPath) 
       ++m_metrics.invalidations;
 
       locker.unlock();
-      const QString cachePath = CacheManager::getArtworkCachePath(artworkPath);
+      const QString cachePath = CacheDiskStorage::artworkCachePath(artworkPath);
       QFile::remove(cachePath);
       return {};
     }
   }
 
-  const QString cachePath = CacheManager::getArtworkCachePath(artworkPath);
+  const QString cachePath = CacheDiskStorage::artworkCachePath(artworkPath);
   if (!QFile::exists(cachePath)) {
     QMutexLocker locker(&m_mutex);
     ++m_metrics.misses;
@@ -430,7 +363,7 @@ void CacheManager::clearCollectionCache(int collectionIndex) {
 
 // Computes total size of cache directory on disk
 auto CacheManager::getCacheSize() -> qint64 {
-  QDir cacheDir(getCacheDirectory());
+  QDir cacheDir(CacheDiskStorage::cacheDirectory());
   qint64 totalSize = 0;
   QDirIterator dirIt(cacheDir.absolutePath(), QDir::Files, QDirIterator::Subdirectories);
   while (dirIt.hasNext()) {
