@@ -204,6 +204,36 @@ target_link_libraries(test_emptystatewidget
 )
 add_test(NAME EmptyStateWidget COMMAND test_emptystatewidget)
 
+# CoverFlowWidget tests (selection clamping, gesture state transitions,
+# wheel/key/mouse → signal emission, gallery owner bookkeeping). Pulls in
+# VideoPreviewWidget + VideoThumbnailExtractor because the widget's ctor
+# constructs the preview child and connects to the extractor singleton —
+# those are linked but never asked to play, so the QtMultimedia backend is
+# not actually started during the test.
+add_executable(test_coverflowwidget
+  ui/widgets/test_coverflowwidget.cpp
+  ${SRC_DIR}/ui/widgets/items/coverflowwidget.cpp
+  ${SRC_DIR}/ui/widgets/media/videopreviewwidget.cpp
+  ${SRC_DIR}/ui/widgets/media/videothumbnailextractor.cpp
+)
+target_include_directories(test_coverflowwidget PRIVATE
+  ${SRC_DIR}/ui/widgets/items
+  ${SRC_DIR}/ui/widgets/media
+  ${SRC_DIR}/ui/widgets/overlays
+  ${SRC_DIR}/ui/widgets/panes
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_coverflowwidget
+  Qt6::Core
+  Qt6::Gui
+  Qt6::Widgets
+  Qt6::Concurrent
+  Qt6::Multimedia
+  Qt6::MultimediaWidgets
+  Qt6::Test
+)
+add_test(NAME CoverFlowWidget COMMAND test_coverflowwidget)
+
 # GridUtils tests
 add_executable(test_gridutils utils/test_gridutils.cpp)
 target_link_libraries(test_gridutils Qt6::Core Qt6::Gui Qt6::Test)
