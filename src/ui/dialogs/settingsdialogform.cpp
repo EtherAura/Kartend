@@ -29,6 +29,7 @@
 #include <set>
 
 #include "attractmanager.h"
+#include "attractpanel.h"
 #include "extensionutils.h"
 #include "fontspanel.h"
 #include "gamepadcapturecontroller.h"
@@ -373,19 +374,8 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   // from the same m_generalSettings so the form fields reflect the working
   // copy, not whatever the panel last cached).
   ui->fontsPanel->refresh();
-  SettingsFormBinding::loadInto(ui->attractModeCheckBox, m_generalSettings.attractModeEnabled);
-  SettingsFormBinding::loadInto(ui->attractIdleTimeoutSpinBox,
-                                m_generalSettings.attractModeIdleTimeoutSec);
-  SettingsFormBinding::loadInto(ui->attractAutoScrollCheckBox,
-                                m_generalSettings.attractModeAutoScrollEnabled);
-  SettingsFormBinding::loadInto(ui->attractScrollSpeedSpinBox,
-                                m_generalSettings.attractModeScrollSpeed);
-  SettingsFormBinding::loadInto(ui->attractAdvanceSelectionCheckBox,
-                                m_generalSettings.attractModeAdvanceSelectionEnabled);
-  SettingsFormBinding::loadInto(ui->attractAdvanceIntervalSpinBox,
-                                m_generalSettings.attractModeAdvanceSelectionIntervalSec);
-  SettingsFormBinding::loadInto(ui->attractAdvanceRandomCheckBox,
-                                m_generalSettings.attractModeAdvanceSelectionRandom);
+  // Attract-mode fields are owned by AttractPanel.
+  ui->attractPanel->refresh();
   if (ui->startupCollectionComboBox) {
     ui->startupCollectionComboBox->blockSignals(true);
     ui->startupCollectionComboBox->clear();
@@ -553,21 +543,20 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
                                   mainWindow->m_generalSettings.scrollAnimationDurationMs);
     SettingsFormBinding::saveFrom(ui->scrollVelocityMultiplierSpinBox,
                                   mainWindow->m_generalSettings.scrollVelocityMultiplier);
-    SettingsFormBinding::saveFrom(ui->attractModeCheckBox,
-                                  mainWindow->m_generalSettings.attractModeEnabled);
-    SettingsFormBinding::saveFrom(ui->attractIdleTimeoutSpinBox,
-                                  mainWindow->m_generalSettings.attractModeIdleTimeoutSec);
-    SettingsFormBinding::saveFrom(ui->attractAutoScrollCheckBox,
-                                  mainWindow->m_generalSettings.attractModeAutoScrollEnabled);
-    SettingsFormBinding::saveFrom(ui->attractScrollSpeedSpinBox,
-                                  mainWindow->m_generalSettings.attractModeScrollSpeed);
-    SettingsFormBinding::saveFrom(ui->attractAdvanceSelectionCheckBox,
-                                  mainWindow->m_generalSettings.attractModeAdvanceSelectionEnabled);
-    SettingsFormBinding::saveFrom(
-        ui->attractAdvanceIntervalSpinBox,
-        mainWindow->m_generalSettings.attractModeAdvanceSelectionIntervalSec);
-    SettingsFormBinding::saveFrom(ui->attractAdvanceRandomCheckBox,
-                                  mainWindow->m_generalSettings.attractModeAdvanceSelectionRandom);
+    // Attract-mode fields owned by AttractPanel — already in
+    // m_generalSettings (the panel's settings pointer); copy to mainWindow.
+    mainWindow->m_generalSettings.attractModeEnabled = m_generalSettings.attractModeEnabled;
+    mainWindow->m_generalSettings.attractModeIdleTimeoutSec =
+        m_generalSettings.attractModeIdleTimeoutSec;
+    mainWindow->m_generalSettings.attractModeAutoScrollEnabled =
+        m_generalSettings.attractModeAutoScrollEnabled;
+    mainWindow->m_generalSettings.attractModeScrollSpeed = m_generalSettings.attractModeScrollSpeed;
+    mainWindow->m_generalSettings.attractModeAdvanceSelectionEnabled =
+        m_generalSettings.attractModeAdvanceSelectionEnabled;
+    mainWindow->m_generalSettings.attractModeAdvanceSelectionIntervalSec =
+        m_generalSettings.attractModeAdvanceSelectionIntervalSec;
+    mainWindow->m_generalSettings.attractModeAdvanceSelectionRandom =
+        m_generalSettings.attractModeAdvanceSelectionRandom;
     if (ui->titleSaturationSpinBox) {
       mainWindow->m_generalSettings.titleTintSaturation = ui->titleSaturationSpinBox->value();
       // Apply to ItemWidget static settings

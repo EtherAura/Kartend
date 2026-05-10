@@ -23,6 +23,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "attractpanel.h"
 #include "collectionremover.h"
 #include "collectiontreewidget.h"
 #include "extensionutils.h"
@@ -105,6 +106,12 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
     mainWindow->m_generalSettings = m_generalSettings;
     mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
   });
+
+  // Attract-mode panel: deferred-save — panel keeps m_generalSettings live;
+  // checkForChanges drives the Save button state and persistence happens in
+  // saveGeneralSettingsFromUI like the other deferred general fields.
+  ui->attractPanel->setSettings(&m_generalSettings);
+  connect(ui->attractPanel, &AttractPanel::changed, this, &SettingsDialog::checkForChanges);
 
   collectionTreeWidget = ui->collectionTreeWidget;
 

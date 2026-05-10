@@ -605,35 +605,20 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
       ui->baseColorEdit->text().trimmed() != m_originalGeneralSettings.titleBaseColor) {
     return true;
   }
-  // Check attract mode settings
-  if (ui->attractModeCheckBox &&
-      ui->attractModeCheckBox->isChecked() != m_originalGeneralSettings.attractModeEnabled) {
-    return true;
-  }
-  if (ui->attractIdleTimeoutSpinBox && ui->attractIdleTimeoutSpinBox->value() !=
-                                           m_originalGeneralSettings.attractModeIdleTimeoutSec) {
-    return true;
-  }
-  if (ui->attractAutoScrollCheckBox && ui->attractAutoScrollCheckBox->isChecked() !=
-                                           m_originalGeneralSettings.attractModeAutoScrollEnabled) {
-    return true;
-  }
-  if (ui->attractScrollSpeedSpinBox &&
-      ui->attractScrollSpeedSpinBox->value() != m_originalGeneralSettings.attractModeScrollSpeed) {
-    return true;
-  }
-  if (ui->attractAdvanceSelectionCheckBox &&
-      ui->attractAdvanceSelectionCheckBox->isChecked() !=
-          m_originalGeneralSettings.attractModeAdvanceSelectionEnabled) {
-    return true;
-  }
-  if (ui->attractAdvanceIntervalSpinBox &&
-      ui->attractAdvanceIntervalSpinBox->value() !=
-          m_originalGeneralSettings.attractModeAdvanceSelectionIntervalSec) {
-    return true;
-  }
-  if (ui->attractAdvanceRandomCheckBox &&
-      ui->attractAdvanceRandomCheckBox->isChecked() !=
+  // Attract-mode fields owned by AttractPanel — struct compare against the
+  // original snapshot since the panel keeps m_generalSettings live.
+  if (m_generalSettings.attractModeEnabled != m_originalGeneralSettings.attractModeEnabled ||
+      m_generalSettings.attractModeIdleTimeoutSec !=
+          m_originalGeneralSettings.attractModeIdleTimeoutSec ||
+      m_generalSettings.attractModeAutoScrollEnabled !=
+          m_originalGeneralSettings.attractModeAutoScrollEnabled ||
+      m_generalSettings.attractModeScrollSpeed !=
+          m_originalGeneralSettings.attractModeScrollSpeed ||
+      m_generalSettings.attractModeAdvanceSelectionEnabled !=
+          m_originalGeneralSettings.attractModeAdvanceSelectionEnabled ||
+      m_generalSettings.attractModeAdvanceSelectionIntervalSec !=
+          m_originalGeneralSettings.attractModeAdvanceSelectionIntervalSec ||
+      m_generalSettings.attractModeAdvanceSelectionRandom !=
           m_originalGeneralSettings.attractModeAdvanceSelectionRandom) {
     return true;
   }

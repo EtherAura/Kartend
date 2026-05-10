@@ -488,33 +488,7 @@ void SettingsDialog::setupGeneralSettingsConnections() {
   }
 
   // Attract mode connections for change detection
-  if (ui->attractModeCheckBox) {
-    connect(ui->attractModeCheckBox, &QCheckBox::toggled, this, &SettingsDialog::checkForChanges);
-  }
-  if (ui->attractIdleTimeoutSpinBox) {
-    connect(ui->attractIdleTimeoutSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->attractScrollSpeedSpinBox) {
-    connect(ui->attractScrollSpeedSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, &SettingsDialog::checkForChanges);
-  }
-  if (ui->attractAutoScrollCheckBox) {
-    connect(ui->attractAutoScrollCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->attractAdvanceSelectionCheckBox) {
-    connect(ui->attractAdvanceSelectionCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->attractAdvanceIntervalSpinBox) {
-    connect(ui->attractAdvanceIntervalSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->attractAdvanceRandomCheckBox) {
-    connect(ui->attractAdvanceRandomCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
+  // Attract-mode connections owned by AttractPanel.
 
   // General settings spinbox connections for change detection
   if (ui->pixmapCacheSpinBox) {
