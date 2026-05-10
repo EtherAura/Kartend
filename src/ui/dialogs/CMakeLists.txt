@@ -8,6 +8,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   errordialog.cpp
   fontspanel.cpp
   gamepadcapturecontroller.cpp
+  generalsettingspanel.cpp
   itemartworklinksdialog.cpp
   kartmergedialog.cpp
   kartprogressdialog.cpp
@@ -38,6 +39,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   errordialog.h
   fontspanel.h
   gamepadcapturecontroller.h
+  generalsettingspanel.h
   itemartworklinksdialog.h
   kartmergedialog.h
   kartprogressdialog.h
@@ -53,6 +55,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   toolbarpanel.h
   attractpanel.ui
   fontspanel.ui
+  generalsettingspanel.ui
   launcherpresetspanel.ui
   settingsdialog.ui
   sidebarpanel.ui

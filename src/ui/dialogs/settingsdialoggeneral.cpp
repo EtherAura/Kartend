@@ -82,112 +82,15 @@ void populateImportConfigComboBox(QComboBox *combo) {
 } // namespace
 
 void SettingsDialog::setupGeneralSettingsConnections() {
-  connect(ui->rememberSelectionCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-    auto *mainWindow = qobject_cast<MainWindow *>(parent());
-    if ((mainWindow) && (mainWindow->getSettingsManager())) {
-      mainWindow->m_generalSettings.rememberSelection = checked;
-      mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
-      m_generalSettings = mainWindow->m_generalSettings;
-    }
-  });
-
-  connect(ui->wrapNavigationCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-    auto *mainWindow = qobject_cast<MainWindow *>(parent());
-    if ((mainWindow) && (mainWindow->getSettingsManager())) {
-      mainWindow->m_generalSettings.wrapNavigation = checked;
-      mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
-      m_generalSettings = mainWindow->m_generalSettings;
-    }
-  });
-
-  connect(ui->selectItemOnHoverCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-    auto *mainWindow = qobject_cast<MainWindow *>(parent());
-    if ((mainWindow) && (mainWindow->getSettingsManager())) {
-      mainWindow->m_generalSettings.selectItemOnHover = checked;
-      mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
-      m_generalSettings = mainWindow->m_generalSettings;
-    }
-  });
-
-  // title-in-placeholder toggle. Pushes the new value into the
-  // ItemWidget static immediately and asks every visible widget to re-render
-  // its placeholder so the change is visible without scrolling.
-  if (ui->showTitleInPlaceholderCheckBox) {
-    connect(ui->showTitleInPlaceholderCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-      auto *mainWindow = qobject_cast<MainWindow *>(parent());
-      if ((mainWindow) && (mainWindow->getSettingsManager())) {
-        mainWindow->m_generalSettings.showTitleInPlaceholder = checked;
-        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
-        m_generalSettings = mainWindow->m_generalSettings;
-        ItemWidget::setShowTitleInPlaceholder(checked);
-        ScrollManager *scrollManager = mainWindow->getScrollManager();
-        if (scrollManager) {
-          const auto &activeWidgets = scrollManager->getActiveWidgets();
-          for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd(); ++it) {
-            ItemWidget *widget = it.value();
-            if (widget) {
-              widget->onArtworkChanged();
-            }
-          }
-        }
-      }
-    });
-  }
-
-  // Splash live-save (boot + resume-focus enable / title / subtitle) lives in
-  // SplashPanel now; the panel emits changed() and SettingsDialog handles the
-  // mirror to mainWindow + saveGeneralSettings in its constructor.
-
-  if (ui->runtimeDetectionCheckBox) {
-    connect(ui->runtimeDetectionCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-      auto *mainWindow = qobject_cast<MainWindow *>(parent());
-      if ((mainWindow) && (mainWindow->getSettingsManager())) {
-        mainWindow->m_generalSettings.runtimeDetectionEnabled = checked;
-        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
-        m_generalSettings = mainWindow->m_generalSettings;
-      }
-    });
-  }
-
-  // launch-history settings save immediately, mirroring the
-  // other check/spinbox handlers above. Live save means the next launch
-  // picks up the new gate/cap without round-tripping through OK/Apply.
-  if (ui->historyEnabledCheckBox) {
-    connect(ui->historyEnabledCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-      auto *mainWindow = qobject_cast<MainWindow *>(parent());
-      if ((mainWindow) && (mainWindow->getSettingsManager())) {
-        mainWindow->m_generalSettings.historyEnabled = checked;
-        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
-        m_generalSettings = mainWindow->m_generalSettings;
-      }
-    });
-  }
-  if (ui->historyMaxEntriesSpinBox) {
-    connect(ui->historyMaxEntriesSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            [this](int value) {
-              auto *mainWindow = qobject_cast<MainWindow *>(parent());
-              if ((mainWindow) && (mainWindow->getSettingsManager())) {
-                mainWindow->m_generalSettings.historyMaxEntries = value;
-                mainWindow->getSettingsManager()->saveGeneralSettings(
-                    mainWindow->m_generalSettings);
-                m_generalSettings = mainWindow->m_generalSettings;
-              }
-            });
-  }
-
-  if (ui->startupCollectionComboBox) {
-    connect(ui->startupCollectionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, [this](int /*index*/) {
-              auto *mainWindow = qobject_cast<MainWindow *>(parent());
-              if ((mainWindow) && (mainWindow->getSettingsManager())) {
-                mainWindow->m_generalSettings.startupCollection =
-                    ui->startupCollectionComboBox->currentData().toString();
-                mainWindow->getSettingsManager()->saveGeneralSettings(
-                    mainWindow->m_generalSettings);
-                m_generalSettings = mainWindow->m_generalSettings;
-              }
-            });
-  }
+  // Selection & Display / Startup / Input & Scroll Timing / Performance &
+  // History live-save handlers all moved to GeneralSettingsPanel; the panel
+  // emits changed() and SettingsDialog mirrors + persists in its constructor
+  // wiring (see constructor's connect for ui->generalSettingsPanel).
+  //
+  // The previously live-applied showTitleInPlaceholder side-effect
+  // (ItemWidget::setShowTitleInPlaceholder + repaint of visible widgets) is
+  // now applied on Save only — consistent with the rest of the dialog's
+  // deferred-save fields.
 
   // Browse font button for per-collection custom font
   connect(ui->browseFontButton, &QPushButton::clicked, this, [this]() {
@@ -464,78 +367,8 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     connect(ui->artworkCycleModifierComboBox, &QComboBox::currentIndexChanged, this, markChanged);
   }
 
-  // +: startup video fields persisted in
-  // GeneralSettings — wire them so the save icon illuminates on edit, like
-  // every other settings field does.
-  if (ui->startupVideoEnabledCheckBox) {
-    connect(ui->startupVideoEnabledCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->startupVideoPathLineEdit) {
-    connect(ui->startupVideoPathLineEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->useHomeViewCheckBox) {
-    connect(ui->useHomeViewCheckBox, &QCheckBox::toggled, this, &SettingsDialog::checkForChanges);
-  }
-  if (ui->homeViewLabelLineEdit) {
-    connect(ui->homeViewLabelLineEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->homeViewIconLineEdit) {
-    connect(ui->homeViewIconLineEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
-  }
-
-  // Attract mode connections for change detection
-  // Attract-mode connections owned by AttractPanel.
-
-  // General settings spinbox connections for change detection
-  if (ui->pixmapCacheSpinBox) {
-    connect(ui->pixmapCacheSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->videoThumbnailTimeoutSpinBox) {
-    connect(ui->videoThumbnailTimeoutSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->keyboardSpeedSpinBox) {
-    connect(ui->keyboardSpeedSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->keyboardRepeatDelaySpinBox) {
-    connect(ui->keyboardRepeatDelaySpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->clickHoldDelaySpinBox) {
-    connect(ui->clickHoldDelaySpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->clickHoldRepeatIntervalSpinBox) {
-    connect(ui->clickHoldRepeatIntervalSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->listKeyboardRepeatSpinBox) {
-    connect(ui->listKeyboardRepeatSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->listClickHoldRepeatSpinBox) {
-    connect(ui->listClickHoldRepeatSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->mouseWheelSpeedSpinBox) {
-    connect(ui->mouseWheelSpeedSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->scrollAnimationSpeedSpinBox) {
-    connect(ui->scrollAnimationSpeedSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->scrollVelocityMultiplierSpinBox) {
-    connect(ui->scrollVelocityMultiplierSpinBox,
-            QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
+  // Startup video / home-view / selection-display / input-timing /
+  // performance-history connections all live in GeneralSettingsPanel now.
   if (ui->titleSaturationSpinBox) {
     connect(ui->titleSaturationSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &SettingsDialog::checkForChanges);

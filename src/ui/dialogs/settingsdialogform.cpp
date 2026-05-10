@@ -333,66 +333,27 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   if (mainWindow) {
     m_generalSettings = mainWindow->m_generalSettings;
   }
-  SettingsFormBinding::loadInto(ui->rememberSelectionCheckBox, m_generalSettings.rememberSelection);
-  SettingsFormBinding::loadInto(ui->wrapNavigationCheckBox, m_generalSettings.wrapNavigation);
-  SettingsFormBinding::loadInto(ui->selectItemOnHoverCheckBox, m_generalSettings.selectItemOnHover);
-  SettingsFormBinding::loadInto(ui->showTitleInPlaceholderCheckBox,
-                                m_generalSettings.showTitleInPlaceholder);
-  // Splash boot/resume fields are owned by SplashPanel; re-hydrate it from
-  // the same m_generalSettings working copy.
+  // Splash / Fonts / Attract / general "General" sub-tab fields are all
+  // owned by their respective panels — refresh them from the working copy.
   ui->splashPanel->refresh();
-  // startup video
-  SettingsFormBinding::loadInto(ui->startupVideoEnabledCheckBox,
-                                m_generalSettings.startupVideoEnabled);
-  SettingsFormBinding::loadInto(ui->startupVideoPathLineEdit, m_generalSettings.startupVideoPath);
-  SettingsFormBinding::loadInto(ui->runtimeDetectionCheckBox,
-                                m_generalSettings.runtimeDetectionEnabled);
-  SettingsFormBinding::loadInto(ui->historyEnabledCheckBox, m_generalSettings.historyEnabled);
-  SettingsFormBinding::loadInto(ui->historyMaxEntriesSpinBox, m_generalSettings.historyMaxEntries);
-  SettingsFormBinding::loadInto(ui->pixmapCacheSpinBox, m_generalSettings.pixmapCacheSizeMB);
-  SettingsFormBinding::loadInto(ui->videoThumbnailTimeoutSpinBox,
-                                m_generalSettings.videoThumbnailExtractionTimeoutMs);
-  SettingsFormBinding::loadInto(ui->keyboardSpeedSpinBox,
-                                m_generalSettings.keyboardRepeatIntervalMs);
-  SettingsFormBinding::loadInto(ui->keyboardRepeatDelaySpinBox,
-                                m_generalSettings.keyboardRepeatDelayMs);
-  SettingsFormBinding::loadInto(ui->clickHoldDelaySpinBox, m_generalSettings.clickHoldDelayMs);
-  SettingsFormBinding::loadInto(ui->clickHoldRepeatIntervalSpinBox,
-                                m_generalSettings.clickHoldRepeatIntervalMs);
-  SettingsFormBinding::loadInto(ui->listKeyboardRepeatSpinBox,
-                                m_generalSettings.listKeyboardRepeatIntervalMs);
-  SettingsFormBinding::loadInto(ui->listClickHoldRepeatSpinBox,
-                                m_generalSettings.listClickHoldRepeatIntervalMs);
-  SettingsFormBinding::loadInto(ui->mouseWheelSpeedSpinBox, m_generalSettings.mouseWheelRows);
-  SettingsFormBinding::loadInto(ui->scrollAnimationSpeedSpinBox,
-                                m_generalSettings.scrollAnimationDurationMs);
-  SettingsFormBinding::loadInto(ui->scrollVelocityMultiplierSpinBox,
-                                m_generalSettings.scrollVelocityMultiplier);
+  ui->fontsPanel->refresh();
+  ui->attractPanel->refresh();
+  ui->generalSettingsPanel->refresh();
+  // Title-tint fields physically live in the per-collection appearance tab
+  // even though they edit GeneralSettings; keep loading them inline.
   SettingsFormBinding::loadInto(ui->titleSaturationSpinBox, m_generalSettings.titleTintSaturation);
   SettingsFormBinding::loadInto(ui->titleLightnessSpinBox, m_generalSettings.titleTintLightness);
   SettingsFormBinding::loadInto(ui->baseColorEdit, m_generalSettings.titleBaseColor);
-  // Global application-font fields are owned by FontsPanel (re-hydrate it
-  // from the same m_generalSettings so the form fields reflect the working
-  // copy, not whatever the panel last cached).
-  ui->fontsPanel->refresh();
-  // Attract-mode fields are owned by AttractPanel.
-  ui->attractPanel->refresh();
-  if (ui->startupCollectionComboBox) {
-    ui->startupCollectionComboBox->blockSignals(true);
-    ui->startupCollectionComboBox->clear();
-    ui->startupCollectionComboBox->addItem(tr("(Default)"), QString());
-    if (mainWindow) {
-      for (const CollectionConfig &cfg : std::as_const(mainWindow->m_collections)) {
-        ui->startupCollectionComboBox->addItem(cfg.name, cfg.name);
-      }
+  // Populate the panel's startup-collection combo with the live collection
+  // names so the user can pick one.
+  if (mainWindow) {
+    QStringList names;
+    names.reserve(mainWindow->m_collections.size());
+    for (const CollectionConfig &cfg : std::as_const(mainWindow->m_collections)) {
+      names.append(cfg.name);
     }
-    int idx = ui->startupCollectionComboBox->findData(m_generalSettings.startupCollection);
-    ui->startupCollectionComboBox->setCurrentIndex(idx >= 0 ? idx : 0);
-    ui->startupCollectionComboBox->blockSignals(false);
+    ui->generalSettingsPanel->setStartupCollections(names, m_generalSettings.startupCollection);
   }
-  SettingsFormBinding::loadInto(ui->useHomeViewCheckBox, m_generalSettings.useHomeView);
-  SettingsFormBinding::loadInto(ui->homeViewLabelLineEdit, m_generalSettings.homeViewLabel);
-  SettingsFormBinding::loadInto(ui->homeViewIconLineEdit, m_generalSettings.homeViewIcon);
   // Note: customFontEdit is now loaded per-collection in loadCollectionFields()
 
   auto setKeyEdit = [](QKeySequenceEdit *edit, int key) {
@@ -459,19 +420,11 @@ void SettingsDialog::loadGeneralSettingsToUI() {
 void SettingsDialog::saveGeneralSettingsFromUI() {
   auto *mainWindow = qobject_cast<MainWindow *>(parent());
   if ((mainWindow) && (mainWindow->getSettingsManager())) {
-    SettingsFormBinding::saveFrom(ui->rememberSelectionCheckBox,
-                                  mainWindow->m_generalSettings.rememberSelection);
-    SettingsFormBinding::saveFrom(ui->wrapNavigationCheckBox,
-                                  mainWindow->m_generalSettings.wrapNavigation);
-    SettingsFormBinding::saveFrom(ui->selectItemOnHoverCheckBox,
-                                  mainWindow->m_generalSettings.selectItemOnHover);
-    // Splash fields owned by SplashPanel — already kept in sync with
-    // m_generalSettings; the dialog→mainWindow mirror below picks them up.
-    // startup video
-    SettingsFormBinding::saveFrom(ui->startupVideoEnabledCheckBox,
-                                  mainWindow->m_generalSettings.startupVideoEnabled);
-    SettingsFormBinding::saveFrom(ui->startupVideoPathLineEdit,
-                                  mainWindow->m_generalSettings.startupVideoPath);
+    // Splash / GeneralSettings fields owned by their respective panels —
+    // already in m_generalSettings; mirror the whole struct's relevant
+    // fields to mainWindow below. Side-effect application (PixmapCache /
+    // VideoThumbnailExtractor) still runs here so the change is visible
+    // while the dialog is open.
     mainWindow->m_generalSettings.bootSplashEnabled = m_generalSettings.bootSplashEnabled;
     mainWindow->m_generalSettings.resumeFocusSplashEnabled =
         m_generalSettings.resumeFocusSplashEnabled;
@@ -480,35 +433,46 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     mainWindow->m_generalSettings.resumeFocusSplashTitle = m_generalSettings.resumeFocusSplashTitle;
     mainWindow->m_generalSettings.resumeFocusSplashSubtitle =
         m_generalSettings.resumeFocusSplashSubtitle;
-    if (ui->pixmapCacheSpinBox) {
-      int newCacheSize = ui->pixmapCacheSpinBox->value();
-      mainWindow->m_generalSettings.pixmapCacheSizeMB = newCacheSize;
-      // Apply immediately (in KB)
-      QPixmapCache::setCacheLimit(newCacheSize * 1024);
-    }
-    if (ui->videoThumbnailTimeoutSpinBox) {
-      int newTimeout = ui->videoThumbnailTimeoutSpinBox->value();
-      mainWindow->m_generalSettings.videoThumbnailExtractionTimeoutMs = newTimeout;
-      VideoThumbnailExtractor::instance()->setExtractionTimeoutMs(newTimeout);
-    }
-    SettingsFormBinding::saveFrom(ui->keyboardSpeedSpinBox,
-                                  mainWindow->m_generalSettings.keyboardRepeatIntervalMs);
-    SettingsFormBinding::saveFrom(ui->keyboardRepeatDelaySpinBox,
-                                  mainWindow->m_generalSettings.keyboardRepeatDelayMs);
-    SettingsFormBinding::saveFrom(ui->clickHoldDelaySpinBox,
-                                  mainWindow->m_generalSettings.clickHoldDelayMs);
-    SettingsFormBinding::saveFrom(ui->clickHoldRepeatIntervalSpinBox,
-                                  mainWindow->m_generalSettings.clickHoldRepeatIntervalMs);
-    SettingsFormBinding::saveFrom(ui->listKeyboardRepeatSpinBox,
-                                  mainWindow->m_generalSettings.listKeyboardRepeatIntervalMs);
-    SettingsFormBinding::saveFrom(ui->listClickHoldRepeatSpinBox,
-                                  mainWindow->m_generalSettings.listClickHoldRepeatIntervalMs);
-    SettingsFormBinding::saveFrom(ui->mouseWheelSpeedSpinBox,
-                                  mainWindow->m_generalSettings.mouseWheelRows);
-    SettingsFormBinding::saveFrom(ui->scrollAnimationSpeedSpinBox,
-                                  mainWindow->m_generalSettings.scrollAnimationDurationMs);
-    SettingsFormBinding::saveFrom(ui->scrollVelocityMultiplierSpinBox,
-                                  mainWindow->m_generalSettings.scrollVelocityMultiplier);
+
+    // Startup
+    mainWindow->m_generalSettings.startupCollection = m_generalSettings.startupCollection;
+    mainWindow->m_generalSettings.useHomeView = m_generalSettings.useHomeView;
+    mainWindow->m_generalSettings.homeViewLabel = m_generalSettings.homeViewLabel;
+    mainWindow->m_generalSettings.homeViewIcon = m_generalSettings.homeViewIcon;
+    mainWindow->m_generalSettings.startupVideoEnabled = m_generalSettings.startupVideoEnabled;
+    mainWindow->m_generalSettings.startupVideoPath = m_generalSettings.startupVideoPath;
+    // Selection & Display
+    mainWindow->m_generalSettings.rememberSelection = m_generalSettings.rememberSelection;
+    mainWindow->m_generalSettings.wrapNavigation = m_generalSettings.wrapNavigation;
+    mainWindow->m_generalSettings.selectItemOnHover = m_generalSettings.selectItemOnHover;
+    mainWindow->m_generalSettings.showTitleInPlaceholder = m_generalSettings.showTitleInPlaceholder;
+    // Input & Scroll Timing
+    mainWindow->m_generalSettings.mouseWheelRows = m_generalSettings.mouseWheelRows;
+    mainWindow->m_generalSettings.scrollVelocityMultiplier =
+        m_generalSettings.scrollVelocityMultiplier;
+    mainWindow->m_generalSettings.scrollAnimationDurationMs =
+        m_generalSettings.scrollAnimationDurationMs;
+    mainWindow->m_generalSettings.clickHoldDelayMs = m_generalSettings.clickHoldDelayMs;
+    mainWindow->m_generalSettings.clickHoldRepeatIntervalMs =
+        m_generalSettings.clickHoldRepeatIntervalMs;
+    mainWindow->m_generalSettings.listClickHoldRepeatIntervalMs =
+        m_generalSettings.listClickHoldRepeatIntervalMs;
+    mainWindow->m_generalSettings.keyboardRepeatIntervalMs =
+        m_generalSettings.keyboardRepeatIntervalMs;
+    mainWindow->m_generalSettings.keyboardRepeatDelayMs = m_generalSettings.keyboardRepeatDelayMs;
+    mainWindow->m_generalSettings.listKeyboardRepeatIntervalMs =
+        m_generalSettings.listKeyboardRepeatIntervalMs;
+    // Performance & History (with live-apply side effects)
+    mainWindow->m_generalSettings.pixmapCacheSizeMB = m_generalSettings.pixmapCacheSizeMB;
+    QPixmapCache::setCacheLimit(m_generalSettings.pixmapCacheSizeMB * 1024);
+    mainWindow->m_generalSettings.runtimeDetectionEnabled =
+        m_generalSettings.runtimeDetectionEnabled;
+    mainWindow->m_generalSettings.historyEnabled = m_generalSettings.historyEnabled;
+    mainWindow->m_generalSettings.historyMaxEntries = m_generalSettings.historyMaxEntries;
+    mainWindow->m_generalSettings.videoThumbnailExtractionTimeoutMs =
+        m_generalSettings.videoThumbnailExtractionTimeoutMs;
+    VideoThumbnailExtractor::instance()->setExtractionTimeoutMs(
+        m_generalSettings.videoThumbnailExtractionTimeoutMs);
     // Attract-mode fields owned by AttractPanel — already in
     // m_generalSettings (the panel's settings pointer); copy to mainWindow.
     mainWindow->m_generalSettings.attractModeEnabled = m_generalSettings.attractModeEnabled;
@@ -537,19 +501,6 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
       mainWindow->m_generalSettings.titleBaseColor = ui->baseColorEdit->text().trimmed();
       // Apply to ItemWidget static settings
       ItemWidget::setTitleBaseColor(ui->baseColorEdit->text().trimmed());
-    }
-    if (ui->startupCollectionComboBox) {
-      mainWindow->m_generalSettings.startupCollection =
-          ui->startupCollectionComboBox->currentData().toString();
-    }
-    if (ui->useHomeViewCheckBox) {
-      mainWindow->m_generalSettings.useHomeView = ui->useHomeViewCheckBox->isChecked();
-    }
-    if (ui->homeViewLabelLineEdit) {
-      mainWindow->m_generalSettings.homeViewLabel = ui->homeViewLabelLineEdit->text().trimmed();
-    }
-    if (ui->homeViewIconLineEdit) {
-      mainWindow->m_generalSettings.homeViewIcon = ui->homeViewIconLineEdit->text().trimmed();
     }
     // Note: customFontFamily is now saved per-collection, not in general
     // settings
@@ -658,6 +609,19 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
 
     mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
     m_generalSettings = mainWindow->m_generalSettings;
+
+    // Apply showTitleInPlaceholder to ItemWidget + repaint visible widgets,
+    // since this used to be a live-apply side-effect and the panel pattern
+    // makes the field deferred-save.
+    ItemWidget::setShowTitleInPlaceholder(m_generalSettings.showTitleInPlaceholder);
+    if (auto *scrollManager = mainWindow->getScrollManager()) {
+      const auto &activeWidgets = scrollManager->getActiveWidgets();
+      for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd(); ++it) {
+        if (auto *widget = it.value()) {
+          widget->onArtworkChanged();
+        }
+      }
+    }
 
     // Push the new attract-mode tunables (idle timeout, scroll speed, advance-
     // selection toggle/interval) into AttractManager so a runtime change applies

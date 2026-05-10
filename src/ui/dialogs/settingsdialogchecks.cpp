@@ -489,16 +489,12 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
   if (m_generalSettings.launcherPresets != m_originalGeneralSettings.launcherPresets) {
     return true;
   }
-  if (ui->rememberSelectionCheckBox &&
-      ui->rememberSelectionCheckBox->isChecked() != m_originalGeneralSettings.rememberSelection) {
-    return true;
-  }
-  if (ui->wrapNavigationCheckBox &&
-      ui->wrapNavigationCheckBox->isChecked() != m_originalGeneralSettings.wrapNavigation) {
-    return true;
-  }
-  if (ui->selectItemOnHoverCheckBox &&
-      ui->selectItemOnHoverCheckBox->isChecked() != m_originalGeneralSettings.selectItemOnHover) {
+  // GeneralSettingsPanel-owned fields (Selection & Display) — struct compare.
+  if (m_generalSettings.rememberSelection != m_originalGeneralSettings.rememberSelection ||
+      m_generalSettings.wrapNavigation != m_originalGeneralSettings.wrapNavigation ||
+      m_generalSettings.selectItemOnHover != m_originalGeneralSettings.selectItemOnHover ||
+      m_generalSettings.showTitleInPlaceholder !=
+          m_originalGeneralSettings.showTitleInPlaceholder) {
     return true;
   }
   // Splash fields live on SplashPanel, which keeps m_generalSettings live-
@@ -518,77 +514,33 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
           m_originalGeneralSettings.resumeFocusSplashSubtitle.trimmed()) {
     return true;
   }
-  // +: startup video fields participate in the
-  // dirty-check comparison so the save button reflects unsaved edits.
-  if (ui->startupVideoEnabledCheckBox && ui->startupVideoEnabledCheckBox->isChecked() !=
-                                             m_originalGeneralSettings.startupVideoEnabled) {
-    return true;
-  }
-  if (ui->startupVideoPathLineEdit && ui->startupVideoPathLineEdit->text().trimmed() !=
-                                          m_originalGeneralSettings.startupVideoPath.trimmed()) {
-    return true;
-  }
-  if (ui->runtimeDetectionCheckBox && ui->runtimeDetectionCheckBox->isChecked() !=
-                                          m_originalGeneralSettings.runtimeDetectionEnabled) {
-    return true;
-  }
-  if (ui->historyEnabledCheckBox &&
-      ui->historyEnabledCheckBox->isChecked() != m_originalGeneralSettings.historyEnabled) {
-    return true;
-  }
-  if (ui->historyMaxEntriesSpinBox &&
-      ui->historyMaxEntriesSpinBox->value() != m_originalGeneralSettings.historyMaxEntries) {
-    return true;
-  }
-  if (ui->startupCollectionComboBox && ui->startupCollectionComboBox->currentData().toString() !=
-                                           m_originalGeneralSettings.startupCollection) {
-    return true;
-  }
-  if (ui->pixmapCacheSpinBox &&
-      ui->pixmapCacheSpinBox->value() != m_originalGeneralSettings.pixmapCacheSizeMB) {
-    return true;
-  }
-  if (ui->videoThumbnailTimeoutSpinBox &&
-      ui->videoThumbnailTimeoutSpinBox->value() !=
-          m_originalGeneralSettings.videoThumbnailExtractionTimeoutMs) {
-    return true;
-  }
-  if (ui->keyboardSpeedSpinBox &&
-      ui->keyboardSpeedSpinBox->value() != m_originalGeneralSettings.keyboardRepeatIntervalMs) {
-    return true;
-  }
-  if (ui->keyboardRepeatDelaySpinBox &&
-      ui->keyboardRepeatDelaySpinBox->value() != m_originalGeneralSettings.keyboardRepeatDelayMs) {
-    return true;
-  }
-  if (ui->mouseWheelSpeedSpinBox &&
-      ui->mouseWheelSpeedSpinBox->value() != m_originalGeneralSettings.mouseWheelRows) {
-    return true;
-  }
-  if (ui->scrollAnimationSpeedSpinBox && ui->scrollAnimationSpeedSpinBox->value() !=
-                                             m_originalGeneralSettings.scrollAnimationDurationMs) {
-    return true;
-  }
-  if (ui->scrollVelocityMultiplierSpinBox &&
-      ui->scrollVelocityMultiplierSpinBox->value() !=
-          m_originalGeneralSettings.scrollVelocityMultiplier) {
-    return true;
-  }
-  if (ui->clickHoldDelaySpinBox &&
-      ui->clickHoldDelaySpinBox->value() != m_originalGeneralSettings.clickHoldDelayMs) {
-    return true;
-  }
-  if (ui->clickHoldRepeatIntervalSpinBox &&
-      ui->clickHoldRepeatIntervalSpinBox->value() !=
-          m_originalGeneralSettings.clickHoldRepeatIntervalMs) {
-    return true;
-  }
-  if (ui->listKeyboardRepeatSpinBox && ui->listKeyboardRepeatSpinBox->value() !=
-                                           m_originalGeneralSettings.listKeyboardRepeatIntervalMs) {
-    return true;
-  }
-  if (ui->listClickHoldRepeatSpinBox &&
-      ui->listClickHoldRepeatSpinBox->value() !=
+  // GeneralSettingsPanel-owned fields (Startup, Input Timing, Performance &
+  // History) — struct compare against the original snapshot.
+  if (m_generalSettings.startupVideoEnabled != m_originalGeneralSettings.startupVideoEnabled ||
+      m_generalSettings.startupVideoPath.trimmed() !=
+          m_originalGeneralSettings.startupVideoPath.trimmed() ||
+      m_generalSettings.startupCollection != m_originalGeneralSettings.startupCollection ||
+      m_generalSettings.runtimeDetectionEnabled !=
+          m_originalGeneralSettings.runtimeDetectionEnabled ||
+      m_generalSettings.historyEnabled != m_originalGeneralSettings.historyEnabled ||
+      m_generalSettings.historyMaxEntries != m_originalGeneralSettings.historyMaxEntries ||
+      m_generalSettings.pixmapCacheSizeMB != m_originalGeneralSettings.pixmapCacheSizeMB ||
+      m_generalSettings.videoThumbnailExtractionTimeoutMs !=
+          m_originalGeneralSettings.videoThumbnailExtractionTimeoutMs ||
+      m_generalSettings.keyboardRepeatIntervalMs !=
+          m_originalGeneralSettings.keyboardRepeatIntervalMs ||
+      m_generalSettings.keyboardRepeatDelayMs != m_originalGeneralSettings.keyboardRepeatDelayMs ||
+      m_generalSettings.mouseWheelRows != m_originalGeneralSettings.mouseWheelRows ||
+      m_generalSettings.scrollAnimationDurationMs !=
+          m_originalGeneralSettings.scrollAnimationDurationMs ||
+      m_generalSettings.scrollVelocityMultiplier !=
+          m_originalGeneralSettings.scrollVelocityMultiplier ||
+      m_generalSettings.clickHoldDelayMs != m_originalGeneralSettings.clickHoldDelayMs ||
+      m_generalSettings.clickHoldRepeatIntervalMs !=
+          m_originalGeneralSettings.clickHoldRepeatIntervalMs ||
+      m_generalSettings.listKeyboardRepeatIntervalMs !=
+          m_originalGeneralSettings.listKeyboardRepeatIntervalMs ||
+      m_generalSettings.listClickHoldRepeatIntervalMs !=
           m_originalGeneralSettings.listClickHoldRepeatIntervalMs) {
     return true;
   }
@@ -658,16 +610,11 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
                                               m_originalGeneralSettings.artworkCycleModifier) {
     return true;
   }
-  if (ui->useHomeViewCheckBox &&
-      ui->useHomeViewCheckBox->isChecked() != m_originalGeneralSettings.useHomeView) {
-    return true;
-  }
-  if (ui->homeViewLabelLineEdit && ui->homeViewLabelLineEdit->text().trimmed() !=
-                                       m_originalGeneralSettings.homeViewLabel.trimmed()) {
-    return true;
-  }
-  if (ui->homeViewIconLineEdit && ui->homeViewIconLineEdit->text().trimmed() !=
-                                      m_originalGeneralSettings.homeViewIcon.trimmed()) {
+  if (m_generalSettings.useHomeView != m_originalGeneralSettings.useHomeView ||
+      m_generalSettings.homeViewLabel.trimmed() !=
+          m_originalGeneralSettings.homeViewLabel.trimmed() ||
+      m_generalSettings.homeViewIcon.trimmed() !=
+          m_originalGeneralSettings.homeViewIcon.trimmed()) {
     return true;
   }
   return false;

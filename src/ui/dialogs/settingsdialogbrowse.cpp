@@ -97,24 +97,6 @@ void SettingsDialog::browsePlaceholderArtwork() {
   }
 }
 
-void SettingsDialog::browseStartupVideo() {
-  QString fileName = QFileDialog::getOpenFileName(
-      this, tr("Select Startup Video"), "",
-      tr("Video Files (*.mp4 *.webm *.mkv *.mov *.avi);;All Files (*)"));
-  if (!fileName.isEmpty() && ui->startupVideoPathLineEdit) {
-    ui->startupVideoPathLineEdit->setText(fileName);
-  }
-}
-
-void SettingsDialog::browseHomeViewIcon() {
-  QString fileName = QFileDialog::getOpenFileName(
-      this, tr("Select Home View Icon"), "",
-      tr("Image Files (*.png *.svg *.jpg *.jpeg *.bmp *.gif *.webp);;All Files (*)"));
-  if (!fileName.isEmpty() && ui->homeViewIconLineEdit) {
-    ui->homeViewIconLineEdit->setText(fileName);
-  }
-}
-
 void SettingsDialog::onRecursiveImportContent() {
   if (!ui->mediaDirLineEdit) {
     return;

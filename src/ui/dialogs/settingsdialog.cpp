@@ -30,6 +30,7 @@
 #include "fontspanel.h"
 #include "gamepadcapturecontroller.h"
 #include "gamepadmanager.h"
+#include "generalsettingspanel.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
 #include "launcherpresetspanel.h"
@@ -118,6 +119,14 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // deferred-save shape as AttractPanel.
   ui->toolbarPanel->setSettings(&m_generalSettings);
   connect(ui->toolbarPanel, &ToolbarPanel::changed, this, &SettingsDialog::checkForChanges);
+
+  // General settings panel (startup / selection / input timing / performance
+  // & history): deferred-save like AttractPanel/ToolbarPanel. The startup-
+  // collection combo is populated from the loaded collections inside
+  // loadGeneralSettingsToUI.
+  ui->generalSettingsPanel->setSettings(&m_generalSettings);
+  connect(ui->generalSettingsPanel, &GeneralSettingsPanel::changed, this,
+          &SettingsDialog::checkForChanges);
 
   collectionTreeWidget = ui->collectionTreeWidget;
 
@@ -291,14 +300,8 @@ void SettingsDialog::setupButtonConnections() {
     connect(ui->browsePlaceholderArtworkButton, &QPushButton::clicked, this,
             &SettingsDialog::browsePlaceholderArtwork);
   }
-  if (ui->browseStartupVideoButton) {
-    connect(ui->browseStartupVideoButton, &QPushButton::clicked, this,
-            &SettingsDialog::browseStartupVideo);
-  }
-  if (ui->browseHomeViewIconButton) {
-    connect(ui->browseHomeViewIconButton, &QPushButton::clicked, this,
-            &SettingsDialog::browseHomeViewIcon);
-  }
+  // browseStartupVideoButton + browseHomeViewIconButton handlers live in
+  // GeneralSettingsPanel now.
   if (ui->recursiveImportContentButton) {
     connect(ui->recursiveImportContentButton, &QPushButton::clicked, this,
             &SettingsDialog::onRecursiveImportContent);
