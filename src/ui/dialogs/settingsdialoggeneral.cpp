@@ -134,53 +134,9 @@ void SettingsDialog::setupGeneralSettingsConnections() {
     });
   }
 
-  if (ui->bootSplashCheckBox) {
-    connect(ui->bootSplashCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-      auto *mainWindow = qobject_cast<MainWindow *>(parent());
-      if ((mainWindow) && (mainWindow->getSettingsManager())) {
-        mainWindow->m_generalSettings.bootSplashEnabled = checked;
-        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
-        m_generalSettings = mainWindow->m_generalSettings;
-      }
-    });
-  }
-
-  if (ui->resumeFocusSplashCheckBox) {
-    connect(ui->resumeFocusSplashCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-      auto *mainWindow = qobject_cast<MainWindow *>(parent());
-      if ((mainWindow) && (mainWindow->getSettingsManager())) {
-        mainWindow->m_generalSettings.resumeFocusSplashEnabled = checked;
-        mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
-        m_generalSettings = mainWindow->m_generalSettings;
-      }
-    });
-  }
-
-  // Splash text overrides: persist on focus-out so partial typing doesn't
-  // hammer the config file or trigger a dirty save mid-edit.
-  auto wireSplashTextEdit = [this](QLineEdit *edit, QString GeneralSettings::*field) {
-    if (!edit) {
-      return;
-    }
-    connect(edit, &QLineEdit::editingFinished, this, [this, edit, field]() {
-      auto *mainWindow = qobject_cast<MainWindow *>(parent());
-      if (!mainWindow || !mainWindow->getSettingsManager()) {
-        return;
-      }
-      const QString value = edit->text().trimmed();
-      if (mainWindow->m_generalSettings.*field == value) {
-        return;
-      }
-      mainWindow->m_generalSettings.*field = value;
-      mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
-      m_generalSettings = mainWindow->m_generalSettings;
-    });
-  };
-  wireSplashTextEdit(ui->bootSplashTitleLineEdit, &GeneralSettings::bootSplashTitle);
-  wireSplashTextEdit(ui->bootSplashSubtitleLineEdit, &GeneralSettings::bootSplashSubtitle);
-  wireSplashTextEdit(ui->resumeFocusSplashTitleLineEdit, &GeneralSettings::resumeFocusSplashTitle);
-  wireSplashTextEdit(ui->resumeFocusSplashSubtitleLineEdit,
-                     &GeneralSettings::resumeFocusSplashSubtitle);
+  // Splash live-save (boot + resume-focus enable / title / subtitle) lives in
+  // SplashPanel now; the panel emits changed() and SettingsDialog handles the
+  // mirror to mainWindow + saveGeneralSettings in its constructor.
 
   if (ui->runtimeDetectionCheckBox) {
     connect(ui->runtimeDetectionCheckBox, &QCheckBox::toggled, this, [this](bool checked) {

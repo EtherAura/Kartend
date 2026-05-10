@@ -25,6 +25,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   settingsdialogtree.cpp
   shortcutsdialog.cpp
   sidebarpanel.cpp
+  splashpanel.cpp
   statisticsdialog.cpp
   applysettingsdialog.h
   collectionpickerdialog.h
@@ -44,9 +45,11 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   settingsformbinding.h
   shortcutsdialog.h
   sidebarpanel.h
+  splashpanel.h
   statisticsdialog.h
   fontspanel.ui
   launcherpresetspanel.ui
   settingsdialog.ui
   sidebarpanel.ui
+  splashpanel.ui
 )

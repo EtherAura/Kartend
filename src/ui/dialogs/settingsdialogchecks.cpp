@@ -501,8 +501,21 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
       ui->selectItemOnHoverCheckBox->isChecked() != m_originalGeneralSettings.selectItemOnHover) {
     return true;
   }
-  if (ui->bootSplashCheckBox &&
-      ui->bootSplashCheckBox->isChecked() != m_originalGeneralSettings.bootSplashEnabled) {
+  // Splash fields live on SplashPanel, which keeps m_generalSettings live-
+  // updated; compare struct-to-struct against the original snapshot rather
+  // than going through the UI tree (the old widgets no longer exist on
+  // ui_settingsdialog.h).
+  if (m_generalSettings.bootSplashEnabled != m_originalGeneralSettings.bootSplashEnabled ||
+      m_generalSettings.resumeFocusSplashEnabled !=
+          m_originalGeneralSettings.resumeFocusSplashEnabled ||
+      m_generalSettings.bootSplashTitle.trimmed() !=
+          m_originalGeneralSettings.bootSplashTitle.trimmed() ||
+      m_generalSettings.bootSplashSubtitle.trimmed() !=
+          m_originalGeneralSettings.bootSplashSubtitle.trimmed() ||
+      m_generalSettings.resumeFocusSplashTitle.trimmed() !=
+          m_originalGeneralSettings.resumeFocusSplashTitle.trimmed() ||
+      m_generalSettings.resumeFocusSplashSubtitle.trimmed() !=
+          m_originalGeneralSettings.resumeFocusSplashSubtitle.trimmed()) {
     return true;
   }
   // +: startup video fields participate in the
@@ -513,29 +526,6 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
   }
   if (ui->startupVideoPathLineEdit && ui->startupVideoPathLineEdit->text().trimmed() !=
                                           m_originalGeneralSettings.startupVideoPath.trimmed()) {
-    return true;
-  }
-  if (ui->resumeFocusSplashCheckBox && ui->resumeFocusSplashCheckBox->isChecked() !=
-                                           m_originalGeneralSettings.resumeFocusSplashEnabled) {
-    return true;
-  }
-  if (ui->bootSplashTitleLineEdit && ui->bootSplashTitleLineEdit->text().trimmed() !=
-                                         m_originalGeneralSettings.bootSplashTitle.trimmed()) {
-    return true;
-  }
-  if (ui->bootSplashSubtitleLineEdit &&
-      ui->bootSplashSubtitleLineEdit->text().trimmed() !=
-          m_originalGeneralSettings.bootSplashSubtitle.trimmed()) {
-    return true;
-  }
-  if (ui->resumeFocusSplashTitleLineEdit &&
-      ui->resumeFocusSplashTitleLineEdit->text().trimmed() !=
-          m_originalGeneralSettings.resumeFocusSplashTitle.trimmed()) {
-    return true;
-  }
-  if (ui->resumeFocusSplashSubtitleLineEdit &&
-      ui->resumeFocusSplashSubtitleLineEdit->text().trimmed() !=
-          m_originalGeneralSettings.resumeFocusSplashSubtitle.trimmed()) {
     return true;
   }
   if (ui->runtimeDetectionCheckBox && ui->runtimeDetectionCheckBox->isChecked() !=

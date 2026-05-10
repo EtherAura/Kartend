@@ -38,6 +38,7 @@
 #include "settingsdialog.h"
 #include "settingsmanager.h"
 #include "sidebarpanel.h"
+#include "splashpanel.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
@@ -90,6 +91,19 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
     mainWindow->m_generalSettings = m_generalSettings;
     mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
     MainWindow::applyGlobalUiFont(mainWindow->m_generalSettings);
+  });
+
+  // Splash (boot + resume-focus) panel: same live-save shape as FontsPanel
+  // minus the apply step — splashes are shown on next startup / focus event,
+  // so persisting is sufficient.
+  ui->splashPanel->setSettings(&m_generalSettings);
+  connect(ui->splashPanel, &SplashPanel::changed, this, [this]() {
+    auto *mainWindow = qobject_cast<MainWindow *>(QObject::parent());
+    if (!mainWindow || !mainWindow->getSettingsManager()) {
+      return;
+    }
+    mainWindow->m_generalSettings = m_generalSettings;
+    mainWindow->getSettingsManager()->saveGeneralSettings(mainWindow->m_generalSettings);
   });
 
   collectionTreeWidget = ui->collectionTreeWidget;

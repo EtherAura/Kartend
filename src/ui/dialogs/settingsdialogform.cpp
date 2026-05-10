@@ -40,6 +40,7 @@
 #include "settingsdialog.h"
 #include "settingsformbinding.h"
 #include "settingsmanager.h"
+#include "splashpanel.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 #include "videothumbnailextractor.h"
@@ -335,20 +336,13 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   SettingsFormBinding::loadInto(ui->selectItemOnHoverCheckBox, m_generalSettings.selectItemOnHover);
   SettingsFormBinding::loadInto(ui->showTitleInPlaceholderCheckBox,
                                 m_generalSettings.showTitleInPlaceholder);
-  SettingsFormBinding::loadInto(ui->bootSplashCheckBox, m_generalSettings.bootSplashEnabled);
+  // Splash boot/resume fields are owned by SplashPanel; re-hydrate it from
+  // the same m_generalSettings working copy.
+  ui->splashPanel->refresh();
   // startup video
   SettingsFormBinding::loadInto(ui->startupVideoEnabledCheckBox,
                                 m_generalSettings.startupVideoEnabled);
   SettingsFormBinding::loadInto(ui->startupVideoPathLineEdit, m_generalSettings.startupVideoPath);
-  SettingsFormBinding::loadInto(ui->resumeFocusSplashCheckBox,
-                                m_generalSettings.resumeFocusSplashEnabled);
-  SettingsFormBinding::loadInto(ui->bootSplashTitleLineEdit, m_generalSettings.bootSplashTitle);
-  SettingsFormBinding::loadInto(ui->bootSplashSubtitleLineEdit,
-                                m_generalSettings.bootSplashSubtitle);
-  SettingsFormBinding::loadInto(ui->resumeFocusSplashTitleLineEdit,
-                                m_generalSettings.resumeFocusSplashTitle);
-  SettingsFormBinding::loadInto(ui->resumeFocusSplashSubtitleLineEdit,
-                                m_generalSettings.resumeFocusSplashSubtitle);
   SettingsFormBinding::loadInto(ui->runtimeDetectionCheckBox,
                                 m_generalSettings.runtimeDetectionEnabled);
   SettingsFormBinding::loadInto(ui->historyEnabledCheckBox, m_generalSettings.historyEnabled);
@@ -515,23 +509,21 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
                                   mainWindow->m_generalSettings.wrapNavigation);
     SettingsFormBinding::saveFrom(ui->selectItemOnHoverCheckBox,
                                   mainWindow->m_generalSettings.selectItemOnHover);
-    SettingsFormBinding::saveFrom(ui->bootSplashCheckBox,
-                                  mainWindow->m_generalSettings.bootSplashEnabled);
+    // Splash fields owned by SplashPanel — already kept in sync with
+    // m_generalSettings; the dialog→mainWindow mirror below picks them up.
     // startup video
     SettingsFormBinding::saveFrom(ui->startupVideoEnabledCheckBox,
                                   mainWindow->m_generalSettings.startupVideoEnabled);
     SettingsFormBinding::saveFrom(ui->startupVideoPathLineEdit,
                                   mainWindow->m_generalSettings.startupVideoPath);
-    SettingsFormBinding::saveFrom(ui->resumeFocusSplashCheckBox,
-                                  mainWindow->m_generalSettings.resumeFocusSplashEnabled);
-    SettingsFormBinding::saveFrom(ui->bootSplashTitleLineEdit,
-                                  mainWindow->m_generalSettings.bootSplashTitle);
-    SettingsFormBinding::saveFrom(ui->bootSplashSubtitleLineEdit,
-                                  mainWindow->m_generalSettings.bootSplashSubtitle);
-    SettingsFormBinding::saveFrom(ui->resumeFocusSplashTitleLineEdit,
-                                  mainWindow->m_generalSettings.resumeFocusSplashTitle);
-    SettingsFormBinding::saveFrom(ui->resumeFocusSplashSubtitleLineEdit,
-                                  mainWindow->m_generalSettings.resumeFocusSplashSubtitle);
+    mainWindow->m_generalSettings.bootSplashEnabled = m_generalSettings.bootSplashEnabled;
+    mainWindow->m_generalSettings.resumeFocusSplashEnabled =
+        m_generalSettings.resumeFocusSplashEnabled;
+    mainWindow->m_generalSettings.bootSplashTitle = m_generalSettings.bootSplashTitle;
+    mainWindow->m_generalSettings.bootSplashSubtitle = m_generalSettings.bootSplashSubtitle;
+    mainWindow->m_generalSettings.resumeFocusSplashTitle = m_generalSettings.resumeFocusSplashTitle;
+    mainWindow->m_generalSettings.resumeFocusSplashSubtitle =
+        m_generalSettings.resumeFocusSplashSubtitle;
     if (ui->pixmapCacheSpinBox) {
       int newCacheSize = ui->pixmapCacheSpinBox->value();
       mainWindow->m_generalSettings.pixmapCacheSizeMB = newCacheSize;
