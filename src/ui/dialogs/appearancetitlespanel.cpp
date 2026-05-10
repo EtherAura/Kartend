@@ -1,6 +1,7 @@
 #include "appearancetitlespanel.h"
 
 #include "settingsformbinding.h"
+#include "settingsmodel.h"
 #include "ui_appearancetitlespanel.h"
 
 #include <QApplication>
@@ -27,7 +28,17 @@ AppearanceTitlesPanel::~AppearanceTitlesPanel() {
   delete ui;
 }
 
-void AppearanceTitlesPanel::load(const CollectionConfig &config) {
+void AppearanceTitlesPanel::setModel(SettingsModel *model) {
+  m_model = model;
+}
+
+void AppearanceTitlesPanel::load() {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   SettingsFormBinding::loadInto(ui->fontSizeSpinBox, config.fontSize);
   SettingsFormBinding::loadInto(ui->customFontEdit, config.customFontFamily);
   SettingsFormBinding::loadInto(ui->hideTitlesCheckBox, config.hideTitles);
@@ -42,14 +53,22 @@ void AppearanceTitlesPanel::clear() {
   ui->hideSubcollectionTitlesCheckBox->setChecked(false);
 }
 
-void AppearanceTitlesPanel::save(CollectionConfig &config) const {
+void AppearanceTitlesPanel::save() const {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   config.fontSize = ui->fontSizeSpinBox->value();
   config.customFontFamily = ui->customFontEdit->text().trimmed();
   config.hideTitles = ui->hideTitlesCheckBox->isChecked();
   config.hideSubcollectionTitles = ui->hideSubcollectionTitlesCheckBox->isChecked();
 }
 
-bool AppearanceTitlesPanel::hasChanges(const CollectionConfig &o) const {
+bool AppearanceTitlesPanel::hasChanges() const {
+  if (!m_model || !m_model->originalCollection) return false;
+  const CollectionConfig &o = *m_model->originalCollection;
   if (ui->fontSizeSpinBox->value() != o.fontSize) return true;
   if (ui->customFontEdit->text().trimmed() != o.customFontFamily) return true;
   if (ui->hideTitlesCheckBox->isChecked() != o.hideTitles) return true;

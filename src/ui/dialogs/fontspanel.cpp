@@ -2,6 +2,7 @@
 
 #include "collectionutils.h"
 #include "settingsformbinding.h"
+#include "settingsmodel.h"
 #include "ui_fontspanel.h"
 
 #include <QApplication>
@@ -23,20 +24,22 @@ FontsPanel::~FontsPanel() {
   delete ui;
 }
 
-void FontsPanel::setSettings(GeneralSettings *settings) {
-  m_settings = settings;
+void FontsPanel::setModel(SettingsModel *model) {
+  m_model = model;
   refresh();
 }
 
 void FontsPanel::refresh() {
-  if (!m_settings) {
+  if (!m_model || !m_model->generalSettings) {
     return;
   }
   // SettingsFormBinding::loadInto already wraps each setter in a QSignalBlocker,
   // so the editingFinished / valueChanged → writeBack pipeline stays quiet
   // during programmatic hydration.
-  SettingsFormBinding::loadInto(ui->globalUiFontFamilyEdit, m_settings->globalUiFontFamily);
-  SettingsFormBinding::loadInto(ui->globalUiFontSizeSpinBox, m_settings->globalUiFontPointSize);
+  SettingsFormBinding::loadInto(ui->globalUiFontFamilyEdit,
+                                m_model->generalSettings->globalUiFontFamily);
+  SettingsFormBinding::loadInto(ui->globalUiFontSizeSpinBox,
+                                m_model->generalSettings->globalUiFontPointSize);
 }
 
 void FontsPanel::onPick() {
@@ -64,10 +67,10 @@ void FontsPanel::onPick() {
 }
 
 void FontsPanel::writeBack() {
-  if (!m_settings) {
+  if (!m_model || !m_model->generalSettings) {
     return;
   }
-  m_settings->globalUiFontFamily = ui->globalUiFontFamilyEdit->text().trimmed();
-  m_settings->globalUiFontPointSize = ui->globalUiFontSizeSpinBox->value();
+  m_model->generalSettings->globalUiFontFamily = ui->globalUiFontFamilyEdit->text().trimmed();
+  m_model->generalSettings->globalUiFontPointSize = ui->globalUiFontSizeSpinBox->value();
   emit changed();
 }

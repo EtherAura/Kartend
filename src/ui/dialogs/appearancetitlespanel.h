@@ -10,6 +10,8 @@ class AppearanceTitlesPanel;
 }
 QT_END_NAMESPACE
 
+struct SettingsModel;
+
 /// Per-collection "Titles" appearance sub-sub-tab. Owns title font size +
 /// custom font + browse picker, and the hide-titles / hide-subcollection-
 /// titles visibility checkboxes.
@@ -19,10 +21,11 @@ public:
   explicit AppearanceTitlesPanel(QWidget *parent = nullptr);
   ~AppearanceTitlesPanel() override;
 
-  void load(const CollectionConfig &config);
+  void setModel(SettingsModel *model);
+  void load();
   void clear();
-  void save(CollectionConfig &config) const;
-  [[nodiscard]] bool hasChanges(const CollectionConfig &original) const;
+  void save() const;
+  [[nodiscard]] bool hasChanges() const;
 
 signals:
   void changed();
@@ -32,6 +35,7 @@ private slots:
 
 private:
   Ui::AppearanceTitlesPanel *ui;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // APPEARANCETITLESPANEL_H

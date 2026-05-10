@@ -1,6 +1,7 @@
 #include "launchertabpanel.h"
 
 #include "settingsformbinding.h"
+#include "settingsmodel.h"
 #include "ui_launchertabpanel.h"
 
 #include <QCheckBox>
@@ -40,7 +41,17 @@ LauncherTabPanel::~LauncherTabPanel() {
   delete ui;
 }
 
-void LauncherTabPanel::load(const CollectionConfig &config) {
+void LauncherTabPanel::setModel(SettingsModel *model) {
+  m_model = model;
+}
+
+void LauncherTabPanel::load() {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   SettingsFormBinding::loadInto(ui->launcherLineEdit, config.launcherPath);
   SettingsFormBinding::loadInto(ui->coreLineEdit, config.corePath);
   SettingsFormBinding::loadInto(ui->launchParamsLineEdit, config.launchParameters);
@@ -60,7 +71,13 @@ void LauncherTabPanel::clear() {
   updateExtractedExtensionVisibility();
 }
 
-void LauncherTabPanel::save(CollectionConfig &config) const {
+void LauncherTabPanel::save() const {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   // launcherPath / corePath / launchParameters preserve exact text (no
   // trim) — paths might legitimately contain trailing spaces in obscure
   // setups.
@@ -73,7 +90,9 @@ void LauncherTabPanel::save(CollectionConfig &config) const {
   config.extractedExtension = ui->extractedExtensionLineEdit->text();
 }
 
-bool LauncherTabPanel::hasChanges(const CollectionConfig &o) const {
+bool LauncherTabPanel::hasChanges() const {
+  if (!m_model || !m_model->originalCollection) return false;
+  const CollectionConfig &o = *m_model->originalCollection;
   if (ui->launcherLineEdit->text() != o.launcherPath) return true;
   if (ui->coreLineEdit->text() != o.corePath) return true;
   if (ui->launchParamsLineEdit->text() != o.launchParameters) return true;

@@ -2,6 +2,7 @@
 
 #include "collectionutils.h"
 #include "settingsformbinding.h"
+#include "settingsmodel.h"
 #include "ui_generalsettingspanel.h"
 
 #include <QCheckBox>
@@ -31,52 +32,47 @@ GeneralSettingsPanel::~GeneralSettingsPanel() {
   delete ui;
 }
 
-void GeneralSettingsPanel::setSettings(GeneralSettings *settings) {
-  m_settings = settings;
+void GeneralSettingsPanel::setModel(SettingsModel *model) {
+  m_model = model;
   refresh();
 }
 
 void GeneralSettingsPanel::refresh() {
-  if (!m_settings) {
+  if (!m_model || !m_model->generalSettings) {
     return;
   }
+  GeneralSettings *s = m_model->generalSettings;
   // Startup
-  SettingsFormBinding::loadInto(ui->useHomeViewCheckBox, m_settings->useHomeView);
-  SettingsFormBinding::loadInto(ui->homeViewLabelLineEdit, m_settings->homeViewLabel);
-  SettingsFormBinding::loadInto(ui->homeViewIconLineEdit, m_settings->homeViewIcon);
-  SettingsFormBinding::loadInto(ui->startupVideoEnabledCheckBox, m_settings->startupVideoEnabled);
-  SettingsFormBinding::loadInto(ui->startupVideoPathLineEdit, m_settings->startupVideoPath);
+  SettingsFormBinding::loadInto(ui->useHomeViewCheckBox, s->useHomeView);
+  SettingsFormBinding::loadInto(ui->homeViewLabelLineEdit, s->homeViewLabel);
+  SettingsFormBinding::loadInto(ui->homeViewIconLineEdit, s->homeViewIcon);
+  SettingsFormBinding::loadInto(ui->startupVideoEnabledCheckBox, s->startupVideoEnabled);
+  SettingsFormBinding::loadInto(ui->startupVideoPathLineEdit, s->startupVideoPath);
 
   // Selection & Display
-  SettingsFormBinding::loadInto(ui->rememberSelectionCheckBox, m_settings->rememberSelection);
-  SettingsFormBinding::loadInto(ui->wrapNavigationCheckBox, m_settings->wrapNavigation);
-  SettingsFormBinding::loadInto(ui->selectItemOnHoverCheckBox, m_settings->selectItemOnHover);
-  SettingsFormBinding::loadInto(ui->showTitleInPlaceholderCheckBox,
-                                m_settings->showTitleInPlaceholder);
+  SettingsFormBinding::loadInto(ui->rememberSelectionCheckBox, s->rememberSelection);
+  SettingsFormBinding::loadInto(ui->wrapNavigationCheckBox, s->wrapNavigation);
+  SettingsFormBinding::loadInto(ui->selectItemOnHoverCheckBox, s->selectItemOnHover);
+  SettingsFormBinding::loadInto(ui->showTitleInPlaceholderCheckBox, s->showTitleInPlaceholder);
 
   // Input & Scroll Timing
-  SettingsFormBinding::loadInto(ui->mouseWheelSpeedSpinBox, m_settings->mouseWheelRows);
-  SettingsFormBinding::loadInto(ui->scrollVelocityMultiplierSpinBox,
-                                m_settings->scrollVelocityMultiplier);
-  SettingsFormBinding::loadInto(ui->scrollAnimationSpeedSpinBox,
-                                m_settings->scrollAnimationDurationMs);
-  SettingsFormBinding::loadInto(ui->clickHoldDelaySpinBox, m_settings->clickHoldDelayMs);
-  SettingsFormBinding::loadInto(ui->clickHoldRepeatIntervalSpinBox,
-                                m_settings->clickHoldRepeatIntervalMs);
-  SettingsFormBinding::loadInto(ui->listClickHoldRepeatSpinBox,
-                                m_settings->listClickHoldRepeatIntervalMs);
-  SettingsFormBinding::loadInto(ui->keyboardSpeedSpinBox, m_settings->keyboardRepeatIntervalMs);
-  SettingsFormBinding::loadInto(ui->keyboardRepeatDelaySpinBox, m_settings->keyboardRepeatDelayMs);
-  SettingsFormBinding::loadInto(ui->listKeyboardRepeatSpinBox,
-                                m_settings->listKeyboardRepeatIntervalMs);
+  SettingsFormBinding::loadInto(ui->mouseWheelSpeedSpinBox, s->mouseWheelRows);
+  SettingsFormBinding::loadInto(ui->scrollVelocityMultiplierSpinBox, s->scrollVelocityMultiplier);
+  SettingsFormBinding::loadInto(ui->scrollAnimationSpeedSpinBox, s->scrollAnimationDurationMs);
+  SettingsFormBinding::loadInto(ui->clickHoldDelaySpinBox, s->clickHoldDelayMs);
+  SettingsFormBinding::loadInto(ui->clickHoldRepeatIntervalSpinBox, s->clickHoldRepeatIntervalMs);
+  SettingsFormBinding::loadInto(ui->listClickHoldRepeatSpinBox, s->listClickHoldRepeatIntervalMs);
+  SettingsFormBinding::loadInto(ui->keyboardSpeedSpinBox, s->keyboardRepeatIntervalMs);
+  SettingsFormBinding::loadInto(ui->keyboardRepeatDelaySpinBox, s->keyboardRepeatDelayMs);
+  SettingsFormBinding::loadInto(ui->listKeyboardRepeatSpinBox, s->listKeyboardRepeatIntervalMs);
 
   // Performance & History
-  SettingsFormBinding::loadInto(ui->pixmapCacheSpinBox, m_settings->pixmapCacheSizeMB);
-  SettingsFormBinding::loadInto(ui->runtimeDetectionCheckBox, m_settings->runtimeDetectionEnabled);
-  SettingsFormBinding::loadInto(ui->historyEnabledCheckBox, m_settings->historyEnabled);
-  SettingsFormBinding::loadInto(ui->historyMaxEntriesSpinBox, m_settings->historyMaxEntries);
+  SettingsFormBinding::loadInto(ui->pixmapCacheSpinBox, s->pixmapCacheSizeMB);
+  SettingsFormBinding::loadInto(ui->runtimeDetectionCheckBox, s->runtimeDetectionEnabled);
+  SettingsFormBinding::loadInto(ui->historyEnabledCheckBox, s->historyEnabled);
+  SettingsFormBinding::loadInto(ui->historyMaxEntriesSpinBox, s->historyMaxEntries);
   SettingsFormBinding::loadInto(ui->videoThumbnailTimeoutSpinBox,
-                                m_settings->videoThumbnailExtractionTimeoutMs);
+                                s->videoThumbnailExtractionTimeoutMs);
 }
 
 void GeneralSettingsPanel::setStartupCollections(const QStringList &names,
@@ -110,40 +106,41 @@ void GeneralSettingsPanel::onBrowseStartupVideo() {
 }
 
 void GeneralSettingsPanel::writeBack() {
-  if (!m_settings) {
+  if (!m_model || !m_model->generalSettings) {
     return;
   }
+  GeneralSettings *s = m_model->generalSettings;
   // Startup
-  m_settings->startupCollection = ui->startupCollectionComboBox->currentData().toString();
-  m_settings->useHomeView = ui->useHomeViewCheckBox->isChecked();
-  m_settings->homeViewLabel = ui->homeViewLabelLineEdit->text();
-  m_settings->homeViewIcon = ui->homeViewIconLineEdit->text();
-  m_settings->startupVideoEnabled = ui->startupVideoEnabledCheckBox->isChecked();
-  m_settings->startupVideoPath = ui->startupVideoPathLineEdit->text();
+  s->startupCollection = ui->startupCollectionComboBox->currentData().toString();
+  s->useHomeView = ui->useHomeViewCheckBox->isChecked();
+  s->homeViewLabel = ui->homeViewLabelLineEdit->text();
+  s->homeViewIcon = ui->homeViewIconLineEdit->text();
+  s->startupVideoEnabled = ui->startupVideoEnabledCheckBox->isChecked();
+  s->startupVideoPath = ui->startupVideoPathLineEdit->text();
 
   // Selection & Display
-  m_settings->rememberSelection = ui->rememberSelectionCheckBox->isChecked();
-  m_settings->wrapNavigation = ui->wrapNavigationCheckBox->isChecked();
-  m_settings->selectItemOnHover = ui->selectItemOnHoverCheckBox->isChecked();
-  m_settings->showTitleInPlaceholder = ui->showTitleInPlaceholderCheckBox->isChecked();
+  s->rememberSelection = ui->rememberSelectionCheckBox->isChecked();
+  s->wrapNavigation = ui->wrapNavigationCheckBox->isChecked();
+  s->selectItemOnHover = ui->selectItemOnHoverCheckBox->isChecked();
+  s->showTitleInPlaceholder = ui->showTitleInPlaceholderCheckBox->isChecked();
 
   // Input & Scroll Timing
-  m_settings->mouseWheelRows = ui->mouseWheelSpeedSpinBox->value();
-  m_settings->scrollVelocityMultiplier = ui->scrollVelocityMultiplierSpinBox->value();
-  m_settings->scrollAnimationDurationMs = ui->scrollAnimationSpeedSpinBox->value();
-  m_settings->clickHoldDelayMs = ui->clickHoldDelaySpinBox->value();
-  m_settings->clickHoldRepeatIntervalMs = ui->clickHoldRepeatIntervalSpinBox->value();
-  m_settings->listClickHoldRepeatIntervalMs = ui->listClickHoldRepeatSpinBox->value();
-  m_settings->keyboardRepeatIntervalMs = ui->keyboardSpeedSpinBox->value();
-  m_settings->keyboardRepeatDelayMs = ui->keyboardRepeatDelaySpinBox->value();
-  m_settings->listKeyboardRepeatIntervalMs = ui->listKeyboardRepeatSpinBox->value();
+  s->mouseWheelRows = ui->mouseWheelSpeedSpinBox->value();
+  s->scrollVelocityMultiplier = ui->scrollVelocityMultiplierSpinBox->value();
+  s->scrollAnimationDurationMs = ui->scrollAnimationSpeedSpinBox->value();
+  s->clickHoldDelayMs = ui->clickHoldDelaySpinBox->value();
+  s->clickHoldRepeatIntervalMs = ui->clickHoldRepeatIntervalSpinBox->value();
+  s->listClickHoldRepeatIntervalMs = ui->listClickHoldRepeatSpinBox->value();
+  s->keyboardRepeatIntervalMs = ui->keyboardSpeedSpinBox->value();
+  s->keyboardRepeatDelayMs = ui->keyboardRepeatDelaySpinBox->value();
+  s->listKeyboardRepeatIntervalMs = ui->listKeyboardRepeatSpinBox->value();
 
   // Performance & History
-  m_settings->pixmapCacheSizeMB = ui->pixmapCacheSpinBox->value();
-  m_settings->runtimeDetectionEnabled = ui->runtimeDetectionCheckBox->isChecked();
-  m_settings->historyEnabled = ui->historyEnabledCheckBox->isChecked();
-  m_settings->historyMaxEntries = ui->historyMaxEntriesSpinBox->value();
-  m_settings->videoThumbnailExtractionTimeoutMs = ui->videoThumbnailTimeoutSpinBox->value();
+  s->pixmapCacheSizeMB = ui->pixmapCacheSpinBox->value();
+  s->runtimeDetectionEnabled = ui->runtimeDetectionCheckBox->isChecked();
+  s->historyEnabled = ui->historyEnabledCheckBox->isChecked();
+  s->historyMaxEntries = ui->historyMaxEntriesSpinBox->value();
+  s->videoThumbnailExtractionTimeoutMs = ui->videoThumbnailTimeoutSpinBox->value();
 
   emit changed();
 }

@@ -23,6 +23,9 @@ struct SettingsModel {
   GeneralSettings *originalGeneralSettings = nullptr;
   /// True when no unsaved row-level change exists.
   bool *collectionSaved = nullptr;
+  /// Index of the row in workingCollections the user is currently editing.
+  /// Negative when no row is selected — panels guard their accessors.
+  int *currentIndex = nullptr;
 };
 
 #endif // SETTINGSMODEL_H

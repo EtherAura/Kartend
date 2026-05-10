@@ -17,6 +17,8 @@ class QListWidget;
 class QPushButton;
 QT_END_NAMESPACE
 
+struct SettingsModel;
+
 /// Standalone panel widget for the per-collection "Launcher" tab in
 /// SettingsDialog. Owns the executable group (path + core + parameters +
 /// display name), the archive-handling group (extract toggle + extension),
@@ -35,16 +37,19 @@ public:
   explicit LauncherTabPanel(QWidget *parent = nullptr);
   ~LauncherTabPanel() override;
 
+  void setModel(SettingsModel *model);
+
   /// Hydrate launcher path / core / parameters / name + extract flag +
-  /// extracted extension from @p config. The additional-launchers list +
-  /// default combo are populated separately by the host dialog.
-  void load(const CollectionConfig &config);
+  /// extracted extension from the model's current working collection. The
+  /// additional-launchers list + default combo are populated separately by
+  /// the host dialog.
+  void load();
   void clear();
   /// Persist launcher path / core / parameters / name + extract flag +
-  /// extracted extension into @p config. Additional launchers + default
-  /// index are written by the host dialog.
-  void save(CollectionConfig &config) const;
-  [[nodiscard]] bool hasChanges(const CollectionConfig &original) const;
+  /// extracted extension into the model's current working collection.
+  /// Additional launchers + default index are written by the host dialog.
+  void save() const;
+  [[nodiscard]] bool hasChanges() const;
 
   /// Toggles visibility of the launch-extension field (only meaningful
   /// when extract-archives is on). Idempotent.
@@ -73,6 +78,7 @@ signals:
 
 private:
   Ui::LauncherTabPanel *ui;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // LAUNCHERTABPANEL_H

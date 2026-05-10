@@ -1,6 +1,7 @@
 #include "sidebarpanel.h"
 
 #include "collectionutils.h"
+#include "settingsmodel.h"
 #include "ui_sidebarpanel.h"
 #include "uiconstants.h"
 
@@ -52,7 +53,17 @@ SidebarPanel::~SidebarPanel() {
   delete ui;
 }
 
-void SidebarPanel::load(const CollectionConfig &config) {
+void SidebarPanel::setModel(SettingsModel *model) {
+  m_model = model;
+}
+
+void SidebarPanel::load() {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   ui->sidebarModeComboBox->setCurrentIndex(static_cast<int>(config.sidebarMode));
   ui->sidebarPositionComboBox->setCurrentIndex(static_cast<int>(config.sidebarPosition));
   ui->sidebarWidthSpinBox->setValue(config.sidebarWidth);
@@ -105,7 +116,13 @@ void SidebarPanel::clear() {
   ui->sidebarActiveCollectionLabel->setText(tr("Editing: (no collection selected)"));
 }
 
-void SidebarPanel::save(CollectionConfig &config) const {
+void SidebarPanel::save() const {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   config.sidebarMode = static_cast<DetailsPaneMode>(ui->sidebarModeComboBox->currentIndex());
   config.sidebarPosition =
       static_cast<DetailsPanePosition>(ui->sidebarPositionComboBox->currentIndex());
@@ -140,7 +157,9 @@ void SidebarPanel::save(CollectionConfig &config) const {
   config.hideVerticalScrollbar = ui->hideVerticalScrollbarCheckBox->isChecked();
 }
 
-bool SidebarPanel::hasChanges(const CollectionConfig &o) const {
+bool SidebarPanel::hasChanges() const {
+  if (!m_model || !m_model->originalCollection) return false;
+  const CollectionConfig &o = *m_model->originalCollection;
   // Background value compares against image OR color depending on the type
   // — same dual-purpose semantics as save().
   const QString bgOrig = o.sidebarBackgroundType == DetailsPaneBackgroundType::Image

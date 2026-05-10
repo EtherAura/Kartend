@@ -10,6 +10,8 @@ class AppearanceEffectsPanel;
 }
 QT_END_NAMESPACE
 
+struct SettingsModel;
+
 /// Per-collection "Effects" appearance sub-sub-tab. Owns the wallpaper-
 /// parallax + toolbar-backdrop-blur enable + strength/radius controls.
 class AppearanceEffectsPanel : public QWidget {
@@ -18,16 +20,18 @@ public:
   explicit AppearanceEffectsPanel(QWidget *parent = nullptr);
   ~AppearanceEffectsPanel() override;
 
-  void load(const CollectionConfig &config);
+  void setModel(SettingsModel *model);
+  void load();
   void clear();
-  void save(CollectionConfig &config) const;
-  [[nodiscard]] bool hasChanges(const CollectionConfig &original) const;
+  void save() const;
+  [[nodiscard]] bool hasChanges() const;
 
 signals:
   void changed();
 
 private:
   Ui::AppearanceEffectsPanel *ui;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // APPEARANCEEFFECTSPANEL_H

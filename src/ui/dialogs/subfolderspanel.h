@@ -10,6 +10,8 @@ class SubfoldersPanel;
 }
 QT_END_NAMESPACE
 
+struct SettingsModel;
+
 /// Standalone panel widget for the per-collection "Subfolders" tab in
 /// SettingsDialog. Owns the content-subfolder include + show-all + hide-
 /// titles + show-hidden checkboxes plus the artwork-subfolder include
@@ -23,10 +25,11 @@ public:
   explicit SubfoldersPanel(QWidget *parent = nullptr);
   ~SubfoldersPanel() override;
 
-  void load(const CollectionConfig &config);
+  void setModel(SettingsModel *model);
+  void load();
   void clear();
-  void save(CollectionConfig &config) const;
-  [[nodiscard]] bool hasChanges(const CollectionConfig &original) const;
+  void save() const;
+  [[nodiscard]] bool hasChanges() const;
 
   /// Public accessor used by the host dialog's pre-save rescan-detection
   /// logic — toggling content-subfolders is one of the database-affecting
@@ -40,6 +43,7 @@ private:
   void updateOptionsVisibility();
 
   Ui::SubfoldersPanel *ui;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // SUBFOLDERSPANEL_H

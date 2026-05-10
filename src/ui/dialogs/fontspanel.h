@@ -9,10 +9,10 @@ class FontsPanel;
 }
 QT_END_NAMESPACE
 
-struct GeneralSettings;
+struct SettingsModel;
 
 /// Standalone panel widget for the global "Application Font" sub-tab in
-/// SettingsDialog. Observes a GeneralSettings* installed by the host dialog
+/// SettingsDialog. Observes a SettingsModel* installed by the host dialog
 /// and mutates the pointed-to globalUiFont* fields directly on user input,
 /// emitting changed() so the host can persist + apply (saveGeneralSettings +
 /// applyGlobalUiFont) in lockstep — preserving the dialog's existing
@@ -23,10 +23,10 @@ public:
   explicit FontsPanel(QWidget *parent = nullptr);
   ~FontsPanel() override;
 
-  /// Install a pointer to the live general settings. The pointer must
+  /// Install a pointer to the live settings model. The pointer must
   /// outlive the panel. Triggers a refresh so the form fields reflect the
   /// pointed-to values immediately.
-  void setSettings(GeneralSettings *settings);
+  void setModel(SettingsModel *model);
 
   /// Re-hydrate the form fields from the pointed-to settings. Safe to call
   /// repeatedly. Suppresses the change signal during the rehydrate.
@@ -45,7 +45,7 @@ private:
   void writeBack();
 
   Ui::FontsPanel *ui;
-  GeneralSettings *m_settings = nullptr;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // FONTSPANEL_H

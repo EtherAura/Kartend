@@ -10,6 +10,8 @@ class AppearanceToolbarPanel;
 }
 QT_END_NAMESPACE
 
+struct SettingsModel;
+
 /// Per-collection "Header Logo" appearance sub-sub-tab. Owns the header
 /// logo path + position combo + browse picker.
 class AppearanceToolbarPanel : public QWidget {
@@ -18,10 +20,11 @@ public:
   explicit AppearanceToolbarPanel(QWidget *parent = nullptr);
   ~AppearanceToolbarPanel() override;
 
-  void load(const CollectionConfig &config);
+  void setModel(SettingsModel *model);
+  void load();
   void clear();
-  void save(CollectionConfig &config) const;
-  [[nodiscard]] bool hasChanges(const CollectionConfig &original) const;
+  void save() const;
+  [[nodiscard]] bool hasChanges() const;
 
 signals:
   void changed();
@@ -31,6 +34,7 @@ private slots:
 
 private:
   Ui::AppearanceToolbarPanel *ui;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // APPEARANCETOOLBARPANEL_H

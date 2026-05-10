@@ -13,6 +13,8 @@ class QLineEdit;
 class QPushButton;
 QT_END_NAMESPACE
 
+struct SettingsModel;
+
 /// Standalone panel widget for the per-collection "Configuration" tab in
 /// SettingsDialog. Owns the parent-collection / linked-parents / type
 /// fields, the content-source row (media dir + browse + recursive import),
@@ -30,13 +32,14 @@ public:
   explicit ConfigurationPanel(QWidget *parent = nullptr);
   ~ConfigurationPanel() override;
 
-  void load(const CollectionConfig &config);
+  void setModel(SettingsModel *model);
+  void load();
   void clear();
   /// Saves the simple data fields (type, mediaDirectory, extensions,
   /// expandMode, showAllSubcollectionItems). Parent-collection index is
   /// resolved separately by the host using the dropdown→collection mapping.
-  void save(CollectionConfig &config) const;
-  [[nodiscard]] bool hasChanges(const CollectionConfig &original) const;
+  void save() const;
+  [[nodiscard]] bool hasChanges() const;
 
   /// Populate the type combo with @p knownTypes and select / set
   /// @p currentText. Trims any leading/trailing whitespace on the current
@@ -66,6 +69,7 @@ signals:
 
 private:
   Ui::ConfigurationPanel *ui;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // CONFIGURATIONPANEL_H

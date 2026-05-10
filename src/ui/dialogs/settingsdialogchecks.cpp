@@ -74,48 +74,50 @@ template <typename EnumT> bool comboEnumChanged(const QComboBox *w, EnumT orig) 
 } // namespace
 
 auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
-  CollectionConfig config;
-  if (currentCollectionIndex >= 0 && currentCollectionIndex < m_workingCollections.size()) {
-    config = m_workingCollections[currentCollectionIndex];
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= m_workingCollections.size()) {
+    return {};
   }
 
-  if (auto *item = m_treeManager ? m_treeManager->itemAt(currentCollectionIndex) : nullptr) {
-    QString treeName = item->text(0);
-    if (!treeName.isEmpty()) {
-      config.name = treeName;
-    }
-  }
-
-  ui->launcherPanel->save(config);
-  config.additionalLaunchers = m_workingAdditionalLaunchers;
-  config.additionalParentNames = m_workingAdditionalParentNames;
-  if (ui->launcherPanel->defaultLauncherComboBox()->count() > 0) {
-    config.defaultLauncherIndex = ui->launcherPanel->defaultLauncherComboBox()->currentIndex();
-  }
-  ui->configurationPanel->save(config);
-  ui->artworkPanel->save(config);
-  ui->subfoldersPanel->save(config);
-  ui->appearanceLayoutPanel->save(config);
-  ui->appearanceTitlesPanel->save(config);
-  ui->sidebarPanel->save(config);
+  // Allow panels to write directly into the working row via the model.
+  // saveCollectionFromUI snapshots first and rolls back if validation
+  // fails downstream.
+  ui->launcherPanel->save();
+  ui->configurationPanel->save();
+  ui->artworkPanel->save();
+  ui->subfoldersPanel->save();
+  ui->appearanceLayoutPanel->save();
+  ui->appearanceTitlesPanel->save();
+  ui->sidebarPanel->save();
 
   // Background / palette / list-row colors / vignette owned by
   // AppearanceColorsPanel.
-  ui->appearanceColorsPanel->save(config);
+  ui->appearanceColorsPanel->save();
 
   // List mode settings (font size + row height owned by AppearanceListPanel).
-  ui->appearanceListPanel->save(config);
-
-  // Custom font family (per-collection)
-  // customFontFamily handled inside AppearanceTitlesPanel::save above.
+  ui->appearanceListPanel->save();
 
   // header logo
-  ui->appearanceToolbarPanel->save(config);
+  ui->appearanceToolbarPanel->save();
 
   // Effects (parallax + backdrop blur) handled by AppearanceEffectsPanel.
-  ui->appearanceEffectsPanel->save(config);
+  ui->appearanceEffectsPanel->save();
 
-  return config;
+  // Special handling for tree name, additionalLaunchers, additionalParentNames,
+  // and defaultLauncherIndex — these stay on the dialog and write directly
+  // into the working row.
+  auto &row = m_workingCollections[currentCollectionIndex];
+  if (auto *item = m_treeManager ? m_treeManager->itemAt(currentCollectionIndex) : nullptr) {
+    QString treeName = item->text(0);
+    if (!treeName.isEmpty()) {
+      row.name = treeName;
+    }
+  }
+  row.additionalLaunchers = m_workingAdditionalLaunchers;
+  row.additionalParentNames = m_workingAdditionalParentNames;
+  if (ui->launcherPanel->defaultLauncherComboBox()->count() > 0) {
+    row.defaultLauncherIndex = ui->launcherPanel->defaultLauncherComboBox()->currentIndex();
+  }
+  return row;
 }
 
 // Updates parent collection settings from UI
@@ -167,14 +169,14 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
           o.verticalSpacing;
 
   return additionalChanged || defaultLauncherChanged || hSpacingChanged || vSpacingChanged ||
-         ui->sidebarPanel->hasChanges(o) || ui->configurationPanel->hasChanges(o) ||
-         ui->artworkPanel->hasChanges(o) || ui->launcherPanel->hasChanges(o) ||
+         ui->sidebarPanel->hasChanges() || ui->configurationPanel->hasChanges() ||
+         ui->artworkPanel->hasChanges() || ui->launcherPanel->hasChanges() ||
 
          // Layout / grid / view fields delegate to AppearanceLayoutPanel.
-         ui->appearanceLayoutPanel->hasChanges(o) ||
+         ui->appearanceLayoutPanel->hasChanges() ||
 
          // Titles / folders.
-         ui->appearanceTitlesPanel->hasChanges(o) || ui->subfoldersPanel->hasChanges(o);
+         ui->appearanceTitlesPanel->hasChanges() || ui->subfoldersPanel->hasChanges();
 }
 
 // Extension + customArtworkTypes dirty checks live in ConfigurationPanel /
@@ -217,16 +219,13 @@ auto SettingsDialog::checkDimensionChanges() const -> bool {
 // logo / parallax+blur. Background type/value are part of AppearanceColorsPanel
 // too (collapsed under hasChanges).
 auto SettingsDialog::checkColorChanges() const -> bool {
-  const CollectionConfig &o = originalCollection;
-  return ui->appearanceColorsPanel->hasChanges(o) ||
-         ui->appearanceToolbarPanel->hasChanges(o) ||
-         ui->appearanceEffectsPanel->hasChanges(o);
+  return ui->appearanceColorsPanel->hasChanges() || ui->appearanceToolbarPanel->hasChanges() ||
+         ui->appearanceEffectsPanel->hasChanges();
 }
 
 // Checks list mode field changes
 auto SettingsDialog::checkListModeChanges() const -> bool {
-  const CollectionConfig &o = originalCollection;
-  return ui->appearanceListPanel->hasChanges(o);
+  return ui->appearanceListPanel->hasChanges();
 }
 
 // Background type/value dirty check rolled into checkColorChanges via

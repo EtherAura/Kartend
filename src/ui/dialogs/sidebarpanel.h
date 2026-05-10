@@ -12,6 +12,8 @@ class QLineEdit;
 class QPushButton;
 QT_END_NAMESPACE
 
+struct SettingsModel;
+
 /// Standalone panel widget for the per-collection "Details Pane" tab in
 /// SettingsDialog. Owns every widget that used to live under sidebarTab —
 /// layout / background / typography / bubbles, plus the scrollbar checkboxes
@@ -23,19 +25,23 @@ public:
   explicit SidebarPanel(QWidget *parent = nullptr);
   ~SidebarPanel() override;
 
-  /// Hydrate every field from @p config and refresh the active-collection label.
-  void load(const CollectionConfig &config);
+  void setModel(SettingsModel *model);
+
+  /// Hydrate every field from the model's current working collection and
+  /// refresh the active-collection label.
+  void load();
 
   /// Reset to defaults and clear the active-collection label. Used when no
   /// collection is selected.
   void clear();
 
-  /// Persist user-edited values back into @p config.
-  void save(CollectionConfig &config) const;
+  /// Persist user-edited values back into the model's current working
+  /// collection.
+  void save() const;
 
   /// True when any field on the live UI differs from the corresponding field
-  /// on @p original.
-  [[nodiscard]] bool hasChanges(const CollectionConfig &original) const;
+  /// on the model's original-collection snapshot.
+  [[nodiscard]] bool hasChanges() const;
 
 signals:
   /// Emitted on any internal field change. Also fires during load() because
@@ -55,6 +61,7 @@ private:
   void connectChangeSignals();
 
   Ui::SidebarPanel *ui;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // SIDEBARPANEL_H

@@ -84,6 +84,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   m_model.generalSettings = &m_generalSettings;
   m_model.originalGeneralSettings = &m_originalGeneralSettings;
   m_model.collectionSaved = &m_collectionSaved;
+  m_model.currentIndex = &currentCollectionIndex;
 
   // Multi-step collection-removal pipeline. Constructed before the
   // tree's Remove button is wired up so removeCollection() can dispatch.
@@ -102,29 +103,39 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // Sidebar (Details Pane) panel: emits changed() on any field mutation,
   // routed to checkForChanges. The panel handles its own pickers and
   // position-driven width-vs-height visibility internally.
+  ui->sidebarPanel->setModel(&m_model);
   connect(ui->sidebarPanel, &SidebarPanel::changed, this, &SettingsDialog::checkForChanges);
 
   // Subfolders panel: per-collection load/save; visibility of the dependent
   // options is internal to the panel.
+  ui->subfoldersPanel->setModel(&m_model);
   connect(ui->subfoldersPanel, &SubfoldersPanel::changed, this, &SettingsDialog::checkForChanges);
 
   // Artwork tab: per-collection asset directories + custom artwork types.
+  ui->artworkPanel->setModel(&m_model);
   connect(ui->artworkPanel, &ArtworkTabPanel::changed, this, &SettingsDialog::checkForChanges);
 
   // Configuration tab: per-collection identity / paths / type / extensions /
   // expand-mode / show-all-subcollection-items. Cross-cutting widgets
   // (parent combo, linked-parents button, recursive-import button, browse-
   // media-dir button) remain wired by the host below.
+  ui->configurationPanel->setModel(&m_model);
   connect(ui->configurationPanel, &ConfigurationPanel::changed, this,
           &SettingsDialog::checkForChanges);
 
   // Launcher tab: simple data fields go through panel.load/save; cross-
   // cutting widgets (additional-launchers list, default-launcher combo,
   // browse buttons) remain accessor-driven from the host.
+  ui->launcherPanel->setModel(&m_model);
   connect(ui->launcherPanel, &LauncherTabPanel::changed, this, &SettingsDialog::checkForChanges);
 
   // Appearance > List Mode sub-sub-tab: per-collection list font size + row
   // height. Other appearance sub-sub-tabs land as separate panels.
+  ui->appearanceListPanel->setModel(&m_model);
+  ui->appearanceToolbarPanel->setModel(&m_model);
+  ui->appearanceTitlesPanel->setModel(&m_model);
+  ui->appearanceEffectsPanel->setModel(&m_model);
+  ui->appearanceLayoutPanel->setModel(&m_model);
   connect(ui->appearanceListPanel, &AppearanceListPanel::changed, this,
           &SettingsDialog::checkForChanges);
   connect(ui->appearanceToolbarPanel, &AppearanceToolbarPanel::changed, this,
@@ -142,7 +153,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // / writeBack the title fields. baseColorChanged() is the live-save signal
   // — host mirrors to mainWindow + saves + applies ItemWidget side effect
   // immediately to preserve the picker's instant-feedback UX.
-  ui->appearanceColorsPanel->setSettings(&m_generalSettings);
+  ui->appearanceColorsPanel->setModel(&m_model);
   connect(ui->appearanceColorsPanel, &AppearanceColorsPanel::changed, this,
           &SettingsDialog::checkForChanges);
   connect(ui->appearanceColorsPanel, &AppearanceColorsPanel::baseColorChanged, this,
@@ -158,7 +169,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // pointed-to GeneralSettings and emits changed(); we mirror to mainWindow,
   // persist via SettingsManager, and apply the font to the running app, all
   // without going through the deferred-save path.
-  ui->fontsPanel->setSettings(&m_generalSettings);
+  ui->fontsPanel->setModel(&m_model);
   connect(ui->fontsPanel, &FontsPanel::changed, this, [this]() {
     // QObject::parent() — explicit because the enclosing constructor's
     // own `parent` argument is in scope and shadows the member function.
@@ -174,7 +185,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // Splash (boot + resume-focus) panel: same live-save shape as FontsPanel
   // minus the apply step — splashes are shown on next startup / focus event,
   // so persisting is sufficient.
-  ui->splashPanel->setSettings(&m_generalSettings);
+  ui->splashPanel->setModel(&m_model);
   connect(ui->splashPanel, &SplashPanel::changed, this, [this]() {
     auto *mainWindow = qobject_cast<MainWindow *>(QObject::parent());
     if (!mainWindow || !mainWindow->getSettingsManager()) {
@@ -187,26 +198,26 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // Attract-mode panel: deferred-save — panel keeps m_generalSettings live;
   // checkForChanges drives the Save button state and persistence happens in
   // saveGeneralSettingsFromUI like the other deferred general fields.
-  ui->attractPanel->setSettings(&m_generalSettings);
+  ui->attractPanel->setModel(&m_model);
   connect(ui->attractPanel, &AttractPanel::changed, this, &SettingsDialog::checkForChanges);
 
   // Toolbar (items-page button visibility + text overrides) panel: same
   // deferred-save shape as AttractPanel.
-  ui->toolbarPanel->setSettings(&m_generalSettings);
+  ui->toolbarPanel->setModel(&m_model);
   connect(ui->toolbarPanel, &ToolbarPanel::changed, this, &SettingsDialog::checkForChanges);
 
   // General settings panel (startup / selection / input timing / performance
   // & history): deferred-save like AttractPanel/ToolbarPanel. The startup-
   // collection combo is populated from the loaded collections inside
   // loadGeneralSettingsToUI.
-  ui->generalSettingsPanel->setSettings(&m_generalSettings);
+  ui->generalSettingsPanel->setModel(&m_model);
   connect(ui->generalSettingsPanel, &GeneralSettingsPanel::changed, this,
           &SettingsDialog::checkForChanges);
 
   // Controls panel (Keyboard / Gamepad / Mouse). Bind the gamepad-capture
   // controller's widget pointers to the panel's own gamepad widgets so the
   // controller doesn't need friend access to ui_settingsdialog.h anymore.
-  ui->controlsPanel->setSettings(&m_generalSettings);
+  ui->controlsPanel->setModel(&m_model);
   connect(ui->controlsPanel, &ControlsPanel::changed, this, &SettingsDialog::checkForChanges);
   ui->controlsPanel->installGamepadCaptureController(m_gamepadCapture);
   m_gamepadCapture->setWidgets({

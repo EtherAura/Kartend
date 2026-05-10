@@ -9,12 +9,12 @@ class AttractPanel;
 }
 QT_END_NAMESPACE
 
-struct GeneralSettings;
+struct SettingsModel;
 
 /// Standalone panel widget for the global "Attract Mode" sub-tab in
 /// SettingsDialog. Owns the seven attract-mode fields (enable / idle timeout
 /// / auto-scroll / scroll speed / advance-selection / advance interval /
-/// random order). Observes a GeneralSettings* installed by the host dialog.
+/// random order). Observes a SettingsModel* installed by the host dialog.
 /// Deferred-save semantics — host wires changed() to checkForChanges so the
 /// Save button reflects unsaved edits; persistence happens on Save like the
 /// rest of the per-collection deferred fields.
@@ -24,7 +24,7 @@ public:
   explicit AttractPanel(QWidget *parent = nullptr);
   ~AttractPanel() override;
 
-  void setSettings(GeneralSettings *settings);
+  void setModel(SettingsModel *model);
   void refresh();
 
 signals:
@@ -34,7 +34,7 @@ private:
   void writeBack();
 
   Ui::AttractPanel *ui;
-  GeneralSettings *m_settings = nullptr;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // ATTRACTPANEL_H

@@ -206,10 +206,10 @@ void SettingsDialog::loadCollectionToUI(int index) {
   m_isLoading = true;
   const CollectionConfig &config = m_workingCollections[index];
 
-  ui->launcherPanel->load(config);
+  ui->launcherPanel->load();
   loadAdditionalLaunchersToUI(config);
   loadLinkedParentsToUI(config);
-  ui->configurationPanel->load(config);
+  ui->configurationPanel->load();
   // Populate the type combo from the union of types in use across the
   // working list so the user can pick anything they've already tagged. The
   // combo stays editable so free-form values still survive a round-trip.
@@ -218,24 +218,24 @@ void SettingsDialog::loadCollectionToUI(int index) {
     types += CollectionUtils::collectAllCollectionTypes(m_workingCollections);
     ui->configurationPanel->setKnownTypes(types, config.type);
   }
-  ui->artworkPanel->load(config);
-  ui->subfoldersPanel->load(config);
-  ui->appearanceLayoutPanel->load(config);
-  ui->sidebarPanel->load(config);
-  ui->appearanceTitlesPanel->load(config);
+  ui->artworkPanel->load();
+  ui->subfoldersPanel->load();
+  ui->appearanceLayoutPanel->load();
+  ui->sidebarPanel->load();
+  ui->appearanceTitlesPanel->load();
 
   // Background / palette / list-row colors / vignette owned by
   // AppearanceColorsPanel.
-  ui->appearanceColorsPanel->load(config);
+  ui->appearanceColorsPanel->load();
 
   // List mode settings
-  ui->appearanceListPanel->load(config);
+  ui->appearanceListPanel->load();
 
   // header logo
-  ui->appearanceToolbarPanel->load(config);
+  ui->appearanceToolbarPanel->load();
 
   // wallpaper parallax
-  ui->appearanceEffectsPanel->load(config);
+  ui->appearanceEffectsPanel->load();
 
   // toolbar backdrop blur
 

@@ -12,7 +12,7 @@ class QLineEdit;
 class QPushButton;
 QT_END_NAMESPACE
 
-struct GeneralSettings;
+struct SettingsModel;
 class GamepadCaptureController;
 
 /// Standalone panel widget for the global "Controls" sub-tab in
@@ -34,7 +34,7 @@ public:
   explicit ControlsPanel(QWidget *parent = nullptr);
   ~ControlsPanel() override;
 
-  void setSettings(GeneralSettings *settings);
+  void setModel(SettingsModel *model);
   void refresh();
 
   /// Wire detect-button clicks to @p controller's start() with the
@@ -62,7 +62,7 @@ private:
   void populateArtworkCycleModifierCombo();
 
   Ui::ControlsPanel *ui;
-  GeneralSettings *m_settings = nullptr;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // CONTROLSPANEL_H

@@ -9,11 +9,11 @@ class ToolbarPanel;
 }
 QT_END_NAMESPACE
 
-struct GeneralSettings;
+struct SettingsModel;
 
 /// Standalone panel widget for the global "Toolbar Buttons" sub-tab. Owns
 /// the 9 visibility checkboxes and 6 text-override edits for the items-page
-/// toolbar widgets. Observes GeneralSettings* and emits changed() on every
+/// toolbar widgets. Observes SettingsModel* and emits changed() on every
 /// mutation; deferred-save semantics — host wires changed→checkForChanges.
 class ToolbarPanel : public QWidget {
   Q_OBJECT
@@ -21,7 +21,7 @@ public:
   explicit ToolbarPanel(QWidget *parent = nullptr);
   ~ToolbarPanel() override;
 
-  void setSettings(GeneralSettings *settings);
+  void setModel(SettingsModel *model);
   void refresh();
 
 signals:
@@ -31,7 +31,7 @@ private:
   void writeBack();
 
   Ui::ToolbarPanel *ui;
-  GeneralSettings *m_settings = nullptr;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // TOOLBARPANEL_H

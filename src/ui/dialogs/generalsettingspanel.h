@@ -10,7 +10,7 @@ class GeneralSettingsPanel;
 }
 QT_END_NAMESPACE
 
-struct GeneralSettings;
+struct SettingsModel;
 
 /// Standalone panel widget for the global "General" sub-tab in SettingsDialog.
 /// Owns four data groups — Startup (collection / home view / startup video),
@@ -30,7 +30,7 @@ public:
   explicit GeneralSettingsPanel(QWidget *parent = nullptr);
   ~GeneralSettingsPanel() override;
 
-  void setSettings(GeneralSettings *settings);
+  void setModel(SettingsModel *model);
   void refresh();
 
   /// Populate the Startup Collection combo with @p names and select the
@@ -50,7 +50,7 @@ private:
   void connectChangeSignals();
 
   Ui::GeneralSettingsPanel *ui;
-  GeneralSettings *m_settings = nullptr;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // GENERALSETTINGSPANEL_H

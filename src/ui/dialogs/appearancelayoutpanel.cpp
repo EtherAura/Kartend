@@ -1,6 +1,7 @@
 #include "appearancelayoutpanel.h"
 
 #include "settingsformbinding.h"
+#include "settingsmodel.h"
 #include "ui_appearancelayoutpanel.h"
 #include "uiconstants.h"
 
@@ -34,7 +35,17 @@ AppearanceLayoutPanel::~AppearanceLayoutPanel() {
   delete ui;
 }
 
-void AppearanceLayoutPanel::load(const CollectionConfig &config) {
+void AppearanceLayoutPanel::setModel(SettingsModel *model) {
+  m_model = model;
+}
+
+void AppearanceLayoutPanel::load() {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   SettingsFormBinding::loadIntoIndex(ui->viewTypeComboBox, static_cast<int>(config.viewType));
   SettingsFormBinding::loadInto(ui->hideMissingArtworkCheckBox, config.hideMissingArtwork);
   SettingsFormBinding::loadIntoIndex(ui->horizontalAlignmentComboBox,
@@ -68,7 +79,13 @@ void AppearanceLayoutPanel::clear() {
   ui->cornerRadiusSpinBox->setValue(0);
 }
 
-void AppearanceLayoutPanel::save(CollectionConfig &config) const {
+void AppearanceLayoutPanel::save() const {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   config.viewType = static_cast<ViewType>(ui->viewTypeComboBox->currentIndex());
   config.hideMissingArtwork = ui->hideMissingArtworkCheckBox->isChecked();
   config.horizontalAlignment =
@@ -84,7 +101,9 @@ void AppearanceLayoutPanel::save(CollectionConfig &config) const {
   config.cornerRadius = ui->cornerRadiusSpinBox->value();
 }
 
-bool AppearanceLayoutPanel::hasChanges(const CollectionConfig &o) const {
+bool AppearanceLayoutPanel::hasChanges() const {
+  if (!m_model || !m_model->originalCollection) return false;
+  const CollectionConfig &o = *m_model->originalCollection;
   if (ui->viewTypeComboBox->currentIndex() != static_cast<int>(o.viewType)) return true;
   if (ui->hideMissingArtworkCheckBox->isChecked() != o.hideMissingArtwork) return true;
   if (ui->horizontalAlignmentComboBox->currentIndex() != static_cast<int>(o.horizontalAlignment))

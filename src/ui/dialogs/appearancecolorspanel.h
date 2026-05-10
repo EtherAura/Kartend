@@ -10,7 +10,7 @@ class AppearanceColorsPanel;
 }
 QT_END_NAMESPACE
 
-struct GeneralSettings;
+struct SettingsModel;
 
 /// Per-collection "Colors" appearance sub-sub-tab. Owns the background type
 /// (Color / Image / Video radios + value edit + picker), item color palette
@@ -26,15 +26,14 @@ public:
   explicit AppearanceColorsPanel(QWidget *parent = nullptr);
   ~AppearanceColorsPanel() override;
 
-  // Per-collection state.
-  void load(const CollectionConfig &config);
+  // Per-collection state (reads/writes the model's current working
+  // collection) plus global title-tint state via the model's general
+  // settings. The pointer must outlive the panel.
+  void setModel(SettingsModel *model);
+  void load();
   void clear();
-  void save(CollectionConfig &config) const;
-  [[nodiscard]] bool hasChanges(const CollectionConfig &original) const;
-
-  // Global title-tint state (titleBaseColor / titleTintSaturation /
-  // titleTintLightness). The pointer must outlive the panel.
-  void setSettings(GeneralSettings *settings);
+  void save() const;
+  [[nodiscard]] bool hasChanges() const;
   void refresh();
 
 signals:
@@ -56,7 +55,7 @@ private:
   void updateBackgroundButtonForType();
 
   Ui::AppearanceColorsPanel *ui;
-  GeneralSettings *m_settings = nullptr;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // APPEARANCECOLORSPANEL_H

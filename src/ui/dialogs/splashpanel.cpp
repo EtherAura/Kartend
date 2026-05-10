@@ -2,6 +2,7 @@
 
 #include "collectionutils.h"
 #include "settingsformbinding.h"
+#include "settingsmodel.h"
 #include "ui_splashpanel.h"
 
 #include <QCheckBox>
@@ -29,35 +30,39 @@ SplashPanel::~SplashPanel() {
   delete ui;
 }
 
-void SplashPanel::setSettings(GeneralSettings *settings) {
-  m_settings = settings;
+void SplashPanel::setModel(SettingsModel *model) {
+  m_model = model;
   refresh();
 }
 
 void SplashPanel::refresh() {
-  if (!m_settings) {
+  if (!m_model || !m_model->generalSettings) {
     return;
   }
-  SettingsFormBinding::loadInto(ui->bootSplashCheckBox, m_settings->bootSplashEnabled);
+  SettingsFormBinding::loadInto(ui->bootSplashCheckBox, m_model->generalSettings->bootSplashEnabled);
   SettingsFormBinding::loadInto(ui->resumeFocusSplashCheckBox,
-                                m_settings->resumeFocusSplashEnabled);
-  SettingsFormBinding::loadInto(ui->bootSplashTitleLineEdit, m_settings->bootSplashTitle);
-  SettingsFormBinding::loadInto(ui->bootSplashSubtitleLineEdit, m_settings->bootSplashSubtitle);
+                                m_model->generalSettings->resumeFocusSplashEnabled);
+  SettingsFormBinding::loadInto(ui->bootSplashTitleLineEdit,
+                                m_model->generalSettings->bootSplashTitle);
+  SettingsFormBinding::loadInto(ui->bootSplashSubtitleLineEdit,
+                                m_model->generalSettings->bootSplashSubtitle);
   SettingsFormBinding::loadInto(ui->resumeFocusSplashTitleLineEdit,
-                                m_settings->resumeFocusSplashTitle);
+                                m_model->generalSettings->resumeFocusSplashTitle);
   SettingsFormBinding::loadInto(ui->resumeFocusSplashSubtitleLineEdit,
-                                m_settings->resumeFocusSplashSubtitle);
+                                m_model->generalSettings->resumeFocusSplashSubtitle);
 }
 
 void SplashPanel::writeBack() {
-  if (!m_settings) {
+  if (!m_model || !m_model->generalSettings) {
     return;
   }
-  m_settings->bootSplashEnabled = ui->bootSplashCheckBox->isChecked();
-  m_settings->resumeFocusSplashEnabled = ui->resumeFocusSplashCheckBox->isChecked();
-  m_settings->bootSplashTitle = ui->bootSplashTitleLineEdit->text().trimmed();
-  m_settings->bootSplashSubtitle = ui->bootSplashSubtitleLineEdit->text().trimmed();
-  m_settings->resumeFocusSplashTitle = ui->resumeFocusSplashTitleLineEdit->text().trimmed();
-  m_settings->resumeFocusSplashSubtitle = ui->resumeFocusSplashSubtitleLineEdit->text().trimmed();
+  m_model->generalSettings->bootSplashEnabled = ui->bootSplashCheckBox->isChecked();
+  m_model->generalSettings->resumeFocusSplashEnabled = ui->resumeFocusSplashCheckBox->isChecked();
+  m_model->generalSettings->bootSplashTitle = ui->bootSplashTitleLineEdit->text().trimmed();
+  m_model->generalSettings->bootSplashSubtitle = ui->bootSplashSubtitleLineEdit->text().trimmed();
+  m_model->generalSettings->resumeFocusSplashTitle =
+      ui->resumeFocusSplashTitleLineEdit->text().trimmed();
+  m_model->generalSettings->resumeFocusSplashSubtitle =
+      ui->resumeFocusSplashSubtitleLineEdit->text().trimmed();
   emit changed();
 }

@@ -2,6 +2,7 @@
 
 #include "extensionutils.h"
 #include "settingsformbinding.h"
+#include "settingsmodel.h"
 #include "ui_configurationpanel.h"
 
 #include <QCheckBox>
@@ -31,7 +32,17 @@ ConfigurationPanel::~ConfigurationPanel() {
   delete ui;
 }
 
-void ConfigurationPanel::load(const CollectionConfig &config) {
+void ConfigurationPanel::setModel(SettingsModel *model) {
+  m_model = model;
+}
+
+void ConfigurationPanel::load() {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   // collectionTypeComboBox is populated separately via setKnownTypes; just
   // set the current text here.
   {
@@ -56,7 +67,13 @@ void ConfigurationPanel::clear() {
   ui->showAllSubcollectionItemsCheckBox->setChecked(false);
 }
 
-void ConfigurationPanel::save(CollectionConfig &config) const {
+void ConfigurationPanel::save() const {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   // Read free-form type label from the editable combobox. currentText()
   // (rather than currentIndex()) lets a freshly typed value not yet
   // committed via Enter round-trip; trimming prevents accidental padding
@@ -69,7 +86,9 @@ void ConfigurationPanel::save(CollectionConfig &config) const {
   config.showAllSubcollectionItems = ui->showAllSubcollectionItemsCheckBox->isChecked();
 }
 
-bool ConfigurationPanel::hasChanges(const CollectionConfig &o) const {
+bool ConfigurationPanel::hasChanges() const {
+  if (!m_model || !m_model->originalCollection) return false;
+  const CollectionConfig &o = *m_model->originalCollection;
   if (ui->collectionTypeComboBox->currentText().trimmed() != o.type) return true;
   if (ui->mediaDirLineEdit->text() != o.mediaDirectory) return true;
   if (ui->expandModeCheckBox->isChecked() != o.expandMode) return true;

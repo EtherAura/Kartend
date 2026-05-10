@@ -1,6 +1,7 @@
 #include "artworktabpanel.h"
 
 #include "settingsformbinding.h"
+#include "settingsmodel.h"
 #include "ui_artworktabpanel.h"
 
 #include <QFileDialog>
@@ -30,7 +31,17 @@ ArtworkTabPanel::~ArtworkTabPanel() {
   delete ui;
 }
 
-void ArtworkTabPanel::load(const CollectionConfig &config) {
+void ArtworkTabPanel::setModel(SettingsModel *model) {
+  m_model = model;
+}
+
+void ArtworkTabPanel::load() {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   SettingsFormBinding::loadInto(ui->artworkDirLineEdit, config.artworkDirectory);
   SettingsFormBinding::loadInto(ui->videoDirLineEdit, config.videoDirectory);
   SettingsFormBinding::loadInto(ui->manualDirLineEdit, config.manualDirectory);
@@ -47,7 +58,13 @@ void ArtworkTabPanel::clear() {
   ui->customArtworkTypesLineEdit->clear();
 }
 
-void ArtworkTabPanel::save(CollectionConfig &config) const {
+void ArtworkTabPanel::save() const {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   // Asset directory paths preserve the user's exact text (no trim) — matches
   // the prior extractUIFieldValues behavior for these fields.
   config.artworkDirectory = ui->artworkDirLineEdit->text();
@@ -55,6 +72,23 @@ void ArtworkTabPanel::save(CollectionConfig &config) const {
   config.manualDirectory = ui->manualDirLineEdit->text();
   config.placeholderArtwork = ui->placeholderArtworkLineEdit->text();
 
+  config.customArtworkTypes = parseCustomArtworkTypes();
+}
+
+bool ArtworkTabPanel::hasChanges() const {
+  if (!m_model || !m_model->originalCollection) return false;
+  const CollectionConfig &o = *m_model->originalCollection;
+  if (ui->artworkDirLineEdit->text() != o.artworkDirectory) return true;
+  if (ui->videoDirLineEdit->text() != o.videoDirectory) return true;
+  if (ui->manualDirLineEdit->text() != o.manualDirectory) return true;
+  if (ui->placeholderArtworkLineEdit->text() != o.placeholderArtwork) return true;
+  // Compare against the parsed-and-deduped form so a stylistic comma-spacing
+  // tweak ("a, b" vs "a,b") doesn't register as dirty.
+  if (parseCustomArtworkTypes() != o.customArtworkTypes) return true;
+  return false;
+}
+
+QStringList ArtworkTabPanel::parseCustomArtworkTypes() const {
   // Custom artwork types are comma-separated; parse, trim each entry, drop
   // empties + duplicates. Mirrors the legacy parser inline in
   // extractUIFieldValues.
@@ -67,20 +101,7 @@ void ArtworkTabPanel::save(CollectionConfig &config) const {
       cleaned.append(type);
     }
   }
-  config.customArtworkTypes = cleaned;
-}
-
-bool ArtworkTabPanel::hasChanges(const CollectionConfig &o) const {
-  if (ui->artworkDirLineEdit->text() != o.artworkDirectory) return true;
-  if (ui->videoDirLineEdit->text() != o.videoDirectory) return true;
-  if (ui->manualDirLineEdit->text() != o.manualDirectory) return true;
-  if (ui->placeholderArtworkLineEdit->text() != o.placeholderArtwork) return true;
-  // Compare against the parsed-and-deduped form so a stylistic comma-spacing
-  // tweak ("a, b" vs "a,b") doesn't register as dirty.
-  CollectionConfig tmp;
-  save(tmp);
-  if (tmp.customArtworkTypes != o.customArtworkTypes) return true;
-  return false;
+  return cleaned;
 }
 
 void ArtworkTabPanel::onBrowseArtworkDir() {

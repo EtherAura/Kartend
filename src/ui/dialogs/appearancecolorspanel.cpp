@@ -1,6 +1,7 @@
 #include "appearancecolorspanel.h"
 
 #include "settingsformbinding.h"
+#include "settingsmodel.h"
 #include "ui_appearancecolorspanel.h"
 
 #include <QCheckBox>
@@ -87,7 +88,18 @@ AppearanceColorsPanel::~AppearanceColorsPanel() {
   delete ui;
 }
 
-void AppearanceColorsPanel::load(const CollectionConfig &config) {
+void AppearanceColorsPanel::setModel(SettingsModel *model) {
+  m_model = model;
+  refresh();
+}
+
+void AppearanceColorsPanel::load() {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   if (config.backgroundType == BackgroundType::Video) {
     ui->backgroundVideoRadio->setChecked(true);
     ui->backgroundValueEdit->setText(config.backgroundVideo);
@@ -122,7 +134,13 @@ void AppearanceColorsPanel::clear() {
   ui->vignetteIntensitySpinBox->setValue(60);
 }
 
-void AppearanceColorsPanel::save(CollectionConfig &config) const {
+void AppearanceColorsPanel::save() const {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   if (ui->backgroundVideoRadio->isChecked()) {
     config.backgroundType = BackgroundType::Video;
   } else if (ui->backgroundImageRadio->isChecked()) {
@@ -157,7 +175,9 @@ void AppearanceColorsPanel::save(CollectionConfig &config) const {
   config.vignetteIntensity = ui->vignetteIntensitySpinBox->value();
 }
 
-bool AppearanceColorsPanel::hasChanges(const CollectionConfig &o) const {
+bool AppearanceColorsPanel::hasChanges() const {
+  if (!m_model || !m_model->originalCollection) return false;
+  const CollectionConfig &o = *m_model->originalCollection;
   BackgroundType currentType = BackgroundType::Color;
   if (ui->backgroundVideoRadio->isChecked()) {
     currentType = BackgroundType::Video;
@@ -185,23 +205,20 @@ bool AppearanceColorsPanel::hasChanges(const CollectionConfig &o) const {
   return false;
 }
 
-void AppearanceColorsPanel::setSettings(GeneralSettings *settings) {
-  m_settings = settings;
-  refresh();
-}
-
 void AppearanceColorsPanel::refresh() {
-  if (!m_settings) return;
-  SettingsFormBinding::loadInto(ui->titleSaturationSpinBox, m_settings->titleTintSaturation);
-  SettingsFormBinding::loadInto(ui->titleLightnessSpinBox, m_settings->titleTintLightness);
-  SettingsFormBinding::loadInto(ui->baseColorEdit, m_settings->titleBaseColor);
+  if (!m_model || !m_model->generalSettings) return;
+  SettingsFormBinding::loadInto(ui->titleSaturationSpinBox,
+                                m_model->generalSettings->titleTintSaturation);
+  SettingsFormBinding::loadInto(ui->titleLightnessSpinBox,
+                                m_model->generalSettings->titleTintLightness);
+  SettingsFormBinding::loadInto(ui->baseColorEdit, m_model->generalSettings->titleBaseColor);
 }
 
 void AppearanceColorsPanel::writeBackGlobals() {
-  if (!m_settings) return;
-  m_settings->titleTintSaturation = ui->titleSaturationSpinBox->value();
-  m_settings->titleTintLightness = ui->titleLightnessSpinBox->value();
-  m_settings->titleBaseColor = ui->baseColorEdit->text().trimmed();
+  if (!m_model || !m_model->generalSettings) return;
+  m_model->generalSettings->titleTintSaturation = ui->titleSaturationSpinBox->value();
+  m_model->generalSettings->titleTintLightness = ui->titleLightnessSpinBox->value();
+  m_model->generalSettings->titleBaseColor = ui->baseColorEdit->text().trimmed();
 }
 
 void AppearanceColorsPanel::updateBackgroundButtonForType() {

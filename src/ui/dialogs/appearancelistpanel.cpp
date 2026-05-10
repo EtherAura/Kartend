@@ -1,6 +1,7 @@
 #include "appearancelistpanel.h"
 
 #include "settingsformbinding.h"
+#include "settingsmodel.h"
 #include "ui_appearancelistpanel.h"
 
 #include <QSpinBox>
@@ -17,7 +18,17 @@ AppearanceListPanel::~AppearanceListPanel() {
   delete ui;
 }
 
-void AppearanceListPanel::load(const CollectionConfig &config) {
+void AppearanceListPanel::setModel(SettingsModel *model) {
+  m_model = model;
+}
+
+void AppearanceListPanel::load() {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   SettingsFormBinding::loadInto(ui->listFontSizeSpinBox, config.listFontSize);
   SettingsFormBinding::loadInto(ui->listRowHeightSpinBox, config.listRowHeight);
 }
@@ -27,12 +38,20 @@ void AppearanceListPanel::clear() {
   ui->listRowHeightSpinBox->setValue(32);
 }
 
-void AppearanceListPanel::save(CollectionConfig &config) const {
+void AppearanceListPanel::save() const {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   config.listFontSize = ui->listFontSizeSpinBox->value();
   config.listRowHeight = ui->listRowHeightSpinBox->value();
 }
 
-bool AppearanceListPanel::hasChanges(const CollectionConfig &o) const {
+bool AppearanceListPanel::hasChanges() const {
+  if (!m_model || !m_model->originalCollection) return false;
+  const CollectionConfig &o = *m_model->originalCollection;
   return ui->listFontSizeSpinBox->value() != o.listFontSize ||
          ui->listRowHeightSpinBox->value() != o.listRowHeight;
 }

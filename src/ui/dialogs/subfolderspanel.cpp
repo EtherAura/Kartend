@@ -1,6 +1,7 @@
 #include "subfolderspanel.h"
 
 #include "settingsformbinding.h"
+#include "settingsmodel.h"
 #include "ui_subfolderspanel.h"
 
 #include <QCheckBox>
@@ -26,7 +27,17 @@ SubfoldersPanel::~SubfoldersPanel() {
   delete ui;
 }
 
-void SubfoldersPanel::load(const CollectionConfig &config) {
+void SubfoldersPanel::setModel(SettingsModel *model) {
+  m_model = model;
+}
+
+void SubfoldersPanel::load() {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   SettingsFormBinding::loadInto(ui->includeContentSubfoldersCheckBox,
                                 config.includeContentSubfolders);
   SettingsFormBinding::loadInto(ui->showAllSubfolderItemsCheckBox, config.showAllSubfolderItems);
@@ -46,7 +57,13 @@ void SubfoldersPanel::clear() {
   updateOptionsVisibility();
 }
 
-void SubfoldersPanel::save(CollectionConfig &config) const {
+void SubfoldersPanel::save() const {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   config.includeContentSubfolders = ui->includeContentSubfoldersCheckBox->isChecked();
   config.showAllSubfolderItems = ui->showAllSubfolderItemsCheckBox->isChecked();
   config.hideSubfolderTitles = ui->hideSubfolderTitlesCheckBox->isChecked();
@@ -54,7 +71,9 @@ void SubfoldersPanel::save(CollectionConfig &config) const {
   config.includeArtworkSubfolders = ui->includeArtworkSubfoldersCheckBox->isChecked();
 }
 
-bool SubfoldersPanel::hasChanges(const CollectionConfig &o) const {
+bool SubfoldersPanel::hasChanges() const {
+  if (!m_model || !m_model->originalCollection) return false;
+  const CollectionConfig &o = *m_model->originalCollection;
   return ui->includeContentSubfoldersCheckBox->isChecked() != o.includeContentSubfolders ||
          ui->showAllSubfolderItemsCheckBox->isChecked() != o.showAllSubfolderItems ||
          ui->hideSubfolderTitlesCheckBox->isChecked() != o.hideSubfolderTitles ||

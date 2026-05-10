@@ -1,6 +1,7 @@
 #include "appearancetoolbarpanel.h"
 
 #include "settingsformbinding.h"
+#include "settingsmodel.h"
 #include "ui_appearancetoolbarpanel.h"
 
 #include <QComboBox>
@@ -25,7 +26,17 @@ AppearanceToolbarPanel::~AppearanceToolbarPanel() {
   delete ui;
 }
 
-void AppearanceToolbarPanel::load(const CollectionConfig &config) {
+void AppearanceToolbarPanel::setModel(SettingsModel *model) {
+  m_model = model;
+}
+
+void AppearanceToolbarPanel::load() {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   SettingsFormBinding::loadInto(ui->headerLogoEdit, config.headerLogoImage);
   SettingsFormBinding::loadIntoIndex(ui->headerLogoPositionComboBox,
                                      static_cast<int>(config.headerLogoPosition));
@@ -36,13 +47,21 @@ void AppearanceToolbarPanel::clear() {
   ui->headerLogoPositionComboBox->setCurrentIndex(1);
 }
 
-void AppearanceToolbarPanel::save(CollectionConfig &config) const {
+void AppearanceToolbarPanel::save() const {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 ||
+      *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   config.headerLogoImage = ui->headerLogoEdit->text().trimmed();
   config.headerLogoPosition =
       static_cast<HeaderLogoPosition>(ui->headerLogoPositionComboBox->currentIndex());
 }
 
-bool AppearanceToolbarPanel::hasChanges(const CollectionConfig &o) const {
+bool AppearanceToolbarPanel::hasChanges() const {
+  if (!m_model || !m_model->originalCollection) return false;
+  const CollectionConfig &o = *m_model->originalCollection;
   if (ui->headerLogoEdit->text().trimmed() != o.headerLogoImage) return true;
   if (ui->headerLogoPositionComboBox->currentIndex() != static_cast<int>(o.headerLogoPosition))
     return true;

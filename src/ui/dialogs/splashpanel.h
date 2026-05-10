@@ -9,11 +9,11 @@ class SplashPanel;
 }
 QT_END_NAMESPACE
 
-struct GeneralSettings;
+struct SettingsModel;
 
 /// Standalone panel widget for the global "Splash" sub-tab in SettingsDialog.
 /// Owns the boot-splash + resume-focus-splash enable/title/subtitle fields,
-/// observing a GeneralSettings* installed by the host dialog so changes write
+/// observing a SettingsModel* installed by the host dialog so changes write
 /// straight through to the live settings struct. Live-save semantics — host
 /// is expected to mirror to mainWindow + saveGeneralSettings on changed().
 class SplashPanel : public QWidget {
@@ -22,7 +22,7 @@ public:
   explicit SplashPanel(QWidget *parent = nullptr);
   ~SplashPanel() override;
 
-  void setSettings(GeneralSettings *settings);
+  void setModel(SettingsModel *model);
   void refresh();
 
 signals:
@@ -32,7 +32,7 @@ private:
   void writeBack();
 
   Ui::SplashPanel *ui;
-  GeneralSettings *m_settings = nullptr;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // SPLASHPANEL_H

@@ -3,6 +3,7 @@
 #include "collectionutils.h"
 #include "gamepadcapturecontroller.h"
 #include "settingsformbinding.h"
+#include "settingsmodel.h"
 #include "ui_controlspanel.h"
 
 #include <QCheckBox>
@@ -24,40 +25,40 @@ ControlsPanel::~ControlsPanel() {
   delete ui;
 }
 
-void ControlsPanel::setSettings(GeneralSettings *settings) {
-  m_settings = settings;
+void ControlsPanel::setModel(SettingsModel *model) {
+  m_model = model;
   refresh();
 }
 
 void ControlsPanel::refresh() {
-  if (!m_settings) {
+  if (!m_model || !m_model->generalSettings) {
     return;
   }
+  GeneralSettings *s = m_model->generalSettings;
 
   auto setKeyEdit = [](QKeySequenceEdit *edit, int key) {
     QSignalBlocker blocker(edit);
     edit->setKeySequence(QKeySequence(key));
   };
-  setKeyEdit(ui->keyNavUpEdit, m_settings->keyNavUp);
-  setKeyEdit(ui->keyNavDownEdit, m_settings->keyNavDown);
-  setKeyEdit(ui->keyNavLeftEdit, m_settings->keyNavLeft);
-  setKeyEdit(ui->keyNavRightEdit, m_settings->keyNavRight);
-  setKeyEdit(ui->keyConfirmEdit, m_settings->keyConfirm);
-  setKeyEdit(ui->keyBackEdit, m_settings->keyBack);
-  setKeyEdit(ui->keySearchEdit, m_settings->keySearch);
-  setKeyEdit(ui->keyHomeViewEdit, m_settings->keyHomeView);
+  setKeyEdit(ui->keyNavUpEdit, s->keyNavUp);
+  setKeyEdit(ui->keyNavDownEdit, s->keyNavDown);
+  setKeyEdit(ui->keyNavLeftEdit, s->keyNavLeft);
+  setKeyEdit(ui->keyNavRightEdit, s->keyNavRight);
+  setKeyEdit(ui->keyConfirmEdit, s->keyConfirm);
+  setKeyEdit(ui->keyBackEdit, s->keyBack);
+  setKeyEdit(ui->keySearchEdit, s->keySearch);
+  setKeyEdit(ui->keyHomeViewEdit, s->keyHomeView);
 
-  SettingsFormBinding::loadInto(ui->gamepadUseDpadCheckBox, m_settings->gamepadUseDpad);
-  SettingsFormBinding::loadInto(ui->gamepadUseLeftStickCheckBox, m_settings->gamepadUseLeftStick);
-  SettingsFormBinding::loadInto(ui->gamepadConfirmButtonLineEdit, m_settings->gamepadConfirmButton);
-  SettingsFormBinding::loadInto(ui->gamepadBackButtonLineEdit, m_settings->gamepadBackButton);
+  SettingsFormBinding::loadInto(ui->gamepadUseDpadCheckBox, s->gamepadUseDpad);
+  SettingsFormBinding::loadInto(ui->gamepadUseLeftStickCheckBox, s->gamepadUseLeftStick);
+  SettingsFormBinding::loadInto(ui->gamepadConfirmButtonLineEdit, s->gamepadConfirmButton);
+  SettingsFormBinding::loadInto(ui->gamepadBackButtonLineEdit, s->gamepadBackButton);
   SettingsFormBinding::loadInto(ui->gamepadToggleSidebarButtonLineEdit,
-                                m_settings->gamepadToggleSidebarButton);
+                                s->gamepadToggleSidebarButton);
 
   {
     QSignalBlocker blocker(ui->artworkCycleModifierComboBox);
-    const int comboIdx =
-        ui->artworkCycleModifierComboBox->findData(m_settings->artworkCycleModifier);
+    const int comboIdx = ui->artworkCycleModifierComboBox->findData(s->artworkCycleModifier);
     ui->artworkCycleModifierComboBox->setCurrentIndex(comboIdx >= 0 ? comboIdx : 0);
   }
 }
@@ -105,9 +106,10 @@ QCheckBox *ControlsPanel::useLeftStickCheckBox() const {
 }
 
 void ControlsPanel::writeBack() {
-  if (!m_settings) {
+  if (!m_model || !m_model->generalSettings) {
     return;
   }
+  GeneralSettings *s = m_model->generalSettings;
   // Single-key extraction with fallback: leave the existing value when the
   // user clears the edit (so partial typing doesn't unbind the shortcut),
   // except for keyHomeView which intentionally allows 0 = unbound.
@@ -119,30 +121,30 @@ void ControlsPanel::writeBack() {
     const int keyOnly = static_cast<int>(seq[0].key());
     return (keyOnly != 0) ? keyOnly : fallback;
   };
-  m_settings->keyNavUp = singleKey(ui->keyNavUpEdit, m_settings->keyNavUp);
-  m_settings->keyNavDown = singleKey(ui->keyNavDownEdit, m_settings->keyNavDown);
-  m_settings->keyNavLeft = singleKey(ui->keyNavLeftEdit, m_settings->keyNavLeft);
-  m_settings->keyNavRight = singleKey(ui->keyNavRightEdit, m_settings->keyNavRight);
-  m_settings->keyConfirm = singleKey(ui->keyConfirmEdit, m_settings->keyConfirm);
-  m_settings->keyBack = singleKey(ui->keyBackEdit, m_settings->keyBack);
-  m_settings->keySearch = singleKey(ui->keySearchEdit, m_settings->keySearch);
-  m_settings->keyHomeView = singleKey(ui->keyHomeViewEdit, 0);
+  s->keyNavUp = singleKey(ui->keyNavUpEdit, s->keyNavUp);
+  s->keyNavDown = singleKey(ui->keyNavDownEdit, s->keyNavDown);
+  s->keyNavLeft = singleKey(ui->keyNavLeftEdit, s->keyNavLeft);
+  s->keyNavRight = singleKey(ui->keyNavRightEdit, s->keyNavRight);
+  s->keyConfirm = singleKey(ui->keyConfirmEdit, s->keyConfirm);
+  s->keyBack = singleKey(ui->keyBackEdit, s->keyBack);
+  s->keySearch = singleKey(ui->keySearchEdit, s->keySearch);
+  s->keyHomeView = singleKey(ui->keyHomeViewEdit, 0);
 
-  m_settings->gamepadUseDpad = ui->gamepadUseDpadCheckBox->isChecked();
-  m_settings->gamepadUseLeftStick = ui->gamepadUseLeftStickCheckBox->isChecked();
+  s->gamepadUseDpad = ui->gamepadUseDpadCheckBox->isChecked();
+  s->gamepadUseLeftStick = ui->gamepadUseLeftStickCheckBox->isChecked();
   // Gamepad button strings: only commit non-empty values so a partial /
   // cancelled detect-button workflow doesn't blank the saved binding.
   const QString confirm = ui->gamepadConfirmButtonLineEdit->text().trimmed();
   if (!confirm.isEmpty()) {
-    m_settings->gamepadConfirmButton = confirm;
+    s->gamepadConfirmButton = confirm;
   }
   const QString back = ui->gamepadBackButtonLineEdit->text().trimmed();
   if (!back.isEmpty()) {
-    m_settings->gamepadBackButton = back;
+    s->gamepadBackButton = back;
   }
   const QString toggleSidebar = ui->gamepadToggleSidebarButtonLineEdit->text().trimmed();
   if (!toggleSidebar.isEmpty()) {
-    m_settings->gamepadToggleSidebarButton = toggleSidebar;
+    s->gamepadToggleSidebarButton = toggleSidebar;
   }
 
   // Validate the combo's data is a known modifier; ignore stale entries
@@ -153,7 +155,7 @@ void ControlsPanel::writeBack() {
   case static_cast<int>(Qt::ControlModifier):
   case static_cast<int>(Qt::AltModifier):
   case static_cast<int>(Qt::MetaModifier):
-    m_settings->artworkCycleModifier = rawModifier;
+    s->artworkCycleModifier = rawModifier;
     break;
   default:
     break;

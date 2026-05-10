@@ -12,6 +12,8 @@ class QSpinBox;
 class QComboBox;
 QT_END_NAMESPACE
 
+struct SettingsModel;
+
 /// Per-collection "Layout" appearance sub-sub-tab. Owns the View / Grid
 /// Sizing / Item Dimensions field groups (12 fields total).
 ///
@@ -26,10 +28,11 @@ public:
   explicit AppearanceLayoutPanel(QWidget *parent = nullptr);
   ~AppearanceLayoutPanel() override;
 
-  void load(const CollectionConfig &config);
+  void setModel(SettingsModel *model);
+  void load();
   void clear();
-  void save(CollectionConfig &config) const;
-  [[nodiscard]] bool hasChanges(const CollectionConfig &original) const;
+  void save() const;
+  [[nodiscard]] bool hasChanges() const;
 
   // Cross-cutting accessors:
   [[nodiscard]] QSpinBox *gridWidthSpinBox() const;
@@ -48,6 +51,7 @@ private:
   static int spacingUiToInternal(int spacing);
 
   Ui::AppearanceLayoutPanel *ui;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // APPEARANCELAYOUTPANEL_H

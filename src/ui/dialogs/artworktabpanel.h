@@ -2,6 +2,7 @@
 #define ARTWORKTABPANEL_H
 
 #include "collectionutils.h"
+#include <QStringList>
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -9,6 +10,8 @@ namespace Ui {
 class ArtworkTabPanel;
 }
 QT_END_NAMESPACE
+
+struct SettingsModel;
 
 /// Standalone panel widget for the per-collection "Artwork" tab in
 /// SettingsDialog. Owns the artwork / video / manual / placeholder asset
@@ -20,10 +23,11 @@ public:
   explicit ArtworkTabPanel(QWidget *parent = nullptr);
   ~ArtworkTabPanel() override;
 
-  void load(const CollectionConfig &config);
+  void setModel(SettingsModel *model);
+  void load();
   void clear();
-  void save(CollectionConfig &config) const;
-  [[nodiscard]] bool hasChanges(const CollectionConfig &original) const;
+  void save() const;
+  [[nodiscard]] bool hasChanges() const;
 
 signals:
   void changed();
@@ -35,7 +39,10 @@ private slots:
   void onBrowsePlaceholderArtwork();
 
 private:
+  QStringList parseCustomArtworkTypes() const;
+
   Ui::ArtworkTabPanel *ui;
+  SettingsModel *m_model = nullptr;
 };
 
 #endif // ARTWORKTABPANEL_H

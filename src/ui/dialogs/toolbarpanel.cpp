@@ -2,6 +2,7 @@
 
 #include "collectionutils.h"
 #include "settingsformbinding.h"
+#include "settingsmodel.h"
 #include "ui_toolbarpanel.h"
 
 #include <QCheckBox>
@@ -29,64 +30,60 @@ ToolbarPanel::~ToolbarPanel() {
   delete ui;
 }
 
-void ToolbarPanel::setSettings(GeneralSettings *settings) {
-  m_settings = settings;
+void ToolbarPanel::setModel(SettingsModel *model) {
+  m_model = model;
   refresh();
 }
 
 void ToolbarPanel::refresh() {
-  if (!m_settings) {
+  if (!m_model || !m_model->generalSettings) {
     return;
   }
-  SettingsFormBinding::loadInto(ui->toolbarGridViewVisibleCheckBox,
-                                m_settings->toolbarShowGridViewButton);
-  SettingsFormBinding::loadInto(ui->toolbarListViewVisibleCheckBox,
-                                m_settings->toolbarShowListViewButton);
+  GeneralSettings *s = m_model->generalSettings;
+  SettingsFormBinding::loadInto(ui->toolbarGridViewVisibleCheckBox, s->toolbarShowGridViewButton);
+  SettingsFormBinding::loadInto(ui->toolbarListViewVisibleCheckBox, s->toolbarShowListViewButton);
   SettingsFormBinding::loadInto(ui->toolbarCoverFlowViewVisibleCheckBox,
-                                m_settings->toolbarShowCoverFlowViewButton);
+                                s->toolbarShowCoverFlowViewButton);
   SettingsFormBinding::loadInto(ui->toolbarHorizontalViewVisibleCheckBox,
-                                m_settings->toolbarShowHorizontalViewButton);
+                                s->toolbarShowHorizontalViewButton);
   SettingsFormBinding::loadInto(ui->toolbarHideSubcollectionsVisibleCheckBox,
-                                m_settings->toolbarShowHideSubcollectionsButton);
-  SettingsFormBinding::loadInto(ui->toolbarTypeFilterVisibleCheckBox,
-                                m_settings->toolbarShowTypeFilter);
-  SettingsFormBinding::loadInto(ui->toolbarTitleFilterVisibleCheckBox,
-                                m_settings->toolbarShowTitleFilter);
+                                s->toolbarShowHideSubcollectionsButton);
+  SettingsFormBinding::loadInto(ui->toolbarTypeFilterVisibleCheckBox, s->toolbarShowTypeFilter);
+  SettingsFormBinding::loadInto(ui->toolbarTitleFilterVisibleCheckBox, s->toolbarShowTitleFilter);
   SettingsFormBinding::loadInto(ui->toolbarSearchModeVisibleCheckBox,
-                                m_settings->toolbarShowSearchModeButton);
-  SettingsFormBinding::loadInto(ui->toolbarSearchBarVisibleCheckBox,
-                                m_settings->toolbarShowSearchBar);
-  SettingsFormBinding::loadInto(ui->toolbarGridViewTextEdit, m_settings->toolbarGridViewButtonText);
-  SettingsFormBinding::loadInto(ui->toolbarListViewTextEdit, m_settings->toolbarListViewButtonText);
+                                s->toolbarShowSearchModeButton);
+  SettingsFormBinding::loadInto(ui->toolbarSearchBarVisibleCheckBox, s->toolbarShowSearchBar);
+  SettingsFormBinding::loadInto(ui->toolbarGridViewTextEdit, s->toolbarGridViewButtonText);
+  SettingsFormBinding::loadInto(ui->toolbarListViewTextEdit, s->toolbarListViewButtonText);
   SettingsFormBinding::loadInto(ui->toolbarCoverFlowViewTextEdit,
-                                m_settings->toolbarCoverFlowViewButtonText);
+                                s->toolbarCoverFlowViewButtonText);
   SettingsFormBinding::loadInto(ui->toolbarHorizontalViewTextEdit,
-                                m_settings->toolbarHorizontalViewButtonText);
+                                s->toolbarHorizontalViewButtonText);
   SettingsFormBinding::loadInto(ui->toolbarHideSubcollectionsTextEdit,
-                                m_settings->toolbarHideSubcollectionsButtonText);
-  SettingsFormBinding::loadInto(ui->toolbarTitleFilterTextEdit, m_settings->toolbarTitleFilterText);
+                                s->toolbarHideSubcollectionsButtonText);
+  SettingsFormBinding::loadInto(ui->toolbarTitleFilterTextEdit, s->toolbarTitleFilterText);
 }
 
 void ToolbarPanel::writeBack() {
-  if (!m_settings) {
+  if (!m_model || !m_model->generalSettings) {
     return;
   }
-  m_settings->toolbarShowGridViewButton = ui->toolbarGridViewVisibleCheckBox->isChecked();
-  m_settings->toolbarShowListViewButton = ui->toolbarListViewVisibleCheckBox->isChecked();
-  m_settings->toolbarShowCoverFlowViewButton = ui->toolbarCoverFlowViewVisibleCheckBox->isChecked();
-  m_settings->toolbarShowHorizontalViewButton =
-      ui->toolbarHorizontalViewVisibleCheckBox->isChecked();
-  m_settings->toolbarShowHideSubcollectionsButton =
+  GeneralSettings *s = m_model->generalSettings;
+  s->toolbarShowGridViewButton = ui->toolbarGridViewVisibleCheckBox->isChecked();
+  s->toolbarShowListViewButton = ui->toolbarListViewVisibleCheckBox->isChecked();
+  s->toolbarShowCoverFlowViewButton = ui->toolbarCoverFlowViewVisibleCheckBox->isChecked();
+  s->toolbarShowHorizontalViewButton = ui->toolbarHorizontalViewVisibleCheckBox->isChecked();
+  s->toolbarShowHideSubcollectionsButton =
       ui->toolbarHideSubcollectionsVisibleCheckBox->isChecked();
-  m_settings->toolbarShowTypeFilter = ui->toolbarTypeFilterVisibleCheckBox->isChecked();
-  m_settings->toolbarShowTitleFilter = ui->toolbarTitleFilterVisibleCheckBox->isChecked();
-  m_settings->toolbarShowSearchModeButton = ui->toolbarSearchModeVisibleCheckBox->isChecked();
-  m_settings->toolbarShowSearchBar = ui->toolbarSearchBarVisibleCheckBox->isChecked();
-  m_settings->toolbarGridViewButtonText = ui->toolbarGridViewTextEdit->text();
-  m_settings->toolbarListViewButtonText = ui->toolbarListViewTextEdit->text();
-  m_settings->toolbarCoverFlowViewButtonText = ui->toolbarCoverFlowViewTextEdit->text();
-  m_settings->toolbarHorizontalViewButtonText = ui->toolbarHorizontalViewTextEdit->text();
-  m_settings->toolbarHideSubcollectionsButtonText = ui->toolbarHideSubcollectionsTextEdit->text();
-  m_settings->toolbarTitleFilterText = ui->toolbarTitleFilterTextEdit->text();
+  s->toolbarShowTypeFilter = ui->toolbarTypeFilterVisibleCheckBox->isChecked();
+  s->toolbarShowTitleFilter = ui->toolbarTitleFilterVisibleCheckBox->isChecked();
+  s->toolbarShowSearchModeButton = ui->toolbarSearchModeVisibleCheckBox->isChecked();
+  s->toolbarShowSearchBar = ui->toolbarSearchBarVisibleCheckBox->isChecked();
+  s->toolbarGridViewButtonText = ui->toolbarGridViewTextEdit->text();
+  s->toolbarListViewButtonText = ui->toolbarListViewTextEdit->text();
+  s->toolbarCoverFlowViewButtonText = ui->toolbarCoverFlowViewTextEdit->text();
+  s->toolbarHorizontalViewButtonText = ui->toolbarHorizontalViewTextEdit->text();
+  s->toolbarHideSubcollectionsButtonText = ui->toolbarHideSubcollectionsTextEdit->text();
+  s->toolbarTitleFilterText = ui->toolbarTitleFilterTextEdit->text();
   emit changed();
 }

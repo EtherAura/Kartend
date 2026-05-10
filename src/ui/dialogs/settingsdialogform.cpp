@@ -95,6 +95,11 @@ void SettingsDialog::saveCollectionFromUI(int index) {
     return;
   }
 
+  // Snapshot the row before panels write into it via extractUIFieldValues —
+  // if any path validation below fails we restore the row so a bad input
+  // doesn't poison the working state.
+  const CollectionConfig snapshot = m_workingCollections[index];
+
   CollectionConfig collection = extractUIFieldValues();
 
   // Validate paths for security before saving
@@ -115,31 +120,42 @@ void SettingsDialog::saveCollectionFromUI(int index) {
     return true;
   };
 
+  auto rollback = [&]() { m_workingCollections[index] = snapshot; };
+
   if (!validatePath(collection.mediaDirectory, tr("Media Directory"))) {
+    rollback();
     return;
   }
   if (!validatePath(collection.artworkDirectory, tr("Artwork Directory"))) {
+    rollback();
     return;
   }
   if (!validatePath(collection.videoDirectory, tr("Video Directory"))) {
+    rollback();
     return;
   }
   if (!validatePath(collection.manualDirectory, tr("Manual Directory"))) {
+    rollback();
     return;
   }
   if (!validatePath(collection.launcherPath, tr("Launcher Path"))) {
+    rollback();
     return;
   }
   if (!validatePath(collection.corePath, tr("Core Path"))) {
+    rollback();
     return;
   }
   if (!validatePath(collection.backgroundImage, tr("Background Image"))) {
+    rollback();
     return;
   }
   if (!validatePath(collection.backgroundVideo, tr("Background Video"))) {
+    rollback();
     return;
   }
   if (!validatePath(collection.headerLogoImage, tr("Header Logo"))) {
+    rollback();
     return;
   }
 
