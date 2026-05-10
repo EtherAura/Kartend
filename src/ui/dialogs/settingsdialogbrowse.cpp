@@ -22,6 +22,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "appearancelistpanel.h"
 #include "artworktabpanel.h"
 #include "configurationpanel.h"
 #include "extensionutils.h"
@@ -300,12 +301,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
   }
 
   // List mode settings
-  if (ui->listFontSizeSpinBox) {
-    ui->listFontSizeSpinBox->setValue(config.listFontSize);
-  }
-  if (ui->listRowHeightSpinBox) {
-    ui->listRowHeightSpinBox->setValue(config.listRowHeight);
-  }
+  ui->appearanceListPanel->load(config);
   if (ui->listRowColorEdit) {
     ui->listRowColorEdit->setText(config.listRowColor);
   }

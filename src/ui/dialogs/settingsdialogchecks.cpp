@@ -22,6 +22,7 @@
 #include <QTreeWidgetItem>
 #include <set>
 
+#include "appearancelistpanel.h"
 #include "artworktabpanel.h"
 #include "configurationpanel.h"
 #include "extensionutils.h"
@@ -168,11 +169,8 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.selectionColor =
       (ui->selectionColorEdit) ? ui->selectionColorEdit->text().trimmed() : config.selectionColor;
 
-  // List mode settings
-  config.listFontSize =
-      (ui->listFontSizeSpinBox) ? ui->listFontSizeSpinBox->value() : config.listFontSize;
-  config.listRowHeight =
-      (ui->listRowHeightSpinBox) ? ui->listRowHeightSpinBox->value() : config.listRowHeight;
+  // List mode settings (font size + row height owned by AppearanceListPanel).
+  ui->appearanceListPanel->save(config);
   config.listRowColor =
       (ui->listRowColorEdit) ? ui->listRowColorEdit->text().trimmed() : config.listRowColor;
   config.listAltRowColor = (ui->listAltRowColorEdit) ? ui->listAltRowColorEdit->text().trimmed()
@@ -346,8 +344,7 @@ auto SettingsDialog::checkColorChanges() const -> bool {
 // Checks list mode field changes
 auto SettingsDialog::checkListModeChanges() const -> bool {
   const CollectionConfig &o = originalCollection;
-  return spinIntChanged(ui->listFontSizeSpinBox, o.listFontSize) ||
-         spinIntChanged(ui->listRowHeightSpinBox, o.listRowHeight) ||
+  return ui->appearanceListPanel->hasChanges(o) ||
          lineTrimmedChanged(ui->listRowColorEdit, o.listRowColor) ||
          lineTrimmedChanged(ui->listAltRowColorEdit, o.listAltRowColor) ||
          lineTrimmedChanged(ui->customFontEdit, o.customFontFamily);

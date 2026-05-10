@@ -256,15 +256,7 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->selectionColorEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);
   }
-  // List mode field connections
-  if (ui->listFontSizeSpinBox) {
-    connect(ui->listFontSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->listRowHeightSpinBox) {
-    connect(ui->listRowHeightSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsDialog::checkForChanges);
-  }
+  // List font size + row height connections live on AppearanceListPanel.
   if (ui->listRowColorEdit) {
     connect(ui->listRowColorEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
   }
