@@ -1,0 +1,71 @@
+#include "subfolderspanel.h"
+
+#include "settingsformbinding.h"
+#include "ui_subfolderspanel.h"
+
+#include <QCheckBox>
+
+SubfoldersPanel::SubfoldersPanel(QWidget *parent) : QWidget(parent), ui(new Ui::SubfoldersPanel) {
+  ui->setupUi(this);
+
+  // Toggle the dependent-options widget alongside the include checkbox so
+  // the dependent flags can't be set while the include flag is off.
+  connect(ui->includeContentSubfoldersCheckBox, &QCheckBox::toggled, this, [this](bool) {
+    updateOptionsVisibility();
+    emit changed();
+  });
+  for (auto *box : {ui->showAllSubfolderItemsCheckBox, ui->hideSubfolderTitlesCheckBox,
+                    ui->showHiddenFoldersCheckBox, ui->includeArtworkSubfoldersCheckBox}) {
+    connect(box, &QCheckBox::toggled, this, [this](bool) { emit changed(); });
+  }
+
+  updateOptionsVisibility();
+}
+
+SubfoldersPanel::~SubfoldersPanel() {
+  delete ui;
+}
+
+void SubfoldersPanel::load(const CollectionConfig &config) {
+  SettingsFormBinding::loadInto(ui->includeContentSubfoldersCheckBox,
+                                config.includeContentSubfolders);
+  SettingsFormBinding::loadInto(ui->showAllSubfolderItemsCheckBox, config.showAllSubfolderItems);
+  SettingsFormBinding::loadInto(ui->hideSubfolderTitlesCheckBox, config.hideSubfolderTitles);
+  SettingsFormBinding::loadInto(ui->showHiddenFoldersCheckBox, config.showHiddenFolders);
+  SettingsFormBinding::loadInto(ui->includeArtworkSubfoldersCheckBox,
+                                config.includeArtworkSubfolders);
+  updateOptionsVisibility();
+}
+
+void SubfoldersPanel::clear() {
+  ui->includeContentSubfoldersCheckBox->setChecked(false);
+  ui->showAllSubfolderItemsCheckBox->setChecked(false);
+  ui->hideSubfolderTitlesCheckBox->setChecked(false);
+  ui->showHiddenFoldersCheckBox->setChecked(false);
+  ui->includeArtworkSubfoldersCheckBox->setChecked(false);
+  updateOptionsVisibility();
+}
+
+void SubfoldersPanel::save(CollectionConfig &config) const {
+  config.includeContentSubfolders = ui->includeContentSubfoldersCheckBox->isChecked();
+  config.showAllSubfolderItems = ui->showAllSubfolderItemsCheckBox->isChecked();
+  config.hideSubfolderTitles = ui->hideSubfolderTitlesCheckBox->isChecked();
+  config.showHiddenFolders = ui->showHiddenFoldersCheckBox->isChecked();
+  config.includeArtworkSubfolders = ui->includeArtworkSubfoldersCheckBox->isChecked();
+}
+
+bool SubfoldersPanel::hasChanges(const CollectionConfig &o) const {
+  return ui->includeContentSubfoldersCheckBox->isChecked() != o.includeContentSubfolders ||
+         ui->showAllSubfolderItemsCheckBox->isChecked() != o.showAllSubfolderItems ||
+         ui->hideSubfolderTitlesCheckBox->isChecked() != o.hideSubfolderTitles ||
+         ui->showHiddenFoldersCheckBox->isChecked() != o.showHiddenFolders ||
+         ui->includeArtworkSubfoldersCheckBox->isChecked() != o.includeArtworkSubfolders;
+}
+
+bool SubfoldersPanel::isContentSubfoldersIncluded() const {
+  return ui->includeContentSubfoldersCheckBox->isChecked();
+}
+
+void SubfoldersPanel::updateOptionsVisibility() {
+  ui->subfolderOptionsWidget->setVisible(ui->includeContentSubfoldersCheckBox->isChecked());
+}

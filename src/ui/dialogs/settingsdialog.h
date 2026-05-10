@@ -129,7 +129,6 @@ private slots:
   void onGridWidthChanged(int value);
   void onRecursiveImportContent();
   void onRecursiveImportArtwork();
-  void onIncludeSubfoldersToggled(bool checked);
   /// react to user changes in the Settings Mode combo box.
   void onSettingsScopeChanged(int comboIndex);
   /// builds the tree's right-click context menu (Rename /

@@ -31,6 +31,7 @@
 #include "settingsdialog.h"
 #include "settingsmanager.h"
 #include "sidebarpanel.h"
+#include "subfolderspanel.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
@@ -121,12 +122,6 @@ void SettingsDialog::onRecursiveImportArtwork() {
     return;
   }
   performRecursiveImport(baseDir, false);
-}
-
-void SettingsDialog::onIncludeSubfoldersToggled(bool checked) {
-  if (ui->subfolderOptionsWidget) {
-    ui->subfolderOptionsWidget->setVisible(checked);
-  }
 }
 
 void SettingsDialog::performRecursiveImport(const QString &baseDir, bool isContentDir) {
@@ -285,24 +280,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
   if (ui->placeholderArtworkLineEdit) {
     ui->placeholderArtworkLineEdit->setText(config.placeholderArtwork);
   }
-  if (ui->includeContentSubfoldersCheckBox) {
-    ui->includeContentSubfoldersCheckBox->setChecked(config.includeContentSubfolders);
-  }
-  if (ui->showAllSubfolderItemsCheckBox) {
-    ui->showAllSubfolderItemsCheckBox->setChecked(config.showAllSubfolderItems);
-  }
-  if (ui->hideSubfolderTitlesCheckBox) {
-    ui->hideSubfolderTitlesCheckBox->setChecked(config.hideSubfolderTitles);
-  }
-  if (ui->showHiddenFoldersCheckBox) {
-    ui->showHiddenFoldersCheckBox->setChecked(config.showHiddenFolders);
-  }
-  if (ui->subfolderOptionsWidget) {
-    ui->subfolderOptionsWidget->setVisible(config.includeContentSubfolders);
-  }
-  if (ui->includeArtworkSubfoldersCheckBox) {
-    ui->includeArtworkSubfoldersCheckBox->setChecked(config.includeArtworkSubfolders);
-  }
+  ui->subfoldersPanel->load(config);
   if (ui->fileExtensionsLineEdit) {
     ui->fileExtensionsLineEdit->setText(config.extensions.join(", "));
   }
@@ -503,11 +481,7 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->toolbarBackdropBlurCheckBox) ui->toolbarBackdropBlurCheckBox->setChecked(false);
   if (ui->backdropBlurRadiusSpinBox) ui->backdropBlurRadiusSpinBox->setValue(12);
 
-  if (ui->includeContentSubfoldersCheckBox) ui->includeContentSubfoldersCheckBox->setChecked(false);
-  if (ui->showAllSubfolderItemsCheckBox) ui->showAllSubfolderItemsCheckBox->setChecked(false);
-  if (ui->hideSubfolderTitlesCheckBox) ui->hideSubfolderTitlesCheckBox->setChecked(false);
-  if (ui->showHiddenFoldersCheckBox) ui->showHiddenFoldersCheckBox->setChecked(false);
-  if (ui->includeArtworkSubfoldersCheckBox) ui->includeArtworkSubfoldersCheckBox->setChecked(false);
+  ui->subfoldersPanel->clear();
   if (ui->showAllSubcollectionItemsCheckBox)
     ui->showAllSubcollectionItemsCheckBox->setChecked(false);
   if (ui->hideTitlesCheckBox) ui->hideTitlesCheckBox->setChecked(false);
@@ -534,7 +508,6 @@ void SettingsDialog::clearCollectionUI() {
   if (ui->parentCollectionComboBox) ui->parentCollectionComboBox->clear();
 
   if (ui->backgroundColorRadio) ui->backgroundColorRadio->setChecked(true);
-  if (ui->subfolderOptionsWidget) ui->subfolderOptionsWidget->setVisible(false);
 
   m_isLoading = false;
 }

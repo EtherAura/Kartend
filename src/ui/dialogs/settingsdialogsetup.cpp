@@ -36,6 +36,7 @@
 #include "scrollmanager.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
+#include "subfolderspanel.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
@@ -74,8 +75,8 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
                                              : originalCollection.mediaDirectory;
   QString newExtensions = ui->fileExtensionsLineEdit ? ui->fileExtensionsLineEdit->text().trimmed()
                                                      : originalCollection.extensions.join(", ");
-  bool newIncludeSubfolders = ui->includeContentSubfoldersCheckBox
-                                  ? ui->includeContentSubfoldersCheckBox->isChecked()
+  bool newIncludeSubfolders = ui->subfoldersPanel
+                                  ? ui->subfoldersPanel->isContentSubfoldersIncluded()
                                   : originalCollection.includeContentSubfolders;
 
   bool databaseFieldsChanged =
@@ -231,28 +232,7 @@ void SettingsDialog::setupFormFieldConnections() {
     connect(ui->collectionTypeComboBox, &QComboBox::currentTextChanged, this,
             &SettingsDialog::checkForChanges);
   }
-  if (ui->includeContentSubfoldersCheckBox) {
-    connect(ui->includeContentSubfoldersCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-    connect(ui->includeContentSubfoldersCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::onIncludeSubfoldersToggled);
-  }
-  if (ui->showAllSubfolderItemsCheckBox) {
-    connect(ui->showAllSubfolderItemsCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->hideSubfolderTitlesCheckBox) {
-    connect(ui->hideSubfolderTitlesCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->showHiddenFoldersCheckBox) {
-    connect(ui->showHiddenFoldersCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->includeArtworkSubfoldersCheckBox) {
-    connect(ui->includeArtworkSubfoldersCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-  }
+  // Content/Artwork subfolders connections live on SubfoldersPanel.
   if (ui->fileExtensionsLineEdit) {
     connect(ui->fileExtensionsLineEdit, &QLineEdit::textChanged, this,
             &SettingsDialog::checkForChanges);

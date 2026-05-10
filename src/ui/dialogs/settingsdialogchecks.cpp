@@ -31,6 +31,7 @@
 #include "settingsdialog.h"
 #include "settingsmanager.h"
 #include "sidebarpanel.h"
+#include "subfolderspanel.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
 
@@ -110,21 +111,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   config.placeholderArtwork = (ui->placeholderArtworkLineEdit)
                                   ? ui->placeholderArtworkLineEdit->text()
                                   : config.placeholderArtwork;
-  config.includeContentSubfolders = (ui->includeContentSubfoldersCheckBox)
-                                        ? ui->includeContentSubfoldersCheckBox->isChecked()
-                                        : config.includeContentSubfolders;
-  config.showAllSubfolderItems = (ui->showAllSubfolderItemsCheckBox)
-                                     ? ui->showAllSubfolderItemsCheckBox->isChecked()
-                                     : config.showAllSubfolderItems;
-  config.hideSubfolderTitles = (ui->hideSubfolderTitlesCheckBox)
-                                   ? ui->hideSubfolderTitlesCheckBox->isChecked()
-                                   : config.hideSubfolderTitles;
-  config.showHiddenFolders = (ui->showHiddenFoldersCheckBox)
-                                 ? ui->showHiddenFoldersCheckBox->isChecked()
-                                 : config.showHiddenFolders;
-  config.includeArtworkSubfolders = (ui->includeArtworkSubfoldersCheckBox)
-                                        ? ui->includeArtworkSubfoldersCheckBox->isChecked()
-                                        : config.includeArtworkSubfolders;
+  ui->subfoldersPanel->save(config);
   config.itemWidth = (ui->itemWidthSpinBox) ? ui->itemWidthSpinBox->value() : config.itemWidth;
   config.itemHeight = (ui->itemHeightSpinBox) ? ui->itemHeightSpinBox->value() : config.itemHeight;
   config.fontSize = (ui->fontSizeSpinBox) ? ui->fontSizeSpinBox->value() : config.fontSize;
@@ -351,12 +338,7 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
          checkboxChanged(ui->hideMissingArtworkCheckBox, o.hideMissingArtwork) ||
          checkboxChanged(ui->hideTitlesCheckBox, o.hideTitles) ||
          checkboxChanged(ui->hideSubcollectionTitlesCheckBox, o.hideSubcollectionTitles) ||
-         checkboxChanged(ui->includeContentSubfoldersCheckBox, o.includeContentSubfolders) ||
-         checkboxChanged(ui->showAllSubfolderItemsCheckBox, o.showAllSubfolderItems) ||
-         checkboxChanged(ui->hideSubfolderTitlesCheckBox, o.hideSubfolderTitles) ||
-         checkboxChanged(ui->showHiddenFoldersCheckBox, o.showHiddenFolders) ||
-         checkboxChanged(ui->includeArtworkSubfoldersCheckBox, o.includeArtworkSubfolders) ||
-         spinIntChanged(ui->fontSizeSpinBox, o.fontSize) ||
+         ui->subfoldersPanel->hasChanges(o) || spinIntChanged(ui->fontSizeSpinBox, o.fontSize) ||
          spinIntChanged(ui->cornerRadiusSpinBox, o.cornerRadius);
 }
 

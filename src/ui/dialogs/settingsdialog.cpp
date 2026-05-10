@@ -42,6 +42,7 @@
 #include "settingsmanager.h"
 #include "sidebarpanel.h"
 #include "splashpanel.h"
+#include "subfolderspanel.h"
 #include "toolbarpanel.h"
 #include "ui_settingsdialog.h"
 #include "uiconstants.h"
@@ -79,6 +80,10 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // routed to checkForChanges. The panel handles its own pickers and
   // position-driven width-vs-height visibility internally.
   connect(ui->sidebarPanel, &SidebarPanel::changed, this, &SettingsDialog::checkForChanges);
+
+  // Subfolders panel: per-collection load/save; visibility of the dependent
+  // options is internal to the panel.
+  connect(ui->subfoldersPanel, &SubfoldersPanel::changed, this, &SettingsDialog::checkForChanges);
 
   // Application-font panel: live-save semantics — panel mutates the
   // pointed-to GeneralSettings and emits changed(); we mirror to mainWindow,
@@ -396,12 +401,8 @@ void SettingsDialog::applyScopeFieldGating() {
       ui->defaultLauncherComboBox,
       ui->extractArchivesCheckBox,
       ui->extractedExtensionLineEdit,
-      ui->includeContentSubfoldersCheckBox,
-      ui->includeArtworkSubfoldersCheckBox,
+      ui->subfoldersPanel,
       ui->showAllSubcollectionItemsCheckBox,
-      ui->showAllSubfolderItemsCheckBox,
-      ui->hideSubfolderTitlesCheckBox,
-      ui->showHiddenFoldersCheckBox,
   };
   for (QWidget *w : gatedFields) {
     if (w) {

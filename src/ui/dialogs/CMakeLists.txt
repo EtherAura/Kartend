@@ -30,6 +30,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   sidebarpanel.cpp
   splashpanel.cpp
   statisticsdialog.cpp
+  subfolderspanel.cpp
   toolbarpanel.cpp
   applysettingsdialog.h
   attractpanel.h
@@ -54,6 +55,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   sidebarpanel.h
   splashpanel.h
   statisticsdialog.h
+  subfolderspanel.h
   toolbarpanel.h
   attractpanel.ui
   controlspanel.ui
@@ -63,5 +65,6 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   settingsdialog.ui
   sidebarpanel.ui
   splashpanel.ui
+  subfolderspanel.ui
   toolbarpanel.ui
 )
