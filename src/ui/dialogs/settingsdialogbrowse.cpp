@@ -23,9 +23,11 @@
 #include <set>
 
 #include "artworktabpanel.h"
+#include "configurationpanel.h"
 #include "extensionutils.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
+#include "launchertabpanel.h"
 #include "mainwindow.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
@@ -49,16 +51,16 @@ void SettingsDialog::checkForChanges() {
 void SettingsDialog::browseLauncher() {
   QString fileName =
       QFileDialog::getOpenFileName(this, tr("Select Launcher"), "", tr("All Files (*)"));
-  if (!fileName.isEmpty() && ui->launcherLineEdit) {
-    ui->launcherLineEdit->setText(fileName);
+  if (!fileName.isEmpty() && ui->launcherPanel->launcherLineEdit()) {
+    ui->launcherPanel->launcherLineEdit()->setText(fileName);
   }
 }
 
 void SettingsDialog::browseCore() {
   QString fileName = QFileDialog::getOpenFileName(
       this, tr("Select Core"), "", tr("Core Files (*.so *.dll *.dylib);;All Files (*)"));
-  if (!fileName.isEmpty() && ui->coreLineEdit) {
-    ui->coreLineEdit->setText(fileName);
+  if (!fileName.isEmpty() && ui->launcherPanel->coreLineEdit()) {
+    ui->launcherPanel->coreLineEdit()->setText(fileName);
   }
 }
 
@@ -200,26 +202,9 @@ void SettingsDialog::loadCollectionToUI(int index) {
   m_isLoading = true;
   const CollectionConfig &config = m_workingCollections[index];
 
-  if (ui->launcherLineEdit) {
-    ui->launcherLineEdit->setText(config.launcherPath);
-  }
-  if (ui->coreLineEdit) {
-    ui->coreLineEdit->setText(config.corePath);
-  }
-  if (ui->launchParamsLineEdit) {
-    ui->launchParamsLineEdit->setText(config.launchParameters);
-  }
-  if (ui->launcherNameLineEdit) {
-    ui->launcherNameLineEdit->setText(config.launcherName);
-  }
+  ui->launcherPanel->load(config);
   loadAdditionalLaunchersToUI(config);
   loadLinkedParentsToUI(config);
-  if (ui->extractArchivesCheckBox) {
-    ui->extractArchivesCheckBox->setChecked(config.extractArchives);
-  }
-  if (ui->extractedExtensionLineEdit) {
-    ui->extractedExtensionLineEdit->setText(config.extractedExtension);
-  }
   ui->configurationPanel->load(config);
   // Populate the type combo from the union of types in use across the
   // working list so the user can pick anything they've already tagged. The
@@ -374,10 +359,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
 void SettingsDialog::clearCollectionUI() {
   m_isLoading = true;
 
-  if (ui->launcherLineEdit) ui->launcherLineEdit->clear();
-  if (ui->coreLineEdit) ui->coreLineEdit->clear();
-  if (ui->launchParamsLineEdit) ui->launchParamsLineEdit->clear();
-  if (ui->launcherNameLineEdit) ui->launcherNameLineEdit->clear();
+  ui->launcherPanel->clear();
   clearAdditionalLaunchersUI();
   clearLinkedParentsUI();
   ui->configurationPanel->clear();

@@ -35,6 +35,7 @@
 #include "gamepadcapturecontroller.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
+#include "launchertabpanel.h"
 #include "mainwindow.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
@@ -234,14 +235,16 @@ void SettingsDialog::updateUIForLauncherType(const QString &launcherPath) {
   bool hasContentDir = !ui->configurationPanel->mediaDirLineEdit()->text().trimmed().isEmpty();
   bool usesLibretroCore = LauncherUtils::usesLibretroCore(launcherPath);
   bool showCore = hasContentDir && usesLibretroCore;
-  ui->coreLineEdit->setVisible(showCore);
-  ui->browseCoreButton->setVisible(showCore);
-  ui->label_core->setVisible(showCore);
+  ui->launcherPanel->coreLineEdit()->setVisible(showCore);
+  ui->launcherPanel->browseCoreButton()->setVisible(showCore);
+  ui->launcherPanel->labelCore()->setVisible(showCore);
   if (usesLibretroCore) {
-    ui->coreLineEdit->setToolTip("Path to libretro core file (.so/.dll/.dylib)");
-    ui->launchParamsLineEdit->setToolTip("Additional libretro frontend parameters");
+    ui->launcherPanel->coreLineEdit()->setToolTip("Path to libretro core file (.so/.dll/.dylib)");
+    ui->launcherPanel->launchParamsLineEdit()->setToolTip(
+        "Additional libretro frontend parameters");
   } else {
-    ui->launchParamsLineEdit->setToolTip("Additional command-line parameters for the launcher");
+    ui->launcherPanel->launchParamsLineEdit()->setToolTip(
+        "Additional command-line parameters for the launcher");
   }
 
   // Update extract archives visibility based on launcher type
@@ -256,11 +259,12 @@ void SettingsDialog::onContentDirectoryChanged() {
 void SettingsDialog::updateFieldVisibility() {
   bool hasContentDir = !ui->configurationPanel->mediaDirLineEdit()->text().trimmed().isEmpty();
 
-  ui->label_launcher->setVisible(hasContentDir);
-  ui->launcherLineEdit->setVisible(hasContentDir);
-  ui->browseLauncherButton->setVisible(hasContentDir);
-  ui->label_launchParams->setVisible(hasContentDir);
-  ui->launchParamsLineEdit->setVisible(hasContentDir);
+  // Launcher path / params + label visibility tracks hasContentDir; toggling
+  // the line edits is enough — the labels are inside the panel and stay with
+  // the panel widget visibility.
+  ui->launcherPanel->launcherLineEdit()->setVisible(hasContentDir);
+  ui->launcherPanel->browseLauncherButton()->setVisible(hasContentDir);
+  ui->launcherPanel->launchParamsLineEdit()->setVisible(hasContentDir);
   ui->configurationPanel->fileExtensionsLineEdit()->setVisible(hasContentDir);
 
   // ArtworkTabPanel widgets are always visible — collections inherit
@@ -268,11 +272,11 @@ void SettingsDialog::updateFieldVisibility() {
   // their own.
 
   if (hasContentDir) {
-    updateUIForLauncherType(ui->launcherLineEdit->text());
+    updateUIForLauncherType(ui->launcherPanel->launcherLineEdit()->text());
   } else {
-    ui->label_core->setVisible(false);
-    ui->coreLineEdit->setVisible(false);
-    ui->browseCoreButton->setVisible(false);
+    ui->launcherPanel->labelCore()->setVisible(false);
+    ui->launcherPanel->coreLineEdit()->setVisible(false);
+    ui->launcherPanel->browseCoreButton()->setVisible(false);
   }
   // Archive Handling stays visible regardless of content dir / launcher type
   // so the user can toggle the option freely.
@@ -283,16 +287,15 @@ void SettingsDialog::updateExtractArchivesVisibility() {
   // Archive Handling section is always visible — historically gated to
   // libretro frontends, but the user wants the toggle accessible regardless
   // of launcher type.
-  ui->label_extractArchives->setVisible(true);
-  ui->extractArchivesCheckBox->setVisible(true);
+  ui->launcherPanel->extractArchivesCheckBox()->setVisible(true);
 
   // Launch Extension is meaningful only when extraction is enabled.
-  bool extractEnabled = ui->extractArchivesCheckBox->isChecked();
-  ui->label_extractedExtension->setVisible(extractEnabled);
-  ui->extractedExtensionLineEdit->setVisible(extractEnabled);
+  bool extractEnabled = ui->launcherPanel->extractArchivesCheckBox()->isChecked();
+  ui->launcherPanel->labelExtractedExtension()->setVisible(extractEnabled);
+  ui->launcherPanel->extractedExtensionLineEdit()->setVisible(extractEnabled);
 
-  if (ui->launcherArchiveGroupBox) {
-    ui->launcherArchiveGroupBox->setVisible(true);
+  if (ui->launcherPanel->launcherArchiveGroupBox()) {
+    ui->launcherPanel->launcherArchiveGroupBox()->setVisible(true);
   }
 }
 

@@ -23,9 +23,11 @@
 #include <set>
 
 #include "artworktabpanel.h"
+#include "configurationpanel.h"
 #include "extensionutils.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
+#include "launchertabpanel.h"
 #include "mainwindow.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
@@ -77,22 +79,12 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
     }
   }
 
-  config.launcherPath = (ui->launcherLineEdit) ? ui->launcherLineEdit->text() : config.launcherPath;
-  config.corePath = (ui->coreLineEdit) ? ui->coreLineEdit->text() : config.corePath;
-  config.launchParameters =
-      (ui->launchParamsLineEdit) ? ui->launchParamsLineEdit->text() : config.launchParameters;
-  config.launcherName =
-      (ui->launcherNameLineEdit) ? ui->launcherNameLineEdit->text().trimmed() : config.launcherName;
+  ui->launcherPanel->save(config);
   config.additionalLaunchers = m_workingAdditionalLaunchers;
   config.additionalParentNames = m_workingAdditionalParentNames;
-  if (ui->defaultLauncherComboBox && ui->defaultLauncherComboBox->count() > 0) {
-    config.defaultLauncherIndex = ui->defaultLauncherComboBox->currentIndex();
+  if (ui->launcherPanel->defaultLauncherComboBox()->count() > 0) {
+    config.defaultLauncherIndex = ui->launcherPanel->defaultLauncherComboBox()->currentIndex();
   }
-  config.extractArchives = (ui->extractArchivesCheckBox) ? ui->extractArchivesCheckBox->isChecked()
-                                                         : config.extractArchives;
-  config.extractedExtension = (ui->extractedExtensionLineEdit)
-                                  ? ui->extractedExtensionLineEdit->text()
-                                  : config.extractedExtension;
   ui->configurationPanel->save(config);
   ui->artworkPanel->save(config);
   ui->subfoldersPanel->save(config);
@@ -257,12 +249,13 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
   // the spacing fields (apply spacingUiToInternal first). Sidebar / details-
   // pane fields delegate to SidebarPanel::hasChanges, which handles its own
   // image-vs-color background-value special case.
-  const bool launcherNameChanged =
-      ui->launcherNameLineEdit && ui->launcherNameLineEdit->text().trimmed() != o.launcherName;
+  // launcher fields (path / core / params / name / extract / extracted-ext)
+  // delegate to LauncherTabPanel::hasChanges; the additional-launchers list
+  // and default-launcher combo state still live on the dialog.
   const bool additionalChanged = m_workingAdditionalLaunchers != o.additionalLaunchers;
   const bool defaultLauncherChanged =
-      ui->defaultLauncherComboBox && ui->defaultLauncherComboBox->count() > 0 &&
-      ui->defaultLauncherComboBox->currentIndex() != o.defaultLauncherIndex;
+      ui->launcherPanel->defaultLauncherComboBox()->count() > 0 &&
+      ui->launcherPanel->defaultLauncherComboBox()->currentIndex() != o.defaultLauncherIndex;
   // type comparison is handled inside ConfigurationPanel::hasChanges below.
   const bool hSpacingChanged =
       ui->horizontalSpacingSpinBox &&
@@ -271,16 +264,9 @@ auto SettingsDialog::checkBasicFieldChanges() const -> bool {
       ui->verticalSpacingSpinBox &&
       spacingUiToInternal(ui->verticalSpacingSpinBox->value()) != o.verticalSpacing;
 
-  return launcherNameChanged || additionalChanged || defaultLauncherChanged || hSpacingChanged ||
-         vSpacingChanged || ui->sidebarPanel->hasChanges(o) ||
-         ui->configurationPanel->hasChanges(o) || ui->artworkPanel->hasChanges(o) ||
-
-         // Launcher / archive paths
-         lineChanged(ui->launcherLineEdit, o.launcherPath) ||
-         lineChanged(ui->coreLineEdit, o.corePath) ||
-         lineChanged(ui->launchParamsLineEdit, o.launchParameters) ||
-         checkboxChanged(ui->extractArchivesCheckBox, o.extractArchives) ||
-         lineChanged(ui->extractedExtensionLineEdit, o.extractedExtension) ||
+  return additionalChanged || defaultLauncherChanged || hSpacingChanged || vSpacingChanged ||
+         ui->sidebarPanel->hasChanges(o) || ui->configurationPanel->hasChanges(o) ||
+         ui->artworkPanel->hasChanges(o) || ui->launcherPanel->hasChanges(o) ||
 
          // Grid metrics
          spinIntChanged(ui->gridWidthSpinBox, o.gridWidth) ||

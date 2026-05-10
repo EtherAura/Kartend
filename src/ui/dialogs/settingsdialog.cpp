@@ -10,6 +10,7 @@
 #include <QFontDialog>
 #include <QInputDialog>
 #include <QKeySequence>
+#include <QListWidget>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPixmapCache>
@@ -37,6 +38,7 @@
 #include "interactionmanager.h"
 #include "itemwidget.h"
 #include "launcherpresetspanel.h"
+#include "launchertabpanel.h"
 #include "mainwindow.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
@@ -96,6 +98,11 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // media-dir button) remain wired by the host below.
   connect(ui->configurationPanel, &ConfigurationPanel::changed, this,
           &SettingsDialog::checkForChanges);
+
+  // Launcher tab: simple data fields go through panel.load/save; cross-
+  // cutting widgets (additional-launchers list, default-launcher combo,
+  // browse buttons) remain accessor-driven from the host.
+  connect(ui->launcherPanel, &LauncherTabPanel::changed, this, &SettingsDialog::checkForChanges);
 
   // Application-font panel: live-save semantics — panel mutates the
   // pointed-to GeneralSettings and emits changed(); we mirror to mainWindow,
@@ -319,8 +326,10 @@ void SettingsDialog::setupButtonConnections() {
     connect(ui->settingsScopeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &SettingsDialog::onSettingsScopeChanged);
   }
-  connect(ui->browseLauncherButton, &QPushButton::clicked, this, &SettingsDialog::browseLauncher);
-  connect(ui->browseCoreButton, &QPushButton::clicked, this, &SettingsDialog::browseCore);
+  connect(ui->launcherPanel->browseLauncherButton(), &QPushButton::clicked, this,
+          &SettingsDialog::browseLauncher);
+  connect(ui->launcherPanel->browseCoreButton(), &QPushButton::clicked, this,
+          &SettingsDialog::browseCore);
   connect(ui->configurationPanel->browseMediaDirButton(), &QPushButton::clicked, this,
           &SettingsDialog::browseMediaDir);
   // Artwork-tab browse buttons (artwork dir, video dir, manual dir,
@@ -382,19 +391,19 @@ void SettingsDialog::applyScopeFieldGating() {
       ui->configurationPanel->recursiveImportContentButton(),
       ui->artworkPanel,
       ui->configurationPanel->fileExtensionsLineEdit(),
-      ui->launcherLineEdit,
-      ui->browseLauncherButton,
-      ui->coreLineEdit,
-      ui->browseCoreButton,
-      ui->launchParamsLineEdit,
-      ui->launcherNameLineEdit,
-      ui->additionalLaunchersList,
-      ui->addAdditionalLauncherButton,
-      ui->editAdditionalLauncherButton,
-      ui->removeAdditionalLauncherButton,
-      ui->defaultLauncherComboBox,
-      ui->extractArchivesCheckBox,
-      ui->extractedExtensionLineEdit,
+      ui->launcherPanel->launcherLineEdit(),
+      ui->launcherPanel->browseLauncherButton(),
+      ui->launcherPanel->coreLineEdit(),
+      ui->launcherPanel->browseCoreButton(),
+      ui->launcherPanel->launchParamsLineEdit(),
+      ui->launcherPanel->launcherNameLineEdit(),
+      ui->launcherPanel->additionalLaunchersList(),
+      ui->launcherPanel->addAdditionalLauncherButton(),
+      ui->launcherPanel->editAdditionalLauncherButton(),
+      ui->launcherPanel->removeAdditionalLauncherButton(),
+      ui->launcherPanel->defaultLauncherComboBox(),
+      ui->launcherPanel->extractArchivesCheckBox(),
+      ui->launcherPanel->extractedExtensionLineEdit(),
       ui->subfoldersPanel,
       ui->configurationPanel,
   };

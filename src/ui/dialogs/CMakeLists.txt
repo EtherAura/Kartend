@@ -18,6 +18,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   launcherchooserdialog.cpp
   launchereditordialog.cpp
   launcherpresetspanel.cpp
+  launchertabpanel.cpp
   settingsdialog.cpp
   settingsdialogbrowse.cpp
   settingsdialogchecks.cpp
@@ -53,6 +54,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   launcherchooserdialog.h
   launchereditordialog.h
   launcherpresetspanel.h
+  launchertabpanel.h
   settingsdialog.h
   settingsformbinding.h
   shortcutsdialog.h
@@ -68,6 +70,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   fontspanel.ui
   generalsettingspanel.ui
   launcherpresetspanel.ui
+  launchertabpanel.ui
   settingsdialog.ui
   sidebarpanel.ui
   splashpanel.ui

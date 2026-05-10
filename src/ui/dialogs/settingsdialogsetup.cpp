@@ -28,9 +28,11 @@
 #include <set>
 
 #include "collectiontreewidget.h"
+#include "configurationpanel.h"
 #include "extensionutils.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
+#include "launchertabpanel.h"
 #include "mainwindow.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
@@ -144,64 +146,36 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
 }
 
 void SettingsDialog::setupFormFieldConnections() {
-  if (ui->launcherLineEdit) {
-    connect(ui->launcherLineEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
-    connect(ui->launcherLineEdit, &QLineEdit::textChanged, this,
-            [this](const QString &text) { updateUIForLauncherType(text); });
-    // keep the default-launcher combo's primary label in sync
-    // with the live launcher path / name as the user edits.
-    connect(ui->launcherLineEdit, &QLineEdit::textChanged, this, [this](const QString &) {
-      const int idx = ui->defaultLauncherComboBox ? ui->defaultLauncherComboBox->currentIndex() : 0;
-      rebuildDefaultLauncherCombo(idx);
-    });
-  }
-  if (ui->launcherNameLineEdit) {
-    connect(ui->launcherNameLineEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
-    connect(ui->launcherNameLineEdit, &QLineEdit::textChanged, this, [this](const QString &) {
-      const int idx = ui->defaultLauncherComboBox ? ui->defaultLauncherComboBox->currentIndex() : 0;
-      rebuildDefaultLauncherCombo(idx);
-    });
-  }
-  if (ui->addAdditionalLauncherButton) {
-    connect(ui->addAdditionalLauncherButton, &QPushButton::clicked, this,
-            &SettingsDialog::onAddAdditionalLauncher);
-  }
-  if (ui->editAdditionalLauncherButton) {
-    connect(ui->editAdditionalLauncherButton, &QPushButton::clicked, this,
-            &SettingsDialog::onEditAdditionalLauncher);
-  }
-  if (ui->removeAdditionalLauncherButton) {
-    connect(ui->removeAdditionalLauncherButton, &QPushButton::clicked, this,
-            &SettingsDialog::onRemoveAdditionalLauncher);
-  }
-  if (ui->additionalLaunchersList) {
-    connect(ui->additionalLaunchersList, &QListWidget::currentRowChanged, this,
-            [this](int) { onAdditionalLauncherSelectionChanged(); });
-    connect(ui->additionalLaunchersList, &QListWidget::itemDoubleClicked, this,
-            [this](QListWidgetItem *) { onEditAdditionalLauncher(); });
-  }
-  if (ui->defaultLauncherComboBox) {
-    connect(ui->defaultLauncherComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            [this](int) { checkForChanges(); });
-  }
-  if (ui->coreLineEdit) {
-    connect(ui->coreLineEdit, &QLineEdit::textChanged, this, &SettingsDialog::checkForChanges);
-  }
-  if (ui->launchParamsLineEdit) {
-    connect(ui->launchParamsLineEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
-  }
-  if (ui->extractArchivesCheckBox) {
-    connect(ui->extractArchivesCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::checkForChanges);
-    connect(ui->extractArchivesCheckBox, &QCheckBox::toggled, this,
-            &SettingsDialog::onExtractArchivesToggled);
-  }
-  if (ui->extractedExtensionLineEdit) {
-    connect(ui->extractedExtensionLineEdit, &QLineEdit::textChanged, this,
-            &SettingsDialog::checkForChanges);
-  }
+  // Launcher data field connections (path / core / params / name / extract /
+  // extension) live on LauncherTabPanel — emits changed() routed to
+  // checkForChanges via the dialog constructor. Cross-cutting wiring
+  // (additional-launchers list + buttons + default-launcher combo + per-
+  // edit launcher-type heuristic) stays here.
+  connect(ui->launcherPanel->launcherLineEdit(), &QLineEdit::textChanged, this,
+          [this](const QString &text) { updateUIForLauncherType(text); });
+  connect(ui->launcherPanel->launcherLineEdit(), &QLineEdit::textChanged, this,
+          [this](const QString &) {
+            rebuildDefaultLauncherCombo(
+                ui->launcherPanel->defaultLauncherComboBox()->currentIndex());
+          });
+  connect(ui->launcherPanel->launcherNameLineEdit(), &QLineEdit::textChanged, this,
+          [this](const QString &) {
+            rebuildDefaultLauncherCombo(
+                ui->launcherPanel->defaultLauncherComboBox()->currentIndex());
+          });
+  connect(ui->launcherPanel->addAdditionalLauncherButton(), &QPushButton::clicked, this,
+          &SettingsDialog::onAddAdditionalLauncher);
+  connect(ui->launcherPanel->editAdditionalLauncherButton(), &QPushButton::clicked, this,
+          &SettingsDialog::onEditAdditionalLauncher);
+  connect(ui->launcherPanel->removeAdditionalLauncherButton(), &QPushButton::clicked, this,
+          &SettingsDialog::onRemoveAdditionalLauncher);
+  connect(ui->launcherPanel->additionalLaunchersList(), &QListWidget::currentRowChanged, this,
+          [this](int) { onAdditionalLauncherSelectionChanged(); });
+  connect(ui->launcherPanel->additionalLaunchersList(), &QListWidget::itemDoubleClicked, this,
+          [this](QListWidgetItem *) { onEditAdditionalLauncher(); });
+  connect(ui->launcherPanel->defaultLauncherComboBox(),
+          QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+          [this](int) { checkForChanges(); });
   // Configuration-tab data field connections (mediaDir, type, extensions,
   // expandMode, showAllSubcollectionItems) live on ConfigurationPanel.
   // Asset-directory + placeholder-artwork edits live on ArtworkTabPanel.
