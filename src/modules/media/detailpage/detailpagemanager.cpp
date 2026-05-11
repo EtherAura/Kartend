@@ -11,6 +11,7 @@
 #include "applicationcontext.h"
 #include "artworkutils.h"
 #include "databasemanager.h"
+#include "detailpagehelpers.h"
 #include "detailpageoverlay.h"
 #include "detailspanemanager.h"
 #include "itemartwork.h"
@@ -57,11 +58,8 @@ void DetailPageManager::showForCurrentSelection() {
   if (db && !itemCtx.uuid.isEmpty()) {
     payload.metadata = db->loadItemMetadata(itemCtx.uuid, itemCtx.filePath);
     payload.usage = db->loadItemUsageStats(itemCtx.uuid, itemCtx.filePath);
-    // Title falls back to the metadata's scraped title when the sidebar
-    // received a file-stem-derived itemName but the DB has a real title.
-    if (!payload.metadata.title.isEmpty()) {
-      payload.itemName = payload.metadata.title;
-    }
+    payload.itemName =
+        DetailPagePayloadBuilder::pickDisplayTitle(payload.itemName, payload.metadata.title);
     payload.manualPath = ItemMetadataStore::resolveManualFile(payload.metadata.manualPath, baseName,
                                                               itemCtx.manualDir);
   }
@@ -73,12 +71,8 @@ void DetailPageManager::showForCurrentSelection() {
   QStringList customOrder;
   if (db && !itemCtx.uuid.isEmpty()) {
     const auto rows = db->loadItemArtwork(itemCtx.uuid, itemCtx.filePath);
-    for (const auto &row : rows) {
-      overridesByType.insert(row.artworkType, row.manualPath);
-      if (!ItemArtworkStore::isStandardType(row.artworkType)) {
-        customOrder.append(row.artworkType);
-      }
-    }
+    overridesByType = DetailPagePayloadBuilder::buildArtworkOverrideMap(rows);
+    customOrder = DetailPagePayloadBuilder::collectCustomArtworkTypes(rows);
   }
 
   auto pushArtwork = [&](const QString &type, const QString &label) {
@@ -129,13 +123,10 @@ void DetailPageManager::showForCurrentSelection() {
   }
 
   // ── File info ────────────────────────────────────────────────────────
-  QFileInfo info(itemCtx.filePath);
-  if (info.exists()) {
-    payload.fileSize = info.size();
-    payload.fileModified = info.lastModified().toString(QStringLiteral("yyyy-MM-dd HH:mm"));
-    payload.fileExtension =
-        info.suffix().isEmpty() ? QString() : QStringLiteral(".%1").arg(info.suffix().toLower());
-  }
+  const auto fileFields = DetailPagePayloadBuilder::buildFileInfoFields(QFileInfo(itemCtx.filePath));
+  payload.fileSize = fileFields.fileSize;
+  payload.fileModified = fileFields.fileModified;
+  payload.fileExtension = fileFields.fileExtension;
 
   m_overlay->showWith(payload);
 }

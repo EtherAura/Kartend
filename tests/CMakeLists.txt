@@ -1119,6 +1119,30 @@ target_link_libraries(bench_filterhelpers
 add_test(NAME BenchFilterHelpers COMMAND bench_filterhelpers)
 set_tests_properties(BenchFilterHelpers PROPERTIES LABELS "benchmark")
 
+# DetailPageHelpers tests (pure helpers extracted from DetailPageManager)
+add_executable(test_detailpagehelpers
+  modules/detailpage/test_detailpagehelpers.cpp
+  ${SRC_DIR}/modules/media/detailpage/detailpagehelpers.cpp
+  ${SRC_DIR}/utils/db/itemartwork.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
+)
+target_include_directories(test_detailpagehelpers PRIVATE
+  ${SRC_DIR}/modules/media/detailpage
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_detailpagehelpers
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME DetailPageHelpers COMMAND test_detailpagehelpers)
+
 # Integration test harness for UI-coordinator managers.
 # Only built when the kartend_lib OBJECT library is available (i.e. when
 # tests/CMakeLists.txt is added from the top-level CMakeLists.txt rather than
