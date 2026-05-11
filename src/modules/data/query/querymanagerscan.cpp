@@ -24,6 +24,7 @@
 #include <QLoggingCategory>
 #include <QMutex>
 #include <QRunnable>
+#include <QSqlError>
 #include <QSqlQuery>
 #include <QString>
 #include <QStringList>
@@ -32,6 +33,7 @@
 #include <QWaitCondition>
 
 #include "collectionutils.h"
+#include "errorutils.h"
 #include "querymanagerhelpers.h"
 #include "querymanagersql.h"
 #include "uiconstants.h"
@@ -39,6 +41,8 @@
 Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 
 using namespace QueryManagerInternal;
+using ErrorUtils::ErrorCode;
+using ErrorUtils::ErrorContext;
 
 bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &collection) {
   Q_UNUSED(collectionIndex)
@@ -94,7 +98,13 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
       update.prepare("UPDATE collections SET ext_signature = ? WHERE uuid = ?");
       update.addBindValue(currentSignature);
       update.addBindValue(uuid);
-      (void)update.exec();
+      if (!update.exec()) {
+        auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                         "Failed to backfill ext_signature",
+                                         "QueryManager::needsRescan")
+                       .withDetails(update.lastError().text());
+        ErrorUtils::logError(err);
+      }
     } else {
       return true;
     }
@@ -155,7 +165,13 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
       meta.bindValue(0, lastScannedIso);
       meta.bindValue(1, seeded);
       meta.bindValue(2, uuid);
-      (void)meta.exec();
+      if (!meta.exec()) {
+        auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                         "Failed to seed dir_signature",
+                                         "QueryManager::needsRescan")
+                       .withDetails(meta.lastError().text());
+        ErrorUtils::logError(err);
+      }
     }
   } else {
     // Flat collections: directory mtime is a sufficient cheap proxy for
@@ -169,7 +185,14 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
   QSqlQuery &newer = getPreparedStatement(QuerySQL::ITEMS_MODIFIED_COUNT);
   newer.bindValue(0, uuid);
   newer.bindValue(1, lastScanned.toString(Qt::ISODate));
-  newer.exec();
+  if (!newer.exec()) {
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to count modified items",
+                                     "QueryManager::needsRescan")
+                   .withDetails(newer.lastError().text());
+    ErrorUtils::logError(err);
+    return false;
+  }
 
   return newer.next() && newer.value(0).toInt() > 0;
 }
