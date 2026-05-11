@@ -20,13 +20,13 @@ makedepends=(
   'ninja'
 )
 checkdepends=()
-source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz")
+source=("${pkgname}-${pkgver}.tar.gz::${url}/releases/download/v${pkgver}/Kartend-${pkgver}.tar.gz")
 # Verifying GitHub's auto-archive sha256 isn't reliable — its gzip parameters
 # can change without notice. For v0.0.6+ this URL should switch to the release
 # page asset (releases/download/vX.Y.Z/Kartend-X.Y.Z.tar.gz) published by
 # .github/workflows/release.yml, at which point sha256sums can be filled in
 # from the deterministic `git archive` output (see workflow's post-publish step).
-sha256sums=('SKIP')
+sha256sums=('fbdd0e8e90dfc3b0910fb30bfb0832e4e397fd7381c45778a6e2d978f01646c1')
 
 build() {
   cmake -S "Kartend-${pkgver}" -B build -G Ninja \
