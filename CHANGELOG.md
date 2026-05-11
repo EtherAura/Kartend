@@ -7,8 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-05-11
+
 ### Added
 
+- Helper-namespace extractions for five manager classes so the pure
+  decision logic is unit-testable without their QWidget / ApplicationContext
+  graphs:
+  - `DetailPagePayloadBuilder` (display title fallback, artwork-row override
+    map + custom-type filter, file-info field assembly)
+  - `SelectionRestoreHelpers` (search-active predicate, restore-decision
+    AND-chain, total/selIdx clamp, collection+token validity check)
+  - `AttractHelpers` (linear + direction-biased random advance-index,
+    sub-pixel scroll accumulator, boundary-aware scroll position)
+  - `OverlayHelpers` (distance-to-duration glide policy with min/max clamp,
+    visibility-aware animation start rect, item rect inset geometry)
+  - `GamepadHelpers` (axis-to-direction with on/off-threshold hysteresis,
+    d-pad + stick vertical-priority combine, SDL Sint16 normalize,
+    case-insensitive confirm/back/toggle button resolution)
+- `+102` new unit tests covering the extracted helpers (every helper has
+  edge-case coverage for empty inputs, hysteresis hold/release, the
+  bounce-fallback at boundaries, defensive clamps, and priority ladders)
 - `KARTEND_PORTABLE_RELEASE` CMake option for distro packaging
   (drops `-march=native`/`-O3`/fast-math, keeps LTO + hardening)
 - `KARTEND_LINKER_MAP` CMake option (replaces fragile `_MAP_DIR`
@@ -47,6 +66,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `PlaylistManager::exportToJson` / `exportToM3U` now use `QSaveFile`
+  (temp file + atomic rename) plus `PathUtils::syncDirectory` for parent-dir
+  durability — a crash or power loss mid-export no longer leaves a
+  half-written `.json` / `.m3u` clobbering a previously good file at the
+  user's chosen path
+- `QueryManager::needsRescan` (three sites that previously used `(void)exec()`
+  or bare `exec()` calls) now logs an `ErrorContext` warning with
+  `lastError().text()` when the SQL fails, so a locked DB or constraint
+  failure no longer desyncs scan metadata from disk in silence
+- `DbMigrations::setUserVersion` now checks the `PRAGMA user_version` exec
+  result and logs on failure; previously a failed PRAGMA after a successful
+  migration body left the version stale and re-ran the migration on next
+  launch with no log trail
+- `SessionManager` now logs a `qCWarning` when the metadata file exists on
+  disk but `open(ReadOnly)` fails (permissions, FS error) — previously
+  silently fell back to default empty state with no signal
+- Re-enabled `-Wunused-parameter` and `-Wunused-lambda-capture` in the
+  base lib's `target_compile_options` and cleared the fallout: removed
+  stale `this` captures in three lambdas (launch / kart / querymanager
+  reconnect logging), removed a const-int capture clang correctly treats
+  as constant-expression, and `Q_UNUSED` for four genuinely-dead
+  parameters that survived prior refactors
 - PGO instrumentation never reached the compiler — `list(APPEND
   RELEASE_COMPILE_OPTS ...)` ran after `target_compile_options()`
   had already substituted the variable text
