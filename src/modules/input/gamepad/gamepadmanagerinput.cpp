@@ -18,46 +18,12 @@ void GamepadManager::updateDirectionFromInputs() {
   const bool useDpad = !m_generalSettings || m_generalSettings->gamepadUseDpad;
   const bool useStick = !m_generalSettings || m_generalSettings->gamepadUseLeftStick;
 
-  // Convert left stick axes to digital directions with hysteresis.
-  constexpr double kOn = UIConstants::Gamepad::AXIS_DEADZONE_ON;
-  constexpr double kOff = UIConstants::Gamepad::AXIS_DEADZONE_OFF;
+  const auto stick = GamepadHelpers::axisToDirections(
+      m_axisX, m_axisY, m_activeDirection, UIConstants::Gamepad::AXIS_DEADZONE_ON,
+      UIConstants::Gamepad::AXIS_DEADZONE_OFF, useStick);
 
-  const double x = m_axisX;
-  const double y = m_axisY;
-
-  const bool prevLeft = (m_activeDirection == Direction::Left);
-  const bool prevRight = (m_activeDirection == Direction::Right);
-  const bool prevUp = (m_activeDirection == Direction::Up);
-  const bool prevDown = (m_activeDirection == Direction::Down);
-
-  const bool stickLeft = useStick && ((x <= -kOn) || (prevLeft && x <= -kOff));
-  const bool stickRight = useStick && ((x >= kOn) || (prevRight && x >= kOff));
-  const bool stickUp = useStick && ((y <= -kOn) || (prevUp && y <= -kOff));
-  const bool stickDown = useStick && ((y >= kOn) || (prevDown && y >= kOff));
-
-  const bool dpadLeft = useDpad && m_left;
-  const bool dpadRight = useDpad && m_right;
-  const bool dpadUp = useDpad && m_up;
-  const bool dpadDown = useDpad && m_down;
-
-  // D-pad states are already included in m_*; incorporate stick-derived states.
-  const bool combinedLeft = dpadLeft || stickLeft;
-  const bool combinedRight = dpadRight || stickRight;
-  const bool combinedUp = dpadUp || stickUp;
-  const bool combinedDown = dpadDown || stickDown;
-
-  Direction newDirection = Direction::None;
-
-  // Prefer vertical when both are pressed (matches typical grid nav feel).
-  if (combinedUp) {
-    newDirection = Direction::Up;
-  } else if (combinedDown) {
-    newDirection = Direction::Down;
-  } else if (combinedLeft) {
-    newDirection = Direction::Left;
-  } else if (combinedRight) {
-    newDirection = Direction::Right;
-  }
+  const Direction newDirection =
+      GamepadHelpers::combineToDirection(m_left, m_right, m_up, m_down, useDpad, stick);
 
   applyActiveDirection(newDirection);
 #endif
@@ -97,31 +63,9 @@ void GamepadManager::applyActiveDirection(Direction newDirection) {
     m_keyboardManager->setPhysicalKeyDown(true);
   }
 
-  int delta = 0;
-  bool vertical = false;
-  switch (newDirection) {
-  case Direction::Left:
-    delta = -1;
-    vertical = false;
-    break;
-  case Direction::Right:
-    delta = 1;
-    vertical = false;
-    break;
-  case Direction::Up:
-    delta = -1;
-    vertical = true;
-    break;
-  case Direction::Down:
-    delta = 1;
-    vertical = true;
-    break;
-  case Direction::None:
-    break;
-  }
-
-  if (delta != 0) {
-    emit requestSelectionMove(delta, vertical);
+  const auto movement = GamepadHelpers::movementFor(newDirection);
+  if (movement.delta != 0) {
+    emit requestSelectionMove(movement.delta, movement.vertical);
   }
 }
 
@@ -147,22 +91,17 @@ void GamepadManager::handleMappedButtonPress(const QString &buttonName) {
   const QString toggleSidebar =
       m_generalSettings ? m_generalSettings->gamepadToggleSidebarButton : QStringLiteral("Y");
 
-  auto matches = [&normalized](const QString &configured) -> bool {
-    const QString c = configured.trimmed();
-    return !c.isEmpty() && (c.compare(normalized, Qt::CaseInsensitive) == 0);
-  };
-
-  // Priority: confirm/back first to avoid accidental side effects if a user
-  // binds multiple actions to the same physical button.
-  if (matches(confirm)) {
+  switch (GamepadHelpers::resolveButtonAction(normalized, confirm, back, toggleSidebar)) {
+  case GamepadHelpers::ButtonAction::Confirm:
     emit requestEnterAction();
     return;
-  }
-  if (matches(back)) {
+  case GamepadHelpers::ButtonAction::Back:
     emit requestEscapeAction();
     return;
-  }
-  if (matches(toggleSidebar)) {
+  case GamepadHelpers::ButtonAction::ToggleSidebar:
     emit requestToggleSidebarAction();
+    return;
+  case GamepadHelpers::ButtonAction::None:
+    return;
   }
 }

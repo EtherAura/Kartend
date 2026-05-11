@@ -1,6 +1,7 @@
 #ifndef GAMEPADMANAGER_H
 #define GAMEPADMANAGER_H
 
+#include "gamepadhelpers.h"
 #include "setuputils.h"
 #include <atomic>
 #include <QObject>
@@ -54,7 +55,7 @@ signals:
   void bindingCaptureButtonPressed(const QString &buttonName);
 
 private:
-  enum class Direction { None, Left, Right, Up, Down };
+  using Direction = GamepadHelpers::Direction;
 
   void updateDirectionFromInputs();
   void applyActiveDirection(Direction newDirection);

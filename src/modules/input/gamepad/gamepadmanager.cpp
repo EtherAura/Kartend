@@ -185,16 +185,8 @@ void GamepadManager::pollSdlState() {
   const Sint16 rawX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX);
   const Sint16 rawY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY);
 
-  // Normalize to [-1, 1].
-  auto normalize = [](Sint16 v) -> double {
-    if (v >= 0) {
-      return static_cast<double>(v) / 32767.0;
-    }
-    return static_cast<double>(v) / 32768.0;
-  };
-
-  m_axisX = normalize(rawX);
-  m_axisY = normalize(rawY);
+  m_axisX = GamepadHelpers::normalizeSdlAxis(rawX);
+  m_axisY = GamepadHelpers::normalizeSdlAxis(rawY);
 
   m_up = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP);
   m_down = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN);

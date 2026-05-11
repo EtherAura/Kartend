@@ -1117,7 +1117,19 @@ target_link_libraries(bench_filterhelpers
   Qt6::Test
 )
 add_test(NAME BenchFilterHelpers COMMAND bench_filterhelpers)
-set_tests_properties(BenchFilterHelpers PROPERTIES LABELS "benchmark")
+set_tests_properties(BenchFilterHelpers PROPERTIES LABELS "benchmark")# GamepadHelpers tests (pure helpers extracted from GamepadManager)
+add_executable(test_gamepadhelpers
+  modules/gamepad/test_gamepadhelpers.cpp
+  ${SRC_DIR}/modules/input/gamepad/gamepadhelpers.cpp
+)
+target_include_directories(test_gamepadhelpers PRIVATE
+  ${SRC_DIR}/modules/input/gamepad
+)
+target_link_libraries(test_gamepadhelpers
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME GamepadHelpers COMMAND test_gamepadhelpers)
 
 # OverlayHelpers tests (pure helpers extracted from SelectionOverlayManager)
 add_executable(test_overlayhelpers
