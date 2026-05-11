@@ -269,7 +269,7 @@ target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
   ${SRC_DIR}/utils/view
 )
 
-target_compile_options(${KARTEND_LIB_TARGET} PRIVATE -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-lambda-capture)
+target_compile_options(${KARTEND_LIB_TARGET} PRIVATE -Wall -Wextra -Wpedantic)
 
 # Keep GCC-only intent with Clang analogue on RISC-V
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "[Rr][Ii][Ss][Cc][Vv]")
