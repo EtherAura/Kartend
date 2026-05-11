@@ -1119,6 +1119,20 @@ target_link_libraries(bench_filterhelpers
 add_test(NAME BenchFilterHelpers COMMAND bench_filterhelpers)
 set_tests_properties(BenchFilterHelpers PROPERTIES LABELS "benchmark")
 
+# SelectionRestoreHelpers tests (pure helpers extracted from SelectionRestoreManager)
+add_executable(test_selectionrestorehelpers
+  modules/restore/test_selectionrestorehelpers.cpp
+  ${SRC_DIR}/modules/data/restore/selectionrestorehelpers.cpp
+)
+target_include_directories(test_selectionrestorehelpers PRIVATE
+  ${SRC_DIR}/modules/data/restore
+)
+target_link_libraries(test_selectionrestorehelpers
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME SelectionRestoreHelpers COMMAND test_selectionrestorehelpers)
+
 # DetailPageHelpers tests (pure helpers extracted from DetailPageManager)
 add_executable(test_detailpagehelpers
   modules/detailpage/test_detailpagehelpers.cpp

@@ -11,6 +11,7 @@
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "scrollmanager.h"
+#include "selectionrestorehelpers.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "setuputils.h"
@@ -51,9 +52,11 @@ auto SelectionRestoreManager::shouldRestoreSelection() const -> bool {
   if (!m_generalSettings) {
     return false;
   }
-  const bool remember = m_generalSettings->rememberSelection;
-  const bool searchActive = (m_searchBar && !m_searchBar->text().trimmed().isEmpty());
-  return remember && !searchActive && scrollMgr() && interactionMgr();
+  const bool searchActive =
+      m_searchBar && SelectionRestoreHelpers::searchTextIsActive(m_searchBar->text());
+  return SelectionRestoreHelpers::shouldRestoreSelection(m_generalSettings->rememberSelection,
+                                                         searchActive, scrollMgr() != nullptr,
+                                                         interactionMgr() != nullptr);
 }
 
 auto SelectionRestoreManager::getSelectionRestoreIndex(int collectionIndex) const -> int {
@@ -86,10 +89,7 @@ auto SelectionRestoreManager::getSelectionRestoreIndex(int collectionIndex) cons
       }
     }
   }
-  if (selIdx >= total) {
-    selIdx = total - 1;
-  }
-  return (selIdx >= 0) ? selIdx : -1;
+  return SelectionRestoreHelpers::clampRestoreIndex(selIdx, total);
 }
 
 auto SelectionRestoreManager::validateSelectionRestoreContext() const -> bool {
@@ -122,22 +122,21 @@ auto SelectionRestoreManager::createRestoreValidationLambda(int scheduledCollect
                "failed");
       return false;
     }
-    if (!m_currentCollectionIndex || *m_currentCollectionIndex != scheduledCollectionIndex) {
-      debugLog("[SelectionRestore] validator: collection mismatch - current="
-               << (m_currentCollectionIndex ? *m_currentCollectionIndex : -1)
-               << "scheduled=" << scheduledCollectionIndex);
+    if (!m_currentCollectionIndex || !state()) {
       if (state()) {
         state()->selectionRestore().restorePending = false;
       }
       return false;
     }
-    if (!state() || state()->selectionRestore().restoreToken != token) {
-      debugLog("[SelectionRestore] validator: token mismatch - state token="
-               << (state() ? state()->selectionRestore().restoreToken : -999)
+    if (!SelectionRestoreHelpers::restoreStillValid(*m_currentCollectionIndex,
+                                                    scheduledCollectionIndex,
+                                                    state()->selectionRestore().restoreToken,
+                                                    token)) {
+      debugLog("[SelectionRestore] validator: stale restore - current="
+               << *m_currentCollectionIndex << "scheduled=" << scheduledCollectionIndex
+               << "stateToken=" << state()->selectionRestore().restoreToken
                << "expected=" << token);
-      if (state()) {
-        state()->selectionRestore().restorePending = false;
-      }
+      state()->selectionRestore().restorePending = false;
       return false;
     }
     return true;
@@ -249,13 +248,13 @@ auto SelectionRestoreManager::createSelectionRestoreLambda(int collectionIndex, 
                                                            int token) -> std::function<void()> {
   QPointer<SelectionRestoreManager> guard(this);
   return [guard, collectionIndex, selIdx, token]() {
-    if (!guard || !guard->state()) {
+    if (!guard || !guard->state() || !guard->m_currentCollectionIndex) {
       return;
     }
-    if (!guard->m_currentCollectionIndex || *guard->m_currentCollectionIndex != collectionIndex) {
-      return;
-    }
-    if (guard->state()->selectionRestore().restoreToken != token) {
+    if (!SelectionRestoreHelpers::restoreStillValid(*guard->m_currentCollectionIndex,
+                                                    collectionIndex,
+                                                    guard->state()->selectionRestore().restoreToken,
+                                                    token)) {
       return;
     }
     if (!guard->interactionMgr() || !guard->scrollMgr()) {
@@ -298,14 +297,13 @@ void SelectionRestoreManager::handleSubcollectionRestore(int collectionIndex) {
   QPointer<SelectionRestoreManager> guard(this);
   QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this,
                      [guard, selIdx, collectionIndex, token]() {
-                       if (!guard || !guard->interactionMgr() || !guard->state()) {
+                       if (!guard || !guard->interactionMgr() || !guard->state() ||
+                           !guard->m_currentCollectionIndex) {
                          return;
                        }
-                       if (!guard->m_currentCollectionIndex ||
-                           *guard->m_currentCollectionIndex != collectionIndex) {
-                         return;
-                       }
-                       if (guard->state()->selectionRestore().restoreToken != token) {
+                       if (!SelectionRestoreHelpers::restoreStillValid(
+                               *guard->m_currentCollectionIndex, collectionIndex,
+                               guard->state()->selectionRestore().restoreToken, token)) {
                          return;
                        }
                        guard->interactionMgr()->beginSelectionRestore(selIdx);
