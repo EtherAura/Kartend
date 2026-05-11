@@ -81,6 +81,10 @@ void SessionManager::initialize() {
       readCachedViewports(root);
     }
     metadataFile.close();
+  } else {
+    qCWarning(lcSessionManager) << "Failed to open session metadata at" << metadataPath
+                                << "- error:" << metadataFile.errorString()
+                                << "(session state will reset)";
   }
 }
 
