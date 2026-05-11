@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSaveFile>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -14,6 +15,7 @@
 #include <QUuid>
 
 #include "errorutils.h"
+#include "pathutils.h"
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
@@ -556,7 +558,7 @@ ErrorUtils::Result<int> PlaylistManager::exportToJson(const QString &playlistId,
   doc["updated_at"] = row.updatedAt;
   doc["items"] = itemsArray;
 
-  QFile file(outPath);
+  QSaveFile file(outPath);
   if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
     return ErrorContext::error(ErrorCode::FileWriteError, "Failed to open output file",
                                "PlaylistManager::exportToJson")
@@ -564,11 +566,16 @@ ErrorUtils::Result<int> PlaylistManager::exportToJson(const QString &playlistId,
   }
   const QByteArray bytes = QJsonDocument(doc).toJson(QJsonDocument::Indented);
   if (file.write(bytes) != bytes.size()) {
-    file.close();
+    file.cancelWriting();
     return ErrorContext::error(ErrorCode::FileWriteError, "Short write to JSON file",
                                "PlaylistManager::exportToJson");
   }
-  file.close();
+  if (!file.commit()) {
+    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to commit JSON file",
+                               "PlaylistManager::exportToJson")
+        .withDetails(file.errorString());
+  }
+  PathUtils::syncDirectory(QFileInfo(outPath).absolutePath());
   return items.size();
 }
 
@@ -585,25 +592,38 @@ ErrorUtils::Result<int> PlaylistManager::exportToM3U(const QString &playlistId,
   }
   const QList<PlaylistItemRef> items = loadItems(playlistId);
 
-  QFile file(outPath);
+  QSaveFile file(outPath);
   if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
     return ErrorContext::error(ErrorCode::FileWriteError, "Failed to open output file",
                                "PlaylistManager::exportToM3U")
         .withDetails(file.errorString());
   }
-  QTextStream out(&file);
-  // Extended-M3U marker on line 1 so parsers that look for it (most modern
-  // players) recognise the dialect. Each entry gets an EXTINF line with
-  // duration -1 (unknown) and the file's basename as the title — we don't
-  // currently track per-item titles in playlist_items, but the basename is
-  // what every other Kartend surface defaults to.
-  out << "#EXTM3U\n";
-  for (const PlaylistItemRef &item : items) {
-    const QString title = QFileInfo(item.sourcePath).completeBaseName();
-    out << "#EXTINF:-1," << title << "\n";
-    out << item.sourcePath << "\n";
+  {
+    QTextStream out(&file);
+    // Extended-M3U marker on line 1 so parsers that look for it (most modern
+    // players) recognise the dialect. Each entry gets an EXTINF line with
+    // duration -1 (unknown) and the file's basename as the title — we don't
+    // currently track per-item titles in playlist_items, but the basename is
+    // what every other Kartend surface defaults to.
+    out << "#EXTM3U\n";
+    for (const PlaylistItemRef &item : items) {
+      const QString title = QFileInfo(item.sourcePath).completeBaseName();
+      out << "#EXTINF:-1," << title << "\n";
+      out << item.sourcePath << "\n";
+    }
+    out.flush();
+    if (out.status() != QTextStream::Ok) {
+      file.cancelWriting();
+      return ErrorContext::error(ErrorCode::FileWriteError, "Failed to write M3U content",
+                                 "PlaylistManager::exportToM3U");
+    }
   }
-  file.close();
+  if (!file.commit()) {
+    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to commit M3U file",
+                               "PlaylistManager::exportToM3U")
+        .withDetails(file.errorString());
+  }
+  PathUtils::syncDirectory(QFileInfo(outPath).absolutePath());
   return items.size();
 }
 

@@ -271,6 +271,7 @@ add_executable(test_playlistmanager
   modules/playlist/test_playlistmanager.cpp
   ${SRC_DIR}/modules/data/playlist/playlistmanager.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
 )
 target_include_directories(test_playlistmanager PRIVATE
   ${SRC_DIR}/modules/data/playlist
