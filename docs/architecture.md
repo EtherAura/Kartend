@@ -10,35 +10,44 @@ Kartend uses a **module-based architecture** where `MainWindow` owns `Applicatio
 
 ```
 src/
-├── core/           # Main application entry and window
-├── modules/        # Feature modules (one folder per manager)
-│   ├── animation/  # Scroll animations, easing curves
-│   ├── application/# Manager lifecycle coordination
-│   ├── artwork/    # Async artwork loading with QtConcurrent
-│   ├── cache/      # In-memory pixmap cache, disk persistence
-│   ├── database/   # SQLite coordination via worker thread
-│   ├── event/      # Event filtering, gesture detection
-│   ├── filter/     # Search and subcollection filtering
-│   ├── interaction/# Input handling, selection state
-│   ├── keyboard/   # Arrow key navigation, key repeat, alphabetic jumping
-│   ├── launch/     # Item launching, process spawning
-│   ├── mouse/      # Click hold scrolling, wheel events
-│   ├── navigation/ # Collection switching, navigation stack
-│   ├── overlay/    # Selection overlay rendering
-│   ├── query/      # Worker thread SQL queries
-│   ├── restore/    # Selection state restoration
-│   ├── scroll/     # Virtual scrolling, grid layout, widget factory
-│   ├── search/     # Search bar logic, search modes
-│   ├── selection/  # Selection logic, click processing
-│   ├── session/    # Selection state persistence
-│   ├── settings/   # Config file I/O, settings dialog
-│   ├── sidebar/    # Metadata sidebar visibility
-│   ├── viewport/   # Centering, viewport positioning
-│   └── widgetpool/ # Widget recycling pool
-├── ui/             # UI components and constants
-│   ├── dialogs/    # Settings dialog, error dialog, shortcuts dialog
-│   └── widgets/    # Item widget, metadata sidebar, list header, overlays
-└── utils/          # Shared utilities and data structures
+├── core/                # Main application entry and window
+├── modules/             # Feature modules grouped by domain
+│   ├── behavior/        # App lifecycle, animation, search, launch, event filtering
+│   │   ├── animation/   # Scroll animations, easing curves
+│   │   ├── application/ # Manager lifecycle coordination
+│   │   ├── event/       # Event filtering, gesture detection
+│   │   ├── filter/      # Search and subcollection filtering
+│   │   ├── launch/      # Item launching, process spawning
+│   │   ├── search/      # Search bar logic, search modes
+│   │   └── widgetpool/  # Widget recycling pool for ItemWidget reuse
+│   ├── data/            # Persistence: SQLite, cache, sessions, settings, playlists
+│   │   ├── cache/       # In-memory pixmap cache, disk persistence
+│   │   ├── database/    # SQLite coordination via worker thread
+│   │   ├── kart/        # Kart (collection bundle) import/export
+│   │   ├── playlist/    # Playlist storage and export (JSON / M3U)
+│   │   ├── query/       # Worker thread SQL queries
+│   │   ├── restore/     # Selection state restoration during navigation
+│   │   ├── session/     # Selection state persistence
+│   │   └── settings/    # Config file I/O, settings dialog
+│   ├── input/           # User input and navigation
+│   │   ├── gamepad/     # Optional Qt6::Gamepad / SDL2 input backend
+│   │   ├── interaction/ # Central input coordination, selection state
+│   │   ├── keyboard/    # Arrow key navigation, key repeat, alphabetic jumping
+│   │   ├── mouse/       # Click-hold scrolling, wheel events
+│   │   ├── navigation/  # Collection switching, navigation stack
+│   │   ├── scroll/      # Virtual scrolling, grid layout, widget factory
+│   │   └── selection/   # Selection logic, click processing
+│   └── media/           # Artwork pipeline, detail pages, overlays, viewport
+│       ├── artwork/     # Async artwork loading with QtConcurrent
+│       ├── attract/     # Attract-mode idle scroll/advance
+│       ├── detailpage/  # Detail-page coordinator
+│       ├── detailspane/ # Metadata / details side pane
+│       ├── overlay/     # Selection / search loading overlays
+│       └── viewport/    # Centering, viewport positioning
+├── ui/                  # UI components and constants
+│   ├── dialogs/         # Settings dialog, error dialog, shortcuts dialog
+│   └── widgets/         # Item widget, metadata sidebar, list header, overlays
+└── utils/               # Shared utilities and data structures
 ```
 
 ## Core (`src/core/`)
