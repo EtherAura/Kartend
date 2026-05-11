@@ -19,7 +19,13 @@ static auto getUserVersion(QSqlDatabase &db) -> int {
 
 static auto setUserVersion(QSqlDatabase &db, int version) -> void {
   QSqlQuery q(db);
-  q.exec(QString("PRAGMA user_version = %1").arg(version));
+  if (!q.exec(QString("PRAGMA user_version = %1").arg(version))) {
+    auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                     QString("Failed to set user_version to %1").arg(version),
+                                     "DbMigrations::setUserVersion")
+                   .withDetails(q.lastError().text());
+    ErrorUtils::logError(err);
+  }
 }
 
 static auto tableHasColumn(QSqlDatabase &db, const QString &table, const QString &column) -> bool {
