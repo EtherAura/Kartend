@@ -23,12 +23,13 @@ cmake --build build/ninja-release --parallel $(nproc)
 # Run all tests via CTest
 ctest --test-dir build/ninja-release --output-on-failure
 
-# Run individual test
+# Run individual test (CMake places every test binary directly under
+# build/<config>/tests/ regardless of where the source lives)
 cd build/ninja-release
 ./tests/test_gridlayoutcalculator
 ./tests/test_sessionmanager
 ./tests/test_artworkmanager
-# ... one binary per suite under tests/ (24 suites total)
+./tests/test_integration       # single binary for all tests/integration/*
 ```
 
 ## Sanitizers (optional)
@@ -50,41 +51,28 @@ ctest --test-dir build/ninja-sanitize --output-on-failure
 
 ## Test Coverage
 
-| Test Suite | Tests | Coverage |
-|------------|-------|----------|
-| `test_artworkmanager` | 15 | Artwork path resolution, batch loading, suppression |
-| `test_cachemanager` | 15 | Pixmap cache, LRU eviction, disk persistence |
-| `test_collectionutils` | 30 | CollectionConfig, hierarchy cache, validation helpers |
-| `test_databasemanager` | 6 | Worker-thread shutdown, SQL connection cleanup, path resolution |
-| `test_dbmigrations` | 10 | SQLite schema migration steps |
-| `test_filterhelpers` | 15 | Filter predicate helpers |
-| `test_gridlayoutcalculator` | 17 | Grid metrics, item positioning, row ranges |
-| `test_gridutils` | 22 | Row/column math, centering, grid metrics calculation |
-| `test_interactionstateholder` | 13 | State flags, suppression timers, struct access |
-| `test_keyboardmanager` | 27 | Key repeat, arrow + alphabetic navigation handlers |
-| `test_launchmanager` | 29 | Security validation, path checking, parameter parsing |
-| `test_mousehelpers` | 17 | Mouse helper math (hold scroll, wheel) |
-| `test_navigationhelpers` | 18 | Navigation helper utilities |
-| `test_navigationstackmanager` | 19 | Navigation stack push/pop/clear |
-| `test_pathutils` | 27 | Path validation, expansion, Result<T> error handling |
-| `test_queryhelpers` | 21 | SQL helper builders |
-| `test_querymanager_cancel_scan` | 1 | Scan cancellation flow |
-| `test_scrollhelpers` | 16 | Scroll helper math |
-| `test_searchhelpers` | 16 | Search helper utilities |
-| `test_searchutils` | 3 | SearchMode utilities |
-| `test_selectionhelpers` | 17 | Selection helper math |
-| `test_sessionmanager` | 17 | Session persistence with atomic writes |
-| `test_stringutils` | 10 | String formatting |
-| `test_widgetpoolmanager` | 17 | Widget acquisition, release, soft/hard clear, stale limits |
+Tests are grouped into four areas. Each `test_*.cpp` is a standalone Qt
+Test binary discovered by CTest, with the exception of the integration
+suite which links all of its `TestXxx` classes into a single binary
+(`test_integration`) driven by `tests/integration/test_main.cpp`.
 
-**Total: 398 unit test methods across 24 test suites.**
+| Area | Path | Binaries | Coverage |
+|------|------|----------|----------|
+| Module unit tests | `tests/modules/<feature>/` | 37 | Per-manager and per-helper coverage mirroring `src/modules/<feature>/` |
+| Utility unit tests | `tests/utils/` | 14 | Helpers under `src/utils/` (cliargs, collectionutils, configvalidation, dbmigrations, gridutils, historystore, itemartwork, itemmetadata, pathutils, searchutils, stringutils, titlefilter, usagestatsstore, videoutils) |
+| Integration tests | `tests/integration/` | 1 | `MainWindowFixture`-driven multi-manager scenarios (application lifecycle, settings dialog apply / changes / scope, scroll, navigation, details-pane coverflow, event-manager wiring, mainwindow smoke) |
+| UI widget tests | `tests/ui/widgets/` | 2 | Widget-level rendering and behavior (`CoverflowWidget`, `EmptyStateWidget`) |
+
+**Total: 63 `test_*.cpp` files, ~330 test methods across 54 binaries.**
+Method counts drift fast — prefer `ctest --output-on-failure --test-dir
+build/ninja-release` for an authoritative pass count.
 
 ## Adding New Tests
 
 1. Create `tests/<area>/test_<classname>.cpp` mirroring the source location
-   (e.g. a test for `src/modules/cache/cachemanager.cpp` lives at
+   (e.g. a test for `src/modules/data/cache/cachemanager.cpp` lives at
    `tests/modules/cache/test_cachemanager.cpp`; a test for
-   `src/utils/pathutils.cpp` lives at `tests/utils/test_pathutils.cpp`).
+   `src/utils/fs/pathutils.cpp` lives at `tests/utils/test_pathutils.cpp`).
    Use the Qt Test structure:
 
 ```cpp

@@ -489,31 +489,64 @@ Unit tests use the **Qt Test framework** with CTest integration.
 
 ```
 tests/
-├── CMakeLists.txt                       # Test build configuration
-├── test_artworkmanager.cpp              # Artwork loading & path resolution
-├── test_cachemanager.cpp                # Pixmap cache, LRU, disk persistence
-├── test_collectionutils.cpp             # CollectionConfig + hierarchy helpers
-├── test_dbmigrations.cpp                # SQLite schema migrations
-├── test_databasemanager.cpp             # DB worker shutdown + path resolution
-├── test_filterhelpers.cpp               # Filter predicate helpers
-├── test_gridlayoutcalculator.cpp        # Grid layout math
-├── test_gridutils.cpp                   # Grid math utilities
-├── test_interactionstateholder.cpp      # Centralized interaction state
-├── test_keyboardmanager.cpp             # Key repeat, arrow/alpha handlers
-├── test_launchmanager.cpp               # Launch security validation
-├── test_mousehelpers.cpp                # Mouse helper math
-├── test_navigationhelpers.cpp           # Navigation helpers
-├── test_navigationstackmanager.cpp      # Navigation stack push/pop
-├── test_pathutils.cpp                   # Path validation, Result<T>
-├── test_queryhelpers.cpp                # SQL helper builders
-├── test_querymanager_cancel_scan.cpp    # Scan cancellation flow
-├── test_scrollhelpers.cpp               # Scroll math helpers
-├── test_searchhelpers.cpp               # Search helpers
-├── test_searchutils.cpp                 # SearchMode utilities
-├── test_selectionhelpers.cpp            # Selection helpers
-├── test_sessionmanager.cpp              # Session persistence (atomic writes)
-├── test_stringutils.cpp                 # String formatting
-└── test_widgetpoolmanager.cpp           # Widget recycling pool
+├── CMakeLists.txt           # Monolithic test build configuration
+├── modules/                 # Per-feature unit tests, mirrors src/modules/
+│   ├── animation/           #   test_animationmanager
+│   ├── artwork/             #   test_artworkmanager
+│   ├── attract/             #   test_attracthelpers
+│   ├── cache/               #   test_cachemanager
+│   ├── database/            #   test_databasemanager
+│   ├── detailpage/          #   test_detailpagehelpers
+│   ├── event/               #   test_eventhelpers
+│   ├── filter/              #   test_filterhelpers
+│   ├── gamepad/             #   test_gamepadhelpers
+│   ├── interaction/         #   test_interactionhelpers, test_interactionstateholder
+│   ├── kart/                #   test_kartmanifest, test_kartmerge, test_kartreader, test_kartwriter
+│   ├── keyboard/            #   test_keyboardhelpers, test_keyboardmanager
+│   ├── launch/              #   test_launchmanager
+│   ├── mouse/               #   test_mousehelpers
+│   ├── navigation/          #   test_navigationhelpers, test_navigationstackmanager
+│   ├── overlay/             #   test_overlayhelpers
+│   ├── playlist/            #   test_playlistmanager
+│   ├── query/               #   test_queryhelpers, test_querymanager_{broken_symlinks,cancel_scan,cross_collection_count}
+│   ├── restore/             #   test_selectionrestorehelpers
+│   ├── scroll/              #   test_gridlayoutcalculator, test_scrolldatamanager, test_scrollhelpers
+│   ├── search/              #   test_searchhelpers
+│   ├── selection/           #   test_selectionhelpers
+│   ├── session/             #   test_sessionmanager
+│   ├── settings/            #   test_settingshelpers
+│   ├── viewport/            #   test_viewporthelpers
+│   └── widgetpool/          #   test_widgetpoolmanager
+├── utils/                   # Per-helper unit tests, mirrors src/utils/
+│   ├── test_cliargs.cpp
+│   ├── test_collectionutils.cpp
+│   ├── test_configvalidation.cpp
+│   ├── test_dbmigrations.cpp
+│   ├── test_gridutils.cpp
+│   ├── test_historystore.cpp
+│   ├── test_itemartwork.cpp
+│   ├── test_itemmetadata.cpp
+│   ├── test_pathutils.cpp
+│   ├── test_searchutils.cpp
+│   ├── test_stringutils.cpp
+│   ├── test_titlefilter.cpp
+│   ├── test_usagestatsstore.cpp
+│   └── test_videoutils.cpp
+├── integration/             # Multi-manager scenarios, single binary, fixture-driven
+│   ├── mainwindowfixture.{cpp,h}
+│   ├── test_main.cpp        # QApplication harness for the integration suite
+│   ├── test_applicationmanager_lifecycle.{cpp,h}
+│   ├── test_applysettingsdialog.{cpp,h}
+│   ├── test_detailspane_coverflow.{cpp,h}
+│   ├── test_eventmanager_detailspane.{cpp,h}
+│   ├── test_mainwindow_smoke.{cpp,h}
+│   ├── test_navigationmanager.{cpp,h}
+│   ├── test_scrollmanager.{cpp,h}
+│   ├── test_settingsdialog_changes.{cpp,h}
+│   └── test_settingsdialog_scope.{cpp,h}
+└── ui/widgets/              # Widget-level rendering and behavior
+    ├── test_coverflowwidget.cpp
+    └── test_emptystatewidget.cpp
 ```
 
 ### Building Tests
@@ -531,7 +564,9 @@ Run individual test:
 cd build/ninja-release
 ./tests/test_gridlayoutcalculator
 ./tests/test_sessionmanager
-# ... one binary per suite under tests/
+./tests/test_pathutils
+./tests/test_integration       # single binary for all tests/integration/*
+# ... CMake places every test binary directly under build/<config>/tests/
 ```
 
 Run all tests via CTest:
@@ -569,34 +604,21 @@ add_test(NAME test_classname COMMAND test_classname)
 
 ### Current Test Coverage
 
-| Test Suite | Tests | Coverage |
-|------------|-------|----------|
-| `test_artworkmanager` | 15 | Artwork path resolution, batch loading, suppression |
-| `test_cachemanager` | 15 | Pixmap cache, LRU eviction, disk persistence |
-| `test_collectionutils` | 30 | CollectionConfig, hierarchy cache, validation helpers |
-| `test_dbmigrations` | 10 | SQLite schema migration steps |
-| `test_databasemanager` | 6 | Worker-thread shutdown, SQL connection cleanup, path resolution |
-| `test_filterhelpers` | 15 | Filter predicate helpers |
-| `test_gridlayoutcalculator` | 17 | Grid metrics, item positioning, row ranges |
-| `test_gridutils` | 22 | Row/column math, centering, grid metrics calculation |
-| `test_interactionstateholder` | 13 | State flags, suppression timers, struct access, search state |
-| `test_keyboardmanager` | 27 | Key repeat, arrow + alphabetic navigation handlers |
-| `test_launchmanager` | 29 | Security validation, path checking, parameter parsing |
-| `test_mousehelpers` | 17 | Mouse helper math (hold scroll, wheel) |
-| `test_navigationhelpers` | 18 | Navigation helper utilities |
-| `test_navigationstackmanager` | 19 | Navigation stack push/pop/clear |
-| `test_pathutils` | 27 | Path validation, expansion, Result<T> error handling |
-| `test_queryhelpers` | 21 | SQL helper builders |
-| `test_querymanager_cancel_scan` | 1 | Scan cancellation flow |
-| `test_scrollhelpers` | 16 | Scroll helper math |
-| `test_searchhelpers` | 16 | Search helper utilities |
-| `test_searchutils` | 3 | SearchMode utilities |
-| `test_selectionhelpers` | 17 | Selection helper math |
-| `test_sessionmanager` | 17 | Session persistence with atomic writes |
-| `test_stringutils` | 10 | String formatting |
-| `test_widgetpoolmanager` | 17 | Widget acquisition, release, soft/hard clear, stale limits |
+Tests are grouped into four areas. Each `test_*.cpp` is a standalone Qt
+Test binary discovered by CTest, with the exception of the integration
+suite which links all of its `TestXxx` classes into a single binary
+(`test_integration`) driven by `tests/integration/test_main.cpp`.
 
-**Total: 398 unit test methods across 24 test suites**
+| Area | Path | Binaries | Coverage |
+|------|------|----------|----------|
+| Module unit tests | `tests/modules/<feature>/` | 37 | Per-manager and per-helper coverage mirroring `src/modules/<feature>/` |
+| Utility unit tests | `tests/utils/` | 14 | Helpers under `src/utils/` (cliargs, collectionutils, configvalidation, dbmigrations, gridutils, historystore, itemartwork, itemmetadata, pathutils, searchutils, stringutils, titlefilter, usagestatsstore, videoutils) |
+| Integration tests | `tests/integration/` | 1 | `MainWindowFixture`-driven multi-manager scenarios (application lifecycle, settings dialog apply / changes / scope, scroll, navigation, details-pane coverflow, event-manager wiring, mainwindow smoke) |
+| UI widget tests | `tests/ui/widgets/` | 2 | Widget-level rendering and behavior (`CoverflowWidget`, `EmptyStateWidget`) |
+
+**Total: 63 `test_*.cpp` files, ~330 test methods across 54 binaries.**
+Method counts drift fast — prefer `ctest --output-on-failure --test-dir
+build/ninja-release` for an authoritative pass count.
 
 ## Code Conventions
 
