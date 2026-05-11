@@ -5,6 +5,7 @@
 #include "attractmanager.h"
 
 #include "applicationcontext.h"
+#include "attracthelpers.h"
 #include "collectionutils.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
@@ -289,38 +290,22 @@ void AttractManager::onScrollTick() {
                                                   UIConstants::Attract::MAX_SCROLL_SPEED_PX)
                                          : UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX;
 
-  // Sub-pixel accumulator: the scrollbar only accepts ints, so accumulate the
-  // fractional pixels-per-tick and only advance the bar by the integer part
-  // each time the accumulator crosses 1. Lets very slow speeds (e.g. 0.5
-  // px/tick → ~32 px/sec) work even though one frame can't move <1 px.
-  m_scrollAccumulator += speed;
-  const int delta = static_cast<int>(m_scrollAccumulator);
-  if (delta == 0) {
+  const auto step = AttractHelpers::accumulateScrollDelta(m_scrollAccumulator, speed);
+  m_scrollAccumulator = step.newAccumulator;
+  if (step.delta == 0) {
     return;
   }
-  m_scrollAccumulator -= delta;
 
-  const int current = bar->value();
-  const int next = current + (delta * m_scrollDirection);
+  const auto pos = AttractHelpers::nextScrollPosition(bar->value(), step.delta, m_scrollDirection,
+                                                      bar->minimum(), bar->maximum());
+  bar->setValue(pos.next);
 
-  if (next >= bar->maximum()) {
-    bar->setValue(bar->maximum());
+  if (pos.hitMax || pos.hitMin) {
     m_scrollAccumulator = 0.0;
-    // Reached far end - pause then reverse
     m_bouncePaused = true;
     m_bouncePauseTimer->start(UIConstants::Attract::BOUNCE_PAUSE_MS);
     return;
   }
-  if (next <= bar->minimum()) {
-    bar->setValue(bar->minimum());
-    m_scrollAccumulator = 0.0;
-    // Reached near end - pause then reverse
-    m_bouncePaused = true;
-    m_bouncePauseTimer->start(UIConstants::Attract::BOUNCE_PAUSE_MS);
-    return;
-  }
-
-  bar->setValue(next);
 
   // Keep virtual scrolling view up to date
   if (scroll) {
@@ -368,39 +353,16 @@ void AttractManager::onAdvanceSelectionTick() {
   const int current = selection->currentSelectedIndex();
   int next;
   if (m_generalSettings->attractModeAdvanceSelectionRandom) {
-    // Bias the random pick toward the current scroll direction so selection
-    // moves visually in step with the autoscroll. Forward → pick from
-    // (current, end); reverse → pick from [0, current). If we're at the
-    // boundary in the scroll direction, fall back to the opposite half so
-    // the pick still produces a visible change before the next bounce.
-    int rangeStart;
-    int rangeEnd; // exclusive
-    if (m_scrollDirection >= 0) {
-      rangeStart = current + 1;
-      rangeEnd = total;
-      if (rangeStart >= rangeEnd) {
-        rangeStart = 0;
-        rangeEnd = qMax(0, current);
-      }
+    const auto range = AttractHelpers::randomAdvanceRange(current, total, m_scrollDirection);
+    if (range.isEmpty()) {
+      next = current; // Pathological state — falls through to the no-op return below.
     } else {
-      rangeStart = 0;
-      rangeEnd = qMax(0, current);
-      if (rangeStart >= rangeEnd) {
-        rangeStart = current + 1;
-        rangeEnd = total;
-      }
-    }
-    if (rangeStart >= rangeEnd) {
-      // Single-item collection (or pathological state); nothing to do.
-      next = current;
-    } else {
-      next = rangeStart + QRandomGenerator::global()->bounded(rangeEnd - rangeStart);
+      next = range.rangeStart + QRandomGenerator::global()->bounded(range.size());
     }
   } else {
-    // Wrap around at the end so cycling continues indefinitely.
-    next = (current >= 0) ? (current + 1) % total : 0;
+    next = AttractHelpers::linearAdvanceIndex(current, total);
   }
-  if (next == current) {
+  if (next == current || next < 0) {
     return;
   }
 

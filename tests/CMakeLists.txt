@@ -1119,6 +1119,20 @@ target_link_libraries(bench_filterhelpers
 add_test(NAME BenchFilterHelpers COMMAND bench_filterhelpers)
 set_tests_properties(BenchFilterHelpers PROPERTIES LABELS "benchmark")
 
+# AttractHelpers tests (pure helpers extracted from AttractManager)
+add_executable(test_attracthelpers
+  modules/attract/test_attracthelpers.cpp
+  ${SRC_DIR}/modules/media/attract/attracthelpers.cpp
+)
+target_include_directories(test_attracthelpers PRIVATE
+  ${SRC_DIR}/modules/media/attract
+)
+target_link_libraries(test_attracthelpers
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME AttractHelpers COMMAND test_attracthelpers)
+
 # SelectionRestoreHelpers tests (pure helpers extracted from SelectionRestoreManager)
 add_executable(test_selectionrestorehelpers
   modules/restore/test_selectionrestorehelpers.cpp
