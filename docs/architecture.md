@@ -46,7 +46,7 @@ src/
 │       └── viewport/    # Centering, viewport positioning
 ├── ui/                  # UI components and constants
 │   ├── dialogs/         # Settings dialog, error dialog, shortcuts dialog
-│   └── widgets/         # Item widget, metadata sidebar, list header, overlays
+│   └── widgets/         # Item widget, details pane, list header, overlays
 └── utils/               # Shared utilities and data structures
 ```
 
@@ -80,7 +80,7 @@ src/
 | `cachemanager` | Manages in-memory pixmap cache with LRU eviction and optional disk persistence. |
 | `sessionmanager` | Persists and restores selection state and item counts across application sessions. |
 | `settingsmanager` | Handles config file I/O, collection settings, and the settings dialog interface. |
-| `sidebarmanager` | Controls metadata sidebar visibility, positioning, and content updates. |
+| `detailspanemanager` | Coordinates the details/metadata side pane (visibility, position, gallery content). |
 | `filtermanager` | Applies search and subcollection filters to the active item set (helper owned by ScrollManager). |
 | `widgetpoolmanager` | Recycles ItemWidget instances for virtual scrolling (helper owned by ScrollManager). |
 | `datasourcemanager` | Owns FilterManager, ScrollDataManager, PreSearchStateManager, and SearchLoadingOverlay (helper extracted from ScrollManager). |
@@ -91,7 +91,7 @@ src/
 ## Manager Hierarchy
 
 **Two-tier ownership model:**
-- **ApplicationManager** owns: `CacheManager`, `SessionManager`, `ArtworkManager`, `SettingsManager`, `DatabaseManager`, `ScrollManager`, `SidebarManager`, `NavigationManager`, `InteractionManager`
+- **ApplicationManager** owns: `CacheManager`, `SessionManager`, `ArtworkManager`, `SettingsManager`, `DatabaseManager`, `ScrollManager`, `DetailsPaneManager`, `NavigationManager`, `InteractionManager`
 - **InteractionManager** owns: `SearchManager`, `SelectionManager`, `KeyboardManager`, `GamepadManager`, `ArrowNavigationHandler`, `AlphabeticNavigationHandler`, `AnimationManager`, `MouseManager`, `LaunchManager`, `ViewportManager`, `EventManager`
 
 Additional helper managers owned by their parent feature module (not top-level): `WidgetPoolManager`, `FilterManager`, `SelectionRestoreManager`, `SelectionOverlayManager`, `SearchLoadingOverlay`, `NavigationStackManager`.
@@ -102,7 +102,7 @@ Additional helper managers owned by their parent feature module (not top-level):
 |-----------|-------------|
 | `uiconstants.h` | Centralized namespace for all UI timing, spacing, and dimension constants. |
 | `settingsdialog` | Collection configuration dialog with tree-based hierarchy editing and live preview. |
-| `metadatasidebar` | Displays file metadata, artwork preview, and item details in the sidebar panel. |
+| `detailspane` | Displays file metadata, artwork gallery, and item details in the side pane. |
 | `itemwidget` | Media item widget displaying artwork, title, and selection state with pulse animation. |
 
 ## Utilities (`src/utils/`)

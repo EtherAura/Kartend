@@ -107,7 +107,7 @@ src/
 │       └── viewport/    # Centering, viewport positioning
 ├── ui/                  # UI components and constants
 │   ├── dialogs/         # Settings dialog, error dialog, shortcuts dialog
-│   └── widgets/         # Item widget, metadata sidebar, list header, overlays
+│   └── widgets/         # Item widget, details pane, list header, overlays
 └── utils/               # Shared utilities and data structures
 ```
 
@@ -152,7 +152,7 @@ if (auto *im = getInteractionManager()) {
 | `CacheManager` | ApplicationManager | |
 | `SessionManager` | ApplicationManager | |
 | `SettingsManager` | ApplicationManager | |
-| `DetailsPaneManager` | ApplicationManager | (renamed from `SidebarManager`) |
+| `DetailsPaneManager` | ApplicationManager | details/metadata side pane coordinator |
 | `PlaylistManager` | ApplicationManager | owns its own SQLite connection on the main thread |
 | `DetailPageManager` | ApplicationManager | detail-page coordinator |
 | `KartManager` | ApplicationManager | Kart import/export coordinator |
@@ -679,7 +679,7 @@ UIConstants is organized into logical sub-namespaces:
 | `UIConstants::Navigation` | Collection navigation timing |
 | `UIConstants::Artwork` | Artwork loading batch sizes, delays |
 | `UIConstants::Cache` | Cache size limits, persistence timing |
-| `UIConstants::Sidebar` | Sidebar dimensions and animation |
+| `UIConstants::DetailsPane` | Details-pane dimensions and animation |
 | `UIConstants::Viewport` | Viewport calculations, scroll margins |
 | `UIConstants::Widget` | Widget pool sizes, creation limits |
 | `UIConstants::Metadata` | Metadata sidebar update timing |
