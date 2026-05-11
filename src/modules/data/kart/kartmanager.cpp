@@ -273,7 +273,7 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir) {
             emit collectionImported(finalRes.value());
           });
 
-  watcher->setFuture(QtConcurrent::run([this, kartPath, destDir]() {
+  watcher->setFuture(QtConcurrent::run([kartPath, destDir]() {
     KartReader::Extractor extractor;
     return extractor.extractTo(kartPath, destDir);
   }));

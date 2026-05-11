@@ -128,10 +128,9 @@ auto SelectionRestoreManager::createRestoreValidationLambda(int scheduledCollect
       }
       return false;
     }
-    if (!SelectionRestoreHelpers::restoreStillValid(*m_currentCollectionIndex,
-                                                    scheduledCollectionIndex,
-                                                    state()->selectionRestore().restoreToken,
-                                                    token)) {
+    if (!SelectionRestoreHelpers::restoreStillValid(
+            *m_currentCollectionIndex, scheduledCollectionIndex,
+            state()->selectionRestore().restoreToken, token)) {
       debugLog("[SelectionRestore] validator: stale restore - current="
                << *m_currentCollectionIndex << "scheduled=" << scheduledCollectionIndex
                << "stateToken=" << state()->selectionRestore().restoreToken
@@ -251,10 +250,9 @@ auto SelectionRestoreManager::createSelectionRestoreLambda(int collectionIndex, 
     if (!guard || !guard->state() || !guard->m_currentCollectionIndex) {
       return;
     }
-    if (!SelectionRestoreHelpers::restoreStillValid(*guard->m_currentCollectionIndex,
-                                                    collectionIndex,
-                                                    guard->state()->selectionRestore().restoreToken,
-                                                    token)) {
+    if (!SelectionRestoreHelpers::restoreStillValid(
+            *guard->m_currentCollectionIndex, collectionIndex,
+            guard->state()->selectionRestore().restoreToken, token)) {
       return;
     }
     if (!guard->interactionMgr() || !guard->scrollMgr()) {

@@ -99,10 +99,10 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
       update.addBindValue(currentSignature);
       update.addBindValue(uuid);
       if (!update.exec()) {
-        auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                         "Failed to backfill ext_signature",
-                                         "QueryManager::needsRescan")
-                       .withDetails(update.lastError().text());
+        auto err =
+            ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                  "Failed to backfill ext_signature", "QueryManager::needsRescan")
+                .withDetails(update.lastError().text());
         ErrorUtils::logError(err);
       }
     } else {
@@ -166,10 +166,10 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
       meta.bindValue(1, seeded);
       meta.bindValue(2, uuid);
       if (!meta.exec()) {
-        auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                         "Failed to seed dir_signature",
-                                         "QueryManager::needsRescan")
-                       .withDetails(meta.lastError().text());
+        auto err =
+            ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to seed dir_signature",
+                                  "QueryManager::needsRescan")
+                .withDetails(meta.lastError().text());
         ErrorUtils::logError(err);
       }
     }
@@ -187,8 +187,7 @@ bool QueryManager::needsRescan(int collectionIndex, const CollectionConfig &coll
   newer.bindValue(1, lastScanned.toString(Qt::ISODate));
   if (!newer.exec()) {
     auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
-                                     "Failed to count modified items",
-                                     "QueryManager::needsRescan")
+                                     "Failed to count modified items", "QueryManager::needsRescan")
                    .withDetails(newer.lastError().text());
     ErrorUtils::logError(err);
     return false;

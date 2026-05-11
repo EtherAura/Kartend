@@ -193,7 +193,7 @@ void DetailsPaneGalleryView::rebuildThumbs(DetailsPaneTab activeTab) {
       const QString videoPath = entry.path;
       const int targetIconSize = iconSize;
       connect(VideoThumbnailExtractor::instance(), &VideoThumbnailExtractor::frameReady, button,
-              [button, videoPath, targetIconSize](const QString &p, const QPixmap &pix) {
+              [button, videoPath](const QString &p, const QPixmap &pix) {
                 if (p != videoPath || pix.isNull()) {
                   return;
                 }

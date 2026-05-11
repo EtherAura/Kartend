@@ -72,7 +72,7 @@ auto QueryManager::ensureDatabaseConnection() -> bool {
     return false;
   }
 
-  auto logReconnectAttempt = [this](int attempt) {
+  auto logReconnectAttempt = [](int attempt) {
     auto info =
         ErrorContext::info(ErrorCode::DatabaseConnectionLost,
                            QString("Database connection lost, attempting reconnection (%1/%2)")

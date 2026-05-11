@@ -23,7 +23,7 @@ AxisDirectionState axisToDirections(double axisX, double axisY, Direction previo
 }
 
 Direction combineToDirection(bool dpadLeft, bool dpadRight, bool dpadUp, bool dpadDown,
-                              bool useDpad, const AxisDirectionState &stick) {
+                             bool useDpad, const AxisDirectionState &stick) {
   const bool left = (useDpad && dpadLeft) || stick.left;
   const bool right = (useDpad && dpadRight) || stick.right;
   const bool up = (useDpad && dpadUp) || stick.up;
@@ -68,8 +68,7 @@ double normalizeSdlAxis(int rawSint16) {
 }
 
 ButtonAction resolveButtonAction(const QString &buttonName, const QString &confirmBinding,
-                                  const QString &backBinding,
-                                  const QString &toggleSidebarBinding) {
+                                 const QString &backBinding, const QString &toggleSidebarBinding) {
   const QString normalized = buttonName.trimmed();
   if (normalized.isEmpty()) {
     return ButtonAction::None;

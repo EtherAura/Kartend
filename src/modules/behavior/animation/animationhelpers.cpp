@@ -14,6 +14,7 @@
 int AnimationManager::computeVerticalCenterDuration(int distance, int itemHeight,
                                                     int verticalSpacing, bool repeatActive,
                                                     int durationMs) {
+  Q_UNUSED(repeatActive)
   int stepSpan = qMax(1, itemHeight + verticalSpacing);
   double rows = static_cast<double>(distance) / static_cast<double>(stepSpan);
   rows = std::max(rows, 1.0);

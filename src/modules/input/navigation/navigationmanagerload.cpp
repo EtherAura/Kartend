@@ -47,6 +47,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcNavigationManager)
   } while (0)
 
 auto NavigationManager::loadCollectionData(int collectionIndex) -> void {
+  Q_UNUSED(collectionIndex)
   if (!databaseMgr() || !m_collections || !m_currentCollectionIndex) {
     return;
   }

@@ -8,8 +8,7 @@ QString pickDisplayTitle(const QString &fallback, const QString &metaTitle) {
   return metaTitle.isEmpty() ? fallback : metaTitle;
 }
 
-QHash<QString, QString>
-buildArtworkOverrideMap(const QList<ItemArtworkStore::ItemArtwork> &rows) {
+QHash<QString, QString> buildArtworkOverrideMap(const QList<ItemArtworkStore::ItemArtwork> &rows) {
   QHash<QString, QString> out;
   out.reserve(rows.size());
   for (const auto &row : rows) {

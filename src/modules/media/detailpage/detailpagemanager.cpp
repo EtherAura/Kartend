@@ -123,7 +123,8 @@ void DetailPageManager::showForCurrentSelection() {
   }
 
   // ── File info ────────────────────────────────────────────────────────
-  const auto fileFields = DetailPagePayloadBuilder::buildFileInfoFields(QFileInfo(itemCtx.filePath));
+  const auto fileFields =
+      DetailPagePayloadBuilder::buildFileInfoFields(QFileInfo(itemCtx.filePath));
   payload.fileSize = fileFields.fileSize;
   payload.fileModified = fileFields.fileModified;
   payload.fileExtension = fileFields.fileExtension;

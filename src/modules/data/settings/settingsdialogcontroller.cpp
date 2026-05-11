@@ -444,6 +444,8 @@ auto SettingsManager::handleReloadRequired(
     DetailsPaneManager *detailsPaneManager, ScrollManager *scrollManager,
     NavigationManager *navigationManager, ArtworkManager *artworkManager,
     CacheManager *cacheManager, int currentCollectionIndex) -> void {
+  Q_UNUSED(detailsPaneManager)
+  Q_UNUSED(currentCollectionIndex)
   if (artworkManager) {
     artworkManager->cancelAllArtworkLoading();
   }

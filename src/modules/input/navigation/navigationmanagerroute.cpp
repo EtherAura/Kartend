@@ -69,6 +69,7 @@ auto NavigationManager::handleSubcollectionNavigation(int collectionIndex, int p
 }
 
 auto NavigationManager::handleRegularNavigation(int collectionIndex) -> void {
+  Q_UNUSED(collectionIndex)
   if (scrollMgr()) {
     scrollMgr()->clearFilter();
   }

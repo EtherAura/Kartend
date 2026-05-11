@@ -37,8 +37,8 @@ struct AxisDirectionState {
 // the rest of Kartend uses. useDpad gates the d-pad bits identically to
 // useStick gating the stick bits.
 [[nodiscard]] Direction combineToDirection(bool dpadLeft, bool dpadRight, bool dpadUp,
-                                            bool dpadDown, bool useDpad,
-                                            const AxisDirectionState &stick);
+                                           bool dpadDown, bool useDpad,
+                                           const AxisDirectionState &stick);
 
 // Movement intent the manager translates to a requestSelectionMove
 // signal. delta=0 means "no movement"; vertical=true means the move is
@@ -62,9 +62,9 @@ struct MovementIntent {
 enum class ButtonAction { None, Confirm, Back, ToggleSidebar };
 
 [[nodiscard]] ButtonAction resolveButtonAction(const QString &buttonName,
-                                                const QString &confirmBinding,
-                                                const QString &backBinding,
-                                                const QString &toggleSidebarBinding);
+                                               const QString &confirmBinding,
+                                               const QString &backBinding,
+                                               const QString &toggleSidebarBinding);
 
 } // namespace GamepadHelpers
 

@@ -473,18 +473,17 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
   connect(child, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
           [cleanup](int /*code*/, QProcess::ExitStatus /*status*/) { cleanup(); });
 
-  connect(child, &QProcess::errorOccurred, this,
-          [this, child, cleanup](QProcess::ProcessError error) {
-            // Only treat FailedToStart as terminal here — finished() will fire
-            // for crashes after start, and we want to keep the overlay up
-            // until the process is actually gone.
-            if (error == QProcess::FailedToStart) {
-              QMessageBox::critical(
-                  nullptr, "Launch Error",
-                  QString("Failed to start tracked launcher:\n%1").arg(child->errorString()));
-              cleanup();
-            }
-          });
+  connect(child, &QProcess::errorOccurred, this, [child, cleanup](QProcess::ProcessError error) {
+    // Only treat FailedToStart as terminal here — finished() will fire
+    // for crashes after start, and we want to keep the overlay up
+    // until the process is actually gone.
+    if (error == QProcess::FailedToStart) {
+      QMessageBox::critical(
+          nullptr, "Launch Error",
+          QString("Failed to start tracked launcher:\n%1").arg(child->errorString()));
+      cleanup();
+    }
+  });
 
   child->start(launcherPath, cmd.arguments);
   // start() returns void; FailedToStart is reported via errorOccurred.
