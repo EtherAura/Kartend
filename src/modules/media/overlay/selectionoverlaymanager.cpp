@@ -2,8 +2,8 @@
 #include "selectionoverlaymanager.h"
 #include "interactionstateholder.h"
 #include "itemwidget.h"
+#include "overlayhelpers.h"
 #include "uiconstants.h"
-#include <cmath>
 #include <QColor>
 #include <QPropertyAnimation>
 #include <QWidget>
@@ -162,11 +162,10 @@ void SelectionOverlayManager::animateTo(const QRect &targetRect, const QRect &st
     return;
   }
 
-  QRect currentRect = startRect.isValid() ? startRect : m_overlay->geometry();
-
-  // If overlay isn't visible or valid, start from target
-  if (!m_overlay->isVisible() || !currentRect.isValid()) {
-    currentRect = targetRect;
+  const QRect proposedStart = startRect.isValid() ? startRect : m_overlay->geometry();
+  QRect currentRect =
+      OverlayHelpers::chooseGlideStart(proposedStart, targetRect, m_overlay->isVisible());
+  if (!m_overlay->isVisible() || !proposedStart.isValid()) {
     m_overlay->setGeometry(currentRect);
   }
 
@@ -187,18 +186,13 @@ void SelectionOverlayManager::animateTo(const QRect &targetRect, const QRect &st
     m_restartingAnim = false;
   }
 
-  // Calculate animation duration based on distance
-  int deltaX = std::abs(currentRect.center().x() - targetRect.center().x());
-  int deltaY = std::abs(currentRect.center().y() - targetRect.center().y());
-  double distance = std::sqrt(static_cast<double>(deltaX * deltaX + deltaY * deltaY));
-
   static constexpr double PIXELS_PER_SECOND =
       UIConstants::Selection::OVERLAY_GLIDE_PIXELS_PER_SECOND;
   static constexpr int MIN_DURATION = 50;
   static constexpr int MAX_DURATION = UIConstants::Selection::OVERLAY_GLIDE_MAX_DURATION_MS;
 
-  int duration = static_cast<int>(std::round((distance / PIXELS_PER_SECOND) * 1000.0));
-  duration = std::clamp(duration, MIN_DURATION, MAX_DURATION);
+  const int duration = OverlayHelpers::glideDurationMs(
+      currentRect.center(), targetRect.center(), PIXELS_PER_SECOND, MIN_DURATION, MAX_DURATION);
 
   // Start the glide animation
   m_animation->setDuration(duration);
@@ -251,6 +245,6 @@ auto SelectionOverlayManager::overlayRectForWidget(ItemWidget *widget) -> QRect 
 
 auto SelectionOverlayManager::overlayRectForPosition(const QPoint &pos, int itemWidth,
                                                      int itemHeight) -> QRect {
-  const int inset = UIConstants::CollectionIcon::ITEM_SPACING;
-  return QRect(pos.x() - inset, pos.y() - inset, itemWidth + 2 * inset, itemHeight + 2 * inset);
+  return OverlayHelpers::overlayRectForPosition(pos, itemWidth, itemHeight,
+                                                UIConstants::CollectionIcon::ITEM_SPACING);
 }

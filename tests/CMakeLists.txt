@@ -1119,6 +1119,21 @@ target_link_libraries(bench_filterhelpers
 add_test(NAME BenchFilterHelpers COMMAND bench_filterhelpers)
 set_tests_properties(BenchFilterHelpers PROPERTIES LABELS "benchmark")
 
+# OverlayHelpers tests (pure helpers extracted from SelectionOverlayManager)
+add_executable(test_overlayhelpers
+  modules/overlay/test_overlayhelpers.cpp
+  ${SRC_DIR}/modules/media/overlay/overlayhelpers.cpp
+)
+target_include_directories(test_overlayhelpers PRIVATE
+  ${SRC_DIR}/modules/media/overlay
+)
+target_link_libraries(test_overlayhelpers
+  Qt6::Core
+  Qt6::Gui
+  Qt6::Test
+)
+add_test(NAME OverlayHelpers COMMAND test_overlayhelpers)
+
 # AttractHelpers tests (pure helpers extracted from AttractManager)
 add_executable(test_attracthelpers
   modules/attract/test_attracthelpers.cpp
