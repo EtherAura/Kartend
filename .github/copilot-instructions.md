@@ -43,6 +43,7 @@
 - ✅ When the user describes new work, your FIRST action is `bd create` (or `bd ready` to check for an existing match).
 - ✅ When in doubt about priority: P0=critical/blocking, P1=high, P2=normal (default), P3=backlog, P4=future/nice-to-have.
 - ✅ When discovering related work mid-task, file it (`--deps discovered-from:<id>`) — don't expand the current issue's scope.
+- ❌ **Never restructure `src/` or `tests/` without refreshing the agent docs in the same commit.** Any folder move/rename/add/removal under `src/modules/`, `src/utils/`, `src/ui/uiconstants/`, or `tests/` — and any manager or `UIConstants::*` sub-namespace rename — MUST regenerate the matching trees and tables in `.github/copilot-instructions.md`, `docs/architecture.md`, `docs/testing.md` (for `tests/` changes), and any `docs/guide/*.md` page that links into the moved path. Stale paths silently mislead every future agent. Before closing the issue, run `grep -rn 'src/modules/<old>\|src/utils/<old>\|OldClassName' docs/ .github/` — it should return zero hits.
 
 ### Quick Reference
 
