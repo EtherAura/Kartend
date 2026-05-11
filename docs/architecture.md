@@ -107,20 +107,65 @@ Additional helper managers owned by their parent feature module (not top-level):
 
 ## Utilities (`src/utils/`)
 
+Utilities are grouped by concern in six subfolders.
+
+### `src/utils/app/` — Application context, config, error model, logging
+
 | Utility | Description |
 |---------|-------------|
-| `collectionutils.h` | Defines CollectionConfig, CollectionContext, and CollectionHierarchyCache data structures. |
-| `configutils.h` | Provides config path resolution and variable expansion for settings files. |
-| `errorutils.h` | Structured error handling with ErrorCode enum, ErrorContext, and Result<T> template. |
-| `searchutils.h` | Defines SearchMode enum and search context utilities for filtering operations. |
-| `stringutils.h` | Formats numbers with comma separators for display in title counts. |
-| `settingsutils` | Resolves settings file paths and provides INI file handling utilities. |
-| `pathutils` | Provides file path normalization, extension handling, and path manipulation. |
-| `gridutils.h` | Computes grid layout metrics including row/column positions and container sizes. |
-| `extensionutils` | Categorizes file extensions by media type (ROM, disc image, archive, etc.). |
-| `timerutils` | Provides debounced timer coordination for viewport and layout updates. |
-| `propertyutils.h` | Defines PropertyKeys namespace with Qt dynamic property key constants. |
-| `stateutils.h` | Centralized state structs for interaction, scroll, and selection state. |
+| `applicationcontext.h` | `ApplicationContext` struct (collection / ui / managers sub-structs) shared across managers. |
+| `cliargs` | Command-line argument parsing for startup-collection overrides and headless Kart import/export. |
+| `collectiontypes.h` | Standalone enums extracted from `collectionutils.h` (`HorizontalAlignment`, `DetailsPaneMode`, etc.). |
+| `collectionutils` | `CollectionConfig`, `CollectionContext`, `CollectionHierarchyCache` plus hierarchy and validation helpers. |
+| `errorutils.h` | Structured error handling: `ErrorCode` enum, `ErrorContext` struct, `Result<T>` template, `lcErrors` category. |
+| `loggingcategories` | Cross-cutting `Q_LOGGING_CATEGORY` declarations (`lcPerfTrace`, `lcSearchDiag`, `lcScanFlow`). |
+| `propertyutils.h` | `PropertyKeys` namespace with Qt dynamic property key constants. |
+| `settingsutils` | Settings file path resolution and INI helpers. |
+| `setuputils.h` | Macros that reduce setup-struct getter boilerplate (`SETUP_GETTER_*` family). |
+| `stateutils.h` | Centralized state structs (`SelectionRestoreState`, `ScrollState`, …) replacing scattered dynamic properties. |
+
+### `src/utils/db/` — SQLite schema and per-item stores
+
+| Utility | Description |
+|---------|-------------|
+| `dbmigrations` | SQLite schema migration steps and `PRAGMA user_version` management. |
+| `historystore` | `launch_history` table access. |
+| `itemartwork` | `item_artwork` table — per-item artwork overrides with standard-type fallback. |
+| `itemmetadata` | `item_metadata` table — custom titles, descriptions, genres, custom key/value fields. |
+| `usagestatsstore` | `play_count`, `last_played`, `total_play_seconds` on the items table. |
+
+### `src/utils/fs/` — Filesystem paths, validation, extension classification
+
+| Utility | Description |
+|---------|-------------|
+| `configvalidation` | Schema validation of `CollectionConfig` plus `isCommandInPath()`. |
+| `extensionutils` | File extension categorization by media type. |
+| `pathutils` | Path validation with `Result<T>` support, expansion, `syncDirectory()` for crash-safe writes. |
+
+### `src/utils/text/` — Search modes, string formatting, title filtering
+
+| Utility | Description |
+|---------|-------------|
+| `searchutils.h` | `SearchMode` enum and search context utilities. |
+| `stringutils.h` | String manipulation and title formatting helpers. |
+| `titlefilter` | Process-wide title-cleanup engine; per-collection regex strip with read/write lock. |
+
+### `src/utils/threading/` — Worker-thread orchestration and debouncing
+
+| Utility | Description |
+|---------|-------------|
+| `adaptivebatcher.h` | Thread-safe batch-size controller with EMA-smoothed timing feedback. |
+| `threadpoolutils` | Bounded-wait `QThreadPool` teardown with abandon-on-timeout fallback. |
+| `timerutils` | `TimerUtils::Coordinator` for debounced viewport updates; `TimerUtils::DebouncedTimer` for generic debouncing. |
+
+### `src/utils/view/` — Grid math, artwork / video helpers, viewport rendering
+
+| Utility | Description |
+|---------|-------------|
+| `artworkutils` | Artwork file lookup, fuzzy matching, `Result<T>`-returning variants. |
+| `gridutils.h` | Grid layout calculations, row/column math, container sizing. |
+| `textzoom` | Process-wide UI text zoom percentage (clamped to 50–300). |
+| `videoutils` | Per-item preview-video file lookup (mirrors `artworkutils`). |
 
 ## Threading Model
 
