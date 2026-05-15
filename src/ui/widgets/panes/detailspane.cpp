@@ -4,18 +4,30 @@
 #include <QApplication>
 #include <QDesktopServices>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFontMetrics>
 #include <QFormLayout>
+#include <QFrame>
+#include <QFutureWatcher>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QImage>
+#include <QLoggingCategory>
+
+#include "itemartwork.h"
+#include "loggingcategories.h"
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSize>
 #include <QStyle>
 #include <QTabBar>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QTimer>
 #include <QToolButton>
 #include <QUrl>
@@ -83,13 +95,32 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
   m_videoPreview->hide();
   if (auto *artworkParentLayout =
           qobject_cast<QVBoxLayout *>(ui->artworkDisplay->parentWidget()->layout())) {
+    // Force-centre both the artwork QLabel and the video preview in
+    // the parent QVBoxLayout. The .ui declares the QLabel with
+    // min=max=200x200 but no layout-item alignment, so QVBoxLayout's
+    // default stretch-then-clamp behaviour leaves it pinned to the
+    // left edge of the sidebar — visibly off-centre in any pane
+    // wider than the artwork box. setAlignment(widget, AlignHCenter)
+    // overrides the per-item alignment without touching the .ui.
+    artworkParentLayout->setAlignment(ui->artworkDisplay, Qt::AlignHCenter);
     int idx = artworkParentLayout->indexOf(ui->artworkDisplay);
     if (idx >= 0) {
-      artworkParentLayout->insertWidget(idx + 1, m_videoPreview);
+      artworkParentLayout->insertWidget(idx + 1, m_videoPreview, 0, Qt::AlignHCenter);
     } else {
-      artworkParentLayout->addWidget(m_videoPreview);
+      artworkParentLayout->addWidget(m_videoPreview, 0, Qt::AlignHCenter);
     }
   }
+
+  // Arrow-key cycling between gallery entries. Click on the main
+  // preview tile (artwork QLabel or video widget) gives it focus
+  // via StrongFocus; eventFilter then catches Key_Left / Key_Right
+  // and routes them to cycleMainPreview. Other keys fall through to
+  // the focused widget's defaults so e.g. Escape, Tab, alphanumeric
+  // search bindings keep working from elsewhere.
+  ui->artworkDisplay->setFocusPolicy(Qt::StrongFocus);
+  m_videoPreview->setFocusPolicy(Qt::StrongFocus);
+  ui->artworkDisplay->installEventFilter(this);
+  m_videoPreview->installEventFilter(this);
 
   setupTabBar();
 
@@ -113,13 +144,12 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
   connect(m_galleryView, &DetailsPaneGalleryView::overlayVisibilityChanged, this,
           &DetailsPane::galleryOverlayVisibilityChanged);
 
-  // center the artwork-section header, artwork preview, video
-  // preview, and item-name label/value. Everything else stays flush-left
-  // so long values (paths, sizes) read naturally. itemNameValue also needs
-  // its *text* alignment centered + wordWrap so a long name wraps inside
-  // the column instead of being cut off at the right edge.
-  ui->itemNameValue->setAlignment(Qt::AlignHCenter);
-  ui->itemNameValue->setWordWrap(true);
+  // itemNameValue now lives in the compact title row (right-aligned next
+  // to the section heading). The original block centered it under the
+  // artwork tile and wrapped long names; in the new layout we want a
+  // single line that elides on overflow rather than expanding the row.
+  ui->itemNameValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+  ui->itemNameValue->setWordWrap(false);
   applyContentAlignment();
   applyPreviewSize();
 
@@ -139,6 +169,17 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
     if (m_activeTab != DetailsPaneTab::Item) {
       return;
     }
+    // Defer if a scroll animation is currently mid-glide. playVideo's
+    // m_player->stop()+setSource()+play() chain blocks the GUI thread
+    // ~100ms while QMediaPlayer/GStreamer initializes the new pipeline.
+    // Hitting that mid-animation visibly stutters the still-running
+    // scroll. Re-arm the timer with a short interval and re-check on
+    // next fire — once the animation truly settles, the predicate
+    // returns false and we proceed (Kartend-9q8d round 6).
+    if (m_scrollIdlePredicate && !m_scrollIdlePredicate()) {
+      m_videoStartTimer->start(50);
+      return;
+    }
     // In vertical dock the video replaces the artwork (cramped narrow panel
     // can't host both stacked). In horizontal dock the video and artwork
     // sit side-by-side inside m_hPreviewLayout — both stay visible based
@@ -153,6 +194,17 @@ DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsP
       updateHorizontalView();
     }
   });
+
+  // Pre-warm the gallery section's lazy widget construction so the cost
+  // (~2.5s on a slow filesystem — Kartend-jxp5) lands in startup instead
+  // of the user's first-click critical path. Section is hidden until
+  // setEntries populates it; prewarming has no UI consequence beyond the
+  // up-front allocation. Safe to call after m_videoPreview is constructed
+  // because ensureSection's insertion-index calculation reads it as the
+  // anchor for placing the gallery container below the video tile.
+  if (m_galleryView) {
+    m_galleryView->prewarmSection();
+  }
 
   clearMetadata();
 }
@@ -170,6 +222,16 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
     return;
   }
 
+  // Per-phase perf timers (Kartend-5ux9 follow-up) — the outer
+  // perfTrace showed setMeta=200-240ms tail even after loadArtwork went
+  // async, so the cost is in some other call inside this function.
+  // Each phase below logs separately; we only emit the breakdown when
+  // KARTEND_PERF_TRACE=1.
+  const bool perfTrace = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE");
+  qint64 perfFileInfoMs = 0, perfPreviewSize1Ms = 0, perfLoadArtworkMs = 0;
+  qint64 perfVideo1Ms = 0, perfVideo2Ms = 0, perfArtworkOnlyMs = 0;
+  qint64 perfSchedulePvMs = 0, perfTabVisMs = 0;
+
   m_hasItemDisplayed = true;
   m_currentItemName = itemName;
   // setExtendedMetadata refills this when the metadata is applied; reset
@@ -181,7 +243,12 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
   // File tab needs it, and the Item-tab paint path won't show it. Doing
   // it unconditionally means a tab switch surfaces the correct data
   // without re-running the manager's selection pipeline.
-  updateFileInfo(filePath);
+  {
+    QElapsedTimer t;
+    if (perfTrace) t.start();
+    updateFileInfo(filePath);
+    if (perfTrace) perfFileInfoMs = t.elapsed();
+  }
 
   QFileInfo fileInfo(filePath);
   const QString baseName = fileInfo.completeBaseName();
@@ -190,29 +257,100 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
   // back to the empty placeholder while the new image is resolved.
   m_artworkSource = QPixmap();
   m_primaryArtworkPath.clear();
-  applyPreviewSize();
-
-  // Try collection's artwork directory first if provided
-  if (!artworkDirectory.isEmpty()) {
-    loadArtwork(baseName, artworkDirectory);
-  } else {
-    // Fallback to sibling "artwork" directory
-    const QDir fileDir = fileInfo.dir();
-    const QString siblingArtworkDir = fileDir.absolutePath() + "/artwork";
-    loadArtwork(baseName, siblingArtworkDir);
+  {
+    QElapsedTimer t;
+    if (perfTrace) t.start();
+    applyPreviewSize();
+    if (perfTrace) perfPreviewSize1Ms = t.elapsed();
   }
 
-  // Resolve and (debounced) start preview video. Always reset the artwork
-  // pane back to the artwork display first; the timer will swap to the video
-  // widget once the debounce elapses if a video was found.
-  showArtworkOnly();
-  const QString videoPath =
-      videoDirectory.isEmpty() ? QString() : VideoUtils::findVideoForFile(filePath, videoDirectory);
-  schedulePreviewVideo(videoPath);
+  // Try collection's artwork directory first if provided
+  {
+    QElapsedTimer t;
+    if (perfTrace) t.start();
+    if (!artworkDirectory.isEmpty()) {
+      loadArtwork(baseName, artworkDirectory);
+    } else {
+      // Fallback to sibling "artwork" directory
+      const QDir fileDir = fileInfo.dir();
+      const QString siblingArtworkDir = fileDir.absolutePath() + "/artwork";
+      loadArtwork(baseName, siblingArtworkDir);
+    }
+    if (perfTrace) perfLoadArtworkMs = t.elapsed();
+  }
+
+  // Resolve preview video. Lookup priority:
+  // (1) the collection's `videoDirectory` (power-user override), then
+  // (2) `{artworkDirectory}/video/` — where scraped videos land under the
+  // single-root layout.
+  QString videoPath;
+  if (!videoDirectory.isEmpty()) {
+    QElapsedTimer t;
+    if (perfTrace) t.start();
+    videoPath = VideoUtils::findVideoForFile(filePath, videoDirectory);
+    if (perfTrace) perfVideo1Ms = t.elapsed();
+  }
+  if (videoPath.isEmpty() && !artworkDirectory.isEmpty()) {
+    QElapsedTimer t;
+    if (perfTrace) t.start();
+    videoPath = VideoUtils::findVideoForFile(filePath, QDir(artworkDirectory).filePath("video"));
+    if (perfTrace) perfVideo2Ms = t.elapsed();
+  }
+  // Static category at warning level so this trace stays silent
+  // during normal navigation (fires on every selection move). Opt in
+  // via `KARTEND_LOG_RULES=kartend.video.debug=true`.
+  static const QLoggingCategory lcVideo("kartend.video", QtWarningMsg);
+  qCDebug(lcVideo) << "preview lookup item=" << filePath << "videoDir=" << videoDirectory
+                   << "artworkDir=" << artworkDirectory << "resolved=" << videoPath;
+
+  // Only churn the video preview when the resolved path actually
+  // changed for THIS item. setMetadata fires multiple times for the
+  // same selection (manager refreshes after artwork load, post-scrape
+  // updates, hover events, etc.); without this guard each invocation
+  // hides the video widget, which triggers VideoPreviewWidget's
+  // hideEvent → m_player->pause(), then the 500ms debounce re-shows +
+  // re-plays — a glitchy ping-pong the user sees as "video stops
+  // playing". When the path is unchanged AND the widget is currently
+  // showing the same video, we leave the playback alone entirely.
+  const QString currentVideoPath = m_videoPreview ? m_videoPreview->currentVideoPath() : QString();
+  const bool videoUnchanged = !videoPath.isEmpty() && videoPath == currentVideoPath &&
+                              m_videoPreview && m_videoPreview->isVisible();
+  if (!videoUnchanged) {
+    {
+      QElapsedTimer t;
+      if (perfTrace) t.start();
+      showArtworkOnly();
+      if (perfTrace) perfArtworkOnlyMs = t.elapsed();
+    }
+    {
+      QElapsedTimer t;
+      if (perfTrace) t.start();
+      schedulePreviewVideo(videoPath);
+      if (perfTrace) perfSchedulePvMs = t.elapsed();
+    }
+  }
 
   // Defer all section visibility to applyTabVisibility() so each tab
   // ends up with its own distinct widget set.
-  applyTabVisibility();
+  {
+    QElapsedTimer t;
+    if (perfTrace) t.start();
+    applyTabVisibility();
+    if (perfTrace) perfTabVisMs = t.elapsed();
+  }
+
+  if (perfTrace) {
+    const qint64 phaseSum = perfFileInfoMs + perfPreviewSize1Ms + perfLoadArtworkMs + perfVideo1Ms +
+                            perfVideo2Ms + perfArtworkOnlyMs + perfSchedulePvMs + perfTabVisMs;
+    if (phaseSum > 5) {
+      qCDebug(lcPerfTrace).nospace()
+          << "DetailsPane::setMetadata phases: sum=" << phaseSum << " (fileInfo=" << perfFileInfoMs
+          << " previewSize1=" << perfPreviewSize1Ms << " loadArtwork=" << perfLoadArtworkMs
+          << " video1=" << perfVideo1Ms << " video2=" << perfVideo2Ms
+          << " artworkOnly=" << perfArtworkOnlyMs << " schedulePv=" << perfSchedulePvMs
+          << " tabVis=" << perfTabVisMs << ") path=" << filePath;
+    }
+  }
 }
 
 // Clears per-item state and re-asserts visibility. Each tab now owns its
@@ -265,11 +403,23 @@ void DetailsPane::setCollectionSummary(const CollectionSummary &summary) {
 }
 
 void DetailsPane::setArtworkSectionVisible(bool visible) {
-  // Artwork header + preview tile + (when hiding) the live video widget.
-  // Artwork and file-info no longer travel together — each tab decides
-  // independently what to show.
-  ui->artworkLabel->setVisible(visible);
-  ui->artworkDisplay->setVisible(visible);
+  // Artwork preview tile + (when hiding) the live video widget.
+  // The "Artwork" header label was removed from the .ui to compact the
+  // Item tab — visibility now only toggles the tile and the live video
+  // widget. Artwork and file-info no longer travel together — each tab
+  // decides independently what to show.
+  // Keep the static artwork tile hidden while a preview video is
+  // currently playing — otherwise QVBoxLayout would stack both
+  // widgets vertically (artwork above video) and the live preview
+  // ends up below the scroll fold. The video occupies the artwork
+  // slot for as long as it has a loaded source. setMetadata /
+  // applyTabVisibility get called multiple times per selection
+  // (manager refreshes, post-scrape updates), and we hit this code
+  // path on each one — without the video-aware branch the artwork
+  // re-appears over the video on every refresh.
+  const bool videoPlaying = m_videoPreview && m_videoPreview->isVisible() &&
+                            !m_videoPreview->currentVideoPath().isEmpty();
+  ui->artworkDisplay->setVisible(visible && !videoPlaying);
   if (m_videoPreview && !visible) {
     m_videoPreview->hide();
   }
@@ -285,6 +435,13 @@ void DetailsPane::setFileInfoRowsVisible(bool visible) {
   ui->lastModifiedValue->setVisible(visible);
   ui->fileExtensionLabel->setVisible(visible);
   ui->fileExtensionValue->setVisible(visible);
+  // Static-UI separators travel with the file-info section. On Item
+  // tab they would otherwise paint as orphaned hairlines between the
+  // gallery and the description (separator2) or above the artwork
+  // tile (separator1) — both unnecessary now that bubble backdrops
+  // delineate sections.
+  if (ui->separator1) ui->separator1->setVisible(visible);
+  if (ui->separator2) ui->separator2->setVisible(visible);
 }
 
 void DetailsPane::renderCollectionSummary() {
@@ -294,7 +451,6 @@ void DetailsPane::renderCollectionSummary() {
     m_galleryView->hideSection();
   }
   ui->titleLabel->setText(tr("Collection Information"));
-  ui->itemNameLabel->setText(tr("Collection:"));
   ui->itemNameValue->setText(m_collectionSummary.name);
 
   ensureDetailsSection();
@@ -340,34 +496,63 @@ QString DetailsPane::formatLastScanned(const QDateTime &lastScanned) {
 // Updates file information fields including size, modification date, and file
 // type
 void DetailsPane::updateFileInfo(const QString &filePath) {
-  QFileInfo fileInfo(filePath);
-
-  if (!fileInfo.exists()) {
-    ui->filePathValue->setText("File not found");
-    ui->fileSizeValue->setText("-");
-    ui->lastModifiedValue->setText("-");
-    ui->fileExtensionValue->setText("-");
-    return;
-  }
-
-  // wrap the full path across multiple lines instead of
-  // eliding it. wordWrap on a path-like string with no spaces falls back
-  // to per-character wrapping at the cell width, so the user sees the
-  // entire path even on a narrow sidebar. The tooltip is kept for parity
-  // with the previous elide-based UI.
+  // Synchronous prelude: everything that doesn't need a stat() — path
+  // display + extension parsing. These run instantly and keep the labels
+  // populated while the async exists/size/lastModified worker is in flight.
   m_currentFilePath = filePath;
   ui->filePathValue->setWordWrap(true);
   updateFilePathDisplay();
   ui->filePathValue->setToolTip(filePath);
 
-  ui->fileSizeValue->setText(formatFileSize(fileInfo.size()));
-  ui->lastModifiedValue->setText(fileInfo.lastModified().toString("yyyy-MM-dd hh:mm:ss"));
+  // Show placeholders for the stat-derived fields until the worker delivers.
+  // On slow mounts (network/USB) a single QFileInfo::exists/size/lastModified
+  // can take 50-260ms; pre-fix this dominated DetailsPane::setMetadata's
+  // total cost (Kartend-5ux9 measurement run).
+  ui->fileSizeValue->setText(QStringLiteral("…"));
+  ui->lastModifiedValue->setText(QStringLiteral("…"));
 
-  QString extension = fileInfo.suffix().toUpper();
+  QString extension = QFileInfo(filePath).suffix().toUpper();
   if (extension.isEmpty()) {
     extension = "Unknown";
   }
   ui->fileExtensionValue->setText(extension + " file");
+
+  // Async stat() phase. Generation counter drops stale results when a
+  // newer selection has started before this worker delivers (otherwise
+  // the previous item's size would land in the new item's panel after a
+  // rapid click-through). QFutureWatcher parented to `this` so a pane
+  // teardown auto-disconnects the lambda.
+  struct StatResult {
+    bool exists = false;
+    qint64 size = 0;
+    QDateTime lastModified;
+  };
+  const quint64 myGen = ++m_fileInfoGen;
+  auto *watcher = new QFutureWatcher<StatResult>(this);
+  connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, myGen]() {
+    watcher->deleteLater();
+    if (myGen != m_fileInfoGen) return;
+    const StatResult res = watcher->result();
+    if (!res.exists) {
+      ui->filePathValue->setText("File not found");
+      ui->fileSizeValue->setText("-");
+      ui->lastModifiedValue->setText("-");
+      ui->fileExtensionValue->setText("-");
+      return;
+    }
+    ui->fileSizeValue->setText(formatFileSize(res.size));
+    ui->lastModifiedValue->setText(res.lastModified.toString("yyyy-MM-dd hh:mm:ss"));
+  });
+  watcher->setFuture(QtConcurrent::run([filePath]() {
+    QFileInfo fi(filePath);
+    StatResult r;
+    r.exists = fi.exists();
+    if (r.exists) {
+      r.size = fi.size();
+      r.lastModified = fi.lastModified();
+    }
+    return r;
+  }));
 }
 
 void DetailsPane::setupTabBar() {
@@ -422,7 +607,6 @@ void DetailsPane::applyTabVisibility() {
   // change. Set them visible up front so individual cases only need to
   // toggle the parts that differ.
   ui->titleLabel->setVisible(true);
-  ui->itemNameLabel->setVisible(true);
   ui->itemNameValue->setVisible(true);
 
   switch (m_activeTab) {
@@ -430,7 +614,6 @@ void DetailsPane::applyTabVisibility() {
     // "What is this?" — artwork preview, video preview, gallery,
     // extended metadata + usage stats. No filesystem rows.
     ui->titleLabel->setText(tr("Item Information"));
-    ui->itemNameLabel->setText(tr("Name:"));
     setArtworkSectionVisible(true);
     setFileInfoRowsVisible(false);
     // Hide the gallery + details containers up front; they may still
@@ -462,7 +645,6 @@ void DetailsPane::applyTabVisibility() {
     // Pure filesystem view — name + path/size/modified/extension.
     // No artwork, no video, no gallery, no extended metadata.
     ui->titleLabel->setText(tr("File Information"));
-    ui->itemNameLabel->setText(tr("Name:"));
     ui->itemNameValue->setText(m_currentItemName.isEmpty() ? tr("No item selected")
                                                            : m_currentItemName);
     setArtworkSectionVisible(false);
@@ -480,16 +662,19 @@ int DetailsPane::previewBoxSize() const {
   if (!ui) {
     return UIConstants::Metadata::ARTWORK_SIZE;
   }
-  // Vertical dock (the only case the original .ui artwork preview is shown
-  // in — the dedicated horizontal view has its own preview tile). Tracks
-  // the scroll area's viewport width minus 28px (10 + 10 layout margins +
-  // 8px slack). Floored at 80 so an unsized panel doesn't collapse the box.
+  // Vertical dock (the only case the original .ui artwork preview is
+  // shown in — the dedicated horizontal view has its own preview
+  // tile). Tracks the scroll area's viewport width minus the
+  // contentLayout's left+right margins (10+10=20) so the tile uses
+  // the full pane width edge-to-edge. Capped at ARTWORK_SIZE_MAX so
+  // very wide sidebars don't blow the tile up beyond a reasonable
+  // limit.
   int viewportW =
       (ui->scrollArea && ui->scrollArea->viewport()) ? ui->scrollArea->viewport()->width() : 0;
   if (viewportW <= 0 && ui->contentWidget) {
     viewportW = ui->contentWidget->width();
   }
-  return qMax(80, viewportW - 28);
+  return qBound(80, viewportW - 20, UIConstants::Metadata::ARTWORK_SIZE_MAX);
 }
 
 int DetailsPane::currentGalleryThumbSize() const {
@@ -559,37 +744,56 @@ void DetailsPane::applyPreviewSize() {
     }
     return;
   }
-  const int size = previewBoxSize();
-  if (ui && ui->artworkDisplay) {
-    ui->artworkDisplay->setFixedSize(size, size);
+  const int width = previewBoxSize();
+  // Tile shape is fixed (same dimensions for every item) so the layout
+  // doesn't reshuffle between selections. Width comes from the
+  // sidebar's available room; height is derived from the pane viewport
+  // so very tall sidebars don't stretch the tile to dominate the
+  // pane. 3:4 portrait works well for the most common case (game box
+  // art); landscape art letterboxes top + bottom but a fixed tile
+  // shape beats a dynamic one for visual stability.
+  int viewportH = 0;
+  if (ui->scrollArea && ui->scrollArea->viewport()) {
+    viewportH = ui->scrollArea->viewport()->height();
   }
+  if (viewportH <= 0 && ui->contentWidget) {
+    viewportH = ui->contentWidget->height();
+  }
+  // Cap the tile at ~45% of the pane height so the description + the
+  // metadata card below it still get usable space without scrolling.
+  const int idealHeight = (width * 4) / 3;
+  const int height = viewportH > 0 ? std::min(idealHeight, viewportH * 45 / 100) : idealHeight;
+
+  // Video has no known aspect ratio until the first frame loads, so it
+  // takes the same tile and the sink letterboxes internally.
   if (m_videoPreview) {
-    m_videoPreview->setFixedSize(size, size);
+    m_videoPreview->setFixedSize(width, height);
   }
   // Vertical dock: scale gallery thumbs alongside the preview.
   applyGalleryThumbSize();
   if (!ui || !ui->artworkDisplay) {
     return;
   }
-  // Re-render the cached source pixmap at the new size so the artwork stays
-  // crisp under both shrink and grow. Falls back to a flat placeholder when
-  // no artwork is loaded so the frame still paints.
-  if (!m_artworkSource.isNull()) {
-    QPixmap scaled =
-        m_artworkSource.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    QPixmap centered(size, size);
-    centered.fill(palette().color(QPalette::Base));
-    QPainter painter(&centered);
-    const int x = (size - scaled.width()) / 2;
-    const int y = (size - scaled.height()) / 2;
-    painter.drawPixmap(x, y, scaled);
-    painter.end();
-    ui->artworkDisplay->setPixmap(centered);
-  } else {
-    QPixmap empty(size, size);
-    empty.fill(palette().color(QPalette::Mid));
-    ui->artworkDisplay->setPixmap(empty);
+  // Hide the tile entirely when there's nothing to show — the
+  // viewport-derived size grows the empty rectangle past 300px tall, which
+  // dominates the unscraped Item tab as a giant Mid-colored slab.
+  if (m_artworkSource.isNull()) {
+    ui->artworkDisplay->setPixmap(QPixmap());
+    ui->artworkDisplay->hide();
+    return;
   }
+  ui->artworkDisplay->setFixedSize(width, height);
+  ui->artworkDisplay->show();
+  QPixmap scaled =
+      m_artworkSource.scaled(width, height, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+  QPixmap centered(width, height);
+  centered.fill(palette().color(QPalette::Base));
+  QPainter painter(&centered);
+  const int x = (width - scaled.width()) / 2;
+  const int y = (height - scaled.height()) / 2;
+  painter.drawPixmap(x, y, scaled);
+  painter.end();
+  ui->artworkDisplay->setPixmap(centered);
 }
 
 void DetailsPane::applyContentAlignment() {
@@ -606,8 +810,7 @@ void DetailsPane::applyContentAlignment() {
   if (!contentLayout) {
     return;
   }
-  const QList<QWidget *> centered = {ui->artworkLabel, ui->artworkDisplay, ui->itemNameLabel,
-                                     m_videoPreview};
+  const QList<QWidget *> centered = {ui->artworkDisplay, m_videoPreview};
   for (QWidget *w : centered) {
     if (w && contentLayout->indexOf(w) >= 0) {
       contentLayout->setAlignment(w, Qt::AlignHCenter);
@@ -713,29 +916,97 @@ void DetailsPane::loadArtwork(const QString &baseName, const QString &artworkDir
     return;
   }
 
-  const QStringList &bases = ExtensionUtils::imageBaseExtensions();
-  for (const QString &ext : bases) {
-    const QString &lower = ext;
-    const QString upper = ext.toUpper();
-
-    QString artworkPath = artworkDir.absoluteFilePath(baseName + "." + lower);
-    if (!QFile::exists(artworkPath)) {
-      artworkPath = artworkDir.absoluteFilePath(baseName + "." + upper);
+  // Phase 1 (synchronous, on main thread): collect ALL candidate paths
+  // that exist on disk, in priority order. Each QFile::exists is a stat
+  // call (cheap). We can't commit to a single resolved path here because
+  // some candidates may be present but undecodable — e.g. a 0-byte
+  // failed-scrape `.jpg` shadowing a valid `.png`. The original
+  // synchronous loop would QPixmap-construct each candidate inline and
+  // continue on null; this version preserves that contract by handing
+  // the whole list to the worker so it can do the decode-to-find
+  // walk off-thread.
+  QStringList candidatePaths;
+  for (const QString &ext : ExtensionUtils::imageBaseExtensions()) {
+    QString lowerCandidate = artworkDir.absoluteFilePath(baseName + "." + ext);
+    if (QFile::exists(lowerCandidate)) {
+      candidatePaths.append(lowerCandidate);
     }
-    if (QFile::exists(artworkPath)) {
-      QPixmap artwork(artworkPath);
-      if (!artwork.isNull()) {
-        // Cache the original-resolution pixmap so applyPreviewSize can
-        // re-render at the new dimension on sidebar resize without
-        // re-reading from disk.
-        m_artworkSource = artwork;
-        m_primaryArtworkPath = artworkPath;
-        applyPreviewSize();
-        updateHorizontalView();
-        return; // Found and loaded artwork
+    QString upperCandidate = artworkDir.absoluteFilePath(baseName + "." + ext.toUpper());
+    if (upperCandidate != lowerCandidate && QFile::exists(upperCandidate)) {
+      candidatePaths.append(upperCandidate);
+    }
+  }
+  // Fall back to typed-subdir scraped art when no top-level mirror exists.
+  // Long-standing behaviour gap (Kartend-wppu): for collections whose
+  // artworkDirectory points at a "wide" Artwork/ tree (parent of typed
+  // subdirs) rather than a single typed subdir like Artwork/covers/, items
+  // without a top-level {baseName}.{ext} mirror would render with a blank
+  // primary tile even though scraped art existed under front/, box/,
+  // screenshot/, etc. Walk the standard types in gallery display priority
+  // (front first) and use the first available file. ItemArtworkStore
+  // already owns the {artworkDirectory}/{type}/{baseName}.{ext} probe so
+  // we just iterate.
+  if (candidatePaths.isEmpty()) {
+    for (const QString &type : ItemArtworkStore::standardTypes()) {
+      const QString sub = ItemArtworkStore::findStandardArtwork(baseName, artworkDirectory, type);
+      if (!sub.isEmpty()) {
+        candidatePaths.append(sub);
+        break;
       }
     }
   }
+  if (candidatePaths.isEmpty()) {
+    return; // Nothing to load — placeholder stays.
+  }
+  // Tentative primary-artwork path so setArtworkGallery (called later in
+  // the same refresh pass) can synthesize the primary-cover thumb in the
+  // gallery strip. If the worker ends up choosing a different candidate
+  // (because the tentative one fails to decode), the callback updates
+  // m_primaryArtworkPath to match the actual resolved path.
+  m_primaryArtworkPath = candidatePaths.first();
+
+  // Phase 2 (async, on QThreadPool): walk the candidate list and return
+  // the first one that successfully decodes. Pre-fix this was a
+  // synchronous QPixmap(path) on the main thread (50-280ms per fresh
+  // selection on slow filesystems). Moving the walk off-thread keeps the
+  // UI responsive; the user sees the placeholder briefly then the real
+  // cover. Same pattern as ScrapeResultDialog::appendThumbAsync
+  // (Kartend-j5lc). QImage is thread-safe; QPixmap::fromImage runs on
+  // the main thread in the watcher's finished slot.
+  //
+  // Generation counter handles rapid-click races: if a newer loadArtwork
+  // call has bumped m_artworkLoadGen by the time this worker finishes,
+  // the older result is dropped instead of overwriting the currently
+  // displayed item's pixmap. QFutureWatcher parented to `this` so a
+  // pane destroy auto-disconnects the lambda and drops the result.
+  using LoadResult = QPair<QString, QImage>;
+  const quint64 myGen = ++m_artworkLoadGen;
+  auto *watcher = new QFutureWatcher<LoadResult>(this);
+  connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, myGen]() {
+    watcher->deleteLater();
+    if (myGen != m_artworkLoadGen) return;
+    const LoadResult res = watcher->result();
+    if (res.second.isNull()) return;
+    // The worker picks the first decodable candidate; update
+    // m_primaryArtworkPath to match in case the tentative path
+    // we set above wasn't the chosen one.
+    m_primaryArtworkPath = res.first;
+    // Cache the original-resolution pixmap so applyPreviewSize
+    // can re-render at the new dimension on sidebar resize
+    // without re-reading from disk.
+    m_artworkSource = QPixmap::fromImage(res.second);
+    applyPreviewSize();
+    updateHorizontalView();
+  });
+  watcher->setFuture(QtConcurrent::run([candidatePaths]() -> LoadResult {
+    for (const QString &p : candidatePaths) {
+      QImage img(p);
+      if (!img.isNull()) {
+        return {p, img};
+      }
+    }
+    return {QString(), QImage()};
+  }));
 }
 
 // Apply horzontal scrolling policy
@@ -752,8 +1023,20 @@ void DetailsPane::setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy policy) {
 // resolves) and when metadata is cleared.
 void DetailsPane::showArtworkOnly() {
   if (m_videoPreview) {
-    m_videoPreview->stop();
-    m_videoPreview->hide();
+    // Skip the stop()+hide() when there's nothing to stop. Pre-fix the
+    // unconditional QMediaPlayer::stop() blocked the GUI thread for
+    // ~85-100ms per selection on items where the player had been left in
+    // a pipeline-initialized state by a previous schedulePreviewVideo —
+    // GStreamer's pipeline state transition isn't free. The user perceived
+    // this as a per-click stutter (Kartend-2c7c). isVisible OR a non-empty
+    // currentVideoPath means the player has something to tear down;
+    // otherwise the call is a no-op anyway.
+    const bool needsStop =
+        m_videoPreview->isVisible() || !m_videoPreview->currentVideoPath().isEmpty();
+    if (needsStop) {
+      m_videoPreview->stop();
+      m_videoPreview->hide();
+    }
   }
   ui->artworkDisplay->show();
 }
@@ -767,8 +1050,21 @@ void DetailsPane::schedulePreviewVideo(const QString &videoPath) {
   }
   m_videoStartTimer->stop();
   if (!videoPath.isEmpty()) {
-    m_videoStartTimer->start();
+    // Explicit interval — the timer callback may shorten the next
+    // re-arm to 50ms when a scroll-active deferral happens
+    // (Kartend-9q8d round 6). Without specifying the interval here,
+    // schedulePreviewVideo would inherit the deferral interval and
+    // start firing every 50ms instead of waiting the full debounce.
+    m_videoStartTimer->start(UIConstants::DetailsPane::VIDEO_PREVIEW_DEBOUNCE_MS);
   }
+}
+
+void DetailsPane::setScrollIdlePredicate(std::function<bool()> predicate) {
+  m_scrollIdlePredicate = std::move(predicate);
+}
+
+bool DetailsPane::isScrollIdle() const {
+  return !m_scrollIdlePredicate || m_scrollIdlePredicate();
 }
 
 // Lazily construct the Details section. Appended once to the bottom of the
@@ -786,41 +1082,97 @@ void DetailsPane::ensureDetailsSection() {
   m_detailsContainer = new QWidget(ui->contentWidget);
   auto *outer = new QVBoxLayout(m_detailsContainer);
   outer->setContentsMargins(0, 0, 0, 0);
-  outer->setSpacing(UIConstants::Metadata::LABEL_SPACING);
+  // Slightly looser stacking: description tile and metadata card read
+  // as distinct blocks with a clear breath between them, rather than
+  // butting up against each other.
+  outer->setSpacing(5);
 
-  auto *separator = new QFrame(m_detailsContainer);
-  separator->setFrameShape(QFrame::HLine);
-  separator->setFrameShadow(QFrame::Sunken);
-  separator->setStyleSheet("color: palette(mid);");
-  outer->addWidget(separator);
+  // No section heading: the metadata rows speak for themselves below
+  // the description, and the previous "Details" label only widened
+  // the gap between the gallery scrollbar and the first row.
 
-  m_detailsTitle = new QLabel(tr("Details"), m_detailsContainer);
-  QFont titleFont = m_detailsTitle->font();
-  titleFont.setBold(true);
-  titleFont.setPointSize(11);
-  m_detailsTitle->setFont(titleFont);
-  m_detailsTitle->setStyleSheet("color: palette(highlight); padding: 4px 0px;");
-  // tag for the bubble-bg stylesheet so the dynamic Details
-  // header gets the same header bubble as the static section titles.
-  m_detailsTitle->setProperty("sidebarRole", "header");
-  outer->addWidget(m_detailsTitle);
-
-  // Manual button is owned by the outer Details layout (above the per-row
-  // sub-layout) so clearDetailsSection() — called on every selection change
-  // before rows are rebuilt — does not destroy and recreate it. Visibility
-  // is driven by setManualFile().
+  // Manual button is constructed up front so it can be referenced from
+  // setManualFile / clearDetailsSection without lifecycle juggling, but
+  // it's only laid out at the *bottom* of the details section (below
+  // the metadata scroll). That placement is intentional: when the
+  // button was above the description, scraped items with a manual
+  // pushed the description ~28px below the gallery, making the gap
+  // between gallery and description read as much larger than it
+  // actually was.
   m_manualButton = new QPushButton(tr("Open Manual"), m_detailsContainer);
   m_manualButton->setCursor(Qt::PointingHandCursor);
   m_manualButton->hide();
   connect(m_manualButton, &QPushButton::clicked, this, &DetailsPane::openCurrentManual);
+
+  // Metadata grid lives inside a QFrame (the styled backdrop) which is
+  // itself nested in a QScrollArea. The QScrollArea claims the leftover
+  // vertical space below the description and clips anything that
+  // overflows — an auto-scroll timer marquees through the rows so the
+  // outer details pane never needs to be scrolled.
+  m_metadataBackdrop = new QFrame;
+  m_metadataBackdrop->setObjectName(QStringLiteral("metadataBackdrop"));
+  m_metadataBackdrop->setFrameShape(QFrame::NoFrame);
+  auto *gridHost = new QVBoxLayout(m_metadataBackdrop);
+  gridHost->setContentsMargins(6, 4, 6, 4);
+  gridHost->setSpacing(0);
+  m_detailsLayout = new QGridLayout();
+  m_detailsLayout->setContentsMargins(0, 0, 0, 0);
+  m_detailsLayout->setHorizontalSpacing(10);
+  m_detailsLayout->setVerticalSpacing(6);
+  // Equal stretch on both columns so short pairs (Genre / Players, etc.)
+  // get balanced halves instead of one taking the slack.
+  m_detailsLayout->setColumnStretch(0, 1);
+  m_detailsLayout->setColumnStretch(1, 1);
+  gridHost->addLayout(m_detailsLayout);
+  // Trailing stretch keeps the rows top-aligned when the card has more
+  // vertical room than the rows need.
+  gridHost->addStretch(1);
+
+  m_metadataScroll = new QScrollArea(m_detailsContainer);
+  m_metadataScroll->setObjectName(QStringLiteral("metadataScroll"));
+  m_metadataScroll->setFrameShape(QFrame::NoFrame);
+  m_metadataScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  m_metadataScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  m_metadataScroll->setWidgetResizable(true);
+  m_metadataScroll->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+  m_metadataScroll->viewport()->setAutoFillBackground(false);
+  m_metadataScroll->setStyleSheet("QScrollArea { background: transparent; border: none; }");
+  m_metadataScroll->setWidget(m_metadataBackdrop);
+  outer->addWidget(m_metadataScroll, /*stretch=*/1);
+  // Manual button anchored below the scrolling metadata so it doesn't
+  // disturb the gallery→description hand-off at the top of the section.
   outer->addWidget(m_manualButton);
 
-  m_detailsLayout = new QVBoxLayout();
-  m_detailsLayout->setSpacing(UIConstants::Metadata::LABEL_SPACING);
-  outer->addLayout(m_detailsLayout);
-
-  contentLayout->addWidget(m_detailsContainer);
+  contentLayout->addWidget(m_detailsContainer, /*stretch=*/1);
+  m_detailsContainer->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
   m_detailsContainer->hide();
+
+  // Auto-scroll driver for the metadata block. One QTimer runs for the
+  // pane's lifetime; it's a no-op when the inner card fits the
+  // viewport. clearDetailsSection snaps the scroll position back to 0
+  // so each new selection starts at the top.
+  m_metadataAutoScrollTimer = new QTimer(this);
+  m_metadataAutoScrollTimer->setInterval(120);
+  m_metadataAutoScrollPause = 16;
+  connect(m_metadataAutoScrollTimer, &QTimer::timeout, this, [this]() {
+    if (!m_metadataScroll) return;
+    auto *bar = m_metadataScroll->verticalScrollBar();
+    if (!bar || bar->maximum() <= 0) {
+      m_metadataAutoScrollPause = 16; // re-arm pause for when content grows
+      return;
+    }
+    if (m_metadataAutoScrollPause > 0) {
+      --m_metadataAutoScrollPause;
+      return;
+    }
+    if (bar->value() >= bar->maximum()) {
+      bar->setValue(0);
+      m_metadataAutoScrollPause = 25;
+      return;
+    }
+    bar->setValue(bar->value() + 1);
+  });
+  m_metadataAutoScrollTimer->start();
 }
 
 void DetailsPane::clearDetailsSection() {
@@ -833,27 +1185,195 @@ void DetailsPane::clearDetailsSection() {
     }
     delete child;
   }
+  // Reset the grid cursor so the next rebuild starts in the top-left
+  // cell rather than continuing wherever the previous selection left off.
+  m_detailsRow = 0;
+  m_detailsCol = 0;
+  // Description widgets live outside m_metadataScroll so they aren't
+  // touched by the grid clear above; nuke them here so the next
+  // appendScrollingDescription rebuilds with the new selection's text.
+  if (m_descriptionScroll) {
+    m_descriptionScroll->deleteLater();
+    m_descriptionScroll = nullptr;
+  }
+  if (m_descriptionLabel) {
+    m_descriptionLabel->deleteLater();
+    m_descriptionLabel = nullptr;
+  }
+  // Snap the metadata auto-scroller back to the top + pause so the
+  // freshly-built rows get the same "rest then start scrolling" cycle
+  // a fresh selection would.
+  if (m_metadataScroll) {
+    if (auto *bar = m_metadataScroll->verticalScrollBar()) {
+      bar->setValue(0);
+    }
+  }
+  m_metadataAutoScrollPause = 16;
 }
 
 void DetailsPane::appendDetailRow(const QString &label, const QString &value, bool wrap) {
   if (!m_detailsLayout || value.trimmed().isEmpty()) {
     return;
   }
-  auto *labelWidget = new QLabel(label + ":", m_detailsContainer);
+  // Render label + value as one inline QLabel ("Genre: Action"). The label
+  // prefix uses the per-collection sidebar accent (palette(Highlight) is
+  // plumbed in applyAppearance); the value text uses the default text
+  // color. Single line per pair keeps the metadata block compact and lets
+  // two short pairs share a row in the two-column grid.
+  auto *rowLabel = new QLabel(m_detailsContainer);
+  rowLabel->setTextFormat(Qt::RichText);
+  // QTextDocument (rich text) won't resolve `palette(highlight)` — we
+  // need a concrete hex color for the span style. Pull it from the
+  // detail container's palette so the per-collection accent override
+  // wins. (applyBubbleStyles rebuilds the value rows on appearance
+  // change, so this snapshot stays fresh.)
+  const QColor accent = m_detailsContainer->palette().color(QPalette::Highlight);
+  rowLabel->setText(QStringLiteral("<span style=\"color:%1;\"><b>%2:</b></span> %3")
+                        .arg(accent.name(), label.toHtmlEscaped(), value.toHtmlEscaped()));
+  // Color only — DO NOT set `padding: 0px` here. An inline padding
+  // declaration on a QLabel that also matches the global
+  // `QLabel[sidebarRole="value"]` rule overrides the bubble's padding
+  // entirely, which means the text would render flush against the
+  // bubble edge. Leaving padding unset lets the global 5px 12px (plus
+  // any explicit left-only padding added in applyBubbleStyles) win.
+  rowLabel->setStyleSheet("color: palette(windowtext);");
+  rowLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  rowLabel->setWordWrap(wrap);
+  rowLabel->setProperty("sidebarRole", "value");
+  rowLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+  // Decide whether this row fits as a half-width cell or needs the full
+  // sidebar width. wrap=true is the explicit "I will be long" caller
+  // signal; the heuristic kicks in otherwise. Measure the bold label
+  // prefix and the regular-weight value separately because the bubble
+  // renders the prefix bold (so a plain fontMetrics call underestimates
+  // the rendered width). Subtract the per-cell bubble padding from the
+  // half-column budget so we don't over-pack rows the bubble would clip.
+  const int viewportW =
+      (ui->scrollArea && ui->scrollArea->viewport()) ? ui->scrollArea->viewport()->width() : 0;
+  // 28 = contentLayout l+r margin, 8 = column gap, 32 = 2*16 bubble padding.
+  const int halfW = qMax(0, (viewportW - 28 - 8 - 32) / 2);
+  QFont boldFont = rowLabel->font();
+  boldFont.setBold(true);
+  const QFontMetrics fmBold(boldFont);
+  const QFontMetrics fmReg(rowLabel->font());
+  const int textW =
+      fmBold.horizontalAdvance(label + QStringLiteral(": ")) + fmReg.horizontalAdvance(value);
+  const bool fullRow = wrap || (halfW > 0 && textW > halfW);
+
+  if (fullRow) {
+    if (m_detailsCol != 0) {
+      ++m_detailsRow;
+      m_detailsCol = 0;
+    }
+    m_detailsLayout->addWidget(rowLabel, m_detailsRow, 0, 1, 2);
+    ++m_detailsRow;
+    m_detailsCol = 0;
+    return;
+  }
+  m_detailsLayout->addWidget(rowLabel, m_detailsRow, m_detailsCol);
+  if (m_detailsCol == 0) {
+    m_detailsCol = 1;
+  } else {
+    m_detailsCol = 0;
+    ++m_detailsRow;
+  }
+}
+
+void DetailsPane::appendScrollingDescription(const QString &label, const QString &value,
+                                             int maxLines) {
+  if (!m_detailsLayout || value.trimmed().isEmpty()) {
+    return;
+  }
+  // The description label mirrors the gallery section's "Media gallery"
+  // header — same font weight, same padding, same color — so the two
+  // section titles read as a matched pair.
+  auto *labelWidget = new QLabel(label, m_detailsContainer);
   QFont labelFont = labelWidget->font();
   labelFont.setBold(true);
   labelWidget->setFont(labelFont);
-  labelWidget->setStyleSheet("color: palette(windowtext); padding: 2px 0px;");
+  labelWidget->setStyleSheet("color: palette(windowtext); padding: 0px;");
 
-  auto *valueWidget = new QLabel(value, m_detailsContainer);
-  valueWidget->setStyleSheet("color: palette(windowtext); padding: 2px 0px 8px 12px;");
-  valueWidget->setWordWrap(wrap);
+  // The QScrollArea is the public widget — it owns the bubble background
+  // (so the visual chrome matches the other "value" rows) and clips the
+  // inner label as it animates. Disable user scrollbars; the auto-scroll
+  // timer is the only thing that moves the viewport. The viewport is
+  // forced transparent here so the bubble's background-color (applied
+  // via the global stylesheet for sidebarRole="value") shows through.
+  auto *scroll = new QScrollArea(m_detailsContainer);
+  scroll->setFrameShape(QFrame::NoFrame);
+  scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  scroll->setWidgetResizable(true);
+  scroll->setProperty("sidebarRole", "value");
+  scroll->viewport()->setAutoFillBackground(false);
+
+  auto *valueWidget = new QLabel(value, scroll);
+  valueWidget->setWordWrap(true);
   valueWidget->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  // tag the value so the bubble-bg stylesheet picks it up.
-  valueWidget->setProperty("sidebarRole", "value");
+  valueWidget->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+  valueWidget->setStyleSheet("color: palette(windowtext); background: transparent;");
+  scroll->setWidget(valueWidget);
 
-  m_detailsLayout->addWidget(labelWidget);
-  m_detailsLayout->addWidget(valueWidget);
+  // Cap height to `maxLines` of wrapped text at the current font.
+  // fontMetrics().lineSpacing() includes the leading; +4px slack covers
+  // the inner padding the QScrollArea adds around its viewport.
+  const int lineH = valueWidget->fontMetrics().lineSpacing();
+  scroll->setFixedHeight(lineH * maxLines + 4);
+
+  // The description block lives in m_detailsContainer's *outer* layout,
+  // not in the metadata grid — that's what keeps it pinned in place
+  // while the metadata card below marquees. Insert just before
+  // m_metadataScroll so the visual order is preserved (description on
+  // top, scrolling rows below).
+  m_descriptionLabel = labelWidget;
+  m_descriptionScroll = scroll;
+  auto *containerLayout = qobject_cast<QVBoxLayout *>(m_detailsContainer->layout());
+  if (containerLayout) {
+    int insertIndex = containerLayout->indexOf(m_metadataScroll);
+    if (insertIndex < 0) insertIndex = containerLayout->count();
+    containerLayout->insertWidget(insertIndex, labelWidget);
+    containerLayout->insertWidget(insertIndex + 1, scroll);
+  }
+  // Auto-scroll driver. Defer the start by one event-loop tick so the
+  // QScrollArea has finished its first layout pass and `verticalScrollBar()
+  // ->maximum()` reflects the wrapped text height (otherwise it's 0 and
+  // the animator decides there's nothing to scroll).
+  QTimer::singleShot(0, scroll, [scroll]() {
+    auto *bar = scroll->verticalScrollBar();
+    if (!bar || bar->maximum() <= 0) return; // content fits — no scroll needed
+    auto *tick = new QTimer(scroll);
+    // State for the marquee animation. One-way (top → bottom) scroll
+    // at reading speed: every tick advances one pixel, the bottom
+    // holds for a beat, then the position resets to 0 and the cycle
+    // repeats. Reversing was confusing because the eye loses the line
+    // it was reading mid-snap.
+    struct State {
+      int pauseTicks = 12; // initial pause at the top so the user has
+                           // a beat to start reading before motion begins
+    };
+    auto *state = new State;
+    QObject::connect(tick, &QTimer::destroyed, [state]() { delete state; });
+    QObject::connect(tick, &QTimer::timeout, scroll, [bar, state]() {
+      if (state->pauseTicks > 0) {
+        --state->pauseTicks;
+        return;
+      }
+      if (bar->value() >= bar->maximum()) {
+        // Reached the bottom — hold long enough to read the last
+        // line, then snap back to the top and hold again before the
+        // next scroll cycle starts.
+        bar->setValue(0);
+        state->pauseTicks = 25; // ~3s hold after the reset
+        return;
+      }
+      bar->setValue(bar->value() + 1);
+    });
+    // 120ms/tick = ~1px every 0.12s. With a ~5-line viewport on a 10-line
+    // synopsis this works out to roughly one screen of text every 8s,
+    // comfortable reading pace without feeling sluggish.
+    tick->start(120);
+  });
 }
 
 void DetailsPane::setExtendedMetadata(const ItemMetadataStore::ItemMetadata &metadata) {
@@ -881,8 +1401,13 @@ void DetailsPane::setExtendedMetadata(const ItemMetadataStore::ItemMetadata &met
         m_detailsContainer->hide();
       }
     }
+    // Unscraped fallback: surface the static file-info rows so the Item
+    // tab still has something to show instead of an empty sidebar.
+    setFileInfoRowsVisible(true);
     return;
   }
+  // Scraped metadata wins the slot — hide the placeholder file-info rows.
+  setFileInfoRowsVisible(false);
 
   ensureDetailsSection();
   if (!m_detailsContainer) {
@@ -894,7 +1419,7 @@ void DetailsPane::setExtendedMetadata(const ItemMetadataStore::ItemMetadata &met
     ui->itemNameValue->setText(metadata.title);
   }
 
-  appendDetailRow(tr("Description"), metadata.description, /*wrap=*/true);
+  appendScrollingDescription(tr("Description"), metadata.description, /*maxLines=*/5);
   appendDetailRow(tr("Genre"), metadata.genre);
   appendDetailRow(tr("Developer"), metadata.developer);
   appendDetailRow(tr("Publisher"), metadata.publisher);
@@ -902,15 +1427,17 @@ void DetailsPane::setExtendedMetadata(const ItemMetadataStore::ItemMetadata &met
   appendDetailRow(tr("Rating"), metadata.contentRating);
   appendDetailRow(tr("Players"), metadata.players);
   appendDetailRow(tr("Runtime"), formatRuntime(metadata.runtimeSeconds));
-  appendDetailRow(tr("Tags"), formatTags(metadata.tags), /*wrap=*/true);
+  appendDetailRow(tr("Tags"), formatTags(metadata.tags));
 
   // User-defined custom fields. Rendered after the structured
   // fields so they appear as a contiguous block at the bottom of Details.
   // parseCustomFields() returns rows in alphabetical key order for stable
-  // display regardless of edit history.
+  // display regardless of edit history. wrap is left at the default so
+  // appendDetailRow's width heuristic decides per row whether to pair
+  // with a neighbour or take the full sidebar width.
   const auto customFields = ItemMetadataStore::parseCustomFields(metadata.customFields);
   for (const auto &pair : customFields) {
-    appendDetailRow(pair.first, pair.second, /*wrap=*/true);
+    appendDetailRow(pair.first, pair.second);
   }
 
   // re-apply the active sidebar-font override so the just-
@@ -918,7 +1445,25 @@ void DetailsPane::setExtendedMetadata(const ItemMetadataStore::ItemMetadata &met
   // override falls back to a no-op when no override is in effect.
   applySidebarFont(m_activeSidebarFontFamily, m_activeSidebarFontPointSize);
 
-  m_detailsContainer->show();
+  // Unscraped items have nothing to put in the metadata grid. The
+  // metadataBackdrop QFrame has an Expanding size policy so without
+  // content it stretches to fill all remaining sidebar height and
+  // paints its bubble background across the whole region — visible
+  // as an oversized empty card under the artwork tile. Hide the
+  // scroll wrapper (and the description widgets, if appendScrollingDescription
+  // never built them) when there's nothing to show, so the layout
+  // collapses cleanly. Restored automatically on the next
+  // setExtendedMetadata call with non-empty content.
+  const bool haveDescription = m_descriptionScroll != nullptr;
+  const bool haveMetadataRows = m_detailsLayout && m_detailsLayout->count() > 0;
+  if (m_metadataScroll) m_metadataScroll->setVisible(haveMetadataRows);
+  if (!haveDescription && !haveMetadataRows && m_manualPath.isEmpty()) {
+    // Nothing scraped, no manual link — hide the whole container so
+    // it doesn't reserve layout space below the gallery.
+    m_detailsContainer->hide();
+  } else {
+    m_detailsContainer->show();
+  }
 }
 
 void DetailsPane::setUsageStats(const UsageStatsStore::ItemUsageStats &stats) {
@@ -954,6 +1499,12 @@ void DetailsPane::setUsageStats(const UsageStatsStore::ItemUsageStats &stats) {
   // same rationale as setExtendedMetadata — pull the new rows
   // under the active sidebar font.
   applySidebarFont(m_activeSidebarFontFamily, m_activeSidebarFontPointSize);
+  // Usage stats just added rows to the grid, so the metadata scroll
+  // has content again — reveal it. setExtendedMetadata may have
+  // hidden it on an unscraped item.
+  if (m_metadataScroll && m_detailsLayout && m_detailsLayout->count() > 0) {
+    m_metadataScroll->show();
+  }
   m_detailsContainer->show();
 }
 

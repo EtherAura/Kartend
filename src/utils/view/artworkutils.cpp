@@ -112,7 +112,35 @@ QString DirectoryCache::findInDirectory(const QString &baseName, const QString &
                          << "dirContentsSize=" << dirContents.size() << "dir=" << artworkDirectory;
   }
 
-  return result;
+  if (!result.isEmpty()) {
+    return result;
+  }
+
+  // Cache miss for this basename. The cache only re-scans on
+  // collection switch — files dropped into the directory between
+  // switches (manual artwork drops, external editors, etc.) would
+  // stay invisible until the user navigated away and back. Probe
+  // the filesystem directly for the expected per-extension paths
+  // and patch the cache on a hit. Cost is bounded: one stat per
+  // image extension per miss, and only ONE such miss-probe round
+  // per (dir, baseName) since the patch makes subsequent lookups
+  // a pure cache hit.
+  locker.unlock();
+  const QStringList &exts = ExtensionUtils::imageBaseExtensions();
+  for (const QString &ext : exts) {
+    QString candidate = QDir(artworkDirectory).absoluteFilePath(baseName + "." + ext);
+    if (!QFile::exists(candidate)) {
+      candidate = QDir(artworkDirectory).absoluteFilePath(baseName + "." + ext.toUpper());
+      if (!QFile::exists(candidate)) continue;
+    }
+    // Found a new file on disk. Patch the cache and return. Both
+    // locks (above + here) are short — the filesystem probe runs
+    // unlocked so other lookups aren't serialised behind it.
+    QMutexLocker patchLocker(&m_mutex);
+    m_cache[artworkDirectory].insert(baseName.toLower(), candidate);
+    return candidate;
+  }
+  return {};
 }
 
 void DirectoryCache::prewarmDirectories(const QStringList &directories) {
@@ -224,12 +252,34 @@ QString findArtworkForFile(const QString &fileName, const QString &artworkDirect
   const QString fullName = QFileInfo(fileName).fileName();
   const QStringList &bases = ExtensionUtils::imageBaseExtensions();
 
-  // Try baseName first, then fullName
+  // Try baseName first, then fullName, at the flat artwork root (the
+  // scrape mirror writes to `{artwork}/{base}.<ext>` for the grid
+  // tile path).
   QString result = searchWithName(artworkDir, baseName, bases);
   if (!result.isEmpty()) {
     return result;
   }
-  return searchWithName(artworkDir, fullName, bases);
+  result = searchWithName(artworkDir, fullName, bases);
+  if (!result.isEmpty()) {
+    return result;
+  }
+  // Fallback: scan `{artwork}/front/` for a cover with the same
+  // basename. Lets a user drop hand-curated cover art into the
+  // gallery's "Front Cover" subdir and have the grid tile pick it
+  // up too, without forcing them to also copy the file to the
+  // flat root.
+  QDir frontDir(artworkDir.absoluteFilePath(QStringLiteral("front")));
+  if (frontDir.exists()) {
+    result = searchWithName(frontDir, baseName, bases);
+    if (!result.isEmpty()) {
+      return result;
+    }
+    result = searchWithName(frontDir, fullName, bases);
+    if (!result.isEmpty()) {
+      return result;
+    }
+  }
+  return {};
 }
 
 ErrorUtils::Result<QString> tryFindArtworkForFile(const QString &fileName,
@@ -297,6 +347,22 @@ QString findArtworkForFileCached(const QString &fileName, const QString &artwork
   const QString fullName = QFileInfo(fileName).fileName();
   if (fullName != baseName) {
     result = DirectoryCache::instance().findInDirectory(fullName, artworkDirectory);
+    if (!result.isEmpty()) {
+      return result;
+    }
+  }
+
+  // Fall back to the `{artwork}/front/` subdir so hand-dropped
+  // cover art there shows up in the grid alongside the gallery.
+  // Goes through the same DirectoryCache so the lookup stays
+  // cheap on repeat hits.
+  const QString frontDir = QDir(artworkDirectory).absoluteFilePath(QStringLiteral("front"));
+  result = DirectoryCache::instance().findInDirectory(baseName, frontDir);
+  if (!result.isEmpty()) {
+    return result;
+  }
+  if (fullName != baseName) {
+    result = DirectoryCache::instance().findInDirectory(fullName, frontDir);
   }
 
   if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && perfTimer.elapsed() > 2) {

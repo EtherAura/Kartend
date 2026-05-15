@@ -66,6 +66,10 @@ QString validateAndExpandPath(const QString &path, const QString &collectionName
   return result.isOk() ? result.value() : QString();
 }
 
+QString expandPathWithoutExistenceCheck(const QString &path, const QString &collectionName) {
+  return expandPath(path, collectionName);
+}
+
 QString truncatePathForDisplay(const QString &path, int maxLength) {
   if (path.length() <= maxLength) {
     return path;

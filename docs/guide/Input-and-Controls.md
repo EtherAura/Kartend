@@ -303,15 +303,15 @@ Zoom ................ Ctrl+= / Ctrl+- / Ctrl+0
 
 ## For developers
 
-- Keyboard handling: [src/modules/keyboard/](../../src/modules/keyboard/) (`KeyboardManager`,
+- Keyboard handling: [src/modules/input/keyboard/](../../src/modules/input/keyboard/) (`KeyboardManager`,
   `ArrowNavigationHandler`, `AlphabeticNavigationHandler`).
-- Mouse handling: [src/modules/mouse/](../../src/modules/mouse/) (`MouseManager`).
-- Gamepad: [src/modules/gamepad/](../../src/modules/gamepad/). Backend
+- Mouse handling: [src/modules/input/mouse/](../../src/modules/input/mouse/) (`MouseManager`).
+- Gamepad: [src/modules/input/gamepad/](../../src/modules/input/gamepad/). Backend
   selection happens at compile time via
   `KARTEND_HAS_QT_GAMEPAD` / `KARTEND_HAS_SDL2_GAMEPAD` (see
   [CMakeLists.txt](../../CMakeLists.txt)).
 - Rebinding storage: `GeneralSettings::keyNav*` etc. in
-  [src/utils/collectionutils.h](../../src/utils/collectionutils.h).
+  [src/utils/app/collectionutils.h](../../src/utils/app/collectionutils.h).
 - Repeat-interval logic for List view's special-case faster cadence:
   see `keyboardmanager*.cpp` for the view-aware path.
 - Hold-scroll: `MouseManager::startHoldScroll()` / `holdScrollTimer`.

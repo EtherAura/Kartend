@@ -208,7 +208,7 @@ based and cheap to extend.
   `QCommandLineParser::process()` so the standard Qt help / version /
   unknown-option semantics apply.
 - A unit-testable parser shim lives in
-  [src/utils/cliargs.cpp](../../src/utils/cliargs.cpp) — the inline
+  [src/utils/app/cliargs.cpp](../../src/utils/app/cliargs.cpp) — the inline
   parser in `main.cpp` mirrors it but uses `process()` for real CLI
   behavior.
 - Adding a new flag:

@@ -7,10 +7,14 @@
 #include "settingsmanager.h"
 
 #include <QDir>
+#include <QElapsedTimer>
+#include <QLoggingCategory>
 #include <QSet>
 #include <QSettings>
 #include <QString>
 #include <QStringList>
+
+#include "loggingcategories.h"
 
 #include "collectionutils.h"
 #include "configvalidation.h"
@@ -184,10 +188,14 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
                                                "mediaDirectory", config.name);
     config.artworkDirectory = sanitizeLoadedPath(settings.value("artworkDirectory").toString(),
                                                  "artworkDirectory", config.name);
-    config.videoDirectory = sanitizeLoadedPath(settings.value("videoDirectory").toString(),
-                                               "videoDirectory", config.name);
-    config.manualDirectory = sanitizeLoadedPath(settings.value("manualDirectory").toString(),
-                                                "manualDirectory", config.name);
+    // videoDirectory / manualDirectory were collapsed into the single-
+    // root artwork layout (`{artwork}/video/`, `{artwork}/manual/`).
+    // Don't read them — the struct fields stay default-empty and the
+    // consumer code paths fall back to the artwork subdirs. The
+    // saved-side `settings.remove(...)` calls below scrub any stale
+    // values out of the INI on the next save.
+    config.videoDirectory.clear();
+    config.manualDirectory.clear();
     config.placeholderArtwork = sanitizeLoadedPath(settings.value("placeholderArtwork").toString(),
                                                    "placeholderArtwork", config.name);
     config.includeContentSubfolders = settings.value("includeContentSubfolders", false).toBool();
@@ -226,6 +234,30 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
       }
     }
     config.customArtworkTypes = cleanedCustomTypes;
+
+    // ScreenScraper systemeid override; -1 = autodetect at scrape time.
+    config.screenscraperSystemId = settings.value("screenscraperSystemId", -1).toInt();
+    // Hash inner ROM in archives. Default true — better SS match accuracy.
+    config.screenscraperHashArchive = settings.value("screenscraperHashArchive", true).toBool();
+    // datFilePaths is persisted as a QSettings array so individual
+    // entries can contain commas / brackets without delimiter
+    // escaping. Legacy configs (pre-multi-DAT) shipped a single
+    // `datFilePath=` key — when the array is absent and the legacy
+    // key has a value, upgrade it to a one-entry list so the user
+    // doesn't lose their existing DAT on first launch after upgrade.
+    const int datPathCount = settings.beginReadArray("datFilePaths");
+    config.datFilePaths.clear();
+    config.datFilePaths.reserve(datPathCount);
+    for (int i = 0; i < datPathCount; ++i) {
+      settings.setArrayIndex(i);
+      const QString path = settings.value("path").toString();
+      if (!path.isEmpty()) config.datFilePaths.append(path);
+    }
+    settings.endArray();
+    if (config.datFilePaths.isEmpty()) {
+      const QString legacy = settings.value("datFilePath").toString();
+      if (!legacy.isEmpty()) config.datFilePaths.append(legacy);
+    }
 
     config.gridWidth = settings.value("gridWidth", 4).toInt();
     config.horizontalGridHeight = settings.value("horizontalGridHeight", 0).toInt();
@@ -379,6 +411,17 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
 // where right-click / kart-import / inline edits saved without
 // firing a refresh, leaving the toolbar dropdown stale until restart.
 void SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
+  // Perf trace (gated on KARTEND_PERF_TRACE=1) — saveCollections is called
+  // from many UI events (sidebar drag commits, tab switches, kart imports,
+  // toolbar filter toggles); the worry is that on a populous library the
+  // synchronous QSettings write + atomicSync syscall is a per-click stall.
+  // Drives the decision on Kartend-9kmb.
+  const bool perfTrace = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE");
+  QElapsedTimer perfWall;
+  if (perfTrace) {
+    perfWall.start();
+  }
+
   QSettings settings(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
   settings.setAtomicSyncRequired(true);
 
@@ -430,12 +473,27 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
   sectionNames.sort();
 
   // Remove only groups that are NOT in the new collections list and NOT
-  // "General"
+  // one of the global INI groups owned by saveGeneralSettings (General,
+  // Scrapers, Launchers/Launchers-array). Without the explicit whitelist,
+  // every saveCollections call would clobber [Scrapers] and the Launchers
+  // array — turning saveGeneralSettings's writes into no-ops on the next
+  // collection mutation.
+  // Top-level groups that live alongside the collection sections and
+  // must survive a collection save. saveCollections walks every other
+  // top-level group and removes it (so a renamed/removed collection
+  // doesn't leave a stale section behind). Anything Kartend writes
+  // outside the collection group hierarchy has to be allow-listed
+  // here or it gets silently wiped on every collection mutation —
+  // which is exactly how `[ScraperOptions]` was disappearing across
+  // restarts (every menu toggle / scraper edit fires saveCollections).
+  static const QSet<QString> preservedTopLevelGroups{
+      QStringLiteral("General"), QStringLiteral("Scrapers"), QStringLiteral("ScraperOptions"),
+      QStringLiteral("Launchers")};
   const QStringList existingGroups = settings.childGroups();
   for (const QString &group : existingGroups) {
-    if (group != "General" && !newGroupNames.contains(group)) {
-      settings.remove(group);
-    }
+    if (preservedTopLevelGroups.contains(group)) continue;
+    if (newGroupNames.contains(group)) continue;
+    settings.remove(group);
   }
 
   settings.beginGroup("General");
@@ -494,10 +552,13 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
                       sanitizePersistedPath(c.mediaDirectory, "mediaDirectory", sectionName));
     settings.setValue("artworkDirectory",
                       sanitizePersistedPath(c.artworkDirectory, "artworkDirectory", sectionName));
-    settings.setValue("videoDirectory",
-                      sanitizePersistedPath(c.videoDirectory, "videoDirectory", sectionName));
-    settings.setValue("manualDirectory",
-                      sanitizePersistedPath(c.manualDirectory, "manualDirectory", sectionName));
+    // Legacy keys — drop them from the INI on every save so stale
+    // values (e.g. an unplugged drive, a path typo) don't linger as
+    // configvalidation warnings forever. The single-root artwork
+    // layout has `{artwork}/video/` and `{artwork}/manual/` as the
+    // canonical home for these media types.
+    settings.remove(QStringLiteral("videoDirectory"));
+    settings.remove(QStringLiteral("manualDirectory"));
     settings.setValue(
         "placeholderArtwork",
         sanitizePersistedPath(c.placeholderArtwork, "placeholderArtwork", sectionName));
@@ -512,6 +573,22 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     settings.setValue("collectionIcon", c.collectionIcon);
     settings.setValue("extensions", c.extensions.join(", "));
     settings.setValue("customArtworkTypes", c.customArtworkTypes.join(", "));
+    // ScreenScraper systemeid override (round-trips even when -1 so the
+    // distinction between "I haven't decided yet" and "autodetect" is
+    // explicit on disk for users hand-editing the file).
+    settings.setValue("screenscraperSystemId", c.screenscraperSystemId);
+    settings.setValue("screenscraperHashArchive", c.screenscraperHashArchive);
+    // Persist datFilePaths via beginWriteArray so removed entries
+    // disappear cleanly from the INI. Also drop any stale single-key
+    // `datFilePath=` left behind by a pre-upgrade config — keeping
+    // both around would confuse hand-editors and round-tripping.
+    settings.remove(QStringLiteral("datFilePath"));
+    settings.beginWriteArray("datFilePaths", c.datFilePaths.size());
+    for (int i = 0; i < c.datFilePaths.size(); ++i) {
+      settings.setArrayIndex(i);
+      settings.setValue("path", c.datFilePaths[i]);
+    }
+    settings.endArray();
     settings.setValue("gridWidth", c.gridWidth);
     settings.setValue("horizontalGridHeight", c.horizontalGridHeight);
     settings.setValue("gridWidthSidebarHidden", c.gridWidthSidebarHidden);
@@ -633,4 +710,21 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
   // moving the emit here covers all paths uniformly (right-click edits, kart
   // imports, inline toolbar edits) without ad-hoc per-call-site additions.
   emit collectionsModified();
+
+  if (perfTrace) {
+    int realCount = 0;
+    int playlistCount = 0;
+    for (const auto &c : collections) {
+      if (c.isPlaylist) {
+        ++playlistCount;
+      } else {
+        ++realCount;
+      }
+    }
+    qCDebug(lcPerfTrace).nospace()
+        << "saveCollections: totalMs=" << perfWall.elapsed()
+        << " collections=" << collections.size() << " (real=" << realCount
+        << " playlists=" << playlistCount << ")"
+        << " path=" << SettingsUtils::getConfigPath();
+  }
 }

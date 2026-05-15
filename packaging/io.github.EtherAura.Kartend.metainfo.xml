@@ -37,7 +37,30 @@
     <binary>kartend</binary>
   </provides>
   <releases>
-    <release version="0.0.6" date="2026-05-11"/>
+    <release version="0.0.6" date="2026-05-11">
+      <description>
+        <p>
+          Pure decision logic for five managers (detail page, selection
+          restore, attract, overlay, gamepad) extracted into helper
+          namespaces with 102 new unit tests covering edge cases, hysteresis,
+          boundary fallbacks, and priority ladders.
+        </p>
+        <p>
+          Packaging and build polish: all CMake options namespaced to
+          KARTEND_*, portable-release flag set for distros, gamepad/SDL2/zstd
+          auto-detect toggles, an uninstall target, CPack tarballs, a
+          tag-triggered release workflow with sha256 publishing, hardening
+          flags split from performance flags, and Qt 6.4 as the new minimum.
+        </p>
+        <p>
+          Reliability fixes: PlaylistManager export now uses QSaveFile +
+          parent-dir fsync, failed SQL in QueryManager rescan and
+          DbMigrations user-version writes now log instead of failing
+          silently, PGO instrumentation actually reaches the compiler, and
+          several Qt 6.4 portability fixes restore builds on Ubuntu 24.04.
+        </p>
+      </description>
+    </release>
     <release version="0.0.5" date="2026-05-06">
       <description>
         <p>

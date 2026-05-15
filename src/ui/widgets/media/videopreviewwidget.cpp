@@ -15,6 +15,7 @@
 #include <QHideEvent>
 #include <QImage>
 #include <QLabel>
+#include <QLoggingCategory>
 #include <QMediaPlayer>
 #include <QPixmap>
 #include <QShowEvent>
@@ -65,6 +66,22 @@ void VideoPreviewWidget::ensureMediaPipeline() {
 
   connect(m_sink, &QVideoSink::videoFrameChanged, this,
           [this](const QVideoFrame &frame) { renderFrame(frame); });
+
+  // Diagnostic logging — every QMediaPlayer state transition + any
+  // error gets one line so a non-playing preview is debuggable
+  // without running through gdb. Enable via
+  // `QT_LOGGING_RULES=kartend.video.debug=true`.
+  static const QLoggingCategory lcVideo("kartend.video", QtWarningMsg);
+  connect(m_player, &QMediaPlayer::errorOccurred, this,
+          [](QMediaPlayer::Error err, const QString &msg) {
+            qCDebug(lcVideo) << "QMediaPlayer error:" << err << msg;
+          });
+  connect(m_player, &QMediaPlayer::mediaStatusChanged, this, [](QMediaPlayer::MediaStatus s) {
+    qCDebug(lcVideo) << "QMediaPlayer mediaStatus:" << s;
+  });
+  connect(m_player, &QMediaPlayer::playbackStateChanged, this, [](QMediaPlayer::PlaybackState s) {
+    qCDebug(lcVideo) << "QMediaPlayer playbackState:" << s;
+  });
 }
 
 VideoPreviewWidget::~VideoPreviewWidget() {
@@ -92,20 +109,52 @@ void VideoPreviewWidget::applyGlobalVolume() {
 }
 
 void VideoPreviewWidget::renderFrame(const QVideoFrame &frame) {
+  static const QLoggingCategory lcVideo("kartend.video", QtWarningMsg);
+  static int frameCounter = 0;
   if (!frame.isValid() || !m_imageLabel) {
+    qCDebug(lcVideo) << "renderFrame skipped: validFrame=" << frame.isValid()
+                     << "label=" << (m_imageLabel != nullptr);
     return;
   }
   // Drop frames arriving after stop() has cleared the source. Without
   // this, a residual frame in the sink's queue could repaint the label
   // after the user has navigated away.
   if (m_currentPath.isEmpty()) {
+    qCDebug(lcVideo) << "renderFrame skipped: currentPath is empty (post-stop)";
     return;
   }
   QImage img = frame.toImage();
   if (img.isNull()) {
+    qCDebug(lcVideo) << "renderFrame skipped: frame.toImage() returned null"
+                     << "pixelFormat=" << frame.pixelFormat() << "size=" << frame.size();
     return;
   }
   m_currentImage = img;
+  // Log periodically (first frame + every 60th after) so the log
+  // isn't drowned by a steady-state 60 fps stream. Also dumps widget
+  // geometry + ancestor visibility so a "frame rendered but user
+  // can't see it" outcome is debuggable (window position outside
+  // the parent's clip rect, parent widget hidden, etc.).
+  if (frameCounter == 0 || frameCounter % 60 == 0) {
+    QString ancestry;
+    QWidget *w = this;
+    int depth = 0;
+    while (w && depth < 6) {
+      ancestry += QStringLiteral(" -> [%1 visible=%2 geom=%3,%4 %5x%6]")
+                      .arg(w->metaObject()->className())
+                      .arg(w->isVisible())
+                      .arg(w->x())
+                      .arg(w->y())
+                      .arg(w->width())
+                      .arg(w->height());
+      w = w->parentWidget();
+      ++depth;
+    }
+    qCDebug(lcVideo) << "renderFrame ok counter=" << frameCounter << "size=" << img.size()
+                     << "labelSize=" << m_imageLabel->size()
+                     << "labelVisible=" << m_imageLabel->isVisible() << ancestry;
+  }
+  ++frameCounter;
   paintCurrentImageScaled();
 }
 

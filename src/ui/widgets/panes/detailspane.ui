@@ -54,34 +54,77 @@
       </property>
       <layout class="QVBoxLayout" name="contentLayout">
        <property name="spacing">
-        <number>12</number>
+        <number>2</number>
        </property>
        <property name="leftMargin">
         <number>10</number>
        </property>
        <property name="topMargin">
-        <number>10</number>
+        <number>6</number>
        </property>
        <property name="rightMargin">
         <number>10</number>
        </property>
        <property name="bottomMargin">
-        <number>10</number>
+        <number>4</number>
        </property>
        <item>
-        <widget class="QLabel" name="titleLabel">
-         <property name="font">
-          <font>
-           <pointsize>11</pointsize>
-           <bold>true</bold>
-          </font>
+        <widget class="QFrame" name="titleBar">
+         <property name="frameShape">
+          <enum>QFrame::NoFrame</enum>
          </property>
-         <property name="styleSheet">
-          <string>color: palette(highlight); padding: 4px 0px;</string>
-         </property>
-         <property name="text">
-          <string>Item Information</string>
-         </property>
+         <layout class="QHBoxLayout" name="titleRow">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <property name="leftMargin">
+           <number>0</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="titleLabel">
+            <property name="font">
+             <font>
+              <pointsize>11</pointsize>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string>color: palette(highlight); padding: 0px; background: transparent;</string>
+            </property>
+            <property name="text">
+             <string>Item Information</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="itemNameValue">
+            <property name="styleSheet">
+             <string>color: palette(windowtext); padding: 0px; background: transparent;</string>
+            </property>
+            <property name="text">
+             <string>No item selected</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignRight|Qt::AlignVCenter</set>
+            </property>
+            <property name="accessibleName">
+             <string>Item name</string>
+            </property>
+            <property name="textInteractionFlags">
+             <set>Qt::TextSelectableByMouse</set>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </widget>
        </item>
        <item>
@@ -94,22 +137,6 @@
          </property>
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="artworkLabel">
-         <property name="font">
-          <font>
-           <pointsize>11</pointsize>
-           <bold>true</bold>
-          </font>
-         </property>
-         <property name="styleSheet">
-          <string>color: palette(highlight); padding: 4px 0px;</string>
-         </property>
-         <property name="text">
-          <string>Artwork</string>
          </property>
         </widget>
        </item>
@@ -152,47 +179,6 @@
         </widget>
        </item>
        <item>
-        <widget class="QLabel" name="itemNameLabel">
-         <property name="font">
-          <font>
-           <bold>true</bold>
-          </font>
-         </property>
-         <property name="styleSheet">
-          <string>color: palette(windowtext); padding: 2px 0px;</string>
-         </property>
-         <property name="text">
-          <string>Name:</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="itemNameValue">
-         <property name="styleSheet">
-          <string>color: palette(windowtext); padding: 2px 0px 8px 12px;</string>
-         </property>
-         <property name="text">
-          <string>No item selected</string>
-         </property>
-         <property name="textInteractionFlags">
-          <set>Qt::TextSelectableByMouse</set>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="Line" name="separator3">
-         <property name="styleSheet">
-          <string>color: palette(mid);</string>
-         </property>
-         <property name="frameShadow">
-          <enum>QFrame::Sunken</enum>
-         </property>
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-        </widget>
-       </item>
-       <item>
         <widget class="QLabel" name="fileInfoTitle">
          <property name="font">
           <font>
@@ -201,7 +187,7 @@
           </font>
          </property>
          <property name="styleSheet">
-          <string>color: palette(highlight); padding: 4px 0px;</string>
+          <string>color: palette(highlight);</string>
          </property>
          <property name="text">
           <string>File Information</string>
@@ -216,7 +202,7 @@
           </font>
          </property>
          <property name="styleSheet">
-          <string>color: palette(windowtext); padding: 2px 0px;</string>
+          <string>color: palette(windowtext);</string>
          </property>
          <property name="text">
           <string>Path:</string>
@@ -226,10 +212,13 @@
        <item>
         <widget class="QLabel" name="filePathValue">
          <property name="styleSheet">
-          <string>color: palette(windowtext); padding: 2px 0px 8px 12px;</string>
+          <string>color: palette(windowtext);</string>
          </property>
          <property name="text">
           <string>-</string>
+         </property>
+         <property name="accessibleName">
+          <string>File path</string>
          </property>
          <property name="wordWrap">
           <bool>true</bool>
@@ -247,7 +236,7 @@
           </font>
          </property>
          <property name="styleSheet">
-          <string>color: palette(windowtext); padding: 2px 0px;</string>
+          <string>color: palette(windowtext);</string>
          </property>
          <property name="text">
           <string>Size:</string>
@@ -257,10 +246,13 @@
        <item>
         <widget class="QLabel" name="fileSizeValue">
          <property name="styleSheet">
-          <string>color: palette(windowtext); padding: 2px 0px 8px 12px;</string>
+          <string>color: palette(windowtext);</string>
          </property>
          <property name="text">
           <string>-</string>
+         </property>
+         <property name="accessibleName">
+          <string>File size</string>
          </property>
          <property name="textInteractionFlags">
           <set>Qt::TextSelectableByMouse</set>
@@ -275,7 +267,7 @@
           </font>
          </property>
          <property name="styleSheet">
-          <string>color: palette(windowtext); padding: 2px 0px;</string>
+          <string>color: palette(windowtext);</string>
          </property>
          <property name="text">
           <string>Modified:</string>
@@ -285,10 +277,13 @@
        <item>
         <widget class="QLabel" name="lastModifiedValue">
          <property name="styleSheet">
-          <string>color: palette(windowtext); padding: 2px 0px 8px 12px;</string>
+          <string>color: palette(windowtext);</string>
          </property>
          <property name="text">
           <string>-</string>
+         </property>
+         <property name="accessibleName">
+          <string>Last modified</string>
          </property>
          <property name="textInteractionFlags">
           <set>Qt::TextSelectableByMouse</set>
@@ -303,7 +298,7 @@
           </font>
          </property>
          <property name="styleSheet">
-          <string>color: palette(windowtext); padding: 2px 0px;</string>
+          <string>color: palette(windowtext);</string>
          </property>
          <property name="text">
           <string>Type:</string>
@@ -313,28 +308,18 @@
        <item>
         <widget class="QLabel" name="fileExtensionValue">
          <property name="styleSheet">
-          <string>color: palette(windowtext); padding: 2px 0px 8px 12px;</string>
+          <string>color: palette(windowtext);</string>
          </property>
          <property name="text">
           <string>-</string>
+         </property>
+         <property name="accessibleName">
+          <string>File type</string>
          </property>
          <property name="textInteractionFlags">
           <set>Qt::TextSelectableByMouse</set>
          </property>
         </widget>
-       </item>
-       <item>
-        <spacer name="verticalSpacer">
-         <property name="orientation">
-          <enum>Qt::Vertical</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>20</width>
-           <height>40</height>
-          </size>
-         </property>
-        </spacer>
        </item>
       </layout>
      </widget>

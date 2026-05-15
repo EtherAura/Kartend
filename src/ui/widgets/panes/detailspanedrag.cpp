@@ -6,8 +6,11 @@
 
 #include "detailspane.h"
 #include "detailspaneresizegrip.h"
+#include "ui_detailspane.h"
+#include "videopreviewwidget.h"
 
 #include <QEvent>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QWidget>
 
@@ -43,6 +46,22 @@ bool DetailsPane::eventFilter(QObject *watched, QEvent *event) {
   auto *child = qobject_cast<QWidget *>(watched);
   if (m_resizeGrip && child && m_resizeGrip->handleChildEvent(child, event)) {
     return true;
+  }
+  // Arrow-key gallery cycle when the main artwork tile or the video
+  // preview has focus — gives mouse-free users a way to flip the big
+  // preview between scraped artwork types. Constrained to these two
+  // widgets so it doesn't shadow the grid's arrow navigation.
+  if (event->type() == QEvent::KeyPress &&
+      (watched == ui->artworkDisplay || watched == m_videoPreview)) {
+    auto *keyEvent = static_cast<QKeyEvent *>(event);
+    if (keyEvent->key() == Qt::Key_Left) {
+      cycleMainPreview(-1);
+      return true;
+    }
+    if (keyEvent->key() == Qt::Key_Right) {
+      cycleMainPreview(+1);
+      return true;
+    }
   }
   return QWidget::eventFilter(watched, event);
 }

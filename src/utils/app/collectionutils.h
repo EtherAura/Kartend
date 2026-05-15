@@ -288,11 +288,12 @@ struct CollectionConfig {
   /// Auto-discovery does NOT apply to custom types — they only resolve via a
   /// per-item manual override.
   QStringList customArtworkTypes;
-  int gridWidth;
+  int gridWidth = 4;
   /// per-collection items-per-column for the Horizontal view
   /// mode. 0 means "fall back to gridWidth" so existing collections that
-  /// upgrade and try Horizontal mode still get a sensible default. Clamped to
-  /// the same [MIN_WIDTH, MAX_WIDTH] range as gridWidth at save time.
+  /// upgrade and try Horizontal mode still get a sensible default. Floored
+  /// to MIN_WIDTH for any non-zero value at save time — no upper cap, so
+  /// extra-wide layouts on 4K/8K displays are permitted.
   int horizontalGridHeight = 0;
   /// alternate items-per-row applied when the sidebar is hidden
   /// AND the active sidebar mode actually shrinks the grid (Expand). 0 means
@@ -312,7 +313,7 @@ struct CollectionConfig {
   /// not yet consumed by the layout calculator — exposed here so callers can
   /// round-trip the value through INI and the kart manifest.
   int gridHeightSidebarHidden = 0;
-  bool sidebarVisible;
+  bool sidebarVisible = false;
   int parentCollectionIndex = -1;
   bool isSubcollection = false;
   [[nodiscard]] bool hasParent() const { return parentCollectionIndex >= 0; }
@@ -497,6 +498,38 @@ struct CollectionConfig {
   bool isPlaylist = false;
   QString playlistId; // UUID — matches playlists.id when isPlaylist is true.
 
+  /// ScreenScraper.fr systemeid override. -1 = unset; the SS provider
+  /// then runs its autodetect heuristic over the collection's
+  /// extensions / name / type to pick a best-guess id at scrape time.
+  /// Set explicitly when autodetect picks the wrong system. Stored
+  /// per-collection in kartend.cfg.
+  int screenscraperSystemId = -1;
+  /// When true and the scraped item is an archive (.zip / .7z / etc.),
+  /// the SS provider extracts the archive to a temp dir and hashes the
+  /// inner ROM rather than the outer archive bytes. SS's hash database
+  /// indexes inner-ROM hashes (the cartridge dump itself), so this
+  /// dramatically improves match accuracy for users who keep their
+  /// libraries zipped. Off → hash the archive itself (fine for SS-
+  /// known archive variants, useless otherwise — falls back to the
+  /// filename match). Default on. Stored per-collection in kartend.cfg.
+  bool screenscraperHashArchive = true;
+  /// Paths to DAT files (No-Intro / Redump / TOSEC Logiqx, or MAME
+  /// listxml) used for offline ROM ID. Walked in list order on every
+  /// scrape — the first hash hit wins, so the user can put the most
+  /// authoritative catalogue at the top and lower-quality fallbacks
+  /// later. Empty list = no DAT lookup. Stored per-collection in
+  /// kartend.cfg as an INI array under `datFilePaths/`. Legacy
+  /// configs with the single-key `datFilePath=...` shape are
+  /// upgraded to a one-element list at load time.
+  QStringList datFilePaths;
+  /// Marks the synthesized config as a smart playlist (filter-driven).
+  /// Set during MainWindow::resyncPlaylistCollections from the
+  /// PlaylistRow.isSmart flag. UI surfaces (right-click menu, sidebar
+  /// label) branch on this so static-only actions like "Add item to
+  /// playlist" stay hidden for smart rows. Runtime-only, never persisted
+  /// to INI.
+  bool isSmartPlaylist = false;
+
   // ─── Collection links / alias parents ────────────────────────
   // Names of additional parent collections this collection should appear
   // under (in addition to its primary parentCollectionIndex). Stored as
@@ -513,9 +546,6 @@ struct CollectionConfig {
   /// and to highlight the favorites toggle on items that already belong to
   /// the favorites playlist. Runtime-only, never persisted to INI.
   QString playlistReservedKind;
-
-  CollectionConfig()
-      : gridWidth(4), sidebarVisible(false), horizontalAlignment(HorizontalAlignment::Center) {}
 
   bool operator==(const CollectionConfig &other) const {
     return name == other.name && type == other.type && launcherPath == other.launcherPath &&
@@ -584,7 +614,11 @@ struct CollectionConfig {
            listAltRowColor == other.listAltRowColor && customFontFamily == other.customFontFamily &&
            sidebarFontFamily == other.sidebarFontFamily &&
            sidebarFontPointSize == other.sidebarFontPointSize && isPlaylist == other.isPlaylist &&
-           playlistId == other.playlistId && playlistReservedKind == other.playlistReservedKind &&
+           playlistId == other.playlistId && isSmartPlaylist == other.isSmartPlaylist &&
+           playlistReservedKind == other.playlistReservedKind &&
+           screenscraperSystemId == other.screenscraperSystemId &&
+           screenscraperHashArchive == other.screenscraperHashArchive &&
+           datFilePaths == other.datFilePaths &&
            additionalParentNames == other.additionalParentNames;
   }
 
@@ -643,30 +677,24 @@ struct CollectionConfig {
 
   // Validates numeric fields are within acceptable ranges
   void clampValues() {
-    gridWidth = std::clamp(gridWidth, UIConstants::Grid::MIN_WIDTH, UIConstants::Grid::MAX_WIDTH);
-    // 0 stays 0 (means "inherit gridWidth"); any non-zero value
-    // is clamped to the same range as gridWidth so a hand-edit can't pin the
-    // column at 0 or saturate the layout calculation.
+    // Grid-width fields have no upper cap — wider-than-40 layouts are
+    // legitimate on 4K/8K displays. Only the MIN_WIDTH floor is enforced
+    // so a hand-edit or kart-import can't pin a non-zero value at 0
+    // columns. The 0-sentinel ("inherit primary") stays untouched for the
+    // alt fields.
+    gridWidth = std::max(gridWidth, UIConstants::Grid::MIN_WIDTH);
     if (horizontalGridHeight != 0) {
-      horizontalGridHeight = std::clamp(horizontalGridHeight, UIConstants::Grid::MIN_WIDTH,
-                                        UIConstants::Grid::MAX_WIDTH);
+      horizontalGridHeight = std::max(horizontalGridHeight, UIConstants::Grid::MIN_WIDTH);
     }
-    // 0 stays 0 ("inherit primary"); any non-zero alt is clamped
-    // to the same valid range so a hand-edit can't pin the grid at 0 columns.
     if (gridWidthSidebarHidden != 0) {
-      gridWidthSidebarHidden = std::clamp(gridWidthSidebarHidden, UIConstants::Grid::MIN_WIDTH,
-                                          UIConstants::Grid::MAX_WIDTH);
+      gridWidthSidebarHidden = std::max(gridWidthSidebarHidden, UIConstants::Grid::MIN_WIDTH);
     }
     if (horizontalGridHeightSidebarHidden != 0) {
       horizontalGridHeightSidebarHidden =
-          std::clamp(horizontalGridHeightSidebarHidden, UIConstants::Grid::MIN_WIDTH,
-                     UIConstants::Grid::MAX_WIDTH);
+          std::max(horizontalGridHeightSidebarHidden, UIConstants::Grid::MIN_WIDTH);
     }
-    // same 0-stays-0 rule for the vertical-shrink override used
-    // when a Top/Bottom-docked details pane hides in Expand mode.
     if (gridHeightSidebarHidden != 0) {
-      gridHeightSidebarHidden = std::clamp(gridHeightSidebarHidden, UIConstants::Grid::MIN_WIDTH,
-                                           UIConstants::Grid::MAX_WIDTH);
+      gridHeightSidebarHidden = std::max(gridHeightSidebarHidden, UIConstants::Grid::MIN_WIDTH);
     }
     itemWidth = std::clamp(itemWidth, UIConstants::Item::MIN_WIDTH, UIConstants::Item::MAX_WIDTH);
     itemHeight =
@@ -989,6 +1017,20 @@ struct GeneralSettings {
   int attractModeAdvanceSelectionIntervalSec = 5; // Seconds between selection advances
   bool attractModeAdvanceSelectionRandom = false; // Pick random vs. sequential next
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Marquee / secondary monitor display
+  // Bartop and arcade-cabinet users on dual-monitor setups can pin a second
+  // window to a marquee/topper screen that mirrors the currently-selected
+  // item's artwork (mode 0) or the current collection's icon (mode 1). The
+  // marquee window is frameless, always-on-top of its own screen, and ignores
+  // input focus. When the named QScreen is no longer present (display
+  // unplugged after settings were saved) it falls back to the primary screen
+  // and logs a warning so the user knows their topper didn't show up.
+  // ─────────────────────────────────────────────────────────────────────────
+  bool marqueeEnabled = false;
+  QString marqueeScreenName; // QScreen::name() (e.g. "HDMI-A-1"); empty = primary screen
+  int marqueeMode = 0;       // 0 = selected item's artwork; 1 = current collection's icon
+
   // Splash screens
   // Empty title/subtitle strings mean "use the built-in default" (app display
   // name for boot title, localized "Welcome back" for resume title, etc.).
@@ -1008,6 +1050,81 @@ struct GeneralSettings {
   // child runs and automatically restore + raise the window when it exits.
   // ─────────────────────────────────────────────────────────────────────────
   bool runtimeDetectionEnabled = false;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // First-run wizard
+  // Flipped to true after the wizard either completes or is explicitly
+  // skipped, so the wizard never re-prompts on subsequent launches. Users
+  // can still re-run it from Help → Setup Wizard… without flipping this
+  // back — once a user has seen it, the auto-launch is permanently off.
+  // ─────────────────────────────────────────────────────────────────────────
+  bool firstRunComplete = false;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Scraper credentials
+  // Per-provider key/value blobs — one inner QHash per provider id
+  // (e.g. "tmdb", "screenscraper") keyed on the credential field name
+  // ("api_token", "dev_id", "user_password"). Persisted as
+  // `[Scrapers]` INI keys of the shape `<provider>/<field>=<value>`.
+  // Empty inner hash = "not configured"; the provider is responsible
+  // for surfacing a "please set credentials in Settings → Scrapers"
+  // error message when its required keys are missing.
+  // ─────────────────────────────────────────────────────────────────────────
+  QHash<QString, QHash<QString, QString>> scraperCredentials;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Scraper performance + behavior options
+  // Speed/quality presets and re-scrape policy. The four numeric fields
+  // are tied to a preset combo (Fastest / Balanced / BestQuality /
+  // Custom); switching to Custom unlocks them. RescrapeMode controls
+  // how an item already in the DB is treated on a second scrape and
+  // applies per-asset (an existing cover skips, a new fanart still
+  // downloads). UpdateChanged downloads bytes anyway to compare, so
+  // it's intentionally the slowest mode; the UI surfaces this.
+  // ─────────────────────────────────────────────────────────────────────────
+  enum class ScraperPreset { Fastest = 0, Balanced = 1, BestQuality = 2, Custom = 3 };
+  enum class ScraperRescrapeMode {
+    Overwrite = 0,     // always replace existing files + rows
+    FillMissing = 1,   // only download / write what's not on disk
+    UpdateChanged = 2, // download all, compare bytes, write only if different
+    Skip = 3,          // skip the whole item if any metadata exists
+  };
+  struct ScraperOptions {
+    ScraperPreset preset = ScraperPreset::Balanced;
+    int mediaMaxDimension = 1024; // px; 0 = full resolution
+    // Default 2: empirical sweet spot for the SS CDN on typical home
+    // connections. Higher values (6-8) caused individual replies to
+    // stretch from seconds to minutes as TCP fairness collapsed
+    // between competing streams to the same host. With HTTP/2 enabled
+    // (httpclient.cpp send()) streams multiplex over one connection,
+    // sidestepping that collapse — so users on a healthy network can
+    // safely bump this up.
+    int mediaConcurrency = 2;  // 1..16
+    int mediaThrottleMs = 100; // 0..1000
+    // Number of items that can be scraped *in parallel* during a batch
+    // scrape. Default 4 matches Skyscraper's `--threads 4`. Each item
+    // still pays its own media-concurrency budget, so the total
+    // in-flight network requests is `batchItemConcurrency *
+    // mediaConcurrency` — keep this product sane for your link.
+    // 1 = strictly serial (the legacy behavior).
+    int batchItemConcurrency = 4; // 1..16
+    ScraperRescrapeMode rescrapeMode = ScraperRescrapeMode::FillMissing;
+    // Stamp `outputformat=jpg` onto image media URLs so SS re-encodes
+    // assets as smaller (lossy) JPGs. Only sensible on the Fastest
+    // preset where bandwidth dominates fidelity; the preset toggles
+    // this field automatically, but a Custom user can flip it on too.
+    bool preferJpgOutput = false;
+    // When true, an interrupted scrape (process exit / crash mid-batch
+    // with a `pending-scrape.json` snapshot on disk) silently resumes
+    // on next launch instead of surfacing the modal Resume / Discard
+    // prompt. Default off so first-time users see the prompt and learn
+    // the recovery path; power users running unattended overnight
+    // batches flip this on so a crash + relaunch self-heals without a
+    // dialog blocking the resume. Consumed by MainWindow's startup
+    // hook around ScraperService::loadPendingState (Kartend-1uvp).
+    bool scrapeAutoResume = false;
+  };
+  ScraperOptions scraperOptions;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Launch history

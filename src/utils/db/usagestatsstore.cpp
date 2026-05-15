@@ -60,6 +60,17 @@ constexpr const char *RECENTLY_PLAYED_SQL =
     "ORDER BY last_played DESC "
     "LIMIT ?";
 
+constexpr const char *NEVER_PLAYED_SQL =
+    "SELECT name, collection_uuid, path, play_count, last_played, "
+    "total_play_seconds "
+    "FROM items WHERE play_count = 0 OR play_count IS NULL "
+    "ORDER BY name COLLATE NOCASE ASC "
+    "LIMIT ?";
+
+constexpr const char *COUNT_PLAYED_SINCE_SQL =
+    "SELECT COUNT(*) FROM items "
+    "WHERE last_played IS NOT NULL AND last_played != '' AND last_played >= ?";
+
 constexpr const char *COLLECTION_BREAKDOWN_SQL = "SELECT collection_uuid, COUNT(*), "
                                                  "COALESCE(SUM(play_count), 0), "
                                                  "COALESCE(SUM(total_play_seconds), 0) "
@@ -230,6 +241,37 @@ ErrorUtils::Result<QList<ItemUsageRow>> loadTopPlayed(QSqlDatabase &db, int limi
 
 ErrorUtils::Result<QList<ItemUsageRow>> loadRecentlyPlayed(QSqlDatabase &db, int limit) {
   return runRowQuery(db, RECENTLY_PLAYED_SQL, limit, "UsageStatsStore::loadRecentlyPlayed");
+}
+
+ErrorUtils::Result<QList<ItemUsageRow>> loadNeverPlayed(QSqlDatabase &db, int limit) {
+  return runRowQuery(db, NEVER_PLAYED_SQL, limit, "UsageStatsStore::loadNeverPlayed");
+}
+
+ErrorUtils::Result<qint64> countPlayedSince(QSqlDatabase &db, const QString &isoCutoffUtc) {
+  if (isoCutoffUtc.isEmpty()) {
+    return qint64(0);
+  }
+  if (!db.isOpen()) {
+    return ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
+                                 "UsageStatsStore::countPlayedSince");
+  }
+  QSqlQuery q(db);
+  if (!q.prepare(COUNT_PLAYED_SINCE_SQL)) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                               "Failed to prepare played-since count",
+                               "UsageStatsStore::countPlayedSince")
+        .withDetails(q.lastError().text());
+  }
+  q.addBindValue(isoCutoffUtc);
+  if (!q.exec()) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to query played-since count",
+                               "UsageStatsStore::countPlayedSince")
+        .withDetails(q.lastError().text());
+  }
+  if (!q.next()) {
+    return qint64(0);
+  }
+  return q.value(0).toLongLong();
 }
 
 ErrorUtils::Result<QHash<QString, CollectionUsage>> loadCollectionBreakdown(QSqlDatabase &db) {

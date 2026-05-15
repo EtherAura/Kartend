@@ -346,11 +346,11 @@ launchParameters=--fullscreen --verbose
 
 ## For developers
 
-- Launch pipeline: [src/modules/launch/](../../src/modules/launch/)
+- Launch pipeline: [src/modules/behavior/launch/](../../src/modules/behavior/launch/)
   (`LaunchManager`, validators, `LaunchUtils`).
 - Preset resolution: `LauncherUtils::resolvePreset(config, presets)` in
-  [src/utils/](../../src/utils/) — call this before reading
-  path/core/params from a launcher entry.
+  [src/utils/app/collectionutils.h](../../src/utils/app/collectionutils.h)
+  — call this before reading path/core/params from a launcher entry.
 - libretro detection: `LauncherUtils::usesLibretroCore(path)`.
 - Per-item override storage: `item_metadata.launcher_index` in SQLite
   (see [Item Metadata](Item-Metadata.md#for-developers)).
@@ -361,7 +361,7 @@ launchParameters=--fullscreen --verbose
   module.
 - Adding a new launcher field (e.g. environment variables): extend
   `LauncherConfig` in
-  [src/utils/collectionutils.h](../../src/utils/collectionutils.h),
+  [src/utils/app/collectionutils.h](../../src/utils/app/collectionutils.h),
   add UI in `launchereditordialog`, propagate through serialization in
   `settingsmanager`, and update
   [Configuration Reference](Configuration-Reference.md).

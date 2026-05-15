@@ -1,6 +1,7 @@
 #ifndef SELECTIONDISPLAYMANAGER_H
 #define SELECTIONDISPLAYMANAGER_H
 
+#include "artworkpreviewoverlay.h"
 #include "collectionutils.h"
 #include "gridlayoutcalculator.h"
 #include <functional>
@@ -22,7 +23,6 @@ class SelectionCoordinator;
 class ArrowKeyScrollHelper;
 class InteractionStateHolder;
 class ListHeaderWidget;
-class ArtworkPreviewOverlay;
 struct GeneralSettings;
 enum class ListSortColumn;
 
@@ -112,6 +112,13 @@ public:
   ///
   void showMediaPreview(const QString &filePath, const QString &artworkDir,
                         const QString &videoDir);
+  /// Populate the expand-mode overlay's bottom thumb strip with the
+  /// item's related artwork so Left/Right and thumb clicks can cycle
+  /// the main preview between cover / screenshot / fanart / video.
+  /// Caller passes the same gallery entries the sidebar uses
+  /// (DetailsPane::currentGalleryEntries). No-op if the overlay has not
+  /// been created yet.
+  void setArtworkPreviewGallery(const QList<ArtworkPreviewOverlay::GalleryEntry> &entries);
 
   // ─────────────────────────────────────────────────────────────────────
   // Selection update logic (moved from ScrollManager,)

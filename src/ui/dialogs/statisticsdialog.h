@@ -41,9 +41,10 @@ public:
 private:
   void setupUI();
   void refresh();
-  void populateAggregate(const UsageStatsStore::AggregateStats &agg);
+  void populateAggregate(const UsageStatsStore::AggregateStats &agg, qint64 playedInLast7Days);
   void populateMostPlayed(const QList<UsageStatsStore::ItemUsageRow> &rows);
   void populateRecentlyPlayed(const QList<UsageStatsStore::ItemUsageRow> &rows);
+  void populateNeverPlayed(const QList<UsageStatsStore::ItemUsageRow> &rows, qint64 totalNever);
   void populateByCollection(const QHash<QString, UsageStatsStore::CollectionUsage> &byUuid);
   void populateHistory(const QList<HistoryStore::HistoryEntry> &rows, qint64 totalCount);
   void onResetClicked();
@@ -70,10 +71,16 @@ private:
   QLabel *m_totalLaunchesValue = nullptr;
   QLabel *m_totalTimeValue = nullptr;
   QLabel *m_itemsLaunchedValue = nullptr;
+  QLabel *m_played7DaysValue = nullptr;
   QLabel *m_runtimeNote = nullptr;
   QTabWidget *m_tabs = nullptr;
   QTreeWidget *m_mostPlayedTree = nullptr;
   QTreeWidget *m_recentlyPlayedTree = nullptr;
+  QTreeWidget *m_neverPlayedTree = nullptr;
+  /// Header row above the never-played tree showing "(N items have never
+  /// been launched)" so the user knows whether the displayed list is the
+  /// full set or just the first 50 entries.
+  QLabel *m_neverPlayedSummary = nullptr;
   QTreeWidget *m_byCollectionTree = nullptr;
   // History tab
   QTreeWidget *m_historyTree = nullptr;

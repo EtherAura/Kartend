@@ -281,12 +281,13 @@ manifest if your library lives elsewhere.
 
 ## For developers
 
-- Path resolution: [src/utils/configutils.h](../../src/utils/) +
-  `settingsutils.cpp`. Uses `QStandardPaths::writableLocation()` for
-  each XDG type.
-- Database setup: [src/modules/database/](../../src/modules/database/)
-  (`DatabaseManager`). Schema migrations live next to it.
-- Cache lifecycle: [src/modules/cache/](../../src/modules/cache/)
+- Path resolution: [src/utils/app/settingsutils.h](../../src/utils/app/settingsutils.h)
+  and `settingsutils.cpp`. Uses `QStandardPaths::writableLocation()`
+  for each XDG type.
+- Database setup: [src/modules/data/database/](../../src/modules/data/database/)
+  (`DatabaseManager`). Schema migrations live in
+  [src/utils/db/dbmigrations.cpp](../../src/utils/db/dbmigrations.cpp).
+- Cache lifecycle: [src/modules/data/cache/](../../src/modules/data/cache/)
   (`CacheManager`). Disk cache uses content-addressable hashing
   (SHA-256 of source path + dimensions).
 - Atomic file writes: see `architecture.md` —

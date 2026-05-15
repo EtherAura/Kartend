@@ -333,7 +333,7 @@ you don't want to propagate.
   — split into multiple translation units (`settingsdialogtree`,
   `settingsdialogfields`, `settingsdialogapply`, etc.) for build
   speed.
-- Persistence: [src/modules/settings/settingsmanager\*](../../src/modules/settings/)
+- Persistence: [src/modules/data/settings/settingsmanager\*](../../src/modules/data/settings/)
   drives INI read/write, with `configvalidation*` for live validation.
 - Apply rules: `applysettingsdialog.cpp` enumerates which fields
   propagate per category. Non-propagatable fields (paths, parent

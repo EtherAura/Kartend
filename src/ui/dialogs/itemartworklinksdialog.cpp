@@ -7,6 +7,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QPalette>
 #include <QPushButton>
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -134,11 +135,47 @@ QHash<QString, QString> ItemArtworkLinksDialog::overrides() const {
   for (int row = 0; row < m_rowTypeIds.size(); ++row) {
     const QString &typeId = m_rowTypeIds.at(row);
     const QString text = currentOverrideForRow(row).trimmed();
-    if (!text.isEmpty()) {
-      out.insert(typeId, text);
+    if (text.isEmpty()) {
+      continue;
     }
+    // A row whose value still matches the auto-discovered path is
+    // treated as "no override" — promoting it to a DB override would
+    // freeze the path and stop future auto-discovery from following
+    // file renames inside `{artwork}/{type}/`.
+    if (m_autoPathByType.value(typeId) == text) {
+      continue;
+    }
+    out.insert(typeId, text);
   }
   return out;
+}
+
+void ItemArtworkLinksDialog::setAutoResolvedPaths(const QHash<QString, QString> &autoPaths) {
+  m_autoPathByType = autoPaths;
+  for (int row = 0; row < m_rowTypeIds.size(); ++row) {
+    const QString &typeId = m_rowTypeIds.at(row);
+    QTableWidgetItem *item = m_table->item(row, kColumnPath);
+    if (!item) {
+      continue;
+    }
+    // Only auto-fill rows that don't already carry a real override —
+    // we don't want to overwrite a saved path with the auto hint.
+    if (!item->text().trimmed().isEmpty()) {
+      continue;
+    }
+    const QString autoPath = autoPaths.value(typeId);
+    if (autoPath.isEmpty()) {
+      continue;
+    }
+    item->setText(autoPath);
+    QFont f = item->font();
+    f.setItalic(true);
+    item->setFont(f);
+    // Use the disabled-text role so the auto hint adapts to the
+    // active palette (dark / light) instead of a fixed gray.
+    item->setForeground(palette().brush(QPalette::Disabled, QPalette::Text));
+    item->setToolTip(tr("Auto-discovered from %1. Edit to override.").arg(autoPath));
+  }
 }
 
 QString ItemArtworkLinksDialog::currentOverrideForRow(int row) const {

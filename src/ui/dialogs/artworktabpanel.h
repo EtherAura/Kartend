@@ -34,15 +34,17 @@ signals:
 
 private slots:
   void onBrowseArtworkDir();
-  void onBrowseVideoDir();
-  void onBrowseManualDir();
   void onBrowsePlaceholderArtwork();
+  void onExportPlaceholderPngs();
 
 private:
   QStringList parseCustomArtworkTypes() const;
 
   Ui::ArtworkTabPanel *ui;
   SettingsModel *m_model = nullptr;
+  /// Programmatically appended below the form rows so we don't have to
+  /// touch artworktabpanel.ui — keeps the Designer surface stable.
+  class QPushButton *m_exportPlaceholdersButton = nullptr;
 };
 
 #endif // ARTWORKTABPANEL_H

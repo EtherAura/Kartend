@@ -487,12 +487,20 @@ bool QueryManager::commitStagedScanResults(const CollectionConfig &collection, c
         break;
       }
 
+      // date_added is stamped at insert time and intentionally OMITTED
+      // from the ON CONFLICT update clause — re-scanning a known item
+      // must NOT reset its "date added to library" stamp. New rows
+      // (cleared library, re-imported, or first-ever scan) get the
+      // current epoch; existing rows keep whatever the v12 backfill or
+      // an earlier scan recorded.
+      const qint64 nowEpochSec = QDateTime::currentSecsSinceEpoch();
+
       QString sql = "INSERT INTO items (collection_id, collection_uuid, path, "
-                    "name, last_modified) VALUES ";
+                    "name, last_modified, date_added) VALUES ";
       QStringList valueSets;
       valueSets.reserve(paths.size());
       for (int i = 0; i < paths.size(); ++i) {
-        valueSets.append("(?, ?, ?, ?, ?)");
+        valueSets.append("(?, ?, ?, ?, ?, ?)");
       }
       sql += valueSets.join(", ");
       sql += " ON CONFLICT(collection_uuid, path) DO UPDATE SET "
@@ -508,6 +516,7 @@ bool QueryManager::commitStagedScanResults(const CollectionConfig &collection, c
         ins.addBindValue(paths[i]);
         ins.addBindValue(names[i]);
         ins.addBindValue(lastModified[i]);
+        ins.addBindValue(nowEpochSec);
       }
       if (!ins.exec()) {
         auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,

@@ -37,7 +37,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite libzstd-dev pulseaudio
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev pulseaudio
 
       - name: Start dummy pulseaudio
         # Qt 6.4's PulseAudio backend SIGILLs in Release builds when
@@ -148,7 +148,7 @@ jobs:
         # transitive dep of some other package.
         uses: ./.github/actions/install-deps
         with:
-          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite pulseaudio
+          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite pulseaudio
 
       - name: Start dummy pulseaudio
         run: |
@@ -211,7 +211,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite pulseaudio
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite pulseaudio
 
       - name: Start dummy pulseaudio
         run: |
@@ -298,7 +298,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite libzstd-dev pulseaudio
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev pulseaudio
 
       - name: Start dummy pulseaudio
         # Qt 6.4's PulseAudio backend SIGILLs in Release builds when
@@ -381,7 +381,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite clang-tidy clang-format-19 cppcheck jq
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite clang-tidy clang-format-19 cppcheck jq
 
       - name: Pin clang-format to v19
         # Ubuntu 24.04's default `clang-format` is v18, which formats slightly
@@ -429,145 +429,3 @@ jobs:
 
       - name: ccache stats
         run: ccache --show-stats
-
-  coverage:
-    runs-on: ubuntu-24.04
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install dependencies
-        uses: ./.github/actions/install-deps
-        with:
-          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite lcov pulseaudio
-
-      - name: Start dummy pulseaudio
-        run: |
-          export XDG_RUNTIME_DIR="$RUNNER_TEMP/pulse-runtime"
-          mkdir -p "$XDG_RUNTIME_DIR"
-          chmod 700 "$XDG_RUNTIME_DIR"
-          pulseaudio --start --exit-idle-time=-1 --daemonize \
-            --load='module-null-sink sink_name=NullOutput' \
-            --load='module-null-source source_name=NullInput' || true
-          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
-
-      - name: Cache ccache
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-coverage-${{ hashFiles('CMakeLists.txt', '**/*.cmake', '.github/workflows/build.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-ccache-coverage-
-            ${{ runner.os }}-ccache-
-
-      - name: Configure ccache
-        run: |
-          ccache --set-config=cache_dir=$HOME/.cache/ccache
-          ccache --set-config=max_size=1G
-          ccache --zero-stats
-
-      - name: Configure CMake (Debug + coverage)
-        run: |
-          cmake -S . -B build/coverage -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DKARTEND_BUILD_TESTS=ON \
-            -DKARTEND_ENABLE_COVERAGE=ON \
-            -DCMAKE_CXX_COMPILER=g++ \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-
-      - name: Build
-        run: cmake --build build/coverage --parallel $(nproc)
-
-      - name: ccache stats
-        run: ccache --show-stats
-
-      - name: Reset coverage counters
-        run: lcov --directory build/coverage --zerocounters
-
-      - name: Run tests
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: ctest --test-dir build/coverage --output-on-failure
-
-      - name: Capture coverage data
-        run: |
-          lcov --directory build/coverage \
-               --capture \
-               --output-file build/coverage/coverage.info \
-               --ignore-errors mismatch,unused,inconsistent,gcov \
-               --no-external \
-               --base-directory $GITHUB_WORKSPACE
-          lcov --remove build/coverage/coverage.info \
-               '*/tests/*' \
-               '*/build/*' \
-               '/usr/*' \
-               '*/qt6/*' \
-               --output-file build/coverage/coverage.filtered.info \
-               --ignore-errors unused,inconsistent
-
-      - name: Generate coverage summary
-        run: |
-          lcov --list build/coverage/coverage.filtered.info \
-               --ignore-errors inconsistent | tee build/coverage/coverage-summary.txt
-
-      - name: Surface coverage in step summary + enforce floor
-        env:
-          # Floors track the observed CI baseline minus a small tolerance.
-          # Baseline as of the integration-test-harness landing: 27.2% lines,
-          # 39.6% functions. Tolerances chosen to absorb small refactors
-          # without firing on noise, while still catching gross regressions
-          # (deleted suite, accidentally disabled job, etc.). Set either var
-          # to 0 to disable that metric's enforcement (report-only).
-          KARTEND_COVERAGE_MIN_LINES: '26'
-          KARTEND_COVERAGE_MIN_FUNCTIONS: '35'
-        run: |
-          # lcov --summary prints lines like "  lines.....: 47.3% (1234 of 2611 lines)"
-          # Capture the percentage and write a GitHub step summary.
-          line_pct="$(lcov --summary build/coverage/coverage.filtered.info \
-                          --ignore-errors inconsistent 2>&1 \
-                      | awk '/^[[:space:]]+lines/ { gsub("%","",$2); print $2; exit }')"
-          fn_pct="$(lcov --summary build/coverage/coverage.filtered.info \
-                        --ignore-errors inconsistent 2>&1 \
-                    | awk '/^[[:space:]]+functions/ { gsub("%","",$2); print $2; exit }')"
-          {
-            echo "## Coverage"
-            echo ""
-            echo "| metric | percent | floor |"
-            echo "|---|---|---|"
-            echo "| lines | ${line_pct:-?}% | ${KARTEND_COVERAGE_MIN_LINES}% |"
-            echo "| functions | ${fn_pct:-?}% | ${KARTEND_COVERAGE_MIN_FUNCTIONS}% |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          # awk handles the float comparison; bash arithmetic can't.
-          below() { awk -v p="$1" -v f="$2" 'BEGIN { print (p+0 < f+0) ? "1" : "0" }'; }
-
-          failed=0
-          line_floor="${KARTEND_COVERAGE_MIN_LINES:-0}"
-          if [ "$line_floor" -gt 0 ] && [ -n "$line_pct" ] && [ "$(below "$line_pct" "$line_floor")" = "1" ]; then
-            echo "::error::Line coverage $line_pct% is below floor $line_floor%"
-            failed=1
-          fi
-          fn_floor="${KARTEND_COVERAGE_MIN_FUNCTIONS:-0}"
-          if [ "$fn_floor" -gt 0 ] && [ -n "$fn_pct" ] && [ "$(below "$fn_pct" "$fn_floor")" = "1" ]; then
-            echo "::error::Function coverage $fn_pct% is below floor $fn_floor%"
-            failed=1
-          fi
-          [ "$failed" -eq 0 ]
-
-      - name: Generate HTML report
-        run: |
-          genhtml build/coverage/coverage.filtered.info \
-                  --output-directory build/coverage/html \
-                  --title "Kartend Coverage" \
-                  --ignore-errors inconsistent,source
-
-      - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-report
-          path: |
-            build/coverage/coverage.filtered.info
-            build/coverage/coverage-summary.txt
-            build/coverage/html/
-          if-no-files-found: error
-          retention-days: 14

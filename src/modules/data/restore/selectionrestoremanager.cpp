@@ -18,7 +18,10 @@
 #include "uiconstants.h"
 
 #include <QLoggingCategory>
-Q_LOGGING_CATEGORY(lcSelectionRestoreManager, "kartend.selectionrestoremanager")
+// Default to warning — restore scheduling logs on every reload and
+// every selection change with logging rules enabled. Opt in via
+// `KARTEND_LOG_RULES=kartend.selectionrestoremanager.debug=true`.
+Q_LOGGING_CATEGORY(lcSelectionRestoreManager, "kartend.selectionrestoremanager", QtWarningMsg)
 #define debugLog(msg)                                                                              \
   do {                                                                                             \
     if (lcSelectionRestoreManager().isDebugEnabled()) {                                            \

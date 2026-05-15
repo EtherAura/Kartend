@@ -197,6 +197,13 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.attractModeAdvanceSelectionRandom =
       s.value("attractModeAdvanceSelectionRandom", false).toBool();
 
+  // Marquee / secondary monitor — opt-in. Mode is clamped to the known
+  // range so a hand-edited INI with a bogus value doesn't propagate into
+  // the runtime (defaults to 0 = item artwork).
+  settings.marqueeEnabled = s.value("marqueeEnabled", false).toBool();
+  settings.marqueeScreenName = s.value("marqueeScreenName").toString();
+  settings.marqueeMode = qBound(0, s.value("marqueeMode", 0).toInt(), 2);
+
   // Splash screens
   settings.bootSplashEnabled = s.value("bootSplashEnabled", true).toBool();
   settings.resumeFocusSplashEnabled = s.value("resumeFocusSplashEnabled", true).toBool();
@@ -207,6 +214,10 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
 
   // Runtime detection — opt-in
   settings.runtimeDetectionEnabled = s.value("runtimeDetectionEnabled", false).toBool();
+
+  // First-run wizard gate — defaults false so a fresh install gets the
+  // wizard on next launch.
+  settings.firstRunComplete = s.value("firstRunComplete", false).toBool();
 
   // Launch history. Default is enabled with a 500-row cap so
   // a fresh install starts logging immediately; the user disables in
@@ -271,6 +282,48 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
     }
   }
   s.endArray();
+
+  // Scraper credentials live in their own [Scrapers] group with
+  // nested keys of the shape <provider>/<field>=<value> (QSettings'
+  // built-in key hierarchy handles the slash). Provider implementations
+  // read these via GeneralSettings::scraperCredentials; missing entries
+  // mean "not configured" and the provider should surface a friendly
+  // error rather than fall back to bundled credentials.
+  settings.scraperCredentials.clear();
+  s.beginGroup("Scrapers");
+  for (const QString &fullKey : s.allKeys()) {
+    const int slash = fullKey.indexOf('/');
+    if (slash <= 0 || slash >= fullKey.size() - 1) {
+      // Malformed key (no provider prefix or empty field name) — skip
+      // rather than poison the credential map.
+      continue;
+    }
+    const QString providerId = fullKey.left(slash);
+    const QString fieldName = fullKey.mid(slash + 1);
+    settings.scraperCredentials[providerId][fieldName] = s.value(fullKey).toString();
+  }
+  s.endGroup();
+
+  // Scraper performance + behavior options. Live in a sibling
+  // [ScraperOptions] group rather than under [Scrapers] so the
+  // credential key-walk above doesn't pick them up as malformed
+  // provider/field pairs.
+  s.beginGroup("ScraperOptions");
+  settings.scraperOptions.preset = static_cast<GeneralSettings::ScraperPreset>(
+      s.value("preset", static_cast<int>(GeneralSettings::ScraperPreset::Balanced)).toInt());
+  settings.scraperOptions.mediaMaxDimension =
+      qBound(0, s.value("mediaMaxDimension", 1024).toInt(), 8192);
+  settings.scraperOptions.mediaConcurrency = qBound(1, s.value("mediaConcurrency", 2).toInt(), 16);
+  settings.scraperOptions.mediaThrottleMs =
+      qBound(0, s.value("mediaThrottleMs", 100).toInt(), 5000);
+  settings.scraperOptions.batchItemConcurrency =
+      qBound(1, s.value("batchItemConcurrency", 4).toInt(), 16);
+  settings.scraperOptions.rescrapeMode = static_cast<GeneralSettings::ScraperRescrapeMode>(
+      s.value("rescrapeMode", static_cast<int>(GeneralSettings::ScraperRescrapeMode::FillMissing))
+          .toInt());
+  settings.scraperOptions.preferJpgOutput = s.value("preferJpgOutput", false).toBool();
+  settings.scraperOptions.scrapeAutoResume = s.value("scrapeAutoResume", false).toBool();
+  s.endGroup();
 
   settings.lastSelectedItems.clear();
   m_generalSettings = settings;
@@ -351,9 +404,32 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.attractModeAdvanceSelectionIntervalSec =
       settings.attractModeAdvanceSelectionIntervalSec;
   m_generalSettings.attractModeAdvanceSelectionRandom = settings.attractModeAdvanceSelectionRandom;
+  // Marquee secondary-monitor display
+  m_generalSettings.marqueeEnabled = settings.marqueeEnabled;
+  m_generalSettings.marqueeScreenName = settings.marqueeScreenName;
+  m_generalSettings.marqueeMode = settings.marqueeMode;
 
   // Runtime detection
   m_generalSettings.runtimeDetectionEnabled = settings.runtimeDetectionEnabled;
+  // First-run wizard
+  m_generalSettings.firstRunComplete = settings.firstRunComplete;
+  // Scraper credentials (per-provider key/value blob; written to
+  // [Scrapers] in the INI by saveGeneralSettings below)
+  m_generalSettings.scraperCredentials = settings.scraperCredentials;
+  // Scraper performance + behavior options (clamped to defensive ranges
+  // so an INI tampered with by hand can't crater the runtime).
+  m_generalSettings.scraperOptions.preset = settings.scraperOptions.preset;
+  m_generalSettings.scraperOptions.mediaMaxDimension =
+      qBound(0, settings.scraperOptions.mediaMaxDimension, 8192);
+  m_generalSettings.scraperOptions.mediaConcurrency =
+      qBound(1, settings.scraperOptions.mediaConcurrency, 16);
+  m_generalSettings.scraperOptions.mediaThrottleMs =
+      qBound(0, settings.scraperOptions.mediaThrottleMs, 5000);
+  m_generalSettings.scraperOptions.batchItemConcurrency =
+      qBound(1, settings.scraperOptions.batchItemConcurrency, 16);
+  m_generalSettings.scraperOptions.rescrapeMode = settings.scraperOptions.rescrapeMode;
+  m_generalSettings.scraperOptions.preferJpgOutput = settings.scraperOptions.preferJpgOutput;
+  m_generalSettings.scraperOptions.scrapeAutoResume = settings.scraperOptions.scrapeAutoResume;
   // Launch history
   m_generalSettings.historyEnabled = settings.historyEnabled;
   m_generalSettings.historyMaxEntries = qBound(10, settings.historyMaxEntries, 50000);
@@ -455,6 +531,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("attractModeEnabled", m_generalSettings.attractModeEnabled);
   s.setValue("attractModeIdleTimeoutSec", m_generalSettings.attractModeIdleTimeoutSec);
   s.setValue("runtimeDetectionEnabled", m_generalSettings.runtimeDetectionEnabled);
+  s.setValue("firstRunComplete", m_generalSettings.firstRunComplete);
   s.setValue("historyEnabled", m_generalSettings.historyEnabled);
   s.setValue("historyMaxEntries", m_generalSettings.historyMaxEntries);
   s.setValue("attractModeAutoScrollEnabled", m_generalSettings.attractModeAutoScrollEnabled);
@@ -465,6 +542,10 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
              m_generalSettings.attractModeAdvanceSelectionIntervalSec);
   s.setValue("attractModeAdvanceSelectionRandom",
              m_generalSettings.attractModeAdvanceSelectionRandom);
+  // Marquee secondary-monitor display
+  s.setValue("marqueeEnabled", m_generalSettings.marqueeEnabled);
+  s.setValue("marqueeScreenName", m_generalSettings.marqueeScreenName);
+  s.setValue("marqueeMode", m_generalSettings.marqueeMode);
   s.setValue("bootSplashEnabled", m_generalSettings.bootSplashEnabled);
   s.setValue("resumeFocusSplashEnabled", m_generalSettings.resumeFocusSplashEnabled);
   s.setValue("bootSplashTitle", m_generalSettings.bootSplashTitle);
@@ -509,6 +590,41 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
     s.setValue("launchParameters", preset.launchParameters);
   }
   s.endArray();
+
+  // Persist scraper credentials. Wipe the entire [Scrapers] group
+  // first so removing a credential field via the UI actually clears
+  // the row from disk (otherwise the next load would resurrect it).
+  s.remove(QStringLiteral("Scrapers"));
+  s.beginGroup("Scrapers");
+  for (auto pIt = m_generalSettings.scraperCredentials.constBegin();
+       pIt != m_generalSettings.scraperCredentials.constEnd(); ++pIt) {
+    const QString &providerId = pIt.key();
+    if (providerId.trimmed().isEmpty()) continue;
+    for (auto fIt = pIt.value().constBegin(); fIt != pIt.value().constEnd(); ++fIt) {
+      const QString &field = fIt.key();
+      if (field.trimmed().isEmpty()) continue;
+      // Skip empty values so a fully-cleared field doesn't write an
+      // empty row that survives a round-trip.
+      if (fIt.value().isEmpty()) continue;
+      s.setValue(providerId + QLatin1Char('/') + field, fIt.value());
+    }
+  }
+  s.endGroup();
+
+  // Scraper performance + behavior options. Wipe the group first so
+  // a "Reset to defaults" round-trip doesn't leave stale custom keys.
+  s.remove(QStringLiteral("ScraperOptions"));
+  s.beginGroup("ScraperOptions");
+  s.setValue("preset", static_cast<int>(m_generalSettings.scraperOptions.preset));
+  s.setValue("mediaMaxDimension", m_generalSettings.scraperOptions.mediaMaxDimension);
+  s.setValue("mediaConcurrency", m_generalSettings.scraperOptions.mediaConcurrency);
+  s.setValue("mediaThrottleMs", m_generalSettings.scraperOptions.mediaThrottleMs);
+  s.setValue("batchItemConcurrency", m_generalSettings.scraperOptions.batchItemConcurrency);
+  s.setValue("rescrapeMode", static_cast<int>(m_generalSettings.scraperOptions.rescrapeMode));
+  s.setValue("preferJpgOutput", m_generalSettings.scraperOptions.preferJpgOutput);
+  s.setValue("scrapeAutoResume", m_generalSettings.scraperOptions.scrapeAutoResume);
+  s.endGroup();
+
   s.sync();
 
   if (s.status() != QSettings::NoError) {

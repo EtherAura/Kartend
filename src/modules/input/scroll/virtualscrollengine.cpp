@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <QApplication>
+#include <QElapsedTimer>
 #include <QPointer>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -76,7 +77,21 @@ void VirtualScrollEngine::updateVirtualView() {
     return;
   }
 
+  // Perf trace — fires once per QPropertyAnimation::valueChanged step
+  // during smooth scroll (~60fps), so cumulative cost matters here even
+  // when each call is cheap. Drives the diagnosis for vertical-grid
+  // animation jerkiness reported during Kartend-jxp5 follow-up.
+  const bool perfTrace = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE");
+  QElapsedTimer perfWall;
+  qint64 perfCalcMs = 0, perfEnsureMs = 0, perfRemoveMs = 0, perfArtMs = 0;
+  if (perfTrace) {
+    perfWall.start();
+  }
+
+  QElapsedTimer perfCalcTimer;
+  if (perfTrace) perfCalcTimer.start();
   QSet<int> needed = calculateNeededIndices();
+  if (perfTrace) perfCalcMs = perfCalcTimer.elapsed();
 
   if (needed.isEmpty()) {
     if (m_owner->m_emptyViewDebugBudget > 0) {
@@ -89,9 +104,12 @@ void VirtualScrollEngine::updateVirtualView() {
     return;
   }
 
+  QElapsedTimer perfEnsureTimer;
+  if (perfTrace) perfEnsureTimer.start();
   for (int visualIndex : needed) {
     ensureWidgetForIndex(visualIndex);
   }
+  if (perfTrace) perfEnsureMs = perfEnsureTimer.elapsed();
 
   if (m_owner->m_activeWidgets.isEmpty() && m_owner->m_emptyViewDebugBudget > 0) {
     --m_owner->m_emptyViewDebugBudget;
@@ -104,14 +122,52 @@ void VirtualScrollEngine::updateVirtualView() {
              << "scrollArea=" << static_cast<bool>(m_owner->m_mediaScrollArea) << ")");
   }
 
-  removeUnneededWidgets(needed);
-  updateArtworkIfAllowed();
+  {
+    QElapsedTimer t;
+    if (perfTrace) t.start();
+    removeUnneededWidgets(needed);
+    if (perfTrace) perfRemoveMs = t.elapsed();
+  }
+  {
+    QElapsedTimer t;
+    if (perfTrace) t.start();
+    updateArtworkIfAllowed();
+    if (perfTrace) perfArtMs = t.elapsed();
+  }
 
   if (m_owner->m_overlayManager) {
     if (m_owner->m_overlayManager->isForceVisible() && m_owner->m_selectionState->hasSelection()) {
       m_owner->refreshSelectionOverlayState();
     }
     m_owner->m_overlayManager->raise();
+  }
+
+  if (perfTrace) {
+    // Log every call (no >Nms filter) — we need to count frequency, not just
+    // tail values. Round-13 trace produced only 5 lines here vs 49 artwork
+    // batches; need to confirm whether updateVirtualView really runs 5x or
+    // we're filtering out many sub-2ms calls.
+    const qint64 total = perfWall.elapsed();
+    // Inter-call interval — diagnoses Qt animation timer drift on Wayland
+    // (Kartend-9q8d round 4). If updateVirtualView fires from
+    // QPropertyAnimation::valueChanged at vsync intervals (~16.67ms on
+    // 60Hz), drift will show up here as variance — values jumping 12 / 18 /
+    // 14 / 21 ms instead of a clean ~16ms cadence. Even cadence + still
+    // jerky == paint pipeline; uneven cadence == animation timer drift.
+    static thread_local QElapsedTimer s_interval;
+    static thread_local bool s_intervalStarted = false;
+    qint64 intervalMs = -1;
+    if (s_intervalStarted) {
+      intervalMs = s_interval.elapsed();
+    } else {
+      s_intervalStarted = true;
+    }
+    s_interval.restart();
+    qCDebug(lcPerfTrace).nospace()
+        << "VirtualScrollEngine::updateVirtualView: total=" << total << " interval=" << intervalMs
+        << " (calc=" << perfCalcMs << " ensure=" << perfEnsureMs << " remove=" << perfRemoveMs
+        << " art=" << perfArtMs << ") needed=" << needed.size()
+        << " active=" << m_owner->m_activeWidgets.size();
   }
 }
 
@@ -162,7 +218,18 @@ void VirtualScrollEngine::updateArtworkIfAllowed() {
     const bool suppressArtwork = state && state->artwork().suppressArtwork;
     const bool allowDuringSelection = state && state->artwork().allowDuringSelection;
     if (!suppressArtwork || allowDuringSelection) {
-      art->updateViewportArtwork();
+      // Route through the debounced TimerCoordinator (100ms) instead of
+      // calling updateViewportArtwork() directly (Kartend-9q8d). This is
+      // called from updateVirtualView, which fires on every animation
+      // step (~60Hz during a smooth scroll) — the previous direct call
+      // accumulated to 312ms of GUI-thread time per scroll session, with
+      // 4 outlier frames at 45-65ms each that the user perceived as
+      // jerkiness. Coalescing multiple per-frame triggers into one
+      // trailing-edge update flattens those spikes. Trade-off: during
+      // continuous scroll (longer than the debounce window) art doesn't
+      // load until the user stops; that's the same UX as the existing
+      // async load (which was already 'popping in' after worker decode).
+      art->scheduleViewportUpdate();
     }
   }
 }

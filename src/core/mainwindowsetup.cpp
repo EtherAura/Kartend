@@ -19,6 +19,7 @@
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "detailspane.h"
+#include "firstrunwizard.h"
 #include "gridwidthdebouncer.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
@@ -29,6 +30,7 @@
 #include "navigationmanager.h"
 #include "playlistmanager.h"
 #include "propertyutils.h"
+#include "scrapercredentialsdialog.h"
 #include "scrollmanager.h"
 #include "toolbarcontroller.h"
 
@@ -50,6 +52,15 @@
 
 #include <QLoggingCategory>
 Q_DECLARE_LOGGING_CATEGORY(lcMainWindow)
+
+namespace {
+// Trailing-edge debounce window for marquee-artwork refreshes triggered by
+// selection storms (wheel / arrow-key holds). Matches the sidebar metadata
+// debounce by intent, not by reference — same cost profile (path expand +
+// FS video probe + QPixmap disk load), tuned to the same wheel-tick cadence.
+// Kept local so a future tweak to either subsystem stays scoped.
+constexpr int kMarqueeArtworkDebounceMs = 60;
+} // namespace
 
 void MainWindow::setupUI() {
   setAcceptDrops(true);
@@ -132,6 +143,19 @@ void MainWindow::setupUI() {
         });
   }
 
+  // Coalesce marquee-artwork refreshes during selection storms. Trailing
+  // edge — single clicks still feel instant. No-op for marquee-disabled users:
+  // updateMarqueeArtwork's early return makes the debounced fire free.
+  if (!m_marqueeDebouncer) {
+    m_marqueeDebouncer = new TimerUtils::DebouncedTimer(kMarqueeArtworkDebounceMs, this);
+    connect(m_marqueeDebouncer, &TimerUtils::DebouncedTimer::triggered, this, [this]() {
+      if (m_isShuttingDown || QApplication::closingDown()) {
+        return;
+      }
+      updateMarqueeArtwork();
+    });
+  }
+
   initializeAppContext();
   createMenuBar();
   setupSidebar();
@@ -142,6 +166,10 @@ void MainWindow::setupUI() {
   // apply persisted toolbar visibility/text overrides to the
   // freshly-constructed toolbar widgets before any layout settles.
   applyToolbarCustomization();
+  // open the secondary-monitor marquee window if the user enabled it.
+  // Goes through the same code path as a settings-save reapply so the
+  // startup and after-save behaviours stay in lockstep.
+  applyMarqueeSettings();
   // bind Ctrl+= / Ctrl+- / Ctrl+0 after managers are wired so
   // applyTextZoom() can refresh the scroll/sidebar pipeline on press.
   setupTextZoomShortcuts();
@@ -332,6 +360,12 @@ void MainWindow::createMenuBar() {
   ctx.onExportKart = [this]() {
     if (auto *km = getKartManager()) km->exportCollectionInteractive(currentCollectionIndex);
   };
+  ctx.onShowFirstRunWizard = [this]() { showFirstRunWizard(); };
+  ctx.onShowScraperCredentials = [this]() {
+    ScraperCredentialsDialog dialog(&m_generalSettings, getSettingsManager(), this);
+    dialog.exec();
+  };
+  ctx.onRunBatchScrape = [this]() { openScraperDialog(); };
 
   m_menuController->setContext(ctx);
   m_menuController->setupMenuBar();
@@ -355,8 +389,8 @@ void MainWindow::adjustGridWidth(int delta) {
 
   int newWidth = activeField + delta;
 
-  // Clamp to valid range
-  newWidth = qBound(UIConstants::Grid::MIN_WIDTH, newWidth, UIConstants::Grid::MAX_WIDTH);
+  // Floor only — no upper cap (4K/8K layouts go past the old 40 limit).
+  newWidth = qMax(UIConstants::Grid::MIN_WIDTH, newWidth);
 
   if (newWidth == activeField) {
     return; // No change needed
@@ -467,6 +501,36 @@ void MainWindow::showAbout() {
   msgBox.setStandardButtons(QMessageBox::Ok);
   msgBox.resize(UIConstants::Dialog::ABOUT_WIDTH, UIConstants::Dialog::ABOUT_HEIGHT);
   msgBox.exec();
+}
+
+void MainWindow::showFirstRunWizard() {
+  FirstRunWizard wizard(this);
+  wizard.exec();
+  const auto result = wizard.result();
+
+  if (result.accepted && !result.pickedConfig.mediaDirectory.isEmpty()) {
+    // Mirrors the post-add sequence in setupInitialTimersEmptyCollections:
+    // append → save → rebuild hierarchy → navigate. Skipping any of these
+    // would leave the freshly-created collection invisible until the next
+    // restart.
+    m_collections.append(result.pickedConfig);
+    if (getSettingsManager()) {
+      getSettingsManager()->saveCollections(m_collections);
+    }
+    rebuildHierarchyCache();
+    if (getNavigationManager()) {
+      currentCollectionIndex = m_collections.size() - 1;
+      getNavigationManager()->showCollectionItems(currentCollectionIndex);
+    }
+  }
+
+  // Always flip firstRunComplete — even when the user skipped without
+  // picking a folder. They saw the wizard; auto-launching it again would
+  // be obnoxious. Re-running stays available via Help → Setup Wizard…
+  m_generalSettings.firstRunComplete = true;
+  if (getSettingsManager()) {
+    getSettingsManager()->saveGeneralSettings(m_generalSettings);
+  }
 }
 
 void MainWindow::setupArtworkManager() {

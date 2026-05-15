@@ -239,11 +239,11 @@ need to compile out the relevant SQL (no runtime toggle today).
 
 ## For developers
 
-- Stores: [src/modules/database/](../../src/modules/database/)
+- Stores: [src/utils/db/](../../src/utils/db/)
   (`HistoryStore`, `UsageStatsStore`).
 - Statistics dialog: [src/ui/dialogs/statisticsdialog.h](../../src/ui/dialogs/).
 - Schema: see the migrations in
-  [src/modules/database/dbmigrations.cpp](../../src/modules/database/).
+  [src/utils/db/dbmigrations.cpp](../../src/utils/db/dbmigrations.cpp).
   `items` (with `play_count`, `last_played`), `launch_history`
   (`timestamp`, `collection_uuid`, `source_path`, `duration_seconds`).
 - Launch hook: `LaunchManager` calls `UsageStatsStore::recordLaunch()`

@@ -7,6 +7,7 @@
 **Collection &amp; Artwork Frontend for KDE**
 
 [![CI](https://github.com/EtherAura/Kartend/actions/workflows/build.yml/badge.svg)](https://github.com/EtherAura/Kartend/actions/workflows/build.yml)
+[![Coverage](https://github.com/EtherAura/Kartend/actions/workflows/coverage.yml/badge.svg)](https://github.com/EtherAura/Kartend/actions/workflows/coverage.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/EtherAura/Kartend?include_prereleases)](https://github.com/EtherAura/Kartend/releases)
 

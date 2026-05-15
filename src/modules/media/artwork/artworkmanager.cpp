@@ -591,17 +591,57 @@ void ArtworkManager::collectUncachedAndApplyCached(const QList<ArtworkInfo> &ite
 // Applies decoded artwork results to UI widgets on the GUI thread (run from
 // the dispatcher's main-thread completion handler).
 void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchResults) {
+  // Per-batch GUI-thread cost — runs on the dispatcher's main-thread
+  // callback. Suspect for vertical-grid scroll jerkiness (Kartend-9q8d):
+  // multiple batches can complete in quick succession, each iterating its
+  // results to do QPixmap::fromImage + setArtworkPixmap + update().
+  // Cumulative GUI-thread time across N batches in a single frame is what
+  // the user perceives as a hitch.
+  //
+  // Round 7 (Kartend-9q8d): isArtworkSuppressed() already short-circuits
+  // updateViewportArtwork from dispatching new batches during scroll, but
+  // batches dispatched BEFORE the scroll started will still complete async
+  // on the worker pool and call back here mid-scroll. Each callback does
+  // setArtworkPixmap + update() per item — cheap individually but a steady
+  // trickle of micro-paints during a wheel storm. Re-queue the results into
+  // m_widgetRegistry's pending list so the next post-scroll
+  // updateViewportArtwork picks them up instead, eliminating the trickle.
+  if (isArtworkSuppressed()) {
+    QList<ArtworkInfo> requeued;
+    requeued.reserve(batchResults.size());
+    for (const auto &r : batchResults) {
+      if (r.widget.isNull()) continue;
+      ArtworkInfo info;
+      info.mediaItem = r.widget;
+      info.artworkPath = r.artworkPath;
+      requeued.append(info);
+    }
+    if (!requeued.isEmpty()) {
+      QList<ArtworkInfo> existing = m_widgetRegistry->takePending();
+      existing.append(requeued);
+      m_widgetRegistry->setPending(std::move(existing));
+    }
+    return;
+  }
+  QElapsedTimer perfTimer;
+  const bool perfTrace = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE");
+  if (perfTrace) perfTimer.start();
+  int applied = 0;
+  int skipped = 0;
   for (const auto &result : batchResults) {
     if (result.widget.isNull() || result.image.isNull()) {
+      ++skipped;
       continue;
     }
     QPixmap pixmap = QPixmap::fromImage(result.image);
     if (pixmap.isNull()) {
+      ++skipped;
       continue;
     }
     pixmap.setDevicePixelRatio(result.image.devicePixelRatio());
     ItemWidget *const widget = result.widget.data();
     if (!widget) {
+      ++skipped;
       continue;
     }
 
@@ -614,15 +654,18 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
     } else {
       const QString widgetFilePath = widget->getFilePath();
       if (widgetFilePath.isEmpty()) {
+        ++skipped;
         continue;
       }
       widgetBaseName = QFileInfo(widgetFilePath).completeBaseName();
     }
     if (widgetBaseName.isEmpty()) {
+      ++skipped;
       continue;
     }
     const QString artworkBaseName = QFileInfo(result.artworkPath).completeBaseName();
     if (widgetBaseName != artworkBaseName) {
+      ++skipped;
       continue;
     }
 
@@ -638,7 +681,15 @@ void ArtworkManager::applyResultsToUi(const QList<ArtworkInfo::Result> &batchRes
     if (!QApplication::closingDown()) {
       widget->setArtworkPixmap(pixmap);
       widget->update();
+      ++applied;
+    } else {
+      ++skipped;
     }
+  }
+  if (perfTrace) {
+    qCDebug(lcPerfTrace).nospace()
+        << "applyResultsToUi: totalMs=" << perfTimer.elapsed() << " applied=" << applied
+        << " skipped=" << skipped << " size=" << batchResults.size();
   }
 }
 

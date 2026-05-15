@@ -4,6 +4,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   detailpageoverlay.cpp
   headerlogooverlay.cpp
   loadingoverlay.cpp
+  marqueewindow.cpp
   nowplayingoverlay.cpp
   splashoverlay.cpp
   startupvideooverlay.cpp
@@ -14,6 +15,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   detailpageoverlay.h
   headerlogooverlay.h
   loadingoverlay.h
+  marqueewindow.h
   nowplayingoverlay.h
   splashoverlay.h
   startupvideooverlay.h

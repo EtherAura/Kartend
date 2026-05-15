@@ -1,0 +1,8 @@
+# CODEOWNERS — GitHub auto-requests reviews from listed owners when matching
+# paths change in a pull request. See:
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Catch-all: every change requests review from @EtherAura. Add more specific
+# rules below if/when sub-maintainers take ownership of particular areas.
+
+*       @EtherAura

@@ -64,13 +64,24 @@
 //
 //   QScrollBar (item area V/H) → NavigationManager
 //     valueChanged              → onViewportChanged
+#include <limits>
+
 #include <QAction>
 #include <QApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QGuiApplication>
+#include <QPixmap>
+#include <QScreen>
 #include <QScrollBar>
 #include <QTimer>
 #include <QToolButton>
 
+#include <QMessageBox>
+
 #include "artworkmanager.h"
+#include "artworkutils.h"
+#include "batchscraperunner.h"
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "detailspanemanager.h"
@@ -78,13 +89,19 @@
 #include "itemwidget.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
+#include "marqueewindow.h"
+#include "metadatalookupprovider.h"
+#include "metadataproviderregistry.h"
 #include "navigationmanager.h"
+#include "pathutils.h"
+#include "scraperesultdialog.h"
 #include "scrollmanager.h"
 #include "settingsmanager.h"
 #include "timerutils.h"
 #include "toolbarcontroller.h"
 #include "ui_mainwindow.h"
 #include "uiconstants.h"
+#include "videoutils.h"
 
 // =====================================================================
 // Slot handlers — extracted from inline lambdas. Each handler captures
@@ -345,7 +362,361 @@ void MainWindow::onInteractionSelectionChanged(int /*index*/) {
   // on direct selection moves.
   if (!QApplication::closingDown()) {
     updateItemPositionLabel();
+    // Push the new selection's artwork to the marquee through the debouncer
+    // so a wheel/arrow storm coalesces into a single trailing-edge refresh
+    // — the per-tick cost (path expand + FS video probe + image-mode disk
+    // load) is the same the sidebar used to pay before its own debounce.
+    // Fallback to direct call if setup hasn't wired the debouncer yet
+    // (rare: very early teardown / tests).
+    if (m_marqueeDebouncer) {
+      m_marqueeDebouncer->trigger();
+    } else {
+      updateMarqueeArtwork();
+    }
   }
+}
+
+namespace {
+
+/// Resolve a configured marquee screen name to a live QScreen pointer.
+/// Empty / missing names return the primary screen so a never-configured
+/// (or unplugged-since-config) target still works.
+QScreen *resolveMarqueeScreen(const QString &screenName) {
+  if (!screenName.isEmpty()) {
+    for (QScreen *s : QGuiApplication::screens()) {
+      if (s->name() == screenName) return s;
+    }
+    qWarning("Marquee: configured screen '%s' not found — falling back to primary",
+             qPrintable(screenName));
+  }
+  return QGuiApplication::primaryScreen();
+}
+
+} // namespace
+
+void MainWindow::applyMarqueeSettings() {
+  if (QApplication::closingDown()) return;
+  if (!m_generalSettings.marqueeEnabled) {
+    // Disable path: tear the window down so the user reclaims the
+    // secondary monitor. The pointer is set to nullptr (rather than
+    // hide()) so the next enable starts from a clean state — handles
+    // the case where the user changed the target screen as part of
+    // the same Save action.
+    if (m_marqueeDebouncer) {
+      // Drop any in-flight selection-storm trigger so it can't fire after
+      // teardown and run updateMarqueeArtwork's no-op early return for
+      // nothing. Harmless either way; this just avoids the spurious wakeup.
+      m_marqueeDebouncer->cancel();
+    }
+    if (m_marqueeWindow) {
+      m_marqueeWindow->close();
+      m_marqueeWindow->deleteLater();
+      m_marqueeWindow = nullptr;
+    }
+    return;
+  }
+  QScreen *target = resolveMarqueeScreen(m_generalSettings.marqueeScreenName);
+  if (!m_marqueeWindow) {
+    m_marqueeWindow = new MarqueeWindow(target);
+  } else {
+    m_marqueeWindow->pinToScreen(target);
+  }
+  m_marqueeWindow->show();
+  // Settings save / first enable — push immediately, not through the
+  // debouncer, so the user sees the marquee populated as soon as they
+  // hit Save (no 60ms blank flash).
+  if (m_marqueeDebouncer) {
+    m_marqueeDebouncer->cancel();
+  }
+  updateMarqueeArtwork();
+}
+
+void MainWindow::updateMarqueeArtwork() {
+  if (!m_marqueeWindow || !m_generalSettings.marqueeEnabled) return;
+
+  // Mode 2 — video / attract loop. Source priority: per-item preview
+  // video (resolved like the details-pane preview) → collection's
+  // backgroundVideo. Empty path stops playback and clears the window.
+  if (m_generalSettings.marqueeMode == 2) {
+    if (!CollectionUtils::isValidIndex(currentCollectionIndex, &m_collections)) return;
+    QString videoPath;
+    if (auto *im = getInteractionManager()) {
+      const QString filePath = im->selectedFilePath();
+      if (!filePath.isEmpty()) {
+        const CollectionConfig &cfg = m_collections[currentCollectionIndex];
+        QString videoDir = PathUtils::validateAndExpandPath(cfg.videoDirectory, cfg.name);
+        if (!videoDir.isEmpty()) {
+          videoPath = VideoUtils::findVideoForFile(filePath, videoDir);
+        }
+        // Fall back to the artwork-tree's `video/` subdir, mirroring
+        // the details-pane preview lookup so a single-root collection
+        // still finds its videos.
+        if (videoPath.isEmpty()) {
+          const QString artDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
+          if (!artDir.isEmpty()) {
+            videoPath = VideoUtils::findVideoForFile(filePath, QDir(artDir).filePath("video"));
+          }
+        }
+      }
+    }
+    if (videoPath.isEmpty()) {
+      videoPath = m_collections[currentCollectionIndex].backgroundVideo;
+    }
+    m_marqueeWindow->setVideo(videoPath);
+    return;
+  }
+
+  QString artworkPath;
+  if (m_generalSettings.marqueeMode == 0) {
+    // Item Artwork mode — the cover of the currently-selected item.
+    if (!CollectionUtils::isValidIndex(currentCollectionIndex, &m_collections)) return;
+    auto *im = getInteractionManager();
+    if (!im) return;
+    const QString filePath = im->selectedFilePath();
+    if (filePath.isEmpty()) return;
+    const CollectionConfig &cfg = m_collections[currentCollectionIndex];
+    const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
+    artworkPath = ArtworkManager::findArtworkForFile(QFileInfo(filePath).fileName(), artworkDir);
+  } else {
+    // Collection Icon mode — the active collection's icon. Stable
+    // even as the user scrolls so the marquee acts as a banner.
+    if (!CollectionUtils::isValidIndex(currentCollectionIndex, &m_collections)) return;
+    artworkPath = m_collections[currentCollectionIndex].collectionIcon;
+  }
+
+  if (artworkPath.isEmpty()) {
+    m_marqueeWindow->setPixmap(
+        QPixmap()); // Clear to background; user sees the topper still exists.
+    return;
+  }
+  QPixmap pix(artworkPath);
+  m_marqueeWindow->setPixmap(pix);
+}
+
+void MainWindow::openScraperDialog(int preCollectionIndex, const QString &preItemPath) {
+  qInfo() << "[MainWindow] openScraperDialog called preCol=" << preCollectionIndex
+          << "preItem=" << preItemPath << "dialogExists=" << (m_scraperDialog != nullptr)
+          << "service=" << m_scraperService.get();
+  if (!getDatabaseManager()) {
+    QMessageBox::warning(this, tr("Scraper"), tr("Database is not ready."));
+    return;
+  }
+
+  // Single reused dialog instance. The dialog's closeEvent override
+  // hides instead of destroying when Unified mode is active, so we
+  // keep the widget tree across opens. First call constructs;
+  // subsequent calls just rebind context + raise.
+  if (!m_scraperDialog) {
+    m_scraperDialog = new ScrapeResultDialog(/*provider=*/nullptr, /*candidates=*/{}, this);
+    m_scraperDialog->setWindowFlag(Qt::Window, true);
+    // Unified flow is non-modal — the user must be able to keep
+    // using the main window while a scrape runs in the background.
+    m_scraperDialog->setModal(false);
+  }
+  auto *dialog = m_scraperDialog;
+
+  ScrapeResultDialog::ScraperContext sctx;
+  sctx.collections = &m_collections;
+  sctx.databaseManager = getDatabaseManager();
+  sctx.generalSettings = &m_generalSettings;
+  // Provider builder: per-collection-index lookup that hands the
+  // dialog a fresh shared_ptr<MetadataLookupProvider>. Each call
+  // rebuilds the registry with the live accessor closures so SS
+  // sees current credentials + the right systemeid override.
+  sctx.providerBuilder = [this](int idx) -> std::shared_ptr<MetadataLookupProvider> {
+    if (!CollectionUtils::isValidIndex(idx, &m_collections)) return nullptr;
+    auto registry = MetadataProviderRegistry::builtIn(
+        [this]() -> const GeneralSettings * { return &m_generalSettings; },
+        [this, idx]() -> const CollectionConfig * {
+          if (!CollectionUtils::isValidIndex(idx, &m_collections)) return nullptr;
+          return &m_collections[idx];
+        });
+    const CollectionConfig &cfg = m_collections[idx];
+    const auto applicable = MetadataProviderRegistry::forCategory(registry, cfg.type);
+    std::shared_ptr<MetadataLookupProvider> provider;
+    for (auto &up : registry) {
+      if (!applicable.contains(up.get())) continue;
+      if (!up->capabilities().testFlag(MetadataProvider::Capability::MetadataLookup)) continue;
+      if (auto *typed = dynamic_cast<MetadataLookupProvider *>(up.get())) {
+        up.release();
+        provider.reset(typed);
+        break;
+      }
+    }
+    return provider;
+  };
+  // applyResult: post-Apply persistence hook for the unified
+  // interactive flow. Mirrors the existing single-item right-click
+  // path's Scraper::applyScrapedItem call so metadata + media writes
+  // hit disk identically.
+  sctx.applyResult = [this](int collectionIndex, const QString &filePath,
+                            const ScrapeResultDialog::Result &result) {
+    if (!CollectionUtils::isValidIndex(collectionIndex, &m_collections)) return;
+    if (!getDatabaseManager()) return;
+    const CollectionConfig &cfg = m_collections[collectionIndex];
+    const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+    const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+    const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
+    const QString baseName = QFileInfo(filePath).completeBaseName();
+    QList<Scraper::PendingMediaWrite> writes;
+    writes.reserve(result.downloads.size());
+    for (const auto &d : result.downloads) {
+      Scraper::PendingMediaWrite w;
+      w.asset = d.asset;
+      w.bytes = d.bytes;
+      writes.append(w);
+    }
+    const Scraper::RescrapeMode rescrapeMode =
+        static_cast<Scraper::RescrapeMode>(m_generalSettings.scraperOptions.rescrapeMode);
+    (void)Scraper::applyScrapedItem(getDatabaseManager(), uuid, filePath, artworkDir, baseName,
+                                    result.item, writes, rescrapeMode);
+  };
+  dialog->setScraperContext(sctx);
+  // Hand the long-lived service to the dialog. The service was
+  // constructed in MainWindow's ctor; we configure it here with the
+  // same builder so a resume on next launch can still build
+  // providers, then bind to the dialog. The dialog reads
+  // m_service->isActive() in startUnifiedScrape and lands directly
+  // in the Live view when there's already a run in progress.
+  Scraper::ScraperService::Context srvCtx;
+  srvCtx.databaseManager = getDatabaseManager();
+  srvCtx.generalSettings = &m_generalSettings;
+  srvCtx.collections = &m_collections;
+  srvCtx.providerBuilder = sctx.providerBuilder;
+  m_scraperService->setContext(srvCtx);
+  dialog->setScraperService(m_scraperService.get());
+
+  // Post-completion housekeeping: refresh the active grid + sidebar +
+  // artwork cache once the scrape ends, then surface a summary box.
+  // UniqueConnection prevents the lambda from being attached multiple
+  // times if the user opens the dialog repeatedly — without it, one
+  // scrape-finish would pop N message boxes.
+  static bool s_unifiedFinishedConnected = false;
+  if (!s_unifiedFinishedConnected) {
+    s_unifiedFinishedConnected = true;
+    QObject::connect(
+        dialog, &ScrapeResultDialog::unifiedScrapeFinished, this,
+        [this](int scraped, int skipped, int errors, const QStringList &firstFailures) {
+          if (getDetailsPaneManager() && getScrollManager() && getInteractionManager()) {
+            const int sel = getInteractionManager()->currentSelectedIndex();
+            if (sel >= 0) {
+              ItemWidget *widgetPtr = getScrollManager()->getActiveWidgets().value(sel, nullptr);
+              getDetailsPaneManager()->updateSidebarMetadata(widgetPtr);
+            }
+          }
+          ArtworkUtils::clearDirectoryCache();
+          if (getNavigationManager() &&
+              CollectionUtils::isValidIndex(currentCollectionIndex, &m_collections)) {
+            getNavigationManager()->safeReloadCollection(currentCollectionIndex);
+          }
+          QString text = tr("Scrape complete.\n\nScraped: %1\nSkipped: %2\nErrors: %3")
+                             .arg(scraped)
+                             .arg(skipped)
+                             .arg(errors);
+          if (!firstFailures.isEmpty()) {
+            text += QStringLiteral("\n\n") +
+                    tr("First failures:\n%1").arg(firstFailures.join(QChar('\n')));
+          }
+          QMessageBox::information(this, tr("Scraper"), text);
+        });
+  }
+
+  dialog->startUnifiedScrape(preCollectionIndex, preItemPath);
+  dialog->show();
+  dialog->raise();
+  dialog->activateWindow();
+}
+
+void MainWindow::promptResumePendingScrapeIfAny() {
+  if (!m_scraperService) return;
+  auto pending = m_scraperService->loadPendingState(/*consumeOnLoad=*/false);
+  if (!pending.isValid()) return;
+  // Wire the service context first so a resume (silent or accepted)
+  // can build providers + persist progress. Same context as
+  // openScraperDialog — kept in sync because both paths run on
+  // MainWindow's live closures.
+  Scraper::ScraperService::Context srvCtx;
+  srvCtx.databaseManager = getDatabaseManager();
+  srvCtx.generalSettings = &m_generalSettings;
+  srvCtx.collections = &m_collections;
+  srvCtx.providerBuilder = [this](int idx) -> std::shared_ptr<MetadataLookupProvider> {
+    if (!CollectionUtils::isValidIndex(idx, &m_collections)) return nullptr;
+    auto registry = MetadataProviderRegistry::builtIn(
+        [this]() -> const GeneralSettings * { return &m_generalSettings; },
+        [this, idx]() -> const CollectionConfig * {
+          if (!CollectionUtils::isValidIndex(idx, &m_collections)) return nullptr;
+          return &m_collections[idx];
+        });
+    const CollectionConfig &cfg = m_collections[idx];
+    const auto applicable = MetadataProviderRegistry::forCategory(registry, cfg.type);
+    std::shared_ptr<MetadataLookupProvider> provider;
+    for (auto &up : registry) {
+      if (!applicable.contains(up.get())) continue;
+      if (!up->capabilities().testFlag(MetadataProvider::Capability::MetadataLookup)) continue;
+      if (auto *typed = dynamic_cast<MetadataLookupProvider *>(up.get())) {
+        up.release();
+        provider.reset(typed);
+        break;
+      }
+    }
+    return provider;
+  };
+  m_scraperService->setContext(srvCtx);
+
+  // Auto-resume is gated by GeneralSettings::ScraperOptions::scrapeAutoResume
+  // (Kartend-1uvp). Off by default — first-time users see the modal Resume /
+  // Discard prompt below and learn the recovery path. Power users running
+  // unattended overnight batches flip it on so a crash + relaunch self-heals
+  // without a dialog blocking the resume.
+  const bool autoResume = m_generalSettings.scraperOptions.scrapeAutoResume;
+  if (autoResume) {
+    m_scraperService->loadPendingState(/*consumeOnLoad=*/true); // delete file
+    m_scraperService->resumeFromState(pending);
+    // Also pop the Scraper window so the user has the Live view +
+    // Close / Cancel buttons available without hunting for the menu.
+    openScraperDialog();
+    return;
+  }
+  const int remaining = pending.totalRemaining();
+  const QString started =
+      QDateTime::fromMSecsSinceEpoch(pending.startedAtUnixMs).toString(Qt::TextDate);
+  // Non-blocking prompt — using open() + buttonClicked instead of
+  // exec() keeps the event loop spinning so the collection grid can
+  // finish painting / loading while the user reads the prompt.
+  // exec() would freeze startup behind the modal, which on large
+  // scrape jobs is exactly when the user wants the grid visible
+  // first.
+  auto *box = new QMessageBox(this);
+  box->setAttribute(Qt::WA_DeleteOnClose);
+  box->setWindowTitle(tr("Resume scrape?"));
+  box->setIcon(QMessageBox::Question);
+  box->setText(tr("An interrupted scrape from %1 was found.").arg(started));
+  box->setInformativeText(tr("Scraped so far: %1\nSkipped: %2\nErrors: %3\n"
+                             "Remaining items: %4")
+                              .arg(pending.summarySoFar.scraped)
+                              .arg(pending.summarySoFar.skipped)
+                              .arg(pending.summarySoFar.errors)
+                              .arg(remaining));
+  auto *resumeBtn = box->addButton(tr("Resume"), QMessageBox::AcceptRole);
+  auto *discardBtn = box->addButton(tr("Discard"), QMessageBox::DestructiveRole);
+  box->addButton(tr("Keep for later"), QMessageBox::RejectRole);
+  box->setDefaultButton(resumeBtn);
+  // Capture pending by value — the state struct is cheap enough and
+  // we already paid for the parse. Avoids re-parsing the file in the
+  // Resume branch.
+  connect(box, &QMessageBox::buttonClicked, this,
+          [this, box, resumeBtn, discardBtn, pending](QAbstractButton *clicked) {
+            if (clicked == resumeBtn) {
+              m_scraperService->discardPendingState();
+              m_scraperService->resumeFromState(pending);
+              openScraperDialog();
+            } else if (clicked == discardBtn) {
+              m_scraperService->discardPendingState();
+            }
+            // "Keep for later" leaves the file in place — next launch re-prompts.
+            box->deleteLater();
+          });
+  box->open();
 }
 
 void MainWindow::onSidebarVisibilityChanged(bool visible) {

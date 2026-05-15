@@ -15,7 +15,8 @@ class QPushButton;
 
 /// Container widget for the collection-tree management UI at the top of the
 /// Collections tab. Hosts the add/remove/duplicate buttons, the settings-
-/// scope dropdown, the save-collection button, and the tree widget itself.
+/// scope dropdown, and the tree widget itself. The dialog-global save button
+/// lives in SettingsDialog's tab-widget corner so it stays put across tabs.
 /// The complex management slots (addCollection / removeCollection /
 /// duplicateCollection / onTreeContextMenuRequested / onTreeRearranged /
 /// propagateCollectionNameChange / populateLinkedAppearances) remain on
@@ -31,7 +32,6 @@ public:
   QPushButton *addCollectionButton() const;
   QPushButton *removeCollectionButton() const;
   QPushButton *duplicateCollectionButton() const;
-  QPushButton *saveCollectionButton() const;
   QComboBox *settingsScopeComboBox() const;
 
 private:

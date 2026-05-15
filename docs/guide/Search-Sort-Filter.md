@@ -290,17 +290,20 @@ For per-type filtering, file a feature request.
 
 ## For developers
 
-- Search: [src/modules/search/](../../src/modules/search/) (`SearchManager`)
+- Search: [src/modules/behavior/search/](../../src/modules/behavior/search/) (`SearchManager`)
   manages the search bar; FTS5 query layer is in
-  [src/modules/query/](../../src/modules/query/) (`QueryManager`).
-- Title pattern stripping: `TitleFilter` (per-collection,
-  [src/modules/filter/](../../src/modules/filter/)).
+  [src/modules/data/query/](../../src/modules/data/query/) (`QueryManager`).
+- Title pattern stripping: `TitleFilter`
+  ([src/utils/text/titlefilter.h](../../src/utils/text/titlefilter.h)),
+  per-collection.
 - Sort: applied in `QueryManager` at SQL level for `sortMode`.
-- Filter pipeline: `FilterManager` owns the active filter set;
-  `ScrollManager` consumes the filtered index list and maps visual
-  index ↔ source-item index for virtual scrolling.
+- Filter pipeline: `FilterManager`
+  ([src/modules/behavior/filter/](../../src/modules/behavior/filter/))
+  owns the active filter set; `ScrollManager` consumes the filtered
+  index list and maps visual index ↔ source-item index for virtual
+  scrolling.
 - Search modes are an enum (`SearchMode`) defined in
-  [src/utils/searchutils.h](../../src/utils/).
+  [src/utils/text/searchutils.h](../../src/utils/text/searchutils.h).
 - Adding a new filter (e.g. tag-based): add a predicate in
   `FilterManager`, wire UI in the toolbar Filter dropdown, persist a
   new `[General]` key in `GeneralSettings`.

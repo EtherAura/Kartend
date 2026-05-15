@@ -432,6 +432,50 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
                 origin, "idx_playlist_items_playlist");
 
     setUserVersion(db, 10);
+    mutableVersion = 10;
+  }
+
+  if (mutableVersion < 11) {
+    // v11: Smart playlists. is_smart=1 marks the row as filter-driven —
+    // its items are evaluated on each open from `smart_filter` (a JSON
+    // serialization of SmartFilter::Filter) rather than read from
+    // playlist_items. Existing rows default to 0 / '' so they remain
+    // static playlists with zero behaviour change. The SmartFilter JSON
+    // schema is owned by src/utils/db/smartfilter.{h,cpp}; bumping that
+    // schema does NOT require a new migration here as long as the
+    // smart_filter column stays TEXT.
+    ensureColumn(db, "playlists", "is_smart", "INTEGER NOT NULL DEFAULT 0", origin);
+    ensureColumn(db, "playlists", "smart_filter", "TEXT NOT NULL DEFAULT ''", origin);
+
+    setUserVersion(db, 11);
+    mutableVersion = 11;
+  }
+
+  if (mutableVersion < 12) {
+    // v12: items.date_added — unix epoch seconds stamped when a row is
+    // first inserted by the scanner. Drives the by-date-added smart
+    // playlist criterion. Existing rows default to 0; the evaluator
+    // treats 0 as "unknown date" and excludes the row from recency-
+    // window queries. We deliberately do NOT backfill from
+    // last_modified — that's the file's mtime (when the file was last
+    // touched on disk), not when the user added the item to their
+    // library. Backfilling from mtime would either lie about the date
+    // or, if everything's defaulted to upgrade-time, make every old
+    // item appear in "Added in last 30 days" right after upgrade. The
+    // 0-as-unknown sentinel is the honest answer; users see the
+    // recency window populate naturally as they add new items
+    // (re-scanning a known item preserves its date_added per the
+    // ON CONFLICT clause in commitStagedScanResults).
+    ensureColumn(db, "items", "date_added", "INTEGER NOT NULL DEFAULT 0", origin);
+
+    // Index keeps the by-date-added query (recency window scan) cheap
+    // even on libraries with tens of thousands of items.
+    ensureIndex(db,
+                "CREATE INDEX IF NOT EXISTS idx_items_date_added "
+                "ON items(date_added)",
+                origin, "idx_items_date_added");
+
+    setUserVersion(db, 12);
   }
 }
 

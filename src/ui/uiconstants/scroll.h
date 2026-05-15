@@ -17,6 +17,12 @@ inline constexpr qint64 ARTWORK_PREWARM_DEBOUNCE_MS = 200;
 /// degenerate layouts when the widget is briefly given a near-zero width
 /// during construction or splitter resizes.
 inline constexpr int MIN_EFFECTIVE_VIEWPORT_WIDTH = 200;
+/// Debounce window for per-item cover-flow resolution (preview video
+/// lookup + per-item artwork gallery). Mirrors the sidebar metadata
+/// debounce: a wheel sweep across the carousel coalesces into one
+/// resolution at the trailing edge instead of running DB + filesystem
+/// probes for every intermediate selection.
+inline constexpr int COVER_FLOW_RESOLVE_DEBOUNCE_MS = 60;
 } // namespace Scroll
 } // namespace UIConstants
 

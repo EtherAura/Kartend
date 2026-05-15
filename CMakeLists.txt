@@ -72,7 +72,7 @@ set(CMAKE_AUTOUIC_SEARCH_PATHS
 # Qt6 required. 6.4 is the floor: project uses QTimeZone::utc() which was
 # added in 6.4 (see kartend's usagestats module).
 set(KARTEND_MIN_QT_VERSION 6.4)
-set(QT_REQUIRED_COMPONENTS Core Gui Widgets Sql Concurrent Multimedia MultimediaWidgets)
+set(QT_REQUIRED_COMPONENTS Core Gui Widgets Sql Concurrent Multimedia MultimediaWidgets Network LinguistTools)
 find_package(Qt6 ${KARTEND_MIN_QT_VERSION} COMPONENTS ${QT_REQUIRED_COMPONENTS} REQUIRED)
 
 # Optional: Qt Gamepad support
@@ -191,8 +191,25 @@ target_link_libraries(${KARTEND_LIB_TARGET}
     Qt6::Concurrent
     Qt6::Multimedia
     Qt6::MultimediaWidgets
+    Qt6::Network
 )
 target_link_libraries(kartend PRIVATE ${KARTEND_LIB_TARGET})
+
+set(KARTEND_TRANSLATION_INSTALL_SUBDIR "${APP_NAME}/translations")
+set(KARTEND_TRANSLATION_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/translations")
+
+# Re-extract source strings via:
+#   cmake --build <build> --target update_translations
+qt_add_translations(kartend
+  SOURCE_TARGETS ${KARTEND_LIB_TARGET} kartend
+  TS_FILES translations/kartend_en.ts
+  QM_FILES_OUTPUT_VARIABLE KARTEND_TRANSLATION_QM_FILES
+  QM_OUTPUT_DIRECTORY "${KARTEND_TRANSLATION_BUILD_DIR}"
+)
+target_compile_definitions(kartend PRIVATE
+  APP_TRANSLATIONS_SUBDIR="${KARTEND_TRANSLATION_INSTALL_SUBDIR}"
+  APP_BUILD_TRANSLATIONS_DIR="${KARTEND_TRANSLATION_BUILD_DIR}"
+)
 
 if (Qt6Gamepad_FOUND)
   target_link_libraries(${KARTEND_LIB_TARGET} PUBLIC Qt6::Gamepad)
@@ -236,10 +253,12 @@ target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
   ${SRC_DIR}/modules/behavior/widgetpool
   ${SRC_DIR}/modules/data/cache
   ${SRC_DIR}/modules/data/database
+  ${SRC_DIR}/modules/data/dat
   ${SRC_DIR}/modules/data/kart
   ${SRC_DIR}/modules/data/playlist
   ${SRC_DIR}/modules/data/query
   ${SRC_DIR}/modules/data/restore
+  ${SRC_DIR}/modules/data/scraper
   ${SRC_DIR}/modules/data/session
   ${SRC_DIR}/modules/data/settings
   ${SRC_DIR}/modules/input/gamepad
@@ -413,6 +432,8 @@ if (UNIX AND NOT APPLE)
           RENAME ${KARTEND_APP_ID}.svg)
   install(FILES packaging/${KARTEND_APP_ID}.metainfo.xml
           DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/metainfo)
+  install(FILES ${KARTEND_TRANSLATION_QM_FILES}
+          DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/${KARTEND_TRANSLATION_INSTALL_SUBDIR})
 endif()
 
 # Uninstall: read install_manifest.txt and remove the listed files. Honors

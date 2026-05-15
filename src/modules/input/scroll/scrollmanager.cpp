@@ -198,6 +198,29 @@ ScrollManager::ScrollManager(QObject *parent) : QObject(parent) {
       m_widgetPool->prewarmAsync();
     }
   });
+
+  // Cover-flow resolve debouncer — coalesces per-tick DB + FS lookups
+  // during a wheel sweep across the carousel. The cheap parts of the
+  // selection update (overlay state, glide animation) still run
+  // synchronously in updateSelectionForIndex; only the per-item video
+  // + gallery resolution waits for the selection to settle.
+  m_coverFlowResolveDebouncer =
+      new TimerUtils::DebouncedTimer(UIConstants::Scroll::COVER_FLOW_RESOLVE_DEBOUNCE_MS, this);
+  connect(m_coverFlowResolveDebouncer, &TimerUtils::DebouncedTimer::triggered, this, [this]() {
+    if (m_pendingCoverFlowVisualIndex < 0) {
+      return;
+    }
+    const int idx = m_pendingCoverFlowVisualIndex;
+    m_pendingCoverFlowVisualIndex = -1;
+    // Re-gate on coverFlowActive() — the user may have switched view
+    // type during the debounce window. The resolve fns also guard, but
+    // bailing here avoids the redundant work.
+    if (!coverFlowActive() || !m_coverFlowWidget) {
+      return;
+    }
+    resolveAndPushCoverFlowVideo(idx);
+    resolveAndPushCoverFlowGallery(idx);
+  });
 }
 
 // Destructor disconnects scroll events, clears timers, deletes widgets and
@@ -581,6 +604,13 @@ void ScrollManager::showMediaPreview(const QString &filePath, const QString &art
                                      const QString &videoDir) {
   if (m_selectionDisplay) {
     m_selectionDisplay->showMediaPreview(filePath, artworkDir, videoDir);
+  }
+}
+
+void ScrollManager::setArtworkPreviewGallery(
+    const QList<ArtworkPreviewOverlay::GalleryEntry> &entries) {
+  if (m_selectionDisplay) {
+    m_selectionDisplay->setArtworkPreviewGallery(entries);
   }
 }
 

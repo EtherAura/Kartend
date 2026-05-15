@@ -90,6 +90,12 @@ void MenuController::setupMenuBar() {
   setupFullscreenAction();
   setupShortcutsAction();
   setupStatisticsAction();
+  setupFirstRunWizardAction();
+  // Scraper Credentials moved out of the Help menu; the editor now
+  // lives inline under Settings → Scrapers → Credentials. setup
+  // helper is kept (still wired through MenuControllerContext) but
+  // unregistered from the menu so the action object isn't shown.
+  setupBatchScrapeAction();
   setupGridWidthActions();
   setupActionOpenRandomItem();
   setupActionImportKart();
@@ -530,6 +536,68 @@ void MenuController::setupStatisticsAction() {
   }
   if (m_ctx.ui && m_ctx.ui->menuHelp) {
     m_ctx.ui->menuHelp->addAction(m_statisticsAction);
+  }
+}
+
+void MenuController::setupFirstRunWizardAction() {
+  // Same programmatic-action pattern as setupStatisticsAction. Lives in the
+  // Help menu next to Usage Statistics; the auto-launch on first run is
+  // wired separately in MainWindow::setupInitialTimers().
+  m_firstRunWizardAction = new QAction(tr("Setup Wizard…"), this);
+  if (!connectMenuAction(m_firstRunWizardAction, [this]() {
+        if (m_ctx.onShowFirstRunWizard) {
+          m_ctx.onShowFirstRunWizard();
+        }
+      })) {
+    return;
+  }
+  if (m_ctx.ui && m_ctx.ui->menuHelp) {
+    m_ctx.ui->menuHelp->addAction(m_firstRunWizardAction);
+  }
+}
+
+void MenuController::setupBatchScrapeAction() {
+  // Programmatic File-menu entry that opens the unified Scraper
+  // dialog (tree of collections + items, media-type checkboxes,
+  // auto/interactive toggle). Replaces the legacy "Batch Scrape
+  // Current Collection" Help-menu entry — the dialog now drives
+  // both individual and batch scrapes off one window.
+  m_batchScrapeAction = new QAction(tr("Scraper…"), this);
+  if (!connectMenuAction(m_batchScrapeAction, [this]() {
+        if (m_ctx.onRunBatchScrape) {
+          m_ctx.onRunBatchScrape();
+        }
+      })) {
+    return;
+  }
+  if (m_ctx.ui && m_ctx.ui->menuFile) {
+    // Tuck Scraper above Exit so the destructive action stays at the
+    // bottom. The File menu currently ends with separator + Exit; we
+    // insert before that final separator.
+    QAction *exitAction = m_ctx.ui->actionExit;
+    if (exitAction) {
+      m_ctx.ui->menuFile->insertAction(exitAction, m_batchScrapeAction);
+      m_ctx.ui->menuFile->insertSeparator(exitAction);
+    } else {
+      m_ctx.ui->menuFile->addAction(m_batchScrapeAction);
+    }
+  }
+}
+
+void MenuController::setupScraperCredentialsAction() {
+  // Help-menu entry that opens the per-provider credential editor.
+  // Sits next to Setup Wizard / Usage Statistics so configuration
+  // affordances stay grouped.
+  m_scraperCredentialsAction = new QAction(tr("Scraper Credentials…"), this);
+  if (!connectMenuAction(m_scraperCredentialsAction, [this]() {
+        if (m_ctx.onShowScraperCredentials) {
+          m_ctx.onShowScraperCredentials();
+        }
+      })) {
+    return;
+  }
+  if (m_ctx.ui && m_ctx.ui->menuHelp) {
+    m_ctx.ui->menuHelp->addAction(m_scraperCredentialsAction);
   }
 }
 

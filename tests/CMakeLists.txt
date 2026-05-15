@@ -160,6 +160,36 @@ target_link_libraries(test_videoutils
 )
 add_test(NAME VideoUtils COMMAND test_videoutils)
 
+# PlaceholderWarmer tests
+# Links Qt6::Gui so QPixmap (returned from the injected TileFactory) can be
+# constructed; QTEST_MAIN spins up QGuiApplication off the back of that.
+# Forces the offscreen platform via add_test PROPERTIES so the binary runs
+# headless on CI without an X/Wayland session.
+add_executable(test_placeholderwarmer
+  utils/test_placeholderwarmer.cpp
+  ${SRC_DIR}/utils/view/placeholderwarmer.cpp
+  ${SRC_DIR}/utils/view/artworkutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
+  ${SRC_DIR}/utils/app/loggingcategories.cpp
+)
+target_include_directories(test_placeholderwarmer PRIVATE
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui/uiconstants
+)
+target_link_libraries(test_placeholderwarmer
+  Qt6::Core
+  Qt6::Gui
+  Qt6::Concurrent
+  Qt6::Test
+)
+add_test(NAME PlaceholderWarmer COMMAND test_placeholderwarmer)
+set_tests_properties(PlaceholderWarmer PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
 # WidgetPoolManager tests
 add_executable(test_widgetpoolmanager
   modules/widgetpool/test_widgetpoolmanager.cpp
@@ -271,6 +301,7 @@ add_executable(test_playlistmanager
   modules/playlist/test_playlistmanager.cpp
   ${SRC_DIR}/modules/data/playlist/playlistmanager.cpp
   ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/db/smartfilter.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
 )
 target_include_directories(test_playlistmanager PRIVATE
@@ -329,6 +360,8 @@ add_executable(test_querymanager_cancel_scan
   ${SRC_DIR}/modules/data/query/querymanagerscanandsave.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/query/querymanagercache.cpp
+  ${SRC_DIR}/utils/db/smartfilter.cpp
+  ${SRC_DIR}/utils/db/smartplaylistevaluator.cpp
   ${SRC_DIR}/modules/data/query/querymanagerload.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetch.cpp
   ${SRC_DIR}/modules/data/query/queryhelpers.cpp
@@ -374,6 +407,8 @@ add_executable(test_querymanager_broken_symlinks
   ${SRC_DIR}/modules/data/query/querymanagerscanandsave.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/query/querymanagercache.cpp
+  ${SRC_DIR}/utils/db/smartfilter.cpp
+  ${SRC_DIR}/utils/db/smartplaylistevaluator.cpp
   ${SRC_DIR}/modules/data/query/querymanagerload.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetch.cpp
   ${SRC_DIR}/modules/data/query/queryhelpers.cpp
@@ -420,6 +455,8 @@ add_executable(test_querymanager_cross_collection_count
   ${SRC_DIR}/modules/data/query/querymanagerscanandsave.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/query/querymanagercache.cpp
+  ${SRC_DIR}/utils/db/smartfilter.cpp
+  ${SRC_DIR}/utils/db/smartplaylistevaluator.cpp
   ${SRC_DIR}/modules/data/query/querymanagerload.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetch.cpp
   ${SRC_DIR}/modules/data/query/queryhelpers.cpp
@@ -473,6 +510,8 @@ add_executable(test_databasemanager
   ${SRC_DIR}/modules/data/query/querymanagerscanandsave.cpp
   ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
   ${SRC_DIR}/modules/data/query/querymanagercache.cpp
+  ${SRC_DIR}/utils/db/smartfilter.cpp
+  ${SRC_DIR}/utils/db/smartplaylistevaluator.cpp
   ${SRC_DIR}/modules/data/query/querymanagerload.cpp
   ${SRC_DIR}/modules/data/query/querymanagerfetch.cpp
   ${SRC_DIR}/modules/data/query/queryhelpers.cpp
@@ -485,6 +524,7 @@ add_executable(test_databasemanager
   ${SRC_DIR}/utils/db/historystore.cpp
   ${SRC_DIR}/utils/db/itemartwork.cpp
   ${SRC_DIR}/utils/db/itemmetadata.cpp
+  ${SRC_DIR}/utils/db/itemmetadatacache.cpp
   ${SRC_DIR}/utils/app/loggingcategories.cpp
   ${SRC_DIR}/utils/db/usagestatsstore.cpp
 )
@@ -718,6 +758,25 @@ target_link_libraries(test_itemmetadata
 )
 add_test(NAME ItemMetadata COMMAND test_itemmetadata)
 
+# Per-item LRU cache (in-memory; no DB required)
+add_executable(test_itemmetadatacache
+  utils/test_itemmetadatacache.cpp
+  ${SRC_DIR}/utils/db/itemmetadatacache.cpp
+)
+target_include_directories(test_itemmetadatacache PRIVATE
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+)
+target_link_libraries(test_itemmetadatacache
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME ItemMetadataCache COMMAND test_itemmetadatacache)
+
 # ItemArtwork storage + standard-type resolution tests
 add_executable(test_itemartwork
   utils/test_itemartwork.cpp
@@ -739,6 +798,444 @@ target_link_libraries(test_itemartwork
   Qt6::Test
 )
 add_test(NAME ItemArtwork COMMAND test_itemartwork)
+
+# Scrape persistence tests
+# Compiles the SUT plus itemartwork.cpp (for isStandardType) and the
+# inline MockDatabaseManager from tests/integration/mocks. No DB / no
+# network — pure file IO + capturing-mock IDatabaseManager.
+add_executable(test_scrapepersistence
+  utils/test_scrapepersistence.cpp
+  ${SRC_DIR}/modules/data/scraper/scrapepersistence.cpp
+  ${SRC_DIR}/utils/db/itemartwork.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
+  # Q_OBJECT-bearing headers — AUTOMOC needs them in the source list to
+  # generate the metaobject vtables that the linker resolves below.
+  ${SRC_DIR}/modules/data/database/idatabasemanager.h
+  integration/mocks/mockdatabasemanager.h
+)
+target_include_directories(test_scrapepersistence PRIVATE
+  ${SRC_DIR}/modules/data/scraper
+  ${SRC_DIR}/modules/data/database
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui/uiconstants
+)
+target_link_libraries(test_scrapepersistence
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME ScrapePersistence COMMAND test_scrapepersistence)
+
+# Direct (worker-thread) scrape persistence tests
+# Exercises Scraper::saveScrapedMetadataDirect against a real :memory:
+# SQLite. This is the path BatchScrapeRunner's write worker runs on its
+# own thread (Kartend-gnkb); the IDatabaseManager-backed
+# saveScrapedMetadata is covered separately by test_scrapepersistence
+# above. Both share the private mergeScrapedIntoExisting helper, but the
+# direct path adds connection-validity guards and uses ItemMetadataStore /
+# ItemArtworkStore directly rather than via the cache-invalidating
+# IDatabaseManager facades.
+add_executable(test_scrapepersistence_direct
+  utils/test_scrapepersistence_direct.cpp
+  ${SRC_DIR}/modules/data/scraper/scrapepersistence.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/db/itemartwork.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
+  # Q_OBJECT-bearing header — scrapepersistence.cpp references
+  # IDatabaseManager's typeinfo, which only exists in the moc-generated
+  # metaobject TU. AUTOMOC needs the header in the source list to emit it.
+  ${SRC_DIR}/modules/data/database/idatabasemanager.h
+)
+target_include_directories(test_scrapepersistence_direct PRIVATE
+  ${SRC_DIR}/modules/data/scraper
+  ${SRC_DIR}/modules/data/database
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui/uiconstants
+)
+target_link_libraries(test_scrapepersistence_direct
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME ScrapePersistenceDirect COMMAND test_scrapepersistence_direct)
+
+# BatchScrapeRunner end-to-end integration with a real DatabaseManager
+# Confirms the gnkb wiring (ScrapeWriteWorker on a separate thread + its
+# own QSqlDatabase + IDatabaseManager::invalidateMetadataCacheItem hop
+# back to the main thread) actually invalidates the metadata cache after
+# a write. Without this assertion a regression in onWriteCompleted's
+# invalidate call would silently leave the sidebar showing pre-scrape
+# stale data and only surface as a user-reported bug. Source list
+# mirrors test_databasemanager (real DB stack) plus the scraper sources.
+add_executable(test_batchscraperunner_integration
+  utils/test_batchscraperunner_integration.cpp
+  utils/stubmetadataprovider.h
+  ${SRC_DIR}/modules/data/scraper/batchscraperunner.cpp
+  ${SRC_DIR}/modules/data/scraper/scrapepersistence.cpp
+  ${SRC_DIR}/modules/data/scraper/scrapewriteworker.cpp
+  ${SRC_DIR}/modules/data/database/cachedcountsservice.cpp
+  ${SRC_DIR}/modules/data/database/databasemanager.cpp
+  ${SRC_DIR}/modules/data/database/databaseschema.cpp
+  ${SRC_DIR}/modules/data/database/filemapcache.cpp
+  ${SRC_DIR}/modules/data/database/idatabasemanager.h
+  ${SRC_DIR}/utils/text/titlefilter.cpp
+  ${SRC_DIR}/modules/data/query/preparedstatementcache.cpp
+  ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
+  ${SRC_DIR}/modules/data/query/querymanager.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerpersist.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerscanandsave.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
+  ${SRC_DIR}/modules/data/query/querymanagercache.cpp
+  ${SRC_DIR}/utils/db/smartfilter.cpp
+  ${SRC_DIR}/utils/db/smartplaylistevaluator.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerload.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerfetch.cpp
+  ${SRC_DIR}/modules/data/query/queryhelpers.cpp
+  ${SRC_DIR}/modules/data/session/sessionmanager.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
+  ${SRC_DIR}/utils/db/historystore.cpp
+  ${SRC_DIR}/utils/db/itemartwork.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+  ${SRC_DIR}/utils/db/itemmetadatacache.cpp
+  ${SRC_DIR}/utils/app/loggingcategories.cpp
+  ${SRC_DIR}/utils/db/usagestatsstore.cpp
+)
+target_include_directories(test_batchscraperunner_integration PRIVATE
+  ${SRC_DIR}/modules/data/database
+  ${SRC_DIR}/modules/data/query
+  ${SRC_DIR}/modules/data/scraper
+  ${SRC_DIR}/modules/data/session
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui
+  ${SRC_DIR}/ui/uiconstants
+)
+target_link_libraries(test_batchscraperunner_integration
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Concurrent
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME BatchScrapeRunnerIntegration
+         COMMAND test_batchscraperunner_integration)
+
+# MusicBrainz parser tests
+add_executable(test_musicbrainzparser
+  utils/test_musicbrainzparser.cpp
+  ${SRC_DIR}/modules/data/scraper/musicbrainzparser.cpp
+)
+target_include_directories(test_musicbrainzparser PRIVATE
+  ${SRC_DIR}/modules/data/scraper
+  ${SRC_DIR}/utils/app
+)
+target_link_libraries(test_musicbrainzparser
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME MusicBrainzParser COMMAND test_musicbrainzparser)
+
+# ScreenScraper system cache tests (parser + on-disk round-trip)
+add_executable(test_screenscrapersystemcache
+  utils/test_screenscrapersystemcache.cpp
+  ${SRC_DIR}/modules/data/scraper/screenscrapersystemcache.cpp
+)
+target_include_directories(test_screenscrapersystemcache PRIVATE
+  ${SRC_DIR}/modules/data/scraper
+  ${SRC_DIR}/utils/app
+)
+target_link_libraries(test_screenscrapersystemcache
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME ScreenScraperSystemCache COMMAND test_screenscrapersystemcache)
+
+# ScreenScraper systems autodetect tests
+add_executable(test_screenscrapersystems
+  utils/test_screenscrapersystems.cpp
+  ${SRC_DIR}/modules/data/scraper/screenscrapersystems.cpp
+)
+target_include_directories(test_screenscrapersystems PRIVATE
+  ${SRC_DIR}/modules/data/scraper
+)
+target_link_libraries(test_screenscrapersystems
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME ScreenScraperSystems COMMAND test_screenscrapersystems)
+
+# ScreenScraper parser tests
+add_executable(test_screenscraperparser
+  utils/test_screenscraperparser.cpp
+  ${SRC_DIR}/modules/data/scraper/screenscraperparser.cpp
+)
+target_include_directories(test_screenscraperparser PRIVATE
+  ${SRC_DIR}/modules/data/scraper
+  ${SRC_DIR}/utils/app
+)
+target_link_libraries(test_screenscraperparser
+  Qt6::Core
+  Qt6::Gui
+  Qt6::Test
+)
+add_test(NAME ScreenScraperParser COMMAND test_screenscraperparser)
+
+# TMDB parser tests
+add_executable(test_tmdbparser
+  utils/test_tmdbparser.cpp
+  ${SRC_DIR}/modules/data/scraper/tmdbparser.cpp
+)
+target_include_directories(test_tmdbparser PRIVATE
+  ${SRC_DIR}/modules/data/scraper
+  ${SRC_DIR}/utils/app
+)
+target_link_libraries(test_tmdbparser
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME TmdbParser COMMAND test_tmdbparser)
+
+# Open Library parser tests
+add_executable(test_openlibraryparser
+  utils/test_openlibraryparser.cpp
+  ${SRC_DIR}/modules/data/scraper/openlibraryparser.cpp
+)
+target_include_directories(test_openlibraryparser PRIVATE
+  ${SRC_DIR}/modules/data/scraper
+  ${SRC_DIR}/utils/app
+)
+target_link_libraries(test_openlibraryparser
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME OpenLibraryParser COMMAND test_openlibraryparser)
+
+# MetadataProviderRegistry tests
+# Must compile the MusicBrainz provider too because the registry's
+# builtIn() instantiates one. Qt6::Network is needed because the
+# provider's ctor calls HttpClient::instance() (lazy singleton init,
+# no network traffic during the test) which #includes QNetworkAccessManager.
+add_executable(test_metadataproviderregistry
+  utils/test_metadataproviderregistry.cpp
+  ${SRC_DIR}/modules/data/scraper/httpclient.cpp
+  ${SRC_DIR}/modules/data/scraper/metadataproviderregistry.cpp
+  ${SRC_DIR}/modules/data/scraper/musicbrainzparser.cpp
+  ${SRC_DIR}/modules/data/scraper/musicbrainzprovider.cpp
+  ${SRC_DIR}/modules/data/scraper/openlibraryparser.cpp
+  ${SRC_DIR}/modules/data/scraper/openlibraryprovider.cpp
+  ${SRC_DIR}/modules/data/scraper/screenscrapermediatypecache.cpp
+  ${SRC_DIR}/modules/data/scraper/screenscraperparser.cpp
+  ${SRC_DIR}/modules/data/scraper/screenscraperprovider.cpp
+  ${SRC_DIR}/modules/data/scraper/screenscrapersystemcache.cpp
+  ${SRC_DIR}/modules/data/scraper/screenscrapersystems.cpp
+  ${SRC_DIR}/modules/data/scraper/tmdbparser.cpp
+  ${SRC_DIR}/modules/data/scraper/tmdbprovider.cpp
+  ${SRC_DIR}/modules/data/scraper/websearchprovider.cpp
+  ${SRC_DIR}/modules/data/scraper/bundledcredentials.cpp
+  ${SRC_DIR}/utils/fs/romhasher.cpp
+  ${SRC_DIR}/modules/data/dat/datlookup.cpp
+  ${SRC_DIR}/modules/data/dat/datcache.cpp
+)
+target_include_directories(test_metadataproviderregistry PRIVATE
+  ${SRC_DIR}/modules/data/scraper
+  ${SRC_DIR}/modules/data/dat
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/fs
+)
+target_compile_definitions(test_metadataproviderregistry PRIVATE
+  APP_VERSION="${PROJECT_VERSION}"
+)
+target_link_libraries(test_metadataproviderregistry
+  Qt6::Core
+  Qt6::Gui
+  Qt6::Network
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME MetadataProviderRegistry COMMAND test_metadataproviderregistry)
+
+# LauncherProbe tests
+add_executable(test_launcherprobe
+  utils/test_launcherprobe.cpp
+  ${SRC_DIR}/utils/fs/launcherprobe.cpp
+)
+target_include_directories(test_launcherprobe PRIVATE
+  ${SRC_DIR}/utils/fs
+)
+target_link_libraries(test_launcherprobe
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME LauncherProbe COMMAND test_launcherprobe)
+
+# DatLookup tests (Logiqx + MAME listxml DAT parsers + indexed store)
+add_executable(test_datlookup
+  utils/test_datlookup.cpp
+  ${SRC_DIR}/modules/data/dat/datlookup.cpp
+)
+target_include_directories(test_datlookup PRIVATE
+  ${SRC_DIR}/modules/data/dat
+  ${SRC_DIR}/utils/app
+)
+target_link_libraries(test_datlookup
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME DatLookup COMMAND test_datlookup)
+
+# DatCache tests (on-disk sqlite cache for parsed DAT files)
+add_executable(test_datcache
+  utils/test_datcache.cpp
+  ${SRC_DIR}/modules/data/dat/datcache.cpp
+  ${SRC_DIR}/modules/data/dat/datlookup.cpp
+)
+target_include_directories(test_datcache PRIVATE
+  ${SRC_DIR}/modules/data/dat
+  ${SRC_DIR}/utils/app
+)
+target_link_libraries(test_datcache
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME DatCache COMMAND test_datcache)
+
+# BatchScrapeRunner tests (async batch scrape state machine)
+# Compiles scrapepersistence + its db-store dependencies so the runner
+# can exercise its `applyScrapedItem` integration path without a real
+# QSqlDatabase. Uses the same mock IDatabaseManager from
+# tests/integration/mocks/ that test_scrapepersistence does. The write
+# worker + databaseschema sources are linked so the runner's lazy-init
+# code path (ensureWriteWorkerStarted) resolves at link time even though
+# the null-DB tests skip it at runtime.
+add_executable(test_batchscraperunner
+  utils/test_batchscraperunner.cpp
+  ${SRC_DIR}/modules/data/scraper/batchscraperunner.cpp
+  ${SRC_DIR}/modules/data/scraper/scrapepersistence.cpp
+  ${SRC_DIR}/modules/data/scraper/scrapewriteworker.cpp
+  ${SRC_DIR}/modules/data/database/databaseschema.cpp
+  ${SRC_DIR}/utils/app/loggingcategories.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/db/itemartwork.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
+  ${SRC_DIR}/modules/data/database/idatabasemanager.h
+  ${SRC_DIR}/modules/data/scraper/scrapewriteworker.h
+)
+target_include_directories(test_batchscraperunner PRIVATE
+  ${SRC_DIR}/modules/data/scraper
+  ${SRC_DIR}/modules/data/database
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui/uiconstants
+)
+target_link_libraries(test_batchscraperunner
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME BatchScrapeRunner COMMAND test_batchscraperunner)
+
+# RomHasher tests (streaming MD5/SHA1 for SS hash-based ROM ID)
+add_executable(test_romhasher
+  utils/test_romhasher.cpp
+  ${SRC_DIR}/utils/fs/romhasher.cpp
+)
+target_include_directories(test_romhasher PRIVATE
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/app
+)
+target_link_libraries(test_romhasher
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME RomHasher COMMAND test_romhasher)
+
+# KdeColorScheme tests
+# Includes resources.qrc so the test binary's `:/themes/` lookups
+# resolve to the same bundled .colors files the production app sees;
+# without this, discover_includesBundledSchemes would always fail.
+add_executable(test_kdecolorscheme
+  utils/test_kdecolorscheme.cpp
+  ${SRC_DIR}/utils/view/kdecolorscheme.cpp
+  ${SRC_DIR}/assets/resources.qrc
+)
+target_include_directories(test_kdecolorscheme PRIVATE
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui/uiconstants
+)
+target_link_libraries(test_kdecolorscheme
+  Qt6::Core
+  Qt6::Gui
+  Qt6::Test
+)
+add_test(NAME KdeColorScheme COMMAND test_kdecolorscheme)
+
+# SmartFilter tests
+add_executable(test_smartfilter
+  utils/test_smartfilter.cpp
+  ${SRC_DIR}/utils/db/smartfilter.cpp
+)
+target_include_directories(test_smartfilter PRIVATE
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+)
+target_link_libraries(test_smartfilter
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME SmartFilter COMMAND test_smartfilter)
+
+# SmartPlaylistEvaluator tests
+add_executable(test_smartplaylistevaluator
+  utils/test_smartplaylistevaluator.cpp
+  ${SRC_DIR}/utils/db/smartfilter.cpp
+  ${SRC_DIR}/utils/db/smartplaylistevaluator.cpp
+)
+target_include_directories(test_smartplaylistevaluator PRIVATE
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+)
+target_link_libraries(test_smartplaylistevaluator
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Test
+)
+add_test(NAME SmartPlaylistEvaluator COMMAND test_smartplaylistevaluator)
 
 # UsageStatsStore tests
 add_executable(test_usagestatsstore

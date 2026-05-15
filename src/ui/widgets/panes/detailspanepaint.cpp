@@ -201,12 +201,30 @@ void DetailsPane::paintEvent(QPaintEvent *event) {
     // this the static helper used QApplication::palette() Mid, which on
     // some setups is visibly lighter than the items grid's effective Mid.
     const QColor mid = palette().color(QPalette::Mid);
-    const QPixmap tile =
-        ItemWidget::buildPlaceholderTile(width(), height(), /*cornerRadius=*/0,
-                                         /*applyGradient=*/false, mid,
-                                         /*lineAlphaScale=*/m_patternIntensity / 100.0);
-    if (!tile.isNull()) {
-      painter.drawPixmap(0, 0, tile);
+    // Cache key encodes everything that affects the rendered tile:
+    // width, height, intensity, palette Mid color. If any changes, we
+    // rebuild; otherwise we reuse the cached pixmap. Without this cache
+    // every sidebar repaint (which fires during scroll due to damage-
+    // event cascade from sibling widgets) re-rasterized the full sidebar
+    // diagonal-hatching pattern via a fresh QPainter pass — the dominant
+    // user-perceived scroll judder source on collections that use the
+    // pattern background (Kartend-9q8d round 5).
+    const int curW = width();
+    const int curH = height();
+    const QRgb midRgba = mid.rgba();
+    if (m_cachedPatternTile.isNull() || m_cachedPatternW != curW || m_cachedPatternH != curH ||
+        m_cachedPatternIntensity != m_patternIntensity || m_cachedPatternMidRgba != midRgba) {
+      m_cachedPatternTile =
+          ItemWidget::buildPlaceholderTile(curW, curH, /*cornerRadius=*/0,
+                                           /*applyGradient=*/false, mid,
+                                           /*lineAlphaScale=*/m_patternIntensity / 100.0);
+      m_cachedPatternW = curW;
+      m_cachedPatternH = curH;
+      m_cachedPatternIntensity = m_patternIntensity;
+      m_cachedPatternMidRgba = midRgba;
+    }
+    if (!m_cachedPatternTile.isNull()) {
+      painter.drawPixmap(0, 0, m_cachedPatternTile);
     } else {
       painter.fillRect(rect(), baseColor);
     }
@@ -346,9 +364,17 @@ void DetailsPane::applyBubbleStyles(const QString &headerHex, const QString &sec
                              .arg(headerColor.green())
                              .arg(headerColor.blue())
                              .arg(headerColor.alpha());
-    sheet += QString("QLabel#titleLabel, QLabel#artworkLabel, QLabel#fileInfoTitle, "
+    // titleBar wraps the title label + item name in one row — applying
+    // the bubble to the QFrame paints a single backdrop behind both
+    // children instead of two separate pills. Other header labels keep
+    // their per-label bubble. The titleRow QHBoxLayout inside titleBar
+    // now uses zero margins so the bubble's own padding defines the
+    // inner spacing — previously both contributed and the total
+    // 8+8px vertical padding read as too thick on unscraped items
+    // where the title bar is the only thing in the sidebar.
+    sheet += QString("QFrame#titleBar, QLabel#fileInfoTitle, "
                      "QLabel[sidebarRole=\"header\"] { "
-                     "background-color: %1; border-radius: 6px; padding: 4px 8px; }")
+                     "background-color: %1; border-radius: 6px; padding: 2px 6px; }")
                  .arg(rgba);
   }
   if (sectionColor.isValid()) {
@@ -357,10 +383,47 @@ void DetailsPane::applyBubbleStyles(const QString &headerHex, const QString &sec
                              .arg(sectionColor.green())
                              .arg(sectionColor.blue())
                              .arg(sectionColor.alpha());
-    sheet += QString("QLabel#itemNameValue, QLabel#filePathValue, QLabel#fileSizeValue, "
+    // itemNameValue dropped from this rule — it now lives inside the
+    // titleBar frame which carries the header bubble. Other static
+    // value labels keep the section bubble. QScrollArea is included
+    // so the scrolling description (sidebarRole="value" on the scroll
+    // area) gets the same backdrop as the static value pills; the
+    // inner viewport + label use the descendant rule to stay
+    // transparent so the bubble color shows through.
+    // Asymmetric horizontal padding (left > right) so the bold key
+    // prefix has a touch of breathing room from the bubble edge.
+    // Kept tight so the rows don't waste vertical / horizontal space.
+    sheet += QString("QLabel#filePathValue, QLabel#fileSizeValue, "
                      "QLabel#lastModifiedValue, QLabel#fileExtensionValue, "
-                     "QLabel[sidebarRole=\"value\"] { "
-                     "background-color: %1; border-radius: 6px; padding: 4px 8px; }")
+                     "QLabel[sidebarRole=\"value\"], "
+                     "QScrollArea[sidebarRole=\"value\"] { "
+                     "background-color: %1; border-radius: 6px; padding: 2px 4px 2px 6px; } "
+                     "QScrollArea[sidebarRole=\"value\"] > QWidget { background: transparent; } "
+                     "QScrollArea[sidebarRole=\"value\"] QLabel { "
+                     "background: transparent; border: none; }")
+                 .arg(rgba);
+
+    // Metadata backdrop sits behind the post-description rows. Render
+    // it a noticeably darker shade of the section color (and slightly
+    // more opaque) so the inner row pills float on a recognisable
+    // card. Using `darker(140)` on RGB lands ~30% darker which reads
+    // as a distinct second layer without losing the section tint.
+    const QColor backdropColor = sectionColor.darker(140);
+    const QString backdropRgba = QString("rgba(%1,%2,%3,%4)")
+                                     .arg(backdropColor.red())
+                                     .arg(backdropColor.green())
+                                     .arg(backdropColor.blue())
+                                     .arg(qMin(255, sectionColor.alpha() + 30));
+    sheet += QString("QFrame#metadataBackdrop { "
+                     "background-color: %1; border-radius: 8px; }")
+                 .arg(backdropRgba);
+    // Gallery section gets the same section bubble color as the
+    // value pills. Matching tone (rather than the darker backdrop
+    // shade) keeps the visual hierarchy clear: gallery is a
+    // sibling pill of the value pills, not the deeper metadata
+    // card below.
+    sheet += QString("QWidget#galleryBackdrop { "
+                     "background-color: %1; border-radius: 8px; }")
                  .arg(rgba);
   }
   ui->contentWidget->setStyleSheet(sheet);

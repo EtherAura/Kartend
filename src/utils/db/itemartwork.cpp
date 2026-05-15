@@ -57,13 +57,18 @@ QString expandTilde(const QString &path) {
 } // namespace
 
 const QStringList &standardTypes() {
-  // Sidebar gallery display order: cover-style art first, supplemental last.
-  // Strings double as on-disk subdirectory names — never reorder for cosmetics
-  // (the order is meaningful) and never rename without a migration.
+  // Sidebar gallery display order: primary cover first, supplemental last.
+  // "front" is the cross-provider scraped-cover id (SS box-2D, MB front,
+  // TMDB poster, Open Library cover all normalise to it); "box" is kept
+  // for libraries that already store hand-curated cover art under a
+  // `/box/` subfolder. Strings double as on-disk subdirectory names —
+  // never reorder for cosmetics (the order is meaningful) and never
+  // rename without a migration.
   static const QStringList types = {
-      QString::fromLatin1(StandardTypes::Box),    QString::fromLatin1(StandardTypes::Screenshot),
-      QString::fromLatin1(StandardTypes::Title),  QString::fromLatin1(StandardTypes::Marquee),
-      QString::fromLatin1(StandardTypes::Fanart), QString::fromLatin1(StandardTypes::Logo),
+      QString::fromLatin1(StandardTypes::Front),      QString::fromLatin1(StandardTypes::Box),
+      QString::fromLatin1(StandardTypes::Screenshot), QString::fromLatin1(StandardTypes::Title),
+      QString::fromLatin1(StandardTypes::Marquee),    QString::fromLatin1(StandardTypes::Fanart),
+      QString::fromLatin1(StandardTypes::Logo),
   };
   return types;
 }
@@ -73,6 +78,9 @@ bool isStandardType(const QString &artworkType) {
 }
 
 QString standardTypeDisplayName(const QString &artworkType) {
+  if (artworkType == QLatin1String(StandardTypes::Front)) {
+    return QStringLiteral("Front Cover");
+  }
   if (artworkType == QLatin1String(StandardTypes::Box)) {
     return QStringLiteral("Box");
   }

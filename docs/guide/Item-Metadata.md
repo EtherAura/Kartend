@@ -264,15 +264,16 @@ auto-discovered cover.
 ## For developers
 
 - Database schema: `item_metadata`, `item_artwork`, `items` tables.
-  See [src/modules/database/](../../src/modules/database/) for
-  per-store classes (`ItemMetadataStore`, `ItemArtworkStore`,
-  `ItemStore`).
+  See [src/utils/db/](../../src/utils/db/) for per-store namespaces
+  (`ItemMetadataStore`, `ItemArtworkStore`), and
+  [src/modules/data/database/](../../src/modules/data/database/) for
+  the `DatabaseManager` facade.
 - Custom fields use the same `item_metadata` table as `manual_path`
   and `launcher_index` — they're stored as ordinary `(field_name,
   field_value)` rows. The "system" fields (`manual_path`,
   `launcher_index`) are well-known names; custom fields are anything
   else.
-- Detail page: [src/modules/detailpage/](../../src/modules/detailpage/)
+- Detail page: [src/modules/media/detailpage/](../../src/modules/media/detailpage/)
   (`DetailPageManager`).
 - Custom Fields Dialog: [src/ui/dialogs/customfieldsdialog.h](../../src/ui/dialogs/).
 - Item Artwork Links Dialog: [src/ui/dialogs/itemartworklinksdialog.h](../../src/ui/dialogs/).

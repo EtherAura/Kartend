@@ -176,6 +176,12 @@ void DatabaseManager::initDatabase() {
     QSqlDatabase::removeDatabase(connectionName);
   }
 
+  // Reconnecting can re-open the same file with a different on-disk
+  // state (recovered transaction, manual restore, fresh database). The
+  // per-item cache from the previous connection is no longer guaranteed
+  // to reflect what we're about to read, so drop it.
+  m_metadataCache.clear();
+
   m_db = QSqlDatabase::addDatabase("QSQLITE", m_connectionName);
   const QString dbPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
   if (!DatabaseSchema::openConnection(m_db, dbPath)) {
@@ -230,6 +236,11 @@ void DatabaseManager::fetchVisualIndexForPath(const CollectionContext &context,
 }
 
 void DatabaseManager::invalidateCollectionCache(const QString &collectionUuid) {
+  // Drop the per-item LRU entries before the worker invalidation lands —
+  // a rescan / re-import could change any row's contents under us, so
+  // serving cached metadata until the worker reply arrives would risk
+  // showing stale data.
+  m_metadataCache.invalidateCollection(collectionUuid);
   emit requestInvalidateCache(collectionUuid);
 }
 
@@ -383,6 +394,7 @@ void DatabaseManager::clearCollectionFromDatabaseByUuid(const QString &collectio
     if (!m_db.commit()) {
       throw std::runtime_error(m_db.lastError().text().toStdString());
     }
+    m_metadataCache.invalidateCollection(collectionUuid);
   } catch (const std::exception &e) {
     m_db.rollback();
     auto err = ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
@@ -435,14 +447,21 @@ QDateTime DatabaseManager::loadCollectionLastScanned(const QString &collectionUu
 
 ItemMetadataStore::ItemMetadata DatabaseManager::loadItemMetadata(const QString &collectionUuid,
                                                                   const QString &path) const {
+  if (auto cached = m_metadataCache.tryGetMetadata(collectionUuid, path); cached) {
+    return *cached;
+  }
   auto result = ItemMetadataStore::load(const_cast<QSqlDatabase &>(m_db), collectionUuid, path);
   if (result.isError()) {
     ErrorUtils::logError(result.error());
     ItemMetadataStore::ItemMetadata empty;
     empty.collectionUuid = collectionUuid;
     empty.path = path;
+    // Don't cache DB-failure stubs — a transient connection blip
+    // shouldn't pin an empty row that masks the real data after
+    // reconnection.
     return empty;
   }
+  m_metadataCache.putMetadata(collectionUuid, path, result.value());
   return result.value();
 }
 
@@ -453,6 +472,7 @@ bool DatabaseManager::saveItemMetadata(const ItemMetadataStore::ItemMetadata &me
     emit errorOccurred(result.error());
     return false;
   }
+  m_metadataCache.invalidateItem(metadata.collectionUuid, metadata.path);
   return true;
 }
 
@@ -460,12 +480,16 @@ bool DatabaseManager::saveItemMetadata(const ItemMetadataStore::ItemMetadata &me
 
 QList<ItemArtworkStore::ItemArtwork> DatabaseManager::loadItemArtwork(const QString &collectionUuid,
                                                                       const QString &path) const {
+  if (auto cached = m_metadataCache.tryGetArtwork(collectionUuid, path); cached) {
+    return *cached;
+  }
   auto result =
       ItemArtworkStore::loadAllForItem(const_cast<QSqlDatabase &>(m_db), collectionUuid, path);
   if (result.isError()) {
     ErrorUtils::logError(result.error());
     return {};
   }
+  m_metadataCache.putArtwork(collectionUuid, path, result.value());
   return result.value();
 }
 
@@ -476,6 +500,7 @@ bool DatabaseManager::saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwo
     emit errorOccurred(result.error());
     return false;
   }
+  m_metadataCache.invalidateItem(artwork.collectionUuid, artwork.path);
   return true;
 }
 
@@ -487,13 +512,22 @@ bool DatabaseManager::removeItemArtwork(const QString &collectionUuid, const QSt
     emit errorOccurred(result.error());
     return false;
   }
+  m_metadataCache.invalidateItem(collectionUuid, path);
   return true;
+}
+
+void DatabaseManager::invalidateMetadataCacheItem(const QString &collectionUuid,
+                                                  const QString &path) {
+  m_metadataCache.invalidateItem(collectionUuid, path);
 }
 
 // ─── UsageStatsStore facades ──────────────────────────────────────────────────
 
 UsageStatsStore::ItemUsageStats DatabaseManager::loadItemUsageStats(const QString &collectionUuid,
                                                                     const QString &path) const {
+  if (auto cached = m_metadataCache.tryGetUsageStats(collectionUuid, path); cached) {
+    return *cached;
+  }
   auto result =
       UsageStatsStore::loadForItem(const_cast<QSqlDatabase &>(m_db), collectionUuid, path);
   if (result.isError()) {
@@ -503,6 +537,7 @@ UsageStatsStore::ItemUsageStats DatabaseManager::loadItemUsageStats(const QStrin
     empty.path = path;
     return empty;
   }
+  m_metadataCache.putUsageStats(collectionUuid, path, result.value());
   return result.value();
 }
 
@@ -510,7 +545,9 @@ void DatabaseManager::recordItemLaunch(const QString &collectionUuid, const QStr
   auto result = UsageStatsStore::recordLaunch(m_db, collectionUuid, path);
   if (result.isError()) {
     ErrorUtils::logError(result.error());
+    return;
   }
+  m_metadataCache.invalidateUsage(collectionUuid, path);
 }
 
 void DatabaseManager::recordItemPlaySession(const QString &collectionUuid, const QString &path,
@@ -518,7 +555,9 @@ void DatabaseManager::recordItemPlaySession(const QString &collectionUuid, const
   auto result = UsageStatsStore::recordPlaySession(m_db, collectionUuid, path, seconds);
   if (result.isError()) {
     ErrorUtils::logError(result.error());
+    return;
   }
+  m_metadataCache.invalidateUsage(collectionUuid, path);
 }
 
 UsageStatsStore::AggregateStats DatabaseManager::loadAggregateUsageStats() const {
@@ -548,6 +587,24 @@ QList<UsageStatsStore::ItemUsageRow> DatabaseManager::loadRecentlyPlayedItems(in
   return result.value();
 }
 
+QList<UsageStatsStore::ItemUsageRow> DatabaseManager::loadNeverPlayedItems(int limit) const {
+  auto result = UsageStatsStore::loadNeverPlayed(const_cast<QSqlDatabase &>(m_db), limit);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return {};
+  }
+  return result.value();
+}
+
+qint64 DatabaseManager::countItemsPlayedSince(const QString &isoCutoffUtc) const {
+  auto result = UsageStatsStore::countPlayedSince(const_cast<QSqlDatabase &>(m_db), isoCutoffUtc);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return 0;
+  }
+  return result.value();
+}
+
 QHash<QString, UsageStatsStore::CollectionUsage> DatabaseManager::loadUsageByCollection() const {
   auto result = UsageStatsStore::loadCollectionBreakdown(const_cast<QSqlDatabase &>(m_db));
   if (result.isError()) {
@@ -564,6 +621,11 @@ bool DatabaseManager::resetAllUsageStats() {
     emit errorOccurred(result.error());
     return false;
   }
+  // The reset only touches the usage column, but enumerating every
+  // cached entry to scrub one slot costs more than the simple clear.
+  // resetAllUsageStats is a deliberate user action — flushing the
+  // whole per-item cache here is fine; the next selection refills it.
+  m_metadataCache.clear();
   return true;
 }
 

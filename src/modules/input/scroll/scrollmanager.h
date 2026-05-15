@@ -1,6 +1,7 @@
 #ifndef SCROLLMANAGER_H
 #define SCROLLMANAGER_H
 
+#include "artworkpreviewoverlay.h"
 #include "collectionutils.h"
 #include "gridlayoutcalculator.h"
 #include "setuputils.h"
@@ -37,7 +38,6 @@ class PreSearchStateManager;
 class SelectionStateTracker;
 class SelectionDisplayManager;
 class ListHeaderWidget;
-class ArtworkPreviewOverlay;
 class VirtualScrollEngine;
 enum class ListSortColumn;
 
@@ -163,6 +163,10 @@ public:
   /// (first-stage) and middle-click peek.
   void showMediaPreview(const QString &filePath, const QString &artworkDir,
                         const QString &videoDir);
+  /// Forwarder for SelectionDisplayManager::setArtworkPreviewGallery.
+  /// Populates the expand-mode overlay's bottom thumb strip so Left/Right
+  /// + thumb clicks can cycle between the item's scraped artwork types.
+  void setArtworkPreviewGallery(const QList<ArtworkPreviewOverlay::GalleryEntry> &entries);
 
   void centerHorizontalScrollbar(int currentCollectionIndex,
                                  const QList<CollectionConfig> &collections);
@@ -345,6 +349,11 @@ private:
   bool m_processingScrollChange = false; // Reentrancy guard for onScrollChanged
   TimerUtils::DebouncedTimer *m_userScrollIdleTimer = nullptr;
   TimerUtils::DebouncedTimer *m_prewarmIdleTimer = nullptr;
+  /// Debounces resolveAndPushCoverFlowVideo + resolveAndPushCoverFlowGallery
+  /// so a wheel sweep across the carousel runs the per-item DB + FS lookups
+  /// once at the trailing edge instead of every ~10ms tick.
+  TimerUtils::DebouncedTimer *m_coverFlowResolveDebouncer = nullptr;
+  int m_pendingCoverFlowVisualIndex = -1;
   qint64 m_lastArtworkPrewarmTime = 0; // Debounce artwork directory prewarm
 
   // Initial scroll index for pre-positioning before widget creation

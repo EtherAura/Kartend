@@ -116,6 +116,7 @@ void ToolbarController::setupSearchModeAction() {
       UIConstants::Icons::fromTheme(UIConstants::Icons::SEARCH), QLineEdit::LeadingPosition);
   if (m_searchModeAction) {
     m_searchModeAction->setToolTip(tr("Toggle search scope"));
+    m_searchModeAction->setText(tr("Toggle search scope"));
   }
 }
 

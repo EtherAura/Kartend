@@ -1,6 +1,7 @@
 #ifndef DETAILSPANE_H
 #define DETAILSPANE_H
 
+#include <functional>
 #include <QDateTime>
 #include <QFont>
 #include <QFrame>
@@ -21,6 +22,7 @@
 class ArtworkPreviewOverlay;
 class DetailsPaneGalleryView;
 class DetailsPaneResizeGrip;
+template <typename T> class QFutureWatcher;
 class VideoPreviewWidget;
 QT_BEGIN_NAMESPACE
 class QHBoxLayout;
@@ -47,6 +49,28 @@ public:
   [[nodiscard]] static QString formatRuntime(int seconds);
   [[nodiscard]] static QString formatTags(const QString &raw);
   [[nodiscard]] static QString formatLastScanned(const QDateTime &lastScanned);
+
+  /// Install a predicate the video-preview start timer consults before
+  /// firing playVideo (Kartend-9q8d round 6). When the predicate returns
+  /// true, the timer restarts itself with a short re-check interval
+  /// instead of running playVideo's GUI-thread-blocking
+  /// stop+setSource+play sequence (which can lock the GUI for ~100ms
+  /// while QMediaPlayer/GStreamer initializes the pipeline). Without
+  /// this, a wheel scroll that lands on a video item triggers playVideo
+  /// mid-glide — the QMediaPlayer block visibly stutters the still-
+  /// running scroll animation. DetailsPane has no manager/ctx access;
+  /// the predicate is the cleanest way to forward the scroll-state
+  /// check (DetailsPaneManager → InteractionStateHolder) without
+  /// dragging the whole context tree into the widget. Default predicate
+  /// returns false (preserves existing behaviour when not wired).
+  void setScrollIdlePredicate(std::function<bool()> predicate);
+
+  /// True when no scroll/animation is currently active. Returns true when
+  /// no predicate is installed (preserves pre-fix behaviour). Used by
+  /// DetailsPaneGalleryView to defer VideoThumbnailExtractor frame
+  /// requests during scroll (Kartend-9q8d round 8) — same blocking
+  /// GUI-thread cost as the main sidebar video preview.
+  [[nodiscard]] bool isScrollIdle() const;
 
   void setMetadata(const QString &filePath, const QString &itemName,
                    const QString &artworkDirectory = QString(),
@@ -76,6 +100,27 @@ public:
     bool isVideo = false;
   };
   void setArtworkGallery(const QList<GalleryEntry> &entries);
+  /// Swap the main artwork preview tile to a specific gallery entry.
+  /// Used by the gallery-thumb click handler so the user can flip the
+  /// big preview between cover / screenshot / fanart / etc. without
+  /// opening the full-screen overlay. For video entries this routes
+  /// through the same debounced schedule path setMetadata uses; for
+  /// images it loads the pixmap into `m_artworkSource` and re-renders
+  /// at the current preview size. Passing an entry whose path no
+  /// longer exists is a no-op (the existing tile stays in place).
+  void showMainPreviewForEntry(const GalleryEntry &entry);
+  /// Cycle the main preview to the next/previous entry in the gallery.
+  /// `direction` is +1 (next) or -1 (previous); wraps at both ends.
+  /// No-op when fewer than 2 gallery entries exist. Bound to Left/Right
+  /// arrow keys via keyPressEvent so the user can flip artwork without
+  /// reaching for the mouse.
+  void cycleMainPreview(int direction);
+  /// Snapshot of the most recently pushed gallery entries (the same list
+  /// the sidebar's thumb strip is rendering). Used by the expand-mode
+  /// ArtworkPreviewOverlay to mirror the sidebar gallery in its own strip
+  /// without re-running the DB → resolve cycle. Empty list when no item
+  /// is selected or when the item has no resolvable artwork.
+  [[nodiscard]] QList<GalleryEntry> currentGalleryEntries() const;
   /// Controls whether the gallery section's edit affordance is shown
   /// Independent of `setArtworkGallery` so the "Edit links…"
   /// button stays available for items with no current artwork — that is the
@@ -254,6 +299,12 @@ private:
   void ensureDetailsSection();
   void clearDetailsSection();
   void appendDetailRow(const QString &label, const QString &value, bool wrap = false);
+  /// Like `appendDetailRow` but renders the value inside a fixed-height
+  /// scroll area that auto-scrolls vertically when the text overflows.
+  /// Used for the description field so long synopses don't push the
+  /// rest of the metadata below the scroll fold. Caps the visible
+  /// region to ~`maxLines` of wrapped text at the current font.
+  void appendScrollingDescription(const QString &label, const QString &value, int maxLines);
   /// Per-item media gallery row (vertical-dock) with section construction,
   /// thumb building, and the click-to-preview overlay. Owned, not borrowed.
   DetailsPaneGalleryView *m_galleryView = nullptr;
@@ -261,6 +312,9 @@ private:
   VideoPreviewWidget *m_videoPreview = nullptr;
   QTimer *m_videoStartTimer = nullptr;
   QString m_pendingVideoPath;
+  /// Optional predicate consulted by m_videoStartTimer's callback before
+  /// firing playVideo. See setScrollIdlePredicate() for rationale.
+  std::function<bool()> m_scrollIdlePredicate;
   /// original-resolution artwork pixmap kept so applyPreviewSize
   /// can re-render the centered/scaled artworkDisplay pixmap when the sidebar
   /// is resized, instead of re-reading the file from disk on every resize.
@@ -270,6 +324,19 @@ private:
   /// artworkDirectory" layout shows up in the gallery row alongside any
   /// typed-subdirectory thumbs and the video tile.
   QString m_primaryArtworkPath;
+  /// Generation counter for async loadArtwork. Each loadArtwork call bumps
+  /// the counter and captures its value in the worker callback; if a newer
+  /// load has started by the time the worker finishes, the stale result is
+  /// dropped instead of overwriting the currently-displayed pixmap. Without
+  /// this guard a rapid wheel/arrow burst could deliver an older selection's
+  /// image AFTER the new one (out-of-order completion via QThreadPool).
+  quint64 m_artworkLoadGen = 0;
+  /// Generation counter for async updateFileInfo. Same pattern as
+  /// m_artworkLoadGen — drops stale stat() results when a newer selection
+  /// has bumped the counter. Critical on slow filesystems (network/USB
+  /// mounts) where a single QFileInfo::exists/size/lastModified call can
+  /// take 50-260ms.
+  quint64 m_fileInfoGen = 0;
   /// bug #4: full file path of the current selection, kept so
   /// resizeEvent can re-elide it width-aware without re-querying the model.
   QString m_currentFilePath;
@@ -281,6 +348,23 @@ private:
   DetailsPanePattern m_bgPattern = DetailsPanePattern::Crosshatch;
   int m_patternIntensity = 50; // 0–100 % alpha multiplier for pattern lines
   QColor m_patternColor;
+  /// Cache for the diagonal-hatching pattern tile. Pre-fix the Pattern
+  /// branch of paintEvent built a fresh sidebar-sized QPixmap on EVERY
+  /// repaint via ItemWidget::buildPlaceholderTile (full QPainter pass over
+  /// the sidebar dimensions). Sidebar repaints during scroll due to
+  /// damage-event cascade from sibling widgets, so per-frame rebuild was
+  /// the dominant scroll-judder source (Kartend-9q8d round 5 — the
+  /// per-frame cost was invisible to all the per-call instrumentation
+  /// because it's pure paint-time work, not measured by our timers).
+  /// Keyed via the four scalar inputs that affect the tile so paint can
+  /// rebuild only when one of them has changed (size, intensity, palette
+  /// Mid). Stored as raw scalars (not a packed key) to avoid any
+  /// truncation surprises from bit-shifting QRgb.
+  mutable QPixmap m_cachedPatternTile;
+  mutable int m_cachedPatternW = -1;
+  mutable int m_cachedPatternH = -1;
+  mutable int m_cachedPatternIntensity = -1;
+  mutable QRgb m_cachedPatternMidRgba = 0;
   /// Width-lock + dock position state. The lock flag toggles the resize
   /// grip on/off and the position drives both the grip's active edge and
   /// the paint code that draws the handle band. The grip controller below
@@ -312,8 +396,43 @@ private:
   // Built lazily on first use so existing layouts (and tests that don't show
   // the sidebar) are unaffected.
   QWidget *m_detailsContainer = nullptr;
-  QVBoxLayout *m_detailsLayout = nullptr;
-  QLabel *m_detailsTitle = nullptr;
+  /// QFrame that wraps just the post-description metadata grid (so the
+  /// description tile and the rows below it sit on visually distinct
+  /// backdrops). applyBubbleStyles paints it a slightly darker shade of
+  /// the section color so the rows read as a card under the section
+  /// pills above. Nested inside m_metadataScroll so the rows scroll
+  /// instead of the outer pane.
+  class QFrame *m_metadataBackdrop = nullptr;
+  /// Description widgets live outside m_metadataScroll so they stay
+  /// pinned in place when the metadata block marquees. Each rebuild
+  /// (clearDetailsSection → appendScrollingDescription) tears these
+  /// down and rebuilds them with the new selection's text.
+  QLabel *m_descriptionLabel = nullptr;
+  class QScrollArea *m_descriptionScroll = nullptr;
+  /// QScrollArea that holds the metadata card. Has an Expanding vertical
+  /// size policy + stretch factor inside m_detailsContainer so it claims
+  /// whatever sidebar height is left after the description (and the
+  /// section pills above) finish laying out. Auto-scroll timer fires
+  /// only when the inner content's height exceeds the viewport's, so
+  /// short items just sit flush.
+  class QScrollArea *m_metadataScroll = nullptr;
+  /// Timer that drives the metadata block's top→bottom auto-scroll.
+  /// Owned, restarted on every clearDetailsSection so it tracks the
+  /// freshly-rebuilt content rather than the previous selection's
+  /// scroll range.
+  class QTimer *m_metadataAutoScrollTimer = nullptr;
+  /// Ticks remaining before the next scroll step; used to pause briefly
+  /// at the top + bottom of each cycle.
+  int m_metadataAutoScrollPause = 0;
+  /// Two-column grid for short metadata rows ("Genre: Action",
+  /// "Players: 1-2", etc.). Short pairs share a row; long values
+  /// (or wrap=true rows like the scrolling description) span both
+  /// columns so they get the full sidebar width.
+  class QGridLayout *m_detailsLayout = nullptr;
+  /// Next-cell cursor for the grid layout above. (row, col=0 or 1).
+  /// Reset to (0, 0) at the start of every clearDetailsSection().
+  int m_detailsRow = 0;
+  int m_detailsCol = 0;
 
   // Manual button. Persisted across selection changes so the
   // button doesn't appear in the middle of the Details list — it's always

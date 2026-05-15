@@ -13,7 +13,7 @@ Fast path using the build script:
 Manual CMake build:
 
 ```bash
-cmake -S . -B build/ninja-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+cmake -S . -B build/ninja-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DKARTEND_BUILD_TESTS=ON
 cmake --build build/ninja-release --parallel $(nproc)
 ```
 
@@ -42,7 +42,7 @@ UB) during development.
 ./.scripts/build.sh --sanitize --keep-builds
 
 # Configure and build tests
-cmake -S . -B build/ninja-sanitize -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DENABLE_SANITIZERS=ON
+cmake -S . -B build/ninja-sanitize -G Ninja -DCMAKE_BUILD_TYPE=Debug -DKARTEND_BUILD_TESTS=ON -DKARTEND_ENABLE_SANITIZERS=ON
 cmake --build build/ninja-sanitize --parallel $(nproc)
 
 # Run the suite
@@ -59,11 +59,11 @@ suite which links all of its `TestXxx` classes into a single binary
 | Area | Path | Binaries | Coverage |
 |------|------|----------|----------|
 | Module unit tests | `tests/modules/<feature>/` | 37 | Per-manager and per-helper coverage mirroring `src/modules/<feature>/` |
-| Utility unit tests | `tests/utils/` | 14 | Helpers under `src/utils/` (cliargs, collectionutils, configvalidation, dbmigrations, gridutils, historystore, itemartwork, itemmetadata, pathutils, searchutils, stringutils, titlefilter, usagestatsstore, videoutils) |
+| Utility unit tests | `tests/utils/` | 15 | Helpers under `src/utils/` (cliargs, collectionutils, configvalidation, dbmigrations, gridutils, historystore, itemartwork, itemmetadata, itemmetadatacache, pathutils, searchutils, stringutils, titlefilter, usagestatsstore, videoutils) |
 | Integration tests | `tests/integration/` | 1 | `MainWindowFixture`-driven multi-manager scenarios (application lifecycle, settings dialog apply / changes / scope, scroll, navigation, details-pane coverflow, event-manager wiring, mainwindow smoke) |
 | UI widget tests | `tests/ui/widgets/` | 2 | Widget-level rendering and behavior (`CoverflowWidget`, `EmptyStateWidget`) |
 
-**Total: 63 `test_*.cpp` files, ~330 test methods across 54 binaries.**
+**Total: 64 `test_*.cpp` files, ~340 test methods across 55 binaries.**
 Method counts drift fast — prefer `ctest --output-on-failure --test-dir
 build/ninja-release` for an authoritative pass count.
 

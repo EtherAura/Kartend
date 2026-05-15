@@ -32,6 +32,10 @@ class NavigationManager;
 class PlaylistManager;
 class SessionManager;
 class ISettingsManager;
+class ScrapeResultDialog;
+namespace Scraper {
+class ScraperService;
+}
 class DetailsPaneManager;
 class ScrollManager;
 class ItemWidget;
@@ -47,6 +51,10 @@ class TextZoomHud;
 
 namespace kart {
 class KartManager;
+}
+
+namespace TimerUtils {
+class DebouncedTimer;
 }
 
 class MainWindow : public QMainWindow {
@@ -115,6 +123,40 @@ public:
   /// startup and again after the user saves the Settings dialog.
   /// Delegates to the ToolbarController.
   void applyToolbarCustomization();
+
+  /// Open the unified Scraper dialog. Caller is responsible for any
+  /// pre-selection (right-click flow passes a collection + item; File
+  /// → Scraper passes nothing). The dialog handles the rest:
+  /// collection-tree picker, per-item checkboxes, media-type filter,
+  /// Auto/Interactive toggle, and per-collection BatchScrapeRunner
+  /// orchestration.
+  void openScraperDialog(int preCollectionIndex = -1, const QString &preItemPath = QString());
+
+  /// Accessor for the long-lived ScraperService that survives
+  /// dialog close + app restart. Owns the active scrape queue;
+  /// persists state to disk after each item completes.
+  [[nodiscard]] Scraper::ScraperService *getScraperService() const {
+    return m_scraperService.get();
+  }
+
+  /// Check for a pending-scrape state file on startup and surface a
+  /// modal resume / discard prompt (unless GeneralSettings has
+  /// scrapeAutoResume = true, in which case resume silently). Called
+  /// once after the main window has finished its construction so the
+  /// modal lands on top of an already-painted UI.
+  void promptResumePendingScrapeIfAny();
+
+  /// Sync the secondary-monitor marquee window to the current
+  /// m_generalSettings.marquee* fields. Creates the window on first
+  /// enable, destroys it on disable, re-pins to a different screen on
+  /// screen-name change, and pushes a fresh pixmap for the active mode.
+  /// Idempotent — invoked at app startup and again after each Save in
+  /// SettingsDialog so the user's edits take effect without a restart.
+  void applyMarqueeSettings();
+  /// Push the artwork relevant to the active marquee mode to the
+  /// marquee window. No-op when the marquee is disabled / not created.
+  /// Called whenever the selection or active collection changes.
+  void updateMarqueeArtwork();
   /// Public escape hatch the toolbar controller calls when the user picks a
   /// new view type from the layout-picker popup. Forwards to the private
   /// setViewType() that does the actual settings save + refresh cascade.
@@ -190,6 +232,18 @@ private:
   NowPlayingOverlay *m_nowPlayingOverlay = nullptr;
   DetailPageOverlay *m_detailPageOverlay = nullptr;
   TextZoomHud *m_textZoomHud = nullptr;
+  /// Secondary-monitor "marquee" / topper window. Lazily created the
+  /// first time settings.marqueeEnabled is true; lives on the screen
+  /// chosen via settings.marqueeScreenName. Owned by MainWindow so it
+  /// disposes alongside the app rather than leaking on exit.
+  class MarqueeWindow *m_marqueeWindow = nullptr;
+  /// Coalesces marquee-artwork refreshes during selection storms (wheel
+  /// scrolling, arrow-key holds). Each selectionChanged tick re-runs path
+  /// expansion + a filesystem video probe + (in image mode) a QPixmap disk
+  /// load — same per-tick cost the sidebar refresh used to pay before its
+  /// own debounce. Trailing-edge fire mirrors DetailsPaneManager's metadata
+  /// debouncer so a single click still feels instant.
+  TimerUtils::DebouncedTimer *m_marqueeDebouncer = nullptr;
   bool m_startupSplashHandled = false;
   bool m_windowWasInactive = false;
 
@@ -206,6 +260,16 @@ private:
 
   std::unique_ptr<ApplicationManager> m_appManager;
   DetailsPane *m_MetadataSidebar = nullptr;
+  /// Long-lived scraper coordinator. Owns the active queue + runner
+  /// across dialog lifetime; persists in-flight state to
+  /// `~/.config/Kartend/pending-scrape.json` after each item so a
+  /// crash or program exit can resume on next launch.
+  std::unique_ptr<Scraper::ScraperService> m_scraperService;
+  /// Single reused Scraper dialog instance — created on first
+  /// openScraperDialog call and kept alive afterwards so closing it
+  /// (Close button or X) merely hides; reopening reuses the same
+  /// widget tree. Parented to this MainWindow.
+  ScrapeResultDialog *m_scraperDialog = nullptr;
 
   void setupManagerConnections();
   void updateWindowTitleWithFilter(int visible, int total);
@@ -301,6 +365,14 @@ private:
   void initializeAppContext();
   void showAbout();
   void showFocusReturnSplash();
+
+  /// Run the first-run wizard modally and persist its outcome.
+  ///
+  /// Mounts a fresh CollectionConfig + saves when the user finishes with a
+  /// folder picked, and always flips firstRunComplete so the auto-launch
+  /// never fires twice. Safe to call from both the deferred startup timer
+  /// and the Help-menu action.
+  void showFirstRunWizard();
 };
 
 #endif

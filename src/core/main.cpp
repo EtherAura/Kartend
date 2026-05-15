@@ -5,11 +5,15 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QGuiApplication>
+#include <QLibraryInfo>
+#include <QLocale>
 #include <QLoggingCategory>
+#include <QStandardPaths>
 #include <QStringList>
 #include <QSurfaceFormat>
 #include <QThreadPool>
 #include <QTimer>
+#include <QTranslator>
 
 #include <cstdlib>
 
@@ -49,6 +53,32 @@ auto main(int argc, char *argv[]) -> int {
   QApplication::setApplicationName(APP_NAME);
   QApplication::setApplicationVersion(APP_VERSION);
   QApplication::setWindowIcon(QIcon(":/icon.svg"));
+
+  // Install translators: Qt's own (dialog buttons, file pickers) plus the
+  // app's .qm files. Both fall back silently to the source-text English when
+  // no matching locale ships. The translator objects must outlive QApplication,
+  // so they use static storage duration.
+  static QTranslator qtTranslator;
+  if (qtTranslator.load(QLocale(), QStringLiteral("qt"), QStringLiteral("_"),
+                        QLibraryInfo::path(QLibraryInfo::TranslationsPath))) {
+    QCoreApplication::installTranslator(&qtTranslator);
+  }
+  static QTranslator appTranslator;
+  QStringList translationDirs;
+  translationDirs << QStringLiteral(APP_BUILD_TRANSLATIONS_DIR);
+  translationDirs << QStandardPaths::locateAll(QStandardPaths::GenericDataLocation,
+                                               QStringLiteral(APP_TRANSLATIONS_SUBDIR),
+                                               QStandardPaths::LocateDirectory);
+  translationDirs << (QCoreApplication::applicationDirPath() + QStringLiteral("/../share/") +
+                      QStringLiteral(APP_TRANSLATIONS_SUBDIR));
+  translationDirs.removeDuplicates();
+  for (const QString &translationDir : translationDirs) {
+    if (appTranslator.load(QLocale(), QStringLiteral("kartend"), QStringLiteral("_"),
+                           translationDir)) {
+      QCoreApplication::installTranslator(&appTranslator);
+      break;
+    }
+  }
 
   // parse CLI options. Use process so --help, --version, and
   // unknown-option errors are handled with the standard Qt behavior (print

@@ -132,6 +132,7 @@ Utilities are grouped by concern in six subfolders.
 | `historystore` | `launch_history` table access. |
 | `itemartwork` | `item_artwork` table — per-item artwork overrides with standard-type fallback. |
 | `itemmetadata` | `item_metadata` table — custom titles, descriptions, genres, custom key/value fields. |
+| `itemmetadatacache` | Per-item LRU (256 entries) fronting the per-item DB loads (metadata, artwork rows, usage stats). Invalidated on writes, rescans, reconnects. |
 | `usagestatsstore` | `play_count`, `last_played`, `total_play_seconds` on the items table. |
 
 ### `src/utils/fs/` — Filesystem paths, validation, extension classification
@@ -225,23 +226,29 @@ void ScrollManager::releaseWidget(ItemWidget *widget);  // Return to pool
 
 ### Atomic File Writes
 
-For data integrity when writing to disk, use the atomic write pattern (temp file + rename):
+For data integrity when writing to disk, use `QSaveFile` (which manages the
+temp-file + atomic-rename internally) plus `PathUtils::syncDirectory()` so
+the rename survives crash / power loss:
 
 ```cpp
+#include <QSaveFile>
+#include "utils/fs/pathutils.h"
+
 bool atomicWriteFile(const QString &filePath, const QByteArray &data) {
-  QString tempPath = filePath + ".tmp";
-  QFile tempFile(tempPath);
-  if (!tempFile.open(QIODevice::WriteOnly)) return false;
-  
-  qint64 written = tempFile.write(data);
-  tempFile.close();
-  
-  if (written != data.size()) {
-    QFile::remove(tempPath);
+  const QString parentDir = QFileInfo(filePath).absolutePath();
+  if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) return false;
+
+  QSaveFile file(filePath);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+  if (file.write(data) != data.size()) {
+    file.cancelWriting();
     return false;
   }
-  
-  if (QFile::exists(filePath)) QFile::remove(filePath);
-  return QFile::rename(tempPath, filePath);
+  if (!file.commit()) return false;
+  PathUtils::syncDirectory(parentDir);
+  return true;
 }
 ```
+
+Adopters: `SessionManager`, `PlaylistManager`, `KartWriter` / `KartReader`,
+`CacheDiskStorage`.

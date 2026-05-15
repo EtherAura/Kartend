@@ -183,6 +183,102 @@
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="scrapersTab">
+      <attribute name="icon">
+       <iconset theme="folder-download"/>
+      </attribute>
+      <attribute name="title">
+       <string>Scrapers</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="scrapersTabLayout">
+       <item>
+        <widget class="QTabWidget" name="scrapersSubTabWidget">
+         <property name="currentIndex">
+          <number>0</number>
+         </property>
+         <widget class="QWidget" name="scraperScreenScraperSubTab">
+          <attribute name="title">
+           <string>ScreenScraper</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="scraperScreenScraperSubTabLayout">
+           <item>
+            <widget class="ScraperCredentialsPanel" name="screenScraperCredentialsPanel" native="true"/>
+           </item>
+           <item>
+            <widget class="ScraperSettingsPanel" name="scraperSettingsPanel" native="true"/>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="scraperMusicBrainzSubTab">
+          <attribute name="title">
+           <string>MusicBrainz</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="scraperMusicBrainzSubTabLayout">
+           <item>
+            <widget class="QLabel" name="musicBrainzPlaceholder">
+             <property name="wordWrap"><bool>true</bool></property>
+             <property name="text">
+              <string>MusicBrainz uses a fixed 1 req/sec policy per the provider's terms of service. No tunable performance options, and no credentials are required for public lookups.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="musicBrainzSpacer">
+             <property name="orientation"><enum>Qt::Vertical</enum></property>
+             <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="scraperOpenLibrarySubTab">
+          <attribute name="title">
+           <string>OpenLibrary</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="scraperOpenLibrarySubTabLayout">
+           <item>
+            <widget class="QLabel" name="openLibraryPlaceholder">
+             <property name="wordWrap"><bool>true</bool></property>
+             <property name="text">
+              <string>OpenLibrary requires no credentials and has no documented per-key concurrency cap. The active per-host throttle for openlibrary.org / covers.openlibrary.org is fixed at conservative defaults to respect their public-API policy.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="openLibrarySpacer">
+             <property name="orientation"><enum>Qt::Vertical</enum></property>
+             <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="scraperTmdbSubTab">
+          <attribute name="title">
+           <string>TMDB</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="scraperTmdbSubTabLayout">
+           <item>
+            <widget class="ScraperCredentialsPanel" name="tmdbCredentialsPanel" native="true"/>
+           </item>
+           <item>
+            <widget class="QLabel" name="tmdbPlaceholder">
+             <property name="wordWrap"><bool>true</bool></property>
+             <property name="text">
+              <string>No tunable performance options yet — TMDB's documented rate limit is generous and the built-in throttle stays well under it.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="tmdbSpacer">
+             <property name="orientation"><enum>Qt::Vertical</enum></property>
+             <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
      <widget class="QWidget" name="generalTab">
       <attribute name="icon">
        <iconset theme="document-properties"/>
@@ -316,6 +412,16 @@
            </item>
           </layout>
          </widget>
+         <widget class="QWidget" name="marqueeSubTab">
+          <attribute name="title">
+           <string>Marquee</string>
+          </attribute>
+          <layout class="QVBoxLayout" name="marqueeSubTabLayout">
+           <item>
+            <widget class="MarqueePanel" name="marqueePanel" native="true"/>
+           </item>
+          </layout>
+         </widget>
          <widget class="QWidget" name="toolbarSubTab">
           <attribute name="title">
            <string>Toolbar Buttons</string>
@@ -405,6 +511,12 @@
    <container>1</container>
   </customwidget>
   <customwidget>
+   <class>MarqueePanel</class>
+   <extends>QWidget</extends>
+   <header>marqueepanel.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
    <class>ToolbarPanel</class>
    <extends>QWidget</extends>
    <header>toolbarpanel.h</header>
@@ -414,6 +526,18 @@
    <class>GeneralSettingsPanel</class>
    <extends>QWidget</extends>
    <header>generalsettingspanel.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ScraperSettingsPanel</class>
+   <extends>QWidget</extends>
+   <header>scrapersettingspanel.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ScraperCredentialsPanel</class>
+   <extends>QWidget</extends>
+   <header>scrapercredentialspanel.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>

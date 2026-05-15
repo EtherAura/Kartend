@@ -18,9 +18,11 @@ namespace Ui {
 class SettingsDialog;
 }
 class QShowEvent;
+class QHideEvent;
 class QResizeEvent;
 class QGraphicsDropShadowEffect;
 class QPropertyAnimation;
+class QPushButton;
 QT_END_NAMESPACE
 
 class CollectionTreeWidget;
@@ -77,6 +79,12 @@ public:
   /// Handles dialog rejection while guarding against unsaved changes.
   void reject() override;
 
+  /// True while any SettingsDialog instance is currently visible.
+  /// Tracked by show/hide events so the main window can suppress its
+  /// focus-return splash when the user dismisses the settings dialog
+  /// (or alt-tabs back to it).
+  [[nodiscard]] static bool isAnyInstanceVisible();
+
 signals:
   void collectionSaved(const QList<CollectionConfig> &collections);
   void gridWidthChanged(int collectionIndex, int newGridWidth);
@@ -89,6 +97,7 @@ signals:
 
 protected:
   void showEvent(QShowEvent *event) override;
+  void hideEvent(QHideEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
 
 private slots:
@@ -273,6 +282,11 @@ private:
   /// broader scope.
   SettingsScope m_settingsScope = SettingsScope::Current;
 
+  /// Persistent save icon — installed as the top-right corner widget of
+  /// the dialog's main QTabWidget so it stays put regardless of which
+  /// page is open. Saves the current collection (when one is selected)
+  /// plus general settings; doesn't close the dialog.
+  QPushButton *m_saveButton = nullptr;
   // Unsaved-changes indicator: a pulsing drop-shadow glow
   // applied to the save button while hasUnsavedChanges() is true. Owned by
   // the button once attached (Qt manages lifetime via QWidget::setGraphicsEffect).

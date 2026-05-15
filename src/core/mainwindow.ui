@@ -130,6 +130,12 @@
              <property name="toolTip">
               <string>Home</string>
              </property>
+             <property name="accessibleName">
+              <string>Home</string>
+             </property>
+             <property name="accessibleDescription">
+              <string>Return to the root collection view showing every top-level collection</string>
+             </property>
              <property name="text">
               <string/>
              </property>
@@ -234,6 +240,12 @@
              <property name="toolTip">
               <string>Layout</string>
              </property>
+             <property name="accessibleName">
+              <string>View layout</string>
+             </property>
+             <property name="accessibleDescription">
+              <string>Choose between Grid, List, Cover Flow, and Horizontal layouts</string>
+             </property>
              <property name="text">
               <string/>
              </property>
@@ -262,6 +274,12 @@
              <property name="toolTip">
               <string>Show item details for the current selection</string>
              </property>
+             <property name="accessibleName">
+              <string>Item details</string>
+             </property>
+             <property name="accessibleDescription">
+              <string>Open a full-page detail view for the currently selected item</string>
+             </property>
              <property name="text">
               <string>ℹ</string>
              </property>
@@ -289,6 +307,12 @@
              </property>
              <property name="toolTip">
               <string>Filter</string>
+             </property>
+             <property name="accessibleName">
+              <string>Filter</string>
+             </property>
+             <property name="accessibleDescription">
+              <string>Filter the current view by collection type and apply title-pattern stripping</string>
              </property>
              <property name="text">
               <string/>
@@ -324,6 +348,12 @@
              <property name="toolTip">
               <string>Preview video volume</string>
              </property>
+             <property name="accessibleName">
+              <string>Preview video volume</string>
+             </property>
+             <property name="accessibleDescription">
+              <string>Volume for video previews and the now-playing overlay, 0 to 100 percent</string>
+             </property>
              <property name="minimum">
               <number>0</number>
              </property>
@@ -354,6 +384,12 @@
              </property>
              <property name="placeholderText">
               <string>Search items...</string>
+             </property>
+             <property name="accessibleName">
+              <string>Search</string>
+             </property>
+             <property name="accessibleDescription">
+              <string>Search items in the current collection. Use the scope toggle inside the field to switch between item-name and full-text search</string>
              </property>
             </widget>
            </item>

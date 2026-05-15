@@ -31,10 +31,6 @@ QPushButton *CollectionsTreeShell::duplicateCollectionButton() const {
   return ui->duplicateCollectionButton;
 }
 
-QPushButton *CollectionsTreeShell::saveCollectionButton() const {
-  return ui->saveCollectionButton;
-}
-
 QComboBox *CollectionsTreeShell::settingsScopeComboBox() const {
   return ui->settingsScopeComboBox;
 }

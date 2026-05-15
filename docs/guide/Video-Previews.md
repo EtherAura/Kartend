@@ -218,7 +218,7 @@ For systematic playback issues see
 - Player widget: [src/ui/widgets/videopreviewwidget.h](../../src/ui/widgets/).
   Wraps `QMediaPlayer` + `QVideoSink` for sidebar embedding.
 - Cover Flow video integration: in the Cover Flow view engine under
-  [src/modules/scroll/](../../src/modules/scroll/) — the center tile
+  [src/modules/input/scroll/](../../src/modules/input/scroll/) — the center tile
   delegate paints the `QVideoSink` frame instead of the artwork
   pixmap.
 - Volume binding: `MainWindow::onPreviewVolumeChanged` writes

@@ -16,6 +16,7 @@
 #include "hoverscrollhandler.h"
 #include "itemwidget.h"
 #include "mousemanager.h"
+#include "scraperesultdialog.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
 #include "wheeleventhandler.h"
@@ -30,6 +31,13 @@ Q_DECLARE_LOGGING_CATEGORY(lcEventManager)
   } while (0)
 
 bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
+  // WheelEventHandler treats every wheel event as a grid-selection
+  // scroll regardless of target. While the scraper dialog is up we
+  // skip that path so wheel ticks in the scraper (or anywhere else)
+  // stop moving the main-window selection.
+  if (ScrapeResultDialog::isAnyInstanceVisible()) {
+    return false;
+  }
   return m_wheelHandler && m_wheelHandler->handleEvent(obj, event);
 }
 

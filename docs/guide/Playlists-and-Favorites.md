@@ -232,7 +232,7 @@ reserved_kind ('' or            source_path
 
 ## For developers
 
-- Manager: [src/modules/playlist/](../../src/modules/playlist/)
+- Manager: [src/modules/data/playlist/](../../src/modules/data/playlist/)
   (`PlaylistManager`).
 - Schema: `playlists` and `playlist_items` tables, defined in the
   database migrations.

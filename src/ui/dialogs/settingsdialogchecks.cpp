@@ -295,6 +295,35 @@ auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
           m_originalGeneralSettings.attractModeAdvanceSelectionRandom) {
     return true;
   }
+  // Marquee fields owned by MarqueePanel — same deferred-save shape as
+  // AttractPanel, struct compare against the original snapshot.
+  if (m_generalSettings.marqueeEnabled != m_originalGeneralSettings.marqueeEnabled ||
+      m_generalSettings.marqueeScreenName != m_originalGeneralSettings.marqueeScreenName ||
+      m_generalSettings.marqueeMode != m_originalGeneralSettings.marqueeMode) {
+    return true;
+  }
+  // Scraper options owned by ScraperSettingsPanel — also deferred-save
+  // via panel.writeModel(); without this diff the dialog's "anything
+  // changed?" check would miss them and skip persistence on close.
+  if (m_generalSettings.scraperOptions.preset != m_originalGeneralSettings.scraperOptions.preset ||
+      m_generalSettings.scraperOptions.mediaMaxDimension !=
+          m_originalGeneralSettings.scraperOptions.mediaMaxDimension ||
+      m_generalSettings.scraperOptions.mediaConcurrency !=
+          m_originalGeneralSettings.scraperOptions.mediaConcurrency ||
+      m_generalSettings.scraperOptions.mediaThrottleMs !=
+          m_originalGeneralSettings.scraperOptions.mediaThrottleMs ||
+      m_generalSettings.scraperOptions.batchItemConcurrency !=
+          m_originalGeneralSettings.scraperOptions.batchItemConcurrency ||
+      m_generalSettings.scraperOptions.rescrapeMode !=
+          m_originalGeneralSettings.scraperOptions.rescrapeMode) {
+    return true;
+  }
+  // ScraperCredentialsPanel: full credential map compare. QHash
+  // operator== checks size + key/value equality, so adding/removing
+  // a provider or toggling any single field flips this.
+  if (m_generalSettings.scraperCredentials != m_originalGeneralSettings.scraperCredentials) {
+    return true;
+  }
   // Customizable toolbar fields owned by ToolbarPanel — struct compare.
   if (m_generalSettings.toolbarShowGridViewButton !=
           m_originalGeneralSettings.toolbarShowGridViewButton ||

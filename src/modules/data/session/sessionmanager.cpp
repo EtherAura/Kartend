@@ -193,8 +193,9 @@ auto SessionManager::buildSessionJson() const -> QJsonObject {
   return root;
 }
 
-// Atomically writes data to file using temp file + rename pattern
-// This prevents data loss if the application crashes during write
+// Atomically writes data to file using QSaveFile (temp file + atomic rename
+// via QFileDevice::commit()), then fsyncs the parent directory so the rename
+// itself is durable across a crash or power loss.
 auto SessionManager::atomicWriteFile(const QString &filePath, const QByteArray &data) -> bool {
   if (filePath.isEmpty()) {
     return false;

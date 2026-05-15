@@ -7,6 +7,7 @@
 QT_BEGIN_NAMESPACE
 class QLabel;
 class QPushButton;
+class QWheelEvent;
 QT_END_NAMESPACE
 
 class VideoPreviewWidget;
@@ -27,6 +28,24 @@ class ArtworkPreviewOverlay : public QWidget {
 public:
   explicit ArtworkPreviewOverlay(QWidget *parent = nullptr);
   ~ArtworkPreviewOverlay() override;
+
+  /// One entry in the overlay's thumb strip — the same shape as the
+  /// sidebar gallery uses. Set via `setGalleryEntries` after showing
+  /// the overlay so Left/Right + thumb clicks can cycle the main
+  /// preview between scraped artwork types without dismissing.
+  struct GalleryEntry {
+    QString label;
+    QString path;
+    bool isVideo = false;
+  };
+
+  /// Populate the overlay's bottom thumb strip with the related
+  /// artworks for the currently-previewed item. An empty list hides
+  /// the strip entirely (single-image preview, no related media to
+  /// cycle through). Called by the caller right after one of the
+  /// show*() methods so the strip's entries are in lockstep with
+  /// the main preview.
+  void setGalleryEntries(const QList<GalleryEntry> &entries);
 
   /// Show the overlay with artwork for the given file path.
   void showArtworkForFile(const QString &filePath, const QString &artworkDirectory);
@@ -84,6 +103,7 @@ protected:
   void mousePressEvent(QMouseEvent *event) override;
   void mouseDoubleClickEvent(QMouseEvent *event) override;
   void keyPressEvent(QKeyEvent *event) override;
+  void wheelEvent(QWheelEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
   void showEvent(QShowEvent *event) override;
   void hideEvent(QHideEvent *event) override;
@@ -97,12 +117,37 @@ private:
   // button's anchor.
   QWidget *m_displayWidget = nullptr;
   QString m_currentFilePath;
+  /// Absolute path of the artwork / video file currently displayed in the
+  /// main preview. Distinct from m_currentFilePath, which is the source
+  /// *media* file (the game / video / audio the overlay was opened for).
+  /// Used so setGalleryEntries() can snap m_galleryIndex to whichever
+  /// entry is already on screen, making the first Left/Right key step
+  /// land on the adjacent entry rather than position 0.
+  QString m_currentArtworkPath;
+  /// Bottom-anchored thumb strip + scroll container. Populated via
+  /// `setGalleryEntries`. m_galleryEntries holds the source data;
+  /// m_galleryStrip is its visible container (or null when no
+  /// entries — strip is hidden in that state).
+  class QWidget *m_galleryStrip = nullptr;
+  class QHBoxLayout *m_galleryLayout = nullptr;
+  class QScrollArea *m_galleryScroll = nullptr;
+  QList<GalleryEntry> m_galleryEntries;
+  /// Index into m_galleryEntries of whichever artwork is currently
+  /// shown as the main preview. -1 when the preview is a one-shot
+  /// (e.g. opened via the old sidebar gallery click path that didn't
+  /// supply entries). Cycle wraps modulo m_galleryEntries.size().
+  int m_galleryIndex = -1;
 
   void setupUI();
   void ensureVideoPreview();
   void centerContent();
   void displayPixmap(const QPixmap &pixmap);
   void displayVideo(const QString &absoluteVideoPath);
+  /// Swap the main preview to the given gallery entry (image → load
+  /// pixmap into m_artworkLabel; video → playVideo on m_videoPreview)
+  /// and updates m_galleryIndex. No-op when index is out of range.
+  void showGalleryEntry(int index);
+  void rebuildGalleryStrip();
 };
 
 #endif // ARTWORKPREVIEWOVERLAY_H

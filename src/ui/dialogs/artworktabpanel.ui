@@ -18,22 +18,8 @@
       <item row="0" column="0"><widget class="QLabel" name="label_artworkDir"><property name="text"><string>Artwork:</string></property></widget></item>
       <item row="0" column="1">
        <layout class="QHBoxLayout" name="artworkDirLayout">
-        <item><widget class="QLineEdit" name="artworkDirLineEdit"/></item>
+        <item><widget class="QLineEdit" name="artworkDirLineEdit"><property name="toolTip"><string>Single root folder for all of this collection's scraped + manual media. Scraping auto-creates per-type subfolders (box/, screenshot/, marquee/, fanart/, logo/, title/, video/, manual/, …) under it as needed — you don't need to define separate folders for each kind.</string></property></widget></item>
         <item><widget class="QPushButton" name="browseArtworkDirButton"><property name="text"><string>Browse</string></property></widget></item>
-       </layout>
-      </item>
-      <item row="1" column="0"><widget class="QLabel" name="label_videoDir"><property name="text"><string>Video:</string></property></widget></item>
-      <item row="1" column="1">
-       <layout class="QHBoxLayout" name="videoDirLayout">
-        <item><widget class="QLineEdit" name="videoDirLineEdit"><property name="toolTip"><string>Directory containing per-item preview videos. Files are matched by base name (e.g. SuperMario.mp4 for SuperMario.smc).</string></property></widget></item>
-        <item><widget class="QPushButton" name="browseVideoDirButton"><property name="text"><string>Browse</string></property></widget></item>
-       </layout>
-      </item>
-      <item row="2" column="0"><widget class="QLabel" name="label_manualDir"><property name="text"><string>Manual:</string></property></widget></item>
-      <item row="2" column="1">
-       <layout class="QHBoxLayout" name="manualDirLayout">
-        <item><widget class="QLineEdit" name="manualDirLineEdit"><property name="toolTip"><string>Directory containing per-item manual files (PDF, EPUB, TXT, etc.). Files are matched by base name (e.g. SuperMario.pdf for SuperMario.smc). Per-item overrides can be set via the right-click menu.</string></property></widget></item>
-        <item><widget class="QPushButton" name="browseManualDirButton"><property name="text"><string>Browse</string></property></widget></item>
        </layout>
       </item>
      </layout>

@@ -88,6 +88,17 @@ struct ErrorContext {
   QString message;
   QString details;
   QString source; // e.g., "QueryManager::fetchItemCount"
+  // HTTP status code captured by the network layer when the failure
+  // originated from an HTTP transport. 0 = not an HTTP error / unknown.
+  // Lets HTTP-aware callers (ScreenScraperProvider) re-map the generic
+  // "HTTP request failed" message into provider-specific guidance
+  // ("daily quota exhausted", "version blacklisted", etc.) without
+  // having to scrape it back out of the details string.
+  int httpStatus = 0;
+  // Server-supplied retry hint (seconds) for transient throttling
+  // failures (HTTP 429 Retry-After). 0 = absent. Callers can use this
+  // to auto-pace re-attempts instead of failing the asset outright.
+  int retryAfterSeconds = 0;
 
   [[nodiscard]] bool isError() const { return code != ErrorCode::Success; }
   [[nodiscard]] bool isCritical() const { return severity == Severity::Critical; }
@@ -122,6 +133,14 @@ struct ErrorContext {
   // Add details to existing context
   ErrorContext &withDetails(const QString &detailsText) {
     details = detailsText;
+    return *this;
+  }
+  ErrorContext &withHttpStatus(int status) {
+    httpStatus = status;
+    return *this;
+  }
+  ErrorContext &withRetryAfter(int seconds) {
+    retryAfterSeconds = seconds;
     return *this;
   }
 };

@@ -30,7 +30,11 @@
 #include "viewportmanager.h"
 
 #include <QLoggingCategory>
-Q_LOGGING_CATEGORY(lcSelectionManager, "kartend.selectionmanager")
+// Default to warning — persistSelection fires per grid move, which
+// generates a stderr write per navigation step when logging rules
+// are enabled. Opt in via
+// `KARTEND_LOG_RULES=kartend.selectionmanager.debug=true`.
+Q_LOGGING_CATEGORY(lcSelectionManager, "kartend.selectionmanager", QtWarningMsg)
 #define debugLog(msg)                                                                              \
   do {                                                                                             \
     if (lcSelectionManager().isDebugEnabled()) {                                                   \

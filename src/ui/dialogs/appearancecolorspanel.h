@@ -52,10 +52,16 @@ private:
   void onBrowseSelectionColor();
   void onBrowseListRowColor();
   void onBrowseListAltRowColor();
+  void onLoadColorScheme();
   void updateBackgroundButtonForType();
 
   Ui::AppearanceColorsPanel *ui;
   SettingsModel *m_model = nullptr;
+  /// Appended programmatically above the form (no .ui file edit).
+  /// Pops a picker listing bundled + system-installed KDE color schemes;
+  /// applying writes through to the per-collection color edits and
+  /// global title base color.
+  class QPushButton *m_loadSchemeButton = nullptr;
 };
 
 #endif // APPEARANCECOLORSPANEL_H

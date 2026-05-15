@@ -290,14 +290,14 @@ Toggleable per-collection; combines with search and other filters.
 
 ## For developers
 
-- Loading: [src/modules/artwork/](../../src/modules/artwork/)
+- Loading: [src/modules/media/artwork/](../../src/modules/media/artwork/)
   (`ArtworkManager` orchestrates), with worker functions in
   `artworkutils.cpp`. The pool is `QtConcurrent`-backed.
-- Cache: [src/modules/cache/](../../src/modules/cache/) (`CacheManager`)
+- Cache: [src/modules/data/cache/](../../src/modules/data/cache/) (`CacheManager`)
   hosts the in-memory LRU and disk persistence.
 - Per-item manual links table: `item_artwork(collection_uuid, source_path,
   artwork_type, artwork_file)` in SQLite. See
-  [src/modules/database/itemartworkstore.h](../../src/modules/database/).
+  [src/utils/db/itemartwork.h](../../src/utils/db/itemartwork.h).
 - Sidebar gallery layout: `MetadataSidebar` in
   [src/ui/widgets/](../../src/ui/widgets/). The gallery tabs are
   constructed dynamically from the union of standard types found and

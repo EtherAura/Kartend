@@ -274,14 +274,14 @@ For the master list see [Configuration Reference](Configuration-Reference.md).
 ## For developers
 
 - The C++ struct is `CollectionConfig` in
-  [src/utils/collectionutils.h](../../src/utils/collectionutils.h).
+  [src/utils/app/collectionutils.h](../../src/utils/app/collectionutils.h).
   Every key in this page maps 1:1 to a struct member.
 - Hierarchy traversal goes through `CollectionHierarchyCache`
   (`collectionutils.h`) and `NavigationStackManager`
-  (`src/modules/navigation/`). Parent-index → name resolution happens
-  there.
+  (`src/modules/input/navigation/`). Parent-index → name resolution
+  happens there.
 - Linked-parent rewrites on rename are in
-  [src/modules/settings/settingsdialogtree.cpp](../../src/modules/settings/).
+  [src/ui/dialogs/settingsdialogtree.cpp](../../src/ui/dialogs/settingsdialogtree.cpp).
 - Virtual subfolder collections are synthesized at scan time by
   `QueryManager`; they have `isSubcollection=true` but no INI section
   and no UUID. Look for `currentSubfolder` in

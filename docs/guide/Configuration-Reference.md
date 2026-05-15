@@ -445,10 +445,11 @@ hideMissingArtwork=true
 ## For developers
 
 - The two structs are `GeneralSettings` and `CollectionConfig` in
-  [src/utils/collectionutils.h](../../src/utils/collectionutils.h).
+  [src/utils/app/collectionutils.h](../../src/utils/app/collectionutils.h).
 - INI read/write happens in
-  [src/modules/settings/settingsmanager*.cpp](../../src/modules/settings/);
-  validation is in `configvalidation*.cpp` next to it.
+  [src/modules/data/settings/settingsmanager*.cpp](../../src/modules/data/settings/);
+  validation is in
+  [src/utils/fs/configvalidation.cpp](../../src/utils/fs/configvalidation.cpp).
 - Adding a new key: extend the struct, add load/save in
   `settingsmanager`, add UI in
   [src/ui/dialogs/settingsdialog\*.cpp](../../src/ui/dialogs/), update

@@ -208,11 +208,11 @@ Maintenance build logs are written to `build/ninja-maintenance/logs/`:
 
 ## Reproducing CI Locally
 
-The full GitHub Actions pipeline (`build.yml`) can be run on your own
-machine via [`act`](https://github.com/nektos/act), which executes the
-workflow inside a Docker container that emulates a GitHub-hosted
-ubuntu-24.04 runner. This catches CI breakage before pushing and is
-much faster than waiting for a remote run.
+The full GitHub Actions pipeline (`build.yml` + `coverage.yml`) can be
+run on your own machine via [`act`](https://github.com/nektos/act), which
+executes each workflow inside a Docker container that emulates a
+GitHub-hosted ubuntu-24.04 runner. This catches CI breakage before
+pushing and is much faster than waiting for a remote run.
 
 ### Prerequisites
 

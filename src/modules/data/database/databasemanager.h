@@ -5,6 +5,7 @@
 
 #include "filemapcache.h"
 #include "idatabasemanager.h"
+#include "itemmetadatacache.h"
 
 class CachedCountsService;
 class QueryManager;
@@ -122,6 +123,14 @@ public:
   bool removeItemArtwork(const QString &collectionUuid, const QString &path,
                          const QString &artworkType) override;
 
+  /// External-writer cache invalidation hook. Drops the (uuid, path)
+  /// entry from `m_metadataCache`. Called from the main thread by the
+  /// BatchScrapeRunner write worker after its own connection commits a
+  /// per-item save — without this the sidebar would render stale data
+  /// for any item that had been touched by the cache before the scrape
+  /// rewrote it. Cheap and idempotent.
+  void invalidateMetadataCacheItem(const QString &collectionUuid, const QString &path) override;
+
   // ──────────────────────────────────────────────────────────────────────────
   // Usage statistics
   // ──────────────────────────────────────────────────────────────────────────
@@ -135,6 +144,8 @@ public:
   [[nodiscard]] QList<UsageStatsStore::ItemUsageRow> loadTopPlayedItems(int limit) const override;
   [[nodiscard]] QList<UsageStatsStore::ItemUsageRow>
   loadRecentlyPlayedItems(int limit) const override;
+  [[nodiscard]] QList<UsageStatsStore::ItemUsageRow> loadNeverPlayedItems(int limit) const override;
+  [[nodiscard]] qint64 countItemsPlayedSince(const QString &isoCutoffUtc) const override;
   [[nodiscard]] QHash<QString, UsageStatsStore::CollectionUsage>
   loadUsageByCollection() const override;
   bool resetAllUsageStats() override;
@@ -207,6 +218,12 @@ private:
 
   FileMapCache m_fileMapCache;
   CachedCountsService *m_cachedCounts = nullptr;
+
+  // Per-item LRU cache for the three load methods the sidebar refresh
+  // fires per settled selection. Mutable so the const load methods can
+  // populate it on miss. Invalidated by every Save/Record write below
+  // and by invalidateCollectionCache() for whole-collection refreshes.
+  mutable ItemMetadataCache m_metadataCache{ItemMetadataCache::DEFAULT_CAPACITY};
 };
 
 #endif

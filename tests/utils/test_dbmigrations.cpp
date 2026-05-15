@@ -103,6 +103,9 @@ private slots:
   void v8AddsLauncherIndexColumn();
   void v9AddsLaunchHistoryTable();
   void v10AddsPlaylistTables();
+  void v11AddsSmartPlaylistColumns();
+  void v12AddsDateAddedColumn();
+  void v12LeavesExistingRowsAsUnknownDate();
   void preservesExistingDataAcrossUpgrade();
 };
 
@@ -122,8 +125,8 @@ void TestDbMigrations::appliesToCurrentVersion() {
 
   QCOMPARE(getUserVersion(db), 0);
   DbMigrations::applySchemaMigrations(db, "test");
-  // Current schema version is 10 (per dbmigrations.cpp).
-  QCOMPARE(getUserVersion(db), 10);
+  // Current schema version is 12 (per dbmigrations.cpp).
+  QCOMPARE(getUserVersion(db), 12);
 
   closeAndRemove(db, conn);
 }
@@ -249,7 +252,7 @@ void TestDbMigrations::v3AddsMetaTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 10);
+  QCOMPARE(getUserVersion(db), 12);
 
   // If FTS5 is available, the meta table should also exist.
   if (tableExists(db, "items_fts")) {
@@ -265,7 +268,7 @@ void TestDbMigrations::v4AddsFileSizeColumnAndIndex() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 10);
+  QCOMPARE(getUserVersion(db), 12);
   QVERIFY(tableHasColumn(db, "items", "file_size"));
   QVERIFY(indexExists(db, "idx_items_uuid_file_size"));
 
@@ -278,7 +281,7 @@ void TestDbMigrations::v5AddsItemMetadataTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 10);
+  QCOMPARE(getUserVersion(db), 12);
   QVERIFY(tableExists(db, "item_metadata"));
   // Required scraper-facing columns and feature-reserved columns.
   QVERIFY(tableHasColumn(db, "item_metadata", "collection_uuid"));
@@ -308,7 +311,7 @@ void TestDbMigrations::v6AddsItemArtworkTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 10);
+  QCOMPARE(getUserVersion(db), 12);
   QVERIFY(tableExists(db, "item_artwork"));
   QVERIFY(tableHasColumn(db, "item_artwork", "collection_uuid"));
   QVERIFY(tableHasColumn(db, "item_artwork", "path"));
@@ -342,7 +345,7 @@ void TestDbMigrations::v7AddsUsageStatsColumnAndIndexes() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 10);
+  QCOMPARE(getUserVersion(db), 12);
   // Cumulative play-time column added in v7.
   QVERIFY(tableHasColumn(db, "items", "total_play_seconds"));
   // Indexes used by the Most-played / Recently-played dialog tabs.
@@ -358,7 +361,7 @@ void TestDbMigrations::v8AddsLauncherIndexColumn() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 10);
+  QCOMPARE(getUserVersion(db), 12);
   // Per-item launcher override column added in v8.
   QVERIFY(tableHasColumn(db, "item_metadata", "launcher_index"));
 
@@ -371,7 +374,7 @@ void TestDbMigrations::v9AddsLaunchHistoryTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 10);
+  QCOMPARE(getUserVersion(db), 12);
   // Append-only history table added in v9.
   QVERIFY(tableExists(db, "launch_history"));
   QVERIFY(tableHasColumn(db, "launch_history", "id"));
@@ -406,7 +409,7 @@ void TestDbMigrations::v10AddsPlaylistTables() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 10);
+  QCOMPARE(getUserVersion(db), 12);
   QVERIFY(tableExists(db, "playlists"));
   QVERIFY(tableHasColumn(db, "playlists", "id"));
   QVERIFY(tableHasColumn(db, "playlists", "name"));
@@ -425,6 +428,63 @@ void TestDbMigrations::v10AddsPlaylistTables() {
 
   QVERIFY(indexExists(db, "idx_playlist_items_lookup"));
   QVERIFY(indexExists(db, "idx_playlist_items_playlist"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::v12AddsDateAddedColumn() {
+  // date_added column + idx_items_date_added must exist after migration,
+  // and rows inserted post-migration default to 0 so the by-date-added
+  // evaluator can distinguish them from backfilled rows.
+  const QString conn = "test_v12_date_added";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QCOMPARE(getUserVersion(db), 12);
+  QVERIFY(tableHasColumn(db, "items", "date_added"));
+  QVERIFY(indexExists(db, "idx_items_date_added"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::v12LeavesExistingRowsAsUnknownDate() {
+  // v12 deliberately doesn't backfill date_added from last_modified —
+  // file mtime != when-user-added-to-library, so any backfill would lie.
+  // Existing rows must come out with date_added=0 ("unknown date"),
+  // which the by-date-added evaluator excludes from recency-window
+  // queries. New rows inserted after migration get a real epoch from
+  // the scanner.
+  const QString conn = "test_v12_unknown_date";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+
+  QSqlQuery insert(db);
+  QVERIFY(insert.exec("INSERT INTO items (name, path, last_modified) "
+                      "VALUES ('Existing', '/existing.mp4', '2020-01-01T00:00:00Z')"));
+
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QSqlQuery sel(db);
+  QVERIFY(sel.exec("SELECT date_added FROM items WHERE path = '/existing.mp4'"));
+  QVERIFY(sel.next());
+  QCOMPARE(sel.value(0).toLongLong(), qint64(0));
+
+  closeAndRemove(db, conn);
+}
+
+void TestDbMigrations::v11AddsSmartPlaylistColumns() {
+  // is_smart + smart_filter columns added in v11. Both must be additive
+  // so existing v10 playlist rows survive the upgrade with default
+  // values (is_smart=0, smart_filter='').
+  const QString conn = "test_v11_smart";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QCOMPARE(getUserVersion(db), 12);
+  QVERIFY(tableHasColumn(db, "playlists", "is_smart"));
+  QVERIFY(tableHasColumn(db, "playlists", "smart_filter"));
 
   closeAndRemove(db, conn);
 }

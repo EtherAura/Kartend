@@ -22,6 +22,8 @@
 #include "errorutils.h"
 #include "querymanagerhelpers.h"
 #include "querymanagersql.h"
+#include "smartfilter.h"
+#include "smartplaylistevaluator.h"
 #include "uiconstants.h"
 
 using ErrorUtils::ErrorCode;
@@ -616,6 +618,54 @@ bool QueryManager::populatePlaylistScopeTempTable(const QString &playlistId) {
     return false;
   }
 
+  // Sniff the playlist row so we can branch between static (copy from
+  // playlist_items) and smart (evaluate filter against items table).
+  // One probe per scope-populate keeps the smart-aware path unambiguous
+  // without coupling QueryManager to PlaylistManager's API.
+  QSqlQuery probe(m_db);
+  probe.prepare("SELECT is_smart, smart_filter FROM playlists WHERE id = ?");
+  probe.addBindValue(playlistId);
+  if (!probe.exec()) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to probe playlist for is_smart",
+                                               "QueryManager::populatePlaylistScopeTempTable")
+                             .withDetails(probe.lastError().text()));
+    return false;
+  }
+  const bool found = probe.next();
+  const bool isSmart = found && probe.value(0).toInt() != 0;
+  const QString smartFilterJson = found ? probe.value(1).toString() : QString();
+
+  if (isSmart) {
+    // Smart playlists ignore playlist_items entirely — the row set is
+    // whatever the SmartPlaylistEvaluator returns for the persisted
+    // filter. A malformed filter is logged and yields an empty scope so
+    // the playlist tile renders as "(empty)" rather than failing the
+    // whole fetch.
+    auto filterResult = SmartFilter::fromJsonString(smartFilterJson);
+    if (filterResult.isError()) {
+      ErrorUtils::logError(filterResult.error());
+      return true; // empty scope is still a valid populated state
+    }
+    const auto matches = SmartPlaylistEvaluator::evaluate(m_db, filterResult.value());
+
+    QSqlQuery insert(m_db);
+    insert.prepare("INSERT OR IGNORE INTO query_playlist_scope (uuid, path) VALUES (?, ?)");
+    for (const auto &m : matches) {
+      insert.bindValue(0, m.collectionUuid);
+      insert.bindValue(1, m.path);
+      if (!insert.exec()) {
+        ErrorUtils::logError(
+            ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                  "Failed to insert smart-playlist match into scope",
+                                  "QueryManager::populatePlaylistScopeTempTable")
+                .withDetails(insert.lastError().text()));
+        // Keep going — partial scope is better than refusing the whole open.
+      }
+    }
+    return true;
+  }
+
   // INSERT OR IGNORE because (uuid, path) is the PK; a malformed playlist_items
   // table with duplicates wouldn't break the SELECT but would fail the INSERT.
   QSqlQuery insert(m_db);
@@ -638,17 +688,40 @@ bool QueryManager::ensurePlaylistScopePopulated(const QString &playlistId) {
     return false;
   }
 
-  // Cheap invalidation token: max(rowid) for this playlist's items combined
-  // with the playlist id. Inserts and deletes both move max(rowid), so an
-  // unchanged token guarantees the temp table is still in sync. Empty
-  // playlists yield max(rowid) NULL → token "<id>|0", which is fine.
-  QSqlQuery probe(m_db);
-  probe.prepare("SELECT COALESCE(MAX(rowid), 0) FROM playlist_items WHERE playlist_id = ?");
-  probe.addBindValue(playlistId);
-  if (!probe.exec() || !probe.next()) {
+  // Sniff is_smart so we can pick the right invalidation token. Static
+  // playlists key on max(rowid) of playlist_items (cheap, perfectly
+  // accurate). Smart playlists hash the filter JSON: identical JSON =
+  // safe to reuse the scope; new JSON (filter edited) = re-evaluate.
+  // The smart key intentionally does NOT include a per-call timestamp —
+  // re-evaluation on every fetch during scrolling would be wasteful.
+  // Trade-off: a smart playlist won't refresh mid-session when the
+  // underlying data changes (e.g. user launches a new game while
+  // viewing "Recently launched"). The user re-triggers evaluation by
+  // editing the filter or restarting the app. A periodic-invalidation
+  // hook is a follow-up if this proves unsatisfactory.
+  QSqlQuery flagProbe(m_db);
+  flagProbe.prepare("SELECT is_smart, smart_filter FROM playlists WHERE id = ?");
+  flagProbe.addBindValue(playlistId);
+  if (!flagProbe.exec() || !flagProbe.next()) {
     return false;
   }
-  const QString key = playlistId + QStringLiteral("|") + probe.value(0).toString();
+  const bool isSmart = flagProbe.value(0).toInt() != 0;
+
+  QString key;
+  if (isSmart) {
+    // Hash the filter JSON so the cache key length stays bounded even
+    // for filters with long extension lists.
+    const QString filterJson = flagProbe.value(1).toString();
+    key = playlistId + QStringLiteral("|smart|") + QString::number(qHash(filterJson));
+  } else {
+    QSqlQuery rowProbe(m_db);
+    rowProbe.prepare("SELECT COALESCE(MAX(rowid), 0) FROM playlist_items WHERE playlist_id = ?");
+    rowProbe.addBindValue(playlistId);
+    if (!rowProbe.exec() || !rowProbe.next()) {
+      return false;
+    }
+    key = playlistId + QStringLiteral("|") + rowProbe.value(0).toString();
+  }
   if (key == m_cachedPlaylistScopeKey) {
     return true;
   }

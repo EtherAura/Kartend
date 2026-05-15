@@ -3,7 +3,10 @@
 // per-collection breakdown / history) plus a header with whole-library totals.
 #include "statisticsdialog.h"
 
+#include <algorithm>
+
 #include <QCheckBox>
+#include <QDateTime>
 #include <QFileInfo>
 #include <QFont>
 #include <QFormLayout>
@@ -30,7 +33,9 @@ constexpr int DIALOG_WIDTH = 920;
 constexpr int DIALOG_HEIGHT = 640;
 constexpr int TOP_LIST_LIMIT = 50;
 constexpr int RECENT_LIST_LIMIT = 50;
+constexpr int NEVER_LIST_LIMIT = 50;
 constexpr int HISTORY_LIST_LIMIT = 1000;
+constexpr int RECENT_DAYS_WINDOW = 7;
 } // namespace
 
 StatisticsDialog::StatisticsDialog(IDatabaseManager *databaseManager,
@@ -85,9 +90,11 @@ void StatisticsDialog::setupUI() {
   m_totalLaunchesValue = makeValueLabel();
   m_totalTimeValue = makeValueLabel();
   m_itemsLaunchedValue = makeValueLabel();
+  m_played7DaysValue = makeValueLabel();
 
   headerLeft->addRow(tr("Total items:"), m_totalItemsValue);
   headerLeft->addRow(tr("Items launched at least once:"), m_itemsLaunchedValue);
+  headerLeft->addRow(tr("Played in last %1 days:").arg(RECENT_DAYS_WINDOW), m_played7DaysValue);
   headerRight->addRow(tr("Total launches:"), m_totalLaunchesValue);
   headerRight->addRow(tr("Total time played:"), m_totalTimeValue);
 
@@ -127,10 +134,25 @@ void StatisticsDialog::setupUI() {
       buildTree({tr("Item"), tr("Collection"), tr("Plays"), tr("Time"), tr("Last played")});
   m_recentlyPlayedTree =
       buildTree({tr("Item"), tr("Collection"), tr("Last played"), tr("Plays"), tr("Time")});
+  m_neverPlayedTree = buildTree({tr("Item"), tr("Collection")});
   m_byCollectionTree = buildTree({tr("Collection"), tr("Items"), tr("Launches"), tr("Time")});
 
   m_tabs->addTab(m_mostPlayedTree, tr("Most played"));
   m_tabs->addTab(m_recentlyPlayedTree, tr("Recently played"));
+
+  // never-played tab needs a summary label above the tree so the user can
+  // tell at a glance whether the visible list is exhaustive or capped.
+  auto *neverPlayedTab = new QWidget(this);
+  auto *neverPlayedLayout = new QVBoxLayout(neverPlayedTab);
+  neverPlayedLayout->setContentsMargins(0, 0, 0, 0);
+  neverPlayedLayout->setSpacing(8);
+  m_neverPlayedSummary = new QLabel(neverPlayedTab);
+  m_neverPlayedSummary->setStyleSheet("color: palette(mid);");
+  m_neverPlayedSummary->setWordWrap(true);
+  neverPlayedLayout->addWidget(m_neverPlayedSummary);
+  neverPlayedLayout->addWidget(m_neverPlayedTree, 1);
+  m_tabs->addTab(neverPlayedTab, tr("Never played"));
+
   m_tabs->addTab(m_byCollectionTree, tr("By collection"));
 
   // history tab. Sits inside a container so the tab can host
@@ -227,9 +249,19 @@ void StatisticsDialog::refresh() {
     return;
   }
 
-  populateAggregate(m_databaseManager->loadAggregateUsageStats());
+  // Recency cutoff is derived once per refresh so the header counter and any
+  // future tab filters stay consistent. UTC ISO-8601 matches what
+  // recordLaunch() writes, so a string comparison in SQL is cheap and safe.
+  const QString cutoffIso =
+      QDateTime::currentDateTimeUtc().addDays(-RECENT_DAYS_WINDOW).toString(Qt::ISODate);
+  const auto agg = m_databaseManager->loadAggregateUsageStats();
+  const qint64 played7Days = m_databaseManager->countItemsPlayedSince(cutoffIso);
+  const qint64 totalNever = std::max<qint64>(0, agg.totalItems - agg.itemsLaunchedAtLeastOnce);
+
+  populateAggregate(agg, played7Days);
   populateMostPlayed(m_databaseManager->loadTopPlayedItems(TOP_LIST_LIMIT));
   populateRecentlyPlayed(m_databaseManager->loadRecentlyPlayedItems(RECENT_LIST_LIMIT));
+  populateNeverPlayed(m_databaseManager->loadNeverPlayedItems(NEVER_LIST_LIMIT), totalNever);
   populateByCollection(m_databaseManager->loadUsageByCollection());
   populateHistory(m_databaseManager->loadRecentHistory(HISTORY_LIST_LIMIT),
                   m_databaseManager->historyEntryCount());
@@ -252,13 +284,17 @@ void StatisticsDialog::refresh() {
   }
 }
 
-void StatisticsDialog::populateAggregate(const UsageStatsStore::AggregateStats &agg) {
+void StatisticsDialog::populateAggregate(const UsageStatsStore::AggregateStats &agg,
+                                         qint64 playedInLast7Days) {
   const QLocale locale;
   if (m_totalItemsValue) {
     m_totalItemsValue->setText(locale.toString(agg.totalItems));
   }
   if (m_itemsLaunchedValue) {
     m_itemsLaunchedValue->setText(locale.toString(agg.itemsLaunchedAtLeastOnce));
+  }
+  if (m_played7DaysValue) {
+    m_played7DaysValue->setText(locale.toString(playedInLast7Days));
   }
   if (m_totalLaunchesValue) {
     m_totalLaunchesValue->setText(locale.toString(agg.totalLaunches));
@@ -336,6 +372,45 @@ void StatisticsDialog::populateRecentlyPlayed(const QList<UsageStatsStore::ItemU
   m_recentlyPlayedTree->sortByColumn(2, Qt::DescendingOrder);
   for (int col = 0; col < m_recentlyPlayedTree->columnCount(); ++col) {
     m_recentlyPlayedTree->resizeColumnToContents(col);
+  }
+}
+
+void StatisticsDialog::populateNeverPlayed(const QList<UsageStatsStore::ItemUsageRow> &rows,
+                                           qint64 totalNever) {
+  if (m_neverPlayedSummary) {
+    if (totalNever <= 0) {
+      m_neverPlayedSummary->setText(
+          tr("Every item in your library has been launched at least once."));
+    } else {
+      const QString totalText = QLocale().toString(totalNever);
+      const qint64 shown = std::min<qint64>(totalNever, rows.size());
+      const QString shownText = QLocale().toString(shown);
+      // %n forms get split-out so the plural rules apply per-clause; the
+      // showing-N caveat only renders when the cap actually clipped the list.
+      if (shown < totalNever) {
+        m_neverPlayedSummary->setText(
+            tr("%1 items have never been launched (showing first %2).").arg(totalText, shownText));
+      } else {
+        m_neverPlayedSummary->setText(tr("%1 items have never been launched.").arg(totalText));
+      }
+    }
+  }
+  if (!m_neverPlayedTree) {
+    return;
+  }
+  m_neverPlayedTree->clear();
+  m_neverPlayedTree->setSortingEnabled(false);
+  for (const auto &row : rows) {
+    auto *item = new NumericTreeItem(m_neverPlayedTree);
+    const QString name = row.name.isEmpty() ? QFileInfo(row.path).completeBaseName() : row.name;
+    item->setText(0, name);
+    item->setText(1, labelForCollectionUuid(row.collectionUuid));
+    item->setToolTip(0, row.path);
+  }
+  m_neverPlayedTree->setSortingEnabled(true);
+  m_neverPlayedTree->sortByColumn(0, Qt::AscendingOrder);
+  for (int col = 0; col < m_neverPlayedTree->columnCount(); ++col) {
+    m_neverPlayedTree->resizeColumnToContents(col);
   }
 }
 

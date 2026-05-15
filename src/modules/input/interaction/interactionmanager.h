@@ -202,6 +202,17 @@ public:
   // Idempotent add — duplicates are silently rejected by PlaylistManager.
   void addItemToPlaylist(const QString &playlistId, const QString &srcUuid,
                          const QString &filePath);
+  // Smart-playlist counterpart of addItemToNewPlaylist. Pops the
+  // CreateSmartPlaylistDialog and creates a filter-driven playlist on
+  // accept; cancellation is a no-op. The current item context is
+  // intentionally ignored — smart playlists derive their members from
+  // the filter, not from the right-clicked item.
+  void createSmartPlaylistDialog();
+  // Open the create dialog pre-loaded with an existing smart playlist's
+  // filter so the user can edit the criterion + parameters in place.
+  // Called from the Edit smart filter… action that appears inside a
+  // smart playlist view.
+  void editSmartPlaylistDialog(const QString &playlistId, const QString &currentName);
   // Inline-rename via a single QInputDialog. No-ops on cancel or unchanged
   // name; the rename is always reflected in the sidebar via the
   // playlistsChanged → resyncPlaylistCollections chain.

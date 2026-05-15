@@ -54,6 +54,9 @@ struct MenuControllerContext {
   std::function<void(const QString &filePath, int collectionIndex)> onLaunchItem;
   std::function<void()> onImportKart;
   std::function<void()> onExportKart;
+  std::function<void()> onShowFirstRunWizard;
+  std::function<void()> onShowScraperCredentials;
+  std::function<void()> onRunBatchScrape;
 };
 
 /// Handles menu bar setup and action connections.
@@ -102,6 +105,9 @@ private:
   QAction *m_fullscreenAction = nullptr;
   QAction *m_shortcutsAction = nullptr;
   QAction *m_statisticsAction = nullptr;
+  QAction *m_firstRunWizardAction = nullptr;
+  QAction *m_scraperCredentialsAction = nullptr;
+  QAction *m_batchScrapeAction = nullptr;
   QAction *m_gridWidthIncreaseAction = nullptr;
   QAction *m_gridWidthDecreaseAction = nullptr;
   QAction *m_importKartAction = nullptr;
@@ -156,6 +162,9 @@ private:
   void setupFullscreenAction();
   void setupShortcutsAction();
   void setupStatisticsAction();
+  void setupFirstRunWizardAction();
+  void setupScraperCredentialsAction();
+  void setupBatchScrapeAction();
   void setupGridWidthActions();
   void setupHamburgerMenu();
   void setupActionOpenRandomItem();

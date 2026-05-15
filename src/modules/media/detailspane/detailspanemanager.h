@@ -16,6 +16,9 @@ class SettingsManager;
 class ArtworkManager;
 class DatabaseManager;
 struct ApplicationContext;
+namespace TimerUtils {
+class DebouncedTimer;
+}
 
 struct DetailsPaneManagerSetup {
   const ApplicationContext *ctx = nullptr;
@@ -48,6 +51,11 @@ public:
   void setupReferences(const DetailsPaneManagerSetup &setup);
   void setupSidebar();
   void toggleSidebar();
+  /// Debounced sidebar refresh. Coalesces rapid selection changes
+  /// (wheel/arrow storms) into a single update once the selection
+  /// settles — the actual refresh runs ~METADATA_DEBOUNCE_MS after
+  /// the last call. Deselect (empty path) bypasses the debounce so
+  /// clears feel instant.
   void updateSidebarMetadata(ItemWidget *selectedItem);
   /// Path-based overload used when no ItemWidget is materialized for the
   /// selection (notably Cover Flow, which renders its own CoverFlowCards
@@ -55,6 +63,12 @@ public:
   /// m_currentItemContext so DetailPageManager and other consumers can
   /// resolve the same item without an ItemWidget pointer.
   void updateSidebarMetadata(const QString &filePath, const QString &itemName);
+  /// Force an immediate sidebar refresh, bypassing the debounce. Use
+  /// from explicit user actions where the latency would be noticed —
+  /// post-edit (context-menu metadata changes) and tab switches. Uses
+  /// the most recent pending args if a debounced update is queued,
+  /// otherwise falls back to the currently-displayed item context.
+  void refreshSidebarMetadataImmediate();
   void applySidebarStateForCollection(int collectionIndex);
   void updateSidebarLayout(int currentCollectionIndex);
   void positionSidebarOverlay();
@@ -113,6 +127,11 @@ private slots:
   void openArtworkLinksDialog();
 
 private:
+  /// The actual heavy work: 4 DB queries + filesystem probes that
+  /// updateSidebarMetadata used to do inline. Routed through the
+  /// debouncer; called directly only by refreshSidebarMetadataImmediate.
+  void performSidebarMetadataUpdate(const QString &filePath, const QString &itemName);
+
   DetailsPane *m_DetailsPane;
   QWidget *m_itemsPage;
   QHBoxLayout *m_mainHorizontalLayout;
@@ -148,6 +167,14 @@ private:
   int m_currentItemOwningIndex = -1;
   QString m_currentItemArtworkDir;
   ItemContext m_currentItemContext;
+
+  /// Coalesces rapid updateSidebarMetadata calls during wheel/arrow
+  /// storms into a single performSidebarMetadataUpdate once the
+  /// selection settles. Constructed in setupReferences so we don't
+  /// need a QObject parent at ctor time.
+  TimerUtils::DebouncedTimer *m_metadataDebouncer = nullptr;
+  QString m_pendingMetadataFilePath;
+  QString m_pendingMetadataItemName;
 };
 
 #endif

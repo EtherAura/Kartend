@@ -28,6 +28,7 @@
 #include "itemwidget.h"
 #include "keyboardmanager.h"
 #include "mousemanager.h"
+#include "scraperesultdialog.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
 #include "uiconstants.h"
@@ -127,6 +128,42 @@ bool EventManager::filterEvent(QObject *obj, QEvent *event) {
   }
 
   (void)handleActivityEvent(event);
+
+  // Swallow item-grid selection input while the scraper dialog is up so
+  // the user can't accidentally scroll/click/arrow-key the underlying
+  // collection while reviewing scrape results. Only events whose target
+  // lives inside the main window are blocked — the scraper dialog's own
+  // widgets stay fully interactive.
+  if (ScrapeResultDialog::isAnyInstanceVisible()) {
+    const QEvent::Type t = event->type();
+    const bool isSelectionInput =
+        (t == QEvent::Wheel || t == QEvent::MouseButtonPress || t == QEvent::MouseButtonDblClick ||
+         t == QEvent::MouseButtonRelease);
+    bool isNavKeyPress = false;
+    if (t == QEvent::KeyPress) {
+      auto *keyEvent = static_cast<QKeyEvent *>(event);
+      switch (keyEvent->key()) {
+      case Qt::Key_Up:
+      case Qt::Key_Down:
+      case Qt::Key_Left:
+      case Qt::Key_Right:
+        isNavKeyPress = true;
+        break;
+      default:
+        break;
+      }
+    }
+    if (isSelectionInput || isNavKeyPress) {
+      QWidget *ourWindow = m_itemsPage ? m_itemsPage->window()
+                                       : (m_gridContainer ? m_gridContainer->window() : nullptr);
+      auto *targetWidget = qobject_cast<QWidget *>(obj);
+      QWidget *targetWindow = targetWidget ? targetWidget->window() : nullptr;
+      if (ourWindow && targetWindow == ourWindow) {
+        event->accept();
+        return true;
+      }
+    }
+  }
 
   switch (event->type()) {
   case QEvent::Enter:
@@ -228,6 +265,32 @@ bool EventManager::handleKeyPressEvent(QObject *obj, QEvent *event) {
   auto *keyEvent = static_cast<QKeyEvent *>(event);
 
   if (QApplication::activeModalWidget()) {
+    return false;
+  }
+
+  // KeyboardManager drives grid navigation off every key event regardless
+  // of which widget is focused. While the scraper dialog is up, skip
+  // arrow-key handling so wheel/arrow ticks inside the scraper don't
+  // bleed through to the main window's selection.
+  if (keyEvent && ScrapeResultDialog::isAnyInstanceVisible()) {
+    switch (keyEvent->key()) {
+    case Qt::Key_Up:
+    case Qt::Key_Down:
+    case Qt::Key_Left:
+    case Qt::Key_Right:
+      return false;
+    default:
+      break;
+    }
+  }
+
+  // When the expand-mode artwork preview overlay is visible, let it
+  // consume the event itself (Escape closes the overlay; Left/Right
+  // cycle through the item's other artwork types; Enter re-launches
+  // the previewed item). Without this bypass the application-level
+  // event filter routes those keys to grid-selection navigation
+  // before the overlay's own keyPressEvent ever fires.
+  if (scrollMgr() && scrollMgr()->isArtworkPreviewVisible()) {
     return false;
   }
 

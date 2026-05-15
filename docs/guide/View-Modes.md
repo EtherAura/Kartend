@@ -245,9 +245,9 @@ Specifics:
 ## For developers
 
 - View modes are a `ViewType` enum in
-  [src/utils/collectionutils.h](../../src/utils/collectionutils.h).
+  [src/utils/app/collectionutils.h](../../src/utils/app/collectionutils.h).
 - Each mode is wired through `ScrollManager` and a corresponding
-  view-engine class under [src/modules/scroll/](../../src/modules/scroll/):
+  view-engine class under [src/modules/input/scroll/](../../src/modules/input/scroll/):
   - Grid / Horizontal share the `VirtualScrollEngine`.
   - List has its own row-rendering path.
   - Cover Flow lives in the `coverflow` view engine and has its own

@@ -2,4 +2,9 @@
     <qresource prefix="/">
         <file>icon.svg</file>
     </qresource>
+    <qresource prefix="/themes">
+        <file alias="KartendDark.colors">themes/KartendDark.colors</file>
+        <file alias="KartendLight.colors">themes/KartendLight.colors</file>
+        <file alias="KartendNeon.colors">themes/KartendNeon.colors</file>
+    </qresource>
 </RCC>

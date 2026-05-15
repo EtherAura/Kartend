@@ -12,15 +12,28 @@
 #include "videopreviewwidget.h"
 #include "videothumbnailextractor.h"
 
+#include <QElapsedTimer>
+#include <QFrame>
+#include <QFutureWatcher>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QImage>
 #include <QLabel>
+#include <QLoggingCategory>
+#include <QPointer>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QSizePolicy>
+#include <QTimer>
+
+#include "loggingcategories.h"
 #include <QPainter>
 #include <QPalette>
 #include <QPixmap>
 #include <QPolygon>
 #include <QPushButton>
 #include <QSize>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -28,6 +41,12 @@ DetailsPaneGalleryView::DetailsPaneGalleryView(QObject *parent) : QObject(parent
 
 void DetailsPaneGalleryView::setHost(DetailsPane *host) {
   m_host = host;
+}
+
+void DetailsPaneGalleryView::prewarmSection() {
+  // Public entry point that just runs the private lazy builder. See header
+  // comment for rationale (Kartend-jxp5).
+  ensureSection();
 }
 
 void DetailsPaneGalleryView::ensureSection() {
@@ -40,11 +59,32 @@ void DetailsPaneGalleryView::ensureSection() {
     return;
   }
 
+  // Perf trace (Kartend-jxp5) — measures the lazy widget construction cost.
+  // Pre-jxp5 this fired on the user's first sidebar refresh that had gallery
+  // entries (~2.5s outlier on the user's library). Post-jxp5 it fires from
+  // DetailsPane's constructor via prewarmSection(), so the cost lands in
+  // startup where it's invisible. The timer stays in case future changes
+  // re-introduce a regression here.
+  const bool perfTrace = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE");
+  QElapsedTimer perfWall;
+  if (perfTrace) {
+    perfWall.start();
+  }
+
   m_container = new QWidget(ui->contentWidget);
+  // Object name lets applyBubbleStyles paint a backdrop behind the
+  // whole gallery section (title row + thumb strip) so it visually
+  // matches the metadata card below the description.
+  m_container->setObjectName(QStringLiteral("galleryBackdrop"));
   auto *outer = new QVBoxLayout(m_container);
-  outer->setContentsMargins(0, UIConstants::Metadata::LABEL_SPACING, 0,
-                            UIConstants::Metadata::LABEL_SPACING);
-  outer->setSpacing(UIConstants::Metadata::LABEL_SPACING);
+  // Inner padding so the backdrop has breathing room around the title
+  // and thumbs. Bottom intentionally flush — the gallery scrollbar
+  // already sits at the bottom of its viewport, so any extra padding
+  // there reads as a "gap" between the gallery and the description
+  // tile below it. The contentLayout spacing supplies the actual
+  // inter-section gap.
+  outer->setContentsMargins(6, 3, 6, 0);
+  outer->setSpacing(2);
 
   // Title row pairs the section heading with the per-item edit affordance.
   // The button is short ("Edit") with a tooltip carrying the longer
@@ -57,11 +97,23 @@ void DetailsPaneGalleryView::ensureSection() {
   QFont titleFont = title->font();
   titleFont.setBold(true);
   title->setFont(titleFont);
-  title->setStyleSheet("color: palette(windowtext); padding: 2px 0px;");
+  // Padding kept in sync with the appendScrollingDescription "Description"
+  // label so the two section headers (gallery / description) read as a
+  // matched pair — same font weight, same vertical metrics.
+  title->setStyleSheet("color: palette(windowtext); padding: 0px;");
   titleRow->addWidget(title);
 
-  m_editButton = new QPushButton(tr("Edit"), m_container);
+  // Icon-only edit affordance: a small monochrome folder glyph (Breeze's
+  // `folder-symbolic`, with `folder` as fallback). The tooltip carries
+  // the longer description that the textual "Edit" label used to. Flat
+  // + fixed-size keeps the chrome unobtrusive next to the title.
+  m_editButton = new QPushButton(m_container);
   m_editButton->setCursor(Qt::PointingHandCursor);
+  m_editButton->setIcon(
+      UIConstants::Icons::fromTheme({"folder-symbolic", UIConstants::Icons::FOLDER}));
+  m_editButton->setIconSize(QSize(16, 16));
+  m_editButton->setFixedSize(20, 20);
+  m_editButton->setFlat(true);
   m_editButton->setToolTip(tr("Pick override files for any artwork type (standard or custom)."));
   m_editButton->setVisible(m_editEnabled);
   connect(m_editButton, &QPushButton::clicked, this, &DetailsPaneGalleryView::editRequested);
@@ -71,14 +123,54 @@ void DetailsPaneGalleryView::ensureSection() {
   titleRow->addStretch(1);
   outer->addLayout(titleRow);
 
-  // Horizontal layout wrapped in a plain widget; if more than ~4 thumbs are
-  // present they wrap by virtue of QLayout's setAlignment.
-  m_thumbsHost = new QWidget(m_container);
+  // Horizontal layout wrapped in its own QScrollArea so a rich scrape
+  // (ScreenScraper can return 20+ artwork types for one game) doesn't
+  // push the parent contentWidget past the sidebar viewport width.
+  // Without this internal scroll, the gallery's HBoxLayout sizeHint
+  // would grow the outer contentWidget horizontally (it's resizable),
+  // shifting AlignHCenter-positioned widgets like the artwork tile
+  // and video preview hundreds of pixels off-screen to the right.
+  // Internal scroll keeps the gallery self-contained: it grows
+  // horizontally inside itself with its own scrollbar / drag-scroll,
+  // and the sidebar's contentWidget stays at viewport width.
+  auto *thumbScroll = new QScrollArea(m_container);
+  thumbScroll->setWidgetResizable(true);
+  thumbScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+  thumbScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  thumbScroll->setFrameShape(QFrame::NoFrame);
+  thumbScroll->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+  // Fix the height to one thumb tile + a few px slack for the
+  // horizontal scrollbar; otherwise the QScrollArea wants to grow
+  // vertically to fit its viewport.
+  thumbScroll->setFixedHeight(UIConstants::Metadata::GALLERY_THUMB_SIZE + 10);
+  // Strip the QScrollArea's own background so the parent's sidebar
+  // bg shows through — otherwise the QScrollArea defaults to
+  // palette(base) which renders as a dark rectangle behind the
+  // slim scrollbar track.
+  thumbScroll->setStyleSheet("QScrollArea { background: transparent; border: none; }");
+  thumbScroll->viewport()->setAutoFillBackground(false);
+  // Slim horizontal scrollbar so the gallery row stays compact. Targets
+  // only this scroll area's bar (objectName ancestor) so app-wide
+  // scrollbars are untouched. ~6px tall track, no arrow buttons.
+  // Handle uses `palette(button)` so it matches the standard scrollbar
+  // face across themes; the track uses palette(window) so the strip
+  // behind the handle reads as the same color as the surrounding
+  // sidebar instead of the QScrollArea's default dark base.
+  thumbScroll->horizontalScrollBar()->setStyleSheet(
+      "QScrollBar:horizontal { height: 6px; background: palette(window); margin: 0; }"
+      "QScrollBar::handle:horizontal { background: palette(button); border-radius: 3px;"
+      " min-width: 24px; }"
+      "QScrollBar::handle:horizontal:hover { background: palette(highlight); }"
+      "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; height: 0; }"
+      "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: "
+      "palette(window); }");
+  m_thumbsHost = new QWidget;
   m_thumbLayout = new QHBoxLayout(m_thumbsHost);
   m_thumbLayout->setContentsMargins(0, 0, 0, 0);
   m_thumbLayout->setSpacing(UIConstants::Metadata::GALLERY_THUMB_SPACING);
   m_thumbLayout->setAlignment(Qt::AlignLeft);
-  outer->addWidget(m_thumbsHost);
+  thumbScroll->setWidget(m_thumbsHost);
+  outer->addWidget(thumbScroll);
 
   // Insert just below the artwork preview pane (and the dynamically-added
   // video preview, if any) so all visual artwork stays clustered. Falling
@@ -102,6 +194,11 @@ void DetailsPaneGalleryView::ensureSection() {
     contentLayout->addWidget(m_container);
   }
   m_container->hide();
+
+  if (perfTrace) {
+    qCDebug(lcPerfTrace).nospace()
+        << "DetailsPaneGalleryView::ensureSection: builtMs=" << perfWall.elapsed();
+  }
 }
 
 void DetailsPaneGalleryView::clearThumbs() {
@@ -143,48 +240,88 @@ void DetailsPaneGalleryView::rebuildThumbs(DetailsPaneTab activeTab) {
   if (!m_container || !m_thumbLayout) {
     return;
   }
-  clearThumbs();
+  // Per-phase perf timers (Kartend-jxp5 follow-up). The galleryUi outer
+  // timer in performSidebarMetadataUpdate showed a ~3.4s outlier on the
+  // FIRST gallery population — even after eager ensureSection (which
+  // landed at ~0ms). The cost has to be in clearThumbs / button-creation /
+  // applyVisibility's show() cascade. Each timer below logs separately
+  // when total >5ms so we can pinpoint the actual hotspot.
+  const bool perfTrace = qEnvironmentVariableIsSet("KARTEND_PERF_TRACE");
+  qint64 perfClearMs = 0, perfLoopMs = 0, perfVisMs = 0;
+  QElapsedTimer perfWall;
+  if (perfTrace) perfWall.start();
+  {
+    QElapsedTimer t;
+    if (perfTrace) t.start();
+    clearThumbs();
+    if (perfTrace) perfClearMs = t.elapsed();
+  }
 
   const int thumbSize = UIConstants::Metadata::GALLERY_THUMB_SIZE;
   const int padding = UIConstants::Metadata::GALLERY_THUMB_PADDING;
   const int iconSize = thumbSize - (padding * 2);
+  // Inner-loop perf accumulators (Kartend-jxp5 round 3 chase). Round 2
+  // showed loop=2248 with entries=2 — ~1.1s per iteration. Need to
+  // identify which specific call inside is slow on first use; suspects
+  // are QToolButton construction (style polish?), the async-dispatch
+  // path (QtConcurrent::run cold-start?), or m_thumbLayout->addWidget
+  // (layout reflow?).
+  qint64 perfBtnCtorMs = 0, perfBtnCfgMs = 0, perfDispatchMs = 0, perfAddMs = 0;
+  QElapsedTimer perfLoopTimer;
+  if (perfTrace) perfLoopTimer.start();
   for (const DetailsPane::GalleryEntry &entry : m_entries) {
-    QPixmap pixmap;
+    QPixmap initialPixmap;
     if (entry.isVideo) {
       // Prefer a cached extracted frame; otherwise show a placeholder and
       // request async extraction. Cached null pixmaps mean a prior
       // extraction failed — keep the placeholder rather than thrashing.
       auto *extractor = VideoThumbnailExtractor::instance();
       if (extractor->hasCacheEntry(entry.path)) {
-        pixmap = extractor->cached(entry.path);
+        initialPixmap = extractor->cached(entry.path);
       }
-      if (pixmap.isNull()) {
-        pixmap = makeVideoPlaceholder(iconSize);
-      }
-    } else {
-      pixmap = QPixmap(entry.path);
-      if (pixmap.isNull()) {
-        // Skip rows whose file vanished between load and render. Don't add
-        // a broken-image placeholder — the user gets a tighter gallery and
-        // can still launch the file from the main viewport.
-        continue;
+      if (initialPixmap.isNull()) {
+        initialPixmap = makeVideoPlaceholder(iconSize);
       }
     }
+    // For non-video entries the icon starts EMPTY (a transparent QPixmap of
+    // the right size keeps the button's geometry stable so the layout
+    // doesn't reflow when the real icon arrives). The actual QImage decode
+    // runs on a worker (Kartend-5ux9 fix); the watcher's finished slot
+    // promotes QImage → QPixmap on the main thread and sets the icon.
+    // Pre-fix this loop blocked the main thread for ~3.4 seconds on the
+    // first gallery population (cold OS cache + ~10 box-art-size decodes).
 
-    auto *button = new QToolButton(m_container);
-    button->setAutoRaise(true);
-    button->setCursor(Qt::PointingHandCursor);
-    button->setFixedSize(thumbSize, thumbSize);
-    button->setIconSize(QSize(iconSize, iconSize));
-    button->setIcon(QIcon(pixmap));
-    button->setToolTip(entry.label);
-    button->setAccessibleName(entry.label);
+    QToolButton *button = nullptr;
+    {
+      QElapsedTimer t;
+      if (perfTrace) t.start();
+      button = new QToolButton(m_container);
+      if (perfTrace) perfBtnCtorMs += t.elapsed();
+    }
+    {
+      QElapsedTimer t;
+      if (perfTrace) t.start();
+      button->setAutoRaise(true);
+      button->setCursor(Qt::PointingHandCursor);
+      button->setFixedSize(thumbSize, thumbSize);
+      button->setIconSize(QSize(iconSize, iconSize));
+      if (!initialPixmap.isNull()) {
+        button->setIcon(QIcon(initialPixmap));
+      }
+      button->setToolTip(entry.label);
+      button->setAccessibleName(entry.label);
+      if (perfTrace) perfBtnCfgMs += t.elapsed();
+    }
 
-    // Capture entry by value so the click handler keeps working after the
-    // caller's list goes out of scope.
+    // Capture entry by value so the click handler keeps working after
+    // the caller's list goes out of scope. Single click swaps the
+    // sidebar's main preview tile to this artwork — the old behaviour
+    // (open the full-screen artworkpreviewoverlay) is still available
+    // by clicking the main preview tile directly.
     const DetailsPane::GalleryEntry capturedEntry = entry;
-    connect(button, &QToolButton::clicked, this,
-            [this, capturedEntry]() { openPreview(capturedEntry); });
+    connect(button, &QToolButton::clicked, this, [this, capturedEntry]() {
+      if (m_host) m_host->showMainPreviewForEntry(capturedEntry);
+    });
 
     if (entry.isVideo) {
       // Request async frame extraction. Receiver is the button itself so
@@ -201,13 +338,95 @@ void DetailsPaneGalleryView::rebuildThumbs(DetailsPaneTab activeTab) {
                                                   Qt::KeepAspectRatio, Qt::SmoothTransformation);
                 button->setIcon(QIcon(scaled));
               });
-      VideoThumbnailExtractor::instance()->requestFrame(videoPath);
+      // Defer the requestFrame trigger so the sidebar refresh returns
+      // immediately. VideoThumbnailExtractor::requestFrame triggers
+      // ensureMediaPipeline (lazy QMediaPlayer + QAudioOutput + QVideoSink
+      // construction on first use, ~3s) + m_player->setSource (cold-disk
+      // file open, ~50-100ms even when warm). QMediaPlayer is GUI-thread
+      // bound so we can't QtConcurrent it.
+      //
+      // Round 8 (Kartend-9q8d): also wait for scroll-idle before firing.
+      // The host's predicate (set by DetailsPaneManager) reflects the
+      // global scroll/animation state; if a scroll is mid-glide, retry
+      // in 50ms. shared_ptr<function> wrapper lets the lambda re-arm
+      // itself recursively without nesting captures. QPointer guard on
+      // the gallery view auto-cancels the chain when clearThumbs runs
+      // (next gallery rebuild), so a stale chain can't fire after the
+      // entry it belonged to is gone.
+      QPointer<DetailsPaneGalleryView> selfGuard(this);
+      DetailsPane *host = m_host;
+      auto fire = std::make_shared<std::function<void()>>();
+      *fire = [selfGuard, videoPath, host, fire]() {
+        if (!selfGuard) return;
+        if (host && !host->isScrollIdle()) {
+          QTimer::singleShot(50, selfGuard.data(), *fire);
+          return;
+        }
+        VideoThumbnailExtractor::instance()->requestFrame(videoPath);
+      };
+      QTimer::singleShot(0, this, *fire);
+    } else {
+      // Async image-thumb load. QPointer guards against the next
+      // clearThumbs deleting the button before this load completes —
+      // worker continues to run but the result is dropped. QFutureWatcher
+      // parented to `this` (the gallery view) so the gallery view's
+      // destruction cleanly stops watching.
+      QElapsedTimer dispatchTimer;
+      if (perfTrace) dispatchTimer.start();
+      QPointer<QToolButton> buttonGuard(button);
+      const QString path = entry.path;
+      const int targetIconSize = iconSize;
+      auto *watcher = new QFutureWatcher<QImage>(this);
+      connect(watcher, &QFutureWatcherBase::finished, this, [watcher, buttonGuard]() {
+        watcher->deleteLater();
+        if (!buttonGuard) return;
+        const QImage img = watcher->result();
+        if (img.isNull()) {
+          // File vanished between rebuild and decode — drop the
+          // button rather than show an empty tile. Same intent as
+          // the pre-fix synchronous `continue` skip.
+          buttonGuard->deleteLater();
+          return;
+        }
+        // Scale on the worker thread already? We could do that
+        // inside the QtConcurrent lambda for further main-thread
+        // savings, but the scale is fast (<1ms for typical
+        // thumb sizes) and keeping it here makes the icon-size
+        // change path (applyThumbSize) consistent.
+        const QPixmap scaled = QPixmap::fromImage(img).scaled(
+            targetIconSize, targetIconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        buttonGuard->setIcon(QIcon(scaled));
+      });
+      watcher->setFuture(QtConcurrent::run([path]() { return QImage(path); }));
+      if (perfTrace) perfDispatchMs += dispatchTimer.elapsed();
     }
 
-    m_thumbLayout->addWidget(button);
+    {
+      QElapsedTimer t;
+      if (perfTrace) t.start();
+      m_thumbLayout->addWidget(button);
+      if (perfTrace) perfAddMs += t.elapsed();
+    }
+  }
+  if (perfTrace) perfLoopMs = perfLoopTimer.elapsed();
+
+  {
+    QElapsedTimer t;
+    if (perfTrace) t.start();
+    applyVisibility(activeTab);
+    if (perfTrace) perfVisMs = t.elapsed();
   }
 
-  applyVisibility(activeTab);
+  if (perfTrace) {
+    const qint64 total = perfWall.elapsed();
+    if (total > 5) {
+      qCDebug(lcPerfTrace).nospace()
+          << "DetailsPaneGalleryView::rebuildThumbs: total=" << total << " (clear=" << perfClearMs
+          << " loop=" << perfLoopMs << " [btnCtor=" << perfBtnCtorMs << " btnCfg=" << perfBtnCfgMs
+          << " dispatch=" << perfDispatchMs << " add=" << perfAddMs << "] applyVis=" << perfVisMs
+          << ") entries=" << m_entries.size();
+    }
+  }
 }
 
 void DetailsPaneGalleryView::setEntries(const QList<DetailsPane::GalleryEntry> &entries,

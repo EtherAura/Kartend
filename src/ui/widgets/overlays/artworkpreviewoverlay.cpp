@@ -6,12 +6,20 @@
 #include "videoutils.h"
 
 #include <QFileInfo>
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QIcon>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLayoutItem>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPixmap>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QToolButton>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 
 ArtworkPreviewOverlay::ArtworkPreviewOverlay(QWidget *parent) : QWidget(parent) {
   setupUI();
@@ -69,6 +77,7 @@ void ArtworkPreviewOverlay::showArtworkForFile(const QString &filePath,
   if (artwork.isNull()) {
     return;
   }
+  m_currentArtworkPath = artworkPath;
   displayPixmap(artwork);
 }
 
@@ -83,6 +92,7 @@ void ArtworkPreviewOverlay::showArtworkAtPath(const QString &absoluteArtworkPath
   if (artwork.isNull()) {
     return;
   }
+  m_currentArtworkPath = absoluteArtworkPath;
   displayPixmap(artwork);
 }
 
@@ -93,6 +103,7 @@ void ArtworkPreviewOverlay::showVideoAtPath(const QString &absoluteVideoPath) {
   // Same rationale as showArtworkAtPath: gallery-style entry points don't
   // carry a media file path, so leave m_currentFilePath empty and let the
   // selection-based fallback in InteractionManager pick up the launch.
+  m_currentArtworkPath = absoluteVideoPath;
   displayVideo(absoluteVideoPath);
 }
 
@@ -105,6 +116,7 @@ bool ArtworkPreviewOverlay::showMediaForFile(const QString &filePath,
   if (!videoDirectory.isEmpty()) {
     const QString videoPath = VideoUtils::findVideoForFile(filePath, videoDirectory);
     if (!videoPath.isEmpty()) {
+      m_currentArtworkPath = videoPath;
       displayVideo(videoPath);
       m_currentFilePath = filePath;
       return true;
@@ -118,6 +130,7 @@ bool ArtworkPreviewOverlay::showMediaForFile(const QString &filePath,
     if (!artworkPath.isEmpty()) {
       QPixmap artwork(artworkPath);
       if (!artwork.isNull()) {
+        m_currentArtworkPath = artworkPath;
         displayPixmap(artwork);
         m_currentFilePath = filePath;
         return true;
@@ -202,6 +215,19 @@ void ArtworkPreviewOverlay::hideOverlay() {
     m_videoPreview->hide();
   }
   m_displayWidget = nullptr;
+  m_currentArtworkPath.clear();
+  // Tear the strip down rather than just hiding it — the caller is
+  // expected to repopulate via setGalleryEntries() before the next
+  // show, and a stale strip from a prior item would race against the
+  // new one if we kept it parented.
+  if (m_galleryStrip) {
+    m_galleryStrip->deleteLater();
+    m_galleryStrip = nullptr;
+    m_galleryLayout = nullptr;
+    m_galleryScroll = nullptr;
+  }
+  m_galleryEntries.clear();
+  m_galleryIndex = -1;
 }
 
 bool ArtworkPreviewOverlay::togglePreviewVideoPause() {
@@ -217,15 +243,34 @@ void ArtworkPreviewOverlay::centerContent() {
     return;
   }
 
+  // When the gallery strip is present, reserve the bottom band for it so
+  // the centered preview doesn't overlap. Otherwise treat the full overlay
+  // as available vertical space.
+  const int stripHeight = m_galleryScroll ? m_galleryScroll->height() : 0;
+  const int stripMargin = m_galleryScroll ? 16 : 0;
+  const int usableHeight = height() - stripHeight - stripMargin;
+
   // Center the active display widget (artwork label or video preview).
   int x = (width() - m_displayWidget->width()) / 2;
-  int y = (height() - m_displayWidget->height()) / 2;
+  int y = (usableHeight - m_displayWidget->height()) / 2;
+  if (y < 0) y = 0;
   m_displayWidget->move(x, y);
 
   // Position close button at top-right of the displayed content.
   int closeX = x + m_displayWidget->width() - m_closeButton->width() / 2;
   int closeY = y - m_closeButton->height() / 2;
   m_closeButton->move(closeX, closeY);
+
+  // Anchor the gallery strip along the bottom edge with 80% of overlay
+  // width centered. The strip is scrollable, so even a very long entry
+  // list fits in the fixed width.
+  if (m_galleryScroll) {
+    const int stripWidth = qMax(200, static_cast<int>(width() * 0.8));
+    const int stripX = (width() - stripWidth) / 2;
+    const int stripY = height() - stripHeight - 12;
+    m_galleryScroll->setGeometry(stripX, stripY, stripWidth, stripHeight);
+    m_galleryScroll->raise();
+  }
 }
 
 void ArtworkPreviewOverlay::paintEvent(QPaintEvent *event) {
@@ -287,7 +332,52 @@ void ArtworkPreviewOverlay::keyPressEvent(QKeyEvent *event) {
       return;
     }
   }
+  // Left/Right cycle through the gallery entries when the overlay was
+  // populated with related artwork. No-op when fewer than 2 entries
+  // (single-image preview, nothing to cycle through).
+  if ((event->key() == Qt::Key_Left || event->key() == Qt::Key_Right) &&
+      m_galleryEntries.size() >= 2) {
+    const int direction = event->key() == Qt::Key_Left ? -1 : +1;
+    const int n = m_galleryEntries.size();
+    int next = m_galleryIndex;
+    if (next < 0) {
+      // No previous index pinned (e.g. overlay opened via legacy
+      // showAtPath); start the cycle from the first entry.
+      next = direction > 0 ? 0 : n - 1;
+    } else {
+      next = ((next + direction) % n + n) % n;
+    }
+    showGalleryEntry(next);
+    event->accept();
+    return;
+  }
   QWidget::keyPressEvent(event);
+}
+
+void ArtworkPreviewOverlay::wheelEvent(QWheelEvent *event) {
+  // Mirror the Left/Right key cycling so the wheel advances the artwork
+  // gallery instead of falling through to grid-selection scrolling. Wheel
+  // up = previous, wheel down = next (matches the visual order of the
+  // bottom thumb strip and the natural "scroll to advance" direction).
+  if (m_galleryEntries.size() < 2) {
+    QWidget::wheelEvent(event);
+    return;
+  }
+  const int delta = event->angleDelta().y();
+  if (delta == 0) {
+    QWidget::wheelEvent(event);
+    return;
+  }
+  const int direction = delta > 0 ? -1 : +1;
+  const int n = m_galleryEntries.size();
+  int next = m_galleryIndex;
+  if (next < 0) {
+    next = direction > 0 ? 0 : n - 1;
+  } else {
+    next = ((next + direction) % n + n) % n;
+  }
+  showGalleryEntry(next);
+  event->accept();
 }
 
 void ArtworkPreviewOverlay::resizeEvent(QResizeEvent *event) {
@@ -303,4 +393,107 @@ void ArtworkPreviewOverlay::showEvent(QShowEvent *event) {
 void ArtworkPreviewOverlay::hideEvent(QHideEvent *event) {
   QWidget::hideEvent(event);
   emit visibilityChanged(false);
+}
+
+void ArtworkPreviewOverlay::setGalleryEntries(const QList<GalleryEntry> &entries) {
+  m_galleryEntries = entries;
+  // Snap the cycle pointer to whichever entry matches the artwork
+  // path currently being previewed. When the overlay was opened via
+  // showArtworkAtPath, that path doubles as the entry's `path` field;
+  // showMediaForFile + showArtworkForFile use the artwork found by
+  // findArtworkForFile, so the match also covers those paths. Falls
+  // back to -1 when no entry path lines up (e.g. the active preview
+  // is the flat-root mirror at `{artwork}/{base}.png` but the gallery
+  // only enumerates typed copies under subdirs).
+  m_galleryIndex = -1;
+  if (!m_currentArtworkPath.isEmpty()) {
+    for (int i = 0; i < m_galleryEntries.size(); ++i) {
+      if (m_galleryEntries[i].path == m_currentArtworkPath) {
+        m_galleryIndex = i;
+        break;
+      }
+    }
+  }
+  rebuildGalleryStrip();
+}
+
+void ArtworkPreviewOverlay::rebuildGalleryStrip() {
+  // Tear down any previously-built strip — the entry list is small
+  // (rarely >30) and rebuild is the simplest way to stay consistent
+  // when the caller swaps to a new item.
+  if (m_galleryStrip) {
+    m_galleryStrip->deleteLater();
+    m_galleryStrip = nullptr;
+    m_galleryLayout = nullptr;
+    m_galleryScroll = nullptr;
+  }
+  if (m_galleryEntries.isEmpty()) return;
+
+  // Strip lives at the bottom of the overlay; centerContent positions
+  // it after the main preview is sized. The QScrollArea wrapper means
+  // even a 30-thumb strip stays inside the overlay rather than
+  // expanding it off-screen.
+  m_galleryScroll = new QScrollArea(this);
+  m_galleryScroll->setWidgetResizable(true);
+  m_galleryScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+  m_galleryScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  m_galleryScroll->setFrameShape(QFrame::NoFrame);
+  m_galleryScroll->setStyleSheet(
+      "QScrollArea { background-color: rgba(0, 0, 0, 140); border-radius: 6px; }");
+
+  const int thumbSize = UIConstants::Metadata::GALLERY_THUMB_SIZE;
+  const int padding = UIConstants::Metadata::GALLERY_THUMB_PADDING;
+  const int iconSize = thumbSize - (padding * 2);
+  m_galleryScroll->setFixedHeight(thumbSize + 24);
+
+  m_galleryStrip = new QWidget;
+  m_galleryLayout = new QHBoxLayout(m_galleryStrip);
+  m_galleryLayout->setContentsMargins(8, 6, 8, 6);
+  m_galleryLayout->setSpacing(UIConstants::Metadata::GALLERY_THUMB_SPACING);
+  m_galleryLayout->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+  for (int i = 0; i < m_galleryEntries.size(); ++i) {
+    const GalleryEntry &entry = m_galleryEntries[i];
+    auto *btn = new QToolButton(m_galleryStrip);
+    btn->setAutoRaise(true);
+    btn->setCursor(Qt::PointingHandCursor);
+    btn->setFixedSize(thumbSize, thumbSize);
+    btn->setIconSize(QSize(iconSize, iconSize));
+    btn->setToolTip(entry.label);
+    btn->setAccessibleName(entry.label);
+    // Video thumbs get a generic placeholder icon — frame-extraction
+    // would duplicate the sidebar's gallery extractor, and the
+    // overlay is short-lived enough that the cost isn't worth it.
+    if (entry.isVideo) {
+      btn->setText(QStringLiteral("▶"));
+    } else {
+      QPixmap pix(entry.path);
+      if (!pix.isNull()) {
+        btn->setIcon(QIcon(pix));
+      }
+    }
+    const int captured = i;
+    connect(btn, &QToolButton::clicked, this, [this, captured]() { showGalleryEntry(captured); });
+    m_galleryLayout->addWidget(btn);
+  }
+
+  m_galleryScroll->setWidget(m_galleryStrip);
+  m_galleryScroll->show();
+  // Re-anchor next paint cycle so the strip sits below the main
+  // preview rather than over it.
+  centerContent();
+}
+
+void ArtworkPreviewOverlay::showGalleryEntry(int index) {
+  if (index < 0 || index >= m_galleryEntries.size()) return;
+  m_galleryIndex = index;
+  const GalleryEntry &entry = m_galleryEntries[index];
+  m_currentArtworkPath = entry.path;
+  if (entry.isVideo) {
+    displayVideo(entry.path);
+  } else {
+    QPixmap pix(entry.path);
+    if (pix.isNull()) return;
+    displayPixmap(pix);
+  }
 }

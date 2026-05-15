@@ -17,6 +17,11 @@
 #include <QTest>
 
 #include "playlistmanager.h"
+#include "smartfilter.h"
+
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 class TestPlaylistManager : public QObject {
   Q_OBJECT
@@ -44,6 +49,11 @@ private slots:
   void exportToM3U_writesExtendedFormatWithBasenameTitles();
   void importFromM3U_skipsUnresolvableEntries();
   void importFromJson_rejectsMissingVersion();
+  void createSmartPlaylist_persistsFlagAndFilter();
+  void updateSmartFilter_changesPersistedJson();
+  void loadSmartFilter_rejectsStaticPlaylist();
+  void exportImportSmartPlaylist_roundTripsViaV2Json();
+  void importV1Json_stillCreatesStaticPlaylist();
 
 private:
   QTemporaryDir m_tempDir;
@@ -464,6 +474,119 @@ void TestPlaylistManager::importFromJson_rejectsMissingVersion() {
   auto result = m_pm->importFromJson(jsonPath);
   QVERIFY(result.isError());
   QCOMPARE(m_pm->loadAll().size(), 0);
+}
+
+void TestPlaylistManager::createSmartPlaylist_persistsFlagAndFilter() {
+  SmartFilter::Filter filter;
+  filter.kind = SmartFilter::Kind::TopPlayed;
+  filter.limit = 25;
+
+  auto created = m_pm->createSmartPlaylist("Top 25", filter);
+  QVERIFY(created.isOk());
+  const QString id = created.value();
+
+  const auto rows = m_pm->loadAll();
+  QCOMPARE(rows.size(), 1);
+  QVERIFY(rows.first().isSmart);
+  QVERIFY(!rows.first().smartFilterJson.isEmpty());
+
+  // The serialized filter must round-trip back through loadSmartFilter.
+  auto loaded = m_pm->loadSmartFilter(id);
+  QVERIFY(loaded.isOk());
+  QCOMPARE(static_cast<int>(loaded.value().kind),
+           static_cast<int>(SmartFilter::Kind::TopPlayed));
+  QCOMPARE(loaded.value().limit, 25);
+}
+
+void TestPlaylistManager::updateSmartFilter_changesPersistedJson() {
+  SmartFilter::Filter initial;
+  initial.kind = SmartFilter::Kind::RecentlyLaunched;
+  initial.limit = 10;
+  auto created = m_pm->createSmartPlaylist("Recents", initial);
+  QVERIFY(created.isOk());
+  const QString id = created.value();
+
+  SmartFilter::Filter updated;
+  updated.kind = SmartFilter::Kind::ByExtension;
+  updated.extensions = {"mp4", "mkv"};
+  QVERIFY(m_pm->updateSmartFilter(id, updated));
+
+  auto reloaded = m_pm->loadSmartFilter(id);
+  QVERIFY(reloaded.isOk());
+  QCOMPARE(static_cast<int>(reloaded.value().kind),
+           static_cast<int>(SmartFilter::Kind::ByExtension));
+  QCOMPARE(reloaded.value().extensions, QStringList({"mp4", "mkv"}));
+}
+
+void TestPlaylistManager::loadSmartFilter_rejectsStaticPlaylist() {
+  // Static playlists carry no filter; the API surfaces an error so the
+  // caller can avoid showing an empty Edit dialog rather than fabricating
+  // a default filter.
+  auto created = m_pm->createPlaylist("Static");
+  QVERIFY(created.isOk());
+  auto loaded = m_pm->loadSmartFilter(created.value());
+  QVERIFY(loaded.isError());
+}
+
+void TestPlaylistManager::exportImportSmartPlaylist_roundTripsViaV2Json() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+
+  SmartFilter::Filter filter;
+  filter.kind = SmartFilter::Kind::NeverPlayed;
+  filter.limit = 8;
+  auto created = m_pm->createSmartPlaylist("Untouched", filter);
+  QVERIFY(created.isOk());
+
+  const QString jsonPath = tmp.filePath("untouched.json");
+  auto exported = m_pm->exportToJson(created.value(), jsonPath);
+  QVERIFY(exported.isOk());
+
+  // Sniff the on-disk shape: v2 emits is_smart + smart_filter at the top
+  // level so a downstream tool can route without parsing the items list.
+  QFile f(jsonPath);
+  QVERIFY(f.open(QIODevice::ReadOnly));
+  const auto doc = QJsonDocument::fromJson(f.readAll());
+  f.close();
+  QVERIFY(doc.isObject());
+  const auto root = doc.object();
+  QCOMPARE(root.value("kartend_playlist_version").toInt(), 2);
+  QVERIFY(root.value("is_smart").toBool(false));
+  QVERIFY(!root.value("smart_filter").toString().isEmpty());
+
+  // Round-trip: import the file under a new name and verify the smart
+  // flag survives along with the filter contents.
+  auto reimported = m_pm->importFromJson(jsonPath, "Untouched (Copy)");
+  QVERIFY(reimported.isOk());
+  const QString newId = reimported.value();
+  auto reloaded = m_pm->loadSmartFilter(newId);
+  QVERIFY(reloaded.isOk());
+  QCOMPARE(static_cast<int>(reloaded.value().kind),
+           static_cast<int>(SmartFilter::Kind::NeverPlayed));
+  QCOMPARE(reloaded.value().limit, 8);
+}
+
+void TestPlaylistManager::importV1Json_stillCreatesStaticPlaylist() {
+  // A pre-v2 export has no is_smart field. The importer must keep
+  // accepting these as static playlists rather than rejecting them — the
+  // user's existing JSON files on disk (and any third-party-tool output
+  // matching v1) need to keep working through the upgrade.
+  QTemporaryDir tmp;
+  const QString jsonPath = tmp.filePath("v1.json");
+  QFile f(jsonPath);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write(R"({"kartend_playlist_version": 1,
+              "name": "Old style",
+              "icon": "",
+              "parent_collection_uuid": "",
+              "items": []})");
+  f.close();
+
+  auto result = m_pm->importFromJson(jsonPath);
+  QVERIFY(result.isOk());
+  const auto rows = m_pm->loadAll();
+  QCOMPARE(rows.size(), 1);
+  QVERIFY(!rows.first().isSmart);
 }
 
 QTEST_MAIN(TestPlaylistManager)

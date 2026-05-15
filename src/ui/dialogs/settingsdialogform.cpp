@@ -2,6 +2,7 @@
 // field extraction, change detection, browse helpers, load/save.
 #include <algorithm>
 #include <functional>
+#include <limits>
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QColorDialog>
@@ -37,6 +38,7 @@
 #include "itemwidget.h"
 #include "launchertabpanel.h"
 #include "mainwindow.h"
+#include "marqueepanel.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
 #include "settingsdialog.h"
@@ -188,7 +190,8 @@ void SettingsDialog::updateSaveButtonStyle() {
   // The button also stays enabled so the user can click Save; when there are
   // no changes we detach the glow and disable the button.
   const bool dirty = hasUnsavedChanges();
-  QPushButton *btn = ui->collectionsTreeShell->saveCollectionButton();
+  QPushButton *btn = m_saveButton;
+  if (!btn) return;
   btn->setEnabled(dirty);
 
   if (dirty) {
@@ -326,7 +329,7 @@ void SettingsDialog::updateGridWidthLimits() {
     return;
   }
   int preservedValue = ui->appearanceLayoutPanel->gridWidthSpinBox()->value();
-  ui->appearanceLayoutPanel->gridWidthSpinBox()->setMaximum(UIConstants::Grid::MAX_WIDTH);
+  ui->appearanceLayoutPanel->gridWidthSpinBox()->setMaximum(std::numeric_limits<int>::max());
   ui->appearanceLayoutPanel->gridWidthSpinBox()->setValue(preservedValue);
 }
 
@@ -349,7 +352,11 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   ui->splashPanel->refresh();
   ui->fontsPanel->refresh();
   ui->attractPanel->refresh();
+  ui->marqueePanel->refresh();
   ui->generalSettingsPanel->refresh();
+  ui->scraperSettingsPanel->refresh();
+  ui->screenScraperCredentialsPanel->refresh();
+  ui->tmdbCredentialsPanel->refresh();
   // Title-tint fields physically live in the per-collection appearance tab
   // even though they edit GeneralSettings; owned by AppearanceColorsPanel
   // which observes &m_generalSettings.
@@ -454,6 +461,13 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
         m_generalSettings.attractModeAdvanceSelectionIntervalSec;
     mainWindow->m_generalSettings.attractModeAdvanceSelectionRandom =
         m_generalSettings.attractModeAdvanceSelectionRandom;
+    // Marquee fields owned by MarqueePanel — copy struct + ping
+    // MainWindow's marquee lifecycle so the window appears / disappears /
+    // moves to a new screen / switches mode without an app restart.
+    mainWindow->m_generalSettings.marqueeEnabled = m_generalSettings.marqueeEnabled;
+    mainWindow->m_generalSettings.marqueeScreenName = m_generalSettings.marqueeScreenName;
+    mainWindow->m_generalSettings.marqueeMode = m_generalSettings.marqueeMode;
+    mainWindow->applyMarqueeSettings();
     // Title-tint fields: AppearanceColorsPanel keeps m_generalSettings live;
     // copy struct fields to mainWindow and apply ItemWidget side effects.
     mainWindow->m_generalSettings.titleTintSaturation = m_generalSettings.titleTintSaturation;
@@ -487,6 +501,19 @@ void SettingsDialog::saveGeneralSettingsFromUI() {
     // window's settings before persisting so the saved snapshot includes
     // any preset add/edit/remove the user just performed.
     mainWindow->m_generalSettings.launcherPresets = m_generalSettings.launcherPresets;
+
+    // Scraper performance + behavior options owned by ScraperSettingsPanel
+    // (writes straight into m_model.generalSettings, which is &m_generalSettings).
+    // Without this whole-struct copy the dialog's working changes never
+    // propagate to mainWindow's GeneralSettings, so they look reverted
+    // the next time the dialog opens — same pattern as all the other
+    // panel-owned fields above.
+    mainWindow->m_generalSettings.scraperOptions = m_generalSettings.scraperOptions;
+    // ScraperCredentialsPanel writes into m_generalSettings.scraperCredentials
+    // (same deferred pattern). The whole map gets copied across so removed
+    // / added providers are reflected in mainWindow's struct before the
+    // SettingsManager save flushes them to disk.
+    mainWindow->m_generalSettings.scraperCredentials = m_generalSettings.scraperCredentials;
 
     // Toolbar customization fields owned by ToolbarPanel — already in
     // m_generalSettings via writeBack(); copy to mainWindow's struct.

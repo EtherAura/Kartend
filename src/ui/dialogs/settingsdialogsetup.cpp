@@ -3,6 +3,7 @@
 // These remain SettingsDialog members; this is a translation-unit split.
 #include <algorithm>
 #include <functional>
+#include <limits>
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QColorDialog>
@@ -46,16 +47,21 @@
 #include "uiconstants.h"
 
 void SettingsDialog::setupBasicUIConnections() {
-  connect(ui->collectionsTreeShell->saveCollectionButton(), &QPushButton::clicked, this, [this]() {
-    if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
-      return;
+  connect(m_saveButton, &QPushButton::clicked, this, [this]() {
+    // The persistent save icon must work on every tab, including those
+    // where no collection is selected (Scrapers, General, etc.). When a
+    // collection is selected we use the full handleSaveCollection path
+    // so per-collection appearance edits round-trip correctly; otherwise
+    // we just persist the general-settings deltas.
+    if (currentCollectionIndex >= 0 && currentCollectionIndex < collections.size() &&
+        ui->appearanceLayoutPanel->gridWidthSpinBox()) {
+      handleSaveCollection(currentCollectionIndex);
+    } else {
+      saveGeneralSettingsFromUI();
+      m_originalGeneralSettings = m_generalSettings;
+      m_collectionSaved = true;
+      updateSaveButtonStyle();
     }
-    if (!ui->appearanceLayoutPanel->gridWidthSpinBox()) {
-      return;
-    }
-
-    int editedIndex = currentCollectionIndex;
-    handleSaveCollection(editedIndex);
   });
 }
 
@@ -285,7 +291,8 @@ void SettingsDialog::setupUIConstraints() {
   }
   if (ui->appearanceLayoutPanel->gridWidthSpinBox()) {
     ui->appearanceLayoutPanel->gridWidthSpinBox()->setMinimum(UIConstants::Grid::MIN_WIDTH);
-    ui->appearanceLayoutPanel->gridWidthSpinBox()->setMaximum(UIConstants::Grid::MAX_WIDTH);
+    // No upper cap — 4K/8K displays exceed the legacy 40-column ceiling.
+    ui->appearanceLayoutPanel->gridWidthSpinBox()->setMaximum(std::numeric_limits<int>::max());
     ui->appearanceLayoutPanel->gridWidthSpinBox()->setSingleStep(1);
   }
   // fontSizeSpinBox bounds set inside AppearanceTitlesPanel.ui.

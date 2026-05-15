@@ -1,18 +1,24 @@
 #include "appearancecolorspanel.h"
 
+#include "kdecolorscheme.h"
 #include "settingsformbinding.h"
 #include "settingsmodel.h"
 #include "ui_appearancecolorspanel.h"
 
+#include <QApplication>
+#include <QBoxLayout>
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QInputDialog>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QSpinBox>
+#include <QStringList>
 
 AppearanceColorsPanel::AppearanceColorsPanel(QWidget *parent)
     : QWidget(parent), ui(new Ui::AppearanceColorsPanel) {
@@ -81,6 +87,24 @@ AppearanceColorsPanel::AppearanceColorsPanel(QWidget *parent)
           &AppearanceColorsPanel::onBrowseListRowColor);
   connect(ui->browseListAltRowColorButton, &QPushButton::clicked, this,
           &AppearanceColorsPanel::onBrowseListAltRowColor);
+
+  // Insert the color-scheme loader at the very top of the panel so the
+  // bulk action sits above the per-field pickers — users typically pick
+  // a scheme first, then tweak. Done programmatically (no .ui edit) to
+  // keep the Designer surface stable.
+  if (auto *root = qobject_cast<QBoxLayout *>(layout())) {
+    auto *row = new QHBoxLayout();
+    m_loadSchemeButton = new QPushButton(tr("Load color scheme…"), this);
+    m_loadSchemeButton->setToolTip(
+        tr("Apply the colors from a bundled or KDE Plasma color scheme. Only "
+           "the per-collection color fields and the global title base color are "
+           "touched — vignette, blur, parallax, and fonts are left as-is."));
+    connect(m_loadSchemeButton, &QPushButton::clicked, this,
+            &AppearanceColorsPanel::onLoadColorScheme);
+    row->addWidget(m_loadSchemeButton);
+    row->addStretch();
+    root->insertLayout(0, row);
+  }
 }
 
 AppearanceColorsPanel::~AppearanceColorsPanel() {
@@ -345,4 +369,73 @@ void AppearanceColorsPanel::onBrowseListAltRowColor() {
   if (color.isValid()) {
     ui->listAltRowColorEdit->setText(color.name());
   }
+}
+
+void AppearanceColorsPanel::onLoadColorScheme() {
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+
+  const QList<KdeColorScheme::SchemeInfo> schemes = KdeColorScheme::discover();
+  if (schemes.isEmpty()) {
+    QMessageBox::information(this, tr("No color schemes available"),
+                             tr("No bundled or system color schemes were discovered. On KDE Plasma "
+                                "systems, schemes normally live under /usr/share/color-schemes/."));
+    return;
+  }
+
+  // Build the picker list with a "(bundled)" suffix on Kartend's own
+  // schemes so users can tell at a glance which entries ship with the
+  // app vs which come from the system. Indexes line up with the
+  // discover() result so the chosen index resolves back to a SchemeInfo.
+  QStringList labels;
+  labels.reserve(schemes.size());
+  for (const auto &s : schemes) {
+    labels.append(s.isBundled ? s.displayName + tr(" (bundled)") : s.displayName);
+  }
+
+  bool ok = false;
+  const QString chosen = QInputDialog::getItem(
+      this, tr("Load color scheme"), tr("Pick a color scheme to apply to this collection:"), labels,
+      0, /*editable=*/false, &ok);
+  if (!ok || chosen.isEmpty()) {
+    return;
+  }
+  const int idx = labels.indexOf(chosen);
+  if (idx < 0 || idx >= schemes.size()) {
+    return;
+  }
+
+  auto loaded = KdeColorScheme::load(schemes[idx].filePath);
+  if (loaded.isError()) {
+    QMessageBox::warning(this, tr("Could not load color scheme"), loaded.error().message);
+    return;
+  }
+  const auto &scheme = loaded.value();
+
+  // Apply to the working CollectionConfig + GeneralSettings, then refresh
+  // the UI line edits so the user sees the new values without an
+  // intermediate Save+Reload. Per-field changed() signals are emitted
+  // automatically by setText() so the dirty-tracking machinery picks
+  // the swap up.
+  CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
+  KdeColorScheme::applyToCollection(scheme, config);
+  if (m_model->generalSettings) {
+    KdeColorScheme::applyToGeneralSettings(scheme, *m_model->generalSettings);
+  }
+
+  // Push the new color values into the form. load() reads from the
+  // working CollectionConfig + generalSettings pointer that the apply
+  // helpers just mutated, so this mirrors the post-Apply visual state.
+  load();
+
+  // Title base color uses live-save semantics (host applies
+  // ItemWidget::setTitleBaseColor on baseColorChanged); fire the signal
+  // so a scheme with a Selection/BackgroundNormal entry takes effect on
+  // the grid immediately.
+  if (m_model->generalSettings && !m_model->generalSettings->titleBaseColor.isEmpty()) {
+    emit baseColorChanged(m_model->generalSettings->titleBaseColor);
+  }
+  emit changed();
 }

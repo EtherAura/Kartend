@@ -20,8 +20,9 @@
 ### Before Saying "Done"
 
 8. **Run quality gates** — `.scripts/build.sh --tests --run-tests` (or `--maintenance` for strict checks). Fix until clean.
-9. **Close the issue(s)** — `bd close <id1> <id2> ...` (batch when possible). Use `--reason="..."` if non-obvious.
-10. **MANDATORY PUSH** — work is NOT complete until `git push` succeeds:
+9. **Update CHANGELOG.md** — if the change is user-visible (new feature, bug fix, behaviour change, breaking change, removed/deprecated feature, security fix), append a bullet to the matching subsection under `[Unreleased]` (`### Added`, `### Changed`, `### Fixed`, `### Removed`, `### Deprecated`, `### Security`). One bullet per logical change, written for end users (not "refactored InternalManager" — write what the user can now see/do/avoid). Internal refactors, agent-doc edits, dev-tooling changes, and test-only changes skip this step. Keep beads IDs out of the bullet (per the hard rule below).
+10. **Close the issue(s)** — `bd close <id1> <id2> ...` (batch when possible). Use `--reason="..."` if non-obvious.
+11. **MANDATORY PUSH** — work is NOT complete until `git push` succeeds:
     ```bash
     git status                # verify what changed
     git add <files>
@@ -31,7 +32,7 @@
     git push                  # push code
     git status                # MUST show "up to date with origin"
     ```
-11. **Verify** — `git status` clean, `bd list --status=in_progress` empty (or only intentionally deferred work).
+12. **Verify** — `git status` clean, `bd list --status=in_progress` empty (or only intentionally deferred work).
 
 ### Hard Rules
 
@@ -44,6 +45,7 @@
 - ✅ When in doubt about priority: P0=critical/blocking, P1=high, P2=normal (default), P3=backlog, P4=future/nice-to-have.
 - ✅ When discovering related work mid-task, file it (`--deps discovered-from:<id>`) — don't expand the current issue's scope.
 - ❌ **Never restructure `src/` or `tests/` without refreshing the agent docs in the same commit.** Any folder move/rename/add/removal under `src/modules/`, `src/utils/`, `src/ui/uiconstants/`, or `tests/` — and any manager or `UIConstants::*` sub-namespace rename — MUST regenerate the matching trees and tables in `.github/copilot-instructions.md`, `docs/architecture.md`, `docs/testing.md` (for `tests/` changes), and any `docs/guide/*.md` page that links into the moved path. Stale paths silently mislead every future agent. Before closing the issue, run `grep -rn 'src/modules/<old>\|src/utils/<old>\|OldClassName' docs/ .github/` — it should return zero hits.
+- ❌ **Never close a user-visible bd issue without appending a bullet to `CHANGELOG.md` `[Unreleased]`.** Anything missed at close time stays missed forever — the release-cut step at `CONTRIBUTING.md:91` promotes `[Unreleased]` verbatim to the new version's section. "User-visible" = a user could notice the difference: new feature, bug fix, behaviour change, removed/deprecated feature, security fix. Internal refactors, agent-doc edits, dev-tooling, and test-only changes are exempt. The empty `### Added` / `### Changed` / `### Fixed` skeleton lives at the top of `CHANGELOG.md` so there's no ambiguity about where to append.
 
 ### Quick Reference
 
@@ -89,6 +91,7 @@ src/
 │   │   ├── playlist/    # Playlist storage and export (JSON / M3U)
 │   │   ├── query/       # Worker thread SQL queries
 │   │   ├── restore/     # Selection state restoration during navigation
+│   │   ├── scraper/     # Metadata-provider abstraction + web-search providers
 │   │   ├── session/     # Selection state persistence
 │   │   └── settings/    # Config file I/O, settings dialog
 │   ├── input/           # User input and navigation
@@ -168,35 +171,41 @@ if (auto *im = getInteractionManager()) {
 
 ### Atomic File Writes Pattern
 
-For data integrity when writing to disk, use the atomic write pattern (temp file + rename):
+For data integrity when writing to disk, use `QSaveFile` (which handles the
+temp-file + atomic-rename dance) plus `PathUtils::syncDirectory()` so the
+rename itself survives a crash or power loss:
 
 ```cpp
-// In SessionManager::atomicWriteFile()
+#include <QSaveFile>
+#include "utils/fs/pathutils.h"
+
 bool atomicWriteFile(const QString &filePath, const QByteArray &data) {
-  QString tempPath = filePath + ".tmp";
-  
-  // Write to temporary file first
-  QFile tempFile(tempPath);
-  if (!tempFile.open(QIODevice::WriteOnly)) {
+  const QString parentDir = QFileInfo(filePath).absolutePath();
+  if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
     return false;
   }
-  qint64 written = tempFile.write(data);
-  tempFile.close();
-  
-  if (written != data.size()) {
-    QFile::remove(tempPath);  // Clean up partial write
+
+  QSaveFile file(filePath);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
     return false;
   }
-  
-  // Remove existing file, then atomic rename
-  if (QFile::exists(filePath)) {
-    QFile::remove(filePath);
+  if (file.write(data) != data.size()) {
+    file.cancelWriting();
+    return false;
   }
-  return QFile::rename(tempPath, filePath);
+  if (!file.commit()) {
+    return false;
+  }
+  PathUtils::syncDirectory(parentDir);
+  return true;
 }
 ```
 
-This pattern prevents data corruption if the application crashes during write.
+Canonical adopters: `SessionManager::atomicWriteFile`,
+`PlaylistManager::exportToJson` / `exportToM3U`, `KartWriter`, `KartReader`,
+`CacheDiskStorage`. Do **not** hand-roll `QFile` + temp-name + `rename()` —
+`QSaveFile` already gets the ordering right and the parent-dir fsync is the
+piece raw `rename()` calls forget.
 
 ### State Ownership
 
@@ -397,6 +406,7 @@ Utilities are grouped by concern in six subfolders. Each has its own
 | `historystore.{h,cpp}` | `launch_history` table access |
 | `itemartwork.{h,cpp}` | `item_artwork` table — per-item artwork overrides (manual path + standard-type fallback) |
 | `itemmetadata.{h,cpp}` | `item_metadata` table — custom titles, descriptions, genres, key/value fields |
+| `itemmetadatacache.{h,cpp}` | Per-item LRU (256 entries) fronting `loadItemMetadata` / `loadItemArtwork` / `loadItemUsageStats`. Three slots per (collectionUuid, path); invalidated on writes, rescans, and reconnects. |
 | `usagestatsstore.{h,cpp}` | `play_count`, `last_played`, `total_play_seconds` on the items table |
 
 #### `src/utils/fs/` — Filesystem paths, validation, extension classification
@@ -470,6 +480,16 @@ Build script flags:
 - `--pgo` - Profile-guided optimization (two-pass build)
 - `--tests --run-tests` - Build and run unit tests
 
+> **clang-tidy `--apply-fixes` trap:** the `modernize-use-default-member-init`
+> fixer can mangle structs that combine an empty-bodied constructor with a
+> member-initializer list (e.g. `T() : x(4), y(false) {}`) — it has been
+> observed to leave behind broken `= default;` syntax on `CollectionConfig`
+> and similar config structs. Prefer in-class member init from the start
+> (`int x = 4;`) and drop the explicit constructor entirely, so the check has
+> nothing to rewrite. After running `--maintenance --apply-fixes`, diff
+> `src/utils/app/collectionutils.h` and any other config structs before
+> committing.
+
 **Debug builds:** Use `--debug` flag when you need to see debug/warning output:
 ```bash
 .scripts/build.sh --debug
@@ -527,6 +547,7 @@ tests/
 │   ├── test_historystore.cpp
 │   ├── test_itemartwork.cpp
 │   ├── test_itemmetadata.cpp
+│   ├── test_itemmetadatacache.cpp
 │   ├── test_pathutils.cpp
 │   ├── test_searchutils.cpp
 │   ├── test_stringutils.cpp
@@ -552,9 +573,9 @@ tests/
 
 ### Building Tests
 
-Enable tests with the `BUILD_TESTS` CMake flag:
+Enable tests with the `KARTEND_BUILD_TESTS` CMake flag:
 ```bash
-cmake -S . -B build/ninja-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+cmake -S . -B build/ninja-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DKARTEND_BUILD_TESTS=ON
 cmake --build build/ninja-release --parallel $(nproc)
 ```
 
@@ -613,11 +634,11 @@ suite which links all of its `TestXxx` classes into a single binary
 | Area | Path | Binaries | Coverage |
 |------|------|----------|----------|
 | Module unit tests | `tests/modules/<feature>/` | 37 | Per-manager and per-helper coverage mirroring `src/modules/<feature>/` |
-| Utility unit tests | `tests/utils/` | 14 | Helpers under `src/utils/` (cliargs, collectionutils, configvalidation, dbmigrations, gridutils, historystore, itemartwork, itemmetadata, pathutils, searchutils, stringutils, titlefilter, usagestatsstore, videoutils) |
+| Utility unit tests | `tests/utils/` | 15 | Helpers under `src/utils/` (cliargs, collectionutils, configvalidation, dbmigrations, gridutils, historystore, itemartwork, itemmetadata, itemmetadatacache, pathutils, searchutils, stringutils, titlefilter, usagestatsstore, videoutils) |
 | Integration tests | `tests/integration/` | 1 | `MainWindowFixture`-driven multi-manager scenarios (application lifecycle, settings dialog apply / changes / scope, scroll, navigation, details-pane coverflow, event-manager wiring, mainwindow smoke) |
 | UI widget tests | `tests/ui/widgets/` | 2 | Widget-level rendering and behavior (`CoverflowWidget`, `EmptyStateWidget`) |
 
-**Total: 63 `test_*.cpp` files, ~330 test methods across 54 binaries.**
+**Total: 64 `test_*.cpp` files, ~340 test methods across 55 binaries.**
 Method counts drift fast — prefer `ctest --output-on-failure --test-dir
 build/ninja-release` for an authoritative pass count.
 
@@ -691,25 +712,35 @@ UIConstants is organized into logical sub-namespaces:
 
 | Namespace | Purpose |
 |-----------|---------|
-| `UIConstants::Grid` | Grid layout (row height, spacing, margins) |
-| `UIConstants::Item` | Item widget dimensions and padding |
-| `UIConstants::Timing` | General timing constants (delays, debounce) |
-| `UIConstants::Animation` | Animation durations and easing |
-| `UIConstants::Keyboard` | Key repeat rates, arrow navigation timing |
-| `UIConstants::Mouse` | Click hold, scroll step timing |
-| `UIConstants::Search` | Search debounce, minimum query length |
-| `UIConstants::Selection` | Selection overlay, highlight timing |
-| `UIConstants::Navigation` | Collection navigation timing |
-| `UIConstants::Artwork` | Artwork loading batch sizes, delays |
-| `UIConstants::Cache` | Cache size limits, persistence timing |
-| `UIConstants::DetailsPane` | Details-pane dimensions and animation |
-| `UIConstants::Viewport` | Viewport calculations, scroll margins |
-| `UIConstants::Widget` | Widget pool sizes, creation limits |
-| `UIConstants::Metadata` | Metadata sidebar update timing |
-| `UIConstants::Color` | Transparency, overlay colors |
-| `UIConstants::Placeholder` | Placeholder image dimensions |
-| `UIConstants::Dialog` | Settings dialog dimensions |
-| `UIConstants::Emoji` | Unicode emoji constants for UI |
+| `UIConstants::Animation` | Scroll/pulse animation durations and keyframes |
+| `UIConstants::Artwork` | Async artwork loading batch sizes, throttling |
+| `UIConstants::Attract` | Idle-triggered attract-mode autoscroll tunables |
+| `UIConstants::Cache` | Memory cache sizing, disk persistence timing |
+| `UIConstants::CollectionIcon` | Collection preview/icon display sizing |
+| `UIConstants::Color` | Color manipulation for theme-aware rendering |
+| `UIConstants::Concurrency` | Background thread pool sizing |
+| `UIConstants::Database` | DB-backed scan and cache-validation thresholds |
+| `UIConstants::DetailsPane` | Details-pane dimensions and timing |
+| `UIConstants::Dialog` | Application dialog dimensions |
+| `UIConstants::Gamepad` | Analog stick deadzones for digital navigation |
+| `UIConstants::Grid` | Virtual scrolling grid layout and container sizing |
+| `UIConstants::Icons` | Breeze/Plasma theme icon names |
+| `UIConstants::Item` | ItemWidget sizing, fonts, validation bounds |
+| `UIConstants::Keyboard` | Arrow-key repeat rate and centering timing |
+| `UIConstants::Launch` | External process spawn / archive extract limits |
+| `UIConstants::ListView` | Text-only list view mode constants |
+| `UIConstants::Metadata` | Metadata sidebar layout constants |
+| `UIConstants::Mouse` | Click-hold, wheel, and double-click timing |
+| `UIConstants::Navigation` | Collection navigation, progress, scrollbar recovery |
+| `UIConstants::Offset` | Common offset values for layout calculations |
+| `UIConstants::Overlay` | Transient overlay timing (e.g. search loading) |
+| `UIConstants::Placeholder` | Deterministic placeholder artwork generation |
+| `UIConstants::Scroll` | Virtual scroll, viewport, artwork prewarm tunables |
+| `UIConstants::Search` | Search debounce and refocus timing |
+| `UIConstants::Selection` | Selection restore and double-click timing |
+| `UIConstants::Timing` | General delays (ms unless noted) |
+| `UIConstants::Viewport` | Main content area sizing constraints |
+| `UIConstants::Widget` | ItemWidget dimensions, borders, pool sizing |
 
 Example usage:
 ```cpp

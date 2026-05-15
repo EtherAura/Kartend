@@ -72,6 +72,7 @@ public:
   bool removeItemArtwork(const QString &, const QString &, const QString &) override {
     return true;
   }
+  void invalidateMetadataCacheItem(const QString &, const QString &) override {}
 
   [[nodiscard]] UsageStatsStore::ItemUsageStats
   loadItemUsageStats(const QString &, const QString &) const override {
@@ -88,6 +89,10 @@ public:
   [[nodiscard]] QList<UsageStatsStore::ItemUsageRow> loadRecentlyPlayedItems(int) const override {
     return {};
   }
+  [[nodiscard]] QList<UsageStatsStore::ItemUsageRow> loadNeverPlayedItems(int) const override {
+    return {};
+  }
+  [[nodiscard]] qint64 countItemsPlayedSince(const QString &) const override { return 0; }
   [[nodiscard]] QHash<QString, UsageStatsStore::CollectionUsage>
   loadUsageByCollection() const override {
     return {};

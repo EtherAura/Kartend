@@ -1,0 +1,596 @@
+#include "scraperservice.h"
+
+#include "idatabasemanager.h"
+#include "pathutils.h"
+#include "scrapepersistence.h"
+
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLoggingCategory>
+#include <QPointer>
+#include <QStandardPaths>
+#include <QTimer>
+
+namespace Scraper {
+
+namespace {
+Q_LOGGING_CATEGORY(lcScraperService, "kartend.scraperservice", QtWarningMsg)
+constexpr int kCurrentStateVersion = 1;
+} // namespace
+
+int ScraperService::PendingState::totalRemaining() const {
+  int total = 0;
+  for (const auto &j : queue) total += j.items.size();
+  return total;
+}
+
+ScraperService::ScraperService(QObject *parent) : QObject(parent) {
+  // 250ms coalescing window keeps per-item updates off the disk-write
+  // path during heavy auto-scrape runs; on shutdown / pause / cancel
+  // we flush synchronously so no resume progress is lost.
+  m_persistTimer = new QTimer(this);
+  m_persistTimer->setSingleShot(true);
+  m_persistTimer->setInterval(250);
+  connect(m_persistTimer, &QTimer::timeout, this, &ScraperService::flushPendingPersist);
+}
+
+ScraperService::~ScraperService() {
+  // Final flush so app shutdown mid-scrape preserves the latest
+  // queue state for the next launch's resume prompt.
+  flushPendingPersist();
+}
+
+void ScraperService::setContext(const Context &ctx) {
+  m_ctx = ctx;
+}
+
+QString ScraperService::pendingStateFilePath() {
+  const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+  return QDir(dir).filePath(QStringLiteral("pending-scrape.json"));
+}
+
+int ScraperService::countQueueRemaining() const {
+  int total = 0;
+  for (const auto &j : m_queue) total += j.items.size();
+  return total;
+}
+
+void ScraperService::startScrape(const QList<CollectionJob> &jobs, Mode mode,
+                                 const QSet<QString> &mediaFilter, bool writeMetadata) {
+  if (m_state != State::Idle) {
+    qCWarning(lcScraperService) << "startScrape called while not idle, state="
+                                << static_cast<int>(m_state);
+    return;
+  }
+  m_queue = jobs;
+  m_queueCursor = 0;
+  m_mode = mode;
+  m_mediaFilter = mediaFilter;
+  m_writeMetadata = writeMetadata;
+  m_summary = Summary{};
+  m_totalItemsAtStart = countQueueRemaining();
+  m_itemsCompleted = 0;
+  m_startedAtMs = QDateTime::currentMSecsSinceEpoch();
+  m_currentCollectionName.clear();
+  m_currentItemPath.clear();
+  m_lastScrapedItem = Scraper::ScrapedItem();
+  m_recentMediaPaths.clear();
+  m_pausedItemPath.clear();
+  m_totalBytesDownloaded = 0;
+  m_bytesAtCollectionStart = 0;
+
+  emit scrapeStarted(m_totalItemsAtStart);
+  persistState();
+  pump();
+}
+
+void ScraperService::resumeFromState(const PendingState &state) {
+  if (!state.isValid()) return;
+  if (m_state != State::Idle) return;
+  m_queue = state.queue;
+  m_queueCursor = 0;
+  m_mode = state.mode;
+  m_mediaFilter = state.mediaFilter;
+  m_writeMetadata = state.writeMetadata;
+  m_summary = state.summarySoFar;
+  m_totalItemsAtStart =
+      countQueueRemaining() + m_summary.scraped + m_summary.skipped + m_summary.errors;
+  m_itemsCompleted = m_summary.scraped + m_summary.skipped + m_summary.errors;
+  m_startedAtMs =
+      state.startedAtUnixMs > 0 ? state.startedAtUnixMs : QDateTime::currentMSecsSinceEpoch();
+  m_currentCollectionName.clear();
+  m_currentItemPath.clear();
+  m_lastScrapedItem = Scraper::ScrapedItem();
+  m_recentMediaPaths.clear();
+  m_pausedItemPath.clear();
+  emit scrapeStarted(m_totalItemsAtStart);
+  persistState();
+  pump();
+}
+
+void ScraperService::cancel() {
+  if (m_state == State::Idle) return;
+  if (m_autoRunner) {
+    m_autoRunner->cancel();
+    // The runner's `finished` slot drains the queue and emits
+    // scrapeFinished — let it handle the post-cancel flow.
+    return;
+  }
+  // Interactive / paused: synthesize a finish.
+  m_state = State::Finishing;
+  clearStateFile();
+  emit scrapeFinished(m_summary);
+  m_state = State::Idle;
+}
+
+void ScraperService::pauseInteractive() {
+  if (m_state != State::RunningInteractive) return;
+  m_state = State::PausedInteractive;
+  emit scrapePaused();
+  persistState();
+}
+
+void ScraperService::resumePaused() {
+  if (m_state != State::PausedInteractive) return;
+  m_state = State::RunningInteractive;
+  emit scrapeResumed();
+  // Re-fire the lookup for the currently-cued item.
+  startInteractiveItem();
+}
+
+void ScraperService::applyPick(const Scraper::ScrapedItem &item) {
+  if (m_state != State::RunningInteractive) return;
+  if (m_queueCursor >= m_queue.size()) return;
+  auto &job = m_queue[m_queueCursor];
+  if (job.items.isEmpty()) return;
+  // The dialog has already persisted via its applyResult callback by
+  // the time it calls us; we only book-keep here.
+  ++m_summary.scraped;
+  ++m_itemsCompleted;
+  m_lastScrapedItem = item;
+  job.items.removeFirst();
+  if (job.items.isEmpty()) {
+    ++m_queueCursor;
+  }
+  schedulePersist();
+  // Fire a synthetic itemCompleted so the Live view's metadata panel
+  // updates. Media paths are unknown to the service in interactive
+  // mode (the dialog's apply path writes them); leave the list empty.
+  emit itemCompleted(m_itemsCompleted, m_totalItemsAtStart, item, QStringList{});
+  pump();
+}
+
+void ScraperService::skipPick() {
+  if (m_state != State::RunningInteractive) return;
+  if (m_queueCursor >= m_queue.size()) return;
+  auto &job = m_queue[m_queueCursor];
+  if (job.items.isEmpty()) return;
+  ++m_summary.skipped;
+  ++m_itemsCompleted;
+  job.items.removeFirst();
+  if (job.items.isEmpty()) ++m_queueCursor;
+  schedulePersist();
+  pump();
+}
+
+void ScraperService::pump() {
+  // Auto-mode: the BatchScrapeRunner drives item iteration; we just
+  // walk collections when each runner finishes. Interactive-mode:
+  // we drive item-by-item ourselves.
+  if (m_queueCursor >= m_queue.size()) {
+    m_state = State::Finishing;
+    clearStateFile();
+    emit scrapeFinished(m_summary);
+    m_state = State::Idle;
+    return;
+  }
+  // Skip empty queue entries (defensive — applyPick/skipPick prune
+  // them inline but a malformed resume could land here).
+  while (m_queueCursor < m_queue.size() && m_queue[m_queueCursor].items.isEmpty()) {
+    ++m_queueCursor;
+  }
+  if (m_queueCursor >= m_queue.size()) {
+    m_state = State::Finishing;
+    clearStateFile();
+    emit scrapeFinished(m_summary);
+    m_state = State::Idle;
+    return;
+  }
+  m_currentCollectionName = m_queue[m_queueCursor].collectionName;
+  if (m_mode == Mode::Auto) {
+    m_state = State::RunningAuto;
+    startAutoCollection();
+  } else {
+    m_state = State::RunningInteractive;
+    startInteractiveItem();
+  }
+}
+
+void ScraperService::startAutoCollection() {
+  if (!m_ctx.providerBuilder || !m_ctx.databaseManager || !m_ctx.generalSettings) {
+    ++m_summary.errors;
+    m_itemsCompleted += m_queue[m_queueCursor].items.size();
+    m_queue[m_queueCursor].items.clear();
+    ++m_queueCursor;
+    schedulePersist();
+    pump();
+    return;
+  }
+  auto &job = m_queue[m_queueCursor];
+  qCInfo(lcScraperService) << "startAutoCollection idx=" << job.collectionIndex
+                           << "name=" << job.collectionName << "items=" << job.items.size();
+  auto provider = m_ctx.providerBuilder(job.collectionIndex);
+  if (!provider) {
+    qCWarning(lcScraperService) << "no provider applies for collection" << job.collectionName;
+    m_summary.firstFailures.append(
+        QStringLiteral("%1: no provider applies").arg(job.collectionName));
+    m_summary.errors += job.items.size();
+    m_itemsCompleted += job.items.size();
+    job.items.clear();
+    ++m_queueCursor;
+    schedulePersist();
+    pump();
+    return;
+  }
+  m_priorAtCollectionStart = m_itemsCompleted;
+  m_currentCollectionItemCount = job.items.size();
+  m_summaryAtCollectionStart = m_summary;
+  m_bytesAtCollectionStart = m_totalBytesDownloaded;
+  const auto rescrapeMode =
+      static_cast<Scraper::RescrapeMode>(m_ctx.generalSettings->scraperOptions.rescrapeMode);
+  const int itemConcurrency = m_ctx.generalSettings->scraperOptions.batchItemConcurrency;
+  m_autoRunner = new BatchScrapeRunner(
+      m_ctx.databaseManager, std::move(provider), job.collectionUuid, job.items, job.artworkDir,
+      /*fetchPrimaryCover=*/true, rescrapeMode, itemConcurrency, this);
+  m_autoRunner->setMediaTypeFilter(m_mediaFilter);
+  m_autoRunner->setWriteMetadata(m_writeMetadata);
+
+  connect(m_autoRunner, &BatchScrapeRunner::progress, this,
+          [this](int doneInCol, int totalInCol, const QString &name) {
+            onAutoItemBegan(doneInCol, totalInCol, name);
+          });
+  connect(m_autoRunner, &BatchScrapeRunner::itemCompleted, this,
+          [this](int doneInCol, int totalInCol, const Scraper::ScrapedItem &scraped,
+                 const QStringList &paths) {
+            onAutoItemCompleted(doneInCol, totalInCol, scraped, paths);
+          });
+  connect(m_autoRunner, &BatchScrapeRunner::finished, this,
+          [this](const BatchScrapeRunner::Summary &s) { onAutoFinished(s); });
+  m_autoRunner->start();
+}
+
+void ScraperService::onAutoItemBegan(int doneInCol, int /*totalInCol*/, const QString &name) {
+  m_currentItemPath = name;
+  // The runner's progress signal counts ALL completions (success +
+  // skip + error). Reset itemsCompleted to the authoritative value so
+  // the progress bar advances even for errored items mid-collection.
+  m_itemsCompleted = m_priorAtCollectionStart + doneInCol;
+  // Roll the per-collection counts into m_summary so the dialog's
+  // Live view "Scraped X · Skipped Y · Errors Z" line ticks on each
+  // item start instead of jumping at the end of the collection.
+  if (m_autoRunner) {
+    const auto runnerSummary = m_autoRunner->currentSummary();
+    m_summary.scraped = m_summaryAtCollectionStart.scraped + runnerSummary.scraped;
+    m_summary.skipped = m_summaryAtCollectionStart.skipped + runnerSummary.skipped;
+    m_summary.errors = m_summaryAtCollectionStart.errors + runnerSummary.errors;
+    m_summary.mediaWritten = m_summaryAtCollectionStart.mediaWritten + runnerSummary.mediaWritten;
+    m_totalBytesDownloaded = m_bytesAtCollectionStart + m_autoRunner->totalBytesDownloaded();
+  }
+  qCDebug(lcScraperService) << "itemBegan name=" << name << "doneInCol=" << doneInCol
+                            << "totalCompleted=" << m_itemsCompleted << "of" << m_totalItemsAtStart;
+  emit itemBegan(m_itemsCompleted, m_totalItemsAtStart, m_currentCollectionName, name);
+}
+
+void ScraperService::onAutoItemCompleted(int doneInCol, int /*totalInCol*/,
+                                         const Scraper::ScrapedItem &scraped,
+                                         const QStringList &paths) {
+  // Sync itemsCompleted to the runner's authoritative count (post-
+  // success). onAutoItemBegan resets this on every progress emit, but
+  // a runner with one-at-a-time concurrency emits itemCompleted
+  // BEFORE the next item's progress, so we need to advance here too.
+  m_itemsCompleted = m_priorAtCollectionStart + doneInCol;
+  // Same per-item summary roll-up as onAutoItemBegan — captures the
+  // tail-end item the next progress() never fires for.
+  if (m_autoRunner) {
+    const auto runnerSummary = m_autoRunner->currentSummary();
+    m_summary.scraped = m_summaryAtCollectionStart.scraped + runnerSummary.scraped;
+    m_summary.skipped = m_summaryAtCollectionStart.skipped + runnerSummary.skipped;
+    m_summary.errors = m_summaryAtCollectionStart.errors + runnerSummary.errors;
+    m_summary.mediaWritten = m_summaryAtCollectionStart.mediaWritten + runnerSummary.mediaWritten;
+    m_totalBytesDownloaded = m_bytesAtCollectionStart + m_autoRunner->totalBytesDownloaded();
+  }
+  m_lastScrapedItem = scraped;
+  appendRecentMedia(paths);
+  qCDebug(lcScraperService) << "itemCompleted scraped.title=" << scraped.title
+                            << "mediaPaths=" << paths.size()
+                            << "totalCompleted=" << m_itemsCompleted;
+  // Remove the just-completed item from the persisted queue so a
+  // resume picks up at the *next* unfinished item. The runner is
+  // walking m_queue[m_queueCursor].items by value (it was copy-
+  // constructed from `job.items` at startAutoCollection), so we own
+  // the queue-side trim independently.
+  if (m_queueCursor < m_queue.size() && !m_queue[m_queueCursor].items.isEmpty()) {
+    m_queue[m_queueCursor].items.removeFirst();
+  }
+  schedulePersist();
+  emit itemCompleted(m_itemsCompleted, m_totalItemsAtStart, scraped, paths);
+}
+
+void ScraperService::onAutoFinished(const BatchScrapeRunner::Summary &summary) {
+  // m_summary is already rolling per-item via the per-progress/
+  // -itemCompleted hooks above, so a final snap to
+  // (m_summaryAtCollectionStart + summary) settles any drift without
+  // double-counting.
+  m_summary.scraped = m_summaryAtCollectionStart.scraped + summary.scraped;
+  m_summary.skipped = m_summaryAtCollectionStart.skipped + summary.skipped;
+  m_summary.errors = m_summaryAtCollectionStart.errors + summary.errors;
+  m_summary.mediaWritten = m_summaryAtCollectionStart.mediaWritten + summary.mediaWritten;
+  if (m_autoRunner) {
+    m_totalBytesDownloaded = m_bytesAtCollectionStart + m_autoRunner->totalBytesDownloaded();
+  }
+  qCInfo(lcScraperService) << "onAutoFinished collection done — scraped=" << summary.scraped
+                           << "skipped=" << summary.skipped << "errors=" << summary.errors;
+  // Backfill itemsCompleted to the full collection size — progress
+  // signal stops just before the last item completes (no signal fires
+  // for "the last item is done"), so we explicitly snap to the total
+  // here. m_priorAtCollectionStart was set when this collection
+  // began.
+  m_itemsCompleted = m_priorAtCollectionStart + m_currentCollectionItemCount;
+  // Drop any unfinished items in the queue's current entry (cancel
+  // path) so the persistence file reflects what actually ran.
+  if (m_queueCursor < m_queue.size()) {
+    m_queue[m_queueCursor].items.clear();
+  }
+  for (const QString &f : summary.firstFailures) {
+    if (m_summary.firstFailures.size() < 5) m_summary.firstFailures.append(f);
+  }
+  if (m_autoRunner) {
+    m_autoRunner->deleteLater();
+    m_autoRunner = nullptr;
+  }
+  ++m_queueCursor;
+  schedulePersist();
+  pump();
+}
+
+void ScraperService::startInteractiveItem() {
+  if (m_queueCursor >= m_queue.size()) {
+    pump();
+    return;
+  }
+  auto &job = m_queue[m_queueCursor];
+  if (job.items.isEmpty()) {
+    ++m_queueCursor;
+    pump();
+    return;
+  }
+  // Rebuild provider per collection switch — m_interactiveProvider
+  // is keyed on the current collection. Cheap; the registry call is
+  // synchronous.
+  if (m_currentCollectionName != job.collectionName || !m_interactiveProvider) {
+    if (m_ctx.providerBuilder) {
+      m_interactiveProvider = m_ctx.providerBuilder(job.collectionIndex);
+    }
+    m_currentCollectionName = job.collectionName;
+  }
+  if (!m_interactiveProvider) {
+    m_summary.firstFailures.append(
+        QStringLiteral("%1: no provider applies").arg(job.collectionName));
+    m_summary.errors += job.items.size();
+    m_itemsCompleted += job.items.size();
+    job.items.clear();
+    ++m_queueCursor;
+    schedulePersist();
+    pump();
+    return;
+  }
+  const QString filePath = job.items.first();
+  m_currentItemPath = filePath;
+  m_pausedItemPath = filePath;
+  const QString name = QFileInfo(filePath).fileName();
+  emit itemBegan(m_itemsCompleted, m_totalItemsAtStart, job.collectionName, name);
+
+  const QString queryText = QFileInfo(filePath).completeBaseName();
+  MetadataLookupProvider::LookupContext ctx{queryText, filePath};
+  QPointer<ScraperService> guard(this);
+  m_interactiveProvider->lookup(ctx,
+                                [guard](ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> r) {
+                                  if (guard.isNull()) return;
+                                  guard->interactiveLookupComplete(r);
+                                });
+}
+
+void ScraperService::interactiveLookupComplete(
+    ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> result) {
+  if (m_state == State::PausedInteractive) {
+    // User closed the dialog mid-lookup. Drop the result; the resume
+    // path will re-fire the lookup.
+    return;
+  }
+  if (result.isError()) {
+    ++m_summary.errors;
+    if (m_summary.firstFailures.size() < 5) {
+      m_summary.firstFailures.append(QStringLiteral("%1: %2").arg(
+          QFileInfo(m_currentItemPath).fileName(), result.error().message));
+    }
+    ++m_itemsCompleted;
+    if (m_queueCursor < m_queue.size() && !m_queue[m_queueCursor].items.isEmpty()) {
+      m_queue[m_queueCursor].items.removeFirst();
+    }
+    if (m_queueCursor < m_queue.size() && m_queue[m_queueCursor].items.isEmpty()) {
+      ++m_queueCursor;
+    }
+    schedulePersist();
+    pump();
+    return;
+  }
+  if (result.value().isEmpty()) {
+    ++m_summary.skipped;
+    ++m_itemsCompleted;
+    if (m_queueCursor < m_queue.size() && !m_queue[m_queueCursor].items.isEmpty()) {
+      m_queue[m_queueCursor].items.removeFirst();
+    }
+    if (m_queueCursor < m_queue.size() && m_queue[m_queueCursor].items.isEmpty()) {
+      ++m_queueCursor;
+    }
+    schedulePersist();
+    pump();
+    return;
+  }
+  // Hand the candidates off to whoever's listening. The UI is
+  // expected to call applyPick / skipPick / pauseInteractive next.
+  auto &job = m_queue[m_queueCursor];
+  emit pickerNeeded(m_currentItemPath, QFileInfo(m_currentItemPath).fileName(), result.value(),
+                    m_interactiveProvider, job.artworkDir);
+}
+
+void ScraperService::appendRecentMedia(const QStringList &paths) {
+  for (const QString &p : paths) {
+    if (p.isEmpty()) continue;
+    m_recentMediaPaths.append(p);
+  }
+  // Cap to a fixed history so the thumbnail strip doesn't grow
+  // unbounded across a long batch.
+  while (m_recentMediaPaths.size() > kRecentMediaCapacity) {
+    m_recentMediaPaths.removeFirst();
+  }
+}
+
+void ScraperService::persistState() {
+  if (m_state == State::Idle) {
+    clearStateFile();
+    return;
+  }
+  // No queue → nothing to resume.
+  if (countQueueRemaining() == 0) {
+    clearStateFile();
+    return;
+  }
+  QJsonObject root;
+  root[QStringLiteral("version")] = kCurrentStateVersion;
+  root[QStringLiteral("started_at_unix_ms")] = m_startedAtMs;
+  root[QStringLiteral("mode")] =
+      m_mode == Mode::Auto ? QStringLiteral("auto") : QStringLiteral("interactive");
+  root[QStringLiteral("write_metadata")] = m_writeMetadata;
+  QJsonArray filterArr;
+  for (const auto &t : m_mediaFilter) filterArr.append(t);
+  root[QStringLiteral("media_filter")] = filterArr;
+  QJsonObject sumObj;
+  sumObj[QStringLiteral("scraped")] = m_summary.scraped;
+  sumObj[QStringLiteral("skipped")] = m_summary.skipped;
+  sumObj[QStringLiteral("errors")] = m_summary.errors;
+  QJsonArray failArr;
+  for (const auto &f : m_summary.firstFailures) failArr.append(f);
+  sumObj[QStringLiteral("first_failures")] = failArr;
+  root[QStringLiteral("summary_so_far")] = sumObj;
+  QJsonArray queueArr;
+  for (int i = m_queueCursor; i < m_queue.size(); ++i) {
+    const auto &j = m_queue[i];
+    if (j.items.isEmpty()) continue;
+    QJsonObject jObj;
+    jObj[QStringLiteral("collection_index")] = j.collectionIndex;
+    jObj[QStringLiteral("collection_uuid")] = j.collectionUuid;
+    jObj[QStringLiteral("collection_name")] = j.collectionName;
+    jObj[QStringLiteral("artwork_dir")] = j.artworkDir;
+    QJsonArray itemsArr;
+    for (const auto &p : j.items) itemsArr.append(p);
+    jObj[QStringLiteral("remaining")] = itemsArr;
+    queueArr.append(jObj);
+  }
+  root[QStringLiteral("queue")] = queueArr;
+
+  const QString path = pendingStateFilePath();
+  QDir().mkpath(QFileInfo(path).absolutePath());
+  QFile f(path);
+  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    qCWarning(lcScraperService) << "Failed to write pending state to" << path;
+    return;
+  }
+  // Compact rather than Indented: smaller file, faster to format, and
+  // the file is machine-read only — no human ever edits this.
+  f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
+}
+
+void ScraperService::schedulePersist() {
+  m_persistDirty = true;
+  if (m_persistTimer && !m_persistTimer->isActive()) m_persistTimer->start();
+}
+
+void ScraperService::flushPendingPersist() {
+  if (!m_persistDirty) return;
+  m_persistDirty = false;
+  if (m_persistTimer) m_persistTimer->stop();
+  persistState();
+}
+
+void ScraperService::clearStateFile() {
+  // Pending debounced write would just re-create the file — cancel
+  // it so a queued schedulePersist() doesn't resurrect the state.
+  m_persistDirty = false;
+  if (m_persistTimer) m_persistTimer->stop();
+  const QString path = pendingStateFilePath();
+  if (QFile::exists(path)) QFile::remove(path);
+}
+
+ScraperService::PendingState ScraperService::loadPendingState(bool consumeOnLoad) {
+  PendingState out;
+  const QString path = pendingStateFilePath();
+  QFile f(path);
+  if (!f.exists() || !f.open(QIODevice::ReadOnly)) return out;
+  const QByteArray bytes = f.readAll();
+  f.close();
+  QJsonParseError err{};
+  const QJsonDocument doc = QJsonDocument::fromJson(bytes, &err);
+  if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+    qCWarning(lcScraperService) << "Bad pending-scrape.json:" << err.errorString();
+    if (consumeOnLoad) QFile::remove(path);
+    return out;
+  }
+  const QJsonObject root = doc.object();
+  const int version = root.value(QStringLiteral("version")).toInt(0);
+  if (version != kCurrentStateVersion) {
+    qCWarning(lcScraperService) << "Unsupported pending-scrape.json version" << version;
+    if (consumeOnLoad) QFile::remove(path);
+    return out;
+  }
+  out.startedAtUnixMs =
+      static_cast<qint64>(root.value(QStringLiteral("started_at_unix_ms")).toDouble(0));
+  out.mode = root.value(QStringLiteral("mode")).toString() == QLatin1String("interactive")
+                 ? Mode::Interactive
+                 : Mode::Auto;
+  out.writeMetadata = root.value(QStringLiteral("write_metadata")).toBool(true);
+  const auto filterArr = root.value(QStringLiteral("media_filter")).toArray();
+  for (const auto &v : filterArr) out.mediaFilter.insert(v.toString());
+  const auto sumObj = root.value(QStringLiteral("summary_so_far")).toObject();
+  out.summarySoFar.scraped = sumObj.value(QStringLiteral("scraped")).toInt(0);
+  out.summarySoFar.skipped = sumObj.value(QStringLiteral("skipped")).toInt(0);
+  out.summarySoFar.errors = sumObj.value(QStringLiteral("errors")).toInt(0);
+  const auto failArr = sumObj.value(QStringLiteral("first_failures")).toArray();
+  for (const auto &v : failArr) out.summarySoFar.firstFailures.append(v.toString());
+  const auto queueArr = root.value(QStringLiteral("queue")).toArray();
+  for (const auto &v : queueArr) {
+    const auto jo = v.toObject();
+    CollectionJob job;
+    job.collectionIndex = jo.value(QStringLiteral("collection_index")).toInt(-1);
+    job.collectionUuid = jo.value(QStringLiteral("collection_uuid")).toString();
+    job.collectionName = jo.value(QStringLiteral("collection_name")).toString();
+    job.artworkDir = jo.value(QStringLiteral("artwork_dir")).toString();
+    const auto items = jo.value(QStringLiteral("remaining")).toArray();
+    for (const auto &p : items) job.items.append(p.toString());
+    if (!job.items.isEmpty()) out.queue.append(job);
+  }
+  out.hasState = !out.queue.isEmpty();
+  if (consumeOnLoad) QFile::remove(path);
+  return out;
+}
+
+void ScraperService::discardPendingState() {
+  clearStateFile();
+}
+
+} // namespace Scraper

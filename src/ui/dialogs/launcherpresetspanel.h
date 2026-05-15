@@ -39,6 +39,7 @@ private slots:
   void onAdd();
   void onEdit();
   void onRemove();
+  void onDetect();
   void onSelectionChanged();
 
 private:
@@ -46,6 +47,10 @@ private:
 
   Ui::LauncherPresetsPanel *ui;
   QList<LauncherPreset> *m_presets = nullptr;
+  /// Programmatically appended below the existing Add / Edit / Remove
+  /// stack. Pops a multi-select picker of well-known media-player /
+  /// reader / image / emulator binaries detected on the user's PATH.
+  class QPushButton *m_detectButton = nullptr;
 };
 
 #endif // LAUNCHERPRESETSPANEL_H

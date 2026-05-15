@@ -24,10 +24,18 @@ struct ItemArtwork {
 };
 
 /// Canonical lowercase identifiers for the standard artwork types. Order is
-/// the sidebar gallery's display priority (box first, logo last). The strings
-/// are stable forever — they double as on-disk subdirectory names under a
-/// collection's `artworkDirectory`.
+/// the sidebar gallery's display priority (front cover first, logo last).
+/// The strings are stable forever — they double as on-disk subdirectory
+/// names under a collection's `artworkDirectory`.
+///
+/// `Front` is the cross-provider primary-cover slot — every API-backed
+/// scraper (SS box-2D, MB front, TMDB poster, Open Library cover) maps
+/// its top-quality cover to this id. `Box` is preserved as a separate
+/// type so libraries with hand-curated `/box/` subfolders keep working
+/// alongside scraped `/front/` content; the user can populate either or
+/// both per item.
 namespace StandardTypes {
+inline constexpr const char *Front = "front";
 inline constexpr const char *Box = "box";
 inline constexpr const char *Screenshot = "screenshot";
 inline constexpr const char *Title = "title";

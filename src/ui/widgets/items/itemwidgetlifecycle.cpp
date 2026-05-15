@@ -112,6 +112,9 @@ void ItemWidget::setAsVirtualFolder(const QString &folderPath, const QString &di
 void ItemWidget::setItemName(const QString &name) {
   const bool nameChanged = (itemName != name);
   itemName = name;
+  // Screen readers announce the tile by its title regardless of whether the
+  // visible nameLabel is hidden (grid mode without titles still benefits).
+  setAccessibleName(name);
   // the placeholder-art title overlay is baked into the
   // pixmap by onArtworkChanged(). configureBaseWidget calls onArtworkChanged
   // once with an empty itemName (during resetForReuse), and the dimension-

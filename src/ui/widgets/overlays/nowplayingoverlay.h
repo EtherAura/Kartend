@@ -19,6 +19,7 @@ QT_END_NAMESPACE
  * user can still alt-tab freely.
  */
 class NowPlayingOverlay : public QWidget {
+  Q_OBJECT
 public:
   explicit NowPlayingOverlay(QWidget *parent = nullptr);
   ~NowPlayingOverlay() override;

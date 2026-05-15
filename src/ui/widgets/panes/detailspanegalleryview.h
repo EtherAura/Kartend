@@ -80,6 +80,18 @@ public:
   /// extraction. Used by both the vertical and horizontal galleries.
   [[nodiscard]] QPixmap makeVideoPlaceholder(int iconSize) const;
 
+  /// Force the gallery's lazy widget construction (container + title row +
+  /// QScrollArea + thumb layout + insertion into the parent contentLayout)
+  /// to run NOW instead of on the first setEntries() call with non-empty
+  /// entries. The first lazy invocation was measured at ~2.5s on a slow
+  /// filesystem (Kartend-jxp5) and lands on the user's first-click critical
+  /// path; calling this from DetailsPane's constructor moves the cost into
+  /// startup where it overlaps other init work and is invisible. The
+  /// section is hidden (zero visible widgets) until setEntries populates it,
+  /// so prewarming has no UI consequence beyond the up-front cost. Idempotent
+  /// — repeated calls are no-ops once the section exists.
+  void prewarmSection();
+
 signals:
   /// Forwarded from the Edit button click — DetailsPane re-emits as its own
   /// editArtworkRequested signal.

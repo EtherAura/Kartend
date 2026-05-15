@@ -5,12 +5,16 @@
 
 #include <QFontMetrics>
 #include <QFormLayout>
+#include <QFutureWatcher>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QImage>
 #include <QLabel>
 #include <QPixmap>
+#include <QPointer>
 #include <QPushButton>
 #include <QTabBar>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -149,34 +153,61 @@ void DetailsPane::rebuildHorizontalGallery() {
   }
   for (const GalleryEntry &entry : m_galleryView->entries()) {
     if (entry.isVideo) continue; // Live preview tile handles video.
-    // Path-keyed cache to avoid re-decoding on every selection change. On
-    // miss, decode synchronously (the gallery is small — typically 5-10
-    // thumbs — and decode is fast for typical box-art sizes); the win is
-    // skipping it on selection bounces and dock-orientation toggles.
-    QPixmap pixmap = m_galleryPixmapCache.value(entry.path);
-    if (pixmap.isNull()) {
-      pixmap = QPixmap(entry.path);
-      if (pixmap.isNull()) continue;
-      // FIFO eviction when the cache is full.
-      if (m_galleryPixmapCacheOrder.size() >= m_galleryPixmapCacheCap) {
-        const QString oldest = m_galleryPixmapCacheOrder.takeFirst();
-        m_galleryPixmapCache.remove(oldest);
-      }
-      m_galleryPixmapCache.insert(entry.path, pixmap);
-      m_galleryPixmapCacheOrder.append(entry.path);
-    }
+    // Path-keyed cache to avoid re-decoding on every selection change.
+    // On hit: set the icon synchronously (fast path).
+    // On miss: create the button with an empty icon, kick off async
+    // decode, populate cache + icon when the worker delivers. Pre-fix
+    // this loop synchronously decoded N images on cache miss — the
+    // 2495ms galleryUi outlier (Kartend-5ux9) was here, since
+    // setArtworkGallery calls rebuildHorizontalGallery on every refresh
+    // regardless of dock orientation (so the horizontal view stays
+    // warm for fast dock-switching).
     auto *btn = new QToolButton(m_hGalleryHost);
     btn->setAutoRaise(true);
     btn->setCursor(Qt::PointingHandCursor);
     btn->setFixedSize(thumbSize, thumbSize);
     btn->setIconSize(QSize(iconSize, iconSize));
-    btn->setIcon(QIcon(pixmap));
     btn->setToolTip(entry.label);
     btn->setAccessibleName(entry.label);
     const GalleryEntry capturedEntry = entry;
     connect(btn, &QToolButton::clicked, this, [this, capturedEntry]() {
       if (m_galleryView) m_galleryView->openPreview(capturedEntry);
     });
+
+    QPixmap pixmap = m_galleryPixmapCache.value(entry.path);
+    if (!pixmap.isNull()) {
+      btn->setIcon(QIcon(pixmap));
+    } else {
+      // Async decode. QPointer<QToolButton> guards against the next
+      // rebuildHorizontalGallery deleting the button before this load
+      // completes — stale results dropped silently. QPointer<DetailsPane>
+      // guards the cache write against pane teardown mid-flight.
+      QPointer<QToolButton> btnGuard(btn);
+      QPointer<DetailsPane> selfGuard(this);
+      const QString path = entry.path;
+      auto *watcher = new QFutureWatcher<QImage>(this);
+      connect(watcher, &QFutureWatcherBase::finished, this,
+              [this, watcher, btnGuard, selfGuard, path]() {
+                watcher->deleteLater();
+                if (!selfGuard) return;
+                const QImage img = watcher->result();
+                if (img.isNull()) {
+                  if (btnGuard) btnGuard->deleteLater();
+                  return;
+                }
+                const QPixmap pix = QPixmap::fromImage(img);
+                // Populate the cache so subsequent rebuilds (dock toggle,
+                // selection bounce) hit the synchronous fast path.
+                if (m_galleryPixmapCacheOrder.size() >= m_galleryPixmapCacheCap) {
+                  const QString oldest = m_galleryPixmapCacheOrder.takeFirst();
+                  m_galleryPixmapCache.remove(oldest);
+                }
+                m_galleryPixmapCache.insert(path, pix);
+                m_galleryPixmapCacheOrder.append(path);
+                if (btnGuard) btnGuard->setIcon(QIcon(pix));
+              });
+      watcher->setFuture(QtConcurrent::run([path]() { return QImage(path); }));
+    }
     m_hGalleryLayout->addWidget(btn);
     addedThumb = true;
   }

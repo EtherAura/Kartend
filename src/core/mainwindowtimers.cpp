@@ -36,6 +36,26 @@ void MainWindow::setupInitialTimers() {
     }
   });
 
+  // First-run wizard takes precedence over the legacy "create your first
+  // collection" QInputDialog. Once the user has either completed or
+  // explicitly skipped the wizard, firstRunComplete stays true forever and
+  // the legacy empty-collections prompt remains as the backstop for power
+  // users who later delete every collection.
+  if (!m_generalSettings.firstRunComplete) {
+    QTimer::singleShot(0, this, [this]() {
+      showFirstRunWizard();
+      // After the wizard the user may still have an empty library (Skip
+      // path). Fall through to the legacy prompt so they're not stranded
+      // on a blank window with no obvious next step.
+      if (m_collections.isEmpty()) {
+        setupInitialTimersEmptyCollections();
+      } else {
+        setupInitialTimersWithCollections();
+      }
+    });
+    return;
+  }
+
   if (m_collections.isEmpty()) {
     setupInitialTimersEmptyCollections();
   } else {

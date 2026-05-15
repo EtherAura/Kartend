@@ -4,13 +4,19 @@
 #include "interactionmanager.h"
 
 #include <QApplication>
+#include <QDesktopServices>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QInputDialog>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPointer>
+#include <QProgressDialog>
+#include <QUrl>
 
+#include "artworkutils.h"
 #include "collectionutils.h"
+#include "createsmartplaylistdialog.h"
 #include "customfieldsdialog.h"
 #include "databasemanager.h"
 #include "detailspane.h"
@@ -19,9 +25,15 @@
 #include "itemwidget.h"
 #include "launcherchooserdialog.h"
 #include "launchmanager.h"
+#include "mainwindow.h"
+#include "metadatalookupprovider.h"
+#include "metadataprovider.h"
+#include "metadataproviderregistry.h"
 #include "navigationmanager.h"
 #include "pathutils.h"
 #include "playlistmanager.h"
+#include "scrapepersistence.h"
+#include "scraperesultdialog.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
 
@@ -94,6 +106,97 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
     const QString itemName = widget->getItemName();
     QObject::connect(customFieldsAction, &QAction::triggered, this,
                      [this, filePath, itemName]() { editCustomFields(filePath, itemName); });
+
+    // --- Look up online (Stage 1: URL providers only) ---
+    // Submenu of metadata providers applicable to the current
+    // collection's type — picks open the user's browser to a search
+    // URL for the item's name. Future API providers will register on
+    // the same MetadataProviderRegistry and surface here alongside
+    // the URL ones.
+    const CollectionConfig &activeCfg = (*m_collections)[*m_currentCollectionIndex];
+    // Capture m_generalSettings into the registry call so API providers
+    // can read user-supplied credentials via the live settings struct.
+    // Collection accessor returns the active collection so SS can
+    // resolve its per-collection systemeid override.
+    const auto generalSettingsAccessor = [this]() -> const GeneralSettings * {
+      return m_generalSettings;
+    };
+    const auto collectionAccessor = [this]() -> const CollectionConfig * {
+      if (!m_collections || !m_currentCollectionIndex ||
+          !CollectionUtils::isValidIndex(*m_currentCollectionIndex, m_collections)) {
+        return nullptr;
+      }
+      return &(*m_collections)[*m_currentCollectionIndex];
+    };
+    const auto allProviders =
+        MetadataProviderRegistry::builtIn(generalSettingsAccessor, collectionAccessor);
+    const auto applicableProviders =
+        MetadataProviderRegistry::forCategory(allProviders, activeCfg.type);
+    // Search query = the item's display name when available, falling
+    // back to the file basename — every provider's URL template wants
+    // a human-readable query, not a filesystem path. Hoisted so both
+    // the URL-search submenu and the API-scrape submenu below capture
+    // the same value.
+    QString queryText = itemName.trimmed();
+    if (queryText.isEmpty()) {
+      queryText = QFileInfo(filePath).completeBaseName();
+    }
+    if (!applicableProviders.isEmpty()) {
+      QMenu *lookupMenu = menu.addMenu(tr("Look up online"));
+      for (MetadataProvider *p : applicableProviders) {
+        if (!p->capabilities().testFlag(MetadataProvider::Capability::WebSearch)) {
+          continue;
+        }
+        const QUrl url = p->searchUrl(queryText);
+        if (!url.isValid()) {
+          continue;
+        }
+        QAction *action = lookupMenu->addAction(p->displayName());
+        QObject::connect(action, &QAction::triggered, this,
+                         [url]() { QDesktopServices::openUrl(url); });
+      }
+    }
+
+    // --- Scrape with API provider (Stage 2: lookup + media download) ---
+    // Surfaces only providers that implement MetadataLookupProvider
+    // (i.e. have MetadataLookup capability). When more than one such
+    // provider applies, group them in a submenu; for the common
+    // single-provider case (currently MusicBrainz for audio
+    // collections) attach the action to the menu directly so the
+    // user can scrape in one click. Owning the picked provider via
+    // the registry's unique_ptrs is a problem since this submenu
+    // outlives the scope — we re-look up the provider by id when
+    // the action fires.
+    QList<MetadataProvider *> lookupProviders;
+    for (MetadataProvider *p : applicableProviders) {
+      if (p->capabilities().testFlag(MetadataProvider::Capability::MetadataLookup)) {
+        lookupProviders.append(p);
+      }
+    }
+    if (!lookupProviders.isEmpty()) {
+      // Unified Scraper entry — opens the same dialog as File →
+      // Scraper, pre-checked to the right-clicked item only. The
+      // user's auto-accept / interactive choice + media-type picks
+      // live inside the dialog now.
+      QAction *scraperAction = menu.addAction(tr("Scraper…"));
+      QObject::connect(scraperAction, &QAction::triggered, this, [this, filePath]() {
+        auto *mw = qobject_cast<MainWindow *>(QApplication::activeWindow());
+        if (!mw) {
+          // Fall back to walking the parent chain — the active
+          // window may be the menu's own QMenu while the click
+          // is dispatching.
+          for (QWidget *w = QApplication::focusWidget(); w; w = w->parentWidget()) {
+            mw = qobject_cast<MainWindow *>(w);
+            if (mw) break;
+          }
+        }
+        if (!mw) return;
+        int idx = -1;
+        if (databaseMgr()) idx = databaseMgr()->getCollectionIndexForFile(filePath);
+        if (idx < 0 && m_currentCollectionIndex) idx = *m_currentCollectionIndex;
+        mw->openScraperDialog(idx, filePath);
+      });
+    }
 
     // --- Set / clear per-item manual override ---
     // Show "Set manual file..." always (lets the user point at any file).
@@ -242,6 +345,14 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       QObject::connect(newPlaylistAction, &QAction::triggered, this,
                        [this, srcUuid, filePath]() { addItemToNewPlaylist(srcUuid, filePath); });
 
+      // Smart-playlist counterpart sits next to the static creator so the
+      // discovery surface for "make a new playlist" stays one menu. The
+      // right-clicked item is intentionally not added — smart playlists
+      // populate from the filter, not from individual references.
+      QAction *newSmartAction = addToMenu->addAction(tr("New smart playlist…"));
+      QObject::connect(newSmartAction, &QAction::triggered, this,
+                       [this]() { createSmartPlaylistDialog(); });
+
       // import a playlist from a JSON or M3U file. Lives next
       // to "New playlist…" rather than under a separate top-level entry so
       // the discovery surface for "create a playlist" is one place.
@@ -255,7 +366,13 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
         // The chooser silently no-ops when the (uuid, path) pair is already in
         // the playlist (containsItem inside addItem) — keeps the menu honest
         // without requiring a separate "already added" disabled state.
+        // Smart playlists are filtered out — manual adds are ignored by the
+        // QueryManager smart-scope branch, so listing them as targets would
+        // surface an action that silently does nothing.
         for (const PlaylistRow &row : playlists) {
+          if (row.isSmart) {
+            continue;
+          }
           QString label = row.name.isEmpty() ? tr("(unnamed)") : row.name;
           QAction *action = addToMenu->addAction(label);
           const QString playlistId = row.id;
@@ -266,8 +383,10 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
         }
       }
 
-      // Inside a playlist, also offer the inverse action.
-      if (insidePlaylist) {
+      // Inside a static playlist, also offer the inverse action. Skipped
+      // for smart playlists — removal would not stick (the next open
+      // re-evaluates the filter and the item reappears).
+      if (insidePlaylist && !(*m_collections)[*m_currentCollectionIndex].isSmartPlaylist) {
         const QString playlistId = (*m_collections)[*m_currentCollectionIndex].playlistId;
         QAction *removeAction = menu.addAction(tr("Remove from playlist"));
         QObject::connect(removeAction, &QAction::triggered, this,
@@ -298,11 +417,23 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       // omitting it.
       const bool isReserved =
           !(*m_collections)[*m_currentCollectionIndex].playlistReservedKind.isEmpty();
+      const bool isSmart = (*m_collections)[*m_currentCollectionIndex].isSmartPlaylist;
 
       QAction *renameAction = menu.addAction(tr("Rename playlist…"));
       QObject::connect(renameAction, &QAction::triggered, this, [this, playlistId, currentName]() {
         renamePlaylistDialog(playlistId, currentName);
       });
+
+      // Smart-playlist edit action — sits next to rename so the two
+      // metadata-edit affordances are adjacent. Hidden for static
+      // playlists since there's nothing filter-shaped to edit.
+      if (isSmart) {
+        QAction *editFilterAction = menu.addAction(tr("Edit smart filter…"));
+        QObject::connect(editFilterAction, &QAction::triggered, this,
+                         [this, playlistId, currentName]() {
+                           editSmartPlaylistDialog(playlistId, currentName);
+                         });
+      }
 
       // export the current playlist. The submenu houses both
       // formats so the menu stays scannable; M3U for cross-app interop, JSON
@@ -358,6 +489,62 @@ void InteractionManager::addItemToPlaylist(const QString &playlistId, const QStr
     return;
   }
   playlistMgr()->addItem(playlistId, srcUuid, filePath);
+}
+
+void InteractionManager::createSmartPlaylistDialog() {
+  if (!playlistMgr()) {
+    return;
+  }
+  CreateSmartPlaylistDialog dialog(QApplication::activeWindow());
+  if (dialog.exec() != QDialog::Accepted) {
+    return;
+  }
+  const QString name = dialog.name();
+  if (name.isEmpty()) {
+    return;
+  }
+  auto created = playlistMgr()->createSmartPlaylist(name, dialog.filter());
+  if (created.isError()) {
+    QMessageBox::warning(QApplication::activeWindow(), tr("Could not create smart playlist"),
+                         created.error().message);
+  }
+  // The synthesizer + sidebar refresh happens via the playlistsChanged
+  // signal that createSmartPlaylist already emitted; nothing else to do.
+}
+
+void InteractionManager::editSmartPlaylistDialog(const QString &playlistId,
+                                                 const QString &currentName) {
+  if (!playlistMgr() || playlistId.isEmpty()) {
+    return;
+  }
+  auto loaded = playlistMgr()->loadSmartFilter(playlistId);
+  if (loaded.isError()) {
+    QMessageBox::warning(QApplication::activeWindow(), tr("Could not load smart filter"),
+                         loaded.error().message);
+    return;
+  }
+  CreateSmartPlaylistDialog dialog(QApplication::activeWindow());
+  dialog.setInitialName(currentName);
+  dialog.setInitialFilter(loaded.value());
+  if (dialog.exec() != QDialog::Accepted) {
+    return;
+  }
+  if (!playlistMgr()->updateSmartFilter(playlistId, dialog.filter())) {
+    QMessageBox::warning(QApplication::activeWindow(), tr("Could not update smart filter"),
+                         tr("The filter update failed. See logs for details."));
+    return;
+  }
+  // Rename if the user changed the name. Done after the filter update so
+  // a partial failure (rename ok, filter ok, but signal handlers race)
+  // still lands the more important payload first.
+  if (!dialog.name().isEmpty() && dialog.name() != currentName) {
+    playlistMgr()->renamePlaylist(playlistId, dialog.name());
+  }
+  // Re-evaluate and re-render the current view so the new filter takes
+  // effect immediately rather than on the next collection switch.
+  if (navMgr() && m_currentCollectionIndex) {
+    navMgr()->safeReloadCollection(*m_currentCollectionIndex);
+  }
 }
 
 void InteractionManager::renamePlaylistDialog(const QString &playlistId,
@@ -442,10 +629,11 @@ void InteractionManager::editCustomFields(const QString &filePath, const QString
     return;
   }
 
-  // Refresh the sidebar so the new fields render immediately.
+  // Refresh the sidebar so the new fields render immediately. Bypass
+  // the debounce — the user is staring at the dialog they just dismissed
+  // and the metadata they edited is for the currently-displayed item.
   if (detailsPaneMgr()) {
-    detailsPaneMgr()->updateSidebarMetadata(
-        m_selectionManager ? m_selectionManager->selectedWidget() : nullptr);
+    detailsPaneMgr()->refreshSidebarMetadataImmediate();
   }
 }
 
@@ -481,8 +669,7 @@ void InteractionManager::setItemManualPath(const QString &filePath, const QStrin
     return;
   }
   if (detailsPaneMgr()) {
-    detailsPaneMgr()->updateSidebarMetadata(
-        m_selectionManager ? m_selectionManager->selectedWidget() : nullptr);
+    detailsPaneMgr()->refreshSidebarMetadataImmediate();
   }
 }
 
@@ -520,8 +707,7 @@ void InteractionManager::setItemLauncherOverride(const QString &filePath, int la
     return;
   }
   if (detailsPaneMgr()) {
-    detailsPaneMgr()->updateSidebarMetadata(
-        m_selectionManager ? m_selectionManager->selectedWidget() : nullptr);
+    detailsPaneMgr()->refreshSidebarMetadataImmediate();
   }
 }
 

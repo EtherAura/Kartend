@@ -7,6 +7,328 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Single-root artwork layout.** Collections now need only one
+  Artwork folder configured — scrape auto-creates the per-kind
+  subdirectories underneath as needed: `front/` (primary cover),
+  `box/`, `screenshot/`, `title/`, `marquee/`, `fanart/`, `logo/`,
+  plus `video/` and `manual/` for non-image media. The primary cover
+  also mirrors to the artwork root (`{Artwork}/{baseName}.<ext>`)
+  for the grid tile. `front` is now a recognised standard artwork
+  type (sidebar gallery surfaces it as **Front Cover**) alongside the
+  pre-existing `box` slot, so scraped covers and hand-curated box art
+  can coexist per-item. The per-collection Artwork tab loses the
+  separate Video / Manual folder rows; the details pane's video
+  preview and manual button now look under `{Artwork}/video/` and
+  `{Artwork}/manual/` by default, and only consult the (now-hidden
+  but still-persisted) `videoDirectory` / `manualDirectory` fields
+  when set, so existing libraries with bespoke layouts keep working.
+- **Batch scrape current collection.** Help → **Batch Scrape Current
+  Collection…** walks every unscrapped item in the active collection
+  through the first applicable API-backed metadata provider for the
+  collection's type (MusicBrainz for audio, TMDB for video, Open
+  Library for reference, ScreenScraper for games when credentials are
+  configured). Auto-picks the top-ranked candidate per item — no
+  per-item confirmation — so scraping a 500-item music library is one
+  click. The runner downloads each item's primary `"front"` cover
+  alongside its metadata so the grid populates with real artwork on
+  the same pass; cover-fetch failures are non-fatal (metadata still
+  saves, the user can re-pull the image per-item later). Progress
+  dialog shows per-item status and a Cancel button; cancel stops
+  cleanly between items so partial-row writes don't leak.
+  Already-scraped items (`ItemMetadata.source` non-empty) are skipped
+  automatically — re-running the action only touches new or
+  unscrapped entries. Provider rate limits are honoured via the
+  existing per-host HTTP throttle (MusicBrainz at 1 req/s, etc.), so
+  a 10k-item run paces itself instead of getting throttled by the
+  provider. Summary box at completion reports scraped / skipped /
+  errors with the first 5 failure messages.
+- **Secondary monitor / marquee window.** Bartop and arcade-cabinet
+  setups with a topper / second monitor can pin a frameless Kartend
+  window to that screen. Two display modes: **Item Artwork**
+  (follows the current selection, ideal for cocktail cabinets) and
+  **Collection Icon** (stable banner that stays put as you scroll).
+  Configure under Settings → Preferences → **Marquee**: enable the
+  toggle, pick the target screen from the dropdown (auto-populated
+  from connected displays + their resolutions), pick a mode. The
+  window doesn't accept keyboard focus, so input always stays on
+  the main Kartend window. Hot-reload — saving the Settings dialog
+  appears / moves / closes the topper without a restart. If the
+  configured screen is unplugged after the fact, Kartend falls back
+  to the primary screen and logs a warning. Video/attract-loop
+  display mode is intentionally deferred to a follow-up.
+- Each collection's **DAT File** row is now a **DAT Files** list that
+  accepts multiple DATs per collection. The scrape pipeline walks the
+  list top-to-bottom and takes the first hash hit, so power users
+  with one DAT per system (No-Intro Mega Drive + No-Intro SNES + DOSBox-X
+  arcade DATs, etc.) can stack them all on one collection and let
+  Kartend pick. Drag rows to reorder; multi-select Add… picks a
+  folder of DATs in one shot; Remove deletes the selected rows.
+  Existing configs with the single-key `datFilePath=` shape upgrade
+  to a one-entry list on first load — no manual migration.
+- DAT-file lookups are now backed by an on-disk sqlite cache under
+  the user's XDG cache dir (`~/.cache/kartend/datcache.sqlite` on
+  Linux). The XML re-parse only happens once per `(absolute path,
+  mtime)` — subsequent scrapes against the same DAT go through
+  indexed `SELECT` queries instead of re-reading the file. For
+  small No-Intro / Redump DATs the difference is invisible (the
+  parse was already sub-second); for MAME's full listxml (~100MB /
+  ~250k entries) cold-start lookup goes from multi-second parse to
+  a single SELECT. Editing the DAT in another tool invalidates the
+  cached records automatically on the next scrape; pointing the
+  picker at a different file ingests it alongside the others
+  (multiple DATs coexist in one cache file).
+- DAT-file lookup now recognises two XML dialects, auto-picked from
+  the root element: **Logiqx `<datafile>`** (No-Intro, Redump, TOSEC
+  — they all share this schema) and **MAME `<mame>` listxml**. For
+  MAME files, the parser uses each machine's `<description>` text
+  ("Pac-Man (Midway)") as the canonical game name rather than the
+  cryptic set-id ("pacman"), and skips `<rom status="nodump">`
+  placeholder entries that would otherwise pollute the index with
+  zero-hash collisions. TOSEC files with `<release>` region/date
+  metadata children parse cleanly — the metadata is ignored, the
+  `<rom>` hashes still come through. Pointing the picker at a
+  non-DAT XML now surfaces a clear "expected `<datafile>` or
+  `<mame>` root" message instead of silently parsing zero records.
+
+### Fixed
+
+- After a scrape (single-item or batch) the sidebar Details pane
+  used to keep showing the item's pre-scrape state until you clicked
+  another item and back. The post-apply path now refreshes the
+  sidebar's metadata view for the current selection so the new
+  title / description / genre / etc. land immediately.
+- After a scrape, the grid tile would stay on its placeholder even
+  though the cover file had been written, until the user navigated
+  away from and back to the collection. Root cause was the artwork
+  directory-listing cache holding the pre-scrape "no file here"
+  result; the post-apply path now invalidates it (alongside the
+  existing collection reload) so the grid picks the new cover up on
+  the first repaint.
+- The just-scraped primary cover now lands at
+  `{artwork}/front/{base}.<ext>` and surfaces in the sidebar gallery
+  as **Front Cover** — the cross-provider `"front"` tag (SS, MB,
+  TMDB, Open Library all normalise their cover to it) is now a
+  first-class standard artwork type. The flat-root mirror at
+  `{artwork}/{base}.<ext>` (which the grid tile and details-pane
+  primary preview auto-discover) is populated by a priority-ranked
+  fallback: front → box → box-3D → mixrbv1/2 → screenshot → title →
+  fanart → marquee. So even when ScreenScraper has only screenshots
+  / fanart / box-3D for a game (and no `box-2D`/`front` cover), the
+  grid still gets a meaningful primary thumbnail instead of the
+  placeholder.
+- The details-pane primary preview tile (artwork QLabel + video
+  preview widget) was anchored to the left of the sidebar because
+  the .ui declared a fixed 200×200 size but no layout-item
+  alignment. Both widgets are now force-centred in the parent
+  QVBoxLayout via `setAlignment(widget, Qt::AlignHCenter)`, so the
+  primary tile sits centred regardless of sidebar width.
+- Scraped videos and manuals used to be dumped under `{artwork}/...`
+  with a hardcoded `.png` extension, leaving an unplayable MP4 named
+  `Pacman.png` in a directory the details pane didn't read from. The
+  scraper now routes by kind into `{artwork}/video/{base}.<ext>` and
+  `{artwork}/manual/{base}.<ext>` (extension inferred from the source
+  URL, default `.mp4` / `.pdf` when the URL has no recognisable
+  suffix). Neither kind produces an `item_artwork` row — videos and
+  manuals aren't artwork, and the details pane discovers them by
+  basename in those subdirectories. The (still-persisted but
+  UI-hidden) `videoDirectory` / `manualDirectory` collection fields
+  remain a power-user override for libraries with bespoke layouts.
+
+### Added
+
+- Settings → Configuration → Artwork now has an **Export placeholder PNGs
+  for missing covers…** button. For every item in the collection that has
+  no cover image, Kartend writes a procedural placeholder PNG into the
+  configured Artwork folder. Existing artwork is left untouched; generated
+  files can be deleted or replaced with real covers later.
+- **Smart playlists** that auto-rebuild from a saved filter on each open.
+  Right-click → Add to playlist → **New smart playlist…** to create one;
+  six built-in criteria are available — Recently launched, Most played,
+  Never launched, By extension, Has artwork, and Recently added. Smart
+  playlists nest into the sidebar like ordinary playlists; right-click
+  inside one and pick **Edit smart filter…** to change the criterion or
+  limit. The JSON export format is bumped to v2 to preserve the smart
+  flag and filter on round-trip; v1 files still import as static
+  playlists.
+- **Recently added** smart-playlist criterion — items added to your
+  library within the last N days. The "added at" stamp is set the first
+  time the scanner sees an item; existing items from before this update
+  show up as "unknown date" and are excluded from recency-window
+  matches until they're re-scanned or replaced.
+- **Color scheme picker** in Settings → Appearance → Colors. Pick from
+  three Kartend-bundled themes (Dark, Light, Neon) plus any KDE Plasma
+  color scheme installed on the system (`*.colors` files under
+  `$XDG_DATA_DIRS/color-schemes/` — typically the full Breeze / Oxygen
+  set on KDE installs). Applying a scheme overwrites the per-collection
+  color fields and the global title base color; vignette, blur,
+  parallax, and font choices are left as-is.
+- Settings → Launchers has a new **Detect installed…** button that
+  probes your PATH for well-known media players, document readers,
+  image viewers, and emulators (mpv, VLC, Okular, Gwenview, RetroArch,
+  and ~30 others) and lets you pick which detected binaries to add as
+  launcher presets in one go. Re-running the detect ignores binaries
+  whose display name already matches an existing preset, so it's safe
+  to use as a "what's new" sweep after installing more tools.
+- **Look up online** submenu on the right-click context menu for an
+  item — opens the user's browser to a search URL on a metadata
+  provider relevant to the collection's type (free-form `type` field
+  in the collection's settings, e.g. "Games" / "Movies" / "Music" /
+  "Books"). Nine providers ship in this release: ScreenScraper.fr /
+  MobyGames / IGDB for games; The Movie Database / IMDb for video;
+  MusicBrainz / Discogs for audio; Open Library / Google Books for
+  reference. The provider list is curated by collection type with a
+  small synonym table so common labels ("Movies" → video, "ROMs" →
+  games, "Books" → reference) all match without per-collection
+  configuration. This is the foundation for future API-based metadata
+  scrapers; for now, every provider is browser-only and no API
+  credentials are required.
+- **Scrape with MusicBrainz…** action on the right-click context menu
+  for items in audio collections. Searches MusicBrainz for the item's
+  name, presents the matched releases in a candidate-picker dialog
+  with title / artist / year / format / front-cover thumbnail, and
+  lets you preview the full release detail (publisher / genre / track
+  count / annotation) plus pick which media variants (front cover /
+  back cover) to download. Honours MusicBrainz's 1 req/sec rate
+  limit. No credentials required. Applying the scrape persists
+  everything to disk: each accepted media variant writes to
+  `{artworkDirectory}/{type}/{basename}.png` (per-type subdir
+  auto-discovered by the sidebar gallery), the front cover
+  additionally mirrors to the primary slot at
+  `{artworkDirectory}/{basename}.png` so the grid tile updates
+  immediately, and non-standard types (e.g. MusicBrainz "back")
+  get an `item_artwork` row pointing at the file so the gallery
+  surfaces them. Scraped metadata fields land on the per-item
+  typed columns (title / publisher / release date / genre / etc.);
+  user-entered fields the scrape doesn't fill are preserved (scrape
+  wins on shared keys, user wins on unshared ones). The collection
+  reloads automatically so changes appear in the grid without a
+  restart.
+- **Scrape with Open Library…** action on the right-click context menu
+  for items in reference / book collections. Same flow as MusicBrainz
+  (candidate dialog → media checkboxes → on-Apply persistence). Tries
+  an ISBN-keyed lookup first when the filename contains a recognisable
+  ISBN-10 or ISBN-13 (handles dashes, optional "ISBN" prefix); falls
+  back to a free-text title search otherwise. Cover Art is fetched
+  from covers.openlibrary.org at medium size for the primary tile and
+  large size as a secondary fanart-slotted asset. No credentials
+  required.
+- **Scrape with The Movie Database…** action on the right-click context
+  menu for items in video / movies / tv collections. Same flow as the
+  other API providers. Returns both movies and TV shows in one
+  combined search; routes to the right detail endpoint based on the
+  matched media type. Maps title / overview / genres / production
+  companies / US content rating / runtime onto Kartend's typed
+  metadata fields; surfaces TMDB id, tagline, and rating in the
+  customFields gallery. Poster goes to the primary tile; backdrop
+  lands as a fanart-slotted asset. **Requires a free TMDB API token**
+  — sign up at themoviedb.org → Settings → API → "API Read Access
+  Token (v4 auth)" and paste it into Help → **Scraper Credentials…**
+  under the TMDB section. No bundled keys — every user supplies
+  their own.
+- New **Help → Scraper Credentials…** dialog for managing per-provider
+  API tokens. Persisted under a new `[Scrapers]` section of
+  `kartend.cfg` keyed as `<provider>/<field>=<value>`; sensitive
+  fields use Qt's password-echo mode. Future API providers will
+  register here too.
+- **Scrape with ScreenScraper.fr…** action on the right-click context
+  menu for items in game collections. Same flow as the other API
+  providers (candidate dialog → media checkboxes → on-Apply
+  persistence). Kartend ships with bundled SS developer credentials
+  (shared across all users — the same model Skyscraper uses) so
+  scraping works out of the box without per-user signup; users who
+  hit the shared rate-limit ceiling can register their own dev
+  account on the SS forum and override the bundled dev_id /
+  dev_password under Help → Scraper Credentials. Adding your own
+  SS.fr user account login (user_id / user_password — register free
+  at screenscraper.fr/membreinscription.php) raises your per-account
+  request quota above the shared bundled limit. API requests go to
+  api.screenscraper.fr (the canonical endpoint host). **Comprehensive metadata mapping**:
+  every field SS exposes for a game lands somewhere — the typed
+  ItemMetadata columns get title (US-region preferred) / synopsis
+  (en preferred) / publisher / developer / players / release date /
+  genres / ESRB rating; the customFields gallery surfaces the SS
+  user rating (notes), staff-favourite flag (topstaff), screen
+  rotation, native resolution, color count, controls, game series
+  (familles), game modes, every other rating board (PEGI / USK /
+  CERO / ... keyed as classification_<board>), full ROM info
+  (filename / size / md5 / sha1 / crc / type / serial / region /
+  languages), cloneof parent id, and the notgame flag. **Expanded
+  media routing**: SS's `box-2D` lands as the primary cover; SS's
+  `screenshot` / `sstitle` / `screenmarquee` / `marquee` / `wheel`
+  / `fanart` map onto Kartend's standard artwork types
+  (screenshot / title / marquee / logo / fanart) so the sidebar
+  gallery auto-discovers them via the per-type subdirectory
+  layout. Other SS media types (`box-3D`, `box-back`,
+  `support-2D`, `manuel`, `video`, etc.) preserve their original
+  names so the item_artwork-row branch surfaces them too.
+  Per-collection systemeid is auto-detected from the collection's
+  name / type / extensions against the live ScreenScraper catalog
+  (fetched on first use from `systemesListe.php`, cached locally
+  for 30 days). No platform names are bundled in Kartend — every
+  alias and extension comes from ScreenScraper itself. Override
+  autodetect from the collection's **Configuration** tab in
+  Settings → **Scrapers** → **ScreenScraper System** (dropdown
+  populated from the cached catalog; falls back to Auto-detect
+  only until the first successful scrape populates the cache).
+- New per-collection setting `screenscraperSystemId` on every
+  collection (defaults to -1 = unset). Stored in the collection's
+  INI section; consumed by the ScreenScraper provider above.
+- **Offline ROM identification via No-Intro / Redump DAT files.**
+  Each collection can point at a DAT file (Settings → Configuration
+  → Scrapers → **DAT File**); when the ScreenScraper provider hashes
+  a ROM and the digests match a DAT entry, it sends the DAT's
+  canonical filename to ScreenScraper as the search query instead
+  of the on-disk name. Result: messy library names ("Game [proto]
+  v1.1 (En,Fr) [!].smc") still match cleanly because ScreenScraper
+  receives the canonical "Game (USA) (Rev 1).sfc" the DAT supplies.
+  Streaming XML parser handles multi-MB DATs without loading the
+  whole document; per-collection cache keyed on path + mtime so an
+  edited DAT reloads automatically. v1 ingests the No-Intro /
+  Redump `<datafile>` shape (the most widely distributed format);
+  TOSEC / MAME XML and a sqlite-backed cache for very large DATs
+  are deferred follow-ups.
+- ScreenScraper scrapes now hash the source file (MD5 + SHA-1) and
+  pass the digests to `jeuInfos.php` alongside the filename — when
+  ScreenScraper recognises the hashes the match is exact regardless
+  of how the ROM was renamed locally, so re-organised libraries no
+  longer fall back to fuzzy filename matching. Files are stream-
+  hashed in 1 MiB chunks so multi-gigabyte disc images don't pin
+  RAM; hashing failures degrade silently to filename-only. For
+  zipped libraries, Kartend extracts the archive (via the same
+  7z / unzip / bsdtar lookup the launcher uses) and hashes the
+  largest inner file rather than the archive bytes — ScreenScraper
+  indexes inner-ROM hashes, so this is what actually lands the
+  hash-match. The behaviour is per-collection (Settings →
+  Configuration → Scrapers → **Hash Inner ROM in Archives**, on
+  by default); switch off to skip the extraction cost on huge
+  archives.
+
+### Changed
+
+- **Smoother wheel scrolling and arrow navigation.** The details pane
+  used to refresh on every selection change — four database queries
+  plus a handful of filesystem probes per tick. During a fast wheel
+  sweep that meant 30+ refreshes back-to-back. The refresh is now
+  debounced: rapid selection changes coalesce into a single pane
+  update once the selection settles, while clicks and arrow taps
+  still feel immediate. Post-edit refreshes (context-menu metadata
+  changes, tab switches) bypass the debounce so the pane updates the
+  moment the user expects. Cover Flow view's per-item preview-video
+  and artwork-gallery resolution gets the same debounce treatment so
+  sweeping through a large carousel no longer does a database query
+  and filesystem scan on every ~10ms tick. The three per-item
+  database lookups (metadata, artwork links, usage stats) are now
+  fronted by a 256-entry LRU cache, so scrolling back and forth
+  across recently-viewed items, returning to a previous selection,
+  or rebuilding the gallery after a context-menu tweak no longer
+  hits the database — the cached rows are reused. Writes invalidate
+  the affected entries; rescans, kart imports, and stats resets
+  clear the relevant slice automatically.
+
+### Fixed
+
 ## [0.0.6] - 2026-05-11
 
 ### Added

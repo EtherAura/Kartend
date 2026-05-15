@@ -204,7 +204,7 @@ keys keep their values, so the configuration is preserved.
 
 ## For developers
 
-- Manager: [src/modules/attract/](../../src/modules/attract/)
+- Manager: [src/modules/media/attract/](../../src/modules/media/attract/)
   (`AttractManager`).
 - Idle timer: a single `QTimer` that resets on any tracked input
   event. Tracked events come from `EventManager` filters, plus a

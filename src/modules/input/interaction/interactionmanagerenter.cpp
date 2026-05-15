@@ -21,6 +21,7 @@
 #include "alphabeticnavigationhandler.h"
 #include "animationmanager.h"
 #include "arrownavigationhandler.h"
+#include "artworkpreviewoverlay.h"
 #include "eventmanager.h"
 #include "gamepadmanager.h"
 #include "interactionhelpers.h"
@@ -251,6 +252,20 @@ auto InteractionManager::maybeExpandInsteadOfLaunch(const QString &filePath, int
   const QString videoDir =
       SettingsUtils::expandConfigVariables(artworkOwner.videoDirectory, artworkOwner.name);
   scrollMgr()->showMediaPreview(filePath, artworkDir, videoDir);
+  // Mirror the sidebar's gallery into the overlay's bottom thumb strip so
+  // Left/Right + thumb click can cycle the main preview between the
+  // item's scraped artwork types. DetailsPane already has the entries
+  // built for the currently-selected item; pull from there rather than
+  // re-running the DB/resolve cycle.
+  if (auto *details = detailsPaneMgr() ? detailsPaneMgr()->sidebarWidget() : nullptr) {
+    const auto sidebarEntries = details->currentGalleryEntries();
+    QList<ArtworkPreviewOverlay::GalleryEntry> overlayEntries;
+    overlayEntries.reserve(sidebarEntries.size());
+    for (const auto &e : sidebarEntries) {
+      overlayEntries.append({e.label, e.path, e.isVideo});
+    }
+    scrollMgr()->setArtworkPreviewGallery(overlayEntries);
+  }
   m_state.setExpandedItemIndex(activationIndex);
   return true;
 }
@@ -321,6 +336,18 @@ void InteractionManager::onMediaPreviewRequested(ItemWidget *widget, int visualI
   const QString videoDir = SettingsUtils::expandConfigVariables(owner.videoDirectory, owner.name);
 
   scrollMgr()->showMediaPreview(filePath, artworkDir, videoDir);
+  // Same rationale as maybeExpandInsteadOfLaunch — keep the overlay's
+  // thumb strip in lockstep with the sidebar's gallery so middle-click
+  // peek gets the same cycle affordance.
+  if (auto *details = detailsPaneMgr() ? detailsPaneMgr()->sidebarWidget() : nullptr) {
+    const auto sidebarEntries = details->currentGalleryEntries();
+    QList<ArtworkPreviewOverlay::GalleryEntry> overlayEntries;
+    overlayEntries.reserve(sidebarEntries.size());
+    for (const auto &e : sidebarEntries) {
+      overlayEntries.append({e.label, e.path, e.isVideo});
+    }
+    scrollMgr()->setArtworkPreviewGallery(overlayEntries);
+  }
 }
 
 void InteractionManager::onArtworkTypeCycleRequested(ItemWidget *widget, int visualIndex) {

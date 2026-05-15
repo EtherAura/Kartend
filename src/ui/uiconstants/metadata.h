@@ -10,6 +10,13 @@ namespace UIConstants {
 namespace Metadata {
 /// Size for artwork preview in sidebar
 inline constexpr int ARTWORK_SIZE = 200;
+/// Hard cap on the dynamically-sized artwork preview tile in vertical
+/// dock mode. previewBoxSize() returns the smaller of (viewport-20)
+/// and this constant. The cap is set high enough that any reasonably
+/// sized sidebar (300-700px) uses its full width; the scrolling
+/// description + metadata card below absorb anything pushed past the
+/// fold.
+inline constexpr int ARTWORK_SIZE_MAX = 720;
 /// Maximum length before truncating file paths
 inline constexpr int PATH_TRUNCATE_LENGTH = 50;
 /// Bytes per KB for file size display

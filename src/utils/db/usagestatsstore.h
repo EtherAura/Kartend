@@ -106,6 +106,18 @@ loadForItem(QSqlDatabase &db, const QString &collectionUuid, const QString &path
 [[nodiscard]] ErrorUtils::Result<QList<ItemUsageRow>> loadRecentlyPlayed(QSqlDatabase &db,
                                                                          int limit);
 
+/// Items that have never been launched (`play_count = 0` or NULL) ordered
+/// alphabetically by name. Useful for surfacing the long tail of unexplored
+/// library entries. `limit` is clamped to [1, 1000].
+[[nodiscard]] ErrorUtils::Result<QList<ItemUsageRow>> loadNeverPlayed(QSqlDatabase &db, int limit);
+
+/// Counts items whose `last_played` is on or after `isoCutoffUtc`. Pass an
+/// ISO-8601 UTC timestamp (the column is indexed and stored as ISO so a
+/// straight string comparison works). NULL/empty timestamps are excluded.
+/// Returns 0 when the cutoff is empty.
+[[nodiscard]] ErrorUtils::Result<qint64> countPlayedSince(QSqlDatabase &db,
+                                                          const QString &isoCutoffUtc);
+
 /// Per-collection breakdown keyed by collection_uuid. The dialog filters this
 /// down to known collections; uuids without a matching CollectionConfig (e.g.
 /// stale rows from deleted collections) are still returned so the totals

@@ -59,6 +59,8 @@ private slots:
   void loadAggregate_summarizesAcrossLibrary();
   void loadTopPlayed_filtersUnplayedAndSortsDescending();
   void loadRecentlyPlayed_filtersUnplayedAndSortsByLastPlayed();
+  void loadNeverPlayed_returnsItemsWithZeroOrNullPlayCount();
+  void countPlayedSince_filtersByCutoff();
   void loadCollectionBreakdown_groupsByUuid();
   void resetAll_clearsAllTrackingColumns();
   void formatDuration_handlesAllRanges();
@@ -204,6 +206,63 @@ void TestUsageStatsStore::loadRecentlyPlayed_filtersUnplayedAndSortsByLastPlayed
   QCOMPARE(rows.size(), 2);
   QCOMPARE(rows[0].path, QStringLiteral("/g/2"));
   QCOMPARE(rows[1].path, QStringLiteral("/g/1"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestUsageStatsStore::loadNeverPlayed_returnsItemsWithZeroOrNullPlayCount() {
+  const QString conn = "usage_never";
+  auto db = openMemoryDb(conn);
+  seedDatabase(db);
+  insertItem(db, "u1", "/g/1", "Game 1"); // launched -> excluded
+  insertItem(db, "u1", "/g/2", "Game 2"); // never -> included (play_count default 0)
+  insertItem(db, "u1", "/g/3", "Game 3"); // null override -> included
+  insertItem(db, "u1", "/g/4", "Game 4"); // never -> included
+
+  QVERIFY(UsageStatsStore::recordLaunch(db, "u1", "/g/1").isOk());
+
+  // Force one row to NULL so the IS NULL branch of the query is exercised
+  // (legacy rows from before the v1 migration could land here).
+  QSqlQuery q(db);
+  QVERIFY(q.exec("UPDATE items SET play_count = NULL WHERE path = '/g/3'"));
+
+  auto rows = UsageStatsStore::loadNeverPlayed(db, 10).value();
+  QCOMPARE(rows.size(), 3);
+  // Alphabetical by name.
+  QCOMPARE(rows[0].name, QStringLiteral("Game 2"));
+  QCOMPARE(rows[1].name, QStringLiteral("Game 3"));
+  QCOMPARE(rows[2].name, QStringLiteral("Game 4"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestUsageStatsStore::countPlayedSince_filtersByCutoff() {
+  const QString conn = "usage_played_since";
+  auto db = openMemoryDb(conn);
+  seedDatabase(db);
+  insertItem(db, "u1", "/g/old", "Old");
+  insertItem(db, "u1", "/g/recent", "Recent");
+  insertItem(db, "u1", "/g/never", "Never");
+
+  // Direct timestamp writes so cutoff comparisons are deterministic.
+  QSqlQuery q(db);
+  q.prepare("UPDATE items SET play_count = 1, last_played = ? WHERE path = ?");
+  q.addBindValue("2026-01-01T00:00:00Z");
+  q.addBindValue("/g/old");
+  QVERIFY(q.exec());
+  q.prepare("UPDATE items SET play_count = 1, last_played = ? WHERE path = ?");
+  q.addBindValue("2026-05-10T12:00:00Z");
+  q.addBindValue("/g/recent");
+  QVERIFY(q.exec());
+
+  // Cutoff that captures only the recent row.
+  QCOMPARE(UsageStatsStore::countPlayedSince(db, "2026-05-01T00:00:00Z").value(), qint64(1));
+  // Cutoff before everything captures both played rows but never the unplayed one.
+  QCOMPARE(UsageStatsStore::countPlayedSince(db, "2025-01-01T00:00:00Z").value(), qint64(2));
+  // Cutoff after everything captures nothing.
+  QCOMPARE(UsageStatsStore::countPlayedSince(db, "2027-01-01T00:00:00Z").value(), qint64(0));
+  // Empty cutoff short-circuits to zero without hitting the DB.
+  QCOMPARE(UsageStatsStore::countPlayedSince(db, QString()).value(), qint64(0));
 
   closeAndRemove(db, conn);
 }

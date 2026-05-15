@@ -12,8 +12,11 @@ namespace Grid {
 inline constexpr int DEFAULT_WIDTH = 7;
 /// Minimum items per row
 inline constexpr int MIN_WIDTH = 1;
-/// Maximum items per row
-inline constexpr int MAX_WIDTH = 40;
+// No project-level maximum: grid width is unbounded for large displays
+// (4K/8K wall mounts, kiosk layouts). QSpinBox::setMaximum uses INT_MAX at
+// the call sites; the pixel-dimension safety net in
+// GridLayoutCalculator (kQtMaxWidgetSize - 1000) is what actually catches
+// runaway values, not a column-count cap.
 /// Spacing between grid items in pixels
 inline constexpr int SPACING = 20;
 /// Margins around the grid in pixels

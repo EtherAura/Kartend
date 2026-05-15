@@ -73,6 +73,15 @@ public:
   loadItemMetadata(const QString &collectionUuid, const QString &path) const = 0;
   virtual bool saveItemMetadata(const ItemMetadataStore::ItemMetadata &metadata) = 0;
 
+  /// Drop the per-item metadata-cache entry for (collectionUuid, path).
+  /// Invoked by external writers (e.g. BatchScrapeRunner's worker thread)
+  /// that wrote to the SQLite file via their own connection and so
+  /// bypassed the cache invalidation that saveItemMetadata /
+  /// saveItemArtwork normally do. Main-thread only — the cache itself
+  /// is not thread-safe (see ItemMetadataCache header). Implementations
+  /// without a cache may no-op.
+  virtual void invalidateMetadataCacheItem(const QString &collectionUuid, const QString &path) = 0;
+
   [[nodiscard]] virtual QList<ItemArtworkStore::ItemArtwork>
   loadItemArtwork(const QString &collectionUuid, const QString &path) const = 0;
   virtual bool saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwork) = 0;
@@ -89,6 +98,9 @@ public:
   loadTopPlayedItems(int limit) const = 0;
   [[nodiscard]] virtual QList<UsageStatsStore::ItemUsageRow>
   loadRecentlyPlayedItems(int limit) const = 0;
+  [[nodiscard]] virtual QList<UsageStatsStore::ItemUsageRow>
+  loadNeverPlayedItems(int limit) const = 0;
+  [[nodiscard]] virtual qint64 countItemsPlayedSince(const QString &isoCutoffUtc) const = 0;
   [[nodiscard]] virtual QHash<QString, UsageStatsStore::CollectionUsage>
   loadUsageByCollection() const = 0;
   virtual bool resetAllUsageStats() = 0;

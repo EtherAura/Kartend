@@ -27,8 +27,13 @@
 #include <QWidget>
 
 namespace {
-Q_LOGGING_CATEGORY(lcSelectionDisplay, "kartend.selectiondisplay")
-}
+// Default to warning — refreshSelectionOverlayState gets fired by
+// many upstream signals (grid scroll, attract mode, selection move),
+// and each call emits 2+ qCDebug lines. With logging rules enabled
+// that's a stderr flood per user input. Opt in via
+// `KARTEND_LOG_RULES=kartend.selectiondisplay.debug=true` to diagnose.
+Q_LOGGING_CATEGORY(lcSelectionDisplay, "kartend.selectiondisplay", QtWarningMsg)
+} // namespace
 
 #define debugLog(msg)                                                                              \
   do {                                                                                             \
@@ -246,6 +251,14 @@ void SelectionDisplayManager::showMediaPreview(const QString &filePath, const QS
             &SelectionDisplayManager::artworkPreviewVisibilityChanged);
   }
   m_artworkPreviewOverlay->showMediaForFile(filePath, artworkDir, videoDir);
+}
+
+void SelectionDisplayManager::setArtworkPreviewGallery(
+    const QList<ArtworkPreviewOverlay::GalleryEntry> &entries) {
+  if (!m_artworkPreviewOverlay) {
+    return;
+  }
+  m_artworkPreviewOverlay->setGalleryEntries(entries);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

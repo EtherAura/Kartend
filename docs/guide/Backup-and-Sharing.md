@@ -279,7 +279,7 @@ A future plain-text export format is a wishlist item.
 
 ## For developers
 
-- Manager: [src/modules/kart/](../../src/modules/kart/) (`KartManager`,
+- Manager: [src/modules/data/kart/](../../src/modules/data/kart/) (`KartManager`,
   `KartReader`, `KartWriter`, `KartManifest`, `KartMerge`).
 - Compression: zstd via `KARTEND_HAS_ZSTD` (CMake-time toggle); zlib
   fallback uses Qt's built-in `qCompress`.

@@ -14,11 +14,15 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   collectiontreewidget.cpp
   configurationpanel.cpp
   controlspanel.cpp
+  createsmartplaylistdialog.cpp
   customfieldsdialog.cpp
   errordialog.cpp
+  firstrunwizard.cpp
   fontspanel.cpp
   gamepadcapturecontroller.cpp
   generalsettingspanel.cpp
+  scrapersettingspanel.cpp
+  scrapercredentialspanel.cpp
   itemartworklinksdialog.cpp
   kartmergedialog.cpp
   kartprogressdialog.cpp
@@ -26,6 +30,9 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   launchereditordialog.cpp
   launcherpresetspanel.cpp
   launchertabpanel.cpp
+  marqueepanel.cpp
+  scrapercredentialsdialog.cpp
+  scraperesultdialog.cpp
   settingsdialog.cpp
   settingsdialogbrowse.cpp
   settingsdialogchecks.cpp
@@ -58,11 +65,15 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   collectiontreewidget.h
   configurationpanel.h
   controlspanel.h
+  createsmartplaylistdialog.h
   customfieldsdialog.h
   errordialog.h
+  firstrunwizard.h
   fontspanel.h
   gamepadcapturecontroller.h
   generalsettingspanel.h
+  scrapersettingspanel.h
+  scrapercredentialspanel.h
   itemartworklinksdialog.h
   kartmergedialog.h
   kartprogressdialog.h
@@ -70,6 +81,9 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   launchereditordialog.h
   launcherpresetspanel.h
   launchertabpanel.h
+  marqueepanel.h
+  scrapercredentialsdialog.h
+  scraperesultdialog.h
   settingsdialog.h
   settingsformbinding.h
   settingsmodel.h
@@ -95,6 +109,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   generalsettingspanel.ui
   launcherpresetspanel.ui
   launchertabpanel.ui
+  marqueepanel.ui
   settingsdialog.ui
   sidebarpanel.ui
   splashpanel.ui

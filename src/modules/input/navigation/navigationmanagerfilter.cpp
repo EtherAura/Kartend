@@ -14,6 +14,7 @@
 #include "uiconstants.h"
 
 #include <algorithm>
+#include <QLineEdit>
 #include <QObject>
 #include <QString>
 #include <QtGlobal>
@@ -232,9 +233,28 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
         context.hideSubcollectionTiles = m_generalSettings->hideSubcollectionTiles;
       }
 
+      // Preserve any active search across the reload. Without this, a reload
+      // triggered mid-search (e.g. post-scrape artwork refresh from the
+      // context menu) drops the filter and re-renders the full collection
+      // while the search bar still shows the query — the visible symptom is
+      // a scroll area sized for the unfiltered set with mostly empty cells.
+      // Carry over the prior scope flags so a search that was scoped to
+      // descendants / all collections keeps that scope after the reload.
+      const QString activeFilter = m_searchBar ? m_searchBar->text().trimmed() : QString();
+      if (!activeFilter.isEmpty() && m_hasItemsQueryContext) {
+        context.queryIncludeDescendants = m_itemsQueryContext.queryIncludeDescendants;
+        context.queryIncludeAllCollections = m_itemsQueryContext.queryIncludeAllCollections;
+        if (m_itemsQueryContext.hasSubcollectionOverride) {
+          context.hasSubcollectionOverride = true;
+          context.subcollectionOverride = m_itemsQueryContext.subcollectionOverride;
+        }
+        context.suppressVirtualFolders =
+            context.suppressVirtualFolders || m_itemsQueryContext.suppressVirtualFolders;
+      }
+
       // Reload after cleanup has settled to avoid use-after-free and
       // re-entrancy issues when UI events fire during widget destruction.
-      requestItemCountForContext(context, QString());
+      requestItemCountForContext(context, activeFilter);
 
       // Update toolbar title to reflect subfolder if navigated into one.
       updateItemsPageTitle(reloadIndex);

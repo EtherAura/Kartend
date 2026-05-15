@@ -9,6 +9,7 @@
 #include <QThread>
 
 #include "errorutils.h"
+#include "smartfilter.h"
 
 struct CollectionConfig;
 
@@ -24,6 +25,15 @@ struct PlaylistRow {
   QString reservedKind; // '' for user playlists; reserved for built-ins (e.g. favorites).
   QString createdAt;
   QString updatedAt;
+  /// True when the playlist is filter-driven; items rebuild on each open
+  /// from `smartFilterJson`. False is the original static-playlist
+  /// behaviour. Persisted in playlists.is_smart (v11).
+  bool isSmart = false;
+  /// SmartFilter JSON payload when isSmart is true; empty string
+  /// otherwise. Persisted in playlists.smart_filter (v11). Callers that
+  /// want a typed Filter should call PlaylistManager::loadSmartFilter
+  /// instead of parsing this directly.
+  QString smartFilterJson;
 };
 
 /// One entry in a playlist, in playlist position order. The reference is
@@ -67,6 +77,29 @@ public:
   ErrorUtils::Result<QString> createPlaylist(const QString &name,
                                              const QString &parentCollectionUuid = QString(),
                                              const QString &reservedKind = QString());
+
+  /// Create a smart playlist whose items are evaluated from `filter` on
+  /// each open. Distinct from `createPlaylist` so the call site is
+  /// explicit at every callsite — adding items to a smart playlist via
+  /// `addItem` is silently ignored by the QueryManager scope branch
+  /// (smart playlists ignore `playlist_items` entirely), so we want the
+  /// API to make the static-vs-smart choice obvious. Reserved smart
+  /// playlists are not currently supported.
+  ErrorUtils::Result<QString> createSmartPlaylist(const QString &name,
+                                                  const SmartFilter::Filter &filter,
+                                                  const QString &parentCollectionUuid = QString());
+
+  /// Replace the filter on an existing smart playlist, stamp updated_at,
+  /// and emit playlistsChanged so the synthesizer re-renders the tile and
+  /// the QueryManager scope cache invalidates on next open.
+  bool updateSmartFilter(const QString &id, const SmartFilter::Filter &filter);
+
+  /// Load and parse the persisted SmartFilter for a playlist. Returns an
+  /// error if the playlist is unknown, not a smart playlist, or if the
+  /// stored JSON is malformed. UI consumers should bail rather than
+  /// fabricating a default filter — the user expects to see what they
+  /// configured.
+  [[nodiscard]] ErrorUtils::Result<SmartFilter::Filter> loadSmartFilter(const QString &id) const;
 
   /// Updates `name` and stamps `updated_at`. Returns false if the id is
   /// unknown or the write fails (errors logged).

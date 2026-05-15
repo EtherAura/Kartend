@@ -48,8 +48,20 @@ public:
 
   /// Returns the current map of artwork type id -> override path. Trimmed
   /// empty strings are dropped so the caller can compute insert/update/delete
-  /// diffs against the original map.
+  /// diffs against the original map. Rows still holding an auto-discovered
+  /// path (untouched by the user since `setAutoResolvedPaths` was called) are
+  /// also dropped — those entries should stay auto-discovered, not be frozen
+  /// as overrides.
   [[nodiscard]] QHash<QString, QString> overrides() const;
+
+  /// Visualises which type rows already resolve to a file on disk even
+  /// when no DB override is set. Each entry's path is rendered in the
+  /// path column in italic + muted color so the user can tell the row
+  /// is "mapped (auto)" without having to remember that
+  /// `{artwork}/{type}/{baseName}.ext` is the auto layout. The caller
+  /// must call this AFTER `setTypeRows` + `setOverrides`; auto values
+  /// only fill rows whose override column is still empty.
+  void setAutoResolvedPaths(const QHash<QString, QString> &autoPaths);
 
   /// Optional: a starting directory for the file picker. Typically the
   /// collection's artwork directory so the user lands near their existing
@@ -76,6 +88,11 @@ private:
   /// (false). Drives the placeholder text and the "auto" hint when the
   /// override is empty.
   QList<bool> m_rowIsStandard;
+  /// Snapshot of the auto-discovered path for each row, captured at
+  /// `setAutoResolvedPaths` time. Used in `overrides()` to skip rows
+  /// the user did not touch so the auto value isn't promoted to a
+  /// frozen DB override on accept.
+  QHash<QString, QString> m_autoPathByType;
 };
 
 #endif // ITEMARTWORKLINKSDIALOG_H

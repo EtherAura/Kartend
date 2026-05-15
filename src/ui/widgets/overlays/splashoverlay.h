@@ -17,6 +17,7 @@ QT_END_NAMESPACE
  * consuming that input.
  */
 class SplashOverlay : public QWidget {
+  Q_OBJECT
 public:
   enum class Reason { Startup, FocusReturn };
 

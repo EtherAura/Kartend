@@ -9,12 +9,14 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFontDialog>
+#include <QIcon>
 #include <QInputDialog>
 #include <QKeySequence>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPixmapCache>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSet>
@@ -47,7 +49,10 @@
 #include "launcherpresetspanel.h"
 #include "launchertabpanel.h"
 #include "mainwindow.h"
+#include "marqueepanel.h"
 #include "pathutils.h"
+#include "scrapercredentialspanel.h"
+#include "scrapersettingspanel.h"
 #include "scrollmanager.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
@@ -69,6 +74,20 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   ui->setupUi(this);
   setWindowTitle(tr("Settings"));
   setModal(true);
+
+  // Persistent save icon — lives in the top-right corner of the main
+  // tab widget so its position is identical regardless of which page
+  // the user is on. The previous location (inside the Collections
+  // tree shell) disappeared on every other tab. Click handler +
+  // dirty-glow wiring are set up alongside the other tab connections
+  // below.
+  m_saveButton = new QPushButton(this);
+  m_saveButton->setIcon(QIcon::fromTheme(QStringLiteral("document-save")));
+  m_saveButton->setToolTip(tr("Save changes"));
+  m_saveButton->setFlat(true);
+  m_saveButton->setMaximumSize(30, 30);
+  m_saveButton->setEnabled(false);
+  ui->tabWidget->setCornerWidget(m_saveButton, Qt::TopRightCorner);
 
   // Gamepad button-capture state machine. Constructed before
   // setupConnections() runs so the Detect-button click handlers can
@@ -201,6 +220,13 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   ui->attractPanel->setModel(&m_model);
   connect(ui->attractPanel, &AttractPanel::changed, this, &SettingsDialog::checkForChanges);
 
+  // Marquee / secondary-monitor panel: same deferred-save shape.
+  // MainWindow::applyMarqueeSettings() is called by settingsdialogform's
+  // copy block so the window appears / disappears / re-pins to a new
+  // screen as soon as the user clicks Save.
+  ui->marqueePanel->setModel(&m_model);
+  connect(ui->marqueePanel, &MarqueePanel::changed, this, &SettingsDialog::checkForChanges);
+
   // Toolbar (items-page button visibility + text overrides) panel: same
   // deferred-save shape as AttractPanel.
   ui->toolbarPanel->setModel(&m_model);
@@ -212,6 +238,23 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // loadGeneralSettingsToUI.
   ui->generalSettingsPanel->setModel(&m_model);
   connect(ui->generalSettingsPanel, &GeneralSettingsPanel::changed, this,
+          &SettingsDialog::checkForChanges);
+  // Scraper performance + behavior panel. Same deferred-save pattern:
+  // setModel binds the GeneralSettings pointer; changed() flips the
+  // dialog into "you have unsaved changes" mode.
+  ui->scraperSettingsPanel->setModel(&m_model);
+  connect(ui->scraperSettingsPanel, &ScraperSettingsPanel::changed, this,
+          &SettingsDialog::checkForChanges);
+  // Scraper credentials live inline inside each provider's sub-tab now
+  // — no separate Credentials tab. Two panels, each filtered to one
+  // provider; they share the same deferred-save model write path.
+  ui->screenScraperCredentialsPanel->setProvider(QStringLiteral("screenscraper"));
+  ui->screenScraperCredentialsPanel->setModel(&m_model);
+  connect(ui->screenScraperCredentialsPanel, &ScraperCredentialsPanel::changed, this,
+          &SettingsDialog::checkForChanges);
+  ui->tmdbCredentialsPanel->setProvider(QStringLiteral("tmdb"));
+  ui->tmdbCredentialsPanel->setModel(&m_model);
+  connect(ui->tmdbCredentialsPanel, &ScraperCredentialsPanel::changed, this,
           &SettingsDialog::checkForChanges);
 
   // Controls panel (Keyboard / Gamepad / Mouse). Bind the gamepad-capture
@@ -509,11 +552,30 @@ void SettingsDialog::emitGridWidthChanged() {
   }
 }
 
+namespace {
+// Refcounted across every live instance — the main window queries
+// this via isAnyInstanceVisible() to skip its focus-return splash
+// when the user dismisses the settings dialog.
+int g_settingsVisibleInstanceCount = 0;
+} // namespace
+
+bool SettingsDialog::isAnyInstanceVisible() {
+  return g_settingsVisibleInstanceCount > 0;
+}
+
 void SettingsDialog::showEvent(QShowEvent *event) {
   QDialog::showEvent(event);
+  ++g_settingsVisibleInstanceCount;
   // Delay grid width calculation until dialog geometry is finalized
   QTimer::singleShot(UIConstants::Timing::LONG_DELAY_MS, this,
                      &SettingsDialog::updateGridWidthLimits);
+}
+
+void SettingsDialog::hideEvent(QHideEvent *event) {
+  if (g_settingsVisibleInstanceCount > 0) {
+    --g_settingsVisibleInstanceCount;
+  }
+  QDialog::hideEvent(event);
 }
 
 void SettingsDialog::resizeEvent(QResizeEvent *event) {

@@ -45,6 +45,8 @@
 #include "pathutils.h"
 #include "playlistmanager.h"
 #include "propertyutils.h"
+#include "scraperesultdialog.h"
+#include "scraperservice.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsdialog.h"
@@ -76,6 +78,7 @@ MainWindow::MainWindow(QWidget *parent)
       currentCollectionIndex(-1), m_MetadataSidebar(nullptr) {
   m_appManager = std::make_unique<ApplicationManager>(this);
   m_appManager->initialize(&m_appContext);
+  m_scraperService = std::make_unique<Scraper::ScraperService>(this);
 
   ui->setupUi(this);
   setupUI();
@@ -89,7 +92,11 @@ bool MainWindow::event(QEvent *event) {
   if (event && !m_isShuttingDown && !QApplication::closingDown()) {
     switch (event->type()) {
     case QEvent::WindowDeactivate:
-      if (!QApplication::activeModalWidget() && !QApplication::activePopupWidget()) {
+      // Skip tracking deactivation that was caused by our own scraper
+      // or settings dialog taking focus — re-entering the main window
+      // afterwards is not a "welcome back" moment.
+      if (!QApplication::activeModalWidget() && !QApplication::activePopupWidget() &&
+          !ScrapeResultDialog::isAnyInstanceVisible() && !SettingsDialog::isAnyInstanceVisible()) {
         m_windowWasInactive = true;
       }
       break;
@@ -97,7 +104,8 @@ bool MainWindow::event(QEvent *event) {
       if (m_windowWasInactive) {
         m_windowWasInactive = false;
         if (m_startupSplashHandled && !QApplication::activeModalWidget() &&
-            !QApplication::activePopupWidget()) {
+            !QApplication::activePopupWidget() && !ScrapeResultDialog::isAnyInstanceVisible() &&
+            !SettingsDialog::isAnyInstanceVisible()) {
           showFocusReturnSplash();
         }
       }
@@ -119,6 +127,12 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
 
 void MainWindow::showStartupSplash() {
   m_startupSplashHandled = true;
+  // Pending-scrape resume prompt fires once on first startup paint —
+  // queued so the modal lands on top of an already-shown main window
+  // and not racing the startup splash. The ScraperService's pending
+  // file is checked here; if one exists, the user is prompted to
+  // resume or discard.
+  QTimer::singleShot(0, this, [this]() { promptResumePendingScrapeIfAny(); });
   // startup video plays first when enabled. The splash is
   // chained onto the video's dismissed signal so it still appears after
   // the user skips or the clip ends — keeping users with both features
@@ -683,6 +697,7 @@ void MainWindow::resyncPlaylistCollections() {
     cfg.name = row.name;
     cfg.isPlaylist = true;
     cfg.playlistId = row.id;
+    cfg.isSmartPlaylist = row.isSmart;
     cfg.playlistReservedKind = row.reservedKind;
     cfg.collectionIcon = row.icon;
     // Empty mediaDirectory keeps the scan / virtual-folder / archive paths

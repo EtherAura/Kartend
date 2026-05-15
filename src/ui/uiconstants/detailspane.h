@@ -30,7 +30,19 @@ inline constexpr int LAYOUT_NOTIFY_DELAY_MS = 100;
 /// Delay before initial center scroll on show.
 inline constexpr int INITIAL_CENTER_SCROLL_DELAY_MS = 50;
 /// Delay after selection settles before starting preview video playback.
-inline constexpr int VIDEO_PREVIEW_DEBOUNCE_MS = 500;
+/// Was 500ms pre-Kartend-9q8d when the debounce had to be long enough to
+/// outwait scroll animations (otherwise playVideo would block the GUI
+/// thread mid-glide and stutter the scroll). Now Kartend-9q8d round 6's
+/// scroll-idle predicate guards playVideo independently, so this debounce
+/// only needs to confirm the user actually settled on an item — 200ms is
+/// snappier without re-introducing the mid-scroll-block risk.
+inline constexpr int VIDEO_PREVIEW_DEBOUNCE_MS = 200;
+/// Debounce window for the sidebar metadata refresh (4 DB queries +
+/// filesystem probes). Coalesces wheel/arrow storms (~10ms cadence) into a
+/// single refresh once the selection settles. Tuned short enough that a
+/// single click feels instant but long enough that a 30-tick wheel sweep
+/// fires once instead of 30 times.
+inline constexpr int METADATA_DEBOUNCE_MS = 60;
 /// width of the resize grip on the inner edge (px). Has to be
 /// wide enough to be a forgiving target but narrow enough that it doesn't
 /// eat clicks aimed at controls near the inner edge (gallery edit button,

@@ -5,6 +5,7 @@
 #include "collectionutils.h"
 #include "databasemanager.h"
 #include "detailspane.h"
+#include "interactionstateholder.h"
 #include "itemartwork.h"
 #include "itemartworklinksdialog.h"
 #include "itemmetadata.h"
@@ -28,7 +29,11 @@
 #include <QVBoxLayout>
 
 #include <QLoggingCategory>
-Q_LOGGING_CATEGORY(lcDetailsPaneManager, "kartend.detailspanemanager")
+// Default to warning — video / metadata lookups log on every grid
+// selection move; with logging rules enabled that's a stderr flood
+// during normal navigation. Opt in via
+// `KARTEND_LOG_RULES=kartend.detailspanemanager.debug=true` to diagnose.
+Q_LOGGING_CATEGORY(lcDetailsPaneManager, "kartend.detailspanemanager", QtWarningMsg)
 #define debugLog(msg)                                                                              \
   do {                                                                                             \
     if (lcDetailsPaneManager().isDebugEnabled()) {                                                 \
@@ -57,6 +62,44 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
   m_mainContentWidget = setup.contentWidget;
   m_itemScrollArea = setup.getScrollArea();
   m_collections = setup.getCollections();
+
+  if (!m_metadataDebouncer) {
+    m_metadataDebouncer =
+        new TimerUtils::DebouncedTimer(UIConstants::DetailsPane::METADATA_DEBOUNCE_MS, this);
+    connect(m_metadataDebouncer, &TimerUtils::DebouncedTimer::triggered, this, [this]() {
+      const QString filePath = m_pendingMetadataFilePath;
+      const QString itemName = m_pendingMetadataItemName;
+      m_pendingMetadataFilePath.clear();
+      m_pendingMetadataItemName.clear();
+      performSidebarMetadataUpdate(filePath, itemName);
+    });
+  }
+
+  // Forward a scroll-idle predicate to the sidebar so its video-preview
+  // start timer can defer playVideo while a scroll animation is mid-glide.
+  // playVideo's QMediaPlayer stop+setSource+play chain blocks the GUI
+  // thread for ~100ms, which visibly stutters the still-running scroll
+  // animation when the video debounce fires before the scroll settles
+  // (Kartend-9q8d round 6). The predicate returns true (idle) only when
+  // every scroll-state flag the InteractionStateHolder tracks is clear:
+  //   - glideAnimating: smooth-scroll animation is mid-glide
+  //   - programmaticScroll: an animation is currently driving the scrollbar
+  //   - userScrollActive: user is actively engaging the wheel
+  // ApplicationContext indirection keeps the predicate robust if
+  // m_ctx->interactionState() is null (no plumbing → predicate degrades
+  // to "always idle", preserving the pre-fix behaviour).
+  if (m_DetailsPane) {
+    const ApplicationContext *ctx = m_ctx;
+    m_DetailsPane->setScrollIdlePredicate([ctx]() -> bool {
+      if (!ctx) return true;
+      const InteractionStateHolder *state = ctx->interactionState();
+      if (!state) return true;
+      if (state->glideAnimating()) return false;
+      if (state->scroll().programmaticScroll) return false;
+      if (state->scroll().userScrollActive) return false;
+      return true;
+    });
+  }
 
   // Wire the per-item artwork-link editor. The sidebar
   // widget itself has no item context, so the manager handles the dialog.
@@ -140,7 +183,10 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
         sm->saveCollections(*m_collections);
       }
       if (!m_currentItemFilePath.isEmpty()) {
-        updateSidebarMetadata(m_currentItemFilePath, m_currentItemName);
+        // Tab switch is a deliberate user action — refresh immediately so
+        // the newly-selected tab's content paints without the debounce
+        // latency that selection-driven updates accept.
+        refreshSidebarMetadataImmediate();
       }
     });
   }

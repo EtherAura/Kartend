@@ -138,6 +138,12 @@ bool WheelEventHandler::handleEvent(QObject * /*obj*/, QEvent *event) {
   if (QApplication::activeModalWidget()) {
     return false;
   }
+  // When the expand-mode artwork preview overlay is visible, let the wheel
+  // event propagate to it so it can cycle through the gallery entries
+  // instead of moving the underlying grid selection.
+  if (scrollMgr() && scrollMgr()->isArtworkPreviewVisible()) {
+    return false;
+  }
   if (eventBelongsToSidebar()) {
     return false;
   }

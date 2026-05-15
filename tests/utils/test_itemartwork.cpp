@@ -74,15 +74,18 @@ private slots:
 void TestItemArtwork::standardTypesAreOrderedAndStable() {
   // The order is meaningful — sidebar gallery renders in this sequence and
   // the strings double as on-disk subdirectory names. A reorder or rename
-  // here is breakage; this test pins the contract.
+  // here is breakage; this test pins the contract. "front" is the cross-
+  // provider primary-cover id and leads the list; "box" follows for
+  // libraries with hand-curated cover art.
   const auto &types = ItemArtworkStore::standardTypes();
-  QCOMPARE(types.size(), 6);
-  QCOMPARE(types[0], QStringLiteral("box"));
-  QCOMPARE(types[1], QStringLiteral("screenshot"));
-  QCOMPARE(types[2], QStringLiteral("title"));
-  QCOMPARE(types[3], QStringLiteral("marquee"));
-  QCOMPARE(types[4], QStringLiteral("fanart"));
-  QCOMPARE(types[5], QStringLiteral("logo"));
+  QCOMPARE(types.size(), 7);
+  QCOMPARE(types[0], QStringLiteral("front"));
+  QCOMPARE(types[1], QStringLiteral("box"));
+  QCOMPARE(types[2], QStringLiteral("screenshot"));
+  QCOMPARE(types[3], QStringLiteral("title"));
+  QCOMPARE(types[4], QStringLiteral("marquee"));
+  QCOMPARE(types[5], QStringLiteral("fanart"));
+  QCOMPARE(types[6], QStringLiteral("logo"));
 }
 
 void TestItemArtwork::isStandardTypeRecognisesCanonicalIds() {

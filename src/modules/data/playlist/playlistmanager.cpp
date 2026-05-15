@@ -100,7 +100,9 @@ bool PlaylistManager::initialize() {
                 "parent_collection_uuid TEXT NOT NULL DEFAULT '', "
                 "reserved_kind TEXT NOT NULL DEFAULT '', "
                 "created_at TEXT NOT NULL DEFAULT '', "
-                "updated_at TEXT NOT NULL DEFAULT ''"
+                "updated_at TEXT NOT NULL DEFAULT '', "
+                "is_smart INTEGER NOT NULL DEFAULT 0, "
+                "smart_filter TEXT NOT NULL DEFAULT ''"
                 ")")) {
     auto err =
         ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to ensure playlists table",
@@ -108,6 +110,13 @@ bool PlaylistManager::initialize() {
             .withDetails(ddl.lastError().text());
     ErrorUtils::logError(err);
   }
+  // Mirror the v11 ensureColumn calls so a long-lived install that already
+  // has a v10 playlists table picks up the smart-playlist columns when the
+  // standalone PlaylistManager opens its connection (the full migration
+  // suite normally handles this via DatabaseManager, but the standalone
+  // path stays schema-compatible by repeating the additive columns here).
+  ddl.exec("ALTER TABLE playlists ADD COLUMN is_smart INTEGER NOT NULL DEFAULT 0");
+  ddl.exec("ALTER TABLE playlists ADD COLUMN smart_filter TEXT NOT NULL DEFAULT ''");
   if (!ddl.exec("CREATE TABLE IF NOT EXISTS playlist_items ("
                 "playlist_id TEXT NOT NULL, "
                 "position INTEGER NOT NULL, "
@@ -168,6 +177,89 @@ ErrorUtils::Result<QString> PlaylistManager::createPlaylist(const QString &name,
   }
   emit playlistsChanged();
   return id;
+}
+
+ErrorUtils::Result<QString>
+PlaylistManager::createSmartPlaylist(const QString &name, const SmartFilter::Filter &filter,
+                                     const QString &parentCollectionUuid) {
+  assertOwnerThread();
+  if (!m_db.isOpen()) {
+    return ErrorContext::error(ErrorCode::DatabaseNotOpen, "Database not open",
+                               "PlaylistManager::createSmartPlaylist");
+  }
+  if (name.trimmed().isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Playlist name is empty",
+                               "PlaylistManager::createSmartPlaylist");
+  }
+
+  const QString id = newPlaylistId();
+  const QString now = isoNow();
+  const QString filterJson = SmartFilter::toJsonString(filter);
+
+  QSqlQuery q(m_db);
+  q.prepare(QStringLiteral(
+      "INSERT INTO playlists (id, name, icon, parent_collection_uuid, reserved_kind, "
+      "created_at, updated_at, is_smart, smart_filter) VALUES (?, ?, '', ?, '', ?, ?, 1, ?)"));
+  q.addBindValue(id);
+  q.addBindValue(name.trimmed());
+  q.addBindValue(parentCollectionUuid.isNull() ? QString("") : parentCollectionUuid);
+  q.addBindValue(now);
+  q.addBindValue(now);
+  q.addBindValue(filterJson);
+  if (!q.exec()) {
+    auto err =
+        ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to create smart playlist",
+                            "PlaylistManager::createSmartPlaylist")
+            .withDetails(q.lastError().text());
+    ErrorUtils::logError(err);
+    return err;
+  }
+  emit playlistsChanged();
+  return id;
+}
+
+bool PlaylistManager::updateSmartFilter(const QString &id, const SmartFilter::Filter &filter) {
+  assertOwnerThread();
+  if (!m_db.isOpen() || id.isEmpty()) {
+    return false;
+  }
+  const QString filterJson = SmartFilter::toJsonString(filter);
+  QSqlQuery q(m_db);
+  q.prepare(QStringLiteral(
+      "UPDATE playlists SET smart_filter = ?, updated_at = ? WHERE id = ? AND is_smart = 1"));
+  q.addBindValue(filterJson);
+  q.addBindValue(isoNow());
+  q.addBindValue(id);
+  if (!q.exec() || q.numRowsAffected() <= 0) {
+    auto err =
+        ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to update smart filter",
+                              "PlaylistManager::updateSmartFilter")
+            .withDetails(q.lastError().text());
+    ErrorUtils::logError(err);
+    return false;
+  }
+  emit playlistsChanged();
+  return true;
+}
+
+ErrorUtils::Result<SmartFilter::Filter> PlaylistManager::loadSmartFilter(const QString &id) const {
+  assertOwnerThread();
+  if (!m_db.isOpen() || id.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Database closed or empty id",
+                               "PlaylistManager::loadSmartFilter");
+  }
+  QSqlQuery q(m_db);
+  q.prepare(QStringLiteral("SELECT is_smart, smart_filter FROM playlists WHERE id = ?"));
+  q.addBindValue(id);
+  if (!q.exec() || !q.next()) {
+    return ErrorContext::error(ErrorCode::FileNotFound, "Playlist not found",
+                               "PlaylistManager::loadSmartFilter");
+  }
+  if (q.value(0).toInt() == 0) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Playlist is not a smart playlist",
+                               "PlaylistManager::loadSmartFilter");
+  }
+  return SmartFilter::fromJsonString(q.value(1).toString());
 }
 
 bool PlaylistManager::renamePlaylist(const QString &id, const QString &newName) {
@@ -384,7 +476,7 @@ QList<PlaylistRow> PlaylistManager::loadAll() const {
   }
   QSqlQuery q(m_db);
   if (!q.exec(QStringLiteral("SELECT id, name, icon, parent_collection_uuid, reserved_kind, "
-                             "created_at, updated_at FROM playlists"))) {
+                             "created_at, updated_at, is_smart, smart_filter FROM playlists"))) {
     auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to load playlists",
                                      "PlaylistManager::loadAll")
                    .withDetails(q.lastError().text());
@@ -400,6 +492,8 @@ QList<PlaylistRow> PlaylistManager::loadAll() const {
     row.reservedKind = q.value(4).toString();
     row.createdAt = q.value(5).toString();
     row.updatedAt = q.value(6).toString();
+    row.isSmart = q.value(7).toInt() != 0;
+    row.smartFilterJson = q.value(8).toString();
     result.push_back(row);
   }
   return result;
@@ -498,7 +592,7 @@ PlaylistRow loadPlaylistRow(QSqlDatabase &db, const QString &id) {
   PlaylistRow row;
   QSqlQuery q(db);
   q.prepare("SELECT id, name, icon, parent_collection_uuid, reserved_kind, "
-            "created_at, updated_at FROM playlists WHERE id = ?");
+            "created_at, updated_at, is_smart, smart_filter FROM playlists WHERE id = ?");
   q.addBindValue(id);
   if (q.exec() && q.next()) {
     row.id = q.value(0).toString();
@@ -508,6 +602,8 @@ PlaylistRow loadPlaylistRow(QSqlDatabase &db, const QString &id) {
     row.reservedKind = q.value(4).toString();
     row.createdAt = q.value(5).toString();
     row.updatedAt = q.value(6).toString();
+    row.isSmart = q.value(7).toInt() != 0;
+    row.smartFilterJson = q.value(8).toString();
   }
   return row;
 }
@@ -547,7 +643,9 @@ ErrorUtils::Result<int> PlaylistManager::exportToJson(const QString &playlistId,
   QJsonObject doc;
   // Versioned wrapper so a future schema change can branch on read without
   // having to sniff fields. Bump on any breaking change to the item shape.
-  doc["kartend_playlist_version"] = 1;
+  // v2 added the is_smart / smart_filter pair; importers should fall back
+  // to the v1 shape when those fields are absent.
+  doc["kartend_playlist_version"] = 2;
   doc["name"] = row.name;
   doc["icon"] = row.icon;
   doc["parent_collection_uuid"] = row.parentCollectionUuid;
@@ -556,6 +654,12 @@ ErrorUtils::Result<int> PlaylistManager::exportToJson(const QString &playlistId,
   // refuses to clean up. Imported playlists are always plain user playlists.
   doc["created_at"] = row.createdAt;
   doc["updated_at"] = row.updatedAt;
+  // Smart playlists carry their filter spec; static playlists carry their
+  // explicit items list. Both are emitted unconditionally so a downstream
+  // tool that doesn't know the version field can still round-trip the
+  // shape it cares about.
+  doc["is_smart"] = row.isSmart;
+  doc["smart_filter"] = row.smartFilterJson;
   doc["items"] = itemsArray;
 
   QSaveFile file(outPath);
@@ -668,6 +772,19 @@ ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPat
   // to root level when the uuid no longer matches any real collection, so a
   // stale reference is harmless.
   const QString parentUuid = root.value("parent_collection_uuid").toString();
+
+  // v2: smart playlist round-trip. When is_smart is true and the embedded
+  // smart_filter parses cleanly, recreate as a smart playlist (no items
+  // are imported — they'll be evaluated on first open). v1 documents
+  // never carry these fields so they fall through to the static path.
+  if (root.value("is_smart").toBool(false)) {
+    auto filterResult = SmartFilter::fromJsonString(root.value("smart_filter").toString());
+    if (filterResult.isError()) {
+      return filterResult.error();
+    }
+    return createSmartPlaylist(name, filterResult.value(), parentUuid);
+  }
+
   auto created = createPlaylist(name, parentUuid);
   if (created.isError()) {
     return created.error();

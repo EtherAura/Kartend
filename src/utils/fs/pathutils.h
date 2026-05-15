@@ -18,6 +18,14 @@ enum class PathValidationError { EmptyPath, NotAbsolute, DoesNotExist };
 [[nodiscard]] ErrorUtils::Result<QString>
 tryValidateAndExpandPath(const QString &path, const QString &collectionName = QString());
 
+/// Expands `~/`, `~`, and `%collection%` placeholders **without** requiring
+/// the resulting path to exist. Use this when the caller intends to create
+/// the directory itself (e.g. mkpath) — `validateAndExpandPath` would
+/// reject a not-yet-created path with `DoesNotExist`. Returns an empty
+/// string when the input is blank after expansion.
+[[nodiscard]] QString expandPathWithoutExistenceCheck(const QString &path,
+                                                      const QString &collectionName = QString());
+
 [[nodiscard]] QString truncatePathForDisplay(const QString &path, int maxLength = 50);
 [[nodiscard]] QString normalizeDisplayName(const QString &input);
 
