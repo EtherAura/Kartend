@@ -119,6 +119,18 @@ void TestRomHasher::recognisesArchiveExtensions() {
 }
 
 void TestRomHasher::hashesInnerRomLargestFile() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  // Ubuntu 24.04's libtsan (the version in the CI runner image) has a
+  // fork-after-thread-start CHECK bug — clone() from a QtTest binary
+  // that's already started its watchdog thread trips
+  // `tsan_rtl.cpp:253 "((!thr->slot)) != (0)"` and aborts the process.
+  // The bug fires both in the test setup (QProcess running `zip`) and
+  // inside RomHasher::hashArchiveInnerRom itself (QProcess running
+  // 7z/unzip/bsdtar), so there's no rearrangement that makes this test
+  // runnable under TSan on this distro. Re-enable once the runner image
+  // ships a newer libtsan.
+  QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
+#endif
   // Need a real extractor on PATH to build an archive AND to read it
   // back. Skip cleanly when the build environment lacks one — the
   // production code path returns an error in this case which is

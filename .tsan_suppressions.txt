@@ -78,6 +78,16 @@ race:QTest::qRun
 # Suppressing here catches all variants of this pattern across test
 # binaries (test_databasemanager, test_integration, …).
 race:QArrayData::allocate
+# Realloc / detach path of the same COW buffers. When two QtConcurrent::run
+# tasks (BatchScrapeRunner::applyAndFinish dispatches one per item) capture
+# QString / QList members of the runner by value, the captures share the
+# COW source buffer. The underlying QArrayData operations (reallocateUnaligned
+# during string growth, memmove during list resize) happen on separate
+# allocator slots per task, but the QtConcurrent thread-pool worker keeps
+# the same heap addresses in its TSan access history across consecutive
+# tasks, so the next task on the same pooled thread looks racy against the
+# previous one's COW operations. Pool-reuse artifact, not a real race.
+race:QArrayData::reallocateUnaligned
 
 # Queued-connection arg lifecycle across the event-queue boundary: when
 # DatabaseManager emits a queued signal carrying CollectionConfig /
@@ -95,6 +105,17 @@ race:QArrayData::allocate
 race:QMetaCallEvent
 race:QArrayDataPointer<CollectionConfig>::deref
 race:QArrayDataPointer<CollectionContext>::deref
+
+# ScrapeWriteWorker (and similar moveToThread'd QObject workers) receive
+# queued signals carrying heap-allocated payloads. Main thread allocates
+# the slot args via QMetaType::create (operator new); the worker's
+# moc-generated qt_static_metacall reads them after Qt dispatches the
+# QMetaCallEvent on the worker's event loop. Same Qt event-queue-mutex
+# happens-before edge as the QMetaCallEvent suppression above, but the
+# specific symbol on this stack is QMetaType::create — the libQt6Core
+# frames between create() and the moc metacall are stripped, so TSan
+# never sees the synchronising mutex.
+race:QMetaType::create
 
 # CacheManager::initialize() runs on a QtConcurrent::run worker thread.
 # ApplicationManager::~ApplicationManager() calls m_cacheInitFuture
