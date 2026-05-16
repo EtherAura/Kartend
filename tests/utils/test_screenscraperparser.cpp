@@ -26,6 +26,10 @@ private slots:
   void parseDetailResponse_mapsBox2DAndSstitleToStandardTypes();
   void parseDetailResponse_preservesNonStandardMediaTypes();
   void parseDetailResponse_recoversFromTrailingGarbage();
+  void parseDetailResponse_titleAndDateFollowRomRegion();
+  void parseDetailResponse_artworkFollowsRomRegion();
+  void parseDetailResponse_fallbackRegionBackstopsUnknownRomRegion();
+  void parseDetailResponse_freeTextFollowsPreferredLanguage();
 };
 
 namespace {
@@ -101,6 +105,44 @@ const QByteArray FIXTURE = R"json({
 })json";
 
 const QByteArray EMPTY_FIXTURE = R"json({"header":{"APIversion":"2"},"response":{}})json";
+
+// Fixture for region/language selection: the matched ROM is a Japanese
+// cartridge, and SS offers US / EU / JP variants of every region-keyed
+// field plus en / fr / de variants of the free-text fields.
+const QByteArray REGION_FIXTURE = R"json({
+  "header": {"APIversion": "2"},
+  "response": {
+    "jeu": {
+      "id": "9000",
+      "noms": [
+        {"region": "us", "text": "Game (US)"},
+        {"region": "eu", "text": "Game (EU)"},
+        {"region": "jp", "text": "Game (JP)"}
+      ],
+      "synopsis": [
+        {"langue": "en", "text": "English description."},
+        {"langue": "fr", "text": "French description."},
+        {"langue": "de", "text": "German description."}
+      ],
+      "dates": [
+        {"region": "us", "text": "1991-09-25"},
+        {"region": "jp", "text": "1991-08-13"},
+        {"region": "eu", "text": "1992-01-10"}
+      ],
+      "genres": [
+        {"noms": [{"langue": "en", "text": "Platform"}, {"langue": "fr", "text": "Plateformer"}]}
+      ],
+      "rom": {
+        "regions": {"region_shortname": "jp"}
+      },
+      "medias": [
+        {"type": "box-2D", "region": "us", "url": "https://example.com/box-us.png"},
+        {"type": "box-2D", "region": "eu", "url": "https://example.com/box-eu.png"},
+        {"type": "box-2D", "region": "jp", "url": "https://example.com/box-jp.png"}
+      ]
+    }
+  }
+})json";
 
 } // namespace
 
@@ -286,6 +328,58 @@ void TestScreenScraperParser::parseDetailResponse_recoversFromTrailingGarbage() 
   auto result = ScreenScraperParser::parseDetailResponse(polluted);
   QVERIFY(result.isOk());
   QCOMPARE(result.value().title, QStringLiteral("Game (US)"));
+}
+
+void TestScreenScraperParser::parseDetailResponse_titleAndDateFollowRomRegion() {
+  // The matched ROM is Japanese, so the region-keyed title and release
+  // date must come back as the JP variants — not collapsed to US.
+  auto result = ScreenScraperParser::parseDetailResponse(REGION_FIXTURE);
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().title, QStringLiteral("Game (JP)"));
+  QCOMPARE(result.value().releaseDate, QStringLiteral("1991-08-13"));
+}
+
+void TestScreenScraperParser::parseDetailResponse_artworkFollowsRomRegion() {
+  // Box art is region-keyed too: a Japanese ROM keeps the JP box even
+  // when US / EU variants are also offered.
+  auto result = ScreenScraperParser::parseDetailResponse(REGION_FIXTURE);
+  QVERIFY(result.isOk());
+  QString frontUrl;
+  for (const auto &m : result.value().media) {
+    if (m.type == QStringLiteral("front")) frontUrl = m.url.toString();
+  }
+  QCOMPARE(frontUrl, QStringLiteral("https://example.com/box-jp.png"));
+}
+
+void TestScreenScraperParser::parseDetailResponse_fallbackRegionBackstopsUnknownRomRegion() {
+  // When the matched ROM's region has no entry in the region-keyed
+  // arrays, the configured fallback region decides — and with no
+  // fallback set, the fixed English-leaning chain picks US.
+  QByteArray unknownRegion = REGION_FIXTURE;
+  unknownRegion.replace("\"region_shortname\": \"jp\"", "\"region_shortname\": \"kr\"");
+
+  ScreenScraperParser::ParseOptions euOpts;
+  euOpts.preferredRegion = QStringLiteral("eu");
+  auto euResult = ScreenScraperParser::parseDetailResponse(unknownRegion, euOpts);
+  QVERIFY(euResult.isOk());
+  QCOMPARE(euResult.value().title, QStringLiteral("Game (EU)"));
+
+  auto defaultResult = ScreenScraperParser::parseDetailResponse(unknownRegion);
+  QVERIFY(defaultResult.isOk());
+  QCOMPARE(defaultResult.value().title, QStringLiteral("Game (US)"));
+}
+
+void TestScreenScraperParser::parseDetailResponse_freeTextFollowsPreferredLanguage() {
+  // Free-text fields follow the application language, independent of
+  // the ROM's region: a Japanese ROM with a French UI yields the
+  // French description and genre while the title stays JP.
+  ScreenScraperParser::ParseOptions frOpts;
+  frOpts.preferredLanguage = QStringLiteral("fr");
+  auto result = ScreenScraperParser::parseDetailResponse(REGION_FIXTURE, frOpts);
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().description, QStringLiteral("French description."));
+  QCOMPARE(result.value().genre, QStringLiteral("Plateformer"));
+  QCOMPARE(result.value().title, QStringLiteral("Game (JP)"));
 }
 
 QTEST_MAIN(TestScreenScraperParser)

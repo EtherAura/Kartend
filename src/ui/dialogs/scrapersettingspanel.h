@@ -54,6 +54,11 @@ private:
   QPushButton *m_detectButton = nullptr;
   QComboBox *m_rescrapeCombo = nullptr;
   QLabel *m_rescrapeWarning = nullptr;
+  /// Fallback region for ScreenScraper's region-keyed fields (title,
+  /// release date, box art). Each item still honours its own
+  /// matched-ROM region first; this only backstops items whose region
+  /// has no entry. Stores the SS region shortname as item data.
+  QComboBox *m_regionCombo = nullptr;
   bool m_loading = false; // suppress changed() during programmatic loads
 };
 

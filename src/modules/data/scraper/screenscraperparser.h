@@ -43,6 +43,17 @@ struct ParseOptions {
   /// — the loose contract that lets new SS types surface even before
   /// the catalog cache is populated.
   QHash<QString, QString> mediaTypeLabels;
+  /// Fallback region (SS shortname: "us", "eu", "jp", "wor", ...)
+  /// used to pick region-keyed fields — title, release date, box
+  /// art — when the matched ROM's own region has no entry. The ROM's
+  /// region always wins; this only backstops it. Empty falls straight
+  /// through to the parser's fixed English-leaning chain.
+  QString preferredRegion;
+  /// Application UI language (ISO 639-1: "en", "fr", "de", ...) used
+  /// to pick language-keyed free-text fields — description, genres,
+  /// families, modes — so they read in the same language as the rest
+  /// of the app. Empty falls through to the fixed chain.
+  QString preferredLanguage;
 };
 
 /// Parse the response body. The matched game (if any) is wrapped in

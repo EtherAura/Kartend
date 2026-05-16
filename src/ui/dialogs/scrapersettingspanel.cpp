@@ -191,6 +191,31 @@ void ScraperSettingsPanel::buildLayout() {
   m_rescrapeWarning->hide();
   form->addRow(m_rescrapeWarning);
 
+  // Fallback region for ScreenScraper's region-keyed fields. Each
+  // scraped item first honours its own matched-ROM region — a Japanese
+  // cart keeps its Japanese title and box art — so this only decides
+  // what to fall back to when the item's region has no entry. Free-text
+  // fields (description, genres, ...) ignore this and follow the
+  // application language instead. Data is the SS region shortname.
+  m_regionCombo = new QComboBox(this);
+  m_regionCombo->addItem(tr("World"), QStringLiteral("wor"));
+  m_regionCombo->addItem(tr("USA"), QStringLiteral("us"));
+  m_regionCombo->addItem(tr("Europe"), QStringLiteral("eu"));
+  m_regionCombo->addItem(tr("Japan"), QStringLiteral("jp"));
+  m_regionCombo->addItem(tr("United Kingdom"), QStringLiteral("uk"));
+  m_regionCombo->addItem(tr("France"), QStringLiteral("fr"));
+  m_regionCombo->addItem(tr("Germany"), QStringLiteral("de"));
+  m_regionCombo->addItem(tr("Spain"), QStringLiteral("sp"));
+  m_regionCombo->addItem(tr("Italy"), QStringLiteral("it"));
+  m_regionCombo->addItem(tr("Brazil"), QStringLiteral("br"));
+  m_regionCombo->addItem(tr("Australia"), QStringLiteral("au"));
+  m_regionCombo->addItem(tr("Korea"), QStringLiteral("kr"));
+  m_regionCombo->setToolTip(tr("Each scraped item uses its own region for the title, release "
+                               "date, and box art. This region is only the fallback for items "
+                               "whose own region has no entry. Descriptions and other text "
+                               "always follow the application language."));
+  form->addRow(tr("Fallback region:"), m_regionCombo);
+
   // Auto-resume toggle (Kartend-1uvp). Off by default — first-time users
   // see the modal Resume / Discard prompt on next launch after an
   // interrupted scrape, which teaches them the recovery path. Power
@@ -263,6 +288,14 @@ void ScraperSettingsPanel::connectChangeSignals() {
   // Auto-resume is a behaviour toggle independent of the speed/quality
   // preset; flipping it doesn't demote the preset to Custom.
   connect(m_autoResumeCheck, &QCheckBox::toggled, this, [this](bool) {
+    if (m_loading) return;
+    writeModel();
+    emit changed();
+  });
+
+  // Fallback region is a metadata-content preference, independent of
+  // the speed/quality preset.
+  connect(m_regionCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
     if (m_loading) return;
     writeModel();
     emit changed();
@@ -378,6 +411,12 @@ void ScraperSettingsPanel::refresh() {
     QSignalBlocker b(m_autoResumeCheck);
     m_autoResumeCheck->setChecked(opts.scrapeAutoResume);
   }
+  if (m_regionCombo) {
+    const int regionIdx = m_regionCombo->findData(opts.preferredScraperRegion);
+    // An unrecognised persisted region (hand-edited config) falls back
+    // to the first entry rather than leaving the combo blank.
+    m_regionCombo->setCurrentIndex(regionIdx >= 0 ? regionIdx : 0);
+  }
   m_loading = false;
 }
 
@@ -396,5 +435,8 @@ void ScraperSettingsPanel::writeModel() {
       static_cast<GeneralSettings::ScraperRescrapeMode>(m_rescrapeCombo->currentData().toInt());
   if (m_autoResumeCheck) {
     opts.scrapeAutoResume = m_autoResumeCheck->isChecked();
+  }
+  if (m_regionCombo) {
+    opts.preferredScraperRegion = m_regionCombo->currentData().toString();
   }
 }

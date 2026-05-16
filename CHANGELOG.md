@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Scraper fallback region.** Scraper settings gain a **Fallback
+  region** dropdown. Each scraped item already follows its own region
+  for the title, release date, and box art; this setting only decides
+  what to fall back to when the item's own region has no entry.
+
 - **Richer New Collection dialog.** Adding a collection now opens a
   short form for its name, content folder, artwork folder, launcher,
   media type, and metadata scraper instead of a bare name prompt — a
@@ -110,6 +115,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- ScreenScraper results no longer collapse every item to its US
+  title and box art. Each scraped item now follows its own region
+  for the title, release date, and artwork — a Japanese cartridge
+  keeps its Japanese title and box — while descriptions, genres, and
+  other free-text fields follow the application language.
 - In the Home view, entering a shell collection that gathers items
   from several subcollections sorted those items by subcollection and
   then by name. With a Name sort selected they now sort by name alone,

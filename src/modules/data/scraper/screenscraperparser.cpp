@@ -1,14 +1,18 @@
 // JSON parser for ScreenScraper.fr jeuInfos.php responses. Their
 // payload is deeply nested with region/language-keyed inner arrays;
-// the helpers below collapse those to single values using a fixed
-// preference order (US/world/EU/JP/first available for region; en/fr
-// for language). A future polish will respect the user's locale.
+// the helpers below collapse those to single values. Region-keyed
+// fields (title, release date, artwork) follow the matched ROM's own
+// region, then the user's configured fallback region, then a fixed
+// English-leaning chain. Language-keyed free-text fields (description,
+// genres, families, modes) follow the application UI language, then
+// the same fixed chain.
 #include "screenscraperparser.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QRegularExpression>
 #include <QStringList>
 #include <QTextDocumentFragment>
 #include <QUrl>
@@ -31,6 +35,51 @@ const QStringList LANGUAGE_PREFERENCES = {
     QStringLiteral("de"),
     QStringLiteral("es"),
 };
+
+/// Append a region/language tag to `prefs`, lowercased and trimmed,
+/// skipping empties and duplicates so the preference scan stays a
+/// clean ordered set.
+void addPreferenceTag(QStringList &prefs, const QString &raw) {
+  const QString tag = raw.trimmed().toLower();
+  if (!tag.isEmpty() && !prefs.contains(tag)) {
+    prefs.append(tag);
+  }
+}
+
+/// Build the region preference order for a single scraped item.
+/// The matched ROM's own region wins, so a Japanese cartridge keeps
+/// its Japanese title and box art instead of collapsing to the US
+/// entry; the user's configured fallback region comes next, then the
+/// fixed English-leaning chain backstops everything. SS occasionally
+/// reports a multi-region ROM as a comma/space-separated list — each
+/// token is folded in, in order.
+QStringList buildRegionPreferences(const QString &itemRegion, const QString &fallbackRegion) {
+  QStringList prefs;
+  const auto tokens =
+      itemRegion.split(QRegularExpression(QStringLiteral("[,\\s]+")), Qt::SkipEmptyParts);
+  for (const QString &token : tokens) {
+    addPreferenceTag(prefs, token);
+  }
+  addPreferenceTag(prefs, fallbackRegion);
+  for (const QString &region : REGION_PREFERENCES) {
+    addPreferenceTag(prefs, region);
+  }
+  return prefs;
+}
+
+/// Build the language preference order for free-text fields
+/// (description, genres, families, modes). The application UI
+/// language wins so those fields read in the same language as the
+/// rest of Kartend; the fixed chain backstops it when SS has no
+/// entry in that language.
+QStringList buildLanguagePreferences(const QString &appLanguage) {
+  QStringList prefs;
+  addPreferenceTag(prefs, appLanguage);
+  for (const QString &language : LANGUAGE_PREFERENCES) {
+    addPreferenceTag(prefs, language);
+  }
+  return prefs;
+}
 
 /// Parse a ScreenScraper JSON payload, tolerating trailing garbage.
 /// SS occasionally appends a PHP warning/notice/stack trace after the
@@ -124,14 +173,16 @@ QUrl rewriteMediaUrl(const QUrl &source, int maxDim, bool preferJpg) {
 
 /// Map SS's `medias[]` array to Scraper::MediaAsset. Each entry is
 /// `{ type: "box-2D", region: "us", url: "...", format: "png" }`. We
-/// keep one asset per (type) — preferring the US region — so the
-/// dialog's media checkbox panel doesn't show 6 box-2D variants.
+/// keep one asset per (type) — preferring the item's own region per
+/// `regionPrefs` — so the dialog's media checkbox panel doesn't show
+/// 6 box-2D variants and a Japanese cart gets Japanese box art.
 QList<Scraper::MediaAsset> mapMedia(const QJsonArray &medias, int mediaMaxDim, bool preferJpg,
-                                    const QHash<QString, QString> &mediaTypeLabels) {
+                                    const QHash<QString, QString> &mediaTypeLabels,
+                                    const QStringList &regionPrefs) {
   QHash<QString, QPair<int, Scraper::MediaAsset>> byType;
   // Region preference index: lower = better.
-  auto regionRank = [](const QString &region) {
-    const int idx = REGION_PREFERENCES.indexOf(region.toLower());
+  auto regionRank = [&regionPrefs](const QString &region) {
+    const int idx = regionPrefs.indexOf(region.toLower());
     return idx < 0 ? 999 : idx;
   };
   for (const auto &v : medias) {
@@ -231,11 +282,11 @@ QList<Scraper::MediaAsset> mapMedia(const QJsonArray &medias, int mediaMaxDim, b
   return out;
 }
 
-QString collectGenres(const QJsonArray &genres) {
+QString collectGenres(const QJsonArray &genres, const QStringList &languagePrefs) {
   QStringList names;
   for (const auto &v : genres) {
     const QJsonObject g = v.toObject();
-    const QString name = pickByTag(g.value("noms").toArray(), "langue", LANGUAGE_PREFERENCES);
+    const QString name = pickByTag(g.value("noms").toArray(), "langue", languagePrefs);
     if (!name.isEmpty() && !names.contains(name)) {
       names.append(name);
     }
@@ -244,8 +295,7 @@ QString collectGenres(const QJsonArray &genres) {
 }
 
 ErrorUtils::Result<Scraper::ScrapedItem>
-parseInner(const QByteArray &json, int mediaMaxDim = 0, bool preferJpg = false,
-           const QHash<QString, QString> &mediaTypeLabels = {}) {
+parseInner(const QByteArray &json, const ScreenScraperParser::ParseOptions &options = {}) {
   QJsonParseError err;
   const auto doc = parseTolerant(json, &err);
   if (err.error != QJsonParseError::NoError || !doc.isObject()) {
@@ -260,9 +310,21 @@ parseInner(const QByteArray &json, int mediaMaxDim = 0, bool preferJpg = false,
                                "ScreenScraperParser::parseInner");
   }
 
+  // SS's `rom` object is the matched ROM variant. Its region drives
+  // region-keyed field selection (title, release date, artwork) so a
+  // non-US cartridge keeps its own title and box art; the configured
+  // fallback region backstops it. Free-text fields (description,
+  // genres, families, modes) follow the application UI language
+  // instead, so they read in the same language as the rest of the app.
+  const QJsonObject rom = jeu.value("rom").toObject();
+  const QString itemRegion =
+      rom.value("regions").toObject().value("region_shortname").toString();
+  const QStringList regionPrefs = buildRegionPreferences(itemRegion, options.preferredRegion);
+  const QStringList languagePrefs = buildLanguagePreferences(options.preferredLanguage);
+
   Scraper::ScrapedItem item;
   item.sourceProviderId = QStringLiteral("screenscraper");
-  item.title = pickByTag(jeu.value("noms").toArray(), "region", REGION_PREFERENCES);
+  item.title = pickByTag(jeu.value("noms").toArray(), "region", regionPrefs);
   // SS encodes the synopsis as HTML-escaped text (`&quot;`, `&amp;`,
   // numeric entities, etc.) so it can ride through the JSON string
   // safely. The details pane renders the description as plain text,
@@ -271,13 +333,13 @@ parseInner(const QByteArray &json, int mediaMaxDim = 0, bool preferJpg = false,
   // entity decoder in Qt and also strips any stray inline HTML tags
   // that SS occasionally leaves in.
   item.description = QTextDocumentFragment::fromHtml(
-                         pickByTag(jeu.value("synopsis").toArray(), "langue", LANGUAGE_PREFERENCES))
+                         pickByTag(jeu.value("synopsis").toArray(), "langue", languagePrefs))
                          .toPlainText();
   item.publisher = readSingleText(jeu.value("editeur"));
   item.developer = readSingleText(jeu.value("developpeur"));
   item.players = readSingleText(jeu.value("joueurs"));
-  item.releaseDate = pickByTag(jeu.value("dates").toArray(), "region", REGION_PREFERENCES);
-  item.genre = collectGenres(jeu.value("genres").toArray());
+  item.releaseDate = pickByTag(jeu.value("dates").toArray(), "region", regionPrefs);
+  item.genre = collectGenres(jeu.value("genres").toArray(), languagePrefs);
 
   // Classifications: SS returns multiple per-rating-board entries
   // (ESRB, PEGI, USK, CERO, ...). Prefer ESRB for the typed
@@ -366,7 +428,7 @@ parseInner(const QByteArray &json, int mediaMaxDim = 0, bool preferJpg = false,
     QStringList families;
     for (const auto &v : jeu.value("familles").toArray()) {
       const QJsonObject f = v.toObject();
-      const QString n = pickByTag(f.value("noms").toArray(), "langue", LANGUAGE_PREFERENCES);
+      const QString n = pickByTag(f.value("noms").toArray(), "langue", languagePrefs);
       if (!n.isEmpty() && !families.contains(n)) families.append(n);
     }
     putIfFilled(QStringLiteral("families"), families.join(QStringLiteral(", ")));
@@ -376,17 +438,17 @@ parseInner(const QByteArray &json, int mediaMaxDim = 0, bool preferJpg = false,
     QStringList modes;
     for (const auto &v : jeu.value("modes").toArray()) {
       const QJsonObject m = v.toObject();
-      const QString n = pickByTag(m.value("noms").toArray(), "langue", LANGUAGE_PREFERENCES);
+      const QString n = pickByTag(m.value("noms").toArray(), "langue", languagePrefs);
       if (!n.isEmpty() && !modes.contains(n)) modes.append(n);
     }
     putIfFilled(QStringLiteral("modes"), modes.join(QStringLiteral(", ")));
   }
 
   // ── ROM-level metadata ──────────────────────────────────────────
-  // SS's `rom` object is the matched ROM variant. All hash + file
-  // fields surface so future hash-based re-scrape (Kartend-70wk) can
-  // round-trip without re-running the lookup.
-  const QJsonObject rom = jeu.value("rom").toObject();
+  // SS's `rom` object is the matched ROM variant (extracted above for
+  // region-keyed field selection). All hash + file fields surface so
+  // future hash-based re-scrape can round-trip without re-running the
+  // lookup.
   putIfFilled(QStringLiteral("rom_filename"), rom.value("romfilename").toString());
   putIfFilled(QStringLiteral("rom_size"), rom.value("romsize").toString());
   putIfFilled(QStringLiteral("rom_md5"), rom.value("rommd5").toString());
@@ -400,7 +462,8 @@ parseInner(const QByteArray &json, int mediaMaxDim = 0, bool preferJpg = false,
   putIfFilled(QStringLiteral("languages"),
               rom.value("langues").toObject().value("langue_shortname").toString());
 
-  item.media = mapMedia(jeu.value("medias").toArray(), mediaMaxDim, preferJpg, mediaTypeLabels);
+  item.media = mapMedia(jeu.value("medias").toArray(), options.mediaMaxDim, options.preferJpg,
+                        options.mediaTypeLabels, regionPrefs);
   return item;
 }
 
@@ -442,7 +505,7 @@ ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> parseSearchResponse(const QB
 
 ErrorUtils::Result<Scraper::ScrapedItem> parseDetailResponse(const QByteArray &json,
                                                              const ParseOptions &options) {
-  return parseInner(json, options.mediaMaxDim, options.preferJpg, options.mediaTypeLabels);
+  return parseInner(json, options);
 }
 
 ErrorUtils::Result<ScreenScraperUserInfo> parseUserInfoResponse(const QByteArray &json) {

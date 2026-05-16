@@ -323,6 +323,8 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
           .toInt());
   settings.scraperOptions.preferJpgOutput = s.value("preferJpgOutput", false).toBool();
   settings.scraperOptions.scrapeAutoResume = s.value("scrapeAutoResume", false).toBool();
+  settings.scraperOptions.preferredScraperRegion =
+      s.value("preferredRegion", QStringLiteral("us")).toString().trimmed().toLower();
   s.endGroup();
 
   settings.lastSelectedItems.clear();
@@ -430,6 +432,8 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.scraperOptions.rescrapeMode = settings.scraperOptions.rescrapeMode;
   m_generalSettings.scraperOptions.preferJpgOutput = settings.scraperOptions.preferJpgOutput;
   m_generalSettings.scraperOptions.scrapeAutoResume = settings.scraperOptions.scrapeAutoResume;
+  m_generalSettings.scraperOptions.preferredScraperRegion =
+      settings.scraperOptions.preferredScraperRegion;
   // Launch history
   m_generalSettings.historyEnabled = settings.historyEnabled;
   m_generalSettings.historyMaxEntries = qBound(10, settings.historyMaxEntries, 50000);
@@ -623,6 +627,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("rescrapeMode", static_cast<int>(m_generalSettings.scraperOptions.rescrapeMode));
   s.setValue("preferJpgOutput", m_generalSettings.scraperOptions.preferJpgOutput);
   s.setValue("scrapeAutoResume", m_generalSettings.scraperOptions.scrapeAutoResume);
+  s.setValue("preferredRegion", m_generalSettings.scraperOptions.preferredScraperRegion);
   s.endGroup();
 
   s.sync();

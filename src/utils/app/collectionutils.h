@@ -1146,6 +1146,13 @@ struct GeneralSettings {
     // dialog blocking the resume. Consumed by MainWindow's startup
     // hook around ScraperService::loadPendingState (Kartend-1uvp).
     bool scrapeAutoResume = false;
+    // Fallback region for ScreenScraper's region-keyed fields (title,
+    // release date, box art), as an SS region shortname ("us", "eu",
+    // "jp", "wor", ...). Each scraped item first honours its own
+    // matched-ROM region so a Japanese cart keeps its Japanese title
+    // and art; this value only backstops items whose region has no
+    // entry. Default "us" preserves the historical behaviour.
+    QString preferredScraperRegion = QStringLiteral("us");
   };
   ScraperOptions scraperOptions;
 

@@ -11,6 +11,7 @@
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QFutureWatcher>
+#include <QLocale>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QUrl>
 #include <QUrlQuery>
@@ -599,8 +600,18 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
               // is checked here instead of just-the-preset so a Custom
               // user can opt in deliberately.
               parseOpts.preferJpg = settings->scraperOptions.preferJpgOutput;
+              // Fallback region for region-keyed fields when the
+              // matched ROM's own region has no entry. Each item still
+              // honours its own region first inside the parser.
+              parseOpts.preferredRegion = settings->scraperOptions.preferredScraperRegion;
             }
           }
+          // Free-text fields (description, genres, ...) follow the
+          // application UI language so they read consistently with the
+          // rest of Kartend. The app loads translations off the system
+          // locale (see main.cpp), so derive the language tag the same
+          // way rather than from a separate setting.
+          parseOpts.preferredLanguage = QLocale().name().section(QLatin1Char('_'), 0, 0);
           parseOpts.mediaTypeLabels = m_mediaTypeLabels;
           auto cands = ScreenScraperParser::parseSearchResponse(bytes);
           if (cands.isOk() && !cands.value().isEmpty()) {
