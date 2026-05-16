@@ -488,7 +488,8 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
             if (datPath.isEmpty()) continue;
             auto source = m_datCache->openOrIngest(datPath);
             if (source.isError()) continue;
-            if (auto rec = m_datCache->lookup(source.value(), hashes.md5, hashes.sha1, QString())) {
+            if (auto rec =
+                    m_datCache->lookup(source.value(), hashes.md5, hashes.sha1, hashes.crc)) {
               datCanonicalName = rec->romName;
               break;
             }
@@ -557,6 +558,9 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
     }
     if (!hashes.sha1.isEmpty()) {
       q.addQueryItem(QStringLiteral("sha1"), hashes.sha1);
+    }
+    if (!hashes.crc.isEmpty()) {
+      q.addQueryItem(QStringLiteral("crc"), hashes.crc);
     }
     if (hashes.size > 0) {
       q.addQueryItem(QStringLiteral("romtaille"), QString::number(hashes.size));

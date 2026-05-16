@@ -13,6 +13,8 @@
 #include <QStringList>
 #include <QTemporaryDir>
 
+#include <array>
+
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
@@ -37,6 +39,42 @@ constexpr int ARCHIVE_EXTRACT_TIMEOUT_MS = 30000;
 // won't make us walk forever.
 constexpr int MAX_INNER_FILES_INSPECTED = 4096;
 
+// Streaming CRC-32 (the reflected zip/PNG polynomial 0xEDB88320 — the
+// identifier No-Intro / Redump DATs and ScreenScraper key on). Qt's
+// QCryptographicHash has no CRC-32 and qChecksum() is only CRC-16, so
+// the small table-driven implementation lives here. Fed the same
+// chunks as the MD5 / SHA-1 hashes so the file is still read once.
+class Crc32 {
+public:
+  void addData(const QByteArray &chunk) {
+    for (const char ch : chunk) {
+      const auto byte = static_cast<quint8>(ch);
+      m_crc = (m_crc >> 8) ^ table()[(m_crc ^ byte) & 0xFFu];
+    }
+  }
+  // 8-digit lowercase hex, the form SS and No-Intro / Redump DATs use.
+  [[nodiscard]] QString hex() const {
+    return QString::number(~m_crc, 16).rightJustified(8, QLatin1Char('0'));
+  }
+
+private:
+  static const std::array<quint32, 256> &table() {
+    static const std::array<quint32, 256> kTable = [] {
+      std::array<quint32, 256> t{};
+      for (quint32 i = 0; i < 256; ++i) {
+        quint32 c = i;
+        for (int k = 0; k < 8; ++k) {
+          c = (c & 1u) != 0u ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+        }
+        t[i] = c;
+      }
+      return t;
+    }();
+    return kTable;
+  }
+  quint32 m_crc = 0xFFFFFFFFu;
+};
+
 } // namespace
 
 ErrorUtils::Result<Result> hashFile(const QString &filePath) {
@@ -59,6 +97,7 @@ ErrorUtils::Result<Result> hashFile(const QString &filePath) {
 
   QCryptographicHash md5(QCryptographicHash::Md5);
   QCryptographicHash sha1(QCryptographicHash::Sha1);
+  Crc32 crc;
   qint64 totalRead = 0;
   while (!f.atEnd()) {
     const QByteArray chunk = f.read(CHUNK_SIZE);
@@ -72,6 +111,7 @@ ErrorUtils::Result<Result> hashFile(const QString &filePath) {
     }
     md5.addData(chunk);
     sha1.addData(chunk);
+    crc.addData(chunk);
     totalRead += chunk.size();
   }
   f.close();
@@ -79,6 +119,7 @@ ErrorUtils::Result<Result> hashFile(const QString &filePath) {
   Result r;
   r.md5 = QString::fromLatin1(md5.result().toHex());
   r.sha1 = QString::fromLatin1(sha1.result().toHex());
+  r.crc = crc.hex();
   r.size = totalRead;
   return r;
 }

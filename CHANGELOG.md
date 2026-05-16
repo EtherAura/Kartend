@@ -116,6 +116,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Scraping now computes each ROM's CRC-32 and uses it for DAT-file
+  matching and ScreenScraper hash lookups. Only MD5 and SHA-1 were
+  computed before, so DAT entries that list just a CRC — the
+  identifier No-Intro / Redump publish — could never match. Works
+  for ROMs inside archives and for symlinked items (hashed through
+  to their target) alike.
 - The scraper now pulls every media type it offers. The **Support /
   cart** art was silently skipped — its checkbox key was mixed-case
   but the download filter matched lowercased, so it never matched —

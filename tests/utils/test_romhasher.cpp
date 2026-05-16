@@ -29,6 +29,7 @@ private slots:
   void hashesKnownContent();
   void hashesEmptyFile();
   void hashesLargeMultiChunkFile();
+  void hashesCrc32CanonicalVector();
   void emptyPathReturnsError();
   void missingFileReturnsError();
   void recognisesArchiveExtensions();
@@ -46,6 +47,21 @@ void writeFile(const QString &path, const QByteArray &bytes) {
   f.write(bytes);
   f.close();
 }
+
+// Reference CRC-32 (zip/PNG polynomial) computed over the whole buffer
+// in one shot — independent of RomHasher's chunked streaming, so a
+// chunk-boundary bug in the streaming accumulator would show up as a
+// mismatch. Returned as 8-digit lowercase hex, the form RomHasher uses.
+QString referenceCrc32Hex(const QByteArray &bytes) {
+  quint32 crc = 0xFFFFFFFFu;
+  for (const char ch : bytes) {
+    crc ^= static_cast<quint8>(ch);
+    for (int k = 0; k < 8; ++k) {
+      crc = (crc & 1u) != 0u ? (0xEDB88320u ^ (crc >> 1)) : (crc >> 1);
+    }
+  }
+  return QString::number(~crc, 16).rightJustified(8, QLatin1Char('0'));
+}
 } // namespace
 
 void TestRomHasher::hashesKnownContent() {
@@ -61,6 +77,7 @@ void TestRomHasher::hashesKnownContent() {
            QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Md5).toHex()));
   QCOMPARE(h.sha1,
            QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha1).toHex()));
+  QCOMPARE(h.crc, referenceCrc32Hex(bytes));
 }
 
 void TestRomHasher::hashesEmptyFile() {
@@ -71,9 +88,22 @@ void TestRomHasher::hashesEmptyFile() {
   QVERIFY(result.isOk());
   const auto h = result.value();
   QCOMPARE(h.size, qint64{0});
-  // MD5/SHA1 of empty input — canonical digests.
+  // MD5/SHA1/CRC-32 of empty input — canonical values.
   QCOMPARE(h.md5, QStringLiteral("d41d8cd98f00b204e9800998ecf8427e"));
   QCOMPARE(h.sha1, QStringLiteral("da39a3ee5e6b4b0d3255bfef95601890afd80709"));
+  QCOMPARE(h.crc, QStringLiteral("00000000"));
+}
+
+void TestRomHasher::hashesCrc32CanonicalVector() {
+  // The standard CRC-32 check value: the ASCII string "123456789"
+  // hashes to 0xCBF43926 under the zip/PNG polynomial. This is the
+  // canonical vector every CRC-32 implementation is tested against.
+  const QString path = m_dir.filePath("crcvector.bin");
+  writeFile(path, QByteArrayLiteral("123456789"));
+
+  auto result = RomHasher::hashFile(path);
+  QVERIFY(result.isOk());
+  QCOMPARE(result.value().crc, QStringLiteral("cbf43926"));
 }
 
 void TestRomHasher::hashesLargeMultiChunkFile() {
@@ -95,6 +125,9 @@ void TestRomHasher::hashesLargeMultiChunkFile() {
            QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Md5).toHex()));
   QCOMPARE(h.sha1,
            QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha1).toHex()));
+  // CRC-32 over a >1 MiB buffer — verifies the streaming accumulator
+  // matches a whole-buffer computation across chunk boundaries.
+  QCOMPARE(h.crc, referenceCrc32Hex(bytes));
 }
 
 void TestRomHasher::emptyPathReturnsError() {
@@ -176,6 +209,7 @@ void TestRomHasher::hashesInnerRomLargestFile() {
                       QCryptographicHash::hash(romBytes, QCryptographicHash::Md5).toHex()));
   QCOMPARE(h.sha1, QString::fromLatin1(
                        QCryptographicHash::hash(romBytes, QCryptographicHash::Sha1).toHex()));
+  QCOMPARE(h.crc, referenceCrc32Hex(romBytes));
 }
 
 void TestRomHasher::archiveMissingPathReturnsError() {

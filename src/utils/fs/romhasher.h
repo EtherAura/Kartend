@@ -28,6 +28,10 @@ struct Result {
   QString md5;
   /// Lowercase hex digest of the file's SHA-1.
   QString sha1;
+  /// Lowercase, zero-padded 8-digit hex of the file's CRC-32 (the
+  /// zip/PNG polynomial, the identifier No-Intro / Redump DATs key
+  /// on). Empty only on read failure.
+  QString crc;
   /// File size in bytes; -1 on failure.
   qint64 size = -1;
 };
