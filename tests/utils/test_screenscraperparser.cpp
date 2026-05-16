@@ -87,8 +87,8 @@ const QByteArray FIXTURE = R"json({
         "romcrc": "12345678",
         "romtype": "rom",
         "romserial": "SNS-AB-USA",
-        "regions": {"region_shortname": "us"},
-        "langues": {"langue_shortname": "en"}
+        "regions": {"regions_id": ["46"], "regions_shortname": ["us"]},
+        "langues": {"langues_id": ["1"], "langues_shortname": ["en"]}
       },
       "medias": [
         {"type": "box-2D", "region": "eu", "url": "https://example.com/box-eu.png"},
@@ -133,7 +133,8 @@ const QByteArray REGION_FIXTURE = R"json({
         {"noms": [{"langue": "en", "text": "Platform"}, {"langue": "fr", "text": "Plateformer"}]}
       ],
       "rom": {
-        "regions": {"region_shortname": "jp"}
+        "romfilename": "Game (Japan).nes",
+        "romregions": "jp"
       },
       "medias": [
         {"type": "box-2D", "region": "us", "url": "https://example.com/box-us.png"},
@@ -356,7 +357,7 @@ void TestScreenScraperParser::parseDetailResponse_fallbackRegionBackstopsUnknown
   // arrays, the configured fallback region decides — and with no
   // fallback set, the fixed English-leaning chain picks US.
   QByteArray unknownRegion = REGION_FIXTURE;
-  unknownRegion.replace("\"region_shortname\": \"jp\"", "\"region_shortname\": \"kr\"");
+  unknownRegion.replace("\"romregions\": \"jp\"", "\"romregions\": \"kr\"");
 
   ScreenScraperParser::ParseOptions euOpts;
   euOpts.preferredRegion = QStringLiteral("eu");

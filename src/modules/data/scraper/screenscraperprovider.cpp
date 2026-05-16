@@ -9,9 +9,13 @@
 #include <utility>
 
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QLocale>
+#include <QStandardPaths>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QUrl>
 #include <QUrlQuery>
@@ -576,6 +580,27 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
           // "invalid response" errors — surface the real SS message
           // instead so the user sees what actually went wrong.
           const QByteArray bytes = response.value();
+          // Diagnostic: when KARTEND_SCRAPER_DUMP_JSON is set, write
+          // each raw jeuInfos.php response to disk so the exact SS
+          // payload shape (region keys, media tags, …) can be
+          // inspected. Off by default; the file path is logged so it
+          // is easy to find.
+          if (qEnvironmentVariableIsSet("KARTEND_SCRAPER_DUMP_JSON")) {
+            const QString dumpDir =
+                QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
+                    .filePath(QStringLiteral("scraper-dump"));
+            if (QDir().mkpath(dumpDir)) {
+              const QString dumpPath = QDir(dumpDir).filePath(
+                  QStringLiteral("jeuInfos-%1.json").arg(QDateTime::currentMSecsSinceEpoch()));
+              QFile dumpFile(dumpPath);
+              if (dumpFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                dumpFile.write(bytes);
+                dumpFile.close();
+                qWarning("[scraper-dump] wrote raw jeuInfos response to %s",
+                         qUtf8Printable(dumpPath));
+              }
+            }
+          }
           const QString trimmedHead = QString::fromUtf8(bytes.left(64)).trimmed();
           if (!trimmedHead.startsWith('{') && trimmedHead.startsWith(QLatin1String("Erreur"))) {
             callback(ErrorUtils::ErrorContext::error(

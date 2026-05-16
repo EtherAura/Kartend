@@ -81,6 +81,26 @@ QStringList buildLanguagePreferences(const QString &appLanguage) {
   return prefs;
 }
 
+/// Read a ScreenScraper `rom`-level tag that the API exposes in two
+/// shapes: a flat `flatKey` string (e.g. `romregions: "jp"`), and an
+/// `objKey` object whose `<objKey>_shortname` is a JSON *array* (e.g.
+/// `regions: { "regions_shortname": ["jp"] }`). The flat string wins;
+/// otherwise the first array element is taken. A scalar `_shortname`
+/// is tolerated too. Used for the matched ROM's region and language.
+QString romTagShortname(const QJsonObject &rom, const QString &flatKey, const QString &objKey) {
+  const QString flat = rom.value(flatKey).toString().trimmed();
+  if (!flat.isEmpty()) {
+    return flat;
+  }
+  const QJsonValue shortname =
+      rom.value(objKey).toObject().value(objKey + QStringLiteral("_shortname"));
+  if (shortname.isArray()) {
+    const QJsonArray arr = shortname.toArray();
+    return arr.isEmpty() ? QString() : arr.first().toString().trimmed();
+  }
+  return shortname.toString().trimmed();
+}
+
 /// Parse a ScreenScraper JSON payload, tolerating trailing garbage.
 /// SS occasionally appends a PHP warning/notice/stack trace after the
 /// closing `}` of an otherwise-valid response (e.g. "Lost World, The —
@@ -318,7 +338,7 @@ parseInner(const QByteArray &json, const ScreenScraperParser::ParseOptions &opti
   // instead, so they read in the same language as the rest of the app.
   const QJsonObject rom = jeu.value("rom").toObject();
   const QString itemRegion =
-      rom.value("regions").toObject().value("region_shortname").toString();
+      romTagShortname(rom, QStringLiteral("romregions"), QStringLiteral("regions"));
   const QStringList regionPrefs = buildRegionPreferences(itemRegion, options.preferredRegion);
   const QStringList languagePrefs = buildLanguagePreferences(options.preferredLanguage);
 
@@ -456,11 +476,12 @@ parseInner(const QByteArray &json, const ScreenScraperParser::ParseOptions &opti
   putIfFilled(QStringLiteral("rom_crc"), rom.value("romcrc").toString());
   putIfFilled(QStringLiteral("rom_type"), rom.value("romtype").toString());
   putIfFilled(QStringLiteral("rom_serial"), rom.value("romserial").toString());
-  // Region: the v1 parser already stamped this; keep the same key.
-  putIfFilled(QStringLiteral("region"),
-              rom.value("regions").toObject().value("region_shortname").toString());
+  // Region + languages: SS gives these as a flat `romregions` /
+  // `romlangues` string or a `regions` / `langues` object with an
+  // array `*_shortname`. romTagShortname handles both.
+  putIfFilled(QStringLiteral("region"), itemRegion);
   putIfFilled(QStringLiteral("languages"),
-              rom.value("langues").toObject().value("langue_shortname").toString());
+              romTagShortname(rom, QStringLiteral("romlangues"), QStringLiteral("langues")));
 
   item.media = mapMedia(jeu.value("medias").toArray(), options.mediaMaxDim, options.preferJpg,
                         options.mediaTypeLabels, regionPrefs);
