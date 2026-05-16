@@ -381,6 +381,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paths are now stored absolutely (a one-time pass upgrades existing
   libraries); this also restores the Statistics dialog and the sidebar's
   per-item usage stats.
+- **Renaming a collection to a blank name in the settings tree is
+  rejected.** Clearing a collection's name inline in the tree used to
+  leave a nameless "ghost" row with nowhere valid to save; the rename
+  now reverts to the previous name.
 
 ## [0.0.6] - 2026-05-11
 

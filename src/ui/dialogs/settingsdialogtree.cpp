@@ -120,6 +120,16 @@ void SettingsDialog::onTreeItemChanged(QTreeWidgetItem *item, int column) {
   QString newName = item->text(0);
   const QString oldName = collections[collectionIndex].name;
 
+  // Reject a blank / whitespace-only rename: a nameless collection has no
+  // valid hierarchical section to persist under and resurfaces as a ghost
+  // row. Revert the tree text to the prior name; block signals on the
+  // revert so this handler doesn't re-enter.
+  if (newName.trimmed().isEmpty()) {
+    QSignalBlocker blocker(item->treeWidget());
+    item->setText(0, oldName);
+    return;
+  }
+
   if (newName != oldName) {
     collections[collectionIndex].name = newName;
     m_workingCollections[collectionIndex].name = newName;
