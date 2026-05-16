@@ -82,6 +82,14 @@ void MainWindow::setupUI() {
   }
   resyncPlaylistCollections();
 
+  // One-shot reconcile at startup: drop items/collections rows left
+  // orphaned by past collection renames or removals so the Statistics
+  // totals line up with the live collections without needing a
+  // settings-save round trip.
+  if (getDatabaseManager()) {
+    getDatabaseManager()->purgeOrphanCollectionData(m_collections);
+  }
+
   getSettingsManager()->loadGeneralSettings(m_generalSettings);
 
   // publish the persisted text-zoom multiplier into the static

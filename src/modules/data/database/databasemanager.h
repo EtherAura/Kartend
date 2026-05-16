@@ -150,6 +150,9 @@ public:
   loadUsageByCollection() const override;
   bool resetAllUsageStats() override;
 
+  void migrateCollectionUuid(const QString &oldUuid, const QString &newUuid) override;
+  void purgeOrphanCollectionData(const QList<CollectionConfig> &liveCollections) override;
+
   // ──────────────────────────────────────────────────────────────────────────
   // Launch history
   // ──────────────────────────────────────────────────────────────────────────

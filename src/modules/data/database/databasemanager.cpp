@@ -405,6 +405,116 @@ void DatabaseManager::clearCollectionFromDatabaseByUuid(const QString &collectio
   }
 }
 
+void DatabaseManager::migrateCollectionUuid(const QString &oldUuid, const QString &newUuid) {
+  if (!m_db.isOpen() || oldUuid.isEmpty() || newUuid.isEmpty() || oldUuid == newUuid) {
+    return;
+  }
+  if (!m_db.transaction()) {
+    ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                                "Failed to start database transaction",
+                                                "DatabaseManager::migrateCollectionUuid")
+                             .withDetails(m_db.lastError().text()));
+    return;
+  }
+  try {
+    // OR REPLACE: should a row already exist under newUuid (e.g. a
+    // rescan ran before the migration), the migrated row — which
+    // carries the real play history — wins over the fresh one.
+    QSqlQuery items(m_db);
+    items.prepare("UPDATE OR REPLACE items SET collection_uuid = ? WHERE collection_uuid = ?");
+    items.addBindValue(newUuid);
+    items.addBindValue(oldUuid);
+    if (!items.exec()) {
+      throw std::runtime_error(items.lastError().text().toStdString());
+    }
+    QSqlQuery cols(m_db);
+    cols.prepare("UPDATE OR REPLACE collections SET uuid = ? WHERE uuid = ?");
+    cols.addBindValue(newUuid);
+    cols.addBindValue(oldUuid);
+    if (!cols.exec()) {
+      throw std::runtime_error(cols.lastError().text().toStdString());
+    }
+    if (!m_db.commit()) {
+      throw std::runtime_error(m_db.lastError().text().toStdString());
+    }
+    m_metadataCache.invalidateCollection(oldUuid);
+    m_metadataCache.invalidateCollection(newUuid);
+  } catch (const std::exception &e) {
+    m_db.rollback();
+    ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                                "Failed to migrate collection uuid",
+                                                "DatabaseManager::migrateCollectionUuid")
+                             .withDetails(QString::fromStdString(e.what())));
+  }
+}
+
+void DatabaseManager::purgeOrphanCollectionData(const QList<CollectionConfig> &liveCollections) {
+  // Derive the uuid set to keep. A collection's uuid is
+  // hash(name, mediaDir); different scan paths feed either the raw or
+  // the path-variable-expanded media dir, so keep BOTH forms — that
+  // way a collection scanned under either is never purged as an
+  // orphan. (For a plain media path the two forms are identical.)
+  QSet<QString> liveUuids;
+  liveUuids.reserve(liveCollections.size() * 2);
+  for (const CollectionConfig &c : liveCollections) {
+    liveUuids.insert(CollectionUtils::computeCollectionUuid(c.name, c.mediaDirectory));
+    const QString expanded = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+    if (expanded != c.mediaDirectory) {
+      liveUuids.insert(CollectionUtils::computeCollectionUuid(c.name, expanded));
+    }
+  }
+
+  // An empty live set means "no collections" — but that is also the
+  // transient state during early startup, so refuse to nuke every
+  // row on it. A genuinely empty library has nothing to purge anyway.
+  if (!m_db.isOpen() || liveUuids.isEmpty()) {
+    return;
+  }
+  // Build a placeholder list for the NOT IN clause; collection counts
+  // are small, so a bound IN clause is fine (no temp table needed).
+  QStringList placeholders;
+  placeholders.reserve(liveUuids.size());
+  for (int i = 0; i < liveUuids.size(); ++i) {
+    placeholders << QStringLiteral("?");
+  }
+  const QString inClause = QStringLiteral("(") + placeholders.join(QStringLiteral(", ")) +
+                           QStringLiteral(")");
+
+  if (!m_db.transaction()) {
+    ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                                "Failed to start database transaction",
+                                                "DatabaseManager::purgeOrphanCollectionData")
+                             .withDetails(m_db.lastError().text()));
+    return;
+  }
+  try {
+    // items keys on `collection_uuid`, collections on `uuid`.
+    const QList<QPair<QString, QString>> targets = {
+        {QStringLiteral("items"), QStringLiteral("collection_uuid")},
+        {QStringLiteral("collections"), QStringLiteral("uuid")}};
+    for (const auto &target : targets) {
+      QSqlQuery del(m_db);
+      del.prepare(QStringLiteral("DELETE FROM %1 WHERE %2 NOT IN %3")
+                      .arg(target.first, target.second, inClause));
+      for (const QString &uuid : liveUuids) {
+        del.addBindValue(uuid);
+      }
+      if (!del.exec()) {
+        throw std::runtime_error(del.lastError().text().toStdString());
+      }
+    }
+    if (!m_db.commit()) {
+      throw std::runtime_error(m_db.lastError().text().toStdString());
+    }
+  } catch (const std::exception &e) {
+    m_db.rollback();
+    ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,
+                                                "Failed to purge orphan collection data",
+                                                "DatabaseManager::purgeOrphanCollectionData")
+                             .withDetails(QString::fromStdString(e.what())));
+  }
+}
+
 void DatabaseManager::updateCachedCounts(const QList<CollectionConfig> &allCollections) {
   SessionManager *session = m_ctx ? m_ctx->sessionManager() : nullptr;
   if (!m_db.isOpen() || !session || !m_cachedCounts) {

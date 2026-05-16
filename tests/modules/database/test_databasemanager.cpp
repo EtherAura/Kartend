@@ -13,7 +13,9 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QSet>
 #include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
@@ -51,6 +53,10 @@ private slots:
   void testResolveFilePath_absolutePathPassthrough();
   void testResolveRelativeFilePath_emptyMapReturnsEmpty();
   void testResolveRelativeFilePath_resolvesViaMap();
+
+  // Collection-uuid reconcile -----------------------------------------------
+  void testMigrateCollectionUuid_movesItemAndCollectionRows();
+  void testPurgeOrphanCollectionData_dropsRowsNotInLiveSet();
 
 private:
   std::unique_ptr<SessionManager> m_session;
@@ -235,6 +241,101 @@ void TestDatabaseManager::testResolveRelativeFilePath_resolvesViaMap() {
   const QString resolved =
       db.resolveRelativeFilePath(QStringLiteral("foo.bin"), fileNames);
   QCOMPARE(resolved, QStringLiteral("/abs/path/to/foo.bin"));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Collection-uuid reconcile
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+/// Opens a second connection to DatabaseManager's media.db so a test
+/// can seed rows and read counts back independently of the manager.
+QSqlDatabase openInspector() {
+  const QString dbDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+  const QString dbPath = QDir(dbDir).absoluteFilePath(QStringLiteral("media.db"));
+  const QString conn = QStringLiteral("test_dbmgr_reconcile_inspect");
+  if (QSqlDatabase::contains(conn)) {
+    QSqlDatabase::removeDatabase(conn);
+  }
+  QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+  db.setDatabaseName(dbPath);
+  db.open();
+  return db;
+}
+
+bool runSql(QSqlDatabase &db, const QString &sql) {
+  QSqlQuery q(db);
+  return q.exec(sql);
+}
+
+int scalar(QSqlDatabase &db, const QString &sql) {
+  QSqlQuery q(db);
+  return (q.exec(sql) && q.next()) ? q.value(0).toInt() : -1;
+}
+} // namespace
+
+void TestDatabaseManager::testMigrateCollectionUuid_movesItemAndCollectionRows() {
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+  db.initDatabase();
+
+  QSqlDatabase insp = openInspector();
+  QVERIFY(insp.isValid() && insp.isOpen());
+  QVERIFY(runSql(insp, "DELETE FROM items"));
+  QVERIFY(runSql(insp, "DELETE FROM collections"));
+  QVERIFY(runSql(insp, "INSERT INTO collections (id, name, last_scanned, uuid) "
+                       "VALUES (1, 'C', 'x', 'old-uuid')"));
+  QVERIFY(runSql(insp, "INSERT INTO items (collection_id, path, name, last_modified, "
+                       "play_count, collection_uuid) VALUES "
+                       "(1, '/m/a.bin', 'a', 'x', 7, 'old-uuid'), "
+                       "(1, '/m/b.bin', 'b', 'x', 0, 'old-uuid')"));
+
+  db.migrateCollectionUuid(QStringLiteral("old-uuid"), QStringLiteral("new-uuid"));
+
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM items WHERE collection_uuid='old-uuid'"), 0);
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM items WHERE collection_uuid='new-uuid'"), 2);
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM collections WHERE uuid='new-uuid'"), 1);
+  // Play history rides along with the migrated row.
+  QCOMPARE(scalar(insp, "SELECT play_count FROM items WHERE path='/m/a.bin'"), 7);
+}
+
+void TestDatabaseManager::testPurgeOrphanCollectionData_dropsRowsNotInLiveSet() {
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+  db.initDatabase();
+
+  CollectionConfig live;
+  live.name = QStringLiteral("Live");
+  live.mediaDirectory = QStringLiteral("/media/live");
+  const QString liveUuid = CollectionUtils::computeCollectionUuid(live.name, live.mediaDirectory);
+
+  QSqlDatabase insp = openInspector();
+  QVERIFY(insp.isValid() && insp.isOpen());
+  QVERIFY(runSql(insp, "DELETE FROM items"));
+  QVERIFY(runSql(insp, "DELETE FROM collections"));
+  QVERIFY(runSql(insp, QStringLiteral("INSERT INTO collections (id, name, last_scanned, uuid) "
+                                      "VALUES (1, 'Live', 'x', '%1'), "
+                                      "(2, 'Stale', 'x', 'orphan-uuid')")
+                           .arg(liveUuid)));
+  // Two live items, one orphan, one with an empty uuid — all orphans
+  // except the live pair.
+  QVERIFY(runSql(insp, QStringLiteral("INSERT INTO items (collection_id, path, name, "
+                                      "last_modified, collection_uuid) VALUES "
+                                      "(1, '/m/a.bin', 'a', 'x', '%1'), "
+                                      "(1, '/m/b.bin', 'b', 'x', '%1'), "
+                                      "(2, '/m/c.bin', 'c', 'x', 'orphan-uuid'), "
+                                      "(1, '/m/d.bin', 'd', 'x', '')")
+                           .arg(liveUuid)));
+
+  db.purgeOrphanCollectionData({live});
+
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM items"), 2);
+  QCOMPARE(scalar(insp, QStringLiteral("SELECT COUNT(*) FROM items WHERE collection_uuid='%1'")
+                            .arg(liveUuid)),
+           2);
+  QCOMPARE(scalar(insp, "SELECT COUNT(*) FROM collections"), 1);
 }
 
 QTEST_MAIN(TestDatabaseManager)

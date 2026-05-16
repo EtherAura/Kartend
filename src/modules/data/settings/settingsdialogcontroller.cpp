@@ -348,11 +348,42 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
     art->getTimerCoordinator()->stopAllTimers();
   }
 
+  // Reconcile renamed collections in the database BEFORE the list is
+  // persisted. A collection's uuid is hash(name, mediaDirectory), so a
+  // rename strands its items + play history under the old uuid — which
+  // is why the Statistics "total items" (a flat COUNT(*)) drifts above
+  // the live per-collection totals. Match each renamed collection to
+  // its pre-dialog self by media directory (unchanged across a rename)
+  // and migrate its rows to the new uuid so the history survives.
+  if (databaseManager) {
+    for (const CollectionConfig &newC : newCollections) {
+      if (newC.mediaDirectory.trimmed().isEmpty()) {
+        continue;
+      }
+      for (const CollectionConfig &oldC : originalCollections) {
+        if (oldC.mediaDirectory == newC.mediaDirectory && oldC.name != newC.name) {
+          databaseManager->migrateCollectionUuid(
+              CollectionUtils::computeCollectionUuid(oldC.name, oldC.mediaDirectory),
+              CollectionUtils::computeCollectionUuid(newC.name, newC.mediaDirectory));
+          break;
+        }
+      }
+    }
+  }
+
   collections = newCollections;
   // saveCollections emits collectionsModified itself, so
   // an explicit emit here would double-fire and run rebuildHierarchyCache
   // twice for no benefit. Removed.
   saveCollections(collections);
+
+  // Drop items/collections rows that no live collection owns — orphans
+  // from this session's renames/removals (and any left by older
+  // builds). Startup runs the same purge; doing it here too keeps the
+  // counts honest without waiting for a restart.
+  if (databaseManager) {
+    databaseManager->purgeOrphanCollectionData(newCollections);
+  }
 
   // detect collections that were freshly added during this
   // dialog session (UUID present in newCollections but not in the snapshot

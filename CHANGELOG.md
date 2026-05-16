@@ -144,6 +144,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Renaming a collection no longer strands its scanned items and play
+  history. A collection is identified by its name + media folder, so
+  a rename used to leave the old rows unreachable — which inflated the
+  Statistics **Total items** above the real per-collection counts.
+  Renames now migrate the data to the new identity, and rows orphaned
+  by past renames or removals are purged on startup, so the Statistics
+  total matches the collections.
 - Scraping now computes each ROM's CRC-32 and uses it for DAT-file
   matching and ScreenScraper hash lookups. Only MD5 and SHA-1 were
   computed before, so DAT entries that list just a CRC — the

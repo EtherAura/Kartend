@@ -99,6 +99,9 @@ public:
   }
   bool resetAllUsageStats() override { return true; }
 
+  void migrateCollectionUuid(const QString &, const QString &) override {}
+  void purgeOrphanCollectionData(const QList<CollectionConfig> &) override {}
+
   void recordHistoryEntry(const QString &, const QString &, const QString &, int) override {}
   [[nodiscard]] QList<HistoryStore::HistoryEntry> loadRecentHistory(int) const override {
     return {};

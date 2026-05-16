@@ -4,6 +4,7 @@
 #include <QDateTime>
 #include <QHash>
 #include <QObject>
+#include <QSet>
 #include <QStringList>
 
 #include "collectionutils.h"
@@ -104,6 +105,20 @@ public:
   [[nodiscard]] virtual QHash<QString, UsageStatsStore::CollectionUsage>
   loadUsageByCollection() const = 0;
   virtual bool resetAllUsageStats() = 0;
+
+  /// Move every `items` / `collections` row from `oldUuid` to
+  /// `newUuid` — used when a collection rename (or media-dir change)
+  /// recomputes its uuid, so play history survives the rename instead
+  /// of being orphaned under the old uuid.
+  virtual void migrateCollectionUuid(const QString &oldUuid, const QString &newUuid) = 0;
+
+  /// Delete `items` / `collections` rows that belong to no collection
+  /// in `liveCollections` — purges orphans left by past renames /
+  /// removals so whole-library counts match the live collections.
+  /// The implementation derives each collection's uuid (both the raw
+  /// and the path-variable-expanded media-dir forms) so a collection
+  /// scanned under either form is never mistaken for an orphan.
+  virtual void purgeOrphanCollectionData(const QList<CollectionConfig> &liveCollections) = 0;
 
   virtual void recordHistoryEntry(const QString &collectionUuid, const QString &path,
                                   const QString &name, int maxEntries) = 0;
