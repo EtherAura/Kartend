@@ -58,12 +58,12 @@ public:
   virtual void emitCollectionSaved(const QList<CollectionConfig> &collections) = 0;
 };
 
-/// Owns the SettingsDialog's collection-removal pipeline. The flow has
-/// seven discrete steps that previously lived as private methods on the
-/// dialog (validate / capture-expanded / perform / update-parents /
-/// rebuild-indices / restore-expanded / select-target) plus the
-/// orchestrator that strings them together with the user-confirm prompt
-/// and post-removal tree refresh.
+/// Owns the SettingsDialog's collection-removal pipeline: the user-confirm
+/// prompt, dropping the selected collection together with its whole
+/// subtree, remapping every surviving collection's parent link onto the
+/// shrunk index space (via CollectionUtils::applyCollectionRemoval), the
+/// post-removal tree refresh, and re-selecting a sensible follow-on
+/// collection.
 ///
 /// Decoupling: the remover operates on a `SettingsModel` (data) plus a
 /// `CollectionRemoverHost` (tree state + UI helpers). No friend access into
@@ -77,16 +77,22 @@ public:
 
   /// Run the full removal flow for whatever the host's selection points at.
   /// No-op when the precondition check fails. Pops the user-confirm dialog,
-  /// removes descendants first, scrubs link references to the vanishing
+  /// removes the selection and its descendants, remaps the surviving
+  /// collections' parent links, scrubs link references to the vanishing
   /// names, refreshes the tree widget, and selects a sensible follow-on
   /// collection. Re-emits SettingsDialog::collectionSaved through the host.
   void run();
 
 private:
-  void performRemovalAt(int index);
-  void rebuildParentIndices();
-  void restoreExpandedStates(const QList<int> &expandedBefore, int removedIndex);
-  void selectTargetAfter(int parentIdx, int removedIndex);
+  /// Re-expand the tree rows that were expanded before the removal,
+  /// translating each saved original index through @p oldToNew (entries
+  /// that map to a removed row are skipped).
+  void restoreExpandedStates(const QList<int> &expandedBefore, const QList<int> &oldToNew);
+  /// Select a sensible follow-on collection after the removal. @p parentIdx
+  /// is the deleted collection's parent already remapped to a post-removal
+  /// index (-1 when it was a root); the first collection is used as the
+  /// fallback.
+  void selectTargetAfter(int parentIdx);
 
   SettingsModel *m_model;
   CollectionRemoverHost *m_host;

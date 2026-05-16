@@ -1,6 +1,7 @@
 #include "configurationpanel.h"
 
 #include "extensionutils.h"
+#include "metadataproviderregistry.h"
 #include "screenscrapersystemcache.h"
 #include "screenscrapersystems.h"
 #include "settingsformbinding.h"
@@ -23,10 +24,20 @@ ConfigurationPanel::ConfigurationPanel(QWidget *parent)
     : QWidget(parent), ui(new Ui::ConfigurationPanel) {
   ui->setupUi(this);
 
+  // The scraper-provider list is fixed in-binary, so populate it once
+  // here; load() only moves the selection. Index 0 (empty id) is the
+  // "automatic — resolve by collection type" choice.
+  ui->scraperProviderComboBox->addItem(tr("Automatic (match by type)"), QString());
+  for (const auto &choice : MetadataProviderRegistry::scrapingProviders()) {
+    ui->scraperProviderComboBox->addItem(choice.displayName, choice.id);
+  }
+
   // Per-field changed() emission. Parent combo + linked-parents + recursive-
   // import are not wired here — the host dialog owns those connections.
   connect(ui->collectionTypeComboBox, &QComboBox::currentTextChanged, this,
           [this](const QString &) { emit changed(); });
+  connect(ui->scraperProviderComboBox, &QComboBox::currentIndexChanged, this,
+          [this](int) { emit changed(); });
   connect(ui->mediaDirLineEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { emit changed(); });
   connect(ui->fileExtensionsLineEdit, &QLineEdit::textChanged, this,
@@ -166,6 +177,14 @@ void ConfigurationPanel::load() {
     QSignalBlocker blocker(ui->collectionTypeComboBox);
     ui->collectionTypeComboBox->setCurrentText(config.type);
   }
+  {
+    // findData on the empty id matches the Automatic entry; an
+    // unrecognised stored id (hand-edit, or a provider dropped in a
+    // later build) also falls back to Automatic.
+    QSignalBlocker blocker(ui->scraperProviderComboBox);
+    const int idx = ui->scraperProviderComboBox->findData(config.scraperProviderId);
+    ui->scraperProviderComboBox->setCurrentIndex(idx >= 0 ? idx : 0);
+  }
   SettingsFormBinding::loadInto(ui->mediaDirLineEdit, config.mediaDirectory);
   SettingsFormBinding::loadInto(ui->fileExtensionsLineEdit, config.extensions.join(", "));
   SettingsFormBinding::loadInto(ui->expandModeCheckBox, config.expandMode);
@@ -183,6 +202,11 @@ void ConfigurationPanel::clear() {
   {
     QSignalBlocker blocker(ui->collectionTypeComboBox);
     ui->collectionTypeComboBox->clear();
+  }
+  {
+    // Items are fixed — just reset the selection to Automatic.
+    QSignalBlocker blocker(ui->scraperProviderComboBox);
+    ui->scraperProviderComboBox->setCurrentIndex(0);
   }
   ui->mediaDirLineEdit->clear();
   ui->fileExtensionsLineEdit->clear();
@@ -207,6 +231,9 @@ void ConfigurationPanel::save() const {
   // committed via Enter round-trip; trimming prevents accidental padding
   // from fragmenting the type set across collections.
   config.type = ui->collectionTypeComboBox->currentText().trimmed();
+  // Scraper override: empty id (Automatic) means resolve by type at
+  // scrape time; a concrete id pins that provider.
+  config.scraperProviderId = ui->scraperProviderComboBox->currentData().toString();
   // Media dir preserves exact text (no trim) — matches legacy behavior.
   config.mediaDirectory = ui->mediaDirLineEdit->text();
   config.extensions = ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text());
@@ -231,6 +258,7 @@ bool ConfigurationPanel::hasChanges() const {
   if (!m_model || !m_model->originalCollection) return false;
   const CollectionConfig &o = *m_model->originalCollection;
   if (ui->collectionTypeComboBox->currentText().trimmed() != o.type) return true;
+  if (ui->scraperProviderComboBox->currentData().toString() != o.scraperProviderId) return true;
   if (ui->mediaDirLineEdit->text() != o.mediaDirectory) return true;
   if (ui->expandModeCheckBox->isChecked() != o.expandMode) return true;
   if (ui->showAllSubcollectionItemsCheckBox->isChecked() != o.showAllSubcollectionItems)

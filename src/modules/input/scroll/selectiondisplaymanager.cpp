@@ -236,10 +236,10 @@ void SelectionDisplayManager::showArtworkPreview(const QString &filePath,
   m_artworkPreviewOverlay->showArtworkForFile(filePath, artworkDir);
 }
 
-void SelectionDisplayManager::showMediaPreview(const QString &filePath, const QString &artworkDir,
+bool SelectionDisplayManager::showMediaPreview(const QString &filePath, const QString &artworkDir,
                                                const QString &videoDir) {
   if (!m_mediaScrollArea) {
-    return;
+    return false;
   }
   if (!m_artworkPreviewOverlay) {
     m_artworkPreviewOverlay = std::make_unique<ArtworkPreviewOverlay>(m_mediaScrollArea);
@@ -250,7 +250,9 @@ void SelectionDisplayManager::showMediaPreview(const QString &filePath, const QS
     connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::visibilityChanged, this,
             &SelectionDisplayManager::artworkPreviewVisibilityChanged);
   }
-  m_artworkPreviewOverlay->showMediaForFile(filePath, artworkDir, videoDir);
+  // Returns false when neither a video nor artwork was found: the overlay
+  // stays hidden, so callers must not treat this as a shown preview.
+  return m_artworkPreviewOverlay->showMediaForFile(filePath, artworkDir, videoDir);
 }
 
 void SelectionDisplayManager::setArtworkPreviewGallery(

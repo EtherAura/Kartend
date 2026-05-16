@@ -7,59 +7,33 @@
 #include "collectionutils.h"
 #include "settingsmodel.h"
 
-#include <algorithm>
-#include <functional>
 #include <QMessageBox>
+#include <QSet>
 
 CollectionRemover::CollectionRemover(SettingsModel *model, CollectionRemoverHost *host,
                                      QObject *parent)
     : QObject(parent), m_model(model), m_host(host) {}
 
-void CollectionRemover::performRemovalAt(int index) {
-  if (!m_model) {
-    return;
-  }
-  m_model->collections->removeAt(index);
-  if (index >= 0 && index < m_model->workingCollections->size()) {
-    m_model->workingCollections->removeAt(index);
-  }
-}
-
-void CollectionRemover::rebuildParentIndices() {
-  if (!m_model) {
-    return;
-  }
-  // Parent indices should already be set correctly after removals — just
-  // sync the working copy with the live collections.
-  auto &live = *m_model->collections;
-  auto &working = *m_model->workingCollections;
-  for (int i = 0; i < live.size() && i < working.size(); ++i) {
-    working[i].parentCollectionIndex = live[i].parentCollectionIndex;
-    working[i].isSubcollection = live[i].isSubcollection;
-  }
-}
-
-void CollectionRemover::restoreExpandedStates(const QList<int> &expandedBefore, int removedIndex) {
+void CollectionRemover::restoreExpandedStates(const QList<int> &expandedBefore,
+                                              const QList<int> &oldToNew) {
   if (!m_host) {
     return;
   }
   for (int expIdx : expandedBefore) {
-    if (expIdx == removedIndex) {
-      continue;
+    const int mapped = (expIdx >= 0 && expIdx < oldToNew.size()) ? oldToNew[expIdx] : -1;
+    if (mapped >= 0) {
+      m_host->expandCollectionAtIndex(mapped);
     }
-    const int adjustedIdx = (expIdx > removedIndex) ? expIdx - 1 : expIdx;
-    m_host->expandCollectionAtIndex(adjustedIdx);
   }
 }
 
-void CollectionRemover::selectTargetAfter(int parentIdx, int removedIndex) {
+void CollectionRemover::selectTargetAfter(int parentIdx) {
   if (!m_model || !m_host) {
     return;
   }
-  if (parentIdx >= removedIndex) {
-    parentIdx -= 1;
-  }
   auto &live = *m_model->collections;
+  // Re-select the deleted collection's (already remapped) parent, falling
+  // back to the first collection when it was a root.
   const int targetIndex = (parentIdx >= 0 && parentIdx < live.size()) ? parentIdx : 0;
   const int newCurrent = live.isEmpty() ? -1 : qBound(0, targetIndex, live.size() - 1);
 
@@ -67,7 +41,10 @@ void CollectionRemover::selectTargetAfter(int parentIdx, int removedIndex) {
     m_host->selectCollection(newCurrent);
     m_host->expandPathToCollection(newCurrent);
     m_host->loadCollectionToUI(newCurrent);
-    *m_model->originalCollection = m_model->workingCollections->at(newCurrent);
+    // value(): the working list is normally the same length as the live
+    // list, but value() yields a default-constructed config rather than
+    // dereferencing past the end should they ever diverge.
+    *m_model->originalCollection = m_model->workingCollections->value(newCurrent);
   } else {
     m_host->selectCollection(-1);
     *m_model->originalCollection = CollectionConfig();
@@ -88,7 +65,7 @@ void CollectionRemover::run() {
 
   // Check if this is a root collection with descendants — affects the
   // confirmation prompt copy.
-  QList<int> descendants = CollectionUtils::collectDescendantIndices(index, live);
+  const QList<int> descendants = CollectionUtils::collectDescendantIndices(index, live);
   const bool isRootCollection = (parentIdx == -1);
   const bool hasDescendants = !descendants.isEmpty();
 
@@ -115,9 +92,9 @@ void CollectionRemover::run() {
   const QList<int> expandedBefore = m_host->expandedCollectionIndices();
 
   // Capture every name about to disappear so we can scrub them out of
-  // other collections' additionalParentNames *before* the index list
-  // shifts under us. Empty newName tells propagateCollectionNameChange to
-  // delete the entry.
+  // other collections' additionalParentNames *before* the list shifts
+  // under us. Empty newName tells propagateCollectionNameChange to delete
+  // the entry.
   QStringList namesAboutToVanish;
   namesAboutToVanish.reserve(descendants.size() + 1);
   namesAboutToVanish.append(live[index].name);
@@ -125,36 +102,27 @@ void CollectionRemover::run() {
     namesAboutToVanish.append(live[descIndex].name);
   }
 
-  // Remove descendants first (in reverse order to maintain indices).
-  std::sort(descendants.begin(), descendants.end(), std::greater<>());
-  for (int descIndex : descendants) {
-    performRemovalAt(descIndex);
+  // Removing the target plus its whole subtree shifts every later index, so
+  // build a map from each original index to its post-removal index (-1 once
+  // removed). applyCollectionRemoval uses it to drop the removed rows AND
+  // remap every survivor's parentCollectionIndex in one pass — the remap the
+  // old reverse-order removeAt loop never did, which is what stranded
+  // subcollections at the root as "ghosts" and left stale indices behind.
+  QSet<int> removedSet(descendants.cbegin(), descendants.cend());
+  removedSet.insert(index);
+  QList<int> oldToNew;
+  oldToNew.reserve(live.size());
+  for (int i = 0, next = 0; i < live.size(); ++i) {
+    oldToNew.append(removedSet.contains(i) ? -1 : next++);
   }
+  // The deleted collection's parent is an ancestor, never part of the
+  // removed subtree — remap it now for the post-removal re-selection.
+  const int remappedParentIdx =
+      (parentIdx >= 0 && parentIdx < oldToNew.size()) ? oldToNew[parentIdx] : -1;
 
-  // Recalculate the target's index after descendant removals.
-  int adjustedIndex = index;
-  for (int descIndex : descendants) {
-    if (descIndex < index) {
-      adjustedIndex--;
-    }
-  }
-  performRemovalAt(adjustedIndex);
-
-  // Update parent references — multiple removals happened, so any
-  // collection whose parent was removed needs to be orphaned to root.
-  auto &working = *m_model->workingCollections;
-  for (int i = 0; i < live.size(); ++i) {
-    const int origParent = live[i].parentCollectionIndex;
-    if (origParent >= 0) {
-      if (origParent == index || descendants.contains(origParent)) {
-        live[i].parentCollectionIndex = -1;
-        working[i].parentCollectionIndex = -1;
-        live[i].isSubcollection = false;
-        working[i].isSubcollection = false;
-      }
-    }
-  }
-  rebuildParentIndices();
+  *m_model->collections = CollectionUtils::applyCollectionRemoval(*m_model->collections, oldToNew);
+  *m_model->workingCollections =
+      CollectionUtils::applyCollectionRemoval(*m_model->workingCollections, oldToNew);
 
   // Scrub any link references to the removed names so the cache doesn't
   // keep silently dropping them on every rebuild.
@@ -176,12 +144,12 @@ void CollectionRemover::run() {
     if (!live.isEmpty()) {
       m_host->selectCollection(0);
       m_host->loadCollectionToUI(0);
-      *m_model->originalCollection = m_model->workingCollections->at(0);
+      *m_model->originalCollection = m_model->workingCollections->value(0);
       m_host->emitCollectionSaved(live);
     }
   } else {
-    restoreExpandedStates(expandedBefore, index);
-    selectTargetAfter(parentIdx, adjustedIndex);
+    restoreExpandedStates(expandedBefore, oldToNew);
+    selectTargetAfter(remappedParentIdx);
   }
 
   *m_model->collectionSaved = true;

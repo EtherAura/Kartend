@@ -392,6 +392,54 @@ QScreen *resolveMarqueeScreen(const QString &screenName) {
   return QGuiApplication::primaryScreen();
 }
 
+/// Resolve the metadata-lookup provider for a collection scrape. An
+/// explicit `CollectionConfig::scraperProviderId` override wins; with no
+/// override (or one that doesn't resolve to a lookup-capable provider)
+/// the first provider whose category matches the collection `type` is
+/// used. Ownership of the chosen provider is released out of @p registry
+/// into the returned shared_ptr; returns null when nothing usable matches.
+std::shared_ptr<MetadataLookupProvider>
+pickLookupProvider(std::vector<std::unique_ptr<MetadataProvider>> &registry,
+                   const CollectionConfig &cfg) {
+  // Claim a provider out of the registry: verify it does metadata
+  // lookups, release its unique_ptr, hand back a shared_ptr. Returns
+  // null (registry untouched) when the provider can't do lookups.
+  auto claim = [&registry](MetadataProvider *p) -> std::shared_ptr<MetadataLookupProvider> {
+    if (!p || !p->capabilities().testFlag(MetadataProvider::Capability::MetadataLookup)) {
+      return nullptr;
+    }
+    auto *typed = dynamic_cast<MetadataLookupProvider *>(p);
+    if (!typed) return nullptr;
+    for (auto &up : registry) {
+      if (up.get() == p) {
+        up.release();
+        break;
+      }
+    }
+    return std::shared_ptr<MetadataLookupProvider>(typed);
+  };
+
+  // Explicit per-collection override takes precedence.
+  const QString overrideId = cfg.scraperProviderId.trimmed();
+  if (!overrideId.isEmpty()) {
+    for (auto &up : registry) {
+      if (up && up->id() == overrideId) {
+        if (auto provider = claim(up.get())) return provider;
+        break; // ids are unique — a non-lookup match falls through to type
+      }
+    }
+  }
+
+  // Fall back to the first category match for the collection type.
+  const auto applicable = MetadataProviderRegistry::forCategory(registry, cfg.type);
+  for (auto &up : registry) {
+    if (up && applicable.contains(up.get())) {
+      if (auto provider = claim(up.get())) return provider;
+    }
+  }
+  return nullptr;
+}
+
 } // namespace
 
 void MainWindow::applyMarqueeSettings() {
@@ -531,19 +579,7 @@ void MainWindow::openScraperDialog(int preCollectionIndex, const QString &preIte
           if (!CollectionUtils::isValidIndex(idx, &m_collections)) return nullptr;
           return &m_collections[idx];
         });
-    const CollectionConfig &cfg = m_collections[idx];
-    const auto applicable = MetadataProviderRegistry::forCategory(registry, cfg.type);
-    std::shared_ptr<MetadataLookupProvider> provider;
-    for (auto &up : registry) {
-      if (!applicable.contains(up.get())) continue;
-      if (!up->capabilities().testFlag(MetadataProvider::Capability::MetadataLookup)) continue;
-      if (auto *typed = dynamic_cast<MetadataLookupProvider *>(up.get())) {
-        up.release();
-        provider.reset(typed);
-        break;
-      }
-    }
-    return provider;
+    return pickLookupProvider(registry, m_collections[idx]);
   };
   // applyResult: post-Apply persistence hook for the unified
   // interactive flow. Mirrors the existing single-item right-click
@@ -647,19 +683,7 @@ void MainWindow::promptResumePendingScrapeIfAny() {
           if (!CollectionUtils::isValidIndex(idx, &m_collections)) return nullptr;
           return &m_collections[idx];
         });
-    const CollectionConfig &cfg = m_collections[idx];
-    const auto applicable = MetadataProviderRegistry::forCategory(registry, cfg.type);
-    std::shared_ptr<MetadataLookupProvider> provider;
-    for (auto &up : registry) {
-      if (!applicable.contains(up.get())) continue;
-      if (!up->capabilities().testFlag(MetadataProvider::Capability::MetadataLookup)) continue;
-      if (auto *typed = dynamic_cast<MetadataLookupProvider *>(up.get())) {
-        up.release();
-        provider.reset(typed);
-        break;
-      }
-    }
-    return provider;
+    return pickLookupProvider(registry, m_collections[idx]);
   };
   m_scraperService->setContext(srvCtx);
 

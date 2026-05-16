@@ -160,7 +160,8 @@ void ToolbarController::refreshHomeButton(const GeneralSettings &gs) {
     icon = QIcon(customPath);
   }
   if (icon.isNull()) {
-    icon = UIConstants::Icons::fromTheme({"go-home", "user-home", "go-home-symbolic"});
+    icon = UIConstants::Icons::fromTheme(
+        {"user-home-symbolic", "go-home", "user-home", "go-home-symbolic"});
   }
   m_homeButton->setIcon(icon);
   m_homeButton->setIconSize(QSize(18, 18));

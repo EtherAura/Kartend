@@ -65,15 +65,54 @@ int countVirtualFolders(const CollectionConfig &config) {
   return dir.entryList(filters).size();
 }
 
-QList<int> collectDescendantIndices(int parentIndex, const QList<CollectionConfig> &collections) {
-  QList<int> descendants;
+namespace {
+// Recursive worker for collectDescendantIndices. `visited` tracks indices
+// already expanded as a parent, so a corrupt config whose parent links form
+// a cycle terminates instead of recursing until the stack overflows.
+void collectDescendantsInto(int parentIndex, const QList<CollectionConfig> &collections,
+                            QSet<int> &visited, QList<int> &out) {
+  if (visited.contains(parentIndex)) {
+    return;
+  }
+  visited.insert(parentIndex);
   for (int index = 0; index < collections.size(); ++index) {
     if (collections[index].parentCollectionIndex == parentIndex) {
-      descendants.append(index);
-      descendants.append(collectDescendantIndices(index, collections));
+      out.append(index);
+      collectDescendantsInto(index, collections, visited, out);
     }
   }
+}
+} // namespace
+
+QList<int> collectDescendantIndices(int parentIndex, const QList<CollectionConfig> &collections) {
+  QList<int> descendants;
+  QSet<int> visited;
+  collectDescendantsInto(parentIndex, collections, visited, descendants);
   return descendants;
+}
+
+QList<CollectionConfig> applyCollectionRemoval(const QList<CollectionConfig> &collections,
+                                               const QList<int> &oldToNew) {
+  QList<CollectionConfig> result;
+  result.reserve(collections.size());
+  for (int i = 0; i < collections.size(); ++i) {
+    // A row with no non-negative mapping was removed (or the map doesn't
+    // cover it) — drop it.
+    if (oldToNew.value(i, -1) < 0) {
+      continue;
+    }
+    CollectionConfig c = collections[i];
+    // parentCollectionIndex still holds an ORIGINAL index — translate it.
+    // A parent that maps to a negative value was itself removed or is
+    // stale, so the survivor is orphaned to the root rather than left
+    // pointing at a wrong (or out-of-range) row.
+    const int newParent =
+        c.parentCollectionIndex >= 0 ? oldToNew.value(c.parentCollectionIndex, -1) : -1;
+    c.parentCollectionIndex = newParent;
+    c.isSubcollection = (newParent >= 0);
+    result.append(c);
+  }
+  return result;
 }
 
 QString hierarchicalNameFor(const CollectionConfig &collection,
@@ -238,6 +277,35 @@ QStringList collectAllCollectionTypes(const QList<CollectionConfig> &collections
   std::sort(result.begin(), result.end(), [](const QString &a, const QString &b) {
     return QString::compare(a, b, Qt::CaseInsensitive) < 0;
   });
+  return result;
+}
+
+QStringList standardCollectionTypes() {
+  // Curated presets surfaced in the type dropdowns. Each maps to a
+  // scraper category via MetadataProviderRegistry::normaliseCategory
+  // ("Documents" → "reference"; "Images" has no provider). The combobox
+  // stays editable so custom types are still allowed.
+  return {QStringLiteral("Video"), QStringLiteral("Audio"), QStringLiteral("Images"),
+          QStringLiteral("Documents"), QStringLiteral("Games")};
+}
+
+QStringList collectionTypeChoices(const QList<CollectionConfig> &collections) {
+  // Leading blank = untagged. Standard presets keep display order; any
+  // custom type already in use is appended (collectAllCollectionTypes
+  // returns it sorted) unless it case-insensitively duplicates a preset.
+  QStringList result;
+  result.append(QString());
+  QSet<QString> seenLower;
+  for (const QString &preset : standardCollectionTypes()) {
+    result.append(preset);
+    seenLower.insert(preset.toLower());
+  }
+  for (const QString &inUse : collectAllCollectionTypes(collections)) {
+    if (!seenLower.contains(inUse.toLower())) {
+      seenLower.insert(inUse.toLower());
+      result.append(inUse);
+    }
+  }
   return result;
 }
 

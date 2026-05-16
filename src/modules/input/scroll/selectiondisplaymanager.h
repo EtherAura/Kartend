@@ -108,9 +108,10 @@ public:
   /// Lazy-creates the overlay if needed and shows it for the given file.
   void showArtworkPreview(const QString &filePath, const QString &artworkDir);
   /// Lazy-creates the overlay and shows a video-first preview for the
-  /// given file, falling back to artwork when no video is found
-  ///
-  void showMediaPreview(const QString &filePath, const QString &artworkDir,
+  /// given file, falling back to artwork when no video is found.
+  /// Returns true when a preview was shown, false when neither a video
+  /// nor artwork exists (the overlay stays hidden).
+  bool showMediaPreview(const QString &filePath, const QString &artworkDir,
                         const QString &videoDir);
   /// Populate the expand-mode overlay's bottom thumb strip with the
   /// item's related artwork so Left/Right and thumb clicks can cycle

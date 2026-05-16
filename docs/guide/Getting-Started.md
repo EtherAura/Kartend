@@ -47,31 +47,47 @@ See [File Locations](File-Locations.md) for the full layout.
 ## 2. Add your first collection
 
 1. Open the **Settings Dialog** with `Ctrl + ,` (or **File → Settings**).
-2. Click **Add Collection** in the tree on the left.
-3. On the **Basic** tab, give it a **Name** (e.g. `Films`, `Albums`,
-   `Manuals`).
-4. Switch to the **Paths & Extensions** tab and fill in:
-   - **Media Directory** — the folder containing the files to display.
+2. Click **Add Collection** in the tree on the left. The **Add
+   Collection** dialog asks for:
+   - **Name** — display label (e.g. `Films`, `Albums`, `Manuals`). The
+     only required field.
+   - **Content Folder** — the folder containing the files to display.
      Paths support `~` for your home directory.
-   - **Artwork Directory** — folder containing cover images that match
-     the media filenames (more below).
-   - **Extensions** — comma-separated list of file extensions to scan
-     (e.g. `pdf,epub` or `mkv,mp4,webm`). Leave blank to accept every
-     file in the directory.
-5. Switch to the **Launcher** tab and set:
-   - **Launcher Path** — the executable that opens an item
-     (`/usr/bin/xdg-open`, `/usr/bin/mpv`, `/usr/bin/retroarch`, …).
-   - **Launch Parameters** *(optional)* — extra arguments to pass before
-     the file path (e.g. `--fs` for fullscreen).
-   - **Core Path** *(RetroArch only)* — the libretro core `.so`. See
-     [Launchers](Launchers.md) for launcher-specific examples.
-6. Click **Save**. Kartend scans the media directory and populates the
+   - **Artwork Folder** — folder containing cover images that match the
+     media filenames (more below).
+   - **Launcher** — the executable that opens an item (e.g.
+     `/usr/bin/mpv`, `/usr/bin/xdg-open`).
+   - **Core** *(RetroArch only)* — appears when the launcher is
+     RetroArch; the libretro core to load.
+   - **Media Type** — a category preset (Video, Audio, Images,
+     Documents, Games) or a custom value. Drives the type filter and
+     the suggested scraper.
+   - **Scraper** — the metadata provider. It follows the media type
+     automatically; change it only to pin a different provider, which
+     is mainly useful for custom media types.
+   - **ScreenScraper System** *(games only)* — appears when the media
+     type is a game category; overrides ScreenScraper.fr's per-system
+     auto-detection. Leave on Auto-detect unless it picks wrong.
+
+   Everything except the name can be left blank and adjusted later.
+3. Switch to the **Paths & Extensions** tab to set **Extensions** — a
+   comma-separated list of file extensions to scan (e.g. `pdf,epub` or
+   `mkv,mp4,webm`). Leave blank to accept every file in the directory.
+   The content and artwork folders you entered in the dialog already
+   appear here.
+4. Switch to the **Launcher** tab. The launcher and core from the
+   dialog are already filled in; here you can also set **Launch
+   Parameters** *(optional — extra arguments passed before the file
+   path, e.g. `--fs` for fullscreen)*. See [Launchers](Launchers.md)
+   for launcher-specific examples, presets, and additional launchers.
+5. Click **Save**. Kartend scans the media directory and populates the
    grid.
 
-> **Where to find this** — Settings Dialog → tabs **Basic**,
-> **Paths & Extensions**, **Launcher**. Underlying INI keys: `name`,
-> `mediaDirectory`, `artworkDirectory`, `extensions`, `launcherPath`,
-> `launchParameters`, `corePath`. See
+> **Where to find this** — Settings Dialog → **Add Collection** dialog,
+> then tabs **Paths & Extensions** and **Launcher**. Underlying INI
+> keys: `name`, `type`, `scraperProviderId`, `mediaDirectory`,
+> `artworkDirectory`, `extensions`, `launcherPath`, `launchParameters`,
+> `corePath`. See
 > [Configuration Reference](Configuration-Reference.md) for every key.
 
 ### Minimal example (config file)

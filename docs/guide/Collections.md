@@ -15,7 +15,7 @@ If you've never built one, start with the
 | Field | Required | Notes |
 |-------|----------|-------|
 | **Name** | yes | Display label and the INI section header. Renaming updates references. The *only* strictly required field. |
-| **Type** | no | Free-form tag (e.g. `Video`, `Audio`, `Documents`). Used by the [collection-type filter](Search-Sort-Filter.md#type-filter). |
+| **Media Type** | no | Category tag — pick a preset (Video, Audio, Images, Documents, Games) from the dropdown or type a custom value. Drives the [collection-type filter](Search-Sort-Filter.md#type-filter) and the suggested scraper. |
 | **Media Directory** | no | Folder of items. Supports `~`. Omitted on [shell collections](Shell-Collections.md) that exist purely to group other collections. |
 | **Artwork Directory** | no | Folder of cover images matched by base filename. See [Artwork](Artwork.md). |
 | **Video Directory** | no | Folder of preview videos for the sidebar. See [Video Previews](Video-Previews.md). |
@@ -43,9 +43,14 @@ Films / TV Shows / Documentaries.
 
 The Settings Dialog's left-hand tree is the control surface.
 
-- **Add** — toolbar button at the top of the tree. New collections are
-  created at root by default; drag them into a parent or set the
-  **Parent Collection** field afterward.
+- **Add** — toolbar button at the top of the tree. Opens the **Add
+  Collection** dialog: name (required), content folder, artwork folder,
+  launcher, media type, and scraper — with a ScreenScraper system
+  selector shown for game media types and a libretro core selector
+  shown for RetroArch launchers. Everything except the name can be left
+  blank and filled in later from the **Configuration**/**Launcher**
+  tabs. New collections are created at root by default; drag them into a
+  parent or set the **Parent Collection** field afterward.
 - **Rename** — double-click the name field on the **Basic** tab, or use
   the tree's right-click → **Rename**. Renaming updates `name`, INI
   section header, and any `additionalParentNames` references in
@@ -133,10 +138,11 @@ reference; deleting one removes the reference from any aliases.
 Appearance is rendered identically whichever parent you reach the
 collection through (it's the same collection, just multiple paths).
 
-## Type metadata and the type filter
+## Media type, the type filter, and scrapers
 
-Each collection has a **Type** — a free-form text tag. It's purely a
-classification you choose:
+Each collection has a **media type** — a category tag. The dropdown
+offers five presets (Video, Audio, Images, Documents, Games) and stays
+editable, so a custom value is still allowed:
 
 ```ini
 [Films]
@@ -160,6 +166,19 @@ behave like a flat library of media items, ignoring the tree.
 
 See [Search, Sort & Filter](Search-Sort-Filter.md#type-filter) for
 filter mechanics.
+
+### Type-driven scraper selection
+
+The media type also picks the default **metadata scraper**: Video →
+TMDB, Audio → MusicBrainz, Documents → Open Library, Games →
+ScreenScraper. The Add Collection dialog fills its **Scraper** field
+from the chosen type automatically, and each collection's
+**Configuration** tab carries a **Metadata Scraper** dropdown to change
+it later. Leave it on **Automatic** to keep resolving the scraper from
+the type at scrape time; pick a provider explicitly to pin it. That
+override (`scraperProviderId`) is what lets a *custom*-typed collection
+scrape — a custom tag matches no scraper category on its own. Image
+collections have no scraper.
 
 ## Folder browsing (treating subfolders as collections)
 
@@ -224,7 +243,8 @@ Every collection key, grouped by purpose:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `name` | string | section header | Display name. |
-| `type` | string | empty | Free-form type tag (used by the type filter). |
+| `type` | string | empty | Media-type tag (used by the type filter and to pick a scraper). |
+| `scraperProviderId` | string | empty | Pinned metadata scraper id (`tmdb`, `screenscraper`, `musicbrainz`, `openlibrary`). Empty = resolve from `type`. |
 | `mediaDirectory` | path | empty | Folder of items. Empty = parent-only. |
 | `artworkDirectory` | path | empty | Folder of cover images. |
 | `videoDirectory` | path | empty | Folder of preview videos. |

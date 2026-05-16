@@ -66,6 +66,28 @@ forCategory(const std::vector<std::unique_ptr<MetadataProvider>> &all, const QSt
 /// group and needs the normalised value to drive grouping.
 [[nodiscard]] QString normaliseCategory(const QString &raw);
 
+/// A scraping-capable provider as offered in the collection dialogs'
+/// scraper picker — the stable `id` is what gets persisted into
+/// `CollectionConfig::scraperProviderId`, `displayName` is the label.
+struct ScraperChoice {
+  QString id;
+  QString displayName;
+};
+
+/// Every built-in provider that can actually run a metadata scrape
+/// (i.e. advertises the `MetadataLookup` capability), in registry
+/// display order. URL-only "look up online" providers are excluded —
+/// pinning one as a collection's scraper would be a no-op. Needs no
+/// accessors: id / displayName / capabilities are static per provider.
+[[nodiscard]] QList<ScraperChoice> scrapingProviders();
+
+/// Provider id of the first scraping-capable provider whose category
+/// matches @p collectionType (after synonym normalisation), or an empty
+/// string when the type resolves to no provider — untagged, an image
+/// collection, or an unmatched custom tag. Drives the creation dialog's
+/// "media type → scraper" auto-association.
+[[nodiscard]] QString defaultScraperForType(const QString &collectionType);
+
 } // namespace MetadataProviderRegistry
 
 #endif // METADATAPROVIDERREGISTRY_H

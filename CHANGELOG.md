@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Richer New Collection dialog.** Adding a collection now opens a
+  short form for its name, content folder, artwork folder, launcher,
+  media type, and metadata scraper instead of a bare name prompt — a
+  fresh collection is usable without an immediate follow-up trip
+  through Settings. The **Media Type** field is a dropdown of curated presets
+  (Video, Audio, Images, Documents, Games) and stays editable so a
+  custom category can still be typed. The **Scraper** field
+  auto-follows the chosen type (Video → TMDB, Audio → MusicBrainz,
+  Documents → Open Library, Games → ScreenScraper) and can be
+  overridden — pinning a scraper explicitly is what makes a
+  custom-typed collection scrapable. Two rows are revealed only when
+  relevant: a **ScreenScraper System** field for game-category media,
+  and a libretro **Core** field once the launcher path is RetroArch.
+  The same media-type dropdown and a new **Metadata Scraper** row also
+  appear on each collection's Configuration tab in Settings; the scraper
+  choice is remembered per-collection.
 - **Single-root artwork layout.** Collections now need only one
   Artwork folder configured — scrape auto-creates the per-kind
   subdirectories underneath as needed: `front/` (primary cover),
@@ -328,6 +344,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clear the relevant slice automatically.
 
 ### Fixed
+
+- **Blank, undeletable collections no longer appear at the top level.**
+  Kartend's internal settings groups (launcher presets, scraper
+  configuration) were being mis-read as nameless collections at startup —
+  they showed as empty rows that came back after every restart no matter
+  how many times you deleted them. Startup now recognises these as
+  settings storage and skips them.
+- **Deleting a collection no longer strands its subcollections or
+  crashes.** Removing a collection that had nested subcollections used to
+  leave the siblings pointing at the wrong parent, so they were re-homed
+  under the wrong collection or detached to the top level; a follow-up
+  delete on a detached entry could crash the app. Deletion now re-links
+  every surviving collection to its correct parent.
+- **Expand-mode items with no artwork or video can be launched again.**
+  In a collection with expand mode enabled, activating an item that had
+  neither artwork nor a video used to do nothing — the first press tried
+  to open a preview with nothing to show and swallowed the launch, and
+  no later press could get past it. Such an item now launches normally.
 
 ## [0.0.6] - 2026-05-11
 

@@ -235,7 +235,8 @@ display name; renaming a collection rewrites the section header.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `name` | string | section header | Display name. |
-| `type` | string | empty | Free-form classification. Used by the [type filter](Search-Sort-Filter.md#type-filter). |
+| `type` | string | empty | Media-type tag — a preset (Video / Audio / Images / Documents / Games) or a custom value. Used by the [type filter](Search-Sort-Filter.md#type-filter) and to pick a scraper. |
+| `scraperProviderId` | string | empty | Pinned metadata scraper id (`tmdb`, `screenscraper`, `musicbrainz`, `openlibrary`). Empty = resolve automatically from `type`. |
 | `mediaDirectory` | path | empty | Folder of items. Empty = parent-only. |
 | `artworkDirectory` | path | empty | Folder of cover images. |
 | `videoDirectory` | path | empty | Folder of preview videos. |

@@ -210,14 +210,12 @@ void SettingsDialog::loadCollectionToUI(int index) {
   loadAdditionalLaunchersToUI(config);
   loadLinkedParentsToUI(config);
   ui->configurationPanel->load();
-  // Populate the type combo from the union of types in use across the
-  // working list so the user can pick anything they've already tagged. The
-  // combo stays editable so free-form values still survive a round-trip.
-  {
-    QStringList types{QString()};
-    types += CollectionUtils::collectAllCollectionTypes(m_workingCollections);
-    ui->configurationPanel->setKnownTypes(types, config.type);
-  }
+  // Seed the type combo with a blank entry, the curated media-type
+  // presets, and any custom types already tagged across the working
+  // list. The combo stays editable so a new free-form value still
+  // survives a round-trip.
+  ui->configurationPanel->setKnownTypes(
+      CollectionUtils::collectionTypeChoices(m_workingCollections), config.type);
   ui->artworkPanel->load();
   ui->subfoldersPanel->load();
   ui->appearanceLayoutPanel->load();

@@ -136,6 +136,33 @@ std::vector<std::unique_ptr<MetadataProvider>> builtIn(GeneralSettingsAccessor s
   return list;
 }
 
+QList<ScraperChoice> scrapingProviders() {
+  QList<ScraperChoice> out;
+  for (const auto &p : builtIn()) {
+    if (p->capabilities().testFlag(MetadataProvider::Capability::MetadataLookup)) {
+      out.append({p->id(), p->displayName()});
+    }
+  }
+  return out;
+}
+
+QString defaultScraperForType(const QString &collectionType) {
+  const QString normalised = normaliseCategory(collectionType);
+  if (normalised.isEmpty()) {
+    return {};
+  }
+  const auto all = builtIn();
+  for (MetadataProvider *p : forCategory(all, normalised)) {
+    // forCategory with a non-empty category never yields the
+    // "applies-everywhere" wildcard (no built-in provider has empty
+    // categories()), so every hit here genuinely matches the type.
+    if (p->capabilities().testFlag(MetadataProvider::Capability::MetadataLookup)) {
+      return p->id();
+    }
+  }
+  return {};
+}
+
 QList<MetadataProvider *> forCategory(const std::vector<std::unique_ptr<MetadataProvider>> &all,
                                       const QString &category) {
   const QString normalised = normaliseCategory(category);

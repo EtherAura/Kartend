@@ -7,7 +7,6 @@
 #include <QDialogButtonBox>
 #include <QFont>
 #include <QFormLayout>
-#include <QInputDialog>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
@@ -19,6 +18,7 @@
 
 #include "applysettingsdialog.h"
 #include "collectiontreewidget.h"
+#include "createcollectiondialog.h"
 #include "mainwindow.h"
 #include "settingsdialog.h"
 #include "settingsmanager.h"
@@ -146,12 +146,13 @@ void SettingsDialog::onTreeItemChanged(QTreeWidgetItem *item, int column) {
 }
 
 void SettingsDialog::addCollection() {
-  bool parseOk;
-  QString name = QInputDialog::getText(this, "Add Collection",
-                                       "Enter collection name:", QLineEdit::Normal, "", &parseOk);
-  if (!parseOk || name.isEmpty()) {
+  CreateCollectionDialog dialog(this);
+  if (dialog.exec() != QDialog::Accepted) {
     return;
   }
+  // OK is gated on a non-empty name, so an accepted dialog always
+  // carries a usable collection name.
+  const QString name = dialog.collectionName();
 
   if (currentCollectionIndex >= 0 && currentCollectionIndex < collections.size()) {
     saveCollectionFromUI(currentCollectionIndex);
@@ -159,11 +160,14 @@ void SettingsDialog::addCollection() {
 
   CollectionConfig newCollection;
   newCollection.name = name;
-  newCollection.launcherPath = "";
-  newCollection.corePath = "";
+  newCollection.type = dialog.collectionType();
+  newCollection.scraperProviderId = dialog.scraperProviderId();
+  newCollection.screenscraperSystemId = dialog.screenscraperSystemId();
+  newCollection.launcherPath = dialog.launcherPath();
+  newCollection.corePath = dialog.corePath();
   newCollection.launchParameters = "";
-  newCollection.mediaDirectory = "";
-  newCollection.artworkDirectory = "";
+  newCollection.mediaDirectory = dialog.contentPath();
+  newCollection.artworkDirectory = dialog.artworkDirectory();
   newCollection.videoDirectory = "";
   newCollection.manualDirectory = "";
   newCollection.extensions = QStringList();
@@ -244,29 +248,30 @@ void SettingsDialog::ensureRootCollectionExists() {
 
   // No root collection exists - prompt user to create one
   while (true) {
-    bool ok = false;
-    QString name =
-        QInputDialog::getText(this, tr("Create Collection"),
-                              tr("No collections found. Enter a name for your first collection:"),
-                              QLineEdit::Normal, "", &ok);
+    CreateCollectionDialog dialog(this);
+    dialog.setWindowTitle(tr("Create Collection"));
+    dialog.setIntroText(tr("No collections found. Set up your first collection to continue."));
 
-    if (!ok) {
-      // User cancelled - they must create a collection to use settings
+    if (dialog.exec() != QDialog::Accepted) {
+      // The user can't cancel their way out — a collection is required
+      // to configure settings. Explain why, then re-prompt.
       QMessageBox::warning(this, tr("Collection Required"),
                            tr("A collection is required to configure settings. "
-                              "Please enter a collection name."));
+                              "Please create one to continue."));
       continue;
     }
 
-    if (name.trimmed().isEmpty()) {
-      QMessageBox::warning(this, tr("Invalid Name"),
-                           tr("Collection name cannot be empty. Please enter a valid name."));
-      continue;
-    }
-
-    // Create the new root collection
+    // OK is gated on a non-empty name, so no empty-name re-check is
+    // needed here.
     CollectionConfig newCollection;
-    newCollection.name = name.trimmed();
+    newCollection.name = dialog.collectionName();
+    newCollection.type = dialog.collectionType();
+    newCollection.scraperProviderId = dialog.scraperProviderId();
+    newCollection.screenscraperSystemId = dialog.screenscraperSystemId();
+    newCollection.mediaDirectory = dialog.contentPath();
+    newCollection.artworkDirectory = dialog.artworkDirectory();
+    newCollection.launcherPath = dialog.launcherPath();
+    newCollection.corePath = dialog.corePath();
     newCollection.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
     newCollection.parentCollectionIndex = -1;
     newCollection.isSubcollection = false;

@@ -32,7 +32,7 @@
         </item>
        </layout>
       </item>
-      <item row="1" column="0"><widget class="QLabel" name="label_collectionType"><property name="text"><string>Type / Category:</string></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="label_collectionType"><property name="text"><string>Media Type:</string></property></widget></item>
       <item row="1" column="1"><widget class="QComboBox" name="collectionTypeComboBox"><property name="editable"><bool>true</bool></property><property name="toolTip"><string>Free-form category label (e.g. Games, Movies, Music). Subcollections inherit the nearest tagged ancestor when left blank. The toolbar type filter shows only subcollection tiles whose effective type matches.</string></property></widget></item>
      </layout>
     </widget>
@@ -78,12 +78,14 @@
       <property name="horizontalSpacing"><number>8</number></property>
       <property name="verticalSpacing"><number>6</number></property>
       <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldGrowthPolicy::ExpandingFieldsGrow</enum></property>
-      <item row="0" column="0"><widget class="QLabel" name="label_screenscraperSystem"><property name="text"><string>ScreenScraper System:</string></property></widget></item>
-      <item row="0" column="1"><widget class="QComboBox" name="screenscraperSystemComboBox"><property name="toolTip"><string>Override ScreenScraper.fr's per-collection system id. Leave on Auto-detect to let Kartend pick from the collection's name / type / extensions.</string></property></widget></item>
-      <item row="1" column="0"><widget class="QLabel" name="label_screenscraperHashArchive"><property name="text"><string>Hash Inner ROM in Archives:</string></property></widget></item>
-      <item row="1" column="1"><widget class="QCheckBox" name="screenscraperHashArchiveCheckBox"><property name="toolTip"><string>When the scraped item is a .zip / .7z / etc., extract it and hash the inner ROM rather than the outer archive — much higher ScreenScraper match accuracy. Turn off to skip the extraction cost for huge archives.</string></property><property name="text"><string/></property></widget></item>
-      <item row="2" column="0"><widget class="QLabel" name="label_datFiles"><property name="text"><string>DAT Files:</string></property><property name="alignment"><set>Qt::AlignmentFlag::AlignTop|Qt::AlignmentFlag::AlignRight</set></property></widget></item>
-      <item row="2" column="1">
+      <item row="0" column="0"><widget class="QLabel" name="label_scraperProvider"><property name="text"><string>Metadata Scraper:</string></property></widget></item>
+      <item row="0" column="1"><widget class="QComboBox" name="scraperProviderComboBox"><property name="toolTip"><string>Metadata scraper for this collection. Automatic resolves a provider by matching the collection type; pick one explicitly to scrape a custom-typed collection.</string></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="label_screenscraperSystem"><property name="text"><string>ScreenScraper System:</string></property></widget></item>
+      <item row="1" column="1"><widget class="QComboBox" name="screenscraperSystemComboBox"><property name="toolTip"><string>Override ScreenScraper.fr's per-collection system id. Leave on Auto-detect to let Kartend pick from the collection's name / type / extensions.</string></property></widget></item>
+      <item row="2" column="0"><widget class="QLabel" name="label_screenscraperHashArchive"><property name="text"><string>Hash Inner ROM in Archives:</string></property></widget></item>
+      <item row="2" column="1"><widget class="QCheckBox" name="screenscraperHashArchiveCheckBox"><property name="toolTip"><string>When the scraped item is a .zip / .7z / etc., extract it and hash the inner ROM rather than the outer archive — much higher ScreenScraper match accuracy. Turn off to skip the extraction cost for huge archives.</string></property><property name="text"><string/></property></widget></item>
+      <item row="3" column="0"><widget class="QLabel" name="label_datFiles"><property name="text"><string>DAT Files:</string></property><property name="alignment"><set>Qt::AlignmentFlag::AlignTop|Qt::AlignmentFlag::AlignRight</set></property></widget></item>
+      <item row="3" column="1">
        <layout class="QVBoxLayout" name="datFilesLayout">
         <item>
          <widget class="QListWidget" name="datFilesListWidget">
@@ -102,7 +104,7 @@
         </item>
        </layout>
       </item>
-      <item row="3" column="0" colspan="2">
+      <item row="4" column="0" colspan="2">
        <widget class="QLabel" name="screenscraperSystemHintLabel">
         <property name="wordWrap"><bool>true</bool></property>
         <property name="text"><string>The ScreenScraper system list will appear here after your first ScreenScraper scrape (configure credentials under Settings → Scrapers → ScreenScraper first, then right-click an item → Scrape with ScreenScraper.fr…). Until then only Auto-detect is available.</string></property>

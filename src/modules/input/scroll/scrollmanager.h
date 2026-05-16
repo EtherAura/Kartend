@@ -161,7 +161,9 @@ public:
   /// Show a video-first preview overlay. Falls back to
   /// artwork when no video is found in @p videoDir. Used by expand-mode
   /// (first-stage) and middle-click peek.
-  void showMediaPreview(const QString &filePath, const QString &artworkDir,
+  /// Returns true when a preview was shown, false when the item has
+  /// neither a video nor artwork (the overlay stays hidden).
+  bool showMediaPreview(const QString &filePath, const QString &artworkDir,
                         const QString &videoDir);
   /// Forwarder for SelectionDisplayManager::setArtworkPreviewGallery.
   /// Populates the expand-mode overlay's bottom thumb strip so Left/Right

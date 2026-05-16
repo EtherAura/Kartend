@@ -522,6 +522,17 @@ struct CollectionConfig {
   /// configs with the single-key `datFilePath=...` shape are
   /// upgraded to a one-element list at load time.
   QStringList datFilePaths;
+  /// Metadata-scraper provider override for this collection. Empty means
+  /// "automatic" — the scrape resolves a provider by matching the
+  /// collection `type` against each provider's category (see
+  /// MetadataProviderRegistry::forCategory). A non-empty value is a
+  /// provider id ("tmdb", "screenscraper", "musicbrainz", "openlibrary")
+  /// that pins that exact scraper regardless of type. The collection-
+  /// creation dialog seeds this from the chosen media type and lets the
+  /// user override it — the override path is what makes a custom-typed
+  /// collection scrapable when category autodetection resolves nothing.
+  /// Stored per-collection in kartend.cfg.
+  QString scraperProviderId;
   /// Marks the synthesized config as a smart playlist (filter-driven).
   /// Set during MainWindow::resyncPlaylistCollections from the
   /// PlaylistRow.isSmart flag. UI surfaces (right-click menu, sidebar
@@ -619,6 +630,7 @@ struct CollectionConfig {
            screenscraperSystemId == other.screenscraperSystemId &&
            screenscraperHashArchive == other.screenscraperHashArchive &&
            datFilePaths == other.datFilePaths &&
+           scraperProviderId == other.scraperProviderId &&
            additionalParentNames == other.additionalParentNames;
   }
 
@@ -1379,6 +1391,25 @@ namespace CollectionUtils {
 [[nodiscard]] QList<int> collectDescendantIndices(int parentIndex,
                                                   const QList<CollectionConfig> &collections);
 
+/**
+ * @brief Rebuilds a collection list after a deletion, dropping removed rows
+ * and remapping every survivor's parent link to its new position.
+ *
+ * @p oldToNew maps each original index to its post-removal index, with a
+ * negative entry marking a removed (or unmapped) row. A survivor keeps its
+ * row when @c oldToNew[i] >= 0; its @c parentCollectionIndex is translated
+ * through the same map. A survivor whose parent maps to a negative value —
+ * the parent was itself removed, or the stored index is stale/out of range —
+ * is orphaned to the root (parent -1, @c isSubcollection false).
+ *
+ * Skipping this remap is what leaves subcollections pointing at the wrong
+ * row, or off the end of the list, after a delete: the source of stray
+ * "ghost" collections in the root view and of crashes when the stale index
+ * is later dereferenced.
+ */
+[[nodiscard]] QList<CollectionConfig>
+applyCollectionRemoval(const QList<CollectionConfig> &collections, const QList<int> &oldToNew);
+
 [[nodiscard]] QString hierarchicalNameFor(const CollectionConfig &collection,
                                           const QList<CollectionConfig> &collections);
 
@@ -1486,6 +1517,22 @@ namespace CollectionUtils {
  * the per-collection editor's combobox completion.
  */
 [[nodiscard]] QStringList collectAllCollectionTypes(const QList<CollectionConfig> &collections);
+
+/**
+ * @brief Returns the curated built-in media-type labels offered as presets in
+ * the collection-type dropdowns (creation dialog + per-collection editor).
+ * The combobox stays editable, so these are suggestions rather than a closed
+ * set — a user can still type a custom type. Order is display order.
+ */
+[[nodiscard]] QStringList standardCollectionTypes();
+
+/**
+ * @brief Builds the type-combobox item list: a leading blank entry (untagged),
+ * then the standard presets, then any custom types already in use across
+ * @p collections. Case-insensitive deduped; presets keep their display order
+ * and custom extras are appended sorted.
+ */
+[[nodiscard]] QStringList collectionTypeChoices(const QList<CollectionConfig> &collections);
 
 /**
  * @brief Computes a deterministic UUID from collection name and media

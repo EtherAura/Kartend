@@ -27,6 +27,9 @@ private slots:
   void forCategory_filtersByCanonicalTag();
   void forCategory_filtersBySynonym();
   void forCategory_emptyCategoriesProviderAlwaysIncluded();
+  void scrapingProviders_returnsOnlyLookupCapableProviders();
+  void defaultScraperForType_mapsStandardTypesToProviders();
+  void defaultScraperForType_emptyForUntaggedAndUnmatched();
   void webSearchProvider_emptyQueryReturnsInvalidUrl();
 };
 
@@ -168,6 +171,74 @@ void TestMetadataProviderRegistry::forCategory_emptyCategoriesProviderAlwaysIncl
   const auto filtered = MetadataProviderRegistry::forCategory(all, QStringLiteral("games"));
   QCOMPARE(filtered.size(), 1);
   QCOMPARE(filtered.first()->id(), QStringLiteral("anywhere"));
+}
+
+void TestMetadataProviderRegistry::scrapingProviders_returnsOnlyLookupCapableProviders() {
+  // The scraper picker in the collection dialogs offers only providers
+  // that can run an actual metadata scrape (MetadataLookup) — pinning a
+  // URL-only "look up online" provider as a collection's scraper would
+  // be a no-op.
+  const auto choices = MetadataProviderRegistry::scrapingProviders();
+  QVERIFY(!choices.isEmpty());
+  QSet<QString> ids;
+  for (const auto &c : choices) {
+    QVERIFY(!c.id.isEmpty());
+    QVERIFY(!c.displayName.isEmpty());
+    ids.insert(c.id);
+  }
+  // The four API providers are lookup-capable.
+  QVERIFY(ids.contains(QStringLiteral("screenscraper")));
+  QVERIFY(ids.contains(QStringLiteral("tmdb")));
+  QVERIFY(ids.contains(QStringLiteral("musicbrainz")));
+  QVERIFY(ids.contains(QStringLiteral("openlibrary")));
+  // URL-only providers are excluded.
+  QVERIFY(!ids.contains(QStringLiteral("mobygames")));
+  QVERIFY(!ids.contains(QStringLiteral("imdb")));
+  QVERIFY(!ids.contains(QStringLiteral("discogs")));
+  // Every returned id must be a real, lookup-capable built-in provider.
+  const auto all = MetadataProviderRegistry::builtIn();
+  for (const auto &c : choices) {
+    bool found = false;
+    for (const auto &p : all) {
+      if (p->id() == c.id) {
+        found = true;
+        QVERIFY2(p->capabilities().testFlag(MetadataProvider::Capability::MetadataLookup),
+                 qPrintable(QString("scrapingProviders surfaced non-lookup id: %1").arg(c.id)));
+      }
+    }
+    QVERIFY2(found,
+             qPrintable(QString("scrapingProviders id not in builtIn: %1").arg(c.id)));
+  }
+}
+
+void TestMetadataProviderRegistry::defaultScraperForType_mapsStandardTypesToProviders() {
+  // The creation dialog uses these mappings to auto-associate a scraper
+  // from the chosen media type.
+  QCOMPARE(MetadataProviderRegistry::defaultScraperForType("Video"), QStringLiteral("tmdb"));
+  QCOMPARE(MetadataProviderRegistry::defaultScraperForType("Audio"),
+           QStringLiteral("musicbrainz"));
+  QCOMPARE(MetadataProviderRegistry::defaultScraperForType("Games"),
+           QStringLiteral("screenscraper"));
+  // "Documents" resolves through the synonym table to the reference
+  // category, whose lookup provider is Open Library.
+  QCOMPARE(MetadataProviderRegistry::defaultScraperForType("Documents"),
+           QStringLiteral("openlibrary"));
+  // A synonym of a standard type resolves identically.
+  QCOMPARE(MetadataProviderRegistry::defaultScraperForType("Movies"), QStringLiteral("tmdb"));
+  // Case-insensitive.
+  QCOMPARE(MetadataProviderRegistry::defaultScraperForType("games"),
+           QStringLiteral("screenscraper"));
+}
+
+void TestMetadataProviderRegistry::defaultScraperForType_emptyForUntaggedAndUnmatched() {
+  // Untagged collection — no type, no default scraper.
+  QCOMPARE(MetadataProviderRegistry::defaultScraperForType(""), QString());
+  QCOMPARE(MetadataProviderRegistry::defaultScraperForType("   "), QString());
+  // "Images" is a standard media type but ships no image scraper.
+  QCOMPARE(MetadataProviderRegistry::defaultScraperForType("Images"), QString());
+  // A custom tag matching no provider category resolves to empty — the
+  // dialog then leaves the scraper on Automatic for the user to pick.
+  QCOMPARE(MetadataProviderRegistry::defaultScraperForType("Homebrew"), QString());
 }
 
 void TestMetadataProviderRegistry::webSearchProvider_emptyQueryReturnsInvalidUrl() {

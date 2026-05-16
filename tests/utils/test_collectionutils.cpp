@@ -81,6 +81,9 @@ private slots:
   void collectAllCollectionTypes_returnsSortedUnion();
   void collectAllCollectionTypes_dedupesCaseInsensitive();
   void collectAllCollectionTypes_skipsEmpty();
+  void standardCollectionTypes_areTheCuratedPresets();
+  void collectionTypeChoices_blankThenPresetsThenInUse();
+  void collectionTypeChoices_dropsInUseTypesThatDuplicatePresets();
 
   // wouldCreateCircularReference
   void circularRef_outOfRangeIndices_treatedAsCircular();
@@ -95,6 +98,14 @@ private slots:
   void context_isValid_defaultIsInvalid();
   void context_isValid_realCollectionIsValid();
   void context_isValid_rootViewWithNoIndexIsValid();
+
+  // collectDescendantIndices + applyCollectionRemoval (collection delete path)
+  void collectDescendantIndices_returnsNestedSubtree();
+  void collectDescendantIndices_cycleIsBounded();
+  void applyCollectionRemoval_remapsParentsAfterRemoval();
+  void applyCollectionRemoval_orphansSurvivorWhoseParentWasRemoved();
+  void applyCollectionRemoval_healsStaleParentIndex();
+  void applyCollectionRemoval_shiftsSurvivingParentIndex();
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -621,6 +632,38 @@ void TestCollectionUtils::collectAllCollectionTypes_skipsEmpty() {
   QCOMPARE(result, QStringList{QStringLiteral("Games")});
 }
 
+void TestCollectionUtils::standardCollectionTypes_areTheCuratedPresets() {
+  const QStringList presets = CollectionUtils::standardCollectionTypes();
+  QCOMPARE(presets, (QStringList{QStringLiteral("Video"), QStringLiteral("Audio"),
+                                 QStringLiteral("Images"), QStringLiteral("Documents"),
+                                 QStringLiteral("Games")}));
+}
+
+void TestCollectionUtils::collectionTypeChoices_blankThenPresetsThenInUse() {
+  QList<CollectionConfig> cs;
+  CollectionConfig a = makeCollection("A", /*isSub=*/false, -1);
+  a.type = QStringLiteral("Podcasts"); // a custom type not in the presets
+  cs << a;
+  const QStringList choices = CollectionUtils::collectionTypeChoices(cs);
+  // Leading blank entry (untagged), then the presets in display order.
+  QVERIFY(!choices.isEmpty());
+  QVERIFY(choices.first().isEmpty());
+  QCOMPARE(choices.mid(1, 5), CollectionUtils::standardCollectionTypes());
+  // The custom in-use type is appended after the presets.
+  QCOMPARE(choices.last(), QStringLiteral("Podcasts"));
+}
+
+void TestCollectionUtils::collectionTypeChoices_dropsInUseTypesThatDuplicatePresets() {
+  QList<CollectionConfig> cs;
+  CollectionConfig a = makeCollection("A", /*isSub=*/false, -1);
+  a.type = QStringLiteral("games"); // case-insensitively duplicates the "Games" preset
+  cs << a;
+  const QStringList choices = CollectionUtils::collectionTypeChoices(cs);
+  // blank + 5 presets, with no extra entry for the duplicate.
+  QCOMPARE(choices.size(), 6);
+  QVERIFY(!choices.contains(QStringLiteral("games")));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // wouldCreateCircularReference
 // ─────────────────────────────────────────────────────────────────────────────
@@ -746,6 +789,110 @@ void TestCollectionUtils::context_isValid_rootViewWithNoIndexIsValid() {
   ctx.currentIndex = -1;
   ctx.isRootView = true;
   QVERIFY(ctx.isValid());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// collectDescendantIndices + applyCollectionRemoval (collection delete path)
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+// Pull the names / parent indices out of a remap result so it can be
+// asserted against plain QList literals (the whole-list QCOMPARE idiom used
+// throughout this file).
+QStringList namesOf(const QList<CollectionConfig> &cs) {
+  QStringList names;
+  for (const CollectionConfig &c : cs) {
+    names << c.name;
+  }
+  return names;
+}
+QList<int> parentsOf(const QList<CollectionConfig> &cs) {
+  QList<int> parents;
+  for (const CollectionConfig &c : cs) {
+    parents << c.parentCollectionIndex;
+  }
+  return parents;
+}
+} // namespace
+
+void TestCollectionUtils::collectDescendantIndices_returnsNestedSubtree() {
+  // Root(0) → Games(1) → SNES(2); Root(0) → Audio(3). Descendants of the
+  // root are every nested collection; descendants of a leaf are empty.
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Root", /*isSub=*/false, -1);
+  cs << makeCollection("Games", /*isSub=*/true, 0);
+  cs << makeCollection("SNES", /*isSub=*/true, 1);
+  cs << makeCollection("Audio", /*isSub=*/true, 0);
+  QCOMPARE(CollectionUtils::collectDescendantIndices(0, cs), (QList<int>{1, 2, 3}));
+  QCOMPARE(CollectionUtils::collectDescendantIndices(1, cs), (QList<int>{2}));
+  QCOMPARE(CollectionUtils::collectDescendantIndices(2, cs), QList<int>{});
+}
+
+void TestCollectionUtils::collectDescendantIndices_cycleIsBounded() {
+  // Corrupt input: A(0) and B(1) each name the other as parent. The walk
+  // must terminate via the visited-set guard instead of recursing until the
+  // stack overflows (the test would crash, not merely fail, otherwise).
+  QList<CollectionConfig> cs;
+  cs << makeCollection("A", /*isSub=*/true, 1);
+  cs << makeCollection("B", /*isSub=*/true, 0);
+  const QList<int> descendants = CollectionUtils::collectDescendantIndices(0, cs);
+  QVERIFY(descendants.size() <= cs.size());
+}
+
+void TestCollectionUtils::applyCollectionRemoval_remapsParentsAfterRemoval() {
+  // A(0) → B(1); C(2) → D(3). Removing A and B (mapped to -1) drops that
+  // subtree; C and D survive and D's parent link follows C to its new index.
+  QList<CollectionConfig> cs;
+  cs << makeCollection("A", /*isSub=*/false, -1);
+  cs << makeCollection("B", /*isSub=*/true, 0);
+  cs << makeCollection("C", /*isSub=*/false, -1);
+  cs << makeCollection("D", /*isSub=*/true, 2);
+  const QList<CollectionConfig> result =
+      CollectionUtils::applyCollectionRemoval(cs, QList<int>{-1, -1, 0, 1});
+  QCOMPARE(namesOf(result), (QStringList{"C", "D"}));
+  QCOMPARE(parentsOf(result), (QList<int>{-1, 0}));
+  QVERIFY(result[1].isSubcollection);
+}
+
+void TestCollectionUtils::applyCollectionRemoval_orphansSurvivorWhoseParentWasRemoved() {
+  // A(0) → B(1) → C(2). Removing only B leaves C with a dead parent, so C is
+  // orphaned to the root rather than left pointing at a removed row.
+  QList<CollectionConfig> cs;
+  cs << makeCollection("A", /*isSub=*/false, -1);
+  cs << makeCollection("B", /*isSub=*/true, 0);
+  cs << makeCollection("C", /*isSub=*/true, 1);
+  const QList<CollectionConfig> result =
+      CollectionUtils::applyCollectionRemoval(cs, QList<int>{0, -1, 1});
+  QCOMPARE(namesOf(result), (QStringList{"A", "C"}));
+  QCOMPARE(parentsOf(result), (QList<int>{-1, -1}));
+  QVERIFY(!result[1].isSubcollection);
+}
+
+void TestCollectionUtils::applyCollectionRemoval_healsStaleParentIndex() {
+  // B carries a stale, out-of-range parent index. Even with nothing removed
+  // the remap heals it to the root so it can't render as a mis-nested ghost.
+  QList<CollectionConfig> cs;
+  cs << makeCollection("A", /*isSub=*/false, -1);
+  cs << makeCollection("B", /*isSub=*/true, 99);
+  const QList<CollectionConfig> result =
+      CollectionUtils::applyCollectionRemoval(cs, QList<int>{0, 1});
+  QCOMPARE(parentsOf(result), (QList<int>{-1, -1}));
+  QVERIFY(!result[1].isSubcollection);
+}
+
+void TestCollectionUtils::applyCollectionRemoval_shiftsSurvivingParentIndex() {
+  // A(0), B(1), C(2) → D(3) → E(4). Removing A shifts every later index down
+  // by one; the surviving D→C and E→D parent links shift with them.
+  QList<CollectionConfig> cs;
+  cs << makeCollection("A", /*isSub=*/false, -1);
+  cs << makeCollection("B", /*isSub=*/false, -1);
+  cs << makeCollection("C", /*isSub=*/false, -1);
+  cs << makeCollection("D", /*isSub=*/true, 2);
+  cs << makeCollection("E", /*isSub=*/true, 3);
+  const QList<CollectionConfig> result =
+      CollectionUtils::applyCollectionRemoval(cs, QList<int>{-1, 0, 1, 2, 3});
+  QCOMPARE(namesOf(result), (QStringList{"B", "C", "D", "E"}));
+  QCOMPARE(parentsOf(result), (QList<int>{-1, -1, 1, 2}));
 }
 
 QTEST_APPLESS_MAIN(TestCollectionUtils)

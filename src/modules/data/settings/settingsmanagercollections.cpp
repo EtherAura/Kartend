@@ -27,6 +27,18 @@
 
 namespace {
 
+// Top-level INI groups that are NOT collections — global settings buckets
+// owned by saveGeneralSettings and the launcher-preset / scraper code.
+// loadCollections must skip them (or each loads as a blank-named "ghost"
+// collection that can't be deleted) and saveCollections must preserve them
+// (or a collection save wipes them). One list so the skip side and the
+// preserve side can never drift apart.
+const QSet<QString> &reservedTopLevelGroups() {
+  static const QSet<QString> groups{QStringLiteral("General"), QStringLiteral("Scrapers"),
+                                     QStringLiteral("ScraperOptions"), QStringLiteral("Launchers")};
+  return groups;
+}
+
 auto findParentCollectionIndex(const QStringList &parts, const QString &immediateParentName,
                                const QList<CollectionConfig> &collections) -> int {
   for (int i = 0; i < collections.size(); ++i) {
@@ -129,7 +141,12 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
 
   QStringList groups = settings.childGroups();
   for (const QString &group : groups) {
-    if (group == "General") continue;
+    // Skip the global settings groups — they are not collections. Reading
+    // them as collections is what spawned blank-named "ghost" rows at the
+    // root that reappeared on every restart.
+    if (reservedTopLevelGroups().contains(group)) {
+      continue;
+    }
 
     // Convert "Parent > Child" back to "Parent/Child" for internal hierarchy
     // processing
@@ -239,6 +256,8 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     config.screenscraperSystemId = settings.value("screenscraperSystemId", -1).toInt();
     // Hash inner ROM in archives. Default true — better SS match accuracy.
     config.screenscraperHashArchive = settings.value("screenscraperHashArchive", true).toBool();
+    // Per-collection scraper override; empty = automatic (resolve by type).
+    config.scraperProviderId = settings.value("scraperProviderId").toString().trimmed();
     // datFilePaths is persisted as a QSettings array so individual
     // entries can contain commas / brackets without delimiter
     // escaping. Legacy configs (pre-multi-DAT) shipped a single
@@ -482,16 +501,14 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
   // must survive a collection save. saveCollections walks every other
   // top-level group and removes it (so a renamed/removed collection
   // doesn't leave a stale section behind). Anything Kartend writes
-  // outside the collection group hierarchy has to be allow-listed
-  // here or it gets silently wiped on every collection mutation —
-  // which is exactly how `[ScraperOptions]` was disappearing across
-  // restarts (every menu toggle / scraper edit fires saveCollections).
-  static const QSet<QString> preservedTopLevelGroups{
-      QStringLiteral("General"), QStringLiteral("Scrapers"), QStringLiteral("ScraperOptions"),
-      QStringLiteral("Launchers")};
+  // outside the collection group hierarchy has to be in
+  // reservedTopLevelGroups() or it gets silently wiped on every
+  // collection mutation — which is exactly how `[ScraperOptions]` was
+  // disappearing across restarts (every menu toggle / scraper edit
+  // fires saveCollections).
   const QStringList existingGroups = settings.childGroups();
   for (const QString &group : existingGroups) {
-    if (preservedTopLevelGroups.contains(group)) continue;
+    if (reservedTopLevelGroups().contains(group)) continue;
     if (newGroupNames.contains(group)) continue;
     settings.remove(group);
   }
@@ -578,6 +595,8 @@ void SettingsManager::saveCollections(const QList<CollectionConfig> &collections
     // explicit on disk for users hand-editing the file).
     settings.setValue("screenscraperSystemId", c.screenscraperSystemId);
     settings.setValue("screenscraperHashArchive", c.screenscraperHashArchive);
+    // Per-collection scraper override; empty = automatic (resolve by type).
+    settings.setValue("scraperProviderId", c.scraperProviderId);
     // Persist datFilePaths via beginWriteArray so removed entries
     // disappear cleanly from the INI. Also drop any stale single-key
     // `datFilePath=` left behind by a pre-upgrade config — keeping

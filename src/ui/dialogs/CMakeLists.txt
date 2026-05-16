@@ -14,6 +14,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   collectiontreewidget.cpp
   configurationpanel.cpp
   controlspanel.cpp
+  createcollectiondialog.cpp
   createsmartplaylistdialog.cpp
   customfieldsdialog.cpp
   errordialog.cpp
@@ -65,6 +66,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   collectiontreewidget.h
   configurationpanel.h
   controlspanel.h
+  createcollectiondialog.h
   createsmartplaylistdialog.h
   customfieldsdialog.h
   errordialog.h

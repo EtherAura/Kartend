@@ -251,7 +251,15 @@ auto InteractionManager::maybeExpandInsteadOfLaunch(const QString &filePath, int
       SettingsUtils::expandConfigVariables(artworkOwner.artworkDirectory, artworkOwner.name);
   const QString videoDir =
       SettingsUtils::expandConfigVariables(artworkOwner.videoDirectory, artworkOwner.name);
-  scrollMgr()->showMediaPreview(filePath, artworkDir, videoDir);
+  // When the item has neither a video nor artwork the overlay stays
+  // hidden. Don't enter the expand state in that case: the second-stage
+  // launch gate above requires a *visible* overlay, so a hidden overlay
+  // would trap the item — every activation re-expands and it can never
+  // launch. Fall through to a normal launch instead.
+  if (!scrollMgr()->showMediaPreview(filePath, artworkDir, videoDir)) {
+    m_state.clearExpandedItem();
+    return false;
+  }
   // Mirror the sidebar's gallery into the overlay's bottom thumb strip so
   // Left/Right + thumb click can cycle the main preview between the
   // item's scraped artwork types. DetailsPane already has the entries
