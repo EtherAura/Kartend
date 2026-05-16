@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Scrape metadata sidecar.** A scrape now writes a human-readable
+  JSON file at `{Artwork}/metadata/{baseName}.json` next to the
+  downloaded art — the scraped title, description, genre, developer,
+  publisher, release date, rating, players, source, and any
+  provider-specific custom fields. Useful for inspecting or
+  exporting what a scrape captured without opening the database.
+  Written for single-item and batch scrapes alike; skipped when the
+  scrape returned no metadata or the **Metadata** checkbox was off,
+  and a `Fill missing` re-scrape leaves an existing sidecar intact.
 - **Scraper fallback region.** Scraper settings gain a **Fallback
   region** dropdown. Each scraped item already follows its own region
   for the title, release date, and box art; this setting only decides

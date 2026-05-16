@@ -9,6 +9,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -287,6 +288,80 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
   return result;
 }
 
+bool writeMetadataSidecar(const QString &artworkDirectory, const QString &baseName,
+                          const ScrapedItem &scraped, RescrapeMode rescrapeMode) {
+  if (artworkDirectory.isEmpty() || baseName.isEmpty()) {
+    return false;
+  }
+  // A bare title is the minimum worth writing. An empty title also
+  // covers the "user opted out of metadata" case — the batch runner
+  // strips every text field in that mode, so the item arrives blank.
+  if (scraped.title.trimmed().isEmpty()) {
+    return false;
+  }
+
+  const QString dir = QDir(artworkDirectory).filePath(QStringLiteral("metadata"));
+  if (!QDir().mkpath(dir)) {
+    qCWarning(lcScrape) << "metadata sidecar: could not create" << dir;
+    return false;
+  }
+  const QString path = QDir(dir).filePath(baseName + QStringLiteral(".json"));
+
+  // FillMissing keeps an existing sidecar untouched; Overwrite and
+  // UpdateChanged regenerate it (a derived file — re-deriving it is
+  // cheaper than a byte compare).
+  if (rescrapeMode == RescrapeMode::FillMissing && QFileInfo::exists(path)) {
+    return false;
+  }
+
+  QJsonObject obj;
+  const auto put = [&obj](const QString &key, const QString &value) {
+    const QString trimmed = value.trimmed();
+    if (!trimmed.isEmpty()) {
+      obj.insert(key, trimmed);
+    }
+  };
+  put(QStringLiteral("title"), scraped.title);
+  put(QStringLiteral("description"), scraped.description);
+  put(QStringLiteral("genre"), scraped.genre);
+  put(QStringLiteral("developer"), scraped.developer);
+  put(QStringLiteral("publisher"), scraped.publisher);
+  put(QStringLiteral("releaseDate"), scraped.releaseDate);
+  put(QStringLiteral("contentRating"), scraped.contentRating);
+  put(QStringLiteral("players"), scraped.players);
+  put(QStringLiteral("source"), scraped.sourceProviderId);
+  if (scraped.runtimeSeconds >= 0) {
+    obj.insert(QStringLiteral("runtimeSeconds"), scraped.runtimeSeconds);
+  }
+  // tagsJson is already a JSON array string — inline it as an array
+  // rather than a quoted string so the sidecar stays readable.
+  if (!scraped.tagsJson.trimmed().isEmpty()) {
+    const QJsonDocument tagsDoc = QJsonDocument::fromJson(scraped.tagsJson.toUtf8());
+    if (tagsDoc.isArray()) {
+      obj.insert(QStringLiteral("tags"), tagsDoc.array());
+    }
+  }
+  if (!scraped.customFields.isEmpty()) {
+    QJsonObject custom;
+    for (auto it = scraped.customFields.constBegin(); it != scraped.customFields.constEnd(); ++it) {
+      const QString trimmed = it.value().trimmed();
+      if (!trimmed.isEmpty()) {
+        custom.insert(it.key(), trimmed);
+      }
+    }
+    if (!custom.isEmpty()) {
+      obj.insert(QStringLiteral("customFields"), custom);
+    }
+  }
+
+  if (!writeBytesAtomically(path, QJsonDocument(obj).toJson(QJsonDocument::Indented))) {
+    qCWarning(lcScrape) << "metadata sidecar: write failed" << path;
+    return false;
+  }
+  qCDebug(lcScrape) << "wrote metadata sidecar ->" << path;
+  return true;
+}
+
 namespace {
 
 /// Pure merge: existing × scraped → merged. Shared between the
@@ -406,6 +481,7 @@ ApplyResult applyScrapedItem(IDatabaseManager *databaseManager, const QString &c
   // BatchScrapeRunner uses the underlying primitives directly so the
   // file-I/O phase can run on a worker thread.
   const MediaWriteResult writes = writeMediaFiles(artworkDirectory, baseName, media, rescrapeMode);
+  (void)writeMetadataSidecar(artworkDirectory, baseName, scraped, rescrapeMode);
   ApplyResult result;
   result.mediaWritten = writes.mediaWritten;
   result.mediaSkipped = writes.mediaSkipped;

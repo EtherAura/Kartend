@@ -143,6 +143,18 @@ struct MediaWriteResult {
                                                const QList<PendingMediaWrite> &media,
                                                RescrapeMode rescrapeMode = RescrapeMode::Overwrite);
 
+/// Write a human-readable JSON metadata sidecar for the scraped item
+/// at `{artworkDirectory}/metadata/{baseName}.json` — the scraped
+/// title / description / genre / etc. plus any provider customFields.
+/// Thread-safe (file I/O only, no DB). Returns true when the file was
+/// written this call; false when skipped — an empty scrape (no title,
+/// e.g. the user opted out of metadata), a FillMissing run that found
+/// an existing sidecar, or a write failure. `rescrapeMode` mirrors the
+/// per-asset policy writeMediaFiles applies.
+[[nodiscard]] bool writeMetadataSidecar(const QString &artworkDirectory, const QString &baseName,
+                                        const ScrapedItem &scraped,
+                                        RescrapeMode rescrapeMode = RescrapeMode::Overwrite);
+
 /// DB-write phase. Saves the merged metadata row (existing × scraped)
 /// plus one `item_artwork` row per entry in `nonStandardArtwork`.
 /// Returns the metadataSaved flag (mirrors `ApplyResult.metadataSaved`).

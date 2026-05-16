@@ -6,6 +6,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QList>
 #include <QObject>
 #include <QString>
@@ -73,6 +75,9 @@ private slots:
   void screenshot_writesIntoTypedSubdirNotFlatRoot();
   void logo_writesIntoTypedSubdirNotFlatRoot();
   void multipleCovers_eachWriteIntoOwnTypedSubdir();
+  void metadataSidecar_writesJsonWithScrapedFields();
+  void metadataSidecar_skippedWhenTitleEmpty();
+  void metadataSidecar_fillMissingKeepsExisting();
 };
 
 void TestScrapePersistence::front_writesCoverIntoTypedSubdirNotFlatRoot() {
@@ -127,14 +132,9 @@ void TestScrapePersistence::standardType_writesIntoPerTypeSubdir() {
   // Standard types are auto-discovered via subdirectory — no
   // item_artwork row needed.
   QCOMPARE(db.artworkSaves.size(), 0);
-  // The primary-cover mirror IS written, using the highest-priority
-  // candidate: "box" outranks "screenshot" in coverFallbackPriority.
-  // No "front" present, so the fallback path picks box for the grid
-  // tile / details-pane primary slot.
-  QFile primary(tmp.path() + "/g.png");
-  QVERIFY(primary.exists());
-  QVERIFY(primary.open(QIODevice::ReadOnly));
-  QCOMPARE(primary.readAll(), QByteArray("BOX_BYTES"));
+  // No redundant copy at the flat artwork root — the grid resolver
+  // walks the typed subdirs for the cover.
+  QVERIFY(!QFile::exists(tmp.path() + "/g.png"));
 }
 
 void TestScrapePersistence::nonStandardType_writesPerTypeAndSavesItemArtworkRow() {
@@ -256,7 +256,8 @@ void TestScrapePersistence::noDatabaseManager_stillWritesFilesAndSkipsMetadata()
   // Files written, but metadata save flagged false (no DB to call).
   QCOMPARE(result.mediaWritten, 1);
   QVERIFY(!result.metadataSaved);
-  QVERIFY(QFileInfo(tmp.path() + "/x.png").exists());
+  // The front cover lands in its typed subdir, not the flat root.
+  QVERIFY(QFileInfo(tmp.path() + "/front/x.png").exists());
 }
 
 namespace {
@@ -434,6 +435,68 @@ void TestScrapePersistence::multipleCovers_eachWriteIntoOwnTypedSubdir() {
   QVERIFY(QFile::exists(tmp.path() + "/box-3d/foo.png"));
   // Nothing at the flat root.
   QVERIFY(!QFile::exists(tmp.path() + "/foo.png"));
+}
+
+void TestScrapePersistence::metadataSidecar_writesJsonWithScrapedFields() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Downtown Nekketsu Monogatari");
+  item.developer = QStringLiteral("Technos");
+  item.genre = QStringLiteral("Beat 'em up");
+  item.sourceProviderId = QStringLiteral("screenscraper");
+  item.customFields.insert(QStringLiteral("region"), QStringLiteral("jp"));
+
+  QVERIFY(Scraper::writeMetadataSidecar(tmp.path(), QStringLiteral("game"), item,
+                                        Scraper::RescrapeMode::Overwrite));
+
+  // The sidecar lands under the metadata/ subdir.
+  QFile f(tmp.path() + "/metadata/game.json");
+  QVERIFY(f.exists());
+  QVERIFY(f.open(QIODevice::ReadOnly));
+  const QJsonObject obj = QJsonDocument::fromJson(f.readAll()).object();
+  QCOMPARE(obj.value("title").toString(), item.title);
+  QCOMPARE(obj.value("developer").toString(), item.developer);
+  QCOMPARE(obj.value("genre").toString(), item.genre);
+  QCOMPARE(obj.value("source").toString(), QStringLiteral("screenscraper"));
+  QCOMPARE(obj.value("customFields").toObject().value("region").toString(),
+           QStringLiteral("jp"));
+  // Empty fields are omitted, not written as empty strings.
+  QVERIFY(!obj.contains("description"));
+}
+
+void TestScrapePersistence::metadataSidecar_skippedWhenTitleEmpty() {
+  // A title-less item (e.g. the user opted out of metadata, so the
+  // batch runner stripped every text field) writes no sidecar.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  Scraper::ScrapedItem item;
+  item.description = QStringLiteral("orphan description");
+
+  QVERIFY(!Scraper::writeMetadataSidecar(tmp.path(), QStringLiteral("game"), item,
+                                         Scraper::RescrapeMode::Overwrite));
+  QVERIFY(!QFile::exists(tmp.path() + "/metadata/game.json"));
+}
+
+void TestScrapePersistence::metadataSidecar_fillMissingKeepsExisting() {
+  // FillMissing leaves an existing sidecar untouched.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QVERIFY(QDir().mkpath(tmp.path() + "/metadata"));
+  const QByteArray original("{\"title\":\"user-edited\"}");
+  {
+    QFile f(tmp.path() + "/metadata/game.json");
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(original);
+  }
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Fresh Scrape Title");
+
+  QVERIFY(!Scraper::writeMetadataSidecar(tmp.path(), QStringLiteral("game"), item,
+                                         Scraper::RescrapeMode::FillMissing));
+  QFile f(tmp.path() + "/metadata/game.json");
+  QVERIFY(f.open(QIODevice::ReadOnly));
+  QCOMPARE(f.readAll(), original);
 }
 
 QTEST_MAIN(TestScrapePersistence)

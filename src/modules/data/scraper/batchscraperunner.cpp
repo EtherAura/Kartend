@@ -459,7 +459,11 @@ void BatchScrapeRunner::applyAndFinish(std::shared_ptr<ItemState> state,
             Q_ARG(Scraper::NonStandardArtworkList, writeRes.nonStandardArtwork));
       });
   watcher->setFuture(QtConcurrent::run(
-      [artworkDir = m_artworkDir, baseName, writes, rescrapeMode = m_rescrapeMode]() {
+      [artworkDir = m_artworkDir, baseName, writes, effective, rescrapeMode = m_rescrapeMode]() {
+        // Human-readable JSON sidecar alongside the artwork. `effective`
+        // is blank when the user opted out of metadata, so the sidecar
+        // helper self-skips in that case.
+        (void)Scraper::writeMetadataSidecar(artworkDir, baseName, effective, rescrapeMode);
         return Scraper::writeMediaFiles(artworkDir, baseName, writes, rescrapeMode);
       }));
 }
