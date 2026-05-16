@@ -107,7 +107,11 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
     return;
   }
 
-  constexpr int CURRENT_SCHEMA_VERSION = 10;
+  // Must equal the highest migration block below. Bumping a migration without
+  // bumping this leaves the early-return gate skipping the new block, so the
+  // schema silently lags the code (e.g. a missing items.date_added column that
+  // breaks the scanner upsert).
+  constexpr int CURRENT_SCHEMA_VERSION = 12;
   const int version = getUserVersion(db);
   if (version >= CURRENT_SCHEMA_VERSION) {
     return;

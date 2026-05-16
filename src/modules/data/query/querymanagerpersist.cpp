@@ -62,16 +62,28 @@ bool QueryManager::ensureCollectionScanned(int collectionIndex,
     return false;
   }
 
+  const QString uuid =
+      CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
+
+  // A scan that already failed this session is not retried automatically.
+  // The failure is deterministic (schema/IO/bind-limit) and rolls back without
+  // persisting dir_signature, so needsRescan() stays true. Re-running it on
+  // every collectionScanCompleted-driven reload spins an unbreakable
+  // scan->fail->reload loop. Return without emitting scanStarting/
+  // collectionScanCompleted: emitting them would re-trigger the reload and
+  // keep the loop alive. The collection is left untouched until the next
+  // session (a fresh QueryManager starts with an empty set) or until the
+  // user changes the media directory (which yields a different UUID).
+  if (m_failedScanUuids.contains(uuid)) {
+    return false;
+  }
+
   if (!needsRescan(collectionIndex, collection)) {
     return false;
   }
 
   // Reset cancellation flag before starting new scan
   resetScanCancellation();
-
-  // Compute UUID for completion signal
-  const QString uuid =
-      CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
 
   // Notify UI that a scan is starting (estimated items unknown, use -1)
   emit scanStarting(collection.name, -1);
@@ -83,6 +95,12 @@ bool QueryManager::ensureCollectionScanned(int collectionIndex,
   int itemsApplied = 0;
   const bool success =
       scanAndSaveItemsToDatabase(collectionIndex, collection, &itemsScanned, &itemsApplied);
+
+  // Remember a failed scan so the next reload-driven pass skips it instead of
+  // retrying forever (see the m_failedScanUuids guard above).
+  if (!success) {
+    m_failedScanUuids.insert(uuid);
+  }
 
   // Always emit collectionScanCompleted when we emitted scanStarting, even if
   // the scan failed. This ensures MainWindow's m_activeScanCount is decremented

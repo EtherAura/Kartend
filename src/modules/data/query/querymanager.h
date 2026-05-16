@@ -8,6 +8,7 @@
 #include <QDateTime>
 #include <QHash>
 #include <QObject>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStringList>
@@ -156,6 +157,14 @@ private:
   SessionManager *m_sessionManager;
   QSqlDatabase m_db;
   QString m_connectionName;
+
+  // Collection UUIDs whose scan failed earlier this session. A failed scan
+  // rolls back without persisting dir_signature, so needsRescan() keeps
+  // returning true; combined with the collectionScanCompleted-driven reload
+  // that re-enters ensureCollectionScanned(), an always-failing scan spins an
+  // unbreakable scan->fail->reload loop. Once a UUID lands here it is not
+  // retried automatically — only worker-thread access, so no locking needed.
+  QSet<QString> m_failedScanUuids;
 
   // LRU cache of prepared QSqlQuery statements bound to m_db. Reuses
   // compiled statements across slot invocations; reset on every get() so

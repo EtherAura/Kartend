@@ -68,7 +68,10 @@ namespace {
 constexpr int BATCH_SIZE = 199;
 constexpr int COMMIT_INTERVAL_BATCHES = 500;
 constexpr int PROGRESS_REPORT_INTERVAL = 50000;
-constexpr int APPLY_BATCH_SIZE = 199; // 5 cols/row -> stays under SQLite 999 bind limit
+// 6 cols/row (collection_id, collection_uuid, path, name, last_modified,
+// date_added) -> 166*6=996 binds, under SQLite's 999 SQLITE_LIMIT_VARIABLE_NUMBER.
+// Keep this in sync with the column count of the upsert in commitStagedScanResults.
+constexpr int APPLY_BATCH_SIZE = 166;
 } // namespace
 
 // ============================================================================
@@ -509,7 +512,24 @@ bool QueryManager::commitStagedScanResults(const CollectionConfig &collection, c
              "last_modified=excluded.last_modified";
 
       QSqlQuery ins(m_db);
-      ins.prepare(sql);
+      // Check prepare() explicitly: a failed prepare (e.g. SQLite's "too many
+      // SQL variables" when a batch exceeds SQLITE_LIMIT_VARIABLE_NUMBER)
+      // leaves the statement with zero parameters, so the bindValue loop below
+      // would otherwise mask the real cause as a generic "Parameter count
+      // mismatch" at exec(). Surface the true error instead.
+      if (!ins.prepare(sql)) {
+        auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                         "Failed to prepare staged scan upsert",
+                                         "QueryManager::commitStagedScanResults")
+                       .withDetails(QString("rows=%1, binds=%2: %3")
+                                        .arg(paths.size())
+                                        .arg(paths.size() * 6)
+                                        .arg(ins.lastError().text()));
+        ErrorUtils::logError(err);
+        emit errorOccurred(err);
+        upsertOk = false;
+        break;
+      }
       for (int i = 0; i < paths.size(); ++i) {
         ins.addBindValue(legacyId);
         ins.addBindValue(uuid);
