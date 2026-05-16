@@ -483,6 +483,31 @@ void DetailsPane::renderCollectionSummary() {
   // than the per-item view.
   applySidebarFont(m_activeSidebarFontFamily, m_activeSidebarFontPointSize);
 
+  // Collection summaries are short and static — there is no marquee and
+  // on this tab the metadata card is the only content. Left uncapped,
+  // m_metadataScroll's Expanding policy stretches the styled backdrop
+  // bubble to the full sidebar height; on a sparse summary (a not-yet-
+  // scraped subcollection shows just Items + Last scanned) that reads as
+  // an oversized empty card. Cap the scroll area to the rows' real,
+  // wrap-aware height so the bubble hugs the summary and matches a
+  // scraped collection's tighter card. clearDetailsSection lifts the cap
+  // again for the Item tab.
+  if (m_metadataScroll && m_metadataBackdrop) {
+    if (QLayout *inner = m_metadataBackdrop->layout()) {
+      inner->activate();
+    }
+    const int width = m_metadataScroll->viewport() ? m_metadataScroll->viewport()->width() : 0;
+    if (width > 0) {
+      // heightForWidth resolves the wrapped path rows; sizeHint suffices
+      // when no row wraps. Width unknown (pane not yet shown) → leave the
+      // card uncapped rather than risk clipping a row.
+      const int contentHeight = m_metadataBackdrop->hasHeightForWidth()
+                                    ? m_metadataBackdrop->heightForWidth(width)
+                                    : m_metadataBackdrop->sizeHint().height();
+      m_metadataScroll->setMaximumHeight(contentHeight);
+    }
+  }
+
   m_detailsContainer->show();
 }
 
@@ -1207,6 +1232,11 @@ void DetailsPane::clearDetailsSection() {
     if (auto *bar = m_metadataScroll->verticalScrollBar()) {
       bar->setValue(0);
     }
+    // Drop any height cap a previous Collection-tab render applied. The
+    // Item tab's metadata card is meant to fill the leftover space
+    // below the description (the auto-scroller marquees any overflow);
+    // renderCollectionSummary re-applies the cap when it needs it.
+    m_metadataScroll->setMaximumHeight(QWIDGETSIZE_MAX);
   }
   m_metadataAutoScrollPause = 16;
 }

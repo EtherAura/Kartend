@@ -368,6 +368,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   metadata against the parent — so the results never appeared on the
   subcollection items they belonged to. Each scraped item is now routed
   to the subcollection that actually owns it.
+- **The details pane's Collection tab no longer shows an oversized empty
+  backdrop.** The rounded backdrop behind a collection's summary
+  stretched to the full sidebar height — most obvious on a not-yet-
+  scraped subcollection, whose summary is only a couple of rows. The
+  backdrop now hugs the summary content.
 
 ## [0.0.6] - 2026-05-11
 
