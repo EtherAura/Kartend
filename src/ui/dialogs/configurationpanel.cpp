@@ -35,18 +35,28 @@ ConfigurationPanel::ConfigurationPanel(QWidget *parent)
   // Per-field changed() emission. Parent combo + linked-parents + recursive-
   // import are not wired here — the host dialog owns those connections.
   connect(ui->collectionTypeComboBox, &QComboBox::currentTextChanged, this,
-          [this](const QString &) { emit changed(); });
+          [this](const QString &) {
+            autodetectScreenscraperSystem();
+            emit changed();
+          });
   connect(ui->scraperProviderComboBox, &QComboBox::currentIndexChanged, this,
           [this](int) { emit changed(); });
   connect(ui->mediaDirLineEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { emit changed(); });
   connect(ui->fileExtensionsLineEdit, &QLineEdit::textChanged, this,
-          [this](const QString &) { emit changed(); });
+          [this](const QString &) {
+            autodetectScreenscraperSystem();
+            emit changed();
+          });
   connect(ui->expandModeCheckBox, &QCheckBox::toggled, this, [this](bool) { emit changed(); });
   connect(ui->showAllSubcollectionItemsCheckBox, &QCheckBox::toggled, this,
           [this](bool) { emit changed(); });
   connect(ui->screenscraperSystemComboBox, &QComboBox::currentIndexChanged, this,
           [this](int) { emit changed(); });
+  // A hand-pick freezes the type/extension → system autodetect so a
+  // later edit to those fields can't override the deliberate choice.
+  connect(ui->screenscraperSystemComboBox, &QComboBox::activated, this,
+          [this](int) { m_systemManuallySet = true; });
   connect(ui->screenscraperHashArchiveCheckBox, &QCheckBox::toggled, this,
           [this](bool) { emit changed(); });
   // Drag-reorder + row deletion both emit a change. The list-widget
@@ -121,7 +131,11 @@ namespace {
 // know about (e.g. hand-edited stale value, deleted cache file),
 // we add an "(unknown id N)" entry so the user can still see / keep
 // the value rather than having it silently swap to Auto-detect.
-void populateSystemsCombo(QComboBox *combo, QLabel *hintLabel, int currentValue) {
+// Returns the loaded catalog so the caller can keep it for the
+// type/extension-driven autodetect (the combo stores only id +
+// display name, not the aliases autodetect scores against).
+QList<ScreenScraperSystems::System> populateSystemsCombo(QComboBox *combo, QLabel *hintLabel,
+                                                         int currentValue) {
   QSignalBlocker blocker(combo);
   combo->clear();
   combo->addItem(ConfigurationPanel::tr("Auto-detect"), -1);
@@ -157,6 +171,7 @@ void populateSystemsCombo(QComboBox *combo, QLabel *hintLabel, int currentValue)
   }
   if (idx < 0) idx = 0;
   combo->setCurrentIndex(idx);
+  return systems;
 }
 
 } // namespace
@@ -190,12 +205,37 @@ void ConfigurationPanel::load() {
   SettingsFormBinding::loadInto(ui->expandModeCheckBox, config.expandMode);
   SettingsFormBinding::loadInto(ui->showAllSubcollectionItemsCheckBox,
                                 config.showAllSubcollectionItems);
-  populateSystemsCombo(ui->screenscraperSystemComboBox, ui->screenscraperSystemHintLabel,
-                       config.screenscraperSystemId);
+  m_screenscraperSystems = populateSystemsCombo(
+      ui->screenscraperSystemComboBox, ui->screenscraperSystemHintLabel,
+      config.screenscraperSystemId);
+  // A collection that already pins a concrete system counts as
+  // manually set — don't let an autodetect on a later type/extension
+  // edit override the user's explicit choice. Auto-detect (-1) stays
+  // open to autodetect.
+  m_systemManuallySet = config.screenscraperSystemId != -1;
   SettingsFormBinding::loadInto(ui->screenscraperHashArchiveCheckBox,
                                 config.screenscraperHashArchive);
   ui->datFilesListWidget->clear();
   ui->datFilesListWidget->addItems(config.datFilePaths);
+}
+
+void ConfigurationPanel::autodetectScreenscraperSystem() {
+  if (m_systemManuallySet) {
+    return;
+  }
+  if (!m_model || !m_model->workingCollections || !m_model->currentIndex ||
+      *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
+    return;
+  }
+  // The collection name carries the platform tag autodetect scores
+  // against; the editable type + extension fields refine it.
+  const QString name = (*m_model->workingCollections)[*m_model->currentIndex].name;
+  const QStringList extensions =
+      ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text());
+  const int detected = ScreenScraperSystems::autodetect(
+      name, ui->collectionTypeComboBox->currentText(), extensions, m_screenscraperSystems);
+  const int idx = detected > 0 ? ui->screenscraperSystemComboBox->findData(detected) : 0;
+  ui->screenscraperSystemComboBox->setCurrentIndex(idx >= 0 ? idx : 0);
 }
 
 void ConfigurationPanel::clear() {

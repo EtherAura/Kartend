@@ -2,6 +2,9 @@
 #define CONFIGURATIONPANEL_H
 
 #include "collectionutils.h"
+#include "screenscrapersystems.h"
+
+#include <QList>
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -68,8 +71,20 @@ signals:
   void changed();
 
 private:
+  /// Re-point the ScreenScraper system combo at the system autodetect
+  /// resolves from the collection name + type + extensions. No-op once
+  /// the user has picked a system by hand (or the collection already
+  /// pinned a concrete one). Triggered by type / extension edits.
+  void autodetectScreenscraperSystem();
+
   Ui::ConfigurationPanel *ui;
   SettingsModel *m_model = nullptr;
+  /// Set when the loaded collection pins a concrete system, or once
+  /// the user picks one by hand — freezes the autodetect.
+  bool m_systemManuallySet = false;
+  /// SS catalog kept for autodetect (the combo carries only id +
+  /// display name, not the aliases autodetect scores against).
+  QList<ScreenScraperSystems::System> m_screenscraperSystems;
 };
 
 #endif // CONFIGURATIONPANEL_H

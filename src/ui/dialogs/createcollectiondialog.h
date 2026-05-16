@@ -2,7 +2,10 @@
 #define CREATECOLLECTIONDIALOG_H
 
 #include <QDialog>
+#include <QList>
 #include <QString>
+
+#include "screenscrapersystems.h"
 
 QT_BEGIN_NAMESPACE
 class QComboBox;
@@ -61,6 +64,10 @@ private:
   /// Re-point the scraper combo at the default provider for the current
   /// media type. No-op once the user has picked a scraper by hand.
   void syncScraperToType();
+  /// Re-point the ScreenScraper system combo at the system autodetect
+  /// resolves from the collection name + type. No-op once the user has
+  /// picked a system by hand, or for non-game media types.
+  void syncScreenscraperSystemToName();
   /// Show/hide the two conditional rows — ScreenScraper system (game media
   /// types) and libretro core (RetroArch launcher) — resizing the dialog
   /// only when a row actually flips.
@@ -85,6 +92,12 @@ private:
   /// type→scraper auto-association so a deliberate pick survives a later
   /// edit to the media type.
   bool m_scraperManuallySet = false;
+  /// Set once the user picks a ScreenScraper system by hand — freezes
+  /// the name→system autodetect the same way.
+  bool m_screenscraperSystemManuallySet = false;
+  /// SS catalog kept for name-driven autodetect (the combo only stores
+  /// id + display name, not the aliases autodetect scores against).
+  QList<ScreenScraperSystems::System> m_screenscraperSystems;
 };
 
 #endif // CREATECOLLECTIONDIALOG_H

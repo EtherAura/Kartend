@@ -31,15 +31,18 @@ constexpr int DIALOG_MIN_WIDTH = 460;
 // in the on-disk cache (written after the user's first ScreenScraper scrape).
 // A brand-new collection has no system override, so Auto-detect (id -1) is
 // the only selection that needs to exist when the cache is empty.
-void populateScreenscraperSystems(QComboBox *combo) {
+// Returns the catalog it loaded so the caller can keep it for
+// name-driven autodetect (the combo only carries id + display name,
+// not the aliases autodetect scores against).
+QList<ScreenScraperSystems::System> populateScreenscraperSystems(QComboBox *combo) {
   combo->addItem(CreateCollectionDialog::tr("Auto-detect"), -1);
   const QString cachePath = ScreenScraperSystemCache::defaultCachePath();
   if (cachePath.isEmpty()) {
-    return;
+    return {};
   }
   const auto loaded = ScreenScraperSystemCache::loadCachedSystems(cachePath);
   if (!loaded.isOk()) {
-    return;
+    return {};
   }
   QList<ScreenScraperSystems::System> systems = loaded.value();
   // Alphabetical so the dropdown scans linearly — the cache keeps SS's own
@@ -54,6 +57,7 @@ void populateScreenscraperSystems(QComboBox *combo) {
     }
     combo->addItem(sys.displayName, sys.id);
   }
+  return systems;
 }
 } // namespace
 
@@ -160,7 +164,7 @@ void CreateCollectionDialog::buildUi() {
   m_screenscraperSystemCombo->setToolTip(
       tr("ScreenScraper.fr system for this collection. Leave on Auto-detect "
          "unless detection picks the wrong system."));
-  populateScreenscraperSystems(m_screenscraperSystemCombo);
+  m_screenscraperSystems = populateScreenscraperSystems(m_screenscraperSystemCombo);
   m_form->addRow(tr("ScreenScraper System:"), m_screenscraperSystemCombo);
 
   root->addLayout(m_form);
@@ -174,8 +178,12 @@ void CreateCollectionDialog::buildUi() {
   // A collection with no name is meaningless — gate OK on it rather than
   // rejecting after the fact.
   m_okButton->setEnabled(false);
-  connect(m_nameEdit, &QLineEdit::textChanged, this,
-          [this](const QString &text) { m_okButton->setEnabled(!text.trimmed().isEmpty()); });
+  connect(m_nameEdit, &QLineEdit::textChanged, this, [this](const QString &text) {
+    m_okButton->setEnabled(!text.trimmed().isEmpty());
+    // The collection name carries the platform tag autodetect scores
+    // against — re-resolve the ScreenScraper system as the user types.
+    syncScreenscraperSystemToName();
+  });
 
   // Type drives the suggested scraper; a hand-pick on the scraper combo
   // freezes that association (activated fires only on user interaction,
@@ -183,9 +191,14 @@ void CreateCollectionDialog::buildUi() {
   connect(m_typeCombo, &QComboBox::currentTextChanged, this, [this](const QString &) {
     syncScraperToType();
     updateConditionalRows();
+    syncScreenscraperSystemToName();
   });
   connect(m_scraperCombo, &QComboBox::activated, this,
           [this](int) { m_scraperManuallySet = true; });
+  // A hand-pick on the system combo freezes the name→system association,
+  // exactly like the scraper combo above.
+  connect(m_screenscraperSystemCombo, &QComboBox::activated, this,
+          [this](int) { m_screenscraperSystemManuallySet = true; });
   // The core row appears the moment the launcher path becomes a RetroArch
   // executable.
   connect(m_launcherEdit, &QLineEdit::textChanged, this,
@@ -204,6 +217,21 @@ void CreateCollectionDialog::syncScraperToType() {
   const QString id = MetadataProviderRegistry::defaultScraperForType(m_typeCombo->currentText());
   const int idx = id.isEmpty() ? 0 : m_scraperCombo->findData(id);
   m_scraperCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+}
+
+void CreateCollectionDialog::syncScreenscraperSystemToName() {
+  // A hand-pick freezes the association; the system row is only
+  // meaningful for game collections anyway.
+  if (m_screenscraperSystemManuallySet || !isGamesType()) {
+    return;
+  }
+  // Autodetect from the collection name + type. The dialog has no
+  // extensions field yet, so the name's platform tag does the work;
+  // a no-match leaves the combo on "Auto-detect" (index 0).
+  const int detected = ScreenScraperSystems::autodetect(
+      m_nameEdit->text().trimmed(), m_typeCombo->currentText(), {}, m_screenscraperSystems);
+  const int idx = detected > 0 ? m_screenscraperSystemCombo->findData(detected) : 0;
+  m_screenscraperSystemCombo->setCurrentIndex(idx >= 0 ? idx : 0);
 }
 
 bool CreateCollectionDialog::isGamesType() const {

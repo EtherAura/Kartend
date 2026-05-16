@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Auto-detected ScreenScraper system.** The **ScreenScraper
+  System** field now fills itself from the collection's identity
+  instead of needing a manual pick — in the New Collection dialog as
+  you type the name, and on the Settings → Configuration tab when you
+  edit the media type or file extensions. A hand-picked system
+  freezes the choice; "Auto-detect" remains selectable.
 - **Clickable scrape error count.** In the scraper's progress view,
   the **Errors** count is now a link when non-zero — clicking it
   opens a dialog listing the recorded failure messages, so a failed
