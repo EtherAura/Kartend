@@ -59,7 +59,7 @@ Scraper::PendingMediaWrite makeMedia(const QString &type, const QString &label,
 class TestScrapePersistence : public QObject {
   Q_OBJECT
 private slots:
-  void front_writesPrimaryCoverAndPerTypeSubdir();
+  void front_writesCoverIntoTypedSubdirNotFlatRoot();
   void standardType_writesIntoPerTypeSubdir();
   void nonStandardType_writesPerTypeAndSavesItemArtworkRow();
   void emptyBytes_skipsWithFailureCounter();
@@ -70,13 +70,12 @@ private slots:
   void manualAsset_routesToManualDirectoryWithUrlExtension();
   void videoAsset_doesNotCreateItemArtworkRow();
   void videoAsset_defaultsExtensionToMp4WhenUrlHasNoSuffix();
-  void primaryCoverFallback_usesScreenshotWhenNoFrontPresent();
-  void primaryCoverFallback_skippedWhenOnlyLogoPresent();
-  void primaryCoverFallback_prefersBox3dOverScreenshot();
-  void primaryCoverMirror_keepsExistingFrontWhenFrontSkipped();
+  void screenshot_writesIntoTypedSubdirNotFlatRoot();
+  void logo_writesIntoTypedSubdirNotFlatRoot();
+  void multipleCovers_eachWriteIntoOwnTypedSubdir();
 };
 
-void TestScrapePersistence::front_writesPrimaryCoverAndPerTypeSubdir() {
+void TestScrapePersistence::front_writesCoverIntoTypedSubdirNotFlatRoot() {
   QTemporaryDir tmp;
   QVERIFY(tmp.isValid());
   CapturingDb db;
@@ -92,17 +91,15 @@ void TestScrapePersistence::front_writesPrimaryCoverAndPerTypeSubdir() {
 
   QCOMPARE(result.mediaWritten, 1);
   QCOMPARE(result.mediaSkipped, 0);
-  // Primary cover slot — what the grid auto-discovers via
-  // ArtworkUtils::findArtworkForFile.
-  QFile primary(tmp.path() + "/song.png");
-  QVERIFY(primary.exists());
-  QVERIFY(primary.open(QIODevice::ReadOnly));
-  QCOMPARE(primary.readAll(), bytes);
-  // Per-type write lands under "front" — the cross-provider primary-
-  // cover id, now a standard gallery type. Surfaces as the "Front
-  // Cover" entry in the sidebar gallery.
+  // The cover lands once, under the "front" typed subdir — the
+  // cross-provider primary-cover id, a standard gallery type.
   QFile typed(tmp.path() + "/front/song.png");
   QVERIFY(typed.exists());
+  QVERIFY(typed.open(QIODevice::ReadOnly));
+  QCOMPARE(typed.readAll(), bytes);
+  // No redundant copy at the flat artwork root — the grid tile
+  // resolves the cover straight from the typed subdir.
+  QVERIFY(!QFile::exists(tmp.path() + "/song.png"));
   // No item_artwork row needed — "front" is a standard type which
   // the gallery's standard-type iteration auto-discovers.
   QCOMPARE(db.artworkSaves.size(), 0);
@@ -368,12 +365,11 @@ void TestScrapePersistence::videoAsset_defaultsExtensionToMp4WhenUrlHasNoSuffix(
   QVERIFY(!QFile::exists(tmp.path() + "/video/foo.php"));
 }
 
-void TestScrapePersistence::primaryCoverFallback_usesScreenshotWhenNoFrontPresent() {
+void TestScrapePersistence::screenshot_writesIntoTypedSubdirNotFlatRoot() {
   // SS regularly returns games without a `front` (box-2D) asset —
-  // only screenshot / fanart / marquee / etc. The persistence layer
-  // must still populate the flat-root mirror so the grid tile and
-  // details-pane primary preview aren't blank. screenshot is one of
-  // the recognised cover-like fallbacks.
+  // only screenshot / fanart / marquee / etc. Whatever the type, the
+  // asset lands in its typed subdir and nothing is copied to the
+  // flat artwork root; the grid resolver walks the typed subdirs.
   QTemporaryDir tmp;
   QVERIFY(tmp.isValid());
   CapturingDb db;
@@ -388,22 +384,17 @@ void TestScrapePersistence::primaryCoverFallback_usesScreenshotWhenNoFrontPresen
                                 QStringLiteral("foo"), item, media);
 
   QCOMPARE(result.mediaWritten, 1);
-  // Typed copy at the standard location.
-  QVERIFY(QFile::exists(tmp.path() + "/screenshot/foo.png"));
-  // Mirror written from the screenshot bytes — same content, flat
-  // root, so the grid tile + details-pane top preview have something
-  // to display.
-  QFile primary(tmp.path() + "/foo.png");
-  QVERIFY(primary.exists());
-  QVERIFY(primary.open(QIODevice::ReadOnly));
-  QCOMPARE(primary.readAll(), shotBytes);
+  QFile typed(tmp.path() + "/screenshot/foo.png");
+  QVERIFY(typed.exists());
+  QVERIFY(typed.open(QIODevice::ReadOnly));
+  QCOMPARE(typed.readAll(), shotBytes);
+  // No redundant flat-root copy.
+  QVERIFY(!QFile::exists(tmp.path() + "/foo.png"));
 }
 
-void TestScrapePersistence::primaryCoverFallback_skippedWhenOnlyLogoPresent() {
-  // Logos and custom user types aren't cover candidates — they
-  // wouldn't make sense as the primary tile thumbnail. The mirror
-  // is intentionally left empty in those cases rather than picking
-  // a poor fallback.
+void TestScrapePersistence::logo_writesIntoTypedSubdirNotFlatRoot() {
+  // Any image type writes to its own typed subdir; none is copied to
+  // the flat artwork root.
   QTemporaryDir tmp;
   QVERIFY(tmp.isValid());
   CapturingDb db;
@@ -416,16 +407,14 @@ void TestScrapePersistence::primaryCoverFallback_skippedWhenOnlyLogoPresent() {
                                 QStringLiteral("foo"), item, media);
 
   QCOMPARE(result.mediaWritten, 1);
-  // Typed copy present.
   QVERIFY(QFile::exists(tmp.path() + "/logo/foo.png"));
-  // No mirror — logo isn't a cover candidate.
   QVERIFY(!QFile::exists(tmp.path() + "/foo.png"));
 }
 
-void TestScrapePersistence::primaryCoverFallback_prefersBox3dOverScreenshot() {
-  // When multiple cover-like types are present but no "front", the
-  // highest-priority one wins for the mirror. box-3D is preferred
-  // over screenshot.
+void TestScrapePersistence::multipleCovers_eachWriteIntoOwnTypedSubdir() {
+  // Several cover-like assets each land in their own typed subdir.
+  // The persistence layer no longer ranks them or mirrors a "winner"
+  // to the flat root — cover priority is the resolver's job now.
   QTemporaryDir tmp;
   QVERIFY(tmp.isValid());
   CapturingDb db;
@@ -441,58 +430,10 @@ void TestScrapePersistence::primaryCoverFallback_prefersBox3dOverScreenshot() {
                                 QStringLiteral("foo"), item, media);
 
   QCOMPARE(result.mediaWritten, 2);
-  // Mirror picks the box-3D bytes, not screenshot — box-3D has
-  // higher cover-fallback priority. Order in the media list doesn't
-  // matter (the priority table is the tiebreaker).
-  QFile primary(tmp.path() + "/foo.png");
-  QVERIFY(primary.exists());
-  QVERIFY(primary.open(QIODevice::ReadOnly));
-  QCOMPARE(primary.readAll(), boxBytes);
-}
-
-void TestScrapePersistence::primaryCoverMirror_keepsExistingFrontWhenFrontSkipped() {
-  // Regression: in FillMissing/UpdateChanged, a skipped `front` must
-  // still win mirror priority over a freshly-written `box-3d`.
-  // Pre-fix, only the *written* assets contributed to the priority
-  // tracker so box-3d's bytes ended up at the flat-root mirror and
-  // swapped the grid thumbnail.
-  QTemporaryDir tmp;
-  QVERIFY(tmp.isValid());
-  CapturingDb db;
-  Scraper::ScrapedItem item;
-  const QByteArray existingFront("ORIGINAL_FRONT");
-  const QByteArray newFront("REFRESHED_FRONT");
-  const QByteArray newBox3d("BOX3D_BYTES");
-  // Seed an existing front cover + flat-root mirror.
-  QVERIFY(QDir().mkpath(tmp.path() + "/front"));
-  {
-    QFile f(tmp.path() + "/front/foo.png");
-    QVERIFY(f.open(QIODevice::WriteOnly));
-    f.write(existingFront);
-  }
-  {
-    QFile f(tmp.path() + "/foo.png");
-    QVERIFY(f.open(QIODevice::WriteOnly));
-    f.write(existingFront);
-  }
-  const QList<Scraper::PendingMediaWrite> media = {
-      makeMedia(QStringLiteral("front"), QStringLiteral("Front cover"), newFront),
-      makeMedia(QStringLiteral("box-3d"), QStringLiteral("Box (3D)"), newBox3d)};
-
-  const auto result =
-      Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
-                                QStringLiteral("foo"), item, media,
-                                Scraper::RescrapeMode::FillMissing);
-
-  // box-3d was new → written; front existed → skipped.
-  QCOMPARE(result.mediaWritten, 1);
-  QCOMPARE(result.mediaSkipped, 1);
+  QVERIFY(QFile::exists(tmp.path() + "/screenshot/foo.png"));
   QVERIFY(QFile::exists(tmp.path() + "/box-3d/foo.png"));
-
-  // Mirror must still hold the original front bytes — NOT box-3d.
-  QFile primary(tmp.path() + "/foo.png");
-  QVERIFY(primary.open(QIODevice::ReadOnly));
-  QCOMPARE(primary.readAll(), existingFront);
+  // Nothing at the flat root.
+  QVERIFY(!QFile::exists(tmp.path() + "/foo.png"));
 }
 
 QTEST_MAIN(TestScrapePersistence)

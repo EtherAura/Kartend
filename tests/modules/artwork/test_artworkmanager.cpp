@@ -38,6 +38,9 @@ private slots:
   void testCreateProcessedArtwork_nullPixmap();
   void testCreateProcessedArtwork_validPixmap();
   void testFindArtworkForFile_missing();
+  void testFindArtworkForFile_resolvesFromFrontSubdir();
+  void testFindArtworkForFile_fallsBackThroughCoverSubdirs();
+  void testFindArtworkForFile_prefersFrontOverScreenshot();
 
   // Pure cycle algorithm ---------------------------------------
   void testNextArtworkType_emptyAvailable();
@@ -139,6 +142,63 @@ void TestArtworkManager::testFindArtworkForFile_missing() {
   const QString path =
       ArtworkManager::findArtworkForFile("nonexistent.rom", m_tempDir.path());
   QVERIFY(path.isEmpty());
+}
+
+namespace {
+// Write a placeholder artwork file so the resolver's existence probe
+// hits. Returns the full path, or empty on failure.
+QString writeArtworkFile(const QString &dir, const QString &name) {
+  if (!QDir().mkpath(dir)) {
+    return {};
+  }
+  const QString path = QDir(dir).filePath(name);
+  QFile f(path);
+  if (!f.open(QIODevice::WriteOnly)) {
+    return {};
+  }
+  f.write("PNG");
+  f.close();
+  return path;
+}
+} // namespace
+
+void TestArtworkManager::testFindArtworkForFile_resolvesFromFrontSubdir() {
+  // Scrapes write the cover into the `front/` typed subdir and no
+  // longer drop a flat-root copy — the resolver must still find it.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString front = writeArtworkFile(QDir(tmp.path()).filePath(QStringLiteral("front")),
+                                         QStringLiteral("game.png"));
+  QVERIFY(!front.isEmpty());
+  const QString path = ArtworkManager::findArtworkForFile("game.rom", tmp.path());
+  QCOMPARE(path, front);
+}
+
+void TestArtworkManager::testFindArtworkForFile_fallsBackThroughCoverSubdirs() {
+  // No `front` cover — the resolver walks the lower-priority cover
+  // subdirs (box, box-3d, … screenshot) and still finds something.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString shot = writeArtworkFile(QDir(tmp.path()).filePath(QStringLiteral("screenshot")),
+                                        QStringLiteral("game.png"));
+  QVERIFY(!shot.isEmpty());
+  const QString path = ArtworkManager::findArtworkForFile("game.rom", tmp.path());
+  QCOMPARE(path, shot);
+}
+
+void TestArtworkManager::testFindArtworkForFile_prefersFrontOverScreenshot() {
+  // When both a front cover and a screenshot exist, `front` wins —
+  // it is first in the cover-subdir priority order.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString front = writeArtworkFile(QDir(tmp.path()).filePath(QStringLiteral("front")),
+                                         QStringLiteral("game.png"));
+  QVERIFY(!front.isEmpty());
+  QVERIFY(!writeArtworkFile(QDir(tmp.path()).filePath(QStringLiteral("screenshot")),
+                            QStringLiteral("game.png"))
+               .isEmpty());
+  const QString path = ArtworkManager::findArtworkForFile("game.rom", tmp.path());
+  QCOMPARE(path, front);
 }
 
 // ─── Pure cycle algorithm ─────────────────────────────────────

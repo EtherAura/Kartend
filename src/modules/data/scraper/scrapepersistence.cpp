@@ -123,27 +123,6 @@ QString mergeCustomFields(const QString &existingJson, const QHash<QString, QStr
   return QString::fromUtf8(QJsonDocument(merged).toJson(QJsonDocument::Compact));
 }
 
-/// Priority order for picking a fallback primary cover when the
-/// scrape didn't return an explicit "front" asset. The persistence
-/// layer mirrors the highest-ranked written image into the flat
-/// `{artworkDirectory}/{baseName}.<ext>` slot so the grid tile and
-/// the details-pane top preview always have something to show.
-/// Lower = higher priority. Types not in this table never serve as
-/// the primary cover (e.g. logos, custom user types).
-int coverFallbackPriority(const QString &type) {
-  const QString lower = type.toLower();
-  if (lower == QLatin1String("front")) return 0;
-  if (lower == QLatin1String("box")) return 1;
-  if (lower == QLatin1String("box-3d")) return 2;
-  if (lower == QLatin1String("mixrbv1")) return 3;
-  if (lower == QLatin1String("mixrbv2")) return 4;
-  if (lower == QLatin1String("screenshot")) return 5;
-  if (lower == QLatin1String("title")) return 6;
-  if (lower == QLatin1String("fanart")) return 7;
-  if (lower == QLatin1String("marquee")) return 8;
-  return -1; // "not a candidate" sentinel
-}
-
 } // namespace
 
 MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString &baseName,
@@ -189,25 +168,11 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
   //   image → <type>/   (or "box" for the cross-provider "front" tag)
   //   video → video/
   //   manual → manual/
-  // Plus a flat-root mirror at {artworkDirectory}/{baseName}.<ext>
-  // for the "front" primary cover so the grid auto-discovers it.
   // File extensions are inferred from each asset's source URL with
-  // a per-kind whitelist (default png / mp4 / pdf).
-  // Track the best-available cover candidate for the flat-root
-  // mirror so we can fall back when the scrape didn't return an
-  // explicit "front" (e.g. an SS game with only box-3D / mixrbv* /
-  // screenshot art, or a provider that uses a different cover tag).
-  // Lower coverFallbackPriority wins; -1 means "not a candidate".
-  // Tracks the on-disk path of the best-priority cover so the
-  // post-loop mirror can re-read its bytes — works for both
-  // newly-written assets AND ones that evaluateAsset skipped because
-  // the file already existed (FillMissing / UpdateChanged matched
-  // bytes). The skipped case is critical: without it a skipped
-  // `front` lets a freshly-written `box-3d` (priority 2) claim the
-  // mirror and swap the grid thumbnail.
-  int bestMirrorPriority = -1;
-  QString bestMirrorSourcePath;
-  QString bestMirrorExt;
+  // a per-kind whitelist (default png / mp4 / pdf). No copy is made
+  // at the flat artwork root — the grid tile and details-pane preview
+  // resolve the primary cover straight from the typed subdirectories
+  // (see ArtworkUtils::findArtworkForFile).
 
   if (!artworkDirectory.isEmpty() && !baseName.isEmpty()) {
     const QDir artRoot(artworkDirectory);
@@ -226,9 +191,7 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
       // Per-kind subdirectory name under artworkDirectory. "front"
       // is the cross-provider primary-cover tag and is a standard
       // gallery type in its own right — files at `{artwork}/front/`
-      // surface in the sidebar gallery as "Front Cover"; the
-      // primary-cover mirror at the flat root is handled below via
-      // the coverFallbackPriority pass.
+      // surface in the sidebar gallery as "Front Cover".
       QString subdir;
       switch (kind) {
       case MediaKind::Video:
@@ -279,19 +242,6 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
         if (result.firstFailures.size() < MAX_REPORTED_FAILURES) {
           result.firstFailures.append(QStringLiteral("%1: %2").arg(write.asset.type, *reason));
         }
-        // Skipped-because-exists still contributes to the mirror
-        // ranking: the file *is* on disk and a higher-priority cover
-        // must beat any newly-written lower-priority one. Shared-scope
-        // assets are excluded — the per-item mirror keys off baseName,
-        // not group/company keys.
-        if (kind == MediaKind::Image && !sharedScope) {
-          const int prio = coverFallbackPriority(write.asset.type);
-          if (prio >= 0 && (bestMirrorPriority < 0 || prio < bestMirrorPriority)) {
-            bestMirrorPriority = prio;
-            bestMirrorSourcePath = destFile;
-            bestMirrorExt = ext;
-          }
-        }
         continue;
       }
       if (!writeBytesAtomically(destFile, write.bytes)) {
@@ -316,19 +266,6 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
                         << "bytes=" << write.bytes.size() << "->" << destFile;
 
       if (kind == MediaKind::Image) {
-        // Track the best-available cover candidate for the post-loop
-        // mirror write. "front" (priority 0) always wins; anything
-        // with priority -1 (logos, custom user types) is skipped.
-        // Shared-scope images are excluded — see the skip branch above.
-        if (!sharedScope) {
-          const int prio = coverFallbackPriority(write.asset.type);
-          if (prio >= 0 && (bestMirrorPriority < 0 || prio < bestMirrorPriority)) {
-            bestMirrorPriority = prio;
-            bestMirrorSourcePath = destFile;
-            bestMirrorExt = ext;
-          }
-        }
-
         // Non-standard typed artwork (e.g. MusicBrainz "back") needs
         // an item_artwork row pointing at the file; otherwise the
         // sidebar gallery's standard-type discovery skips it.
@@ -344,41 +281,6 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
       // Video / Manual: no item_artwork row. The details pane's
       // video preview and manual button discover the file by
       // basename under {artworkDirectory}/video|manual/.
-    }
-
-    // Write the flat-root primary-cover mirror once, picking the
-    // best-priority image we saw above. "front" always wins; when
-    // it isn't present, box → box-3D → mixrbv* → screenshot etc.
-    // provide a sensible fallback so the grid tile and details-pane
-    // top preview are never blank after a successful scrape. Bytes
-    // come from the on-disk source so a skipped-because-exists cover
-    // still mirrors correctly without re-downloading.
-    if (bestMirrorPriority >= 0 && !bestMirrorSourcePath.isEmpty()) {
-      QFile src(bestMirrorSourcePath);
-      QByteArray mirrorBytes;
-      if (src.open(QIODevice::ReadOnly)) {
-        mirrorBytes = src.readAll();
-      }
-      if (!mirrorBytes.isEmpty()) {
-        const QString primary = artRoot.filePath(baseName + QLatin1Char('.') + bestMirrorExt);
-        // Same re-scrape gate as per-asset writes above. The flat-root
-        // mirror is a derivative of the cover, so it follows the same
-        // policy — FillMissing keeps an existing mirror file even if
-        // the user re-scrapes with a different cover; Overwrite always
-        // refreshes it.
-        const auto mirrorReason = evaluateAsset(primary, mirrorBytes);
-        if (!mirrorReason.has_value()) {
-          writeBytesAtomically(primary, mirrorBytes);
-          qCDebug(lcScrape) << "wrote primary-cover mirror prio=" << bestMirrorPriority << "from"
-                            << bestMirrorSourcePath << "->" << primary;
-        } else {
-          qCDebug(lcScrape) << "skipped primary-cover mirror:" << *mirrorReason;
-        }
-      } else {
-        qCDebug(lcScrape) << "primary-cover mirror source unreadable:" << bestMirrorSourcePath;
-      }
-    } else {
-      qCDebug(lcScrape) << "no primary-cover mirror written; mediaCount=" << media.size();
     }
   }
 

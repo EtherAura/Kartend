@@ -34,9 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Artwork folder configured — scrape auto-creates the per-kind
   subdirectories underneath as needed: `front/` (primary cover),
   `box/`, `screenshot/`, `title/`, `marquee/`, `fanart/`, `logo/`,
-  plus `video/` and `manual/` for non-image media. The primary cover
-  also mirrors to the artwork root (`{Artwork}/{baseName}.<ext>`)
-  for the grid tile. `front` is now a recognised standard artwork
+  plus `video/` and `manual/` for non-image media. The grid tile and
+  details-pane preview resolve an item's cover straight from these
+  typed subdirectories — no duplicate copy is kept at the artwork
+  root. `front` is now a recognised standard artwork
   type (sidebar gallery surfaces it as **Front Cover**) alongside the
   pre-existing `box` slot, so scraped covers and hand-curated box art
   can coexist per-item. The per-collection Artwork tab loses the
@@ -154,14 +155,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{artwork}/front/{base}.<ext>` and surfaces in the sidebar gallery
   as **Front Cover** — the cross-provider `"front"` tag (SS, MB,
   TMDB, Open Library all normalise their cover to it) is now a
-  first-class standard artwork type. The flat-root mirror at
-  `{artwork}/{base}.<ext>` (which the grid tile and details-pane
-  primary preview auto-discover) is populated by a priority-ranked
-  fallback: front → box → box-3D → mixrbv1/2 → screenshot → title →
-  fanart → marquee. So even when ScreenScraper has only screenshots
-  / fanart / box-3D for a game (and no `box-2D`/`front` cover), the
-  grid still gets a meaningful primary thumbnail instead of the
-  placeholder.
+  first-class standard artwork type. The grid tile and details-pane
+  primary preview resolve the cover by walking the typed subdirs in
+  priority order: front → box → box-3D → mixrbv1/2 → screenshot →
+  title → fanart → marquee. So even when ScreenScraper has only
+  screenshots / fanart / box-3D for a game (and no `box-2D`/`front`
+  cover), the grid still gets a meaningful primary thumbnail instead
+  of the placeholder — and no duplicate cover file is written to the
+  artwork root.
 - The details-pane primary preview tile (artwork QLabel + video
   preview widget) was anchored to the left of the sidebar because
   the .ui declared a fixed 200×200 size but no layout-item
@@ -238,10 +239,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   limit. No credentials required. Applying the scrape persists
   everything to disk: each accepted media variant writes to
   `{artworkDirectory}/{type}/{basename}.png` (per-type subdir
-  auto-discovered by the sidebar gallery), the front cover
-  additionally mirrors to the primary slot at
-  `{artworkDirectory}/{basename}.png` so the grid tile updates
-  immediately, and non-standard types (e.g. MusicBrainz "back")
+  auto-discovered by the sidebar gallery and by the grid tile, which
+  resolves the cover straight from those subdirs), and non-standard
+  types (e.g. MusicBrainz "back")
   get an `item_artwork` row pointing at the file so the gallery
   surfaces them. Scraped metadata fields land on the per-item
   typed columns (title / publisher / release date / genre / etc.);

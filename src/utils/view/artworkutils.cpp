@@ -12,6 +12,24 @@
 
 namespace ArtworkUtils {
 
+namespace {
+/// Subdirectories under the artwork root that can supply an item's
+/// primary cover, in display-priority order. The scrape pipeline
+/// writes each media type into its own `{artwork}/<type>/` subdir and
+/// no longer drops a copy at the flat root, so the grid tile and the
+/// details-pane preview resolve the cover by walking these in order.
+/// `front` is the canonical cover; the rest are sensible fallbacks
+/// for items ScreenScraper has no dedicated front cover for.
+const QStringList &coverSubdirPriority() {
+  static const QStringList kDirs = {
+      QStringLiteral("front"),   QStringLiteral("box"),     QStringLiteral("box-3d"),
+      QStringLiteral("mixrbv1"), QStringLiteral("mixrbv2"), QStringLiteral("screenshot"),
+      QStringLiteral("title"),   QStringLiteral("fanart"),  QStringLiteral("marquee"),
+  };
+  return kDirs;
+}
+} // namespace
+
 // Singleton instance
 DirectoryCache &DirectoryCache::instance() {
   static DirectoryCache cache;
@@ -148,11 +166,30 @@ void DirectoryCache::prewarmDirectories(const QStringList &directories) {
   // This dramatically speeds up OS dentry cache warmup for large directory
   // counts.
 
+  // Each artwork root is expanded with its typed cover subdirs
+  // (`front/`, `box/`, …): scrapes write the cover into those rather
+  // than the flat root, so findArtworkForFileCached resolves it from
+  // there — prewarming them avoids a cold-start round of blank tiles.
+  QStringList expanded;
+  expanded.reserve(directories.size() * 2);
+  for (const QString &dir : directories) {
+    if (dir.isEmpty()) {
+      continue;
+    }
+    expanded.append(dir);
+    const QDir root(dir);
+    for (const QString &subdir : coverSubdirPriority()) {
+      if (root.exists(subdir)) {
+        expanded.append(root.absoluteFilePath(subdir));
+      }
+    }
+  }
+
   // Filter out empty directories and already-cached ones
   QStringList toProcess;
   {
     QMutexLocker locker(&m_mutex);
-    for (const QString &dir : directories) {
+    for (const QString &dir : expanded) {
       if (!dir.isEmpty() && !m_cache.contains(dir)) {
         toProcess.append(dir);
       }
@@ -252,9 +289,10 @@ QString findArtworkForFile(const QString &fileName, const QString &artworkDirect
   const QString fullName = QFileInfo(fileName).fileName();
   const QStringList &bases = ExtensionUtils::imageBaseExtensions();
 
-  // Try baseName first, then fullName, at the flat artwork root (the
-  // scrape mirror writes to `{artwork}/{base}.<ext>` for the grid
-  // tile path).
+  // Try baseName first, then fullName, at the flat artwork root.
+  // Scrapes no longer write a flat-root copy, but a user may still
+  // drop a cover there by hand, and pre-existing libraries keep the
+  // old mirror files — so the flat root stays the first lookup.
   QString result = searchWithName(artworkDir, baseName, bases);
   if (!result.isEmpty()) {
     return result;
@@ -263,18 +301,20 @@ QString findArtworkForFile(const QString &fileName, const QString &artworkDirect
   if (!result.isEmpty()) {
     return result;
   }
-  // Fallback: scan `{artwork}/front/` for a cover with the same
-  // basename. Lets a user drop hand-curated cover art into the
-  // gallery's "Front Cover" subdir and have the grid tile pick it
-  // up too, without forcing them to also copy the file to the
-  // flat root.
-  QDir frontDir(artworkDir.absoluteFilePath(QStringLiteral("front")));
-  if (frontDir.exists()) {
-    result = searchWithName(frontDir, baseName, bases);
+  // Fallback: walk the typed cover subdirs in priority order
+  // (`front` → box → box-3d → … ). This is where scrapes now put
+  // the cover, and it also lets hand-dropped gallery art surface on
+  // the grid tile.
+  for (const QString &subdir : coverSubdirPriority()) {
+    QDir coverDir(artworkDir.absoluteFilePath(subdir));
+    if (!coverDir.exists()) {
+      continue;
+    }
+    result = searchWithName(coverDir, baseName, bases);
     if (!result.isEmpty()) {
       return result;
     }
-    result = searchWithName(frontDir, fullName, bases);
+    result = searchWithName(coverDir, fullName, bases);
     if (!result.isEmpty()) {
       return result;
     }
@@ -308,7 +348,9 @@ ErrorUtils::Result<QString> tryFindArtworkForFile(const QString &fileName,
   const QString fullName = QFileInfo(fileName).fileName();
   const QStringList &bases = ExtensionUtils::imageBaseExtensions();
 
-  // Try baseName first, then fullName
+  // Try baseName first, then fullName, at the flat root, then walk
+  // the typed cover subdirs (`front` → box → … ) where scrapes now
+  // write the cover.
   QString result = searchWithName(artworkDir, baseName, bases);
   if (!result.isEmpty()) {
     return result;
@@ -316,6 +358,20 @@ ErrorUtils::Result<QString> tryFindArtworkForFile(const QString &fileName,
   result = searchWithName(artworkDir, fullName, bases);
   if (!result.isEmpty()) {
     return result;
+  }
+  for (const QString &subdir : coverSubdirPriority()) {
+    QDir coverDir(artworkDir.absoluteFilePath(subdir));
+    if (!coverDir.exists()) {
+      continue;
+    }
+    result = searchWithName(coverDir, baseName, bases);
+    if (!result.isEmpty()) {
+      return result;
+    }
+    result = searchWithName(coverDir, fullName, bases);
+    if (!result.isEmpty()) {
+      return result;
+    }
   }
 
   return ErrorContext::info(ErrorCode::FileNotFound, "No matching artwork found",
@@ -352,17 +408,22 @@ QString findArtworkForFileCached(const QString &fileName, const QString &artwork
     }
   }
 
-  // Fall back to the `{artwork}/front/` subdir so hand-dropped
-  // cover art there shows up in the grid alongside the gallery.
-  // Goes through the same DirectoryCache so the lookup stays
-  // cheap on repeat hits.
-  const QString frontDir = QDir(artworkDirectory).absoluteFilePath(QStringLiteral("front"));
-  result = DirectoryCache::instance().findInDirectory(baseName, frontDir);
-  if (!result.isEmpty()) {
-    return result;
-  }
-  if (fullName != baseName) {
-    result = DirectoryCache::instance().findInDirectory(fullName, frontDir);
+  // Fall back to the typed cover subdirs in priority order
+  // (`front` → box → box-3d → … ) — scrapes write the cover there
+  // rather than at the flat root. Each subdir goes through the same
+  // DirectoryCache so repeat hits stay cheap.
+  for (const QString &subdir : coverSubdirPriority()) {
+    const QString coverDir = QDir(artworkDirectory).absoluteFilePath(subdir);
+    result = DirectoryCache::instance().findInDirectory(baseName, coverDir);
+    if (!result.isEmpty()) {
+      return result;
+    }
+    if (fullName != baseName) {
+      result = DirectoryCache::instance().findInDirectory(fullName, coverDir);
+      if (!result.isEmpty()) {
+        return result;
+      }
+    }
   }
 
   if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE") && perfTimer.elapsed() > 2) {
