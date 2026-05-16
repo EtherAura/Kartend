@@ -56,7 +56,7 @@ bool WheelEventHandler::eventBelongsToSidebar() const {
 
 bool WheelEventHandler::canProceed() const {
   return m_itemScrollArea && m_stackedWidget &&
-         CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections) &&
+         CollectionUtils::isInteractiveViewIndex(m_currentCollectionIndex, m_collections) &&
          m_stackedWidget->currentWidget() == m_itemsPage;
 }
 
@@ -152,7 +152,15 @@ bool WheelEventHandler::handleEvent(QObject * /*obj*/, QEvent *event) {
   }
 
   auto *wheelEvent = static_cast<QWheelEvent *>(event);
-  const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
+  // canProceed() now also admits the synthetic home view (index -1), which
+  // has no backing collection. Fall back to a default-constructed config
+  // (ViewType::Grid) so the root tile grid still scrolls; a real collection
+  // is read only when the index is valid.
+  CollectionConfig fallbackCollection;
+  const CollectionConfig &collection =
+      CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)
+          ? (*m_collections)[*m_currentCollectionIndex]
+          : fallbackCollection;
   // Horizontal view flips the scroll axis. The "wheel notch advances by one
   // column" UX is preserved — vertical wheel motion drives column-major
   // selection movement.
@@ -256,11 +264,18 @@ QList<int> WheelEventHandler::getSubcollections(int parentIndex) const {
 
 bool WheelEventHandler::applySelectionDelta(int wheelSteps) {
   if (wheelSteps == 0 || !scrollMgr() ||
-      !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+      !CollectionUtils::isInteractiveViewIndex(m_currentCollectionIndex, m_collections)) {
     return false;
   }
 
-  const CollectionConfig &collection = (*m_collections)[*m_currentCollectionIndex];
+  // The home view (index -1) has no backing collection; fall back to a
+  // default-constructed config (ViewType::Grid) so the tile grid still
+  // scrolls. A real collection is read only when the index is valid.
+  CollectionConfig fallbackCollection;
+  const CollectionConfig &collection =
+      CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)
+          ? (*m_collections)[*m_currentCollectionIndex]
+          : fallbackCollection;
   // The per-column step in Horizontal mode is the *effective*
   // items-per-column from the live metrics (which already honor
   // horizontalGridHeight's fallback to gridWidth). Reading

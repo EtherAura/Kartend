@@ -629,8 +629,7 @@ struct CollectionConfig {
            playlistReservedKind == other.playlistReservedKind &&
            screenscraperSystemId == other.screenscraperSystemId &&
            screenscraperHashArchive == other.screenscraperHashArchive &&
-           datFilePaths == other.datFilePaths &&
-           scraperProviderId == other.scraperProviderId &&
+           datFilePaths == other.datFilePaths && scraperProviderId == other.scraperProviderId &&
            additionalParentNames == other.additionalParentNames;
   }
 
@@ -759,6 +758,18 @@ namespace CollectionUtils {
 [[nodiscard]] inline bool isValidIndex(const int *indexPtr,
                                        const QList<CollectionConfig> *collections) {
   return indexPtr && isValidIndex(*indexPtr, collections);
+}
+
+/// True when the index points at a real collection OR the synthetic
+/// root / home view (index -1). The home view renders the root
+/// collections as tiles but has no backing collection; input handlers
+/// gate on this (instead of isValidIndex) so it still accepts keyboard
+/// + mouse interaction. Callers that then read a per-collection
+/// property must still guard that access with isValidIndex — only the
+/// outer "is this an interactive view" gate is widened.
+[[nodiscard]] inline bool isInteractiveViewIndex(const int *indexPtr,
+                                                 const QList<CollectionConfig> *collections) {
+  return isValidIndex(indexPtr, collections) || (indexPtr && *indexPtr == -1);
 }
 
 /// Validates index against collection reference (no null check needed)

@@ -276,7 +276,7 @@ ItemWidget *SelectionManager::widgetForIndex(int index) const {
 }
 
 bool SelectionManager::shouldTreatAsNewRow(int targetIndex, int gridWidth) const {
-  if (!CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+  if (!CollectionUtils::isInteractiveViewIndex(m_currentCollectionIndex, m_collections)) {
     return false;
   }
   return SelectionHelpers::shouldTreatAsNewRow(targetIndex, m_lastSelectedRow, gridWidth);
@@ -304,7 +304,7 @@ int SelectionManager::getCurrentGridWidth() const {
 void SelectionManager::selectItemByIndex(int index, bool allowHorizontalScroll) {
   Q_UNUSED(allowHorizontalScroll);
   if (!scrollMgr() || !m_itemScrollArea ||
-      !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+      !CollectionUtils::isInteractiveViewIndex(m_currentCollectionIndex, m_collections)) {
     return;
   }
 
@@ -365,7 +365,8 @@ void SelectionManager::selectItemByIndex(int index, bool allowHorizontalScroll) 
 }
 
 void SelectionManager::selectItemByHover(int index) {
-  if (!scrollMgr() || !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+  if (!scrollMgr() ||
+      !CollectionUtils::isInteractiveViewIndex(m_currentCollectionIndex, m_collections)) {
     return;
   }
 

@@ -40,6 +40,13 @@ private slots:
   void isValidIndex_nullIndexPointer();
   void isValidIndex_validIndexPointer();
 
+  // isInteractiveViewIndex (valid collection OR synthetic home view, index -1)
+  void isInteractiveViewIndex_validIndex();
+  void isInteractiveViewIndex_rootView();
+  void isInteractiveViewIndex_otherNegativeRejected();
+  void isInteractiveViewIndex_outOfBoundsRejected();
+  void isInteractiveViewIndex_nullPointers();
+
   // computeCollectionUuid
   void computeCollectionUuid_deterministic();
   void computeCollectionUuid_caseInsensitive();
@@ -247,6 +254,51 @@ void TestCollectionUtils::isValidIndex_validIndexPointer() {
   QVERIFY(CollectionUtils::isValidIndex(&idx, &list));
   idx = 5;
   QVERIFY(!CollectionUtils::isValidIndex(&idx, &list));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// isInteractiveViewIndex
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestCollectionUtils::isInteractiveViewIndex_validIndex() {
+  QList<CollectionConfig> list;
+  list.append(CollectionConfig{});
+  int idx = 0;
+  QVERIFY(CollectionUtils::isInteractiveViewIndex(&idx, &list));
+}
+
+void TestCollectionUtils::isInteractiveViewIndex_rootView() {
+  // Index -1 is the synthetic home/root view — interactive even though it is
+  // not a valid collection index, and even when no collections exist.
+  QList<CollectionConfig> list;
+  list.append(CollectionConfig{});
+  int idx = -1;
+  QVERIFY(CollectionUtils::isInteractiveViewIndex(&idx, &list));
+  QList<CollectionConfig> empty;
+  QVERIFY(CollectionUtils::isInteractiveViewIndex(&idx, &empty));
+}
+
+void TestCollectionUtils::isInteractiveViewIndex_otherNegativeRejected() {
+  // Only -1 is the home view; any other negative is rejected.
+  QList<CollectionConfig> list;
+  list.append(CollectionConfig{});
+  int idx = -2;
+  QVERIFY(!CollectionUtils::isInteractiveViewIndex(&idx, &list));
+}
+
+void TestCollectionUtils::isInteractiveViewIndex_outOfBoundsRejected() {
+  QList<CollectionConfig> list;
+  list.append(CollectionConfig{});
+  int idx = 5;
+  QVERIFY(!CollectionUtils::isInteractiveViewIndex(&idx, &list));
+}
+
+void TestCollectionUtils::isInteractiveViewIndex_nullPointers() {
+  QList<CollectionConfig> list;
+  list.append(CollectionConfig{});
+  int idx = 0;
+  QVERIFY(!CollectionUtils::isInteractiveViewIndex(static_cast<int *>(nullptr), &list));
+  QVERIFY(!CollectionUtils::isInteractiveViewIndex(&idx, nullptr));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -634,9 +686,9 @@ void TestCollectionUtils::collectAllCollectionTypes_skipsEmpty() {
 
 void TestCollectionUtils::standardCollectionTypes_areTheCuratedPresets() {
   const QStringList presets = CollectionUtils::standardCollectionTypes();
-  QCOMPARE(presets, (QStringList{QStringLiteral("Video"), QStringLiteral("Audio"),
-                                 QStringLiteral("Images"), QStringLiteral("Documents"),
-                                 QStringLiteral("Games")}));
+  QCOMPARE(presets,
+           (QStringList{QStringLiteral("Video"), QStringLiteral("Audio"), QStringLiteral("Images"),
+                        QStringLiteral("Documents"), QStringLiteral("Games")}));
 }
 
 void TestCollectionUtils::collectionTypeChoices_blankThenPresetsThenInUse() {

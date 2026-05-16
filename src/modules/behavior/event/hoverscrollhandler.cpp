@@ -81,7 +81,7 @@ bool HoverScrollHandler::handleEvent(QObject *obj, QEvent *event, bool isRestori
     clearPendingScroll();
     return false;
   }
-  if (!CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+  if (!CollectionUtils::isInteractiveViewIndex(m_currentCollectionIndex, m_collections)) {
     clearPendingScroll();
     return false;
   }
@@ -241,7 +241,7 @@ void HoverScrollHandler::pollCursorForContinue() {
       m_stackedWidget->currentWidget() != m_itemsPage) {
     return;
   }
-  if (!CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+  if (!CollectionUtils::isInteractiveViewIndex(m_currentCollectionIndex, m_collections)) {
     return;
   }
   // Don't re-arm if a new hover scroll was already staged (e.g. by mouse move)

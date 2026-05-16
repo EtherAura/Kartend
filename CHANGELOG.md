@@ -385,6 +385,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rejected.** Clearing a collection's name inline in the tree used to
   leave a nameless "ghost" row with nowhere valid to save; the rename
   now reverts to the previous name.
+- **Mouse and keyboard work in the Home view again.** Selecting,
+  activating, and scrolling collection tiles in the synthetic Home view
+  did nothing — the input handlers treated it as "no collection
+  selected" and dropped every click and keypress. They now recognise the
+  Home view as an interactive view.
 
 ## [0.0.6] - 2026-05-11
 

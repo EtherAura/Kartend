@@ -44,7 +44,8 @@ void ArrowNavigationHandler::setupReferences(const ArrowNavigationHandlerSetup &
 }
 
 void ArrowNavigationHandler::handleArrowKeyNavigation(int direction, bool vertical) {
-  if (!scrollMgr() || !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+  if (!scrollMgr() ||
+      !CollectionUtils::isInteractiveViewIndex(m_currentCollectionIndex, m_collections)) {
     return;
   }
 
@@ -170,7 +171,7 @@ void ArrowNavigationHandler::handleRepeatStep() {
     return;
   }
 
-  if (!CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+  if (!CollectionUtils::isInteractiveViewIndex(m_currentCollectionIndex, m_collections)) {
     if (keyboardMgr()) {
       keyboardMgr()->stopRepeat();
     }

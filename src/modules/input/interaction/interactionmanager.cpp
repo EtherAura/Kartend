@@ -343,7 +343,7 @@ void InteractionManager::applyImmediateViewportPositioningForSelection(int targe
 void InteractionManager::selectItemByIndex(int index, bool allowHorizontalScroll) {
   Q_UNUSED(allowHorizontalScroll);
   if (!scrollMgr() || !m_itemScrollArea ||
-      !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+      !CollectionUtils::isInteractiveViewIndex(m_currentCollectionIndex, m_collections)) {
     return;
   }
 
