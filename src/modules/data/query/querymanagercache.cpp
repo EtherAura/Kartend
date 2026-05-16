@@ -399,11 +399,17 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
 
   // Apply sort order based on sortMode. No GROUP BY anymore, so reference
   // the per-row columns directly instead of MIN/MAX aggregates.
+  //
+  // Name sorts order by the `name` column, not `path`: items.path is absolute,
+  // so a path sort groups items by their owning (sub)collection's directory.
+  // When a shell collection aggregates several subcollections that surfaces as
+  // a collection-then-name order instead of a flat name order. Ordering by
+  // `name` also matches the slow-path QueryHelpers::orderByForSortMode.
   const bool isRandomSort = (sortMode == SortMode::Random);
   if (!isRandomSort) {
     switch (sortMode) {
     case SortMode::NameDescending:
-      sql += " ORDER BY path COLLATE NOCASE DESC";
+      sql += " ORDER BY name COLLATE NOCASE DESC";
       break;
     case SortMode::DateDescending:
       sql += " ORDER BY i.last_modified DESC, path COLLATE NOCASE";
@@ -424,7 +430,7 @@ bool QueryManager::populateSortedItemsCache(const QStringList &uuids, const QStr
       sql += " ORDER BY c.name COLLATE NOCASE DESC, path COLLATE NOCASE";
       break;
     default:
-      sql += " ORDER BY path COLLATE NOCASE";
+      sql += " ORDER BY name COLLATE NOCASE";
       break;
     }
   }

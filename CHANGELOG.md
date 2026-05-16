@@ -110,6 +110,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- In the Home view, entering a shell collection that gathers items
+  from several subcollections sorted those items by subcollection and
+  then by name. With a Name sort selected they now sort by name alone,
+  as a single flat list.
 - After a scrape (single-item or batch) the sidebar Details pane
   used to keep showing the item's pre-scrape state until you clicked
   another item and back. The post-apply path now refreshes the
