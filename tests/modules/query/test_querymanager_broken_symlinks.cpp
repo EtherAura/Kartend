@@ -29,8 +29,7 @@ private slots:
   void brokenSymlinkSurvivesScan();
 };
 
-template <typename Func>
-class ScopeExit {
+template <typename Func> class ScopeExit {
 public:
   explicit ScopeExit(Func &&func) : m_func(std::forward<Func>(func)) {}
   ~ScopeExit() { m_func(); }
@@ -42,8 +41,7 @@ private:
   Func m_func;
 };
 
-template <typename Func>
-auto makeScopeExit(Func &&func) -> ScopeExit<Func> {
+template <typename Func> auto makeScopeExit(Func &&func) -> ScopeExit<Func> {
   return ScopeExit<Func>(std::forward<Func>(func));
 }
 
@@ -150,15 +148,28 @@ void TestQueryManagerBrokenSymlinks::brokenSymlinkSurvivesScan() {
   QVERIFY2(scanCompletedSpy.wait(10'000), "Timed out waiting for collectionScanCompleted");
 
   QSqlQuery q(inspectDb);
-  q.prepare(QStringLiteral("SELECT path FROM items WHERE collection_uuid = ? ORDER BY path"));
+  q.prepare(QStringLiteral(
+      "SELECT path, rel_path FROM items WHERE collection_uuid = ? ORDER BY rel_path"));
   q.addBindValue(uuid);
   QVERIFY(q.exec());
 
-  QStringList persistedPaths;
+  // Since the v13 path-convention change, items.path holds the ABSOLUTE path
+  // and items.rel_path holds the media-dir-relative form.
+  QStringList persistedAbsPaths;
+  QStringList persistedRelPaths;
   while (q.next()) {
-    persistedPaths.append(q.value(0).toString());
+    persistedAbsPaths.append(q.value(0).toString());
+    persistedRelPaths.append(q.value(1).toString());
   }
-  QCOMPARE(persistedPaths, (QStringList{QStringLiteral("broken.bin"), QStringLiteral("real.bin")}));
+  QCOMPARE(persistedRelPaths,
+           (QStringList{QStringLiteral("broken.bin"), QStringLiteral("real.bin")}));
+
+  const QDir media(mediaDir.path());
+  QCOMPARE(persistedAbsPaths, (QStringList{media.absoluteFilePath(QStringLiteral("broken.bin")),
+                                           media.absoluteFilePath(QStringLiteral("real.bin"))}));
+  for (const QString &absPath : persistedAbsPaths) {
+    QVERIFY2(QDir::isAbsolutePath(absPath), qPrintable("items.path must be absolute: " + absPath));
+  }
 }
 
 QTEST_MAIN(TestQueryManagerBrokenSymlinks)

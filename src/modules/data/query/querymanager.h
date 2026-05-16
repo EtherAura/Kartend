@@ -235,7 +235,17 @@ private:
                                                      const QString &uuid,
                                                      const QString &extSignature, int &legacyIdOut);
   void insertItemsBatch(int legacyId, const QString &uuid, const QStringList &paths,
-                        const QHash<QString, QDateTime> &timestamps);
+                        const QHash<QString, QDateTime> &timestamps, const QString &mediaRoot);
+
+  // One-time reconcile for the v13 path-convention change: existing items
+  // rows hold a media-dir-relative `path` and a NULL `rel_path`. This
+  // rewrites `path` to the ABSOLUTE form and backfills `rel_path` with the
+  // relative form, preserving every other column (date_added, rating, usage
+  // stats, id). Gated by the meta flag `items_paths_absolutized`; runs as a
+  // cheap no-op once every non-playlist collection has been processed. Must
+  // run before any scan so the absolute-vs-absolute join in
+  // deleteMissingItemsByUuidUsingScannedItems stays consistent.
+  void maybeAbsolutizeItemPaths(const QList<CollectionConfig> &allCollections);
 
   [[nodiscard]] bool ensureScannedItemsTempTable();
   void clearScannedItemsTempTable();

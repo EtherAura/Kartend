@@ -47,6 +47,13 @@ void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollecti
     return;
   }
 
+  // v13 path-convention reconcile: rewrite any pre-v13 relative items.path
+  // rows to absolute (and backfill rel_path) BEFORE the per-collection loop
+  // can trigger a scan — the absolute-vs-absolute join in
+  // deleteMissingItemsByUuidUsingScannedItems depends on it. Gated by a meta
+  // flag, so this is a cheap no-op after it has completed once.
+  maybeAbsolutizeItemPaths(allCollections);
+
   QStringList allFilePaths;
   QHash<QString, QString> allFileNames;
   QHash<QString, QString> fileToArtworkDir;

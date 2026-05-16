@@ -373,6 +373,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stretched to the full sidebar height — most obvious on a not-yet-
   scraped subcollection, whose summary is only a couple of rows. The
   backdrop now hugs the summary content.
+- **The File menu's Recently / Most launched lists populate, and
+  play-time tracking works.** Launch counts and timestamps were written
+  against absolute file paths, but the library stored each item's path
+  relative to its collection's media folder — so the update matched no
+  row and `play_count` / `last_played` / play-time stayed empty. Item
+  paths are now stored absolutely (a one-time pass upgrades existing
+  libraries); this also restores the Statistics dialog and the sidebar's
+  per-item usage stats.
 
 ## [0.0.6] - 2026-05-11
 

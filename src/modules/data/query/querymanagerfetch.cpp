@@ -148,11 +148,15 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
     }
   }
 
-  // Apply subfolder filtering when browsing subfolders
+  // Apply subfolder filtering when browsing subfolders.
+  // Subfolder predicates key on rel_path (the media-dir-relative form) — with
+  // items.path now absolute, a "no slash" test on path would never match a
+  // root-level item. COALESCE(rel_path, path) is a defensive fallback for any
+  // row left with a NULL rel_path before the v13 reconcile runs.
   const QString &subfolder = ctx.config.currentSubfolder;
   if (!subfolder.isEmpty()) {
-    // In a subfolder - show only items whose path starts with subfolder/
-    sql += " AND path LIKE ?";
+    // In a subfolder - show only items whose rel_path starts with subfolder/
+    sql += " AND COALESCE(rel_path, path) LIKE ?";
   } else if (ctx.config.includeContentSubfolders && !ctx.config.showAllSubfolderItems &&
              trimmedFilter.isEmpty()) {
     // At root with subfolders enabled but NOT showing all items, we normally
@@ -160,7 +164,7 @@ int QueryManager::fetchItemCountImpl(const CollectionContext &context,
     //
     // When a search filter is active, include subfolder items so search can
     // find matches even in \"virtual folders only\" collections.
-    sql += " AND path NOT LIKE '%/%'";
+    sql += " AND COALESCE(rel_path, path) NOT LIKE '%/%'";
   }
   // If showAllSubfolderItems is true, we don't filter - all items are shown
   // mixed together
@@ -278,6 +282,12 @@ void QueryManager::ensureScannedForContext(const CollectionContext &context,
   // worker's WAL snapshot may be stale, causing needsRescan to return false
   // because it still sees old collection data that was just deleted.
   refreshWalView();
+
+  // v13 path-convention reconcile: must run before any scan so the
+  // absolute-vs-absolute join in deleteMissingItemsByUuidUsingScannedItems
+  // stays consistent. The meta-flag gate makes this a cheap no-op once the
+  // reconcile (typically done first in loadAllCollections) has completed.
+  maybeAbsolutizeItemPaths(allCollections);
 
   if (!context.isValid()) {
     auto err =

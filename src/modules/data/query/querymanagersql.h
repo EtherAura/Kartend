@@ -18,9 +18,16 @@ constexpr const char *ITEMS_MODIFIED_COUNT =
 constexpr const char *ITEMS_COUNT_BY_UUID = "SELECT COUNT(*) FROM items WHERE collection_uuid = ?";
 constexpr const char *DELETE_ITEMS_BY_UUID = "DELETE FROM items WHERE collection_uuid = ?";
 constexpr const char *DELETE_COLLECTION_BY_UUID = "DELETE FROM collections WHERE uuid = ?";
+// Returns the media-dir-relative path (rel_path) so the C++-side subfolder
+// filters in loadItems / loadItemsWithSubcollections keep working: items.path
+// is absolute since v13, but the scan branch of loadOrScanCollection still
+// yields relative paths, so the cached branch must match. COALESCE falls back
+// to path for any row not yet touched by the v13 reconcile.
+// appendFileMapsAndListCanonical re-absolutizes via QDir::absoluteFilePath, so
+// a relative value here resolves correctly.
 constexpr const char *LOAD_ITEMS_BY_UUID =
-    "SELECT DISTINCT path FROM items WHERE collection_uuid = ? ORDER BY name "
-    "COLLATE NOCASE";
+    "SELECT DISTINCT COALESCE(rel_path, path) FROM items WHERE collection_uuid "
+    "= ? ORDER BY name COLLATE NOCASE";
 constexpr const char *UPDATE_COLLECTION_SCAN_METADATA =
     "UPDATE collections SET last_scanned = ?, dir_signature = ? WHERE uuid = ?";
 

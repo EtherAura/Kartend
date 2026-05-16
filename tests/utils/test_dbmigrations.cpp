@@ -18,8 +18,7 @@ auto openMemoryDb(const QString &connName) -> QSqlDatabase {
   auto db = QSqlDatabase::addDatabase("QSQLITE", connName);
   db.setDatabaseName(":memory:");
   if (!db.open()) {
-    qWarning("Failed to open in-memory db: %s",
-             qPrintable(db.lastError().text()));
+    qWarning("Failed to open in-memory db: %s", qPrintable(db.lastError().text()));
   }
   return db;
 }
@@ -54,8 +53,7 @@ auto getUserVersion(QSqlDatabase &db) -> int {
   return -1;
 }
 
-auto tableHasColumn(QSqlDatabase &db, const QString &table,
-                    const QString &column) -> bool {
+auto tableHasColumn(QSqlDatabase &db, const QString &table, const QString &column) -> bool {
   QSqlQuery q(db);
   if (!q.exec(QString("PRAGMA table_info(%1)").arg(table))) {
     return false;
@@ -106,6 +104,7 @@ private slots:
   void v11AddsSmartPlaylistColumns();
   void v12AddsDateAddedColumn();
   void v12LeavesExistingRowsAsUnknownDate();
+  void v13AddsRelPathColumn();
   void preservesExistingDataAcrossUpgrade();
 };
 
@@ -125,8 +124,8 @@ void TestDbMigrations::appliesToCurrentVersion() {
 
   QCOMPARE(getUserVersion(db), 0);
   DbMigrations::applySchemaMigrations(db, "test");
-  // Current schema version is 12 (per dbmigrations.cpp).
-  QCOMPARE(getUserVersion(db), 12);
+  // Current schema version is 13 (per dbmigrations.cpp).
+  QCOMPARE(getUserVersion(db), 13);
 
   closeAndRemove(db, conn);
 }
@@ -252,7 +251,7 @@ void TestDbMigrations::v3AddsMetaTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 12);
+  QCOMPARE(getUserVersion(db), 13);
 
   // If FTS5 is available, the meta table should also exist.
   if (tableExists(db, "items_fts")) {
@@ -268,7 +267,7 @@ void TestDbMigrations::v4AddsFileSizeColumnAndIndex() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 12);
+  QCOMPARE(getUserVersion(db), 13);
   QVERIFY(tableHasColumn(db, "items", "file_size"));
   QVERIFY(indexExists(db, "idx_items_uuid_file_size"));
 
@@ -281,7 +280,7 @@ void TestDbMigrations::v5AddsItemMetadataTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 12);
+  QCOMPARE(getUserVersion(db), 13);
   QVERIFY(tableExists(db, "item_metadata"));
   // Required scraper-facing columns and feature-reserved columns.
   QVERIFY(tableHasColumn(db, "item_metadata", "collection_uuid"));
@@ -297,9 +296,8 @@ void TestDbMigrations::v5AddsItemMetadataTable() {
   QSqlQuery q(db);
   QVERIFY(q.exec("INSERT INTO item_metadata (collection_uuid, path, updated_at) "
                  "VALUES ('u1', '/m/1', '2026-01-01')"));
-  const bool dupAccepted =
-      q.exec("INSERT INTO item_metadata (collection_uuid, path, updated_at) "
-             "VALUES ('u1', '/m/1', '2026-01-02')");
+  const bool dupAccepted = q.exec("INSERT INTO item_metadata (collection_uuid, path, updated_at) "
+                                  "VALUES ('u1', '/m/1', '2026-01-02')");
   QVERIFY(!dupAccepted);
 
   closeAndRemove(db, conn);
@@ -311,7 +309,7 @@ void TestDbMigrations::v6AddsItemArtworkTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 12);
+  QCOMPARE(getUserVersion(db), 13);
   QVERIFY(tableExists(db, "item_artwork"));
   QVERIFY(tableHasColumn(db, "item_artwork", "collection_uuid"));
   QVERIFY(tableHasColumn(db, "item_artwork", "path"));
@@ -345,7 +343,7 @@ void TestDbMigrations::v7AddsUsageStatsColumnAndIndexes() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 12);
+  QCOMPARE(getUserVersion(db), 13);
   // Cumulative play-time column added in v7.
   QVERIFY(tableHasColumn(db, "items", "total_play_seconds"));
   // Indexes used by the Most-played / Recently-played dialog tabs.
@@ -361,7 +359,7 @@ void TestDbMigrations::v8AddsLauncherIndexColumn() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 12);
+  QCOMPARE(getUserVersion(db), 13);
   // Per-item launcher override column added in v8.
   QVERIFY(tableHasColumn(db, "item_metadata", "launcher_index"));
 
@@ -374,7 +372,7 @@ void TestDbMigrations::v9AddsLaunchHistoryTable() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 12);
+  QCOMPARE(getUserVersion(db), 13);
   // Append-only history table added in v9.
   QVERIFY(tableExists(db, "launch_history"));
   QVERIFY(tableHasColumn(db, "launch_history", "id"));
@@ -409,7 +407,7 @@ void TestDbMigrations::v10AddsPlaylistTables() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 12);
+  QCOMPARE(getUserVersion(db), 13);
   QVERIFY(tableExists(db, "playlists"));
   QVERIFY(tableHasColumn(db, "playlists", "id"));
   QVERIFY(tableHasColumn(db, "playlists", "name"));
@@ -441,7 +439,7 @@ void TestDbMigrations::v12AddsDateAddedColumn() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 12);
+  QCOMPARE(getUserVersion(db), 13);
   QVERIFY(tableHasColumn(db, "items", "date_added"));
   QVERIFY(indexExists(db, "idx_items_date_added"));
 
@@ -473,6 +471,36 @@ void TestDbMigrations::v12LeavesExistingRowsAsUnknownDate() {
   closeAndRemove(db, conn);
 }
 
+void TestDbMigrations::v13AddsRelPathColumn() {
+  // v13 adds items.rel_path (the media-dir-relative path) so items.path can
+  // store the ABSOLUTE path app-wide. The migration is purely additive — it
+  // only adds the column; QueryManager::maybeAbsolutizeItemPaths rewrites
+  // existing rows on the next load. Existing rows must survive the ALTER
+  // TABLE with rel_path defaulting to NULL.
+  const QString conn = "test_v13_rel_path";
+  auto db = openMemoryDb(conn);
+  createBaseSchema(db);
+
+  QSqlQuery insert(db);
+  QVERIFY(insert.exec("INSERT INTO items (name, path, last_modified) "
+                      "VALUES ('Existing', 'sub/clip.mp4', '2020-01-01T00:00:00Z')"));
+
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  QCOMPARE(getUserVersion(db), 13);
+  QVERIFY(tableHasColumn(db, "items", "rel_path"));
+
+  // The pre-existing row survives and its rel_path defaults to NULL — the
+  // reconcile (not this migration) is what backfills it.
+  QSqlQuery sel(db);
+  QVERIFY(sel.exec("SELECT path, rel_path FROM items WHERE name = 'Existing'"));
+  QVERIFY(sel.next());
+  QCOMPARE(sel.value(0).toString(), QStringLiteral("sub/clip.mp4"));
+  QVERIFY(sel.value(1).isNull());
+
+  closeAndRemove(db, conn);
+}
+
 void TestDbMigrations::v11AddsSmartPlaylistColumns() {
   // is_smart + smart_filter columns added in v11. Both must be additive
   // so existing v10 playlist rows survive the upgrade with default
@@ -482,7 +510,7 @@ void TestDbMigrations::v11AddsSmartPlaylistColumns() {
   createBaseSchema(db);
   DbMigrations::applySchemaMigrations(db, "test");
 
-  QCOMPARE(getUserVersion(db), 12);
+  QCOMPARE(getUserVersion(db), 13);
   QVERIFY(tableHasColumn(db, "playlists", "is_smart"));
   QVERIFY(tableHasColumn(db, "playlists", "smart_filter"));
 

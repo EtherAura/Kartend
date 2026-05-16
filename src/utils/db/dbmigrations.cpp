@@ -111,7 +111,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 12;
+  constexpr int CURRENT_SCHEMA_VERSION = 13;
   const int version = getUserVersion(db);
   if (version >= CURRENT_SCHEMA_VERSION) {
     return;
@@ -480,6 +480,29 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
                 origin, "idx_items_date_added");
 
     setUserVersion(db, 12);
+    mutableVersion = 12;
+  }
+
+  if (mutableVersion < 13) {
+    // v13: items.path now stores the ABSOLUTE path. Every other consumer
+    // (the grid, item_metadata/item_artwork, the launch + usage-stats
+    // code) already keys on absolute paths; the scanner alone stored
+    // media-dir-relative paths, so UsageStatsStore's `WHERE path = ?`
+    // never matched a launch's absolute path and play_count/last_played
+    // were never recorded.
+    //
+    // rel_path keeps the media-dir-relative form, which the subfolder /
+    // virtual-folder queries still need (a root-level item has no slash
+    // in rel_path; a nested one is `subdir/.../file`).
+    //
+    // This migration only adds the column. Existing rows still hold a
+    // relative `path`; QueryManager::maybeAbsolutizeItemPaths rewrites
+    // them in place (and backfills rel_path) on the next load — it runs
+    // there, not here, because the relative→absolute rewrite needs each
+    // collection's media directory, which lives in kartend.cfg rather
+    // than the database. A meta flag (items_paths_absolutized) gates it.
+    ensureColumn(db, "items", "rel_path", "TEXT", origin);
+    setUserVersion(db, 13);
   }
 }
 

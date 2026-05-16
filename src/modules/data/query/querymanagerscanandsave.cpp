@@ -68,10 +68,11 @@ namespace {
 constexpr int BATCH_SIZE = 199;
 constexpr int COMMIT_INTERVAL_BATCHES = 500;
 constexpr int PROGRESS_REPORT_INTERVAL = 50000;
-// 6 cols/row (collection_id, collection_uuid, path, name, last_modified,
-// date_added) -> 166*6=996 binds, under SQLite's 999 SQLITE_LIMIT_VARIABLE_NUMBER.
-// Keep this in sync with the column count of the upsert in commitStagedScanResults.
-constexpr int APPLY_BATCH_SIZE = 166;
+// 7 cols/row (collection_id, collection_uuid, path, rel_path, name,
+// last_modified, date_added) -> 142*7=994 binds, under SQLite's 999
+// SQLITE_LIMIT_VARIABLE_NUMBER. Keep this in sync with the column count of the
+// upsert in commitStagedScanResults.
+constexpr int APPLY_BATCH_SIZE = 142;
 } // namespace
 
 // ============================================================================
@@ -455,7 +456,7 @@ bool QueryManager::commitStagedScanResults(const CollectionConfig &collection, c
       }
 
       QSqlQuery sel(m_db);
-      sel.prepare("SELECT rowid, path, name, last_modified FROM scanned_items "
+      sel.prepare("SELECT rowid, path, rel_path, name, last_modified FROM scanned_items "
                   "WHERE rowid > ? ORDER BY rowid LIMIT ?");
       sel.addBindValue(lastRowId);
       sel.addBindValue(APPLY_BATCH_SIZE);
@@ -471,9 +472,11 @@ bool QueryManager::commitStagedScanResults(const CollectionConfig &collection, c
       }
 
       QStringList paths;
+      QStringList relPaths;
       QStringList names;
       QStringList lastModified;
       paths.reserve(APPLY_BATCH_SIZE);
+      relPaths.reserve(APPLY_BATCH_SIZE);
       names.reserve(APPLY_BATCH_SIZE);
       lastModified.reserve(APPLY_BATCH_SIZE);
 
@@ -482,8 +485,9 @@ bool QueryManager::commitStagedScanResults(const CollectionConfig &collection, c
         const qint64 rowId = sel.value(0).toLongLong();
         batchMaxRowId = std::max(batchMaxRowId, rowId);
         paths.append(sel.value(1).toString());
-        names.append(sel.value(2).toString());
-        lastModified.append(sel.value(3).toString());
+        relPaths.append(sel.value(2).toString());
+        names.append(sel.value(3).toString());
+        lastModified.append(sel.value(4).toString());
       }
 
       if (paths.isEmpty()) {
@@ -499,15 +503,16 @@ bool QueryManager::commitStagedScanResults(const CollectionConfig &collection, c
       const qint64 nowEpochSec = QDateTime::currentSecsSinceEpoch();
 
       QString sql = "INSERT INTO items (collection_id, collection_uuid, path, "
-                    "name, last_modified, date_added) VALUES ";
+                    "rel_path, name, last_modified, date_added) VALUES ";
       QStringList valueSets;
       valueSets.reserve(paths.size());
       for (int i = 0; i < paths.size(); ++i) {
-        valueSets.append("(?, ?, ?, ?, ?, ?)");
+        valueSets.append("(?, ?, ?, ?, ?, ?, ?)");
       }
       sql += valueSets.join(", ");
       sql += " ON CONFLICT(collection_uuid, path) DO UPDATE SET "
              "collection_id=excluded.collection_id, "
+             "rel_path=excluded.rel_path, "
              "name=excluded.name, "
              "last_modified=excluded.last_modified";
 
@@ -523,7 +528,7 @@ bool QueryManager::commitStagedScanResults(const CollectionConfig &collection, c
                                          "QueryManager::commitStagedScanResults")
                        .withDetails(QString("rows=%1, binds=%2: %3")
                                         .arg(paths.size())
-                                        .arg(paths.size() * 6)
+                                        .arg(paths.size() * 7)
                                         .arg(ins.lastError().text()));
         ErrorUtils::logError(err);
         emit errorOccurred(err);
@@ -534,6 +539,7 @@ bool QueryManager::commitStagedScanResults(const CollectionConfig &collection, c
         ins.addBindValue(legacyId);
         ins.addBindValue(uuid);
         ins.addBindValue(paths[i]);
+        ins.addBindValue(relPaths[i]);
         ins.addBindValue(names[i]);
         ins.addBindValue(lastModified[i]);
         ins.addBindValue(nowEpochSec);

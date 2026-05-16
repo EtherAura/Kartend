@@ -38,6 +38,7 @@
 
 #include "collectionutils.h"
 #include "errorutils.h"
+#include "pathutils.h"
 #include "querymanagerhelpers.h"
 #include "querymanagersql.h"
 #include "uiconstants.h"
@@ -113,7 +114,8 @@ bool QueryManager::ensureCollectionScanned(int collectionIndex,
 }
 
 void QueryManager::insertItemsBatch(int legacyId, const QString &uuid, const QStringList &paths,
-                                    const QHash<QString, QDateTime> &timestamps) {
+                                    const QHash<QString, QDateTime> &timestamps,
+                                    const QString &mediaRoot) {
   if (paths.isEmpty()) {
     return;
   }
@@ -122,26 +124,33 @@ void QueryManager::insertItemsBatch(int legacyId, const QString &uuid, const QSt
   // IMPORTANT: preserve user state fields
   // (play_count/last_played/rating/artwork_path). We only update name +
   // last_modified (and collection_id) when a row already exists.
+  // path stores the ABSOLUTE filesystem path; rel_path stores the
+  // media-dir-relative form (see dbmigrations.cpp v13).
   QString sql = "INSERT INTO items (collection_id, collection_uuid, "
-                "path, name, last_modified, file_size) VALUES ";
+                "path, rel_path, name, last_modified, file_size) VALUES ";
   QStringList valueSets;
   valueSets.reserve(paths.size());
   for (int i = 0; i < paths.size(); ++i) {
-    valueSets.append("(?, ?, ?, ?, ?, ?)");
+    valueSets.append("(?, ?, ?, ?, ?, ?, ?)");
   }
   sql += valueSets.join(", ");
   sql += " ON CONFLICT(collection_uuid, path) DO UPDATE SET "
          "collection_id=excluded.collection_id, "
+         "rel_path=excluded.rel_path, "
          "name=excluded.name, "
          "last_modified=excluded.last_modified, "
          "file_size=excluded.file_size";
 
   QSqlQuery ins(m_db);
   ins.prepare(sql);
+  const QDir mediaDir(mediaRoot);
   for (const QString &filePath : paths) {
-    const QFileInfo info(filePath);
+    const QString absolutePath =
+        QDir::isAbsolutePath(filePath) ? filePath : mediaDir.absoluteFilePath(filePath);
+    const QFileInfo info(absolutePath);
     ins.addBindValue(legacyId);
     ins.addBindValue(uuid);
+    ins.addBindValue(absolutePath);
     ins.addBindValue(filePath);
     ins.addBindValue(QFileInfo(filePath).completeBaseName());
     ins.addBindValue(timestamps.value(filePath).toString(Qt::ISODate));
@@ -156,13 +165,167 @@ void QueryManager::insertItemsBatch(int legacyId, const QString &uuid, const QSt
   }
 }
 
+void QueryManager::maybeAbsolutizeItemPaths(const QList<CollectionConfig> &allCollections) {
+  if (!m_db.isOpen()) {
+    return;
+  }
+
+  // Gate: the v13 reconcile only needs to run once. Seed the flag at '0' if
+  // it doesn't exist yet, then bail immediately if a prior run completed.
+  {
+    QSqlQuery seed(m_db);
+    if (!seed.exec("INSERT OR IGNORE INTO meta(key, value) "
+                   "VALUES('items_paths_absolutized', '0')")) {
+      // meta table may not exist on a very old DB that never reached the v3
+      // migration; nothing to reconcile in that case either.
+      return;
+    }
+  }
+  {
+    QSqlQuery check(m_db);
+    if (check.exec("SELECT value FROM meta WHERE key = 'items_paths_absolutized'") &&
+        check.next() && check.value(0).toString() == QStringLiteral("1")) {
+      return;
+    }
+  }
+
+  if (!m_db.transaction()) {
+    auto err = ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
+                                     "Failed to start transaction to absolutize item paths",
+                                     "QueryManager::maybeAbsolutizeItemPaths")
+                   .withDetails(m_db.lastError().text());
+    ErrorUtils::logError(err);
+    return;
+  }
+
+  bool allCollectionsProcessed = true;
+  bool reconcileFailed = false;
+
+  for (const CollectionConfig &cfg : allCollections) {
+    // Playlists are virtual collections — they own no items rows of their
+    // own, so there is nothing to rewrite (and no media directory to use).
+    if (cfg.isPlaylist) {
+      continue;
+    }
+
+    // Compute the expanded media dir + uuid IDENTICALLY to every other call
+    // site (loadAllCollections, computeCollectionUuid, the scanner).
+    const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+    if (expandedMediaDir.trimmed().isEmpty()) {
+      // Media directory unresolved (e.g. an offline mount). Skip this
+      // collection and remember the run is incomplete so the next startup
+      // retries it.
+      allCollectionsProcessed = false;
+      continue;
+    }
+    const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+    if (uuid.isEmpty()) {
+      allCollectionsProcessed = false;
+      continue;
+    }
+
+    QSqlQuery rows(m_db);
+    rows.prepare("SELECT id, path, rel_path FROM items WHERE collection_uuid = ?");
+    rows.addBindValue(uuid);
+    if (!rows.exec()) {
+      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                       "Failed to read items for path absolutization",
+                                       "QueryManager::maybeAbsolutizeItemPaths")
+                     .withDetails(rows.lastError().text());
+      ErrorUtils::logError(err);
+      reconcileFailed = true;
+      break;
+    }
+
+    const QDir mediaDir(expandedMediaDir);
+
+    struct PendingUpdate {
+      qint64 id = 0;
+      QString path;
+      QString relPath;
+    };
+    QList<PendingUpdate> updates;
+    while (rows.next()) {
+      const qint64 id = rows.value(0).toLongLong();
+      const QString storedPath = rows.value(1).toString();
+      const QVariant relPathValue = rows.value(2);
+
+      if (!QDir::isAbsolutePath(storedPath)) {
+        // Pre-v13 row: path is relative. Rewrite to absolute and stash the
+        // original relative form into rel_path.
+        updates.append({id, mediaDir.absoluteFilePath(storedPath), storedPath});
+      } else if (relPathValue.isNull() || relPathValue.toString().isEmpty()) {
+        // Path is already absolute (written by a post-v13 scan, or a prior
+        // partial reconcile) but rel_path was never populated — backfill it.
+        updates.append({id, storedPath, mediaDir.relativeFilePath(storedPath)});
+      }
+      // else: already fully migrated, nothing to do.
+    }
+
+    QSqlQuery update(m_db);
+    update.prepare("UPDATE items SET path = ?, rel_path = ? WHERE id = ?");
+    for (const PendingUpdate &u : updates) {
+      update.bindValue(0, u.path);
+      update.bindValue(1, u.relPath);
+      update.bindValue(2, u.id);
+      if (!update.exec()) {
+        auto err =
+            ErrorContext::warning(ErrorCode::DatabaseQueryFailed, "Failed to absolutize item path",
+                                  "QueryManager::maybeAbsolutizeItemPaths")
+                .withDetails(update.lastError().text());
+        ErrorUtils::logError(err);
+        reconcileFailed = true;
+        break;
+      }
+    }
+    if (reconcileFailed) {
+      break;
+    }
+  }
+
+  if (reconcileFailed) {
+    m_db.rollback();
+    return;
+  }
+
+  // Only flip the flag to '1' when EVERY non-playlist collection was
+  // processed. If any was skipped (offline mount), leave it '0' so the next
+  // startup retries — the per-row guards above make the retry idempotent.
+  if (allCollectionsProcessed) {
+    QSqlQuery mark(m_db);
+    mark.prepare("UPDATE meta SET value = '1' WHERE key = 'items_paths_absolutized'");
+    if (!mark.exec()) {
+      auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                       "Failed to mark item paths as absolutized",
+                                       "QueryManager::maybeAbsolutizeItemPaths")
+                     .withDetails(mark.lastError().text());
+      ErrorUtils::logError(err);
+      m_db.rollback();
+      return;
+    }
+  }
+
+  if (!m_db.commit()) {
+    auto err = ErrorContext::warning(ErrorCode::DatabaseTransactionFailed,
+                                     "Failed to commit item path absolutization",
+                                     "QueryManager::maybeAbsolutizeItemPaths")
+                   .withDetails(m_db.lastError().text());
+    ErrorUtils::logError(err);
+    m_db.rollback();
+  }
+}
+
 bool QueryManager::ensureScannedItemsTempTable() {
   if (!m_db.isOpen()) {
     return false;
   }
   QSqlQuery q(m_db);
+  // path holds the ABSOLUTE filesystem path (the PK / upsert key); rel_path
+  // holds the media-dir-relative form that subfolder / virtual-folder queries
+  // need. See dbmigrations.cpp v13 for the items-table counterpart.
   if (!q.exec("CREATE TEMP TABLE IF NOT EXISTS scanned_items ("
               "path TEXT PRIMARY KEY, "
+              "rel_path TEXT, "
               "name TEXT, "
               "last_modified TEXT, "
               "file_size INTEGER DEFAULT 0"
@@ -195,13 +358,16 @@ void QueryManager::insertScannedItemsBatch(const QStringList &paths,
     return;
   }
 
-  // 4 columns per row -> keep under SQLite 999 variable limit.
-  QString sql = "INSERT OR REPLACE INTO scanned_items (path, name, "
+  // 5 columns per row -> keep under SQLite 999 variable limit.
+  // path stores the ABSOLUTE filesystem path (the upsert key shared with
+  // items.path); rel_path stores the original media-dir-relative path that
+  // subfolder / virtual-folder queries still need.
+  QString sql = "INSERT OR REPLACE INTO scanned_items (path, rel_path, name, "
                 "last_modified, file_size) VALUES ";
   QStringList valueSets;
   valueSets.reserve(paths.size());
   for (int i = 0; i < paths.size(); ++i) {
-    valueSets.append("(?, ?, ?, ?)");
+    valueSets.append("(?, ?, ?, ?, ?)");
   }
   sql += valueSets.join(", ");
 
@@ -211,6 +377,7 @@ void QueryManager::insertScannedItemsBatch(const QStringList &paths,
   for (const QString &p : paths) {
     const QString absolutePath = QDir::isAbsolutePath(p) ? p : mediaDir.absoluteFilePath(p);
     const QFileInfo absoluteInfo(absolutePath);
+    ins.addBindValue(absolutePath);
     ins.addBindValue(p);
     ins.addBindValue(QFileInfo(p).completeBaseName());
     ins.addBindValue(timestamps.value(p).toString(Qt::ISODate));
@@ -230,14 +397,27 @@ bool QueryManager::applyScannedItemsToDatabase(int legacyId, const QString &coll
   }
 
   QSqlQuery upsert(m_db);
-  upsert.prepare("INSERT INTO items (collection_id, collection_uuid, path, "
-                 "name, last_modified, file_size) "
-                 "SELECT ?, ?, path, name, last_modified, file_size FROM scanned_items "
-                 "ON CONFLICT(collection_uuid, path) DO UPDATE SET "
-                 "collection_id=excluded.collection_id, "
-                 "name=excluded.name, "
-                 "last_modified=excluded.last_modified, "
-                 "file_size=excluded.file_size");
+  // The trailing "WHERE true" disambiguates the grammar: without it SQLite
+  // parses "FROM scanned_items ON CONFLICT ..." as the start of a JOIN ... ON
+  // and rejects the upsert with a "near DO: syntax error". This is the
+  // documented workaround for an INSERT ... SELECT ... ON CONFLICT statement.
+  if (!upsert.prepare(
+          "INSERT INTO items (collection_id, collection_uuid, path, "
+          "rel_path, name, last_modified, file_size) "
+          "SELECT ?, ?, path, rel_path, name, last_modified, file_size FROM scanned_items "
+          "WHERE true "
+          "ON CONFLICT(collection_uuid, path) DO UPDATE SET "
+          "collection_id=excluded.collection_id, "
+          "rel_path=excluded.rel_path, "
+          "name=excluded.name, "
+          "last_modified=excluded.last_modified, "
+          "file_size=excluded.file_size")) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to prepare scanned_items upsert",
+                                               "QueryManager::applyScannedItemsToDatabase")
+                             .withDetails(upsert.lastError().text()));
+    return false;
+  }
   upsert.addBindValue(legacyId);
   upsert.addBindValue(collectionUuid);
   if (!upsert.exec()) {

@@ -439,6 +439,55 @@ target_link_libraries(test_querymanager_broken_symlinks
 )
 add_test(NAME QueryManagerBrokenSymlinks COMMAND test_querymanager_broken_symlinks)
 
+# Regression test: items.path stores the ABSOLUTE path and items.rel_path the
+# media-dir-relative form (Kartend-4te3); the v13 reconcile rewrites pre-v13
+# relative-path rows in place. Reuses the same query-stack source list as
+# QueryManagerBrokenSymlinks.
+add_executable(test_querymanager_abspath
+  modules/query/test_querymanager_abspath.cpp
+  ${SRC_DIR}/modules/data/query/preparedstatementcache.cpp
+  ${SRC_DIR}/modules/data/query/scanworkcontroller.cpp
+  ${SRC_DIR}/modules/data/query/querymanager.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerstatichelpers.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerlifecycle.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerfetchrange.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerscan.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerpersist.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerscanandsave.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerconnection.cpp
+  ${SRC_DIR}/modules/data/query/querymanagercache.cpp
+  ${SRC_DIR}/utils/db/smartfilter.cpp
+  ${SRC_DIR}/utils/db/smartplaylistevaluator.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerload.cpp
+  ${SRC_DIR}/modules/data/query/querymanagerfetch.cpp
+  ${SRC_DIR}/modules/data/query/queryhelpers.cpp
+  ${SRC_DIR}/modules/data/session/sessionmanager.cpp
+  ${SRC_DIR}/utils/app/collectionutils.cpp
+  ${SRC_DIR}/utils/app/settingsutils.cpp
+  ${SRC_DIR}/utils/fs/pathutils.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/app/loggingcategories.cpp
+)
+target_include_directories(test_querymanager_abspath PRIVATE
+  ${SRC_DIR}/modules/data/query
+  ${SRC_DIR}/modules/data/session
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui
+)
+target_link_libraries(test_querymanager_abspath
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Concurrent
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME QueryManagerAbsPath COMMAND test_querymanager_abspath)
+
 # Regression test: same-named files across collections count separately
 # under queryIncludeAllCollections / showAllSubcollectionItems (Kartend-oyi2).
 # Reuses the same query-stack source list as QueryManagerCancelScan.
