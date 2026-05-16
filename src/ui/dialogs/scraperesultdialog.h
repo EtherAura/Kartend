@@ -194,6 +194,9 @@ private slots:
   void onCollectionCheckChanged(QTreeWidgetItem *item, int column);
   void onItemCheckChanged(QListWidgetItem *item);
   void onScrapeClicked();
+  /// Opens a dialog listing the recorded scrape failure messages.
+  /// Wired to the clickable error count in the unified counts label.
+  void showScrapeErrorDetails();
 
 private:
   enum class Mode { SingleItem, Batch, Unified };

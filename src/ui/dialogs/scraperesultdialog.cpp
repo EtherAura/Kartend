@@ -1075,6 +1075,13 @@ void ScrapeResultDialog::buildUnifiedPanel() {
 
   m_unifiedCountsLabel = new QLabel(m_unifiedPage);
   m_unifiedCountsLabel->hide();
+  // The error count is rendered as a link when non-zero; rich text
+  // is needed for the anchor. Clicking it opens the failure list.
+  m_unifiedCountsLabel->setTextFormat(Qt::RichText);
+  m_unifiedCountsLabel->setTextInteractionFlags(Qt::LinksAccessibleByMouse |
+                                                Qt::LinksAccessibleByKeyboard);
+  connect(m_unifiedCountsLabel, &QLabel::linkActivated, this,
+          [this](const QString &) { showScrapeErrorDetails(); });
   root->addWidget(m_unifiedCountsLabel);
 }
 
@@ -1917,11 +1924,46 @@ void ScrapeResultDialog::updateUnifiedProgressLabel() {
                                     .arg(formatDuration(elapsedMs), etaStr, rateStr));
   int mediaWritten = 0;
   if (m_service) mediaWritten = m_service->summary().mediaWritten;
+  // Render the error count as a clickable link when there are errors,
+  // so the user can open the recorded failure messages. Substituted
+  // into the %4 slot rather than baked into the tr() string so the
+  // translatable text stays markup-free.
+  const QString errorsField =
+      errors > 0
+          ? QStringLiteral("<a href=\"kartend:scrape-errors\">%1</a>").arg(errors)
+          : QString::number(errors);
   m_unifiedCountsLabel->setText(tr("Scraped %1 items, %2 media  ·  Skipped %3  ·  Errors %4")
-                                    .arg(scraped)
-                                    .arg(mediaWritten)
-                                    .arg(skipped)
-                                    .arg(errors));
+                                    .arg(QString::number(scraped), QString::number(mediaWritten),
+                                         QString::number(skipped), errorsField));
+}
+
+void ScrapeResultDialog::showScrapeErrorDetails() {
+  // Gather failure messages from both the service summary (live /
+  // service-driven runs) and the in-dialog accumulator (the fallback
+  // orchestration path); dedupe so a message recorded by both isn't
+  // listed twice.
+  QStringList failures = m_unifiedFailures;
+  if (m_service) {
+    for (const QString &failure : m_service->summary().firstFailures) {
+      if (!failures.contains(failure)) {
+        failures.append(failure);
+      }
+    }
+  }
+
+  QMessageBox box(this);
+  box.setIcon(QMessageBox::Warning);
+  box.setWindowTitle(tr("Scrape errors"));
+  if (failures.isEmpty()) {
+    // The error counter advanced but no message was captured (the
+    // failure-message lists are capped per collection).
+    box.setText(tr("No further error detail was recorded for this scrape."));
+  } else {
+    box.setText(tr("The scrape reported the following errors:"));
+    box.setInformativeText(failures.join(QLatin1Char('\n')));
+  }
+  box.setStandardButtons(QMessageBox::Close);
+  box.exec();
 }
 
 void ScrapeResultDialog::onScrapeClicked() {

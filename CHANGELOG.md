@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Clickable scrape error count.** In the scraper's progress view,
+  the **Errors** count is now a link when non-zero — clicking it
+  opens a dialog listing the recorded failure messages, so a failed
+  scrape can be diagnosed without digging through logs.
 - **Scrape metadata sidecar.** A scrape now writes a human-readable
   JSON file at `{Artwork}/metadata/{baseName}.json` next to the
   downloaded art — the scraped title, description, genre, developer,
