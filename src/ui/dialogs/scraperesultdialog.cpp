@@ -1458,32 +1458,65 @@ void ScrapeResultDialog::onCollectionTreeCurrentChanged(QTreeWidgetItem *current
   rebuildItemsList(idx);
 }
 
+void ScrapeResultDialog::applyCollectionCheckState(int collectionIndex, bool checked) {
+  if (collectionIndex < 0) return;
+  if (checked) {
+    // Newly-checked collection: default the inclusion set to "every
+    // item we know about". The items list rebuild ticks each row.
+    if (m_itemsCacheByCollection.contains(collectionIndex)) {
+      m_itemSelectionByCollection[collectionIndex] =
+          m_itemsCacheByCollection.value(collectionIndex);
+    } else {
+      // Empty entry signals "include all" until the DB lookup lands;
+      // the rebuildItemsList call kicks the DB fetch which populates
+      // both caches once paths arrive. Without that fetch
+      // m_itemSelectionByCollection[idx] would stay empty and the
+      // Scrape button would silently no-op for this collection.
+      m_itemSelectionByCollection.insert(collectionIndex, QStringList());
+      rebuildItemsList(collectionIndex);
+    }
+  } else {
+    m_itemSelectionByCollection.remove(collectionIndex);
+  }
+}
+
 void ScrapeResultDialog::onCollectionCheckChanged(QTreeWidgetItem *item, int column) {
   if (column != 0) return;
   const int idx = m_treeItemToCollectionIndex.value(item, -1);
   if (idx < 0) return;
   const bool checked = item->checkState(0) == Qt::Checked;
-  if (checked) {
-    // Newly-checked collection: default the inclusion set to "every
-    // item we know about". The items list rebuild below ticks each row.
-    if (m_itemsCacheByCollection.contains(idx)) {
-      m_itemSelectionByCollection[idx] = m_itemsCacheByCollection.value(idx);
-    } else {
-      // Empty entry signals "include all" until the DB lookup lands;
-      // the rebuildItemsList call below kicks the DB fetch which
-      // populates both caches once paths arrive. Without that fetch
-      // m_itemSelectionByCollection[idx] would stay empty and the
-      // Scrape button would silently no-op for this collection.
-      m_itemSelectionByCollection.insert(idx, QStringList());
-      rebuildItemsList(idx);
-    }
-  } else {
-    m_itemSelectionByCollection.remove(idx);
+  applyCollectionCheckState(idx, checked);
+
+  // Cascade the new state through the whole subtree: checking a parent
+  // collection selects its subcollections too, unchecking clears them.
+  // Tree signals are blocked while the child check states are written
+  // so this doesn't re-enter once per child — the per-collection
+  // bookkeeping is applied directly instead.
+  QSet<int> affected{idx};
+  {
+    QSignalBlocker blocker(m_collectionTree);
+    std::function<void(QTreeWidgetItem *)> cascade = [&](QTreeWidgetItem *parent) {
+      for (int i = 0; i < parent->childCount(); ++i) {
+        QTreeWidgetItem *child = parent->child(i);
+        child->setCheckState(0, checked ? Qt::Checked : Qt::Unchecked);
+        const int childIdx = m_treeItemToCollectionIndex.value(child, -1);
+        if (childIdx >= 0) {
+          applyCollectionCheckState(childIdx, checked);
+          affected.insert(childIdx);
+        }
+        cascade(child);
+      }
+    };
+    cascade(item);
   }
-  // Refresh items list if we're currently looking at this collection.
+
+  // Refresh the items list if the collection currently on screen is
+  // one the cascade just touched.
   const auto *cur = m_collectionTree->currentItem();
-  if (cur && m_treeItemToCollectionIndex.value(const_cast<QTreeWidgetItem *>(cur), -1) == idx) {
-    rebuildItemsList(idx);
+  const int curIdx =
+      cur ? m_treeItemToCollectionIndex.value(const_cast<QTreeWidgetItem *>(cur), -1) : -1;
+  if (curIdx >= 0 && affected.contains(curIdx)) {
+    rebuildItemsList(curIdx);
   }
 }
 

@@ -216,6 +216,10 @@ private:
   // ── Unified flow helpers ────────────────────────────────────────
   void populateCollectionTree();
   void rebuildItemsList(int collectionIndex);
+  /// Apply the per-collection bookkeeping for a check-state change:
+  /// seed (or clear) that collection's item-inclusion set. Shared by a
+  /// direct checkbox click and the parent → subtree cascade.
+  void applyCollectionCheckState(int collectionIndex, bool checked);
   void setUnifiedSetupEnabled(bool enabled);
   void updateUnifiedProgressLabel();
   /// Total items checked across every checked collection — the

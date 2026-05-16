@@ -115,6 +115,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- In the scraper's collection tree, checking a parent collection now
+  cascades to its subcollections — the whole subtree is selected (and
+  unchecking a parent clears it). Previously only the parent row was
+  ticked and its subcollections stayed unselected.
 - ScreenScraper results no longer collapse every item to its US
   title and box art. Each scraped item now follows its own region
   for the title, release date, and artwork — a Japanese cartridge
