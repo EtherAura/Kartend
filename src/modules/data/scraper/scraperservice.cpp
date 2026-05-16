@@ -484,6 +484,7 @@ void ScraperService::persistState() {
   sumObj[QStringLiteral("scraped")] = m_summary.scraped;
   sumObj[QStringLiteral("skipped")] = m_summary.skipped;
   sumObj[QStringLiteral("errors")] = m_summary.errors;
+  sumObj[QStringLiteral("media_written")] = m_summary.mediaWritten;
   QJsonArray failArr;
   for (const auto &f : m_summary.firstFailures) failArr.append(f);
   sumObj[QStringLiteral("first_failures")] = failArr;
@@ -570,6 +571,7 @@ ScraperService::PendingState ScraperService::loadPendingState(bool consumeOnLoad
   out.summarySoFar.scraped = sumObj.value(QStringLiteral("scraped")).toInt(0);
   out.summarySoFar.skipped = sumObj.value(QStringLiteral("skipped")).toInt(0);
   out.summarySoFar.errors = sumObj.value(QStringLiteral("errors")).toInt(0);
+  out.summarySoFar.mediaWritten = sumObj.value(QStringLiteral("media_written")).toInt(0);
   const auto failArr = sumObj.value(QStringLiteral("first_failures")).toArray();
   for (const auto &v : failArr) out.summarySoFar.firstFailures.append(v.toString());
   const auto queueArr = root.value(QStringLiteral("queue")).toArray();

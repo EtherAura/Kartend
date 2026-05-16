@@ -115,6 +115,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Resuming an interrupted scrape no longer resets the media count to
+  zero — the number of media files written before the interruption is
+  now restored along with the scraped / skipped / error counts.
 - In the scraper's collection tree, checking a parent collection now
   cascades to its subcollections — the whole subtree is selected (and
   unchecking a parent clears it). Previously only the parent row was

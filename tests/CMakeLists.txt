@@ -1270,6 +1270,40 @@ target_link_libraries(test_batchscraperunner
 )
 add_test(NAME BatchScrapeRunner COMMAND test_batchscraperunner)
 
+add_executable(test_scraperservice_resume
+  utils/test_scraperservice_resume.cpp
+  ${SRC_DIR}/modules/data/scraper/scraperservice.cpp
+  ${SRC_DIR}/modules/data/scraper/batchscraperunner.cpp
+  ${SRC_DIR}/modules/data/scraper/scrapepersistence.cpp
+  ${SRC_DIR}/modules/data/scraper/scrapewriteworker.cpp
+  ${SRC_DIR}/modules/data/database/databaseschema.cpp
+  ${SRC_DIR}/utils/app/loggingcategories.cpp
+  ${SRC_DIR}/utils/db/dbmigrations.cpp
+  ${SRC_DIR}/utils/db/itemartwork.cpp
+  ${SRC_DIR}/utils/db/itemmetadata.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
+  ${SRC_DIR}/modules/data/database/idatabasemanager.h
+  ${SRC_DIR}/modules/data/scraper/scrapewriteworker.h
+)
+target_include_directories(test_scraperservice_resume PRIVATE
+  ${SRC_DIR}/modules/data/scraper
+  ${SRC_DIR}/modules/data/database
+  ${SRC_DIR}/utils/app
+  ${SRC_DIR}/utils/db
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/text
+  ${SRC_DIR}/utils/threading
+  ${SRC_DIR}/utils/view
+  ${SRC_DIR}/ui/uiconstants
+)
+target_link_libraries(test_scraperservice_resume
+  Qt6::Core
+  Qt6::Sql
+  Qt6::Widgets
+  Qt6::Test
+)
+add_test(NAME ScraperServiceResume COMMAND test_scraperservice_resume)
+
 # RomHasher tests (streaming MD5/SHA1 for SS hash-based ROM ID)
 add_executable(test_romhasher
   utils/test_romhasher.cpp
