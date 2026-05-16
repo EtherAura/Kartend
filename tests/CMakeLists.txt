@@ -658,6 +658,17 @@ target_include_directories(test_collectionutils PRIVATE
 target_link_libraries(test_collectionutils Qt6::Core Qt6::Widgets Qt6::Test)
 add_test(NAME CollectionUtils COMMAND test_collectionutils)
 
+# ScrapeJobGrouping tests (shell-parent scrape routing — Kartend-7dng)
+add_executable(test_scrapejobgrouping
+  utils/test_scrapejobgrouping.cpp
+  ${SRC_DIR}/ui/dialogs/scrapejobgrouping.cpp
+)
+target_include_directories(test_scrapejobgrouping PRIVATE
+  ${SRC_DIR}/ui/dialogs
+)
+target_link_libraries(test_scrapejobgrouping Qt6::Core Qt6::Test)
+add_test(NAME ScrapeJobGrouping COMMAND test_scrapejobgrouping)
+
 # ConfigValidation tests (schema + cross-collection diagnostics)
 add_executable(test_configvalidation
   utils/test_configvalidation.cpp

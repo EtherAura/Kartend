@@ -35,6 +35,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QSet>
 #include <QShowEvent>
 #include <QSplitter>
 #include <QtConcurrent/QtConcurrentRun>
@@ -55,6 +56,7 @@ Q_LOGGING_CATEGORY(lcDialogTimings, "kartend.scrape.timings", QtWarningMsg)
 #include "idatabasemanager.h"
 #include "metadatalookupprovider.h"
 #include "pathutils.h"
+#include "scrapejobgrouping.h"
 
 namespace {
 
@@ -1506,29 +1508,34 @@ void ScrapeResultDialog::rebuildItemsList(int collectionIndex) {
     context.currentIndex = collectionIndex;
     QPointer<ScrapeResultDialog> guard(this);
     auto *connHolder = new QObject(this);
-    QObject::connect(db, &IDatabaseManager::itemsRangeLoaded, connHolder,
-                     [guard, connHolder, collectionIndex](
-                         int /*offset*/, const QStringList &filePaths,
-                         const QHash<QString, QString> &, const QHash<QString, QString> &,
-                         const QHash<QString, QString> &, const QHash<QString, int> &) {
-                       connHolder->deleteLater();
-                       if (guard.isNull()) return;
-                       guard->m_itemsCacheByCollection[collectionIndex] = filePaths;
-                       // If the collection was checked before items landed,
-                       // populate the inclusion set with the full list now.
-                       if (guard->m_itemSelectionByCollection.contains(collectionIndex) &&
-                           guard->m_itemSelectionByCollection.value(collectionIndex).isEmpty()) {
-                         guard->m_itemSelectionByCollection[collectionIndex] = filePaths;
-                       }
-                       // Only re-render if the user is still viewing this collection.
-                       const auto *cur = guard->m_collectionTree->currentItem();
-                       const int curIdx = cur ? guard->m_treeItemToCollectionIndex.value(
-                                                    const_cast<QTreeWidgetItem *>(cur), -1)
-                                              : -1;
-                       if (curIdx == collectionIndex) {
-                         guard->rebuildItemsList(collectionIndex);
-                       }
-                     });
+    QObject::connect(
+        db, &IDatabaseManager::itemsRangeLoaded, connHolder,
+        [guard, connHolder, collectionIndex](
+            int /*offset*/, const QStringList &filePaths, const QHash<QString, QString> &,
+            const QHash<QString, QString> &, const QHash<QString, QString> &,
+            const QHash<QString, int> &fileToCollectionIndex) {
+          connHolder->deleteLater();
+          if (guard.isNull()) return;
+          guard->m_itemsCacheByCollection[collectionIndex] = filePaths;
+          // Retain each item's owning-collection index so a
+          // scrape of a shell parent routes per item rather
+          // than dumping everything on the parent.
+          guard->m_itemOwnerByCollection[collectionIndex] = fileToCollectionIndex;
+          // If the collection was checked before items landed,
+          // populate the inclusion set with the full list now.
+          if (guard->m_itemSelectionByCollection.contains(collectionIndex) &&
+              guard->m_itemSelectionByCollection.value(collectionIndex).isEmpty()) {
+            guard->m_itemSelectionByCollection[collectionIndex] = filePaths;
+          }
+          // Only re-render if the user is still viewing this collection.
+          const auto *cur = guard->m_collectionTree->currentItem();
+          const int curIdx =
+              cur ? guard->m_treeItemToCollectionIndex.value(const_cast<QTreeWidgetItem *>(cur), -1)
+                  : -1;
+          if (curIdx == collectionIndex) {
+            guard->rebuildItemsList(collectionIndex);
+          }
+        });
     db->fetchItemsRange(context, *m_scraperCtx.collections, 0, std::numeric_limits<int>::max(),
                         QString());
     return;
@@ -1902,19 +1909,33 @@ void ScrapeResultDialog::onScrapeClicked() {
   m_unifiedItemsCompletedAcross = 0;
   m_unifiedCancelled = false;
   m_unifiedStartMs = QDateTime::currentMSecsSinceEpoch();
+  // Resolve every checked item to its owning collection, then emit one
+  // job per owner. A "shell" parent collection displays the items of
+  // its subcollections; checking the parent row pulls those items in,
+  // but each item's scraped artwork + metadata must land on the
+  // subcollection that owns it — not the parent. ScrapeJobGrouping does
+  // the (pure, unit-tested) grouping; owners keep tree display order so
+  // the progress label stays predictable.
+  QList<int> checkedOrder;
   for (QTreeWidgetItem *row : rowsInOrder) {
-    if (row->checkState(0) != Qt::Checked) continue;
-    const int idx = m_treeItemToCollectionIndex.value(row, -1);
-    if (idx < 0 || idx >= m_scraperCtx.collections->size()) continue;
-    QStringList items = m_itemSelectionByCollection.value(idx);
+    if (row->checkState(0) == Qt::Checked) {
+      checkedOrder.append(m_treeItemToCollectionIndex.value(row, -1));
+    }
+  }
+  const auto ownerGroups = ScrapeJobGrouping::byOwningCollection(
+      checkedOrder, m_itemSelectionByCollection, m_itemOwnerByCollection,
+      static_cast<int>(m_scraperCtx.collections->size()));
+  for (const auto &group : ownerGroups) {
+    const int owner = group.first;
+    const QStringList &items = group.second;
     if (items.isEmpty()) continue;
-    const CollectionConfig &cfg = (*m_scraperCtx.collections)[idx];
+    const CollectionConfig &cfg = (*m_scraperCtx.collections)[owner];
     const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
     const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
     const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
 
     Scraper::ScraperService::CollectionJob sJob;
-    sJob.collectionIndex = idx;
+    sJob.collectionIndex = owner;
     sJob.collectionUuid = uuid;
     sJob.collectionName = cfg.name;
     sJob.artworkDir = artworkDir;
@@ -1922,7 +1943,7 @@ void ScrapeResultDialog::onScrapeClicked() {
     serviceQueue.append(sJob);
 
     CollectionJob job;
-    job.collectionIndex = idx;
+    job.collectionIndex = owner;
     job.collectionName = cfg.name;
     job.items = items;
     m_unifiedQueue.append(job);

@@ -439,6 +439,15 @@ private:
   /// clicks a collection in the tree (or via DB fetch). Cached so
   /// re-clicking a collection doesn't re-hit the database.
   QHash<int, QStringList> m_itemsCacheByCollection;
+  /// Per viewed-collection: item path → the collection index that
+  /// actually owns that item. For a plain collection every item maps
+  /// to the collection itself; for a "shell" parent that displays its
+  /// subcollections' items the entries point at the owning
+  /// subcollection. onScrapeClicked() uses this to route each item's
+  /// scraped artwork + metadata to its real owner instead of the
+  /// parent. Populated from the itemsRangeLoaded fetch alongside
+  /// m_itemsCacheByCollection.
+  QHash<int, QHash<QString, int>> m_itemOwnerByCollection;
   /// Tree row → collection index map, populated when the tree is built.
   QHash<QTreeWidgetItem *, int> m_treeItemToCollectionIndex;
   /// Snapshot at scrape time: queue of (collectionIndex, items) tuples

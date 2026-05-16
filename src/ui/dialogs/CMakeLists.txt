@@ -34,6 +34,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   marqueepanel.cpp
   scrapercredentialsdialog.cpp
   scraperesultdialog.cpp
+  scrapejobgrouping.cpp
   settingsdialog.cpp
   settingsdialogbrowse.cpp
   settingsdialogchecks.cpp
@@ -86,6 +87,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   marqueepanel.h
   scrapercredentialsdialog.h
   scraperesultdialog.h
+  scrapejobgrouping.h
   settingsdialog.h
   settingsformbinding.h
   settingsmodel.h

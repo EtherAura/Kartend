@@ -362,6 +362,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   neither artwork nor a video used to do nothing — the first press tried
   to open a preview with nothing to show and swallowed the launch, and
   no later press could get past it. Such an item now launches normally.
+- **Scraping a parent collection saves artwork to the right
+  subcollection.** When a parent collection displays the items of its
+  subcollections, scraping it used to write every item's artwork and
+  metadata against the parent — so the results never appeared on the
+  subcollection items they belonged to. Each scraped item is now routed
+  to the subcollection that actually owns it.
 
 ## [0.0.6] - 2026-05-11
 
