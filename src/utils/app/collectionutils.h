@@ -1029,6 +1029,12 @@ struct GeneralSettings {
   QString homeViewLabel;
   QString homeViewIcon;
 
+  // Optional override pointing at a RetroArch install so the Core
+  // picker can list installed libretro cores. Accepts a retroarch.cfg
+  // file or a core directory; empty means probe the standard per-OS
+  // retroarch.cfg locations. See RetroArchUtils::resolveCoreDirectory.
+  QString retroarchConfigPath;
+
   // ─────────────────────────────────────────────────────────────────────────
   // Attract mode / autoscroll
   // ─────────────────────────────────────────────────────────────────────────

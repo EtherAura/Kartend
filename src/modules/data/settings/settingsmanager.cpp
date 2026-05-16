@@ -174,6 +174,7 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   settings.useHomeView = s.value("useHomeView", false).toBool();
   settings.homeViewLabel = s.value("homeViewLabel", QString()).toString();
   settings.homeViewIcon = s.value("homeViewIcon", QString()).toString();
+  settings.retroarchConfigPath = s.value("retroarchConfigPath", QString()).toString();
 
   // Attract mode
   settings.attractModeEnabled = s.value("attractModeEnabled", false).toBool();
@@ -395,6 +396,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.useHomeView = settings.useHomeView;
   m_generalSettings.homeViewLabel = settings.homeViewLabel.trimmed();
   m_generalSettings.homeViewIcon = settings.homeViewIcon.trimmed();
+  m_generalSettings.retroarchConfigPath = settings.retroarchConfigPath.trimmed();
 
   // Attract mode
   m_generalSettings.attractModeEnabled = settings.attractModeEnabled;
@@ -532,6 +534,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("useHomeView", m_generalSettings.useHomeView);
   s.setValue("homeViewLabel", m_generalSettings.homeViewLabel);
   s.setValue("homeViewIcon", m_generalSettings.homeViewIcon);
+  s.setValue("retroarchConfigPath", m_generalSettings.retroarchConfigPath);
   s.setValue("attractModeEnabled", m_generalSettings.attractModeEnabled);
   s.setValue("attractModeIdleTimeoutSec", m_generalSettings.attractModeIdleTimeoutSec);
   s.setValue("runtimeDetectionEnabled", m_generalSettings.runtimeDetectionEnabled);

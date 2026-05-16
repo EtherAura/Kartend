@@ -1319,6 +1319,21 @@ target_link_libraries(test_romhasher
 )
 add_test(NAME RomHasher COMMAND test_romhasher)
 
+# RetroArchUtils tests (retroarch.cfg parsing + libretro core discovery)
+add_executable(test_retroarchutils
+  utils/test_retroarchutils.cpp
+  ${SRC_DIR}/utils/fs/retroarchutils.cpp
+)
+target_include_directories(test_retroarchutils PRIVATE
+  ${SRC_DIR}/utils/fs
+  ${SRC_DIR}/utils/app
+)
+target_link_libraries(test_retroarchutils
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME RetroArchUtils COMMAND test_retroarchutils)
+
 # KdeColorScheme tests
 # Includes resources.qrc so the test binary's `:/themes/` lookups
 # resolve to the same bundled .colors files the production app sees;

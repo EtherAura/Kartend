@@ -40,6 +40,13 @@
           <item><widget class="QPushButton" name="browseStartupVideoButton"><property name="text"><string>Browse</string></property></widget></item>
          </layout>
         </item>
+        <item row="6" column="0"><widget class="QLabel" name="retroarchConfigLabel"><property name="text"><string>RetroArch Config:</string></property></widget></item>
+        <item row="6" column="1">
+         <layout class="QHBoxLayout" name="retroarchConfigLayout">
+          <item><widget class="QLineEdit" name="retroarchConfigLineEdit"><property name="toolTip"><string>Optional path to a retroarch.cfg file or a libretro core directory, used to list installed cores in the collection Core picker. Empty auto-detects the standard RetroArch config location.</string></property></widget></item>
+          <item><widget class="QPushButton" name="browseRetroarchConfigButton"><property name="text"><string>Browse</string></property></widget></item>
+         </layout>
+        </item>
        </layout>
       </widget>
      </item>

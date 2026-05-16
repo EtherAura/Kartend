@@ -157,6 +157,7 @@ void SettingsDialog::onTreeItemChanged(QTreeWidgetItem *item, int column) {
 
 void SettingsDialog::addCollection() {
   CreateCollectionDialog dialog(this);
+  dialog.setRetroarchConfigOverride(m_generalSettings.retroarchConfigPath);
   if (dialog.exec() != QDialog::Accepted) {
     return;
   }
@@ -259,6 +260,7 @@ void SettingsDialog::ensureRootCollectionExists() {
   // No root collection exists - prompt user to create one
   while (true) {
     CreateCollectionDialog dialog(this);
+    dialog.setRetroarchConfigOverride(m_generalSettings.retroarchConfigPath);
     dialog.setWindowTitle(tr("Create Collection"));
     dialog.setIntroText(tr("No collections found. Set up your first collection to continue."));
 

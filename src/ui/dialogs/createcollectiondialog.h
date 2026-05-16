@@ -59,6 +59,11 @@ public:
   /// and the value irrelevant for other types.
   [[nodiscard]] int screenscraperSystemId() const;
 
+  /// Point the Core picker at a RetroArch install (a retroarch.cfg file
+  /// or a core directory). Empty auto-detects the standard location.
+  /// Call before exec() so the detected-cores dropdown is populated.
+  void setRetroarchConfigOverride(const QString &path);
+
 private:
   void buildUi();
   /// Re-point the scraper combo at the default provider for the current
@@ -68,6 +73,9 @@ private:
   /// resolves from the collection name + type. No-op once the user has
   /// picked a system by hand, or for non-game media types.
   void syncScreenscraperSystemToName();
+  /// Fill the Core combo with libretro cores discovered in the
+  /// RetroArch install (per the override / autodetect).
+  void populateCoreCombo();
   /// Show/hide the two conditional rows — ScreenScraper system (game media
   /// types) and libretro core (RetroArch launcher) — resizing the dialog
   /// only when a row actually flips.
@@ -87,6 +95,11 @@ private:
   QComboBox *m_typeCombo = nullptr;
   QComboBox *m_scraperCombo = nullptr;
   QComboBox *m_screenscraperSystemCombo = nullptr;
+  /// Dropdown of libretro cores discovered in the RetroArch install;
+  /// picking one fills m_coreEdit.
+  QComboBox *m_coreCombo = nullptr;
+  /// RetroArch override (retroarch.cfg / core dir); empty = autodetect.
+  QString m_retroarchOverride;
   QPushButton *m_okButton = nullptr;
   /// Set once the user changes the scraper combo themselves — freezes the
   /// type→scraper auto-association so a deliberate pick survives a later

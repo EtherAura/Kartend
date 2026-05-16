@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Pick a libretro core from a list.** When a new collection uses a
+  RetroArch launcher, the **Core** field now offers a dropdown of the
+  cores found in your RetroArch install — no more browsing to a
+  `.so` / `.dll` / `.dylib` by hand (the path field and Browse button
+  stay for cores outside that directory). Kartend reads RetroArch's
+  core directory from its `retroarch.cfg`, auto-detecting the standard
+  location; a new **RetroArch Config** field in General settings lets
+  you point at a specific `retroarch.cfg` or core directory when the
+  install lives somewhere non-standard.
 - **Auto-detected ScreenScraper system.** The **ScreenScraper
   System** field now fills itself from the collection's identity
   instead of needing a manual pick — in the New Collection dialog as

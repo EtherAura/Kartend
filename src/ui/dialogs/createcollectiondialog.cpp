@@ -19,6 +19,7 @@
 
 #include "collectionutils.h"
 #include "metadataproviderregistry.h"
+#include "retroarchutils.h"
 #include "screenscrapersystemcache.h"
 #include "screenscrapersystems.h"
 
@@ -130,12 +131,38 @@ void CreateCollectionDialog::buildUi() {
                                tr("Select Launcher Executable"), /*pickDirectory=*/false));
 
   // Libretro core — only meaningful for a RetroArch launcher, so the row is
-  // revealed only then (toggled in updateConditionalRows()).
-  m_coreRow = makeBrowseRow(m_coreEdit,
-                            tr("Libretro core (.so / .dll / .dylib) RetroArch loads "
-                               "for this collection."),
-                            tr("Select Core File"), /*pickDirectory=*/false);
+  // revealed only then (toggled in updateConditionalRows()). The combo
+  // lists cores discovered in the RetroArch install; picking one fills
+  // the path field. The field + Browse stay for cores outside that
+  // directory (custom builds, a non-standard install).
+  m_coreEdit = new QLineEdit(this);
+  m_coreEdit->setToolTip(tr("Libretro core (.so / .dll / .dylib) RetroArch loads "
+                            "for this collection."));
+  m_coreCombo = new QComboBox(this);
+  m_coreCombo->setToolTip(tr("Cores detected in your RetroArch install — pick one "
+                             "to fill the path."));
+  auto *coreBrowse = new QPushButton(tr("Browse"), this);
+  m_coreRow = new QHBoxLayout;
+  m_coreRow->addWidget(m_coreCombo);
+  m_coreRow->addWidget(m_coreEdit);
+  m_coreRow->addWidget(coreBrowse);
   m_form->addRow(tr("Core:"), m_coreRow);
+  connect(coreBrowse, &QPushButton::clicked, this, [this]() {
+    const QString picked =
+        QFileDialog::getOpenFileName(this, tr("Select Core File"), m_coreEdit->text().trimmed());
+    if (!picked.isEmpty()) {
+      m_coreEdit->setText(picked);
+    }
+  });
+  // Picking a detected core fills the path field — the field stays the
+  // single source of truth that corePath() reads back.
+  connect(m_coreCombo, &QComboBox::activated, this, [this](int index) {
+    const QString path = m_coreCombo->itemData(index).toString();
+    if (!path.isEmpty()) {
+      m_coreEdit->setText(path);
+    }
+  });
+  populateCoreCombo();
 
   m_typeCombo = new QComboBox(this);
   m_typeCombo->setEditable(true);
@@ -217,6 +244,28 @@ void CreateCollectionDialog::syncScraperToType() {
   const QString id = MetadataProviderRegistry::defaultScraperForType(m_typeCombo->currentText());
   const int idx = id.isEmpty() ? 0 : m_scraperCombo->findData(id);
   m_scraperCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+}
+
+void CreateCollectionDialog::setRetroarchConfigOverride(const QString &path) {
+  m_retroarchOverride = path;
+  populateCoreCombo();
+}
+
+void CreateCollectionDialog::populateCoreCombo() {
+  m_coreCombo->clear();
+  const QList<RetroArchUtils::Core> cores =
+      RetroArchUtils::discoverCores(RetroArchUtils::resolveCoreDirectory(m_retroarchOverride));
+  if (cores.isEmpty()) {
+    // Nothing to pick — the user falls back to the path field + Browse.
+    m_coreCombo->addItem(tr("No cores detected"), QString());
+    m_coreCombo->setEnabled(false);
+    return;
+  }
+  m_coreCombo->setEnabled(true);
+  m_coreCombo->addItem(tr("Pick a detected core…"), QString());
+  for (const auto &core : cores) {
+    m_coreCombo->addItem(core.displayName, core.path);
+  }
 }
 
 void CreateCollectionDialog::syncScreenscraperSystemToName() {

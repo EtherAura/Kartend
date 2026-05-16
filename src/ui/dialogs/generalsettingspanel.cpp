@@ -24,6 +24,8 @@ GeneralSettingsPanel::GeneralSettingsPanel(QWidget *parent)
           &GeneralSettingsPanel::onBrowseHomeViewIcon);
   connect(ui->browseStartupVideoButton, &QPushButton::clicked, this,
           &GeneralSettingsPanel::onBrowseStartupVideo);
+  connect(ui->browseRetroarchConfigButton, &QPushButton::clicked, this,
+          &GeneralSettingsPanel::onBrowseRetroarchConfig);
 
   connectChangeSignals();
 }
@@ -48,6 +50,7 @@ void GeneralSettingsPanel::refresh() {
   SettingsFormBinding::loadInto(ui->homeViewIconLineEdit, s->homeViewIcon);
   SettingsFormBinding::loadInto(ui->startupVideoEnabledCheckBox, s->startupVideoEnabled);
   SettingsFormBinding::loadInto(ui->startupVideoPathLineEdit, s->startupVideoPath);
+  SettingsFormBinding::loadInto(ui->retroarchConfigLineEdit, s->retroarchConfigPath);
 
   // Selection & Display
   SettingsFormBinding::loadInto(ui->rememberSelectionCheckBox, s->rememberSelection);
@@ -105,6 +108,18 @@ void GeneralSettingsPanel::onBrowseStartupVideo() {
   }
 }
 
+void GeneralSettingsPanel::onBrowseRetroarchConfig() {
+  // The override accepts either a retroarch.cfg file or a core
+  // directory; offer a file picker filtered to .cfg, with All Files
+  // so a user can still aim at any config the install uses.
+  const QString fileName = QFileDialog::getOpenFileName(
+      this, tr("Select retroarch.cfg"), QDir::homePath(),
+      tr("RetroArch config (*.cfg);;All Files (*)"));
+  if (!fileName.isEmpty()) {
+    ui->retroarchConfigLineEdit->setText(fileName);
+  }
+}
+
 void GeneralSettingsPanel::writeBack() {
   if (!m_model || !m_model->generalSettings) {
     return;
@@ -117,6 +132,7 @@ void GeneralSettingsPanel::writeBack() {
   s->homeViewIcon = ui->homeViewIconLineEdit->text();
   s->startupVideoEnabled = ui->startupVideoEnabledCheckBox->isChecked();
   s->startupVideoPath = ui->startupVideoPathLineEdit->text();
+  s->retroarchConfigPath = ui->retroarchConfigLineEdit->text();
 
   // Selection & Display
   s->rememberSelection = ui->rememberSelectionCheckBox->isChecked();
@@ -160,6 +176,8 @@ void GeneralSettingsPanel::connectChangeSignals() {
   connect(ui->startupVideoEnabledCheckBox, &QCheckBox::toggled, this,
           [this](bool) { writeBack(); });
   connect(ui->startupVideoPathLineEdit, &QLineEdit::textChanged, this,
+          [this](const QString &) { writeBack(); });
+  connect(ui->retroarchConfigLineEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { writeBack(); });
 
   // Selection & Display

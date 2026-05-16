@@ -44,6 +44,7 @@ signals:
 private slots:
   void onBrowseHomeViewIcon();
   void onBrowseStartupVideo();
+  void onBrowseRetroarchConfig();
 
 private:
   void writeBack();
