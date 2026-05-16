@@ -264,7 +264,10 @@ QList<Scraper::MediaAsset> mapMedia(const QJsonArray &medias, int mediaMaxDim, b
     if (lower == QStringLiteral("box-2d")) {
       mapped = QStringLiteral("front");
       label = QStringLiteral("Box (front)");
-    } else if (lower == QStringLiteral("screenshot")) {
+    } else if (lower == QStringLiteral("screenshot") || lower == QStringLiteral("ss")) {
+      // SS serves the in-game screenshot under the short tag `ss`;
+      // some responses also use the long `screenshot`. Same asset —
+      // collapse both to the canonical `screenshot` type.
       mapped = QStringLiteral("screenshot");
       label = QStringLiteral("Screenshot");
     } else if (lower == QStringLiteral("sstitle")) {

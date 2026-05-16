@@ -30,6 +30,7 @@ private slots:
   void parseDetailResponse_artworkFollowsRomRegion();
   void parseDetailResponse_fallbackRegionBackstopsUnknownRomRegion();
   void parseDetailResponse_freeTextFollowsPreferredLanguage();
+  void parseDetailResponse_collapsesSsToScreenshot();
 };
 
 namespace {
@@ -381,6 +382,28 @@ void TestScreenScraperParser::parseDetailResponse_freeTextFollowsPreferredLangua
   QCOMPARE(result.value().description, QStringLiteral("French description."));
   QCOMPARE(result.value().genre, QStringLiteral("Plateformer"));
   QCOMPARE(result.value().title, QStringLiteral("Game (JP)"));
+}
+
+void TestScreenScraperParser::parseDetailResponse_collapsesSsToScreenshot() {
+  // SS serves the in-game screenshot under the short tag `ss`; it must
+  // collapse to the canonical `screenshot` type so it lines up with
+  // the `screenshot` media-type filter checkbox.
+  const QByteArray json = R"json({
+    "response": {"jeu": {
+      "id": "1",
+      "noms": [{"region": "us", "text": "Game"}],
+      "rom": {"romregions": "us"},
+      "medias": [{"type": "ss", "region": "us", "url": "https://example.com/ss.png"}]
+    }}
+  })json";
+  auto result = ScreenScraperParser::parseDetailResponse(json);
+  QVERIFY(result.isOk());
+  QStringList types;
+  for (const auto &m : result.value().media) {
+    types.append(m.type);
+  }
+  QVERIFY(types.contains(QStringLiteral("screenshot")));
+  QVERIFY(!types.contains(QStringLiteral("ss")));
 }
 
 QTEST_MAIN(TestScreenScraperParser)

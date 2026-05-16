@@ -115,6 +115,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The scraper now pulls every media type it offers. The **Support /
+  cart** art was silently skipped — its checkbox key was mixed-case
+  but the download filter matched lowercased, so it never matched —
+  and the media-type list itself was an incomplete subset. The list
+  now covers the full range ScreenScraper serves: box spine, back and
+  3D box, box / cart textures, carbon and steel wheels, screen
+  marquees, Steam grid, figurine, pictograms, and more.
 - Resuming an interrupted scrape no longer resets the media count to
   zero — the number of media files written before the interruption is
   now restored along with the scraped / skipped / error counts.

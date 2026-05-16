@@ -691,10 +691,13 @@ void ScrapeResultDialog::buildUnifiedPanel() {
   // gates the textual ScrapedItem fields (title / description / etc.)
   // rather than a MediaAsset::type — handled specially when building
   // the BatchScrapeRunner filter and at applyResult time.
-  // The remaining keys are matched case-insensitively against
-  // MediaAsset::type as the provider returns them; aliases (e.g.
-  // box-2d → front, sstitle → title, manuel → manual) are collapsed
-  // earlier by the parser.
+  //
+  // Every other key must equal a MediaAsset::type in lowercase: the
+  // runner matches each asset's `type.toLower()` against the filter
+  // set, and that set is built by lowercasing these keys. Parser
+  // aliases are already collapsed (box-2D → front, sstitle → title,
+  // manuel → manual, ss/screenshot → screenshot); every other entry
+  // keeps its raw ScreenScraper tag, lowercased.
   struct MediaTypeEntry {
     const char *key;
     const char *label;
@@ -703,24 +706,36 @@ void ScrapeResultDialog::buildUnifiedPanel() {
   static constexpr MediaTypeEntry kMediaTypes[] = {
       {"_metadata", "Metadata (title, description, …)", true},
       {"front", "Front cover", true},
-      {"back", "Back cover", false},
+      {"box-2d-back", "Back cover", false},
+      {"box-2d-side", "Box spine", false},
       {"box-3d", "Box (3D)", false},
+      {"box-texture", "Box texture", false},
+      {"support-2d", "Cart / disc label", false},
+      {"support-3d", "Cart / disc (3D)", false},
+      {"support-texture", "Cart / disc texture", false},
       {"screenshot", "Screenshot", false},
       {"title", "Title screen", false},
       {"fanart", "Fanart", false},
-      {"marquee", "Marquee", false},
-      {"wheel", "Wheel / logo", false},
-      {"manual", "Manual", false},
-      {"video", "Video", false},
-      {"video-normalized", "Video (normalized)", false},
       {"background", "Background", false},
+      {"steamgrid", "Steam grid", false},
+      {"wheel", "Wheel / logo", false},
+      {"wheel-carbon", "Wheel (carbon)", false},
+      {"wheel-steel", "Wheel (steel)", false},
+      {"marquee", "Marquee", false},
+      {"screenmarquee", "Screen marquee", false},
+      {"screenmarqueesmall", "Screen marquee (small)", false},
       {"bezel-16-9", "Bezel (16:9)", false},
       {"bezel-4-3", "Bezel (4:3)", false},
       {"mixrbv1", "Mix (RBV1)", false},
       {"mixrbv2", "Mix (RBV2)", false},
-      {"support-2D", "Support / cart (2D)", false},
-      {"support-3D", "Support / cart (3D)", false},
+      {"figurine", "Figurine", false},
+      {"pictoliste", "Pictogram (list)", false},
+      {"pictocouleur", "Pictogram (colour)", false},
+      {"pictomonochrome", "Pictogram (mono)", false},
       {"map", "Map", false},
+      {"manual", "Manual", false},
+      {"video", "Video", false},
+      {"video-normalized", "Video (normalized)", false},
   };
   int row = 0;
   int col = 0;
@@ -1986,7 +2001,11 @@ void ScrapeResultDialog::onScrapeClicked() {
                              tr("Pick at least one collection (and one item) before scraping."));
     return;
   }
-  // Translate user picks into runner config.
+  // Translate user picks into runner config. Filter keys are
+  // lowercased: the runner matches each asset's `type.toLower()`
+  // against this set, so a mixed-case key (e.g. "support-2D") would
+  // otherwise never match and that media type would silently never
+  // download.
   QSet<QString> mediaFilter;
   bool writeMetadata = true;
   for (auto it = m_mediaTypeChecks.constBegin(); it != m_mediaTypeChecks.constEnd(); ++it) {
@@ -1994,7 +2013,7 @@ void ScrapeResultDialog::onScrapeClicked() {
       writeMetadata = it.value()->isChecked();
       continue;
     }
-    if (it.value()->isChecked()) mediaFilter.insert(it.key());
+    if (it.value()->isChecked()) mediaFilter.insert(it.key().toLower());
   }
   const auto mode = m_modeAutoRadio->isChecked() ? Scraper::ScraperService::Mode::Auto
                                                  : Scraper::ScraperService::Mode::Interactive;
@@ -2092,7 +2111,7 @@ void ScrapeResultDialog::runAutoCollection(int collectionIndex, const QStringLis
       writeMetadata = it.value()->isChecked();
       continue;
     }
-    if (it.value()->isChecked()) mediaFilter.insert(it.key());
+    if (it.value()->isChecked()) mediaFilter.insert(it.key().toLower());
   }
 
   auto *runner = new Scraper::BatchScrapeRunner(m_scraperCtx.databaseManager, std::move(provider),
@@ -2417,7 +2436,7 @@ void ScrapeResultDialog::onApply() {
     QSet<QString> filter;
     for (auto it = m_mediaTypeChecks.constBegin(); it != m_mediaTypeChecks.constEnd(); ++it) {
       if (it.key() == QLatin1String("_metadata")) continue;
-      if (it.value()->isChecked()) filter.insert(it.key());
+      if (it.value()->isChecked()) filter.insert(it.key().toLower());
     }
     for (const auto &asset : m_currentDetail.media) {
       if (!asset.url.isValid()) continue;
