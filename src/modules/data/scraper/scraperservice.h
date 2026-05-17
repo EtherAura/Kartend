@@ -222,6 +222,11 @@ private:
   void onAutoItemCompleted(int doneInCol, int totalInCol, const Scraper::ScrapedItem &scraped,
                            const QStringList &mediaPaths);
   void onAutoFinished(const BatchScrapeRunner::Summary &summary);
+  /// Roll the active runner's per-collection Summary (counts +
+  /// firstFailures) onto the pre-collection snapshot into m_summary.
+  /// SET semantics so it is idempotent across the itemBegan /
+  /// itemCompleted / finished hooks that all call it.
+  void rollRunnerSummaryIntoSummary(const BatchScrapeRunner::Summary &runnerSummary);
   void interactiveLookupComplete(ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> result);
   void persistState();
   /// Coalesces high-frequency persist calls (item completions during

@@ -8,15 +8,40 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLockFile>
 #include <QObject>
 #include <QStandardPaths>
 #include <QString>
 #include <QTest>
 
+#include <memory>
+
+#include "metadatalookupprovider.h"
 #include "scraperservice.h"
 
 using Scraper::ScraperService;
+
+/// A lookup provider that captures its lookup() callback but never
+/// invokes it on its own — so an interactive scrape parks at its very
+/// first item. That is the startup window the persisted-snapshot fix
+/// has to cover (a crash here used to leave no pending-scrape.json).
+/// A test can also fire `lastLookupCallback` by hand to simulate a
+/// network result arriving late (e.g. after the scrape was cancelled).
+class ParkedProvider : public MetadataLookupProvider {
+public:
+  mutable LookupCallback lastLookupCallback;
+  QString id() const override { return QStringLiteral("parked"); }
+  QString displayName() const override { return QStringLiteral("Parked"); }
+  QStringList categories() const override { return {QStringLiteral("games")}; }
+  Capabilities capabilities() const override { return Capability::MetadataLookup; }
+  QUrl searchUrl(const QString &) const override { return {}; }
+  void lookup(const QString &, LookupCallback cb) override { lastLookupCallback = std::move(cb); }
+  void fetchDetail(const Scraper::ScrapeCandidate &, DetailCallback) override {}
+  void fetchMediaBytes(const QUrl &, MediaCallback) override {}
+};
 
 class TestScraperServiceResume : public QObject {
   Q_OBJECT
@@ -27,6 +52,8 @@ private slots:
   void loadRestoresMediaWrittenCount();
   void loadDefaultsMediaWrittenToZeroForLegacyFile();
   void loadSkipsResumeWhenOwnedByLiveInstance();
+  void startScrapePersistsInitialSnapshot();
+  void cancelledInteractiveScrapeIgnoresLateLookupResult();
 
 private:
   static void writePendingFile(const QByteArray &json);
@@ -193,6 +220,90 @@ void TestScraperServiceResume::loadSkipsResumeWhenOwnedByLiveInstance() {
   liveOwner.unlock();
   const ScraperService::PendingState orphaned = service.loadPendingState(/*consumeOnLoad=*/false);
   QVERIFY(orphaned.isValid());
+}
+
+void TestScraperServiceResume::startScrapePersistsInitialSnapshot() {
+  // A scrape that has begun but not yet completed (or even started) a
+  // single item must already have pending-scrape.json on disk —
+  // otherwise a crash in the startup window leaves nothing to resume
+  // and the next launch shows no resume prompt. Regression: startScrape
+  // called persistState() while m_state was still Idle, so persistState
+  // hit its Idle guard and cleared the file instead of writing it.
+  QVERIFY(!QFile::exists(pendingFilePath())); // clean slate from init()
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  // Interactive mode parks on the first item's lookup (ParkedProvider
+  // never calls back), so the scrape stays RunningInteractive with the
+  // full queue intact — the exact "started, nothing done yet" state.
+  ctx.providerBuilder = [](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return std::make_shared<ParkedProvider>();
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionUuid = QStringLiteral("uuid-1");
+  job.collectionName = QStringLiteral("Coll");
+  job.artworkDir = QStringLiteral("/art");
+  job.items = QStringList{QStringLiteral("/m/a.bin"), QStringLiteral("/m/b.bin")};
+
+  service.startScrape({job}, ScraperService::Mode::Interactive, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  // The snapshot must exist immediately — before any item completes and
+  // before the debounced persist timer could ever have fired.
+  QVERIFY(QFile::exists(pendingFilePath()));
+
+  // ...and it must be a complete, parseable snapshot carrying the whole
+  // queue, not a truncated stub. (loadPendingState() can't be used here
+  // — `service` still holds the ownership lock, so it would correctly
+  // report the scrape as live and refuse to surface it.)
+  QFile f(pendingFilePath());
+  QVERIFY(f.open(QIODevice::ReadOnly));
+  const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+  f.close();
+  QVERIFY(doc.isObject());
+  QCOMPARE(doc.object().value(QStringLiteral("mode")).toString(), QStringLiteral("interactive"));
+  const QJsonArray queue = doc.object().value(QStringLiteral("queue")).toArray();
+  QCOMPARE(queue.size(), 1);
+  QCOMPARE(queue.first().toObject().value(QStringLiteral("remaining")).toArray().size(), 2);
+}
+
+void TestScraperServiceResume::cancelledInteractiveScrapeIgnoresLateLookupResult() {
+  // After an interactive scrape is cancelled, a lookup callback that
+  // was already in flight must not advance — let alone restart — the
+  // queue. Regression: interactiveLookupComplete only bailed for the
+  // Paused state, so a result landing after cancel re-entered pump()
+  // and resurrected the cancelled run.
+  auto provider = std::make_shared<ParkedProvider>();
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionUuid = QStringLiteral("uuid-1");
+  job.collectionName = QStringLiteral("Coll");
+  job.artworkDir = QStringLiteral("/art");
+  job.items = QStringList{QStringLiteral("/m/a.bin"), QStringLiteral("/m/b.bin")};
+  service.startScrape({job}, ScraperService::Mode::Interactive, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  // The first item's lookup is in flight — its callback was captured.
+  QVERIFY(static_cast<bool>(provider->lastLookupCallback));
+  QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
+
+  service.cancel();
+  QCOMPARE(service.state(), ScraperService::State::Idle);
+
+  // Fire the now-stale lookup result. The cancelled service must
+  // ignore it and stay idle — not pick up the next queued item.
+  provider->lastLookupCallback(QList<Scraper::ScrapeCandidate>{});
+  QCOMPARE(service.state(), ScraperService::State::Idle);
 }
 
 QTEST_MAIN(TestScraperServiceResume)

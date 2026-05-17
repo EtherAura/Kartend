@@ -14,6 +14,7 @@
 #include <QLockFile>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QTimer>
 
@@ -22,6 +23,10 @@ namespace Scraper {
 namespace {
 Q_LOGGING_CATEGORY(lcScraperService, "kartend.scraperservice", QtWarningMsg)
 constexpr int kCurrentStateVersion = 1;
+/// Cap on the per-run failure-message list surfaced in the error
+/// details popup. Bounded so a run with a broken provider doesn't
+/// produce an unreadable wall of text.
+constexpr int kMaxReportedFailures = 5;
 } // namespace
 
 int ScraperService::PendingState::totalRemaining() const {
@@ -135,6 +140,12 @@ void ScraperService::startScrape(const QList<CollectionJob> &jobs, Mode mode,
   m_totalBytesDownloaded = 0;
   m_bytesAtCollectionStart = 0;
 
+  // Enter the running state *before* the initial persist. persistState()
+  // bails out when m_state is Idle, and pump() (below) is what sets the
+  // running state — so without this the startup snapshot is never
+  // written, and a crash before the first debounced persist leaves
+  // nothing on disk to resume. pump() re-affirms the same state.
+  m_state = m_mode == Mode::Auto ? State::RunningAuto : State::RunningInteractive;
   emit scrapeStarted(m_totalItemsAtStart);
   persistState();
   pump();
@@ -168,6 +179,10 @@ void ScraperService::resumeFromState(const PendingState &state) {
   m_lastScrapedItem = Scraper::ScrapedItem();
   m_recentMediaPaths.clear();
   m_pausedItemPath.clear();
+  // Enter the running state before the initial persist — see
+  // startScrape(): persistState() needs a non-Idle state to write, and
+  // pump() only sets it afterwards.
+  m_state = m_mode == Mode::Auto ? State::RunningAuto : State::RunningInteractive;
   emit scrapeStarted(m_totalItemsAtStart);
   persistState();
   pump();
@@ -176,10 +191,18 @@ void ScraperService::resumeFromState(const PendingState &state) {
 void ScraperService::cancel() {
   if (m_state == State::Idle) return;
   if (m_autoRunner) {
+    // An in-flight HTTP request can't be interrupted — waiting for the
+    // runner's own `finished` (the old behaviour) leaves the UI frozen
+    // until every in-flight lookup/download finishes or times out, so
+    // Cancel looks dead. Instead: tell the runner to stop, detach it
+    // (drop our signal connections so its drain doesn't drive the
+    // service), and let it delete itself once its `finished` lands.
+    // The synthesized finish below returns the UI to the setup view
+    // immediately.
     m_autoRunner->cancel();
-    // The runner's `finished` slot drains the queue and emits
-    // scrapeFinished — let it handle the post-cancel flow.
-    return;
+    disconnect(m_autoRunner, nullptr, this, nullptr);
+    connect(m_autoRunner, &BatchScrapeRunner::finished, m_autoRunner, &QObject::deleteLater);
+    m_autoRunner = nullptr;
   }
   // Interactive / paused: synthesize a finish.
   m_state = State::Finishing;
@@ -273,8 +296,16 @@ void ScraperService::pump() {
 
 void ScraperService::startAutoCollection() {
   if (!m_ctx.providerBuilder || !m_ctx.databaseManager || !m_ctx.generalSettings) {
-    ++m_summary.errors;
-    m_itemsCompleted += m_queue[m_queueCursor].items.size();
+    // Whole collection fails — count every item as an error (not just
+    // one) so scraped + skipped + errors still reconciles with the
+    // total, and record a reason so the error-details popup explains it.
+    const int failed = m_queue[m_queueCursor].items.size();
+    m_summary.errors += failed;
+    m_itemsCompleted += failed;
+    if (m_summary.firstFailures.size() < kMaxReportedFailures) {
+      m_summary.firstFailures.append(
+          QStringLiteral("%1: scraper not configured").arg(m_queue[m_queueCursor].collectionName));
+    }
     m_queue[m_queueCursor].items.clear();
     ++m_queueCursor;
     schedulePersist();
@@ -324,6 +355,25 @@ void ScraperService::startAutoCollection() {
   m_autoRunner->start();
 }
 
+void ScraperService::rollRunnerSummaryIntoSummary(const BatchScrapeRunner::Summary &runnerSummary) {
+  // Roll the active runner's per-collection counts onto the
+  // pre-collection snapshot. SET semantics (not +=) so calling this
+  // from every itemBegan / itemCompleted / finished hook stays
+  // idempotent. firstFailures is rebuilt here too: it used to be
+  // copied only at collection-finish, so the error-details popup was
+  // empty while a collection was still scraping even though the error
+  // *count* had already ticked up — "errors appear, but no detail".
+  m_summary.scraped = m_summaryAtCollectionStart.scraped + runnerSummary.scraped;
+  m_summary.skipped = m_summaryAtCollectionStart.skipped + runnerSummary.skipped;
+  m_summary.errors = m_summaryAtCollectionStart.errors + runnerSummary.errors;
+  m_summary.mediaWritten = m_summaryAtCollectionStart.mediaWritten + runnerSummary.mediaWritten;
+  m_summary.firstFailures = m_summaryAtCollectionStart.firstFailures;
+  for (const QString &f : runnerSummary.firstFailures) {
+    if (m_summary.firstFailures.size() >= kMaxReportedFailures) break;
+    m_summary.firstFailures.append(f);
+  }
+}
+
 void ScraperService::onAutoItemBegan(int doneInCol, int /*totalInCol*/, const QString &name) {
   m_currentItemPath = name;
   // The runner's progress signal counts ALL completions (success +
@@ -334,11 +384,7 @@ void ScraperService::onAutoItemBegan(int doneInCol, int /*totalInCol*/, const QS
   // Live view "Scraped X · Skipped Y · Errors Z" line ticks on each
   // item start instead of jumping at the end of the collection.
   if (m_autoRunner) {
-    const auto runnerSummary = m_autoRunner->currentSummary();
-    m_summary.scraped = m_summaryAtCollectionStart.scraped + runnerSummary.scraped;
-    m_summary.skipped = m_summaryAtCollectionStart.skipped + runnerSummary.skipped;
-    m_summary.errors = m_summaryAtCollectionStart.errors + runnerSummary.errors;
-    m_summary.mediaWritten = m_summaryAtCollectionStart.mediaWritten + runnerSummary.mediaWritten;
+    rollRunnerSummaryIntoSummary(m_autoRunner->currentSummary());
     m_totalBytesDownloaded = m_bytesAtCollectionStart + m_autoRunner->totalBytesDownloaded();
   }
   qCDebug(lcScraperService) << "itemBegan name=" << name << "doneInCol=" << doneInCol
@@ -357,11 +403,7 @@ void ScraperService::onAutoItemCompleted(int doneInCol, int /*totalInCol*/,
   // Same per-item summary roll-up as onAutoItemBegan — captures the
   // tail-end item the next progress() never fires for.
   if (m_autoRunner) {
-    const auto runnerSummary = m_autoRunner->currentSummary();
-    m_summary.scraped = m_summaryAtCollectionStart.scraped + runnerSummary.scraped;
-    m_summary.skipped = m_summaryAtCollectionStart.skipped + runnerSummary.skipped;
-    m_summary.errors = m_summaryAtCollectionStart.errors + runnerSummary.errors;
-    m_summary.mediaWritten = m_summaryAtCollectionStart.mediaWritten + runnerSummary.mediaWritten;
+    rollRunnerSummaryIntoSummary(m_autoRunner->currentSummary());
     m_totalBytesDownloaded = m_bytesAtCollectionStart + m_autoRunner->totalBytesDownloaded();
   }
   m_lastScrapedItem = scraped;
@@ -385,11 +427,9 @@ void ScraperService::onAutoFinished(const BatchScrapeRunner::Summary &summary) {
   // m_summary is already rolling per-item via the per-progress/
   // -itemCompleted hooks above, so a final snap to
   // (m_summaryAtCollectionStart + summary) settles any drift without
-  // double-counting.
-  m_summary.scraped = m_summaryAtCollectionStart.scraped + summary.scraped;
-  m_summary.skipped = m_summaryAtCollectionStart.skipped + summary.skipped;
-  m_summary.errors = m_summaryAtCollectionStart.errors + summary.errors;
-  m_summary.mediaWritten = m_summaryAtCollectionStart.mediaWritten + summary.mediaWritten;
+  // double-counting. SET semantics — same helper as the per-item
+  // hooks — so the firstFailures list isn't double-appended.
+  rollRunnerSummaryIntoSummary(summary);
   if (m_autoRunner) {
     m_totalBytesDownloaded = m_bytesAtCollectionStart + m_autoRunner->totalBytesDownloaded();
   }
@@ -405,9 +445,6 @@ void ScraperService::onAutoFinished(const BatchScrapeRunner::Summary &summary) {
   // path) so the persistence file reflects what actually ran.
   if (m_queueCursor < m_queue.size()) {
     m_queue[m_queueCursor].items.clear();
-  }
-  for (const QString &f : summary.firstFailures) {
-    if (m_summary.firstFailures.size() < 5) m_summary.firstFailures.append(f);
   }
   if (m_autoRunner) {
     m_autoRunner->deleteLater();
@@ -467,14 +504,16 @@ void ScraperService::startInteractiveItem() {
 
 void ScraperService::interactiveLookupComplete(
     ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> result) {
-  if (m_state == State::PausedInteractive) {
-    // User closed the dialog mid-lookup. Drop the result; the resume
-    // path will re-fire the lookup.
+  if (m_state != State::RunningInteractive) {
+    // Not actively running interactive: either paused (the dialog was
+    // closed mid-lookup — the resume path re-fires the lookup) or the
+    // run was cancelled / finished. Either way this stale result must
+    // not advance the queue or, worse, restart a cancelled scrape.
     return;
   }
   if (result.isError()) {
     ++m_summary.errors;
-    if (m_summary.firstFailures.size() < 5) {
+    if (m_summary.firstFailures.size() < kMaxReportedFailures) {
       m_summary.firstFailures.append(QStringLiteral("%1: %2").arg(
           QFileInfo(m_currentItemPath).fileName(), result.error().message));
     }
@@ -570,14 +609,21 @@ void ScraperService::persistState() {
 
   const QString path = pendingStateFilePath();
   QDir().mkpath(QFileInfo(path).absolutePath());
-  QFile f(path);
-  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+  // QSaveFile streams into a temp sibling and atomically renames on
+  // commit() — so a crash mid-write can't leave a truncated
+  // pending-scrape.json. A partial file fails loadPendingState()'s JSON
+  // parse, which silently suppresses the resume prompt on next launch.
+  QSaveFile f(path);
+  if (!f.open(QIODevice::WriteOnly)) {
     qCWarning(lcScraperService) << "Failed to write pending state to" << path;
     return;
   }
   // Compact rather than Indented: smaller file, faster to format, and
   // the file is machine-read only — no human ever edits this.
   f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
+  if (!f.commit()) {
+    qCWarning(lcScraperService) << "Failed to commit pending state to" << path;
+  }
 }
 
 void ScraperService::schedulePersist() {

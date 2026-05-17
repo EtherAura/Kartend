@@ -19,6 +19,7 @@
 
 #include "errorutils.h"
 #include "metadatalookupprovider.h"
+#include "mockdatabasemanager.h"
 #include "scrapertypes.h"
 
 #include <QCoreApplication>
@@ -121,6 +122,19 @@ public:
   }
 };
 
+/// IDatabaseManager double that reports every item as already
+/// scraped (non-empty `source`). Under `RescrapeMode::Skip` the
+/// runner's filterAlreadyScraped() drops every such item up front.
+class AllScrapedDb : public KartendTest::MockDatabaseManager {
+public:
+  [[nodiscard]] ItemMetadataStore::ItemMetadata loadItemMetadata(const QString &,
+                                                                 const QString &) const override {
+    ItemMetadataStore::ItemMetadata md;
+    md.source = QStringLiteral("screenscraper"); // non-empty → "already scraped"
+    return md;
+  }
+};
+
 /// Helper to build a deterministic candidate + detail pair for a
 /// given query. Keeps the test bodies focused on the controller
 /// behaviour rather than the structural data.
@@ -191,6 +205,7 @@ private slots:
   void coverFetchDisabledSkipsMediaCall();
   void coverFetchFailureLeavesMetadataSavedAndCountsAsScraped();
   void coverFetchSkippedWhenNoFrontAsset();
+  void skipModeCountsAlreadyScrapedItemsAsSkipped();
 };
 
 void TestBatchScrapeRunner::scrapesAllItemsThatHaveCandidates() {
@@ -457,6 +472,31 @@ void TestBatchScrapeRunner::coverFetchSkippedWhenNoFrontAsset() {
   const auto summary = waitForFinish(&runner);
   QCOMPARE(summary.scraped, 1);
   QVERIFY(stub->mediaRequestLog.isEmpty());
+}
+
+void TestBatchScrapeRunner::skipModeCountsAlreadyScrapedItemsAsSkipped() {
+  // Regression: under Skip rescrape mode, filterAlreadyScraped() used
+  // to drop already-scraped items SILENTLY — they vanished from the
+  // accounting, so scraped+skipped+errors never reconciled with the
+  // item count the caller started from. They must now count as
+  // `skipped` instead.
+  AllScrapedDb db;
+  // The provider is never consulted: every item is filtered out
+  // before the queue runs.
+  auto stub = std::make_shared<StubProvider>();
+  Scraper::BatchScrapeRunner runner(
+      &db, stub, QStringLiteral("uuid"),
+      QStringList{QStringLiteral("/games/A.bin"), QStringLiteral("/games/B.bin"),
+                  QStringLiteral("/games/C.bin")},
+      QString(), /*fetchPrimaryCover=*/false, Scraper::RescrapeMode::Skip,
+      /*itemConcurrency=*/1);
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  // All three were already scraped → all three counted as skipped,
+  // none scraped, none errored. scraped+skipped+errors == 3 == total.
+  QCOMPARE(summary.skipped, 3);
+  QCOMPARE(summary.scraped, 0);
+  QCOMPARE(summary.errors, 0);
 }
 
 QTEST_MAIN(TestBatchScrapeRunner)

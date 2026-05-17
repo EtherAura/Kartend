@@ -177,6 +177,13 @@ void BatchScrapeRunner::filterAlreadyScraped() {
       kept.append(path);
     }
   }
+  // The dropped items were intentionally skipped (Skip rescrape mode:
+  // they already have metadata). Count them as `skipped` rather than
+  // dropping them silently — otherwise scraped+skipped+errors never
+  // reconciles with the total the caller computed before this filter,
+  // and the items just vanish from the progress accounting.
+  m_preSkippedCount = static_cast<int>(m_paths.size() - kept.size());
+  m_summary.skipped += m_preSkippedCount;
   m_paths = std::move(kept);
 }
 
@@ -209,8 +216,8 @@ void BatchScrapeRunner::pump() {
 void BatchScrapeRunner::startItem(std::shared_ptr<ItemState> state) {
   // Emit progress BEFORE the network call so the UI shows
   // "Scraping <name>" while the request is in flight.
-  emit progress(m_summary.scraped + m_summary.skipped + m_summary.errors,
-                static_cast<int>(m_paths.size()), QFileInfo(state->path).fileName());
+  emit progress(m_summary.scraped + m_summary.skipped + m_summary.errors, totalItemCount(),
+                QFileInfo(state->path).fileName());
 
   const QString query = QFileInfo(state->path).completeBaseName();
   MetadataLookupProvider::LookupContext ctx{query, state->path};
@@ -431,7 +438,7 @@ void BatchScrapeRunner::applyAndFinish(std::shared_ptr<ItemState> state,
           self->m_summary.mediaWritten += writeRes.mediaWritten;
           emit self->itemCompleted(self->m_summary.scraped + self->m_summary.skipped +
                                        self->m_summary.errors,
-                                   static_cast<int>(self->m_paths.size()), effective, thumbPaths);
+                                   self->totalItemCount(), effective, thumbPaths);
           self->itemFinished();
           return;
         }
@@ -512,8 +519,8 @@ void BatchScrapeRunner::onWriteCompleted(quint64 requestId, bool ok) {
 
   // Notify observers (ScraperService → dialog Live view) of the
   // freshly-written (or existing fallback) paths.
-  emit itemCompleted(m_summary.scraped + m_summary.skipped + m_summary.errors,
-                     static_cast<int>(m_paths.size()), pending.scraped, pending.writtenPaths);
+  emit itemCompleted(m_summary.scraped + m_summary.skipped + m_summary.errors, totalItemCount(),
+                     pending.scraped, pending.writtenPaths);
   itemFinished();
 }
 

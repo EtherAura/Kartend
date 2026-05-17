@@ -198,6 +198,16 @@ private:
   /// `finished` exactly once.
   void itemFinished();
 
+  /// Total items this run accounts for: the live queue plus any items
+  /// `filterAlreadyScraped` removed up front (Skip rescrape mode).
+  /// Those pre-skipped items are folded into m_summary.skipped, so
+  /// reporting them in the `total` keeps the progress `done`/`total`
+  /// and the final scraped+skipped+errors tally reconciled with the
+  /// item count the caller started from.
+  [[nodiscard]] int totalItemCount() const {
+    return static_cast<int>(m_paths.size()) + m_preSkippedCount;
+  }
+
   /// Lazy-init the worker thread + ScrapeWriteWorker. Called from start()
   /// when m_db is non-null. The null-DB carve-out skips this so the
   /// existing test fixtures (which run with nullptr m_db) keep working
@@ -231,6 +241,10 @@ private:
 
   int m_queueCursor = 0; ///< Next index in m_paths to dispatch.
   int m_inFlight = 0;    ///< Items currently mid-chain.
+  /// Items dropped by `filterAlreadyScraped` before the queue ran
+  /// (Skip rescrape mode). Counted in m_summary.skipped; retained
+  /// separately so `totalItemCount()` can report the pre-filter total.
+  int m_preSkippedCount = 0;
   bool m_cancelled = false;
   bool m_finishedEmitted = false; ///< Guard against double-emit on cancel races.
   Summary m_summary;
