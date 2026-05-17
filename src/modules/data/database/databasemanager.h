@@ -203,7 +203,8 @@ private slots:
                                 const QHash<QString, QString> &fileNames,
                                 const QHash<QString, QString> &fileToArtworkDir,
                                 const QHash<QString, QString> &fileToMediaDir,
-                                const QHash<QString, int> &fileToCollectionIndex);
+                                const QHash<QString, int> &fileToCollectionIndex,
+                                int requestedCollectionIndex);
 
 private:
   [[nodiscard]] qint64 countCollectionByUuid(const QString &collectionUuid) const;

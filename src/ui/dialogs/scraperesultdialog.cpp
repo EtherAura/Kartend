@@ -1568,7 +1568,14 @@ void ScrapeResultDialog::rebuildItemsList(int collectionIndex) {
         [guard, connHolder, collectionIndex](
             int /*offset*/, const QStringList &filePaths, const QHash<QString, QString> &,
             const QHash<QString, QString> &, const QHash<QString, QString> &,
-            const QHash<QString, int> &fileToCollectionIndex) {
+            const QHash<QString, int> &fileToCollectionIndex, int requestedCollectionIndex) {
+          // itemsRangeLoaded is a shared signal: when a parent collection is
+          // cascade-checked the dialog has one fetchItemsRange in flight per
+          // collection, and every connected handler sees every emission.
+          // Consume ONLY the result for the collection this fetch asked for —
+          // otherwise this collection's cache gets populated from another
+          // collection's items (the whole-parent-group over-count bug).
+          if (requestedCollectionIndex != collectionIndex) return;
           connHolder->deleteLater();
           if (guard.isNull()) return;
           guard->m_itemsCacheByCollection[collectionIndex] = filePaths;

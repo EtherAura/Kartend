@@ -293,7 +293,8 @@ void DatabaseManager::onWorkerItemsRangeLoaded(int offset, const QStringList &fi
                                                const QHash<QString, QString> &fileNames,
                                                const QHash<QString, QString> &fileToArtworkDir,
                                                const QHash<QString, QString> &fileToMediaDir,
-                                               const QHash<QString, int> &fileToCollectionIndex) {
+                                               const QHash<QString, int> &fileToCollectionIndex,
+                                               int requestedCollectionIndex) {
   qCDebug(lcSearchDiag) << "[DatabaseManager] onWorkerItemsRangeLoaded: offset=" << offset
                         << "paths=" << filePaths.size();
 
@@ -305,7 +306,7 @@ void DatabaseManager::onWorkerItemsRangeLoaded(int offset, const QStringList &fi
 
   m_fileMapCache.mergeRangeLoaded(fileToArtworkDir, fileToMediaDir, fileToCollectionIndex);
   emit itemsRangeLoaded(offset, filePaths, filteredNames, fileToArtworkDir, fileToMediaDir,
-                        fileToCollectionIndex);
+                        fileToCollectionIndex, requestedCollectionIndex);
 }
 
 // ─── Path resolution (delegated to FileMapCache) ──────────────────────────────

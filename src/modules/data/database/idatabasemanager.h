@@ -130,11 +130,19 @@ signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames);
   void itemCountLoaded(int count);
   void itemCountLoadedWithToken(int count, int requestToken);
+  /// `requestedCollectionIndex` echoes the CollectionContext::currentIndex
+  /// the fetch was issued for. itemsRangeLoaded is a shared signal, so a
+  /// consumer with several fetches in flight at once (e.g. the Scraper
+  /// dialog, which fires one fetchItemsRange per collection when a parent
+  /// is cascade-checked) must use it to route each result to the request
+  /// that asked for it — otherwise the first result is consumed by every
+  /// waiting handler.
   void itemsRangeLoaded(int offset, const QStringList &filePaths,
                         const QHash<QString, QString> &fileNames,
                         const QHash<QString, QString> &fileToArtworkDir,
                         const QHash<QString, QString> &fileToMediaDir,
-                        const QHash<QString, int> &fileToCollectionIndex);
+                        const QHash<QString, int> &fileToCollectionIndex,
+                        int requestedCollectionIndex);
   void visualIndexForPathLoaded(int visualIndex, const QString &filePath);
   void errorOccurred(const ErrorUtils::ErrorContext &error);
   void cachedCountsUpdated();

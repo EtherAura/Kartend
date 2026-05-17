@@ -39,7 +39,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   if (!ensureDatabaseAvailable("QueryManager::fetchItemsRange")) {
     emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(),
                           QHash<QString, QString>(), QHash<QString, QString>(),
-                          QHash<QString, int>());
+                          QHash<QString, int>(), context.currentIndex);
     return;
   }
 
@@ -74,7 +74,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   if (ctx.config.isPlaylist && uuids.isEmpty()) {
     emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(),
                           QHash<QString, QString>(), QHash<QString, QString>(),
-                          QHash<QString, int>());
+                          QHash<QString, int>(), context.currentIndex);
     return;
   }
   if (ctx.config.isPlaylist && !ensurePlaylistScopePopulated(ctx.config.playlistId)) {
@@ -85,7 +85,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
     emit errorOccurred(err);
     emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(),
                           QHash<QString, QString>(), QHash<QString, QString>(),
-                          QHash<QString, int>());
+                          QHash<QString, int>(), context.currentIndex);
     return;
   }
 
@@ -219,7 +219,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
         }
 
         emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir, fileToMediaDir,
-                              fileToCollectionIndex);
+                              fileToCollectionIndex, context.currentIndex);
         return;
       } else {
         // Cache query failed - fall through to standard path
@@ -265,7 +265,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
       emit errorOccurred(err);
       emit itemsRangeLoaded(offset, QStringList(), QHash<QString, QString>(),
                             QHash<QString, QString>(), QHash<QString, QString>(),
-                            QHash<QString, int>());
+                            QHash<QString, int>(), context.currentIndex);
       return;
     }
   }
@@ -445,5 +445,5 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
   }
 
   emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir, fileToMediaDir,
-                        fileToCollectionIndex);
+                        fileToCollectionIndex, context.currentIndex);
 }

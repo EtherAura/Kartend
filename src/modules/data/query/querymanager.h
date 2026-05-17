@@ -78,11 +78,15 @@ signals:
                    const QHash<QString, int> &fileToCollectionIndex);
   void itemCountLoaded(int count);
   void itemCountLoadedWithToken(int count, int requestToken);
+  /// Trailing `requestedCollectionIndex` echoes CollectionContext::currentIndex
+  /// so concurrent fetchItemsRange callers can match a result to its request
+  /// — see IDatabaseManager::itemsRangeLoaded.
   void itemsRangeLoaded(int offset, const QStringList &filePaths,
                         const QHash<QString, QString> &fileNames,
                         const QHash<QString, QString> &fileToArtworkDir,
                         const QHash<QString, QString> &fileToMediaDir,
-                        const QHash<QString, int> &fileToCollectionIndex);
+                        const QHash<QString, int> &fileToCollectionIndex,
+                        int requestedCollectionIndex);
   /// Emitted when the visual index for a specific file path is found.
   /// Index is -1 if the file was not found in the collection.
   void visualIndexForPathLoaded(int visualIndex, const QString &filePath);

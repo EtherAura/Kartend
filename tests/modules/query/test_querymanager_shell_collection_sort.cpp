@@ -206,6 +206,14 @@ void TestQueryManagerShellCollectionSort::cachedNameSortIsFlatAcrossSubcollectio
   const QStringList filePaths = args.at(1).toStringList();
   QCOMPARE(filePaths.size(), kCollectionCount);
 
+  // itemsRangeLoaded must echo the request's CollectionContext::currentIndex
+  // as the trailing requestedCollectionIndex argument. itemsRangeLoaded is a
+  // shared signal, so a consumer with several concurrent fetchItemsRange
+  // calls in flight (e.g. the Scraper dialog cascade-checking a parent)
+  // relies on this to route each result to the collection that asked for it
+  // — without it the first result was consumed by every waiting handler.
+  QCOMPARE(args.at(6).toInt(), ctx.currentIndex);
+
   // The visible order is the basename order of the returned paths. With the
   // pre-fix path sort this is 11.bin, 10.bin, ..., 00.bin (one subcollection
   // directory after another); a flat name sort interleaves them alphabetically.
