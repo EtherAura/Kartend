@@ -1,6 +1,7 @@
 #include "scrapersettingspanel.h"
 
 #include "collectionutils.h"
+#include "scrapelogger.h"
 #include "screenscraperparser.h"
 #include "screenscraperprovider.h"
 #include "settingsmodel.h"
@@ -232,6 +233,19 @@ void ScraperSettingsPanel::buildLayout() {
          "raised so the Live view + Cancel/Close buttons are reachable."));
   form->addRow(QString(), m_autoResumeCheck);
 
+  // Scrape logging toggle. Off by default — diagnostic logging has a
+  // per-message disk-write cost, so it is opt-in for users debugging a
+  // misbehaving or crashed scrape.
+  m_scrapeLoggingCheck = new QCheckBox(tr("Enable scrape logging"), this);
+  m_scrapeLoggingCheck->setToolTip(tr("Records detailed scrape activity to a log file so a scrape "
+                                      "that crashes or stalls can be diagnosed afterwards (a "
+                                      "windowed build has no visible console output).\n\n"
+                                      "When on, scrape messages are written to:\n%1\n\n"
+                                      "The file is size-capped; the previous run rolls over to "
+                                      "scrape.log.old. Leave off for normal use.")
+                                       .arg(ScrapeLogger::logFilePath()));
+  form->addRow(QString(), m_scrapeLoggingCheck);
+
   root->addLayout(form);
   root->addStretch(1);
 }
@@ -288,6 +302,14 @@ void ScraperSettingsPanel::connectChangeSignals() {
   // Auto-resume is a behaviour toggle independent of the speed/quality
   // preset; flipping it doesn't demote the preset to Custom.
   connect(m_autoResumeCheck, &QCheckBox::toggled, this, [this](bool) {
+    if (m_loading) return;
+    writeModel();
+    emit changed();
+  });
+
+  // Scrape logging is a diagnostic toggle, also independent of the
+  // preset.
+  connect(m_scrapeLoggingCheck, &QCheckBox::toggled, this, [this](bool) {
     if (m_loading) return;
     writeModel();
     emit changed();
@@ -411,6 +433,10 @@ void ScraperSettingsPanel::refresh() {
     QSignalBlocker b(m_autoResumeCheck);
     m_autoResumeCheck->setChecked(opts.scrapeAutoResume);
   }
+  if (m_scrapeLoggingCheck) {
+    QSignalBlocker b(m_scrapeLoggingCheck);
+    m_scrapeLoggingCheck->setChecked(opts.scrapeLogging);
+  }
   if (m_regionCombo) {
     const int regionIdx = m_regionCombo->findData(opts.preferredScraperRegion);
     // An unrecognised persisted region (hand-edited config) falls back
@@ -435,6 +461,9 @@ void ScraperSettingsPanel::writeModel() {
       static_cast<GeneralSettings::ScraperRescrapeMode>(m_rescrapeCombo->currentData().toInt());
   if (m_autoResumeCheck) {
     opts.scrapeAutoResume = m_autoResumeCheck->isChecked();
+  }
+  if (m_scrapeLoggingCheck) {
+    opts.scrapeLogging = m_scrapeLoggingCheck->isChecked();
   }
   if (m_regionCombo) {
     opts.preferredScraperRegion = m_regionCombo->currentData().toString();

@@ -1152,6 +1152,14 @@ struct GeneralSettings {
     // dialog blocking the resume. Consumed by MainWindow's startup
     // hook around ScraperService::loadPendingState (Kartend-1uvp).
     bool scrapeAutoResume = false;
+    // When true, scrape diagnostic logging is enabled: the kartend.scrape*
+    // logging categories are raised to debug+info verbosity and their
+    // output is teed to a size-capped `scrape.log` in the app config
+    // directory. Default off. A GUI build has no visible stderr, so this
+    // is the only way for a user to capture what a scrape did when it
+    // misbehaves (a crash, a stuck resume). Consumed by ScrapeLogger,
+    // toggled from SettingsManager load/save.
+    bool scrapeLogging = false;
     // Fallback region for ScreenScraper's region-keyed fields (title,
     // release date, box art), as an SS region shortname ("us", "eu",
     // "jp", "wor", ...). Each scraped item first honours its own

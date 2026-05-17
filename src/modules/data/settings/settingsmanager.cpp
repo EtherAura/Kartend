@@ -12,6 +12,7 @@
 #include "mainwindow.h"
 #include "navigationmanager.h"
 #include "pathutils.h"
+#include "scrapelogger.h"
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsdialog.h"
@@ -324,12 +325,17 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
           .toInt());
   settings.scraperOptions.preferJpgOutput = s.value("preferJpgOutput", false).toBool();
   settings.scraperOptions.scrapeAutoResume = s.value("scrapeAutoResume", false).toBool();
+  settings.scraperOptions.scrapeLogging = s.value("scrapeLogging", false).toBool();
   settings.scraperOptions.preferredScraperRegion =
       s.value("preferredRegion", QStringLiteral("us")).toString().trimmed().toLower();
   s.endGroup();
 
   settings.lastSelectedItems.clear();
   m_generalSettings = settings;
+  // Bring scrape logging into effect for the running process. This is
+  // the first settings read at startup, so the kartend.scrape*
+  // categories are toggled before any scrape (or resume prompt) runs.
+  ScrapeLogger::setEnabled(m_generalSettings.scraperOptions.scrapeLogging);
 }
 
 // Saves general settings (no legacy last_selected.dat persistence)
@@ -434,8 +440,12 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   m_generalSettings.scraperOptions.rescrapeMode = settings.scraperOptions.rescrapeMode;
   m_generalSettings.scraperOptions.preferJpgOutput = settings.scraperOptions.preferJpgOutput;
   m_generalSettings.scraperOptions.scrapeAutoResume = settings.scraperOptions.scrapeAutoResume;
+  m_generalSettings.scraperOptions.scrapeLogging = settings.scraperOptions.scrapeLogging;
   m_generalSettings.scraperOptions.preferredScraperRegion =
       settings.scraperOptions.preferredScraperRegion;
+  // Apply the (possibly changed) scrape-logging toggle immediately so a
+  // settings-dialog change takes effect without a restart. Idempotent.
+  ScrapeLogger::setEnabled(m_generalSettings.scraperOptions.scrapeLogging);
   // Launch history
   m_generalSettings.historyEnabled = settings.historyEnabled;
   m_generalSettings.historyMaxEntries = qBound(10, settings.historyMaxEntries, 50000);
@@ -630,6 +640,7 @@ void SettingsManager::saveGeneralSettings(const GeneralSettings &settings) {
   s.setValue("rescrapeMode", static_cast<int>(m_generalSettings.scraperOptions.rescrapeMode));
   s.setValue("preferJpgOutput", m_generalSettings.scraperOptions.preferJpgOutput);
   s.setValue("scrapeAutoResume", m_generalSettings.scraperOptions.scrapeAutoResume);
+  s.setValue("scrapeLogging", m_generalSettings.scraperOptions.scrapeLogging);
   s.setValue("preferredRegion", m_generalSettings.scraperOptions.preferredScraperRegion);
   s.endGroup();
 

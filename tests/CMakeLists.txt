@@ -1250,6 +1250,7 @@ add_executable(test_batchscraperunner
   ${SRC_DIR}/utils/fs/extensionutils.cpp
   ${SRC_DIR}/modules/data/database/idatabasemanager.h
   ${SRC_DIR}/modules/data/scraper/scrapewriteworker.h
+  integration/mocks/mockdatabasemanager.h
 )
 target_include_directories(test_batchscraperunner PRIVATE
   ${SRC_DIR}/modules/data/scraper
@@ -1258,6 +1259,7 @@ target_include_directories(test_batchscraperunner PRIVATE
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs
   ${SRC_DIR}/utils/text
+  ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks
   ${SRC_DIR}/utils/threading
   ${SRC_DIR}/utils/view
   ${SRC_DIR}/ui/uiconstants
@@ -1303,6 +1305,20 @@ target_link_libraries(test_scraperservice_resume
   Qt6::Test
 )
 add_test(NAME ScraperServiceResume COMMAND test_scraperservice_resume)
+
+# ScrapeLogger tests (message-handler tee of kartend.scrape* to scrape.log)
+add_executable(test_scrapelogger
+  utils/test_scrapelogger.cpp
+  ${SRC_DIR}/utils/app/scrapelogger.cpp
+)
+target_include_directories(test_scrapelogger PRIVATE
+  ${SRC_DIR}/utils/app
+)
+target_link_libraries(test_scrapelogger
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME ScrapeLogger COMMAND test_scrapelogger)
 
 # RomHasher tests (streaming MD5/SHA1 for SS hash-based ROM ID)
 add_executable(test_romhasher

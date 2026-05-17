@@ -47,6 +47,10 @@ private:
   /// launch (Kartend-1uvp). Off by default so first-time users see the
   /// modal Resume / Discard prompt and learn the recovery path.
   QCheckBox *m_autoResumeCheck = nullptr;
+  /// Toggle for scrape diagnostic logging. Off by default; when on,
+  /// scrape activity is written to `scrape.log` in the config dir for
+  /// post-mortem diagnosis of a misbehaving or crashed scrape.
+  QCheckBox *m_scrapeLoggingCheck = nullptr;
   /// Live read-out of the authenticated user's SS account state
   /// (thread allowance, daily quota usage). Updated by a ssuserInfos
   /// lookup triggered from the Detect button below the spinbox.

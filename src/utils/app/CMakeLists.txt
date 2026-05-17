@@ -2,6 +2,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   cliargs.cpp
   collectionutils.cpp
   loggingcategories.cpp
+  scrapelogger.cpp
   settingsutils.cpp
   applicationcontext.h
   cliargs.h
@@ -10,6 +11,7 @@ target_sources(${KARTEND_LIB_TARGET} PRIVATE
   errorutils.h
   loggingcategories.h
   propertyutils.h
+  scrapelogger.h
   settingsutils.h
   setuputils.h
   stateutils.h
