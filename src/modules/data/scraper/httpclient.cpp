@@ -22,6 +22,24 @@ using ErrorUtils::ErrorContext;
 
 namespace Scraper {
 
+namespace {
+/// Transfer (inactivity) timeout for every scraper HTTP request.
+/// QNetworkAccessManager never aborts a stalled connection on its own,
+/// so a reply whose socket goes silent would otherwise never emit
+/// finished() — its response callback never runs, the per-item chain
+/// in BatchScrapeRunner never completes, and because rate-limited
+/// providers run with maxConcurrent=1 every later request queued for
+/// that host is blocked behind it. The whole batch then wedges with
+/// the result dialog's ETA still climbing. setTransferTimeout makes Qt
+/// abort a request after this many ms of zero byte movement; the abort
+/// surfaces as finished() + OperationCanceledError and flows through
+/// send()'s existing error path, so the item is recorded as an error
+/// and the batch keeps going. 30s of total inactivity is an
+/// unambiguous stall — a slow but progressing download keeps resetting
+/// the timer because bytes are still arriving.
+constexpr int kTransferTimeoutMs = 30000;
+} // namespace
+
 HttpClient *HttpClient::instance() {
   static HttpClient *s_instance = nullptr;
   if (!s_instance) {
@@ -34,6 +52,9 @@ HttpClient *HttpClient::instance() {
 
 HttpClient::HttpClient(QObject *parent) : QObject(parent) {
   m_qnam = new QNetworkAccessManager(this);
+  // Without this a stalled reply never completes and pins its host's
+  // concurrency slot forever (see kTransferTimeoutMs).
+  m_qnam->setTransferTimeout(kTransferTimeoutMs);
 }
 
 HttpClient::~HttpClient() = default;
@@ -222,8 +243,20 @@ void HttpClient::send(const QString &host, PendingRequest request) {
                       QString::fromLatin1(reply->rawHeader("Retry-After")).toInt(&ok);
                   if (ok && parsed > 0) retryAfter = parsed;
                 }
-                auto ctx = ErrorContext::error(ErrorCode::DatabaseQueryFailed,
-                                               "HTTP request failed", "Scraper::HttpClient::send")
+                // A request aborted by the transfer timeout above
+                // surfaces as OperationCanceledError. HttpClient never
+                // calls abort() itself, so that error here always means
+                // the connection stalled — report it as its own failure
+                // mode so a dead connection is distinguishable from a
+                // genuine 4xx/5xx in the scrape summary's failure list.
+                const bool timedOut =
+                    reply->error() == QNetworkReply::OperationCanceledError;
+                auto ctx = ErrorContext::error(
+                               timedOut ? ErrorCode::OperationCancelled
+                                        : ErrorCode::DatabaseQueryFailed,
+                               timedOut ? QStringLiteral("Network request timed out")
+                                        : QStringLiteral("HTTP request failed"),
+                               "Scraper::HttpClient::send")
                                .withDetails(details)
                                .withHttpStatus(httpStatus);
                 if (retryAfter > 0) ctx.withRetryAfter(retryAfter);

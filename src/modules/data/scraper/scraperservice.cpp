@@ -11,6 +11,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLockFile>
 #include <QLoggingCategory>
 #include <QPointer>
 #include <QStandardPaths>
@@ -54,6 +55,51 @@ QString ScraperService::pendingStateFilePath() {
   return QDir(dir).filePath(QStringLiteral("pending-scrape.json"));
 }
 
+QString ScraperService::pendingStateLockFilePath() {
+  return pendingStateFilePath() + QStringLiteral(".lock");
+}
+
+bool ScraperService::acquireScrapeLock() {
+  if (m_scrapeLock && m_scrapeLock->isLocked()) return true;
+  const QString path = pendingStateLockFilePath();
+  QDir().mkpath(QFileInfo(path).absolutePath());
+  m_scrapeLock = std::make_unique<QLockFile>(path);
+  // Disable time-based staleness: a scrape legitimately runs for
+  // minutes or hours, so the lock file's age says nothing. QLockFile
+  // still treats a lock whose owning PID is no longer running as
+  // stale (PID + process-name check) and reclaims it — exactly the
+  // crashed-owner case we *want* to resume from.
+  m_scrapeLock->setStaleLockTime(0);
+  if (m_scrapeLock->tryLock(0)) return true;
+  qCWarning(lcScraperService) << "pending-scrape state is owned by another live Kartend instance;"
+                              << "this run will not be persisted for resume.";
+  m_scrapeLock.reset();
+  return false;
+}
+
+void ScraperService::releaseScrapeLock() {
+  if (m_scrapeLock) {
+    m_scrapeLock->unlock(); // also removes the .lock file
+    m_scrapeLock.reset();
+  }
+}
+
+bool ScraperService::pendingScrapeOwnedByLiveInstance() {
+  QLockFile probe(pendingStateLockFilePath());
+  probe.setStaleLockTime(0);
+  if (probe.tryLock(0)) {
+    // Acquired it ourselves → no live owner (nobody scraping, or the
+    // previous owner crashed and its stale lock was reclaimed). Drop
+    // it again; the actual run takes its own lock via acquireScrapeLock.
+    probe.unlock();
+    return false;
+  }
+  // tryLock failed: a live process holds it iff the error is
+  // LockFailedError. Any other error (permissions, etc.) is treated
+  // as "not owned" so a transient glitch can't strand a real resume.
+  return probe.error() == QLockFile::LockFailedError;
+}
+
 int ScraperService::countQueueRemaining() const {
   int total = 0;
   for (const auto &j : m_queue) total += j.items.size();
@@ -67,6 +113,11 @@ void ScraperService::startScrape(const QList<CollectionJob> &jobs, Mode mode,
                                 << static_cast<int>(m_state);
     return;
   }
+  // Take the ownership lock so a second instance sees this scrape as
+  // live and won't offer to resume it. If another instance already
+  // owns the state file, this run still proceeds (the user asked for
+  // it) but persistState() will skip writing — see m_ownsStateFile.
+  m_ownsStateFile = acquireScrapeLock();
   m_queue = jobs;
   m_queueCursor = 0;
   m_mode = mode;
@@ -92,6 +143,15 @@ void ScraperService::startScrape(const QList<CollectionJob> &jobs, Mode mode,
 void ScraperService::resumeFromState(const PendingState &state) {
   if (!state.isValid()) return;
   if (m_state != State::Idle) return;
+  // Claim ownership before touching the queue. A failure here means
+  // another live instance grabbed this scrape between loadPendingState
+  // and now — resuming anyway would run it twice, so bail.
+  if (!acquireScrapeLock()) {
+    qCWarning(lcScraperService)
+        << "Refusing to resume: another live Kartend instance owns this scrape.";
+    return;
+  }
+  m_ownsStateFile = true;
   m_queue = state.queue;
   m_queueCursor = 0;
   m_mode = state.mode;
@@ -462,6 +522,9 @@ void ScraperService::appendRecentMedia(const QStringList &paths) {
 }
 
 void ScraperService::persistState() {
+  // Another live instance owns pending-scrape.json — never write over
+  // it (that would corrupt its resume state) and never remove it.
+  if (!m_ownsStateFile) return;
   if (m_state == State::Idle) {
     clearStateFile();
     return;
@@ -534,8 +597,15 @@ void ScraperService::clearStateFile() {
   // it so a queued schedulePersist() doesn't resurrect the state.
   m_persistDirty = false;
   if (m_persistTimer) m_persistTimer->stop();
-  const QString path = pendingStateFilePath();
-  if (QFile::exists(path)) QFile::remove(path);
+  // Only this run's owner may delete the file. A concurrent secondary
+  // scrape that never got the lock must leave the real owner's state
+  // intact when it finishes.
+  if (m_ownsStateFile) {
+    const QString path = pendingStateFilePath();
+    if (QFile::exists(path)) QFile::remove(path);
+  }
+  releaseScrapeLock();
+  m_ownsStateFile = false;
 }
 
 ScraperService::PendingState ScraperService::loadPendingState(bool consumeOnLoad) {
@@ -543,6 +613,16 @@ ScraperService::PendingState ScraperService::loadPendingState(bool consumeOnLoad
   const QString path = pendingStateFilePath();
   QFile f(path);
   if (!f.exists() || !f.open(QIODevice::ReadOnly)) return out;
+  // A pending file that belongs to a still-running Kartend instance is
+  // NOT an interrupted scrape — it's a live one. Return an invalid
+  // state so the caller skips the resume prompt; the owning instance
+  // clears the file itself when its scrape finishes. Never consume it
+  // here, even with consumeOnLoad set.
+  if (pendingScrapeOwnedByLiveInstance()) {
+    qCInfo(lcScraperService) << "pending-scrape.json belongs to a running Kartend instance — "
+                                "skipping resume.";
+    return out;
+  }
   const QByteArray bytes = f.readAll();
   f.close();
   QJsonParseError err{};
@@ -592,7 +672,17 @@ ScraperService::PendingState ScraperService::loadPendingState(bool consumeOnLoad
 }
 
 void ScraperService::discardPendingState() {
-  clearStateFile();
+  // Explicit user-driven discard from the resume prompt. This path is
+  // only reachable when loadPendingState() returned a valid state,
+  // which it does only for a scrape *not* owned by a live instance —
+  // so an unconditional remove here can't clobber a running scrape.
+  m_persistDirty = false;
+  if (m_persistTimer) m_persistTimer->stop();
+  const QString path = pendingStateFilePath();
+  if (QFile::exists(path)) QFile::remove(path);
+  // Drop the now-orphaned lock file too so the config dir stays tidy;
+  // QLockFile would reclaim it as stale anyway.
+  QFile::remove(pendingStateLockFilePath());
 }
 
 } // namespace Scraper

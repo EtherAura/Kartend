@@ -146,6 +146,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Opening a second Kartend window while a scrape is running no longer
+  offers to "resume" that same scrape. The interrupted-scrape snapshot
+  stays on disk for the whole run, so a second instance used to see it
+  and could start the scrape a second time — two runs racing on the
+  same database and artwork files. A running scrape is now marked as
+  owned by its live process; only a scrape whose owner has actually
+  exited (e.g. a crash) is offered for resume.
+- A long-running scrape no longer hangs forever when a network
+  request stalls. With no transfer timeout, a dead connection could
+  freeze the whole batch — no further media downloaded, the estimated
+  time-remaining still climbing — until the app was restarted.
+  Stalled requests are now aborted after 30 seconds; the affected
+  item is recorded as an error and the scrape continues.
 - Renaming a collection no longer strands its scanned items and play
   history. A collection is identified by its name + media folder, so
   a rename used to leave the old rows unreachable — which inflated the

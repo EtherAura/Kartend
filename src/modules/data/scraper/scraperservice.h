@@ -16,6 +16,7 @@
 #include "scrapertypes.h"
 
 class IDatabaseManager;
+class QLockFile;
 class QTimer;
 struct GeneralSettings;
 
@@ -234,6 +235,23 @@ private:
   void flushPendingPersist();
   void clearStateFile();
   [[nodiscard]] static QString pendingStateFilePath();
+  /// Sibling lock file (`pending-scrape.json.lock`) used to mark the
+  /// pending-scrape state as owned by a live process.
+  [[nodiscard]] static QString pendingStateLockFilePath();
+  /// Take the pending-scrape ownership lock for this run. Returns true
+  /// when acquired (or already held). Returns false when another live
+  /// Kartend instance already owns the scrape — the caller then runs
+  /// without persisting resumable state. A lock left by a crashed
+  /// owner is stale (its PID is dead) and gets reclaimed here.
+  [[nodiscard]] bool acquireScrapeLock();
+  /// Drop the ownership lock and remove its on-disk file. Safe to call
+  /// when no lock is held.
+  void releaseScrapeLock();
+  /// True when `pending-scrape.json` belongs to a still-running
+  /// Kartend instance — i.e. a second instance must NOT offer to
+  /// resume that scrape. False when nobody holds it or the previous
+  /// owner crashed (stale lock).
+  [[nodiscard]] static bool pendingScrapeOwnedByLiveInstance();
   void appendRecentMedia(const QStringList &paths);
   [[nodiscard]] int countQueueRemaining() const;
 
@@ -292,6 +310,14 @@ private:
   // Timeout calls flushPendingPersist() which does the real write.
   QTimer *m_persistTimer = nullptr;
   bool m_persistDirty = false;
+
+  // Multi-instance guard. Held for the lifetime of an active run so a
+  // second Kartend instance can tell the scrape is live and skips its
+  // resume prompt. `m_ownsStateFile` gates every write to / removal of
+  // `pending-scrape.json`: false means another live instance owns the
+  // file, so this run must leave it untouched.
+  std::unique_ptr<QLockFile> m_scrapeLock;
+  bool m_ownsStateFile = false;
 };
 
 } // namespace Scraper

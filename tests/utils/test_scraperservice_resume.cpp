@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLockFile>
 #include <QObject>
 #include <QStandardPaths>
 #include <QString>
@@ -25,6 +26,7 @@ private slots:
   void cleanup();
   void loadRestoresMediaWrittenCount();
   void loadDefaultsMediaWrittenToZeroForLegacyFile();
+  void loadSkipsResumeWhenOwnedByLiveInstance();
 
 private:
   static void writePendingFile(const QByteArray &json);
@@ -32,11 +34,38 @@ private:
   // If the production path ever moves, loadPendingState() will read
   // nothing and the isValid() assertions below fail loudly.
   static QString pendingFilePath();
+  // Mirrors ScraperService::pendingStateLockFilePath().
+  static QString pendingLockFilePath();
+  // A small valid pending-scrape snapshot reused by several tests.
+  static QByteArray validPendingJson();
 };
 
 QString TestScraperServiceResume::pendingFilePath() {
   const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
   return QDir(dir).filePath(QStringLiteral("pending-scrape.json"));
+}
+
+QString TestScraperServiceResume::pendingLockFilePath() {
+  return pendingFilePath() + QStringLiteral(".lock");
+}
+
+QByteArray TestScraperServiceResume::validPendingJson() {
+  return R"json({
+    "version": 1,
+    "started_at_unix_ms": 1715000000000,
+    "mode": "auto",
+    "write_metadata": true,
+    "summary_so_far": { "scraped": 1, "skipped": 0, "errors": 0 },
+    "queue": [
+      {
+        "collection_index": 0,
+        "collection_uuid": "uuid-1",
+        "collection_name": "Coll",
+        "artwork_dir": "/art",
+        "remaining": ["/m/a.bin"]
+      }
+    ]
+  })json";
 }
 
 void TestScraperServiceResume::initTestCase() {
@@ -57,10 +86,12 @@ void TestScraperServiceResume::writePendingFile(const QByteArray &json) {
 void TestScraperServiceResume::init() {
   // Each test starts from a clean slate so a stale file can't leak in.
   QFile::remove(pendingFilePath());
+  QFile::remove(pendingLockFilePath());
 }
 
 void TestScraperServiceResume::cleanup() {
   QFile::remove(pendingFilePath());
+  QFile::remove(pendingLockFilePath());
 }
 
 void TestScraperServiceResume::loadRestoresMediaWrittenCount() {
@@ -137,6 +168,31 @@ void TestScraperServiceResume::loadDefaultsMediaWrittenToZeroForLegacyFile() {
   QVERIFY(state.isValid());
   QCOMPARE(state.summarySoFar.mediaWritten, 0);
   QCOMPARE(state.summarySoFar.scraped, 5);
+}
+
+void TestScraperServiceResume::loadSkipsResumeWhenOwnedByLiveInstance() {
+  // A second Kartend instance must not resume a scrape that another,
+  // still-running instance owns. The running instance is simulated by
+  // a QLockFile held at the sibling `.lock` path — its owning PID (us)
+  // is alive, so loadPendingState() must treat the snapshot as live.
+  writePendingFile(validPendingJson());
+
+  QLockFile liveOwner(pendingLockFilePath());
+  liveOwner.setStaleLockTime(0);
+  QVERIFY(liveOwner.tryLock(0));
+
+  ScraperService service;
+  const ScraperService::PendingState owned = service.loadPendingState(/*consumeOnLoad=*/false);
+  QVERIFY(!owned.isValid()); // resume must NOT be offered
+  // The owning instance's state file must be left untouched, even
+  // though a consume was not requested.
+  QVERIFY(QFile::exists(pendingFilePath()));
+
+  // Once the owning instance exits, the lock is released and the
+  // snapshot becomes a genuine interrupted scrape again.
+  liveOwner.unlock();
+  const ScraperService::PendingState orphaned = service.loadPendingState(/*consumeOnLoad=*/false);
+  QVERIFY(orphaned.isValid());
 }
 
 QTEST_MAIN(TestScraperServiceResume)
