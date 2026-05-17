@@ -25,6 +25,7 @@
       <item row="1" column="0"><widget class="QLabel" name="label_core"><property name="text"><string>Core Path:</string></property></widget></item>
       <item row="1" column="1">
        <layout class="QHBoxLayout" name="coreLayout">
+        <item><widget class="QComboBox" name="coreComboBox"><property name="toolTip"><string>Cores detected in your RetroArch install — pick one to fill the path.</string></property></widget></item>
         <item><widget class="QLineEdit" name="coreLineEdit"><property name="toolTip"><string>Path to libretro core file</string></property></widget></item>
         <item><widget class="QPushButton" name="browseCoreButton"><property name="text"><string>Browse</string></property></widget></item>
        </layout>

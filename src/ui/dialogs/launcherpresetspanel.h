@@ -25,6 +25,11 @@ public:
   /// panel (the host SettingsDialog retains ownership). Triggers a refresh.
   void setPresets(QList<LauncherPreset> *presets);
 
+  /// RetroArch install override (a retroarch.cfg file or a core
+  /// directory) forwarded to the launcher editor so its Core picker
+  /// can list installed cores. Empty auto-detects the standard path.
+  void setRetroarchConfigOverride(const QString &configOverride);
+
   /// Re-hydrate the list view from the pointed-to presets. Safe to call
   /// repeatedly; preserves the current selection row when possible.
   void refresh();
@@ -47,6 +52,8 @@ private:
 
   Ui::LauncherPresetsPanel *ui;
   QList<LauncherPreset> *m_presets = nullptr;
+  /// RetroArch override passed through to each LauncherEditorDialog.
+  QString m_retroarchOverride;
   /// Programmatically appended below the existing Add / Edit / Remove
   /// stack. Pops a multi-select picker of well-known media-player /
   /// reader / image / emulator binaries detected on the user's PATH.

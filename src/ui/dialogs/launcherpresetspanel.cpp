@@ -60,6 +60,10 @@ void LauncherPresetsPanel::setPresets(QList<LauncherPreset> *presets) {
   refresh();
 }
 
+void LauncherPresetsPanel::setRetroarchConfigOverride(const QString &configOverride) {
+  m_retroarchOverride = configOverride;
+}
+
 void LauncherPresetsPanel::refresh() {
   const int previousRow = ui->launcherPresetsList->currentRow();
   QSignalBlocker blocker(ui->launcherPresetsList);
@@ -88,7 +92,8 @@ void LauncherPresetsPanel::onAdd() {
   }
   // Presets can't reference other presets, so the editor opens in inline-only
   // mode (empty availablePresets). The dialog's preset combo is hidden.
-  LauncherEditorDialog dialog(this, LauncherConfig{}, tr("Add Launcher Preset"));
+  LauncherEditorDialog dialog(this, LauncherConfig{}, tr("Add Launcher Preset"), {},
+                              m_retroarchOverride);
   if (dialog.exec() != QDialog::Accepted) {
     return;
   }
@@ -124,7 +129,7 @@ void LauncherPresetsPanel::onEdit() {
   seed.launcherPath = existing.launcherPath;
   seed.corePath = existing.corePath;
   seed.launchParameters = existing.launchParameters;
-  LauncherEditorDialog dialog(this, seed, tr("Edit Launcher Preset"));
+  LauncherEditorDialog dialog(this, seed, tr("Edit Launcher Preset"), {}, m_retroarchOverride);
   if (dialog.exec() != QDialog::Accepted) {
     return;
   }

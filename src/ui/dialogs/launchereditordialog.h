@@ -31,7 +31,8 @@ class LauncherEditorDialog : public QDialog {
 public:
   explicit LauncherEditorDialog(QWidget *parent, const LauncherConfig &initial,
                                 const QString &title,
-                                const QList<LauncherPreset> &availablePresets = {});
+                                const QList<LauncherPreset> &availablePresets = {},
+                                const QString &retroarchConfigOverride = QString());
 
   /// Returns the launcher as edited by the user. Trim is applied to all
   /// fields; empty `name` is preserved (the chooser falls back to the
@@ -55,14 +56,23 @@ private:
   /// is noise.
   void updateCoreRowVisibility();
 
+  /// Fill the Core combo with libretro cores discovered in the
+  /// RetroArch install (per the override / autodetect).
+  void populateCoreCombo();
+
   QList<LauncherPreset> m_availablePresets;
   QFormLayout *m_form = nullptr;
   QComboBox *m_presetCombo = nullptr;
   QLineEdit *m_nameEdit = nullptr;
   QLineEdit *m_launcherEdit = nullptr;
   QLineEdit *m_coreEdit = nullptr;
+  /// Dropdown of libretro cores detected in the RetroArch install;
+  /// picking one fills m_coreEdit.
+  QComboBox *m_coreCombo = nullptr;
   QWidget *m_coreRowWidget = nullptr;
   QLineEdit *m_paramsEdit = nullptr;
+  /// RetroArch override (retroarch.cfg / core dir); empty = autodetect.
+  QString m_retroarchOverride;
 };
 
 #endif // LAUNCHEREDITORDIALOG_H

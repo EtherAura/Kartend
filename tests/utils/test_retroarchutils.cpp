@@ -9,6 +9,7 @@
 #include <QByteArray>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QObject>
 #include <QString>
 #include <QTemporaryDir>
@@ -18,6 +19,8 @@ class TestRetroArchUtils : public QObject {
   Q_OBJECT
 private slots:
   void parsesCoreDirectoryFromConfig();
+  void expandsTildeInLibretroDirectory();
+  void resolvesRelativeLibretroDirectoryAgainstConfigDir();
   void configDefaultSentinelReturnsEmpty();
   void configWithoutKeyReturnsEmpty();
   void resolveCoreDirectory_dirOverrideUsedAsIs();
@@ -48,6 +51,23 @@ void TestRetroArchUtils::parsesCoreDirectoryFromConfig() {
                      .arg(coreDir)
                      .toUtf8());
   QCOMPARE(RetroArchUtils::coreDirectoryFromConfig(cfg), QDir::cleanPath(coreDir));
+}
+
+void TestRetroArchUtils::expandsTildeInLibretroDirectory() {
+  // retroarch.cfg routinely stores the core dir home-relative with a
+  // leading `~`; it must expand to the real home directory.
+  const QString cfg = m_dir.filePath(QStringLiteral("tilde.cfg"));
+  writeFile(cfg, QByteArrayLiteral("libretro_directory = \"~/.config/retroarch/cores\"\n"));
+  QCOMPARE(RetroArchUtils::coreDirectoryFromConfig(cfg),
+           QDir(QDir::homePath()).filePath(QStringLiteral(".config/retroarch/cores")));
+}
+
+void TestRetroArchUtils::resolvesRelativeLibretroDirectoryAgainstConfigDir() {
+  // A relative core dir resolves against the config file's directory.
+  const QString cfg = m_dir.filePath(QStringLiteral("relative.cfg"));
+  writeFile(cfg, QByteArrayLiteral("libretro_directory = \"cores\"\n"));
+  QCOMPARE(RetroArchUtils::coreDirectoryFromConfig(cfg),
+           QDir(QFileInfo(cfg).absolutePath()).filePath(QStringLiteral("cores")));
 }
 
 void TestRetroArchUtils::configDefaultSentinelReturnsEmpty() {

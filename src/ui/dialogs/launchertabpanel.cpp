@@ -1,5 +1,6 @@
 #include "launchertabpanel.h"
 
+#include "retroarchutils.h"
 #include "settingsformbinding.h"
 #include "settingsmodel.h"
 #include "ui_launchertabpanel.h"
@@ -33,7 +34,16 @@ LauncherTabPanel::LauncherTabPanel(QWidget *parent)
   });
   connect(ui->extractedExtensionLineEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { emit changed(); });
+  // Picking a detected core fills the path field, which stays the
+  // single source of truth that save() / hasChanges() read.
+  connect(ui->coreComboBox, &QComboBox::activated, this, [this](int index) {
+    const QString path = ui->coreComboBox->itemData(index).toString();
+    if (!path.isEmpty()) {
+      ui->coreLineEdit->setText(path);
+    }
+  });
 
+  populateCoreCombo();
   updateExtractedExtensionVisibility();
 }
 
@@ -50,6 +60,9 @@ void LauncherTabPanel::load() {
       *m_model->currentIndex < 0 || *m_model->currentIndex >= m_model->workingCollections->size()) {
     return;
   }
+  // Refresh the detected-cores list — the RetroArch override may have
+  // changed in General settings since the panel was constructed.
+  populateCoreCombo();
   const CollectionConfig &config = (*m_model->workingCollections)[*m_model->currentIndex];
   SettingsFormBinding::loadInto(ui->launcherLineEdit, config.launcherPath);
   SettingsFormBinding::loadInto(ui->coreLineEdit, config.corePath);
@@ -98,6 +111,27 @@ bool LauncherTabPanel::hasChanges() const {
   if (ui->extractArchivesCheckBox->isChecked() != o.extractArchives) return true;
   if (ui->extractedExtensionLineEdit->text() != o.extractedExtension) return true;
   return false;
+}
+
+void LauncherTabPanel::populateCoreCombo() {
+  ui->coreComboBox->clear();
+  QString configOverride;
+  if (m_model && m_model->generalSettings) {
+    configOverride = m_model->generalSettings->retroarchConfigPath;
+  }
+  const QList<RetroArchUtils::Core> cores =
+      RetroArchUtils::discoverCores(RetroArchUtils::resolveCoreDirectory(configOverride));
+  if (cores.isEmpty()) {
+    // Nothing to pick — the user falls back to the path field + Browse.
+    ui->coreComboBox->addItem(tr("No cores detected"), QString());
+    ui->coreComboBox->setEnabled(false);
+    return;
+  }
+  ui->coreComboBox->setEnabled(true);
+  ui->coreComboBox->addItem(tr("Pick a detected core…"), QString());
+  for (const RetroArchUtils::Core &core : cores) {
+    ui->coreComboBox->addItem(core.displayName, core.path);
+  }
 }
 
 void LauncherTabPanel::updateExtractedExtensionVisibility() {

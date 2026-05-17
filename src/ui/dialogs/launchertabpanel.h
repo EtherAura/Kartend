@@ -55,6 +55,10 @@ public:
   /// when extract-archives is on). Idempotent.
   void updateExtractedExtensionVisibility();
 
+  /// Fill the Core combo with libretro cores discovered in the
+  /// RetroArch install (honouring the General-settings override).
+  void populateCoreCombo();
+
   // Cross-cutting widget accessors:
   [[nodiscard]] QLineEdit *launcherLineEdit() const;
   [[nodiscard]] QLineEdit *coreLineEdit() const;

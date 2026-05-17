@@ -116,6 +116,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // through the panel API to read presets (settingsdialoglaunchers.cpp still
   // reads m_generalSettings.launcherPresets directly for its presets combo).
   ui->launcherPresetsPanel->setPresets(&m_generalSettings.launcherPresets);
+  ui->launcherPresetsPanel->setRetroarchConfigOverride(m_generalSettings.retroarchConfigPath);
   connect(ui->launcherPresetsPanel, &LauncherPresetsPanel::presetsChanged, this,
           &SettingsDialog::checkForChanges);
 

@@ -93,7 +93,8 @@ void SettingsDialog::updateAdditionalLauncherButtonsState() {
 
 void SettingsDialog::onAddAdditionalLauncher() {
   LauncherEditorDialog dialog(this, LauncherConfig{}, tr("Add Launcher"),
-                              m_generalSettings.launcherPresets);
+                              m_generalSettings.launcherPresets,
+                              m_generalSettings.retroarchConfigPath);
   if (dialog.exec() != QDialog::Accepted) {
     return;
   }
@@ -123,7 +124,8 @@ void SettingsDialog::onEditAdditionalLauncher() {
     return;
   }
   LauncherEditorDialog dialog(this, m_workingAdditionalLaunchers[row], tr("Edit Launcher"),
-                              m_generalSettings.launcherPresets);
+                              m_generalSettings.launcherPresets,
+                              m_generalSettings.retroarchConfigPath);
   if (dialog.exec() != QDialog::Accepted) {
     return;
   }

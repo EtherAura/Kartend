@@ -23,6 +23,19 @@ const QStringList &coreExtensions() {
   return kExts;
 }
 
+// retroarch.cfg routinely stores paths with a leading `~` for the home
+// directory; QDir / QFileInfo do NOT expand it, so a `~`-rooted core
+// directory would look non-existent. Expand it here.
+QString expandHome(const QString &path) {
+  if (path == QStringLiteral("~")) {
+    return QDir::homePath();
+  }
+  if (path.startsWith(QStringLiteral("~/"))) {
+    return QDir::homePath() + path.mid(1);
+  }
+  return path;
+}
+
 } // namespace
 
 QStringList defaultConfigPaths() {
@@ -84,13 +97,18 @@ QString coreDirectoryFromConfig(const QString &configPath) {
     if (value.isEmpty() || value == QStringLiteral("default")) {
       return {};
     }
+    value = expandHome(value);
+    // A relative core dir is relative to the config file's directory.
+    if (QDir::isRelativePath(value)) {
+      value = QDir(QFileInfo(configPath).absolutePath()).absoluteFilePath(value);
+    }
     return QDir::cleanPath(value);
   }
   return {};
 }
 
 QString resolveCoreDirectory(const QString &overridePath) {
-  const QString trimmedOverride = overridePath.trimmed();
+  const QString trimmedOverride = expandHome(overridePath.trimmed());
   if (!trimmedOverride.isEmpty()) {
     const QFileInfo info(trimmedOverride);
     if (info.isDir()) {

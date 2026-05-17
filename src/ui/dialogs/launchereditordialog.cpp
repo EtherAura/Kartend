@@ -1,5 +1,7 @@
 #include "launchereditordialog.h"
 
+#include "retroarchutils.h"
+
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFileDialog>
@@ -13,8 +15,10 @@
 
 LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig &initial,
                                            const QString &title,
-                                           const QList<LauncherPreset> &availablePresets)
-    : QDialog(parent), m_availablePresets(availablePresets) {
+                                           const QList<LauncherPreset> &availablePresets,
+                                           const QString &retroarchConfigOverride)
+    : QDialog(parent), m_availablePresets(availablePresets),
+      m_retroarchOverride(retroarchConfigOverride) {
   setWindowTitle(title);
   setModal(true);
 
@@ -72,12 +76,25 @@ LauncherEditorDialog::LauncherEditorDialog(QWidget *parent, const LauncherConfig
   m_coreRowWidget = new QWidget(this);
   auto *coreRow = new QHBoxLayout(m_coreRowWidget);
   coreRow->setContentsMargins(0, 0, 0, 0);
+  // Dropdown of cores detected in the RetroArch install — picking one
+  // fills the path field, which stays the value launcher() reads back.
+  m_coreCombo = new QComboBox(this);
+  m_coreCombo->setToolTip(tr("Cores detected in your RetroArch install — "
+                             "pick one to fill the path."));
+  connect(m_coreCombo, &QComboBox::activated, this, [this](int index) {
+    const QString path = m_coreCombo->itemData(index).toString();
+    if (!path.isEmpty()) {
+      m_coreEdit->setText(path);
+    }
+  });
+  coreRow->addWidget(m_coreCombo);
   coreRow->addWidget(m_coreEdit);
   auto *browseCore = new QPushButton(tr("Browse"), this);
   browseCore->setIcon(QIcon::fromTheme(QStringLiteral("document-open")));
   connect(browseCore, &QPushButton::clicked, this, &LauncherEditorDialog::onBrowseCore);
   coreRow->addWidget(browseCore);
   form->addRow(tr("Core Path:"), m_coreRowWidget);
+  populateCoreCombo();
 
   m_paramsEdit = new QLineEdit(initial.launchParameters, this);
   m_paramsEdit->setPlaceholderText(tr("Optional parameters (e.g. -fullscreen)"));
@@ -162,4 +179,24 @@ void LauncherEditorDialog::updateCoreRowVisibility() {
     return;
   }
   m_form->setRowVisible(m_coreRowWidget, LauncherUtils::usesLibretroCore(m_launcherEdit->text()));
+}
+
+void LauncherEditorDialog::populateCoreCombo() {
+  if (!m_coreCombo) {
+    return;
+  }
+  m_coreCombo->clear();
+  const QList<RetroArchUtils::Core> cores =
+      RetroArchUtils::discoverCores(RetroArchUtils::resolveCoreDirectory(m_retroarchOverride));
+  if (cores.isEmpty()) {
+    // Nothing to pick — the user falls back to the path field + Browse.
+    m_coreCombo->addItem(tr("No cores detected"), QString());
+    m_coreCombo->setEnabled(false);
+    return;
+  }
+  m_coreCombo->setEnabled(true);
+  m_coreCombo->addItem(tr("Pick a detected core…"), QString());
+  for (const RetroArchUtils::Core &core : cores) {
+    m_coreCombo->addItem(core.displayName, core.path);
+  }
 }
