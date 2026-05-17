@@ -602,8 +602,7 @@ void ScrollManager::showArtworkPreview(const QString &filePath, const QString &a
 // middle-click; falls back to artwork when no video matches.
 bool ScrollManager::showMediaPreview(const QString &filePath, const QString &artworkDir,
                                      const QString &videoDir) {
-  return m_selectionDisplay &&
-         m_selectionDisplay->showMediaPreview(filePath, artworkDir, videoDir);
+  return m_selectionDisplay && m_selectionDisplay->showMediaPreview(filePath, artworkDir, videoDir);
 }
 
 void ScrollManager::setArtworkPreviewGallery(

@@ -477,8 +477,8 @@ void DatabaseManager::purgeOrphanCollectionData(const QList<CollectionConfig> &l
   for (int i = 0; i < liveUuids.size(); ++i) {
     placeholders << QStringLiteral("?");
   }
-  const QString inClause = QStringLiteral("(") + placeholders.join(QStringLiteral(", ")) +
-                           QStringLiteral(")");
+  const QString inClause =
+      QStringLiteral("(") + placeholders.join(QStringLiteral(", ")) + QStringLiteral(")");
 
   if (!m_db.transaction()) {
     ErrorUtils::logError(ErrorContext::critical(ErrorCode::DatabaseTransactionFailed,

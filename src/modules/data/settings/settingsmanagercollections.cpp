@@ -35,7 +35,7 @@ namespace {
 // preserve side can never drift apart.
 const QSet<QString> &reservedTopLevelGroups() {
   static const QSet<QString> groups{QStringLiteral("General"), QStringLiteral("Scrapers"),
-                                     QStringLiteral("ScraperOptions"), QStringLiteral("Launchers")};
+                                    QStringLiteral("ScraperOptions"), QStringLiteral("Launchers")};
   return groups;
 }
 

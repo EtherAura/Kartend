@@ -112,9 +112,9 @@ void GeneralSettingsPanel::onBrowseRetroarchConfig() {
   // The override accepts either a retroarch.cfg file or a core
   // directory; offer a file picker filtered to .cfg, with All Files
   // so a user can still aim at any config the install uses.
-  const QString fileName = QFileDialog::getOpenFileName(
-      this, tr("Select retroarch.cfg"), QDir::homePath(),
-      tr("RetroArch config (*.cfg);;All Files (*)"));
+  const QString fileName =
+      QFileDialog::getOpenFileName(this, tr("Select retroarch.cfg"), QDir::homePath(),
+                                   tr("RetroArch config (*.cfg);;All Files (*)"));
   if (!fileName.isEmpty()) {
     ui->retroarchConfigLineEdit->setText(fileName);
   }

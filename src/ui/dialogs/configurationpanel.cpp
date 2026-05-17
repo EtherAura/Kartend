@@ -43,11 +43,10 @@ ConfigurationPanel::ConfigurationPanel(QWidget *parent)
           [this](int) { emit changed(); });
   connect(ui->mediaDirLineEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { emit changed(); });
-  connect(ui->fileExtensionsLineEdit, &QLineEdit::textChanged, this,
-          [this](const QString &) {
-            autodetectScreenscraperSystem();
-            emit changed();
-          });
+  connect(ui->fileExtensionsLineEdit, &QLineEdit::textChanged, this, [this](const QString &) {
+    autodetectScreenscraperSystem();
+    emit changed();
+  });
   connect(ui->expandModeCheckBox, &QCheckBox::toggled, this, [this](bool) { emit changed(); });
   connect(ui->showAllSubcollectionItemsCheckBox, &QCheckBox::toggled, this,
           [this](bool) { emit changed(); });
@@ -205,9 +204,9 @@ void ConfigurationPanel::load() {
   SettingsFormBinding::loadInto(ui->expandModeCheckBox, config.expandMode);
   SettingsFormBinding::loadInto(ui->showAllSubcollectionItemsCheckBox,
                                 config.showAllSubcollectionItems);
-  m_screenscraperSystems = populateSystemsCombo(
-      ui->screenscraperSystemComboBox, ui->screenscraperSystemHintLabel,
-      config.screenscraperSystemId);
+  m_screenscraperSystems =
+      populateSystemsCombo(ui->screenscraperSystemComboBox, ui->screenscraperSystemHintLabel,
+                           config.screenscraperSystemId);
   // A collection that already pins a concrete system counts as
   // manually set — don't let an autodetect on a later type/extension
   // edit override the user's explicit choice. Auto-detect (-1) stays

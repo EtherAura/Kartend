@@ -1929,9 +1929,8 @@ void ScrapeResultDialog::updateUnifiedProgressLabel() {
   // into the %4 slot rather than baked into the tr() string so the
   // translatable text stays markup-free.
   const QString errorsField =
-      errors > 0
-          ? QStringLiteral("<a href=\"kartend:scrape-errors\">%1</a>").arg(errors)
-          : QString::number(errors);
+      errors > 0 ? QStringLiteral("<a href=\"kartend:scrape-errors\">%1</a>").arg(errors)
+                 : QString::number(errors);
   m_unifiedCountsLabel->setText(tr("Scraped %1 items, %2 media  ·  Skipped %3  ·  Errors %4")
                                     .arg(QString::number(scraped), QString::number(mediaWritten),
                                          QString::number(skipped), errorsField));

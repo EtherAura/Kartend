@@ -53,8 +53,8 @@ QStringList defaultConfigPaths() {
 
 #if defined(Q_OS_LINUX)
   // Flatpak keeps a fully separate config tree.
-  paths << QDir(home).filePath(QStringLiteral(
-      ".var/app/org.libretro.RetroArch/config/retroarch/retroarch.cfg"));
+  paths << QDir(home).filePath(
+      QStringLiteral(".var/app/org.libretro.RetroArch/config/retroarch/retroarch.cfg"));
   paths << QDir(home).filePath(QStringLiteral(".config/retroarch/retroarch.cfg"));
 #elif defined(Q_OS_MACOS)
   paths << QDir(home).filePath(
