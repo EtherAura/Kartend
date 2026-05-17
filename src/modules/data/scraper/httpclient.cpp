@@ -249,16 +249,15 @@ void HttpClient::send(const QString &host, PendingRequest request) {
                 // the connection stalled — report it as its own failure
                 // mode so a dead connection is distinguishable from a
                 // genuine 4xx/5xx in the scrape summary's failure list.
-                const bool timedOut =
-                    reply->error() == QNetworkReply::OperationCanceledError;
-                auto ctx = ErrorContext::error(
-                               timedOut ? ErrorCode::OperationCancelled
-                                        : ErrorCode::DatabaseQueryFailed,
-                               timedOut ? QStringLiteral("Network request timed out")
-                                        : QStringLiteral("HTTP request failed"),
-                               "Scraper::HttpClient::send")
-                               .withDetails(details)
-                               .withHttpStatus(httpStatus);
+                const bool timedOut = reply->error() == QNetworkReply::OperationCanceledError;
+                auto ctx =
+                    ErrorContext::error(timedOut ? ErrorCode::OperationCancelled
+                                                 : ErrorCode::DatabaseQueryFailed,
+                                        timedOut ? QStringLiteral("Network request timed out")
+                                                 : QStringLiteral("HTTP request failed"),
+                                        "Scraper::HttpClient::send")
+                        .withDetails(details)
+                        .withHttpStatus(httpStatus);
                 if (retryAfter > 0) ctx.withRetryAfter(retryAfter);
                 callback(ctx);
               } else {
