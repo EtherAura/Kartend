@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-05-17
+
 ### Added
 
 - **Pick a libretro core from a list.** Every **Core** field for a
@@ -143,102 +145,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `<rom>` hashes still come through. Pointing the picker at a
   non-DAT XML now surfaces a clear "expected `<datafile>` or
   `<mame>` root" message instead of silently parsing zero records.
-
-### Fixed
-
-- Opening a second Kartend window while a scrape is running no longer
-  offers to "resume" that same scrape. The interrupted-scrape snapshot
-  stays on disk for the whole run, so a second instance used to see it
-  and could start the scrape a second time — two runs racing on the
-  same database and artwork files. A running scrape is now marked as
-  owned by its live process; only a scrape whose owner has actually
-  exited (e.g. a crash) is offered for resume.
-- A long-running scrape no longer hangs forever when a network
-  request stalls. With no transfer timeout, a dead connection could
-  freeze the whole batch — no further media downloaded, the estimated
-  time-remaining still climbing — until the app was restarted.
-  Stalled requests are now aborted after 30 seconds; the affected
-  item is recorded as an error and the scrape continues.
-- Renaming a collection no longer strands its scanned items and play
-  history. A collection is identified by its name + media folder, so
-  a rename used to leave the old rows unreachable — which inflated the
-  Statistics **Total items** above the real per-collection counts.
-  Renames now migrate the data to the new identity, and rows orphaned
-  by past renames or removals are purged on startup, so the Statistics
-  total matches the collections.
-- Scraping now computes each ROM's CRC-32 and uses it for DAT-file
-  matching and ScreenScraper hash lookups. Only MD5 and SHA-1 were
-  computed before, so DAT entries that list just a CRC — the
-  identifier No-Intro / Redump publish — could never match. Works
-  for ROMs inside archives and for symlinked items (hashed through
-  to their target) alike.
-- The scraper now pulls every media type it offers. The **Support /
-  cart** art was silently skipped — its checkbox key was mixed-case
-  but the download filter matched lowercased, so it never matched —
-  and the media-type list itself was an incomplete subset. The list
-  now covers the full range ScreenScraper serves: box spine, back and
-  3D box, box / cart textures, carbon and steel wheels, screen
-  marquees, Steam grid, figurine, pictograms, and more.
-- Resuming an interrupted scrape no longer resets the media count to
-  zero — the number of media files written before the interruption is
-  now restored along with the scraped / skipped / error counts.
-- In the scraper's collection tree, checking a parent collection now
-  cascades to its subcollections — the whole subtree is selected (and
-  unchecking a parent clears it). Previously only the parent row was
-  ticked and its subcollections stayed unselected.
-- ScreenScraper results no longer collapse every item to its US
-  title and box art. Each scraped item now follows its own region
-  for the title, release date, and artwork — a Japanese cartridge
-  keeps its Japanese title and box — while descriptions, genres, and
-  other free-text fields follow the application language.
-- In the Home view, entering a shell collection that gathers items
-  from several subcollections sorted those items by subcollection and
-  then by name. With a Name sort selected they now sort by name alone,
-  as a single flat list.
-- After a scrape (single-item or batch) the sidebar Details pane
-  used to keep showing the item's pre-scrape state until you clicked
-  another item and back. The post-apply path now refreshes the
-  sidebar's metadata view for the current selection so the new
-  title / description / genre / etc. land immediately.
-- After a scrape, the grid tile would stay on its placeholder even
-  though the cover file had been written, until the user navigated
-  away from and back to the collection. Root cause was the artwork
-  directory-listing cache holding the pre-scrape "no file here"
-  result; the post-apply path now invalidates it (alongside the
-  existing collection reload) so the grid picks the new cover up on
-  the first repaint.
-- The just-scraped primary cover now lands at
-  `{artwork}/front/{base}.<ext>` and surfaces in the sidebar gallery
-  as **Front Cover** — the cross-provider `"front"` tag (SS, MB,
-  TMDB, Open Library all normalise their cover to it) is now a
-  first-class standard artwork type. The grid tile and details-pane
-  primary preview resolve the cover by walking the typed subdirs in
-  priority order: front → box → box-3D → mixrbv1/2 → screenshot →
-  title → fanart → marquee. So even when ScreenScraper has only
-  screenshots / fanart / box-3D for a game (and no `box-2D`/`front`
-  cover), the grid still gets a meaningful primary thumbnail instead
-  of the placeholder — and no duplicate cover file is written to the
-  artwork root.
-- The details-pane primary preview tile (artwork QLabel + video
-  preview widget) was anchored to the left of the sidebar because
-  the .ui declared a fixed 200×200 size but no layout-item
-  alignment. Both widgets are now force-centred in the parent
-  QVBoxLayout via `setAlignment(widget, Qt::AlignHCenter)`, so the
-  primary tile sits centred regardless of sidebar width.
-- Scraped videos and manuals used to be dumped under `{artwork}/...`
-  with a hardcoded `.png` extension, leaving an unplayable MP4 named
-  `Pacman.png` in a directory the details pane didn't read from. The
-  scraper now routes by kind into `{artwork}/video/{base}.<ext>` and
-  `{artwork}/manual/{base}.<ext>` (extension inferred from the source
-  URL, default `.mp4` / `.pdf` when the URL has no recognisable
-  suffix). Neither kind produces an `item_artwork` row — videos and
-  manuals aren't artwork, and the details pane discovers them by
-  basename in those subdirectories. The (still-persisted but
-  UI-hidden) `videoDirectory` / `manualDirectory` collection fields
-  remain a power-user override for libraries with bespoke layouts.
-
-### Added
-
 - Settings → Configuration → Artwork now has an **Export placeholder PNGs
   for missing covers…** button. For every item in the collection that has
   no cover image, Kartend writes a procedural placeholder PNG into the
@@ -429,6 +335,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Opening a second Kartend window while a scrape is running no longer
+  offers to "resume" that same scrape. The interrupted-scrape snapshot
+  stays on disk for the whole run, so a second instance used to see it
+  and could start the scrape a second time — two runs racing on the
+  same database and artwork files. A running scrape is now marked as
+  owned by its live process; only a scrape whose owner has actually
+  exited (e.g. a crash) is offered for resume.
+- A long-running scrape no longer hangs forever when a network
+  request stalls. With no transfer timeout, a dead connection could
+  freeze the whole batch — no further media downloaded, the estimated
+  time-remaining still climbing — until the app was restarted.
+  Stalled requests are now aborted after 30 seconds; the affected
+  item is recorded as an error and the scrape continues.
+- Renaming a collection no longer strands its scanned items and play
+  history. A collection is identified by its name + media folder, so
+  a rename used to leave the old rows unreachable — which inflated the
+  Statistics **Total items** above the real per-collection counts.
+  Renames now migrate the data to the new identity, and rows orphaned
+  by past renames or removals are purged on startup, so the Statistics
+  total matches the collections.
+- Scraping now computes each ROM's CRC-32 and uses it for DAT-file
+  matching and ScreenScraper hash lookups. Only MD5 and SHA-1 were
+  computed before, so DAT entries that list just a CRC — the
+  identifier No-Intro / Redump publish — could never match. Works
+  for ROMs inside archives and for symlinked items (hashed through
+  to their target) alike.
+- The scraper now pulls every media type it offers. The **Support /
+  cart** art was silently skipped — its checkbox key was mixed-case
+  but the download filter matched lowercased, so it never matched —
+  and the media-type list itself was an incomplete subset. The list
+  now covers the full range ScreenScraper serves: box spine, back and
+  3D box, box / cart textures, carbon and steel wheels, screen
+  marquees, Steam grid, figurine, pictograms, and more.
+- Resuming an interrupted scrape no longer resets the media count to
+  zero — the number of media files written before the interruption is
+  now restored along with the scraped / skipped / error counts.
+- In the scraper's collection tree, checking a parent collection now
+  cascades to its subcollections — the whole subtree is selected (and
+  unchecking a parent clears it). Previously only the parent row was
+  ticked and its subcollections stayed unselected.
+- ScreenScraper results no longer collapse every item to its US
+  title and box art. Each scraped item now follows its own region
+  for the title, release date, and artwork — a Japanese cartridge
+  keeps its Japanese title and box — while descriptions, genres, and
+  other free-text fields follow the application language.
+- In the Home view, entering a shell collection that gathers items
+  from several subcollections sorted those items by subcollection and
+  then by name. With a Name sort selected they now sort by name alone,
+  as a single flat list.
+- After a scrape (single-item or batch) the sidebar Details pane
+  used to keep showing the item's pre-scrape state until you clicked
+  another item and back. The post-apply path now refreshes the
+  sidebar's metadata view for the current selection so the new
+  title / description / genre / etc. land immediately.
+- After a scrape, the grid tile would stay on its placeholder even
+  though the cover file had been written, until the user navigated
+  away from and back to the collection. Root cause was the artwork
+  directory-listing cache holding the pre-scrape "no file here"
+  result; the post-apply path now invalidates it (alongside the
+  existing collection reload) so the grid picks the new cover up on
+  the first repaint.
+- The just-scraped primary cover now lands at
+  `{artwork}/front/{base}.<ext>` and surfaces in the sidebar gallery
+  as **Front Cover** — the cross-provider `"front"` tag (SS, MB,
+  TMDB, Open Library all normalise their cover to it) is now a
+  first-class standard artwork type. The grid tile and details-pane
+  primary preview resolve the cover by walking the typed subdirs in
+  priority order: front → box → box-3D → mixrbv1/2 → screenshot →
+  title → fanart → marquee. So even when ScreenScraper has only
+  screenshots / fanart / box-3D for a game (and no `box-2D`/`front`
+  cover), the grid still gets a meaningful primary thumbnail instead
+  of the placeholder — and no duplicate cover file is written to the
+  artwork root.
+- The details-pane primary preview tile (artwork QLabel + video
+  preview widget) was anchored to the left of the sidebar because
+  the .ui declared a fixed 200×200 size but no layout-item
+  alignment. Both widgets are now force-centred in the parent
+  QVBoxLayout via `setAlignment(widget, Qt::AlignHCenter)`, so the
+  primary tile sits centred regardless of sidebar width.
+- Scraped videos and manuals used to be dumped under `{artwork}/...`
+  with a hardcoded `.png` extension, leaving an unplayable MP4 named
+  `Pacman.png` in a directory the details pane didn't read from. The
+  scraper now routes by kind into `{artwork}/video/{base}.<ext>` and
+  `{artwork}/manual/{base}.<ext>` (extension inferred from the source
+  URL, default `.mp4` / `.pdf` when the URL has no recognisable
+  suffix). Neither kind produces an `item_artwork` row — videos and
+  manuals aren't artwork, and the details pane discovers them by
+  basename in those subdirectories. The (still-persisted but
+  UI-hidden) `videoDirectory` / `manualDirectory` collection fields
+  remain a power-user override for libraries with bespoke layouts.
 - **Blank, undeletable collections no longer appear at the top level.**
   Kartend's internal settings groups (launcher presets, scraper
   configuration) were being mis-read as nameless collections at startup —
@@ -766,7 +762,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Gentoo ebuild packaging
 - CI with build, test, sanitizer, and maintenance checks
 
-[Unreleased]: https://github.com/EtherAura/Kartend/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/EtherAura/Kartend/compare/v0.0.7...HEAD
+[0.0.7]: https://github.com/EtherAura/Kartend/compare/v0.0.6...v0.0.7
+[0.0.6]: https://github.com/EtherAura/Kartend/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/EtherAura/Kartend/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/EtherAura/Kartend/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/EtherAura/Kartend/compare/v0.0.2...v0.0.3

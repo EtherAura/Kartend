@@ -37,6 +37,7 @@
     <binary>kartend</binary>
   </provides>
   <releases>
+    <release version="0.0.7" date="2026-05-17"/>
     <release version="0.0.6" date="2026-05-11">
       <description>
         <p>
