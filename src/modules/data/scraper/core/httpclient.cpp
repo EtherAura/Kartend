@@ -8,6 +8,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QTimer>
+#include <QUrlQuery>
 
 // Diagnostic log for scrape-speed work. Stays silent at runtime by
 // default — every ENQ / START / FINISH below would otherwise stream
@@ -38,6 +39,35 @@ namespace {
 /// unambiguous stall — a slow but progressing download keeps resetting
 /// the timer because bytes are still arriving.
 constexpr int kTransferTimeoutMs = 30000;
+
+/// Builds a log-safe URL string with credential-bearing query parameters
+/// masked. Scraper request URLs carry ScreenScraper `devpassword` /
+/// `sspassword` (and account ids) in the query string; logging them
+/// verbatim leaks working credentials into scrape.log. START / FINISH log
+/// only url.path() and are unaffected — this is for the ENQ line, which
+/// needs the query string to show media presets.
+QString redactedUrlForLog(const QUrl &url) {
+  static const char *const kSensitiveKeys[] = {"devpassword", "sspassword", "password",
+                                               "passwd",      "apikey",     "api_key",
+                                               "token",       "ssid",       "devid"};
+  QUrl sanitized = url;
+  QUrlQuery query(sanitized);
+  bool changed = false;
+  for (const char *key : kSensitiveKeys) {
+    const QString k = QLatin1String(key);
+    if (query.hasQueryItem(k)) {
+      query.removeAllQueryItems(k);
+      query.addQueryItem(k, QStringLiteral("<redacted>"));
+      changed = true;
+    }
+  }
+  if (changed) {
+    sanitized.setQuery(query);
+  }
+  return sanitized
+      .toString(QUrl::RemoveScheme | QUrl::RemoveUserInfo | QUrl::RemovePort | QUrl::RemoveFragment)
+      .left(200);
+}
 } // namespace
 
 HttpClient *HttpClient::instance() {
@@ -98,9 +128,7 @@ void HttpClient::get(const QUrl &url, const QString &userAgent, ResponseCallback
   // category is actually enabled, otherwise this string-build runs
   // for every queued request even when no logs are written.
   if (lcScrapeTimings().isDebugEnabled()) {
-    const QString urlForLog = url.toString(QUrl::RemoveScheme | QUrl::RemoveUserInfo |
-                                           QUrl::RemovePort | QUrl::RemoveFragment)
-                                  .left(200);
+    const QString urlForLog = redactedUrlForLog(url);
     qCDebug(lcScrapeTimings) << "ENQ" << host << urlForLog
                              << "queue=" << m_queues.value(host).size()
                              << "inflight=" << m_inFlight.value(host, 0);

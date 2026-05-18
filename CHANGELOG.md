@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Large scrapes no longer crash on PDF manuals.** When a scrape saved a
+  manual as a PDF, the artwork loader could hand that PDF to Qt's image
+  decoder, which routed it to the PDF plugin and aborted the whole
+  application mid-scrape. Non-image files are now kept out of every
+  artwork image loader, so a downloaded manual can no longer take the
+  app down.
+
+### Security
+
+- **The scrape log no longer records credentials.** With scrape logging
+  enabled, `scrape.log` wrote full request URLs — including the
+  ScreenScraper developer and account passwords — in plain text. Password
+  and account-id parameters are now masked as `<redacted>` before any URL
+  is logged.
+
 ## [0.0.7] - 2026-05-17
 
 ### Added

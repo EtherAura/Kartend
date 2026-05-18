@@ -1,5 +1,6 @@
 // Categorizes file extensions by media type (ROM, disc image, archive, etc.).
 #include "extensionutils.h"
+#include <QFileInfo>
 #include <QSet>
 #include <QString>
 
@@ -58,4 +59,14 @@ auto ExtensionUtils::imageFilters() -> QStringList {
     filters.append(QStringLiteral("*.") + ext);
   }
   return filters;
+}
+
+// Extension-only allowlist guard for image-decode call sites. Deliberately
+// strict — matches imageBaseExtensions() exactly — so a scraped `.pdf` (or
+// any other non-image file) can never be routed to Qt's image plugins.
+auto ExtensionUtils::isDecodableImagePath(const QString &path) -> bool {
+  if (path.isEmpty()) {
+    return false;
+  }
+  return imageBaseExtensions().contains(QFileInfo(path).suffix().toLower());
 }

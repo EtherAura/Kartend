@@ -19,6 +19,7 @@
 #include <QStringList>
 #include <QVBoxLayout>
 
+#include "extensionutils.h"
 #include "itemmetadata.h"
 #include "uiconstants.h"
 #include "videothumbnailextractor.h"
@@ -326,9 +327,12 @@ void DetailPageOverlay::renderHeroArtwork() {
       painter.drawPolygon(triangle);
       pixmap = placeholder;
     }
-  } else {
+  } else if (ExtensionUtils::isDecodableImagePath(entry.path)) {
     pixmap = QPixmap(entry.path);
   }
+  // A non-image entry.path (e.g. a .pdf manual) leaves `pixmap` null and
+  // falls through to the "Unable to load" branch — never reaching Qt's
+  // PDF image plugin, which abort()s the process on some inputs.
   if (pixmap.isNull()) {
     m_heroLabel->setText(tr("Unable to load %1").arg(entry.label));
   } else {

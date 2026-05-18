@@ -19,6 +19,7 @@
 #include "collectionutils.h"
 #include "detailspane.h"
 #include "detailspaneresizegrip.h"
+#include "extensionutils.h"
 #include "itemwidget.h"
 #include "textzoom.h"
 #include "ui_detailspane.h"
@@ -86,10 +87,12 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection) {
   m_bgPattern = collection.sidebarPattern;
   m_patternIntensity = std::clamp(collection.sidebarPatternIntensity, 0, 100);
   m_patternColor = QColor(collection.sidebarPatternColor);
-  if (collection.sidebarBackgroundImage.isEmpty()) {
-    m_bgImage = QPixmap();
-  } else {
+  if (ExtensionUtils::isDecodableImagePath(collection.sidebarBackgroundImage)) {
     m_bgImage = QPixmap(collection.sidebarBackgroundImage);
+  } else {
+    // Empty or non-image path — never hand it to QPixmap's autodetect,
+    // which would route a .pdf to the abort()-prone PDF image plugin.
+    m_bgImage = QPixmap();
   }
 
   // Make children transparent so the painted background shows through.

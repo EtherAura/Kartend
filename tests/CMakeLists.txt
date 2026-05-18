@@ -165,6 +165,18 @@ target_link_libraries(test_videoutils
 )
 add_test(NAME VideoUtils COMMAND test_videoutils)
 
+# ExtensionUtils tests (image-decode allowlist guard — keeps scraped .pdf
+# manuals out of QImageReader / Qt's abort()-prone PDF image plugin)
+add_executable(test_extensionutils
+  utils/test_extensionutils.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
+)
+target_link_libraries(test_extensionutils
+  Qt6::Core
+  Qt6::Test
+)
+add_test(NAME ExtensionUtils COMMAND test_extensionutils)
+
 # PlaceholderWarmer tests
 # Links Qt6::Gui so QPixmap (returned from the injected TileFactory) can be
 # constructed; QTEST_MAIN spins up QGuiApplication off the back of that.
@@ -250,6 +262,7 @@ add_executable(test_coverflowwidget
   ${SRC_DIR}/ui/widgets/items/coverflowwidget.cpp
   ${SRC_DIR}/ui/widgets/media/videopreviewwidget.cpp
   ${SRC_DIR}/ui/widgets/media/videothumbnailextractor.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
 )
 target_include_directories(test_coverflowwidget PRIVATE
   ${SRC_DIR}/ui/widgets/items

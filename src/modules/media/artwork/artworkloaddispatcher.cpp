@@ -1,6 +1,7 @@
 #include "artworkloaddispatcher.h"
 
 #include "cachemanager.h"
+#include "extensionutils.h"
 #include "loggingcategories.h"
 #include "threadpoolutils.h"
 #include "uiconstants.h"
@@ -35,6 +36,13 @@ namespace {
 // QGuiApplication::primaryScreen() probe.
 auto loadAndProcessImage(const QString &path) -> QImage {
   if (path.isEmpty() || !QFile::exists(path)) {
+    return {};
+  }
+  // Extension guard: a non-image file (e.g. a scraped .pdf manual) routed
+  // into QImageReader reaches Qt's PDFium-backed PDF plugin, which calls
+  // abort() on some inputs — taking down the whole process. This is the
+  // worker-thread decode path; keep it strictly images-only.
+  if (!ExtensionUtils::isDecodableImagePath(path)) {
     return {};
   }
   qreal dpr = 1.0;

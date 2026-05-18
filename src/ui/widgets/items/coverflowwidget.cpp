@@ -1,6 +1,7 @@
 // Cover-flow view mode implementation.
 
 #include "coverflowwidget.h"
+#include "extensionutils.h"
 #include "uiconstants.h"
 #include "videopreviewwidget.h"
 #include "videothumbnailextractor.h"
@@ -50,7 +51,9 @@ constexpr int kGalleryThumbSpacing = 8; ///< inter-thumbnail gap
 constexpr int kGalleryStripHeight = 64; ///< vertical slot reserved at bottom
 
 QPixmap loadAndScale(const QString &path, int targetSize) {
-  if (path.isEmpty()) {
+  // Extension guard: never hand a non-image file (e.g. a scraped .pdf
+  // manual) to QImageReader — Qt's PDF image plugin abort()s the process.
+  if (path.isEmpty() || !ExtensionUtils::isDecodableImagePath(path)) {
     return {};
   }
   QImageReader reader(path);
@@ -286,12 +289,17 @@ QPixmap CoverFlowWidget::galleryThumbPixmap(int entryIdx, int size) {
     return pm;
   }
 
-  // Artwork entry: load + scale to thumb size, with caching.
-  QImageReader reader(entry.path);
-  reader.setAutoTransform(true);
-  reader.setAllocationLimit(UIConstants::Artwork::MAX_DECODE_MB);
-  reader.setScaledSize(QSize(size * 2, size * 2));
-  QImage img = reader.read();
+  // Artwork entry: load + scale to thumb size, with caching. The extension
+  // guard keeps non-image entries (e.g. a .pdf manual) away from QImageReader
+  // — leaving `img` null routes them to the placeholder branch below.
+  QImage img;
+  if (ExtensionUtils::isDecodableImagePath(entry.path)) {
+    QImageReader reader(entry.path);
+    reader.setAutoTransform(true);
+    reader.setAllocationLimit(UIConstants::Artwork::MAX_DECODE_MB);
+    reader.setScaledSize(QSize(size * 2, size * 2));
+    img = reader.read();
+  }
   QPixmap pm;
   if (!img.isNull()) {
     pm = QPixmap::fromImage(img.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
