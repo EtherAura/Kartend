@@ -1,6 +1,7 @@
 #ifndef DETAILPAGEMANAGER_H
 #define DETAILPAGEMANAGER_H
 
+#include "idetailpagemanager.h"
 #include "setuputils.h"
 #include <QObject>
 
@@ -25,7 +26,9 @@ struct DetailPageManagerSetup {
   DetailPageOverlay *overlay = nullptr;
 };
 
-class DetailPageManager : public QObject {
+// QObject must be the first base; IDetailPageManager is a plain (non-QObject)
+// role interface — single-QObject-base multiple inheritance.
+class DetailPageManager : public QObject, public IDetailPageManager {
   Q_OBJECT
 public:
   explicit DetailPageManager(QObject *parent = nullptr);
@@ -37,13 +40,13 @@ public:
   /// the DB-backed extended metadata + artwork + usage rows, and shows the
   /// overlay. No-op if no item is currently selected (sidebar context is
   /// invalid).
-  void showForCurrentSelection();
+  void showForCurrentSelection() override;
 
   /// Hides the overlay if active. Wired to navigation events that should
   /// dismiss the detail page (collection change, search, etc.).
-  void hideOverlay();
+  void hideOverlay() override;
 
-  [[nodiscard]] DetailPageOverlay *overlay() const { return m_overlay; }
+  [[nodiscard]] DetailPageOverlay *overlay() const override { return m_overlay; }
 
 private:
   // ctx is the single source of truth for sibling managers (DetailsPaneManager,

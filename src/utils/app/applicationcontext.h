@@ -27,7 +27,7 @@ class IArtworkManager;
 class ISettingsManager;
 class ISessionManager;
 class DetailsPaneManager;
-class DetailPageManager;
+class IDetailPageManager;
 class IDatabaseManager;
 class INavigationManager;
 class AnimationManager;
@@ -117,7 +117,7 @@ struct ApplicationContext {
     ISettingsManager *settingsManager = nullptr;
     ISessionManager *sessionManager = nullptr;
     DetailsPaneManager *detailsPaneManager = nullptr;
-    DetailPageManager *detailPageManager = nullptr;
+    IDetailPageManager *detailPageManager = nullptr;
     IDatabaseManager *databaseManager = nullptr;
     INavigationManager *navigationManager = nullptr;
     AnimationManager *animationManager = nullptr;
@@ -170,7 +170,7 @@ struct ApplicationContext {
   [[nodiscard]] DetailsPaneManager *detailsPaneManager() const {
     return managers.detailsPaneManager;
   }
-  [[nodiscard]] DetailPageManager *detailPageManager() const { return managers.detailPageManager; }
+  [[nodiscard]] IDetailPageManager *detailPageManager() const { return managers.detailPageManager; }
   [[nodiscard]] IDatabaseManager *databaseManager() const { return managers.databaseManager; }
   [[nodiscard]] INavigationManager *navigationManager() const { return managers.navigationManager; }
   [[nodiscard]] AnimationManager *animationManager() const { return managers.animationManager; }

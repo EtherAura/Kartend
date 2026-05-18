@@ -27,6 +27,7 @@
 #include "loadingoverlay.h"
 #include "mainwindow.h"
 #include "menucontroller.h"
+#include "detailpagemanager.h"
 #include "navigationmanager.h"
 #include "playlistmanager.h"
 #include "propertyutils.h"
