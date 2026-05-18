@@ -4,9 +4,9 @@
 #include <QTimer>
 #include <QVector>
 
-#include "sessionmanager.h"
+#include "isessionmanager.h"
 
-CachedCountsService::CachedCountsService(SessionManager *sessionManager, int debounceMs,
+CachedCountsService::CachedCountsService(ISessionManager *sessionManager, int debounceMs,
                                          QObject *parent)
     : QObject(parent), m_sessionManager(sessionManager), m_timer(new QTimer(this)) {
   m_timer->setSingleShot(true);

@@ -14,7 +14,7 @@
 #include <QStringList>
 #include <QThread>
 
-class SessionManager;
+class ISessionManager;
 
 /**
  * @brief Worker thread database query executor.
@@ -34,7 +34,7 @@ class SessionManager;
 class QueryManager : public QObject {
   Q_OBJECT
 public:
-  explicit QueryManager(SessionManager *sessionManager,
+  explicit QueryManager(ISessionManager *sessionManager,
                         const QString &connectionName = QStringLiteral("kartend_worker"),
                         QObject *parent = nullptr);
   ~QueryManager() override;
@@ -158,7 +158,7 @@ private:
   // dispatches directory-walk tasks. Replaces the in-line m_scanCancellationToken
   // and m_scanThreadPool that QueryManager used to manage directly.
   ScanWorkController m_scanWork;
-  SessionManager *m_sessionManager;
+  ISessionManager *m_sessionManager;
   QSqlDatabase m_db;
   QString m_connectionName;
 

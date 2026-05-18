@@ -25,7 +25,7 @@ class EmptyStateWidget;
 class ScrollManager;
 class ArtworkManager;
 class ISettingsManager;
-class SessionManager;
+class ISessionManager;
 class DetailsPaneManager;
 class DetailPageManager;
 class IDatabaseManager;
@@ -115,7 +115,7 @@ struct ApplicationContext {
     ScrollManager *scrollManager = nullptr;
     ArtworkManager *artworkManager = nullptr;
     ISettingsManager *settingsManager = nullptr;
-    SessionManager *sessionManager = nullptr;
+    ISessionManager *sessionManager = nullptr;
     DetailsPaneManager *detailsPaneManager = nullptr;
     DetailPageManager *detailPageManager = nullptr;
     IDatabaseManager *databaseManager = nullptr;
@@ -166,7 +166,7 @@ struct ApplicationContext {
   [[nodiscard]] ScrollManager *scrollManager() const { return managers.scrollManager; }
   [[nodiscard]] ArtworkManager *artworkManager() const { return managers.artworkManager; }
   [[nodiscard]] ISettingsManager *settingsManager() const { return managers.settingsManager; }
-  [[nodiscard]] SessionManager *sessionManager() const { return managers.sessionManager; }
+  [[nodiscard]] ISessionManager *sessionManager() const { return managers.sessionManager; }
   [[nodiscard]] DetailsPaneManager *detailsPaneManager() const {
     return managers.detailsPaneManager;
   }

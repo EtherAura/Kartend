@@ -28,7 +28,7 @@ class ISettingsManager;
 class DetailsPaneManager;
 class ScrollManager;
 class IDatabaseManager;
-class SessionManager;
+class ISessionManager;
 class ArtworkManager;
 class DetailsPane;
 class SelectionRestoreManager;
@@ -187,7 +187,7 @@ private:
   [[nodiscard]] IDatabaseManager *databaseMgr() const {
     return m_ctx ? m_ctx->databaseManager() : nullptr;
   }
-  [[nodiscard]] SessionManager *sessionMgr() const {
+  [[nodiscard]] ISessionManager *sessionMgr() const {
     return m_ctx ? m_ctx->sessionManager() : nullptr;
   }
   [[nodiscard]] ArtworkManager *artworkMgr() const {

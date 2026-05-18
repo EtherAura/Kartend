@@ -6,7 +6,7 @@
 #include "errorutils.h"
 #include "pathutils.h"
 #include "querymanagerhelpers.h"
-#include "sessionmanager.h"
+#include "isessionmanager.h"
 #include "uiconstants.h"
 #include <algorithm>
 #include <atomic>
@@ -43,7 +43,7 @@ using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 using namespace QueryManagerInternal;
 
-QueryManager::QueryManager(SessionManager *sessionManager, const QString &connectionName,
+QueryManager::QueryManager(ISessionManager *sessionManager, const QString &connectionName,
                            QObject *parent)
     : QObject(parent), m_sessionManager(sessionManager), m_connectionName(connectionName) {
   // Register ErrorContext for queued signal/slot connections

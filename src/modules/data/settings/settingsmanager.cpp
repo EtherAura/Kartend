@@ -667,7 +667,7 @@ void SettingsManager::setLastSelectedItem(int collectionIndex, int itemIndex) {
 
 auto SettingsManager::getLastSelectedItem(int collectionIndex) const -> int {
   auto *mainWindow = qobject_cast<MainWindow *>(parent());
-  SessionManager *session = m_ctx ? m_ctx->sessionManager() : nullptr;
+  ISessionManager *session = m_ctx ? m_ctx->sessionManager() : nullptr;
   if ((mainWindow) && collectionIndex >= 0 && collectionIndex < mainWindow->m_collections.size()) {
     const CollectionConfig &cfg = mainWindow->m_collections[collectionIndex];
     const bool subfolderActive = !cfg.currentSubfolder.trimmed().isEmpty();

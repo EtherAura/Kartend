@@ -54,7 +54,7 @@ DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
 
   initDatabase();
 
-  SessionManager *session = m_ctx ? m_ctx->sessionManager() : nullptr;
+  ISessionManager *session = m_ctx ? m_ctx->sessionManager() : nullptr;
 
   // NOTE: QThreads are intentionally NOT parented to DatabaseManager. If they
   // were, ~QObject would auto-delete them mid-run during shutdown, and
@@ -517,7 +517,7 @@ void DatabaseManager::purgeOrphanCollectionData(const QList<CollectionConfig> &l
 }
 
 void DatabaseManager::updateCachedCounts(const QList<CollectionConfig> &allCollections) {
-  SessionManager *session = m_ctx ? m_ctx->sessionManager() : nullptr;
+  ISessionManager *session = m_ctx ? m_ctx->sessionManager() : nullptr;
   if (!m_db.isOpen() || !session || !m_cachedCounts) {
     return;
   }

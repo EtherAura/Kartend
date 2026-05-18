@@ -10,7 +10,7 @@
 #include "collectionutils.h"
 
 class QTimer;
-class SessionManager;
+class ISessionManager;
 
 /// Owns the debounced async cached-count update flow that lives between
 /// DatabaseManager (main thread) and the QueryManager worker (DB thread).
@@ -27,7 +27,7 @@ class SessionManager;
 class CachedCountsService : public QObject {
   Q_OBJECT
 public:
-  explicit CachedCountsService(SessionManager *sessionManager, int debounceMs,
+  explicit CachedCountsService(ISessionManager *sessionManager, int debounceMs,
                                QObject *parent = nullptr);
 
   /// Coalesce a counts-recompute request. Multiple calls inside the debounce
@@ -54,7 +54,7 @@ private slots:
   void onTimerFired();
 
 private:
-  SessionManager *m_sessionManager;
+  ISessionManager *m_sessionManager;
   QTimer *m_timer;
   quint64 m_generation = 0;
   quint64 m_inFlightGeneration = 0;

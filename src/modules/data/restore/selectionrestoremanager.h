@@ -14,7 +14,7 @@ QT_END_NAMESPACE
 class InteractionManager;
 class InteractionStateHolder;
 class ScrollManager;
-class SessionManager;
+class ISessionManager;
 class ISettingsManager;
 struct ApplicationContext;
 struct CollectionConfig;
@@ -147,7 +147,7 @@ private:
   [[nodiscard]] ScrollManager *scrollMgr() const {
     return m_ctx ? m_ctx->scrollManager() : nullptr;
   }
-  [[nodiscard]] SessionManager *sessionMgr() const {
+  [[nodiscard]] ISessionManager *sessionMgr() const {
     return m_ctx ? m_ctx->sessionManager() : nullptr;
   }
   [[nodiscard]] ISettingsManager *settingsMgr() const {

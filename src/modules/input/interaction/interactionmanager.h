@@ -40,7 +40,7 @@ class ISettingsManager;
 class DetailsPaneManager;
 class DetailPageManager;
 class ScrollManager;
-class SessionManager;
+class ISessionManager;
 class ArtworkManager;
 class DetailsPane;
 
@@ -61,7 +61,7 @@ struct InteractionManagerSetup {
   ISettingsManager *settingsManager = nullptr;
   IDatabaseManager *databaseManager = nullptr;
   NavigationManager *navigationManager = nullptr;
-  SessionManager *sessionManager = nullptr;
+  ISessionManager *sessionManager = nullptr;
   ArtworkManager *artworkManager = nullptr;
 
   // UI elements (can be overridden or taken from ctx)
@@ -88,7 +88,7 @@ struct InteractionManagerSetup {
   SETUP_GETTER_INLINE_MGR_SAME(ISettingsManager *, SettingsManager, settingsManager)
   SETUP_GETTER_INLINE_MGR_SAME(IDatabaseManager *, DatabaseManager, databaseManager)
   SETUP_GETTER_INLINE_MGR_SAME(NavigationManager *, NavigationManager, navigationManager)
-  SETUP_GETTER_INLINE_MGR_SAME(SessionManager *, SessionManager, sessionManager)
+  SETUP_GETTER_INLINE_MGR_SAME(ISessionManager *, SessionManager, sessionManager)
   SETUP_GETTER_INLINE_MGR_SAME(ArtworkManager *, ArtworkManager, artworkManager)
 
   // UI element accessors that check ctx fallback
@@ -373,7 +373,7 @@ private:
   [[nodiscard]] class PlaylistManager *playlistMgr() const {
     return m_ctx ? m_ctx->playlistManager() : nullptr;
   }
-  [[nodiscard]] SessionManager *sessionMgr() const {
+  [[nodiscard]] ISessionManager *sessionMgr() const {
     return m_ctx ? m_ctx->sessionManager() : nullptr;
   }
   [[nodiscard]] ArtworkManager *artworkMgr() const {
