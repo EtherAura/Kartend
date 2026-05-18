@@ -370,7 +370,7 @@ private:
   [[nodiscard]] NavigationManager *navMgr() const {
     return m_ctx ? m_ctx->navigationManager() : nullptr;
   }
-  [[nodiscard]] class PlaylistManager *playlistMgr() const {
+  [[nodiscard]] class IPlaylistManager *playlistMgr() const {
     return m_ctx ? m_ctx->playlistManager() : nullptr;
   }
   [[nodiscard]] ISessionManager *sessionMgr() const {

@@ -40,7 +40,7 @@ class EventManager;
 class SearchManager;
 class LaunchManager;
 class ICacheManager;
-class PlaylistManager;
+class IPlaylistManager;
 
 /**
  * @brief Shared application context containing common dependencies.
@@ -130,7 +130,7 @@ struct ApplicationContext {
     SearchManager *searchManager = nullptr;
     LaunchManager *launchManager = nullptr;
     ICacheManager *cacheManager = nullptr;
-    PlaylistManager *playlistManager = nullptr;
+    IPlaylistManager *playlistManager = nullptr;
 
     // Centralized interaction state (owned by InteractionManager)
     InteractionStateHolder *interactionState = nullptr;
@@ -185,7 +185,7 @@ struct ApplicationContext {
   [[nodiscard]] SearchManager *searchManager() const { return managers.searchManager; }
   [[nodiscard]] LaunchManager *launchManager() const { return managers.launchManager; }
   [[nodiscard]] ICacheManager *cacheManager() const { return managers.cacheManager; }
-  [[nodiscard]] PlaylistManager *playlistManager() const { return managers.playlistManager; }
+  [[nodiscard]] IPlaylistManager *playlistManager() const { return managers.playlistManager; }
   [[nodiscard]] InteractionStateHolder *interactionState() const {
     return managers.interactionState;
   }

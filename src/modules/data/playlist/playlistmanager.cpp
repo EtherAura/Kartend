@@ -36,7 +36,7 @@ QString newPlaylistId() {
 } // namespace
 
 PlaylistManager::PlaylistManager(QObject *parent)
-    : QObject(parent), m_connectionName(QStringLiteral("kartend_playlists_main")) {}
+    : IPlaylistManager(parent), m_connectionName(QStringLiteral("kartend_playlists_main")) {}
 
 PlaylistManager::~PlaylistManager() {
   assertOwnerThread();

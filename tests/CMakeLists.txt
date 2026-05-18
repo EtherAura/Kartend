@@ -318,6 +318,7 @@ add_test(NAME CacheManager COMMAND test_cachemanager)
 add_executable(test_playlistmanager
   modules/playlist/test_playlistmanager.cpp
   ${SRC_DIR}/modules/data/playlist/playlistmanager.cpp
+  ${SRC_DIR}/modules/data/playlist/iplaylistmanager.h
   ${SRC_DIR}/utils/db/dbmigrations.cpp
   ${SRC_DIR}/utils/db/smartfilter.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
