@@ -39,7 +39,7 @@ class KeyboardManager;
 class EventManager;
 class SearchManager;
 class LaunchManager;
-class CacheManager;
+class ICacheManager;
 class PlaylistManager;
 
 /**
@@ -129,7 +129,7 @@ struct ApplicationContext {
     EventManager *eventManager = nullptr;
     SearchManager *searchManager = nullptr;
     LaunchManager *launchManager = nullptr;
-    CacheManager *cacheManager = nullptr;
+    ICacheManager *cacheManager = nullptr;
     PlaylistManager *playlistManager = nullptr;
 
     // Centralized interaction state (owned by InteractionManager)
@@ -184,7 +184,7 @@ struct ApplicationContext {
   [[nodiscard]] EventManager *eventManager() const { return managers.eventManager; }
   [[nodiscard]] SearchManager *searchManager() const { return managers.searchManager; }
   [[nodiscard]] LaunchManager *launchManager() const { return managers.launchManager; }
-  [[nodiscard]] CacheManager *cacheManager() const { return managers.cacheManager; }
+  [[nodiscard]] ICacheManager *cacheManager() const { return managers.cacheManager; }
   [[nodiscard]] PlaylistManager *playlistManager() const { return managers.playlistManager; }
   [[nodiscard]] InteractionStateHolder *interactionState() const {
     return managers.interactionState;

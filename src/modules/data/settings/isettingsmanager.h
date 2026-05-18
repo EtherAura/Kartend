@@ -10,7 +10,7 @@ class DetailsPaneManager;
 class ScrollManager;
 class NavigationManager;
 class ArtworkManager;
-class CacheManager;
+class ICacheManager;
 class IDatabaseManager;
 
 struct SettingsDialogContext {
@@ -51,7 +51,7 @@ public:
       const QList<CollectionConfig> &originalCollections, int viewingCollectionIndex,
       DetailsPaneManager *detailsPaneManager, ScrollManager *scrollManager,
       NavigationManager *navigationManager, ArtworkManager *artworkManager,
-      CacheManager *cacheManager, int currentCollectionIndex) = 0;
+      ICacheManager *cacheManager, int currentCollectionIndex) = 0;
 
   virtual void handleLayoutChanges(QWidget *parent, const QList<CollectionConfig> &collections,
                                    int viewingCollectionIndex, bool titleChangedForView,

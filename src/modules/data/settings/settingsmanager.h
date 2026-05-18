@@ -33,7 +33,7 @@ public:
                             const QList<CollectionConfig> &originalCollections,
                             int viewingCollectionIndex, DetailsPaneManager *detailsPaneManager,
                             ScrollManager *scrollManager, NavigationManager *navigationManager,
-                            ArtworkManager *artworkManager, CacheManager *cacheManager,
+                            ArtworkManager *artworkManager, ICacheManager *cacheManager,
                             int currentCollectionIndex) override;
 
   void handleLayoutChanges(QWidget *parent, const QList<CollectionConfig> &collections,

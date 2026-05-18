@@ -343,7 +343,7 @@ void SettingsManager::openSettingsDialog(const SettingsDialogContext &context) {
   }
 
   ArtworkManager *art = m_ctx ? m_ctx->artworkManager() : nullptr;
-  CacheManager *cache = m_ctx ? m_ctx->cacheManager() : nullptr;
+  ICacheManager *cache = m_ctx ? m_ctx->cacheManager() : nullptr;
   if (art && art->getTimerCoordinator()) {
     art->getTimerCoordinator()->stopAllTimers();
   }
@@ -474,7 +474,7 @@ auto SettingsManager::handleReloadRequired(
     const QList<CollectionConfig> &originalCollections, int viewingCollectionIndex,
     DetailsPaneManager *detailsPaneManager, ScrollManager *scrollManager,
     NavigationManager *navigationManager, ArtworkManager *artworkManager,
-    CacheManager *cacheManager, int currentCollectionIndex) -> void {
+    ICacheManager *cacheManager, int currentCollectionIndex) -> void {
   Q_UNUSED(detailsPaneManager)
   Q_UNUSED(currentCollectionIndex)
   if (artworkManager) {

@@ -34,7 +34,7 @@ public:
 
   void handleReloadRequired(const QList<CollectionConfig> &, const QList<CollectionConfig> &,
                             const QList<CollectionConfig> &, int, DetailsPaneManager *,
-                            ScrollManager *, NavigationManager *, ArtworkManager *, CacheManager *,
+                            ScrollManager *, NavigationManager *, ArtworkManager *, ICacheManager *,
                             int) override {}
 
   void handleLayoutChanges(QWidget *, const QList<CollectionConfig> &, int, bool, bool, bool, bool,

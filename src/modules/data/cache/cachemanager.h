@@ -13,77 +13,59 @@
 #include <QTimer>
 
 #include "cachediskstorage.h"
+#include "icachemanager.h"
 
-// Statistics for monitoring cache performance
-struct CacheMetrics {
-  qint64 memoryHits = 0;    // Found in QCache (fastest)
-  qint64 diskHits = 0;      // Loaded from disk cache
-  qint64 misses = 0;        // Not cached anywhere
-  qint64 inserts = 0;       // New items cached
-  qint64 evictions = 0;     // Items evicted by LRU
-  qint64 invalidations = 0; // Stale items removed
+// CacheMetrics now lives in icachemanager.h — the data contract travels
+// with the interface.
 
-  [[nodiscard]] double memoryHitRate() const {
-    qint64 total = memoryHits + diskHits + misses;
-    return total > 0 ? static_cast<double>(memoryHits) / total : 0.0;
-  }
-
-  [[nodiscard]] double totalHitRate() const {
-    qint64 total = memoryHits + diskHits + misses;
-    return total > 0 ? static_cast<double>(memoryHits + diskHits) / total : 0.0;
-  }
-
-  void reset() { memoryHits = diskHits = misses = inserts = evictions = invalidations = 0; }
-};
-
-class CacheManager {
+class CacheManager : public ICacheManager {
 public:
   CacheManager();
-  ~CacheManager();
+  ~CacheManager() override;
 
   // Non-copyable, non-movable (singleton-like usage)
   CacheManager(const CacheManager &) = delete;
   CacheManager &operator=(const CacheManager &) = delete;
   CacheManager(CacheManager &&) = delete;
   CacheManager &operator=(CacheManager &&) = delete;
-  void initialize();
-  void saveToDisk();
-  void saveToDiskForShutdown();
-  void scheduleSaveToDisk(int delayMs = -1);
+  void initialize() override;
+  void saveToDisk() override;
+  void saveToDiskForShutdown() override;
+  void scheduleSaveToDisk(int delayMs = -1) override;
 
   // Shutdown-safe persistence helpers
   // These allow ApplicationManager to snapshot state while the CacheManager is
   // still alive and then write it out asynchronously without holding a raw
   // pointer to this instance.
-  [[nodiscard]] QHash<QString, qint64> snapshotTimestampsForShutdown() const;
+  [[nodiscard]] QHash<QString, qint64> snapshotTimestampsForShutdown() const override;
   static void saveTimestampsSnapshotToDiskForShutdown(const QHash<QString, qint64> &timestampsCopy);
 
   // Cancels pending I/O operations and waits for in-flight tasks to complete.
   // Call before shutdown to ensure clean state for final save.
-  void cancelPendingIo();
+  void cancelPendingIo() override;
 
-  [[nodiscard]] QPixmap getArtwork(const QString &artworkPath);
+  [[nodiscard]] QPixmap getArtwork(const QString &artworkPath) override;
   // Memory-only lookup: never performs disk I/O or creates files.
-  [[nodiscard]] QPixmap getArtworkFromMemoryOnly(const QString &artworkPath);
+  [[nodiscard]] QPixmap getArtworkFromMemoryOnly(const QString &artworkPath) override;
 
   // Worker-thread friendly disk cache read.
   // Returns the cached image (PNG) as QImage, without creating any QPixmap.
-  [[nodiscard]] QImage tryLoadArtworkImageFromDiskCache(const QString &artworkPath);
+  [[nodiscard]] QImage tryLoadArtworkImageFromDiskCache(const QString &artworkPath) override;
 
-  void cacheArtwork(const QString &artworkPath, const QPixmap &pixmap);
+  void cacheArtwork(const QString &artworkPath, const QPixmap &pixmap) override;
 
   // Inserts into in-memory cache only; does not mark dirty for disk
   // persistence.
-  void cacheArtworkInMemoryOnly(const QString &artworkPath, const QPixmap &pixmap);
+  void cacheArtworkInMemoryOnly(const QString &artworkPath, const QPixmap &pixmap) override;
 
-  void clearCollectionCache(int collectionIndex);
+  void clearCollectionCache(int collectionIndex) override;
   [[nodiscard]] static qint64 getCacheSize();
-  void releaseGuiResources();
+  void releaseGuiResources() override;
 
   // Cache metrics access
-  [[nodiscard]] CacheMetrics metrics() const;
-  void resetMetrics();
-  void logMetrics() const;
+  [[nodiscard]] CacheMetrics metrics() const override;
+  void resetMetrics() override;
+  void logMetrics() const override;
 
 private:
   mutable QMutex m_mutex;
