@@ -23,10 +23,12 @@ src/
 │   ├── data/            # Persistence: SQLite, cache, sessions, settings, playlists
 │   │   ├── cache/       # In-memory pixmap cache, disk persistence
 │   │   ├── database/    # SQLite coordination via worker thread
+│   │   ├── dat/         # Offline DAT-file identification + on-disk parse cache
 │   │   ├── kart/        # Kart (collection bundle) import/export
 │   │   ├── playlist/    # Playlist storage and export (JSON / M3U)
 │   │   ├── query/       # Worker thread SQL queries
 │   │   ├── restore/     # Selection state restoration during navigation
+│   │   ├── scraper/     # Metadata scraping (core/ + parsers/ + providers/)
 │   │   ├── session/     # Selection state persistence
 │   │   └── settings/    # Config file I/O, settings dialog
 │   ├── input/           # User input and navigation
@@ -45,7 +47,8 @@ src/
 │       ├── overlay/     # Selection / search loading overlays
 │       └── viewport/    # Centering, viewport positioning
 ├── ui/                  # UI components and constants
-│   ├── dialogs/         # Settings dialog, error dialog, shortcuts dialog
+│   ├── dialogs/         # Dialogs grouped by domain: settings/, collection/,
+│   │                    # launcher/, scraper/, kart/ (loose dialogs at root)
 │   └── widgets/         # Item widget, details pane, list header, overlays
 └── utils/               # Shared utilities and data structures
 ```
@@ -91,8 +94,8 @@ src/
 ## Manager Hierarchy
 
 **Two-tier ownership model:**
-- **ApplicationManager** owns: `CacheManager`, `SessionManager`, `ArtworkManager`, `SettingsManager`, `DatabaseManager`, `ScrollManager`, `DetailsPaneManager`, `NavigationManager`, `InteractionManager`
-- **InteractionManager** owns: `SearchManager`, `SelectionManager`, `KeyboardManager`, `GamepadManager`, `ArrowNavigationHandler`, `AlphabeticNavigationHandler`, `AnimationManager`, `MouseManager`, `LaunchManager`, `ViewportManager`, `EventManager`
+- **ApplicationManager** owns: `CacheManager`, `SessionManager`, `ArtworkManager`, `SettingsManager`, `DatabaseManager`, `ScrollManager`, `DetailsPaneManager`, `NavigationManager`, `InteractionManager`, `PlaylistManager`, `DetailPageManager`, `KartManager`
+- **InteractionManager** owns: `SearchManager`, `SelectionManager`, `KeyboardManager`, `GamepadManager`, `ArrowNavigationHandler`, `AlphabeticNavigationHandler`, `AnimationManager`, `MouseManager`, `LaunchManager`, `ViewportManager`, `EventManager`, `AttractManager`
 
 Additional helper managers owned by their parent feature module (not top-level): `WidgetPoolManager`, `FilterManager`, `SelectionRestoreManager`, `SelectionOverlayManager`, `SearchLoadingOverlay`, `NavigationStackManager`.
 
@@ -120,6 +123,7 @@ Utilities are grouped by concern in six subfolders.
 | `errorutils.h` | Structured error handling: `ErrorCode` enum, `ErrorContext` struct, `Result<T>` template, `lcErrors` category. |
 | `loggingcategories` | Cross-cutting `Q_LOGGING_CATEGORY` declarations (`lcPerfTrace`, `lcSearchDiag`, `lcScanFlow`). |
 | `propertyutils.h` | `PropertyKeys` namespace with Qt dynamic property key constants. |
+| `scrapelogger` | Optional scrape-diagnostic logging, driven by the scrape-logging setting. |
 | `settingsutils` | Settings file path resolution and INI helpers. |
 | `setuputils.h` | Macros that reduce setup-struct getter boilerplate (`SETUP_GETTER_*` family). |
 | `stateutils.h` | Centralized state structs (`SelectionRestoreState`, `ScrollState`, …) replacing scattered dynamic properties. |
@@ -133,6 +137,8 @@ Utilities are grouped by concern in six subfolders.
 | `itemartwork` | `item_artwork` table — per-item artwork overrides with standard-type fallback. |
 | `itemmetadata` | `item_metadata` table — custom titles, descriptions, genres, custom key/value fields. |
 | `itemmetadatacache` | Per-item LRU (256 entries) fronting the per-item DB loads (metadata, artwork rows, usage stats). Invalidated on writes, rescans, reconnects. |
+| `smartfilter` | Serializable filter spec driving a smart playlist's per-open query. |
+| `smartplaylistevaluator` | Translates a `SmartFilter::Filter` into concrete (collection, item) matches. |
 | `usagestatsstore` | `play_count`, `last_played`, `total_play_seconds` on the items table. |
 
 ### `src/utils/fs/` — Filesystem paths, validation, extension classification
@@ -141,7 +147,10 @@ Utilities are grouped by concern in six subfolders.
 |---------|-------------|
 | `configvalidation` | Schema validation of `CollectionConfig` plus `isCommandInPath()`. |
 | `extensionutils` | File extension categorization by media type. |
+| `launcherprobe` | PATH-probe for well-known launcher binaries. |
 | `pathutils` | Path validation with `Result<T>` support, expansion, `syncDirectory()` for crash-safe writes. |
+| `retroarchutils` | Discovery of a RetroArch install's libretro cores. |
+| `romhasher` | Stream-hashing of media files for hash-based scraper lookups. |
 
 ### `src/utils/text/` — Search modes, string formatting, title filtering
 
@@ -165,6 +174,8 @@ Utilities are grouped by concern in six subfolders.
 |---------|-------------|
 | `artworkutils` | Artwork file lookup, fuzzy matching, `Result<T>`-returning variants. |
 | `gridutils.h` | Grid layout calculations, row/column math, container sizing. |
+| `kdecolorscheme` | Discovery and parsing of KDE Plasma `.colors` scheme files. |
+| `placeholderwarmer` | Batch pre-export of procedural placeholder artwork. |
 | `textzoom` | Process-wide UI text zoom percentage (clamped to 50–300). |
 | `videoutils` | Per-item preview-video file lookup (mirrors `artworkutils`). |
 
@@ -187,24 +198,35 @@ emit itemsRangeLoaded(offset, filePaths, fileNames); // Back to main thread
 
 ## Dependency Injection
 
-Managers receive dependencies via dedicated setup structs:
+Managers receive dependencies via dedicated setup structs. Sibling-manager
+pointers are *not* copied into the struct — they are read through the shared
+`ApplicationContext` (`ctx`), which is the single source of truth. The setup
+struct carries only `ctx` plus non-manager refs (UI widgets, collection-state
+pointers, callbacks):
 
 ```cpp
-// In header: define setup struct with needed pointers
+// In header: setup struct carries ctx + non-manager refs only.
 struct ScrollManagerSetup {
+  const ApplicationContext *ctx = nullptr;
   QWidget *gridContainer = nullptr;
-  ArtworkManager *artworkManager = nullptr;
-  // ...
+  // ... non-manager refs only
 };
 
-// In implementation: store references
+// In implementation: store ctx, then non-manager fields.
 void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
+  m_ctx = setup.ctx;
   m_gridContainer = setup.gridContainer;
-  m_artworkManager = setup.artworkManager;
+}
+
+// Read siblings through ctx at the point of use.
+if (auto *art = m_ctx ? m_ctx->artworkManager() : nullptr) {
+  art->scheduleViewportUpdate();
 }
 ```
 
-Setup calls are wired in `MainWindow::setupManagers()` and related methods.
+`MainWindow::initializeAppContext()` populates `ctx->managers.*` before any
+`setupReferences()` runs; setup calls are wired in
+`MainWindow::setupManagers()` and related methods.
 
 ## Key Design Patterns
 

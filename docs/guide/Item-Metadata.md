@@ -276,8 +276,8 @@ auto-discovered cover.
 - Detail page: [src/modules/media/detailpage/](../../src/modules/media/detailpage/)
   (`DetailPageManager`).
 - Custom Fields Dialog: [src/ui/dialogs/customfieldsdialog.h](../../src/ui/dialogs/).
-- Item Artwork Links Dialog: [src/ui/dialogs/itemartworklinksdialog.h](../../src/ui/dialogs/).
-- Launcher chooser: [src/ui/dialogs/launcherchooserdialog.h](../../src/ui/dialogs/).
+- Item Artwork Links Dialog: [src/ui/dialogs/collection/itemartworklinksdialog.h](../../src/ui/dialogs/collection/).
+- Launcher chooser: [src/ui/dialogs/launcher/launcherchooserdialog.h](../../src/ui/dialogs/launcher/).
 - Adding a new well-known item field: extend the relevant store with a
   typed accessor (e.g. `setLastPlayed`, `lastPlayedFor`) rather than
   treating it as an arbitrary custom field — the typed accessor lets

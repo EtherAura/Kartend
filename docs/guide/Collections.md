@@ -301,7 +301,7 @@ For the master list see [Configuration Reference](Configuration-Reference.md).
   (`src/modules/input/navigation/`). Parent-index → name resolution
   happens there.
 - Linked-parent rewrites on rename are in
-  [src/ui/dialogs/settingsdialogtree.cpp](../../src/ui/dialogs/settingsdialogtree.cpp).
+  [src/ui/dialogs/settings/settingsdialogtree.cpp](../../src/ui/dialogs/settings/settingsdialogtree.cpp).
 - Virtual subfolder collections are synthesized at scan time by
   `QueryManager`; they have `isSubcollection=true` but no INI section
   and no UUID. Look for `currentSubfolder` in

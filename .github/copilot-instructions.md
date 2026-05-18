@@ -87,11 +87,15 @@ src/
 │   ├── data/            # Persistence: SQLite, cache, sessions, settings, playlists
 │   │   ├── cache/       # In-memory pixmap cache, disk persistence
 │   │   ├── database/    # SQLite coordination via worker thread
+│   │   ├── dat/         # Offline DAT-file identification + on-disk parse cache
 │   │   ├── kart/        # Kart (collection bundle) import/export
 │   │   ├── playlist/    # Playlist storage and export (JSON / M3U)
 │   │   ├── query/       # Worker thread SQL queries
 │   │   ├── restore/     # Selection state restoration during navigation
-│   │   ├── scraper/     # Metadata-provider abstraction + web-search providers
+│   │   ├── scraper/     # Metadata scraping
+│   │   │   ├── core/        # Orchestration, HTTP, persistence, credentials
+│   │   │   ├── parsers/     # Provider-response parsers
+│   │   │   └── providers/   # Metadata providers + registry
 │   │   ├── session/     # Selection state persistence
 │   │   └── settings/    # Config file I/O, settings dialog
 │   ├── input/           # User input and navigation
@@ -110,10 +114,33 @@ src/
 │       ├── overlay/     # Selection / search loading overlays
 │       └── viewport/    # Centering, viewport positioning
 ├── ui/                  # UI components and constants
-│   ├── dialogs/         # Settings dialog, error dialog, shortcuts dialog
+│   ├── dialogs/         # Dialogs and settings panels, grouped by domain
+│   │   ├── settings/    # Settings dialog core + all tab panels
+│   │   ├── collection/  # Collection create / remove / picker dialogs
+│   │   ├── launcher/    # Launcher chooser / editor dialogs
+│   │   ├── scraper/     # Scraper settings / credentials / result dialogs
+│   │   └── kart/        # Kart merge / progress dialogs
+│   │                    # (errordialog, firstrunwizard, shortcutsdialog,
+│   │                    #  statisticsdialog stay at dialogs/ root)
 │   └── widgets/         # Item widget, details pane, list header, overlays
 └── utils/               # Shared utilities and data structures
 ```
+
+### Module Layering
+
+All of `src/` currently links into one `OBJECT` library, so module
+boundaries are **not** compiler-enforced. One invariant is enforced by a
+lint instead:
+
+> **`src/utils/` is the foundation layer.** It must not `#include` any
+> header from `src/modules/`, `src/ui/`, or `src/core/`. Shared code that
+> a utils file needs belongs *in* `src/utils/`.
+
+`.scripts/check-layering.py` checks this and runs in the
+`maintenance-check` CI job. (`uiconstants.h` is a documented allowlisted
+exception — a pure constants namespace pending relocation.) Splitting each
+top-level module into its own library with explicit `target_link_libraries`
+is the longer-term fix; until then, do not add upward edges from utils.
 
 ### Manager Hierarchy
 
@@ -290,23 +317,33 @@ void ScrollManager::doWork() {
 
 Setup calls are wired in `MainWindow::setupManagers()` and related methods.
 
-### Scroll Module (`src/modules/scroll/`)
+### Scroll Module (`src/modules/input/scroll/`)
 
 The scroll module handles virtual scrolling with widget pooling:
 
 | Class | Purpose |
 |-------|---------|
 | `ScrollManager` | Core orchestration of virtual scrolling, viewport updates |
+| `VirtualScrollEngine` | Visible-range computation and row materialization |
 | `GridLayoutCalculator` | Stateless grid metric calculations (row/column positions) |
-| `ItemWidgetFactory` | Widget creation and configuration, delegates to pool |
-| `WidgetPoolManager` | Widget recycling pool for performance |
+| `ItemWidgetFactory` | Widget creation and configuration, delegates to the pool |
 | `VirtualContainerManager` | Container lifecycle and sizing |
+| `ScrollDataManager` | Scroll-side item/data bookkeeping |
+| `DataSourceManager` | Item data-source binding for the scroll view |
 | `SelectionCoordinator` | Selection state and movement analysis |
-| `SelectionOverlayManager` | Glide animation overlay rendering |
+| `SelectionDisplayManager` | Selection rendering on materialized widgets |
+| `SelectionStateTracker` | Selection-state snapshot tracking |
 | `ScrollEventHandler` | Scroll event wiring and user scroll detection |
-| `FilterManager` | Search and subcollection filtering |
+| `ArrowKeyScrollHelper` | Arrow-key driven scroll stepping |
+| `PreSearchStateManager` | Saves/restores pre-search scroll state |
 
-### Interaction Module (`src/modules/interaction/`)
+Note: the widget-recycling pool (`WidgetPoolManager`), search/subcollection
+filtering (`FilterManager`), and glide-overlay rendering
+(`SelectionOverlayManager`) are *not* in this folder — they live in
+`src/modules/behavior/widgetpool/`, `src/modules/behavior/filter/`, and
+`src/modules/media/overlay/` respectively.
+
+### Interaction Module (`src/modules/input/interaction/`)
 
 The interaction module coordinates user input handling:
 
@@ -315,7 +352,7 @@ The interaction module coordinates user input handling:
 | `InteractionManager` | Central coordinator for input handling, owns sub-managers |
 | `InteractionStateHolder` | Centralized typed state replacing scattered dynamic properties |
 
-### Database Module (`src/modules/database/`, `src/modules/query/`)
+### Database Module (`src/modules/data/database/`, `src/modules/data/query/`)
 
 Database operations use a worker thread pattern:
 
@@ -394,6 +431,7 @@ Utilities are grouped by concern in six subfolders. Each has its own
 | `errorutils.h` | `ErrorCode` enum, `ErrorContext` struct, `Result<T>` template, `lcErrors` logging category |
 | `loggingcategories.{h,cpp}` | Cross-cutting `Q_LOGGING_CATEGORY` declarations (`lcPerfTrace`, `lcSearchDiag`, `lcScanFlow`) |
 | `propertyutils.h` | `PropertyKeys` namespace with Qt dynamic property key constants |
+| `scrapelogger.{h,cpp}` | Optional scrape-diagnostic logging, driven by the scrape-logging setting |
 | `settingsutils.{h,cpp}` | Settings file path resolution, INI helpers |
 | `setuputils.h` | Macros that reduce setup-struct getter boilerplate (`SETUP_GETTER_*` family) |
 | `stateutils.h` | Centralized state structs (`SelectionRestoreState`, `ScrollState`, etc.) replacing scattered dynamic properties |
@@ -407,6 +445,8 @@ Utilities are grouped by concern in six subfolders. Each has its own
 | `itemartwork.{h,cpp}` | `item_artwork` table — per-item artwork overrides (manual path + standard-type fallback) |
 | `itemmetadata.{h,cpp}` | `item_metadata` table — custom titles, descriptions, genres, key/value fields |
 | `itemmetadatacache.{h,cpp}` | Per-item LRU (256 entries) fronting `loadItemMetadata` / `loadItemArtwork` / `loadItemUsageStats`. Three slots per (collectionUuid, path); invalidated on writes, rescans, and reconnects. |
+| `smartfilter.{h,cpp}` | Serializable filter spec driving a smart playlist's per-open query |
+| `smartplaylistevaluator.{h,cpp}` | Translates a `SmartFilter::Filter` into concrete (collection, item) matches |
 | `usagestatsstore.{h,cpp}` | `play_count`, `last_played`, `total_play_seconds` on the items table |
 
 #### `src/utils/fs/` — Filesystem paths, validation, extension classification
@@ -415,7 +455,10 @@ Utilities are grouped by concern in six subfolders. Each has its own
 |---------|---------|
 | `configvalidation.{h,cpp}` | Schema validation of `CollectionConfig` plus `isCommandInPath()` |
 | `extensionutils.{h,cpp}` | File extension categorization, media type detection |
+| `launcherprobe.{h,cpp}` | PATH-probe for well-known launcher binaries |
 | `pathutils.{h,cpp}` | Path validation with `Result<T>` support, expansion, `syncDirectory()` for crash-safe writes |
+| `retroarchutils.{h,cpp}` | Discovery of a RetroArch install's libretro cores |
+| `romhasher.{h,cpp}` | Stream-hashing of media files for hash-based scraper lookups |
 
 #### `src/utils/text/` — Search modes, string formatting, title filtering
 
@@ -439,6 +482,8 @@ Utilities are grouped by concern in six subfolders. Each has its own
 |---------|---------|
 | `artworkutils.{h,cpp}` | Artwork file lookup, fuzzy matching, `Result<T>`-returning variants |
 | `gridutils.h` | Grid layout calculations, row/column math, container sizing |
+| `kdecolorscheme.{h,cpp}` | Discovery and parsing of KDE Plasma `.colors` scheme files |
+| `placeholderwarmer.{h,cpp}` | Batch pre-export of procedural placeholder artwork |
 | `textzoom.{h,cpp}` | Process-wide UI text zoom percentage (clamped to 50–300) |
 | `videoutils.{h,cpp}` | Per-item preview-video file lookup (mirrors `artworkutils` for video) |
 
@@ -511,12 +556,16 @@ Unit tests use the **Qt Test framework** with CTest integration.
 ```
 tests/
 ├── CMakeLists.txt           # Monolithic test build configuration
-├── modules/                 # Per-feature unit tests, mirrors src/modules/
+├── modules/                 # Per-feature unit tests. One flat folder per
+│   │                        # feature — NOT nested like src/modules/<group>/.
+│   │                        # A test for src/modules/<group>/<feature>/ lives
+│   │                        # at tests/modules/<feature>/ (group omitted).
 │   ├── animation/           #   test_animationmanager
 │   ├── artwork/             #   test_artworkmanager
 │   ├── attract/             #   test_attracthelpers
 │   ├── cache/               #   test_cachemanager
 │   ├── database/            #   test_databasemanager
+│   ├── dat/                 #   test_datcache, test_datlookup
 │   ├── detailpage/          #   test_detailpagehelpers
 │   ├── event/               #   test_eventhelpers
 │   ├── filter/              #   test_filterhelpers
@@ -529,8 +578,9 @@ tests/
 │   ├── navigation/          #   test_navigationhelpers, test_navigationstackmanager
 │   ├── overlay/             #   test_overlayhelpers
 │   ├── playlist/            #   test_playlistmanager
-│   ├── query/               #   test_queryhelpers, test_querymanager_{broken_symlinks,cancel_scan,cross_collection_count}
+│   ├── query/               #   test_queryhelpers, test_querymanager_{abspath,broken_symlinks,cancel_scan,cross_collection_count,shell_collection_sort}
 │   ├── restore/             #   test_selectionrestorehelpers
+│   ├── scraper/             #   provider / parser / persistence tests + stubmetadataprovider.h
 │   ├── scroll/              #   test_gridlayoutcalculator, test_scrolldatamanager, test_scrollhelpers
 │   ├── search/              #   test_searchhelpers
 │   ├── selection/           #   test_selectionhelpers
@@ -538,8 +588,8 @@ tests/
 │   ├── settings/            #   test_settingshelpers
 │   ├── viewport/            #   test_viewporthelpers
 │   └── widgetpool/          #   test_widgetpoolmanager
-├── utils/                   # Per-helper unit tests, mirrors src/utils/
-│   ├── test_cliargs.cpp
+├── utils/                   # Per-helper unit tests — ONLY for src/utils/.
+│   ├── test_cliargs.cpp     #   (module tests do NOT belong here; see modules/)
 │   ├── test_collectionutils.cpp
 │   ├── test_configvalidation.cpp
 │   ├── test_dbmigrations.cpp
@@ -548,14 +598,23 @@ tests/
 │   ├── test_itemartwork.cpp
 │   ├── test_itemmetadata.cpp
 │   ├── test_itemmetadatacache.cpp
+│   ├── test_kdecolorscheme.cpp
+│   ├── test_launcherprobe.cpp
 │   ├── test_pathutils.cpp
+│   ├── test_placeholderwarmer.cpp
+│   ├── test_retroarchutils.cpp
+│   ├── test_romhasher.cpp
+│   ├── test_scrapelogger.cpp
 │   ├── test_searchutils.cpp
+│   ├── test_smartfilter.cpp
+│   ├── test_smartplaylistevaluator.cpp
 │   ├── test_stringutils.cpp
 │   ├── test_titlefilter.cpp
 │   ├── test_usagestatsstore.cpp
 │   └── test_videoutils.cpp
 ├── integration/             # Multi-manager scenarios, single binary, fixture-driven
 │   ├── mainwindowfixture.{cpp,h}
+│   ├── mocks/               # mockdatabasemanager.h, mocksettingsmanager.h, mockedmainwindowfixture.{cpp,h}
 │   ├── test_main.cpp        # QApplication harness for the integration suite
 │   ├── test_applicationmanager_lifecycle.{cpp,h}
 │   ├── test_applysettingsdialog.{cpp,h}
@@ -566,6 +625,8 @@ tests/
 │   ├── test_scrollmanager.{cpp,h}
 │   ├── test_settingsdialog_changes.{cpp,h}
 │   └── test_settingsdialog_scope.{cpp,h}
+├── benchmarks/              # Perf benchmarks — ctest label "benchmark",
+│   └── bench_filterhelpers.cpp   #   skipped by default; run via `ctest -L benchmark`
 └── ui/widgets/              # Widget-level rendering and behavior
     ├── test_coverflowwidget.cpp
     └── test_emptystatewidget.cpp
@@ -626,21 +687,21 @@ add_test(NAME test_classname COMMAND test_classname)
 
 ### Current Test Coverage
 
-Tests are grouped into four areas. Each `test_*.cpp` is a standalone Qt
+Tests are grouped into five areas. Each `test_*.cpp` is a standalone Qt
 Test binary discovered by CTest, with the exception of the integration
 suite which links all of its `TestXxx` classes into a single binary
 (`test_integration`) driven by `tests/integration/test_main.cpp`.
 
-| Area | Path | Binaries | Coverage |
-|------|------|----------|----------|
-| Module unit tests | `tests/modules/<feature>/` | 37 | Per-manager and per-helper coverage mirroring `src/modules/<feature>/` |
-| Utility unit tests | `tests/utils/` | 15 | Helpers under `src/utils/` (cliargs, collectionutils, configvalidation, dbmigrations, gridutils, historystore, itemartwork, itemmetadata, itemmetadatacache, pathutils, searchutils, stringutils, titlefilter, usagestatsstore, videoutils) |
-| Integration tests | `tests/integration/` | 1 | `MainWindowFixture`-driven multi-manager scenarios (application lifecycle, settings dialog apply / changes / scope, scroll, navigation, details-pane coverflow, event-manager wiring, mainwindow smoke) |
-| UI widget tests | `tests/ui/widgets/` | 2 | Widget-level rendering and behavior (`CoverflowWidget`, `EmptyStateWidget`) |
+| Area | Path | Coverage |
+|------|------|----------|
+| Module unit tests | `tests/modules/<feature>/` | Per-manager and per-helper coverage for `src/modules/`. One flat folder per feature (the `behavior/data/input/media` group level is omitted). Includes `dat/` and `scraper/`. |
+| Utility unit tests | `tests/utils/` | Helpers under `src/utils/` **only** — `app`, `db`, `fs`, `text`, `threading`, `view`. Tests for `src/modules/` files must NOT land here. |
+| Integration tests | `tests/integration/` | One binary (`test_integration`). `MainWindowFixture`-driven multi-manager scenarios; shared mocks under `tests/integration/mocks/`. |
+| UI widget tests | `tests/ui/widgets/` | Widget-level rendering and behavior (`CoverflowWidget`, `EmptyStateWidget`). |
+| Benchmarks | `tests/benchmarks/` | Perf benchmarks labelled `benchmark`; skipped by default. Run with `ctest -L benchmark`. |
 
-**Total: 64 `test_*.cpp` files, ~340 test methods across 55 binaries.**
-Method counts drift fast — prefer `ctest --output-on-failure --test-dir
-build/ninja-release` for an authoritative pass count.
+Binary and method counts drift fast — prefer `ctest --output-on-failure
+--test-dir build/ninja-release` for an authoritative list and pass count.
 
 ## Code Conventions
 
@@ -755,6 +816,33 @@ constexpr int delay = UIConstants::SEARCH_DEBOUNCE_DELAY_MS;
 ### Header Guards
 
 Use `#ifndef CLASSNAME_H` pattern. Qt forward declarations with `QT_BEGIN_NAMESPACE`/`QT_END_NAMESPACE` blocks.
+
+### Class Naming Conventions
+
+Class name suffixes are **role markers** — pick the one that matches what the
+class *is*, and don't invent new suffixes. The codebase currently uses 39
+`*Manager` classes; that name is overused, so prefer a more specific suffix
+below when one fits, and reserve `Manager` for genuine feature-area owners.
+
+| Suffix | Role | Notes |
+|--------|------|-------|
+| `Manager` | Long-lived stateful owner/coordinator of a feature area | Default only when nothing more specific fits |
+| `Handler` | Focused responder to one event/input kind | e.g. `WheelEventHandler`, `HoverScrollHandler` |
+| `Controller` | Drives one UI surface (menu, toolbar, dialog) | e.g. `MenuController`, `ToolbarController` |
+| `Coordinator` | Cross-cutting orchestration helper, owns no feature state | e.g. `SelectionCoordinator` |
+| `Engine` | Pure computational core, no Qt/UI dependencies | e.g. `VirtualScrollEngine` |
+| `Service` | Stateless-ish operation provider, callable by many owners | e.g. `ScraperService` |
+| `Worker` | Runs on a non-main (worker) thread | pair with `QThread`/`QtConcurrent` |
+| `Provider` | Pluggable backend behind an interface | e.g. `ScreenScraperProvider` |
+| `Registry` | Lookup table of providers/objects by key | e.g. `MetadataProviderRegistry` |
+| `Factory` | Constructs and configures objects | e.g. `ItemWidgetFactory` |
+| `Parser` | Parses an external response/format into typed data | e.g. `TmdbParser` |
+| `Cache` | Caching layer fronting a slower source | e.g. `FileMapCache` |
+| `*helpers` (file) | Free-function namespace, no class | e.g. `scrollhelpers.cpp` |
+
+When unsure, prefer the **narrowest** accurate suffix. Renaming existing
+misnamed classes is deferred to dedicated rename passes — do not bulk-rename
+opportunistically inside an unrelated change.
 
 ### Return Value Annotations
 

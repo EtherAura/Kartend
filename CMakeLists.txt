@@ -258,7 +258,9 @@ target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
   ${SRC_DIR}/modules/data/playlist
   ${SRC_DIR}/modules/data/query
   ${SRC_DIR}/modules/data/restore
-  ${SRC_DIR}/modules/data/scraper
+  ${SRC_DIR}/modules/data/scraper/core
+  ${SRC_DIR}/modules/data/scraper/parsers
+  ${SRC_DIR}/modules/data/scraper/providers
   ${SRC_DIR}/modules/data/session
   ${SRC_DIR}/modules/data/settings
   ${SRC_DIR}/modules/input/gamepad
@@ -280,6 +282,11 @@ target_include_directories(${KARTEND_LIB_TARGET} PUBLIC
   ${SRC_DIR}/ui/widgets/overlays
   ${SRC_DIR}/ui/widgets/panes
   ${SRC_DIR}/ui/dialogs
+  ${SRC_DIR}/ui/dialogs/settings
+  ${SRC_DIR}/ui/dialogs/collection
+  ${SRC_DIR}/ui/dialogs/launcher
+  ${SRC_DIR}/ui/dialogs/scraper
+  ${SRC_DIR}/ui/dialogs/kart
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
   ${SRC_DIR}/utils/fs

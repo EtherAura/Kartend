@@ -1,122 +1,16 @@
 target_sources(${KARTEND_LIB_TARGET} PRIVATE
-  applysettingsdialog.cpp
-  appearancecolorspanel.cpp
-  appearanceeffectspanel.cpp
-  appearancelayoutpanel.cpp
-  appearancelistpanel.cpp
-  appearancetitlespanel.cpp
-  appearancetoolbarpanel.cpp
-  artworktabpanel.cpp
-  attractpanel.cpp
-  collectionpickerdialog.cpp
-  collectionremover.cpp
-  collectionstreeshell.cpp
-  collectiontreewidget.cpp
-  configurationpanel.cpp
-  controlspanel.cpp
-  createcollectiondialog.cpp
-  createsmartplaylistdialog.cpp
-  customfieldsdialog.cpp
   errordialog.cpp
   firstrunwizard.cpp
-  fontspanel.cpp
-  gamepadcapturecontroller.cpp
-  generalsettingspanel.cpp
-  scrapersettingspanel.cpp
-  scrapercredentialspanel.cpp
-  itemartworklinksdialog.cpp
-  kartmergedialog.cpp
-  kartprogressdialog.cpp
-  launcherchooserdialog.cpp
-  launchereditordialog.cpp
-  launcherpresetspanel.cpp
-  launchertabpanel.cpp
-  marqueepanel.cpp
-  scrapercredentialsdialog.cpp
-  scraperesultdialog.cpp
-  scrapejobgrouping.cpp
-  settingsdialog.cpp
-  settingsdialogbrowse.cpp
-  settingsdialogchecks.cpp
-  settingsdialogform.cpp
-  settingsdialoggeneral.cpp
-  settingsdialoglaunchers.cpp
-  settingsdialoglinks.cpp
-  settingsdialogremove.cpp
-  settingsdialogsetup.cpp
-  settingsdialogtree.cpp
   shortcutsdialog.cpp
-  treemanager.cpp
-  sidebarpanel.cpp
-  splashpanel.cpp
   statisticsdialog.cpp
-  subfolderspanel.cpp
-  toolbarpanel.cpp
-  applysettingsdialog.h
-  appearancecolorspanel.h
-  appearanceeffectspanel.h
-  appearancelayoutpanel.h
-  appearancelistpanel.h
-  appearancetitlespanel.h
-  appearancetoolbarpanel.h
-  artworktabpanel.h
-  attractpanel.h
-  collectionpickerdialog.h
-  collectionremover.h
-  collectionstreeshell.h
-  collectiontreewidget.h
-  configurationpanel.h
-  controlspanel.h
-  createcollectiondialog.h
-  createsmartplaylistdialog.h
-  customfieldsdialog.h
   errordialog.h
   firstrunwizard.h
-  fontspanel.h
-  gamepadcapturecontroller.h
-  generalsettingspanel.h
-  scrapersettingspanel.h
-  scrapercredentialspanel.h
-  itemartworklinksdialog.h
-  kartmergedialog.h
-  kartprogressdialog.h
-  launcherchooserdialog.h
-  launchereditordialog.h
-  launcherpresetspanel.h
-  launchertabpanel.h
-  marqueepanel.h
-  scrapercredentialsdialog.h
-  scraperesultdialog.h
-  scrapejobgrouping.h
-  settingsdialog.h
-  settingsformbinding.h
-  settingsmodel.h
-  treemanager.h
   shortcutsdialog.h
-  sidebarpanel.h
-  splashpanel.h
   statisticsdialog.h
-  subfolderspanel.h
-  toolbarpanel.h
-  appearancecolorspanel.ui
-  appearanceeffectspanel.ui
-  appearancelayoutpanel.ui
-  appearancelistpanel.ui
-  appearancetitlespanel.ui
-  appearancetoolbarpanel.ui
-  artworktabpanel.ui
-  attractpanel.ui
-  collectionstreeshell.ui
-  configurationpanel.ui
-  controlspanel.ui
-  fontspanel.ui
-  generalsettingspanel.ui
-  launcherpresetspanel.ui
-  launchertabpanel.ui
-  marqueepanel.ui
-  settingsdialog.ui
-  sidebarpanel.ui
-  splashpanel.ui
-  subfolderspanel.ui
-  toolbarpanel.ui
 )
+
+add_subdirectory(settings)
+add_subdirectory(collection)
+add_subdirectory(launcher)
+add_subdirectory(scraper)
+add_subdirectory(kart)

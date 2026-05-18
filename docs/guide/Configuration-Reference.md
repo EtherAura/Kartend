@@ -453,7 +453,7 @@ hideMissingArtwork=true
   [src/utils/fs/configvalidation.cpp](../../src/utils/fs/configvalidation.cpp).
 - Adding a new key: extend the struct, add load/save in
   `settingsmanager`, add UI in
-  [src/ui/dialogs/settingsdialog\*.cpp](../../src/ui/dialogs/), update
+  [src/ui/dialogs/settings/](../../src/ui/dialogs/settings/), update
   `applysettingsdialog` if the key should be propagatable, and add a
   row to this page.
 - Keys that should *not* propagate to other collections (paths,

@@ -405,6 +405,11 @@ jobs:
           ccache --set-config=max_size=1G
           ccache --zero-stats
           
+      - name: Check module layering
+        # Fails if the foundation layer (src/utils/) reaches upward into
+        # src/modules|ui|core. Cheap, build-independent guardrail.
+        run: python3 .scripts/check-layering.py
+
       - name: Run maintenance build script
         run: |
           bash .scripts/build.sh --maintenance --format-check

@@ -51,28 +51,32 @@ ctest --test-dir build/ninja-sanitize --output-on-failure
 
 ## Test Coverage
 
-Tests are grouped into four areas. Each `test_*.cpp` is a standalone Qt
+Tests are grouped into five areas. Each `test_*.cpp` is a standalone Qt
 Test binary discovered by CTest, with the exception of the integration
 suite which links all of its `TestXxx` classes into a single binary
 (`test_integration`) driven by `tests/integration/test_main.cpp`.
 
-| Area | Path | Binaries | Coverage |
-|------|------|----------|----------|
-| Module unit tests | `tests/modules/<feature>/` | 37 | Per-manager and per-helper coverage mirroring `src/modules/<feature>/` |
-| Utility unit tests | `tests/utils/` | 15 | Helpers under `src/utils/` (cliargs, collectionutils, configvalidation, dbmigrations, gridutils, historystore, itemartwork, itemmetadata, itemmetadatacache, pathutils, searchutils, stringutils, titlefilter, usagestatsstore, videoutils) |
-| Integration tests | `tests/integration/` | 1 | `MainWindowFixture`-driven multi-manager scenarios (application lifecycle, settings dialog apply / changes / scope, scroll, navigation, details-pane coverflow, event-manager wiring, mainwindow smoke) |
-| UI widget tests | `tests/ui/widgets/` | 2 | Widget-level rendering and behavior (`CoverflowWidget`, `EmptyStateWidget`) |
+| Area | Path | Coverage |
+|------|------|----------|
+| Module unit tests | `tests/modules/<feature>/` | Per-manager and per-helper coverage for `src/modules/`. One flat folder per feature — the `behavior/data/input/media` group level is omitted. Includes `dat/` and `scraper/`. |
+| Utility unit tests | `tests/utils/` | Helpers under `src/utils/` **only** (`app`, `db`, `fs`, `text`, `threading`, `view`). Tests for `src/modules/` files must NOT land here. |
+| Integration tests | `tests/integration/` | One binary (`test_integration`). `MainWindowFixture`-driven multi-manager scenarios; shared mocks under `tests/integration/mocks/`. |
+| UI widget tests | `tests/ui/widgets/` | Widget-level rendering and behavior (`CoverflowWidget`, `EmptyStateWidget`). |
+| Benchmarks | `tests/benchmarks/` | Perf benchmarks labelled `benchmark`; skipped by default. Run with `ctest -L benchmark`. |
 
-**Total: 64 `test_*.cpp` files, ~340 test methods across 55 binaries.**
-Method counts drift fast — prefer `ctest --output-on-failure --test-dir
-build/ninja-release` for an authoritative pass count.
+Binary and method counts drift fast — prefer `ctest --output-on-failure
+--test-dir build/ninja-release` for an authoritative list and pass count.
 
 ## Adding New Tests
 
-1. Create `tests/<area>/test_<classname>.cpp` mirroring the source location
-   (e.g. a test for `src/modules/data/cache/cachemanager.cpp` lives at
+1. Create the test file mirroring the source location. A test for a
+   `src/modules/` file goes in `tests/modules/<feature>/` — the
+   `behavior/data/input/media` group level is dropped (e.g. a test for
+   `src/modules/data/cache/cachemanager.cpp` lives at
    `tests/modules/cache/test_cachemanager.cpp`; a test for
-   `src/utils/fs/pathutils.cpp` lives at `tests/utils/test_pathutils.cpp`).
+   `src/modules/data/scraper/parsers/tmdbparser.cpp` lives at
+   `tests/modules/scraper/test_tmdbparser.cpp`). A test for a `src/utils/`
+   file goes in `tests/utils/` (e.g. `tests/utils/test_pathutils.cpp`).
    Use the Qt Test structure:
 
 ```cpp

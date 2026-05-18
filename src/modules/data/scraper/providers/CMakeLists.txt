@@ -1,0 +1,22 @@
+target_sources(${KARTEND_LIB_TARGET} PRIVATE
+  metadataproviderregistry.cpp
+  musicbrainzprovider.cpp
+  openlibraryprovider.cpp
+  screenscraperprovider.cpp
+  screenscrapermediatypecache.cpp
+  screenscrapersystemcache.cpp
+  screenscrapersystems.cpp
+  tmdbprovider.cpp
+  websearchprovider.cpp
+  metadatalookupprovider.h
+  metadataprovider.h
+  metadataproviderregistry.h
+  musicbrainzprovider.h
+  openlibraryprovider.h
+  screenscraperprovider.h
+  screenscrapermediatypecache.h
+  screenscrapersystemcache.h
+  screenscrapersystems.h
+  tmdbprovider.h
+  websearchprovider.h
+)

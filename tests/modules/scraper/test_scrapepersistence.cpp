@@ -14,7 +14,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-#include "../integration/mocks/mockdatabasemanager.h"
+#include "../../integration/mocks/mockdatabasemanager.h"
 #include "scrapepersistence.h"
 #include "scrapertypes.h"
 

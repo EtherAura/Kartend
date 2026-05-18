@@ -329,7 +329,7 @@ you don't want to propagate.
 
 ## For developers
 
-- Settings UI: [src/ui/dialogs/settingsdialog\*](../../src/ui/dialogs/)
+- Settings UI: [src/ui/dialogs/settings/](../../src/ui/dialogs/settings/)
   — split into multiple translation units (`settingsdialogtree`,
   `settingsdialogfields`, `settingsdialogapply`, etc.) for build
   speed.
